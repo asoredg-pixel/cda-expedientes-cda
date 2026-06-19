@@ -1828,6 +1828,27 @@ function cfgPuedeEditarResponsablesPersonas(){
 function cfgPuedeEditarPersonas(){return cfgPuedeEditarResponsablesPersonas();}
 function esAdministrador(){return rolSesion==='admin';}
 function esAdminFirestore(){return !!(window._usuarioActual&&window._usuarioActual.rol==='admin');}
+function esEncargadoDepartamentalUsuarios(){
+  if(!window._usuarioActual||esAdminFirestore())return false;
+  const rol=String(window._usuarioActual.rol||'').trim();
+  return DEPTOS.some(d=>d.id===rol);
+}
+function puedeGestionarUsuariosAutorizados(){return esAdminFirestore()||esEncargadoDepartamentalUsuarios();}
+function puedeEliminarUsuariosAutorizados(){return esAdminFirestore();}
+function getDeptoGestionUsuariosAutorizados(){
+  if(esEncargadoDepartamentalUsuarios())return String(window._usuarioActual.rol||'').trim();
+  return '';
+}
+function usuariosAutorizadosVisibles(){
+  const d=getDeptoGestionUsuariosAutorizados();
+  if(!d)return _usuariosCache.slice();
+  return _usuariosCache.filter(u=>u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+}
+function usuarioEditablePorEncargado(u){
+  const d=getDeptoGestionUsuariosAutorizados();
+  if(!d)return true;
+  return !!(u&&u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+}
 function esModoContratista(){return rolSesion==='contratista';}
 function esUsuarioContratista(){return !!(window._usuarioActual&&window._usuarioActual.rol==='contratista');}
 function expInstructoresList(e){
@@ -5566,7 +5587,14 @@ function mergeUsuarioEnCache(u){
   if(!u||!u.email)return;
   const em=String(u.email).trim().toLowerCase();
   const i=_usuariosCache.findIndex(x=>String(x.email||'').trim().toLowerCase()===em);
-  const row={email:em,nombre:u.nombre||'',rol:u.rol||'',codigo:u.codigo||'',activo:u.activo!==false};
+  const row={
+    email:em,
+    nombre:u.nombre||'',
+    rol:u.rol||'',
+    codigo:u.codigo||'',
+    activo:u.activo!==false,
+    deptoResponsable:String(u.deptoResponsable||'').trim()
+  };
   if(i>=0)_usuariosCache[i]={..._usuariosCache[i],...row};
   else _usuariosCache.push(row);
   sortUsuariosCache();
@@ -5587,7 +5615,8 @@ function aplicarUsuariosIndex(arr){
     nombre:u.nombre||'',
     rol:u.rol||'',
     codigo:u.codigo||'',
-    activo:u.activo!==false
+    activo:u.activo!==false,
+    deptoResponsable:String(u.deptoResponsable||'').trim()
   })).filter(u=>u.email);
   sortUsuariosCache();
   _usuariosCacheLoaded=true;
@@ -5602,7 +5631,8 @@ async function persistUsuariosIndexGlobal(){
     nombre:u.nombre||'',
     rol:u.rol||'',
     codigo:u.codigo||'',
-    activo:u.activo!==false
+    activo:u.activo!==false,
+    deptoResponsable:String(u.deptoResponsable||'').trim()
   }));
   try{
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{usuariosIndex:index,updatedAt:new Date().toISOString()},{merge:true});
@@ -5613,10 +5643,10 @@ async function refreshUsuariosAutorizadosUi(){
   paintUsuariosCfgTable();
 }
 async function sincronizarUsuariosAutorizados(){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
   invalidateUsuariosCache();
   await refreshUsuariosAutorizadosUi();
-  notif('Lista actualizada · '+_usuariosCache.length+' usuario(s)','ok');
+  notif('Lista actualizada · '+usuariosAutorizadosVisibles().length+' usuario(s)','ok');
 }
 function stopUsuariosFirestoreListener(){
   if(_usuariosFsUnsub){_usuariosFsUnsub();_usuariosFsUnsub=null;}
@@ -5646,7 +5676,8 @@ function paintUsuariosCfgTable(){
   const tbody=document.getElementById('usuarios-fs-tbody');
   const cnt=document.getElementById('usuarios-fs-count');
   if(!tbody)return;
-  const list=_usuariosCache;
+  const list=usuariosAutorizadosVisibles();
+  const puedeEliminar=puedeEliminarUsuariosAutorizados();
   if(cnt)cnt.textContent=String(list.length);
   tbody.innerHTML=list.length?list.map(u=>{
     const act=u.activo!==false;
@@ -5661,15 +5692,27 @@ function paintUsuariosCfgTable(){
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm" onclick="editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
       '<button type="button" class="btn bsm" onclick="toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
-      '<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'+
+      (puedeEliminar?('<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'):'')+
       '</td></tr>';
   }).join(''):'<tr><td colspan="7" class="emp">No hay usuarios registrados.</td></tr>';
 }
 function buildUsuariosCfgShell(){
+  const encDepto=esEncargadoDepartamentalUsuarios();
+  const deptoEnc=getDeptoGestionUsuariosAutorizados();
+  const tituloTab=encDepto?'👥 Responsables autorizados':'👥 Usuarios autorizados';
+  const ayuda=encDepto
+    ?('Registre responsables con acceso Google para <strong>'+escAttr(labelDepartamento(deptoEnc))+'</strong>. Puede agregar, editar y desactivar. Solo el administrador puede eliminar.')
+    :('El rol define el módulo (Secretaría, NCA, departamentos u oficinas). Para <strong>Responsables</strong> indique el departamento. Los encargados departamentales gestionan solo los responsables de su departamento.');
+  const rolField=encDepto
+    ?('<input type="hidden" id="usu-fs-rol" value="responsables">'+
+      '<div class="fld"><label>Rol</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Responsables</div></div>'+
+      '<div class="fld"><label>Departamento</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);font-weight:600">'+escAttr(labelDepartamento(deptoEnc))+'</div><input type="hidden" id="usu-fs-depto" value="'+escAttr(deptoEnc)+'"></div>')
+    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
+      '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>');
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
-    '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Solo administrador. El rol define el módulo (Secretaría, NCA, departamentos u oficinas). Para <strong>Responsables</strong> indique también el departamento; los encargados solo verán los de su departamento al vincularlos.</div></div>'+
+    '<div><div style="font-size:14px;font-weight:600">'+tituloTab+' <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+ayuda+'</div></div>'+
     '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
     '<button type="button" class="btn bsm" onclick="sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
@@ -5677,8 +5720,7 @@ function buildUsuariosCfgShell(){
     '<div class="fg">'+
     '<div class="fld"><label>Nombre completo</label><input type="text" id="usu-fs-nombre"></div>'+
     '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" placeholder="usuario@gmail.com"></div>'+
-    '<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
-    '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>'+
+    rolField+
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
@@ -5780,7 +5822,8 @@ function deptoResponsableOptsHtml(selected){
   return DEPTOS.map(d=>'<option value="'+d.id+'"'+(selected===d.id?' selected':'')+'>'+escAttr(labelDepartamento(d.id))+'</option>').join('');
 }
 function toggleUsuarioDeptoResponsableField(){
-  const rol=document.getElementById('usu-fs-rol')?.value;
+  const rolEl=document.getElementById('usu-fs-rol');
+  const rol=rolEl?(rolEl.tagName==='SELECT'?rolEl.value:rolEl.value):'';
   const wrap=document.getElementById('usu-fs-depto-wrap');
   if(wrap)wrap.style.display=(rol==='responsables')?'':'none';
 }
@@ -5802,7 +5845,7 @@ function instructorUsuarioAlertHtml(email,deptoId){
   return '';
 }
 function abrirPanelUsuariosAutorizados(){
-  if(!esAdminFirestore()){notif('Solo el administrador puede gestionar usuarios autorizados','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso para gestionar usuarios autorizados','err');return;}
   showTab('cfg');
   showCfgTab('usuarios');
   setTimeout(()=>mostrarFormUsuarioFirestore(),120);
@@ -5811,7 +5854,7 @@ function onInstructorUsuarioEmailSelect(deptoId,i,email){
   withCfgDepto(deptoId,()=>editInstructor(i,'email',email));
 }
 function mostrarFormUsuarioFirestore(){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
   const w=document.getElementById('usuario-form-wrap');
   if(!w){
     renderUsuariosCfg();
@@ -5821,25 +5864,36 @@ function mostrarFormUsuarioFirestore(){
   w.style.display='block';
   _usuariosEditEmail='';
   ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;}});
-  const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts('guaviare');
-  const depto=document.getElementById('usu-fs-depto');if(depto)depto.innerHTML=deptoResponsableOptsHtml('guaviare');
+  const deptoEnc=getDeptoGestionUsuariosAutorizados();
+  const rol=document.getElementById('usu-fs-rol');
+  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts('guaviare');
+  else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  const depto=document.getElementById('usu-fs-depto');
+  if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoEnc||'guaviare');
+  else if(depto&&depto.tagName==='INPUT')depto.value=deptoEnc||'';
   toggleUsuarioDeptoResponsableField();
   const act=document.getElementById('usu-fs-activo');if(act)act.checked=true;
-  const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent='Nuevo usuario';
+  const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent=esEncargadoDepartamentalUsuarios()?'Nuevo responsable autorizado':'Nuevo usuario';
   w.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function editarUsuarioFirestore(email){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
   const u=getUsuarioAutorizadoByEmail(email);
   if(!u){notif('Usuario no encontrado','err');return;}
+  if(!usuarioEditablePorEncargado(u)){notif('No puede editar este usuario','err');return;}
   const w=document.getElementById('usuario-form-wrap');
   if(!w){renderUsuariosCfg();setTimeout(()=>editarUsuarioFirestore(email),80);return;}
   w.style.display='block';
   _usuariosEditEmail=String(email||'').trim().toLowerCase();
   const nom=document.getElementById('usu-fs-nombre');if(nom)nom.value=u.nombre||'';
   const em=document.getElementById('usu-fs-email');if(em){em.value=u.email||'';em.readOnly=true;}
-  const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts(u.rol||'');
-  const depto=document.getElementById('usu-fs-depto');if(depto)depto.innerHTML=deptoResponsableOptsHtml(u.deptoResponsable||'');
+  const rol=document.getElementById('usu-fs-rol');
+  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts(u.rol||'');
+  else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  const depto=document.getElementById('usu-fs-depto');
+  const deptoVal=u.deptoResponsable||getDeptoGestionUsuariosAutorizados()||'';
+  if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoVal);
+  else if(depto&&depto.tagName==='INPUT')depto.value=deptoVal;
   toggleUsuarioDeptoResponsableField();
   const cod=document.getElementById('usu-fs-codigo');if(cod)cod.value=u.codigo||'';
   const act=document.getElementById('usu-fs-activo');if(act)act.checked=u.activo!==false;
@@ -5852,15 +5906,24 @@ function ocultarFormUsuarioFirestore(){
   const em=document.getElementById('usu-fs-email');if(em)em.readOnly=false;
 }
 async function guardarUsuarioFirestore(){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc){notif('Firestore no disponible','err');return;}
   const nombre=String(document.getElementById('usu-fs-nombre')?.value||'').trim();
   const email=String(_usuariosEditEmail||document.getElementById('usu-fs-email')?.value||'').trim().toLowerCase();
-  const rol=String(document.getElementById('usu-fs-rol')?.value||'').trim();
-  const deptoResponsable=String(document.getElementById('usu-fs-depto')?.value||'').trim();
+  let rol=String(document.getElementById('usu-fs-rol')?.value||'').trim();
+  let deptoResponsable=String(document.getElementById('usu-fs-depto')?.value||'').trim();
   const codigo=String(document.getElementById('usu-fs-codigo')?.value||'').trim();
   const activo=!!document.getElementById('usu-fs-activo')?.checked;
+  if(esEncargadoDepartamentalUsuarios()){
+    rol='responsables';
+    deptoResponsable=getDeptoGestionUsuariosAutorizados();
+  }
+  if(_usuariosEditEmail){
+    const prev=getUsuarioAutorizadoByEmail(_usuariosEditEmail);
+    if(!usuarioEditablePorEncargado(prev)){notif('No puede editar este usuario','err');return;}
+  }
+  if(!esAdminFirestore()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
   if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
   if(rol==='responsables'&&!deptoResponsable){notif('Indique el departamento del responsable','err');return;}
   if(rol==='ciudadano'||rol==='contratista'){notif('Use el rol Responsables para contratistas. La consulta ciudadana no requiere cuenta Google.','err');return;}
@@ -5875,7 +5938,7 @@ async function guardarUsuarioFirestore(){
     mergeUsuarioEnCache({email,nombre,rol,codigo,activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
     await persistUsuariosIndexGlobal();
     await aplicarSyncUsuariosAutorizados();
-    notif('Usuario guardado'+(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''),'ok');
+    notif('Usuario guardado'+(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):'')),'ok');
     ocultarFormUsuarioFirestore();
     await refreshUsuariosAutorizadosUi();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
@@ -5885,14 +5948,15 @@ async function guardarUsuarioFirestore(){
   }
 }
 async function toggleUsuarioFirestoreActivo(email,activo){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
+  email=String(email||'').trim().toLowerCase();
+  const u=getUsuarioAutorizadoByEmail(email);
+  if(!usuarioEditablePorEncargado(u)){notif('No puede modificar este usuario','err');return;}
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc)return;
-  email=String(email||'').trim().toLowerCase();
   try{
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{activo:!!activo,actualizadoEn:new Date().toISOString()},{merge:true});
     logAudit((activo?'Activó':'Desactivó')+' usuario '+email,'configuracion',null);
-    const u=getUsuarioAutorizadoByEmail(email);
     if(u)mergeUsuarioEnCache({...u,activo:!!activo});
     await persistUsuariosIndexGlobal();
     await aplicarSyncUsuariosAutorizados();
@@ -5902,7 +5966,7 @@ async function toggleUsuarioFirestoreActivo(email,activo){
   }catch(err){console.error(err);notif('Error al actualizar usuario','err');}
 }
 async function eliminarUsuarioFirestore(email){
-  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  if(!puedeEliminarUsuariosAutorizados()){notif('Solo el administrador puede eliminar usuarios','err');return;}
   email=String(email||'').trim().toLowerCase();
   confirmPrecaucion({title:'Eliminar usuario',message:'¿Eliminar el acceso de '+email+'?',detail:'El documento se borrará de Firestore.',confirmLabel:'Sí, eliminar'},async()=>{
     const db=window._db;
@@ -5922,9 +5986,9 @@ async function eliminarUsuarioFirestore(email){
 async function renderUsuariosCfg(){
   const el=document.getElementById('cfg-usuarios-panel');
   if(!el)return;
-  if(!esAdminFirestore()){
+  if(!puedeGestionarUsuariosAutorizados()){
     stopUsuariosFirestoreListener();
-    el.innerHTML='<div class="emp" style="padding:1rem">Solo el administrador puede gestionar usuarios autorizados.</div>';
+    el.innerHTML='<div class="emp" style="padding:1rem">No tiene permiso para gestionar usuarios autorizados.</div>';
     return;
   }
   const needsShell=!document.getElementById('usuarios-fs-tbody');
@@ -10977,7 +11041,10 @@ function updateDeptoUI(){
   const tabAud=document.getElementById('ctab-auditoria');
   if(tabAud)tabAud.style.display=esAdministrador()?'':'none';
   const tabUsu=document.getElementById('ctab-usuarios');
-  if(tabUsu)tabUsu.style.display=esAdminFirestore()?'':'none';
+  if(tabUsu){
+    tabUsu.style.display=puedeGestionarUsuariosAutorizados()?'':'none';
+    tabUsu.textContent=esEncargadoDepartamentalUsuarios()?'👥 Responsables autorizados':'👥 Usuarios autorizados';
+  }
   const btnInicio=document.getElementById('btn-inicio-rol');
   if(btnInicio)btnInicio.style.display=(rolSesion&&esAdminFirestore())?'inline-flex':'none';
   if(ban){
@@ -13045,7 +13112,7 @@ function showTab(t){
 }
 function showCfgTab(t){
   if(t==='auditoria'&&!esAdministrador()){notif('Solo administrador','err');t='listas';}
-  if(t==='usuarios'&&!esAdminFirestore()){notif('Solo administrador','err');t='listas';}
+  if(t==='usuarios'&&!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');t='listas';}
   if(t==='nuevo'&&cfgEsSoloLectura()){notif('No puede crear trámites en este departamento','err');t='listas';}
   if(t!=='usuarios')stopUsuariosFirestoreListener();
   document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
@@ -15377,7 +15444,8 @@ const CFG_PANELS=[
 ];
 function instructoresPanelSub(){
   if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (rol Responsables + departamento). Los encargados de módulo se asignan al definir el rol en Usuarios autorizados.';
-  return 'Seleccione responsables previamente registrados por el administrador para su departamento. No puede crear ni editar usuarios autorizados.';
+  if(esEncargadoDepartamentalUsuarios())return 'Seleccione responsables registrados en «Responsables autorizados» para su departamento, o regístrelos allí antes de vincularlos aquí.';
+  return 'Seleccione responsables previamente registrados para su departamento.';
 }
 function instructorUsuarioLinkRow(i,ins,deptoId){
   const dep=jsStr(deptoId);
@@ -15496,8 +15564,10 @@ function instructoresCardBody(){
       '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button>';
     if(esAdminFirestore()){
       h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
+    }else if(esEncargadoDepartamentalUsuarios()){
+      h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar responsable autorizado</button>';
     }else{
-      h+='<span style="font-size:11px;color:var(--tx2);width:100%">Para nuevos responsables, solicite al administrador registrarlos en Usuarios autorizados con rol Responsables y departamento asignado.</span>';
+      h+='<span style="font-size:11px;color:var(--tx2);width:100%">Para nuevos responsables, solicite al administrador o al encargado del departamento registrarlo en Responsables autorizados.</span>';
     }
     if(!_usuariosCache.filter(u=>usuarioEsResponsableDepto(u,getDeptoResponsablesSelect())).length)h+='<span style="font-size:11px;color:var(--or);width:100%">No hay responsables autorizados para este departamento.</span>';
     h+='</div>';
@@ -15595,7 +15665,7 @@ function cfgCardReadonlyStrings(arr){
 function renderCfg(){
   updateDeptoUI();
   updateCfgTabsDepto();
-  if(!esAdminFirestore()){
+  if(!puedeGestionarUsuariosAutorizados()){
     stopUsuariosFirestoreListener();
     const uPg=document.getElementById('cpg-usuarios');
     if(uPg&&uPg.classList.contains('on'))showCfgTab('listas');
@@ -15617,7 +15687,10 @@ function renderCfg(){
   const tabAud=document.getElementById('ctab-auditoria');
   if(tabAud)tabAud.style.display=esAdministrador()?'':'none';
   const tabUsu=document.getElementById('ctab-usuarios');
-  if(tabUsu)tabUsu.style.display=esAdminFirestore()?'':'none';
+  if(tabUsu){
+    tabUsu.style.display=puedeGestionarUsuariosAutorizados()?'':'none';
+    tabUsu.textContent=esEncargadoDepartamentalUsuarios()?'👥 Responsables autorizados':'👥 Usuarios autorizados';
+  }
 }
 function saveCfgFoldState(){
   const open={};
