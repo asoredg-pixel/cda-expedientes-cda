@@ -2146,22 +2146,52 @@ function upsertInstructorEncargado(deptoId,nombre,email,rol,oficinas){
   if(rol==='encargado_depto')c.instructores.forEach((x,j)=>{if(x!==ins&&x.rol==='encargado_depto')x.rol='contratista';});
   if(Array.isArray(oficinas))ins.oficinas=oficinas.slice();
 }
+function removeEncargadoInstructorDepto(deptoId){
+  const c=cfgByDepto[deptoId];
+  if(!c)return;
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  c.instructores=c.instructores.filter(ins=>ins.rol!=='encargado_depto');
+}
+function removeEncargadoInstructorOficina(oficinaId){
+  const c=cfgByDepto.guaviare;
+  if(!c)return;
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  for(let i=c.instructores.length-1;i>=0;i--){
+    const ins=c.instructores[i];
+    if(ins.rol!=='encargado_oficina')continue;
+    const ofs=ins.oficinas||[];
+    if(!ofs.includes(oficinaId))continue;
+    if(ofs.length<=1)c.instructores.splice(i,1);
+    else ins.oficinas=ofs.filter(x=>x!==oficinaId);
+  }
+}
+function encargadoSlotTieneData(data){
+  return !!(data&&String(data.nombre||'').trim());
+}
 function syncEncargadosGlobalToInstructores(){
   encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
   const nca=encargadosGlobal.departamentos.guaviare;
-  if(nca&&nca.nombre){
+  if(encargadoSlotTieneData(nca)){
     upsertInstructorEncargado('guaviare',nca.nombre,nca.email,'encargado_depto',['guaviare']);
+  }else{
+    removeEncargadoInstructorDepto('guaviare');
   }
   Object.entries(encargadosGlobal.oficinas||{}).forEach(([ofiId,data])=>{
-    if(ofiId==='guaviare'||!data||!data.nombre)return;
-    upsertInstructorEncargado('guaviare',data.nombre,data.email,'encargado_oficina',[ofiId]);
+    if(ofiId==='guaviare'){
+      if(encargadoSlotTieneData(data))upsertInstructorEncargado('guaviare',data.nombre,data.email,'encargado_depto',['guaviare']);
+      return;
+    }
+    if(encargadoSlotTieneData(data))upsertInstructorEncargado('guaviare',data.nombre,data.email,'encargado_oficina',[ofiId]);
+    else removeEncargadoInstructorOficina(ofiId);
   });
   ['guainia','vaupes'].forEach(deptoId=>{
     const data=encargadosGlobal.departamentos[deptoId];
-    if(data&&data.nombre)upsertInstructorEncargado(deptoId,data.nombre,data.email,'encargado_depto',[]);
+    if(encargadoSlotTieneData(data))upsertInstructorEncargado(deptoId,data.nombre,data.email,'encargado_depto',[]);
+    else removeEncargadoInstructorDepto(deptoId);
   });
   const sec=encargadosGlobal.secretaria;
-  if(sec&&sec.nombre)upsertInstructorEncargado('guaviare',sec.nombre,sec.email,'encargado_oficina',['secretaria']);
+  if(encargadoSlotTieneData(sec))upsertInstructorEncargado('guaviare',sec.nombre,sec.email,'encargado_oficina',['secretaria']);
+  else removeEncargadoInstructorOficina('secretaria');
 }
 function findInstructorByEmail(email){
   email=String(email||'').toLowerCase().trim();
@@ -5394,6 +5424,65 @@ function tituloRolFirestore(rolId){
 }
 let _usuariosCache=[];
 let _usuariosCacheLoaded=false;
+let _usuariosEditEmail='';
+let _usuariosFsUnsub=null;
+function stopUsuariosFirestoreListener(){
+  if(_usuariosFsUnsub){_usuariosFsUnsub();_usuariosFsUnsub=null;}
+}
+function startUsuariosFirestoreListener(){
+  stopUsuariosFirestoreListener();
+  const db=window._db;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
+  _usuariosFsUnsub=window._fsOnSnapshot(window._fsCollection(db,'usuarios'),snap=>{
+    _usuariosCache=[];
+    snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
+    _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
+    _usuariosCacheLoaded=true;
+    paintUsuariosCfgTable();
+    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+  },err=>console.error('Error escuchando usuarios Firestore:',err));
+}
+function paintUsuariosCfgTable(){
+  const tbody=document.getElementById('usuarios-fs-tbody');
+  const cnt=document.getElementById('usuarios-fs-count');
+  if(!tbody)return;
+  const list=_usuariosCache;
+  if(cnt)cnt.textContent=String(list.length);
+  tbody.innerHTML=list.length?list.map(u=>{
+    const act=u.activo!==false;
+    const em=jsStr(u.email);
+    return '<tr>'+
+      '<td>'+escAttr(u.nombre||'—')+'</td>'+
+      '<td style="font-size:12px">'+escAttr(u.email)+'</td>'+
+      '<td>'+escAttr(tituloRolFirestore(u.rol))+'</td>'+
+      '<td>'+escAttr(u.codigo||'—')+'</td>'+
+      '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+
+      '<button type="button" class="btn bsm" onclick="editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
+      '<button type="button" class="btn bsm" onclick="toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
+      '<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'+
+      '</td></tr>';
+  }).join(''):'<tr><td colspan="6" class="emp">No hay usuarios registrados.</td></tr>';
+}
+function buildUsuariosCfgShell(){
+  return '<div class="card">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+    '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados para ingresar al sistema.</div></div>'+
+    '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button></div>'+
+    '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px" id="usuario-form-tit">Nuevo usuario</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Nombre completo</label><input type="text" id="usu-fs-nombre"></div>'+
+    '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" placeholder="usuario@gmail.com"></div>'+
+    '<div class="fld"><label>Rol</label><select id="usu-fs-rol">'+rolesFirestoreOpts('')+'</select></div>'+
+    '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
+    '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
+    '</div>'+
+    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
+    '</div>'+
+    '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="usuarios-fs-tbody"></tbody></table></div></div>';
+}
 async function loadUsuariosFirestore(){
   const db=window._db;
   if(!db||!window._fsGetDocs||!window._fsCollection)return[];
@@ -5444,33 +5533,58 @@ function onInstructorUsuarioEmailSelect(deptoId,i,email){
 }
 function mostrarFormUsuarioFirestore(){
   const w=document.getElementById('usuario-form-wrap');
-  if(!w)return;
+  if(!w){
+    renderUsuariosCfg();
+    setTimeout(()=>mostrarFormUsuarioFirestore(),80);
+    return;
+  }
   w.style.display='block';
-  ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const rol=document.getElementById('usu-fs-rol');if(rol)rol.value='guaviare';
+  _usuariosEditEmail='';
+  ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;}});
+  const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts('guaviare');
   const act=document.getElementById('usu-fs-activo');if(act)act.checked=true;
+  const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent='Nuevo usuario';
+  w.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function editarUsuarioFirestore(email){
+  const u=getUsuarioAutorizadoByEmail(email);
+  if(!u){notif('Usuario no encontrado','err');return;}
+  const w=document.getElementById('usuario-form-wrap');
+  if(!w){renderUsuariosCfg();setTimeout(()=>editarUsuarioFirestore(email),80);return;}
+  w.style.display='block';
+  _usuariosEditEmail=String(email||'').trim().toLowerCase();
+  const nom=document.getElementById('usu-fs-nombre');if(nom)nom.value=u.nombre||'';
+  const em=document.getElementById('usu-fs-email');if(em){em.value=u.email||'';em.readOnly=true;}
+  const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts(u.rol||'');
+  const cod=document.getElementById('usu-fs-codigo');if(cod)cod.value=u.codigo||'';
+  const act=document.getElementById('usu-fs-activo');if(act)act.checked=u.activo!==false;
+  const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent='Editar usuario';
+  w.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function ocultarFormUsuarioFirestore(){
   const w=document.getElementById('usuario-form-wrap');if(w)w.style.display='none';
+  _usuariosEditEmail='';
+  const em=document.getElementById('usu-fs-email');if(em)em.readOnly=false;
 }
 async function guardarUsuarioFirestore(){
   if(!esAdminFirestore()){notif('Solo administrador','err');return;}
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc){notif('Firestore no disponible','err');return;}
   const nombre=String(document.getElementById('usu-fs-nombre')?.value||'').trim();
-  const email=String(document.getElementById('usu-fs-email')?.value||'').trim().toLowerCase();
+  const email=String(_usuariosEditEmail||document.getElementById('usu-fs-email')?.value||'').trim().toLowerCase();
   const rol=String(document.getElementById('usu-fs-rol')?.value||'').trim();
   const codigo=String(document.getElementById('usu-fs-codigo')?.value||'').trim();
   const activo=!!document.getElementById('usu-fs-activo')?.checked;
   if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){notif('Correo inválido','err');return;}
   try{
-    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{nombre,rol,codigo,activo,creadoEn:new Date().toISOString()},{merge:true});
-    logAudit('Registró usuario autorizado '+email,'configuracion',null,nombre);
-    invalidateUsuariosCache();
+    const payload={nombre,rol,codigo,activo,actualizadoEn:new Date().toISOString()};
+    if(!_usuariosEditEmail)payload.creadoEn=new Date().toISOString();
+    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    logAudit((_usuariosEditEmail?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
     notif('Usuario guardado','ok');
     ocultarFormUsuarioFirestore();
-    renderUsuariosCfg();
+    paintUsuariosCfgTable();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){
     console.error(err);
@@ -5485,9 +5599,8 @@ async function toggleUsuarioFirestoreActivo(email,activo){
   try{
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{activo:!!activo},{merge:true});
     logAudit((activo?'Activó':'Desactivó')+' usuario '+email,'configuracion',null);
-    invalidateUsuariosCache();
     notif(activo?'Usuario activado':'Usuario desactivado','ok');
-    renderUsuariosCfg();
+    paintUsuariosCfgTable();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){console.error(err);notif('Error al actualizar usuario','err');}
 }
@@ -5500,9 +5613,8 @@ async function eliminarUsuarioFirestore(email){
     try{
       await window._fsDeleteDoc(window._fsDoc(db,'usuarios',email));
       logAudit('Eliminó usuario autorizado '+email,'configuracion',null);
-      invalidateUsuariosCache();
       notif('Usuario eliminado','ok');
-      renderUsuariosCfg();
+      paintUsuariosCfgTable();
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
     }catch(err){console.error(err);notif('Error al eliminar usuario','err');}
   });
@@ -5510,42 +5622,19 @@ async function eliminarUsuarioFirestore(email){
 async function renderUsuariosCfg(){
   const el=document.getElementById('cfg-usuarios-panel');
   if(!el)return;
+  stopUsuariosFirestoreListener();
   if(!esAdminFirestore()){
     el.innerHTML='<div class="emp" style="padding:1rem">Solo el administrador puede gestionar usuarios autorizados.</div>';
     return;
   }
-  el.innerHTML='<div class="emp" style="padding:1rem">⏳ Cargando usuarios…</div>';
-  const list=await loadUsuariosFirestore();
-  const rows=list.length?list.map(u=>{
-    const act=u.activo!==false;
-    const em=jsStr(u.email);
-    return '<tr>'+
-      '<td>'+escAttr(u.nombre||'—')+'</td>'+
-      '<td style="font-size:12px">'+escAttr(u.email)+'</td>'+
-      '<td>'+escAttr(tituloRolFirestore(u.rol))+'</td>'+
-      '<td>'+escAttr(u.codigo||'—')+'</td>'+
-      '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
-      '<td style="white-space:nowrap">'+
-      '<button type="button" class="btn bsm" onclick="toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
-      '<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'+
-      '</td></tr>';
-  }).join(''):'<tr><td colspan="6" class="emp">No hay usuarios registrados.</td></tr>';
-  el.innerHTML='<div class="card">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
-    '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados para ingresar al sistema.</div></div>'+
-    '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button></div>'+
-    '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
-    '<div class="fg">'+
-    '<div class="fld"><label>Nombre completo</label><input type="text" id="usu-fs-nombre"></div>'+
-    '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" placeholder="usuario@gmail.com"></div>'+
-    '<div class="fld"><label>Rol</label><select id="usu-fs-rol">'+rolesFirestoreOpts('')+'</select></div>'+
-    '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
-    '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
-    '</div>'+
-    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
-    '</div>'+
-    '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  if(!document.getElementById('usuarios-fs-tbody'))el.innerHTML=buildUsuariosCfgShell();
+  if(!window._fsOnSnapshot){
+    el.innerHTML=buildUsuariosCfgShell();
+    await loadUsuariosFirestore();
+    paintUsuariosCfgTable();
+    return;
+  }
+  startUsuariosFirestoreListener();
 }
 function getSoporteActivo(t){
   normalizeTask(t);
@@ -12632,6 +12721,7 @@ function showCfgTab(t){
   if(t==='auditoria'&&!esAdministrador()){notif('Solo administrador','err');t='listas';}
   if(t==='usuarios'&&!esAdminFirestore()){notif('Solo administrador','err');t='listas';}
   if(t==='nuevo'&&cfgEsSoloLectura()){notif('No puede crear trámites en este departamento','err');t='listas';}
+  if(t!=='usuarios')stopUsuariosFirestoreListener();
   document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
   document.getElementById('cpg-'+t).classList.add('on');
@@ -15224,25 +15314,31 @@ function encargadosGlobalCardBody(){
   const nca=encargadosGlobal.departamentos.guaviare||{nombre:'',email:''};
   const mkSlot=(tit,grupo,id)=>{
     const data=(encargadosGlobal[grupo]||{})[id]||{nombre:'',email:''};
-    return '<div class="encargado-slot"><div class="encargado-slot-k">'+escAttr(tit)+'</div>'+
+    const g=jsStr(grupo),sid=jsStr(id);
+    return '<div class="encargado-slot" id="enc-slot-'+g+'-'+sid+'"><div class="encargado-slot-k">'+escAttr(tit)+'</div>'+
       '<input type="text" placeholder="Nombre encargado" value="'+escAttr(data.nombre||'')+'" onchange="setEncargadoGlobal(\''+grupo+'\',\''+escAttr(id)+'\',\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
       '<input type="email" placeholder="Correo Gmail" value="'+escAttr(data.email||'')+'" onchange="setEncargadoGlobal(\''+grupo+'\',\''+escAttr(id)+'\',\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
+      (encargadoSlotTieneData(data)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\''+grupo+'\',\''+escAttr(id)+'\')">✕ Quitar encargado</button>':'')+
       '</div>';
   };
   let h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Atajo para encargados: también puede definirlos en «Personas del departamento» (rol Encargado). Los cambios se sincronizan en ambos sentidos al guardar.</div>';
   h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">NCA DEGUV — trámites ambientales y PQRSD Guaviare</div><div class="encargados-grid">';
-  h+='<div class="encargado-slot"><div class="encargado-slot-k">NCA DEGUV</div>'+
+  h+='<div class="encargado-slot" id="enc-slot-nca"><div class="encargado-slot-k">NCA DEGUV</div>'+
     '<input type="text" placeholder="Nombre encargado" value="'+escAttr(nca.nombre||'')+'" onchange="setEncargadoNcaUnificado(\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(nca.email||'')+'" onchange="setEncargadoNcaUnificado(\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>';
+    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(nca.email||'')+'" onchange="setEncargadoNcaUnificado(\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
+    (encargadoSlotTieneData(nca)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\'departamentos\',\'guaviare\')">✕ Quitar encargado</button>':'')+
+    '</div>';
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Departamentos regionales</div><div class="encargados-grid">';
   h+=mkSlot('Guainía','departamentos','guainia');
   h+=mkSlot('Vaupés','departamentos','vaupes');
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Oficinas DEGUV</div><div class="encargados-grid">';
   OFICINAS_DEGUV.filter(o=>o.id!=='secretaria'&&o.id!=='guaviare').forEach(o=>{h+=mkSlot(o.nombre,'oficinas',o.id);});
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Secretaría</div><div class="encargados-grid">';
-  h+='<div class="encargado-slot"><div class="encargado-slot-k">Secretaría DEGUV</div>'+
+  h+='<div class="encargado-slot" id="enc-slot-secretaria"><div class="encargado-slot-k">Secretaría DEGUV</div>'+
     '<input type="text" placeholder="Nombre encargado" value="'+escAttr(encargadosGlobal.secretaria.nombre||'')+'" onchange="setEncargadoGlobal(\'secretaria\',\'\',\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(encargadosGlobal.secretaria.email||'')+'" onchange="setEncargadoGlobal(\'secretaria\',\'\',\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>';
+    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(encargadosGlobal.secretaria.email||'')+'" onchange="setEncargadoGlobal(\'secretaria\',\'\',\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
+    (encargadoSlotTieneData(encargadosGlobal.secretaria)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\'secretaria\',\'\')">✕ Quitar encargado</button>':'')+
+    '</div>';
   h+='</div><div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarEncargadosGlobal()">Guardar encargados</button></div>';
   return h;
 }
@@ -15258,14 +15354,41 @@ function setEncargadoGlobal(grupo,id,campo,val){
   if(!encargadosGlobal[grupo][id])encargadosGlobal[grupo][id]={nombre:'',email:''};
   encargadosGlobal[grupo][id][campo]=campo==='email'?String(val||'').toLowerCase().trim():String(val||'').trim();
 }
-function guardarEncargadosGlobal(){
+function limpiarEncargadoSlot(grupo,id){
+  if(grupo==='secretaria'){
+    encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+    encargadosGlobal.secretaria={nombre:'',email:''};
+  }else if((grupo==='departamentos'||grupo==='oficinas')&&id==='guaviare'){
+    setEncargadoNcaUnificado('nombre','');
+    setEncargadoNcaUnificado('email','');
+  }else{
+    setEncargadoGlobal(grupo,id,'nombre','');
+    setEncargadoGlobal(grupo,id,'email','');
+  }
+  guardarEncargadosGlobal();
+}
+async function guardarEncargadosGlobal(){
+  if(!puedeGestionarEncargadosCfg()){notif('Solo el administrador puede guardar encargados','err');return;}
   encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
   syncEncargadosGlobalToInstructores();
-  syncInstructoresToEncargadosGlobal();
-  saveLS();
-  auditCfgChange('Encargados globales');
-  renderListasCfg();
-  notif('Encargados guardados','ok');
+  _saveLSLocal();
+  if(window._db&&window._fsSetDoc){
+    updateSyncIndicator('syncing');
+    try{
+      await saveFirestore();
+      auditCfgChange('Encargados globales');
+      renderListasCfg();
+      notif('Encargados guardados','ok');
+    }catch(err){
+      console.error(err);
+      updateSyncIndicator('error');
+      notif('Error al guardar encargados en Firestore','err');
+    }
+  }else{
+    auditCfgChange('Encargados globales');
+    renderListasCfg();
+    notif('Encargados guardados (local)','ok');
+  }
 }
 function renderListasCfg(){
   const el=document.getElementById('cfg-panels');if(!el)return;
@@ -17337,12 +17460,12 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
-    if(data.rol==='admin'){
-      mostrarSelectorRolesAdmin(data.nombre||email);
-    }else{
-      const respNom=(data.rol==='contratista'||data.rol==='responsables')?data.nombre:'';
-      ingresarComoRol(data.rol,respNom);
-    }
+    const authPanel=document.getElementById('login-auth-panel');
+    const rolesWrap=document.getElementById('login-roles-wrap');
+    if(authPanel)authPanel.style.display='none';
+    if(rolesWrap)rolesWrap.style.display='none';
+    const respNom=(data.rol==='contratista'||data.rol==='responsables')?data.nombre:'';
+    ingresarComoRol(data.rol,respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
     setLoginStatus('');
@@ -17563,6 +17686,8 @@ window.cerrarSesionGoogle=cerrarSesionGoogle;
 window.volverSelectorRolesAdmin=volverSelectorRolesAdmin;
 window.volverPantallaPrincipal=volverPantallaPrincipal;
 window.guardarUsuarioFirestore=guardarUsuarioFirestore;
+window.editarUsuarioFirestore=editarUsuarioFirestore;
+window.limpiarEncargadoSlot=limpiarEncargadoSlot;
 window.toggleUsuarioFirestoreActivo=toggleUsuarioFirestoreActivo;
 window.eliminarUsuarioFirestore=eliminarUsuarioFirestore;
 window.mostrarFormUsuarioFirestore=mostrarFormUsuarioFirestore;
