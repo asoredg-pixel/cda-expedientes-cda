@@ -2249,9 +2249,9 @@ function syncResponsablesDesdeUsuariosAutorizados(){
   (_usuariosCache||[]).filter(u=>u.activo!==false&&u.rol==='responsables').forEach(u=>{
     const email=String(u.email||'').trim().toLowerCase();
     const nombre=String(u.nombre||'').trim();
-    if(!email||!nombre)return;
-    const c=cfgByDepto.guaviare;
-    if(!c)return;
+    const deptoId=String(u.deptoResponsable||'').trim();
+    if(!email||!nombre||!deptoId||!cfgByDepto[deptoId])return;
+    const c=cfgByDepto[deptoId];
     c.instructores=migrateInstructoresList(c.instructores||[]);
     let ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
     if(ins){
@@ -2259,7 +2259,7 @@ function syncResponsablesDesdeUsuariosAutorizados(){
         ins.nombre=nombre;ins.email=email;ins.activo=true;ins.rol='contratista';
       }
     }else{
-      c.instructores.push({id:'ins_'+Date.now(),nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
+      c.instructores.push({id:'ins_'+Date.now()+'_'+deptoId,nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
     }
   });
 }
@@ -5655,6 +5655,7 @@ function paintUsuariosCfgTable(){
       '<td>'+escAttr(u.nombre||'—')+'</td>'+
       '<td style="font-size:12px">'+escAttr(u.email)+'</td>'+
       '<td>'+escAttr(tituloRolFirestore(u.rol))+'</td>'+
+      '<td>'+escAttr(labelDeptoResponsableUsuario(u))+'</td>'+
       '<td>'+escAttr(u.codigo||'—')+'</td>'+
       '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
       '<td style="white-space:nowrap">'+
@@ -5662,13 +5663,13 @@ function paintUsuariosCfgTable(){
       '<button type="button" class="btn bsm" onclick="toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
       '<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'+
       '</td></tr>';
-  }).join(''):'<tr><td colspan="6" class="emp">No hay usuarios registrados.</td></tr>';
+  }).join(''):'<tr><td colspan="7" class="emp">No hay usuarios registrados.</td></tr>';
 }
 function buildUsuariosCfgShell(){
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
     '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados. El rol define el módulo: Secretaría, NCA, departamentos u oficinas quedan encargados automáticamente; Responsables se vincula en la lista de responsables.</div></div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Solo administrador. El rol define el módulo (Secretaría, NCA, departamentos u oficinas). Para <strong>Responsables</strong> indique también el departamento; los encargados solo verán los de su departamento al vincularlos.</div></div>'+
     '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
     '<button type="button" class="btn bsm" onclick="sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
@@ -5676,13 +5677,14 @@ function buildUsuariosCfgShell(){
     '<div class="fg">'+
     '<div class="fld"><label>Nombre completo</label><input type="text" id="usu-fs-nombre"></div>'+
     '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" placeholder="usuario@gmail.com"></div>'+
-    '<div class="fld"><label>Rol</label><select id="usu-fs-rol">'+rolesFirestoreOpts('')+'</select></div>'+
+    '<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
+    '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>'+
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
     '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
     '</div>'+
-    '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="usuarios-fs-tbody"></tbody></table></div></div>';
+    '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Departamento</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="usuarios-fs-tbody"></tbody></table></div></div>';
 }
 async function loadUsuariosFirestore(){
   const db=window._db;
@@ -5732,27 +5734,75 @@ async function ensureUsuariosFirestoreCache(force){
   return loadUsuariosFirestore();
 }
 function invalidateUsuariosCache(){_usuariosCacheLoaded=false;}
-function getUsuarioAutorizadoByEmail(email){
-  const em=String(email||'').trim().toLowerCase();
-  if(!em)return null;
-  return _usuariosCache.find(u=>String(u.email||'').trim().toLowerCase()===em)||null;
+function getDeptoResponsablesSelect(){
+  if(esAdminModoGlobal()){
+    const sd=document.getElementById('cfi-instructores-depto');
+    if(sd&&sd.value)return sd.value;
+    return 'guaviare';
+  }
+  const r=getRolEfectivo();
+  if(DEPTOS.some(d=>d.id===r))return r;
+  return deptoCfg||getDeptoOperativo();
 }
-function usuariosAutorizadosSelectOptions(selectedEmail,emptyLabel){
+function usuarioEsResponsableDepto(u,deptoId){
+  if(!u||u.activo===false)return false;
+  const rol=String(u.rol||'').trim();
+  if(rol!=='responsables'&&rol!=='contratista')return false;
+  const d=String(u.deptoResponsable||'').trim();
+  if(rol==='contratista'&&!d)return deptoId==='guaviare';
+  if(!d)return false;
+  return d===deptoId;
+}
+function usuariosAutorizadosSelectOptions(selectedEmail,emptyLabel,deptoId){
+  deptoId=deptoId!=null?deptoId:getDeptoResponsablesSelect();
   const cur=String(selectedEmail||'').trim().toLowerCase();
-  let h='<option value="">'+escAttr(emptyLabel||'— Seleccione usuario autorizado —')+'</option>';
-  _usuariosCache.forEach(u=>{
+  const miEmail=String(window._usuarioActual&&window._usuarioActual.email||'').trim().toLowerCase();
+  let h='<option value="">'+escAttr(emptyLabel||'— Seleccione responsable autorizado —')+'</option>';
+  _usuariosCache.filter(u=>{
+    if(!usuarioEsResponsableDepto(u,deptoId))return false;
+    const em=String(u.email||'').trim().toLowerCase();
+    if(miEmail&&em===miEmail&&em!==cur)return false;
+    return true;
+  }).forEach(u=>{
     const em=String(u.email||'').trim().toLowerCase();
     h+='<option value="'+escAttr(em)+'"'+(cur===em?' selected':'')+'>'+escAttr((u.nombre||em)+' · '+em)+'</option>';
   });
   return h;
 }
-function instructorUsuarioAlertHtml(email){
+function refreshInstructoresEmailSelect(){
+  const sel=document.getElementById('cfi-instructores-email');
+  if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML=usuariosAutorizadosSelectOptions(cur,'',getDeptoResponsablesSelect());
+  if(cur&&!Array.from(sel.options).some(o=>o.value===cur))sel.value='';
+}
+function deptoResponsableOptsHtml(selected){
+  return DEPTOS.map(d=>'<option value="'+d.id+'"'+(selected===d.id?' selected':'')+'>'+escAttr(labelDepartamento(d.id))+'</option>').join('');
+}
+function toggleUsuarioDeptoResponsableField(){
+  const rol=document.getElementById('usu-fs-rol')?.value;
+  const wrap=document.getElementById('usu-fs-depto-wrap');
+  if(wrap)wrap.style.display=(rol==='responsables')?'':'none';
+}
+function labelDeptoResponsableUsuario(u){
+  if(!u||u.rol!=='responsables')return '—';
+  const d=String(u.deptoResponsable||'').trim();
+  return d?labelDepartamento(d):'— sin departamento —';
+}
+function getUsuarioAutorizadoByEmail(email){
+  const em=String(email||'').trim().toLowerCase();
+  if(!em)return null;
+  return _usuariosCache.find(u=>String(u.email||'').trim().toLowerCase()===em)||null;
+}
+function instructorUsuarioAlertHtml(email,deptoId){
   const u=getUsuarioAutorizadoByEmail(email);
-  if(email&&!u)return '<span style="font-size:11px;color:var(--or);font-weight:600">Esta persona debe registrarse primero en Configuración &gt; Usuarios autorizados</span>';
+  if(email&&!u)return '<span style="font-size:11px;color:var(--or);font-weight:600">Solicite al administrador registrar este responsable en Usuarios autorizados</span>';
   if(u&&u.activo===false)return '<span style="font-size:11px;color:var(--rd);font-weight:600">⚠️ Usuario desactivado — sin acceso al sistema</span>';
+  if(u&&deptoId&&u.rol==='responsables'&&!usuarioEsResponsableDepto(u,deptoId))return '<span style="font-size:11px;color:var(--or);font-weight:600">Asignado a '+escAttr(labelDepartamento(u.deptoResponsable)||'otro departamento')+' — no corresponde a este departamento</span>';
   return '';
 }
 function abrirPanelUsuariosAutorizados(){
+  if(!esAdminFirestore()){notif('Solo el administrador puede gestionar usuarios autorizados','err');return;}
   showTab('cfg');
   showCfgTab('usuarios');
   setTimeout(()=>mostrarFormUsuarioFirestore(),120);
@@ -5761,6 +5811,7 @@ function onInstructorUsuarioEmailSelect(deptoId,i,email){
   withCfgDepto(deptoId,()=>editInstructor(i,'email',email));
 }
 function mostrarFormUsuarioFirestore(){
+  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
   const w=document.getElementById('usuario-form-wrap');
   if(!w){
     renderUsuariosCfg();
@@ -5771,11 +5822,14 @@ function mostrarFormUsuarioFirestore(){
   _usuariosEditEmail='';
   ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;}});
   const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts('guaviare');
+  const depto=document.getElementById('usu-fs-depto');if(depto)depto.innerHTML=deptoResponsableOptsHtml('guaviare');
+  toggleUsuarioDeptoResponsableField();
   const act=document.getElementById('usu-fs-activo');if(act)act.checked=true;
   const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent='Nuevo usuario';
   w.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function editarUsuarioFirestore(email){
+  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
   const u=getUsuarioAutorizadoByEmail(email);
   if(!u){notif('Usuario no encontrado','err');return;}
   const w=document.getElementById('usuario-form-wrap');
@@ -5785,6 +5839,8 @@ function editarUsuarioFirestore(email){
   const nom=document.getElementById('usu-fs-nombre');if(nom)nom.value=u.nombre||'';
   const em=document.getElementById('usu-fs-email');if(em){em.value=u.email||'';em.readOnly=true;}
   const rol=document.getElementById('usu-fs-rol');if(rol)rol.innerHTML=rolesFirestoreOpts(u.rol||'');
+  const depto=document.getElementById('usu-fs-depto');if(depto)depto.innerHTML=deptoResponsableOptsHtml(u.deptoResponsable||'');
+  toggleUsuarioDeptoResponsableField();
   const cod=document.getElementById('usu-fs-codigo');if(cod)cod.value=u.codigo||'';
   const act=document.getElementById('usu-fs-activo');if(act)act.checked=u.activo!==false;
   const tit=document.getElementById('usuario-form-tit');if(tit)tit.textContent='Editar usuario';
@@ -5802,17 +5858,21 @@ async function guardarUsuarioFirestore(){
   const nombre=String(document.getElementById('usu-fs-nombre')?.value||'').trim();
   const email=String(_usuariosEditEmail||document.getElementById('usu-fs-email')?.value||'').trim().toLowerCase();
   const rol=String(document.getElementById('usu-fs-rol')?.value||'').trim();
+  const deptoResponsable=String(document.getElementById('usu-fs-depto')?.value||'').trim();
   const codigo=String(document.getElementById('usu-fs-codigo')?.value||'').trim();
   const activo=!!document.getElementById('usu-fs-activo')?.checked;
   if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
+  if(rol==='responsables'&&!deptoResponsable){notif('Indique el departamento del responsable','err');return;}
   if(rol==='ciudadano'||rol==='contratista'){notif('Use el rol Responsables para contratistas. La consulta ciudadana no requiere cuenta Google.','err');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){notif('Correo inválido','err');return;}
   try{
     const payload={nombre,rol,codigo,activo,actualizadoEn:new Date().toISOString()};
+    if(rol==='responsables')payload.deptoResponsable=deptoResponsable;
+    else payload.deptoResponsable='';
     if(!_usuariosEditEmail)payload.creadoEn=new Date().toISOString();
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
     logAudit((_usuariosEditEmail?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
-    mergeUsuarioEnCache({email,nombre,rol,codigo,activo});
+    mergeUsuarioEnCache({email,nombre,rol,codigo,activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
     await persistUsuariosIndexGlobal();
     await aplicarSyncUsuariosAutorizados();
     notif('Usuario guardado'+(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''),'ok');
@@ -15316,8 +15376,8 @@ const CFG_PANELS=[
   {key:'instructores',title:'Responsables',sub:''},
 ];
 function instructoresPanelSub(){
-  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (rol Responsables). Los encargados de módulo (Secretaría, NCA, departamentos y oficinas) se asignan al definir el rol en Usuarios autorizados.';
-  return 'Seleccione el correo desde Usuarios autorizados; el nombre se completa automáticamente.';
+  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (rol Responsables + departamento). Los encargados de módulo se asignan al definir el rol en Usuarios autorizados.';
+  return 'Seleccione responsables previamente registrados por el administrador para su departamento. No puede crear ni editar usuarios autorizados.';
 }
 function instructorUsuarioLinkRow(i,ins,deptoId){
   const dep=jsStr(deptoId);
@@ -15325,9 +15385,9 @@ function instructorUsuarioLinkRow(i,ins,deptoId){
   const u=getUsuarioAutorizadoByEmail(cur);
   const nombreMostrar=u?(u.nombre||u.email):(ins.nombre||'—');
   let h='<div class="inst-usuario-link" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:280px">';
-  h+='<select onchange="onInstructorUsuarioEmailSelect(\''+dep+'\','+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;min-width:220px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions(cur)+'</select>';
+  h+='<select onchange="onInstructorUsuarioEmailSelect(\''+dep+'\','+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;min-width:220px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions(cur,'',deptoId)+'</select>';
   h+='<span class="inst-nombre-ro" style="font-weight:600;font-size:12px;padding:4px 0">'+escAttr(nombreMostrar)+'</span>';
-  const alert=instructorUsuarioAlertHtml(cur);
+  const alert=instructorUsuarioAlertHtml(cur,deptoId);
   if(alert)h+=alert;
   h+='</div>';
   return h;
@@ -15428,14 +15488,18 @@ function instructoresCardBody(){
   if(puedeGestionarContratistasCfg()){
     h+='<div class="cfadd" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
     if(esAdminModoGlobal()){
-      h+='<select id="cfi-instructores-depto" class="depto-sel" style="min-width:140px;padding:6px 8px;font-size:12px" title="Departamento del nuevo responsable">'+
+      h+='<select id="cfi-instructores-depto" class="depto-sel" style="min-width:140px;padding:6px 8px;font-size:12px" title="Departamento del nuevo responsable" onchange="refreshInstructoresEmailSelect()">'+
         DEPTOS.map(d=>'<option value="'+d.id+'">'+escAttr(labelDepto(d.id))+'</option>').join('')+
         '</select>';
     }
-    h+='<select id="cfi-instructores-email" style="flex:1;min-width:220px;border:1px solid var(--bd);border-radius:5px;padding:6px 8px;font-size:12px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions('')+'</select>'+
-      '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button>'+
-      '<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
-    if(!_usuariosCache.length)h+='<span style="font-size:11px;color:var(--or);width:100%">No hay usuarios autorizados. Regístrelos en Configuración &gt; Usuarios autorizados.</span>';
+    h+='<select id="cfi-instructores-email" style="flex:1;min-width:220px;border:1px solid var(--bd);border-radius:5px;padding:6px 8px;font-size:12px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions('','',getDeptoResponsablesSelect())+'</select>'+
+      '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button>';
+    if(esAdminFirestore()){
+      h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
+    }else{
+      h+='<span style="font-size:11px;color:var(--tx2);width:100%">Para nuevos responsables, solicite al administrador registrarlos en Usuarios autorizados con rol Responsables y departamento asignado.</span>';
+    }
+    if(!_usuariosCache.filter(u=>usuarioEsResponsableDepto(u,getDeptoResponsablesSelect())).length)h+='<span style="font-size:11px;color:var(--or);width:100%">No hay responsables autorizados para este departamento.</span>';
     h+='</div>';
   }
   h+='</div>';
@@ -15447,10 +15511,13 @@ function addInstructor(){
   const email=sel?String(sel.value||'').trim().toLowerCase():'';
   if(!email){notif('Seleccione un usuario autorizado de la lista','err');return;}
   const u=getUsuarioAutorizadoByEmail(email);
-  if(!u){notif('Esta persona debe registrarse primero en Configuración > Usuarios autorizados','err');return;}
+  if(!u){notif('Solicite al administrador registrar este responsable en Usuarios autorizados','err');return;}
+  if(u.rol!=='responsables'){notif('Solo usuarios con rol Responsables pueden agregarse','err');return;}
   let targetDepto=deptoCfg||getDeptoOperativo();
   const sd=document.getElementById('cfi-instructores-depto');
   if(esAdminModoGlobal()&&sd)targetDepto=sd.value||targetDepto;
+  else targetDepto=getDeptoResponsablesSelect();
+  if(!usuarioEsResponsableDepto(u,targetDepto)){notif('Este responsable está asignado a '+labelDepartamento(u.deptoResponsable||'otro departamento')+', no a '+labelDepartamento(targetDepto),'err');return;}
   withCfgDepto(targetDepto,()=>{
     cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
     if(cfg.instructores.some(i=>String(i.email||'').trim().toLowerCase()===email)){notif('Ese usuario ya está como responsable en '+labelDepto(targetDepto),'err');return;}
@@ -15483,9 +15550,12 @@ function editInstructor(i,k,v){
   }else if(k==='email'){
     const em=String(v||'').trim().toLowerCase();
     if(ins.rol==='contratista'){
-      if(!em){notif('Seleccione un correo de Usuarios autorizados','err');renderListasCfg();return;}
+      if(!em){notif('Seleccione un responsable autorizado de su departamento','err');renderListasCfg();return;}
       const u=getUsuarioAutorizadoByEmail(em);
-      if(!u){notif('Esta persona debe registrarse primero en Configuración > Usuarios autorizados','err');renderListasCfg();return;}
+      if(!u){notif('Solicite al administrador registrar este responsable en Usuarios autorizados','err');renderListasCfg();return;}
+      if(u.rol!=='responsables'){notif('Solo usuarios con rol Responsables','err');renderListasCfg();return;}
+      const deptEdit=deptoCfg||getDeptoOperativo();
+      if(!usuarioEsResponsableDepto(u,deptEdit)){notif('Este responsable no pertenece a '+labelDepartamento(deptEdit),'err');renderListasCfg();return;}
       if(cfg.instructores.some((x,j)=>j!==i&&String(x.email||'').trim().toLowerCase()===em)){notif('Ese usuario ya está registrado como responsable','err');renderListasCfg();return;}
       ins.email=em;
       ins.nombre=u.nombre||em;
@@ -15525,6 +15595,11 @@ function cfgCardReadonlyStrings(arr){
 function renderCfg(){
   updateDeptoUI();
   updateCfgTabsDepto();
+  if(!esAdminFirestore()){
+    stopUsuariosFirestoreListener();
+    const uPg=document.getElementById('cpg-usuarios');
+    if(uPg&&uPg.classList.contains('on'))showCfgTab('listas');
+  }
   const cfgSub=document.querySelector('#pg-cfg > .ssub');
   if(cfgSub){
     cfgSub.textContent=esAdminModoGlobal()
@@ -17926,6 +18001,8 @@ window.exportarAhoraFromReminder=exportarAhoraFromReminder;
 window.recordarDespuesExport=recordarDespuesExport;
 window.iniciarLoginGoogle=iniciarLoginGoogle;
 window.abrirPanelUsuariosAutorizados=abrirPanelUsuariosAutorizados;
+window.refreshInstructoresEmailSelect=refreshInstructoresEmailSelect;
+window.toggleUsuarioDeptoResponsableField=toggleUsuarioDeptoResponsableField;
 window.onInstructorUsuarioEmailSelect=onInstructorUsuarioEmailSelect;
 window.ingresarConsultaCiudadana=ingresarConsultaCiudadana;
 window.cerrarSesionGoogle=cerrarSesionGoogle;
