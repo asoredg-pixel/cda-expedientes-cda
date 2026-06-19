@@ -1829,10 +1829,11 @@ function cfgPuedeEditarPersonas(){return cfgPuedeEditarResponsablesPersonas();}
 function esAdministrador(){return rolSesion==='admin';}
 function esAdminFirestore(){return !!(window._usuarioActual&&window._usuarioActual.rol==='admin');}
 function esEncargadoDepartamentalUsuarios(){
-  if(!window._usuarioActual||esAdminFirestore())return false;
+  if(!window._usuarioActual||esAdminFirestore()||esAdministrador())return false;
   const rol=String(window._usuarioActual.rol||'').trim();
   return DEPTOS.some(d=>d.id===rol);
 }
+function esVistaUsuariosAdminCompleta(){return esAdminFirestore()||esAdministrador();}
 function puedeGestionarUsuariosAutorizados(){return esAdminFirestore()||esEncargadoDepartamentalUsuarios();}
 function puedeEliminarUsuariosAutorizados(){return esAdminFirestore();}
 function getDeptoGestionUsuariosAutorizados(){
@@ -5522,7 +5523,9 @@ function rolesFirestoreOpts(selected){
   const seen=new Set();
   const opts=[];
   ROLES_INGRESO.forEach(r=>{if(!seen.has(r.id)&&!excluir.has(r.id)){seen.add(r.id);opts.push(r);}});
-  return opts.map(r=>'<option value="'+escAttr(r.id)+'"'+(selected===r.id?' selected':'')+'>'+escAttr(r.titulo)+'</option>').join('');
+  let h=selected?'':'<option value="">— Seleccione rol —</option>';
+  h+=opts.map(r=>'<option value="'+escAttr(r.id)+'"'+(selected===r.id?' selected':'')+'>'+escAttr(r.titulo)+'</option>').join('');
+  return h;
 }
 function tituloRolFirestore(rolId){
   if(rolId==='contratista')return 'Responsables';
@@ -5777,7 +5780,7 @@ async function ensureUsuariosFirestoreCache(force){
 }
 function invalidateUsuariosCache(){_usuariosCacheLoaded=false;}
 function getDeptoResponsablesSelect(){
-  if(esAdminModoGlobal()){
+  if(esAdministrador()||esAdminModoGlobal()){
     const sd=document.getElementById('cfi-instructores-depto');
     if(sd&&sd.value)return sd.value;
     return 'guaviare';
@@ -5846,6 +5849,7 @@ function instructorUsuarioAlertHtml(email,deptoId){
 }
 function abrirPanelUsuariosAutorizados(){
   if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso para gestionar usuarios autorizados','err');return;}
+  prepararVistaAdminUsuariosAutorizados();
   showTab('cfg');
   showCfgTab('usuarios');
   setTimeout(()=>mostrarFormUsuarioFirestore(),120);
@@ -5866,7 +5870,7 @@ function mostrarFormUsuarioFirestore(){
   ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;}});
   const deptoEnc=getDeptoGestionUsuariosAutorizados();
   const rol=document.getElementById('usu-fs-rol');
-  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts('guaviare');
+  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts('');
   else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
   const depto=document.getElementById('usu-fs-depto');
   if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoEnc||'guaviare');
@@ -5923,8 +5927,9 @@ async function guardarUsuarioFirestore(){
     const prev=getUsuarioAutorizadoByEmail(_usuariosEditEmail);
     if(!usuarioEditablePorEncargado(prev)){notif('No puede editar este usuario','err');return;}
   }
-  if(!esAdminFirestore()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
+  if(!esVistaUsuariosAdminCompleta()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
   if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
+  if(!rol){notif('Seleccione un rol','err');return;}
   if(rol==='responsables'&&!deptoResponsable){notif('Indique el departamento del responsable','err');return;}
   if(rol==='ciudadano'||rol==='contratista'){notif('Use el rol Responsables para contratistas. La consulta ciudadana no requiere cuenta Google.','err');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){notif('Correo inválido','err');return;}
@@ -5983,7 +5988,7 @@ async function eliminarUsuarioFirestore(email){
     }catch(err){console.error(err);notif('Error al eliminar usuario','err');}
   });
 }
-async function renderUsuariosCfg(){
+async function renderUsuariosCfg(forceRebuild){
   const el=document.getElementById('cfg-usuarios-panel');
   if(!el)return;
   if(!puedeGestionarUsuariosAutorizados()){
@@ -5991,13 +5996,27 @@ async function renderUsuariosCfg(){
     el.innerHTML='<div class="emp" style="padding:1rem">No tiene permiso para gestionar usuarios autorizados.</div>';
     return;
   }
-  const needsShell=!document.getElementById('usuarios-fs-tbody');
+  const modeKey=esEncargadoDepartamentalUsuarios()?'enc-'+getDeptoGestionUsuariosAutorizados():'adm';
+  const tbody=document.getElementById('usuarios-fs-tbody');
+  const needsShell=forceRebuild||!tbody||tbody.dataset.mode!==modeKey;
   if(needsShell){
     stopUsuariosFirestoreListener();
     el.innerHTML=buildUsuariosCfgShell();
+    const tb=document.getElementById('usuarios-fs-tbody');
+    if(tb)tb.dataset.mode=modeKey;
   }
   await refreshUsuariosAutorizadosUi();
   if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection)startUsuariosFirestoreListener();
+}
+function prepararVistaAdminUsuariosAutorizados(){
+  if(!esAdministrador())return;
+  const sel=document.getElementById('sel-depto');
+  if(sel&&sel.value!=='admin'){
+    sel.value='admin';
+    deptoActivo='guaviare';
+    try{localStorage.setItem('sst_sel_modulo','admin');}catch(e){}
+    updateDeptoUI();
+  }
 }
 function getSoporteActivo(t){
   normalizeTask(t);
@@ -9234,6 +9253,14 @@ function postLoadInit(){
   deptoActivo=localStorage.getItem('sst_depto')||'guaviare';
   deptoCfg=localStorage.getItem('sst_depto_cfg')||'guaviare';
   responsableActivo=localStorage.getItem('sst_responsable')||'';
+  try{
+    const rolSes=sessionStorage.getItem('sst_rol_sesion');
+    if(rolSes==='admin'){
+      const savedMod=localStorage.getItem('sst_sel_modulo')||'admin';
+      if(savedMod==='admin')deptoActivo='guaviare';
+      else if(DEPTOS.some(d=>d.id===savedMod)||savedMod==='secretaria'||savedMod==='jurisdiccional'||savedMod==='responsables'||savedMod==='ciudadano'||OFICINAS_DEGUV.some(o=>o.id===savedMod))deptoActivo=savedMod;
+    }
+  }catch(e){}
   try{const al=localStorage.getItem('sst_act_libres');if(al)actividadesLibres=lsParseStoredJson(al);}catch(e){}
   try{const ag=localStorage.getItem('sst_agenda');if(ag)agendaEventos=lsParseStoredJson(ag);}catch(e){}
   try{const ch=localStorage.getItem('sst_chat');if(ch)chatMensajes=lsParseStoredJson(ch);}catch(e){}
@@ -9250,7 +9277,15 @@ function postLoadInit(){
   if(deptoActivo!=='jurisdiccional'&&deptoActivo!=='responsables')setCfgPtr(deptoActivo);
   else setCfgPtr(deptoCfg);
   const sel=document.getElementById('sel-depto');
-  if(sel)sel.value=deptoActivo;
+  if(sel){
+    try{
+      if(sessionStorage.getItem('sst_rol_sesion')==='admin'){
+        sel.value=localStorage.getItem('sst_sel_modulo')||'admin';
+      }else{
+        sel.value=deptoActivo;
+      }
+    }catch(e){sel.value=deptoActivo;}
+  }
   exps.forEach(e=>{
     if(!e._depto)e._depto='guaviare';
     migrarDetalleNotas(e);
@@ -10974,6 +11009,7 @@ function onDeptoChange(){
   if(!esAdministrador())return;
   syncCfgToStore();
   const selVal=document.getElementById('sel-depto').value;
+  if(esAdministrador()){try{localStorage.setItem('sst_sel_modulo',selVal);}catch(e){}}
   if(selVal==='admin')deptoActivo='guaviare';
   else deptoActivo=selVal;
   window._deptoConsFiltroTram='';
@@ -13119,12 +13155,16 @@ function showCfgTab(t){
   document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
   document.getElementById('cpg-'+t).classList.add('on');
   document.getElementById('ctab-'+t).classList.add('on');
+  if(t==='usuarios'){
+    prepararVistaAdminUsuariosAutorizados();
+    renderUsuariosCfg(true);
+    return;
+  }
   if(t==='listas')renderListasCfg();
   if(t==='info-tecnica')renderInfoTecCfg();
   if(t==='tramites')renderTramsCfg();
   if(t==='personas')renderPersonasCfg();
   if(t==='auditoria')renderAuditLogCfg();
-  if(t==='usuarios')renderUsuariosCfg();
 }
 function htmlApoderadoAutorizado(ev){
   const apo=!!ev._apoderado;
@@ -15535,7 +15575,7 @@ function instructorRowEditable(i,ins,deptoId){
 }
 function instructoresCardBody(){
   let h='<div class="cfcard">';
-  if(esVistaEncargadosModuloCfg()){
+  if(esVistaEncargadosModuloCfg()||esAdministrador()){
     DEPTOS.forEach(d=>{
       const rows=getInstructoresContratistasDepto(d.id);
       h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:'+(d.id===DEPTOS[0].id?'0':'14px')+' 0 8px">'+escAttr(labelDepartamento(d.id))+(d.id==='guaviare'?' · NCA DEGUV':'')+'</div>';
@@ -15555,7 +15595,7 @@ function instructoresCardBody(){
   }
   if(puedeGestionarContratistasCfg()){
     h+='<div class="cfadd" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
-    if(esAdminModoGlobal()){
+    if(esAdministrador()||esAdminModoGlobal()){
       h+='<select id="cfi-instructores-depto" class="depto-sel" style="min-width:140px;padding:6px 8px;font-size:12px" title="Departamento del nuevo responsable" onchange="refreshInstructoresEmailSelect()">'+
         DEPTOS.map(d=>'<option value="'+d.id+'">'+escAttr(labelDepto(d.id))+'</option>').join('')+
         '</select>';
@@ -15585,7 +15625,8 @@ function addInstructor(){
   if(u.rol!=='responsables'){notif('Solo usuarios con rol Responsables pueden agregarse','err');return;}
   let targetDepto=deptoCfg||getDeptoOperativo();
   const sd=document.getElementById('cfi-instructores-depto');
-  if(esAdminModoGlobal()&&sd)targetDepto=sd.value||targetDepto;
+  if(esAdministrador()&&sd)targetDepto=sd.value||targetDepto;
+  else if(esAdminModoGlobal()&&sd)targetDepto=sd.value||targetDepto;
   else targetDepto=getDeptoResponsablesSelect();
   if(!usuarioEsResponsableDepto(u,targetDepto)){notif('Este responsable está asignado a '+labelDepartamento(u.deptoResponsable||'otro departamento')+', no a '+labelDepartamento(targetDepto),'err');return;}
   withCfgDepto(targetDepto,()=>{
@@ -17971,7 +18012,7 @@ function ingresarComoRol(rolId,respNombre){
   editId=null;
   const sel=document.getElementById('sel-depto');
   if(sel){
-    if(rolId==='admin'){sel.value='admin';deptoActivo='guaviare';}
+    if(rolId==='admin'){sel.value='admin';deptoActivo='guaviare';try{localStorage.setItem('sst_sel_modulo','admin');}catch(e){}}
     else sel.value=deptoActivo;
     sel.style.display=rolId==='admin'?'':'none';
   }
