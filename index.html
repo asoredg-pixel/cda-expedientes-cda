@@ -2220,6 +2220,60 @@ function syncEncargadosGlobalToInstructores(){
   if(encargadoSlotTieneData(sec))upsertInstructorEncargado('guaviare',sec.nombre,sec.email,'encargado_oficina',['secretaria']);
   else removeEncargadoInstructorOficina('secretaria');
 }
+function rolEsEncargadoModulo(rol){
+  rol=String(rol||'').trim();
+  if(rol==='secretaria')return{type:'secretaria'};
+  if(DEPTOS.some(d=>d.id===rol))return{type:'departamento',id:rol};
+  if(OFICINAS_DEGUV.some(o=>o.id===rol&&o.id!=='guaviare'&&o.id!=='secretaria'))return{type:'oficina',id:rol};
+  return null;
+}
+function syncEncargadosDesdeUsuariosAutorizados(){
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  const vacio={nombre:'',email:''};
+  encargadosGlobal.secretaria={...vacio};
+  DEPTOS.forEach(d=>{encargadosGlobal.departamentos[d.id]={...vacio};});
+  Object.keys(encargadosGlobal.oficinas||{}).forEach(id=>{encargadosGlobal.oficinas[id]={...vacio};});
+  (_usuariosCache||[]).filter(u=>u.activo!==false).forEach(u=>{
+    const mod=rolEsEncargadoModulo(u.rol);
+    if(!mod)return;
+    const data={nombre:String(u.nombre||'').trim(),email:String(u.email||'').trim().toLowerCase()};
+    if(!data.email)return;
+    if(mod.type==='secretaria')encargadosGlobal.secretaria=data;
+    else if(mod.type==='departamento')encargadosGlobal.departamentos[mod.id]=data;
+    else if(mod.type==='oficina')encargadosGlobal.oficinas[mod.id]=data;
+  });
+  syncEncargadoNcaGlobalSlots(encargadosGlobal);
+  syncEncargadosGlobalToInstructores();
+}
+function syncResponsablesDesdeUsuariosAutorizados(){
+  (_usuariosCache||[]).filter(u=>u.activo!==false&&u.rol==='responsables').forEach(u=>{
+    const email=String(u.email||'').trim().toLowerCase();
+    const nombre=String(u.nombre||'').trim();
+    if(!email||!nombre)return;
+    const c=cfgByDepto.guaviare;
+    if(!c)return;
+    c.instructores=migrateInstructoresList(c.instructores||[]);
+    let ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
+    if(ins){
+      if(ins.rol!=='encargado_depto'&&ins.rol!=='encargado_oficina'){
+        ins.nombre=nombre;ins.email=email;ins.activo=true;ins.rol='contratista';
+      }
+    }else{
+      c.instructores.push({id:'ins_'+Date.now(),nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
+    }
+  });
+}
+async function aplicarSyncUsuariosAutorizados(opts){
+  opts=opts||{};
+  syncEncargadosDesdeUsuariosAutorizados();
+  syncResponsablesDesdeUsuariosAutorizados();
+  syncCfgToStore();
+  _saveLSLocal();
+  if(!opts.skipSave&&window._db&&window._fsSetDoc){
+    try{await saveFirestore();}catch(err){console.error('Error sincronizando encargados/responsables:',err);}
+  }
+  if(!opts.silent&&(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')))renderListasCfg();
+}
 function findInstructorByEmail(email){
   email=String(email||'').toLowerCase().trim();
   if(!email)return null;
@@ -5581,6 +5635,7 @@ function startUsuariosFirestoreListener(){
       persistUsuariosIndexGlobal().catch(()=>{});
     }
     paintUsuariosCfgTable();
+    aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   },err=>{
     console.error('Error escuchando usuarios Firestore:',err);
@@ -5613,7 +5668,7 @@ function buildUsuariosCfgShell(){
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
     '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados para ingresar al sistema.</div></div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados. El rol define el módulo: Secretaría, NCA, departamentos u oficinas quedan encargados automáticamente; Responsables se vincula en la lista de responsables.</div></div>'+
     '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
     '<button type="button" class="btn bsm" onclick="sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
@@ -5666,6 +5721,10 @@ async function loadUsuariosFirestore(){
   }
   try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
   if(loaded)await persistUsuariosIndexGlobal().catch(()=>{});
+  if(_usuariosCacheLoaded){
+    syncEncargadosDesdeUsuariosAutorizados();
+    syncResponsablesDesdeUsuariosAutorizados();
+  }
   return _usuariosCache;
 }
 async function ensureUsuariosFirestoreCache(force){
@@ -5755,7 +5814,8 @@ async function guardarUsuarioFirestore(){
     logAudit((_usuariosEditEmail?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
     mergeUsuarioEnCache({email,nombre,rol,codigo,activo});
     await persistUsuariosIndexGlobal();
-    notif('Usuario guardado','ok');
+    await aplicarSyncUsuariosAutorizados();
+    notif('Usuario guardado'+(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''),'ok');
     ocultarFormUsuarioFirestore();
     await refreshUsuariosAutorizadosUi();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
@@ -5775,6 +5835,7 @@ async function toggleUsuarioFirestoreActivo(email,activo){
     const u=getUsuarioAutorizadoByEmail(email);
     if(u)mergeUsuarioEnCache({...u,activo:!!activo});
     await persistUsuariosIndexGlobal();
+    await aplicarSyncUsuariosAutorizados();
     notif(activo?'Usuario activado':'Usuario desactivado','ok');
     await refreshUsuariosAutorizadosUi();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
@@ -5791,6 +5852,7 @@ async function eliminarUsuarioFirestore(email){
       logAudit('Eliminó usuario autorizado '+email,'configuracion',null);
       removeUsuarioDeCache(email);
       await persistUsuariosIndexGlobal();
+      await aplicarSyncUsuariosAutorizados();
       notif('Usuario eliminado','ok');
       await refreshUsuariosAutorizadosUi();
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
@@ -15254,7 +15316,7 @@ const CFG_PANELS=[
   {key:'instructores',title:'Responsables',sub:''},
 ];
 function instructoresPanelSub(){
-  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (correo y nombre). Los encargados se definen en «Encargados por módulo». Elija departamento al añadir.';
+  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (rol Responsables). Los encargados de módulo (Secretaría, NCA, departamentos y oficinas) se asignan al definir el rol en Usuarios autorizados.';
   return 'Seleccione el correo desde Usuarios autorizados; el nombre se completa automáticamente.';
 }
 function instructorUsuarioLinkRow(i,ins,deptoId){
@@ -15503,34 +15565,24 @@ function restoreCfgFoldState(open){
 function encargadosGlobalCardBody(){
   encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
   const nca=encargadosGlobal.departamentos.guaviare||{nombre:'',email:''};
-  const mkSlot=(tit,grupo,id)=>{
-    const data=(encargadosGlobal[grupo]||{})[id]||{nombre:'',email:''};
-    const g=jsStr(grupo),sid=jsStr(id);
-    return '<div class="encargado-slot" id="enc-slot-'+g+'-'+sid+'"><div class="encargado-slot-k">'+escAttr(tit)+'</div>'+
-      '<input type="text" placeholder="Nombre encargado" value="'+escAttr(data.nombre||'')+'" onchange="setEncargadoGlobal(\''+grupo+'\',\''+escAttr(id)+'\',\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-      '<input type="email" placeholder="Correo Gmail" value="'+escAttr(data.email||'')+'" onchange="setEncargadoGlobal(\''+grupo+'\',\''+escAttr(id)+'\',\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-      (encargadoSlotTieneData(data)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\''+grupo+'\',\''+escAttr(id)+'\')">✕ Quitar encargado</button>':'')+
+  const mkView=(tit,data)=>{
+    data=data||{nombre:'',email:''};
+    return '<div class="encargado-slot"><div class="encargado-slot-k">'+escAttr(tit)+'</div>'+
+      (encargadoSlotTieneData(data)?'<div style="font-size:13px;font-weight:600;margin-top:4px">'+escAttr(data.nombre)+'</div><div style="font-size:11px;color:var(--tx2);margin-top:2px">'+escAttr(data.email)+'</div>':'<div style="font-size:11px;color:var(--tx3);margin-top:4px">Sin encargado — registre un usuario autorizado con el rol de este módulo</div>')+
       '</div>';
   };
-  let h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Atajo para encargados: también puede definirlos en «Personas del departamento» (rol Encargado). Los cambios se sincronizan en ambos sentidos al guardar.</div>';
+  let h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--bll);border-radius:var(--r);border:1px solid var(--bl)">Vista informativa. Los encargados se asignan en <strong>Usuarios autorizados</strong> al elegir el rol del módulo (Secretaría, NCA DEGUV, Guainía, Vaupés u oficinas DEGUV). No es necesario registrarlos aquí por separado.</div>';
+  h+='<div style="margin-bottom:8px"><button type="button" class="btn bsm bp" onclick="abrirPanelUsuariosAutorizados()">➕ Registrar usuario autorizado</button></div>';
   h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">NCA DEGUV — trámites ambientales y PQRSD Guaviare</div><div class="encargados-grid">';
-  h+='<div class="encargado-slot" id="enc-slot-nca"><div class="encargado-slot-k">NCA DEGUV</div>'+
-    '<input type="text" placeholder="Nombre encargado" value="'+escAttr(nca.nombre||'')+'" onchange="setEncargadoNcaUnificado(\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(nca.email||'')+'" onchange="setEncargadoNcaUnificado(\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    (encargadoSlotTieneData(nca)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\'departamentos\',\'guaviare\')">✕ Quitar encargado</button>':'')+
-    '</div>';
+  h+=mkView('NCA DEGUV',nca);
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Departamentos regionales</div><div class="encargados-grid">';
-  h+=mkSlot('Guainía','departamentos','guainia');
-  h+=mkSlot('Vaupés','departamentos','vaupes');
+  h+=mkView('Guainía',encargadosGlobal.departamentos.guainia);
+  h+=mkView('Vaupés',encargadosGlobal.departamentos.vaupes);
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Oficinas DEGUV</div><div class="encargados-grid">';
-  OFICINAS_DEGUV.filter(o=>o.id!=='secretaria'&&o.id!=='guaviare').forEach(o=>{h+=mkSlot(o.nombre,'oficinas',o.id);});
+  OFICINAS_DEGUV.filter(o=>o.id!=='secretaria'&&o.id!=='guaviare').forEach(o=>{h+=mkView(o.nombre,encargadosGlobal.oficinas[o.id]);});
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Secretaría</div><div class="encargados-grid">';
-  h+='<div class="encargado-slot" id="enc-slot-secretaria"><div class="encargado-slot-k">Secretaría DEGUV</div>'+
-    '<input type="text" placeholder="Nombre encargado" value="'+escAttr(encargadosGlobal.secretaria.nombre||'')+'" onchange="setEncargadoGlobal(\'secretaria\',\'\',\'nombre\',this.value)" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    '<input type="email" placeholder="Correo Gmail" value="'+escAttr(encargadosGlobal.secretaria.email||'')+'" onchange="setEncargadoGlobal(\'secretaria\',\'\',\'email\',this.value)" style="width:100%;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
-    (encargadoSlotTieneData(encargadosGlobal.secretaria)?'<button type="button" class="btn bsm bd2" style="margin-top:6px;width:100%" onclick="limpiarEncargadoSlot(\'secretaria\',\'\')">✕ Quitar encargado</button>':'')+
-    '</div>';
-  h+='</div><div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarEncargadosGlobal()">Guardar encargados</button></div>';
+  h+=mkView('Secretaría DEGUV',encargadosGlobal.secretaria);
+  h+='</div>';
   return h;
 }
 function setEncargadoGlobal(grupo,id,campo,val){
@@ -15585,9 +15637,10 @@ function renderListasCfg(){
   const el=document.getElementById('cfg-panels');if(!el)return;
   const open=saveCfgFoldState();
   ensureUsuariosFirestoreCache().then(()=>{
+    syncEncargadosDesdeUsuariosAutorizados();
     const ro=cfgEsSoloLectura();
     let html='';
-    if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','NCA DEGUV unificado (trámites + PQRSD Guaviare), departamentos regionales, oficinas DEGUV y Secretaría — nombre y correo Gmail.',encargadosGlobalCardBody(),false)+
+    if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','Asignación automática según el rol en Usuarios autorizados (Secretaría, NCA, departamentos y oficinas DEGUV).',encargadosGlobalCardBody(),false)+
       cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     html+=cfgSectionFold('Actividades predeterminadas','Crea opciones reutilizables para buscarlas al asignar actividades en el registro.',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
