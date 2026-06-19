@@ -14419,7 +14419,7 @@ function contarPorDepto(list){
   return c;
 }
 function pieChartDeptoHtml(counts){
-  const entries=DEPTOS.map(d=>({id:d.id,nombre:d.nombre,v:counts[d.id]||0})).filter(x=>x.v>0);
+  const entries=DEPTOS.map(d=>({id:d.id,nombre:labelDepartamento(d.id),v:counts[d.id]||0})).filter(x=>x.v>0);
   const total=entries.reduce((s,x)=>s+x.v,0);
   if(!total)return'<div style="font-size:12px;color:var(--tx3)">Sin expedientes</div>';
   let acc=0;
@@ -14520,7 +14520,7 @@ function renderJurisConsolidadoStats(list,fullList){
     const ate=porEstado['Atendido'][id]||0;
     const seg=porEstado['Seguimiento'][id]||0;
     const arch=porEstado['Archivado o anulado'][id]||0;
-    return '<tr><td style="font-weight:600">'+d.nombre+'</td><td style="text-align:center;font-weight:700">'+t+'</td><td style="text-align:center">'+tr+'</td>'+
+    return '<tr><td style="font-weight:600">'+labelDepartamento(d.id)+'</td><td style="text-align:center;font-weight:700">'+t+'</td><td style="text-align:center">'+tr+'</td>'+
       '<td style="text-align:center">'+sol+'</td><td style="text-align:center">'+et+'</td><td style="text-align:center">'+ate+'</td><td style="text-align:center">'+seg+'</td><td style="text-align:center">'+arch+'</td></tr>';
   }).join('');
   const sumCol=(fn)=>deptoRows.reduce((s,d)=>s+fn(d.id),0);
@@ -14528,7 +14528,7 @@ function renderJurisConsolidadoStats(list,fullList){
   const filtros='<div class="juris-filtros-bar">'+
     '<div class="fld"><label>Departamento</label><select id="juris-f-depto" onchange="onJurisFiltroChange()">'+
     '<option value=""'+(fd===''?' selected':'')+'>Todos los departamentos</option>'+
-    DEPTOS.map(d=>'<option value="'+d.id+'"'+(fd===d.id?' selected':'')+'>'+d.nombre+'</option>').join('')+
+    DEPTOS.map(d=>'<option value="'+d.id+'"'+(fd===d.id?' selected':'')+'>'+labelDepartamento(d.id)+'</option>').join('')+
     '</select></div>'+
     '<div class="fld"><label>Tipo de trámite</label><select id="juris-f-tram" onchange="onJurisFiltroChange()">'+
     '<option value=""'+(ft===''?' selected':'')+'>Todos los trámites</option>'+
@@ -16100,7 +16100,7 @@ function mvItem(k,i,d){if(guardCfgEditGeneral())return;const a=cfg[k];const n=i+
 function renderTramsCfg(){
   const ro=cfgEsSoloLectura();
   if(ro){
-    document.getElementById('trams-list').innerHTML=cfgRestringidoBannerHtml()+cfg.tramites.map(t=>'<div class="trc"><div class="trh"><div class="fx" style="gap:8px"><div style="width:11px;height:11px;border-radius:50%;background:'+t.color+'"></div><div class="trn">'+escAttr(t.nombre)+'</div><span style="font-size:12px;color:var(--tx2)">'+(t.etapas||[]).length+' etapas · '+(t.campos||[]).length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+'</span></div></div></div>').join('');
+    document.getElementById('trams-list').innerHTML=cfgRestringidoBannerHtml()+cfg.tramites.map(t=>'<div class="trc"><div class="trh"><div class="fx" style="gap:8px"><div style="width:11px;height:11px;border-radius:50%;background:'+t.color+'"></div><div class="trn">'+escAttr(t.nombre)+'</div><span style="font-size:12px;color:var(--tx2)">'+(t.campos||[]).length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+'</span></div></div></div>').join('');
     return;
   }
   document.getElementById('trams-list').innerHTML=cfg.tramites.map((t)=>{
@@ -16129,7 +16129,7 @@ function renderTramsCfg(){
         '<div class="fx" style="gap:8px">'+
           '<div style="width:11px;height:11px;border-radius:50%;background:'+t.color+';flex-shrink:0"></div>'+
           '<div class="trn">'+escAttr(t.nombre)+'</div>'+
-          '<span style="font-size:12px;color:var(--tx2)">'+( t.etapas||[]).length+' etapas · '+campos.length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+'</span>'+
+          '<span style="font-size:12px;color:var(--tx2)">'+campos.length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+'</span>'+
         '</div>'+
         '<div class="fx" style="gap:5px"><button class="btn bsm bd2" onclick="event.stopPropagation();delTram(\''+jsStr(t.id)+'\')">🗑 Eliminar</button><span>▼</span></div>'+
       '</div>'+
@@ -16144,14 +16144,6 @@ function renderTramsCfg(){
             '<div class="fld"><label>Alerta en % del plazo</label><input type="number" id="tram-alerta-'+t.id+'" value="'+t.alerta+'" min="1" max="100" style="border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif;background:var(--sf);width:100%"></div>'+
           '</div>'+
         '</div>'+
-        // Etapas
-        '<div style="margin-top:.6rem"><div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.3rem">Etapas del proceso</div>'+
-        (t.etapas||[]).map((a,ai)=>'<div class="eta-row"><div class="eta-num" style="background:'+t.color+'">'+( ai+1)+'</div><span>'+a+'</span>'+
-          (ai>0?'<button class="btn bsm bic" onclick="mvEta(\''+t.id+'\','+ai+',-1)">▲</button>':'<span style="width:24px"></span>')+
-          (ai<(t.etapas.length-1)?'<button class="btn bsm bic" onclick="mvEta(\''+t.id+'\','+ai+',1)">▼</button>':'<span style="width:24px"></span>')+
-          '<button class="btn bsm bic bd2" onclick="delEta(\''+t.id+'\','+ai+')">✕</button>'+
-        '</div>').join('')+
-        renderEtapasPredPicker(t)+'</div>'+
         // Campos
         '<div style="margin-top:.6rem"><div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.3rem">Campos del formulario</div>'+
         secHtml+
@@ -16162,7 +16154,7 @@ function renderTramsCfg(){
         '</div></div>'+
         '<div class="tram-save-bar">'+
           '<button type="button" class="btn bp" onclick="event.stopPropagation();guardarTramite(\''+jsStr(t.id)+'\')">💾 Guardar trámite</button>'+
-          '<span style="font-size:11px;color:var(--tx3)">Términos, etapas y campos se guardan al pulsar este botón.</span>'+
+          '<span style="font-size:11px;color:var(--tx3)">Términos y campos se guardan al pulsar este botón.</span>'+
         '</div>'+
       '</div>'+
     '</div>';
