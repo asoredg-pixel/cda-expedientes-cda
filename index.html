@@ -4039,6 +4039,10 @@ function poblarActDeptRespSel(){
 }
 function poblarSelResponsable(){
   const sel=document.getElementById('sel-responsable');if(!sel)return;
+  if(esResponsableIdentidadFija()){
+    fijarResponsableSesion();
+    return;
+  }
   const cv=responsableActivo||sel.value;
   const names=esModoResponsable()?getAllResponsables():[];
   sel.innerHTML='<option value="">— Seleccione —</option>'+names.map(n=>'<option value="'+escAttr(n)+'"'+(cv===n?' selected':'')+'>'+escAttr(n)+'</option>').join('');
@@ -4047,6 +4051,7 @@ function poblarSelResponsable(){
   if(lbl)lbl.textContent='Responsable:';
 }
 function onResponsableChange(){
+  if(esResponsableIdentidadFija()){fijarResponsableSesion();return;}
   const sel=document.getElementById('sel-responsable');
   responsableActivo=sel?sel.value:'';
   try{localStorage.setItem('sst_responsable',responsableActivo||'');}catch(e){}
@@ -4062,6 +4067,7 @@ function onResponsableChange(){
   renderBandejaDepto();
 }
 function cambiarResponsable(){
+  if(esResponsableIdentidadFija()){notif('Su sesión está vinculada a su cuenta de Google','err');return;}
   responsableActivo='';
   try{localStorage.setItem('sst_responsable','');}catch(e){}
   const sel=document.getElementById('sel-responsable');
@@ -5437,17 +5443,63 @@ function exportarAuditLogCompleto(){
   notif('Log de auditoría exportado ('+entries.length+' entradas)','ok');
 }
 function rolesFirestoreOpts(selected){
+  const excluir=new Set(['ciudadano','contratista']);
   const seen=new Set();
   const opts=[];
-  ROLES_INGRESO.forEach(r=>{if(!seen.has(r.id)){seen.add(r.id);opts.push(r);}});
-  if(!seen.has('contratista'))opts.push({id:'contratista',titulo:'Contratista'});
+  ROLES_INGRESO.forEach(r=>{if(!seen.has(r.id)&&!excluir.has(r.id)){seen.add(r.id);opts.push(r);}});
   return opts.map(r=>'<option value="'+escAttr(r.id)+'"'+(selected===r.id?' selected':'')+'>'+escAttr(r.titulo)+'</option>').join('');
 }
 function tituloRolFirestore(rolId){
+  if(rolId==='contratista')return 'Responsables';
   const r=ROLES_INGRESO.find(x=>x.id===rolId);
   if(r)return r.titulo;
-  if(rolId==='contratista')return 'Contratista';
   return rolId||'—';
+}
+function esResponsableIdentidadFija(){
+  if(!window._usuarioActual||esAdminFirestore())return false;
+  const r=window._usuarioActual.rol;
+  return r==='responsables'||r==='contratista';
+}
+function getResponsableLoginNombre(){
+  const u=window._usuarioActual;
+  if(!u)return '';
+  const ins=findInstructorByEmail(u.email);
+  if(ins&&String(ins.nombre||'').trim())return String(ins.nombre).trim();
+  return String(u.nombre||'').trim();
+}
+function fijarResponsableSesion(){
+  const nom=getResponsableLoginNombre();
+  if(!nom)return false;
+  responsableActivo=nom;
+  try{localStorage.setItem('sst_responsable',nom);}catch(e){}
+  const hint=document.getElementById('resp-global-hint');
+  if(hint)hint.textContent='Sesión vinculada a su cuenta · '+nom;
+  return true;
+}
+function normalizarRolLoginFirestore(rol){
+  rol=String(rol||'').trim();
+  if(rol==='contratista')return'responsables';
+  return rol;
+}
+function resolverAccesoLoginUsuario(data,email){
+  const rolRaw=String(data.rol||'').trim();
+  if(rolRaw==='ciudadano'){
+    return{ok:false,msg:'La consulta ciudadana no requiere cuenta Google. Use la opción en la pantalla de inicio.'};
+  }
+  const rolLogin=normalizarRolLoginFirestore(rolRaw);
+  const rolesValidos=ROLES_INGRESO.map(r=>r.id).filter(id=>id!=='ciudadano'&&id!=='contratista');
+  if(!rolesValidos.includes(rolLogin)&&rolRaw!=='contratista'){
+    return{ok:false,msg:'❌ Acceso denegado. Rol no reconocido en el sistema.'};
+  }
+  let respNom='';
+  if(rolLogin==='responsables'){
+    const ins=findInstructorByEmail(email);
+    respNom=ins&&String(ins.nombre||'').trim()?String(ins.nombre).trim():String(data.nombre||'').trim();
+    if(!respNom){
+      return{ok:false,msg:'❌ Acceso denegado. Debe estar registrado como responsable en Configuración antes de ingresar.'};
+    }
+  }
+  return{ok:true,rol:rolLogin,respNom};
 }
 let _usuariosCache=[];
 let _usuariosCacheLoaded=false;
@@ -5694,6 +5746,7 @@ async function guardarUsuarioFirestore(){
   const codigo=String(document.getElementById('usu-fs-codigo')?.value||'').trim();
   const activo=!!document.getElementById('usu-fs-activo')?.checked;
   if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
+  if(rol==='ciudadano'||rol==='contratista'){notif('Use el rol Responsables para contratistas. La consulta ciudadana no requiere cuenta Google.','err');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){notif('Correo inválido','err');return;}
   try{
     const payload={nombre,rol,codigo,activo,actualizadoEn:new Date().toISOString()};
@@ -10748,8 +10801,11 @@ function onDeptoChange(){
   }else if(deptoActivo==='responsables'){
     editId=null;
     limpiarForm();
-    responsableActivo='';
-    try{localStorage.setItem('sst_responsable','');}catch(e){}
+    if(esResponsableIdentidadFija())fijarResponsableSesion();
+    else{
+      responsableActivo='';
+      try{localStorage.setItem('sst_responsable','');}catch(e){}
+    }
     poblarSelResponsable();
     if(document.getElementById('pg-cfg').classList.contains('on')||!document.querySelector('.pg.on'))showTab('con');
   }else{
@@ -10780,6 +10836,7 @@ function onDeptoChange(){
 }
 function updateDeptoUI(){
   if(esVistaActividadesDepto())ensureEncargadoActivo();
+  if(esModoResponsable()&&esResponsableIdentidadFija())fijarResponsableSesion();
   const ban=document.getElementById('reg-depto-banner');
   const respBar=document.getElementById('resp-global-bar');
   const sub=document.querySelector('.lsb');
@@ -10817,7 +10874,22 @@ function updateDeptoUI(){
   }
   if(respBar){
     respBar.classList.toggle('on',resp);
-    if(resp)poblarSelResponsable();
+    const respFijo=esResponsableIdentidadFija();
+    const selResp=document.getElementById('sel-responsable');
+    const lblResp=document.getElementById('resp-global-label');
+    const btnCambiarResp=respBar.querySelector('button[onclick="cambiarResponsable()"]');
+    if(resp){
+      if(respFijo)fijarResponsableSesion();
+      else poblarSelResponsable();
+      if(selResp)selResp.style.display=respFijo?'none':'';
+      if(btnCambiarResp)btnCambiarResp.style.display=respFijo?'none':'';
+      if(lblResp)lblResp.textContent=respFijo?'Conectado como:':'Responsable:';
+      if(respFijo){
+        const nom=getResponsableLoginNombre();
+        const hint=document.getElementById('resp-global-hint');
+        if(hint&&nom)hint.innerHTML='<strong style="color:var(--tx)">'+escAttr(nom)+'</strong> · '+escAttr(responsablePuedeVerRegistro()?'Consulta, actividades y registro según permisos':'Consulta y actividades asignadas');
+      }
+    }
   }
   const tabReg=document.getElementById('tab-reg');
   const hideRegResp=resp&&!responsablePuedeVerRegistro();
@@ -17568,14 +17640,14 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
-    window._usuarioActual={email,nombre:data.nombre||email,rol:data.rol||'',codigo:data.codigo||'',uid};
+    window._usuarioActual={email,nombre:data.nombre||email,rol:normalizarRolLoginFirestore(data.rol||''),codigo:data.codigo||'',uid,rolOriginal:data.rol||''};
     authUsuario=fbUser;
     setLoginStatus('');
     setLoginAuthMsg('');
-    const rolValido=data.rol==='contratista'||ROLES_INGRESO.some(r=>r.id===data.rol);
-    if(!rolValido){
+    const acceso=resolverAccesoLoginUsuario(data,email);
+    if(!acceso.ok){
       window._usuarioActual=null;
-      setLoginAuthMsg('❌ Acceso denegado. Rol no reconocido en el sistema.','err');
+      setLoginAuthMsg(acceso.msg,'err');
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
@@ -17583,8 +17655,7 @@ async function verificarUsuarioFirestore(fbUser){
     const rolesWrap=document.getElementById('login-roles-wrap');
     if(authPanel)authPanel.style.display='none';
     if(rolesWrap)rolesWrap.style.display='none';
-    const respNom=(data.rol==='contratista'||data.rol==='responsables')?data.nombre:'';
-    ingresarComoRol(data.rol,respNom);
+    ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
     setLoginStatus('');
@@ -17635,8 +17706,8 @@ function mostrarSelectorRolesAdmin(nombre){
   if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
     if(window._usuarioActual&&window._usuarioActual.rol){
       const u=window._usuarioActual;
-      const respNom=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
-      ingresarComoRol(u.rol,respNom);
+      const respNom=u&&u.rol==='responsables'?getResponsableLoginNombre():'';
+      ingresarComoRol(normalizarRolLoginFirestore(u.rol),respNom);
     }
     return;
   }
@@ -17654,8 +17725,8 @@ function renderLoginRoles(){
   if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
     if(window._usuarioActual&&window._usuarioActual.rol){
       const u=window._usuarioActual;
-      const respNom=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
-      ingresarComoRol(u.rol,respNom);
+      const respNom=u&&u.rol==='responsables'?getResponsableLoginNombre():'';
+      ingresarComoRol(normalizarRolLoginFirestore(u.rol),respNom);
     }
     return;
   }
@@ -17668,7 +17739,7 @@ function rutaInicialPorRol(rolId){
   if(rolId==='ciudadano')return'ciudadano';
   if(rolId==='contratista')return'reg';
   if(rolId==='jurisdiccional')return'con';
-  if(rolId==='responsables')return'con';
+  if(rolId==='responsables')return responsableActivo?'act':'con';
   if(OFICINAS_DEGUV.some(o=>o.id===rolId&&o.id!=='guaviare'&&o.id!=='secretaria'))return'pqrs-ofi';
   if(rolId==='admin'||DEPTOS.some(d=>d.id===rolId))return'reg';
   return'con';
@@ -17678,9 +17749,11 @@ function ingresarComoRol(rolId,respNombre){
   if(!rolId)return;
   const u=window._usuarioActual;
   if(u&&u.rol&&u.rol!=='admin'){
-    if(rolId!==u.rol){
-      const rn=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
-      ingresarComoRol(u.rol,rn);
+    const rolAsignado=normalizarRolLoginFirestore(u.rol);
+    const rolIntento=normalizarRolLoginFirestore(rolId);
+    if(rolIntento!==rolAsignado){
+      const rn=rolAsignado==='responsables'?getResponsableLoginNombre():'';
+      ingresarComoRol(rolAsignado,rn);
       return;
     }
   }
@@ -17693,6 +17766,7 @@ function ingresarComoRol(rolId,respNombre){
     deptoActivo=rolId==='admin'?'guaviare':rolId;
   }
   responsableActivo=respNombre?String(respNombre).trim():'';
+  if(esResponsableIdentidadFija())fijarResponsableSesion();
   editId=null;
   const sel=document.getElementById('sel-depto');
   if(sel){
