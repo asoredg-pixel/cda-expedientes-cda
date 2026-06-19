@@ -1903,7 +1903,30 @@ function withCfgDepto(deptoId,fn){
   }
 }
 function editInstructorDepto(deptoId,i,k,v){withCfgDepto(deptoId,()=>editInstructor(i,k,v));}
-function delInstructorDepto(deptoId,i){withCfgDepto(deptoId,()=>delInstructor(i));}
+function delInstructorDepto(deptoId,i){
+  withCfgDepto(deptoId,()=>{
+    cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
+    const ins=cfg.instructores[i];
+    if(!ins)return;
+    const esEnc=ins.rol==='encargado_depto'||ins.rol==='encargado_oficina';
+    if(esEnc&&!puedeGestionarEncargadosCfg()){notif('Solo el administrador puede eliminar encargados','err');return;}
+    if(!esEnc&&!instructorEditableContratista(ins)&&!esAdminModoGlobal()){notif('Solo puede eliminar responsables de su departamento','err');return;}
+    const insId=ins.id;
+    confirmEliminar({message:'¿Eliminar a '+escAttr(ins.nombre||'esta persona')+' de la lista?',detail:INST_ROLES[ins.rol]||''},()=>{
+      withCfgDepto(deptoId,()=>{
+        cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
+        const idx=cfg.instructores.findIndex(x=>x.id===insId);
+        if(idx<0){notif('No se encontró el responsable en '+labelDepartamento(deptoId),'err');return;}
+        cfg.instructores.splice(idx,1);
+        syncInstructoresToEncargadosGlobal();
+        saveLS();renderListasCfg();poblarSelResponsable();notif('Eliminado de la lista','ok');
+      });
+    });
+  });
+}
+function delInstructor(i){
+  delInstructorDepto(deptoCfg||getDeptoOperativo(),i);
+}
 function toggleInstructorRegSecDepto(deptoId,i,key,checked){withCfgDepto(deptoId,()=>toggleInstructorRegSec(i,key,checked));}
 function toggleInstructorOficinaDepto(deptoId,i,oficinaId,checked){withCfgDepto(deptoId,()=>toggleInstructorOficina(i,oficinaId,checked));}
 function instructorEditableContratista(ins){
@@ -2018,6 +2041,10 @@ function getDeptoOperativo(){
   return deptoActivo;
 }
 function nombreDeptoOperativo(){const d=DEPTOS.find(x=>x.id===getDeptoOperativo());return d?d.munKey:'Guaviare';}
+function labelDepartamento(id){
+  const d=DEPTOS.find(x=>x.id===id);
+  return d?d.munKey:(id||'');
+}
 function labelDepto(id){
   if(id==='admin')return 'Administrador';
   const of=OFICINAS_DEGUV.find(x=>x.id===id);
@@ -10765,7 +10792,7 @@ function updateDeptoUI(){
   const ofi=esModoOficinaDeguv();
   const ofiVista=esVistaPqrsOficinaDeguv();
   const ofiNom=ofi?labelOficina(deptoActivo):(ofiVista&&deptoActivo==='guaviare'?'NCA DEGUV':'');
-  if(sub)sub.textContent=juris?'Vista jurisdiccional — solo consulta y consolidado':ciudadano?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':sec?'Secretaría DEGUV — radicación y traslado de PQRSD a oficinas':ofi?('Oficina: '+ofiNom+' — bandeja de PQRSD trasladados'):resp?(responsableActivo?(responsablePuedeVerRegistro()?'Vista responsable — edición parcial en Registro según permisos':'Vista responsable — Consulta y actividades'):'Seleccione responsable'):encDepto?('Departamento: '+labelDepto(deptoActivo)+' · Encargado: '+encNom):esAdminModoGlobal()?('Administrador — vista global · '+labelDepto(deptoActivo)):esNcaDeguv()?('NCA DEGUV · Encargado: '+encNom):esRolDepartamentalCfg()?('Departamento: '+labelDepto(getRolEfectivo())+' · Encargado: '+encNom):'Departamento: '+labelDepto(getDeptoOperativo());
+  if(sub)sub.textContent=juris?'Vista jurisdiccional — solo consulta y consolidado':ciudadano?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':sec?'Secretaría DEGUV — radicación y traslado de PQRSD a oficinas':ofi?('Oficina: '+ofiNom+' — bandeja de PQRSD trasladados'):resp?(responsableActivo?(responsablePuedeVerRegistro()?'Vista responsable — edición parcial en Registro según permisos':'Vista responsable — Consulta y actividades'):'Seleccione responsable'):encDepto?('Departamento: '+labelDepartamento(deptoActivo)+' · Encargado: '+encNom):esAdminModoGlobal()?('Administrador — vista global · '+labelDepto(deptoActivo)):esNcaDeguv()?('Departamento: '+labelDepartamento('guaviare')+' · Encargado: '+encNom):esRolDepartamentalCfg()?('Departamento: '+labelDepartamento(getRolEfectivo())+' · Encargado: '+encNom):'Departamento: '+labelDepartamento(getDeptoOperativo());
   const selDepto=document.getElementById('sel-depto');
   if(selDepto)selDepto.style.display=esAdministrador()?'':'none';
   const tabAud=document.getElementById('ctab-auditoria');
@@ -15168,7 +15195,6 @@ function instructorUsuarioLinkRow(i,ins,deptoId){
   h+='<span class="inst-nombre-ro" style="font-weight:600;font-size:12px;padding:4px 0">'+escAttr(nombreMostrar)+'</span>';
   const alert=instructorUsuarioAlertHtml(cur);
   if(alert)h+=alert;
-  h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()" title="Abrir Usuarios autorizados">+ Registrar nuevo usuario</button>';
   h+='</div>';
   return h;
 }
@@ -15250,7 +15276,7 @@ function instructoresCardBody(){
   if(esVistaEncargadosModuloCfg()){
     DEPTOS.forEach(d=>{
       const rows=getInstructoresContratistasDepto(d.id);
-      h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:'+(d.id===DEPTOS[0].id?'0':'14px')+' 0 8px">'+escAttr(labelDepto(d.id))+'</div>';
+      h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:'+(d.id===DEPTOS[0].id?'0':'14px')+' 0 8px">'+escAttr(labelDepartamento(d.id))+(d.id==='guaviare'?' · NCA DEGUV':'')+'</div>';
       if(rows.length){
         rows.forEach(({ins,i})=>{h+=instructorRowEditable(i,ins,d.id);});
       }else{
@@ -15341,18 +15367,6 @@ function editInstructor(i,k,v){
   if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')syncInstructoresToEncargadosGlobal();
   saveLS();poblarSelResponsable();
   if(k==='activo'||k==='email'||esAdminModoGlobal())renderListasCfg();
-}
-function delInstructor(i){
-  cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
-  const ins=cfg.instructores[i];if(!ins)return;
-  const esEnc=ins.rol==='encargado_depto'||ins.rol==='encargado_oficina';
-  if(esEnc&&!puedeGestionarEncargadosCfg()){notif('Solo el administrador puede eliminar encargados','err');return;}
-  if(!esEnc&&!instructorEditableContratista(ins)&&!esAdminModoGlobal()){notif('Solo puede eliminar responsables de su departamento','err');return;}
-  confirmEliminar({message:'¿Eliminar a '+escAttr(ins.nombre||'esta persona')+' de la lista?',detail:INST_ROLES[ins.rol]||''},()=>{
-    cfg.instructores.splice(i,1);
-    syncInstructoresToEncargadosGlobal();
-    saveLS();renderListasCfg();poblarSelResponsable();notif('Eliminado de la lista','ok');
-  });
 }
 function cfgSectionFold(title,sub,body,open){
   return '<details class="form-section cfg-fold"'+(open?' open':'')+'><summary class="form-section-hdr">'+title+'</summary><div class="form-section-body">'+
