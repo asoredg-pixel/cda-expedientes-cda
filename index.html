@@ -5426,6 +5426,65 @@ let _usuariosCache=[];
 let _usuariosCacheLoaded=false;
 let _usuariosEditEmail='';
 let _usuariosFsUnsub=null;
+function sortUsuariosCache(){
+  _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
+}
+function mergeUsuarioEnCache(u){
+  if(!u||!u.email)return;
+  const em=String(u.email).trim().toLowerCase();
+  const i=_usuariosCache.findIndex(x=>String(x.email||'').trim().toLowerCase()===em);
+  const row={email:em,nombre:u.nombre||'',rol:u.rol||'',codigo:u.codigo||'',activo:u.activo!==false};
+  if(i>=0)_usuariosCache[i]={..._usuariosCache[i],...row};
+  else _usuariosCache.push(row);
+  sortUsuariosCache();
+  _usuariosCacheLoaded=true;
+  try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+}
+function removeUsuarioDeCache(email){
+  const em=String(email||'').trim().toLowerCase();
+  if(!em)return;
+  _usuariosCache=_usuariosCache.filter(u=>String(u.email||'').trim().toLowerCase()!==em);
+  _usuariosCacheLoaded=true;
+  try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+}
+function aplicarUsuariosIndex(arr){
+  if(!Array.isArray(arr))return false;
+  _usuariosCache=arr.map(u=>({
+    email:String(u.email||'').trim().toLowerCase(),
+    nombre:u.nombre||'',
+    rol:u.rol||'',
+    codigo:u.codigo||'',
+    activo:u.activo!==false
+  })).filter(u=>u.email);
+  sortUsuariosCache();
+  _usuariosCacheLoaded=true;
+  try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+  return _usuariosCache.length>0;
+}
+async function persistUsuariosIndexGlobal(){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc)return;
+  const index=_usuariosCache.map(u=>({
+    email:String(u.email||'').trim().toLowerCase(),
+    nombre:u.nombre||'',
+    rol:u.rol||'',
+    codigo:u.codigo||'',
+    activo:u.activo!==false
+  }));
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{usuariosIndex:index,updatedAt:new Date().toISOString()},{merge:true});
+  }catch(err){console.error('Error sincronizando índice de usuarios:',err);}
+}
+async function refreshUsuariosAutorizadosUi(){
+  await loadUsuariosFirestore();
+  paintUsuariosCfgTable();
+}
+async function sincronizarUsuariosAutorizados(){
+  if(!esAdminFirestore()){notif('Solo administrador','err');return;}
+  invalidateUsuariosCache();
+  await refreshUsuariosAutorizadosUi();
+  notif('Lista actualizada · '+_usuariosCache.length+' usuario(s)','ok');
+}
 function stopUsuariosFirestoreListener(){
   if(_usuariosFsUnsub){_usuariosFsUnsub();_usuariosFsUnsub=null;}
 }
@@ -5434,13 +5493,20 @@ function startUsuariosFirestoreListener(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   _usuariosFsUnsub=window._fsOnSnapshot(window._fsCollection(db,'usuarios'),snap=>{
-    _usuariosCache=[];
-    snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
-    _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
-    _usuariosCacheLoaded=true;
+    if(!snap.empty){
+      _usuariosCache=[];
+      snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
+      sortUsuariosCache();
+      _usuariosCacheLoaded=true;
+      try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+      persistUsuariosIndexGlobal().catch(()=>{});
+    }
     paintUsuariosCfgTable();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
-  },err=>console.error('Error escuchando usuarios Firestore:',err));
+  },err=>{
+    console.error('Error escuchando usuarios Firestore:',err);
+    refreshUsuariosAutorizadosUi();
+  });
 }
 function paintUsuariosCfgTable(){
   const tbody=document.getElementById('usuarios-fs-tbody');
@@ -5469,7 +5535,8 @@ function buildUsuariosCfgShell(){
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
     '<div><div style="font-size:14px;font-weight:600">👥 Usuarios autorizados <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Correos Gmail autorizados para ingresar al sistema.</div></div>'+
-    '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button></div>'+
+    '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
+    '<button type="button" class="btn bsm" onclick="sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px" id="usuario-form-tit">Nuevo usuario</div>'+
     '<div class="fg">'+
@@ -5485,18 +5552,42 @@ function buildUsuariosCfgShell(){
 }
 async function loadUsuariosFirestore(){
   const db=window._db;
-  if(!db||!window._fsGetDocs||!window._fsCollection)return[];
-  try{
-    const snap=await window._fsGetDocs(window._fsCollection(db,'usuarios'));
-    _usuariosCache=[];
-    snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
-    _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
-    _usuariosCacheLoaded=true;
-    return _usuariosCache;
-  }catch(err){
-    console.error('Error cargando usuarios Firestore:',err);
-    return _usuariosCache;
+  if(!db)return _usuariosCache;
+  let loaded=false;
+  if(window._fsGetDocs&&window._fsCollection){
+    try{
+      const snap=await window._fsGetDocs(window._fsCollection(db,'usuarios'));
+      if(!snap.empty){
+        _usuariosCache=[];
+        snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
+        sortUsuariosCache();
+        _usuariosCacheLoaded=true;
+        loaded=true;
+      }
+    }catch(err){
+      console.warn('No se pudo listar la colección usuarios:',err);
+    }
   }
+  if(!loaded&&window._fsGetDoc&&window._fsDoc){
+    try{
+      const gSnap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+      if(gSnap.exists()){
+        const idx=gSnap.data().usuariosIndex;
+        if(aplicarUsuariosIndex(idx))loaded=true;
+      }
+    }catch(err){
+      console.warn('No se pudo leer usuariosIndex en sistema/global:',err);
+    }
+  }
+  if(!loaded){
+    try{
+      const local=localStorage.getItem('sst_usuarios_index');
+      if(local)aplicarUsuariosIndex(JSON.parse(local));
+    }catch(e){}
+  }
+  try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+  if(loaded)await persistUsuariosIndexGlobal().catch(()=>{});
+  return _usuariosCache;
 }
 async function ensureUsuariosFirestoreCache(force){
   if(!force&&_usuariosCacheLoaded)return _usuariosCache;
@@ -5582,9 +5673,11 @@ async function guardarUsuarioFirestore(){
     if(!_usuariosEditEmail)payload.creadoEn=new Date().toISOString();
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
     logAudit((_usuariosEditEmail?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
+    mergeUsuarioEnCache({email,nombre,rol,codigo,activo});
+    await persistUsuariosIndexGlobal();
     notif('Usuario guardado','ok');
     ocultarFormUsuarioFirestore();
-    paintUsuariosCfgTable();
+    await refreshUsuariosAutorizadosUi();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){
     console.error(err);
@@ -5597,10 +5690,13 @@ async function toggleUsuarioFirestoreActivo(email,activo){
   if(!db||!window._fsSetDoc||!window._fsDoc)return;
   email=String(email||'').trim().toLowerCase();
   try{
-    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{activo:!!activo},{merge:true});
+    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{activo:!!activo,actualizadoEn:new Date().toISOString()},{merge:true});
     logAudit((activo?'Activó':'Desactivó')+' usuario '+email,'configuracion',null);
+    const u=getUsuarioAutorizadoByEmail(email);
+    if(u)mergeUsuarioEnCache({...u,activo:!!activo});
+    await persistUsuariosIndexGlobal();
     notif(activo?'Usuario activado':'Usuario desactivado','ok');
-    paintUsuariosCfgTable();
+    await refreshUsuariosAutorizadosUi();
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){console.error(err);notif('Error al actualizar usuario','err');}
 }
@@ -5613,8 +5709,10 @@ async function eliminarUsuarioFirestore(email){
     try{
       await window._fsDeleteDoc(window._fsDoc(db,'usuarios',email));
       logAudit('Eliminó usuario autorizado '+email,'configuracion',null);
+      removeUsuarioDeCache(email);
+      await persistUsuariosIndexGlobal();
       notif('Usuario eliminado','ok');
-      paintUsuariosCfgTable();
+      await refreshUsuariosAutorizadosUi();
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
     }catch(err){console.error(err);notif('Error al eliminar usuario','err');}
   });
@@ -5622,19 +5720,18 @@ async function eliminarUsuarioFirestore(email){
 async function renderUsuariosCfg(){
   const el=document.getElementById('cfg-usuarios-panel');
   if(!el)return;
-  stopUsuariosFirestoreListener();
   if(!esAdminFirestore()){
+    stopUsuariosFirestoreListener();
     el.innerHTML='<div class="emp" style="padding:1rem">Solo el administrador puede gestionar usuarios autorizados.</div>';
     return;
   }
-  if(!document.getElementById('usuarios-fs-tbody'))el.innerHTML=buildUsuariosCfgShell();
-  if(!window._fsOnSnapshot){
+  const needsShell=!document.getElementById('usuarios-fs-tbody');
+  if(needsShell){
+    stopUsuariosFirestoreListener();
     el.innerHTML=buildUsuariosCfgShell();
-    await loadUsuariosFirestore();
-    paintUsuariosCfgTable();
-    return;
   }
-  startUsuariosFirestoreListener();
+  await refreshUsuariosAutorizadosUi();
+  if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection)startUsuariosFirestoreListener();
 }
 function getSoporteActivo(t){
   normalizeTask(t);
@@ -8944,6 +9041,7 @@ async function loadLS(){
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
       if(Array.isArray(g.chatMensajes))chatMensajes=g.chatMensajes;
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
+      if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
     }
@@ -8985,6 +9083,13 @@ async function saveFirestore(){
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
+      usuariosIndex:_usuariosCache.map(u=>({
+        email:String(u.email||'').trim().toLowerCase(),
+        nombre:u.nombre||'',
+        rol:u.rol||'',
+        codigo:u.codigo||'',
+        activo:u.activo!==false
+      })),
       updatedAt:new Date().toISOString()
     },{merge:true});
     for(const depto of DEPTOS_FIRESTORE){
@@ -17687,6 +17792,7 @@ window.volverSelectorRolesAdmin=volverSelectorRolesAdmin;
 window.volverPantallaPrincipal=volverPantallaPrincipal;
 window.guardarUsuarioFirestore=guardarUsuarioFirestore;
 window.editarUsuarioFirestore=editarUsuarioFirestore;
+window.sincronizarUsuariosAutorizados=sincronizarUsuariosAutorizados;
 window.limpiarEncargadoSlot=limpiarEncargadoSlot;
 window.toggleUsuarioFirestoreActivo=toggleUsuarioFirestoreActivo;
 window.eliminarUsuarioFirestore=eliminarUsuarioFirestore;
