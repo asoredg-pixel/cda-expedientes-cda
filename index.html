@@ -834,7 +834,6 @@ body.sesion-activa #pg-login{display:none!important}
   .hacts>.depto-sel,.hacts #sel-depto{grid-column:1/-1;max-width:none;width:100%;min-width:0}
   .hacts>.btn,.hacts>.hacts-juris-hide>.btn{justify-content:center;width:100%;min-height:36px}
   .hacts>.hacts-juris-hide{display:contents}
-  .hacts #btn-inicio-rol{grid-column:1/-1}
 }
 @media(max-width:768px){
   .hdr,.tabs,.resp-global-bar{padding-left:.75rem;padding-right:.75rem}
@@ -889,7 +888,6 @@ body.sesion-activa #pg-login{display:none!important}
   .hdri{flex-direction:row;align-items:center}
   .hacts{width:auto;flex:1 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end}
   .hacts>.depto-sel,.hacts #sel-depto{width:auto;max-width:min(240px,100%)}
-  .hacts #btn-inicio-rol{width:auto}
 }
 .login-main-card{text-align:center;padding:2rem 1.5rem;border:1px solid var(--bd);border-radius:var(--rl);background:var(--sf);margin-bottom:1.5rem;box-shadow:var(--sh)}
 .login-main-card h2{margin:0 0 8px;font-size:1.35rem}
@@ -970,7 +968,6 @@ window.dispatchEvent(new Event('firebase-ready'));
         <span id="hdr-user-label"></span>
         <button type="button" class="btn bsm" onclick="cerrarSesionGoogle()">Cerrar sesión</button>
       </div>
-      <button type="button" class="btn bsm" id="btn-inicio-rol" onclick="volverSelectorRolesAdmin()" style="display:none" title="Volver a selección de rol">← Inicio</button>
       <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar módulo (solo Administrador)">
         <optgroup label="Administración">
           <option value="admin">Administrador</option>
@@ -11170,8 +11167,6 @@ function updateDeptoUI(){
     tabUsu.style.display=puedeGestionarUsuariosAutorizados()?'':'none';
     tabUsu.textContent=esEncargadoDepartamentalUsuarios()?'👥 Responsables autorizados':'👥 Usuarios autorizados';
   }
-  const btnInicio=document.getElementById('btn-inicio-rol');
-  if(btnInicio)btnInicio.style.display=(rolSesion&&esAdminFirestore())?'inline-flex':'none';
   if(ban){
     if(juris){
       ban.style.display='';
@@ -18158,13 +18153,7 @@ function volverSelectorRolesAdmin(){
   updateHeaderUsuario();
 }
 function volverPantallaPrincipal(){
-  if(esAdminFirestore()&&rolSesion){
-    volverSelectorRolesAdmin();
-    return;
-  }
-  salirDeSesionApp();
-  initLoginScreen();
-  updateHeaderUsuario();
+  cerrarSesionGoogle();
 }
 function cerrarSesionGoogle(){
   if(window._authSignOut)window._authSignOut().catch(()=>{});

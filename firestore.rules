@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function myUserPath() {
+      return /databases/$(database)/documents/usuarios/$(authEmail());
+    }
+
+    function myUserExists() {
+      return isSignedIn() && exists(myUserPath());
+    }
+
+    function myUser() {
+      return get(myUserPath()).data;
+    }
+
+    function myUserActive() {
+      return myUserExists() && myUser().activo != false;
+    }
+
+    function isAdmin() {
+      return myUserActive() && myUser().rol == 'admin';
+    }
+
+    function isDeptoEncargado() {
+      return myUserActive() && myUser().rol in ['guaviare', 'guainia', 'vaupes'];
+    }
+
+    function responsableDeMiDepto(data) {
+      return data.rol == 'responsables'
+        && data.deptoResponsable == myUser().rol
+        && data.nombre is string
+        && data.nombre.size() > 0;
+    }
+
+    // Usuarios autorizados (login Google)
+    match /usuarios/{email} {
+      allow read: if myUserActive();
+
+      allow create: if isAdmin()
+        || (isDeptoEncargado() && responsableDeMiDepto(request.resource.data));
+
+      allow update: if isAdmin()
+        || (isDeptoEncargado()
+            && resource.data.rol == 'responsables'
+            && responsableDeMiDepto(request.resource.data));
+
+      allow delete: if isAdmin();
+    }
+
+    // Configuración global — solo administrador
+    match /sistema/{document=**} {
+      allow read: if myUserActive();
+      allow write: if isAdmin();
+    }
+
+    // Expedientes y configuración por departamento
+    match /departamentos/{deptoId} {
+      allow read: if myUserActive();
+      allow write: if isAdmin()
+        || (isDeptoEncargado() && myUser().rol == deptoId);
+    }
+  }
+}
