@@ -897,10 +897,12 @@ body.sesion-activa #pg-login{display:none!important}
 .login-func-divider{text-align:center;font-size:12px;color:var(--tx3);margin:1.25rem 0 .75rem;position:relative}
 .login-func-divider:before,.login-func-divider:after{content:'';position:absolute;top:50%;width:38%;height:1px;background:var(--bd)}
 .login-func-divider:before{left:0}.login-func-divider:after{right:0}
+.login-sub-func{text-align:center}
+#login-auth-panel{display:flex;flex-direction:column;align-items:center;width:100%}
 .login-gmail-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:320px;padding:11px 18px;border:1px solid var(--bd);border-radius:var(--rl);background:#fff;color:var(--tx);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:box-shadow .15s,border-color .15s}
 .login-gmail-btn:hover{border-color:#4285f4;box-shadow:0 2px 10px rgba(66,133,244,.18)}
 .login-gmail-btn svg{width:20px;height:20px;flex-shrink:0}
-.login-auth-msg{font-size:12px;color:var(--tx2);margin-top:10px;min-height:18px}
+.login-auth-msg{font-size:12px;color:var(--tx2);margin-top:10px;min-height:18px;width:100%;max-width:320px;text-align:center}
 .login-auth-msg.err{color:var(--rd)}
 .login-status{text-align:center;font-size:14px;color:var(--tx2);padding:1.5rem 1rem;margin:1rem 0}
 .hdr-user-bar{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--tx2);margin-right:4px;flex-wrap:wrap}
@@ -966,9 +968,9 @@ window.dispatchEvent(new Event('firebase-ready'));
     <div class="hacts">
       <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
         <span id="hdr-user-label"></span>
-        <button type="button" class="btn bsm" onclick="salirARolInicio()">Cerrar sesión</button>
+        <button type="button" class="btn bsm" onclick="cerrarSesionGoogle()">Cerrar sesión</button>
       </div>
-      <button type="button" class="btn bsm" id="btn-inicio-rol" onclick="salirARolInicio()" style="display:none" title="Volver a selección de rol">← Inicio</button>
+      <button type="button" class="btn bsm" id="btn-inicio-rol" onclick="volverSelectorRolesAdmin()" style="display:none" title="Volver a selección de rol">← Inicio</button>
       <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar módulo (solo Administrador)">
         <optgroup label="Administración">
           <option value="admin">Administrador</option>
@@ -1053,7 +1055,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <button type="button" class="btn bp" onclick="ingresarConsultaCiudadana()">Ingresar a consulta ciudadana</button>
     </div>
     <div class="login-func-divider">Acceso funcionarios</div>
-    <p class="login-sub" id="login-sub">Personal autorizado: ingrese con su cuenta Google.</p>
+    <p class="login-sub login-sub-func" id="login-sub">Personal autorizado: ingrese con su cuenta Google.</p>
     <div id="login-auth-panel">
       <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="iniciarLoginGoogle()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -1065,6 +1067,9 @@ window.dispatchEvent(new Event('firebase-ready'));
     <div id="login-roles-wrap" style="display:none">
       <p class="login-sub">Seleccione su rol para ingresar.</p>
       <div id="login-roles-grid" class="login-roles-grid"></div>
+      <div style="text-align:center;margin-top:1.25rem">
+        <button type="button" class="btn bsm" onclick="cerrarSesionGoogle()">Cerrar sesión de Google</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1482,6 +1487,9 @@ window.dispatchEvent(new Event('firebase-ready'));
       <button type="button" class="btn bp" onclick="buscarExpCiudadano()">Consultar</button>
     </div>
     <div id="ciudadano-resultado"></div>
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--bd)">
+      <button type="button" class="btn bsm" onclick="volverPantallaPrincipal()">← Volver al inicio</button>
+    </div>
   </div>
 </div>
 
@@ -17330,13 +17338,7 @@ async function verificarUsuarioFirestore(fbUser){
       return;
     }
     if(data.rol==='admin'){
-      const authPanel=document.getElementById('login-auth-panel');
-      const rolesWrap=document.getElementById('login-roles-wrap');
-      const sub=document.getElementById('login-sub');
-      if(authPanel)authPanel.style.display='none';
-      if(rolesWrap)rolesWrap.style.display='';
-      if(sub)sub.textContent='Bienvenido '+ (data.nombre||email) + '. Seleccione rol para ingresar (administrador).';
-      renderLoginRoles();
+      mostrarSelectorRolesAdmin(data.nombre||email);
     }else{
       const respNom=(data.rol==='contratista'||data.rol==='responsables')?data.nombre:'';
       ingresarComoRol(data.rol,respNom);
@@ -17387,7 +17389,34 @@ function initFirebaseAuthListener(){
 function ingresarConsultaCiudadana(){
   ingresarComoRol('ciudadano');
 }
+function mostrarSelectorRolesAdmin(nombre){
+  if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
+    if(window._usuarioActual&&window._usuarioActual.rol){
+      const u=window._usuarioActual;
+      const respNom=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
+      ingresarComoRol(u.rol,respNom);
+    }
+    return;
+  }
+  const authPanel=document.getElementById('login-auth-panel');
+  const rolesWrap=document.getElementById('login-roles-wrap');
+  const sub=document.getElementById('login-sub');
+  const statusEl=document.getElementById('login-status');
+  if(authPanel)authPanel.style.display='none';
+  if(rolesWrap)rolesWrap.style.display='';
+  if(statusEl)statusEl.style.display='none';
+  if(sub)sub.textContent='Bienvenido '+ (nombre||window._usuarioActual.nombre||window._usuarioActual.email) + '. Seleccione rol para ingresar (administrador).';
+  renderLoginRoles();
+}
 function renderLoginRoles(){
+  if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
+    if(window._usuarioActual&&window._usuarioActual.rol){
+      const u=window._usuarioActual;
+      const respNom=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
+      ingresarComoRol(u.rol,respNom);
+    }
+    return;
+  }
   const el=document.getElementById('login-roles-grid');
   if(!el)return;
   el.innerHTML=ROLES_INGRESO.map(r=>'<button type="button" class="login-rol-card '+r.cls+'" onclick="ingresarComoRol(\''+escAttr(r.id)+'\')"><span class="login-rol-icon">'+r.icon+'</span><span class="login-rol-tit">'+escAttr(r.titulo)+'</span><span class="login-rol-desc">'+escAttr(r.desc)+'</span></button>').join('');
@@ -17405,6 +17434,14 @@ function rutaInicialPorRol(rolId){
 function ingresarComoRol(rolId,respNombre){
   rolId=String(rolId||'').trim();
   if(!rolId)return;
+  const u=window._usuarioActual;
+  if(u&&u.rol&&u.rol!=='admin'){
+    if(rolId!==u.rol){
+      const rn=(u.rol==='contratista'||u.rol==='responsables')?u.nombre:'';
+      ingresarComoRol(u.rol,rn);
+      return;
+    }
+  }
   rolSesion=rolId;
   try{sessionStorage.setItem('sst_rol_sesion',rolId);}catch(e){}
   if(rolId==='contratista'){
@@ -17453,10 +17490,7 @@ function ingresarComoRol(rolId,respNombre){
   updateHeaderUsuario();
   setTimeout(()=>maybeShowExportReminder(),800);
 }
-function salirARolInicio(){
-  if(window._authSignOut)window._authSignOut().catch(()=>{});
-  window._usuarioActual=null;
-  authUsuario=null;
+function salirDeSesionApp(){
   rolSesion=null;
   deptoActivo='guaviare';
   responsableActivo='';
@@ -17469,6 +17503,27 @@ function salirARolInicio(){
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   const login=document.getElementById('pg-login');
   if(login)login.classList.add('on');
+}
+function volverSelectorRolesAdmin(){
+  if(!esAdminFirestore())return;
+  salirDeSesionApp();
+  mostrarSelectorRolesAdmin();
+  updateHeaderUsuario();
+}
+function volverPantallaPrincipal(){
+  if(esAdminFirestore()&&rolSesion){
+    volverSelectorRolesAdmin();
+    return;
+  }
+  salirDeSesionApp();
+  initLoginScreen();
+  updateHeaderUsuario();
+}
+function cerrarSesionGoogle(){
+  if(window._authSignOut)window._authSignOut().catch(()=>{});
+  window._usuarioActual=null;
+  authUsuario=null;
+  salirDeSesionApp();
   initLoginScreen();
   updateHeaderUsuario();
 }
@@ -17504,6 +17559,9 @@ window.iniciarLoginGoogle=iniciarLoginGoogle;
 window.abrirPanelUsuariosAutorizados=abrirPanelUsuariosAutorizados;
 window.onInstructorUsuarioEmailSelect=onInstructorUsuarioEmailSelect;
 window.ingresarConsultaCiudadana=ingresarConsultaCiudadana;
+window.cerrarSesionGoogle=cerrarSesionGoogle;
+window.volverSelectorRolesAdmin=volverSelectorRolesAdmin;
+window.volverPantallaPrincipal=volverPantallaPrincipal;
 window.guardarUsuarioFirestore=guardarUsuarioFirestore;
 window.toggleUsuarioFirestoreActivo=toggleUsuarioFirestoreActivo;
 window.eliminarUsuarioFirestore=eliminarUsuarioFirestore;
