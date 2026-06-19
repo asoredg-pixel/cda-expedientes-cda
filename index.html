@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- SST UI delegación clics v20250611p — Google login; usuarios Firestore; filtro contratista -->
+<!-- SST UI delegación clics v20250611q — Responsables↔Usuarios FS; login ciudadano; chat solo sesión -->
 <title>Sistema de Seguimiento de Trámites</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -809,6 +809,7 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .tab-modulo-only.on{display:inline-flex}
 .depto-sel optgroup{font-weight:600;color:var(--tx2)}
 body:not(.sesion-activa) .hdr,body:not(.sesion-activa) .tabs,body:not(.sesion-activa) #resp-global-bar,body:not(.sesion-activa) .main>.pg:not(#pg-login){display:none!important}
+body:not(.sesion-activa) .chat-fab,body:not(.sesion-activa) .chat-window{display:none!important}
 body:not(.sesion-activa) .main{padding-top:0}
 body.sesion-activa #pg-login{display:none!important}
 .login-wrap{max-width:920px;margin:2rem auto;padding:0 1rem}
@@ -1046,7 +1047,13 @@ window.dispatchEvent(new Event('firebase-ready'));
 <div class="pg on" id="pg-login">
   <div class="login-wrap">
     <h1>Sistema de Seguimiento de Trámites</h1>
-    <p class="login-sub" id="login-sub">Ingrese con su cuenta Google autorizada.</p>
+    <div class="login-main-card">
+      <h2>🔍 Consulta ciudadana</h2>
+      <p>Consulte el estado de su trámite o PQRSD ingresando el número de expediente o solicitud.</p>
+      <button type="button" class="btn bp" onclick="ingresarConsultaCiudadana()">Ingresar a consulta ciudadana</button>
+    </div>
+    <div class="login-func-divider">Acceso funcionarios</div>
+    <p class="login-sub" id="login-sub">Personal autorizado: ingrese con su cuenta Google.</p>
     <div id="login-auth-panel">
       <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="iniciarLoginGoogle()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -5378,6 +5385,7 @@ function tituloRolFirestore(rolId){
   return rolId||'—';
 }
 let _usuariosCache=[];
+let _usuariosCacheLoaded=false;
 async function loadUsuariosFirestore(){
   const db=window._db;
   if(!db||!window._fsGetDocs||!window._fsCollection)return[];
@@ -5386,11 +5394,45 @@ async function loadUsuariosFirestore(){
     _usuariosCache=[];
     snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
     _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
+    _usuariosCacheLoaded=true;
     return _usuariosCache;
   }catch(err){
     console.error('Error cargando usuarios Firestore:',err);
-    return [];
+    return _usuariosCache;
   }
+}
+async function ensureUsuariosFirestoreCache(force){
+  if(!force&&_usuariosCacheLoaded)return _usuariosCache;
+  return loadUsuariosFirestore();
+}
+function invalidateUsuariosCache(){_usuariosCacheLoaded=false;}
+function getUsuarioAutorizadoByEmail(email){
+  const em=String(email||'').trim().toLowerCase();
+  if(!em)return null;
+  return _usuariosCache.find(u=>String(u.email||'').trim().toLowerCase()===em)||null;
+}
+function usuariosAutorizadosSelectOptions(selectedEmail,emptyLabel){
+  const cur=String(selectedEmail||'').trim().toLowerCase();
+  let h='<option value="">'+escAttr(emptyLabel||'— Seleccione usuario autorizado —')+'</option>';
+  _usuariosCache.forEach(u=>{
+    const em=String(u.email||'').trim().toLowerCase();
+    h+='<option value="'+escAttr(em)+'"'+(cur===em?' selected':'')+'>'+escAttr((u.nombre||em)+' · '+em)+'</option>';
+  });
+  return h;
+}
+function instructorUsuarioAlertHtml(email){
+  const u=getUsuarioAutorizadoByEmail(email);
+  if(email&&!u)return '<span style="font-size:11px;color:var(--or);font-weight:600">Esta persona debe registrarse primero en Configuración &gt; Usuarios autorizados</span>';
+  if(u&&u.activo===false)return '<span style="font-size:11px;color:var(--rd);font-weight:600">⚠️ Usuario desactivado — sin acceso al sistema</span>';
+  return '';
+}
+function abrirPanelUsuariosAutorizados(){
+  showTab('cfg');
+  showCfgTab('usuarios');
+  setTimeout(()=>mostrarFormUsuarioFirestore(),120);
+}
+function onInstructorUsuarioEmailSelect(deptoId,i,email){
+  withCfgDepto(deptoId,()=>editInstructor(i,'email',email));
 }
 function mostrarFormUsuarioFirestore(){
   const w=document.getElementById('usuario-form-wrap');
@@ -5417,9 +5459,11 @@ async function guardarUsuarioFirestore(){
   try{
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{nombre,rol,codigo,activo,creadoEn:new Date().toISOString()},{merge:true});
     logAudit('Registró usuario autorizado '+email,'configuracion',null,nombre);
+    invalidateUsuariosCache();
     notif('Usuario guardado','ok');
     ocultarFormUsuarioFirestore();
     renderUsuariosCfg();
+    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){
     console.error(err);
     notif('Error al guardar usuario','err');
@@ -5433,8 +5477,10 @@ async function toggleUsuarioFirestoreActivo(email,activo){
   try{
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{activo:!!activo},{merge:true});
     logAudit((activo?'Activó':'Desactivó')+' usuario '+email,'configuracion',null);
+    invalidateUsuariosCache();
     notif(activo?'Usuario activado':'Usuario desactivado','ok');
     renderUsuariosCfg();
+    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
   }catch(err){console.error(err);notif('Error al actualizar usuario','err');}
 }
 async function eliminarUsuarioFirestore(email){
@@ -5446,8 +5492,10 @@ async function eliminarUsuarioFirestore(email){
     try{
       await window._fsDeleteDoc(window._fsDoc(db,'usuarios',email));
       logAudit('Eliminó usuario autorizado '+email,'configuracion',null);
+      invalidateUsuariosCache();
       notif('Usuario eliminado','ok');
       renderUsuariosCfg();
+      if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
     }catch(err){console.error(err);notif('Error al eliminar usuario','err');}
   });
 }
@@ -10591,7 +10639,7 @@ function updateDeptoUI(){
   if(btnConExport)btnConExport.style.display=ciudadano?'none':'';
   document.querySelectorAll('.con-filtro-avanzado').forEach(el=>{el.style.display=ciudadano?'none':'';});
   const chatFab=document.getElementById('chat-fab');
-  if(chatFab)chatFab.style.display=ciudadano?'none':'';
+  if(chatFab)chatFab.style.display=(ciudadano||!document.body.classList.contains('sesion-activa'))?'none':'';
   const qTxt=document.getElementById('q-txt');
   if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. PQRSD-2026-001)':'Nombre, expediente, resolución, NIT, ciudad…';
   if(ciudadano){
@@ -14904,8 +14952,22 @@ const CFG_PANELS=[
   {key:'instructores',title:'Responsables',sub:''},
 ];
 function instructoresPanelSub(){
-  if(esAdminModoGlobal())return 'Todos los responsables de NCA DEGUV, Guainía y Vaupés. Los encargados se definen en «Encargados por módulo». Elija departamento al añadir.';
-  return '';
+  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (correo y nombre). Los encargados se definen en «Encargados por módulo». Elija departamento al añadir.';
+  return 'Seleccione el correo desde Usuarios autorizados; el nombre se completa automáticamente.';
+}
+function instructorUsuarioLinkRow(i,ins,deptoId){
+  const dep=jsStr(deptoId);
+  const cur=String(ins.email||'').trim().toLowerCase();
+  const u=getUsuarioAutorizadoByEmail(cur);
+  const nombreMostrar=u?(u.nombre||u.email):(ins.nombre||'—');
+  let h='<div class="inst-usuario-link" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:280px">';
+  h+='<select onchange="onInstructorUsuarioEmailSelect(\''+dep+'\','+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;min-width:220px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions(cur)+'</select>';
+  h+='<span class="inst-nombre-ro" style="font-weight:600;font-size:12px;padding:4px 0">'+escAttr(nombreMostrar)+'</span>';
+  const alert=instructorUsuarioAlertHtml(cur);
+  if(alert)h+=alert;
+  h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()" title="Abrir Usuarios autorizados">+ Registrar nuevo usuario</button>';
+  h+='</div>';
+  return h;
 }
 function instructorRegSecBoxes(i,ins,deptoId){
   deptoId=deptoId||deptoCfg;
@@ -14971,10 +15033,8 @@ function instructorRowReadonly(ins){
 function instructorRowEditable(i,ins,deptoId){
   deptoId=deptoId||deptoCfg||getDeptoOperativo();
   const dep=jsStr(deptoId);
-  const showEmail=esAdminModoGlobal()||esRolDepartamentalCfg();
   return '<div class="inst-row-wrap"><div class="inst-row'+(ins.activo===false?' inactive':'')+'">'+
-    '<input type="text" value="'+escAttr(ins.nombre||'')+'" placeholder="Nombre" onchange="editInstructorDepto(\''+dep+'\','+i+',\'nombre\',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);min-width:140px">'+
-    (showEmail?('<input type="email" value="'+escAttr(ins.email||'')+'" placeholder="Correo Gmail" onchange="editInstructorDepto(\''+dep+'\','+i+',\'email\',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);min-width:160px">'):'')+
+    instructorUsuarioLinkRow(i,ins,deptoId)+
     '<select onchange="editInstructorDepto(\''+dep+'\','+i+',\'activo\',this.value===\'1\')" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;background:var(--sf);color:var(--tx)">'+
       '<option value="1"'+(ins.activo!==false?' selected':'')+'>Activo</option>'+
       '<option value="0"'+(ins.activo===false?' selected':'')+'>Inactivo</option>'+
@@ -15009,26 +15069,31 @@ function instructoresCardBody(){
         DEPTOS.map(d=>'<option value="'+d.id+'">'+escAttr(labelDepto(d.id))+'</option>').join('')+
         '</select>';
     }
-    h+='<input type="text" id="cfi-instructores" placeholder="Agregar responsable…" onkeydown="if(event.key===\'Enter\')addInstructor()" style="flex:1;min-width:160px">'+
-      '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button></div>';
+    h+='<select id="cfi-instructores-email" style="flex:1;min-width:220px;border:1px solid var(--bd);border-radius:5px;padding:6px 8px;font-size:12px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions('')+'</select>'+
+      '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button>'+
+      '<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
+    if(!_usuariosCache.length)h+='<span style="font-size:11px;color:var(--or);width:100%">No hay usuarios autorizados. Regístrelos en Configuración &gt; Usuarios autorizados.</span>';
+    h+='</div>';
   }
   h+='</div>';
   return h;
 }
 function addInstructor(){
   if(!puedeGestionarContratistasCfg()){notif('No tiene permiso para agregar personas','err');return;}
-  const inp=document.getElementById('cfi-instructores');
-  const v=inp?inp.value.trim():'';
-  if(!v){notif('Escribe el nombre del responsable','err');return;}
+  const sel=document.getElementById('cfi-instructores-email');
+  const email=sel?String(sel.value||'').trim().toLowerCase():'';
+  if(!email){notif('Seleccione un usuario autorizado de la lista','err');return;}
+  const u=getUsuarioAutorizadoByEmail(email);
+  if(!u){notif('Esta persona debe registrarse primero en Configuración > Usuarios autorizados','err');return;}
   let targetDepto=deptoCfg||getDeptoOperativo();
   const sd=document.getElementById('cfi-instructores-depto');
   if(esAdminModoGlobal()&&sd)targetDepto=sd.value||targetDepto;
   withCfgDepto(targetDepto,()=>{
     cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
-    if(cfg.instructores.some(i=>(i.nombre||'').toLowerCase()===v.toLowerCase())){notif('Ya existe esa persona en '+labelDepto(targetDepto),'err');return;}
-    cfg.instructores.push({id:'ins_'+Date.now(),nombre:v,email:'',rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
+    if(cfg.instructores.some(i=>String(i.email||'').trim().toLowerCase()===email)){notif('Ese usuario ya está como responsable en '+labelDepto(targetDepto),'err');return;}
+    cfg.instructores.push({id:'ins_'+Date.now(),nombre:u.nombre||email,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
   });
-  if(inp)inp.value='';
+  if(sel)sel.value='';
   saveLS();renderListasCfg();poblarSelResponsable();notif('Responsable agregado en '+labelDepto(targetDepto),'ok');
 }
 function toggleInstructorRegSec(i,key,checked){
@@ -15047,13 +15112,24 @@ function editInstructor(i,k,v){
   if(esEnc&&!puedeGestionarEncargadosCfg()){notif('Solo el administrador puede editar encargados','err');renderListasCfg();return;}
   if(!esEnc&&!instructorEditableContratista(ins)&&!esAdminModoGlobal()){notif('Solo puede editar responsables de su departamento','err');renderListasCfg();return;}
   if(k==='nombre'){
+    if(ins.rol==='contratista'){renderListasCfg();return;}
     const nv=String(v||'').trim();
     if(!nv){notif('El nombre no puede quedar vacío','err');return;}
     if(cfg.instructores.some((x,j)=>j!==i&&(x.nombre||'').toLowerCase()===nv.toLowerCase())){notif('Ya existe ese nombre','err');return;}
     ins.nombre=nv;
   }else if(k==='email'){
-    if(!esAdminModoGlobal()&&!esRolDepartamentalCfg())return;
-    ins.email=String(v||'').toLowerCase().trim();
+    const em=String(v||'').trim().toLowerCase();
+    if(ins.rol==='contratista'){
+      if(!em){notif('Seleccione un correo de Usuarios autorizados','err');renderListasCfg();return;}
+      const u=getUsuarioAutorizadoByEmail(em);
+      if(!u){notif('Esta persona debe registrarse primero en Configuración > Usuarios autorizados','err');renderListasCfg();return;}
+      if(cfg.instructores.some((x,j)=>j!==i&&String(x.email||'').trim().toLowerCase()===em)){notif('Ese usuario ya está registrado como responsable','err');renderListasCfg();return;}
+      ins.email=em;
+      ins.nombre=u.nombre||em;
+    }else{
+      if(!esAdminModoGlobal()&&!esRolDepartamentalCfg())return;
+      ins.email=em;
+    }
   }else if(k==='rol'){
     notif('Los encargados se configuran en «Encargados por módulo»','err');
     renderListasCfg();
@@ -15061,7 +15137,7 @@ function editInstructor(i,k,v){
   }else if(k==='activo'){ins.activo=!!v;}
   if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')syncInstructoresToEncargadosGlobal();
   saveLS();poblarSelResponsable();
-  if(k==='activo'||esAdminModoGlobal())renderListasCfg();
+  if(k==='activo'||k==='email'||esAdminModoGlobal())renderListasCfg();
 }
 function delInstructor(i){
   cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
@@ -15186,18 +15262,20 @@ function guardarEncargadosGlobal(){
 function renderListasCfg(){
   const el=document.getElementById('cfg-panels');if(!el)return;
   const open=saveCfgFoldState();
-  const ro=cfgEsSoloLectura();
-  let html='';
-  if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','NCA DEGUV unificado (trámites + PQRSD Guaviare), departamentos regionales, oficinas DEGUV y Secretaría — nombre y correo Gmail.',encargadosGlobalCardBody(),false)+
-    cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
-  html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
-  html+=cfgSectionFold('Actividades predeterminadas','Crea opciones reutilizables para buscarlas al asignar actividades en el registro.',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
-    cfgSectionFold('Actividades sin expediente (predeterminadas)','Opciones base para actividades cortas: al crear o asignar, aparecen como sugerencias (igual que las de expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesCortasPred||[]):actCortasPredCardBody(),false)+
-    cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
-    cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
-    cfgSectionFold('Tipos de conducta — trámite Sancionatorio','Opciones del selector «Tipo de conducta / caso» en expedientes Sancionatorio.',ro?cfgCardReadonlyStrings(cfg.tiposSancionatorio||[]):tiposSancionatorioCardBody(),false);
-  el.innerHTML=html;
-  restoreCfgFoldState(open);
+  ensureUsuariosFirestoreCache().then(()=>{
+    const ro=cfgEsSoloLectura();
+    let html='';
+    if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','NCA DEGUV unificado (trámites + PQRSD Guaviare), departamentos regionales, oficinas DEGUV y Secretaría — nombre y correo Gmail.',encargadosGlobalCardBody(),false)+
+      cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
+    html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
+    html+=cfgSectionFold('Actividades predeterminadas','Crea opciones reutilizables para buscarlas al asignar actividades en el registro.',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
+      cfgSectionFold('Actividades sin expediente (predeterminadas)','Opciones base para actividades cortas: al crear o asignar, aparecen como sugerencias (igual que las de expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesCortasPred||[]):actCortasPredCardBody(),false)+
+      cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
+      cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
+      cfgSectionFold('Tipos de conducta — trámite Sancionatorio','Opciones del selector «Tipo de conducta / caso» en expedientes Sancionatorio.',ro?cfgCardReadonlyStrings(cfg.tiposSancionatorio||[]):tiposSancionatorioCardBody(),false);
+    el.innerHTML=html;
+    restoreCfgFoldState(open);
+  });
 }
 function tiposSancionatorioCardBody(){
   const tipos=cfg.tiposSancionatorio||[];
@@ -17189,7 +17267,7 @@ function initLoginScreen(){
   const sub=document.getElementById('login-sub');
   if(authPanel)authPanel.style.display='';
   if(rolesWrap)rolesWrap.style.display='none';
-  if(sub)sub.textContent='Ingrese con su cuenta Google autorizada.';
+  if(sub)sub.textContent='Personal autorizado: ingrese con su cuenta Google.';
   setLoginAuthMsg('');
   setLoginStatus('');
 }
@@ -17306,6 +17384,9 @@ function initFirebaseAuthListener(){
     }
   });
 }
+function ingresarConsultaCiudadana(){
+  ingresarComoRol('ciudadano');
+}
 function renderLoginRoles(){
   const el=document.getElementById('login-roles-grid');
   if(!el)return;
@@ -17420,6 +17501,9 @@ window.cerrarStorageFullBanner=cerrarStorageFullBanner;
 window.exportarAhoraFromReminder=exportarAhoraFromReminder;
 window.recordarDespuesExport=recordarDespuesExport;
 window.iniciarLoginGoogle=iniciarLoginGoogle;
+window.abrirPanelUsuariosAutorizados=abrirPanelUsuariosAutorizados;
+window.onInstructorUsuarioEmailSelect=onInstructorUsuarioEmailSelect;
+window.ingresarConsultaCiudadana=ingresarConsultaCiudadana;
 window.guardarUsuarioFirestore=guardarUsuarioFirestore;
 window.toggleUsuarioFirestoreActivo=toggleUsuarioFirestoreActivo;
 window.eliminarUsuarioFirestore=eliminarUsuarioFirestore;
