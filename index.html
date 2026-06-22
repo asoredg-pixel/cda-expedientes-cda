@@ -2694,7 +2694,7 @@ function devolverPqrsASecretaria(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Devolución a Secretaría DEGUV',oficina:'secretaria',oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   if(anterior&&anterior!=='secretaria')cancelarTareasPqrsNca(e,'Devolución a Secretaría — actividad cancelada');
-  saveLS();
+  persistExpedienteGranular(e);
   notif('PQRSD devuelta a Secretaría','ok');
   cerrarPqrsSidePanel();
   renderPqrsOficinaInbox();
@@ -2864,7 +2864,7 @@ function submitPqrsComentario(expId){
   if(!txt){notif('Escriba un comentario','err');return;}
   if(!Array.isArray(e._pqrs_comentarios))e._pqrs_comentarios=[];
   e._pqrs_comentarios.push({id:'pc_'+Date.now(),texto:txt,autor:pqrsComentarioAutor(),fecha:hoy()});
-  saveLS();
+  persistExpedienteGranular(e);
   if(ta)ta.value='';
   notif('Comentario registrado','ok');
   refreshPqrsDetalleViews(expId);
@@ -2940,7 +2940,7 @@ function submitPqrsRespuesta(expId){
   if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
   const go=function(archivos){
     registrarPqrsRespuestaCore(e,{fechaResp,oficioExt,medioResp,nota,adj,archivos});
-    saveLS();
+    persistExpedienteGranular(e);
     closeTaskModal();
     notif('Respuesta PQRSD registrada','ok');
     refreshPqrsDetalleViews(expId);
@@ -3047,9 +3047,10 @@ function eliminarPqrs(expId){
   }
   const msg=pqrsEstaCerrada(e)?'¿Eliminar esta PQRSD atendida del registro? (solo administrador)':'¿Eliminar esta PQRSD del registro?';
   confirmPrecaucion({title:'Eliminar PQRSD',message:msg,detail:expId,confirmLabel:'Sí, eliminar'},function(){
+    const expRef=e||{_exp:expId,_depto:e._depto||deptoActivo||'guaviare'};
     exps=exps.filter(x=>x._exp!==expId);
     logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
-    saveLS();
+    persistExpedienteDelete(expRef);
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
     cerrarPqrsSidePanel();
@@ -4594,7 +4595,7 @@ function marcarPqrsInformativaCore(expId,nota){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:notaHist+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
   completarTareasAtenderPqrs(e,notaHist);
-  saveLS();
+  persistExpedienteGranular(e);
   notif('PQRSD marcada como informativa y cerrada','ok');
   return true;
 }
@@ -5145,7 +5146,7 @@ function aprobarSolicitudPqrsDevolverSecretaria(expId,taskId){
   const notaFull=nota+(sol.nota?' · Motivo del responsable: '+sol.nota:'');
   if(trasladarPqrsASecretariaDesdeNca(expId,notaFull,sol.por)){
     clearTaskSolicitudPendiente(expId,taskId,'aprobada','Devuelta a Secretaría — '+nota);
-    saveLS();
+    persistExpedienteGranular(e);
     closeTaskModal();notif('PQRSD devuelta a Secretaría DEGUV','ok');
     renderActividades();renderBandejaDepto();refreshPqrsDetalleViews(expId);
     renderSecretariaPqrs();
@@ -5162,7 +5163,7 @@ function aprobarSolicitudTraslado(expId,taskId){
   if(trasladarTaskExp(expId,taskId,dest)){
     syncPqrsResponsableDesdeTask(expId,taskId,dest);
     clearTaskSolicitudPendiente(expId,taskId,'aprobada','Traslado aprobado a '+dest);
-    saveLS();
+    persistExpedienteGranular(e);
     closeTaskModal();notif('Traslado realizado a '+dest,'ok');renderActividades();renderBandejaDepto();
     refreshPqrsDetalleViews(expId);
     if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
@@ -9465,6 +9466,13 @@ async function loadLS(){
 function expedienteDocId(expOrId){
   return typeof expOrId==='object'?String(expOrId._exp||'').trim():String(expOrId||'').trim();
 }
+function resolveDeptoFirestoreId(deptoId,exp){
+  const fromExp=exp&&exp._depto?String(exp._depto).trim():'';
+  const candidate=String(deptoId||fromExp||'guaviare').trim();
+  if(DEPTOS_FIRESTORE.includes(candidate))return candidate;
+  if(fromExp&&DEPTOS_FIRESTORE.includes(fromExp))return fromExp;
+  return 'guaviare';
+}
 function expedienteDocRef(db,deptoId,expOrId){
   const expId=expedienteDocId(expOrId);
   if(!expId||!db||!window._fsDoc)return null;
@@ -9475,7 +9483,7 @@ async function saveExpedienteDoc(deptoId,exp){
   if(!db||!window._fsSetDoc||!exp)return false;
   const expId=expedienteDocId(exp);
   if(!expId){console.warn('saveExpedienteDoc: expediente sin _exp');return false;}
-  const depto=deptoId||exp._depto||'guaviare';
+  const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref)return false;
   const payload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
@@ -9492,7 +9500,7 @@ async function deleteExpedienteDoc(deptoId,exp){
   if(!db||!window._fsDeleteDoc)return false;
   const expId=expedienteDocId(exp);
   if(!expId){console.warn('deleteExpedienteDoc: expediente sin _exp');return false;}
-  const depto=deptoId||(typeof exp==='object'?exp._depto:null)||'guaviare';
+  const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref)return false;
   try{
@@ -9560,6 +9568,33 @@ async function saveGlobalFirestore(){
     console.error('saveGlobalFirestore:',err);
     return false;
   }
+}
+function persistExpLocal(){
+  _saveLSLocal();
+  checkLocalStorageCapacityAfterSave();
+}
+function persistExpedienteGranular(exp,withGlobal){
+  if(!exp)return;
+  try{persistExpLocal();}
+  catch(e){
+    if(isQuotaExceededError(e)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);}
+    else console.error('Error al guardar en localStorage:',e);
+    return;
+  }
+  const fs=[saveExpedienteDoc(deptoActivo,exp)];
+  if(withGlobal)fs.push(saveGlobalFirestore());
+  updateSyncIndicator('syncing');
+  Promise.all(fs).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+}
+function persistExpedienteDelete(expRef){
+  try{persistExpLocal();}
+  catch(e){
+    if(isQuotaExceededError(e)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);}
+    else console.error('Error al guardar en localStorage:',e);
+    return;
+  }
+  updateSyncIndicator('syncing');
+  deleteExpedienteDoc(deptoActivo,expRef).then(function(ok){updateSyncIndicator(ok?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
 }
 
 async function saveFirestore(){
@@ -17558,7 +17593,7 @@ function guardarPqrsSecretaria(){
   else if(oficina!=='secretaria')ensureTareaPqrsOficina(data,oficina);
   upsertPersonaCatalog(data);
   logAudit('Creó PQRSD ['+expId+']','pqrsd',expId);
-  saveLS();
+  persistExpedienteGranular(data,true);
   renderBandejaDepto();
   notif('PQRSD '+expId+(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)),'ok');
   limpiarFormSecretaria();
@@ -17873,7 +17908,7 @@ function submitEditPqrsSecretaria(expId){
   else if(e._pqrs_oficina&&e._pqrs_oficina!=='secretaria')ensureTareaPqrsOficina(e,e._pqrs_oficina);
   upsertPersonaCatalog(e);
   logAudit('Editó PQRSD ['+expId+']','pqrsd',expId);
-  saveLS();
+  persistExpedienteGranular(e,true);
   closeTaskModal();
   notif('PQRSD actualizada','ok');
   renderBandejaDepto();
@@ -17932,7 +17967,7 @@ function submitAsignarPqrsOficina(expId){
   const existIdx=e.tasks.findIndex(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
   if(existIdx>=0)e.tasks[existIdx]=normalizeTask({...e.tasks[existIdx],responsable:resp,responsables:[resp],asignados:[{nombre:resp,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}],eliminada:false,prioritaria:prior,vence:vence,plazoDias:plazoDias});
   else e.tasks.push(tk);
-  saveLS();
+  persistExpedienteGranular(e);
   closeTaskModal();
   notif('PQRSD asignado a '+resp,'ok');
   renderPqrsOficinaInbox();
@@ -17980,7 +18015,7 @@ function submitTrasladoPqrsInterOficina(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  saveLS();
+  persistExpedienteGranular(e);
   closeTaskModal();
   notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
   renderBandejaDepto();
