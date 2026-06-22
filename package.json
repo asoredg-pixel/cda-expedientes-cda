@@ -1,0 +1,11 @@
+{
+  "name": "cda-expedientes",
+  "private": true,
+  "description": "Sistema de Seguimiento de Trámites CDA Guaviare",
+  "scripts": {
+    "backup": "node backup-firestore.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
+  }
+}

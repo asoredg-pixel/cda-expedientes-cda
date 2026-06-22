@@ -1567,7 +1567,7 @@ window.dispatchEvent(new Event('firebase-ready'));
 <div id="ciudadano-doc-overlay" class="task-modal-overlay" onclick="if(event.target===this)closeCiudadanoDocViewer()">
   <div class="task-modal" style="max-width:920px;width:96%" onclick="event.stopPropagation()">
     <div class="task-modal-hdr"><span id="ciudadano-doc-tit">Documento</span><button type="button" class="btn bsm" onclick="closeCiudadanoDocViewer()">✕</button></div>
-    <div style="padding:12px"><iframe id="ciudadano-doc-iframe" style="width:100%;height:min(72vh,580px);border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></iframe>
+    <div style="padding:12px"><iframe id="ciudadano-doc-iframe" sandbox="allow-scripts allow-same-origin allow-popups" style="width:100%;height:min(72vh,580px);border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></iframe>
     <div id="ciudadano-doc-foot" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div></div>
   </div>
 </div>
@@ -1732,6 +1732,7 @@ let encargadosGlobal=null;
 let authUsuario=null;
 let _localSaving=false;
 let _fsUnsub=null;
+let _cfgUnsub=null;
 const ADMIN_GMAIL='ncacdaguaviare@gmail.com';
 const DEPTOS_FIRESTORE=['guaviare','guainia','vaupes'];
 
@@ -4309,7 +4310,7 @@ function renderComparePqrsDocBlock(titulo,previewUrl,openUrl,meta){
   let h='<div class="compare-ver-block"><div class="lbl">'+escAttr(titulo)+(meta?' · '+escAttr(meta):'')+'</div>';
   if(hasVista){
     const isImg=/\.(png|jpe?g|gif|webp)(\?|$)/i.test(String(previewUrl||''))||String(previewUrl||'').startsWith('data:image/');
-    h+=isImg?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;max-height:min(360px,42vh);object-fit:contain;display:block">'):('<iframe src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"></iframe>');
+    h+=isImg?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;max-height:min(360px,42vh);object-fit:contain;display:block">'):('<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"></iframe>');
     if(openUrl&&openUrl!==previewUrl)h+='<div style="padding:4px 8px;font-size:11px;border-top:1px solid var(--bd)"><a href="'+escAttr(openUrl)+'" target="_blank" rel="noopener">↗ Abrir en pestaña</a></div>';
   }else{
     h+='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin documento adjunto para comparar.</div>';
@@ -6162,7 +6163,7 @@ function renderSoporteEmbedHtml(sel){
       '<div style="font-size:13px;color:var(--tx2)">Documento Word — descargue para revisar</div>'+
       '<a class="btn bsm bp" href="'+escAttr(sel.url||src)+'" download="'+escAttr(sel.label||'documento')+'">Descargar / abrir</a></div>';
   }
-  return '<iframe id="soporte-iframe" src="'+escAttr(src)+'" title="Vista previa documento"></iframe>';
+  return '<iframe id="soporte-iframe" sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(src)+'" title="Vista previa documento"></iframe>';
 }
 function addSoporteArchivoLocal(expId,taskId,archivo){
   if(!archivo||!archivo.data)return false;
@@ -7181,7 +7182,7 @@ function renderCompareDocSideHtml(doc,sideLbl,t){
   if(soporteTieneVista(sopLike)){
     vista=soporteEsImagen(sopLike)
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;max-height:420px;object-fit:contain;display:block">'
-      :'<iframe src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
   }
@@ -9431,20 +9432,22 @@ async function loadLS(){
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
     }
-    const snaps=await Promise.all(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto))));
+    const [deptoSnaps,expSnaps]=await Promise.all([
+      Promise.all(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
+      Promise.all(DEPTOS_FIRESTORE.map(depto=>loadExpedientesDepto(depto)))
+    ]);
     exps=[];
     cfgByDepto={};
-    snaps.forEach((snap,i)=>{
+    deptoSnaps.forEach((snap,i)=>{
       const depto=DEPTOS_FIRESTORE[i];
       if(snap.exists()){
         const data=snap.data();
-        const deptoExps=Array.isArray(data.expedientes)?data.expedientes:[];
-        exps=exps.concat(deptoExps);
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
       }else{
         cfgByDepto[depto]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));
       }
     });
+    expSnaps.forEach(deptoExps=>{exps=exps.concat(deptoExps);});
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
     postLoadInit();
     updateSyncIndicator('synced');
@@ -9454,6 +9457,111 @@ async function loadLS(){
     updateSyncIndicator('error');
   }
 }
+
+// ================================================================
+// FIRESTORE — expedientes en subcolección (Fase 1-2)
+// departamentos/{deptoId}/expedientes/{exp._exp}
+// ================================================================
+function expedienteDocId(expOrId){
+  return typeof expOrId==='object'?String(expOrId._exp||'').trim():String(expOrId||'').trim();
+}
+function expedienteDocRef(db,deptoId,expOrId){
+  const expId=expedienteDocId(expOrId);
+  if(!expId||!db||!window._fsDoc)return null;
+  return window._fsDoc(db,'departamentos',deptoId,'expedientes',expId);
+}
+async function saveExpedienteDoc(deptoId,exp){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!exp)return false;
+  const expId=expedienteDocId(exp);
+  if(!expId){console.warn('saveExpedienteDoc: expediente sin _exp');return false;}
+  const depto=deptoId||exp._depto||'guaviare';
+  const ref=expedienteDocRef(db,depto,expId);
+  if(!ref)return false;
+  const payload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
+  try{
+    await window._fsSetDoc(ref,payload,{merge:true});
+    return true;
+  }catch(err){
+    console.error('saveExpedienteDoc:',depto,expId,err);
+    return false;
+  }
+}
+async function deleteExpedienteDoc(deptoId,exp){
+  const db=window._db;
+  if(!db||!window._fsDeleteDoc)return false;
+  const expId=expedienteDocId(exp);
+  if(!expId){console.warn('deleteExpedienteDoc: expediente sin _exp');return false;}
+  const depto=deptoId||(typeof exp==='object'?exp._depto:null)||'guaviare';
+  const ref=expedienteDocRef(db,depto,expId);
+  if(!ref)return false;
+  try{
+    await window._fsDeleteDoc(ref);
+    return true;
+  }catch(err){
+    console.error('deleteExpedienteDoc:',depto,expId,err);
+    return false;
+  }
+}
+async function loadExpedientesDepto(deptoId){
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsCollection||!deptoId)return [];
+  try{
+    const snap=await window._fsGetDocs(window._fsCollection(db,'departamentos',deptoId,'expedientes'));
+    return snap.docs.map(d=>{
+      const data=d.data()||{};
+      const expId=String(data._exp||data.id||d.id||'').trim();
+      return{...data,_exp:expId,id:expId};
+    });
+  }catch(err){
+    console.error('loadExpedientesDepto:',deptoId,err);
+    return [];
+  }
+}
+async function saveDeptMeta(deptoId){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!deptoId)return false;
+  try{
+    syncCfgToStore();
+    await window._fsSetDoc(window._fsDoc(db,'departamentos',deptoId),{
+      cfg:cfgByDepto[deptoId]||{},
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.error('saveDeptMeta:',deptoId,err);
+    return false;
+  }
+}
+async function saveGlobalFirestore(){
+  const db=window._db;
+  if(!db||!window._fsSetDoc)return false;
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+      personas:personas||[],
+      actividadesLibres:actividadesLibres||[],
+      agendaEventos:agendaEventos||[],
+      chatMensajes:chatMensajes||[],
+      bandejaLeidos:getBandejaLeidos(),
+      bandejaEliminados:getBandejaEliminados(),
+      encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
+      usuariosIndex:_usuariosCache.map(u=>({
+        email:String(u.email||'').trim().toLowerCase(),
+        nombre:u.nombre||'',
+        rol:u.rol||'',
+        codigo:u.codigo||'',
+        activo:u.activo!==false,
+        deptoResponsable:String(u.deptoResponsable||'').trim()
+      })),
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.error('saveGlobalFirestore:',err);
+    return false;
+  }
+}
+
 async function saveFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc||_localSaving)return;
@@ -9499,11 +9607,21 @@ async function saveFirestore(){
   setTimeout(()=>{_localSaving=false;},1500);
 }
 function saveLS(){
+  // LEGACY: usar solo para cambios de cfg/chat/agenda/personas.
+  // No usar para mutaciones de expedientes individuales.
   purgeRetencionDatosLeidos();
   try{
     _saveLSLocal();
     checkLocalStorageCapacityAfterSave();
-    saveFirestore();
+    updateSyncIndicator('syncing');
+    const fsPromises=[saveGlobalFirestore()];
+    const deptoMeta=deptoCfg||deptoActivo||'';
+    if(DEPTOS_FIRESTORE.includes(deptoMeta))fsPromises.push(saveDeptMeta(deptoMeta));
+    Promise.all(fsPromises).then(function(results){
+      updateSyncIndicator(results.every(r=>r!==false)?'synced':'error');
+    }).catch(function(){
+      updateSyncIndicator('error');
+    });
   }catch(e){
     if(isQuotaExceededError(e)){
       showStorageFullBanner();
@@ -9535,20 +9653,54 @@ function renderTabActual(){
   renderChatBadge();
   renderBandejaDepto();
 }
+function desuscribirCfgSync(){
+  if(_cfgUnsub){try{_cfgUnsub();}catch(e){}_cfgUnsub=null;}
+}
+function suscribirCfgSync(deptoId){
+  const db=window._db;
+  deptoId=deptoId||deptoCfg||deptoActivo||'guaviare';
+  if(!db||!window._fsOnSnapshot||!window._fsDoc)return;
+  if(!DEPTOS_FIRESTORE.includes(deptoId))return;
+  desuscribirCfgSync();
+  _cfgUnsub=window._fsOnSnapshot(window._fsDoc(db,'departamentos',deptoId),function(snap){
+    if(_localSaving||!snap.exists())return;
+    const data=snap.data();
+    if(!data||!data.cfg)return;
+    cfgByDepto[deptoId]=normalizeCfgObj(data.cfg);
+    if(deptoCfg===deptoId)setCfgPtr(deptoId);
+    if(document.getElementById('pg-cfg')&&document.getElementById('pg-cfg').classList.contains('on')&&typeof renderCfg==='function')renderCfg();
+  });
+}
+function mergeExpFromFirestoreSnapshot(data,docId){
+  const expId=String((data&&data._exp)||(data&&data.id)||docId||'').trim();
+  if(!expId)return null;
+  return{...data,_exp:expId,id:expId};
+}
 function initRealtimeSync(){
   const db=window._db;
-  if(!db||!window._fsOnSnapshot)return;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   if(_fsUnsub){try{_fsUnsub();}catch(e){}_fsUnsub=null;}
-  const depto=deptoCfg||deptoActivo||'guaviare';
+  const depto=deptoActivo||'guaviare';
   if(!DEPTOS_FIRESTORE.includes(depto))return;
-  _fsUnsub=window._fsOnSnapshot(window._fsDoc(db,'departamentos',depto),(snap)=>{
-    if(!snap.exists()||_localSaving)return;
-    const data=snap.data();
-    const deptoExps=Array.isArray(data.expedientes)?data.expedientes:[];
-    exps=(exps||[]).filter(e=>(e._depto||'guaviare')!==depto).concat(deptoExps);
-    if(data.cfg)cfgByDepto[depto]=normalizeCfgObj(data.cfg);
-    setCfgPtr(deptoCfg||depto);
-    renderTabActual();
+  _fsUnsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
+    if(_localSaving)return;
+    const changes=snap.docChanges();
+    if(!changes.length)return;
+    changes.forEach(function(change){
+      if(change.type==='removed'){
+        const expId=String(change.doc.id||'').trim();
+        if(!expId)return;
+        exps=(exps||[]).filter(function(e){return String(e._exp||'').trim()!==expId;});
+        return;
+      }
+      const exp=mergeExpFromFirestoreSnapshot(change.doc.data(),change.doc.id);
+      if(!exp)return;
+      const idx=(exps||[]).findIndex(function(e){return String(e._exp||'').trim()===exp._exp;});
+      if(idx>=0)exps[idx]=exp;
+      else exps.push(exp);
+    });
+    renderTabla();
+    renderChatBadge();
   });
 }
 async function migrarLocalStorageAFirestore(){
@@ -9559,6 +9711,98 @@ async function migrarLocalStorageAFirestore(){
   await saveFirestore();
   notif('Migración a Firestore completada','ok');
 }
+
+/*
+ * --- Fallback legacy: array expedientes[] embebido en departamentos/{deptoId} ---
+ * Desactivado tras migración a subcolección. Reactivar solo si hace falta rollback.
+ *
+ * async function loadLS_legacy(){
+ *   const db=window._db;
+ *   if(!db||!window._fsGetDoc){_loadLSLocal();updateSyncIndicator('offline');return;}
+ *   updateSyncIndicator('syncing');
+ *   try{
+ *     const globalSnap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+ *     if(globalSnap.exists()){
+ *       const g=globalSnap.data();
+ *       if(Array.isArray(g.personas))personas=g.personas;
+ *       if(Array.isArray(g.actividadesLibres))actividadesLibres=g.actividadesLibres;
+ *       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
+ *       if(Array.isArray(g.chatMensajes))chatMensajes=g.chatMensajes;
+ *       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
+ *       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
+ *       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
+ *       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
+ *     }
+ *     const snaps=await Promise.all(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto))));
+ *     exps=[];
+ *     cfgByDepto={};
+ *     snaps.forEach((snap,i)=>{
+ *       const depto=DEPTOS_FIRESTORE[i];
+ *       if(snap.exists()){
+ *         const data=snap.data();
+ *         const deptoExps=Array.isArray(data.expedientes)?data.expedientes:[];
+ *         exps=exps.concat(deptoExps);
+ *         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
+ *       }else{
+ *         cfgByDepto[depto]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));
+ *       }
+ *     });
+ *     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
+ *     postLoadInit();
+ *     updateSyncIndicator('synced');
+ *   }catch(err){
+ *     console.error('Error cargando Firestore:',err);
+ *     _loadLSLocal();
+ *     updateSyncIndicator('error');
+ *   }
+ * }
+ *
+ * async function saveFirestore_legacy(){
+ *   const db=window._db;
+ *   if(!db||!window._fsSetDoc||_localSaving)return;
+ *   _localSaving=true;
+ *   updateSyncIndicator('syncing');
+ *   try{
+ *     syncCfgToStore();
+ *     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+ *       personas:personas||[],
+ *       actividadesLibres:actividadesLibres||[],
+ *       agendaEventos:agendaEventos||[],
+ *       chatMensajes:chatMensajes||[],
+ *       bandejaLeidos:getBandejaLeidos(),
+ *       bandejaEliminados:getBandejaEliminados(),
+ *       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
+ *       usuariosIndex:_usuariosCache.map(u=>({
+ *         email:String(u.email||'').trim().toLowerCase(),
+ *         nombre:u.nombre||'',
+ *         rol:u.rol||'',
+ *         codigo:u.codigo||'',
+ *         activo:u.activo!==false,
+ *         deptoResponsable:String(u.deptoResponsable||'').trim()
+ *       })),
+ *       updatedAt:new Date().toISOString()
+ *     },{merge:true});
+ *     for(const depto of DEPTOS_FIRESTORE){
+ *       const deptoExps=(exps||[]).filter(e=>(e._depto||'guaviare')===depto);
+ *       const pqrsdDepto=deptoExps.filter(esPqrsSecretaria);
+ *       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{
+ *         expedientes:deptoExps,
+ *         cfg:cfgByDepto[depto]||{},
+ *         pqrsd:pqrsdDepto,
+ *         chat:{},
+ *         inbox:[],
+ *         updatedAt:new Date().toISOString()
+ *       },{merge:true});
+ *     }
+ *     updateSyncIndicator('synced');
+ *   }catch(err){
+ *     console.error('Error guardando Firestore:',err);
+ *     updateSyncIndicator('error');
+ *   }
+ *   setTimeout(()=>{_localSaving=false;},1500);
+ * }
+ * --- fin fallback legacy ---
+ */
 
 // ================================================================
 // UTILS
@@ -13210,6 +13454,7 @@ function showTab(t){
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
   if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t='con';}
   if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}
+  if(t!=='cfg')desuscribirCfgSync();
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
   document.getElementById('pg-'+t).classList.add('on');
@@ -13227,7 +13472,7 @@ function showTab(t){
   if(t==='agenda')renderAgenda();
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){initPeriodoFiltros('cons');renderConsolidado();}
-  if(t==='cfg'){updateDeptoUI();renderCfg();}
+  if(t==='cfg'){updateDeptoUI();renderCfg();suscribirCfgSync(deptoCfg||deptoActivo);}
   updateDeptoUI();
 }
 function showCfgTab(t){
@@ -14277,7 +14522,31 @@ function guardarExpCore(stayOnForm){
     liberarExpLock(expId);
     detenerRenovacionExpLock();
   }
-  saveLS();renderTabla();
+  const savedExp=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  try{
+    _saveLSLocal();
+    checkLocalStorageCapacityAfterSave();
+  }catch(e){
+    if(isQuotaExceededError(e)){
+      showStorageFullBanner();
+      console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);
+    }else{
+      console.error('Error al guardar en localStorage:',e);
+    }
+    return;
+  }
+  if(savedExp){
+    updateSyncIndicator('syncing');
+    Promise.all([
+      saveExpedienteDoc(deptoActivo,savedExp),
+      saveGlobalFirestore()
+    ]).then(function(results){
+      updateSyncIndicator(results.every(r=>r!==false)?'synced':'error');
+    }).catch(function(){
+      updateSyncIndicator('error');
+    });
+  }
+  renderTabla();
   if(document.getElementById('pg-con').classList.contains('on'))renderConsulta();
   if(document.getElementById('pg-cons').classList.contains('on'))renderConsolidado();
   if(stayOnForm){
@@ -14333,11 +14602,30 @@ function eliminarExp(expId){
     confirmLabel:'Sí, eliminar expediente'
   },function(){
     const esPqrsExp=e&&esPqrsSecretaria(e);
+    const expRef=e||{_exp:expId,_depto:deptoActivo||'guaviare'};
     exps=exps.filter(x=>x._exp!==expId);
     if(esPqrsExp)logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     else logAudit('Eliminó expediente ['+expId+']','expedientes',expId);
     if(editId===expId){editId=null;showTab('reg');}
-    saveLS();renderTabla();notif('Expediente eliminado','ok');
+    try{
+      _saveLSLocal();
+      checkLocalStorageCapacityAfterSave();
+    }catch(err){
+      if(isQuotaExceededError(err)){
+        showStorageFullBanner();
+        console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',err);
+      }else{
+        console.error('Error al guardar en localStorage:',err);
+      }
+      return;
+    }
+    updateSyncIndicator('syncing');
+    deleteExpedienteDoc(deptoActivo,expRef).then(function(ok){
+      updateSyncIndicator(ok?'synced':'error');
+    }).catch(function(){
+      updateSyncIndicator('error');
+    });
+    renderTabla();notif('Expediente eliminado','ok');
   });
 }
 function verCon(expId){
