@@ -1,73 +1,244 @@
 rules_version = '2';
 
+// =============================================================================
+// Reglas de seguridad — SST (cda-expedientes)
+// Colecciones: usuarios/{email}, departamentos/{deptoId}, sistema/global
+// =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
+    // -------------------------------------------------------------------------
+    // Helpers — autenticación y usuario autorizado
+    // -------------------------------------------------------------------------
+
+    // Hay sesión Firebase Auth (Google).
+    function isAuthenticated() {
       return request.auth != null;
     }
 
+    // Correo del token, normalizado a minúsculas (ID del doc usuarios/{email}).
     function authEmail() {
       return request.auth.token.email.lower();
     }
 
-    function myUserPath() {
+    // Ruta del documento del usuario que inició sesión.
+    function userDocPath() {
       return /databases/$(database)/documents/usuarios/$(authEmail());
     }
 
-    function myUserExists() {
-      return isSignedIn() && exists(myUserPath());
+    // El documento usuarios/{authEmail} existe.
+    function userDocExists() {
+      return isAuthenticated() && exists(userDocPath());
     }
 
-    function myUser() {
-      return get(myUserPath()).data;
+    // Datos del usuario autenticado (solo invocar si userDocExists()).
+    function getUserData() {
+      return get(userDocPath()).data;
     }
 
-    function myUserActive() {
-      return myUserExists() && myUser().activo != false;
+    // Usuario autorizado: documento existe y activo !== false.
+    function isActiveUser() {
+      return userDocExists() && getUserData().activo != false;
     }
 
+    // Rol almacenado en Firestore del usuario autenticado.
+    function userRol() {
+      return getUserData().rol;
+    }
+
+    // Administrador global.
     function isAdmin() {
-      return myUserActive() && myUser().rol == 'admin';
+      return isActiveUser() && userRol() == 'admin';
     }
 
-    function isDeptoEncargado() {
-      return myUserActive() && myUser().rol in ['guaviare', 'guainia', 'vaupes'];
+    // Encargado departamental: su rol ES el id del departamento.
+    function rolEsEncargadoDepto() {
+      return isActiveUser() && userRol() in ['guaviare', 'guainia', 'vaupes'];
     }
 
+    // Encargado de un departamento concreto.
+    function rolEsEncargadoDeptoId(deptoId) {
+      return rolEsEncargadoDepto() && userRol() == deptoId;
+    }
+
+    // Roles que operan PQRSD solo sobre departamentos/guaviare.
+    function rolOperaGuaviare() {
+      return isActiveUser()
+        && userRol() in ['secretaria', 'oap_deguv', 'rn_deguv', 'admin_deguv', 'ds_deguv'];
+    }
+
+    // Responsable o contratista legacy (mismo tratamiento).
+    function isResponsable() {
+      return isActiveUser() && userRol() in ['responsables', 'contratista'];
+    }
+
+    // Departamento efectivo de un responsable/contratista.
+    // Espeja usuarioEsResponsableDepto(): contratista sin depto → guaviare.
+    function deptoDelResponsable() {
+      return (userRol() == 'contratista'
+        && (getUserData().deptoResponsable == null
+            || getUserData().deptoResponsable == ''))
+        ? 'guaviare'
+        : getUserData().deptoResponsable;
+    }
+
+    // Vista jurisdiccional: lectura multi-departamento, sin escritura.
+    function isJurisdiccional() {
+      return isActiveUser() && userRol() == 'jurisdiccional';
+    }
+
+    // IDs de departamento válidos en Firestore.
+    function deptoIdValido(deptoId) {
+      return deptoId in ['guaviare', 'guainia', 'vaupes'];
+    }
+
+    // Payload de un usuario responsable del departamento del encargado autenticado.
     function responsableDeMiDepto(data) {
       return data.rol == 'responsables'
-        && data.deptoResponsable == myUser().rol
+        && data.deptoResponsable == userRol()
         && data.nombre is string
         && data.nombre.size() > 0;
     }
 
-    // Usuarios autorizados (login Google)
+    // El encargado solo puede tocar usuarios que ya eran responsables de su dept.
+    function responsableExistenteDeMiDepto() {
+      return resource.data.rol == 'responsables'
+        && resource.data.deptoResponsable == userRol();
+    }
+
+    // -------------------------------------------------------------------------
+    // Permisos sobre departamentos/{deptoId}
+    // -------------------------------------------------------------------------
+
+    function puedeLeerDepartamento(deptoId) {
+      return deptoIdValido(deptoId) && (
+        isAdmin()
+        || isJurisdiccional()
+        || rolEsEncargadoDeptoId(deptoId)
+        || (rolOperaGuaviare() && deptoId == 'guaviare')
+        || (isResponsable() && deptoDelResponsable() == deptoId)
+      );
+    }
+
+    function puedeEscribirDepartamento(deptoId) {
+      return deptoIdValido(deptoId) && (
+        isAdmin()
+        || rolEsEncargadoDeptoId(deptoId)
+        || (rolOperaGuaviare() && deptoId == 'guaviare')
+        || (isResponsable() && deptoDelResponsable() == deptoId)
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // Permisos sobre sistema/global
+    // -------------------------------------------------------------------------
+
+    function puedeEscribirGlobal() {
+      return isAdmin()
+        || userRol() in [
+          'guaviare', 'guainia', 'vaupes',
+          'secretaria', 'oap_deguv', 'rn_deguv', 'admin_deguv', 'ds_deguv'
+        ];
+    }
+
+    // -------------------------------------------------------------------------
+    // usuarios/{email} — usuarios autorizados (login Google)
+    // -------------------------------------------------------------------------
     match /usuarios/{email} {
-      allow read: if myUserActive();
 
-      allow create: if isAdmin()
-        || (isDeptoEncargado() && responsableDeMiDepto(request.resource.data));
-
-      allow update: if isAdmin()
-        || (isDeptoEncargado()
+      // Lectura:
+      // - admin: cualquier usuario
+      // - encargado dept.: responsables de su departamento
+      // - cualquier usuario activo: su propio documento (login / sesión)
+      allow read: if isActiveUser() && (
+        isAdmin()
+        || email.lower() == authEmail()
+        || (rolEsEncargadoDepto()
             && resource.data.rol == 'responsables'
-            && responsableDeMiDepto(request.resource.data));
+            && resource.data.deptoResponsable == userRol())
+      );
 
+      // Creación:
+      // - admin: cualquier usuario autorizado
+      // - encargado dept.: solo responsables de su departamento
+      allow create: if isActiveUser() && (
+        isAdmin()
+        || (rolEsEncargadoDepto() && responsableDeMiDepto(request.resource.data))
+      );
+
+      // Actualización:
+      // - admin: cualquier usuario
+      // - encargado dept.: solo si ya era responsable de su dept. y sigue siéndolo
+      allow update: if isActiveUser() && (
+        isAdmin()
+        || (rolEsEncargadoDepto()
+            && responsableExistenteDeMiDepto()
+            && responsableDeMiDepto(request.resource.data))
+      );
+
+      // Eliminación: solo administrador.
       allow delete: if isAdmin();
     }
 
-    // Configuración global — solo administrador
-    match /sistema/{document=**} {
-      allow read: if myUserActive();
-      allow write: if isAdmin();
+    // -------------------------------------------------------------------------
+    // departamentos/{deptoId} — expedientes, cfg, pqrsd, chat, inbox
+    // IDs inválidos: siempre denegado (no entran en puedeLeer/Escribir).
+    // El cliente intenta escribir los 3 deptos en cada saveLS(); las rules
+    // bloquean silenciosamente los que están fuera del ámbito del rol.
+    // -------------------------------------------------------------------------
+    match /departamentos/{deptoId} {
+      allow read: if isActiveUser() && puedeLeerDepartamento(deptoId);
+      allow create, update: if isActiveUser() && puedeEscribirDepartamento(deptoId);
+      allow delete: if isAdmin() && deptoIdValido(deptoId);
     }
 
-    // Expedientes y configuración por departamento
-    match /departamentos/{deptoId} {
-      allow read: if myUserActive();
-      allow write: if isAdmin()
-        || (isDeptoEncargado() && myUser().rol == deptoId);
+    // -------------------------------------------------------------------------
+    // sistema/global — datos transversales e índice de usuarios
+    // -------------------------------------------------------------------------
+    match /sistema/global {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isAdmin();
+    }
+
+    // Cualquier otra ruta bajo sistema/ queda denegada por defecto.
+    match /sistema/{docId} {
+      allow read, write: if false;
     }
   }
 }
+
+// =============================================================================
+// CASOS NO CUBIERTOS — requieren Cloud Functions u otra validación server-side
+// =============================================================================
+//
+// 1. Validación campo a campo dentro de departamentos/{deptoId}.expedientes[]
+//    (p. ej. que un responsable solo modifique expedientes asignados, o solo
+//    ciertas claves _* del objeto). Las rules solo controlan acceso al documento
+//    completo del departamento.
+//
+// 2. Validación de integridad de departamentos/{deptoId}.cfg (instructores[],
+//    tramites[], listas) — tamaño, esquema, roles permitidos en instructores.
+//
+// 3. Coherencia entre pqrsd[] y expedientes[] (pqrsd es subconjunto derivado).
+//
+// 4. Escrituras parciales en sistema/global: un encargado de Guainía puede
+//    sobrescribir personas[] o chatMensajes[] globales si el cliente envía el
+//    objeto completo. Las rules no distinguen campos dentro del documento.
+//
+// 5. Rate limiting, auditoría, detección de payloads anormalmente grandes.
+//
+// 6. Validación de que usuarios/{email} no cambie de rol/deptoResponsable fuera
+//    del flujo UI (p. ej. responsable promovido a admin vía API directa) más allá
+//    de las comprobaciones básicas del encargado departamental.
+//
+// 7. Sincronización usuariosIndex en sistema/global vs colección usuarios/
+//    (consistencia denormalizada).
+//
+// 8. Acceso de contratista/responsable limitado a expedientes concretos dentro
+//    del array expedientes[] (regSecciones, tareas asignadas por email).
+//
+// 9. Validación de updatedAt / creadoEn / tipos de datos en todos los campos.
+//
+// 10. Bloqueo de lectura de usuarios/{email} ajenos para roles que hoy no lo
+//     necesitan (las rules permiten read propio + admin + encargado dept.).

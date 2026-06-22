@@ -15227,6 +15227,109 @@ function abrirConsultaExpPanel(expId,opts){
     }
   });
 }
+const CON_CONSULTA_PAGE=30;
+let _conConsultaPag={list:[],shown:0,mode:'',qs:'',today:''};
+function conConsultaOneCard(e){
+  if(_conConsultaPag.mode==='pqrs'){
+    e=normalizePqrsOficinaFields(e);
+    const asunto=e.f_f1||'—';
+    const detalle=e._pqrs_detalle||e._detalle_general||'';
+    const btnResp=puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta dada</button>':'';
+    const btnAsig=puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
+    const btnTras=puedeTrasladarPqrs(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+jsStr(e._exp)+'\')">↪ Trasladar</button>':'';
+    const btnEdit=(esSecretaria()&&puedeEditarPqrsSecretaria(e))?pqrsBtnEdit(e._exp,'✏ Editar'):'';
+    const docBtn=htmlPqrsDocumentoBtns(e);
+    const abrirFn=esSecretaria()?"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('sec')":"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('pqrs-ofi')";
+    return '<div class="ec">'+
+      '<div class="ech"><div class="ech-left">'+
+        '<div class="eid"><strong style="font-family:\'DM Mono\',monospace">'+hl(e._exp,_conConsultaPag.qs)+'</strong> '+pqrsEstadoConsultaBadge(e)+'</div>'+
+        '<div class="enm">'+hl(e._tipo_solicitud||'PQRSD',_conConsultaPag.qs)+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
+      '</div>'+
+      '<div class="ech-right"><button type="button" class="btn bsm" onclick="'+abrirFn+'">Abrir</button></div></div>'+
+      '<div class="ecb">'+
+        renderPqrsPlazoBarHtml(e)+
+        '<div class="pqrs-det-sec"><div class="pqrs-det-k">Interesado</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
+        '<div class="pqrs-det-sec"><div class="pqrs-det-k">Asunto / descripción</div><div class="pqrs-det-v">'+hl(asunto,_conConsultaPag.qs)+(detalle&&detalle!==asunto?('<br><span style="color:var(--tx2)">'+hl(detalle,_conConsultaPag.qs)+'</span>'):'')+'</div></div>'+
+        (docBtn?('<div class="fx" style="gap:6px;margin-top:8px">'+docBtn+'</div>'):'')+
+        renderPqrsTrazabilidadHtml(e)+
+        htmlPqrsRespuestaRegistrada(e)+
+        '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTras+btnEdit+'</div>'+
+      '</div></div>';
+  }
+  const today=_conConsultaPag.today;
+  migrarInfoTecExpediente(e);
+  const tram=getTram(e._tramite,e);
+  const ter=calcTerminos(e);
+  const tasks=(e.tasks||[]).map(normalizeTask);
+  const porVerT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Por verificar').length;
+  const doneT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Atendida').length;
+  const porEjecT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='En ejecución').length;
+  const porCorrT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Por corregir').length;
+  const vencT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Vencida').length;
+  const d=dias(getFechaEstado(e,'Solicitud')||e._fecha);
+  const tkHtml=tasks.length?tasks.map(t=>renderTaskConsultaItem(e,t,_conConsultaPag.qs)).join(''):'<div style="font-size:12px;color:var(--tx3);padding:5px">Sin actividades</div>';
+  const pendAct=tasks.filter(t=>!t.eliminada&&estadoTask(t)!=='Atendida').length;
+  const asocList=getExpAsociadosAll(e);
+  const hasAsoc=asocList.length>0;
+  const pqrsDoc=esPqrsSecretaria(e)?htmlPqrsDocumentoConsulta(e):'';
+  const expIdHtml=esSoloLectura()?
+    '<span class="bdg" style="font-family:\'DM Mono\',monospace;font-size:12px;background:var(--bll);color:var(--bl);padding:2px 8px;border-radius:4px">'+hl(e._exp,_conConsultaPag.qs)+'</span>':
+    '<button type="button" class="con-exp-link bdg" style="font-family:\'DM Mono\',monospace;font-size:12px;background:var(--bll);color:var(--bl);padding:2px 8px;border-radius:4px" data-sst-action="editarExp" data-sst-exp="'+escAttr(e._exp)+'" title="Editar expediente en '+uiEditorContenedorLbl()+'">'+hl(e._exp,_conConsultaPag.qs)+'</button>';
+  const actFoldSummary=esModoCiudadano()?
+    'Actividades ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks):
+    'Actividades asignadas ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks)+' <span style="font-size:11px;font-weight:400;color:var(--tx3)">— chat · historial</span>';
+  return '<div class="ec">'+
+    '<div class="ech">'+
+      '<div class="ech-left">'+
+        '<div class="eid">'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,_conConsultaPag.qs)+'</span>':'')+'</div>'+
+        '<div class="enm">'+hl(getNom(e),_conConsultaPag.qs)+'</div>'+
+        '<div class="emta">'+(tram?tram.nombre:'')+badgeDepto(e._depto)+'</div>'+
+        '<div style="margin-top:4px">'+flagsHtmlCompact(e)+'</div>'+
+        (hasAsoc?renderExpAsociadosView(e,true):'')+
+      '</div>'+
+      '<div class="ech-right">'+
+        '<div class="fx" style="flex-wrap:wrap;gap:4px">'+badgeTram(e._tramite,e)+' '+badgeEst(e._estado)+
+        expBtnArchHtml(e._exp,{title:'Ver todos los adjuntos'})+
+          (esSoloLectura()?'':expBtnEditHtml(e._exp,{bic:false,label:'✏️',suffix:' Editar',title:'Editar en '+uiEditorContenedorLbl()}))+'</div>'+
+        renderConsultaHdrMeta(e,ter,porVerT,doneT,porEjecT,vencT,porCorrT,d)+
+      '</div>'+
+    '</div>'+
+    '<div class="ecb">'+
+      '<div class="tc">'+
+        '<div class="con-col-left">'+
+          '<div><div class="slbl">Línea de tiempo del trámite</div>'+renderFullTimeline(e)+'</div>'+
+          renderInteresadoView(e)+
+          renderDetalleConsultaView(e)+
+          pqrsDoc+
+          renderInfoTecConsultaView(e)+
+          renderContableView(e)+
+          renderActosAdminView(e)+
+          renderConceptosSegView(e)+
+        '</div>'+
+        '<div>'+
+          '<details class="con-fold con-act-fold"'+(pendAct?' open':'')+'>'+
+          '<summary class="slbl" style="cursor:pointer;margin-bottom:0">'+actFoldSummary+'</summary>'+
+          '<div class="item-fold-body" style="padding-top:.5rem">'+tkHtml+'</div></details>'+
+          (esModoCiudadano()?'':('<div class="con-export-exp-wrap">'+
+          '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar expediente (.json) para importar en otro equipo"><span class="export-ico">⬇</span></button>'+
+          '</div>'))+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+function conConsultaAppendMore(){
+  const st=_conConsultaPag;
+  const batch=st.list.slice(st.shown,st.shown+CON_CONSULTA_PAGE);
+  if(!batch.length)return;
+  const btn=document.getElementById('con-list-more');
+  const html=batch.map(conConsultaOneCard).join('');
+  if(btn)btn.insertAdjacentHTML('beforebegin',html);
+  st.shown+=batch.length;
+  const rest=st.list.length-st.shown;
+  if(rest<=0){if(btn)btn.remove();}
+  else if(btn)btn.textContent='Cargar '+CON_CONSULTA_PAGE+' más (quedan '+rest+')';
+}
 function renderConsulta(){
   actualizarConsultaPqrsUI();
   const sl=document.querySelector('#pg-con .card > .slbl');
@@ -15261,98 +15364,14 @@ function renderConsulta(){
     return;
   }
   const qs=q.length>=2?q:'';
-  if(esOficinaPqrsBasica()){
-    c.innerHTML=list.map(e=>{
-      e=normalizePqrsOficinaFields(e);
-      const asunto=e.f_f1||'—';
-      const detalle=e._pqrs_detalle||e._detalle_general||'';
-      const btnResp=puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta dada</button>':'';
-      const btnAsig=puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
-      const btnTras=puedeTrasladarPqrs(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+jsStr(e._exp)+'\')">↪ Trasladar</button>':'';
-      const btnEdit=(esSecretaria()&&puedeEditarPqrsSecretaria(e))?pqrsBtnEdit(e._exp,'✏ Editar'):'';
-      const docBtn=htmlPqrsDocumentoBtns(e);
-      const abrirFn=esSecretaria()?"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('sec')":"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('pqrs-ofi')";
-      return '<div class="ec">'+
-        '<div class="ech"><div class="ech-left">'+
-          '<div class="eid"><strong style="font-family:\'DM Mono\',monospace">'+hl(e._exp,qs)+'</strong> '+pqrsEstadoConsultaBadge(e)+'</div>'+
-          '<div class="enm">'+hl(e._tipo_solicitud||'PQRSD',qs)+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
-        '</div>'+
-        '<div class="ech-right"><button type="button" class="btn bsm" onclick="'+abrirFn+'">Abrir</button></div></div>'+
-        '<div class="ecb">'+
-          renderPqrsPlazoBarHtml(e)+
-          '<div class="pqrs-det-sec"><div class="pqrs-det-k">Interesado</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
-          '<div class="pqrs-det-sec"><div class="pqrs-det-k">Asunto / descripción</div><div class="pqrs-det-v">'+hl(asunto,qs)+(detalle&&detalle!==asunto?('<br><span style="color:var(--tx2)">'+hl(detalle,qs)+'</span>'):'')+'</div></div>'+
-          (docBtn?('<div class="fx" style="gap:6px;margin-top:8px">'+docBtn+'</div>'):'')+
-          renderPqrsTrazabilidadHtml(e)+
-          htmlPqrsRespuestaRegistrada(e)+
-          '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTras+btnEdit+'</div>'+
-        '</div></div>';
-    }).join('');
-    return;
+  _conConsultaPag={list,shown:0,mode:esOficinaPqrsBasica()?'pqrs':'general',qs,today:hoy()};
+  const first=list.slice(0,CON_CONSULTA_PAGE);
+  _conConsultaPag.shown=first.length;
+  c.innerHTML=first.map(conConsultaOneCard).join('');
+  if(list.length>CON_CONSULTA_PAGE){
+    const rest=list.length-first.length;
+    c.insertAdjacentHTML('beforeend','<button type="button" id="con-list-more" class="btn bsm" style="margin:12px auto;display:block" onclick="conConsultaAppendMore()">Cargar '+CON_CONSULTA_PAGE+' más (quedan '+rest+')</button>');
   }
-  const today=hoy();
-  c.innerHTML=list.map(e=>{
-    migrarInfoTecExpediente(e);
-    const tram=getTram(e._tramite,e);
-    const ter=calcTerminos(e);
-    const tasks=(e.tasks||[]).map(normalizeTask);
-    const porVerT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Por verificar').length;
-    const doneT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Atendida').length;
-    const porEjecT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='En ejecución').length;
-    const porCorrT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Por corregir').length;
-    const vencT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Vencida').length;
-    const d=dias(getFechaEstado(e,'Solicitud')||e._fecha);
-    const tkHtml=tasks.length?tasks.map(t=>renderTaskConsultaItem(e,t,qs)).join(''):'<div style="font-size:12px;color:var(--tx3);padding:5px">Sin actividades</div>';
-    const pendAct=tasks.filter(t=>!t.eliminada&&estadoTask(t)!=='Atendida').length;
-    const asocList=getExpAsociadosAll(e);
-    const hasAsoc=asocList.length>0;
-    const pqrsDoc=esPqrsSecretaria(e)?htmlPqrsDocumentoConsulta(e):'';
-    const expIdHtml=esSoloLectura()?
-      '<span class="bdg" style="font-family:\'DM Mono\',monospace;font-size:12px;background:var(--bll);color:var(--bl);padding:2px 8px;border-radius:4px">'+hl(e._exp,qs)+'</span>':
-      '<button type="button" class="con-exp-link bdg" style="font-family:\'DM Mono\',monospace;font-size:12px;background:var(--bll);color:var(--bl);padding:2px 8px;border-radius:4px" data-sst-action="editarExp" data-sst-exp="'+escAttr(e._exp)+'" title="Editar expediente en '+uiEditorContenedorLbl()+'">'+hl(e._exp,qs)+'</button>';
-    const actFoldSummary=esModoCiudadano()?
-      'Actividades ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks):
-      'Actividades asignadas ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks)+' <span style="font-size:11px;font-weight:400;color:var(--tx3)">— chat · historial</span>';
-    return '<div class="ec">'+
-      '<div class="ech">'+
-        '<div class="ech-left">'+
-          '<div class="eid">'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,qs)+'</span>':'')+'</div>'+
-          '<div class="enm">'+hl(getNom(e),qs)+'</div>'+
-          '<div class="emta">'+(tram?tram.nombre:'')+badgeDepto(e._depto)+'</div>'+
-          '<div style="margin-top:4px">'+flagsHtmlCompact(e)+'</div>'+
-          (hasAsoc?renderExpAsociadosView(e,true):'')+
-        '</div>'+
-        '<div class="ech-right">'+
-          '<div class="fx" style="flex-wrap:wrap;gap:4px">'+badgeTram(e._tramite,e)+' '+badgeEst(e._estado)+
-          expBtnArchHtml(e._exp,{title:'Ver todos los adjuntos'})+
-            (esSoloLectura()?'':expBtnEditHtml(e._exp,{bic:false,label:'✏️',suffix:' Editar',title:'Editar en '+uiEditorContenedorLbl()}))+'</div>'+
-          renderConsultaHdrMeta(e,ter,porVerT,doneT,porEjecT,vencT,porCorrT,d)+
-        '</div>'+
-      '</div>'+
-      '<div class="ecb">'+
-        '<div class="tc">'+
-          '<div class="con-col-left">'+
-            '<div><div class="slbl">Línea de tiempo del trámite</div>'+renderFullTimeline(e)+'</div>'+
-            renderInteresadoView(e)+
-            renderDetalleConsultaView(e)+
-            pqrsDoc+
-            renderInfoTecConsultaView(e)+
-            renderContableView(e)+
-            renderActosAdminView(e)+
-            renderConceptosSegView(e)+
-          '</div>'+
-          '<div>'+
-            '<details class="con-fold con-act-fold"'+(pendAct?' open':'')+'>'+
-            '<summary class="slbl" style="cursor:pointer;margin-bottom:0">'+actFoldSummary+'</summary>'+
-            '<div class="item-fold-body" style="padding-top:.5rem">'+tkHtml+'</div></details>'+
-            (esModoCiudadano()?'':('<div class="con-export-exp-wrap">'+
-            '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar expediente (.json) para importar en otro equipo"><span class="export-ico">⬇</span></button>'+
-            '</div>'))+
-          '</div>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  }).join('');
 }
 
 // ================================================================
