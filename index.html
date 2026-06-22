@@ -946,14 +946,14 @@ window.dispatchEvent(new Event('firebase-ready'));
 <body>
 <div id="storage-full-banner" class="storage-full-banner" role="alert">
   <span>⚠️ ALMACENAMIENTO LLENO: Los datos NO se guardaron. Exporte sus datos inmediatamente desde Configuración &gt; Exportar datos</span>
-  <button type="button" class="storage-full-banner-close" onclick="cerrarStorageFullBanner()" aria-label="Cerrar">✕</button>
+  <button type="button" class="storage-full-banner-close" onclick="SST.cerrarStorageFullBanner()" aria-label="Cerrar">✕</button>
 </div>
-<div id="export-reminder-overlay" class="export-reminder-overlay" onclick="if(event.target===this)recordarDespuesExport()">
+<div id="export-reminder-overlay" class="export-reminder-overlay" onclick="if(event.target===this)SST.recordarDespuesExport()">
   <div class="export-reminder-box" onclick="event.stopPropagation()">
     <p id="export-reminder-msg" style="margin:0;font-size:14px;line-height:1.5"></p>
     <div class="export-reminder-btns">
-      <button type="button" class="btn bp" onclick="exportarAhoraFromReminder()">Exportar ahora</button>
-      <button type="button" class="btn bs" onclick="recordarDespuesExport()">Recordar después</button>
+      <button type="button" class="btn bp" onclick="SST.exportarAhoraFromReminder()">Exportar ahora</button>
+      <button type="button" class="btn bs" onclick="SST.recordarDespuesExport()">Recordar después</button>
     </div>
   </div>
 </div>
@@ -966,7 +966,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     <div class="hacts">
       <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
         <span id="hdr-user-label"></span>
-        <button type="button" class="btn bsm" onclick="cerrarSesionGoogle()">Cerrar sesión</button>
+        <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
       </div>
       <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar módulo (solo Administrador)">
         <optgroup label="Administración">
@@ -1049,12 +1049,12 @@ window.dispatchEvent(new Event('firebase-ready'));
     <div class="login-main-card">
       <h2>🔍 Consulta ciudadana</h2>
       <p>Consulte el estado de su trámite o PQRSD ingresando el número de expediente o solicitud.</p>
-      <button type="button" class="btn bp" onclick="ingresarConsultaCiudadana()">Ingresar a consulta ciudadana</button>
+      <button type="button" class="btn bp" onclick="SST.ingresarConsultaCiudadana()">Ingresar a consulta ciudadana</button>
     </div>
     <div class="login-func-divider">Acceso funcionarios</div>
     <p class="login-sub login-sub-func" id="login-sub">Personal autorizado: ingrese con su cuenta Google.</p>
     <div id="login-auth-panel">
-      <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="iniciarLoginGoogle()">
+      <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="SST.iniciarLoginGoogle()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
         🔑 Ingresar con cuenta Google
       </button>
@@ -1065,7 +1065,7 @@ window.dispatchEvent(new Event('firebase-ready'));
       <p class="login-sub">Seleccione su rol para ingresar.</p>
       <div id="login-roles-grid" class="login-roles-grid"></div>
       <div style="text-align:center;margin-top:1.25rem">
-        <button type="button" class="btn bsm" onclick="cerrarSesionGoogle()">Cerrar sesión de Google</button>
+        <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión de Google</button>
       </div>
     </div>
   </div>
@@ -1485,7 +1485,7 @@ window.dispatchEvent(new Event('firebase-ready'));
     </div>
     <div id="ciudadano-resultado"></div>
     <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--bd)">
-      <button type="button" class="btn bsm" onclick="volverPantallaPrincipal()">← Volver al inicio</button>
+      <button type="button" class="btn bsm" onclick="SST.volverPantallaPrincipal()">← Volver al inicio</button>
     </div>
   </div>
 </div>
@@ -2758,19 +2758,19 @@ function pqrsAsocAccionesHtml(e){
   const id=jsStr(e._exp);
   if(esPqrsAsocContextoNca(e)){
     return [
-      '<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="tramite" onclick="event.stopPropagation();openAsociarVinculoPqrsModal(\''+id+'\',\'tramite\')">🔗 Asociar expediente</button>',
-      '<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="pqrs" onclick="event.stopPropagation();openAsociarVinculoPqrsModal(\''+id+'\',\'pqrs\')">🔗 Asociar PQRSD</button>'
+      '<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="tramite" onclick="event.stopPropagation();SST.openAsociarVinculoPqrsModal(\''+id+'\',\'tramite\')">🔗 Asociar expediente</button>',
+      '<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="pqrs" onclick="event.stopPropagation();SST.openAsociarVinculoPqrsModal(\''+id+'\',\'pqrs\')">🔗 Asociar PQRSD</button>'
     ];
   }
-  return ['<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="pqrs" onclick="event.stopPropagation();openAsociarVinculoPqrsModal(\''+id+'\',\'pqrs\')">🔗 Asociar PQRSD</button>'];
+  return ['<button type="button" class="btn bsm" data-sst-action="openAsociarVinculoPqrsModal" data-sst-exp="'+escAttr(e._exp)+'" data-sst-mode="pqrs" onclick="event.stopPropagation();SST.openAsociarVinculoPqrsModal(\''+id+'\',\'pqrs\')">🔗 Asociar PQRSD</button>'];
 }
 function pqrsAsocToolbarBtnHtml(e){
   if(!puedeGestionarPqrsAsociacion(e))return'';
   if(esPqrsAsocContextoNca(e)){
-    return '<button type="button" class="btn bsm" onclick="openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'tramite\')">🔗 Exp.</button>'+
-      '<button type="button" class="btn bsm" onclick="openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'pqrs\')">🔗 PQRSD</button>';
+    return '<button type="button" class="btn bsm" onclick="SST.openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'tramite\')">🔗 Exp.</button>'+
+      '<button type="button" class="btn bsm" onclick="SST.openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'pqrs\')">🔗 PQRSD</button>';
   }
-  return '<button type="button" class="btn bsm" onclick="openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'pqrs\')">🔗 Asociar PQRSD</button>';
+  return '<button type="button" class="btn bsm" onclick="SST.openAsociarVinculoPqrsModal(\''+jsStr(e._exp)+'\',\'pqrs\')">🔗 Asociar PQRSD</button>';
 }
 function puedeMarcarPqrsInformativa(e){
   if(!e||!esPqrsSecretaria(e)||pqrsEstaCerrada(e)||e._pqrs_informativa)return false;
@@ -3017,7 +3017,7 @@ function htmlPqrsOficinaDetalleCore(e,opts){
   const cerrada=pqrsEstaCerrada(e);
   const btnResp=(!cerrada&&puedeMarcarPqrsRespondida(e))?' <button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Responder</button>':'';
   const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?(' '+pqrsAsocAccionesHtml(e).join(' ')):'';
-  const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm" onclick="openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'';
+  const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'';
   const btnAsig=(!cerrada&&puedeAsignarPqrsOficina(e))?' <button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
   const btnTras=(puedeTrasladarPqrs(e)&&!cerrada)?' <button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar</button>':'';
   const btnEdit=(opts.showEdit&&puedeEditarPqrsSecretaria(e))?' '+pqrsBtnEdit(e._exp,'✏ Editar'):'';
@@ -4409,7 +4409,7 @@ function renderConPanelPqrsExtras(e){
   h+=renderPqrsAsociadosPanelHtml(e);
   const acc=[];
   if(puedeGestionarPqrsAsociacion(e))pqrsAsocAccionesHtml(e).forEach(function(b){acc.push(b);});
-  if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ Marcar informativa</button>');
+  if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ Marcar informativa</button>');
   if(puedeAsignarPqrsOficina(e))acc.push('<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar responsable</button>');
   if(puedeTrasladarPqrs(e))acc.push('<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a otra oficina</button>');
   if(puedeMarcarPqrsRespondida(e))acc.push('<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta</button>');
@@ -4520,7 +4520,7 @@ function filtrarPqrsExpAsocSug(inp){
   if(!list.length){box.style.display='none';box.innerHTML='';return;}
   box.style.display='block';
   box.innerHTML=list.map(function(ex,i){
-    return '<button type="button" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-bottom:1px solid var(--bd);background:var(--sf);cursor:pointer;font-size:12px;font-family:\'DM Sans\',sans-serif" onmousedown="event.preventDefault();pickPqrsExpAsocSug('+i+')">'+expAsocEtiquetaSug(ex)+'</button>';
+    return '<button type="button" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-bottom:1px solid var(--bd);background:var(--sf);cursor:pointer;font-size:12px;font-family:\'DM Sans\',sans-serif" onmousedown="event.preventDefault();SST.pickPqrsExpAsocSug('+i+')">'+expAsocEtiquetaSug(ex)+'</button>';
   }).join('');
 }
 function pickPqrsExpAsocSug(idx){
@@ -4550,9 +4550,9 @@ function openAsociarVinculoPqrsModal(expId,modo){
     (esTram?'Vincule esta PQRSD con un expediente de trámite activo (requerimiento, información del usuario, etc.).':'Vincule esta PQRSD con otra PQRSD relacionada (mismo interesado, trámite complementario, etc.).')+
     '</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>N° '+(esTram?'expediente de trámite':'PQRSD')+'<span class="req-star">*</span></label>'+
-    '<input type="text" id="pqrs-asoc-exp-inp" placeholder="'+(esTram?'Buscar expediente por número, nombre o trámite…':'Buscar PQRSD por número, interesado o asunto…')+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="filtrarPqrsExpAsocSug(this)" onfocus="filtrarPqrsExpAsocSug(this)"></div>'+
+    '<input type="text" id="pqrs-asoc-exp-inp" placeholder="'+(esTram?'Buscar expediente por número, nombre o trámite…':'Buscar PQRSD por número, interesado o asunto…')+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="SST.filtrarPqrsExpAsocSug(this)" onfocus="SST.filtrarPqrsExpAsocSug(this)"></div>'+
     '<div id="pqrs-asoc-sug-list" style="max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px;display:none"></div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();submitAsociarVinculoPqrs(\''+jsStr(expId)+'\')">'+(esTram?'Asociar expediente':'Asociar PQRSD')+'</button>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitAsociarVinculoPqrs(\''+jsStr(expId)+'\')">'+(esTram?'Asociar expediente':'Asociar PQRSD')+'</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsAsoc',expId:expId,modo:modo};
@@ -4617,7 +4617,7 @@ function openMarcarPqrsInformativaModal(expId){
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Use cuando la PQRSD solo aporta información (respuesta a requerimiento, datos sobre un trámite activo, etc.) y <strong>no requiere respuesta formal</strong> al ciudadano. Se dará por <strong>atendida</strong> y se cerrará la actividad «Atender PQRSD».</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Observación (opcional)</label><textarea id="pqrs-inf-nota" placeholder="Ej. Información sobre el trámite EXP-2026-015 — respuesta a requerimiento" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();submitMarcarPqrsInformativa(\''+jsStr(expId)+'\')">ℹ Marcar informativa y cerrar</button>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitMarcarPqrsInformativa(\''+jsStr(expId)+'\')">ℹ Marcar informativa y cerrar</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsInformativa',expId:expId};
@@ -5498,7 +5498,7 @@ function renderAuditLogCfg(){
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
     '<div><div style="font-size:14px;font-weight:600">Log de Auditoría</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-top:2px">Últimas '+rows.length+' entradas · '+loadAuditLog().length+' en total</div></div>'+
-    '<button type="button" class="btn bsm bp" onclick="exportarAuditLogCompleto()">⬇ Exportar log completo</button></div>'+
+    '<button type="button" class="btn bsm bp" onclick="SST.exportarAuditLogCompleto()">⬇ Exportar log completo</button></div>'+
     '<div style="overflow:auto;max-height:min(70vh,640px)"><table class="tbl" style="width:100%"><thead><tr>'+
     '<th>Fecha</th><th>Rol</th><th>Acción</th><th>Módulo</th><th>Expediente</th></tr></thead><tbody>'+tbody+'</tbody></table></div></div>';
 }
@@ -5691,9 +5691,9 @@ function paintUsuariosCfgTable(){
       '<td>'+escAttr(u.codigo||'—')+'</td>'+
       '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
       '<td style="white-space:nowrap">'+
-      '<button type="button" class="btn bsm" onclick="editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
-      '<button type="button" class="btn bsm" onclick="toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
-      (puedeEliminar?('<button type="button" class="btn bsm bd2" onclick="eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'):'')+
+      '<button type="button" class="btn bsm" onclick="SST.editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
+      '<button type="button" class="btn bsm" onclick="SST.toggleUsuarioFirestoreActivo(\''+em+'\','+(!act)+')">'+(act?'Desactivar':'Activar')+'</button> '+
+      (puedeEliminar?('<button type="button" class="btn bsm bd2" onclick="SST.eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'):'')+
       '</td></tr>';
   }).join(''):'<tr><td colspan="7" class="emp">No hay usuarios registrados.</td></tr>';
 }
@@ -5708,14 +5708,14 @@ function buildUsuariosCfgShell(){
     ?('<input type="hidden" id="usu-fs-rol" value="responsables">'+
       '<div class="fld"><label>Rol</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Responsables</div></div>'+
       '<div class="fld"><label>Departamento</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);font-weight:600">'+escAttr(labelDepartamento(deptoEnc))+'</div><input type="hidden" id="usu-fs-depto" value="'+escAttr(deptoEnc)+'"></div>')
-    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
+    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="SST.toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
       '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>');
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
     '<div><div style="font-size:14px;font-weight:600">'+tituloTab+' <span class="nbdg" id="usuarios-fs-count">0</span></div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+ayuda+'</div></div>'+
-    '<button type="button" class="btn bsm bp" onclick="mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
-    '<button type="button" class="btn bsm" onclick="sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
+    '<button type="button" class="btn bsm bp" onclick="SST.mostrarFormUsuarioFirestore()">➕ Agregar usuario</button>'+
+    '<button type="button" class="btn bsm" onclick="SST.sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px" id="usuario-form-tit">Nuevo usuario</div>'+
     '<div class="fg">'+
@@ -5725,7 +5725,7 @@ function buildUsuariosCfgShell(){
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
-    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
+    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="SST.guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="SST.ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
     '</div>'+
     '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Departamento</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="usuarios-fs-tbody"></tbody></table></div></div>';
 }
@@ -10828,7 +10828,7 @@ function openExpFlagsModal(expId){
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(getNom(e))+'</div>'+
     '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">'+getExpFlagsArray(e,false).join(' ')+'</div>'+
-    '<button type="button" class="btn bsm bp" onclick="event.stopPropagation();abrirConsultaExpPanel(\''+jsStr(expId)+'\');closeTaskModal()">Abrir en '+uiEditorContenedorLbl()+'</button> '+
+    '<button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.abrirConsultaExpPanel(\''+jsStr(expId)+'\');closeTaskModal()">Abrir en '+uiEditorContenedorLbl()+'</button> '+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>';
   ov.classList.add('on');
 }
@@ -14854,10 +14854,10 @@ function renderConPanelDocumentosBlock(e,taskIdFilter,open){
   const tramDocs=docsTramiteData(e._docs_tramite);
   const tramGestionHtml=canGestionar?(
     '<div style="margin-bottom:10px">'+
-    '<button type="button" class="btn bsm bp" data-sst-action="openAnadirDocTramiteModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();openAnadirDocTramiteModal(\''+jsStr(e._exp)+'\')">➕ Añadir documento</button>'+
+    '<button type="button" class="btn bsm bp" data-sst-action="openAnadirDocTramiteModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openAnadirDocTramiteModal(\''+jsStr(e._exp)+'\')">➕ Añadir documento</button>'+
     (tramDocs.length?('<div style="margin-top:8px">'+tramDocs.map(d=>'<div class="con-panel-doc-tram-row">'+
       '<span style="flex:1;min-width:0"><strong>'+escAttr(d.label||'Documento')+'</strong><br><span style="font-size:10px;color:var(--tx3)">'+escAttr(fmtF((d.fecha||'').slice(0,10))||'Sin fecha')+'</span></span>'+
-      '<button type="button" class="btn bsm bd2" onclick="eliminarDocTramiteExp(\''+jsStr(e._exp)+'\',\''+jsStr(d.id)+'\')" title="Quitar documento">🗑</button></div>').join('')+'</div>'):'')+
+      '<button type="button" class="btn bsm bd2" onclick="SST.eliminarDocTramiteExp(\''+jsStr(e._exp)+'\',\''+jsStr(d.id)+'\')" title="Quitar documento">🗑</button></div>').join('')+'</div>'):'')+
     '</div>'):'';
   const hintAsoc=(incluirAsoc&&getExpAsociadosAll(e).length)?'<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Incluye documentos de PQRSD y expedientes vinculados.</div>':'';
   const body=items.length?
@@ -14880,7 +14880,7 @@ function openAnadirDocTramiteModal(expId){
   body.innerHTML=
     '<div class="fld" style="margin-bottom:10px"><label>Nombre / tipo de documento<span class="req-star">*</span></label><input type="text" id="doc-tram-label" placeholder="Ej. Resolución N° 123, Concepto técnico, Oficio…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Enlace Google Drive<span class="req-star">*</span></label><input type="url" id="doc-tram-url" placeholder="https://drive.google.com/file/d/…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();submitAnadirDocTramite(\''+jsStr(expId)+'\')">Guardar documento</button>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitAnadirDocTramite(\''+jsStr(expId)+'\')">Guardar documento</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'docTramite',expId:expId};
@@ -15124,7 +15124,7 @@ function renderConSidePanel(){
   const lockBanner=window._conPanelLockMsg?('<div style="padding:10px 12px;margin-bottom:10px;border-radius:var(--r);background:var(--aml);border:1px solid #e8c97a;font-size:12px;color:#7a5500;line-height:1.45">'+escAttr(window._conPanelLockMsg)+'</div>'):'';
   const pqrsToolbarBtns=!window._conPanelEditMode&&esPqrsSecretaria(e)?(
     pqrsAsocToolbarBtnHtml(e)+
-    (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm" onclick="openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'')+
+    (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'')+
     (puedeTrasladarPqrs(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar</button>':'')+
     (puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'')+
     (puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Respuesta</button>':'')
@@ -15596,7 +15596,7 @@ function instructorUsuarioLinkRow(i,ins,deptoId){
   const u=getUsuarioAutorizadoByEmail(cur);
   const nombreMostrar=u?(u.nombre||u.email):(ins.nombre||'—');
   let h='<div class="inst-usuario-link" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:280px">';
-  h+='<select onchange="onInstructorUsuarioEmailSelect(\''+dep+'\','+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;min-width:220px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions(cur,'',deptoId)+'</select>';
+  h+='<select onchange="SST.onInstructorUsuarioEmailSelect(\''+dep+'\','+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;min-width:220px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions(cur,'',deptoId)+'</select>';
   h+='<span class="inst-nombre-ro" style="font-weight:600;font-size:12px;padding:4px 0">'+escAttr(nombreMostrar)+'</span>';
   const alert=instructorUsuarioAlertHtml(cur,deptoId);
   if(alert)h+=alert;
@@ -15699,16 +15699,16 @@ function instructoresCardBody(){
   if(puedeGestionarContratistasCfg()){
     h+='<div class="cfadd" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
     if(esAdministrador()||esAdminModoGlobal()){
-      h+='<select id="cfi-instructores-depto" class="depto-sel" style="min-width:140px;padding:6px 8px;font-size:12px" title="Departamento del nuevo responsable" onchange="refreshInstructoresEmailSelect()">'+
+      h+='<select id="cfi-instructores-depto" class="depto-sel" style="min-width:140px;padding:6px 8px;font-size:12px" title="Departamento del nuevo responsable" onchange="SST.refreshInstructoresEmailSelect()">'+
         DEPTOS.map(d=>'<option value="'+d.id+'">'+escAttr(labelDepto(d.id))+'</option>').join('')+
         '</select>';
     }
     h+='<select id="cfi-instructores-email" style="flex:1;min-width:220px;border:1px solid var(--bd);border-radius:5px;padding:6px 8px;font-size:12px;background:var(--sf);color:var(--tx)">'+usuariosAutorizadosSelectOptions('','',getDeptoResponsablesSelect())+'</select>'+
       '<button type="button" class="btn bsm bp" onclick="addInstructor()">+</button>';
     if(esAdminFirestore()){
-      h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
+      h+='<button type="button" class="btn bsm" onclick="SST.abrirPanelUsuariosAutorizados()">+ Registrar nuevo usuario</button>';
     }else if(esEncargadoDepartamentalUsuarios()){
-      h+='<button type="button" class="btn bsm" onclick="abrirPanelUsuariosAutorizados()">+ Registrar responsable autorizado</button>';
+      h+='<button type="button" class="btn bsm" onclick="SST.abrirPanelUsuariosAutorizados()">+ Registrar responsable autorizado</button>';
     }else{
       h+='<span style="font-size:11px;color:var(--tx2);width:100%">Para nuevos responsables, solicite al administrador o al encargado del departamento registrarlo en Responsables autorizados.</span>';
     }
@@ -15864,7 +15864,7 @@ function encargadosGlobalCardBody(){
       '</div>';
   };
   let h='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--bll);border-radius:var(--r);border:1px solid var(--bl)">Vista informativa. Los encargados se asignan en <strong>Usuarios autorizados</strong> al elegir el rol del módulo (Secretaría, NCA DEGUV, Guainía, Vaupés u oficinas DEGUV). No es necesario registrarlos aquí por separado.</div>';
-  h+='<div style="margin-bottom:8px"><button type="button" class="btn bsm bp" onclick="abrirPanelUsuariosAutorizados()">➕ Registrar usuario autorizado</button></div>';
+  h+='<div style="margin-bottom:8px"><button type="button" class="btn bsm bp" onclick="SST.abrirPanelUsuariosAutorizados()">➕ Registrar usuario autorizado</button></div>';
   h+='<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">NCA DEGUV — trámites ambientales y PQRSD Guaviare</div><div class="encargados-grid">';
   h+=mkView('NCA DEGUV',nca);
   h+='</div><div style="font-size:11px;font-weight:700;color:var(--tx2);margin:8px 0 6px">Departamentos regionales</div><div class="encargados-grid">';
@@ -18178,47 +18178,50 @@ function cerrarSesionGoogle(){
 initPqrsUiDelegation();
 initSstUiDelegation();
 ensureOverlaysClosed();
-window.openAnadirDocTramiteModal=openAnadirDocTramiteModal;
-window.submitAnadirDocTramite=submitAnadirDocTramite;
-window.eliminarDocTramiteExp=eliminarDocTramiteExp;
-window.openAsociarExpedientePqrsModal=openAsociarExpedientePqrsModal;
-window.openAsociarVinculoPqrsModal=openAsociarVinculoPqrsModal;
-window.submitAsociarExpedientePqrs=submitAsociarExpedientePqrs;
-window.submitAsociarVinculoPqrs=submitAsociarVinculoPqrs;
-window.filtrarPqrsExpAsocSug=filtrarPqrsExpAsocSug;
-window.pickPqrsExpAsocSug=pickPqrsExpAsocSug;
-window.openMarcarPqrsInformativaModal=openMarcarPqrsInformativaModal;
-window.submitMarcarPqrsInformativa=submitMarcarPqrsInformativa;
-window.openConsultaArchivosModal=openConsultaArchivosModal;
-window.abrirConsultaExpPanelDesdeAct=abrirConsultaExpPanelDesdeAct;
-window.abrirConsultaExpAsociado=abrirConsultaExpAsociado;
-window.abrirConsultaExpPanel=abrirConsultaExpPanel;
-window.openEditarActTaskModal=openEditarActTaskModal;
-window.conPanelSelExp=conPanelSelExp;
-window.conPanelActivarEdicion=conPanelActivarEdicion;
-window.editarExp=editarExp;
-window.logAudit=logAudit;
-window.exportarAuditLogCompleto=exportarAuditLogCompleto;
-window.cerrarStorageFullBanner=cerrarStorageFullBanner;
-window.exportarAhoraFromReminder=exportarAhoraFromReminder;
-window.recordarDespuesExport=recordarDespuesExport;
-window.iniciarLoginGoogle=iniciarLoginGoogle;
-window.abrirPanelUsuariosAutorizados=abrirPanelUsuariosAutorizados;
-window.refreshInstructoresEmailSelect=refreshInstructoresEmailSelect;
-window.toggleUsuarioDeptoResponsableField=toggleUsuarioDeptoResponsableField;
-window.onInstructorUsuarioEmailSelect=onInstructorUsuarioEmailSelect;
-window.ingresarConsultaCiudadana=ingresarConsultaCiudadana;
-window.cerrarSesionGoogle=cerrarSesionGoogle;
-window.volverSelectorRolesAdmin=volverSelectorRolesAdmin;
-window.volverPantallaPrincipal=volverPantallaPrincipal;
-window.guardarUsuarioFirestore=guardarUsuarioFirestore;
-window.editarUsuarioFirestore=editarUsuarioFirestore;
-window.sincronizarUsuariosAutorizados=sincronizarUsuariosAutorizados;
-window.limpiarEncargadoSlot=limpiarEncargadoSlot;
-window.toggleUsuarioFirestoreActivo=toggleUsuarioFirestoreActivo;
-window.eliminarUsuarioFirestore=eliminarUsuarioFirestore;
-window.mostrarFormUsuarioFirestore=mostrarFormUsuarioFirestore;
-window.ocultarFormUsuarioFirestore=ocultarFormUsuarioFirestore;
+// Namespace público — funciones llamadas desde onclick en el HTML
+window.SST = {
+  openAnadirDocTramiteModal,
+  submitAnadirDocTramite,
+  eliminarDocTramiteExp,
+  openAsociarExpedientePqrsModal,
+  openAsociarVinculoPqrsModal,
+  submitAsociarExpedientePqrs,
+  submitAsociarVinculoPqrs,
+  filtrarPqrsExpAsocSug,
+  pickPqrsExpAsocSug,
+  openMarcarPqrsInformativaModal,
+  submitMarcarPqrsInformativa,
+  openConsultaArchivosModal,
+  abrirConsultaExpPanelDesdeAct,
+  abrirConsultaExpAsociado,
+  abrirConsultaExpPanel,
+  openEditarActTaskModal,
+  conPanelSelExp,
+  conPanelActivarEdicion,
+  editarExp,
+  logAudit,
+  exportarAuditLogCompleto,
+  cerrarStorageFullBanner,
+  exportarAhoraFromReminder,
+  recordarDespuesExport,
+  iniciarLoginGoogle,
+  abrirPanelUsuariosAutorizados,
+  refreshInstructoresEmailSelect,
+  toggleUsuarioDeptoResponsableField,
+  onInstructorUsuarioEmailSelect,
+  ingresarConsultaCiudadana,
+  cerrarSesionGoogle,
+  volverSelectorRolesAdmin,
+  volverPantallaPrincipal,
+  guardarUsuarioFirestore,
+  editarUsuarioFirestore,
+  sincronizarUsuariosAutorizados,
+  limpiarEncargadoSlot,
+  toggleUsuarioFirestoreActivo,
+  eliminarUsuarioFirestore,
+  mostrarFormUsuarioFirestore,
+  ocultarFormUsuarioFirestore,
+};
 async function bootstrapApp(){
   document.documentElement.classList.add('ui-editor-modal-mode');
   ensurePrimerUsoDate();
