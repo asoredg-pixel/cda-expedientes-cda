@@ -469,34 +469,78 @@ async function gmailSend(to, subject, htmlBody, threadId) {
   return gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', body);
 }
 
-async function reenviarEmailAOficina(msg, ofiId) {
+async function reenviarEmailAOficina(msg, ofiId, expId) {
   const ofiData = (encargadosGlobal && encargadosGlobal.oficinas && encargadosGlobal.oficinas[ofiId]) || {};
   const ofiEmail = (ofiData.email || '').trim();
+  const ofiLabel = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
   if (!ofiEmail) {
-    notif('La oficina ' + (typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId) + ' no tiene correo configurado en Encargados.', 'warn');
+    notif('La oficina ' + ofiLabel + ' no tiene correo configurado en Encargados.', 'warn');
     return false;
   }
-  const headers = (msg.payload && msg.payload.headers) || [];
-  const fromHeader = gmailGetHeader(headers, 'from');
-  const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
-  const date = gmailGetHeader(headers, 'date') || '';
-  const parts = gmailExtractParts(msg.payload);
-  const originalBody = parts.textHtml || '<pre>' + escAttr(parts.textPlain || '') + '</pre>';
-  const htmlBody =
-    '<p><strong>Mensaje reenviado desde Secretaría DEGUV</strong></p>' +
-    '<table style="font-size:12px;color:#555;border-collapse:collapse">' +
-    '<tr><td style="padding:2px 8px 2px 0"><strong>De:</strong></td><td>' + escAttr(fromHeader) + '</td></tr>' +
-    '<tr><td style="padding:2px 8px 2px 0"><strong>Fecha:</strong></td><td>' + escAttr(gmailFmtDate(date)) + '</td></tr>' +
-    '<tr><td style="padding:2px 8px 2px 0"><strong>Asunto:</strong></td><td>' + escAttr(subject) + '</td></tr>' +
-    '</table><hr>' +
-    originalBody;
   try {
-    await gmailSend(ofiEmail, 'Fwd: ' + subject, htmlBody, msg.threadId);
-    notif('Correo reenviado a ' + (typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId) + ' (' + ofiEmail + ')', 'ok');
+    // Obtener el correo en formato raw (incluye todos los adjuntos tal como llegaron)
+    const rawData = await gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
+    if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
+
+    // Decodificar base64url → bytes → texto
+    const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
+    const binaryStr = atob(b64std);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (var bi = 0; bi < binaryStr.length; bi++) bytes[bi] = binaryStr.charCodeAt(bi);
+    const rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+
+    // Localizar separador cabecera/cuerpo
+    var sep = '\r\n\r\n';
+    var headerEnd = rawText.indexOf(sep);
+    if (headerEnd === -1) { sep = '\n\n'; headerEnd = rawText.indexOf(sep); }
+    if (headerEnd === -1) throw new Error('Estructura del correo no reconocida');
+
+    var lb = sep === '\r\n\r\n' ? '\r\n' : '\n';
+    var origHeaders = rawText.substring(0, headerEnd);
+    var body = rawText.substring(headerEnd + sep.length);
+
+    // Reconstruir cabeceras: eliminar To/Cc/Bcc, añadir nuevo To, poner prefijo en Subject
+    var headerLines = origHeaders.split(lb);
+    var newHeaderLines = [];
+    var hi = 0;
+    while (hi < headerLines.length) {
+      var hline = headerLines[hi];
+      if (/^(To|Cc|Bcc):/i.test(hline)) {
+        hi++;
+        while (hi < headerLines.length && /^[ \t]/.test(headerLines[hi])) hi++;
+        continue;
+      }
+      if (/^Subject:/i.test(hline)) {
+        var origSubj = hline.replace(/^Subject:\s*/i, '');
+        // Quitar prefijos FWD anteriores para no acumularlos
+        var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*(\[PQRSD[^\]]*\]\s*:?\s*)?)+/i, '');
+        var expTag = expId ? '[PQRSD #' + expId + '] ' : '';
+        newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
+        hi++;
+        while (hi < headerLines.length && /^[ \t]/.test(headerLines[hi])) hi++;
+        continue;
+      }
+      newHeaderLines.push(hline);
+      hi++;
+    }
+    // To va primero
+    newHeaderLines.unshift('To: ' + ofiEmail);
+
+    // Reconstruir correo completo
+    var newRaw = newHeaderLines.join(lb) + lb + lb + body;
+
+    // Re-codificar a base64url preservando bytes UTF-8
+    var newBytes = new TextEncoder().encode(newRaw);
+    var binOut = '';
+    newBytes.forEach(function(b) { binOut += String.fromCharCode(b); });
+    var encoded = btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
+    notif('Correo reenviado con adjuntos a ' + ofiLabel + ' (' + ofiEmail + ')', 'ok');
     return true;
   } catch (e) {
     console.error('reenviarEmailAOficina:', e);
-    notif('Error al reenviar: ' + e.message, 'err');
+    notif('Error al reenviar correo: ' + e.message, 'err');
     return false;
   }
 }
@@ -768,14 +812,58 @@ function prePopularFormDesdeEmail(msg) {
 function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
   prePopularFormDesdeEmail(_gmailCurrentMsg);
-  // Cerrar el panel Gmail para que el formulario quede visible y limpio
-  const body = document.getElementById('gmail-panel-body');
-  const btn = document.getElementById('gmail-toggle-btn');
-  if (body) body.style.display = 'none';
-  if (btn) btn.textContent = 'Ver bandeja';
+
+  // Colapsar el panel Gmail (mantenerlo accesible pero fuera del camino)
+  const panelBody = document.getElementById('gmail-panel-body');
+  const toggleBtn = document.getElementById('gmail-toggle-btn');
+  if (panelBody) panelBody.style.display = 'none';
+  if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
+
+  // Construir tarjeta de referencia del correo junto al formulario
+  const msg = _gmailCurrentMsg;
+  const headers = (msg.payload && msg.payload.headers) || [];
+  const from = gmailParseFrom(gmailGetHeader(headers, 'from'));
+  const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
+  const date = gmailFmtDate(gmailGetHeader(headers, 'date') || '');
+  const parts = gmailExtractParts(msg.payload);
+  const atts = parts.attachments || [];
+  const snippetText = msg.snippet ? msg.snippet.slice(0, 160) : '';
+
+  const attsHtml = atts.length
+    ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">' +
+      atts.map(function(a) {
+        return '<span style="padding:2px 8px;background:var(--bg2,#f5f5f5);border:1px solid var(--bd);border-radius:10px;font-size:11px">📎 ' + escAttr(a.filename || a.mimeType || 'adjunto') + '</span>';
+      }).join('') + '</div>'
+    : '';
+
+  const card = document.getElementById('gmail-ref-card');
+  if (card) {
+    card.style.display = '';
+    card.innerHTML =
+      '<div style="background:var(--bg);border:1px solid var(--bd);border-left:4px solid #EA4335;border-radius:var(--r);padding:12px 14px;font-size:13px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">' +
+      '<div>' +
+      '<div style="font-weight:600;color:#EA4335;font-size:12px;margin-bottom:2px">📧 Correo de origen (referencia)</div>' +
+      '<div style="font-weight:600">' + escAttr(subject.slice(0, 80)) + '</div>' +
+      '<div style="color:var(--tx2);font-size:12px;margin-top:2px">' +
+        '<span>De: ' + escAttr((from.name || from.email || '').slice(0, 40)) + '</span>' +
+        '<span style="margin:0 8px">·</span>' +
+        '<span>' + escAttr(date) + '</span>' +
+      '</div>' +
+      (snippetText ? '<div style="color:var(--tx3);font-size:11px;margin-top:4px;font-style:italic">' + escAttr(snippetText) + '…</div>' : '') +
+      attsHtml +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-shrink:0">' +
+      '<button class="btn bsm" onclick="document.getElementById(\'gmail-panel-body\').style.display=\'\';document.getElementById(\'gmail-toggle-btn\').textContent=\'Ocultar bandeja\';document.getElementById(\'gmail-panel-wrap\').scrollIntoView({behavior:\'smooth\'})">Ver correo</button>' +
+      '<button class="btn bsm" style="color:var(--tx3)" onclick="document.getElementById(\'gmail-ref-card\').style.display=\'none\'" title="Cerrar referencia">✕</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+  }
+
   // Scroll al formulario de radicación
-  const formCard = document.querySelector('#pg-sec .card:not(.gmail-panel-wrap)');
-  if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const refCard = document.getElementById('gmail-ref-card');
+  if (refCard) refCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
   notif('Formulario pre-llenado. Revise los datos, complete la oficina destino y radique.', 'ok');
 }
 

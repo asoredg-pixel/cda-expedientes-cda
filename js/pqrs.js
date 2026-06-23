@@ -92,7 +92,9 @@ function toggleSecPersona(){
   if(pj)pj.style.display=(!anon&&tp==='juridica')?'':'none';
 }
 function limpiarFormSecretaria(){
-  ['sec-exp','sec-asunto','sec-detalle','sec-link','sec-archivo','sec-fecha-termino','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  // Ocultar tarjeta de referencia de correo si estaba visible
+  const refCard=document.getElementById('gmail-ref-card');if(refCard)refCard.style.display='none';
+  ['sec-exp','sec-asunto','sec-detalle','sec-link','sec-archivo','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const tp=document.getElementById('sec-tipo-persona');if(tp)tp.value='natural';
   const anon=document.getElementById('sec-anonimo');if(anon)anon.checked=false;
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
@@ -165,7 +167,8 @@ function guardarPqrsSecretaria(){
   // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
     ?window._gmailPendingAttachments:null;
-  // Si hay adjuntos de Drive y no se puso link manual, usar el primer link de Drive
+  // Si hay adjuntos de Drive y no se puso link manual, usar el primer link como principal
+  // El campo _pqrs_gmail_attachments guarda todos los links para acceso completo
   const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
   // Responsable: encargado configurado para la oficina destino
   const encargadoOfi=typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'';
@@ -197,7 +200,7 @@ function guardarPqrsSecretaria(){
   persistExpedienteGranular(data,true);
   // Sprint D: reenviar correo a oficina si hay token Gmail y oficina tiene correo
   if(gmailMsgId&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId){
-    reenviarEmailAOficina(_gmailCurrentMsg,oficina);
+    reenviarEmailAOficina(_gmailCurrentMsg,oficina,expId);
     // Marcar como leído (quitar la N de no radicado)
     if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
   }
@@ -208,6 +211,21 @@ function guardarPqrsSecretaria(){
   notif('PQRSD '+expId+(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)),'ok');
   limpiarFormSecretaria();
   renderSecretariaPqrs();
+}
+// Genera HTML con TODOS los links de adjuntos Drive de una PQRSD
+function htmlPqrsAdjuntosDrive(e){
+  var links=[];
+  if(e._pqrs_solicitud_link)links.push({url:e._pqrs_solicitud_link,label:'Documento principal'});
+  if(Array.isArray(e._pqrs_gmail_attachments)){
+    e._pqrs_gmail_attachments.forEach(function(att){
+      if(att&&att.driveLink&&att.driveLink!==e._pqrs_solicitud_link)
+        links.push({url:att.driveLink,label:att.nombre||'Adjunto'});
+    });
+  }
+  if(!links.length)return '';
+  return links.map(function(l){
+    return '<div style="font-size:12px;margin-bottom:6px">📎 <a href="'+escAttr(l.url)+'" target="_blank" rel="noopener">'+escAttr(l.label)+'</a></div>';
+  }).join('');
 }
 function htmlPqrsOficinaInteresado(e){
   if(e._qd_anonimo)return '<div class="pqrs-det-v">Solicitud anónima</div>';
@@ -564,7 +582,7 @@ function openAsignarPqrsOficinaModal(expId){
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Responsable que atenderá<span class="req-star">*</span></label>'+
     '<select id="pqrs-ofi-resp-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+opts+'</select></div>'+
-    (e._pqrs_solicitud_link?'<div style="font-size:12px;margin-bottom:8px">📎 Solicitud: <a href="'+escAttr(e._pqrs_solicitud_link)+'" target="_blank" rel="noopener">Ver documento</a></div>':'')+
+    htmlPqrsAdjuntosDrive(e)+
     (e._pqrs_solicitud_archivo?'<div style="font-size:12px;margin-bottom:8px;color:var(--tx2)">📄 Referencia: '+escAttr(e._pqrs_solicitud_archivo)+'</div>':'')+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
