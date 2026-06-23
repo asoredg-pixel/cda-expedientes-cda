@@ -9468,7 +9468,7 @@ async function loadLS(){
       if(Array.isArray(g.personas))personas=g.personas;
       if(Array.isArray(g.actividadesLibres))actividadesLibres=g.actividadesLibres;
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
-      if(Array.isArray(g.chatMensajes))chatMensajes=g.chatMensajes;
+      // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
@@ -18753,12 +18753,6 @@ async function bootstrapApp(){
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
-  if(window._firebaseReady){
-    setTimeout(function(){
-      console.log('[diag] Ejecutando diagTestSaveExpedienteDoc (requiere sesión activa para pasar rules)');
-      diagTestSaveExpedienteDoc();
-    },2500);
-  }
 }
 bootstrapApp();
 </script></body></html>

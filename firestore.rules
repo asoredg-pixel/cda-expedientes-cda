@@ -208,6 +208,26 @@ service cloud.firestore {
     match /sistema/{docId} {
       allow read, write: if false;
     }
+
+    // -------------------------------------------------------------------------
+    // chats/{convId}/mensajes/{mensajeId}
+    // convId = [canonA, canonB].sort().join('__')  ('|' → '__' para Firestore)
+    // canonA/B tienen prefijos: depto:, ofi:, resp:, juris:
+    // Acceso: cualquier usuario activo autenticado.
+    // La restricción por conversación no se puede hacer solo con request.auth
+    // porque las claves son sintéticas (rol:nombre), no emails.
+    // Seguridad real: isActiveUser() garantiza cuenta registrada en usuarios/.
+    // -------------------------------------------------------------------------
+    match /chats/{convId} {
+      allow read, write: if false;
+
+      match /mensajes/{mensajeId} {
+        allow read:   if isActiveUser();
+        allow create: if isActiveUser();
+        allow update: if isActiveUser();
+        allow delete: if isAdmin();
+      }
+    }
   }
 }
 
