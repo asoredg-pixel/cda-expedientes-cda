@@ -190,6 +190,12 @@ service cloud.firestore {
       allow read: if isActiveUser() && puedeLeerDepartamento(deptoId);
       allow create, update: if isActiveUser() && puedeEscribirDepartamento(deptoId);
       allow delete: if isAdmin() && deptoIdValido(deptoId);
+
+      match /expedientes/{expId} {
+        allow read: if isActiveUser() && puedeLeerDepartamento(deptoId);
+        allow create, update: if isActiveUser() && puedeEscribirDepartamento(deptoId);
+        allow delete: if isActiveUser() && puedeEscribirDepartamento(deptoId);
+      }
     }
 
     // -------------------------------------------------------------------------

@@ -9485,13 +9485,15 @@ async function saveExpedienteDoc(deptoId,exp){
   if(!expId){console.warn('saveExpedienteDoc: expediente sin _exp');return false;}
   const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
-  if(!ref)return false;
+  if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
   const payload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
   try{
+    console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
     await window._fsSetDoc(ref,payload,{merge:true});
+    console.log('saveExpedienteDoc OK:',ref.path);
     return true;
   }catch(err){
-    console.error('saveExpedienteDoc:',depto,expId,err);
+    console.error('saveExpedienteDoc:',depto,expId,ref.path,err);
     return false;
   }
 }
@@ -9581,11 +9583,23 @@ function persistExpedienteGranular(exp,withGlobal){
     else console.error('Error al guardar en localStorage:',e);
     return;
   }
+  const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
+  console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
   const fs=[saveExpedienteDoc(deptoActivo,exp)];
   if(withGlobal)fs.push(saveGlobalFirestore());
   updateSyncIndicator('syncing');
   Promise.all(fs).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
 }
+function diagTestSaveExpedienteDoc(){
+  saveExpedienteDoc('guaviare',{
+    _exp:'TEST-001',
+    _depto:'guaviare',
+    _tramite:'prueba',
+    nombre:'Expediente de prueba'
+  }).then(function(ok){console.log('saveExpedienteDoc resultado:',ok);})
+    .catch(function(err){console.error('saveExpedienteDoc error:',err);});
+}
+window.diagTestSaveExpedienteDoc=diagTestSaveExpedienteDoc;
 function persistExpedienteDelete(expRef){
   try{persistExpLocal();}
   catch(e){
@@ -18544,6 +18558,7 @@ window.SST = {
   eliminarUsuarioFirestore,
   mostrarFormUsuarioFirestore,
   ocultarFormUsuarioFirestore,
+  diagTestSaveExpedienteDoc,
 };
 async function bootstrapApp(){
   document.documentElement.classList.add('ui-editor-modal-mode');
@@ -18563,6 +18578,12 @@ async function bootstrapApp(){
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
+  if(window._firebaseReady){
+    setTimeout(function(){
+      console.log('[diag] Ejecutando diagTestSaveExpedienteDoc (requiere sesión activa para pasar rules)');
+      diagTestSaveExpedienteDoc();
+    },2500);
+  }
 }
 bootstrapApp();
 </script></body></html>
