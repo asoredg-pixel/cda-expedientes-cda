@@ -921,7 +921,7 @@ const firebaseConfig={
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,getDoc,setDoc,onSnapshot,getDocs,collection,deleteDoc}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,doc,getDoc,setDoc,onSnapshot,getDocs,collection,deleteDoc,deleteField}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
@@ -935,6 +935,7 @@ window._fsOnSnapshot=onSnapshot;
 window._fsCollection=collection;
 window._fsGetDocs=getDocs;
 window._fsDeleteDoc=deleteDoc;
+window._fsDeleteField=deleteField;
 window._googleProvider=new GoogleAuthProvider();
 window._authSignInGoogle=()=>signInWithPopup(auth,window._googleProvider);
 window._authSignOut=()=>signOut(auth);
@@ -9621,6 +9622,26 @@ function diagTestSaveExpedienteDoc(){
     .catch(function(err){console.error('saveExpedienteDoc error:',err);});
 }
 window.diagTestSaveExpedienteDoc=diagTestSaveExpedienteDoc;
+async function limpiarCamposObsoletos(){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc||!window._fsDeleteField){
+    console.error('limpiarCamposObsoletos: Firebase no disponible');
+    return false;
+  }
+  const del=window._fsDeleteField();
+  try{
+    for(const depto of DEPTOS_FIRESTORE){
+      const ref=window._fsDoc(db,'departamentos',depto);
+      await window._fsSetDoc(ref,{expedientes:del,pqrsd:del},{merge:true});
+      console.log('limpiarCamposObsoletos OK:',ref.path);
+    }
+    console.log('limpiarCamposObsoletos: completado en',DEPTOS_FIRESTORE.join(', '));
+    return true;
+  }catch(err){
+    console.error('limpiarCamposObsoletos:',err);
+    return false;
+  }
+}
 function persistExpedienteDelete(expRef){
   try{persistExpLocal();}
   catch(e){
@@ -9658,12 +9679,8 @@ async function saveFirestore(){
       updatedAt:new Date().toISOString()
     },{merge:true});
     for(const depto of DEPTOS_FIRESTORE){
-      const deptoExps=(exps||[]).filter(e=>(e._depto||'guaviare')===depto);
-      const pqrsdDepto=deptoExps.filter(esPqrsSecretaria);
       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{
-        expedientes:deptoExps,
         cfg:cfgByDepto[depto]||{},
-        pqrsd:pqrsdDepto,
         chat:{},
         inbox:[],
         updatedAt:new Date().toISOString()
@@ -18580,6 +18597,7 @@ window.SST = {
   mostrarFormUsuarioFirestore,
   ocultarFormUsuarioFirestore,
   diagTestSaveExpedienteDoc,
+  limpiarCamposObsoletos,
 };
 async function bootstrapApp(){
   document.documentElement.classList.add('ui-editor-modal-mode');
