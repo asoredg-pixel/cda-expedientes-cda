@@ -921,7 +921,7 @@ const firebaseConfig={
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,getDoc,setDoc,onSnapshot,getDocs,collection,deleteDoc,deleteField}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,deleteDoc,deleteField,arrayUnion,arrayRemove}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
@@ -931,11 +931,15 @@ window._firebaseAuth=auth;
 window._fsDoc=doc;
 window._fsGetDoc=getDoc;
 window._fsSetDoc=setDoc;
+window._fsUpdateDoc=updateDoc;
+window._fsAddDoc=addDoc;
 window._fsOnSnapshot=onSnapshot;
 window._fsCollection=collection;
 window._fsGetDocs=getDocs;
 window._fsDeleteDoc=deleteDoc;
 window._fsDeleteField=deleteField;
+window._fsArrayUnion=arrayUnion;
+window._fsArrayRemove=arrayRemove;
 window._googleProvider=new GoogleAuthProvider();
 window._authSignInGoogle=()=>signInWithPopup(auth,window._googleProvider);
 window._authSignOut=()=>signOut(auth);
@@ -17133,6 +17137,9 @@ function getChatContacts(){
 function chatConvId(keyA,keyB){
   return [chatCanonicalKey(keyA),chatCanonicalKey(keyB)].sort().join('|');
 }
+function chatConvFirestoreId(convId){
+  return String(convId||'').replace(/\|/g,'__');
+}
 function chatConvMessages(convId){
   const canon=String(convId||'');
   return (chatMensajes||[]).filter(m=>chatConvId(m.fromKey,m.toKey)===canon).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
@@ -17245,7 +17252,7 @@ function chatUnreadConv(convId){
   }
   return chatConvMessages(convId).filter(chatMsgUnreadForMe).length;
 }
-function chatMarcarLeido(convId){
+async function chatMarcarLeido(convId){
   const my=getMyChatKeys();
   if(!my.length)return;
   let ch=false;
@@ -17256,11 +17263,30 @@ function chatMarcarLeido(convId){
     const other=keys.find(k=>chatNormKey(k)!==chatNormKey(me.key));
     if(other&&other.startsWith('resp:'))msgs=chatMsgsForDeptResp(me.deptoId,other);
   }
+  const db=window._db;
+  const fsUpdates=[];
   msgs.forEach(m=>{
     if(!m.readBy)m.readBy=[];
-    my.forEach(k=>{if(!m.readBy.map(chatNormKey).includes(k)){m.readBy.push(k);ch=true;}});
+    const rbSet=new Set(m.readBy.map(chatNormKey));
+    const toAdd=[];
+    my.forEach(k=>{
+      if(!rbSet.has(k)){m.readBy.push(k);toAdd.push(k);ch=true;}
+    });
+    if(toAdd.length&&db&&window._fsUpdateDoc&&window._fsDoc&&window._fsArrayUnion&&m.id){
+      const fsConvId=chatConvFirestoreId(m.convId||convId);
+      fsUpdates.push(window._fsUpdateDoc(
+        window._fsDoc(db,'chats',fsConvId,'mensajes',m.id),
+        {readBy:window._fsArrayUnion(...toAdd)}
+      ));
+    }
   });
-  if(ch){saveLS();renderChatBadge();}
+  if(ch){
+    renderChatBadge();
+    if(fsUpdates.length){
+      try{await Promise.all(fsUpdates);}
+      catch(err){console.error('chatMarcarLeido:',err);}
+    }
+  }
 }
 function renderChatBadge(){
   purgeChatConversacionesLeidas();
@@ -17278,19 +17304,40 @@ function toggleChatWindow(force){
   if(open){renderChatContacts();renderChatBadge();}
   else{window._chatConvActiva=null;window._chatVista='contactos';chatToggleDriveBar(false);chatSyncLayout();}
 }
-function chatMarcarNoLeido(){
+async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
   const my=getMyChatKeys();
   if(!convId||!my.length)return;
   let ch=false;
+  const db=window._db;
+  const fsUpdates=[];
   chatMsgsForActiveConv().forEach(m=>{
     if(my.includes(chatNormKey(m.fromKey)))return;
     if(!m.readBy)m.readBy=[];
     const rb=m.readBy.map(chatNormKey);
     const nxt=rb.filter(k=>!my.includes(k));
-    if(nxt.length!==rb.length){m.readBy=nxt;ch=true;}
+    if(nxt.length!==rb.length){
+      const removed=rb.filter(k=>my.includes(k));
+      m.readBy=nxt;
+      ch=true;
+      if(removed.length&&db&&window._fsUpdateDoc&&window._fsDoc&&window._fsArrayRemove&&m.id){
+        const fsConvId=chatConvFirestoreId(m.convId||convId);
+        fsUpdates.push(window._fsUpdateDoc(
+          window._fsDoc(db,'chats',fsConvId,'mensajes',m.id),
+          {readBy:window._fsArrayRemove(...removed)}
+        ));
+      }
+    }
   });
-  if(ch){saveLS();renderChatBadge();chatVolverContactos();notif('Conversación marcada como no leída','ok');}
+  if(ch){
+    renderChatBadge();
+    chatVolverContactos();
+    notif('Conversación marcada como no leída','ok');
+    if(fsUpdates.length){
+      try{await Promise.all(fsUpdates);}
+      catch(err){console.error('chatMarcarNoLeido:',err);}
+    }
+  }
 }
 function chatToggleContactos(force){
   if(typeof force==='boolean')window._chatContactsCollapsed=force;
@@ -17406,7 +17453,7 @@ function renderChatMessages(){
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
-function chatEnviarTexto(){
+async function chatEnviarTexto(){
   const inp=document.getElementById('chat-inp');
   const convId=window._chatConvActiva;
   const me=getChatIdentity();
@@ -17417,7 +17464,7 @@ function chatEnviarTexto(){
   const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
   const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
   const to=chatContactFromKey(otherKey);
-  chatMensajes.push({
+  const msg={
     id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
     convId:chatConvId(me.key,to.key),
     fromKey:me.key,fromLabel:me.label,
@@ -17425,14 +17472,27 @@ function chatEnviarTexto(){
     text,
     ts:new Date().toISOString(),
     readBy:chatKeyAliases(me.key).map(chatNormKey)
-  });
+  };
   inp.value='';
-  saveLS();
+  chatMensajes.push(msg);
   renderChatMessages();
   renderChatContacts();
   renderChatBadge();
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc)return;
+  const fsConvId=chatConvFirestoreId(msg.convId);
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+  }catch(err){
+    console.error('chatEnviarTexto:',fsConvId,msg.id,err);
+    chatMensajes=chatMensajes.filter(m=>m.id!==msg.id);
+    renderChatMessages();
+    renderChatContacts();
+    renderChatBadge();
+    notif('Error al guardar el mensaje en Firestore','err');
+  }
 }
-function chatEnviarDriveLink(){
+async function chatEnviarDriveLink(){
   const inp=document.getElementById('chat-drive-inp');
   const convId=window._chatConvActiva;
   const me=getChatIdentity();
@@ -17445,7 +17505,7 @@ function chatEnviarDriveLink(){
   const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
   const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
   const to=chatContactFromKey(otherKey);
-  chatMensajes.push({
+  const msg={
     id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
     convId:chatConvId(me.key,to.key),
     fromKey:me.key,fromLabel:me.label,
@@ -17454,13 +17514,26 @@ function chatEnviarDriveLink(){
     driveLink:link,
     ts:new Date().toISOString(),
     readBy:chatKeyAliases(me.key).map(chatNormKey)
-  });
+  };
   inp.value='';
   chatToggleDriveBar(false);
-  saveLS();
+  chatMensajes.push(msg);
   renderChatMessages();
   renderChatContacts();
   renderChatBadge();
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc)return;
+  const fsConvId=chatConvFirestoreId(msg.convId);
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+  }catch(err){
+    console.error('chatEnviarDriveLink:',fsConvId,msg.id,err);
+    chatMensajes=chatMensajes.filter(m=>m.id!==msg.id);
+    renderChatMessages();
+    renderChatContacts();
+    renderChatBadge();
+    notif('Error al guardar el enlace en Firestore','err');
+  }
 }
 function chatEnviarArchivo(){
   notif('Solo se aceptan links de Google Drive. Use el botón «📎 Drive».','err');
