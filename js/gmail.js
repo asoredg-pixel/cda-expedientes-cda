@@ -373,26 +373,57 @@ async function gmailGetAttachment(messageId, attachmentId) {
   return data.data; // base64url encoded
 }
 
-// Abre un adjunto directamente en el navegador (nueva pestaña para PDF, imagen inline)
+var _gmailAttViewerUrl = ''; // blob URL actual para liberar al cerrar
+
+function gmailCloseAttViewer() {
+  var panel = document.getElementById('gmail-att-viewer');
+  if (panel) panel.classList.remove('open');
+  if (_gmailAttViewerUrl) { URL.revokeObjectURL(_gmailAttViewerUrl); _gmailAttViewerUrl = ''; }
+  var body = document.getElementById('gmail-att-viewer-body');
+  if (body) body.innerHTML = '';
+}
+
+// Abre un adjunto en el panel lateral (PDF en iframe, imágenes inline, resto en nueva pestaña)
 async function gmailViewAttachment(msgId, attId, filename, mimeType) {
   if (!gmailIsTokenValid()) { notif('Reconecte la bandeja para ver adjuntos', 'err'); return; }
-  const chipEl = document.getElementById('att-chip-' + attId);
-  if (chipEl) { chipEl.textContent = '⏳ ' + filename; chipEl.style.opacity = '0.6'; }
+  var chipEl = document.getElementById('att-chip-' + attId);
+  var origContent = chipEl ? chipEl.innerHTML : '';
+  if (chipEl) { chipEl.innerHTML = '⏳ Cargando…'; chipEl.style.opacity = '0.6'; }
   try {
-    const b64url = await gmailGetAttachment(msgId, attId);
-    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
+    var b64url = await gmailGetAttachment(msgId, attId);
+    var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
     for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener');
-    // Limpiar el object URL después de un momento
-    setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+    var mime = mimeType || 'application/octet-stream';
+    var blob = new Blob([bytes], { type: mime });
+    if (_gmailAttViewerUrl) URL.revokeObjectURL(_gmailAttViewerUrl);
+    _gmailAttViewerUrl = URL.createObjectURL(blob);
+
+    // Actualizar panel lateral
+    var title = document.getElementById('gmail-att-viewer-title');
+    if (title) title.textContent = filename;
+    var dlLink = document.getElementById('gmail-att-viewer-dl');
+    if (dlLink) { dlLink.href = _gmailAttViewerUrl; dlLink.download = filename; dlLink.style.display = 'inline-flex'; }
+    var viewBody = document.getElementById('gmail-att-viewer-body');
+    if (viewBody) {
+      var isImg = mime.startsWith('image/');
+      var isPdf = mime === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        viewBody.innerHTML = '<iframe src="' + escAttr(_gmailAttViewerUrl) + '" style="flex:1;width:100%;border:none;height:100%" title="' + escAttr(filename) + '"></iframe>';
+      } else if (isImg) {
+        viewBody.innerHTML = '<div style="overflow:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start;height:100%"><img src="' + escAttr(_gmailAttViewerUrl) + '" alt="' + escAttr(filename) + '" style="max-width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>';
+      } else {
+        // Tipo no previsualizable: ofrecer descarga
+        viewBody.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tx2)"><div style="font-size:40px;margin-bottom:12px">📎</div><div style="font-weight:600;margin-bottom:8px">' + escAttr(filename) + '</div><div style="font-size:12px;margin-bottom:16px">Este tipo de archivo no puede previsualizarse.</div><a href="' + escAttr(_gmailAttViewerUrl) + '" download="' + escAttr(filename) + '" class="btn bp bsm">⬇ Descargar</a></div>';
+      }
+    }
+    var panel = document.getElementById('gmail-att-viewer');
+    if (panel) panel.classList.add('open');
   } catch (e) {
     notif('Error al abrir adjunto: ' + e.message, 'err');
   } finally {
-    if (chipEl) { chipEl.textContent = '📎 ' + filename; chipEl.style.opacity = ''; }
+    if (chipEl) { chipEl.innerHTML = origContent; chipEl.style.opacity = ''; }
   }
 }
 
@@ -878,6 +909,8 @@ function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
   prePopularFormDesdeEmail(_gmailCurrentMsg);
 
+  // Cerrar visor de adjuntos si estaba abierto
+  if (typeof gmailCloseAttViewer === 'function') gmailCloseAttViewer();
   // Colapsar el panel Gmail (mantenerlo accesible pero fuera del camino)
   const panelBody = document.getElementById('gmail-panel-body');
   const toggleBtn = document.getElementById('gmail-toggle-btn');

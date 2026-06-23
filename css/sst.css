@@ -925,8 +925,17 @@ body.sesion-activa #pg-login{display:none!important}
 .gmail-msg-subject{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px}
 .gmail-msg-meta{font-size:11px;color:var(--tx2);display:flex;flex-wrap:wrap;gap:8px}
 .gmail-msg-actions{padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--bd);background:var(--sf2)}
-.gmail-atts-bar{padding:6px 12px;background:color-mix(in srgb,#EA4335 8%,transparent);border-bottom:1px solid var(--bd);font-size:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.gmail-att-chip{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:2px 8px;font-size:11px;color:var(--tx2)}
+.gmail-atts-bar{padding:8px 12px;background:color-mix(in srgb,#EA4335 6%,transparent);border-bottom:1px solid var(--bd);font-size:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gmail-att-chip{display:inline-flex;align-items:center;gap:4px;max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;background:var(--bg);border:1px solid var(--bd);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--tx);cursor:pointer;transition:background .15s}
+.gmail-att-chip:hover{background:var(--sf2);border-color:var(--ac)}
+/* Panel lateral para ver adjuntos */
+#gmail-att-viewer{position:fixed;top:0;right:0;width:min(520px,96vw);height:100vh;background:var(--bg);border-left:2px solid var(--bd);box-shadow:-4px 0 24px rgba(0,0,0,.18);z-index:3000;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
+#gmail-att-viewer.open{transform:translateX(0)}
+#gmail-att-viewer-header{padding:10px 14px;background:var(--sf);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
+#gmail-att-viewer-title{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#gmail-att-viewer-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+#gmail-att-viewer-body iframe{flex:1;border:none;background:#fff}
+#gmail-att-viewer-body img{max-width:100%;max-height:100%;object-fit:contain;padding:16px}
 .gmail-msg-body{padding:16px;font-size:13px;line-height:1.6;color:var(--tx);overflow-x:auto}
 .gmail-msg-body img{max-width:100%;height:auto}
 .gmail-msg-body a{color:var(--ac)}

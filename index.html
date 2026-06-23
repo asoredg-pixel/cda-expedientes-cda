@@ -790,4 +790,16 @@ async function bootstrapApp(){
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
 }
 bootstrapApp();
-</script></body></html>
+</script>
+<!-- Panel lateral para ver adjuntos de correo Gmail -->
+<div id="gmail-att-viewer">
+  <div id="gmail-att-viewer-header">
+    <span id="gmail-att-viewer-title">Adjunto</span>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <a id="gmail-att-viewer-dl" download class="btn bsm" style="display:none">⬇ Descargar</a>
+      <button class="btn bsm" onclick="gmailCloseAttViewer()" title="Cerrar panel">✕</button>
+    </div>
+  </div>
+  <div id="gmail-att-viewer-body"></div>
+</div>
+</body></html>
