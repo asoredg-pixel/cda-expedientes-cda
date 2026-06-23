@@ -377,6 +377,22 @@ function toggleEditPqrsPersona(){
   const tp=(document.getElementById('pqrs-edit-tipo-persona')||{}).value||'natural';
   const pn=document.getElementById('pqrs-edit-pn-block');
   const pj=document.getElementById('pqrs-edit-pj-block');
+  const gv2=function(id){const el=document.getElementById(id);return el?el.value:'';};
+  const setv2=function(id,v){const el=document.getElementById(id);if(el&&!el.value)el.value=v;};
+  // Migrar datos al cambiar de tipo para no "perder" la información ya ingresada
+  if(tp==='juridica'&&pn&&pn.style.display!=='none'){
+    // natural → jurídica: datos de la persona natural pasan al campo "oficial/quien radica"
+    setv2('pqrs-edit-pj-ofi-nombre',gv2('pqrs-edit-pn-nombre'));
+    setv2('pqrs-edit-pj-ofi-identificacion',gv2('pqrs-edit-pn-identificacion'));
+    setv2('pqrs-edit-pj-ofi-correo',gv2('pqrs-edit-pn-correo'));
+    setv2('pqrs-edit-pj-ofi-telefono',gv2('pqrs-edit-pn-telefono'));
+  }else if(tp==='natural'&&pj&&pj.style.display!=='none'){
+    // jurídica → natural: datos del oficial pasan a la persona natural
+    setv2('pqrs-edit-pn-nombre',gv2('pqrs-edit-pj-ofi-nombre'));
+    setv2('pqrs-edit-pn-identificacion',gv2('pqrs-edit-pj-ofi-identificacion'));
+    setv2('pqrs-edit-pn-correo',gv2('pqrs-edit-pj-ofi-correo'));
+    setv2('pqrs-edit-pn-telefono',gv2('pqrs-edit-pj-ofi-telefono'));
+  }
   if(pn)pn.style.display=(!anon&&tp==='natural')?'':'none';
   if(pj)pj.style.display=(!anon&&tp==='juridica')?'':'none';
 }

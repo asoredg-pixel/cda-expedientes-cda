@@ -9840,6 +9840,24 @@ function togglePerTipoCfg(){
   const t=document.getElementById('per-tipo')?document.getElementById('per-tipo').value:'natural';
   const nat=document.getElementById('per-form-natural');
   const jur=document.getElementById('per-form-juridica');
+  // Migrar datos al cambiar de tipo para no "perder" la información ya ingresada
+  if(t==='juridica'&&nat&&nat.style.display!=='none'){
+    // natural → jurídica: mover datos de la persona natural al representante legal
+    const gv2=function(id){const el=document.getElementById(id);return el?el.value:'';};
+    const setv2=function(id,v){const el=document.getElementById(id);if(el&&!el.value)el.value=v;};
+    setv2('per-rep-nombre',gv2('per-nombre'));
+    setv2('per-rep-ident',gv2('per-ident'));
+    setv2('per-rep-correo',gv2('per-correo'));
+    setv2('per-rep-tel',gv2('per-tel'));
+  }else if(t==='natural'&&jur&&jur.style.display!=='none'){
+    // jurídica → natural: mover datos del representante a la persona natural
+    const gv2=function(id){const el=document.getElementById(id);return el?el.value:'';};
+    const setv2=function(id,v){const el=document.getElementById(id);if(el&&!el.value)el.value=v;};
+    setv2('per-nombre',gv2('per-rep-nombre'));
+    setv2('per-ident',gv2('per-rep-ident'));
+    setv2('per-correo',gv2('per-rep-correo'));
+    setv2('per-tel',gv2('per-rep-tel'));
+  }
   if(nat)nat.style.display=t==='juridica'?'none':'';
   if(jur)jur.style.display=t==='juridica'?'':'none';
 }
