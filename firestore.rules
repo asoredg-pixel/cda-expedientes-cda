@@ -181,10 +181,8 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // departamentos/{deptoId} — expedientes, cfg, pqrsd, chat, inbox
+    // departamentos/{deptoId} — cfg, chat, inbox (+ subcolección expedientes/)
     // IDs inválidos: siempre denegado (no entran en puedeLeer/Escribir).
-    // El cliente intenta escribir los 3 deptos en cada saveLS(); las rules
-    // bloquean silenciosamente los que están fuera del ámbito del rol.
     // -------------------------------------------------------------------------
     match /departamentos/{deptoId} {
       allow read: if isActiveUser() && puedeLeerDepartamento(deptoId);
@@ -192,9 +190,8 @@ service cloud.firestore {
       allow delete: if isAdmin() && deptoIdValido(deptoId);
 
       match /expedientes/{expId} {
-        allow read: if isActiveUser() && puedeLeerDepartamento(deptoId);
-        allow create, update: if isActiveUser() && puedeEscribirDepartamento(deptoId);
-        allow delete: if isActiveUser() && puedeEscribirDepartamento(deptoId);
+        allow read: if puedeLeerDepartamento(deptoId);
+        allow write: if puedeEscribirDepartamento(deptoId);
       }
     }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Respaldo de Firestore (Admin SDK) — proyecto cda-tramites
- * Colecciones: usuarios, sistema/global, departamentos
+ * Colecciones: usuarios, sistema/global, departamentos, departamentos/{deptoId}/expedientes
  *
  * Requiere GOOGLE_APPLICATION_CREDENTIALS apuntando al JSON de cuenta de servicio.
  */
@@ -11,6 +11,7 @@ const path = require('path');
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'cda-tramites';
 const BACKUPS_DIR = path.join(__dirname, 'backups');
+const DEPTOS_FIRESTORE = ['guaviare', 'guainia', 'vaupes'];
 
 function timestampLabel(date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
@@ -118,6 +119,25 @@ async function main() {
     documents: departamentos,
   });
   summary.push({ collection: 'departamentos', count: departamentos.length, file: departamentosFile });
+
+  // departamentos/{deptoId}/expedientes — subcolección por departamento
+  for (const deptoId of DEPTOS_FIRESTORE) {
+    const expedientes = await exportCollection(db, `departamentos/${deptoId}/expedientes`);
+    const expedientesFile = path.join(BACKUPS_DIR, `${ts}_expedientes_${deptoId}.json`);
+    await writeJson(expedientesFile, {
+      exportedAt: new Date().toISOString(),
+      projectId: PROJECT_ID,
+      collection: `departamentos/${deptoId}/expedientes`,
+      deptoId,
+      count: expedientes.length,
+      documents: expedientes,
+    });
+    summary.push({
+      collection: `departamentos/${deptoId}/expedientes`,
+      count: expedientes.length,
+      file: expedientesFile,
+    });
+  }
 
   console.log('\nRespaldo Firestore completado (' + PROJECT_ID + ')\n');
   for (const row of summary) {
