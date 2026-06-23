@@ -939,3 +939,13 @@ body.sesion-activa #pg-login{display:none!important}
 .gmail-msg-body{padding:16px;font-size:13px;line-height:1.6;color:var(--tx);overflow-x:auto}
 .gmail-msg-body img{max-width:100%;height:auto}
 .gmail-msg-body a{color:var(--ac)}
+/* Expediente cards colapsables en Consulta */
+details.ec-fold{margin-bottom:6px}
+details.ec-fold>summary{list-style:none;cursor:pointer}
+details.ec-fold>summary::-webkit-details-marker{display:none}
+details.ec-fold>summary.ec{border-radius:var(--r);border:1px solid var(--bd)}
+details.ec-fold[open]>summary.ec{border-radius:var(--r) var(--r) 0 0;border-bottom:1px solid var(--bd)}
+details.ec-fold>summary.ec:hover .ech{background:color-mix(in srgb,var(--ac) 5%,var(--sf))}
+.ec-fold-ico{display:inline-block;font-size:10px;margin-right:4px;color:var(--tx3);transition:transform .15s}
+.ec-fold-ico::before{content:'▸'}
+details.ec-fold[open] .ec-fold-ico::before{content:'▾'}

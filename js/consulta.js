@@ -891,12 +891,14 @@ function conConsultaOneCard(e){
     const btnEdit=(esSecretaria()&&puedeEditarPqrsSecretaria(e))?pqrsBtnEdit(e._exp,'✏ Editar'):'';
     const docBtn=htmlPqrsDocumentoBtns(e);
     const abrirFn=esSecretaria()?"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('sec')":"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('pqrs-ofi')";
-    return '<div class="ec">'+
+    return '<details class="ec-fold">'+
+      '<summary class="ec">'+
       '<div class="ech"><div class="ech-left">'+
-        '<div class="eid"><strong style="font-family:\'DM Mono\',monospace">'+hl(e._exp,_conConsultaPag.qs)+'</strong> '+pqrsEstadoConsultaBadge(e)+'</div>'+
+        '<div class="eid"><span class="ec-fold-ico"></span><strong style="font-family:\'DM Mono\',monospace">'+hl(e._exp,_conConsultaPag.qs)+'</strong> '+pqrsEstadoConsultaBadge(e)+'</div>'+
         '<div class="enm">'+hl(e._tipo_solicitud||'PQRSD',_conConsultaPag.qs)+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
       '</div>'+
       '<div class="ech-right"><button type="button" class="btn bsm" onclick="'+abrirFn+'">Abrir</button></div></div>'+
+      '</summary>'+
       '<div class="ecb">'+
         renderPqrsPlazoBarHtml(e)+
         '<div class="pqrs-det-sec"><div class="pqrs-det-k">Interesado</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
@@ -905,7 +907,7 @@ function conConsultaOneCard(e){
         renderPqrsTrazabilidadHtml(e)+
         htmlPqrsRespuestaRegistrada(e)+
         '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTras+btnEdit+'</div>'+
-      '</div></div>';
+      '</div></details>';
   }
   const today=_conConsultaPag.today;
   migrarInfoTecExpediente(e);
@@ -929,10 +931,11 @@ function conConsultaOneCard(e){
   const actFoldSummary=esModoCiudadano()?
     'Actividades ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks):
     'Actividades asignadas ('+tasks.filter(t=>!t.eliminada).length+')'+conActCoEjSummaryHtml(tasks)+' <span style="font-size:11px;font-weight:400;color:var(--tx3)">— chat · historial</span>';
-  return '<div class="ec">'+
+  return '<details class="ec-fold">'+
+    '<summary class="ec">'+
     '<div class="ech">'+
       '<div class="ech-left">'+
-        '<div class="eid">'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,_conConsultaPag.qs)+'</span>':'')+'</div>'+
+        '<div class="eid"><span class="ec-fold-ico"></span>'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,_conConsultaPag.qs)+'</span>':'')+'</div>'+
         '<div class="enm">'+hl(getNom(e),_conConsultaPag.qs)+'</div>'+
         '<div class="emta">'+(tram?tram.nombre:'')+badgeDepto(e._depto)+'</div>'+
         '<div style="margin-top:4px">'+flagsHtmlCompact(e)+'</div>'+
@@ -945,6 +948,7 @@ function conConsultaOneCard(e){
         renderConsultaHdrMeta(e,ter,porVerT,doneT,porEjecT,vencT,porCorrT,d)+
       '</div>'+
     '</div>'+
+    '</summary>'+
     '<div class="ecb">'+
       '<div class="tc">'+
         '<div class="con-col-left">'+
@@ -967,7 +971,7 @@ function conConsultaOneCard(e){
         '</div>'+
       '</div>'+
     '</div>'+
-  '</div>';
+  '</details>';
 }
 function conConsultaAppendMore(){
   const st=_conConsultaPag;
