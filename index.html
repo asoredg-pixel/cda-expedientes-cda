@@ -504,67 +504,93 @@
     </div>
   </div>
 
-  <!-- Tarjeta de referencia del correo activo (se muestra al radicar desde correo) -->
-  <div id="gmail-ref-card" style="display:none;margin-bottom:1rem"></div>
+  <!-- Vista paralela correo/formulario — se activa al pulsar "Radicar desde este correo" -->
+  <div id="sec-radicar-split">
 
-  <div class="card" style="border-left:4px solid var(--pu)">
-    <div class="slbl">Nueva radicación PQRSD</div>
-    <div class="ssub">Complete los datos del solicitante, adjunte la solicitud (link o referencia) e indique la oficina destino.</div>
-    <div class="fg" style="margin-bottom:10px">
-      <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label><input type="text" id="sec-exp" placeholder="Ej. PQRSD-2026-001"></div>
-      <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud"></div>
-      <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
-      <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha"></div>
-      <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo"><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
-      <div class="fld"><label>Medio de recepción</label><select id="sec-medio" onchange="onSecMedioRecepcionChange()"><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
-    </div>
-    <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
-      <label>Medio de notificación</label>
-      <div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="sec-medio-notif-btns"></div>
-      <input type="hidden" id="sec-medio-notif" value="">
-      <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
-    </div>
-    <div class="fg" style="margin-bottom:10px">
-      <div class="fld"><label>Tipo de persona</label><select id="sec-tipo-persona" onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
-    </div>
-    <div id="sec-pn-block">
-      <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>Nombre del solicitante</label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>Correo</label><input type="email" id="sec-pn-correo"></div>
-        <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pn-telefono"></div>
+    <!-- PANEL IZQUIERDO: previsualización del correo (oculto hasta activar split) -->
+    <div id="sec-email-panel">
+      <!-- Cabecera del panel -->
+      <div id="sec-email-panel-hdr">
+        <span id="sec-email-panel-from" style="font-weight:600;font-size:13px;color:var(--tx)"></span>
+        <span id="sec-email-panel-date" style="font-size:11px;color:var(--tx2)"></span>
+        <button class="btn bsm" style="flex-shrink:0" onclick="cerrarSplitView()" title="Volver a la bandeja">✕ Cerrar vista</button>
+      </div>
+      <div id="sec-email-panel-subject" style="padding:8px 14px 0;font-size:13px;font-weight:600;color:var(--tx)"></div>
+      <!-- Chips de adjuntos -->
+      <div id="sec-email-panel-atts" style="display:none;padding:6px 14px;background:color-mix(in srgb,#EA4335 5%,transparent);border-bottom:1px solid var(--bd)"></div>
+      <!-- Cuerpo del correo -->
+      <div id="sec-email-panel-body"></div>
+      <!-- Visor de adjunto inline (overlay sobre el panel izquierdo) -->
+      <div id="sec-att-inline">
+        <div id="sec-att-inline-hdr">
+          <span id="sec-att-inline-title"></span>
+          <button class="btn bsm" onclick="closeSplitAttViewer()">✕ Cerrar</button>
+        </div>
+        <div id="sec-att-inline-body"></div>
       </div>
     </div>
-    <div id="sec-pj-block" style="display:none">
+
+    <!-- PANEL DERECHO: formulario de radicación -->
+    <div id="sec-form-card" class="card" style="border-left:4px solid var(--pu)">
+      <div class="slbl">Nueva radicación PQRSD</div>
+      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud (link o referencia) e indique la oficina destino.</div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Entidad / empresa</div>
-        <div class="fld"><label>Razón social / entidad<span class="req-star">*</span></label><input type="text" id="sec-pj-empresa" placeholder="Ej. Alcaldía Municipal…" oninput="filtrarPersonasSug(this,'sec-pj','empresa')" onfocus="filtrarPersonasSug(this,'sec-pj','empresa')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>NIT</label><input type="text" id="sec-pj-nit" placeholder="Buscar por NIT…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>Correo entidad</label><input type="email" id="sec-pj-correo"></div>
-        <div class="fld"><label>Teléfono entidad</label><input type="tel" id="sec-pj-telefono"></div>
+        <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label><input type="text" id="sec-exp" placeholder="Ej. PQRSD-2026-001"></div>
+        <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud"></div>
+        <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
+        <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha"></div>
+        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo"><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
+        <div class="fld"><label>Medio de recepción</label><select id="sec-medio" onchange="onSecMedioRecepcionChange()"><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
+      </div>
+      <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
+        <label>Medio de notificación</label>
+        <div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="sec-medio-notif-btns"></div>
+        <input type="hidden" id="sec-medio-notif" value="">
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
       </div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Persona que radica / oficia en nombre de la entidad</div>
-        <div style="grid-column:1/-1;font-size:11px;color:var(--tx2);margin-bottom:4px">Quien presenta el oficio o diligencia la solicitud (puede ser distinto al representante legal).</div>
-        <div class="fld"><label>Nombre</label><input type="text" id="sec-pj-ofi-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-ofi','nombre')" onfocus="filtrarPersonasSug(this,'sec-ofi','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>Identificación</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-        <div class="fld"><label>Correo</label><input type="email" id="sec-pj-ofi-correo"></div>
-        <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
+        <div class="fld"><label>Tipo de persona</label><select id="sec-tipo-persona" onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
       </div>
+      <div id="sec-pn-block">
+        <div class="fg" style="margin-bottom:10px">
+          <div class="fld"><label>Nombre del solicitante</label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Correo</label><input type="email" id="sec-pn-correo"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pn-telefono"></div>
+        </div>
+      </div>
+      <div id="sec-pj-block" style="display:none">
+        <div class="fg" style="margin-bottom:10px">
+          <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Entidad / empresa</div>
+          <div class="fld"><label>Razón social / entidad<span class="req-star">*</span></label><input type="text" id="sec-pj-empresa" placeholder="Ej. Alcaldía Municipal…" oninput="filtrarPersonasSug(this,'sec-pj','empresa')" onfocus="filtrarPersonasSug(this,'sec-pj','empresa')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>NIT</label><input type="text" id="sec-pj-nit" placeholder="Buscar por NIT…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Correo entidad</label><input type="email" id="sec-pj-correo"></div>
+          <div class="fld"><label>Teléfono entidad</label><input type="tel" id="sec-pj-telefono"></div>
+        </div>
+        <div class="fg" style="margin-bottom:10px">
+          <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Persona que radica / oficia en nombre de la entidad</div>
+          <div style="grid-column:1/-1;font-size:11px;color:var(--tx2);margin-bottom:4px">Quien presenta el oficio o diligencia la solicitud (puede ser distinto al representante legal).</div>
+          <div class="fld"><label>Nombre</label><input type="text" id="sec-pj-ofi-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-ofi','nombre')" onfocus="filtrarPersonasSug(this,'sec-ofi','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Correo</label><input type="email" id="sec-pj-ofi-correo"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
+      <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
+      <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
+      <div class="fg" style="margin-bottom:10px">
+        <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
+      </div>
+      <div class="fg" style="margin-bottom:10px">
+        <div class="fld"><label>Link de la solicitud (Drive, etc.)</label><input type="url" id="sec-link" placeholder="https://…"></div>
+        <div class="fld"><label>Referencia de archivo adjunto</label><input type="text" id="sec-archivo" placeholder="Nombre del documento o carpeta"></div>
+      </div>
+      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" onclick="guardarPqrsSecretaria()">📤 Radicar y trasladar a oficina</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
-    <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
-    <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
-    <div class="fg" style="margin-bottom:10px">
-      <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
-    </div>
-    <div class="fg" style="margin-bottom:10px">
-      <div class="fld"><label>Link de la solicitud (Drive, etc.)</label><input type="url" id="sec-link" placeholder="https://…"></div>
-      <div class="fld"><label>Referencia de archivo adjunto</label><input type="text" id="sec-archivo" placeholder="Nombre del documento o carpeta"></div>
-    </div>
-    <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" onclick="guardarPqrsSecretaria()">📤 Radicar y trasladar a oficina</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
-  </div>
+
+  </div><!-- /sec-radicar-split -->
   <div id="sec-pqrs-mets" class="pqrs-ofi-mets" style="margin-top:1rem"></div>
   <div class="card" style="margin-top:1rem">
     <div class="slbl">PQRSD asignadas a oficinas</div>

@@ -908,62 +908,137 @@ function prePopularFormDesdeEmail(msg) {
 
 function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
+  // Pre-llenar el formulario con datos del correo
   prePopularFormDesdeEmail(_gmailCurrentMsg);
-
-  // Cerrar visor de adjuntos si estaba abierto
+  // Cerrar visor de adjuntos full-screen si estaba abierto
   if (typeof gmailCloseAttViewer === 'function') gmailCloseAttViewer();
-  // Colapsar el panel Gmail (mantenerlo accesible pero fuera del camino)
-  const panelBody = document.getElementById('gmail-panel-body');
-  const toggleBtn = document.getElementById('gmail-toggle-btn');
+  // Ocultar panel Gmail (bandeja) para liberar espacio
+  var panelBody = document.getElementById('gmail-panel-body');
+  var toggleBtn = document.getElementById('gmail-toggle-btn');
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
 
-  // Construir tarjeta de referencia del correo junto al formulario
-  const msg = _gmailCurrentMsg;
-  const headers = (msg.payload && msg.payload.headers) || [];
-  const from = gmailParseFrom(gmailGetHeader(headers, 'from'));
-  const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
-  const date = gmailFmtDate(gmailGetHeader(headers, 'date') || '');
-  const parts = gmailExtractParts(msg.payload);
-  const atts = parts.attachments || [];
-  const snippetText = msg.snippet ? msg.snippet.slice(0, 160) : '';
+  // Construir la previsualización del correo en el panel izquierdo
+  var msg = _gmailCurrentMsg;
+  var headers = (msg.payload && msg.payload.headers) || [];
+  var from = gmailParseFrom(gmailGetHeader(headers, 'from'));
+  var subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
+  var date = gmailFmtDate(gmailGetHeader(headers, 'date') || '');
+  var parts = gmailExtractParts(msg.payload);
+  var atts = parts.attachments || [];
+  var rawBody = parts.textHtml || ('<pre style="white-space:pre-wrap;font-size:13px;margin:0">' + escAttr(parts.textPlain || '(sin cuerpo)') + '</pre>');
+  var safeBody = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(rawBody, { USE_PROFILES: { html: true } }) : rawBody;
 
-  const attsHtml = atts.length
-    ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">' +
-      atts.map(function(a) {
-        return '<span style="padding:2px 8px;background:var(--bg2,#f5f5f5);border:1px solid var(--bd);border-radius:10px;font-size:11px">📎 ' + escAttr(a.filename || a.mimeType || 'adjunto') + '</span>';
-      }).join('') + '</div>'
-    : '';
+  // Cabecera
+  var fromEl = document.getElementById('sec-email-panel-from');
+  var dateEl = document.getElementById('sec-email-panel-date');
+  var subjectEl = document.getElementById('sec-email-panel-subject');
+  if (fromEl) fromEl.textContent = (from.name || from.email || 'Remitente desconocido');
+  if (dateEl) dateEl.textContent = date;
+  if (subjectEl) subjectEl.textContent = subject;
 
-  const card = document.getElementById('gmail-ref-card');
-  if (card) {
-    card.style.display = '';
-    card.innerHTML =
-      '<div style="background:var(--bg);border:1px solid var(--bd);border-left:4px solid #EA4335;border-radius:var(--r);padding:12px 14px;font-size:13px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">' +
-      '<div>' +
-      '<div style="font-weight:600;color:#EA4335;font-size:12px;margin-bottom:2px">📧 Correo de origen (referencia)</div>' +
-      '<div style="font-weight:600">' + escAttr(subject.slice(0, 80)) + '</div>' +
-      '<div style="color:var(--tx2);font-size:12px;margin-top:2px">' +
-        '<span>De: ' + escAttr((from.name || from.email || '').slice(0, 40)) + '</span>' +
-        '<span style="margin:0 8px">·</span>' +
-        '<span>' + escAttr(date) + '</span>' +
-      '</div>' +
-      (snippetText ? '<div style="color:var(--tx3);font-size:11px;margin-top:4px;font-style:italic">' + escAttr(snippetText) + '…</div>' : '') +
-      attsHtml +
-      '</div>' +
-      '<div style="display:flex;gap:6px;flex-shrink:0">' +
-      '<button class="btn bsm" onclick="document.getElementById(\'gmail-panel-body\').style.display=\'\';document.getElementById(\'gmail-toggle-btn\').textContent=\'Ocultar bandeja\';document.getElementById(\'gmail-panel-wrap\').scrollIntoView({behavior:\'smooth\'})">Ver correo</button>' +
-      '<button class="btn bsm" style="color:var(--tx3)" onclick="document.getElementById(\'gmail-ref-card\').style.display=\'none\'" title="Cerrar referencia">✕</button>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
+  // Adjuntos
+  var attsEl = document.getElementById('sec-email-panel-atts');
+  if (attsEl) {
+    if (atts.length) {
+      attsEl.style.display = '';
+      attsEl.innerHTML = '<span style="font-weight:600;font-size:12px;flex-shrink:0">Adjuntos (' + atts.length + '):</span> ' +
+        atts.map(function(a) {
+          var sizeStr = a.size > 1024 ? Math.round(a.size / 1024) + ' KB' : (a.size || '?') + ' B';
+          var isImg = (a.mimeType || '').startsWith('image/');
+          var ico = isImg ? '🖼️' : ((a.mimeType || '').includes('pdf') ? '📄' : '📎');
+          if (a.attachmentId) {
+            return '<button id="split-chip-' + escAttr(a.attachmentId) + '" class="gmail-att-chip" ' +
+              'onclick="openSplitAttViewer(\'' + escAttr(msg.id) + '\',\'' + escAttr(a.attachmentId) + '\',\'' + escAttr(a.filename) + '\',\'' + escAttr(a.mimeType || '') + '\')" ' +
+              'title="' + escAttr(a.filename) + ' (' + sizeStr + ')">' +
+              '<span class="att-ico">' + ico + '</span>' +
+              '<span class="att-name">' + escAttr(a.filename) + '</span>' +
+              '<em class="att-size">(' + sizeStr + ')</em>' +
+              '</button>';
+          }
+          return '<span class="gmail-att-chip"><span class="att-ico">' + ico + '</span><span class="att-name">' + escAttr(a.filename) + '</span></span>';
+        }).join('');
+    } else {
+      attsEl.style.display = 'none';
+      attsEl.innerHTML = '';
+    }
   }
 
-  // Scroll al formulario de radicación
-  const refCard = document.getElementById('gmail-ref-card');
-  if (refCard) refCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  notif('Formulario pre-llenado. Revise los datos, complete la oficina destino y radique.', 'ok');
+  // Cuerpo del correo
+  var bodyEl = document.getElementById('sec-email-panel-body');
+  if (bodyEl) bodyEl.innerHTML = safeBody;
+
+  // Activar la vista paralela
+  var emailPanel = document.getElementById('sec-email-panel');
+  if (emailPanel) emailPanel.classList.add('active');
+
+  // Asegurar que el visor inline esté cerrado
+  closeSplitAttViewer();
+
+  // Scroll al inicio del split
+  var split = document.getElementById('sec-radicar-split');
+  if (split) split.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  notif('Formulario pre-llenado. Revise el correo a la izquierda y complete la radicación.', 'ok');
+}
+
+// Abre el visor inline de adjuntos dentro del panel izquierdo del split
+async function openSplitAttViewer(msgId, attId, filename, mimeType) {
+  if (!gmailIsTokenValid()) { notif('Reconecte la bandeja para ver adjuntos', 'err'); return; }
+  var chipEl = document.getElementById('split-chip-' + attId);
+  var origContent = chipEl ? chipEl.innerHTML : '';
+  if (chipEl) { chipEl.innerHTML = '<span class="att-ico">⏳</span><span class="att-name">Cargando…</span>'; chipEl.style.opacity = '0.6'; }
+  try {
+    var b64url = await gmailGetAttachment(msgId, attId);
+    var bytes = gmailDecodeBase64url(b64url);
+    var mime = mimeType || 'application/octet-stream';
+    var blob = new Blob([bytes], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var inlineHdr = document.getElementById('sec-att-inline-hdr');
+    var inlineTitle = document.getElementById('sec-att-inline-title');
+    var inlineBody = document.getElementById('sec-att-inline-body');
+    var inlineEl = document.getElementById('sec-att-inline');
+    if (inlineTitle) inlineTitle.textContent = filename;
+    if (inlineBody) {
+      if (mime === 'application/pdf') {
+        inlineBody.innerHTML = '<iframe src="' + url + '#toolbar=0" title="' + escAttr(filename) + '"></iframe>';
+      } else if (mime.startsWith('image/')) {
+        inlineBody.innerHTML = '<img src="' + url + '" alt="' + escAttr(filename) + '" style="max-width:100%;height:auto;margin:auto;display:block;padding:10px">';
+      } else {
+        // Descarga directa para otros tipos
+        var a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+        if (chipEl) { chipEl.innerHTML = origContent; chipEl.style.opacity = ''; }
+        return;
+      }
+    }
+    if (inlineEl) inlineEl.classList.add('open');
+  } catch (e) {
+    console.error('openSplitAttViewer:', e);
+    notif('No se pudo cargar el adjunto', 'err');
+  } finally {
+    if (chipEl) { chipEl.innerHTML = origContent; chipEl.style.opacity = ''; }
+  }
+}
+
+// Cierra el visor inline de adjuntos del panel izquierdo
+function closeSplitAttViewer() {
+  var inlineEl = document.getElementById('sec-att-inline');
+  var inlineBody = document.getElementById('sec-att-inline-body');
+  if (inlineEl) inlineEl.classList.remove('open');
+  if (inlineBody) inlineBody.innerHTML = '';
+}
+
+// Cierra el split view y vuelve al layout normal
+function cerrarSplitView() {
+  var emailPanel = document.getElementById('sec-email-panel');
+  if (emailPanel) emailPanel.classList.remove('active');
+  closeSplitAttViewer();
+  // Mostrar la bandeja Gmail de nuevo
+  var panelBody = document.getElementById('gmail-panel-body');
+  var toggleBtn = document.getElementById('gmail-toggle-btn');
+  if (panelBody) panelBody.style.display = '';
+  if (toggleBtn) toggleBtn.textContent = 'Ocultar bandeja';
+  var wrap = document.getElementById('gmail-panel-wrap');
+  if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ----------------------------------------------------------------

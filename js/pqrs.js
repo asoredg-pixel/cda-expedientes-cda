@@ -92,7 +92,9 @@ function toggleSecPersona(){
   if(pj)pj.style.display=(!anon&&tp==='juridica')?'':'none';
 }
 function limpiarFormSecretaria(){
-  // Ocultar tarjeta de referencia de correo si estaba visible
+  // Cerrar vista paralela correo/formulario si estaba activa
+  if(typeof cerrarSplitView==='function')cerrarSplitView();
+  // Compatibilidad con ref-card legacy
   const refCard=document.getElementById('gmail-ref-card');if(refCard)refCard.style.display='none';
   ['sec-exp','sec-asunto','sec-detalle','sec-link','sec-archivo','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const tp=document.getElementById('sec-tipo-persona');if(tp)tp.value='natural';
