@@ -930,3 +930,8 @@ body.sesion-activa #pg-login{display:none!important}
 .gmail-msg-body{padding:16px;font-size:13px;line-height:1.6;color:var(--tx);overflow-x:auto}
 .gmail-msg-body img{max-width:100%;height:auto}
 .gmail-msg-body a{color:var(--ac)}
+.gmail-toolbar{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.gmail-search-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gmail-search-input{flex:1;min-width:200px;padding:7px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;background:var(--bg);color:var(--tx)}
+.gmail-search-badge{font-size:11px;color:#EA4335;font-weight:600}
+.gmail-filters{display:flex;gap:6px;flex-wrap:wrap}

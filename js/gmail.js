@@ -31,6 +31,8 @@ let _gmailMessages = [];
 let _gmailCurrentMsg = null;
 let _gmailConnecting = false;
 let _gmailNextPageToken = null;
+let _gmailFilter = 'all'; // 'all' | 'unread' | 'read'
+let _gmailSearchMode = false; // true when showing search results
 
 // ----------------------------------------------------------------
 // Token helpers
@@ -171,6 +173,66 @@ async function gmailLoadMore() {
   }
 }
 
+// ----------------------------------------------------------------
+// Búsqueda en toda la bandeja (Gmail API q= — busca en TODOS los correos)
+// ----------------------------------------------------------------
+async function gmailSearch(query) {
+  if (!query || !query.trim()) { gmailClearSearch(); return; }
+  const listEl = document.getElementById('gmail-inbox-list');
+  if (listEl) listEl.innerHTML = '<div class="gmail-loading">Buscando "' + escAttr(query) + '"…</div>';
+  _gmailSearchMode = true;
+  updateGmailFilterBtns();
+  try {
+    // q= usa la misma sintaxis que Gmail: subject:, from:, etc.
+    const url = GMAIL_API_BASE + '/messages?maxResults=30&q=' + encodeURIComponent(query);
+    const data = await gmailApiCall('GET', url);
+    const ids = (data.messages || []).map(m => m.id);
+    if (!ids.length) {
+      if (listEl) listEl.innerHTML = '<div class="gmail-empty">Sin resultados para "' + escAttr(query) + '".</div>';
+      return;
+    }
+    const results = [];
+    for (let i = 0; i < ids.length; i += 10) {
+      const batch = ids.slice(i, i + 10);
+      const metas = await Promise.all(batch.map(id =>
+        gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + id +
+          '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date')
+      ));
+      results.push(...metas);
+    }
+    // Render search results (don't replace _gmailMessages, show separately)
+    renderGmailMessageList(results, true);
+  } catch (e) {
+    console.error('gmailSearch:', e);
+    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
+  }
+}
+
+function gmailClearSearch() {
+  _gmailSearchMode = false;
+  const inp = document.getElementById('gmail-search-input');
+  if (inp) inp.value = '';
+  updateGmailFilterBtns();
+  renderGmailInboxList();
+}
+
+function gmailSetFilter(filter) {
+  if (_gmailSearchMode) gmailClearSearch();
+  _gmailFilter = filter;
+  updateGmailFilterBtns();
+  renderGmailInboxList();
+}
+
+function updateGmailFilterBtns() {
+  ['all', 'unread', 'read'].forEach(function(f) {
+    const btn = document.getElementById('gmail-filter-' + f);
+    if (!btn) return;
+    btn.className = 'btn bsm' + (_gmailFilter === f && !_gmailSearchMode ? ' bp' : '');
+  });
+  const searchBadge = document.getElementById('gmail-search-badge');
+  if (searchBadge) searchBadge.style.display = _gmailSearchMode ? 'inline' : 'none';
+}
+
 async function gmailMarkAsRead(messageId) {
   if (!messageId || !gmailIsTokenValid()) return;
   try {
@@ -181,6 +243,7 @@ async function gmailMarkAsRead(messageId) {
     if (msg && Array.isArray(msg.labelIds)) {
       msg.labelIds = msg.labelIds.filter(l => l !== 'UNREAD');
       renderGmailInboxList();
+      updateUnreadCount();
     }
   } catch (e) {
     console.warn('gmailMarkAsRead error:', e.message);
@@ -451,6 +514,14 @@ function confirmarEnvioRespuestaEmailPqrs(e) {
 // ----------------------------------------------------------------
 // UI — Gmail panel
 // ----------------------------------------------------------------
+function updateUnreadCount() {
+  const badge = document.getElementById('gmail-unread-count');
+  if (!badge) return;
+  const n = _gmailMessages.filter(m => Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD')).length;
+  badge.textContent = n > 0 ? n : '';
+  badge.style.display = n > 0 ? 'inline' : 'none';
+}
+
 function updateGmailConnectBtn() {
   const btn = document.getElementById('gmail-connect-btn');
   const status = document.getElementById('gmail-connect-status');
@@ -491,9 +562,12 @@ async function gmailLoadInbox() {
   }
   listEl.innerHTML = '<div class="gmail-loading">Cargando correos…</div>';
   _gmailNextPageToken = null;
+  _gmailFilter = 'all';
+  _gmailSearchMode = false;
   try {
     _gmailMessages = await gmailListMessages(50);
     renderGmailInboxList();
+    updateUnreadCount();
   } catch (e) {
     console.error('gmailLoadInbox:', e);
     listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
@@ -505,13 +579,24 @@ async function gmailLoadInbox() {
 }
 
 function renderGmailInboxList() {
+  if (_gmailSearchMode) return; // Don't overwrite search results
+  const msgs = _gmailFilter === 'unread'
+    ? _gmailMessages.filter(m => Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD'))
+    : _gmailFilter === 'read'
+      ? _gmailMessages.filter(m => !Array.isArray(m.labelIds) || !m.labelIds.includes('UNREAD'))
+      : _gmailMessages;
+  renderGmailMessageList(msgs, false);
+}
+
+function renderGmailMessageList(msgs, isSearch) {
   const listEl = document.getElementById('gmail-inbox-list');
   if (!listEl) return;
-  if (!_gmailMessages.length) {
-    listEl.innerHTML = '<div class="gmail-empty">No hay correos recientes en la bandeja.</div>';
+  if (!msgs.length) {
+    const label = _gmailFilter === 'unread' ? 'sin radicar' : _gmailFilter === 'read' ? 'radicados' : 'recientes';
+    listEl.innerHTML = '<div class="gmail-empty">No hay correos ' + (isSearch ? 'para esa búsqueda' : label) + '.</div>';
     return;
   }
-  const rows = _gmailMessages.map(function(msg) {
+  const rows = msgs.map(function(msg) {
     const headers = (msg.payload && msg.payload.headers) || [];
     const from = gmailParseFrom(gmailGetHeader(headers, 'from'));
     const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
@@ -530,10 +615,12 @@ function renderGmailInboxList() {
       '<div class="gmail-row-date">' + escAttr(gmailFmtDate(date)) + '</div>' +
       '</div>';
   }).join('');
-  const moreBtn = _gmailNextPageToken
-    ? '<div style="padding:8px;text-align:center"><button id="gmail-load-more-btn" class="btn bsm" onclick="gmailLoadMore()">Cargar 50 más (' + _gmailMessages.length + ' cargados)</button></div>'
-    : '<div style="padding:6px;text-align:center;font-size:11px;color:var(--tx3)">— ' + _gmailMessages.length + ' correos cargados —</div>';
-  listEl.innerHTML = rows + moreBtn;
+  const footer = isSearch
+    ? '<div style="padding:6px;text-align:center;font-size:11px;color:var(--tx3)">' + msgs.length + ' resultado(s) — <button class="btn bsm" onclick="gmailClearSearch()">← Volver a bandeja</button></div>'
+    : _gmailNextPageToken
+      ? '<div style="padding:8px;text-align:center"><button id="gmail-load-more-btn" class="btn bsm" onclick="gmailLoadMore()">Cargar 50 más (' + _gmailMessages.length + ' cargados)</button></div>'
+      : '<div style="padding:6px;text-align:center;font-size:11px;color:var(--tx3)">— ' + _gmailMessages.length + ' correos cargados —</div>';
+  listEl.innerHTML = rows + footer;
 }
 
 async function gmailOpenMessage(id) {

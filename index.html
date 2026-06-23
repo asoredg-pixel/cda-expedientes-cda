@@ -484,6 +484,19 @@
       </div>
     </div>
     <div id="gmail-panel-body" style="display:none;margin-top:1rem">
+      <!-- Barra de búsqueda y filtros -->
+      <div class="gmail-toolbar">
+        <div class="gmail-search-wrap">
+          <input type="text" id="gmail-search-input" class="gmail-search-input" placeholder="Buscar en toda la bandeja… (asunto, remitente, contenido, N° expediente)" onkeydown="if(event.key==='Enter')gmailSearch(this.value)">
+          <button class="btn bp bsm" onclick="gmailSearch(document.getElementById('gmail-search-input').value)" title="Buscar">🔍</button>
+          <span id="gmail-search-badge" class="gmail-search-badge" style="display:none">Búsqueda activa — <button class="btn bsm" onclick="gmailClearSearch()" style="padding:1px 6px">✕ limpiar</button></span>
+        </div>
+        <div class="gmail-filters">
+          <button id="gmail-filter-all" class="btn bsm bp" onclick="gmailSetFilter('all')">Todos</button>
+          <button id="gmail-filter-unread" class="btn bsm" onclick="gmailSetFilter('unread')">Sin radicar <span id="gmail-unread-count" class="gmail-badge-new" style="font-size:10px"></span></button>
+          <button id="gmail-filter-read" class="btn bsm" onclick="gmailSetFilter('read')">Radicados</button>
+        </div>
+      </div>
       <div class="gmail-layout">
         <div class="gmail-inbox-col">
           <div id="gmail-inbox-list"><div class="gmail-empty">Conecte la bandeja para ver los correos.</div></div>
