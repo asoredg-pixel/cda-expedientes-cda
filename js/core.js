@@ -592,6 +592,11 @@ function submitPqrsRespuesta(expId){
     refreshPqrsDetalleViews(expId);
     renderPqrsOficinaInbox();
     renderSecretariaPqrs();
+    // Sprint E: ofrecer enviar respuesta por correo si medio es electronica y hay token Gmail
+    const ciudadanoEmail=(e._qd_correo||e._pn_correo||'').trim();
+    if(medioResp==='electronica'&&ciudadanoEmail&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+      if(typeof confirmarEnvioRespuestaEmailPqrs==='function')confirmarEnvioRespuestaEmailPqrs(e);
+    }
   };
   go([]);
 }

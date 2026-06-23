@@ -26,7 +26,9 @@
 <script src="js/export.js"></script>
 <script src="js/chat.js"></script>
 <script src="js/pqrs.js"></script>
+<script src="js/gmail.js"></script>
 <script src="js/ingreso.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div id="storage-full-banner" class="storage-full-banner" role="alert">
@@ -467,6 +469,30 @@
 
 <!-- ===== SECRETARÍA — RADICACIÓN PQRSD ===== -->
 <div class="pg" id="pg-sec">
+
+  <!-- Panel bandeja Gmail (secretaría) — Sprint Gmail -->
+  <div class="card gmail-panel-wrap" id="gmail-panel-wrap" style="margin-bottom:1rem;border-left:4px solid #EA4335">
+    <div class="fx" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div class="slbl" style="margin:0">📧 Bandeja de entrada PQRSD</div>
+        <span id="gmail-connect-status" style="font-size:11px;color:var(--tx2)"></span>
+      </div>
+      <div class="fx" style="gap:6px;flex-wrap:wrap">
+        <button id="gmail-connect-btn" class="btn bp bsm" onclick="gmailConnect()">Conectar bandeja</button>
+        <button id="gmail-refresh-btn" class="btn bsm" onclick="gmailLoadInbox()" title="Actualizar bandeja" disabled>↻ Actualizar</button>
+        <button class="btn bsm" onclick="toggleGmailPanel()" id="gmail-toggle-btn">Ver bandeja</button>
+      </div>
+    </div>
+    <div id="gmail-panel-body" style="display:none;margin-top:1rem">
+      <div class="gmail-layout">
+        <div class="gmail-inbox-col">
+          <div id="gmail-inbox-list"><div class="gmail-empty">Conecte la bandeja para ver los correos.</div></div>
+        </div>
+        <div class="gmail-msg-col" id="gmail-msg-view"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="border-left:4px solid var(--pu)">
     <div class="slbl">Nueva radicación PQRSD</div>
     <div class="ssub">Complete los datos del solicitante, adjunte la solicitud (link o referencia) e indique la oficina destino.</div>

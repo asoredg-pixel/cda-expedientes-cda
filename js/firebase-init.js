@@ -34,3 +34,6 @@ window._authSignOut=()=>signOut(auth);
 window._authOnStateChanged=onAuthStateChanged;
 window._firebaseReady=true;
 window.dispatchEvent(new Event('firebase-ready'));
+// OAuth 2.0 Client ID para Gmail API (Google Cloud Console → APIs → Credenciales → ID de cliente web)
+// Formato: XXXXXXXXXX-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com
+window._gmailClientId='TU_CLIENT_ID.apps.googleusercontent.com';

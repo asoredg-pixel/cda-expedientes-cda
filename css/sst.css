@@ -900,3 +900,33 @@ body.sesion-activa #pg-login{display:none!important}
 .encargados-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:12px}
 .encargado-slot{border:1px solid var(--bd);border-radius:var(--r);padding:10px;background:var(--sf2)}
 .encargado-slot-k{font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px}
+
+/* ================================================================
+   Gmail panel — bandeja PQRSD (Secretaría)
+   ================================================================ */
+.gmail-panel-wrap{background:var(--sf)}
+.gmail-layout{display:grid;grid-template-columns:300px 1fr;gap:12px;min-height:400px;max-height:600px}
+@media(max-width:700px){.gmail-layout{grid-template-columns:1fr;max-height:none}}
+.gmail-inbox-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;background:var(--bg)}
+.gmail-msg-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;background:var(--bg);padding:0}
+.gmail-row{padding:10px 12px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .15s}
+.gmail-row:hover{background:var(--sf2)}
+.gmail-row.active{background:color-mix(in srgb,var(--ac) 10%,transparent)}
+.gmail-row.unread .gmail-row-from{font-weight:700;color:var(--tx)}
+.gmail-row-from{font-size:12px;font-weight:500;color:var(--tx);display:flex;align-items:center;gap:4px;margin-bottom:2px}
+.gmail-row-subject{font-size:11px;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gmail-row-date{font-size:10px;color:var(--tx3);margin-top:2px}
+.gmail-badge-new{background:#EA4335;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;margin-left:4px}
+.gmail-att-icon{font-size:11px;margin-left:2px}
+.gmail-empty{padding:24px;text-align:center;color:var(--tx3);font-size:13px}
+.gmail-empty.err{color:#c62828}
+.gmail-loading{padding:16px;text-align:center;color:var(--tx2);font-size:13px}
+.gmail-msg-header{padding:14px 16px 10px;border-bottom:1px solid var(--bd);background:var(--sf)}
+.gmail-msg-subject{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.gmail-msg-meta{font-size:11px;color:var(--tx2);display:flex;flex-wrap:wrap;gap:8px}
+.gmail-msg-actions{padding:8px 12px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--bd);background:var(--sf2)}
+.gmail-atts-bar{padding:6px 12px;background:color-mix(in srgb,#EA4335 8%,transparent);border-bottom:1px solid var(--bd);font-size:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gmail-att-chip{background:var(--sf);border:1px solid var(--bd);border-radius:12px;padding:2px 8px;font-size:11px;color:var(--tx2)}
+.gmail-msg-body{padding:16px;font-size:13px;line-height:1.6;color:var(--tx);overflow-x:auto}
+.gmail-msg-body img{max-width:100%;height:auto}
+.gmail-msg-body a{color:var(--ac)}
