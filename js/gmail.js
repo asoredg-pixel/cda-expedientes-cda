@@ -1041,7 +1041,11 @@ async function openSplitAttViewer(msgId, attId, filename, mimeType) {
   if (chipEl) { chipEl.innerHTML = '<span class="att-ico">⏳</span><span class="att-name">Cargando…</span>'; chipEl.style.opacity = '0.6'; }
   try {
     var b64url = await gmailGetAttachment(msgId, attId);
-    var bytes = gmailDecodeBase64url(b64url);
+    // Decode as raw bytes (NOT via TextDecoder — that corrupts binary files like PDFs)
+    var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var bi = 0; bi < binary.length; bi++) bytes[bi] = binary.charCodeAt(bi);
     var mime = mimeType || 'application/octet-stream';
     var blob = new Blob([bytes], { type: mime });
     var url = URL.createObjectURL(blob);
