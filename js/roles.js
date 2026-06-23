@@ -1,0 +1,617 @@
+﻿// =============================================================================
+// roles.js — Roles, permisos e instructor/encargado management
+// Depende de: constants.js, state.js (runtime).
+// Dependencias de runtime (getInstructoresCfg, syncCfgToStore, saveLS, etc.)
+// se resuelven desde el scope global al momento de llamada.
+// Cargar después de state.js y antes del script principal.
+// =============================================================================
+function esJurisdiccional(){return deptoActivo==='jurisdiccional';}
+function esSecretaria(){return deptoActivo==='secretaria';}
+function esModoCiudadano(){return deptoActivo==='ciudadano';}
+function esModuloOficina(id){return OFICINAS_DEGUV.some(o=>o.id===(id||deptoActivo))&&deptoActivo!=='guaviare'&&deptoActivo!=='secretaria';}
+function esVistaPqrsOficinaDeguv(){
+  if(esModoOficinaDeguv())return true;
+  if(esSecretaria())return true;
+  return false;
+}
+function esOficinaPqrsBasica(){return esModoOficinaDeguv()||esSecretaria();}
+function esOficinaPqrsNca(){return deptoActivo==='guaviare'&&!esModoOficinaDeguv()&&!esSecretaria()&&!esJurisdiccional()&&!esModoResponsable()&&!esModoCiudadano();}
+function getResponsablesOficinaPqrs(oficinaId){
+  oficinaId=oficinaId||getPqrsOficinaActiva();
+  let responsables=getInstructoresOficina(oficinaId).map(i=>i.nombre).filter(Boolean);
+  const enc=getEncargadoOficina(oficinaId);
+  if(enc&&!responsables.includes(enc))responsables.unshift(enc);
+  return responsables;
+}
+function normMedioRecepcionPqrs(v){
+  const s=String(v||'').trim();
+  if(s==='Correo electrónico'||s==='Correo electronico')return 'Correo';
+  return s;
+}
+function mediosRecepcionPqrsOptsHtml(val){
+  const v=normMedioRecepcionPqrs(val||'Ventanilla');
+  return ['Ventanilla','Correo','Teléfono','Web'].map(m=>'<option value="'+escAttr(m)+'"'+(v===m?' selected':'')+'>'+escAttr(m)+'</option>').join('');
+}
+function esAdminActuandoComoSecretaria(){return esAdministrador()&&esSecretaria();}
+function puedeEditarFechaRadicacionPqrs(){return esAdminActuandoComoSecretaria();}
+function updateSecFechaRadicVisibility(){
+  const wrap=document.getElementById('sec-fecha-radic-wrap');
+  if(!wrap)return;
+  wrap.style.display=puedeEditarFechaRadicacionPqrs()?'':'none';
+  const f=document.getElementById('sec-fecha');
+  if(f&&puedeEditarFechaRadicacionPqrs()&&!f.value)f.value=hoy();
+}
+function getContratistasOficinaPqrs(oficinaId){
+  oficinaId=oficinaId||getPqrsOficinaActiva();
+  if(oficinaId==='secretaria'||oficinaId==='admin_deguv')return [];
+  if(oficinaId==='guaviare'){
+    return getInstructoresActivos('guaviare').filter(i=>i.rol==='contratista'&&instructorEsSoloNcaDeguv(i)).map(i=>i.nombre).filter(Boolean);
+  }
+  return getInstructoresOficina(oficinaId).filter(i=>i.rol==='contratista').map(i=>i.nombre).filter(Boolean);
+}
+function oficinaPuedeAsignarPqrs(oficinaId){
+  return getContratistasOficinaPqrs(oficinaId).length>0;
+}
+function oficinaTieneResponsables(oficinaId){
+  oficinaId=oficinaId||getPqrsOficinaActiva();
+  if(oficinaId==='secretaria'||oficinaId==='admin_deguv')return false;
+  if(oficinaId==='guaviare')return getResponsablesNcaDeguv().length>0;
+  return getResponsablesOficinaPqrs(oficinaId).length>0;
+}
+function getPqrsOficinaActiva(){
+  if(esModoOficinaDeguv())return deptoActivo;
+  if(deptoActivo==='guaviare')return 'guaviare';
+  if(esSecretaria())return 'secretaria';
+  return deptoActivo;
+}
+function getOficinaActiva(){
+  const oid=getPqrsOficinaActiva();
+  return OFICINAS_DEGUV.find(o=>o.id===oid)||OFICINAS_DEGUV.find(o=>o.id===deptoActivo)||null;
+}
+function esModoOficinaDeguv(){return esModuloOficina(deptoActivo);}
+function oficinaSinApoyo(id){const o=OFICINAS_DEGUV.find(x=>x.id===(id||deptoActivo));return !!(o&&o.sinApoyo);}
+function labelOficina(id){const o=OFICINAS_DEGUV.find(x=>x.id===id);return o?o.nombre:(id||'');}
+function esModuloEspecialActivo(){return esSecretaria()||esModoCiudadano()||esJurisdiccional()||esModoResponsable()||esModoOficinaDeguv();}
+function esDeptoCfgRestringido(){
+  const d=deptoCfg||getDeptoOperativo();
+  return d==='guainia'||d==='vaupes'||d==='guaviare';
+}
+function cfgEsSoloLectura(){return esCfgDeptoSoloResponsablesPersonas();}
+function esCfgDeptoSoloResponsablesPersonas(){
+  if(esAdminModoGlobal())return false;
+  if(esJurisdiccional())return false;
+  if(esAdministrador())return false;
+  return esDeptoCfgRestringido();
+}
+function cfgPuedeEditarResponsablesPersonas(){
+  if(esJurisdiccional())return false;
+  if(esAdminModoGlobal())return true;
+  if(esAdministrador())return DEPTOS.some(d=>d.id===getRolEfectivo());
+  return esDeptoCfgRestringido();
+}
+function cfgPuedeEditarPersonas(){return cfgPuedeEditarResponsablesPersonas();}
+function esAdministrador(){return rolSesion==='admin';}
+function esAdminFirestore(){return !!(window._usuarioActual&&window._usuarioActual.rol==='admin');}
+function esEncargadoDepartamentalUsuarios(){
+  if(!window._usuarioActual||esAdminFirestore()||esAdministrador())return false;
+  const rol=String(window._usuarioActual.rol||'').trim();
+  return DEPTOS.some(d=>d.id===rol);
+}
+function esVistaUsuariosAdminCompleta(){return esAdminFirestore()||esAdministrador();}
+function puedeGestionarUsuariosAutorizados(){return esAdminFirestore()||esEncargadoDepartamentalUsuarios();}
+function puedeEliminarUsuariosAutorizados(){return esAdminFirestore();}
+function getDeptoGestionUsuariosAutorizados(){
+  if(esEncargadoDepartamentalUsuarios())return String(window._usuarioActual.rol||'').trim();
+  return '';
+}
+function usuariosAutorizadosVisibles(){
+  const d=getDeptoGestionUsuariosAutorizados();
+  if(!d)return _usuariosCache.slice();
+  return _usuariosCache.filter(u=>u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+}
+function usuarioEditablePorEncargado(u){
+  const d=getDeptoGestionUsuariosAutorizados();
+  if(!d)return true;
+  return !!(u&&u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+}
+function esModoContratista(){return rolSesion==='contratista';}
+function esUsuarioContratista(){return !!(window._usuarioActual&&window._usuarioActual.rol==='contratista');}
+function expInstructoresList(e){
+  const raw=e&&e._instructores;
+  if(Array.isArray(raw))return raw.map(String);
+  if(typeof raw==='string'){
+    try{const p=JSON.parse(raw);if(Array.isArray(p))return p.map(String);}catch(x){}
+    return raw.split(/[,;|]/).map(s=>s.trim()).filter(Boolean);
+  }
+  return [];
+}
+function expVisibleParaContratista(e){
+  if(!esUsuarioContratista())return true;
+  const u=window._usuarioActual;
+  if(!u)return false;
+  const nom=String(u.nombre||'').trim().toLowerCase();
+  const em=String(u.email||'').trim().toLowerCase();
+  if(String(e._responsable||'').trim().toLowerCase()===em)return true;
+  if(expInstructoresList(e).some(x=>{const s=String(x||'').trim().toLowerCase();return s===nom||s===em;}))return true;
+  return (e.tasks||[]).some(t=>{
+    const rs=[t.responsable,...(t.responsables||[]),...(t.asignados||[])].filter(Boolean);
+    return rs.some(r=>{const s=String(r).trim().toLowerCase();return s===nom||s===em;});
+  });
+}
+function getSelDeptoVal(){
+  const sel=document.getElementById('sel-depto');
+  if(!sel)return deptoActivo;
+  return sel.value||deptoActivo;
+}
+function esAdminModoGlobal(){return rolSesion==='admin'&&getSelDeptoVal()==='admin';}
+function getRolEfectivo(){
+  if(rolSesion!=='admin')return rolSesion;
+  return getSelDeptoVal();
+}
+function puedeEditarRegSecContratistaCfg(){return esAdminModoGlobal()||cfgPuedeEditarResponsablesPersonas();}
+function esNcaDeguv(){return getRolEfectivo()==='guaviare'&&deptoActivo==='guaviare'&&!esJurisdiccional()&&!esModoResponsable()&&!esSecretaria()&&!esModoOficinaDeguv()&&!esModoCiudadano();}
+function esAdminGuaviare(){return esAdministrador();}
+function esAdminFull(){return esAdministrador();}
+function puedeRestaurarActividad(){return esAdministrador();}
+function guardCfgEditGeneral(){
+  if(cfgEsSoloLectura()){notif('En Configuración solo puede modificar responsables y personas/usuarios de su departamento','err');return true;}
+  return false;
+}
+function updateCfgTabsDepto(){
+  ['info-tecnica','tramites'].forEach(id=>{
+    const tab=document.getElementById('ctab-'+id);
+    if(tab)tab.style.display='';
+  });
+  const nuevoTab=document.getElementById('ctab-nuevo');
+  if(nuevoTab)nuevoTab.style.display=cfgEsSoloLectura()?'none':'';
+  const listasTab=document.getElementById('ctab-listas');
+  if(listasTab)listasTab.textContent=esCfgDeptoSoloResponsablesPersonas()&&!esAdminModoGlobal()?'Responsables y listas':'Configuración base';
+}
+function cfgRestringidoBannerHtml(){return'';}
+function esRolDepartamentalCfg(){const r=getRolEfectivo();return r==='guaviare'||r==='guainia'||r==='vaupes';}
+function puedeGestionarContratistasCfg(){return cfgPuedeEditarResponsablesPersonas();}
+function puedeGestionarEncargadosCfg(){return esAdminModoGlobal();}
+function esVistaEncargadosModuloCfg(){return esAdminModoGlobal();}
+function muestraOficinasContratistaCfg(){return deptoCfg==='guaviare'&&(esAdminModoGlobal()||getRolEfectivo()==='guaviare');}
+function muestraOficinasContratistaIns(deptoId){return deptoId==='guaviare'&&(esAdminModoGlobal()||getRolEfectivo()==='guaviare');}
+function getInstructoresContratistasDepto(deptoId){
+  const c=cfgByDepto[deptoId]||{};
+  return migrateInstructoresList(c.instructores||[]).map((ins,i)=>({ins,i})).filter(x=>x.ins.rol==='contratista');
+}
+function withCfgDepto(deptoId,fn){
+  syncCfgToStore();
+  const prev=deptoCfg;
+  if(deptoId)setCfgPtr(deptoId);
+  try{return fn();}
+  finally{
+    syncCfgToStore();
+    if(prev&&prev!==deptoId)setCfgPtr(prev);
+  }
+}
+function editInstructorDepto(deptoId,i,k,v){withCfgDepto(deptoId,()=>editInstructor(i,k,v));}
+function delInstructorDepto(deptoId,i){
+  withCfgDepto(deptoId,()=>{
+    cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
+    const ins=cfg.instructores[i];
+    if(!ins)return;
+    const esEnc=ins.rol==='encargado_depto'||ins.rol==='encargado_oficina';
+    if(esEnc&&!puedeGestionarEncargadosCfg()){notif('Solo el administrador puede eliminar encargados','err');return;}
+    if(!esEnc&&!instructorEditableContratista(ins)&&!esAdminModoGlobal()){notif('Solo puede eliminar responsables de su departamento','err');return;}
+    const insId=ins.id;
+    confirmEliminar({message:'¿Eliminar a '+escAttr(ins.nombre||'esta persona')+' de la lista?',detail:INST_ROLES[ins.rol]||''},()=>{
+      withCfgDepto(deptoId,()=>{
+        cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
+        const idx=cfg.instructores.findIndex(x=>x.id===insId);
+        if(idx<0){notif('No se encontró el responsable en '+labelDepartamento(deptoId),'err');return;}
+        cfg.instructores.splice(idx,1);
+        syncInstructoresToEncargadosGlobal();
+        saveLS();renderListasCfg();poblarSelResponsable();notif('Eliminado de la lista','ok');
+      });
+    });
+  });
+}
+function delInstructor(i){
+  delInstructorDepto(deptoCfg||getDeptoOperativo(),i);
+}
+function toggleInstructorRegSecDepto(deptoId,i,key,checked){withCfgDepto(deptoId,()=>toggleInstructorRegSec(i,key,checked));}
+function toggleInstructorOficinaDepto(deptoId,i,oficinaId,checked){withCfgDepto(deptoId,()=>toggleInstructorOficina(i,oficinaId,checked));}
+function instructorEditableContratista(ins){
+  if(!ins)return false;
+  if(esAdminModoGlobal())return true;
+  if(!esRolDepartamentalCfg())return false;
+  if(ins.rol!=='contratista')return false;
+  const miDepto=getRolEfectivo();
+  return deptoCfg===miDepto;
+}
+function syncInstructoresToEncargadosGlobal(){
+  if(!esAdministrador())return;
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  DEPTOS.forEach(d=>{
+    const enc=getInstructoresCfg(d.id).find(i=>i.activo!==false&&i.rol==='encargado_depto');
+    encargadosGlobal.departamentos[d.id]={nombre:enc?(enc.nombre||''):'',email:enc?(enc.email||'').toLowerCase().trim():''};
+  });
+  OFICINAS_DEGUV.forEach(o=>{
+    if(o.id==='secretaria'||o.id==='guaviare')return;
+    const enc=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes(o.id));
+    encargadosGlobal.oficinas[o.id]={nombre:enc?(enc.nombre||''):'',email:enc?(enc.email||'').toLowerCase().trim():''};
+  });
+  syncEncargadoNcaGlobalSlots(encargadosGlobal);
+  const secEnc=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes('secretaria'));
+  encargadosGlobal.secretaria={nombre:secEnc?(secEnc.nombre||''):'',email:secEnc?(secEnc.email||'').toLowerCase().trim():''};
+}
+function enforceUniqueEncargadoDepto(idx){
+  cfg.instructores.forEach((x,j)=>{if(j!==idx&&x.rol==='encargado_depto')x.rol='contratista';});
+}
+function enforceUniqueEncargadoOficina(idx,oficinaId){
+  if(!oficinaId)return;
+  cfg.instructores.forEach((x,j)=>{
+    if(j===idx||x.rol!=='encargado_oficina')return;
+    x.oficinas=(x.oficinas||[]).filter(id=>id!==oficinaId);
+    if(!(x.oficinas||[]).length)x.rol='contratista';
+  });
+}
+function esModoResponsable(){return deptoActivo==='responsables'||rolSesion==='responsables';}
+// REG_EDIT_SECS → js/constants.js
+function getInstructorByNombre(nombre){
+  const n=String(nombre||'').trim();
+  if(!n)return null;
+  for(const d of DEPTOS){
+    const ins=getInstructoresCfg(d.id).find(i=>agendaNorm(i.nombre)===agendaNorm(n));
+    if(ins)return {...ins,deptoRef:d.id};
+  }
+  return null;
+}
+function getRegSeccionesResponsableActivo(){
+  if(!esModoResponsable()||!responsableActivo)return null;
+  const ins=getInstructorByNombre(responsableActivo);
+  if(!ins)return [];
+  if(ins.rol==='encargado_depto')return Object.keys(REG_EDIT_SECS);
+  return Array.isArray(ins.regSecciones)?ins.regSecciones.filter(Boolean):[];
+}
+function responsablePuedeVerRegistro(){
+  if(!esModoResponsable())return true;
+  return getRegSeccionesResponsableActivo().length>0;
+}
+function responsablePuedeEditarSec(key){
+  if(esJurisdiccional())return false;
+  if(!esModoResponsable())return true;
+  return getRegSeccionesResponsableActivo().includes(key);
+}
+function regSecHtml(key,html){
+  if(!html)return '';
+  if(esModoResponsable()&&!responsablePuedeEditarSec(key))return '';
+  return html;
+}
+function mergeExpDataPorSecciones(data,prev,secs){
+  if(!prev||!Array.isArray(secs))return data;
+  const out={...data};
+  const has=k=>secs.includes(k);
+  const copyKeys=(keys)=>keys.forEach(k=>{if(prev[k]!==undefined)out[k]=prev[k];});
+  const copyDir=(prefix)=>Object.keys(prev).filter(k=>k.startsWith('_'+prefix+'_')).forEach(k=>{out[k]=prev[k];});
+  const personaKeys=['_tipo_persona','_tipo_solicitud','_tipo_sancionatorio','_es_pqrs','_es_queja','_qd_anonimo','_medio_notificacion','_pn_nombre','_pn_identificacion','_pn_correo','_pn_telefono','_est_com','_ec_nombre','_ec_telefono','_pj_rep_nombre','_pj_rep_identificacion','_pj_rep_correo','_pj_rep_telefono','_pj_empresa','_pj_nit','_pj_correo','_pj_telefono','_qd_nombre','_qd_identificacion','_qd_correo','_qd_telefono','_pi_tipo_persona','_pi_nombre','_pi_identificacion','_pi_correo','_pi_telefono','_pi_rep_nombre','_pi_rep_identificacion','_pi_rep_correo','_pi_rep_telefono','_pi_empresa','_pi_nit','_pi_correo_emp','_pi_telefono_emp','_apoderado','_apo_nombre','_apo_identificacion','_apo_correo','_apo_telefono','_autorizado','_aut_nombre','_aut_identificacion','_aut_correo','_aut_telefono'];
+  const controlKeys=['_fecha','_fechas_estado','_estado','_etapa','_usar_etapa','_resolucion','_fecha_res','_usar_exp_asociados','_expedientes_asociados','_medida_prev','_suspendido','_sancionatorio','_exp_sancionatorio'];
+  const contableKeys=['_facturas_extra','_acuerdo_pago','_acuerdo_dia','_acuerdo_solicitud','_acuerdo_notificacion','_acuerdo_corte','_fac_sol_eval','_fac_sol_eval_ref','_fac_sol_pub','_fac_sol_pub_ref','_fac_sol_venc','_fac_sol_pago','_fac_tra_enabled','_fac_tra_res','_fac_tra_res_ref','_fac_tra_pub','_fac_tra_pub_ref','_fac_tra_venc','_fac_tra_pago','_persuasivo_fecha','_persuasivo_venc','_coactivo_traslado','_enviar_coactivo'];
+  const segKeys=['_conceptos_seg','_etapa_seg','_fecha_seg','_obs_seg'];
+  if(!has('control'))copyKeys(controlKeys);
+  if(!has('persona')){copyKeys(personaKeys);['pn','pj','ec','qd','pi','pi_emp','apo','aut'].forEach(copyDir);}
+  if(!has('detalle')){out._detalle_notas=prev._detalle_notas;out._detalle_general=prev._detalle_general;}
+  if(!has('info_tec'))out._info_tecnica_items=prev._info_tecnica_items;
+  if(!has('contable'))copyKeys(contableKeys);
+  if(!has('normativa'))out._actos_admin=prev._actos_admin;
+  if(!has('seguimiento'))copyKeys(segKeys);
+  if(!has('actividades'))out.tasks=prev.tasks;
+  if(!has('campos'))Object.keys(prev).filter(k=>k.startsWith('f_')).forEach(k=>{out[k]=prev[k];});
+  return out;
+}
+function esSoloLectura(){
+  if(esModoCiudadano())return true;
+  if(esJurisdiccional())return true;
+  if(esModoContratista())return true;
+  if(esModoResponsable())return !responsablePuedeVerRegistro();
+  return false;
+}
+function getDeptoOperativo(){
+  if(esJurisdiccional())return deptoCfg||'guaviare';
+  if(esModoResponsable())return deptoCfg||'guaviare';
+  if(esSecretaria()||esModoOficinaDeguv()||esModoCiudadano())return 'guaviare';
+  return deptoActivo;
+}
+function nombreDeptoOperativo(){const d=DEPTOS.find(x=>x.id===getDeptoOperativo());return d?d.munKey:'Guaviare';}
+function labelDepartamento(id){
+  const d=DEPTOS.find(x=>x.id===id);
+  return d?d.munKey:(id||'');
+}
+function labelDepto(id){
+  if(id==='admin')return 'Administrador';
+  const of=OFICINAS_DEGUV.find(x=>x.id===id);
+  if(of)return of.nombre;
+  if(id==='secretaria')return 'Secretaría DEGUV';
+  if(id==='ciudadano')return 'Consulta ciudadana';
+  const d=DEPTOS.find(x=>x.id===id);
+  return d?d.nombre:(id||'');
+}
+function getAllResponsables(){
+  const set=new Set();
+  const encargados=new Set();
+  Object.values(cfgByDepto||{}).forEach(c=>migrateInstructoresList(c.instructores).forEach(i=>{
+    if(i.nombre&&i.activo!==false){
+      if(i.rol==='encargado_depto')encargados.add(i.nombre);
+      else if(i.rol!=='encargado_oficina')set.add(i.nombre);
+    }
+  }));
+  exps.forEach(e=>(e.tasks||[]).forEach(t=>{if(t.responsable&&!encargados.has(t.responsable))set.add(t.responsable);}));
+  (actividadesLibres||[]).forEach(t=>{if(t.responsable&&!encargados.has(t.responsable))set.add(t.responsable);});
+  return [...set].sort((a,b)=>a.localeCompare(b,'es'));
+}
+function instructorEsAsignableActividad(ins){
+  return !!(ins&&ins.activo!==false&&String(ins.nombre||'').trim()&&ins.rol!=='encargado_oficina'&&ins.rol!=='encargado_depto');
+}
+function getContratistasAsignables(deptoId){
+  return getInstructoresActivos(deptoId||getDeptoOperativo()).filter(instructorEsAsignableActividad).map(i=>i.nombre).filter(Boolean);
+}
+function getContratistasAsignablesTodos(){
+  const set=new Set();
+  const encargados=new Set();
+  Object.values(cfgByDepto||{}).forEach(c=>migrateInstructoresList(c.instructores).forEach(i=>{
+    if(i.nombre&&i.activo!==false&&i.rol==='encargado_depto')encargados.add(i.nombre);
+  }));
+  DEPTOS.forEach(d=>getContratistasAsignables(d.id).forEach(n=>set.add(n)));
+  exps.forEach(e=>(e.tasks||[]).forEach(t=>{if(t.responsable&&!encargados.has(t.responsable))set.add(t.responsable);}));
+  (actividadesLibres||[]).forEach(t=>{if(t.responsable&&!encargados.has(t.responsable))set.add(t.responsable);});
+  return [...set].sort((a,b)=>a.localeCompare(b,'es'));
+}
+function getResponsablesForTrasladoActividad(expId,taskId){
+  const e=getExpById(expId);
+  const t=getTaskAny(expId,taskId);
+  if(e&&t&&taskEsAtenderPqrs(t,e))return getResponsablesNcaDeguv();
+  const depto=(t&&(t.depto||(e&&e._depto)))||deptoActivo;
+  return getContratistasAsignables(depto);
+}
+function esTareaDelEncargado(t,deptoId){
+  if(!t||!t.responsable)return false;
+  const enc=getEncargadoDepto(deptoId||t.depto||deptoActivo);
+  return !!enc&&t.responsable===enc;
+}
+function getActDeptRespFilter(){
+  const sel=document.getElementById('act-dept-resp-sel');
+  if(!sel||!esVistaActividadesDepto())return null;
+  const v=sel.value;
+  if(v==='__all__')return null;
+  return v||getEncargadoDepto(deptoActivo)||null;
+}
+function ensureEncargadoActivo(){
+  if(esModoResponsable()||esJurisdiccional())return;
+  const enc=getEncargadoDepto(deptoActivo);
+  if(enc){
+    responsableActivo=enc;
+    try{localStorage.setItem('sst_responsable',enc);}catch(e){}
+  }
+}
+// INST_ROLES → js/constants.js
+function migrateInstructoresList(arr){
+  return (arr||[]).map((item,i)=>{
+    if(typeof item==='string')return{id:'ins_'+String(i)+'_'+String(item).replace(/\W/g,'').slice(0,20),nombre:item,email:'',rol:'contratista',activo:true,regSecciones:[],oficinas:[]};
+    const o={...item};
+    if(!o.id)o.id='ins_'+(o.nombre||'x').replace(/\W/g,'').slice(0,16)+'_'+i;
+    if(!o.email)o.email='';
+    if(!o.rol)o.rol=o.rol==='responsable_depto'?'encargado_depto':(o.rol||'contratista');
+    if(o.activo==null)o.activo=true;
+    if(!Array.isArray(o.regSecciones))o.regSecciones=[];
+    if(!Array.isArray(o.oficinas))o.oficinas=[];
+    return o;
+  });
+}
+function getDefaultEncargadosGlobal(){
+  return{
+    departamentos:{guaviare:{nombre:'',email:''},guainia:{nombre:'',email:''},vaupes:{nombre:'',email:''}},
+    oficinas:{guaviare:{nombre:'',email:''},oap_deguv:{nombre:'',email:''},rn_deguv:{nombre:'',email:''},admin_deguv:{nombre:'',email:''},ds_deguv:{nombre:'',email:''}},
+    secretaria:{nombre:'',email:''}
+  };
+}
+function normalizeEncargadosGlobal(v){
+  const d=getDefaultEncargadosGlobal();
+  if(!v||typeof v!=='object')return d;
+  ['departamentos','oficinas'].forEach(k=>{
+    if(v[k])Object.keys(d[k]).forEach(id=>{
+      if(v[k][id])d[k][id]={nombre:String(v[k][id].nombre||''),email:String(v[k][id].email||'').toLowerCase().trim()};
+    });
+  });
+  if(v.secretaria)d.secretaria={nombre:String(v.secretaria.nombre||''),email:String(v.secretaria.email||'').toLowerCase().trim()};
+  syncEncargadoNcaGlobalSlots(d);
+  return d;
+}
+function syncEncargadoNcaGlobalSlots(eg){
+  if(!eg||!eg.departamentos||!eg.oficinas)return;
+  const dep=eg.departamentos.guaviare||{nombre:'',email:''};
+  const ofi=eg.oficinas.guaviare||{nombre:'',email:''};
+  const src=dep.nombre?dep:(ofi.nombre?ofi:{nombre:'',email:''});
+  eg.departamentos.guaviare={nombre:src.nombre,email:src.email};
+  eg.oficinas.guaviare={nombre:src.nombre,email:src.email};
+}
+function setEncargadoNcaUnificado(campo,val){
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  ['departamentos','oficinas'].forEach(grupo=>{
+    if(!encargadosGlobal[grupo].guaviare)encargadosGlobal[grupo].guaviare={nombre:'',email:''};
+    encargadosGlobal[grupo].guaviare[campo]=campo==='email'?String(val||'').toLowerCase().trim():String(val||'').trim();
+  });
+}
+function upsertInstructorEncargado(deptoId,nombre,email,rol,oficinas){
+  if(!deptoId||!nombre)return;
+  const c=cfgByDepto[deptoId];
+  if(!c)return;
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  email=String(email||'').toLowerCase().trim();
+  let ins=c.instructores.find(i=>email&&String(i.email||'').toLowerCase()===email);
+  if(!ins)ins=c.instructores.find(i=>agendaNorm(i.nombre)===agendaNorm(nombre));
+  if(!ins){ins={id:'ins_'+Date.now(),nombre,email,rol,activo:true,regSecciones:[],oficinas:[]};c.instructores.push(ins);}
+  else{ins.nombre=nombre;if(email)ins.email=email;ins.activo=true;}
+  ins.rol=rol;
+  if(rol==='encargado_depto')c.instructores.forEach((x,j)=>{if(x!==ins&&x.rol==='encargado_depto')x.rol='contratista';});
+  if(Array.isArray(oficinas))ins.oficinas=oficinas.slice();
+}
+function removeEncargadoInstructorDepto(deptoId){
+  const c=cfgByDepto[deptoId];
+  if(!c)return;
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  c.instructores=c.instructores.filter(ins=>ins.rol!=='encargado_depto');
+}
+function removeEncargadoInstructorOficina(oficinaId){
+  const c=cfgByDepto.guaviare;
+  if(!c)return;
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  for(let i=c.instructores.length-1;i>=0;i--){
+    const ins=c.instructores[i];
+    if(ins.rol!=='encargado_oficina')continue;
+    const ofs=ins.oficinas||[];
+    if(!ofs.includes(oficinaId))continue;
+    if(ofs.length<=1)c.instructores.splice(i,1);
+    else ins.oficinas=ofs.filter(x=>x!==oficinaId);
+  }
+}
+function encargadoSlotTieneData(data){
+  return !!(data&&String(data.nombre||'').trim());
+}
+function syncEncargadosGlobalToInstructores(){
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  const nca=encargadosGlobal.departamentos.guaviare;
+  if(encargadoSlotTieneData(nca)){
+    upsertInstructorEncargado('guaviare',nca.nombre,nca.email,'encargado_depto',['guaviare']);
+  }else{
+    removeEncargadoInstructorDepto('guaviare');
+  }
+  Object.entries(encargadosGlobal.oficinas||{}).forEach(([ofiId,data])=>{
+    if(ofiId==='guaviare'){
+      if(encargadoSlotTieneData(data))upsertInstructorEncargado('guaviare',data.nombre,data.email,'encargado_depto',['guaviare']);
+      return;
+    }
+    if(encargadoSlotTieneData(data))upsertInstructorEncargado('guaviare',data.nombre,data.email,'encargado_oficina',[ofiId]);
+    else removeEncargadoInstructorOficina(ofiId);
+  });
+  ['guainia','vaupes'].forEach(deptoId=>{
+    const data=encargadosGlobal.departamentos[deptoId];
+    if(encargadoSlotTieneData(data))upsertInstructorEncargado(deptoId,data.nombre,data.email,'encargado_depto',[]);
+    else removeEncargadoInstructorDepto(deptoId);
+  });
+  const sec=encargadosGlobal.secretaria;
+  if(encargadoSlotTieneData(sec))upsertInstructorEncargado('guaviare',sec.nombre,sec.email,'encargado_oficina',['secretaria']);
+  else removeEncargadoInstructorOficina('secretaria');
+}
+function rolEsEncargadoModulo(rol){
+  rol=String(rol||'').trim();
+  if(rol==='secretaria')return{type:'secretaria'};
+  if(DEPTOS.some(d=>d.id===rol))return{type:'departamento',id:rol};
+  if(OFICINAS_DEGUV.some(o=>o.id===rol&&o.id!=='guaviare'&&o.id!=='secretaria'))return{type:'oficina',id:rol};
+  return null;
+}
+function syncEncargadosDesdeUsuariosAutorizados(){
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  const vacio={nombre:'',email:''};
+  encargadosGlobal.secretaria={...vacio};
+  DEPTOS.forEach(d=>{encargadosGlobal.departamentos[d.id]={...vacio};});
+  Object.keys(encargadosGlobal.oficinas||{}).forEach(id=>{encargadosGlobal.oficinas[id]={...vacio};});
+  (_usuariosCache||[]).filter(u=>u.activo!==false).forEach(u=>{
+    const mod=rolEsEncargadoModulo(u.rol);
+    if(!mod)return;
+    const data={nombre:String(u.nombre||'').trim(),email:String(u.email||'').trim().toLowerCase()};
+    if(!data.email)return;
+    if(mod.type==='secretaria')encargadosGlobal.secretaria=data;
+    else if(mod.type==='departamento')encargadosGlobal.departamentos[mod.id]=data;
+    else if(mod.type==='oficina')encargadosGlobal.oficinas[mod.id]=data;
+  });
+  syncEncargadoNcaGlobalSlots(encargadosGlobal);
+  syncEncargadosGlobalToInstructores();
+}
+function syncResponsablesDesdeUsuariosAutorizados(){
+  (_usuariosCache||[]).filter(u=>u.activo!==false&&u.rol==='responsables').forEach(u=>{
+    const email=String(u.email||'').trim().toLowerCase();
+    const nombre=String(u.nombre||'').trim();
+    const deptoId=String(u.deptoResponsable||'').trim();
+    if(!email||!nombre||!deptoId||!cfgByDepto[deptoId])return;
+    const c=cfgByDepto[deptoId];
+    c.instructores=migrateInstructoresList(c.instructores||[]);
+    let ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
+    if(ins){
+      if(ins.rol!=='encargado_depto'&&ins.rol!=='encargado_oficina'){
+        ins.nombre=nombre;ins.email=email;ins.activo=true;ins.rol='contratista';
+      }
+    }else{
+      c.instructores.push({id:'ins_'+Date.now()+'_'+deptoId,nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
+    }
+  });
+}
+async function aplicarSyncUsuariosAutorizados(opts){
+  opts=opts||{};
+  syncEncargadosDesdeUsuariosAutorizados();
+  syncResponsablesDesdeUsuariosAutorizados();
+  syncCfgToStore();
+  _saveLSLocal();
+  if(!opts.skipSave&&window._db&&window._fsSetDoc){
+    try{await saveFirestore();}catch(err){console.error('Error sincronizando encargados/responsables:',err);}
+  }
+  if(!opts.silent&&(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')))renderListasCfg();
+}
+function findInstructorByEmail(email){
+  email=String(email||'').toLowerCase().trim();
+  if(!email)return null;
+  for(const deptoId of DEPTOS.map(d=>d.id)){
+    const list=migrateInstructoresList((cfgByDepto[deptoId]||{}).instructores||[]);
+    const hit=list.find(i=>String(i.email||'').toLowerCase()===email);
+    if(hit)return{...hit,deptoId};
+  }
+  return null;
+}
+function resolveRolFromEmail(email){
+  email=String(email||'').toLowerCase().trim();
+  if(!email)return null;
+  if(email===ADMIN_GMAIL.toLowerCase())return{rolId:'admin',responsable:''};
+  encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
+  if(encargadosGlobal.secretaria.email===email)return{rolId:'secretaria',responsable:''};
+  for(const [ofiId,data] of Object.entries(encargadosGlobal.oficinas||{})){
+    if(data&&data.email===email)return{rolId:ofiId,responsable:''};
+  }
+  for(const [depId,data] of Object.entries(encargadosGlobal.departamentos||{})){
+    if(data&&data.email===email)return{rolId:depId,responsable:''};
+  }
+  const ins=findInstructorByEmail(email);
+  if(ins){
+    if(ins.rol==='encargado_depto'&&DEPTOS.some(d=>d.id===ins.deptoId))return{rolId:ins.deptoId,responsable:''};
+    if(ins.rol==='encargado_oficina'&&(ins.oficinas||[]).length)return{rolId:ins.oficinas[0],responsable:''};
+    return{rolId:'responsables',responsable:ins.nombre||''};
+  }
+  return null;
+}
+function getInstructoresOficina(oficinaId){
+  return getInstructoresActivos('guaviare').filter(i=>{
+    const ofs=i.oficinas||[];
+    return ofs.length&&ofs.includes(oficinaId)&&instructorEsAsignableActividad(i);
+  });
+}
+function getEncargadoOficina(oficinaId){
+  oficinaId=oficinaId||deptoActivo;
+  const ins=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes(oficinaId));
+  if(ins)return ins.nombre;
+  if(oficinaId==='guaviare'){
+    const encDept=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_depto'&&String(i.nombre||'').trim());
+    if(encDept)return encDept.nombre;
+  }
+  if(oficinaSinApoyo(oficinaId)){
+    const solo=getInstructoresOficina(oficinaId)[0];
+    if(solo)return solo.nombre;
+  }
+  return '';
+}
+function esPqrsSecretaria(e){
+  return !!(e&&e._radicado_secretaria&&esTramitePqrs(e._tramite));
+}
+function normalizePqrsOficinaFields(e){
+  if(!e)return e;
+  if(!e._pqrs_historial||!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  if(!Array.isArray(e._pqrs_comentarios))e._pqrs_comentarios=[];
+  if(!Array.isArray(e._pqrs_avisos_oficina))e._pqrs_avisos_oficina=[];
+  if(!Array.isArray(e._pqrs_respuesta_soportes))e._pqrs_respuesta_soportes=[];
+  if(e._pqrs_informativa===undefined)e._pqrs_informativa=false;
+  if(!e._pqrs_estado_oficina&&e._pqrs_oficina)e._pqrs_estado_oficina='pendiente';
+  if(e._pqrs_oficina&&esTramitePqrs(e._tramite)&&!e._radicado_secretaria)e._radicado_secretaria=true;
+  if(e.f_f2)e.f_f2=normMedioRecepcionPqrs(e.f_f2);
+  return e;
+}
