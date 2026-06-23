@@ -827,12 +827,13 @@ function renderGmailMessageView(msg) {
         if (a.attachmentId) {
           return '<button id="att-chip-' + escAttr(a.attachmentId) + '" class="gmail-att-chip" ' +
             'onclick="gmailViewAttachment(\'' + escAttr(msg.id) + '\',\'' + escAttr(a.attachmentId) + '\',\'' + escAttr(a.filename) + '\',\'' + escAttr(a.mimeType || '') + '\')" ' +
-            'title="Clic para abrir ' + escAttr(a.filename) + ' en nueva pestaña" ' +
-            'style="cursor:pointer;border:1px solid var(--bd);background:var(--bg);border-radius:12px;padding:3px 10px;font-size:12px">' +
-            ico + ' ' + escAttr(a.filename) + ' <em style="color:var(--tx3)">(' + sizeStr + ')</em>' +
+            'title="' + escAttr(a.filename) + ' (' + sizeStr + ')">' +
+            '<span class="att-ico">' + ico + '</span>' +
+            '<span class="att-name">' + escAttr(a.filename) + '</span>' +
+            '<em class="att-size">(' + sizeStr + ')</em>' +
             '</button>';
         }
-        return '<span class="gmail-att-chip">' + ico + ' ' + escAttr(a.filename) + ' <em>(' + sizeStr + ')</em></span>';
+        return '<span class="gmail-att-chip"><span class="att-ico">' + ico + '</span><span class="att-name">' + escAttr(a.filename) + '</span><em class="att-size">(' + sizeStr + ')</em></span>';
       }).join(' ') +
       '</div>'
     : '';

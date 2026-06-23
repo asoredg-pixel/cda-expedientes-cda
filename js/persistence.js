@@ -233,18 +233,19 @@ async function loadLS(){
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
     }
-    const [deptoSnaps,expSnaps]=await Promise.all([
-      Promise.all(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
+    const [deptoResults,expSnaps]=await Promise.all([
+      Promise.allSettled(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
       Promise.all(DEPTOS_FIRESTORE.map(depto=>loadExpedientesDepto(depto)))
     ]);
     exps=[];
     cfgByDepto={};
-    deptoSnaps.forEach((snap,i)=>{
+    deptoResults.forEach((result,i)=>{
       const depto=DEPTOS_FIRESTORE[i];
-      if(snap.exists()){
-        const data=snap.data();
+      if(result.status==='fulfilled'&&result.value.exists()){
+        const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
       }else{
+        if(result.status==='rejected')console.warn('Sin acceso al departamento (normal para rol restringido):',depto);
         cfgByDepto[depto]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));
       }
     });
@@ -519,7 +520,7 @@ function suscribirCfgSync(deptoId){
   const db=window._db;
   deptoId=deptoId||deptoCfg||deptoActivo||'guaviare';
   if(!db||!window._fsOnSnapshot||!window._fsDoc)return;
-  if(!DEPTOS_FIRESTORE.includes(deptoId))return;
+  if(!DEPTOS_FIRESTORE.includes(deptoId))deptoId='guaviare';
   desuscribirCfgSync();
   _cfgUnsub=window._fsOnSnapshot(window._fsDoc(db,'departamentos',deptoId),function(snap){
     if(_localSaving||!snap.exists())return;
@@ -539,8 +540,9 @@ function initRealtimeSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   if(_fsUnsub){try{_fsUnsub();}catch(e){}_fsUnsub=null;}
-  const depto=deptoActivo||'guaviare';
-  if(!DEPTOS_FIRESTORE.includes(depto))return;
+  // Secretaría y oficinas DEGUV operan sobre guaviare aunque su deptoActivo sea otro valor
+  let depto=deptoActivo||'guaviare';
+  if(!DEPTOS_FIRESTORE.includes(depto))depto='guaviare';
   _fsUnsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
     if(_localSaving)return;
     const changes=snap.docChanges();

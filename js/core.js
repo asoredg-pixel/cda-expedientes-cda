@@ -8438,7 +8438,7 @@ function updateDeptoUI(){
   const tabCfg=document.getElementById('tab-cfg');if(tabCfg)tabCfg.classList.toggle('tab-juris-off',juris||resp||sec||ciudadano||ofi||esModoContratista());
   // Secretaría y NCA necesitan consulta (búsqueda general de PQRSD y expedientes)
   // Solo se oculta para: responsable individual, ciudadano, y oficinas deguv (tienen su propia bandeja)
-  const tabCons=document.getElementById('tab-cons');if(tabCons)tabCons.classList.toggle('tab-resp-reg-off',resp||ciudadano||ofi);
+  const tabCons=document.getElementById('tab-cons');if(tabCons)tabCons.classList.toggle('tab-resp-reg-off',resp||ciudadano||ofi||sec);
   document.querySelectorAll('.tab-modulo-only').forEach(el=>el.classList.remove('on'));
   const tabSec=document.getElementById('tab-sec');if(tabSec)tabSec.classList.toggle('on',sec);
   const tabOfi=document.getElementById('tab-pqrs-ofi');if(tabOfi)tabOfi.classList.toggle('on',ofiVista);
