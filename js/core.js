@@ -2289,18 +2289,26 @@ function ensureTareaPqrsNca(e){
   if(!Array.isArray(e.tasks))e.tasks=[];
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   const prior=!!e._pqrs_prioritaria;
+  // Resolver encargado antes de verificar tarea existente
+  const enc=String(e._pqrs_responsable_oficina||'').trim()||getEncargadoOficina('guaviare')||'';
+  if(enc&&!e._pqrs_responsable_oficina)e._pqrs_responsable_oficina=enc;
   let existIdx=e.tasks.findIndex(t=>t&&!t.eliminada&&String(t.actividad||'').startsWith('Atender PQRSD'));
   if(existIdx>=0){
     const exist=normalizeTask(e.tasks[existIdx]);
     exist.prioritaria=prior;
     exist.vence=vence;
     exist.plazoDias=plazoDias;
+    // Actualizar responsable si aún no tiene uno asignado
+    if(enc&&!exist.responsable){
+      exist.responsable=enc;
+      exist.responsables=[enc];
+      if(!Array.isArray(exist.asignados)||!exist.asignados.length){
+        exist.asignados=[{nombre:enc,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
+      }
+    }
     e.tasks[existIdx]=exist;
     return;
   }
-  // Usar el encargado de la oficina NCA (guaviare) — incluye encargado_oficina y encargado_depto
-  const enc=String(e._pqrs_responsable_oficina||'').trim()||getEncargadoOficina('guaviare')||'';
-  if(enc&&!e._pqrs_responsable_oficina)e._pqrs_responsable_oficina=enc;
   const actNombre='Atender PQRSD: '+(e.f_f1||e._tipo_solicitud||'Solicitud');
   const tk=normalizeTask({
     id:genTaskId(),actividad:actNombre,detalle:e._pqrs_detalle||e._detalle_general||'',desc:actNombre,

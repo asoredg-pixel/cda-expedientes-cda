@@ -239,15 +239,44 @@ function updateGmailFilterBtns() {
   if (clearBtn) clearBtn.style.display = _gmailSearchMode ? 'inline-flex' : 'none';
 }
 
+// Obtiene o crea la etiqueta "Radicado PQRSD" en Gmail; cachea el ID en sessionStorage
+async function gmailGetOrCreateLabel(labelName) {
+  const cacheKey = 'sst_gmail_label_' + labelName.replace(/\s/g, '_');
+  try { const c = sessionStorage.getItem(cacheKey); if (c) return c; } catch (e) {}
+  const token = gmailGetToken();
+  // Listar etiquetas existentes
+  const list = await fetch(GMAIL_API_BASE + '/labels', { headers: { 'Authorization': 'Bearer ' + token } });
+  const listData = await list.json();
+  const existing = (listData.labels || []).find(function(l) { return l.name === labelName; });
+  if (existing) {
+    try { sessionStorage.setItem(cacheKey, existing.id); } catch (e) {}
+    return existing.id;
+  }
+  // Crear etiqueta nueva
+  const createRes = await fetch(GMAIL_API_BASE + '/labels', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: labelName, labelListVisibility: 'labelShow', messageListVisibility: 'show' })
+  });
+  const label = await createRes.json();
+  try { sessionStorage.setItem(cacheKey, label.id); } catch (e) {}
+  return label.id;
+}
+
 async function gmailMarkAsRead(messageId) {
   if (!messageId || !gmailIsTokenValid()) return;
   try {
-    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify',
-      { removeLabelIds: ['UNREAD'] });
-    // Update local state
-    const msg = _gmailMessages.find(m => m.id === messageId);
+    // Obtener etiqueta "Radicado PQRSD" para aplicarla junto con quitar UNREAD
+    var radicadoLabelId = '';
+    try { radicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch (e) { console.warn('Label:', e.message); }
+    var modify = { removeLabelIds: ['UNREAD'] };
+    if (radicadoLabelId) modify.addLabelIds = [radicadoLabelId];
+    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify', modify);
+    // Actualizar estado local
+    const msg = _gmailMessages.find(function(m) { return m.id === messageId; });
     if (msg && Array.isArray(msg.labelIds)) {
-      msg.labelIds = msg.labelIds.filter(l => l !== 'UNREAD');
+      msg.labelIds = msg.labelIds.filter(function(l) { return l !== 'UNREAD'; });
+      if (radicadoLabelId && !msg.labelIds.includes(radicadoLabelId)) msg.labelIds.push(radicadoLabelId);
       renderGmailInboxList();
       updateUnreadCount();
     }
@@ -342,6 +371,29 @@ async function gmailGetAttachment(messageId, attachmentId) {
   const data = await gmailApiCall('GET',
     GMAIL_API_BASE + '/messages/' + messageId + '/attachments/' + attachmentId);
   return data.data; // base64url encoded
+}
+
+// Abre un adjunto directamente en el navegador (nueva pestaña para PDF, imagen inline)
+async function gmailViewAttachment(msgId, attId, filename, mimeType) {
+  if (!gmailIsTokenValid()) { notif('Reconecte la bandeja para ver adjuntos', 'err'); return; }
+  const chipEl = document.getElementById('att-chip-' + attId);
+  if (chipEl) { chipEl.textContent = '⏳ ' + filename; chipEl.style.opacity = '0.6'; }
+  try {
+    const b64url = await gmailGetAttachment(msgId, attId);
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    // Limpiar el object URL después de un momento
+    setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
+  } catch (e) {
+    notif('Error al abrir adjunto: ' + e.message, 'err');
+  } finally {
+    if (chipEl) { chipEl.textContent = '📎 ' + filename; chipEl.style.opacity = ''; }
+  }
 }
 
 // ----------------------------------------------------------------
@@ -737,7 +789,20 @@ function renderGmailMessageView(msg) {
   const attsHtml = atts.length
     ? '<div class="gmail-atts-bar">' +
       '<span style="font-weight:600;font-size:12px">Adjuntos (' + atts.length + '):</span> ' +
-      atts.map(a => '<span class="gmail-att-chip">📎 ' + escAttr(a.filename) + ' <em>(' + (a.size > 1024 ? Math.round(a.size / 1024) + ' KB' : a.size + ' B') + ')</em></span>').join('') +
+      atts.map(function(a) {
+        var sizeStr = a.size > 1024 ? Math.round(a.size / 1024) + ' KB' : (a.size || '?') + ' B';
+        var isImg = (a.mimeType || '').startsWith('image/');
+        var ico = isImg ? '🖼️' : ((a.mimeType || '').includes('pdf') ? '📄' : '📎');
+        if (a.attachmentId) {
+          return '<button id="att-chip-' + escAttr(a.attachmentId) + '" class="gmail-att-chip" ' +
+            'onclick="gmailViewAttachment(\'' + escAttr(msg.id) + '\',\'' + escAttr(a.attachmentId) + '\',\'' + escAttr(a.filename) + '\',\'' + escAttr(a.mimeType || '') + '\')" ' +
+            'title="Clic para abrir ' + escAttr(a.filename) + ' en nueva pestaña" ' +
+            'style="cursor:pointer;border:1px solid var(--bd);background:var(--bg);border-radius:12px;padding:3px 10px;font-size:12px">' +
+            ico + ' ' + escAttr(a.filename) + ' <em style="color:var(--tx3)">(' + sizeStr + ')</em>' +
+            '</button>';
+        }
+        return '<span class="gmail-att-chip">' + ico + ' ' + escAttr(a.filename) + ' <em>(' + sizeStr + ')</em></span>';
+      }).join(' ') +
       '</div>'
     : '';
   viewEl.innerHTML =
