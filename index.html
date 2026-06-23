@@ -7727,20 +7727,34 @@ function chatConvCompletamenteLeida(cid){
   const msgs=chatConvMessages(cid);
   return msgs.length>0&&msgs.every(chatMensajeLeidoPorDestinatario);
 }
-function purgeChatConversacionesLeidas(){
+async function purgeChatConversacionesLeidas(){
   if(!document.body.classList.contains('sesion-activa'))return false;
   if(!Array.isArray(chatMensajes)||!chatMensajes.length)return false;
   const convIds=new Set();
   chatMensajes.forEach(m=>convIds.add(chatConvId(m.fromKey,m.toKey)));
-  const dropIds=new Set();
+  const dropMsgs=[];
   convIds.forEach(cid=>{
     if(!chatConvCompletamenteLeida(cid))return;
     const msgs=chatConvMessages(cid);
     const last=msgs[msgs.length-1];
-    if(diasDesdeIso(last.ts||last.fecha)>=RETENCION_LEIDOS_DIAS)msgs.forEach(m=>dropIds.add(m.id));
+    if(diasDesdeIso(last.ts||last.fecha)>=RETENCION_LEIDOS_DIAS)msgs.forEach(m=>dropMsgs.push(m));
   });
-  if(!dropIds.size)return false;
+  if(!dropMsgs.length)return false;
+  const dropIds=new Set(dropMsgs.map(m=>m.id));
   chatMensajes=chatMensajes.filter(m=>!dropIds.has(m.id));
+  const db=window._db;
+  if(db&&window._fsDeleteDoc&&window._fsDoc){
+    try{
+      await Promise.all(dropMsgs.map(function(m){
+        const convId=m.convId||chatConvId(m.fromKey,m.toKey);
+        const fsConvId=chatConvFirestoreId(convId);
+        return window._fsDeleteDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',m.id));
+      }));
+    }catch(err){
+      console.error('purgeChatConversacionesLeidas:',err);
+      return false;
+    }
+  }
   return true;
 }
 function purgeBandejaLeidasAntiguas(){
@@ -17335,7 +17349,7 @@ async function chatMarcarLeido(convId){
   }
 }
 function renderChatBadge(){
-  purgeChatConversacionesLeidas();
+  void purgeChatConversacionesLeidas();
   const n=chatUnreadCount();
   const b=document.getElementById('chat-fab-badge');
   if(!b)return;
