@@ -2,7 +2,12 @@ rules_version = '2';
 
 // =============================================================================
 // Reglas de seguridad — SST (cda-expedientes)
-// Colecciones: usuarios/{email}, departamentos/{deptoId}, sistema/global
+// Colecciones:
+//   usuarios/{email}
+//   departamentos/{deptoId}             — doc padre: cfg, updatedAt
+//   departamentos/{deptoId}/expedientes/{expId}
+//   sistema/global                      — personas, actividadesLibres, agenda, etc.
+//   chats/{convId}/mensajes/{mensajeId}
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -181,7 +186,8 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // departamentos/{deptoId} — cfg, chat, inbox (+ subcolección expedientes/)
+    // departamentos/{deptoId} — doc padre: cfg, updatedAt
+    // Subcolección: departamentos/{deptoId}/expedientes/{expId}
     // IDs inválidos: siempre denegado (no entran en puedeLeer/Escribir).
     // -------------------------------------------------------------------------
     match /departamentos/{deptoId} {
@@ -235,33 +241,36 @@ service cloud.firestore {
 // CASOS NO CUBIERTOS — requieren Cloud Functions u otra validación server-side
 // =============================================================================
 //
-// 1. Validación campo a campo dentro de departamentos/{deptoId}.expedientes[]
-//    (p. ej. que un responsable solo modifique expedientes asignados, o solo
-//    ciertas claves _* del objeto). Las rules solo controlan acceso al documento
-//    completo del departamento.
+// 1. Validación campo a campo dentro de departamentos/{deptoId}/expedientes/{expId}
+//    (p. ej. que un responsable solo modifique expedientes asignados a su email,
+//    o solo ciertas claves _* del documento). Las rules solo controlan acceso
+//    al documento completo de la subcolección.
 //
 // 2. Validación de integridad de departamentos/{deptoId}.cfg (instructores[],
 //    tramites[], listas) — tamaño, esquema, roles permitidos en instructores.
 //
-// 3. Coherencia entre pqrsd[] y expedientes[] (pqrsd es subconjunto derivado).
+// 3. Escrituras parciales en sistema/global: un encargado de Guainía puede
+//    sobrescribir personas[] o actividadesLibres[] globales si el cliente
+//    envía el objeto completo. Las rules no distinguen campos dentro del doc.
 //
-// 4. Escrituras parciales en sistema/global: un encargado de Guainía puede
-//    sobrescribir personas[] o chatMensajes[] globales si el cliente envía el
-//    objeto completo. Las rules no distinguen campos dentro del documento.
+// 4. Rate limiting, auditoría, detección de payloads anormalmente grandes.
 //
-// 5. Rate limiting, auditoría, detección de payloads anormalmente grandes.
-//
-// 6. Validación de que usuarios/{email} no cambie de rol/deptoResponsable fuera
+// 5. Validación de que usuarios/{email} no cambie de rol/deptoResponsable fuera
 //    del flujo UI (p. ej. responsable promovido a admin vía API directa) más allá
 //    de las comprobaciones básicas del encargado departamental.
 //
-// 7. Sincronización usuariosIndex en sistema/global vs colección usuarios/
+// 6. Sincronización usuariosIndex en sistema/global vs colección usuarios/
 //    (consistencia denormalizada).
 //
-// 8. Acceso de contratista/responsable limitado a expedientes concretos dentro
-//    del array expedientes[] (regSecciones, tareas asignadas por email).
+// 7. Acceso de contratista/responsable limitado a expedientes concretos dentro
+//    de departamentos/{deptoId}/expedientes/ (regSecciones, tareas por email).
 //
-// 9. Validación de updatedAt / creadoEn / tipos de datos en todos los campos.
+// 8. Validación de updatedAt / creadoEn / tipos de datos en todos los campos.
 //
-// 10. Bloqueo de lectura de usuarios/{email} ajenos para roles que hoy no lo
-//     necesitan (las rules permiten read propio + admin + encargado dept.).
+// 9. Bloqueo de lectura de usuarios/{email} ajenos para roles que hoy no lo
+//    necesitan (las rules permiten read propio + admin + encargado dept.).
+//
+// 10. Restricción de chats/{convId}/mensajes a solo los participantes del convId:
+//     actualmente cualquier isActiveUser() puede leer/crear mensajes en cualquier
+//     conversación. Para restricción fina se requeriría que el convId incluya
+//     el email del usuario, o un índice de participantes en el doc padre.

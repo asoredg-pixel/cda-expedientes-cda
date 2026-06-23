@@ -4514,7 +4514,9 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   const histTipo=targetEsPqrs?'asociacion_pqrs':'asociacion_exp';
   const histLbl=targetEsPqrs?('Vinculada a PQRSD '+target._exp):('Vinculada al expediente '+target._exp);
   e._pqrs_historial.push({tipo:histTipo,fecha:hoy(),nota:histLbl+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
-  saveLS();
+  // Persistir la PQRSD y el expediente vinculado (bidireccional puede mutar ambos)
+  persistExpedienteGranular(e,false);
+  if(target&&target._exp!==e._exp)persistExpedienteGranular(target,false);
   notif('PQRSD vinculada a '+target._exp,'ok');
   return true;
 }
@@ -9646,6 +9648,19 @@ async function limpiarCamposObsoletos(){
     console.error('limpiarCamposObsoletos: Firebase no disponible');
     return false;
   }
+  // Protección: requiere confirmación explícita para evitar ejecución accidental
+  const ok=window.confirm(
+    '⚠️ ACCIÓN IRREVERSIBLE\n\n'+
+    'limpiarCamposObsoletos() eliminará los campos "expedientes" y "pqrsd" '+
+    'del documento padre de cada departamento en Firestore.\n\n'+
+    'Solo ejecutar UNA VEZ después de verificar que la subcolección '+
+    'departamentos/{deptoId}/expedientes está completamente poblada.\n\n'+
+    '¿Continuar?'
+  );
+  if(!ok){
+    console.log('limpiarCamposObsoletos: cancelado por el usuario');
+    return false;
+  }
   const del=window._fsDeleteField();
   try{
     for(const depto of DEPTOS_FIRESTORE){
@@ -9698,8 +9713,6 @@ async function saveFirestore(){
     for(const depto of DEPTOS_FIRESTORE){
       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{
         cfg:cfgByDepto[depto]||{},
-        chat:{},
-        inbox:[],
         updatedAt:new Date().toISOString()
       },{merge:true});
     }
@@ -16904,18 +16917,17 @@ function aplicarImportJSON(data){
   const arr=data.exps||data.expedientes;
   if(!Array.isArray(arr))throw new Error('Formato inválido — use un respaldo .json completo');
   const nExp=arr.length;
-  const nChat=Array.isArray(data.chatMensajes)?data.chatMensajes.length:0;
   confirmPrecaucion({
     title:'Confirmar importación',
-    message:'¿Restaurar respaldo completo? Se reemplazarán expedientes, configuración, chat, agenda y trazabilidad en este equipo.',
-    detail:nExp+' expediente(s)'+(nChat?(' · '+nChat+' mensaje(s) de chat'):''),
+    message:'¿Restaurar respaldo completo? Se reemplazarán expedientes, configuración, agenda y trazabilidad en este equipo.',
+    detail:nExp+' expediente(s)',
     confirmLabel:'Sí, importar respaldo'
-  },()=>{
+  },async ()=>{
     exps=arr;
     if(data.personas&&Array.isArray(data.personas))personas=data.personas;
     if(data.actividadesLibres&&Array.isArray(data.actividadesLibres))actividadesLibres=data.actividadesLibres;
     if(data.agendaEventos&&Array.isArray(data.agendaEventos))agendaEventos=data.agendaEventos;
-    if(data.chatMensajes&&Array.isArray(data.chatMensajes))chatMensajes=data.chatMensajes;
+    // chatMensajes ya no se importa desde JSON — los mensajes viven en chats/{convId}/mensajes en Firestore
     if(data.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(data.encargadosGlobal);
     if(data.cfgByDepto){
       cfgByDepto=data.cfgByDepto;
@@ -16935,7 +16947,8 @@ function aplicarImportJSON(data){
     if(Array.isArray(data.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(data.bandejaEliminados));}catch(e){}
     normalizarDatosTrasImport();
     logAudit('Importó datos al sistema','configuracion',null,nExp+' expediente(s)');
-    saveLS();
+    // Persistir en localStorage
+    try{persistExpLocal();}catch(e){console.error('aplicarImportJSON: localStorage error',e);}
     const sel=document.getElementById('sel-depto');if(sel)sel.value=deptoActivo;
     updateDeptoUI();
     poblarTramSelect();
@@ -16945,7 +16958,23 @@ function aplicarImportJSON(data){
     if(document.getElementById('pg-con').classList.contains('on')){poblarFiltrosCon();renderConsulta();}
     if(document.getElementById('pg-cons').classList.contains('on'))renderConsolidado();
     if(document.getElementById('pg-act').classList.contains('on'))renderActividades();
-    notif('Respaldo importado: '+nExp+' expediente(s), configuración, chat y trazabilidad','ok');
+    notif('Respaldo importado: '+nExp+' expediente(s), configuración y trazabilidad — sincronizando con Firestore…','ok');
+    // Escritura a Firestore: global + doc padre de cada depto + subcolección de cada expediente
+    updateSyncIndicator('syncing');
+    try{
+      const writes=[saveGlobalFirestore()];
+      DEPTOS.forEach(d=>{writes.push(saveFirestore(d.id));});
+      exps.forEach(function(exp){
+        if(exp&&exp._exp&&(exp._depto||deptoActivo))writes.push(saveExpedienteDoc(exp._depto||deptoActivo,exp));
+      });
+      await Promise.all(writes);
+      updateSyncIndicator('synced');
+      notif('Respaldo importado y sincronizado: '+nExp+' expediente(s)','ok');
+    }catch(fsErr){
+      console.error('aplicarImportJSON: error Firestore',fsErr);
+      updateSyncIndicator('error');
+      notif('Respaldo importado localmente — error al sincronizar con Firestore','err');
+    }
   });
 }
 function leerJSON(evt){

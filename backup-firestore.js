@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Respaldo de Firestore (Admin SDK) — proyecto cda-tramites
- * Colecciones: usuarios, sistema/global, departamentos, departamentos/{deptoId}/expedientes
+ * Colecciones: usuarios, sistema/global, departamentos,
+ *              departamentos/{deptoId}/expedientes, chats/{convId}/mensajes
  *
  * Requiere GOOGLE_APPLICATION_CREDENTIALS apuntando al JSON de cuenta de servicio.
  */
@@ -139,9 +140,32 @@ async function main() {
     });
   }
 
+  // chats/{convId}/mensajes — exportar todas las conversaciones activas
+  const chatConvsSnap = await db.collection('chats').get();
+  let totalChatMsgs = 0;
+  for (const convDoc of chatConvsSnap.docs) {
+    const convId = convDoc.id;
+    const mensajes = await exportCollection(db, `chats/${convId}/mensajes`);
+    if (mensajes.length === 0) continue; // omitir conversaciones vacías
+    const chatFile = path.join(BACKUPS_DIR, `${ts}_chat_${convId}.json`);
+    await writeJson(chatFile, {
+      exportedAt: new Date().toISOString(),
+      projectId: PROJECT_ID,
+      collection: `chats/${convId}/mensajes`,
+      convId,
+      count: mensajes.length,
+      documents: mensajes,
+    });
+    summary.push({ collection: `chats/${convId}/mensajes`, count: mensajes.length, file: chatFile });
+    totalChatMsgs += mensajes.length;
+  }
+  if (totalChatMsgs === 0) {
+    summary.push({ collection: 'chats/*/mensajes', count: 0, file: '(ningún mensaje)' });
+  }
+
   console.log('\nRespaldo Firestore completado (' + PROJECT_ID + ')\n');
   for (const row of summary) {
-    console.log('  ' + row.collection + ': ' + row.count + ' documento(s) → ' + path.basename(row.file));
+    console.log('  ' + row.collection + ': ' + row.count + ' documento(s)' + (row.file !== '(ningún mensaje)' ? ' → ' + path.basename(row.file) : ''));
   }
   console.log('\nTotal: ' + summary.reduce((s, r) => s + r.count, 0) + ' documento(s)\n');
 }
