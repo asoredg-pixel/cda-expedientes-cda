@@ -1738,6 +1738,7 @@ let authUsuario=null;
 let _localSaving=false;
 let _fsUnsub=null;
 let _cfgUnsub=null;
+let _chatUnsub=null;
 const ADMIN_GMAIL='ncacdaguaviare@gmail.com';
 const DEPTOS_FIRESTORE=['guaviare','guainia','vaupes'];
 
@@ -9577,7 +9578,6 @@ async function saveGlobalFirestore(){
       personas:personas||[],
       actividadesLibres:actividadesLibres||[],
       agendaEventos:agendaEventos||[],
-      chatMensajes:chatMensajes||[],
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
@@ -9668,7 +9668,6 @@ async function saveFirestore(){
       personas:personas||[],
       actividadesLibres:actividadesLibres||[],
       agendaEventos:agendaEventos||[],
-      chatMensajes:chatMensajes||[],
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
@@ -17140,6 +17139,53 @@ function chatConvId(keyA,keyB){
 function chatConvFirestoreId(convId){
   return String(convId||'').replace(/\|/g,'__');
 }
+async function loadChatMensajes(convId){
+  convId=String(convId||'').trim();
+  if(!convId)return 0;
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsCollection)return 0;
+  const fsConvId=chatConvFirestoreId(convId);
+  try{
+    const snap=await window._fsGetDocs(window._fsCollection(db,'chats',fsConvId,'mensajes'));
+    const loaded=snap.docs.map(function(d){return{id:d.id,...d.data()};})
+      .sort(function(a,b){
+        const ta=typeof a.ts==='string'?a.ts:String(a.ts||'');
+        const tb=typeof b.ts==='string'?b.ts:String(b.ts||'');
+        return ta.localeCompare(tb);
+      });
+    chatMensajes=(chatMensajes||[]).filter(function(m){
+      const mConv=m.convId||chatConvId(m.fromKey,m.toKey);
+      return mConv!==convId;
+    });
+    chatMensajes.push(...loaded);
+    return loaded.length;
+  }catch(err){
+    console.error('loadChatMensajes:',fsConvId,err);
+    return 0;
+  }
+}
+function initChatSync(convId){
+  if(_chatUnsub){try{_chatUnsub();}catch(e){}_chatUnsub=null;}
+  convId=String(convId||'').trim();
+  if(!convId)return;
+  const db=window._db;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
+  const fsConvId=chatConvFirestoreId(convId);
+  _chatUnsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
+    snap.docChanges().forEach(function(change){
+      const msg={id:change.doc.id,...change.doc.data()};
+      if(change.type==='removed'){
+        chatMensajes=(chatMensajes||[]).filter(function(m){return m.id!==msg.id;});
+      }else{
+        const idx=(chatMensajes||[]).findIndex(function(m){return m.id===msg.id;});
+        if(idx>=0)chatMensajes[idx]=msg;
+        else chatMensajes.push(msg);
+      }
+    });
+    renderChatMessages();
+    renderChatBadge();
+  });
+}
 function chatConvMessages(convId){
   const canon=String(convId||'');
   return (chatMensajes||[]).filter(m=>chatConvId(m.fromKey,m.toKey)===canon).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
@@ -17302,7 +17348,7 @@ function toggleChatWindow(force){
   const open=force===true?true:force===false?false:!w.classList.contains('on');
   w.classList.toggle('on',open);
   if(open){renderChatContacts();renderChatBadge();}
-  else{window._chatConvActiva=null;window._chatVista='contactos';chatToggleDriveBar(false);chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatVista='contactos';chatToggleDriveBar(false);initChatSync(null);chatSyncLayout();}
 }
 async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
@@ -17368,6 +17414,7 @@ function chatSyncLayout(){
   if(conv&&contacts&&!mobile&&!collapsed)contacts.classList.remove('wide');
 }
 function chatVolverContactos(){
+  initChatSync(null);
   window._chatConvActiva=null;
   window._chatVista='contactos';
   window._chatContactsCollapsed=false;
@@ -17398,7 +17445,7 @@ function renderChatContacts(){
       '</div>';
   }).join('');
 }
-function chatAbrirConv(contactKey){
+async function chatAbrirConv(contactKey){
   const me=getChatIdentity();
   if(!me)return;
   const convId=chatConvId(me.key,contactKey);
@@ -17410,6 +17457,8 @@ function chatAbrirConv(contactKey){
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent=c.label;
   if(sub)sub.textContent=c.sub||'Conversación';
+  await loadChatMensajes(convId);
+  initChatSync(convId);
   chatMarcarLeido(convId);
   chatSyncLayout();
   renderChatContacts();
