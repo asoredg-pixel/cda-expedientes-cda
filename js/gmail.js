@@ -383,6 +383,43 @@ function gmailCloseAttViewer() {
   if (body) body.innerHTML = '';
 }
 
+// ----------------------------------------------------------------
+// Helpers — detección y visualización de archivos Office
+// ----------------------------------------------------------------
+function _gmailIsOfficeFile(filename, mime) {
+  var ext = (filename || '').toLowerCase().split('.').pop();
+  var officeExts = ['doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp'];
+  var officeMimes = [
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    'application/vnd.oasis.opendocument.presentation'
+  ];
+  return officeExts.includes(ext) || officeMimes.includes(mime || '');
+}
+function _gmailOfficeLoadingHtml(filename, dlUrl) {
+  return '<div style="padding:24px;text-align:center;color:var(--tx2);display:flex;flex-direction:column;align-items:center;gap:10px;height:100%;justify-content:center">' +
+    '<div style="font-size:36px">📄</div>' +
+    '<div style="font-weight:600">' + escAttr(filename) + '</div>' +
+    '<div style="font-size:12px">Subiendo a Drive para previsualizar…</div>' +
+    '<div class="gmail-loading" style="margin-top:4px"></div>' +
+    '<a href="' + escAttr(dlUrl) + '" download="' + escAttr(filename) + '" class="btn bsm" style="margin-top:8px">⬇ Descargar mientras espera</a>' +
+    '</div>';
+}
+function _gmailOfficeDownloadHtml(filename, dlUrl) {
+  return '<div style="padding:24px;text-align:center;color:var(--tx2);display:flex;flex-direction:column;align-items:center;gap:10px;height:100%;justify-content:center">' +
+    '<div style="font-size:36px">📄</div>' +
+    '<div style="font-weight:600">' + escAttr(filename) + '</div>' +
+    '<div style="font-size:12px">No se pudo generar la previsualización. Descargue el archivo para abrirlo.</div>' +
+    '<a href="' + escAttr(dlUrl) + '" download="' + escAttr(filename) + '" class="btn bp bsm" style="margin-top:8px">⬇ Descargar</a>' +
+    '</div>';
+}
+
 // Abre un adjunto en el panel lateral (PDF en iframe, imágenes inline, resto en nueva pestaña)
 async function gmailViewAttachment(msgId, attId, filename, mimeType) {
   if (!gmailIsTokenValid()) { notif('Reconecte la bandeja para ver adjuntos', 'err'); return; }
@@ -413,9 +450,24 @@ async function gmailViewAttachment(msgId, attId, filename, mimeType) {
         viewBody.innerHTML = '<iframe src="' + escAttr(_gmailAttViewerUrl) + '" style="flex:1;width:100%;border:none;height:100%" title="' + escAttr(filename) + '"></iframe>';
       } else if (isImg) {
         viewBody.innerHTML = '<div style="overflow:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start;height:100%"><img src="' + escAttr(_gmailAttViewerUrl) + '" alt="' + escAttr(filename) + '" style="max-width:100%;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.2)"></div>';
+      } else if (_gmailIsOfficeFile(filename, mime)) {
+        // Office: subir a Drive y mostrar en visor de Google Docs
+        viewBody.innerHTML = _gmailOfficeLoadingHtml(filename, _gmailAttViewerUrl);
+        var panel = document.getElementById('gmail-att-viewer');
+        if (panel) panel.classList.add('open');
+        try {
+          var driveFileFs = await driveUploadFile(filename, mime, b64url);
+          if (driveFileFs && driveFileFs.id) {
+            var viewUrlFs = 'https://drive.google.com/file/d/' + driveFileFs.id + '/preview';
+            viewBody.innerHTML = '<iframe src="' + escAttr(viewUrlFs) + '" style="flex:1;width:100%;border:none;height:100%" title="' + escAttr(filename) + '" allow="autoplay"></iframe>';
+          } else { throw new Error('Sin ID'); }
+        } catch (offErrFs) {
+          viewBody.innerHTML = _gmailOfficeDownloadHtml(filename, _gmailAttViewerUrl);
+        }
+        return;
       } else {
         // Tipo no previsualizable: ofrecer descarga
-        viewBody.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tx2)"><div style="font-size:40px;margin-bottom:12px">📎</div><div style="font-weight:600;margin-bottom:8px">' + escAttr(filename) + '</div><div style="font-size:12px;margin-bottom:16px">Este tipo de archivo no puede previsualizarse.</div><a href="' + escAttr(_gmailAttViewerUrl) + '" download="' + escAttr(filename) + '" class="btn bp bsm">⬇ Descargar</a></div>';
+        viewBody.innerHTML = '<div style="padding:24px;text-align:center;color:var(--tx2)"><div style="font-size:40px;margin-bottom:12px">📎</div><div style="font-weight:600;margin-bottom:8px">' + escAttr(filename) + '</div><div style="font-size:12px;margin-bottom:16px">Este tipo de archivo no puede previsualizarse directamente.</div><a href="' + escAttr(_gmailAttViewerUrl) + '" download="' + escAttr(filename) + '" class="btn bp bsm">⬇ Descargar</a></div>';
       }
     }
     var panel = document.getElementById('gmail-att-viewer');
@@ -999,18 +1051,32 @@ async function openSplitAttViewer(msgId, attId, filename, mimeType) {
     var inlineEl = document.getElementById('sec-att-inline');
     if (inlineTitle) inlineTitle.textContent = filename;
     if (inlineBody) {
-      if (mime === 'application/pdf') {
+      if (mime === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) {
         inlineBody.innerHTML = '<iframe src="' + url + '#toolbar=0" title="' + escAttr(filename) + '"></iframe>';
+        if (inlineEl) inlineEl.classList.add('open');
       } else if (mime.startsWith('image/')) {
         inlineBody.innerHTML = '<img src="' + url + '" alt="' + escAttr(filename) + '" style="max-width:100%;height:auto;margin:auto;display:block;padding:10px">';
+        if (inlineEl) inlineEl.classList.add('open');
+      } else if (_gmailIsOfficeFile(filename, mime)) {
+        // Office: subir a Drive y abrir con visor de Google Docs
+        if (inlineEl) inlineEl.classList.add('open');
+        inlineBody.innerHTML = _gmailOfficeLoadingHtml(filename, url);
+        try {
+          var driveFile = await driveUploadFile(filename, mime, b64url);
+          if (driveFile && driveFile.id) {
+            var viewUrl = 'https://drive.google.com/file/d/' + driveFile.id + '/preview';
+            inlineBody.innerHTML = '<iframe src="' + escAttr(viewUrl) + '" title="' + escAttr(filename) + '" allow="autoplay"></iframe>';
+          } else { throw new Error('Sin ID'); }
+        } catch (officeErr) {
+          inlineBody.innerHTML = _gmailOfficeDownloadHtml(filename, url);
+        }
       } else {
-        // Descarga directa para otros tipos
+        // Tipo desconocido: descarga directa sin abrir el visor
         var a = document.createElement('a'); a.href = url; a.download = filename; a.click();
         if (chipEl) { chipEl.innerHTML = origContent; chipEl.style.opacity = ''; }
         return;
       }
     }
-    if (inlineEl) inlineEl.classList.add('open');
   } catch (e) {
     console.error('openSplitAttViewer:', e);
     notif('No se pudo cargar el adjunto', 'err');
