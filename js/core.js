@@ -2298,13 +2298,15 @@ function ensureTareaPqrsNca(e){
     e.tasks[existIdx]=exist;
     return;
   }
-  const enc=getEncargadoDepto('guaviare')||'';
+  // Usar el encargado de la oficina NCA (guaviare) — incluye encargado_oficina y encargado_depto
+  const enc=String(e._pqrs_responsable_oficina||'').trim()||getEncargadoOficina('guaviare')||'';
+  if(enc&&!e._pqrs_responsable_oficina)e._pqrs_responsable_oficina=enc;
   const actNombre='Atender PQRSD: '+(e.f_f1||e._tipo_solicitud||'Solicitud');
   const tk=normalizeTask({
     id:genTaskId(),actividad:actNombre,detalle:e._pqrs_detalle||e._detalle_general||'',desc:actNombre,
     responsable:enc,responsables:enc?[enc]:[],asignados:enc?[{nombre:enc,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}]:[],
     entregaModo:'individual',plazoDias:plazoDias,vence:vence,prioritaria:prior,
-    comentarios:[],historial:[{tipo:'recepcion_nca',fecha:hoy(),nota:'PQRSD recibido en NCA DEGUV — asigne responsable y dé trámite desde el expediente'}],soportes:[],notasDoc:[]
+    comentarios:[],historial:[{tipo:'recepcion_nca',fecha:hoy(),nota:'PQRSD recibido en NCA DEGUV'}],soportes:[],notasDoc:[]
   });
   e.tasks.push(tk);
   e._pqrs_estado_oficina='asignado';

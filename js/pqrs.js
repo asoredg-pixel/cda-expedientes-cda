@@ -167,6 +167,8 @@ function guardarPqrsSecretaria(){
     ?window._gmailPendingAttachments:null;
   // Si hay adjuntos de Drive y no se puso link manual, usar el primer link de Drive
   const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
+  // Responsable: encargado configurado para la oficina destino
+  const encargadoOfi=typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'';
   const data=normalizePqrsOficinaFields({
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:fechaTermino||'',
     _fechas_estado:JSON.stringify({Solicitud:fechaSol,'En trámite':fecha}),
@@ -179,7 +181,7 @@ function guardarPqrsSecretaria(){
     f_f1:asunto,f_f2:medio,
     _detalle_notas:detNotas,_detalle_general:detalle,
     _radicado_secretaria:true,_pqrs_oficina:oficina,_pqrs_traslado_fecha:hoy(),_pqrs_traslado_por:'Secretaría DEGUV',
-    _pqrs_estado_oficina:'pendiente',_pqrs_responsable_oficina:'',
+    _pqrs_estado_oficina:'pendiente',_pqrs_responsable_oficina:encargadoOfi,
     _pqrs_solicitud_link:linkFinal,_pqrs_solicitud_archivo:archivo,_pqrs_detalle:detalle,
     _pqrs_historial:hist,tasks:[],
     // Sprint B: trazabilidad del correo origen
@@ -196,6 +198,8 @@ function guardarPqrsSecretaria(){
   // Sprint D: reenviar correo a oficina si hay token Gmail y oficina tiene correo
   if(gmailMsgId&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId){
     reenviarEmailAOficina(_gmailCurrentMsg,oficina);
+    // Marcar como leído (quitar la N de no radicado)
+    if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
   }
   // Limpiar datos Gmail pendientes
   window._gmailPendingMsgId=null;

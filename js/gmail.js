@@ -30,6 +30,7 @@ let _gmailTokenClient = null;
 let _gmailMessages = [];
 let _gmailCurrentMsg = null;
 let _gmailConnecting = false;
+let _gmailNextPageToken = null;
 
 // ----------------------------------------------------------------
 // Token helpers
@@ -133,10 +134,12 @@ async function gmailApiCall(method, url, body) {
 // ----------------------------------------------------------------
 // Gmail API — inbox
 // ----------------------------------------------------------------
-async function gmailListMessages(maxResults) {
+async function gmailListMessages(maxResults, pageToken) {
   maxResults = maxResults || 50;
-  const data = await gmailApiCall('GET',
-    GMAIL_API_BASE + '/messages?labelIds=INBOX&maxResults=' + maxResults);
+  let url = GMAIL_API_BASE + '/messages?labelIds=INBOX&maxResults=' + maxResults;
+  if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+  const data = await gmailApiCall('GET', url);
+  _gmailNextPageToken = data.nextPageToken || null;
   const ids = (data.messages || []).map(m => m.id);
   if (!ids.length) return [];
   // Fetch metadata in batches of 10
@@ -151,6 +154,37 @@ async function gmailListMessages(maxResults) {
     results.push(...metas);
   }
   return results;
+}
+
+async function gmailLoadMore() {
+  if (!_gmailNextPageToken) return;
+  const listEl = document.getElementById('gmail-inbox-list');
+  const moreBtn = document.getElementById('gmail-load-more-btn');
+  if (moreBtn) { moreBtn.textContent = 'Cargando…'; moreBtn.disabled = true; }
+  try {
+    const more = await gmailListMessages(50, _gmailNextPageToken);
+    _gmailMessages = _gmailMessages.concat(more);
+    renderGmailInboxList();
+  } catch (e) {
+    notif('Error al cargar más correos: ' + e.message, 'err');
+    if (moreBtn) { moreBtn.textContent = 'Cargar más'; moreBtn.disabled = false; }
+  }
+}
+
+async function gmailMarkAsRead(messageId) {
+  if (!messageId || !gmailIsTokenValid()) return;
+  try {
+    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify',
+      { removeLabelIds: ['UNREAD'] });
+    // Update local state
+    const msg = _gmailMessages.find(m => m.id === messageId);
+    if (msg && Array.isArray(msg.labelIds)) {
+      msg.labelIds = msg.labelIds.filter(l => l !== 'UNREAD');
+      renderGmailInboxList();
+    }
+  } catch (e) {
+    console.warn('gmailMarkAsRead error:', e.message);
+  }
 }
 
 async function gmailGetMessage(id) {
@@ -456,6 +490,7 @@ async function gmailLoadInbox() {
     return;
   }
   listEl.innerHTML = '<div class="gmail-loading">Cargando correos…</div>';
+  _gmailNextPageToken = null;
   try {
     _gmailMessages = await gmailListMessages(50);
     renderGmailInboxList();
@@ -476,7 +511,7 @@ function renderGmailInboxList() {
     listEl.innerHTML = '<div class="gmail-empty">No hay correos recientes en la bandeja.</div>';
     return;
   }
-  listEl.innerHTML = _gmailMessages.map(function(msg) {
+  const rows = _gmailMessages.map(function(msg) {
     const headers = (msg.payload && msg.payload.headers) || [];
     const from = gmailParseFrom(gmailGetHeader(headers, 'from'));
     const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
@@ -495,6 +530,10 @@ function renderGmailInboxList() {
       '<div class="gmail-row-date">' + escAttr(gmailFmtDate(date)) + '</div>' +
       '</div>';
   }).join('');
+  const moreBtn = _gmailNextPageToken
+    ? '<div style="padding:8px;text-align:center"><button id="gmail-load-more-btn" class="btn bsm" onclick="gmailLoadMore()">Cargar 50 más (' + _gmailMessages.length + ' cargados)</button></div>'
+    : '<div style="padding:6px;text-align:center;font-size:11px;color:var(--tx3)">— ' + _gmailMessages.length + ' correos cargados —</div>';
+  listEl.innerHTML = rows + moreBtn;
 }
 
 async function gmailOpenMessage(id) {
