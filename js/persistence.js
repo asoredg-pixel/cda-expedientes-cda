@@ -72,10 +72,11 @@ function showStorageCapacityToast(msg,tone){
   window._storageCapToastTimer=setTimeout(()=>{el.style.display='none';},8000);
 }
 function checkLocalStorageCapacityAfterSave(){
+  // LS solo guarda cfg/sesión/personas (expedientes están en Firestore). Alertas solo si cache auxiliar supera límite.
   const pct=getLocalStorageUsagePct();
   const base=lsCapacityMonitorMsg();
-  if(pct>=90)showStorageCapacityToast(base+' Exporte AHORA.','crit');
-  else if(pct>=70)showStorageCapacityToast(base+' Exporte sus datos pronto.','warn');
+  if(pct>=90)showStorageCapacityToast(base+' Caché local llena — los datos principales están seguros en Firebase.','crit');
+  else if(pct>=70)showStorageCapacityToast(base+' Caché local alta — datos seguros en Firebase.','warn');
 }
 function ensurePrimerUsoDate(){
   try{
@@ -116,13 +117,13 @@ function maybeShowExportReminder(){
   const msgEl=document.getElementById('export-reminder-msg');
   const ov=document.getElementById('export-reminder-overlay');
   if(!msgEl||!ov)return;
-  msgEl.textContent='Han pasado '+dias+' días desde el último respaldo. ¿Desea exportar ahora?';
+  msgEl.textContent='Han pasado '+dias+' días sin exportar un respaldo portable. Sus datos están seguros en Firebase, pero se recomienda un .json como copia offline. ¿Exportar ahora?';
   ov.classList.add('on');
 }
 function _saveLSLocal(){
+  // Guarda solo cfg/sesión/personas — expedientes y chat viven en Firestore (subcollecciones)
   syncCfgToStore();
   window._lsCompressionStats={jsonChars:0,storedChars:0,compressed:false};
-  lsStoreJson('sst_e',exps);
   lsStoreJson('sst_c_by_depto',cfgByDepto);
   localStorage.setItem('sst_depto',deptoActivo);
   localStorage.setItem('sst_depto_cfg',deptoCfg);
@@ -130,7 +131,6 @@ function _saveLSLocal(){
   localStorage.setItem('sst_responsable',responsableActivo||'');
   lsStoreJson('sst_act_libres',actividadesLibres||[]);
   lsStoreJson('sst_agenda',agendaEventos||[]);
-  lsStoreJson('sst_chat',chatMensajes||[]);
   lsStoreJson('sst_encargados_global',encargadosGlobal||getDefaultEncargadosGlobal());
 }
 function postLoadInit(){
@@ -376,12 +376,7 @@ function persistExpLocal(){
 }
 function persistExpedienteGranular(exp,withGlobal){
   if(!exp)return;
-  try{persistExpLocal();}
-  catch(e){
-    if(isQuotaExceededError(e)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);}
-    else console.error('Error al guardar en localStorage:',e);
-    return;
-  }
+  // Expedientes se persisten solo en Firestore (subcollección). No escribe a localStorage.
   const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
   console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
   const fs=[saveExpedienteDoc(deptoActivo,exp)];
@@ -433,12 +428,7 @@ async function limpiarCamposObsoletos(){
   }
 }
 function persistExpedienteDelete(expRef){
-  try{persistExpLocal();}
-  catch(e){
-    if(isQuotaExceededError(e)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);}
-    else console.error('Error al guardar en localStorage:',e);
-    return;
-  }
+  // Elimina directo de Firestore. No escribe a localStorage.
   updateSyncIndicator('syncing');
   deleteExpedienteDoc(deptoActivo,expRef).then(function(ok){updateSyncIndicator(ok?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
 }
