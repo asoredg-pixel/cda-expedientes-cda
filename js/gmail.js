@@ -589,10 +589,15 @@ function prePopularFormDesdeEmail(msg) {
 function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
   prePopularFormDesdeEmail(_gmailCurrentMsg);
-  // Scroll to radicación form
-  const pg = document.getElementById('pg-sec');
-  if (pg) pg.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  notif('Formulario pre-llenado desde el correo. Revise los datos y radique.', 'ok');
+  // Cerrar el panel Gmail para que el formulario quede visible y limpio
+  const body = document.getElementById('gmail-panel-body');
+  const btn = document.getElementById('gmail-toggle-btn');
+  if (body) body.style.display = 'none';
+  if (btn) btn.textContent = 'Ver bandeja';
+  // Scroll al formulario de radicación
+  const formCard = document.querySelector('#pg-sec .card:not(.gmail-panel-wrap)');
+  if (formCard) formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  notif('Formulario pre-llenado. Revise los datos, complete la oficina destino y radique.', 'ok');
 }
 
 // ----------------------------------------------------------------

@@ -905,10 +905,10 @@ body.sesion-activa #pg-login{display:none!important}
    Gmail panel — bandeja PQRSD (Secretaría)
    ================================================================ */
 .gmail-panel-wrap{background:var(--sf)}
-.gmail-layout{display:grid;grid-template-columns:300px 1fr;gap:12px;min-height:400px;max-height:600px}
-@media(max-width:700px){.gmail-layout{grid-template-columns:1fr;max-height:none}}
-.gmail-inbox-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;background:var(--bg)}
-.gmail-msg-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;background:var(--bg);padding:0}
+.gmail-layout{display:grid;grid-template-columns:300px 1fr;gap:12px;height:520px;max-height:520px}
+@media(max-width:700px){.gmail-layout{grid-template-columns:1fr;height:auto;max-height:none}}
+.gmail-inbox-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;overflow-x:hidden;background:var(--bg);height:100%}
+.gmail-msg-col{border:1px solid var(--bd);border-radius:var(--r);overflow-y:auto;overflow-x:hidden;background:var(--bg);padding:0;height:100%}
 .gmail-row{padding:10px 12px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .15s}
 .gmail-row:hover{background:var(--sf2)}
 .gmail-row.active{background:color-mix(in srgb,var(--ac) 10%,transparent)}
