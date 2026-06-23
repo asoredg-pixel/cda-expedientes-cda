@@ -485,16 +485,18 @@
     </div>
     <div id="gmail-panel-body" style="display:none;margin-top:1rem">
       <!-- Barra de búsqueda y filtros -->
-      <div class="gmail-toolbar">
-        <div class="gmail-search-wrap">
-          <input type="text" id="gmail-search-input" class="gmail-search-input" placeholder="Buscar en toda la bandeja… (asunto, remitente, contenido, N° expediente)" onkeydown="if(event.key==='Enter')gmailSearch(this.value)">
-          <button class="btn bp bsm" onclick="gmailSearch(document.getElementById('gmail-search-input').value)" title="Buscar">🔍</button>
-          <span id="gmail-search-badge" class="gmail-search-badge" style="display:none">Búsqueda activa — <button class="btn bsm" onclick="gmailClearSearch()" style="padding:1px 6px">✕ limpiar</button></span>
+      <div class="fg" style="margin-bottom:10px;align-items:flex-end">
+        <div class="fld" style="grid-column:1/-1;display:flex;gap:6px;align-items:center">
+          <input type="text" id="gmail-search-input" placeholder="Buscar correo: asunto, remitente, N° expediente o palabras del contenido…" style="flex:1;padding:8px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;background:var(--bg);color:var(--tx)" onkeydown="if(event.key==='Enter')gmailSearch(this.value)">
+          <button class="btn bp bsm" onclick="gmailSearch(document.getElementById('gmail-search-input').value)">🔍 Buscar</button>
+          <button class="btn bsm" id="gmail-clear-search-btn" onclick="gmailClearSearch()" style="display:none" title="Limpiar búsqueda">✕</button>
         </div>
-        <div class="gmail-filters">
-          <button id="gmail-filter-all" class="btn bsm bp" onclick="gmailSetFilter('all')">Todos</button>
-          <button id="gmail-filter-unread" class="btn bsm" onclick="gmailSetFilter('unread')">Sin radicar <span id="gmail-unread-count" class="gmail-badge-new" style="font-size:10px"></span></button>
+        <div class="fld" style="grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:12px;color:var(--tx2);font-weight:500">Filtrar:</span>
+          <button id="gmail-filter-all" class="btn bp bsm" onclick="gmailSetFilter('all')">Todos</button>
+          <button id="gmail-filter-unread" class="btn bsm" onclick="gmailSetFilter('unread')">Sin radicar <span id="gmail-unread-count" class="gmail-badge-new" style="display:none"></span></button>
           <button id="gmail-filter-read" class="btn bsm" onclick="gmailSetFilter('read')">Radicados</button>
+          <span id="gmail-search-badge" style="display:none;font-size:11px;color:#EA4335;font-weight:600">— Búsqueda activa</span>
         </div>
       </div>
       <div class="gmail-layout">

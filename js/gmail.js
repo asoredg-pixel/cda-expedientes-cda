@@ -177,34 +177,38 @@ async function gmailLoadMore() {
 // Búsqueda en toda la bandeja (Gmail API q= — busca en TODOS los correos)
 // ----------------------------------------------------------------
 async function gmailSearch(query) {
-  if (!query || !query.trim()) { gmailClearSearch(); return; }
+  query = (query || '').trim();
+  if (!query) { gmailClearSearch(); return; }
+  if (!gmailIsTokenValid()) { notif('Reconecte la bandeja antes de buscar.', 'err'); return; }
   const listEl = document.getElementById('gmail-inbox-list');
   if (listEl) listEl.innerHTML = '<div class="gmail-loading">Buscando "' + escAttr(query) + '"…</div>';
   _gmailSearchMode = true;
   updateGmailFilterBtns();
   try {
-    // q= usa la misma sintaxis que Gmail: subject:, from:, etc.
-    const url = GMAIL_API_BASE + '/messages?maxResults=30&q=' + encodeURIComponent(query);
+    // Restringe la búsqueda a la bandeja de entrada (in:inbox)
+    const q = 'in:inbox ' + query;
+    const url = GMAIL_API_BASE + '/messages?maxResults=30&q=' + encodeURIComponent(q);
     const data = await gmailApiCall('GET', url);
-    const ids = (data.messages || []).map(m => m.id);
+    const ids = (data.messages || []).map(function(m) { return m.id; });
     if (!ids.length) {
       if (listEl) listEl.innerHTML = '<div class="gmail-empty">Sin resultados para "' + escAttr(query) + '".</div>';
       return;
     }
     const results = [];
-    for (let i = 0; i < ids.length; i += 10) {
-      const batch = ids.slice(i, i + 10);
-      const metas = await Promise.all(batch.map(id =>
-        gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + id +
-          '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date')
-      ));
-      results.push(...metas);
+    for (var i = 0; i < ids.length; i += 10) {
+      var batch = ids.slice(i, i + 10);
+      var metas = await Promise.all(batch.map(function(id) {
+        return gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + id +
+          '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date');
+      }));
+      results.push.apply(results, metas);
     }
-    // Render search results (don't replace _gmailMessages, show separately)
     renderGmailMessageList(results, true);
   } catch (e) {
+    _gmailSearchMode = false;
+    updateGmailFilterBtns();
     console.error('gmailSearch:', e);
-    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
+    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">Error al buscar: ' + escAttr(e.message) + '</div>';
   }
 }
 
@@ -227,10 +231,12 @@ function updateGmailFilterBtns() {
   ['all', 'unread', 'read'].forEach(function(f) {
     const btn = document.getElementById('gmail-filter-' + f);
     if (!btn) return;
-    btn.className = 'btn bsm' + (_gmailFilter === f && !_gmailSearchMode ? ' bp' : '');
+    btn.className = (_gmailFilter === f && !_gmailSearchMode) ? 'btn bp bsm' : 'btn bsm';
   });
   const searchBadge = document.getElementById('gmail-search-badge');
   if (searchBadge) searchBadge.style.display = _gmailSearchMode ? 'inline' : 'none';
+  const clearBtn = document.getElementById('gmail-clear-search-btn');
+  if (clearBtn) clearBtn.style.display = _gmailSearchMode ? 'inline-flex' : 'none';
 }
 
 async function gmailMarkAsRead(messageId) {
@@ -341,15 +347,48 @@ async function gmailGetAttachment(messageId, attachmentId) {
 // ----------------------------------------------------------------
 // Drive API — upload y compartir
 // ----------------------------------------------------------------
+async function getOrCreateDriveFolder(folderName) {
+  // Cache folder ID in sessionStorage to avoid repeated searches
+  const cacheKey = 'sst_drive_folder_' + folderName.replace(/\s/g, '_');
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) return cached;
+  } catch (e) {}
+  const token = gmailGetToken();
+  const searchUrl = DRIVE_API_BASE + '/files?q=' +
+    encodeURIComponent('name="' + folderName + '" and mimeType="application/vnd.google-apps.folder" and trashed=false') +
+    '&fields=files(id,name)';
+  const searchRes = await fetch(searchUrl, { headers: { 'Authorization': 'Bearer ' + token } });
+  const searchData = await searchRes.json();
+  let folderId;
+  if (searchData.files && searchData.files.length > 0) {
+    folderId = searchData.files[0].id;
+  } else {
+    const createRes = await fetch(DRIVE_API_BASE + '/files', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' })
+    });
+    const folder = await createRes.json();
+    folderId = folder.id;
+  }
+  try { sessionStorage.setItem(cacheKey, folderId); } catch (e) {}
+  return folderId;
+}
+
 async function driveUploadFile(filename, mimeType, base64urlData) {
   const token = gmailGetToken();
   if (!token) throw new Error('Sin token Drive');
+  // Get or create destination folder
+  let folderId = '';
+  try { folderId = await getOrCreateDriveFolder('PQRSD - Adjuntos CDA'); } catch (e) { console.warn('Drive folder:', e.message); }
   const b64 = base64urlData.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const blob = new Blob([bytes], { type: mimeType });
   const metadata = { name: filename, mimeType: mimeType };
+  if (folderId) metadata.parents = [folderId];
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', blob);
@@ -359,7 +398,7 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
     body: form
   });
   if (!uploadRes.ok) {
-    const txt = await uploadRes.text().catch(() => '');
+    const txt = await uploadRes.text().catch(function() { return ''; });
     throw new Error('Drive upload ' + uploadRes.status + ': ' + txt.slice(0, 120));
   }
   const file = await uploadRes.json();
@@ -568,6 +607,7 @@ async function gmailLoadInbox() {
     _gmailMessages = await gmailListMessages(50);
     renderGmailInboxList();
     updateUnreadCount();
+    updateGmailFilterBtns();
   } catch (e) {
     console.error('gmailLoadInbox:', e);
     listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
@@ -706,6 +746,19 @@ function prePopularFormDesdeEmail(msg) {
   setv('sec-pn-correo', from.email || '');
   setv('sec-asunto', subject);
   if (snippet) setv('sec-detalle', snippet.slice(0, 300));
+  // Auto-fill fecha de solicitud desde la fecha del correo
+  const dateHeader = gmailGetHeader(headers, 'date');
+  if (dateHeader) {
+    try {
+      const d = new Date(dateHeader);
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        setv('sec-fecha-solicitud', yyyy + '-' + mm + '-' + dd);
+      }
+    } catch (e) {}
+  }
 
   // Store message ID for saving with the expediente
   window._gmailPendingMsgId = msg.id;
