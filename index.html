@@ -7052,7 +7052,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       if(activo&&(activo.url||activo.preview)&&!activo.local)pq.adj.links=[activo.url||activo.preview];
     }
     guardarPqrsRespuestaDatos(e,{fechaResp:pq.fechaResp,oficioExt:pq.oficioExt,nota:cmt,adj:pq.adj},false);
-    saveLS();
+    persistExpedienteGranular(e,false);
   }
   closeTaskModal();
 }
@@ -7391,7 +7391,6 @@ function devolverTaskAlResponsable(expId,taskId,nota){
   if(solicitarAjusteSoporte(expId,taskId,nota||'Devuelta al responsable')){
     notif('Actividad devuelta — queda por corregir','ok');
     closeTaskModal();
-    saveLS();
     renderBandejaDepto();
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
     if(window._conPanelEditMode&&document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
@@ -7607,7 +7606,7 @@ function confirmarCierreTask(expId,taskId){
     const medioResp=String(e._pqrs_respuesta_medio||'').trim();
     const links=[e._pqrs_respuesta_link].concat(e._pqrs_respuesta_links||[]).filter(Boolean);
     registrarPqrsRespuestaCore(e,{fechaResp,oficioExt,medioResp,nota,adj:{links,files:[]},archivos:[]});
-    saveLS();
+    persistExpedienteGranular(e,false);
     verificarTaskExp(expId,taskId,fechaCierre);
     refreshPqrsDetalleViews(expId);
     if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
@@ -7654,14 +7653,36 @@ function getTaskAny(expId,taskId){
 }
 function mutateTask(expId,taskId,fn){
   const lib=taskId?getActLibreById(taskId):null;
-  if(lib){fn(normalizeActLibre(lib));saveLS();refreshTaskViews();return true;}
+  if(lib){
+    fn(normalizeActLibre(lib));
+    try{persistExpLocal();}
+    catch(e){
+      if(isQuotaExceededError(e)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',e);}
+      else console.error('Error al guardar en localStorage:',e);
+      return false;
+    }
+    updateSyncIndicator('syncing');
+    Promise.all([saveGlobalFirestore()]).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+    refreshTaskViews();
+    return true;
+  }
   const e=getExpById(expId);if(!e)return false;
   e.tasks=(e.tasks||[]).map(normalizeTask);
   const t=e.tasks.find(x=>x.id===taskId);if(!t)return false;
   fn(t);
   t.estado=estadoTaskRaw(t);
   t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
-  saveLS();
+  if(e._exp&&e._depto)persistExpedienteGranular(e,false);
+  else{
+    try{persistExpLocal();}
+    catch(err){
+      if(isQuotaExceededError(err)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',err);}
+      else console.error('Error al guardar en localStorage:',err);
+      return false;
+    }
+    updateSyncIndicator('syncing');
+    Promise.all([saveGlobalFirestore()]).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+  }
   refreshTaskViews();
   return true;
 }
@@ -8313,7 +8334,7 @@ function finalizarTaskEncargado(expId,taskId,linksOpt,comentarioOpt,archivosOpt,
         if(activo&&(activo.url||activo.preview)&&!activo.local)pqrsOpts.adj.links=[activo.url||activo.preview];
       }
       registrarPqrsRespuestaCore(e,{fechaResp:pqrsOpts.fechaResp,oficioExt:pqrsOpts.oficioExt,nota:cmt,adj:pqrsOpts.adj});
-      saveLS();
+      persistExpedienteGranular(e,false);
     }
   }
   if(ok)notif('Actividad finalizada','ok');
@@ -9023,7 +9044,7 @@ function persistDetalleNotasExp(){
   const notas=detalleNotasData(hid.value);
   e._detalle_notas=JSON.stringify(notas);
   e._detalle_general=notas.length?notas.map(n=>n.texto).join('\n\n'):'';
-  saveLS();
+  persistExpedienteGranular(e,false);
   if(document.getElementById('pg-reg')&&document.getElementById('pg-reg').classList.contains('on'))renderTabla();
 }
 function addDetalleNota(){
@@ -15240,7 +15261,7 @@ function submitAnadirDocTramite(expId){
   if(!e){notif('Expediente no encontrado','err');return;}
   if(!Array.isArray(e._docs_tramite))e._docs_tramite=[];
   e._docs_tramite.push({id:'dt_'+Date.now().toString(36),label,url:p.url||url,preview:p.preview||p.url||url,fecha:hoy(),por:taskComentarioAutor()});
-  saveLS();
+  persistExpedienteGranular(e,false);
   closeTaskModal();
   notif('Documento añadido al trámite','ok');
   if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
@@ -15260,7 +15281,7 @@ function eliminarDocTramiteExp(expId,docId){
     const e=getExpById(expId);
     if(!e)return;
     e._docs_tramite=docsTramiteData(e._docs_tramite).filter(d=>String(d.id||'')!==String(docId||''));
-    saveLS();
+    persistExpedienteGranular(e,false);
     notif('Documento eliminado','ok');
     if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')){
       refreshConPanelDocumentos(expId,null,false);
@@ -16829,7 +16850,7 @@ function aplicarImportExpediente(data){
     if(idx>=0)exps[idx]=exp;
     else exps.push(exp);
     normalizarDatosTrasImport();
-    saveLS();
+    persistExpedienteGranular(exp,false);
     poblarTramSelect();
     renderTabla();
     renderBandejaDepto();
