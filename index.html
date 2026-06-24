@@ -4,30 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- SST UI delegación clics v20250611q — Responsables↔Usuarios FS; login ciudadano; chat solo sesión -->
-<title>Sistema de Seguimiento de Trámites</title>
+<title>Sistema de Seguimiento — CDA Guaviare</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='14' fill='%231565c0'/><text x='50' y='56' text-anchor='middle' font-family='Arial,sans-serif' font-size='36' font-weight='bold' fill='white'>CDA</text><text x='50' y='80' text-anchor='middle' font-family='Arial,sans-serif' font-size='18' fill='%23bbdefb'>DEGUV</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260624m">
+<link rel="stylesheet" href="css/sst.css?v=20260624n">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
-<script type="module" src="js/firebase-init.js?v=20260624m"></script>
-<script src="js/constants.js?v=20260624m"></script>
-<script src="js/utils.js?v=20260624m"></script>
-<script src="js/state.js?v=20260624m"></script>
-<script src="js/persistence.js?v=20260624m"></script>
-<script src="js/roles.js?v=20260624m"></script>
-<script src="js/config-store.js?v=20260624m"></script>
-<script src="js/core.js?v=20260624m"></script>
-<script src="js/formulario.js?v=20260624m"></script>
-<script src="js/tareas.js?v=20260624m"></script>
-<script src="js/guardar-exp.js?v=20260624m"></script>
-<script src="js/consulta.js?v=20260624m"></script>
-<script src="js/consolidado.js?v=20260624m"></script>
-<script src="js/configuracion.js?v=20260624m"></script>
-<script src="js/export.js?v=20260624m"></script>
-<script src="js/chat.js?v=20260624m"></script>
-<script src="js/pqrs.js?v=20260624m"></script>
-<script src="js/gmail.js?v=20260624m"></script>
-<script src="js/ingreso.js?v=20260624m"></script>
+<script type="module" src="js/firebase-init.js?v=20260624n"></script>
+<script src="js/constants.js?v=20260624n"></script>
+<script src="js/utils.js?v=20260624n"></script>
+<script src="js/state.js?v=20260624n"></script>
+<script src="js/persistence.js?v=20260624n"></script>
+<script src="js/roles.js?v=20260624n"></script>
+<script src="js/config-store.js?v=20260624n"></script>
+<script src="js/core.js?v=20260624n"></script>
+<script src="js/formulario.js?v=20260624n"></script>
+<script src="js/tareas.js?v=20260624n"></script>
+<script src="js/guardar-exp.js?v=20260624n"></script>
+<script src="js/consulta.js?v=20260624n"></script>
+<script src="js/consolidado.js?v=20260624n"></script>
+<script src="js/configuracion.js?v=20260624n"></script>
+<script src="js/export.js?v=20260624n"></script>
+<script src="js/chat.js?v=20260624n"></script>
+<script src="js/pqrs.js?v=20260624n"></script>
+<script src="js/gmail.js?v=20260624n"></script>
+<script src="js/ingreso.js?v=20260624n"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -92,9 +93,9 @@
   <div class="tabs-wrap">
   <div class="tabsi">
     <button class="tab on" onclick="showTab('reg')" id="tab-reg">📋 Registro</button>
+    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi">📧 Correos</button>
     <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec">📥 Radicación</button>
     <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi">📌 PQRSD</button>
-    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi">📧 Correos</button>
     <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act">📌 Actividades</button>
     <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda">📅 Agenda</button>
     <button class="tab" onclick="showTab('con')" id="tab-con">🔍 Consulta</button>

@@ -1296,6 +1296,14 @@ function gmailOfiIsTokenValid() {
 function gmailOfiConnect() {
   // Secretary: reuse her primary Gmail OAuth (managed in gmail.js secretary section)
   if (_gmailOfiIsSecretaria()) {
+    if (gmailIsTokenValid()) {
+      // Already connected — just bootstrap the Correos view
+      _updateGmailOfiBtn();
+      gmailOfiFolder('INBOX');
+      gmailOfiLoadLabels();
+      if (!_gmailOfiSignature) _gmailOfiLoadSignature();
+      return;
+    }
     if (typeof gmailConnect === 'function') {
       gmailConnect(function() {
         _updateGmailOfiBtn();
@@ -1389,7 +1397,11 @@ async function _gmailOfiApi(method, url, body) {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   if (res.status === 401) {
-    gmailOfiSetToken('');
+    if (_gmailOfiIsSecretaria()) {
+      gmailSetToken('', 0); // Clear primary token
+    } else {
+      gmailOfiSetToken('');
+    }
     _updateGmailOfiBtn();
     notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
     throw new Error('Token expirado.');
@@ -1517,7 +1529,7 @@ function _renderGmailOfiLabels() {
 }
 
 async function _gmailOfiUpdateBadges() {
-  if (!gmailOfiIsTokenValid()) return;
+  if (!_gmailOfiTokenValid()) return;
   try {
     const [unreadData, draftData] = await Promise.all([
       _gmailOfiApi('GET', GMAIL_API_BASE + '/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=1').catch(()=>null),
@@ -1600,7 +1612,7 @@ function gmailOfiCloseMessage() {
 }
 
 async function gmailOfiOpenMessage(id) {
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const mp = document.getElementById('gm-msg-pane');
   const lp = document.getElementById('gm-list-pane');
   const viewEl = document.getElementById('gmail-ofi-msg-view');
@@ -1690,7 +1702,7 @@ function _renderGmailOfiMsgView(msg) {
 // ---- Star toggle ----
 async function gmailOfiToggleStar(msgId, event) {
   if (event) { event.preventDefault(); event.stopPropagation(); }
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const msg = _gmailOfiMessages.find(m => m.id === msgId);
   if (!msg) return;
   const starred = Array.isArray(msg.labelIds) && msg.labelIds.includes('STARRED');
@@ -1709,7 +1721,7 @@ async function gmailOfiToggleStar(msgId, event) {
 
 // ---- Attachment viewer ----
 async function gmailOfiViewAttachment(msgId, attachmentId, filename, mimeType) {
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo para ver adjuntos.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo para ver adjuntos.', 'err'); return; }
   notif('📄 Abriendo adjunto…', 'ok');
   try {
     const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + msgId + '/attachments/' + attachmentId);
@@ -1728,7 +1740,7 @@ async function gmailOfiViewAttachment(msgId, attachmentId, filename, mimeType) {
 function gmailOfiOpenCompose(opts) {
   const modal = document.getElementById('gm-compose-modal');
   if (!modal) return;
-  if (!gmailOfiIsTokenValid()) { notif('Conecte su correo para redactar.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('Conecte su correo para redactar.', 'err'); return; }
   opts = opts || {};
   const f = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   f('gm-compose-to',      opts.to || '');
@@ -1768,7 +1780,7 @@ function _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) {
 }
 
 async function gmailOfiSendCompose() {
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const modal = document.getElementById('gm-compose-modal');
   const g = id => (document.getElementById(id)||{}).value||'';
   const to = g('gm-compose-to'), cc = g('gm-compose-cc'),
@@ -1790,7 +1802,7 @@ async function gmailOfiSendCompose() {
 }
 
 async function gmailOfiSaveDraft() {
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const g = id => (document.getElementById(id)||{}).value||'';
   const to = g('gm-compose-to'), subject = g('gm-compose-subject'), body = g('gm-compose-body');
   if (!body.trim()) { notif('El borrador está vacío.', 'err'); return; }
