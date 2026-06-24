@@ -192,9 +192,11 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
   const respOfi=String(e._pqrs_responsable_oficina||'').trim();
   if(!respOfi&&ofi!=='guaviare')return false;
   if(!usuario)return true;
-  if(!taskUsuarioEsAsignado(t,usuario))return false;
+  // El encargado de NCA (guaviare) siempre ve TODAS las tareas PQRSD asignadas a NCA
   const encGuaviare=getEncargadoDepto('guaviare');
   if(ofi==='guaviare'&&encGuaviare&&agendaNorm(usuario)===agendaNorm(encGuaviare))return true;
+  // Para responsables específicos, verificar asignación
+  if(!taskUsuarioEsAsignado(t,usuario))return false;
   if(respOfi)return agendaNorm(respOfi)===agendaNorm(usuario);
   return ofi==='guaviare';
 }
@@ -660,6 +662,27 @@ function htmlPqrsRespuestaRegistrada(e){
   });
   return h+'</div>';
 }
+function abrirVisorAdjunto(urlView,nombreArchivo){
+  let ov=document.getElementById('adj-viewer-ov');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='adj-viewer-ov';
+    ov.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
+    ov.onclick=function(ev){if(ev.target===ov)ov.remove();};
+    document.body.appendChild(ov);
+  }
+  const previewUrl=String(urlView||'').replace(/\/view(\?.*)?$/,'/preview');
+  ov.innerHTML=
+    '<div style="background:var(--sf,#fff);border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;width:min(900px,96vw);height:min(720px,90vh);overflow:hidden">'+
+    '<div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd,#e2e8f0);gap:8px">'+
+    '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escAttr(nombreArchivo||'Adjunto')+'</span>'+
+    '<a href="'+escAttr(String(urlView||'').replace(/\/preview(\?.*)?$/,'/view'))+'" target="_blank" rel="noopener" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">↗ Abrir en Drive</a>'+
+    '<button type="button" onclick="document.getElementById(\'adj-viewer-ov\').remove()" style="background:none;border:none;cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;color:var(--tx2,#666)" title="Cerrar">✕</button>'+
+    '</div>'+
+    '<iframe src="'+escAttr(previewUrl)+'" style="flex:1;width:100%;border:none" allowfullscreen></iframe>'+
+    '</div>';
+  ov.style.display='flex';
+}
 function htmlPqrsCorreoOrigenHtml(e){
   const d=e&&e._gmail_email_data;
   if(!d||typeof d!=='object')return'';
@@ -671,10 +694,8 @@ function htmlPqrsCorreoOrigenHtml(e){
       const drv=driveAtts.find(x=>x.nombre===a.nombre)||driveAtts[i]||null;
       const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':(a.mimeType||'').includes('word')||(a.nombre||'').match(/\.docx?$/i)?'📝':(a.mimeType||'').includes('sheet')||(a.mimeType||'').includes('excel')||(a.nombre||'').match(/\.xlsx?$/i)?'📊':'📎';
       if(drv&&drv.driveLink){
-        // Convert /view to /preview so Drive's built-in viewer renders PDF, Word, Excel, images
-        const previewUrl=drv.driveLink.replace(/\/view(\?.*)?$/,'/preview');
-        const onclick='event.stopPropagation();window.open(\''+previewUrl.replace(/'/g,"\\'")+"','_blank','popup,width=920,height=720,resizable=yes,scrollbars=yes');return false;";
-        return'<a href="'+escAttr(previewUrl)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(a.nombre||'adjunto')+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
+        const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(drv.driveLink)+'\',\''+jsStr(a.nombre||'Adjunto')+'\');return false;';
+        return'<a href="'+escAttr(drv.driveLink)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(a.nombre||'adjunto')+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
       }
       return'<span class="gmail-att-chip" style="opacity:.7" title="Sin enlace Drive aún"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
     }).join('');
