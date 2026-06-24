@@ -33,7 +33,8 @@ let _gmailConnecting = false;
 let _gmailNextPageToken = null;
 let _gmailFilter = 'all'; // 'all' | 'unread' | 'read'
 let _gmailSearchMode = false; // true when showing search results
-let _gmailRadicadoLabelId = ''; // ID of the "Radicado PQRSD" custom label, loaded on connect
+let _gmailRadicadoLabelId = ''; // ID of the "RAD APP" custom label, loaded on connect
+const GMAIL_RADICADO_LABEL = 'RAD APP'; // Nombre de la etiqueta Gmail para correos radicados en la app
 
 // ----------------------------------------------------------------
 // Token helpers
@@ -242,7 +243,7 @@ function updateGmailFilterBtns() {
   if (clearBtn) clearBtn.style.display = _gmailSearchMode ? 'inline-flex' : 'none';
 }
 
-// Obtiene o crea la etiqueta "Radicado PQRSD" en Gmail; cachea el ID en sessionStorage
+// Obtiene o crea la etiqueta "RAD APP" (o cualquier nombre) en Gmail; cachea el ID en sessionStorage
 async function gmailGetOrCreateLabel(labelName) {
   const cacheKey = 'sst_gmail_label_' + labelName.replace(/\s/g, '_');
   try { const c = sessionStorage.getItem(cacheKey); if (c) return c; } catch (e) {}
@@ -271,7 +272,7 @@ async function gmailMarkAsRead(messageId) {
   try {
     // Use cached label ID or fetch it
     if (!_gmailRadicadoLabelId) {
-      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch(e) { console.warn('Label get:', e.message); }
+      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel(GMAIL_RADICADO_LABEL); } catch(e) { console.warn('Label get:', e.message); }
     }
     var modify = { removeLabelIds: ['UNREAD'] };
     if (_gmailRadicadoLabelId) modify.addLabelIds = [_gmailRadicadoLabelId];
@@ -746,7 +747,7 @@ function confirmarEnvioRespuestaEmailPqrs(e) {
 function updateUnreadCount() {
   const badge = document.getElementById('gmail-unread-count');
   if (!badge) return;
-  // Show count of non-radicated messages (sin etiqueta "Radicado PQRSD")
+  // Show count of non-radicated messages (sin etiqueta "RAD APP")
   const n = _gmailMessages.filter(m => !_msgEsRadicado(m)).length;
   badge.textContent = n > 0 ? n : '';
   badge.style.display = n > 0 ? 'inline' : 'none';
@@ -795,9 +796,9 @@ async function gmailLoadInbox() {
   _gmailFilter = 'all';
   _gmailSearchMode = false;
   try {
-    // Eagerly load/create the "Radicado PQRSD" label ID for filter logic
+    // Eagerly load/create the "RAD APP" label ID for filter logic
     if (!_gmailRadicadoLabelId) {
-      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch(e) { console.warn('Label init:', e.message); }
+      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel(GMAIL_RADICADO_LABEL); } catch(e) { console.warn('Label init:', e.message); }
     }
     _gmailMessages = await gmailListMessages(50);
     renderGmailInboxList();
@@ -825,9 +826,9 @@ function _msgEsRadicado(m) {
 function renderGmailInboxList() {
   if (_gmailSearchMode) return; // Don't overwrite search results
   const msgs = _gmailFilter === 'unread'
-    ? _gmailMessages.filter(m => !_msgEsRadicado(m))        // Sin radicar = sin etiqueta "Radicado PQRSD"
+    ? _gmailMessages.filter(m => !_msgEsRadicado(m))        // Sin radicar = sin etiqueta "RAD APP"
     : _gmailFilter === 'read'
-      ? _gmailMessages.filter(m => _msgEsRadicado(m))        // Radicados = con etiqueta "Radicado PQRSD"
+      ? _gmailMessages.filter(m => _msgEsRadicado(m))        // Radicados = con etiqueta "RAD APP"
       : _gmailMessages;
   renderGmailMessageList(msgs, false);
 }
