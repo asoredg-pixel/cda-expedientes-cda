@@ -292,9 +292,11 @@ async function saveExpedienteDoc(deptoId,exp){
     console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
     await window._fsSetDoc(ref,payload,{merge:true});
     console.log('saveExpedienteDoc OK:',ref.path);
+    window._lastFsSaveError=null;
     return true;
   }catch(err){
     console.error('saveExpedienteDoc:',depto,expId,ref.path,err);
+    window._lastFsSaveError={code:err&&err.code||'unknown',msg:err&&err.message||'Error desconocido'};
     return false;
   }
 }
@@ -368,6 +370,7 @@ async function saveGlobalFirestore(){
     return true;
   }catch(err){
     console.error('saveGlobalFirestore:',err);
+    if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Global: '+(err&&err.message||'Error desconocido')};
     return false;
   }
 }
@@ -387,8 +390,17 @@ function persistExpedienteGranular(exp,withGlobal){
     const ok=r.every(x=>x!==false);
     updateSyncIndicator(ok?'synced':'error');
     if(!ok){
-      console.error('persistExpedienteGranular: guardado en Firestore falló',{exp__exp:exp._exp,deptoResolved});
-      if(typeof notif==='function')notif('⚠️ No se pudo guardar en Firestore. Verifique conexión o permisos.','err');
+      const lastErr=window._lastFsSaveError||null;
+      const errCode=lastErr&&lastErr.code||'unknown';
+      console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
+      if(typeof notif==='function'){
+        let msg='⚠️ No se pudo guardar en Firestore.';
+        if(errCode==='permission-denied')msg+=' Sin permisos: verifique que el usuario "'+((window._usuarioActual&&window._usuarioActual.email)||'?')+'" tenga rol secretaria activo en la configuración.';
+        else if(errCode==='unauthenticated')msg+=' Sesión expirada — cierre sesión y vuelva a ingresar.';
+        else if(errCode&&errCode!=='unknown')msg+=' Código: '+errCode;
+        else msg+=' Verifique conexión o permisos.';
+        notif(msg,'err');
+      }
     }
   }).catch(function(err){
     updateSyncIndicator('error');
@@ -402,10 +414,25 @@ function diagTestSaveExpedienteDoc(){
     _depto:'guaviare',
     _tramite:'prueba',
     nombre:'Expediente de prueba'
-  }).then(function(ok){console.log('saveExpedienteDoc resultado:',ok);})
+  }).then(function(ok){console.log('saveExpedienteDoc resultado:',ok,'lastErr:',window._lastFsSaveError);})
     .catch(function(err){console.error('saveExpedienteDoc error:',err);});
 }
+async function diagCheckUsuarioFirestore(email){
+  const em=String(email||'').trim().toLowerCase();
+  const db=window._db;
+  if(!db||!window._fsGetDoc||!window._fsDoc){console.error('diagCheckUsuarioFirestore: Firestore no disponible');return;}
+  try{
+    const snap=await window._fsGetDoc(window._fsDoc(db,'usuarios',em||((window._usuarioActual&&window._usuarioActual.email)||'')));
+    if(!snap.exists()){console.error('diagCheckUsuarioFirestore: documento NO EXISTE para',em);return;}
+    const d=snap.data()||{};
+    console.log('diagCheckUsuarioFirestore OK:',{email:snap.id,rol:d.rol,activo:d.activo,nombre:d.nombre,codigo:d.codigo});
+    console.log('rolOperaGuaviareFrontend:',['secretaria','oap_deguv','rn_deguv','admin_deguv','ds_deguv'].includes(d.rol));
+  }catch(err){
+    console.error('diagCheckUsuarioFirestore error:',err.code,err.message);
+  }
+}
 window.diagTestSaveExpedienteDoc=diagTestSaveExpedienteDoc;
+window.diagCheckUsuarioFirestore=diagCheckUsuarioFirestore;
 async function limpiarCamposObsoletos(){
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc||!window._fsDeleteField){
