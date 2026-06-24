@@ -29,6 +29,8 @@ window._fsDeleteField=deleteField;
 window._fsArrayUnion=arrayUnion;
 window._fsArrayRemove=arrayRemove;
 window._googleProvider=new GoogleAuthProvider();
+// Force account picker every time so users can switch accounts after logout
+window._googleProvider.setCustomParameters({prompt:'select_account'});
 window._authSignInGoogle=()=>signInWithPopup(auth,window._googleProvider);
 window._authSignOut=()=>signOut(auth);
 window._authOnStateChanged=onAuthStateChanged;
