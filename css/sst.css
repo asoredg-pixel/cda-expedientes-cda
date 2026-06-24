@@ -1273,25 +1273,40 @@ body.sesion-activa{background:#eeecea}
 }
 .hdr .ltx{color:rgba(255,255,255,.95)!important}
 .hdr .lsb{color:rgba(255,255,255,.4)!important}
-.hdr-logo-img{filter:drop-shadow(0 0 10px rgba(52,211,153,.45))}
+/* Logo: white container to make it pop on dark header */
+.lic-logo{background:rgba(255,255,255,.95)!important;border-radius:8px!important;padding:3px!important;width:46px!important;height:46px!important}
+.hdr-logo-img{filter:none!important;width:40px!important;height:40px!important}
 /* Header buttons */
-.hdr .btn{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.8)!important}
+.hdr .btn{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.85)!important}
 .hdr .btn:hover{background:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.3)!important;color:#fff!important;transform:none!important}
-#hdr-user-label{color:rgba(255,255,255,.72)!important;font-size:12px}
-/* Dept selector on dark */
-.depto-sel{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.22)!important;color:rgba(255,255,255,.9)!important}
-.depto-sel option{background:#163828;color:#fff}
+/* User label — clearly white */
+.hdr-user-bar{color:rgba(255,255,255,.85)!important}
+.hdr-user-bar strong{color:#fff!important}
+#hdr-user-label{color:rgba(255,255,255,.85)!important;font-size:12px}
+/* Dept selector on dark — white text, light options */
+.depto-sel{background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.25)!important;color:#fff!important}
+.depto-sel option,.depto-sel optgroup{background:#fff!important;color:#1a1a1a!important}
+.depto-sel optgroup{font-weight:700!important;color:#1a4a2e!important}
 /* Bell icon */
 .inbox-btn{background:rgba(255,255,255,.09)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.8)!important;border-radius:9px!important}
 .inbox-btn:hover{background:rgba(255,255,255,.18)!important;color:#fff!important}
-/* Resp global bar */
-.resp-global-bar{border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+/* Resp global bar — white text on teal background */
+.resp-global-bar{border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.18);background:linear-gradient(90deg,#163828,#0e2035)!important;border-bottom:1px solid rgba(52,211,153,.18)!important;color:#fff!important}
+.resp-global-bar .btn{background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.22)!important;color:#fff!important}
+.resp-global-bar .btn:hover{background:rgba(255,255,255,.22)!important;color:#fff!important}
+#resp-global-label{color:rgba(255,255,255,.7)!important;font-size:12px!important}
+#resp-global-hint{color:rgba(255,255,255,.65)!important;font-size:12px!important}
+#resp-global-hint strong{color:#fff!important}
+.resp-global-bar select{background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.25)!important;color:#fff!important}
+.resp-global-bar select option{background:#fff!important;color:#1a1a1a!important}
 
 /* ─── TABS — Floating pills on warm bar ─── */
 .tabs{background:#e8e6df!important;border-bottom:1px solid rgba(0,0,0,.09)!important;box-shadow:0 2px 8px rgba(0,0,0,.07)}
 .tab{border-radius:20px!important;border-bottom:none!important;padding:5px 14px!important;margin:5px 2px!important;font-size:12.5px!important;color:#5a5850!important;transition:all .2s cubic-bezier(.22,1,.36,1)!important}
 .tab:hover{background:rgba(22,56,40,.11)!important;color:#163828!important}
-.tab.on{background:linear-gradient(135deg,#1a4a2e 0%,#185FA5 100%)!important;color:#fff!important;border-bottom:none!important;box-shadow:0 2px 12px rgba(26,73,46,.38)!important}
+/* tab.on = visible (module tabs), tab.tab-selected = truly active → only tab-selected gets gradient */
+.tab.on:not(.tab-selected){color:#5a5850!important;background:none!important;box-shadow:none!important;border-bottom:none!important}
+.tab.tab-selected{background:linear-gradient(135deg,#1a4a2e 0%,#185FA5 100%)!important;color:#fff!important;border-bottom:none!important;box-shadow:0 2px 12px rgba(26,73,46,.38)!important}
 
 /* ─── CARDS ─── */
 .card{border-radius:14px!important;border:1px solid rgba(0,0,0,.07)!important;box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 12px rgba(0,0,0,.06)!important;transition:box-shadow .22s,transform .18s!important}

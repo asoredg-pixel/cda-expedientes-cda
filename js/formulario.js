@@ -23,10 +23,10 @@ function showTab(t){
   if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}
   if(t!=='cfg')desuscribirCfgSync();
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
-  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(b=>{b.classList.remove('on');b.classList.remove('tab-selected');});
   document.getElementById('pg-'+t).classList.add('on');
   const tabBtn=document.getElementById('tab-'+t);
-  if(tabBtn)tabBtn.classList.add('on');
+  if(tabBtn){tabBtn.classList.add('on');tabBtn.classList.add('tab-selected');}
   if(t==='reg'){poblarTramSelect();renderTabla();}
   if(t==='sec'){poblarSecOficinaSelect();renderSecretariaPqrs();}
   if(t==='pqrs-ofi'){initPeriodoFiltros('pqrs-ofi');renderPqrsOficinaInbox();}

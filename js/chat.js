@@ -48,11 +48,11 @@ function addChatContactosOficina(add,oficinaId,skipEncNombre){
   if(!oficinaId||oficinaId==='guaviare')return;
   const enc=getEncargadoOficina(oficinaId);
   const ofiLbl=labelOficina(oficinaId);
+  // Only add the encargado (by name) if configured — don't fall back to office name
   if(enc&&enc!==skipEncNombre){
     add({kind:'enc_ofi',key:'resp:'+enc,label:enc,oficinaId,sub:ofiLbl+' · Encargado'});
-  }else if(!enc){
-    add({kind:'ofi',key:'ofi:'+oficinaId,label:ofiLbl,oficinaId,sub:'Oficina DEGUV'});
   }
+  // Always add configured responsables of the office
   getInstructoresOficina(oficinaId).forEach(i=>{
     const n=i.nombre;
     if(!n||n===enc||i.rol==='encargado_oficina')return;
