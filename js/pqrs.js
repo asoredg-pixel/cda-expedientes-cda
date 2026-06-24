@@ -190,9 +190,9 @@ function guardarPqrsSecretaria(){
     _pqrs_solicitud_link:linkFinal,_pqrs_solicitud_archivo:archivo,_pqrs_detalle:detalle,
     _pqrs_historial:hist,tasks:[],
     // Sprint B: trazabilidad del correo origen
-    _gmail_message_id:gmailMsgId||undefined,
+    _gmail_message_id:gmailMsgId||null,
     // Sprint C: links de adjuntos subidos a Drive
-    _pqrs_gmail_attachments:gmailAtts||undefined
+    _pqrs_gmail_attachments:gmailAtts||null
   });
   exps.push(data);
   if(oficina==='guaviare')ensureTareaPqrsNca(data);

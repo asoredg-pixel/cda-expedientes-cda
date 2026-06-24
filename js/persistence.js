@@ -287,7 +287,9 @@ async function saveExpedienteDoc(deptoId,exp){
   const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
-  const payload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
+  // Strip undefined values — Firestore v10 throws invalid-argument on undefined fields
+  const rawPayload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
+  const payload=Object.fromEntries(Object.entries(rawPayload).filter(([,v])=>v!==undefined));
   try{
     console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
     await window._fsSetDoc(ref,payload,{merge:true});
