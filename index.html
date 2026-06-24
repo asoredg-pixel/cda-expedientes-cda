@@ -7,28 +7,28 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260624q">
+<link rel="stylesheet" href="css/sst.css?v=20260624r">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
-<script type="module" src="js/firebase-init.js?v=20260624q"></script>
-<script src="js/constants.js?v=20260624q"></script>
-<script src="js/utils.js?v=20260624q"></script>
-<script src="js/state.js?v=20260624q"></script>
-<script src="js/persistence.js?v=20260624q"></script>
-<script src="js/roles.js?v=20260624q"></script>
-<script src="js/config-store.js?v=20260624q"></script>
-<script src="js/core.js?v=20260624q"></script>
-<script src="js/formulario.js?v=20260624q"></script>
-<script src="js/tareas.js?v=20260624q"></script>
-<script src="js/guardar-exp.js?v=20260624q"></script>
-<script src="js/consulta.js?v=20260624q"></script>
-<script src="js/consolidado.js?v=20260624q"></script>
-<script src="js/configuracion.js?v=20260624q"></script>
-<script src="js/export.js?v=20260624q"></script>
-<script src="js/chat.js?v=20260624q"></script>
-<script src="js/pqrs.js?v=20260624q"></script>
-<script src="js/gmail.js?v=20260624q"></script>
-<script src="js/ingreso.js?v=20260624q"></script>
+<script type="module" src="js/firebase-init.js?v=20260624r"></script>
+<script src="js/constants.js?v=20260624r"></script>
+<script src="js/utils.js?v=20260624r"></script>
+<script src="js/state.js?v=20260624r"></script>
+<script src="js/persistence.js?v=20260624r"></script>
+<script src="js/roles.js?v=20260624r"></script>
+<script src="js/config-store.js?v=20260624r"></script>
+<script src="js/core.js?v=20260624r"></script>
+<script src="js/formulario.js?v=20260624r"></script>
+<script src="js/tareas.js?v=20260624r"></script>
+<script src="js/guardar-exp.js?v=20260624r"></script>
+<script src="js/consulta.js?v=20260624r"></script>
+<script src="js/consolidado.js?v=20260624r"></script>
+<script src="js/configuracion.js?v=20260624r"></script>
+<script src="js/export.js?v=20260624r"></script>
+<script src="js/chat.js?v=20260624r"></script>
+<script src="js/pqrs.js?v=20260624r"></script>
+<script src="js/gmail.js?v=20260624r"></script>
+<script src="js/ingreso.js?v=20260624r"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -133,60 +133,102 @@
 
 <!-- ===== INICIO — SELECCIÓN DE ROL ===== -->
 <div class="pg on" id="pg-login">
-  <!-- Animated aurora background -->
+  <!-- Aurora background -->
   <div class="lbg" aria-hidden="true">
     <div class="lbg-blob lbg-b1"></div>
     <div class="lbg-blob lbg-b2"></div>
     <div class="lbg-blob lbg-b3"></div>
     <div class="lbg-blob lbg-b4"></div>
+    <div class="lbg-blob lbg-b5"></div>
     <div class="lbg-grid"></div>
   </div>
-  <!-- Floating particles (populated by script below) -->
   <div id="lbg-pts" class="lbg-pts" aria-hidden="true"></div>
 
-  <!-- Login card -->
-  <div class="login-wrap">
-    <div class="login-logo-wrap">
-      <img src="assets/logo-cda.png" alt="CDA Guaviare" class="login-logo-img">
-    </div>
-    <h1 class="login-title">Sistema de Seguimiento de Trámites</h1>
-    <p class="login-org">Corporación para el Desarrollo Sostenible del Norte y el Oriente Amazónico · DEGUV</p>
+  <!-- Edge decorative curves -->
+  <svg class="login-edge-svg login-edge-l" viewBox="0 0 180 600" aria-hidden="true" preserveAspectRatio="none">
+    <path d="M0,0 C90,180 -30,340 90,600 L0,600Z" fill="rgba(34,197,94,.05)"/>
+    <path d="M0,120 C110,210 10,380 110,500" stroke="rgba(52,211,153,.18)" stroke-width="1.5" fill="none"/>
+    <path d="M0,260 C70,320 -10,410 70,500" stroke="rgba(6,182,212,.12)" stroke-width="1" fill="none"/>
+    <circle cx="30" cy="180" r="4" fill="rgba(52,211,153,.2)"/>
+    <circle cx="80" cy="320" r="2.5" fill="rgba(6,182,212,.18)"/>
+  </svg>
+  <svg class="login-edge-svg login-edge-r" viewBox="0 0 180 600" aria-hidden="true" preserveAspectRatio="none">
+    <path d="M180,0 C90,180 210,340 90,600 L180,600Z" fill="rgba(6,182,212,.04)"/>
+    <path d="M180,100 C70,200 170,400 70,510" stroke="rgba(52,211,153,.15)" stroke-width="1.5" fill="none"/>
+    <circle cx="150" cy="220" r="3" fill="rgba(163,230,53,.18)"/>
+    <circle cx="100" cy="400" r="2" fill="rgba(52,211,153,.15)"/>
+  </svg>
 
-    <div class="login-main-card">
-      <h2>🔍 Consulta ciudadana</h2>
-      <p>Consulte el estado de su trámite o PQRSD ingresando el número de expediente o solicitud.</p>
-      <button type="button" class="btn bp login-cta-btn" onclick="SST.ingresarConsultaCiudadana()">Consultar mi trámite</button>
+  <!-- Two-column card -->
+  <div class="login-card">
+    <!-- LEFT: Brand -->
+    <div class="login-panel-brand">
+      <div class="lpb-rings" aria-hidden="true">
+        <div class="lpb-ring lpb-r1"></div>
+        <div class="lpb-ring lpb-r2"></div>
+        <div class="lpb-ring lpb-r3"></div>
+      </div>
+      <div class="lpb-logo-wrap">
+        <img src="assets/logo-cda-icon.png" alt="CDA" class="lpb-logo">
+      </div>
+      <h1 class="lpb-title">Sistema de<br>Seguimiento<br>de Trámites</h1>
+      <p class="lpb-org">Corporación para el Desarrollo Sostenible del Norte y el Oriente Amazónico</p>
+      <div class="lpb-badge">⚡ DEGUV · Guaviare · 2026</div>
+      <svg class="lpb-leaf" viewBox="0 0 110 170" aria-hidden="true">
+        <path d="M55,165 C18,138 8,98 28,56 C38,30 55,14 78,6 C88,46 82,88 66,118 C60,132 55,150 55,165Z" fill="rgba(52,211,153,.1)" stroke="rgba(52,211,153,.28)" stroke-width="1"/>
+        <path d="M55,165 C55,135 50,95 46,56" stroke="rgba(52,211,153,.22)" stroke-width="1" fill="none"/>
+        <path d="M50,88 C36,72 26,62 28,56" stroke="rgba(52,211,153,.18)" stroke-width=".8" fill="none"/>
+        <path d="M52,110 C41,99 34,87 36,78" stroke="rgba(52,211,153,.16)" stroke-width=".8" fill="none"/>
+        <circle cx="28" cy="56" r="2.5" fill="rgba(52,211,153,.35)"/>
+        <circle cx="78" cy="6" r="2" fill="rgba(163,230,53,.3)"/>
+      </svg>
     </div>
 
-    <div class="login-func-divider">Acceso funcionarios</div>
-    <p class="login-sub login-sub-func" id="login-sub">Personal autorizado: ingrese con su cuenta Google institucional.</p>
-    <div id="login-auth-panel">
-      <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="SST.iniciarLoginGoogle()">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        Ingresar con cuenta Google
-      </button>
-      <p id="login-auth-msg" class="login-auth-msg"></p>
-    </div>
-    <div id="login-status" class="login-status" style="display:none"></div>
-    <div id="login-roles-wrap" style="display:none">
-      <p class="login-sub" style="color:rgba(255,255,255,.7)">Seleccione su rol para ingresar.</p>
-      <div id="login-roles-grid" class="login-roles-grid"></div>
-      <div style="text-align:center;margin-top:1.25rem">
-        <button type="button" class="btn bsm" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2);background:rgba(255,255,255,.07)" onclick="SST.cerrarSesionGoogle()">Cerrar sesión de Google</button>
+    <!-- RIGHT: Auth -->
+    <div class="login-panel-auth">
+      <div class="lpa-header">
+        <div class="lpa-welcome">Bienvenido</div>
+        <p class="lpa-hint">Seleccione cómo desea ingresar al sistema</p>
+      </div>
+
+      <div class="login-main-card">
+        <div class="lmc-icon">🌿</div>
+        <div class="lmc-body">
+          <h2>Consulta ciudadana</h2>
+          <p>Consulte el estado de su trámite o PQRSD sin necesidad de registrarse.</p>
+          <button type="button" class="login-cta-btn" onclick="SST.ingresarConsultaCiudadana()">Consultar mi trámite <span class="lmc-arr">→</span></button>
+        </div>
+      </div>
+
+      <div class="login-func-divider"><span>Acceso funcionarios</span></div>
+
+      <p class="login-sub login-sub-func" id="login-sub">Personal autorizado con cuenta Google institucional.</p>
+      <div id="login-auth-panel">
+        <button type="button" class="login-gmail-btn" id="btn-google-login" onclick="SST.iniciarLoginGoogle()">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Ingresar con Google
+        </button>
+        <p id="login-auth-msg" class="login-auth-msg"></p>
+      </div>
+      <div id="login-status" class="login-status" style="display:none"></div>
+      <div id="login-roles-wrap" style="display:none">
+        <p class="login-sub" style="color:rgba(255,255,255,.6);margin-bottom:.5rem">Seleccione su rol para continuar</p>
+        <div id="login-roles-grid" class="login-roles-grid"></div>
+        <div style="text-align:center;margin-top:.9rem">
+          <button type="button" class="login-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión de Google</button>
+        </div>
       </div>
     </div>
-  </div>
+  </div><!-- /.login-card -->
 </div>
 <script>
-/* Generate login floating particles */
 (function(){
   var c=document.getElementById('lbg-pts');
   if(!c)return;
-  for(var i=0;i<22;i++){
-    var p=document.createElement('div');
-    p.className='lpt';
-    var sz=(1.5+Math.random()*3).toFixed(1);
-    p.style.cssText='left:'+(3+Math.random()*94)+'%;bottom:-8px;width:'+sz+'px;height:'+sz+'px;animation-duration:'+(10+Math.random()*22)+'s;animation-delay:'+(-Math.random()*30)+'s;opacity:'+(0.2+Math.random()*0.5);
+  for(var i=0;i<28;i++){
+    var p=document.createElement('div');p.className='lpt';
+    var sz=(1+Math.random()*4).toFixed(1);
+    p.style.cssText='left:'+(2+Math.random()*96)+'%;bottom:-10px;width:'+sz+'px;height:'+sz+'px;animation-duration:'+(9+Math.random()*24)+'s;animation-delay:'+(-Math.random()*32)+'s;opacity:'+(0.15+Math.random()*0.55);
     c.appendChild(p);
   }
 })();
