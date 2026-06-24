@@ -1294,6 +1294,18 @@ function gmailOfiIsTokenValid() {
 
 // ---- Connect / disconnect ----
 function gmailOfiConnect() {
+  // Secretary: reuse her primary Gmail OAuth (managed in gmail.js secretary section)
+  if (_gmailOfiIsSecretaria()) {
+    if (typeof gmailConnect === 'function') {
+      gmailConnect(function() {
+        _updateGmailOfiBtn();
+        gmailOfiFolder('INBOX');
+        gmailOfiLoadLabels();
+        _gmailOfiLoadSignature();
+      });
+    }
+    return;
+  }
   if (_gmailOfiConnecting) return;
   const clientId = (typeof window._gmailClientId !== 'undefined') ? window._gmailClientId : '';
   if (!clientId || clientId.includes('TU_CLIENT_ID')) {
@@ -1317,31 +1329,43 @@ function gmailOfiConnect() {
       notif('✅ Correo conectado.', 'ok');
       gmailOfiFolder('INBOX');
       gmailOfiLoadLabels();
+      _gmailOfiLoadSignature();
     }
   });
   _gmailOfiTokenClient.requestAccessToken({ prompt: '' });
 }
 
 function gmailOfiDisconnect() {
-  gmailOfiSetToken('');
-  _gmailOfiMessages  = [];
+  if (_gmailOfiIsSecretaria()) {
+    if (typeof gmailDisconnect === 'function') gmailDisconnect();
+  } else {
+    gmailOfiSetToken('');
+  }
+  _gmailOfiMessages   = [];
   _gmailOfiCurrentMsg = null;
-  _gmailOfiLabels    = [];
+  _gmailOfiLabels     = [];
+  _gmailOfiSignature  = '';
   _updateGmailOfiBtn();
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (listEl) listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
-  const viewEl = document.getElementById('gmail-ofi-msg-view');
-  if (viewEl) viewEl.innerHTML = '';
   gmailOfiCloseMessage();
   const labelsEl = document.getElementById('gm-labels-list');
   if (labelsEl) labelsEl.innerHTML = '';
+}
+
+// For secretary, the Correos tab reuses her primary Gmail token (no double-login)
+function _gmailOfiIsSecretaria() { return typeof esSecretaria === 'function' && esSecretaria(); }
+function _gmailOfiTokenValid() {
+  if (_gmailOfiIsSecretaria()) return typeof gmailIsTokenValid === 'function' ? gmailIsTokenValid() : false;
+  return gmailOfiIsTokenValid();
 }
 
 function _updateGmailOfiBtn() {
   const btn = document.getElementById('gmail-ofi-connect-btn');
   if (!btn) return;
   if (_gmailOfiConnecting) { btn.textContent = '⏳ Conectando…'; btn.disabled = true; return; }
-  if (gmailOfiIsTokenValid()) {
+  const valid = _gmailOfiTokenValid();
+  if (valid) {
     btn.textContent = '🔌 Desconectar';
     btn.disabled = false;
     btn.onclick = gmailOfiDisconnect;
@@ -1351,12 +1375,15 @@ function _updateGmailOfiBtn() {
     btn.onclick = gmailOfiConnect;
   }
   const rb = document.getElementById('gmail-ofi-refresh-btn');
-  if (rb) rb.style.display = gmailOfiIsTokenValid() ? '' : 'none';
+  if (rb) rb.style.display = valid ? '' : 'none';
 }
 
 // ---- API helper ----
 async function _gmailOfiApi(method, url, body) {
-  const token = gmailOfiGetToken();
+  // Secretary reuses her primary token; other roles use the OFI token
+  const token = _gmailOfiIsSecretaria()
+    ? (sessionStorage.getItem(GMAIL_TOKEN_KEY) || '')
+    : gmailOfiGetToken();
   if (!token) { notif('⚠️ Reconecte su correo para continuar.', 'err'); throw new Error('Sin token.'); }
   const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
@@ -1429,7 +1456,7 @@ function gmailOfiLoadInbox(query) {
 async function _gmailOfiLoadMessages(opts) {
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (!listEl) return;
-  if (!gmailOfiIsTokenValid()) {
+  if (!_gmailOfiTokenValid()) {
     listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
     _updateGmailOfiBtn();
     return;
@@ -1501,6 +1528,22 @@ async function _gmailOfiUpdateBadges() {
     const db = document.getElementById('gmb-DRAFT');
     if (db) db.textContent = (draftData && draftData.resultSizeEstimate) ? draftData.resultSizeEstimate : '';
   } catch(e) {}
+}
+
+// ---- Gmail Signature ----
+let _gmailOfiSignature = '';
+
+async function _gmailOfiLoadSignature() {
+  try {
+    const data = await _gmailOfiApi('GET', 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs');
+    const primary = (data.sendAs || []).find(s => s.isPrimary) || (data.sendAs || [])[0];
+    if (primary && primary.signature) {
+      // Strip HTML to plain text
+      const div = document.createElement('div');
+      div.innerHTML = primary.signature;
+      _gmailOfiSignature = '\n\n-- \n' + (div.textContent || div.innerText || '').trim();
+    }
+  } catch(e) { _gmailOfiSignature = ''; }
 }
 
 // ---- Email list rendering ----
@@ -1621,6 +1664,10 @@ function _renderGmailOfiMsgView(msg) {
   const fwdSubj    = subject.startsWith('Fwd:') ? subject : 'Fwd: ' + subject;
   const fwdBody    = '\n\n--- Mensaje reenviado ---\nDe: ' + from + '\nFecha: ' + date + '\nPara: ' + to + '\nAsunto: ' + subject + '\n\n' + (parts.textPlain || '');
 
+  const radicarBtn = _gmailOfiIsSecretaria()
+    ? '<button type="button" class="gm-action-btn gm-radicar-btn" onclick="gmailOfiRadicarDesdeCorreo()">📋 Radicar desde este correo</button>'
+    : '';
+
   viewEl.innerHTML =
     '<div class="gm-msg-header">' +
       '<h2 class="gm-msg-title">' + escAttr(subject) + '</h2>' +
@@ -1634,6 +1681,7 @@ function _renderGmailOfiMsgView(msg) {
       '<div class="gm-msg-actions">' +
         (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({to:\'' + escAttr(replyEmail) + '\',subject:\'' + escAttr(replySubj) + '\',inReplyTo:\'' + escAttr(msgId) + '\',title:\'Responder\'})">↩ Responder</button>' : '') +
         '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({subject:\'' + escAttr(fwdSubj) + '\',body:\'' + escAttr(fwdBody) + '\',title:\'Reenviar\'})">↪ Reenviar</button>' +
+        radicarBtn +
       '</div>' +
     '</div>' +
     attsHtml + bodyHtml;
@@ -1686,7 +1734,9 @@ function gmailOfiOpenCompose(opts) {
   f('gm-compose-to',      opts.to || '');
   f('gm-compose-cc',      opts.cc || '');
   f('gm-compose-subject', opts.subject || '');
-  f('gm-compose-body',    opts.body || '');
+  // Pre-fill body: provided body (reply/forward quote) + signature if available
+  const sigSuffix = (!opts.body && _gmailOfiSignature) ? _gmailOfiSignature : (!opts.body ? '' : (_gmailOfiSignature ? '\n\n' + _gmailOfiSignature : ''));
+  f('gm-compose-body', (opts.body || '') + sigSuffix);
   const title = document.getElementById('gm-compose-title');
   if (title) title.textContent = opts.title || 'Nuevo mensaje';
   modal.dataset.inReplyTo = opts.inReplyTo || '';
@@ -1753,14 +1803,32 @@ async function gmailOfiSaveDraft() {
   } catch(e) { notif('Error al guardar borrador: ' + e.message, 'err'); }
 }
 
+// ---- Radicar desde correo (secretaría) ----
+// Navega al tab de Radicación y activa el split view con el correo actual
+function gmailOfiRadicarDesdeCorreo() {
+  const msg = _gmailOfiCurrentMsg;
+  if (!msg) return;
+  // Bridge: make this the active message for the secretary's radicación flow
+  _gmailCurrentMsg = msg;
+  window._gmailPendingMsgId    = msg.id;
+  window._gmailPendingAttachments = null;
+  // Navigate to Radicación tab
+  if (typeof showTab === 'function') showTab('sec');
+  // Trigger split-view + form pre-population (existing secretary function)
+  setTimeout(function() {
+    if (typeof gmailPreRadicarPqrs === 'function') gmailPreRadicarPqrs();
+  }, 120);
+}
+
 // ---- Init panel ----
 function gmailOfiInitPanel() {
   _updateGmailOfiBtn();
-  if (gmailOfiIsTokenValid()) {
+  if (_gmailOfiTokenValid()) {
     if (!_gmailOfiMessages.length) {
       gmailOfiFolder('INBOX');
       gmailOfiLoadLabels();
       _gmailOfiUpdateBadges();
+      if (!_gmailOfiSignature) _gmailOfiLoadSignature();
     } else {
       _renderGmailOfiList();
       _renderGmailOfiLabels();

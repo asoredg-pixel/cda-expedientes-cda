@@ -8,14 +8,16 @@
 // ================================================================
 function showTab(t){
   if(esModoCiudadano()&&t!=='ciudadano')t='ciudadano';
-  if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi')t='sec';
+  if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi')t='sec';
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');
   if(esJurisdiccional()&&t!=='con'&&t!=='cons')t='con';
   if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='con';
   if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
-  // gmail-ofi tab requires one of: office, NCA or responsable
-  if(t==='gmail-ofi'&&!esModoOficinaDeguv()&&!esOficinaPqrsNca()&&!esNcaDeguv()&&!esModoResponsable())t='con';
+  // gmail-ofi tab requires one of: secretary, office, NCA or responsable
+  if(t==='gmail-ofi'&&!esSecretaria()&&!esModoOficinaDeguv()&&!esOficinaPqrsNca()&&!esNcaDeguv()&&!esModoResponsable())t='con';
+  // secretary can switch between sec and gmail-ofi freely
+  if(esSecretaria()&&t==='gmail-ofi')t='gmail-ofi';
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
   if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t='con';}
   if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}

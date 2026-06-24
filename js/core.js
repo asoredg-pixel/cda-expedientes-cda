@@ -8500,9 +8500,9 @@ function updateDeptoUI(){
   document.querySelectorAll('.tab-modulo-only').forEach(el=>el.classList.remove('on'));
   const tabSec=document.getElementById('tab-sec');if(tabSec)tabSec.classList.toggle('on',sec);
   const tabOfi=document.getElementById('tab-pqrs-ofi');if(tabOfi)tabOfi.classList.toggle('on',ofiVista);
-  // Gmail Correos tab — visible for offices, NCA and responsables
+  // Gmail Correos tab — visible for secretary, offices, NCA and responsables
   const tabGmailOfi=document.getElementById('tab-gmail-ofi');
-  if(tabGmailOfi){const showGmail=ofi||esOficinaPqrsNca()||esNcaDeguv()||resp;tabGmailOfi.classList.toggle('tab-gmail-ofi-on',showGmail);}
+  if(tabGmailOfi){const showGmail=sec||ofi||esOficinaPqrsNca()||esNcaDeguv()||resp;tabGmailOfi.classList.toggle('tab-gmail-ofi-on',showGmail);}
   const tabCiu=document.getElementById('tab-ciudadano');if(tabCiu)tabCiu.classList.toggle('on',ciudadano);
   document.querySelectorAll('.tabsi .tab').forEach(el=>{
     if(ciudadano)el.style.display=el.id==='tab-ciudadano'?'inline-flex':'none';

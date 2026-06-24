@@ -1106,6 +1106,9 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
 .gm-compose-footer{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
 .gm-compose-discard-btn{margin-left:auto;background:none;border:none;font-size:16px;cursor:pointer;color:var(--tx3);padding:4px;border-radius:4px}
 .gm-compose-discard-btn:hover{background:var(--sf2);color:var(--rd)}
+/* Radicar button (secretary only) */
+.gm-radicar-btn{background:color-mix(in srgb,var(--gn) 15%,var(--bg));border-color:var(--gn);color:var(--gn);font-weight:600}
+.gm-radicar-btn:hover{background:color-mix(in srgb,var(--gn) 25%,var(--bg))}
 /* ── Responsive ── */
 @media(max-width:860px){
   .gm-sidebar{width:52px;min-width:52px}
