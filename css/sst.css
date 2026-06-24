@@ -1255,3 +1255,96 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
   .gm-topbar{gap:6px}
   .gm-compose-btn span{display:none}
 }
+
+/* =====================================================
+   APP INTERIOR REDESIGN 2026 — Premium Amazon Theme
+   Solo diseño, sin cambios de funcionalidad.
+   Para revertir: eliminar desde aquí hasta END.
+   ===================================================== */
+
+/* Body background when logged in */
+body.sesion-activa{background:#eeecea}
+
+/* ─── HEADER — Dark forest gradient ─── */
+.hdr{
+  background:linear-gradient(135deg,#0b2114 0%,#163828 45%,#0e2035 100%)!important;
+  border-bottom:1px solid rgba(52,211,153,.14)!important;
+  box-shadow:0 4px 28px rgba(0,0,0,.32),0 1px 0 rgba(52,211,153,.07)!important;
+}
+.hdr .ltx{color:rgba(255,255,255,.95)!important}
+.hdr .lsb{color:rgba(255,255,255,.4)!important}
+.hdr-logo-img{filter:drop-shadow(0 0 10px rgba(52,211,153,.45))}
+/* Header buttons */
+.hdr .btn{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.8)!important}
+.hdr .btn:hover{background:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.3)!important;color:#fff!important;transform:none!important}
+#hdr-user-label{color:rgba(255,255,255,.72)!important;font-size:12px}
+/* Dept selector on dark */
+.depto-sel{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.22)!important;color:rgba(255,255,255,.9)!important}
+.depto-sel option{background:#163828;color:#fff}
+/* Bell icon */
+.inbox-btn{background:rgba(255,255,255,.09)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.8)!important;border-radius:9px!important}
+.inbox-btn:hover{background:rgba(255,255,255,.18)!important;color:#fff!important}
+/* Resp global bar */
+.resp-global-bar{border-radius:0 0 14px 14px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+
+/* ─── TABS — Floating pills on warm bar ─── */
+.tabs{background:#e8e6df!important;border-bottom:1px solid rgba(0,0,0,.09)!important;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+.tab{border-radius:20px!important;border-bottom:none!important;padding:5px 14px!important;margin:5px 2px!important;font-size:12.5px!important;color:#5a5850!important;transition:all .2s cubic-bezier(.22,1,.36,1)!important}
+.tab:hover{background:rgba(22,56,40,.11)!important;color:#163828!important}
+.tab.on{background:linear-gradient(135deg,#1a4a2e 0%,#185FA5 100%)!important;color:#fff!important;border-bottom:none!important;box-shadow:0 2px 12px rgba(26,73,46,.38)!important}
+
+/* ─── CARDS ─── */
+.card{border-radius:14px!important;border:1px solid rgba(0,0,0,.07)!important;box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 12px rgba(0,0,0,.06)!important;transition:box-shadow .22s,transform .18s!important}
+.card:hover{box-shadow:0 2px 8px rgba(0,0,0,.07),0 10px 28px rgba(0,0,0,.1)!important}
+
+/* ─── BUTTONS ─── */
+.btn{border-radius:9px!important;transition:all .18s cubic-bezier(.22,1,.36,1)!important}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)!important}
+.bp{background:linear-gradient(135deg,#1a4a2e 0%,#185FA5 100%)!important;border:none!important;box-shadow:0 2px 8px rgba(26,73,46,.38)!important}
+.bp:hover{box-shadow:0 4px 16px rgba(26,73,46,.48)!important;filter:brightness(1.08)}
+.bd2{background:linear-gradient(135deg,#9b1c1c,#b91c1c)!important;border:none!important}
+.bpu{background:linear-gradient(135deg,#5b21b6,#7c3aed)!important;border:none!important}
+
+/* ─── FORM FIELDS ─── */
+.fld input,.fld select,.fld textarea{border-radius:9px;transition:border-color .18s,box-shadow .18s}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:#1a4a2e!important;box-shadow:0 0 0 3px rgba(26,73,46,.13)!important;outline:none}
+.fld label{font-size:12px;font-weight:600;color:#544f48;letter-spacing:.01em}
+
+/* ─── SECTION LABELS ─── */
+.slbl{color:#1a4a2e!important;font-weight:700!important;font-size:10.5px!important;letter-spacing:.07em}
+
+/* ─── TABLES ─── */
+th{background:#f0efe7!important;color:#1a4a2e!important;font-size:10.5px!important;font-weight:700!important;border-bottom:2px solid #dddad0!important;padding:8px 10px!important}
+td{padding:9px 10px!important;border-bottom:1px solid #ece9e0!important;transition:background .12s}
+tr:nth-child(even) td{background:rgba(26,73,46,.022)}
+tr:hover td{background:rgba(26,73,46,.055)!important}
+tr:last-child td{border-bottom:none!important}
+
+/* ─── STATUS / PERIOD labels ─── */
+.depto-banner{border-radius:10px!important;border-left:4px solid var(--bl)!important}
+
+/* ─── INBOX PANEL ─── */
+.inbox-panel{border-radius:16px!important;box-shadow:0 8px 36px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.07)!important}
+
+/* ─── SIDE PANELS & MODALS ─── */
+.con-side-panel{border-radius:20px 0 0 20px!important;box-shadow:-8px 0 40px rgba(0,0,0,.15)!important}
+.con-side-panel-hdr{border-radius:20px 0 0 0!important}
+
+/* ─── AGENDA & ACTIVITY ELEMENTS ─── */
+.agenda-drawer{border-radius:16px 0 0 16px!important}
+.agenda-drawer-hdr{border-radius:16px 0 0 0!important}
+
+/* ─── CHAT ─── */
+.chat-window{border-radius:16px 16px 0 0!important;box-shadow:0 -4px 32px rgba(0,0,0,.2)!important}
+.chat-hdr{border-radius:16px 16px 0 0!important;background:linear-gradient(135deg,#0b2114,#0e2035)!important;color:#fff!important}
+.chat-hdr-tit,.chat-hdr-sub{color:rgba(255,255,255,.9)!important}
+.chat-hdr-btn{color:rgba(255,255,255,.7)!important}
+.chat-hdr-btn:hover{color:#fff!important;background:rgba(255,255,255,.12)!important}
+
+/* ─── RESPONSIVE ADJUSTMENTS ─── */
+@media(max-width:600px){
+  .tab{padding:5px 10px!important;font-size:11.5px!important}
+}
+
+/* ─── END APP INTERIOR REDESIGN ─── */
