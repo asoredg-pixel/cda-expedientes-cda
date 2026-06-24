@@ -562,6 +562,26 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
   };
 }
 
+// Auto-upload adjuntos al radicar desde correo si aún no se han subido.
+// Llamada desde pqrs.js antes de guardar el expediente.
+async function gmailAutoUploadPendingAttachments() {
+  if (!window._gmailPendingMsgId) return;           // no viene de Gmail
+  if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) return; // ya subidos
+  const ed = window._gmailPendingEmailData;
+  if (!ed || !Array.isArray(ed.adjuntosInfo) || !ed.adjuntosInfo.length) return; // sin adjuntos
+  if (!_gmailCurrentMsg || _gmailCurrentMsg.id !== window._gmailPendingMsgId) return; // sin msg en memoria
+  if (!gmailIsTokenValid()) return;                  // sin token
+  try {
+    notif('📎 Subiendo adjuntos a Drive…', 'info');
+    const files = await subirAdjuntosEmailADrive(_gmailCurrentMsg);
+    if (files && files.length) {
+      window._gmailPendingAttachments = files;
+      notif('✅ ' + files.length + ' adjunto(s) subido(s) a Drive automáticamente', 'ok');
+    }
+  } catch (e) {
+    console.warn('gmailAutoUploadPendingAttachments:', e.message);
+  }
+}
 async function subirAdjuntosEmailADrive(msg) {
   const parts = gmailExtractParts(msg.payload);
   const results = [];

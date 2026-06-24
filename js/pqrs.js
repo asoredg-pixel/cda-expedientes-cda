@@ -105,7 +105,7 @@ function limpiarFormSecretaria(){
   const hid=document.getElementById('sec-medio-notif');if(hid){hid.value='';delete hid.dataset.userSet;}
   initSecMedioNotificacion(true);
 }
-function guardarPqrsSecretaria(){
+async function guardarPqrsSecretaria(){
   const expId=String((document.getElementById('sec-exp')||{}).value||'').trim();
   const fecha=puedeEditarFechaRadicacionPqrs()?((document.getElementById('sec-fecha')||{}).value||hoy()):hoy();
   const fechaSol=String((document.getElementById('sec-fecha-solicitud')||{}).value||'').trim();
@@ -166,6 +166,10 @@ function guardarPqrsSecretaria(){
   }
   // Sprint B: capturar Gmail message id si viene de un correo
   const gmailMsgId=window._gmailPendingMsgId||'';
+  // Auto-subir adjuntos a Drive si aún no se han subido (secretaria radica sin pulsar "Subir")
+  if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
+    try{await gmailAutoUploadPendingAttachments();}catch(e){console.warn('auto-upload adjuntos:',e);}
+  }
   // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
     ?window._gmailPendingAttachments:null;
