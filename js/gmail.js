@@ -1244,10 +1244,10 @@ async function gmailSubirAdjuntosYVincular() {
 }
 
 // ================================================================
-// GMAIL PANEL — OFICINAS
-// Cada oficina conecta su propio Gmail para ver correos PQRSD
-// reenviados desde cdaguaviare1@gmail.com y responder al ciudadano.
-// Token almacenado en sessionStorage con clave distinta al de Secretaría.
+// GMAIL PANEL — OFICINAS / NCA / RESPONSABLES
+// Interfaz tipo Gmail: bandeja, enviados, borradores, etiquetas,
+// redactar, responder, reenviar y visor de adjuntos en línea.
+// Token independiente del de Secretaría (sst_gmail_ofi_token).
 // ================================================================
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
@@ -1255,14 +1255,18 @@ const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send'
 ].join(' ');
+const GMAIL_OFI_SYS_LABELS = new Set([
+  'INBOX','UNREAD','SENT','DRAFT','IMPORTANT','STARRED',
+  'SPAM','TRASH','CATEGORY_SOCIAL','CATEGORY_UPDATES',
+  'CATEGORY_FORUMS','CATEGORY_PROMOTIONS'
+]);
 
 let _gmailOfiTokenClient = null;
-let _gmailOfiMessages = [];
-let _gmailOfiCurrentMsg = null;
-let _gmailOfiConnecting = false;
-let _gmailOfiPage = 0;           // current page index (0-based)
-let _gmailOfiPageToken = null;   // Gmail API nextPageToken
-let _gmailOfiAllIds = [];        // all message IDs for current search
+let _gmailOfiMessages    = [];
+let _gmailOfiCurrentMsg  = null;
+let _gmailOfiConnecting  = false;
+let _gmailOfiActiveFolder = 'INBOX';
+let _gmailOfiLabels      = [];
 
 // ---- Token helpers ----
 function gmailOfiGetToken() {
@@ -1310,8 +1314,9 @@ function gmailOfiConnect() {
       }
       gmailOfiSetToken(response.access_token, response.expires_in);
       _updateGmailOfiBtn();
-      notif('✅ Bandeja PQRSD conectada.', 'ok');
-      gmailOfiLoadInbox();
+      notif('✅ Correo conectado.', 'ok');
+      gmailOfiFolder('INBOX');
+      gmailOfiLoadLabels();
     }
   });
   _gmailOfiTokenClient.requestAccessToken({ prompt: '' });
@@ -1319,26 +1324,23 @@ function gmailOfiConnect() {
 
 function gmailOfiDisconnect() {
   gmailOfiSetToken('');
-  _gmailOfiMessages = [];
+  _gmailOfiMessages  = [];
   _gmailOfiCurrentMsg = null;
-  _gmailOfiAllIds = [];
+  _gmailOfiLabels    = [];
   _updateGmailOfiBtn();
-  const list = document.getElementById('gmail-ofi-inbox-list');
-  const view = document.getElementById('gmail-ofi-msg-view');
-  if (list) list.innerHTML = '<div class="gmail-empty">Conecte su correo para ver correos PQRSD.</div>';
-  if (view) view.innerHTML = '';
-  const refreshBtn = document.getElementById('gmail-ofi-refresh-btn');
-  if (refreshBtn) refreshBtn.style.display = 'none';
+  const listEl = document.getElementById('gmail-ofi-inbox-list');
+  if (listEl) listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
+  const viewEl = document.getElementById('gmail-ofi-msg-view');
+  if (viewEl) viewEl.innerHTML = '';
+  gmailOfiCloseMessage();
+  const labelsEl = document.getElementById('gm-labels-list');
+  if (labelsEl) labelsEl.innerHTML = '';
 }
 
 function _updateGmailOfiBtn() {
   const btn = document.getElementById('gmail-ofi-connect-btn');
   if (!btn) return;
-  if (_gmailOfiConnecting) {
-    btn.textContent = '⏳ Conectando…';
-    btn.disabled = true;
-    return;
-  }
+  if (_gmailOfiConnecting) { btn.textContent = '⏳ Conectando…'; btn.disabled = true; return; }
   if (gmailOfiIsTokenValid()) {
     btn.textContent = '🔌 Desconectar';
     btn.disabled = false;
@@ -1348,281 +1350,420 @@ function _updateGmailOfiBtn() {
     btn.disabled = false;
     btn.onclick = gmailOfiConnect;
   }
-  const refreshBtn = document.getElementById('gmail-ofi-refresh-btn');
-  if (refreshBtn) refreshBtn.style.display = gmailOfiIsTokenValid() ? '' : 'none';
+  const rb = document.getElementById('gmail-ofi-refresh-btn');
+  if (rb) rb.style.display = gmailOfiIsTokenValid() ? '' : 'none';
 }
 
-// ---- API helper (uses office token) ----
+// ---- API helper ----
 async function _gmailOfiApi(method, url, body) {
   const token = gmailOfiGetToken();
-  if (!token) {
-    notif('⚠️ Reconecte su correo para continuar.', 'err');
-    throw new Error('Sin token de correo.');
-  }
-  const opts = {
-    method,
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
-  };
+  if (!token) { notif('⚠️ Reconecte su correo para continuar.', 'err'); throw new Error('Sin token.'); }
+  const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   if (res.status === 401) {
     gmailOfiSetToken('');
     _updateGmailOfiBtn();
-    notif('⚠️ La sesión de correo expiró. Reconecte su correo.', 'err');
+    notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
     throw new Error('Token expirado.');
   }
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error('API ' + res.status + ': ' + txt.slice(0, 200));
-  }
+  if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
   return res.json();
 }
 
-// ---- Inbox ----
-// query: optional Gmail search query string. Defaults to all inbox messages.
-async function gmailOfiLoadInbox(query) {
-  const listEl = document.getElementById('gmail-ofi-inbox-list');
-  if (!listEl) return;
-  if (!gmailOfiIsTokenValid()) {
-    listEl.innerHTML = '<div class="gmail-empty">Conecte su correo para ver los mensajes.</div>';
-    _updateGmailOfiBtn();
-    return;
-  }
-  listEl.innerHTML = '<div class="gmail-loading">Cargando mensajes…</div>';
+// ---- Date formatting ----
+function _gmailOfiShortDate(dateStr) {
+  if (!dateStr) return '';
   try {
-    // Show all inbox messages by default; narrow with an optional search query
-    const q = (typeof query === 'string' && query.trim()) ? query.trim() : 'in:inbox';
-    const url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=30';
-    const data = await _gmailOfiApi('GET', url);
-    const ids = (data.messages || []).map(m => m.id);
-    if (!ids.length) {
-      listEl.innerHTML = '<div class="gmail-empty">No hay mensajes' + (query ? ' para «' + escAttr(query) + '»' : '') + '.</div>';
-      return;
-    }
-    // Fetch full message data in batches of 10
-    const msgs = [];
-    for (let i = 0; i < Math.min(ids.length, 30); i += 10) {
-      const batch = ids.slice(i, i + 10);
-      const batchResults = await Promise.all(
-        batch.map(id => _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full').catch(() => null))
-      );
-      msgs.push(...batchResults.filter(Boolean));
-    }
-    _gmailOfiMessages = msgs;
-    _renderGmailOfiInboxList();
-  } catch(e) {
-    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">Error: ' + escAttr(e.message) + '</div>';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const now = new Date();
+    if (d.toDateString() === now.toDateString())
+      return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' });
+    if (d.getFullYear() === now.getFullYear())
+      return d.toLocaleDateString('es-CO', { day:'2-digit', month:'short' });
+    return d.toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'2-digit' });
+  } catch(e) { return dateStr; }
+}
+
+// ---- Folder navigation ----
+const _gmailOfiSysNames = {
+  INBOX:'Recibidos', SENT:'Enviados', DRAFT:'Borradores',
+  SPAM:'Spam', TRASH:'Papelera', STARRED:'Destacados'
+};
+
+function gmailOfiFolder(labelId) {
+  _gmailOfiActiveFolder = labelId;
+  document.querySelectorAll('.gm-folder').forEach(el => el.classList.remove('gm-folder-active'));
+  const folderEl = document.getElementById('gmf-' + labelId);
+  if (folderEl) folderEl.classList.add('gm-folder-active');
+  const titleEl = document.getElementById('gm-list-title');
+  if (titleEl) {
+    const lbl = _gmailOfiLabels.find(l => l.id === labelId);
+    titleEl.textContent = _gmailOfiSysNames[labelId] || (lbl ? lbl.name : labelId);
   }
+  gmailOfiCloseMessage();
+  _gmailOfiLoadMessages({ labelId });
+}
+
+function gmailOfiRefresh() {
+  if (_gmailOfiActiveFolder) gmailOfiFolder(_gmailOfiActiveFolder);
+  else gmailOfiFolder('INBOX');
 }
 
 function gmailOfiSearch(query) {
   const q = String(query || '').trim();
-  gmailOfiLoadInbox(q || 'in:inbox');
+  if (!q) { gmailOfiFolder('INBOX'); return; }
+  document.querySelectorAll('.gm-folder').forEach(el => el.classList.remove('gm-folder-active'));
+  const titleEl = document.getElementById('gm-list-title');
+  if (titleEl) titleEl.textContent = 'Búsqueda: ' + q;
+  gmailOfiCloseMessage();
+  _gmailOfiLoadMessages({ query: q });
 }
 
-function _renderGmailOfiInboxList() {
+// Backward-compat alias
+function gmailOfiLoadInbox(query) {
+  if (query) gmailOfiSearch(query); else gmailOfiFolder('INBOX');
+}
+
+async function _gmailOfiLoadMessages(opts) {
+  const listEl = document.getElementById('gmail-ofi-inbox-list');
+  if (!listEl) return;
+  if (!gmailOfiIsTokenValid()) {
+    listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
+    _updateGmailOfiBtn();
+    return;
+  }
+  listEl.innerHTML = '<div class="gm-loading-state"><div class="gm-spinner"></div><span>Cargando…</span></div>';
+  const countEl = document.getElementById('gm-list-count');
+  if (countEl) countEl.textContent = '';
+  try {
+    let url;
+    if (opts.query) {
+      url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(opts.query) + '&maxResults=30';
+    } else {
+      url = GMAIL_API_BASE + '/messages?labelIds=' + encodeURIComponent(opts.labelId) + '&maxResults=30';
+    }
+    const data = await _gmailOfiApi('GET', url);
+    const ids = (data.messages || []).map(m => m.id);
+    if (!ids.length) {
+      listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">📭</div><div>No hay mensajes aquí</div></div>';
+      if (countEl) countEl.textContent = '';
+      return;
+    }
+    const msgs = [];
+    for (let i = 0; i < Math.min(ids.length, 30); i += 10) {
+      const batch = ids.slice(i, i + 10);
+      const res = await Promise.all(
+        batch.map(id => _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full').catch(() => null))
+      );
+      msgs.push(...res.filter(Boolean));
+    }
+    _gmailOfiMessages = msgs;
+    if (countEl) countEl.textContent = msgs.length + ' mensaje' + (msgs.length !== 1 ? 's' : '');
+    _renderGmailOfiList();
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div>' + escAttr(e.message) + '</div></div>';
+  }
+}
+
+// ---- Labels ----
+async function gmailOfiLoadLabels() {
+  try {
+    const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/labels');
+    _gmailOfiLabels = (data.labels || []).filter(l => l.type === 'user');
+    _renderGmailOfiLabels();
+  } catch(e) { console.warn('gmailOfiLoadLabels:', e); }
+}
+
+function _renderGmailOfiLabels() {
+  const el = document.getElementById('gm-labels-list');
+  if (!el) return;
+  if (!_gmailOfiLabels.length) { el.innerHTML = ''; return; }
+  el.innerHTML = _gmailOfiLabels.map(function(lbl) {
+    const color = (lbl.color && lbl.color.backgroundColor) ? lbl.color.backgroundColor : '#888';
+    return '<div class="gm-folder" id="gmf-' + escAttr(lbl.id) + '" onclick="gmailOfiFolder(\'' + escAttr(lbl.id) + '\')">' +
+      '<span class="gmf-ico" style="font-size:10px;color:' + escAttr(color) + '">●</span>' +
+      '<span class="gmf-name">' + escAttr(lbl.name) + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+async function _gmailOfiUpdateBadges() {
+  if (!gmailOfiIsTokenValid()) return;
+  try {
+    const [unreadData, draftData] = await Promise.all([
+      _gmailOfiApi('GET', GMAIL_API_BASE + '/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=1').catch(()=>null),
+      _gmailOfiApi('GET', GMAIL_API_BASE + '/messages?labelIds=DRAFT&maxResults=1').catch(()=>null)
+    ]);
+    const ub = document.getElementById('gmb-INBOX');
+    if (ub) ub.textContent = (unreadData && unreadData.resultSizeEstimate) ? unreadData.resultSizeEstimate : '';
+    const db = document.getElementById('gmb-DRAFT');
+    if (db) db.textContent = (draftData && draftData.resultSizeEstimate) ? draftData.resultSizeEstimate : '';
+  } catch(e) {}
+}
+
+// ---- Email list rendering ----
+function _renderGmailOfiList() {
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (!listEl) return;
   if (!_gmailOfiMessages.length) {
-    listEl.innerHTML = '<div class="gmail-empty">Sin correos PQRSD.</div>';
+    listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">📭</div><div>No hay mensajes</div></div>';
     return;
   }
   listEl.innerHTML = _gmailOfiMessages.map(function(msg) {
     const headers = (msg.payload && msg.payload.headers) || [];
-    const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
-    const date = gmailGetHeader(headers, 'date') || '';
-    const hasAtt = gmailMsgHasAttachments(msg);
-    const unread = Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD');
-    const active = (_gmailOfiCurrentMsg && _gmailOfiCurrentMsg.id === msg.id) ? ' active' : '';
-    const fromParsed = gmailParseFrom(gmailGetHeader(headers, 'from'));
-    const fromLabel = (fromParsed.name || fromParsed.email || 'Desconocido').slice(0, 26);
-    return '<div class="gmail-row' + (unread ? ' unread' : '') + active + '" onclick="gmailOfiOpenMessage(\'' + escAttr(msg.id) + '\')">' +
-      '<div class="gmail-row-from">' + escAttr(fromLabel) + (unread ? '<span class="gmail-badge-new">N</span>' : '') + '</div>' +
-      '<div class="gmail-row-subject">' + escAttr(subject.slice(0, 65)) + (hasAtt ? ' 📎' : '') + '</div>' +
-      '<div class="gmail-row-date">' + escAttr(gmailFmtDate(date)) + '</div>' +
+    const subject  = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
+    const date     = gmailGetHeader(headers, 'date') || '';
+    const from     = gmailParseFrom(gmailGetHeader(headers, 'from'));
+    const fromLabel = (from.name || from.email || 'Desconocido').slice(0, 28);
+    const unread   = Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD');
+    const starred  = Array.isArray(msg.labelIds) && msg.labelIds.includes('STARRED');
+    const hasAtt   = gmailMsgHasAttachments(msg);
+    const snippet  = (msg.snippet || '').slice(0, 80);
+    const active   = (_gmailOfiCurrentMsg && _gmailOfiCurrentMsg.id === msg.id) ? ' gm-row-active' : '';
+    // Custom label chips
+    const customIds = (msg.labelIds || []).filter(l => !GMAIL_OFI_SYS_LABELS.has(l));
+    const labelsHtml = customIds.map(function(lid) {
+      const lbl = _gmailOfiLabels.find(x => x.id === lid);
+      if (!lbl) return '';
+      const bg = (lbl.color && lbl.color.backgroundColor) ? lbl.color.backgroundColor : '#e0e0e0';
+      const tx = (lbl.color && lbl.color.textColor) ? lbl.color.textColor : '#000';
+      return '<span class="gm-row-label" style="background:' + escAttr(bg) + ';color:' + escAttr(tx) + '">' + escAttr(lbl.name) + '</span>';
+    }).join('');
+    return '<div class="gm-email-row' + (unread ? ' gm-unread' : '') + active + '" onclick="gmailOfiOpenMessage(\'' + escAttr(msg.id) + '\')">' +
+      '<button class="gm-row-star" onclick="gmailOfiToggleStar(\'' + escAttr(msg.id) + '\',event)" title="' + (starred?'Quitar destacado':'Destacar') + '">' + (starred?'★':'☆') + '</button>' +
+      '<div class="gm-row-from">' + escAttr(fromLabel) + '</div>' +
+      '<div class="gm-row-body">' +
+        '<span class="gm-row-subject">' + escAttr(subject.slice(0,55)) + '</span>' +
+        (hasAtt ? '<span class="gm-row-att">📎</span>' : '') +
+        (labelsHtml ? '<span class="gm-row-labels">' + labelsHtml + '</span>' : '') +
+        (snippet ? '<span class="gm-row-snippet"> — ' + escAttr(snippet) + '</span>' : '') +
+      '</div>' +
+      '<div class="gm-row-date">' + escAttr(_gmailOfiShortDate(date)) + '</div>' +
       '</div>';
   }).join('');
 }
 
 // ---- Message view ----
-async function gmailOfiOpenMessage(id) {
+function gmailOfiCloseMessage() {
+  const mp = document.getElementById('gm-msg-pane');
+  const lp = document.getElementById('gm-list-pane');
+  if (mp) { mp.classList.remove('open'); mp.style.display = 'none'; }
+  if (lp) lp.style.display = '';
+  _gmailOfiCurrentMsg = null;
   const viewEl = document.getElementById('gmail-ofi-msg-view');
-  if (!viewEl) return;
-  if (!gmailOfiIsTokenValid()) {
-    notif('⚠️ Reconecte su correo para ver el mensaje.', 'err');
-    return;
-  }
-  viewEl.innerHTML = '<div class="gmail-loading">Cargando mensaje…</div>';
+  if (viewEl) viewEl.innerHTML = '';
+}
+
+async function gmailOfiOpenMessage(id) {
+  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  const mp = document.getElementById('gm-msg-pane');
+  const lp = document.getElementById('gm-list-pane');
+  const viewEl = document.getElementById('gmail-ofi-msg-view');
+  if (viewEl) viewEl.innerHTML = '<div class="gm-loading-state"><div class="gm-spinner"></div><span>Cargando mensaje…</span></div>';
+  if (mp) { mp.style.display = 'flex'; mp.classList.add('open'); }
+  // On narrow screens, hide list
+  if (lp && window.innerWidth < 860) lp.style.display = 'none';
   try {
     let msg = _gmailOfiMessages.find(m => m.id === id) || null;
-    if (!msg) {
-      msg = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full');
-    }
+    if (!msg) msg = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full');
     _gmailOfiCurrentMsg = msg;
-    // Mark as read silently
     if (Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD')) {
       _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + id + '/modify', { removeLabelIds: ['UNREAD'] })
         .then(() => {
           if (msg.labelIds) msg.labelIds = msg.labelIds.filter(l => l !== 'UNREAD');
-          _renderGmailOfiInboxList();
+          _renderGmailOfiList();
+          _gmailOfiUpdateBadges();
         }).catch(() => {});
     }
     _renderGmailOfiMsgView(msg);
-    _renderGmailOfiInboxList();
+    _renderGmailOfiList();
   } catch(e) {
-    if (viewEl) viewEl.innerHTML = '<div class="gmail-empty err">Error: ' + escAttr(e.message) + '</div>';
+    if (viewEl) viewEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div>' + escAttr(e.message) + '</div></div>';
   }
 }
 
 function _renderGmailOfiMsgView(msg) {
   const viewEl = document.getElementById('gmail-ofi-msg-view');
   if (!viewEl || !msg) return;
-  const headers = (msg.payload && msg.payload.headers) || [];
-  const subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
-  const from = gmailGetHeader(headers, 'from') || '';
-  const date = gmailGetHeader(headers, 'date') || '';
-  const replyTo = gmailGetHeader(headers, 'reply-to') || '';
-  const msgId = gmailGetHeader(headers, 'message-id') || '';
-  const parts = gmailExtractParts(msg.payload);
-
-  // Body HTML
+  const headers  = (msg.payload && msg.payload.headers) || [];
+  const subject  = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
+  const from     = gmailGetHeader(headers, 'from') || '';
+  const to       = gmailGetHeader(headers, 'to') || '';
+  const date     = gmailGetHeader(headers, 'date') || '';
+  const replyTo  = gmailGetHeader(headers, 'reply-to') || '';
+  const msgId    = gmailGetHeader(headers, 'message-id') || '';
+  const parts    = gmailExtractParts(msg.payload);
+  // Body
   let bodyHtml = '';
   if (parts.textHtml) {
-    const safe = (typeof DOMPurify !== 'undefined')
-      ? DOMPurify.sanitize(parts.textHtml, { USE_PROFILES: { html: true } })
-      : parts.textHtml;
-    bodyHtml = '<div class="pqrs-email-body" style="max-height:360px">' + safe + '</div>';
+    const safe = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(parts.textHtml, { USE_PROFILES:{html:true} }) : parts.textHtml;
+    bodyHtml = '<div class="gm-msg-body">' + safe + '</div>';
   } else if (parts.textPlain) {
-    bodyHtml = '<pre style="white-space:pre-wrap;font-size:12px;margin-top:8px;max-height:300px;overflow-y:auto;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">' + escAttr(parts.textPlain) + '</pre>';
+    bodyHtml = '<pre class="gm-msg-body gm-msg-plain">' + escAttr(parts.textPlain) + '</pre>';
   }
-
   // Attachments
   let attsHtml = '';
   if (parts.attachments && parts.attachments.length) {
-    attsHtml = '<div class="gmail-atts-bar" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0">' +
+    attsHtml = '<div class="gm-msg-atts">' +
       parts.attachments.map(function(att) {
-        const mime = (att.mimeType || '').toLowerCase();
-        const ico = mime.includes('pdf') ? '📄' : mime.includes('word') || (att.filename||'').match(/\.docx?$/i) ? '📝' :
-          mime.includes('sheet') || mime.includes('excel') || (att.filename||'').match(/\.xlsx?$/i) ? '📊' :
-          mime.startsWith('image/') ? '🖼️' : '📎';
-        return '<button type="button" class="gmail-att-chip" ' +
-          'onclick="gmailOfiViewAttachment(\'' + escAttr(msg.id) + '\',\'' + escAttr(att.attachmentId) + '\',\'' + escAttr(att.filename||'Adjunto') + '\',\'' + escAttr(att.mimeType||'application/octet-stream') + '\')" ' +
-          'title="' + escAttr(att.filename||'Adjunto') + '">' +
-          '<span class="att-ico">' + ico + '</span>' +
-          '<span class="att-name">' + escAttr((att.filename||'Adjunto').slice(0, 32)) + '</span>' +
-          '</button>';
+        const mime = (att.mimeType||'').toLowerCase();
+        const ico  = mime.includes('pdf')?'📄':mime.includes('word')||(att.filename||'').match(/\.docx?$/i)?'📝':mime.includes('sheet')||mime.includes('excel')||(att.filename||'').match(/\.xlsx?$/i)?'📊':mime.startsWith('image/')?'🖼️':'📎';
+        return '<button type="button" class="gmail-att-chip" onclick="gmailOfiViewAttachment(\'' + escAttr(msg.id) + '\',\'' + escAttr(att.attachmentId) + '\',\'' + escAttr(att.filename||'Adjunto') + '\',\'' + escAttr(att.mimeType||'application/octet-stream') + '\')" title="' + escAttr(att.filename||'Adjunto') + '">' +
+          '<span class="att-ico">' + ico + '</span><span class="att-name">' + escAttr((att.filename||'Adjunto').slice(0,32)) + '</span></button>';
       }).join('') + '</div>';
   }
-
-  // Reply button — find citizen email from original from or reply-to header
+  // From email for reply
   const fromParsed = gmailParseFrom(from);
-  const citizenEmail = (replyTo ? gmailParseFrom(replyTo).email : '') || fromParsed.email || '';
-  const replySubject = subject.startsWith('Re:') ? subject : 'Re: ' + subject;
-  const replyBtn = citizenEmail
-    ? '<button type="button" class="btn bsm bp" onclick="gmailOfiOpenReply(\'' + escAttr(citizenEmail) + '\',\'' + escAttr(replySubject) + '\',\'' + escAttr(msgId) + '\')">✉️ Responder al ciudadano</button>'
-    : '';
+  const replyEmail = (replyTo ? gmailParseFrom(replyTo).email : '') || fromParsed.email || '';
+  const replySubj  = subject.startsWith('Re:') ? subject : 'Re: ' + subject;
+  const fwdSubj    = subject.startsWith('Fwd:') ? subject : 'Fwd: ' + subject;
+  const fwdBody    = '\n\n--- Mensaje reenviado ---\nDe: ' + from + '\nFecha: ' + date + '\nPara: ' + to + '\nAsunto: ' + subject + '\n\n' + (parts.textPlain || '');
 
   viewEl.innerHTML =
-    '<div class="gmail-msg-subject" style="font-size:14px;font-weight:700;margin-bottom:6px">' + escAttr(subject) + '</div>' +
-    '<div class="gmail-msg-meta" style="font-size:11px;color:var(--tx2);display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-      '<span>De: ' + escAttr(from) + '</span>' +
-      '<span>📅 ' + escAttr(gmailFmtDate(date)) + '</span>' +
-    '</div>' +
-    '<div class="fx" style="gap:8px;margin-bottom:10px;flex-wrap:wrap">' +
-      replyBtn +
-      '<button type="button" class="btn bsm" onclick="document.getElementById(\'gmail-ofi-msg-view\').innerHTML=\'\'">✕ Cerrar</button>' +
+    '<div class="gm-msg-header">' +
+      '<h2 class="gm-msg-title">' + escAttr(subject) + '</h2>' +
+      '<div class="gm-msg-sender">' +
+        '<span class="gm-sender-avatar">' + escAttr((fromParsed.name||fromParsed.email||'?').charAt(0).toUpperCase()) + '</span>' +
+        '<div class="gm-sender-info">' +
+          '<div class="gm-sender-name">' + escAttr(fromParsed.name || fromParsed.email) + ' <span class="gm-sender-addr">&lt;' + escAttr(fromParsed.email) + '&gt;</span></div>' +
+          '<div class="gm-sender-meta">Para: ' + escAttr(to) + ' · ' + escAttr(gmailFmtDate(date)) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="gm-msg-actions">' +
+        (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({to:\'' + escAttr(replyEmail) + '\',subject:\'' + escAttr(replySubj) + '\',inReplyTo:\'' + escAttr(msgId) + '\',title:\'Responder\'})">↩ Responder</button>' : '') +
+        '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({subject:\'' + escAttr(fwdSubj) + '\',body:\'' + escAttr(fwdBody) + '\',title:\'Reenviar\'})">↪ Reenviar</button>' +
+      '</div>' +
     '</div>' +
     attsHtml + bodyHtml;
 }
 
+// ---- Star toggle ----
+async function gmailOfiToggleStar(msgId, event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  const msg = _gmailOfiMessages.find(m => m.id === msgId);
+  if (!msg) return;
+  const starred = Array.isArray(msg.labelIds) && msg.labelIds.includes('STARRED');
+  try {
+    if (starred) {
+      await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + msgId + '/modify', { removeLabelIds: ['STARRED'] });
+      msg.labelIds = (msg.labelIds||[]).filter(l => l !== 'STARRED');
+    } else {
+      await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + msgId + '/modify', { addLabelIds: ['STARRED'] });
+      if (!msg.labelIds) msg.labelIds = [];
+      msg.labelIds.push('STARRED');
+    }
+    _renderGmailOfiList();
+  } catch(e) { notif('Error: ' + e.message, 'err'); }
+}
+
 // ---- Attachment viewer ----
 async function gmailOfiViewAttachment(msgId, attachmentId, filename, mimeType) {
-  if (!gmailOfiIsTokenValid()) {
-    notif('⚠️ Reconecte su correo para ver adjuntos.', 'err');
-    return;
-  }
-  notif('📄 Abriendo adjunto…', 'info');
+  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo para ver adjuntos.', 'err'); return; }
+  notif('📄 Abriendo adjunto…', 'ok');
   try {
     const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + msgId + '/attachments/' + attachmentId);
-    const b64 = (data.data || '').replace(/-/g, '+').replace(/_/g, '/');
-    // Pad base64 if needed
+    const b64    = (data.data || '').replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
     const binary = atob(padded);
-    const bytes = new Uint8Array(binary.length);
+    const bytes  = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
-    const blobUrl = URL.createObjectURL(blob);
-    // Open viewer — passes blob URL; abrirVisorAdjunto handles blob: protocol
-    abrirVisorAdjunto(blobUrl, filename);
+    const blob   = new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+    abrirVisorAdjunto(URL.createObjectURL(blob), filename);
     notif('', '');
-  } catch(e) {
-    notif('Error al abrir adjunto: ' + e.message, 'err');
-  }
+  } catch(e) { notif('Error al abrir adjunto: ' + e.message, 'err'); }
 }
 
-// ---- Reply ----
-function gmailOfiOpenReply(toEmail, subject, inReplyTo) {
-  // Remove any existing reply box first
-  const existingBox = document.getElementById('gmail-ofi-reply-box');
-  if (existingBox) existingBox.remove();
-  const viewEl = document.getElementById('gmail-ofi-msg-view');
-  if (!viewEl) return;
-  viewEl.insertAdjacentHTML('beforeend',
-    '<div id="gmail-ofi-reply-box" style="margin-top:14px;padding:14px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">' +
-    '<div style="font-size:12px;font-weight:700;margin-bottom:8px">✉️ Respuesta para: <span style="color:var(--bl)">' + escAttr(toEmail) + '</span></div>' +
-    '<input type="hidden" id="gmail-ofi-reply-to" value="' + escAttr(toEmail) + '">' +
-    '<input type="hidden" id="gmail-ofi-reply-subject" value="' + escAttr(subject) + '">' +
-    '<input type="hidden" id="gmail-ofi-reply-inreplyto" value="' + escAttr(inReplyTo) + '">' +
-    '<textarea id="gmail-ofi-reply-body" placeholder="Escriba su respuesta al ciudadano…" ' +
-      'style="width:100%;min-height:110px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:13px;resize:vertical;box-sizing:border-box;background:var(--bg);color:var(--tx)"></textarea>' +
-    '<div class="fx" style="gap:8px;margin-top:10px;flex-wrap:wrap">' +
-    '<button type="button" class="btn bsm bp" onclick="gmailOfiSubmitReply()">📤 Enviar respuesta</button>' +
-    '<button type="button" class="btn bsm" onclick="document.getElementById(\'gmail-ofi-reply-box\').remove()">Cancelar</button>' +
-    '</div></div>'
-  );
-  // Scroll to reply box
-  const box = document.getElementById('gmail-ofi-reply-box');
-  if (box) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+// ---- Compose / Reply / Forward / Draft ----
+function gmailOfiOpenCompose(opts) {
+  const modal = document.getElementById('gm-compose-modal');
+  if (!modal) return;
+  if (!gmailOfiIsTokenValid()) { notif('Conecte su correo para redactar.', 'err'); return; }
+  opts = opts || {};
+  const f = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  f('gm-compose-to',      opts.to || '');
+  f('gm-compose-cc',      opts.cc || '');
+  f('gm-compose-subject', opts.subject || '');
+  f('gm-compose-body',    opts.body || '');
+  const title = document.getElementById('gm-compose-title');
+  if (title) title.textContent = opts.title || 'Nuevo mensaje';
+  modal.dataset.inReplyTo = opts.inReplyTo || '';
+  modal.style.display = 'flex';
+  const toEl = document.getElementById('gm-compose-to');
+  const bodyEl = document.getElementById('gm-compose-body');
+  if (toEl && !toEl.value) toEl.focus();
+  else if (bodyEl) bodyEl.focus();
 }
 
-async function gmailOfiSubmitReply() {
-  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo para enviar.', 'err'); return; }
-  const to = (document.getElementById('gmail-ofi-reply-to') || {}).value || '';
-  const subject = (document.getElementById('gmail-ofi-reply-subject') || {}).value || '';
-  const body = (document.getElementById('gmail-ofi-reply-body') || {}).value || '';
-  const inReplyTo = (document.getElementById('gmail-ofi-reply-inreplyto') || {}).value || '';
-  if (!to || !body.trim()) { notif('Complete el mensaje antes de enviar.', 'err'); return; }
-  const sendBtn = document.querySelector('#gmail-ofi-reply-box .btn.bp');
+function gmailOfiDiscardDraft() {
+  const modal = document.getElementById('gm-compose-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) {
+  const lines = [
+    'To: ' + to,
+    cc ? 'Cc: ' + cc : null,
+    'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=',
+    inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
+    inReplyTo ? 'References: ' + inReplyTo : null,
+    'Content-Type: text/plain; charset=utf-8',
+    'MIME-Version: 1.0',
+    '',
+    body
+  ].filter(l => l !== null).join('\r\n');
+  return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+async function gmailOfiSendCompose() {
+  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  const modal = document.getElementById('gm-compose-modal');
+  const g = id => (document.getElementById(id)||{}).value||'';
+  const to = g('gm-compose-to'), cc = g('gm-compose-cc'),
+        subject = g('gm-compose-subject'), body = g('gm-compose-body'),
+        inReplyTo = (modal&&modal.dataset.inReplyTo)||'';
+  if (!to.trim()) { notif('Ingrese el destinatario.', 'err'); return; }
+  if (!body.trim()) { notif('El mensaje está vacío.', 'err'); return; }
+  const sendBtn = document.querySelector('#gm-compose-modal .gm-compose-send');
   if (sendBtn) { sendBtn.textContent = '⏳ Enviando…'; sendBtn.disabled = true; }
   try {
-    const lines = [
-      'To: ' + to,
-      'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=',
-      inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
-      inReplyTo ? 'References: ' + inReplyTo : null,
-      'Content-Type: text/plain; charset=utf-8',
-      'MIME-Version: 1.0',
-      '',
-      body
-    ].filter(l => l !== null).join('\r\n');
-    const encoded = btoa(unescape(encodeURIComponent(lines)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
-    notif('✅ Respuesta enviada al ciudadano.', 'ok');
-    const box = document.getElementById('gmail-ofi-reply-box');
-    if (box) box.remove();
+    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) });
+    notif('✅ Mensaje enviado.', 'ok');
+    gmailOfiDiscardDraft();
+    if (_gmailOfiActiveFolder === 'SENT') gmailOfiFolder('SENT');
   } catch(e) {
     notif('Error al enviar: ' + e.message, 'err');
-    if (sendBtn) { sendBtn.textContent = '📤 Enviar respuesta'; sendBtn.disabled = false; }
+    if (sendBtn) { sendBtn.textContent = '📤 Enviar'; sendBtn.disabled = false; }
   }
 }
 
-// Called from renderPqrsOficinaInbox to initialize the panel state
+async function gmailOfiSaveDraft() {
+  if (!gmailOfiIsTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  const g = id => (document.getElementById(id)||{}).value||'';
+  const to = g('gm-compose-to'), subject = g('gm-compose-subject'), body = g('gm-compose-body');
+  if (!body.trim()) { notif('El borrador está vacío.', 'err'); return; }
+  try {
+    const raw = _gmailOfiBuildMime(to||'(sin destinatario)', '', subject, body, '');
+    await _gmailOfiApi('POST', GMAIL_API_BASE + '/drafts', { message: { raw } });
+    notif('💾 Borrador guardado.', 'ok');
+    gmailOfiDiscardDraft();
+    setTimeout(_gmailOfiUpdateBadges, 600);
+  } catch(e) { notif('Error al guardar borrador: ' + e.message, 'err'); }
+}
+
+// ---- Init panel ----
 function gmailOfiInitPanel() {
   _updateGmailOfiBtn();
-  if (gmailOfiIsTokenValid() && !_gmailOfiMessages.length) {
-    gmailOfiLoadInbox();
-  } else if (_gmailOfiMessages.length) {
-    _renderGmailOfiInboxList();
+  if (gmailOfiIsTokenValid()) {
+    if (!_gmailOfiMessages.length) {
+      gmailOfiFolder('INBOX');
+      gmailOfiLoadLabels();
+      _gmailOfiUpdateBadges();
+    } else {
+      _renderGmailOfiList();
+      _renderGmailOfiLabels();
+    }
   }
 }

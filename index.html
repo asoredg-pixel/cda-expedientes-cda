@@ -6,28 +6,28 @@
 <!-- SST UI delegación clics v20250611q — Responsables↔Usuarios FS; login ciudadano; chat solo sesión -->
 <title>Sistema de Seguimiento de Trámites</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260624k">
+<link rel="stylesheet" href="css/sst.css?v=20260624l">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
-<script type="module" src="js/firebase-init.js?v=20260624k"></script>
-<script src="js/constants.js?v=20260624k"></script>
-<script src="js/utils.js?v=20260624k"></script>
-<script src="js/state.js?v=20260624k"></script>
-<script src="js/persistence.js?v=20260624k"></script>
-<script src="js/roles.js?v=20260624k"></script>
-<script src="js/config-store.js?v=20260624k"></script>
-<script src="js/core.js?v=20260624k"></script>
-<script src="js/formulario.js?v=20260624k"></script>
-<script src="js/tareas.js?v=20260624k"></script>
-<script src="js/guardar-exp.js?v=20260624k"></script>
-<script src="js/consulta.js?v=20260624k"></script>
-<script src="js/consolidado.js?v=20260624k"></script>
-<script src="js/configuracion.js?v=20260624k"></script>
-<script src="js/export.js?v=20260624k"></script>
-<script src="js/chat.js?v=20260624k"></script>
-<script src="js/pqrs.js?v=20260624k"></script>
-<script src="js/gmail.js?v=20260624k"></script>
-<script src="js/ingreso.js?v=20260624k"></script>
+<script type="module" src="js/firebase-init.js?v=20260624l"></script>
+<script src="js/constants.js?v=20260624l"></script>
+<script src="js/utils.js?v=20260624l"></script>
+<script src="js/state.js?v=20260624l"></script>
+<script src="js/persistence.js?v=20260624l"></script>
+<script src="js/roles.js?v=20260624l"></script>
+<script src="js/config-store.js?v=20260624l"></script>
+<script src="js/core.js?v=20260624l"></script>
+<script src="js/formulario.js?v=20260624l"></script>
+<script src="js/tareas.js?v=20260624l"></script>
+<script src="js/guardar-exp.js?v=20260624l"></script>
+<script src="js/consulta.js?v=20260624l"></script>
+<script src="js/consolidado.js?v=20260624l"></script>
+<script src="js/configuracion.js?v=20260624l"></script>
+<script src="js/export.js?v=20260624l"></script>
+<script src="js/chat.js?v=20260624l"></script>
+<script src="js/pqrs.js?v=20260624l"></script>
+<script src="js/gmail.js?v=20260624l"></script>
+<script src="js/ingreso.js?v=20260624l"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -629,28 +629,87 @@
 
 <!-- ===== CORREOS PQRSD — OFICINAS / NCA / RESPONSABLES ===== -->
 <div class="pg" id="pg-gmail-ofi">
-  <div class="modulo-banner ofi">📧 Correos PQRSD — Bandeja de mensajes de su oficina</div>
-  <div class="card" style="border-left:4px solid var(--bl);padding:0;overflow:hidden">
-    <!-- Cabecera con conexión -->
-    <div class="gmail-ofi-panel-summary" style="border-radius:var(--r) var(--r) 0 0">
-      <span style="font-size:14px;font-weight:700">📧 Bandeja de correos PQRSD</span>
-      <div class="gmail-ofi-panel-actions">
-        <button type="button" class="btn bsm" id="gmail-ofi-refresh-btn" onclick="gmailOfiLoadInbox()" style="display:none" title="Actualizar bandeja">🔄 Actualizar</button>
+  <div class="gm-wrap">
+    <!-- Top bar -->
+    <div class="gm-topbar">
+      <button type="button" class="gm-compose-btn" onclick="gmailOfiOpenCompose()">✏️ Redactar</button>
+      <div class="gm-search-bar">
+        <span class="gm-search-ico">🔍</span>
+        <input type="text" id="gmail-ofi-search" class="gm-search-inp" placeholder="Buscar en el correo…" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
+        <button type="button" class="gm-search-clear" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiFolder(_gmailOfiActiveFolder||'INBOX')" title="Limpiar">✕</button>
+      </div>
+      <div class="gm-topbar-right">
+        <button type="button" class="gm-icon-btn" id="gmail-ofi-refresh-btn" onclick="gmailOfiRefresh()" style="display:none" title="Actualizar">🔄</button>
         <button type="button" class="btn bsm bp" id="gmail-ofi-connect-btn" onclick="gmailOfiConnect()">📧 Conectar mi correo</button>
       </div>
     </div>
-    <!-- Barra de búsqueda -->
-    <div class="gmail-ofi-search-row">
-      <input type="text" id="gmail-ofi-search" class="gmail-ofi-search-input" placeholder="Buscar por asunto, remitente, PQRSD…" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
-      <button type="button" class="btn bsm" onclick="gmailOfiSearch(document.getElementById('gmail-ofi-search').value)" title="Buscar">🔍</button>
-      <button type="button" class="btn bsm" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiLoadInbox()" title="Ver todos">Todos</button>
-    </div>
-    <!-- Panel dividido: lista (izq) + vista (der) -->
-    <div class="gmail-ofi-split" id="gmail-ofi-split">
-      <div class="gmail-ofi-inbox" id="gmail-ofi-inbox-list">
-        <div class="gmail-empty">Conecte su correo para ver los mensajes PQRSD.</div>
+    <!-- Body -->
+    <div class="gm-body">
+      <!-- Sidebar -->
+      <nav class="gm-sidebar">
+        <div class="gm-folder gm-folder-active" id="gmf-INBOX" onclick="gmailOfiFolder('INBOX')">
+          <span class="gmf-ico">📥</span><span class="gmf-name">Recibidos</span><span class="gmf-badge" id="gmb-INBOX"></span>
+        </div>
+        <div class="gm-folder" id="gmf-STARRED" onclick="gmailOfiFolder('STARRED')">
+          <span class="gmf-ico">⭐</span><span class="gmf-name">Destacados</span>
+        </div>
+        <div class="gm-folder" id="gmf-SENT" onclick="gmailOfiFolder('SENT')">
+          <span class="gmf-ico">📤</span><span class="gmf-name">Enviados</span>
+        </div>
+        <div class="gm-folder" id="gmf-DRAFT" onclick="gmailOfiFolder('DRAFT')">
+          <span class="gmf-ico">📝</span><span class="gmf-name">Borradores</span><span class="gmf-badge" id="gmb-DRAFT"></span>
+        </div>
+        <div class="gm-folder" id="gmf-SPAM" onclick="gmailOfiFolder('SPAM')">
+          <span class="gmf-ico">⚠️</span><span class="gmf-name">Spam</span>
+        </div>
+        <div class="gm-folder" id="gmf-TRASH" onclick="gmailOfiFolder('TRASH')">
+          <span class="gmf-ico">🗑️</span><span class="gmf-name">Papelera</span>
+        </div>
+        <div class="gm-sidebar-section">Etiquetas</div>
+        <div id="gm-labels-list"></div>
+      </nav>
+      <!-- Main -->
+      <div class="gm-main">
+        <!-- List pane -->
+        <div class="gm-list-pane" id="gm-list-pane">
+          <div class="gm-list-toolbar">
+            <span class="gm-list-title" id="gm-list-title">Recibidos</span>
+            <span class="gm-list-count" id="gm-list-count"></span>
+          </div>
+          <div id="gmail-ofi-inbox-list" class="gm-email-list">
+            <div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>
+          </div>
+        </div>
+        <!-- Message pane -->
+        <div class="gm-msg-pane" id="gm-msg-pane" style="display:none">
+          <div class="gm-msg-nav">
+            <button type="button" class="gm-back-btn" onclick="gmailOfiCloseMessage()">← Volver a la lista</button>
+          </div>
+          <div id="gmail-ofi-msg-view" class="gm-msg-view-inner"></div>
+        </div>
       </div>
-      <div class="gmail-ofi-view" id="gmail-ofi-msg-view"></div>
+    </div>
+  </div>
+
+  <!-- Compose modal (floating, Gmail-style) -->
+  <div class="gm-compose-modal" id="gm-compose-modal" style="display:none">
+    <div class="gm-compose-hdr">
+      <span id="gm-compose-title">Nuevo mensaje</span>
+      <div class="gm-compose-hdr-btns">
+        <button type="button" title="Minimizar" onclick="document.getElementById('gm-compose-modal').style.display='none'">—</button>
+        <button type="button" title="Descartar" onclick="gmailOfiDiscardDraft()">✕</button>
+      </div>
+    </div>
+    <div class="gm-compose-fields">
+      <div class="gm-compose-field"><label>Para</label><input type="email" id="gm-compose-to" placeholder="destinatario@ejemplo.com"></div>
+      <div class="gm-compose-field"><label>Cc</label><input type="email" id="gm-compose-cc" placeholder="(opcional)"></div>
+      <div class="gm-compose-field"><label>Asunto</label><input type="text" id="gm-compose-subject" placeholder="Asunto del mensaje"></div>
+    </div>
+    <textarea id="gm-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje…"></textarea>
+    <div class="gm-compose-footer">
+      <button type="button" class="btn bsm bp gm-compose-send" onclick="gmailOfiSendCompose()">📤 Enviar</button>
+      <button type="button" class="btn bsm" onclick="gmailOfiSaveDraft()">💾 Guardar borrador</button>
+      <button type="button" class="gm-compose-discard-btn" onclick="gmailOfiDiscardDraft()" title="Descartar">🗑️</button>
     </div>
   </div>
 </div>
