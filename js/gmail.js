@@ -154,6 +154,7 @@ async function gmailApiCall(method, url, body) {
   if (res.status === 401) {
     gmailSetToken('');
     updateGmailConnectBtn();
+    notif('⚠️ La sesión de Gmail expiró. Haga clic en Reconectar para continuar.', 'err');
     throw new Error('Token expirado. Reconecte la bandeja.');
   }
   if (!res.ok) {
@@ -596,7 +597,10 @@ async function gmailAutoUploadPendingAttachments() {
   const ed = window._gmailPendingEmailData;
   if (!ed || !Array.isArray(ed.adjuntosInfo) || !ed.adjuntosInfo.length) return; // sin adjuntos
   if (!_gmailCurrentMsg || _gmailCurrentMsg.id !== window._gmailPendingMsgId) return; // sin msg en memoria
-  if (!gmailIsTokenValid()) return;                  // sin token
+  if (!gmailIsTokenValid()) {
+    notif('⚠️ La sesión de Gmail expiró. Los adjuntos NO se vincularán a este PQRSD. Reconecte la bandeja y vuelva a radicar.', 'err');
+    return;
+  }
   try {
     notif('📎 Subiendo adjuntos a Drive…', 'info');
     const files = await subirAdjuntosEmailADrive(_gmailCurrentMsg);
