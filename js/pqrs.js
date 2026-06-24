@@ -325,8 +325,6 @@ function pqrsAccionesTablaHtml(e){
   return h;
 }
 function renderPqrsOficinaInbox(){
-  // Initialize office Gmail panel if available
-  if(typeof gmailOfiInitPanel==='function')try{gmailOfiInitPanel();}catch(e){}
   const tb=document.getElementById('tbl-pqrs-ofi');
   const tit=document.getElementById('pqrs-ofi-titulo');
   const ban=document.getElementById('pqrs-ofi-banner');

@@ -549,6 +549,7 @@ function renderTabActual(){
   else if(id==='pg-cfg')renderCfg();
   else if(id==='pg-sec'){poblarSecOficinaSelect();renderSecretariaPqrs();}
   else if(id==='pg-pqrs-ofi')renderPqrsOficinaInbox();
+  else if(id==='pg-gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
   else if(id==='pg-agenda')renderAgenda();
   renderChatBadge();
   renderBandejaDepto();

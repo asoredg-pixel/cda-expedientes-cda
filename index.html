@@ -6,28 +6,28 @@
 <!-- SST UI delegación clics v20250611q — Responsables↔Usuarios FS; login ciudadano; chat solo sesión -->
 <title>Sistema de Seguimiento de Trámites</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260624j">
+<link rel="stylesheet" href="css/sst.css?v=20260624k">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
-<script type="module" src="js/firebase-init.js?v=20260624j"></script>
-<script src="js/constants.js?v=20260624j"></script>
-<script src="js/utils.js?v=20260624j"></script>
-<script src="js/state.js?v=20260624j"></script>
-<script src="js/persistence.js?v=20260624j"></script>
-<script src="js/roles.js?v=20260624j"></script>
-<script src="js/config-store.js?v=20260624j"></script>
-<script src="js/core.js?v=20260624j"></script>
-<script src="js/formulario.js?v=20260624j"></script>
-<script src="js/tareas.js?v=20260624j"></script>
-<script src="js/guardar-exp.js?v=20260624j"></script>
-<script src="js/consulta.js?v=20260624j"></script>
-<script src="js/consolidado.js?v=20260624j"></script>
-<script src="js/configuracion.js?v=20260624j"></script>
-<script src="js/export.js?v=20260624j"></script>
-<script src="js/chat.js?v=20260624j"></script>
-<script src="js/pqrs.js?v=20260624j"></script>
-<script src="js/gmail.js?v=20260624j"></script>
-<script src="js/ingreso.js?v=20260624j"></script>
+<script type="module" src="js/firebase-init.js?v=20260624k"></script>
+<script src="js/constants.js?v=20260624k"></script>
+<script src="js/utils.js?v=20260624k"></script>
+<script src="js/state.js?v=20260624k"></script>
+<script src="js/persistence.js?v=20260624k"></script>
+<script src="js/roles.js?v=20260624k"></script>
+<script src="js/config-store.js?v=20260624k"></script>
+<script src="js/core.js?v=20260624k"></script>
+<script src="js/formulario.js?v=20260624k"></script>
+<script src="js/tareas.js?v=20260624k"></script>
+<script src="js/guardar-exp.js?v=20260624k"></script>
+<script src="js/consulta.js?v=20260624k"></script>
+<script src="js/consolidado.js?v=20260624k"></script>
+<script src="js/configuracion.js?v=20260624k"></script>
+<script src="js/export.js?v=20260624k"></script>
+<script src="js/chat.js?v=20260624k"></script>
+<script src="js/pqrs.js?v=20260624k"></script>
+<script src="js/gmail.js?v=20260624k"></script>
+<script src="js/ingreso.js?v=20260624k"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -94,6 +94,7 @@
     <button class="tab on" onclick="showTab('reg')" id="tab-reg">📋 Registro</button>
     <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec">📥 Radicación</button>
     <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi">📌 PQRSD</button>
+    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi">📧 Correos</button>
     <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act">📌 Actividades</button>
     <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda">📅 Agenda</button>
     <button class="tab" onclick="showTab('con')" id="tab-con">🔍 Consulta</button>
@@ -607,28 +608,6 @@
 <div class="pg" id="pg-pqrs-ofi">
   <div class="modulo-banner ofi" id="pqrs-ofi-banner">📌 PQRSD trasladados a su oficina — Consulte, traslade o indique si ya se dio respuesta.</div>
 
-  <!-- ── Bandeja de correos PQRSD (Gmail OAuth por oficina) ── -->
-  <details class="card gmail-ofi-panel" id="gmail-ofi-panel-wrap" style="margin-bottom:12px">
-    <summary class="gmail-ofi-panel-summary">
-      <span>📧 Correos PQRSD recibidos</span>
-      <div class="gmail-ofi-panel-actions" onclick="event.stopPropagation()">
-        <button type="button" class="btn bsm" id="gmail-ofi-refresh-btn" onclick="gmailOfiLoadInbox()" style="display:none" title="Actualizar bandeja">🔄</button>
-        <button type="button" class="btn bsm bp" id="gmail-ofi-connect-btn" onclick="gmailOfiConnect()">📧 Conectar mi correo</button>
-      </div>
-    </summary>
-    <div class="gmail-ofi-search-row">
-      <input type="text" id="gmail-ofi-search" class="gmail-ofi-search-input" placeholder="Buscar por asunto, remitente, PQRSD…" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
-      <button type="button" class="btn bsm" onclick="gmailOfiSearch(document.getElementById('gmail-ofi-search').value)" title="Buscar">🔍</button>
-      <button type="button" class="btn bsm" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiLoadInbox()" title="Ver todos">Todos</button>
-    </div>
-    <div class="gmail-ofi-split" id="gmail-ofi-split">
-      <div class="gmail-ofi-inbox" id="gmail-ofi-inbox-list">
-        <div class="gmail-empty">Conecte su correo para ver los mensajes PQRSD.</div>
-      </div>
-      <div class="gmail-ofi-view" id="gmail-ofi-msg-view"></div>
-    </div>
-  </details>
-
   <div class="card" style="border-left:4px solid var(--bl)">
     <div class="fx" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.8rem">
       <div class="slbl" style="margin:0" id="pqrs-ofi-titulo">PQRSD</div>
@@ -645,6 +624,34 @@
     <div id="pqrs-ofi-mets" class="pqrs-ofi-mets"></div>
     <div class="tw"><table><thead><tr><th>Expediente</th><th>Tipo</th><th>Asunto</th><th>Radicación</th><th>Estado</th><th></th></tr></thead><tbody id="tbl-pqrs-ofi"></tbody></table></div>
     <div id="pqrs-ofi-detalle" class="pqrs-ofi-detalle pqrs-ofi-det-below" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ===== CORREOS PQRSD — OFICINAS / NCA / RESPONSABLES ===== -->
+<div class="pg" id="pg-gmail-ofi">
+  <div class="modulo-banner ofi">📧 Correos PQRSD — Bandeja de mensajes de su oficina</div>
+  <div class="card" style="border-left:4px solid var(--bl);padding:0;overflow:hidden">
+    <!-- Cabecera con conexión -->
+    <div class="gmail-ofi-panel-summary" style="border-radius:var(--r) var(--r) 0 0">
+      <span style="font-size:14px;font-weight:700">📧 Bandeja de correos PQRSD</span>
+      <div class="gmail-ofi-panel-actions">
+        <button type="button" class="btn bsm" id="gmail-ofi-refresh-btn" onclick="gmailOfiLoadInbox()" style="display:none" title="Actualizar bandeja">🔄 Actualizar</button>
+        <button type="button" class="btn bsm bp" id="gmail-ofi-connect-btn" onclick="gmailOfiConnect()">📧 Conectar mi correo</button>
+      </div>
+    </div>
+    <!-- Barra de búsqueda -->
+    <div class="gmail-ofi-search-row">
+      <input type="text" id="gmail-ofi-search" class="gmail-ofi-search-input" placeholder="Buscar por asunto, remitente, PQRSD…" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
+      <button type="button" class="btn bsm" onclick="gmailOfiSearch(document.getElementById('gmail-ofi-search').value)" title="Buscar">🔍</button>
+      <button type="button" class="btn bsm" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiLoadInbox()" title="Ver todos">Todos</button>
+    </div>
+    <!-- Panel dividido: lista (izq) + vista (der) -->
+    <div class="gmail-ofi-split" id="gmail-ofi-split">
+      <div class="gmail-ofi-inbox" id="gmail-ofi-inbox-list">
+        <div class="gmail-empty">Conecte su correo para ver los mensajes PQRSD.</div>
+      </div>
+      <div class="gmail-ofi-view" id="gmail-ofi-msg-view"></div>
+    </div>
   </div>
 </div>
 

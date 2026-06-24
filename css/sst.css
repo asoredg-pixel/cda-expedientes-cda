@@ -987,19 +987,17 @@ details.ec-fold>summary.ec:hover .ech{background:color-mix(in srgb,var(--ac) 5%,
 .ec-fold-ico{display:inline-block;font-size:10px;margin-right:4px;color:var(--tx3);transition:transform .15s}
 .ec-fold-ico::before{content:'▸'}
 details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
+/* Tab visibility — correos oficina/nca/resp */
+.tab.tab-gmail-ofi-only{display:none!important}
+.tab.tab-gmail-ofi-only.tab-gmail-ofi-on{display:inline-flex!important}
 /* =====================================================================
-   GMAIL PANEL — OFICINAS
+   GMAIL PANEL — OFICINAS / NCA / RESPONSABLES
    ===================================================================== */
-.gmail-ofi-panel{padding:0;overflow:hidden}
 .gmail-ofi-panel-summary{
-  list-style:none;cursor:pointer;display:flex;align-items:center;
-  justify-content:space-between;gap:8px;padding:10px 14px;
-  border-radius:var(--r);user-select:none;font-size:13px;font-weight:600;
-  background:var(--sf);flex-wrap:wrap
+  display:flex;align-items:center;justify-content:space-between;
+  gap:8px;padding:10px 14px;font-size:13px;font-weight:600;
+  background:var(--sf);flex-wrap:wrap;border-bottom:1px solid var(--bd)
 }
-.gmail-ofi-panel-summary::-webkit-details-marker{display:none}
-.gmail-ofi-panel-summary::before{content:'▶';font-size:9px;margin-right:6px;transition:transform .2s;color:var(--tx3)}
-.gmail-ofi-panel[open] .gmail-ofi-panel-summary::before{transform:rotate(90deg)}
 .gmail-ofi-panel-actions{display:flex;gap:6px;align-items:center}
 /* Search bar */
 .gmail-ofi-search-row{display:flex;gap:6px;align-items:center;padding:8px 14px;border-top:1px solid var(--bd);background:var(--sf)}

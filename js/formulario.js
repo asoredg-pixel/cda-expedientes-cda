@@ -14,6 +14,8 @@ function showTab(t){
   if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='con';
   if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
+  // gmail-ofi tab requires one of: office, NCA or responsable
+  if(t==='gmail-ofi'&&!esModoOficinaDeguv()&&!esOficinaPqrsNca()&&!esNcaDeguv()&&!esModoResponsable())t='con';
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
   if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t='con';}
   if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}
@@ -26,6 +28,7 @@ function showTab(t){
   if(t==='reg'){poblarTramSelect();renderTabla();}
   if(t==='sec'){poblarSecOficinaSelect();renderSecretariaPqrs();}
   if(t==='pqrs-ofi'){initPeriodoFiltros('pqrs-ofi');renderPqrsOficinaInbox();}
+  if(t==='gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
   if(t==='ciudadano'){
     const inp=document.getElementById('ciudadano-exp');
     if(inp&&!inp.value&&window._ciudadanoUltExp)inp.value=window._ciudadanoUltExp;
