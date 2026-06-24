@@ -987,3 +987,33 @@ details.ec-fold>summary.ec:hover .ech{background:color-mix(in srgb,var(--ac) 5%,
 .ec-fold-ico{display:inline-block;font-size:10px;margin-right:4px;color:var(--tx3);transition:transform .15s}
 .ec-fold-ico::before{content:'▸'}
 details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
+/* =====================================================================
+   GMAIL PANEL — OFICINAS
+   ===================================================================== */
+.gmail-ofi-panel{padding:0;overflow:hidden}
+.gmail-ofi-panel-summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;padding:10px 14px;
+  border-radius:var(--r);user-select:none;font-size:13px;font-weight:600;
+  background:var(--sf);flex-wrap:wrap
+}
+.gmail-ofi-panel-summary::-webkit-details-marker{display:none}
+.gmail-ofi-panel-summary::before{content:'▶';font-size:9px;margin-right:6px;transition:transform .2s;color:var(--tx3)}
+.gmail-ofi-panel[open] .gmail-ofi-panel-summary::before{transform:rotate(90deg)}
+.gmail-ofi-panel-actions{display:flex;gap:6px;align-items:center}
+/* Split layout: inbox list (left) + message view (right) */
+.gmail-ofi-split{
+  display:flex;gap:0;border-top:1px solid var(--bd);
+  min-height:200px;max-height:calc(100vh - 200px)
+}
+.gmail-ofi-inbox{
+  width:280px;min-width:220px;flex-shrink:0;
+  overflow-y:auto;border-right:1px solid var(--bd);background:var(--bg)
+}
+.gmail-ofi-view{
+  flex:1;min-width:0;overflow-y:auto;padding:14px 16px;background:var(--bg)
+}
+@media(max-width:700px){
+  .gmail-ofi-split{flex-direction:column;max-height:none}
+  .gmail-ofi-inbox{width:100%;min-width:0;border-right:none;border-bottom:1px solid var(--bd);max-height:200px}
+}

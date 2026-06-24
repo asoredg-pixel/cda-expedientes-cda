@@ -671,12 +671,16 @@ function abrirVisorAdjunto(urlView,nombreArchivo){
     ov.onclick=function(ev){if(ev.target===ov)ov.remove();};
     document.body.appendChild(ov);
   }
-  const previewUrl=String(urlView||'').replace(/\/view(\?.*)?$/,'/preview');
+  const isBlob=String(urlView||'').startsWith('blob:');
+  const previewUrl=isBlob?String(urlView||''):String(urlView||'').replace(/\/view(\?.*)?$/,'/preview');
+  const extraLink=isBlob
+    ?'<a href="'+escAttr(String(urlView||''))+'" download="'+escAttr(nombreArchivo||'adjunto')+'" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">⬇ Descargar</a>'
+    :'<a href="'+escAttr(String(urlView||'').replace(/\/preview(\?.*)?$/,'/view'))+'" target="_blank" rel="noopener" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">↗ Abrir en Drive</a>';
   ov.innerHTML=
     '<div style="background:var(--sf,#fff);border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;width:min(900px,96vw);height:min(720px,90vh);overflow:hidden">'+
     '<div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd,#e2e8f0);gap:8px">'+
     '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escAttr(nombreArchivo||'Adjunto')+'</span>'+
-    '<a href="'+escAttr(String(urlView||'').replace(/\/preview(\?.*)?$/,'/view'))+'" target="_blank" rel="noopener" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">↗ Abrir en Drive</a>'+
+    extraLink+
     '<button type="button" onclick="document.getElementById(\'adj-viewer-ov\').remove()" style="background:none;border:none;cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;color:var(--tx2,#666)" title="Cerrar">✕</button>'+
     '</div>'+
     '<iframe src="'+escAttr(previewUrl)+'" style="flex:1;width:100%;border:none" allowfullscreen></iframe>'+
