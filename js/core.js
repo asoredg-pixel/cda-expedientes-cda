@@ -669,9 +669,14 @@ function htmlPqrsCorreoOrigenHtml(e){
   if(adjInfo.length){
     attsHtml=adjInfo.map(function(a,i){
       const drv=driveAtts.find(x=>x.nombre===a.nombre)||driveAtts[i]||null;
-      const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':'📎';
-      if(drv&&drv.driveLink)return'<a href="'+escAttr(drv.driveLink)+'" target="_blank" rel="noopener" class="gmail-att-chip" style="text-decoration:none"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
-      return'<span class="gmail-att-chip" style="opacity:.7"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
+      const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':(a.mimeType||'').includes('word')||(a.nombre||'').match(/\.docx?$/i)?'📝':(a.mimeType||'').includes('sheet')||(a.mimeType||'').includes('excel')||(a.nombre||'').match(/\.xlsx?$/i)?'📊':'📎';
+      if(drv&&drv.driveLink){
+        // Convert /view to /preview so Drive's built-in viewer renders PDF, Word, Excel, images
+        const previewUrl=drv.driveLink.replace(/\/view(\?.*)?$/,'/preview');
+        const onclick='event.stopPropagation();window.open(\''+previewUrl.replace(/'/g,"\\'")+"','_blank','popup,width=920,height=720,resizable=yes,scrollbars=yes');return false;";
+        return'<a href="'+escAttr(previewUrl)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(a.nombre||'adjunto')+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
+      }
+      return'<span class="gmail-att-chip" style="opacity:.7" title="Sin enlace Drive aún"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
     }).join('');
   }
   const bodyHtml=d.cuerpoHtml||(d.cuerpoTxt?'<pre style="white-space:pre-wrap;font-size:12px;margin:0">'+escAttr(d.cuerpoTxt)+'</pre>':'');
@@ -2095,6 +2100,7 @@ function renderConPanelPqrsExtras(e){
   if(acc.length)h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin:.65rem 0">'+acc.join(' ')+'</div>';
   h+=renderPqrsTrazabilidadHtml(e);
   if(pqrsEstaCerrada(e))h+=htmlPqrsRespuestaRegistrada(e);
+  h+=htmlPqrsCorreoOrigenHtml(e);
   return '<div class="con-panel-pqrs-wrap" style="margin-bottom:.75rem">'+h+'</div>';
 }
 function getPqrsAsociadosVisibles(e){
