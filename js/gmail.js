@@ -103,6 +103,7 @@ function gmailDisconnect() {
   _gmailCurrentMsg = null;
   window._gmailPendingMsgId = null;
   window._gmailPendingAttachments = null;
+  window._gmailPendingEmailData = null;
   updateGmailConnectBtn();
   renderGmailInboxList();
   const view = document.getElementById('gmail-msg-view');
@@ -956,6 +957,35 @@ function prePopularFormDesdeEmail(msg) {
   // Store message ID for saving with the expediente
   window._gmailPendingMsgId = msg.id;
   window._gmailPendingAttachments = window._gmailPendingAttachments || null;
+
+  // Capture email metadata + body so offices can view it without needing Gmail OAuth
+  try {
+    const _h = (msg.payload && msg.payload.headers) || [];
+    const _from = gmailParseFrom(gmailGetHeader(_h, 'from'));
+    const _parts = gmailExtractParts(msg.payload);
+    const _rawHtml = _parts.textHtml || '';
+    const _rawTxt = _parts.textPlain || '';
+    const _safeHtml = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(_rawHtml, {USE_PROFILES:{html:true}}) : _rawHtml;
+    // Cap HTML at ~60KB to stay safely under Firestore 1MB document limit
+    const _bodyHtml = _safeHtml.length > 60000 ? _safeHtml.slice(0, 60000) + '…' : _safeHtml;
+    const _bodyTxt = _rawTxt.length > 8000 ? _rawTxt.slice(0, 8000) + '…' : _rawTxt;
+    const _atts = (_parts.attachments || []).map(a => ({
+      nombre: a.filename || '',
+      mimeType: a.mimeType || '',
+      size: a.size || 0,
+      attachmentId: a.attachmentId || ''
+    }));
+    window._gmailPendingEmailData = {
+      remitente: _from.name ? (_from.name + ' <' + _from.email + '>') : (_from.email || ''),
+      fecha: gmailGetHeader(_h, 'date') || '',
+      asunto: gmailGetHeader(_h, 'subject') || '',
+      cuerpoHtml: _bodyHtml,
+      cuerpoTxt: _bodyTxt,
+      adjuntosInfo: _atts
+    };
+  } catch(e) {
+    window._gmailPendingEmailData = null;
+  }
 }
 
 function gmailPreRadicarPqrs() {

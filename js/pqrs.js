@@ -169,6 +169,9 @@ function guardarPqrsSecretaria(){
   // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
     ?window._gmailPendingAttachments:null;
+  // Sprint E: capturar metadatos/cuerpo del correo para visualización por oficinas
+  const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
+    ?window._gmailPendingEmailData:null;
   // Si hay adjuntos de Drive y no se puso link manual, usar el primer link como principal
   // El campo _pqrs_gmail_attachments guarda todos los links para acceso completo
   const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
@@ -192,7 +195,9 @@ function guardarPqrsSecretaria(){
     // Sprint B: trazabilidad del correo origen
     _gmail_message_id:gmailMsgId||null,
     // Sprint C: links de adjuntos subidos a Drive
-    _pqrs_gmail_attachments:gmailAtts||null
+    _pqrs_gmail_attachments:gmailAtts||null,
+    // Sprint E: cuerpo y metadatos del correo para visualización offline por oficinas
+    _gmail_email_data:gmailEmailData
   });
   exps.push(data);
   if(oficina==='guaviare')ensureTareaPqrsNca(data);
@@ -209,6 +214,7 @@ function guardarPqrsSecretaria(){
   // Limpiar datos Gmail pendientes
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
+  window._gmailPendingEmailData=null;
   renderBandejaDepto();
   notif('PQRSD '+expId+(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)),'ok');
   limpiarFormSecretaria();

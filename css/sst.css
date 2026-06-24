@@ -931,6 +931,14 @@ body.sesion-activa #pg-login{display:none!important}
 .gmail-att-chip .att-ico{flex-shrink:0}
 .gmail-att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 0}
 .gmail-att-chip .att-size{flex-shrink:0;color:var(--tx3)}
+/* ── Correo de origen en detalle PQRSD ─────────────────────────────── */
+details.pqrs-email-origen{margin-top:12px;padding-top:10px;border-top:1px solid var(--bd)}
+details.pqrs-email-origen summary{font-size:12px;font-weight:600;cursor:pointer;color:var(--ac);user-select:none;list-style:none;display:flex;align-items:center;gap:4px}
+details.pqrs-email-origen summary::-webkit-details-marker{display:none}
+details.pqrs-email-origen summary::before{content:'▶';font-size:9px;transition:transform .2s}
+details.pqrs-email-origen[open] summary::before{transform:rotate(90deg)}
+.pqrs-email-body{max-height:340px;overflow-y:auto;border:1px solid var(--bd);border-radius:var(--r);padding:10px;font-size:12px;line-height:1.55;background:var(--bg);margin-top:6px}
+.pqrs-email-body img{max-width:100%;height:auto}
 /* =====================================================================
    VISTA PARALELA CORREO / FORMULARIO (Split radicación secretaría)
    ===================================================================== */

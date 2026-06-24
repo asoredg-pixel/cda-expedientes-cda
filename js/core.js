@@ -660,6 +660,30 @@ function htmlPqrsRespuestaRegistrada(e){
   });
   return h+'</div>';
 }
+function htmlPqrsCorreoOrigenHtml(e){
+  const d=e&&e._gmail_email_data;
+  if(!d||typeof d!=='object')return'';
+  const driveAtts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
+  const adjInfo=Array.isArray(d.adjuntosInfo)?d.adjuntosInfo:[];
+  let attsHtml='';
+  if(adjInfo.length){
+    attsHtml=adjInfo.map(function(a,i){
+      const drv=driveAtts.find(x=>x.nombre===a.nombre)||driveAtts[i]||null;
+      const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':'📎';
+      if(drv&&drv.driveLink)return'<a href="'+escAttr(drv.driveLink)+'" target="_blank" rel="noopener" class="gmail-att-chip" style="text-decoration:none"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
+      return'<span class="gmail-att-chip" style="opacity:.7"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
+    }).join('');
+  }
+  const bodyHtml=d.cuerpoHtml||(d.cuerpoTxt?'<pre style="white-space:pre-wrap;font-size:12px;margin:0">'+escAttr(d.cuerpoTxt)+'</pre>':'');
+  const fechaStr=d.fecha?' · '+escAttr(d.fecha):'';
+  return'<details class="pqrs-email-origen"><summary>📧 Correo de origen <span style="font-weight:400;color:var(--tx3)">(clic para ver)</span></summary>'+
+    '<div style="padding:8px 0 4px">'+
+    (d.remitente||d.fecha?'<div style="font-size:11px;color:var(--tx2);margin-bottom:3px">De: <strong>'+escAttr(d.remitente||'')+fechaStr+'</strong></div>':'')  +
+    (d.asunto?'<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+escAttr(d.asunto)+'</div>':'')+
+    (attsHtml?'<div class="gmail-att-chips" style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px">'+attsHtml+'</div>':'')+
+    (bodyHtml?'<div class="pqrs-email-body">'+bodyHtml+'</div>':'')+
+    '</div></details>';
+}
 function htmlPqrsOficinaDetalleCore(e,opts){
   opts=opts||{};
   e=normalizePqrsOficinaFields(e);
@@ -686,6 +710,7 @@ function htmlPqrsOficinaDetalleCore(e,opts){
     (docHtml?('<div class="pqrs-det-sec"><div class="pqrs-det-k">Documento de la solicitud</div><div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+docHtml+'</div></div>'):'')+
     renderPqrsTrazabilidadHtml(e)+
     htmlPqrsRespuestaRegistrada(e)+chatHtml+
+    htmlPqrsCorreoOrigenHtml(e)+
     '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:14px">'+btnResp+btnAsoc+btnInf+btnAsig+btnTras+btnEdit+btnDel+'</div>';
 }
 function eliminarPqrs(expId){
