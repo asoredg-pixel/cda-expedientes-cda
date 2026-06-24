@@ -1903,7 +1903,9 @@ function getTareasDeptActividades(respFilter){
       t=normalizeTask(t);
       if(t.eliminada)return;
       if(!pqrsTaskVisibleEnActividades(t,e,respFilter))return;
-      if(respFilter&&!taskUsuarioEsAsignado(t,respFilter))return;
+      // Para tareas PQRSD, pqrsTaskVisibleEnActividades ya maneja el filtro de usuario;
+      // solo aplicar el filtro adicional para tareas normales
+      if(respFilter&&!taskEsAtenderPqrs(t,e)&&!taskUsuarioEsAsignado(t,respFilter))return;
       const tramObj=getTram(e._tramite,e);
       list.push({...t,exp:e._exp,depto:e._depto,nombre:getNom(e),tram:tramObj?tramObj.nombre:(esTramitePqrs(e._tramite)?'PQRSD':''),sinExpediente:false,esPqrs:esTramitePqrs(e._tramite),prioritaria:!!(t.prioritaria||(esTramitePqrs(e._tramite)&&e._pqrs_prioritaria))});
     });

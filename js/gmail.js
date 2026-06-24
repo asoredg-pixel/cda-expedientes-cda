@@ -42,16 +42,42 @@ const GMAIL_RADICADO_LABEL = 'RAD APP'; // Nombre de la etiqueta Gmail para corr
 function gmailGetToken() {
   try { return sessionStorage.getItem(GMAIL_TOKEN_KEY) || ''; } catch (e) { return ''; }
 }
+let _gmailTokenWarnTimer = null;
 function gmailSetToken(tok, expiresInSec) {
   try {
     if (tok) {
       sessionStorage.setItem(GMAIL_TOKEN_KEY, tok);
-      sessionStorage.setItem(GMAIL_TOKEN_EXP_KEY, String(Date.now() + (expiresInSec || 3600) * 1000));
+      const expMs = Date.now() + (expiresInSec || 3600) * 1000;
+      sessionStorage.setItem(GMAIL_TOKEN_EXP_KEY, String(expMs));
+      _gmailScheduleTokenWarning(expMs);
     } else {
       sessionStorage.removeItem(GMAIL_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_TOKEN_EXP_KEY);
+      if (_gmailTokenWarnTimer) { clearTimeout(_gmailTokenWarnTimer); _gmailTokenWarnTimer = null; }
     }
   } catch (e) {}
+}
+function _gmailScheduleTokenWarning(expMs) {
+  if (_gmailTokenWarnTimer) clearTimeout(_gmailTokenWarnTimer);
+  const warn50 = expMs - Date.now() - 600000; // 10 min antes de expirar (50 min después de conectar)
+  const warn2  = expMs - Date.now() - 120000; // 2 min antes de expirar (aviso crítico)
+  if (warn50 > 0) {
+    _gmailTokenWarnTimer = setTimeout(function() {
+      if (gmailIsTokenValid()) {
+        notif('⏰ El permiso de Gmail expira en ~10 minutos. Reconecte la bandeja para evitar interrupciones al radicar.', 'warn');
+        // Schedule critical warning
+        _gmailTokenWarnTimer = setTimeout(function() {
+          if (gmailIsTokenValid()) {
+            notif('⚠️ El permiso de Gmail expira en ~2 minutos. Reconecte la bandeja YA para no perder la carga automática de adjuntos.', 'err');
+          }
+        }, warn2 > 0 ? warn2 - warn50 : 0);
+      }
+    }, warn50);
+  } else if (warn2 > 0) {
+    _gmailTokenWarnTimer = setTimeout(function() {
+      if (gmailIsTokenValid()) notif('⚠️ El permiso de Gmail expira en ~2 minutos. Reconecte la bandeja.', 'err');
+    }, warn2);
+  }
 }
 function gmailIsTokenValid() {
   const tok = gmailGetToken();
