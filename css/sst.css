@@ -804,11 +804,116 @@ body:not(.sesion-activa) .hdr,body:not(.sesion-activa) .tabs,body:not(.sesion-ac
 body:not(.sesion-activa) .chat-fab,body:not(.sesion-activa) .chat-window{display:none!important}
 body:not(.sesion-activa) .main{padding-top:0}
 body.sesion-activa #pg-login{display:none!important}
-.login-wrap{max-width:920px;margin:2rem auto;padding:0 1rem}
-.login-wrap h1{font-size:1.5rem;margin:0 0 6px;color:var(--tx)}
-.login-wrap .login-sub{font-size:13px;color:var(--tx2);margin-bottom:1.5rem}
-.login-roles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.login-rol-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:1.15rem 1.2rem;border:1px solid var(--bd);border-radius:var(--rl);background:var(--sf);cursor:pointer;text-align:left;transition:border-color .15s,box-shadow .15s,transform .1s;font-family:inherit;width:100%}
+
+/* ===== LOGIN 2026 — Immersive Aurora Design ===== */
+#pg-login{
+  position:relative;min-height:100vh;display:flex!important;align-items:center;justify-content:center;
+  background:#030c07;overflow:hidden;padding:1.5rem;box-sizing:border-box;
+}
+/* Aurora blobs */
+.lbg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lbg-blob{position:absolute;border-radius:50%;filter:blur(90px);animation:lbgDrift ease-in-out infinite}
+.lbg-b1{width:750px;height:750px;background:radial-gradient(circle at 40% 40%,rgba(22,163,74,.45),rgba(5,150,105,.18) 55%,transparent);top:-240px;left:-220px;animation-duration:24s;animation-delay:0s}
+.lbg-b2{width:650px;height:650px;background:radial-gradient(circle at 50% 50%,rgba(6,182,212,.38),rgba(14,116,144,.12) 55%,transparent);bottom:-180px;right:-180px;animation-duration:28s;animation-delay:-12s}
+.lbg-b3{width:420px;height:420px;background:radial-gradient(circle at 50% 50%,rgba(163,230,53,.28),rgba(101,163,13,.1) 55%,transparent);top:35%;right:8%;animation-duration:19s;animation-delay:-6s}
+.lbg-b4{width:380px;height:380px;background:radial-gradient(circle at 50% 50%,rgba(52,211,153,.32),transparent 65%);bottom:15%;left:4%;animation-duration:32s;animation-delay:-18s}
+@keyframes lbgDrift{
+  0%,100%{transform:translate(0,0) scale(1)}
+  20%{transform:translate(45px,-55px) scale(1.09)}
+  40%{transform:translate(-35px,45px) scale(0.94)}
+  60%{transform:translate(55px,25px) scale(1.06)}
+  80%{transform:translate(-25px,-35px) scale(1.02)}
+}
+/* Grid overlay */
+.lbg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:52px 52px;mask-image:radial-gradient(ellipse at center,rgba(0,0,0,.7) 0%,transparent 78%);-webkit-mask-image:radial-gradient(ellipse at center,rgba(0,0,0,.7) 0%,transparent 78%)}
+/* Floating particles */
+.lbg-pts{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lpt{position:absolute;background:rgba(255,255,255,.65);border-radius:50%;box-shadow:0 0 8px rgba(134,239,172,.5);animation:lptRise linear infinite}
+@keyframes lptRise{
+  0%{transform:translateY(0) scale(1);opacity:0}
+  8%{opacity:1}
+  85%{opacity:.4}
+  100%{transform:translateY(-110vh) scale(.4);opacity:0}
+}
+/* Login card — glass morphism */
+.login-wrap{
+  position:relative;z-index:10;
+  background:rgba(255,255,255,.07);
+  backdrop-filter:blur(30px) saturate(1.5);-webkit-backdrop-filter:blur(30px) saturate(1.5);
+  border:1px solid rgba(255,255,255,.14);border-radius:24px;
+  padding:2.5rem 2rem;max-width:460px;width:100%;
+  box-shadow:0 32px 80px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.05),inset 0 1px 0 rgba(255,255,255,.1);
+  animation:loginCardIn .9s cubic-bezier(.22,1,.36,1) both;
+  color:#fff;text-align:center;
+}
+/* Animated gradient border */
+.login-wrap::before{
+  content:'';position:absolute;inset:0;border-radius:24px;padding:1px;
+  background:linear-gradient(135deg,rgba(34,197,94,.55),rgba(6,182,212,.35),rgba(163,230,53,.45),rgba(16,185,129,.4));
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:borderPulse 4s ease-in-out infinite alternate;pointer-events:none;
+}
+@keyframes borderPulse{0%{opacity:.35}100%{opacity:1}}
+@keyframes loginCardIn{
+  from{opacity:0;transform:translateY(40px) scale(.96)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+/* Logo */
+.login-logo-wrap{margin-bottom:1.1rem}
+.login-logo-img{width:150px;filter:drop-shadow(0 4px 22px rgba(34,197,94,.45));animation:logoFloat 4s ease-in-out infinite}
+@keyframes logoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+/* Title & org */
+.login-title{font-size:1.1rem;font-weight:700;color:#fff;margin:0 0 .3rem;letter-spacing:-.01em;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+.login-org{font-size:.75rem;color:rgba(255,255,255,.55);margin:0 0 1.5rem;line-height:1.5}
+/* Citizen card */
+.login-main-card{
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.11);border-radius:14px;
+  padding:1.25rem;margin-bottom:1.25rem;text-align:left;transition:background .25s,border-color .25s;
+}
+.login-main-card:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}
+.login-main-card h2{color:#fff;font-size:.95rem;margin:0 0 .4rem}
+.login-main-card p{color:rgba(255,255,255,.6);font-size:.82rem;margin:0 0 .9rem}
+.login-cta-btn{width:100%;border-radius:10px!important;font-weight:600!important;padding:.72rem!important}
+/* Divider */
+.login-func-divider{
+  display:flex;align-items:center;gap:.75rem;margin:1rem 0;
+  color:rgba(255,255,255,.4);font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+}
+.login-func-divider::before,.login-func-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.12)}
+.login-sub{color:rgba(255,255,255,.6)!important;font-size:.83rem;margin-bottom:1rem}
+/* Google button */
+.login-gmail-btn{
+  display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  padding:.88rem 1.25rem;background:rgba(255,255,255,.93);color:#222;
+  border:none;border-radius:12px;font-size:.95rem;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:background .2s,transform .15s,box-shadow .2s;
+  box-shadow:0 4px 20px rgba(0,0,0,.35);
+}
+.login-gmail-btn:hover{background:#fff;transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.login-gmail-btn svg{width:22px;height:22px;flex-shrink:0}
+.login-auth-msg{font-size:.8rem;color:rgba(255,255,255,.55);margin-top:10px;min-height:18px;width:100%;text-align:center}
+.login-auth-msg.err{color:#f87171}
+/* Role cards (dark theme) */
+.login-roles-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px;margin-top:.5rem}
+.login-rol-card{
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:1rem 1.1rem;
+  border:1px solid rgba(255,255,255,.15);border-radius:14px;
+  background:rgba(255,255,255,.07);cursor:pointer;text-align:left;
+  transition:border-color .15s,background .15s,transform .1s;font-family:inherit;width:100%;color:#fff;
+}
+.login-rol-card:hover{background:rgba(255,255,255,.13);border-color:rgba(52,211,153,.5);transform:translateY(-2px)}
+.login-rol-card strong{color:#fff;font-size:.88rem}
+.login-rol-card small{color:rgba(255,255,255,.5);font-size:.75rem}
+/* Override legacy .login-wrap h1 and margin */
+.login-wrap h1{font-size:1.1rem!important;color:#fff!important;margin:0 0 .3rem!important}
+.login-wrap .login-sub{color:rgba(255,255,255,.6)!important}
+
+/* ===== END LOGIN ===== */
+
+.login-wrap{max-width:460px}
+.login-rol-card{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:1.15rem 1.2rem;border:1px solid rgba(255,255,255,.15);border-radius:var(--rl);background:rgba(255,255,255,.08);cursor:pointer;text-align:left;transition:border-color .15s,box-shadow .15s,transform .1s;font-family:inherit;width:100%}
 .login-rol-card:hover{border-color:var(--bl);box-shadow:0 4px 14px rgba(24,95,165,.12);transform:translateY(-2px)}
 .login-rol-icon{font-size:28px;line-height:1}
 .login-rol-tit{font-size:14px;font-weight:700;color:var(--tx)}
@@ -845,8 +950,7 @@ body.sesion-activa #pg-login{display:none!important}
   .resp-global-bar .depto-sel,.resp-global-bar #sel-responsable{width:100%;max-width:none;min-width:0}
   .resp-global-bar .btn{width:100%;justify-content:center;min-height:40px}
   .resp-global-bar #resp-global-hint{width:100%}
-  .login-wrap{margin:1.25rem auto;padding:0 .75rem}
-  .login-wrap h1{font-size:1.25rem}
+  .login-wrap{margin:0;padding:1.75rem 1.25rem}
   .login-roles-grid{grid-template-columns:1fr}
   .sb,.act-filtros-bar,.act-periodo-row,.periodo-filtro{flex-direction:column;align-items:stretch!important}
   .sb input,.sb select,.sb .btn,.sb label,.act-filtros-bar .btn,.act-filtros-bar select,.act-filtros-bar input,.act-periodo-row input,.act-periodo-row select,.act-periodo-row .btn,.act-periodo-row label,.periodo-filtro input,.periodo-filtro select,.periodo-filtro .btn,.periodo-filtro label{width:100%;max-width:none}
@@ -881,19 +985,8 @@ body.sesion-activa #pg-login{display:none!important}
   .hacts{width:auto;flex:1 1 auto;display:flex;flex-wrap:wrap;justify-content:flex-end}
   .hacts>.depto-sel,.hacts #sel-depto{width:auto;max-width:min(240px,100%)}
 }
-.login-main-card{text-align:center;padding:2rem 1.5rem;border:1px solid var(--bd);border-radius:var(--rl);background:var(--sf);margin-bottom:1.5rem;box-shadow:var(--sh)}
-.login-main-card h2{margin:0 0 8px;font-size:1.35rem}
-.login-main-card p{margin:0 0 1.25rem;color:var(--tx2);font-size:13px}
-.login-func-divider{text-align:center;font-size:12px;color:var(--tx3);margin:1.25rem 0 .75rem;position:relative}
-.login-func-divider:before,.login-func-divider:after{content:'';position:absolute;top:50%;width:38%;height:1px;background:var(--bd)}
-.login-func-divider:before{left:0}.login-func-divider:after{right:0}
-.login-sub-func{text-align:center}
 #login-auth-panel{display:flex;flex-direction:column;align-items:center;width:100%}
-.login-gmail-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:320px;padding:11px 18px;border:1px solid var(--bd);border-radius:var(--rl);background:#fff;color:var(--tx);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:box-shadow .15s,border-color .15s}
-.login-gmail-btn:hover{border-color:#4285f4;box-shadow:0 2px 10px rgba(66,133,244,.18)}
-.login-gmail-btn svg{width:20px;height:20px;flex-shrink:0}
-.login-auth-msg{font-size:12px;color:var(--tx2);margin-top:10px;min-height:18px;width:100%;max-width:320px;text-align:center}
-.login-auth-msg.err{color:var(--rd)}
+.login-sub-func{text-align:center}
 .login-status{text-align:center;font-size:14px;color:var(--tx2);padding:1.5rem 1rem;margin:1rem 0}
 .hdr-user-bar{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--tx2);margin-right:4px;flex-wrap:wrap}
 .hdr-user-bar strong{color:var(--tx);font-weight:600}
