@@ -1795,7 +1795,7 @@ function gmailOfiForwardCurrent() {
   const h = n => (headers.find(x => x.name.toLowerCase() === n.toLowerCase()) || {}).value || '';
   const from = h('From'), date = h('Date'), to = h('To'), subject = h('Subject');
   const fwdSubj = subject.startsWith('Fwd:') ? subject : 'Fwd: ' + subject;
-  const parts   = _gmailOfiExtractParts(msg.payload || {});
+  const parts   = gmailExtractParts(msg.payload || {});
   const fwdBody = '\n\n--- Mensaje reenviado ---\nDe: ' + from + '\nFecha: ' + date + '\nPara: ' + to + '\nAsunto: ' + subject + '\n\n' + (parts.textPlain || '');
   gmailOfiOpenCompose({ subject: fwdSubj, body: fwdBody, title: 'Reenviar' });
 }
