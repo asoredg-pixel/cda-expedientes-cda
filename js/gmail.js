@@ -1699,8 +1699,8 @@ function _renderGmailOfiMsgView(msg) {
         '</div>' +
       '</div>' +
       '<div class="gm-msg-actions">' +
-        (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({to:\'' + escAttr(replyEmail) + '\',subject:\'' + escAttr(replySubj) + '\',inReplyTo:\'' + escAttr(msgId) + '\',title:\'Responder\'})">↩ Responder</button>' : '') +
-        '<button type="button" class="gm-action-btn" onclick="gmailOfiOpenCompose({subject:\'' + escAttr(fwdSubj) + '\',body:\'' + escAttr(fwdBody) + '\',title:\'Reenviar\'})">↪ Reenviar</button>' +
+        (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiReplyCurrent()">↩ Responder</button>' : '') +
+        '<button type="button" class="gm-action-btn" onclick="gmailOfiForwardCurrent()">↪ Reenviar</button>' +
         radicarBtn +
       '</div>' +
     '</div>' +
@@ -1774,6 +1774,30 @@ function gmailOfiOpenCompose(opts) {
   const bodyEl = document.getElementById('gm-compose-body');
   if (toEl && !toEl.value) toEl.focus();
   else if (bodyEl) bodyEl.focus();
+}
+
+function gmailOfiReplyCurrent() {
+  const msg = _gmailOfiCurrentMsg;
+  if (!msg) return;
+  const headers = (msg.payload && msg.payload.headers) || [];
+  const h = n => (headers.find(x => x.name.toLowerCase() === n.toLowerCase()) || {}).value || '';
+  const from = h('From'), replyTo = h('Reply-To'), subject = h('Subject'), msgId = h('Message-Id');
+  const fromParsed = gmailParseFrom(from);
+  const replyEmail = (replyTo ? gmailParseFrom(replyTo).email : '') || fromParsed.email || '';
+  const replySubj  = subject.startsWith('Re:') ? subject : 'Re: ' + subject;
+  gmailOfiOpenCompose({ to: replyEmail, subject: replySubj, inReplyTo: msgId, title: 'Responder' });
+}
+
+function gmailOfiForwardCurrent() {
+  const msg = _gmailOfiCurrentMsg;
+  if (!msg) return;
+  const headers = (msg.payload && msg.payload.headers) || [];
+  const h = n => (headers.find(x => x.name.toLowerCase() === n.toLowerCase()) || {}).value || '';
+  const from = h('From'), date = h('Date'), to = h('To'), subject = h('Subject');
+  const fwdSubj = subject.startsWith('Fwd:') ? subject : 'Fwd: ' + subject;
+  const parts   = _gmailOfiExtractParts(msg.payload || {});
+  const fwdBody = '\n\n--- Mensaje reenviado ---\nDe: ' + from + '\nFecha: ' + date + '\nPara: ' + to + '\nAsunto: ' + subject + '\n\n' + (parts.textPlain || '');
+  gmailOfiOpenCompose({ subject: fwdSubj, body: fwdBody, title: 'Reenviar' });
 }
 
 function gmailOfiDiscardDraft() {
