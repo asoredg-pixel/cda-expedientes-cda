@@ -616,9 +616,44 @@ function initRealtimeSync(){
 }
 async function migrarLocalStorageAFirestore(){
   const db=window._db;
-  if(!db||!window._fsSetDoc){notif('Firebase no disponible','err');return;}
-  if(!confirm('¿Migrar datos locales a Firestore? Esto sobrescribirá los datos remotos del departamento.'))return;
-  _loadLSLocal();
-  await saveFirestore();
-  notif('Migración a Firestore completada','ok');
+  if(!db||!window._fsSetDoc||!window._fsGetDocs||!window._fsCollection||!window._fsDoc){notif('Firebase no disponible','err');return;}
+  if(!confirm('¿Migrar datos locales a Firestore?\n\nSolo se subirán los registros que NO existen en Firestore (fusión inteligente — no se sobreescriben datos existentes).'))return;
+  notif('⏳ Iniciando migración…','info');
+  try{
+    // 1. Load local records
+    const localExps=lsLoadJson('sst_e')||[];
+    if(!localExps.length){notif('No hay registros locales para migrar.','info');return;}
+
+    // 2. Get all existing IDs from Firestore per department
+    const existingIds=new Set();
+    for(const depto of DEPTOS_FIRESTORE){
+      try{
+        const snap=await window._fsGetDocs(window._fsCollection(db,'departamentos',depto,'expedientes'));
+        snap.forEach(d=>existingIds.add(d.id));
+      }catch(e){/* access denied for this depto — skip */}
+    }
+
+    // 3. Upload only records that don't already exist in Firestore
+    let uploaded=0,skipped=0;
+    for(const exp of localExps){
+      const expId=String(exp._exp||'').trim();
+      const depto=resolveDeptoFirestoreId(exp._depto||'guaviare',exp);
+      if(!expId||!depto)continue;
+      if(existingIds.has(expId)){skipped++;continue;}
+      try{
+        await window._fsSetDoc(window._fsDoc(db,'departamentos',depto,'expedientes',expId),exp,{merge:false});
+        existingIds.add(expId);
+        uploaded++;
+      }catch(e){console.warn('Error subiendo expediente',expId,e);}
+    }
+    // 4. Also save cfg/config (non-destructive merge)
+    await saveGlobalFirestore().catch(()=>{});
+    notif('✅ Migración completada: '+uploaded+' subidos, '+skipped+' ya existían en Firestore.','ok');
+    // 5. Reload from Firestore so the view is consistent
+    await loadLS();
+    updateDeptoUI();
+  }catch(err){
+    console.error('migrarLocalStorageAFirestore:',err);
+    notif('Error en migración: '+(err&&err.message||err),'err');
+  }
 }
