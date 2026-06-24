@@ -202,6 +202,9 @@ function postLoadInit(){
       return nt;
     });
   });
+  // Apply encargados from encargadosGlobal → cfgByDepto[deptoId].instructores
+  // so getEncargadoDepto() returns the correct name for chat and other consumers.
+  if(typeof syncEncargadosGlobalToInstructores==='function')syncEncargadosGlobalToInstructores();
 }
 function _loadLSLocal(){
   try{
