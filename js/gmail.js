@@ -1251,7 +1251,6 @@ async function gmailSubirAdjuntosYVincular() {
 // ================================================================
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
-const GMAIL_OFI_SENDER = 'cdaguaviare1@gmail.com';
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send'
@@ -1380,26 +1379,27 @@ async function _gmailOfiApi(method, url, body) {
 }
 
 // ---- Inbox ----
-async function gmailOfiLoadInbox() {
+// query: optional Gmail search query string. Defaults to all inbox messages.
+async function gmailOfiLoadInbox(query) {
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (!listEl) return;
   if (!gmailOfiIsTokenValid()) {
-    listEl.innerHTML = '<div class="gmail-empty">Conecte su correo para ver correos PQRSD.</div>';
+    listEl.innerHTML = '<div class="gmail-empty">Conecte su correo para ver los mensajes.</div>';
     _updateGmailOfiBtn();
     return;
   }
-  listEl.innerHTML = '<div class="gmail-loading">Cargando correos PQRSD…</div>';
+  listEl.innerHTML = '<div class="gmail-loading">Cargando mensajes…</div>';
   try {
-    // Fetch up to 30 messages from the PQRSD sender
-    const q = 'from:' + GMAIL_OFI_SENDER;
+    // Show all inbox messages by default; narrow with an optional search query
+    const q = (typeof query === 'string' && query.trim()) ? query.trim() : 'in:inbox';
     const url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=30';
     const data = await _gmailOfiApi('GET', url);
     const ids = (data.messages || []).map(m => m.id);
     if (!ids.length) {
-      listEl.innerHTML = '<div class="gmail-empty">No hay correos PQRSD en su bandeja.<br><small>Asegúrese de que Secretaría le haya enviado el traslado.</small></div>';
+      listEl.innerHTML = '<div class="gmail-empty">No hay mensajes' + (query ? ' para «' + escAttr(query) + '»' : '') + '.</div>';
       return;
     }
-    // Fetch full message data (limited to 10 at a time to avoid rate limits)
+    // Fetch full message data in batches of 10
     const msgs = [];
     for (let i = 0; i < Math.min(ids.length, 30); i += 10) {
       const batch = ids.slice(i, i + 10);
@@ -1413,6 +1413,11 @@ async function gmailOfiLoadInbox() {
   } catch(e) {
     if (listEl) listEl.innerHTML = '<div class="gmail-empty err">Error: ' + escAttr(e.message) + '</div>';
   }
+}
+
+function gmailOfiSearch(query) {
+  const q = String(query || '').trim();
+  gmailOfiLoadInbox(q || 'in:inbox');
 }
 
 function _renderGmailOfiInboxList() {
@@ -1429,8 +1434,10 @@ function _renderGmailOfiInboxList() {
     const hasAtt = gmailMsgHasAttachments(msg);
     const unread = Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD');
     const active = (_gmailOfiCurrentMsg && _gmailOfiCurrentMsg.id === msg.id) ? ' active' : '';
+    const fromParsed = gmailParseFrom(gmailGetHeader(headers, 'from'));
+    const fromLabel = (fromParsed.name || fromParsed.email || 'Desconocido').slice(0, 26);
     return '<div class="gmail-row' + (unread ? ' unread' : '') + active + '" onclick="gmailOfiOpenMessage(\'' + escAttr(msg.id) + '\')">' +
-      '<div class="gmail-row-from">Secretaría CDA' + (unread ? '<span class="gmail-badge-new">N</span>' : '') + '</div>' +
+      '<div class="gmail-row-from">' + escAttr(fromLabel) + (unread ? '<span class="gmail-badge-new">N</span>' : '') + '</div>' +
       '<div class="gmail-row-subject">' + escAttr(subject.slice(0, 65)) + (hasAtt ? ' 📎' : '') + '</div>' +
       '<div class="gmail-row-date">' + escAttr(gmailFmtDate(date)) + '</div>' +
       '</div>';

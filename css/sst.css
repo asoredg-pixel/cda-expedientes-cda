@@ -1001,6 +1001,9 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
 .gmail-ofi-panel-summary::before{content:'▶';font-size:9px;margin-right:6px;transition:transform .2s;color:var(--tx3)}
 .gmail-ofi-panel[open] .gmail-ofi-panel-summary::before{transform:rotate(90deg)}
 .gmail-ofi-panel-actions{display:flex;gap:6px;align-items:center}
+/* Search bar */
+.gmail-ofi-search-row{display:flex;gap:6px;align-items:center;padding:8px 14px;border-top:1px solid var(--bd);background:var(--sf)}
+.gmail-ofi-search-input{flex:1;padding:6px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;background:var(--bg);color:var(--tx)}
 /* Split layout: inbox list (left) + message view (right) */
 .gmail-ofi-split{
   display:flex;gap:0;border-top:1px solid var(--bd);
