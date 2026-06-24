@@ -1236,7 +1236,11 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
 .gm-compose-field:last-child{border-bottom:none}
 .gm-compose-field label{font-size:12px;color:var(--tx3);min-width:48px;flex-shrink:0}
 .gm-compose-field input{flex:1;border:none;background:transparent;font-size:13px;color:var(--tx);outline:none;padding:4px 0}
-.gm-compose-textarea{flex:1;border:none;resize:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--tx);background:transparent;padding:12px;outline:none;min-height:200px}
+.gm-compose-textarea{flex:1;border:none;resize:none;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--tx);background:transparent;padding:12px;outline:none;min-height:140px}
+/* HTML signature preview — rendered below textarea, read-only */
+.gm-sig-preview{border-top:1px dashed var(--bd);padding:8px 14px 10px;overflow-y:auto;max-height:180px;background:var(--sf);font-size:13px;flex-shrink:0}
+.gm-sig-preview img{max-width:100%;height:auto}
+.gm-sig-divider{color:var(--tx3);font-size:12px;margin-bottom:6px;user-select:none}
 .gm-compose-footer{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
 .gm-compose-discard-btn{margin-left:auto;background:none;border:none;font-size:16px;cursor:pointer;color:var(--tx3);padding:4px;border-radius:4px}
 .gm-compose-discard-btn:hover{background:var(--sf2);color:var(--rd)}

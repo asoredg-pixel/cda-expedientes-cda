@@ -1352,7 +1352,8 @@ function gmailOfiDisconnect() {
   _gmailOfiMessages   = [];
   _gmailOfiCurrentMsg = null;
   _gmailOfiLabels     = [];
-  _gmailOfiSignature  = '';
+  _gmailOfiSignature     = '';
+  _gmailOfiSignatureHtml = '';
   _updateGmailOfiBtn();
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (listEl) listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
@@ -1543,19 +1544,26 @@ async function _gmailOfiUpdateBadges() {
 }
 
 // ---- Gmail Signature ----
-let _gmailOfiSignature = '';
+let _gmailOfiSignature = '';     // plain-text version (for text/plain MIME part)
+let _gmailOfiSignatureHtml = ''; // raw HTML version (for text/html MIME part + preview)
 
 async function _gmailOfiLoadSignature() {
   try {
     const data = await _gmailOfiApi('GET', 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs');
     const primary = (data.sendAs || []).find(s => s.isPrimary) || (data.sendAs || [])[0];
     if (primary && primary.signature) {
-      // Strip HTML to plain text
+      _gmailOfiSignatureHtml = primary.signature; // keep full HTML (logo, colors, etc.)
       const div = document.createElement('div');
       div.innerHTML = primary.signature;
-      _gmailOfiSignature = '\n\n-- \n' + (div.textContent || div.innerText || '').trim();
+      _gmailOfiSignature = '\n-- \n' + (div.textContent || div.innerText || '').trim();
     }
-  } catch(e) { _gmailOfiSignature = ''; }
+  } catch(e) { _gmailOfiSignature = ''; _gmailOfiSignatureHtml = ''; }
+}
+
+// Convert plain text to simple HTML paragraphs for the html/mime part
+function _gmailOfiTextToHtml(text) {
+  return (text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .split('\n').map(l => '<p style="margin:0 0 6px 0">' + (l || '&nbsp;') + '</p>').join('');
 }
 
 // ---- Email list rendering ----
@@ -1746,9 +1754,18 @@ function gmailOfiOpenCompose(opts) {
   f('gm-compose-to',      opts.to || '');
   f('gm-compose-cc',      opts.cc || '');
   f('gm-compose-subject', opts.subject || '');
-  // Pre-fill body: provided body (reply/forward quote) + signature if available
-  const sigSuffix = (!opts.body && _gmailOfiSignature) ? _gmailOfiSignature : (!opts.body ? '' : (_gmailOfiSignature ? '\n\n' + _gmailOfiSignature : ''));
-  f('gm-compose-body', (opts.body || '') + sigSuffix);
+  // Body textarea: only user message / quoted text — NO plain-text signature (handled in MIME builder)
+  f('gm-compose-body', opts.body || '');
+  // HTML signature preview below textarea
+  const sigPreview = document.getElementById('gm-sig-preview');
+  if (sigPreview) {
+    if (_gmailOfiSignatureHtml) {
+      sigPreview.innerHTML = '<div class="gm-sig-divider">--</div>' + _gmailOfiSignatureHtml;
+      sigPreview.style.display = 'block';
+    } else {
+      sigPreview.style.display = 'none';
+    }
+  }
   const title = document.getElementById('gm-compose-title');
   if (title) title.textContent = opts.title || 'Nuevo mensaje';
   modal.dataset.inReplyTo = opts.inReplyTo || '';
@@ -1764,17 +1781,42 @@ function gmailOfiDiscardDraft() {
   if (modal) modal.style.display = 'none';
 }
 
-function _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) {
+function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
+  const boundary = 'sst_ofi_' + Date.now();
+  const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+
+  // Plain-text part: user message + stripped signature
+  const plainBody = (userText || '') + (_gmailOfiSignature || '');
+
+  // HTML part: user text converted to paragraphs + full HTML signature with logo
+  const userHtml = '<div style="font-family:Arial,sans-serif;font-size:14px">' + _gmailOfiTextToHtml(userText || '') + '</div>';
+  const sigHtml = _gmailOfiSignatureHtml
+    ? '<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">' + _gmailOfiSignatureHtml + '</div></div>'
+    : '';
+  const htmlBody = userHtml + sigHtml;
+  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody)));
+
   const lines = [
     'To: ' + to,
     cc ? 'Cc: ' + cc : null,
-    'Subject: =?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=',
+    'Subject: ' + subjectEnc,
     inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
     inReplyTo ? 'References: ' + inReplyTo : null,
-    'Content-Type: text/plain; charset=utf-8',
     'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="' + boundary + '"',
     '',
-    body
+    '--' + boundary,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    plainBody,
+    '',
+    '--' + boundary,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + boundary + '--'
   ].filter(l => l !== null).join('\r\n');
   return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
