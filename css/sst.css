@@ -22,6 +22,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-
 .hacts{flex:1 1 280px;min-width:0;justify-content:flex-end}
 .lic{width:30px;height:30px;background:var(--bl);border-radius:7px;display:flex;align-items:center;justify-content:center}
 .lic svg{width:16px;height:16px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round}
+.lic-logo{width:44px;height:44px;background:transparent;border-radius:0;padding:0}
+.hdr-logo-img{width:44px;height:44px;object-fit:contain;display:block}
 .ltx{font-size:14px;font-weight:600}.lsb{font-size:11px;color:var(--tx2);margin-top:-2px}
 .hacts{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
 .depto-sel{padding:6px 10px;border:1px solid var(--bl);border-radius:var(--r);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;background:var(--bll);color:var(--bld);min-width:148px;max-width:200px}
