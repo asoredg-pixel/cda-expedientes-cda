@@ -18,7 +18,7 @@ const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 const GMAIL_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',  // read + modify labels/messages (not delete)
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/drive.file'
 ].join(' ');
@@ -33,6 +33,7 @@ let _gmailConnecting = false;
 let _gmailNextPageToken = null;
 let _gmailFilter = 'all'; // 'all' | 'unread' | 'read'
 let _gmailSearchMode = false; // true when showing search results
+let _gmailRadicadoLabelId = ''; // ID of the "Radicado PQRSD" custom label, loaded on connect
 
 // ----------------------------------------------------------------
 // Token helpers
@@ -104,6 +105,7 @@ function gmailDisconnect() {
   window._gmailPendingMsgId = null;
   window._gmailPendingAttachments = null;
   window._gmailPendingEmailData = null;
+  _gmailRadicadoLabelId = '';
   updateGmailConnectBtn();
   renderGmailInboxList();
   const view = document.getElementById('gmail-msg-view');
@@ -267,22 +269,30 @@ async function gmailGetOrCreateLabel(labelName) {
 async function gmailMarkAsRead(messageId) {
   if (!messageId || !gmailIsTokenValid()) return;
   try {
-    // Obtener etiqueta "Radicado PQRSD" para aplicarla junto con quitar UNREAD
-    var radicadoLabelId = '';
-    try { radicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch (e) { console.warn('Label:', e.message); }
+    // Use cached label ID or fetch it
+    if (!_gmailRadicadoLabelId) {
+      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch(e) { console.warn('Label get:', e.message); }
+    }
     var modify = { removeLabelIds: ['UNREAD'] };
-    if (radicadoLabelId) modify.addLabelIds = [radicadoLabelId];
+    if (_gmailRadicadoLabelId) modify.addLabelIds = [_gmailRadicadoLabelId];
     await gmailApiCall('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify', modify);
     // Actualizar estado local
     const msg = _gmailMessages.find(function(m) { return m.id === messageId; });
-    if (msg && Array.isArray(msg.labelIds)) {
+    if (msg) {
+      if (!Array.isArray(msg.labelIds)) msg.labelIds = [];
       msg.labelIds = msg.labelIds.filter(function(l) { return l !== 'UNREAD'; });
-      if (radicadoLabelId && !msg.labelIds.includes(radicadoLabelId)) msg.labelIds.push(radicadoLabelId);
+      if (_gmailRadicadoLabelId && !msg.labelIds.includes(_gmailRadicadoLabelId)) msg.labelIds.push(_gmailRadicadoLabelId);
       renderGmailInboxList();
       updateUnreadCount();
     }
   } catch (e) {
     console.warn('gmailMarkAsRead error:', e.message);
+    // Detect scope/permission error and prompt reconnection
+    if (e.message && (e.message.includes('403') || e.message.toLowerCase().includes('scope'))) {
+      notif('⚠️ Sin permiso para etiquetar en Gmail. Haga clic en Reconectar para actualizar permisos.', 'warn');
+      gmailSetToken('');
+      updateGmailConnectBtn();
+    }
   }
 }
 
@@ -736,7 +746,8 @@ function confirmarEnvioRespuestaEmailPqrs(e) {
 function updateUnreadCount() {
   const badge = document.getElementById('gmail-unread-count');
   if (!badge) return;
-  const n = _gmailMessages.filter(m => Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD')).length;
+  // Show count of non-radicated messages (sin etiqueta "Radicado PQRSD")
+  const n = _gmailMessages.filter(m => !_msgEsRadicado(m)).length;
   badge.textContent = n > 0 ? n : '';
   badge.style.display = n > 0 ? 'inline' : 'none';
 }
@@ -784,26 +795,39 @@ async function gmailLoadInbox() {
   _gmailFilter = 'all';
   _gmailSearchMode = false;
   try {
+    // Eagerly load/create the "Radicado PQRSD" label ID for filter logic
+    if (!_gmailRadicadoLabelId) {
+      try { _gmailRadicadoLabelId = await gmailGetOrCreateLabel('Radicado PQRSD'); } catch(e) { console.warn('Label init:', e.message); }
+    }
     _gmailMessages = await gmailListMessages(50);
     renderGmailInboxList();
     updateUnreadCount();
     updateGmailFilterBtns();
   } catch (e) {
     console.error('gmailLoadInbox:', e);
-    listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
-    if (e.message.includes('Token expirado') || e.message.includes('Sin token')) {
+    const scopeErr = e.message && (e.message.includes('403') || e.message.toLowerCase().includes('scope') || e.message.toLowerCase().includes('insufficient'));
+    if (scopeErr) {
+      listEl.innerHTML = '<div class="gmail-empty err">⚠️ Permisos insuficientes. Haga clic en <strong>Reconectar</strong> para autorizar el nuevo alcance.</div>';
       gmailSetToken('');
       updateGmailConnectBtn();
+    } else {
+      listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message) + '</div>';
+      if (e.message.includes('Token expirado') || e.message.includes('Sin token')) { gmailSetToken(''); updateGmailConnectBtn(); }
     }
   }
 }
 
+function _msgEsRadicado(m) {
+  if (!Array.isArray(m.labelIds)) return false;
+  if (_gmailRadicadoLabelId && m.labelIds.includes(_gmailRadicadoLabelId)) return true;
+  return false;
+}
 function renderGmailInboxList() {
   if (_gmailSearchMode) return; // Don't overwrite search results
   const msgs = _gmailFilter === 'unread'
-    ? _gmailMessages.filter(m => Array.isArray(m.labelIds) && m.labelIds.includes('UNREAD'))
+    ? _gmailMessages.filter(m => !_msgEsRadicado(m))        // Sin radicar = sin etiqueta "Radicado PQRSD"
     : _gmailFilter === 'read'
-      ? _gmailMessages.filter(m => !Array.isArray(m.labelIds) || !m.labelIds.includes('UNREAD'))
+      ? _gmailMessages.filter(m => _msgEsRadicado(m))        // Radicados = con etiqueta "Radicado PQRSD"
       : _gmailMessages;
   renderGmailMessageList(msgs, false);
 }
