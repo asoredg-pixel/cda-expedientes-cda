@@ -380,10 +380,21 @@ function persistExpedienteGranular(exp,withGlobal){
   // Expedientes se persisten solo en Firestore (subcollección). No escribe a localStorage.
   const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
   console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
-  const fs=[saveExpedienteDoc(deptoActivo,exp)];
+  const fs=[saveExpedienteDoc(deptoResolved,exp)];
   if(withGlobal)fs.push(saveGlobalFirestore());
   updateSyncIndicator('syncing');
-  Promise.all(fs).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+  Promise.all(fs).then(function(r){
+    const ok=r.every(x=>x!==false);
+    updateSyncIndicator(ok?'synced':'error');
+    if(!ok){
+      console.error('persistExpedienteGranular: guardado en Firestore falló',{exp__exp:exp._exp,deptoResolved});
+      if(typeof notif==='function')notif('⚠️ No se pudo guardar en Firestore. Verifique conexión o permisos.','err');
+    }
+  }).catch(function(err){
+    updateSyncIndicator('error');
+    console.error('persistExpedienteGranular catch:',err);
+    if(typeof notif==='function')notif('⚠️ Error al guardar en Firestore: '+(err&&err.message||'desconocido'),'err');
+  });
 }
 function diagTestSaveExpedienteDoc(){
   saveExpedienteDoc('guaviare',{
@@ -560,8 +571,14 @@ function initRealtimeSync(){
       if(idx>=0)exps[idx]=exp;
       else exps.push(exp);
     });
+    // Re-render all views that depend on exps so every role sees new/updated records
     renderTabla();
     renderChatBadge();
+    if(typeof renderSecretariaPqrs==='function')try{renderSecretariaPqrs();}catch(e){}
+    if(typeof renderPqrsOficinaInbox==='function')try{renderPqrsOficinaInbox();}catch(e){}
+    if(typeof renderActividades==='function')try{renderActividades();}catch(e){}
+    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))
+      if(typeof renderConsulta==='function')try{renderConsulta();}catch(e){}
   });
 }
 async function migrarLocalStorageAFirestore(){
