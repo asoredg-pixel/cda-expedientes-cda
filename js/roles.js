@@ -626,6 +626,21 @@ function getEncargadoOficina(oficinaId){
 function esPqrsSecretaria(e){
   return !!(e&&e._radicado_secretaria&&esTramitePqrs(e._tramite));
 }
+function pqrsPendienteTraslado(e){
+  return !!(e&&e._pqrs_pendiente_traslado);
+}
+function esDirectorDsDeguv(){return deptoActivo==='ds_deguv';}
+function puedeGestionarPendientesTraslado(){
+  return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
+}
+function puedeTrasladarPqrsInicial(e){
+  if(!e||!esPqrsSecretaria(e)||!pqrsPendienteTraslado(e)||pqrsEstaCerrada(e))return false;
+  return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
+}
+function puedeMarcarPqrsPrioritariaDs(e){
+  if(!e||!pqrsPendienteTraslado(e)||pqrsEstaCerrada(e))return false;
+  return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
+}
 function normalizePqrsOficinaFields(e){
   if(!e)return e;
   if(!e._pqrs_historial||!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
@@ -633,7 +648,8 @@ function normalizePqrsOficinaFields(e){
   if(!Array.isArray(e._pqrs_avisos_oficina))e._pqrs_avisos_oficina=[];
   if(!Array.isArray(e._pqrs_respuesta_soportes))e._pqrs_respuesta_soportes=[];
   if(e._pqrs_informativa===undefined)e._pqrs_informativa=false;
-  if(!e._pqrs_estado_oficina&&e._pqrs_oficina)e._pqrs_estado_oficina='pendiente';
+  if(pqrsPendienteTraslado(e)&&!e._pqrs_oficina)e._pqrs_oficina='secretaria';
+  if(!e._pqrs_estado_oficina&&e._pqrs_oficina&&!pqrsPendienteTraslado(e))e._pqrs_estado_oficina='pendiente';
   if(e._pqrs_oficina&&esTramitePqrs(e._tramite)&&!e._radicado_secretaria)e._radicado_secretaria=true;
   if(e.f_f2)e.f_f2=normMedioRecepcionPqrs(e.f_f2);
   return e;

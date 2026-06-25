@@ -1003,6 +1003,7 @@ async function reenviarEmailAOficina(msg, ofiId, expId) {
   }
 }
 
+// Envío legacy al ciudadano (Secretaría). El flujo PQRSD usa confirmarEnvioRespuestaEmailPqrs en core.js.
 async function enviarRespuestaCiudadano(e) {
   const ciudadanoEmail = (e._qd_correo || e._pn_correo || '').trim();
   if (!ciudadanoEmail) { notif('El expediente no tiene correo del ciudadano', 'err'); return false; }
@@ -1035,22 +1036,7 @@ async function enviarRespuestaCiudadano(e) {
   }
 }
 
-function confirmarEnvioRespuestaEmailPqrs(e) {
-  if (!e) return;
-  const ciudadanoEmail = (e._qd_correo || e._pn_correo || '').trim();
-  if (!ciudadanoEmail) return;
-  if (!gmailIsTokenValid()) return;
-  if (typeof confirmPrecaucion === 'function') {
-    confirmPrecaucion({
-      title: 'Enviar respuesta por correo',
-      message: '¿Desea enviar un correo de respuesta al ciudadano?',
-      detail: ciudadanoEmail,
-      confirmLabel: 'Sí, enviar correo'
-    }, function() { enviarRespuestaCiudadano(e); });
-  } else if (window.confirm('¿Enviar respuesta por correo a ' + ciudadanoEmail + '?')) {
-    enviarRespuestaCiudadano(e);
-  }
-}
+// confirmarEnvioRespuestaEmailPqrs → definido en js/core.js (Sprint 7)
 
 // ----------------------------------------------------------------
 // UI — Gmail panel
@@ -1512,6 +1498,7 @@ async function gmailSubirAdjuntosYVincular() {
 // ================================================================
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
+const GMAIL_OFI_ACCOUNT_KEY = 'sst_gmail_ofi_account';
 // drive.file: needed for offices to upload to the institutional shared Drive folder
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
@@ -1535,16 +1522,38 @@ let _gmailOfiLabels      = [];
 function gmailOfiGetToken() {
   try { return sessionStorage.getItem(GMAIL_OFI_TOKEN_KEY) || ''; } catch(e) { return ''; }
 }
-function gmailOfiSetToken(tok, expiresInSec) {
+function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
   try {
     if (tok) {
       sessionStorage.setItem(GMAIL_OFI_TOKEN_KEY, tok);
       sessionStorage.setItem(GMAIL_OFI_TOKEN_EXP_KEY, String(Date.now() + (expiresInSec || 3600) * 1000));
+      if (accountEmail) sessionStorage.setItem(GMAIL_OFI_ACCOUNT_KEY, String(accountEmail).trim().toLowerCase());
     } else {
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_EXP_KEY);
+      sessionStorage.removeItem(GMAIL_OFI_ACCOUNT_KEY);
     }
   } catch(e) {}
+}
+async function _gmailFetchProfileEmail(token) {
+  if (!token) return '';
+  const res = await fetch(GMAIL_API_BASE + '/profile', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!res.ok) throw new Error('No se pudo verificar la cuenta de correo (' + res.status + ')');
+  const data = await res.json();
+  return String(data.emailAddress || '').trim().toLowerCase();
+}
+async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
+  let email = '';
+  try {
+    email = await _gmailFetchProfileEmail(tok);
+  } catch (err) {
+    notif('Error al verificar cuenta Gmail: ' + String(err.message || err).slice(0, 100), 'err');
+    return false;
+  }
+  gmailOfiSetToken(tok, expiresInSec, email);
+  return true;
 }
 function gmailOfiIsTokenValid() {
   const tok = gmailOfiGetToken();
@@ -1588,14 +1597,18 @@ function gmailOfiConnect() {
   _gmailOfiTokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: GMAIL_OFI_SCOPES,
-    callback: function(response) {
+    callback: async function(response) {
       _gmailOfiConnecting = false;
       if (response.error) {
         notif('Error al conectar correo: ' + (response.error_description || response.error), 'err');
         _updateGmailOfiBtn();
         return;
       }
-      gmailOfiSetToken(response.access_token, response.expires_in);
+      const ok = await _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in);
+      if (!ok) {
+        _updateGmailOfiBtn();
+        return;
+      }
       _updateGmailOfiBtn();
       notif('✅ Correo conectado.', 'ok');
       gmailOfiFolder('INBOX');

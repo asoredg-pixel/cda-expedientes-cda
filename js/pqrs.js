@@ -105,7 +105,9 @@ function limpiarFormSecretaria(){
   const hid=document.getElementById('sec-medio-notif');if(hid){hid.value='';delete hid.dataset.userSet;}
   initSecMedioNotificacion(true);
 }
-async function guardarPqrsSecretaria(){
+async function guardarPqrsSecretaria(modo){
+  modo=modo||'trasladar';
+  const soloRadicar=modo==='solo';
   const expId=String((document.getElementById('sec-exp')||{}).value||'').trim();
   const fecha=puedeEditarFechaRadicacionPqrs()?((document.getElementById('sec-fecha')||{}).value||hoy()):hoy();
   const fechaSol=String((document.getElementById('sec-fecha-solicitud')||{}).value||'').trim();
@@ -144,33 +146,35 @@ async function guardarPqrsSecretaria(){
   }
   const asunto=String((document.getElementById('sec-asunto')||{}).value||'').trim();
   const detalle=String((document.getElementById('sec-detalle')||{}).value||'').trim();
-  const oficina=(document.getElementById('sec-oficina')||{}).value||'';
+  let oficina=(document.getElementById('sec-oficina')||{}).value||'';
   const link=String((document.getElementById('sec-link')||{}).value||'').trim();
   const archivo=String((document.getElementById('sec-archivo')||{}).value||'').trim();
   const medioNotif=medioNotificacionNorm((document.getElementById('sec-medio-notif')||{}).value||'');
-  const prioritaria=!!((document.getElementById('sec-prioritaria')||{}).checked);
+  let prioritaria=!!((document.getElementById('sec-prioritaria')||{}).checked);
   if(!expId){notif('Indique el número de PQRSD','err');return;}
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
   if(!asunto){notif('Indique el asunto de la solicitud','err');return;}
-  if(!oficina){notif('Seleccione la oficina destino','err');return;}
+  if(!soloRadicar&&!oficina){notif('Seleccione la oficina destino','err');return;}
+  if(soloRadicar){
+    oficina='secretaria';
+    prioritaria=false;
+  }
   if(fechaTermino&&fechaTermino<fechaSol){notif('La fecha de término no puede ser anterior a la fecha de solicitud','err');return;}
   const dupPqrs=expNumeroDuplicado(expId);
   if(dupPqrs){alertRegistroDuplicado(expId,'pqrs',dupPqrs);return;}
   const tramId=getTramPqrsId('guaviare');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:'Secretaría DEGUV',fecha:fecha}]):'[]';
-  const hist=[{tipo:'radicacion',fecha:fecha,nota:'Radicado por Secretaría DEGUV',oficina:''}];
-  if(oficina==='secretaria'){
-    hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
-  }else{
-    hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Traslado inicial a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
+  const hist=[{tipo:'radicacion',fecha:fecha,nota:soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV',oficina:''}];
+  if(!soloRadicar){
+    if(oficina==='secretaria'){
+      hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
+    }else{
+      hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Traslado inicial a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
+    }
   }
-  // Sprint B: capturar Gmail message id si viene de un correo
   const gmailMsgId=window._gmailPendingMsgId||'';
-  // Notificación PRIORITARIA: reenviar el correo a la oficina ANTES de la subida a Drive.
-  // Así el responsable siempre recibe el aviso con sus anexos, aunque Drive falle o el
-  // token expire durante la subida (que puede tardar varios segundos).
-  const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
-  if(gmailMsgId){
+  if(!soloRadicar&&gmailMsgId){
+    const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
     const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
     if(_tokOk){
       if(oficina!=='secretaria'&&typeof reenviarEmailAOficina==='function'){
@@ -181,23 +185,16 @@ async function guardarPqrsSecretaria(){
       notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina (sesión Gmail expirada). Reconecte la bandeja y use «Reenviar» o notifique manualmente.','warn');
     }
   }
-  // Auto-subir soporte (PDF de la solicitud) a Drive si aún no se ha subido.
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
     try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
   }
-  // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
     ?window._gmailPendingAttachments:null;
-  // Sprint E: capturar metadatos/cuerpo del correo para visualización por oficinas
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
     ?window._gmailPendingEmailData:null;
-  // Si hay adjuntos de Drive y no se puso link manual, usar el primer link como principal
-  // El campo _pqrs_gmail_attachments guarda todos los links para acceso completo
   const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
-  // Registrar tipo de radicación en workflow para Drive
   const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
-  // Responsable: encargado configurado para la oficina destino
-  const encargadoOfi=typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'';
+  const encargadoOfi=soloRadicar?'':(typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'');
   const data=normalizePqrsOficinaFields({
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:fechaTermino||'',
     _fechas_estado:JSON.stringify({Solicitud:fechaSol,'En trámite':fecha}),
@@ -209,34 +206,52 @@ async function guardarPqrsSecretaria(){
     ...pjFields,
     f_f1:asunto,f_f2:medio,
     _detalle_notas:detNotas,_detalle_general:detalle,
-    _radicado_secretaria:true,_pqrs_oficina:oficina,_pqrs_traslado_fecha:hoy(),_pqrs_traslado_por:'Secretaría DEGUV',
+    _radicado_secretaria:true,_pqrs_oficina:oficina,
+    _pqrs_pendiente_traslado:soloRadicar||undefined,
+    _pqrs_traslado_fecha:soloRadicar?'':hoy(),_pqrs_traslado_por:soloRadicar?'':'Secretaría DEGUV',
     _pqrs_estado_oficina:'pendiente',_pqrs_responsable_oficina:encargadoOfi,
     _pqrs_solicitud_link:linkFinal,_pqrs_solicitud_archivo:archivo,_pqrs_detalle:detalle,
     _pqrs_historial:hist,tasks:[],
-    // Sprint B: trazabilidad del correo origen
     _gmail_message_id:gmailMsgId||null,
-    // Sprint C: links de adjuntos subidos a Drive
     _pqrs_gmail_attachments:gmailAtts||null,
-    // Sprint E: cuerpo y metadatos del correo para visualización offline por oficinas
     _gmail_email_data:gmailEmailData,
-    // Sprint 9: tipo de radicación y workflow inicial
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion})
   });
   exps.push(data);
-  if(oficina==='guaviare')ensureTareaPqrsNca(data);
-  else if(oficina!=='secretaria')ensureTareaPqrsOficina(data,oficina);
+  if(!soloRadicar){
+    if(oficina==='guaviare')ensureTareaPqrsNca(data);
+    else if(oficina!=='secretaria')ensureTareaPqrsOficina(data,oficina);
+  }
   upsertPersonaCatalog(data);
-  logAudit('Creó PQRSD ['+expId+']','pqrsd',expId);
+  logAudit('Creó PQRSD ['+expId+']'+(soloRadicar?' (sin traslado)':''),'pqrsd',expId);
   persistExpedienteGranular(data,true);
-  // El reenvío a la oficina ya se hizo arriba (antes de la subida a Drive).
-  // Limpiar datos Gmail pendientes
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  notif('PQRSD '+expId+(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)),'ok');
+  notif('PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina))),'ok');
   limpiarFormSecretaria();
   renderSecretariaPqrs();
+}
+async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
+  if(!e||oficina==='secretaria')return;
+  if(normMedioRecepcionPqrs(e.f_f2||'')!=='Correo')return;
+  const gmailMsgId=e._gmail_message_id||'';
+  if(!gmailMsgId)return;
+  const tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  if(!tokOk){
+    notif('⚠️ PQRSD trasladada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja y reenvíe manualmente.','warn');
+    return;
+  }
+  let msg=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'){
+    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
+  }
+  if(msg&&typeof reenviarEmailAOficina==='function'){
+    try{await reenviarEmailAOficina(msg,oficina,expId);if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);}catch(err){console.warn('reenvio oficina:',err);notif('⚠️ Traslado registrado, pero falló el reenvío del correo.','warn');}
+  }else{
+    notif('⚠️ PQRSD trasladada, pero no se pudo reenviar el correo a la oficina.','warn');
+  }
 }
 // Genera HTML con TODOS los links de adjuntos Drive de una PQRSD
 function htmlPqrsAdjuntosDrive(e){
@@ -293,15 +308,32 @@ function renderPqrsOficinaDetallePanel(){
 function marcarPqrsRespondidaOficina(expId){
   openPqrsRespuestaModal(expId);
 }
+function getPqrsPendientesTrasladoList(skipPeriodo){
+  let list=exps.filter(e=>esPqrsSecretaria(e)&&pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
+  if(!skipPeriodo)list=filterExpsPeriodo(list,'pqrs-ofi');
+  return list.sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
+}
 function renderSecretariaPqrs(){
   const all=getSecretariaPqrsAll();
-  const asignadas=all.filter(e=>e._pqrs_oficina);
+  const pendientes=getPqrsPendientesTrasladoList(true);
+  const asignadas=all.filter(e=>e._pqrs_oficina&&!pqrsPendienteTraslado(e));
   const atendidas=all.filter(e=>pqrsEstaCerrada(e));
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
     '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
+    '<div class="met" style="border-left:3px solid #7c5cbf"><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
+  const pendWrap=document.getElementById('sec-pend-trasl-wrap');
+  const pendTb=document.getElementById('tbl-sec-pend-trasl');
+  if(pendWrap&&pendTb){
+    pendWrap.style.display=pendientes.length?'':'none';
+    if(!pendientes.length)pendTb.innerHTML='';
+    else pendTb.innerHTML=pendientes.map(e=>{
+      const asunto=e.f_f1||e._pqrs_detalle||'—';
+      return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+fmtF(e._fecha_solicitud||e._fecha)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+    }).join('');
+  }
   const tb=document.getElementById('tbl-sec-pqrs');
   if(tb){
     if(!asignadas.length)tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
@@ -321,7 +353,8 @@ function pqrsOfiEstBadge(est){
 function getPqrsOficinaList(oficinaId,filtro){
   oficinaId=oficinaId||getPqrsOficinaActiva();
   filtro=filtro||window._pqrsOfiFiltro||'all';
-  let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId).map(normalizePqrsOficinaFields);
+  if(filtro==='por_trasladar')return getPqrsPendientesTrasladoList();
+  let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId&&!pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
   if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e));
   else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
@@ -333,6 +366,8 @@ function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
   let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">Ver</button> ';
+  if(puedeTrasladarPqrsInicial(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openTrasladoPqrsInicialModal(\''+id+'\')">Trasladar</button> ';
+  if(puedeMarcarPqrsPrioritariaDs(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();togglePqrsPrioritariaDs(\''+id+'\')">'+(e._pqrs_prioritaria?'Quitar ⚡':'⚡ Prioritaria')+'</button> ';
   if(puedeTrasladarPqrs(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTrasladoPqrsInterOficinaModal(\''+id+'\')">Trasladar</button> ';
   if(puedeAsignarPqrsOficina(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openAsignarPqrsOficinaModal(\''+id+'\')">Asignar</button> ';
   // NCA encargado revisión de responsable
@@ -363,14 +398,19 @@ function renderPqrsOficinaInbox(){
   const detBox=document.getElementById('pqrs-ofi-detalle');
   const ofi=getOficinaActiva();
   const filtro=window._pqrsOfiFiltro||'all';
-  if(tit&&ofi)tit.textContent='PQRSD — '+ofi.nombre;
-  if(ban)ban.style.display='none';
+  const esPendTrasl=filtro==='por_trasladar';
+  if(tit){
+    if(esPendTrasl)tit.textContent='PQRSD — Pendientes por trasladar';
+    else if(ofi)tit.textContent='PQRSD — '+ofi.nombre;
+  }
+  if(ban)ban.style.display=esPendTrasl?'none':'none';
   const pr=document.getElementById('pqrs-ofi-periodo-resumen');
   const prLbl=labelPeriodo('pqrs-ofi');
   if(pr)pr.textContent=prLbl?('Filtro de fechas (radicación): '+prLbl):'';
   if(!tb)return;
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   const list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
+  const pendTraslCount=getPqrsPendientesTrasladoList().length;
   if(mets){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
@@ -381,11 +421,13 @@ function renderPqrsOficinaInbox(){
     const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
     const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
     const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
+    const onPorTrasl=filtro==='por_trasladar'?'outline:2px solid #7c5cbf;':'';
     mets.innerHTML=
       pqrsMetCard('all',onAll+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+listAll.length+'</div><div class="l">Total</div>')+
       pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
       pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
       (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
+      (puedeGestionarPendientesTraslado()&&pendTraslCount?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'')+
       pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
   }
   if(!list.length){
@@ -552,7 +594,8 @@ function submitEditPqrsSecretaria(expId){
   const medioNotif=medioNotificacionNorm((document.getElementById('pqrs-edit-medio-notif')||{}).value||'');
   const prior=!!((document.getElementById('pqrs-edit-prior')||{}).checked);
   if(!asunto){notif('Indique el asunto','err');return;}
-  if(!oficina){notif('Seleccione oficina','err');return;}
+  if(!oficina&&!pqrsPendienteTraslado(e)){notif('Seleccione oficina','err');return;}
+  if(pqrsPendienteTraslado(e)&&oficina&&oficina!=='secretaria')e._pqrs_pendiente_traslado=false;
   if(fechaTermino&&fechaSol&&fechaTermino<fechaSol){notif('La fecha de término no puede ser anterior a la fecha de solicitud','err');return;}
   syncPqrsFechaSolicitud(e,fechaSol);
   e._pqrs_fecha_termino=fechaTermino||'';
@@ -664,6 +707,57 @@ function submitAsignarPqrsOficina(expId){
   renderPqrsOficinaInbox();
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
+}
+function openTrasladoPqrsInicialModal(expId){
+  const e=exps.find(x=>x._exp===expId);
+  if(!e||!esPqrsSecretaria(e)){notif('PQRSD no encontrado','err');return;}
+  if(!puedeTrasladarPqrsInicial(e)){notif('No puede trasladar esta PQRSD','err');return;}
+  abrirPqrsModalPrep();
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body)return;
+  if(tit)tit.textContent='Traslado inicial · '+expId;
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  const opts=OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Radicada sin oficina asignada. Seleccione la oficina competente.</div>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
+    '<div class="fld" style="margin-bottom:12px"><label>Oficina destino<span class="req-star">*</span></label>'+
+    '<select id="pqrs-trasl-ini-ofi-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+opts+'</select></div>'+
+    '<div class="fld" style="margin-bottom:12px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-ini-motivo" placeholder="Ej. Competencia de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\')">Confirmar traslado</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+  ov.classList.add('on');
+  window._taskModalCtx={mode:'trasladoPqrsIni',expId};
+}
+async function submitTrasladoPqrsInicial(expId){
+  const sel=document.getElementById('pqrs-trasl-ini-ofi-sel');
+  const nuevaOfi=sel?sel.value:'';
+  const motivo=String((document.getElementById('pqrs-trasl-ini-motivo')||{}).value||'').trim();
+  if(!nuevaOfi){notif('Seleccione oficina destino','err');return;}
+  const e=exps.find(x=>x._exp===expId);
+  if(!e){notif('Expediente no encontrado','err');return;}
+  if(!puedeTrasladarPqrsInicial(e)){notif('No puede trasladar esta PQRSD','err');return;}
+  const por=esSecretaria()?'Secretaría DEGUV':(esDirectorDsDeguv()?'DS DEGUV':'Administrador');
+  e._pqrs_pendiente_traslado=false;
+  e._pqrs_oficina=nuevaOfi;
+  e._pqrs_traslado_fecha=hoy();
+  e._pqrs_traslado_por=por;
+  e._pqrs_responsable_oficina=typeof getEncargadoOficina==='function'?getEncargadoOficina(nuevaOfi):'';
+  e._pqrs_estado_oficina='pendiente';
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
+  syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
+  await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
+  persistExpedienteGranular(e);
+  closeTaskModal();
+  notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
+  renderBandejaDepto();
+  renderPqrsOficinaInbox();
+  renderSecretariaPqrs();
+  if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+  if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+  if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
 }
 function openTrasladoPqrsInterOficinaModal(expId){
   const e=exps.find(x=>x._exp===expId);

@@ -281,6 +281,7 @@ function getPqrsEstadoDisplay(e){
     if(e._pqrs_informativa)return 'Atendida (informativa)';
     return pqrsRespuestaEnTermino(e)?'Atendida':'Atendido extemporánea';
   }
+  if(pqrsPendienteTraslado(e))return 'Pendiente traslado';
   if(pqrsEstaAtrasada(e))return 'Atrasada';
   const ofi=e._pqrs_oficina||'';
   if(!ofi||ofi==='secretaria')return 'Solicitud';
@@ -652,7 +653,7 @@ function openPqrsRespuestaModal(expId){
     mkCan(PQRS_WF_CANAL.AVISO,'Por aviso','📌')+
     '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(wf.canal||e._pqrs_respuesta_medio||'')+'"></div>'+
 
-    // Correo ciudadano (visible sólo si canal=correo)
+    // Correo destino (visible sólo si canal=correo)
     '<div class="fld" id="pqrs-resp-email-wrap" style="display:none;margin-bottom:10px"><label>Correo del ciudadano <span style="font-weight:400;color:var(--tx3)">(editable)</span></label>'+
     '<input type="email" id="pqrs-resp-email-ciu" placeholder="ciudadano@ejemplo.com" value="'+escAttr(ciudEmail)+'">'+
     '<div id="pqrs-resp-send-status" style="font-size:11px;margin-top:4px"></div></div>'+
@@ -935,7 +936,9 @@ function htmlPqrsOficinaDetalleCore(e,opts){
   const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?(' '+pqrsAsocAccionesHtml(e).join(' ')):'';
   const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'';
   const btnAsig=(!cerrada&&puedeAsignarPqrsOficina(e))?' <button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
+  const btnTrasInicial=(puedeTrasladarPqrsInicial(e)&&!cerrada)?' <button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a oficina</button>':'';
   const btnTras=(puedeTrasladarPqrs(e)&&!cerrada)?' <button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar</button>':'';
+  const btnPriorDs=(puedeMarcarPqrsPrioritariaDs(e)&&!cerrada)?' <button type="button" class="btn bsm" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">'+(e._pqrs_prioritaria?'Quitar prioritaria':'⚡ Prioritaria')+'</button>':'';
   const btnEdit=(opts.showEdit&&puedeEditarPqrsSecretaria(e))?' '+pqrsBtnEdit(e._exp,'✏ Editar'):'';
   const btnDel=(opts.showDelete&&puedeEliminarPqrs(e))?' <button type="button" class="btn bsm bd2" onclick="eliminarPqrs(\''+escAttr(e._exp)+'\')">🗑 Eliminar</button>':'';
   const chatHtml=opts.showChat!==false&&esSecretaria()?renderPqrsChatHtml(e):'';
@@ -951,7 +954,18 @@ function htmlPqrsOficinaDetalleCore(e,opts){
     renderPqrsTrazabilidadHtml(e)+
     htmlPqrsRespuestaRegistrada(e)+chatHtml+
     htmlPqrsCorreoOrigenHtml(e)+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:14px">'+btnResp+btnAsoc+btnInf+btnAsig+btnTras+btnEdit+btnDel+'</div>';
+    '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:14px">'+btnResp+btnAsoc+btnInf+btnAsig+btnTrasInicial+btnTras+btnPriorDs+btnEdit+btnDel+'</div>';
+}
+function togglePqrsPrioritariaDs(expId){
+  expId=String(expId||'').trim();
+  const e=exps.find(x=>String(x._exp||'').trim()===expId);
+  if(!e||!puedeMarcarPqrsPrioritariaDs(e)){notif('No puede cambiar la prioridad de esta PQRSD','err');return;}
+  e._pqrs_prioritaria=!e._pqrs_prioritaria;
+  persistExpedienteGranular(e);
+  notif(e._pqrs_prioritaria?'PQRSD marcada como prioritaria':'Prioritaria retirada','ok');
+  renderSecretariaPqrs();
+  renderPqrsOficinaInbox();
+  refreshPqrsDetalleViews(expId);
 }
 function eliminarPqrs(expId){
   if(!esSecretaria()){notif('Solo Secretaría puede eliminar PQRSD','err');return;}
@@ -1028,7 +1042,7 @@ function matchPqrsEstadoConsulta(e,qe){
 }
 function pqrsEstadoDisplayBadge(e){
   const st=getPqrsEstadoDisplay(e);
-  const cls=st==='Atendida'?'cerr':st==='Atendido extemporánea'?'aten':st==='Atrasada'?'aten':st==='En trámite'?'asig':'pend';
+  const cls=st==='Atendida'?'cerr':st==='Atendido extemporánea'?'aten':st==='Atrasada'?'aten':st==='En trámite'?'asig':st==='Pendiente traslado'?'pend':'pend';
   return '<span class="pqrs-ofi-est '+cls+'">'+escAttr(st)+'</span>';
 }
 function pqrsEstadoConsultaBadge(e){
@@ -2132,6 +2146,7 @@ function getTareasDeptActividades(respFilter){
 }
 function puedeTrasladarPqrs(e){
   if(!e||!esPqrsSecretaria(e))return false;
+  if(pqrsPendienteTraslado(e))return false;
   if(pqrsEstaCerrada(e))return false;
   if(esSecretaria())return true;
   if(esModoOficinaDeguv())return e._pqrs_oficina===deptoActivo;
@@ -2385,7 +2400,9 @@ function renderConPanelPqrsExtras(e){
   if(puedeGestionarPqrsAsociacion(e))pqrsAsocAccionesHtml(e).forEach(function(b){acc.push(b);});
   if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ Marcar informativa</button>');
   if(puedeAsignarPqrsOficina(e))acc.push('<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar responsable</button>');
+  if(puedeTrasladarPqrsInicial(e))acc.push('<button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a oficina</button>');
   if(puedeTrasladarPqrs(e))acc.push('<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a otra oficina</button>');
+  if(puedeMarcarPqrsPrioritariaDs(e))acc.push('<button type="button" class="btn bsm" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">'+(e._pqrs_prioritaria?'Quitar prioritaria':'⚡ Prioritaria')+'</button>');
   if(puedeMarcarPqrsRespondida(e))acc.push('<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta</button>');
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))acc.push(pqrsBtnEdit(e._exp,'✏ Editar PQRSD'));
   if(acc.length)h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin:.65rem 0">'+acc.join(' ')+'</div>';
@@ -11088,11 +11105,12 @@ async function enviarCorreoRespuestaPqrs(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const para=String((document.getElementById('pqrs-mail-para')||{}).value||'').trim().toLowerCase();
+  if(!para){notif('Indique el correo destino','err');return;}
   const asunto=String((document.getElementById('pqrs-mail-asunto')||{}).value||'').trim();
   const cuerpo=String((document.getElementById('pqrs-mail-cuerpo')||{}).value||'').trim();
   const statusEl=document.getElementById('pqrs-mail-status');
   const btn=document.getElementById('pqrs-mail-send-btn');
-  if(!para||!asunto){notif('Indique el correo destino y el asunto','err');return;}
+  if(!asunto){notif('Indique el asunto del correo','err');return;}
   if(!cuerpo){notif('Indique el cuerpo del correo','err');return;}
   if(btn){btn.disabled=true;btn.textContent='Enviando…';}
   if(statusEl)statusEl.textContent='⬆ Enviando correo…';

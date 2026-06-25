@@ -776,6 +776,7 @@ function renderConSidePanel(){
   const pqrsToolbarBtns=!window._conPanelEditMode&&esPqrsSecretaria(e)?(
     pqrsAsocToolbarBtnHtml(e)+
     (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'')+
+    (puedeTrasladarPqrsInicial(e)?'<button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a oficina</button>':'')+
     (puedeTrasladarPqrs(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar</button>':'')+
     (puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'')+
     (puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Respuesta</button>':'')
@@ -887,6 +888,7 @@ function conConsultaOneCard(e){
     const detalle=e._pqrs_detalle||e._detalle_general||'';
     const btnResp=puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta dada</button>':'';
     const btnAsig=puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
+    const btnTrasIni=puedeTrasladarPqrsInicial(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+jsStr(e._exp)+'\')">↪ Trasladar a oficina</button>':'';
     const btnTras=puedeTrasladarPqrs(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+jsStr(e._exp)+'\')">↪ Trasladar</button>':'';
     const btnEdit=(esSecretaria()&&puedeEditarPqrsSecretaria(e))?pqrsBtnEdit(e._exp,'✏ Editar'):'';
     const docBtn=htmlPqrsDocumentoBtns(e);
@@ -906,7 +908,7 @@ function conConsultaOneCard(e){
         (docBtn?('<div class="fx" style="gap:6px;margin-top:8px">'+docBtn+'</div>'):'')+
         renderPqrsTrazabilidadHtml(e)+
         htmlPqrsRespuestaRegistrada(e)+
-        '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTras+btnEdit+'</div>'+
+        '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTrasIni+btnTras+btnEdit+'</div>'+
       '</div></details>';
   }
   const today=_conConsultaPag.today;
