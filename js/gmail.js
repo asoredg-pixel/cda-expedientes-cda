@@ -2167,88 +2167,135 @@ function _gmailFindPqrsByRadicado(token) {
   const norm = function(s){ return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
   const t = norm(token);
   if (!t) return null;
-  const list = (typeof exps !== 'undefined' ? exps : []);
-  const esPqrs = function(e){ return e && (e._radicado_secretaria || e._es_pqrs); };
-  const abierta = function(e){ return !(typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e)); };
-  // Coincidencia exacta del número de expediente.
-  let hit = list.find(function(e){ return esPqrs(e) && abierta(e) && norm(e._exp) === t; });
+  const list = _gmailPqrsRespCandidatas();
+  let hit = list.find(function(e){ return norm(e._exp) === t; });
   if (hit) return hit;
-  // Coincidencia por terminación (radicados con prefijos).
-  hit = list.find(function(e){ var n = norm(e._exp); return esPqrs(e) && abierta(e) && n && (n.endsWith(t) || t.endsWith(n)); });
+  hit = list.find(function(e){ var n = norm(e._exp); return n && (n.endsWith(t) || t.endsWith(n)); });
   return hit || null;
 }
 
-// ---- Responder PQRSD desde Correos (todas las oficinas) ----
-// El usuario elige la PQRSD a vincular con el mensaje actual (en vista o a componer)
-function gmailOfiVincularRespuestaPqrs() {
-  // Collect PQRSDs assigned to this office that are open
+// PQRSD abiertas elegibles para vincular como respuesta (solo radicadas por Secretaría, no trámites).
+function _gmailPqrsRespCandidatas() {
   const depto = typeof deptoActivo !== 'undefined' ? deptoActivo : '';
-  const pqrsAbiertas = (typeof exps !== 'undefined' ? exps : []).filter(function(e) {
-    if (!e || !(e._radicado_secretaria || e._es_pqrs)) return false;
+  return (typeof exps !== 'undefined' ? exps : []).filter(function(e) {
+    if (!e || typeof esPqrsSecretaria !== 'function' || !esPqrsSecretaria(e)) return false;
     if (typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e)) return false;
     if (e._pqrs_oficina && e._pqrs_oficina !== depto &&
         !(typeof esNcaDeguv === 'function' && esNcaDeguv() && e._pqrs_oficina === 'guaviare') &&
         !(typeof esCargoVital === 'function' && esCargoVital())) return false;
     return true;
   });
+}
 
-  // Datos del correo en vista.
+function gmailFiltrarPqrsRespSug(inp) {
+  const q = (inp && inp.value || '').trim().toLowerCase();
+  const list = _gmailPqrsRespCandidatas().filter(function(e) {
+    if (!q) return true;
+    const num = String(e._exp || '').toLowerCase();
+    const asunto = String(e.f_f1 || e._pqrs_detalle || '').toLowerCase();
+    const nom = (typeof getNom === 'function' ? getNom(e) : '').toLowerCase();
+    return num.includes(q) || asunto.includes(q) || nom.includes(q);
+  }).slice(0, 12);
+  window._gmailPqrsRespSugList = list;
+  const box = document.getElementById('gmail-resp-pqrs-sug');
+  if (!box) return;
+  if (!list.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = list.map(function(ex, i) {
+    const asunto = ex.f_f1 || ex._pqrs_detalle || '—';
+    return '<button type="button" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-bottom:1px solid var(--bd);background:var(--sf);cursor:pointer;font-size:12px;font-family:\'DM Sans\',sans-serif" onmousedown="event.preventDefault();gmailPickPqrsRespSug(' + i + ')">' +
+      '<strong style="font-family:\'DM Mono\',monospace">' + escAttr(ex._exp) + '</strong> — ' + escAttr(asunto.slice(0, 70)) + '</button>';
+  }).join('');
+}
+
+function gmailSetPqrsRespSel(e, opts) {
+  opts = opts || {};
+  const hid = document.getElementById('gmail-resp-pqrs-hid');
+  const chip = document.getElementById('gmail-resp-pqrs-chip');
+  const search = document.getElementById('gmail-resp-pqrs-search');
+  const sug = document.getElementById('gmail-resp-pqrs-sug');
+  if (hid) hid.value = e ? String(e._exp || '').trim() : '';
+  if (chip) {
+    if (e) {
+      const asunto = e.f_f1 || e._pqrs_detalle || '—';
+      const det = opts.detectada ? ' <span style="font-weight:400;font-size:11px;color:var(--tx2)">— detectada del asunto</span>' : '';
+      chip.style.display = '';
+      chip.innerHTML =
+        '<div style="padding:10px 12px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r);display:flex;gap:8px;align-items:flex-start">' +
+        '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;color:var(--bl);font-size:13px">📌 PQRSD #' + escAttr(e._exp) + det + '</div>' +
+        '<div style="font-size:12px;color:var(--tx2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escAttr(asunto.slice(0, 90)) + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn bsm bd2" style="flex-shrink:0;font-size:11px" onclick="gmailClearPqrsRespSel()" title="Quitar selección">✕</button>' +
+        '</div>';
+    } else {
+      chip.style.display = 'none';
+      chip.innerHTML = '';
+    }
+  }
+  if (search && e) search.value = '';
+  if (sug) { sug.style.display = 'none'; sug.innerHTML = ''; }
+  if (e && !opts.keepEmail) {
+    const emailInp = document.getElementById('gmail-resp-pqrs-email');
+    const ciud = (e._qd_correo || e._pn_correo || '').trim();
+    if (emailInp && ciud) emailInp.value = ciud;
+  }
+}
+
+function gmailPickPqrsRespSug(idx) {
+  const ex = (window._gmailPqrsRespSugList || [])[idx];
+  if (!ex) return;
+  gmailSetPqrsRespSel(ex);
+}
+
+function gmailClearPqrsRespSel() {
+  gmailSetPqrsRespSel(null);
+  const search = document.getElementById('gmail-resp-pqrs-search');
+  if (search) { search.value = ''; search.focus(); }
+}
+
+// ---- Responder PQRSD desde Correos (todas las oficinas) ----
+function gmailOfiVincularRespuestaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   const headers = msg && msg.payload && msg.payload.headers ? msg.payload.headers : [];
   const findH = function(n){ var h = headers.find(function(x){ return x.name === n; }); return h ? (h.value || '') : ''; };
   const fromEmail = _gmailOfiParseFrom(findH('From'));
   const subject = findH('Subject');
 
-  // Auto-detección: si el asunto trae el radicado [PQRSD #707], usamos esa PQRSD.
   const radTok = _gmailExtractRadicadoFromSubject(subject);
   const detectada = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
 
-  if (!pqrsAbiertas.length && !detectada) {
-    notif('No hay PQRSD abiertas asignadas a su oficina.', 'warn');
-    return;
-  }
-
-  // Build options list (para selección manual / cambio).
-  const lista = detectada && !pqrsAbiertas.some(function(e){ return e._exp === detectada._exp; })
-    ? [detectada].concat(pqrsAbiertas) : pqrsAbiertas;
-  const opts = lista.map(function(e) {
-    const asunto = e.f_f1 || e._pqrs_detalle || '—';
-    const sel = detectada && e._exp === detectada._exp ? ' selected' : '';
-    return '<option value="' + escAttr(e._exp) + '"' + sel + '>' + escAttr(e._exp) + ' — ' + escAttr(asunto.slice(0, 60)) + '</option>';
-  }).join('');
-
-  // Show quick modal using task-modal
   if (typeof abrirPqrsModalPrep === 'function') abrirPqrsModalPrep();
   const ov = document.getElementById('task-modal-overlay');
   const tit = document.getElementById('task-modal-title');
   const body = document.getElementById('task-modal-body');
+  const modal = ov ? ov.querySelector('.task-modal') : null;
   if (!ov || !body) return;
   if (tit) tit.textContent = 'Vincular correo como respuesta PQRSD';
+  if (modal) { modal.classList.remove('task-modal-wide'); modal.classList.add('task-modal-wide'); }
 
-  // Correo del ciudadano: si hay PQRSD detectada usamos su correo registrado.
   const emailCiu = detectada ? (detectada._qd_correo || detectada._pn_correo || fromEmail.email || '') : (fromEmail.email || '');
-
-  let pqrsSelectorHtml;
-  if (detectada) {
-    const asuntoDet = detectada.f_f1 || detectada._pqrs_detalle || '—';
-    pqrsSelectorHtml =
-      '<div class="fld" style="margin-bottom:10px"><label>PQRSD a cerrar</label>' +
-      '<div style="margin-top:4px;padding:10px 12px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">' +
-      '<div style="font-weight:600;color:var(--bl);font-size:13px">📌 PQRSD #' + escAttr(detectada._exp) + ' <span style="font-weight:400;font-size:11px;color:var(--tx2)">— detectada del asunto</span></div>' +
-      '<div style="font-size:12px;color:var(--tx2);margin-top:2px">' + escAttr(asuntoDet.slice(0, 80)) + '</div>' +
-      '</div>' +
-      '<select id="gmail-resp-pqrs-sel" style="display:none">' + opts + '</select>' +
-      '<button type="button" class="btn bsm bd2" style="margin-top:6px;font-size:11px" onclick="(function(s,b){s.style.display=\'\';b.style.display=\'none\';})(document.getElementById(\'gmail-resp-pqrs-sel\'),this)">Vincular a otra PQRSD…</button>' +
-      '</div>';
-  } else {
-    pqrsSelectorHtml =
-      '<div class="fld" style="margin-bottom:10px"><label>Seleccione la PQRSD a cerrar</label>' +
-      '<select id="gmail-resp-pqrs-sel" style="margin-top:4px;width:100%"><option value="">— Elegir PQRSD —</option>' + opts + '</select></div>';
-  }
+  const usaDriveInst = typeof DRIVE_INST_DEPTOS !== 'undefined' && DRIVE_INST_DEPTOS.has((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || (typeof deptoCfg !== 'undefined' ? deptoCfg : '') || '');
+  const hayToken = (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid()) || (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid());
+  const adjBtns =
+    '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">' +
+    (usaDriveInst && hayToken ? '<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile(\'gmail-resp-adj-rows\')">📎 Adjuntar archivo</button>' : '') +
+    '<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow(\'gmail-resp-adj-rows\')">🔗 + Link Drive</button>' +
+    '</div>';
+  const adjInfo = usaDriveInst
+    ? '<div style="font-size:11px;color:var(--tx2);margin-top:4px">' + (hayToken ? 'Los archivos se subirán al Drive institucional.' : 'Conecte su correo para subir archivos al Drive.') + '</div>'
+    : '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue links de Drive de su carpeta personal.</div>';
 
   body.innerHTML =
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Este correo quedará registrado como la notificación oficial enviada al ciudadano y cerrará la PQRSD.</div>' +
-    pqrsSelectorHtml +
+
+    '<div class="fld" style="margin-bottom:10px"><label>PQRSD a cerrar</label>' +
+    '<input type="hidden" id="gmail-resp-pqrs-hid" value="">' +
+    '<div id="gmail-resp-pqrs-chip" style="display:none;margin-top:4px;margin-bottom:6px"></div>' +
+    '<input type="text" id="gmail-resp-pqrs-search" placeholder="Buscar PQRSD por número, interesado o asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;margin-top:4px" oninput="gmailFiltrarPqrsRespSug(this)" onfocus="gmailFiltrarPqrsRespSug(this)">' +
+    '<div id="gmail-resp-pqrs-sug" style="max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);margin-top:4px;display:none"></div>' +
+    '</div>' +
+
     '<div class="fg" style="margin-bottom:10px">' +
     '<div class="fld"><label>Fecha de la respuesta</label><input type="date" id="gmail-resp-pqrs-fecha" value="' + (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0,10)) + '"></div>' +
     '<div class="fld"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="gmail-resp-pqrs-oficio" placeholder="OFI-2026-045"></div>' +
@@ -2257,13 +2304,19 @@ function gmailOfiVincularRespuestaPqrs() {
     '<input type="email" id="gmail-resp-pqrs-email" value="' + escAttr(emailCiu) + '" style="margin-top:4px"></div>' +
     '<div class="fld" style="margin-bottom:10px"><label>Resumen de la respuesta</label>' +
     '<textarea id="gmail-resp-pqrs-cuerpo" placeholder="Resuma la respuesta enviada por correo…" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">' + escAttr(subject) + '</textarea></div>' +
+
+    '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documentos de la respuesta</label>' + adjInfo +
+    '<div id="gmail-resp-adj-rows" style="margin-top:6px"></div>' + adjBtns + '</div>' +
+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">' +
-    '<button type="button" class="btn bsm bp" onclick="gmailOfiConfirmarRespuestaPqrs()">✅ Registrar como respuesta oficial</button>' +
+    '<button type="button" class="btn bsm bp" id="gmail-resp-pqrs-submit" onclick="gmailOfiConfirmarRespuestaPqrs()">✅ Registrar como respuesta oficial</button>' +
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>' +
     '</div>';
 
   ov.classList.add('on');
   window._taskModalCtx = { mode: 'gmailVincularPqrs' };
+  if (detectada) gmailSetPqrsRespSel(detectada, { detectada: true, keepEmail: true });
+  setTimeout(function(){ var s = document.getElementById('gmail-resp-pqrs-search'); if (s && !detectada) s.focus(); }, 80);
 }
 
 function _gmailOfiParseFrom(str) {
@@ -2274,25 +2327,57 @@ function _gmailOfiParseFrom(str) {
 }
 
 async function gmailOfiConfirmarRespuestaPqrs() {
-  const expId = String((document.getElementById('gmail-resp-pqrs-sel') || {}).value || '').trim();
+  const expId = String((document.getElementById('gmail-resp-pqrs-hid') || {}).value || '').trim();
   const fecha = String((document.getElementById('gmail-resp-pqrs-fecha') || {}).value || '').trim();
   const oficio = String((document.getElementById('gmail-resp-pqrs-oficio') || {}).value || '').trim();
   const ciudEmail = String((document.getElementById('gmail-resp-pqrs-email') || {}).value || '').trim().toLowerCase();
   const cuerpo = String((document.getElementById('gmail-resp-pqrs-cuerpo') || {}).value || '').trim();
 
-  if (!expId) { notif('Seleccione la PQRSD a cerrar', 'err'); return; }
+  if (!expId) { notif('Seleccione la PQRSD a cerrar (busque por número o asunto)', 'err'); return; }
   if (!fecha) { notif('Indique la fecha de la respuesta', 'err'); return; }
   if (!cuerpo) { notif('Escriba el resumen de la respuesta', 'err'); return; }
 
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === expId);
   if (!e) { notif('PQRSD no encontrada', 'err'); return; }
+  if (typeof esPqrsSecretaria === 'function' && !esPqrsSecretaria(e)) {
+    notif('Solo puede vincular PQRSD radicadas por Secretaría, no expedientes de trámite', 'err');
+    return;
+  }
 
-  // Build workflow patch — mark as closed via email
+  const btn = document.getElementById('gmail-resp-pqrs-submit');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Procesando…'; }
+
+  const adj = typeof collectPqrsRespAdjuntos === 'function'
+    ? collectPqrsRespAdjuntos('gmail-resp-adj-rows')
+    : { links: [], files: [] };
+  const documentos = [];
+  const usaDriveInst = typeof DRIVE_INST_DEPTOS !== 'undefined' && DRIVE_INST_DEPTOS.has((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || (typeof deptoCfg !== 'undefined' ? deptoCfg : '') || '');
+  const nombreCarpeta = (e._qd_nombre || e._nombre || e._pn_nombre || expId);
+
+  if (usaDriveInst && adj.files && adj.files.length) {
+    for (const item of adj.files) {
+      const file = item.file;
+      const statusEl = item.statusEl;
+      try {
+        if (statusEl) statusEl.textContent = '⬆ Subiendo…';
+        const res = await driveUploadInstitutional(file, file.name, file.type || 'application/octet-stream', 'respuesta_aprobada', expId, nombreCarpeta);
+        if (statusEl) statusEl.textContent = '✅ Subido';
+        documentos.push({ nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo' });
+      } catch (err) {
+        if (statusEl) statusEl.textContent = '❌ Error';
+        console.error('Drive upload error:', err);
+        notif('Error al subir ' + file.name + ': ' + String(err.message || err).slice(0, 80), 'err');
+      }
+    }
+  }
+  (adj.links || []).forEach(function(lnk) {
+    documentos.push({ nombre: 'Link Drive', driveLink: lnk, tipo: 'link' });
+  });
+
+  const msgId = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg.id : null;
+  if (msgId) documentos.push({ nombre: 'Correo enviado (Gmail)', driveLink: 'https://mail.google.com/mail/u/0/#inbox/' + msgId, tipo: 'correo' });
+
   if (typeof setPqrsWorkflow === 'function') {
-    const docs = [];
-    // Add the Gmail thread URL if available
-    const msgId = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg.id : null;
-    if (msgId) docs.push({ nombre: 'Correo enviado (Gmail)', driveLink: 'https://mail.google.com/mail/u/0/#inbox/' + msgId, tipo: 'correo' });
     setPqrsWorkflow(e, {
       fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
       tipo: typeof PQRS_WF_TIPO !== 'undefined' ? PQRS_WF_TIPO.MENSAJE : 'mensaje',
@@ -2300,13 +2385,12 @@ async function gmailOfiConfirmarRespuestaPqrs() {
       cuerpo,
       oficio,
       fecha_respuesta: fecha,
-      documentos: docs,
+      documentos: documentos,
       notificacion_correo: { enviado: true, a: ciudEmail, en: new Date().toISOString() },
       cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
       cerrado_en: new Date().toISOString()
     });
   } else {
-    // Fallback: legacy fields only
     e._pqrs_estado_oficina = 'cerrado';
     e._estado = 'Atendido';
     e._fecha_res = fecha;
@@ -2314,6 +2398,17 @@ async function gmailOfiConfirmarRespuestaPqrs() {
     e._pqrs_respuesta_medio = 'electronica';
     e._pqrs_respuesta_nota = cuerpo;
     if (oficio) e._pqrs_respuesta_oficio = oficio;
+  }
+
+  if (typeof registrarPqrsRespuestaCore === 'function') {
+    registrarPqrsRespuestaCore(e, {
+      fechaResp: fecha,
+      oficioExt: oficio,
+      medioResp: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
+      nota: cuerpo,
+      adj: { links: adj.links || [], files: [] },
+      archivos: documentos
+    });
   }
 
   if (!Array.isArray(e._pqrs_historial)) e._pqrs_historial = [];
@@ -2328,9 +2423,9 @@ async function gmailOfiConfirmarRespuestaPqrs() {
   if (typeof closeTaskModal === 'function') closeTaskModal();
   if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
+  if (typeof refreshPqrsDetalleViews === 'function') refreshPqrsDetalleViews(expId);
   notif('✅ PQRSD ' + expId + ' cerrada como respondida por correo', 'ok');
 
-  // Apply RAD APP label on message (already-sent email)
   if (_gmailOfiCurrentMsg && _gmailOfiTokenValid()) {
     try { await _gmailApplyRadLabel(_gmailOfiCurrentMsg.id); } catch (err) { console.warn('Label error:', err); }
   }

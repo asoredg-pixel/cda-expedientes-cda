@@ -690,9 +690,12 @@ function setPqrsRespCanal(val){
   const emailWrap=document.getElementById('pqrs-resp-email-wrap');
   if(emailWrap)emailWrap.style.display=(val===PQRS_WF_CANAL.CORREO)?'':'none';
 }
-function addPqrsRespAdjFile(){
+function addPqrsRespAdjFile(boxId){
+  const boxSel=boxId||'pqrs-resp-adj-rows';
   const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='*/*';
   inp.onchange=function(){
+    const box=document.getElementById(boxSel);
+    if(!box)return;
     Array.from(inp.files||[]).forEach(f=>{
       const row=document.createElement('div');
       row.className='fx pqrs-adj-file-row';
@@ -703,7 +706,7 @@ function addPqrsRespAdjFile(){
         '<span class="adj-upload-status" style="font-size:11px;color:var(--tx2)">Listo</span>'+
         '<button type="button" class="btn bsm bd2" onclick="this.parentElement.remove()">✕</button>';
       row._adjFile=f;
-      document.getElementById('pqrs-resp-adj-rows').appendChild(row);
+      box.appendChild(row);
     });
   };
   inp.click();
