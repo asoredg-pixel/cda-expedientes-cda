@@ -328,6 +328,10 @@ function collectArchivosPqrsLinks(e){
     items.push({exp:e._exp,taskId:'',taskDesc:'PQRSD',label:label||'Documento PQRSD',url:p.url||url,local:false,mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||'',version:''});
   };
   push(e._pqrs_solicitud_link,'Solicitud PQRSD',e._fecha_solicitud||e._fecha);
+  (e._pqrs_gmail_attachments||[]).forEach(function(att){
+    if(!att||!att.driveLink||att.driveLink===e._pqrs_solicitud_link)return;
+    push(att.driveLink,att.nombre||'Anexo PQRSD',e._fecha_solicitud||e._fecha);
+  });
   push(e._pqrs_respuesta_link,'Respuesta PQRSD',e._pqrs_respuesta_fecha);
   (e._pqrs_respuesta_links||[]).forEach((u,i)=>push(u,'Respuesta PQRSD '+(i+1),e._pqrs_respuesta_fecha));
   (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>push(s.url||s.preview,s.label||('Respuesta '+(i+1)),e._pqrs_respuesta_fecha));

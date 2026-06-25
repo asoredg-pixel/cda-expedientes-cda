@@ -661,9 +661,10 @@
         <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
       </div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>Link de la solicitud (Drive, etc.)</label><input type="url" id="sec-link" placeholder="https://…"></div>
+        <div class="fld"><label>Link de la solicitud (Drive, etc.)</label><input type="url" id="sec-link" placeholder="https://…"><span style="font-size:11px;color:var(--tx3)">Opcional si se genera soporte automático al radicar.</span></div>
         <div class="fld"><label>Referencia de archivo adjunto</label><input type="text" id="sec-archivo" placeholder="Nombre del documento o carpeta"></div>
       </div>
+      <div class="fld" style="margin-bottom:10px"><label>Anexo digital (opcional)</label><input type="file" id="sec-anexo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" multiple style="width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><span style="font-size:11px;color:var(--tx3)">Se sube al Drive institucional junto con el soporte PDF (nombre: ANEXO PQRSD {número} {archivo}). Requiere bandeja Gmail conectada.</span></div>
       <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" onclick="guardarPqrsSecretaria('trasladar')">📤 Radicar y trasladar a oficina</button><button type="button" class="btn" onclick="guardarPqrsSecretaria('solo')">📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 

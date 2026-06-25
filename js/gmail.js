@@ -816,6 +816,197 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
   return doc.output('blob');
 }
 
+function tipoRadicacionDesdeMedioPqrs(medio) {
+  const m = typeof normMedioRecepcionPqrs === 'function' ? normMedioRecepcionPqrs(medio || '') : String(medio || '');
+  if (m === 'Ventanilla') return 'radicacion_ventanilla';
+  return 'radicacion_otro';
+}
+
+function _pdfMedioRadicacionLabel(medio) {
+  const m = typeof normMedioRecepcionPqrs === 'function' ? normMedioRecepcionPqrs(medio || '') : String(medio || '');
+  if (m === 'Ventanilla') return 'Radicación en ventanilla';
+  if (m === 'Teléfono') return 'Radicación por teléfono';
+  if (m === 'Web') return 'Radicación por página web';
+  return 'Radicación — ' + (m || 'otro medio');
+}
+
+function _pdfWriteLines(doc, lines, x, y, lineH, pageH, margin) {
+  for (let i = 0; i < lines.length; i++) {
+    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.text(lines[i], x, y);
+    y += lineH;
+  }
+  return y;
+}
+
+// PDF soporte para radicación manual (ventanilla, teléfono, web, etc.).
+async function generarPdfSolicitudManual(opts) {
+  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF || null;
+  if (!jsPDFCtor) return null;
+  opts = opts || {};
+  const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+  const margin = 48;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const maxW = pageW - margin * 2;
+  let y = margin;
+  const lineH = 13;
+  const expId = opts.expId || '';
+  const medio = opts.medio || 'Ventanilla';
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.setTextColor(110);
+  doc.text('Corporación CDA — ' + _pdfMedioRadicacionLabel(medio), margin, y); y += 16;
+  doc.setTextColor(0);
+  if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
+  doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+
+  const meta = [
+    ['Tipo:', opts.tipo || 'Petición'],
+    ['Medio recepción:', typeof normMedioRecepcionPqrs === 'function' ? normMedioRecepcionPqrs(medio) : medio],
+    ['Fecha solicitud:', typeof fmtF === 'function' ? fmtF(opts.fechaSol || '') : (opts.fechaSol || '')],
+    ['Fecha radicación:', typeof fmtF === 'function' ? fmtF(opts.fecha || '') : (opts.fecha || '')]
+  ];
+  if (opts.fechaTermino) meta.push(['Fecha término:', typeof fmtF === 'function' ? fmtF(opts.fechaTermino) : opts.fechaTermino]);
+  if (typeof medioNotificacionLabel === 'function' && opts.medioNotif) {
+    meta.push(['Medio notificación:', medioNotificacionLabel(opts.medioNotif)]);
+  }
+  doc.setFontSize(10);
+  meta.forEach(function(row) {
+    doc.setFont('helvetica', 'bold'); doc.text(row[0], margin, y);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(String(row[1] || ''), maxW - 90);
+    y = _pdfWriteLines(doc, lines, margin + 90, y, 14, pageH, margin);
+    y += 2;
+  });
+  y += 4; doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+
+  doc.setFont('helvetica', 'bold'); doc.text('Interesado', margin, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  if (opts.anon) {
+    y = _pdfWriteLines(doc, ['Solicitud anónima'], margin, y, lineH, pageH, margin);
+  } else {
+    const inter = [
+      ['Nombre / entidad:', opts.nombre || ''],
+      ['Identificación:', opts.ident || ''],
+      ['Correo:', opts.correo || ''],
+      ['Teléfono:', opts.tel || '']
+    ];
+    if (opts.tipoPersona === 'juridica' && opts.pjEmpresa) {
+      inter.unshift(['Razón social:', opts.pjEmpresa]);
+      if (opts.pjNit) inter.splice(1, 0, ['NIT:', opts.pjNit]);
+    }
+    inter.forEach(function(row) {
+      if (!row[1]) return;
+      doc.setFont('helvetica', 'bold'); doc.text(row[0], margin, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(String(row[1]), maxW - 100);
+      y = _pdfWriteLines(doc, lines, margin + 100, y, 14, pageH, margin);
+      y += 2;
+    });
+  }
+  y += 4; doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+
+  doc.setFont('helvetica', 'bold'); doc.text('Asunto:', margin, y); y += 14;
+  doc.setFont('helvetica', 'normal');
+  y = _pdfWriteLines(doc, doc.splitTextToSize(String(opts.asunto || ''), maxW), margin, y, lineH, pageH, margin);
+  y += 8;
+  doc.setFont('helvetica', 'bold'); doc.text('Detalle de la solicitud:', margin, y); y += 14;
+  doc.setFont('helvetica', 'normal');
+  const detalle = String(opts.detalle || opts.asunto || '(sin detalle adicional)').replace(/\r/g, '');
+  y = _pdfWriteLines(doc, doc.splitTextToSize(detalle, maxW), margin, y, lineH, pageH, margin);
+
+  const anexosNombres = opts.anexosNombres || [];
+  if (anexosNombres.length) {
+    y += 10; if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 16;
+    doc.setFont('helvetica', 'bold'); doc.text('Anexos digitales (' + anexosNombres.length + '):', margin, y); y += 14;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
+    anexosNombres.forEach(function(n) {
+      if (y > pageH - margin) { doc.addPage(); y = margin; }
+      doc.text('• ' + n, margin + 6, y); y += 12;
+    });
+    doc.setTextColor(0); doc.setFontSize(10);
+  }
+
+  return doc.output('blob');
+}
+
+// Radicación manual: genera PDF soporte + sube anexos al Drive institucional (misma carpeta PQRSD).
+async function subirSoporteRadicacionManual(opts) {
+  opts = opts || {};
+  const expId = String(opts.expId || '').trim();
+  const tipoRad = opts.tipoRadicacion || tipoRadicacionDesdeMedioPqrs(opts.medio);
+  const fechaRef = opts.fecha || '';
+  const nombreCarpeta = String(opts.nombreCarpeta || opts.nombre || opts.asunto || '').trim();
+  const anexosFiles = Array.isArray(opts.anexosFiles) ? opts.anexosFiles.filter(Boolean) : [];
+  const anexosNombres = anexosFiles.map(function(f) { return f.name || 'anexo'; });
+
+  if (!_driveGetBestToken()) {
+    notif('⚠️ Conecte la bandeja Gmail (cdaguaviare1) en la pestaña Correos para generar el soporte PDF en Drive.', 'warn');
+    return { soporte: null, anexos: [], all: [], link: '' };
+  }
+
+  const uploaded = [];
+  let soporte = null;
+  try {
+    notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
+    const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
+    if (pdfBlob) {
+      const asuntoSlug = String(opts.asunto || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
+      soporte = await driveUploadInstitutional(
+        pdfBlob,
+        'Solicitud_PQRSD-' + expId + '_' + asuntoSlug + '.pdf',
+        'application/pdf',
+        tipoRad,
+        expId,
+        nombreCarpeta,
+        fechaRef
+      );
+      uploaded.push(soporte);
+    } else {
+      notif('⚠️ No se pudo generar el PDF (jsPDF no disponible).', 'warn');
+    }
+
+    for (let i = 0; i < anexosFiles.length; i++) {
+      const file = anexosFiles[i];
+      const origName = file.name || ('anexo-' + (i + 1));
+      const safeName = origName.replace(/[<>:"/\\|?*]/g, '_');
+      const driveName = 'ANEXO PQRSD ' + expId + ' ' + safeName;
+      const up = await driveUploadInstitutional(
+        file,
+        driveName,
+        file.type || 'application/octet-stream',
+        tipoRad,
+        expId,
+        nombreCarpeta,
+        fechaRef
+      );
+      up.nombre = driveName;
+      uploaded.push(up);
+    }
+
+    if (soporte) {
+      const extra = uploaded.length > 1 ? ' y ' + (uploaded.length - 1) + ' anexo(s)' : '';
+      notif('✅ Soporte PDF' + extra + ' subido(s) al Drive institucional.', 'ok');
+    } else if (uploaded.length) {
+      notif('✅ ' + uploaded.length + ' anexo(s) subido(s) al Drive institucional.', 'ok');
+    }
+  } catch (e) {
+    console.warn('subirSoporteRadicacionManual:', e);
+    notif('⚠️ No se pudo subir el soporte al Drive: ' + (e.message || 'revise la conexión Gmail'), 'warn');
+  }
+
+  return {
+    soporte: soporte,
+    anexos: uploaded.filter(function(u) { return u !== soporte; }),
+    all: uploaded,
+    link: soporte ? soporte.driveLink : (uploaded[0] ? uploaded[0].driveLink : '')
+  };
+}
+
 // Auto-upload del soporte al radicar desde correo si aún no se ha subido.
 // Genera un PDF del correo (la solicitud) y lo sube al Drive institucional.
 // Los anexos NO se suben: ya llegan al correo de la oficina responsable.

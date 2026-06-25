@@ -558,11 +558,19 @@ function htmlPqrsDocumentoBtns(e){
     h+='<button type="button" class="btn bsm bp" onclick="openPqrsDocViewer(\''+escAttr(e._pqrs_solicitud_link)+'\',\'Solicitud PQRSD\')">📎 Ver documento</button>';
     h+=' <button type="button" class="btn bsm" onclick="window.open(\''+escAttr(p.url||e._pqrs_solicitud_link)+'\',\'_blank\',\'noopener\')">↗ Abrir en pestaña</button>';
   }
+  if(Array.isArray(e._pqrs_gmail_attachments)){
+    e._pqrs_gmail_attachments.forEach(function(att){
+      if(!att||!att.driveLink||att.driveLink===e._pqrs_solicitud_link)return;
+      const lbl=att.nombre||'Anexo';
+      h+=' <button type="button" class="btn bsm" onclick="openPqrsDocViewer(\''+escAttr(att.driveLink)+'\',\''+escAttr(lbl)+'\')">📎 '+escAttr(lbl.length>28?lbl.slice(0,26)+'…':lbl)+'</button>';
+    });
+  }
   if(e._pqrs_solicitud_archivo)h+='<span style="font-size:12px;color:var(--tx2);margin-left:6px">📄 '+escAttr(e._pqrs_solicitud_archivo)+'</span>';
   return h;
 }
 function htmlPqrsDocumentoConsulta(e){
-  if(!e._pqrs_solicitud_link&&!e._pqrs_solicitud_archivo)return'';
+  const hasAtts=Array.isArray(e._pqrs_gmail_attachments)&&e._pqrs_gmail_attachments.some(a=>a&&a.driveLink&&a.driveLink!==e._pqrs_solicitud_link);
+  if(!e._pqrs_solicitud_link&&!e._pqrs_solicitud_archivo&&!hasAtts)return'';
   return '<details class="con-fold"><summary>Documento de la solicitud PQRSD</summary><div class="item-fold-body"><div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+htmlPqrsDocumentoBtns(e)+'</div></div></details>';
 }
 function debeOcultarPqrsDocSolicitudEnPanel(){
