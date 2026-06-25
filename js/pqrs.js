@@ -321,14 +321,16 @@ function renderSecretariaPqrs(){
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
     '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
-    '<div class="met" style="border-left:3px solid #7c5cbf"><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
+    '<div class="met met-click" style="border-left:3px solid #7c5cbf" onclick="setPqrsOfiFiltro(\'por_trasladar\');showTab(\'pqrs-ofi\')" title="Ver bandeja por trasladar"><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
   const pendTb=document.getElementById('tbl-sec-pend-trasl');
   if(pendWrap&&pendTb){
-    pendWrap.style.display=pendientes.length?'':'none';
-    if(!pendientes.length)pendTb.innerHTML='';
+    const showPend=puedeGestionarPendientesTraslado();
+    pendWrap.style.display=showPend?'':'none';
+    if(!showPend)pendTb.innerHTML='';
+    else if(!pendientes.length)pendTb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">No hay PQRSD pendientes de traslado.</td></tr>';
     else pendTb.innerHTML=pendientes.map(e=>{
       const asunto=e.f_f1||e._pqrs_detalle||'—';
       return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+fmtF(e._fecha_solicitud||e._fecha)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
@@ -403,7 +405,14 @@ function renderPqrsOficinaInbox(){
     if(esPendTrasl)tit.textContent='PQRSD — Pendientes por trasladar';
     else if(ofi)tit.textContent='PQRSD — '+ofi.nombre;
   }
-  if(ban)ban.style.display=esPendTrasl?'none':'none';
+  if(ban){
+    if(esPendTrasl){
+      ban.style.display='';
+      ban.textContent='📋 PQRSD radicadas sin oficina asignada — traslade a la oficina competente (Secretaría o DS DEGUV).';
+    }else{
+      ban.style.display='none';
+    }
+  }
   const pr=document.getElementById('pqrs-ofi-periodo-resumen');
   const prLbl=labelPeriodo('pqrs-ofi');
   if(pr)pr.textContent=prLbl?('Filtro de fechas (radicación): '+prLbl):'';
@@ -411,6 +420,7 @@ function renderPqrsOficinaInbox(){
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   const list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
   const pendTraslCount=getPqrsPendientesTrasladoList().length;
+  const showPorTrasl=puedeGestionarPendientesTraslado();
   if(mets){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
@@ -422,16 +432,18 @@ function renderPqrsOficinaInbox(){
     const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
     const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
     const onPorTrasl=filtro==='por_trasladar'?'outline:2px solid #7c5cbf;':'';
+    const cardPorTrasl=showPorTrasl?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'';
     mets.innerHTML=
+      (showPorTrasl?cardPorTrasl:'')+
       pqrsMetCard('all',onAll+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+listAll.length+'</div><div class="l">Total</div>')+
       pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
       pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
       (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
-      (puedeGestionarPendientesTraslado()&&pendTraslCount?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'')+
       pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
   }
   if(!list.length){
-    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--tx3);padding:16px">No hay PQRSD en este filtro.</td></tr>';
+    const vacioMsg=esPendTrasl?'No hay PQRSD pendientes de traslado en este filtro de fechas.':'No hay PQRSD en este filtro.';
+    tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--tx3);padding:16px">'+vacioMsg+'</td></tr>';
     if(detBox){detBox.style.display='none';detBox.innerHTML='';}
     window._pqrsOfiSelExp=null;
     return;
