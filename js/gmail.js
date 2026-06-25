@@ -617,6 +617,9 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 // ----------------------------------------------------------------
 const DRIVE_ROOT_PQRSD_ID = '1SgWKCPR_9FClu4l0oV1kxJoZxUnwRr0k';
 
+// Nombres de carpeta mensual (índice = getMonth()).
+const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
+
 // Obtiene el mejor token disponible para subir al Drive institucional.
 // Prioridad: secretaria (cdaguaviare1) > token de oficina conectada.
 function _driveGetBestToken() {
@@ -669,38 +672,43 @@ async function _driveEnsureFolder(token, folderName, parentId) {
 //       'radicacion_otro'|'respuesta_borrador'|'respuesta_aprobada'|
 //       'respuesta_pendiente'|'soporte_notificacion'|'caratula'
 // pqrsNum: número del expediente, nombre: apellido o asunto para carpeta.
-async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta) {
+async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
 
-  const anio = new Date().getFullYear().toString();
-  let subcarpetaRaiz, subsubcarpeta;
+  // Fecha de referencia para organizar año/mes (radicación o respuesta).
+  let ref = fechaRef ? new Date(fechaRef) : new Date();
+  if (isNaN(ref.getTime())) ref = new Date();
+  const anio = ref.getFullYear().toString();
+  const mes = DRIVE_MESES_ES[ref.getMonth()];
 
+  // Segmentos de ruta dentro de la raíz institucional.
+  // Radicación: Radicacion / {año} / {mes} / {medio} / PQRSD-{num}-{nombre}
+  // Respuestas: Respuestas / {estado} / {año} / {mes} / PQRSD-{num}-{nombre}
+  // Carátulas:  Caratulas / {año} / {mes} / PQRSD-{num}-{nombre}
+  let segments;
   if (tipo && tipo.startsWith('radicacion')) {
-    subcarpetaRaiz = 'Radicacion';
-    subsubcarpeta = tipo === 'radicacion_correo'     ? 'Por-correo'  :
-                    tipo === 'radicacion_ventanilla'  ? 'Ventanilla'  :
-                    tipo === 'radicacion_oficio'      ? 'Oficio'      : 'Otros';
+    const medio = tipo === 'radicacion_correo'     ? 'Por-correo'  :
+                  tipo === 'radicacion_ventanilla'  ? 'Ventanilla'  :
+                  tipo === 'radicacion_oficio'      ? 'Oficio'      : 'Otros';
+    segments = ['Radicacion', anio, mes, medio];
   } else if (tipo === 'respuesta_borrador') {
-    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Pendiente-revision';
-  } else if (tipo === 'respuesta_aprobada') {
-    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Aprobadas';
+    segments = ['Respuestas', 'Pendiente-revision', anio, mes];
+  } else if (tipo === 'respuesta_aprobada' || tipo === 'soporte_notificacion') {
+    segments = ['Respuestas', 'Aprobadas', anio, mes];
   } else if (tipo === 'respuesta_pendiente' || tipo === 'respuesta_vital') {
-    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Pendiente-gestion-vital';
-  } else if (tipo === 'soporte_notificacion') {
-    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Aprobadas';
+    segments = ['Respuestas', 'Pendiente-gestion-vital', anio, mes];
   } else {
-    subcarpetaRaiz = 'Caratulas'; subsubcarpeta = anio;
+    segments = ['Caratulas', anio, mes];
   }
 
-  // Construir ruta: raíz / subcarpetaRaiz / subsubcarpeta / anio / PQRSD-{num}-{nombre}
-  const r1 = await _driveEnsureFolder(token, subcarpetaRaiz, DRIVE_ROOT_PQRSD_ID);
-  const r2 = await _driveEnsureFolder(token, subsubcarpeta, r1);
-  const r3 = subcarpetaRaiz !== 'Caratulas' ? await _driveEnsureFolder(token, anio, r2) : r2;
-  let folderId = r3;
+  // Crear (o reutilizar) la cadena de carpetas.
+  let parent = DRIVE_ROOT_PQRSD_ID;
+  for (const seg of segments) parent = await _driveEnsureFolder(token, seg, parent);
+  let folderId = parent;
   if (pqrsNum) {
     const carpNom = 'PQRSD-' + pqrsNum + (nombreCarpeta ? '-' + nombreCarpeta.slice(0, 30) : '');
-    folderId = await _driveEnsureFolder(token, carpNom, r3);
+    folderId = await _driveEnsureFolder(token, carpNom, parent);
   }
 
   // Upload multipart
@@ -739,33 +747,114 @@ async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, ti
   return driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta);
 }
 
-// Auto-upload adjuntos al radicar desde correo si aún no se han subido.
+// Genera un PDF (soporte de solicitud) a partir del contenido del correo.
+// Replica la idea de "imprimir el correo en PDF" como soporte de radicación.
+// Devuelve un Blob application/pdf, o null si jsPDF no está disponible.
+async function generarPdfSolicitudCorreo(emailData, expId) {
+  const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF || null;
+  if (!jsPDFCtor) return null;
+  const ed = emailData || {};
+  const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+  const margin = 48;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const maxW = pageW - margin * 2;
+  let y = margin;
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.setTextColor(110);
+  doc.text('Corporación CDA — Radicación por correo electrónico', margin, y); y += 16;
+  doc.setTextColor(0);
+  if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
+  doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+
+  const meta = [
+    ['Remitente:', ed.remitente || ''],
+    ['Fecha:', ed.fecha || ''],
+    ['Asunto:', ed.asunto || '']
+  ];
+  doc.setFontSize(10);
+  meta.forEach(function(row) {
+    doc.setFont('helvetica', 'bold'); doc.text(row[0], margin, y);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(String(row[1] || ''), maxW - 70);
+    doc.text(lines, margin + 70, y);
+    y += Math.max(15, lines.length * 14);
+  });
+  y += 6; doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+  doc.text('Contenido de la solicitud:', margin, y); y += 16;
+  doc.setFont('helvetica', 'normal');
+  const cuerpo = String(ed.cuerpoTxt || ed.asunto || '(sin contenido de texto)').replace(/\r/g, '');
+  const bodyLines = doc.splitTextToSize(cuerpo, maxW);
+  const lineH = 13;
+  for (let i = 0; i < bodyLines.length; i++) {
+    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.text(bodyLines[i], margin, y); y += lineH;
+  }
+
+  // Nota de anexos (no se suben al Drive; llegan al correo de la oficina).
+  if (ed.adjuntosInfo && ed.adjuntosInfo.length) {
+    y += 10; if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 16;
+    doc.setFont('helvetica', 'bold'); doc.text('Anexos del correo original (' + ed.adjuntosInfo.length + '):', margin, y); y += 14;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
+    ed.adjuntosInfo.forEach(function(a) {
+      if (y > pageH - margin) { doc.addPage(); y = margin; }
+      doc.text('• ' + (a.nombre || 'adjunto'), margin + 6, y); y += 12;
+    });
+    doc.setTextColor(0);
+    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    doc.setFontSize(8); doc.setTextColor(130);
+    doc.text('Los anexos no se almacenan en Drive; se conservan en el correo reenviado a la oficina responsable.', margin, y);
+    doc.setTextColor(0);
+  }
+
+  return doc.output('blob');
+}
+
+// Auto-upload del soporte al radicar desde correo si aún no se ha subido.
+// Genera un PDF del correo (la solicitud) y lo sube al Drive institucional.
+// Los anexos NO se suben: ya llegan al correo de la oficina responsable.
 // Llamada desde pqrs.js antes de guardar el expediente.
 async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
   if (!window._gmailPendingMsgId) return;           // no viene de Gmail
-  if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) return; // ya subidos
+  if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) return; // ya subido
   const ed = window._gmailPendingEmailData;
   if (!_gmailCurrentMsg || _gmailCurrentMsg.id !== window._gmailPendingMsgId) return; // sin msg en memoria
   if (!gmailIsTokenValid()) {
-    notif('⚠️ La sesión de Gmail expiró. Los adjuntos NO se vincularán a este PQRSD. Reconecte la bandeja y vuelva a radicar.', 'err');
+    notif('⚠️ La sesión de Gmail expiró. El soporte NO se vinculará a este PQRSD. Reconecte la bandeja y vuelva a radicar.', 'err');
     return;
   }
   try {
-    notif('📎 Subiendo correo y adjuntos a Drive institucional…', 'info');
-    const files = await subirAdjuntosEmailADrive(_gmailCurrentMsg, expIdHint, nombreHint);
-    if (files && files.length) {
-      window._gmailPendingAttachments = files;
-      notif('✅ ' + files.length + ' elemento(s) subido(s) al Drive institucional', 'ok');
+    notif('🖨️ Generando PDF de la solicitud y subiéndolo al Drive…', 'info');
+    const asunto = ((ed && ed.asunto) || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
+    let soporte = null;
+
+    // 1) Intentar PDF (soporte preferido).
+    const pdfBlob = await generarPdfSolicitudCorreo(ed || {}, expIdHint);
+    if (pdfBlob) {
+      soporte = await driveUploadInstitutional(
+        pdfBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.pdf',
+        'application/pdf', 'radicacion_correo', expIdHint || '', nombreHint || ''
+      );
+    } else if (ed && ed.cuerpoHtml) {
+      // 2) Respaldo: subir el cuerpo como HTML si jsPDF no está disponible.
+      const htmlBlob = new Blob([ed.cuerpoHtml], { type: 'text/html' });
+      soporte = await driveUploadInstitutional(
+        htmlBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.html',
+        'text/html', 'radicacion_correo', expIdHint || '', nombreHint || ''
+      );
     }
-    // Also upload email body as HTML file
-    if (ed && ed.cuerpoHtml) {
-      try {
-        const htmlBlob = new Blob([ed.cuerpoHtml], { type: 'text/html' });
-        const asunto = (ed.asunto || 'correo').replace(/[<>:"/\\|?*]/g, '_').slice(0, 60);
-        const htmlFile = await driveUploadInstitutional(htmlBlob, 'correo_' + asunto + '.html', 'text/html', 'radicacion_correo', expIdHint || '', nombreHint || '');
-        if (htmlFile && !window._gmailPendingAttachments) window._gmailPendingAttachments = [];
-        if (htmlFile) window._gmailPendingAttachments.push(htmlFile);
-      } catch (e) { console.warn('Upload email body HTML:', e); }
+
+    if (soporte) {
+      window._gmailPendingAttachments = [soporte];
+      notif('✅ Soporte de la solicitud subido al Drive institucional. Los anexos quedan en el correo de la oficina.', 'ok');
+    } else {
+      notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');
     }
   } catch (e) {
     console.warn('gmailAutoUploadPendingAttachments:', e.message);
@@ -2066,6 +2155,29 @@ async function gmailOfiSaveDraft() {
   } catch(e) { notif('Error al guardar borrador: ' + e.message, 'err'); }
 }
 
+// Extrae el número de radicado del asunto, ej. "[PQRSD #707]" → "707".
+function _gmailExtractRadicadoFromSubject(subject) {
+  if (!subject) return '';
+  const m = String(subject).match(/PQRSD\s*[#N°ºo:.\-]*\s*([A-Za-z0-9\-]+)/i);
+  return m ? m[1].trim() : '';
+}
+
+// Busca un expediente PQRSD abierto cuyo radicado coincide con el token del asunto.
+function _gmailFindPqrsByRadicado(token) {
+  const norm = function(s){ return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  const t = norm(token);
+  if (!t) return null;
+  const list = (typeof exps !== 'undefined' ? exps : []);
+  const esPqrs = function(e){ return e && (e._radicado_secretaria || e._es_pqrs); };
+  const abierta = function(e){ return !(typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e)); };
+  // Coincidencia exacta del número de expediente.
+  let hit = list.find(function(e){ return esPqrs(e) && abierta(e) && norm(e._exp) === t; });
+  if (hit) return hit;
+  // Coincidencia por terminación (radicados con prefijos).
+  hit = list.find(function(e){ var n = norm(e._exp); return esPqrs(e) && abierta(e) && n && (n.endsWith(t) || t.endsWith(n)); });
+  return hit || null;
+}
+
 // ---- Responder PQRSD desde Correos (todas las oficinas) ----
 // El usuario elige la PQRSD a vincular con el mensaje actual (en vista o a componer)
 function gmailOfiVincularRespuestaPqrs() {
@@ -2080,15 +2192,29 @@ function gmailOfiVincularRespuestaPqrs() {
     return true;
   });
 
-  if (!pqrsAbiertas.length) {
+  // Datos del correo en vista.
+  const msg = _gmailOfiCurrentMsg;
+  const headers = msg && msg.payload && msg.payload.headers ? msg.payload.headers : [];
+  const findH = function(n){ var h = headers.find(function(x){ return x.name === n; }); return h ? (h.value || '') : ''; };
+  const fromEmail = _gmailOfiParseFrom(findH('From'));
+  const subject = findH('Subject');
+
+  // Auto-detección: si el asunto trae el radicado [PQRSD #707], usamos esa PQRSD.
+  const radTok = _gmailExtractRadicadoFromSubject(subject);
+  const detectada = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
+
+  if (!pqrsAbiertas.length && !detectada) {
     notif('No hay PQRSD abiertas asignadas a su oficina.', 'warn');
     return;
   }
 
-  // Build options list
-  const opts = pqrsAbiertas.map(function(e) {
+  // Build options list (para selección manual / cambio).
+  const lista = detectada && !pqrsAbiertas.some(function(e){ return e._exp === detectada._exp; })
+    ? [detectada].concat(pqrsAbiertas) : pqrsAbiertas;
+  const opts = lista.map(function(e) {
     const asunto = e.f_f1 || e._pqrs_detalle || '—';
-    return '<option value="' + escAttr(e._exp) + '">' + escAttr(e._exp) + ' — ' + escAttr(asunto.slice(0, 60)) + '</option>';
+    const sel = detectada && e._exp === detectada._exp ? ' selected' : '';
+    return '<option value="' + escAttr(e._exp) + '"' + sel + '>' + escAttr(e._exp) + ' — ' + escAttr(asunto.slice(0, 60)) + '</option>';
   }).join('');
 
   // Show quick modal using task-modal
@@ -2098,20 +2224,37 @@ function gmailOfiVincularRespuestaPqrs() {
   const body = document.getElementById('task-modal-body');
   if (!ov || !body) return;
   if (tit) tit.textContent = 'Vincular correo como respuesta PQRSD';
-  const msg = _gmailOfiCurrentMsg;
-  const fromEmail = msg ? _gmailOfiParseFrom(msg.payload && msg.payload.headers ? msg.payload.headers.find(h => h.name === 'From') && msg.payload.headers.find(h => h.name === 'From').value || '' : '') : {email:'',name:''};
-  const subject = msg ? (msg.payload && msg.payload.headers && (msg.payload.headers.find(h => h.name === 'Subject') || {}).value || '') : '';
+
+  // Correo del ciudadano: si hay PQRSD detectada usamos su correo registrado.
+  const emailCiu = detectada ? (detectada._qd_correo || detectada._pn_correo || fromEmail.email || '') : (fromEmail.email || '');
+
+  let pqrsSelectorHtml;
+  if (detectada) {
+    const asuntoDet = detectada.f_f1 || detectada._pqrs_detalle || '—';
+    pqrsSelectorHtml =
+      '<div class="fld" style="margin-bottom:10px"><label>PQRSD a cerrar</label>' +
+      '<div style="margin-top:4px;padding:10px 12px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">' +
+      '<div style="font-weight:600;color:var(--bl);font-size:13px">📌 PQRSD #' + escAttr(detectada._exp) + ' <span style="font-weight:400;font-size:11px;color:var(--tx2)">— detectada del asunto</span></div>' +
+      '<div style="font-size:12px;color:var(--tx2);margin-top:2px">' + escAttr(asuntoDet.slice(0, 80)) + '</div>' +
+      '</div>' +
+      '<select id="gmail-resp-pqrs-sel" style="display:none">' + opts + '</select>' +
+      '<button type="button" class="btn bsm bd2" style="margin-top:6px;font-size:11px" onclick="(function(s,b){s.style.display=\'\';b.style.display=\'none\';})(document.getElementById(\'gmail-resp-pqrs-sel\'),this)">Vincular a otra PQRSD…</button>' +
+      '</div>';
+  } else {
+    pqrsSelectorHtml =
+      '<div class="fld" style="margin-bottom:10px"><label>Seleccione la PQRSD a cerrar</label>' +
+      '<select id="gmail-resp-pqrs-sel" style="margin-top:4px;width:100%"><option value="">— Elegir PQRSD —</option>' + opts + '</select></div>';
+  }
 
   body.innerHTML =
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Este correo quedará registrado como la notificación oficial enviada al ciudadano y cerrará la PQRSD.</div>' +
-    '<div class="fld" style="margin-bottom:10px"><label>Seleccione la PQRSD a cerrar</label>' +
-    '<select id="gmail-resp-pqrs-sel" style="margin-top:4px;width:100%"><option value="">— Elegir PQRSD —</option>' + opts + '</select></div>' +
+    pqrsSelectorHtml +
     '<div class="fg" style="margin-bottom:10px">' +
     '<div class="fld"><label>Fecha de la respuesta</label><input type="date" id="gmail-resp-pqrs-fecha" value="' + (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0,10)) + '"></div>' +
     '<div class="fld"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="gmail-resp-pqrs-oficio" placeholder="OFI-2026-045"></div>' +
     '</div>' +
     '<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano al que se respondió</label>' +
-    '<input type="email" id="gmail-resp-pqrs-email" value="' + escAttr(fromEmail.email || '') + '" style="margin-top:4px"></div>' +
+    '<input type="email" id="gmail-resp-pqrs-email" value="' + escAttr(emailCiu) + '" style="margin-top:4px"></div>' +
     '<div class="fld" style="margin-bottom:10px"><label>Resumen de la respuesta</label>' +
     '<textarea id="gmail-resp-pqrs-cuerpo" placeholder="Resuma la respuesta enviada por correo…" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">' + escAttr(subject) + '</textarea></div>' +
     '<div class="fx" style="gap:8px;flex-wrap:wrap">' +

@@ -268,6 +268,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .con-side-panel-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:.75rem;padding-bottom:.65rem;border-bottom:1px solid var(--bd)}
 .medio-notif-btn{border:1px solid var(--bd);background:var(--sf2);color:var(--tx2);font-size:12px;padding:6px 10px;border-radius:var(--r);cursor:pointer;font-family:'DM Sans',sans-serif}
 .medio-notif-btn.on{background:var(--bll);color:var(--bl);border-color:var(--bl);font-weight:600}
+.canal-resp-btn.on,.tipo-resp-btn.on{background:var(--bll)!important;color:var(--bl)!important;border-color:var(--bl)!important;font-weight:600}
 .con-arch-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:12px}
 .con-exp-link{cursor:pointer;border:0;font-family:inherit}
 .con-exp-link:hover{opacity:.85;text-decoration:underline}
