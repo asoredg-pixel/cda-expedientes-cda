@@ -891,17 +891,25 @@ function htmlPqrsCorreoOrigenHtml(e){
   const driveAtts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
   const adjInfo=Array.isArray(d.adjuntosInfo)?d.adjuntosInfo:[];
   let attsHtml='';
+  let hayAnexoSinLink=false;
   if(adjInfo.length){
     attsHtml=adjInfo.map(function(a,i){
-      const drv=driveAtts.find(x=>x.nombre===a.nombre)||driveAtts[i]||null;
+      // Solo enlazar si existe una subida a Drive que coincide por NOMBRE con el anexo.
+      // (Ya no se suben los anexos originales al Drive: el fallback posicional apuntaba
+      //  por error al PDF de soporte. Los originales están en el correo reenviado.)
+      const drv=driveAtts.find(x=>x&&x.nombre===a.nombre&&x.driveLink)||null;
       const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':(a.mimeType||'').includes('word')||(a.nombre||'').match(/\.docx?$/i)?'📝':(a.mimeType||'').includes('sheet')||(a.mimeType||'').includes('excel')||(a.nombre||'').match(/\.xlsx?$/i)?'📊':'📎';
       if(drv&&drv.driveLink){
         const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(drv.driveLink)+'\',\''+jsStr(a.nombre||'Adjunto')+'\');return false;';
         return'<a href="'+escAttr(drv.driveLink)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(a.nombre||'adjunto')+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
       }
-      return'<span class="gmail-att-chip" style="opacity:.7" title="Sin enlace Drive aún"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
+      hayAnexoSinLink=true;
+      return'<span class="gmail-att-chip" style="opacity:.85" title="Este anexo está en el correo reenviado a su oficina"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
     }).join('');
   }
+  const notaAnexos=hayAnexoSinLink
+    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;display:flex;gap:5px;align-items:flex-start"><span>📥</span><span>Los anexos originales se conservan en el <strong>correo reenviado a su oficina</strong> (revise su bandeja de Gmail). El PDF de soporte está en «Documento de la solicitud».</span></div>'
+    :'';
   const bodyHtml=d.cuerpoHtml||(d.cuerpoTxt?'<pre style="white-space:pre-wrap;font-size:12px;margin:0">'+escAttr(d.cuerpoTxt)+'</pre>':'');
   const fechaStr=d.fecha?' · '+escAttr(d.fecha):'';
   return'<details class="pqrs-email-origen"><summary>📧 Correo de origen <span style="font-weight:400;color:var(--tx3)">(clic para ver)</span></summary>'+
@@ -909,6 +917,7 @@ function htmlPqrsCorreoOrigenHtml(e){
     (d.remitente||d.fecha?'<div style="font-size:11px;color:var(--tx2);margin-bottom:3px">De: <strong>'+escAttr(d.remitente||'')+fechaStr+'</strong></div>':'')  +
     (d.asunto?'<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+escAttr(d.asunto)+'</div>':'')+
     (attsHtml?'<div class="gmail-att-chips" style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px">'+attsHtml+'</div>':'')+
+    notaAnexos+
     (bodyHtml?'<div class="pqrs-email-body">'+bodyHtml+'</div>':'')+
     '</div></details>';
 }

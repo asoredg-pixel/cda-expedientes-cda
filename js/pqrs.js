@@ -166,9 +166,24 @@ async function guardarPqrsSecretaria(){
   }
   // Sprint B: capturar Gmail message id si viene de un correo
   const gmailMsgId=window._gmailPendingMsgId||'';
-  // Auto-subir adjuntos a Drive si aún no se han subido (secretaria radica sin pulsar "Subir")
+  // Notificación PRIORITARIA: reenviar el correo a la oficina ANTES de la subida a Drive.
+  // Así el responsable siempre recibe el aviso con sus anexos, aunque Drive falle o el
+  // token expire durante la subida (que puede tardar varios segundos).
+  const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+  if(gmailMsgId){
+    const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
+    if(_tokOk){
+      if(oficina!=='secretaria'&&typeof reenviarEmailAOficina==='function'){
+        try{await reenviarEmailAOficina(_msgParaReenvio,oficina,expId);}catch(err){console.warn('reenvio oficina:',err);}
+      }
+      if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
+    }else if(oficina!=='secretaria'){
+      notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina (sesión Gmail expirada). Reconecte la bandeja y use «Reenviar» o notifique manualmente.','warn');
+    }
+  }
+  // Auto-subir soporte (PDF de la solicitud) a Drive si aún no se ha subido.
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
-    try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload adjuntos:',e);}
+    try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
   }
   // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
@@ -213,12 +228,7 @@ async function guardarPqrsSecretaria(){
   upsertPersonaCatalog(data);
   logAudit('Creó PQRSD ['+expId+']','pqrsd',expId);
   persistExpedienteGranular(data,true);
-  // Sprint D: reenviar correo a oficina si hay token Gmail y oficina tiene correo
-  if(gmailMsgId&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId){
-    reenviarEmailAOficina(_gmailCurrentMsg,oficina,expId);
-    // Marcar como leído (quitar la N de no radicado)
-    if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
-  }
+  // El reenvío a la oficina ya se hizo arriba (antes de la subida a Drive).
   // Limpiar datos Gmail pendientes
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
