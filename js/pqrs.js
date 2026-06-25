@@ -311,15 +311,29 @@ function getPqrsOficinaList(oficinaId,filtro){
   if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e));
   else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
+  else if(filtro==='revision')list=list.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION);
   list=filterExpsPeriodo(list,'pqrs-ofi');
   return list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
 }
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
+  const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
   let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">Ver</button> ';
   if(puedeTrasladarPqrs(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTrasladoPqrsInterOficinaModal(\''+id+'\')">Trasladar</button> ';
   if(puedeAsignarPqrsOficina(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openAsignarPqrsOficinaModal(\''+id+'\')">Asignar</button> ';
-  if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
+  // NCA encargado revisión de responsable
+  if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
+    h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')">⏳ Revisar</button> ';
+  // VITAL gestión oficio firmado
+  if(fase===PQRS_WF.VITAL_GESTION&&(typeof esCargoVital==='function'&&esCargoVital()||esAdministrador()))
+    h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openVitalBandejaModal(\''+id+'\')">📄 VITAL</button> ';
+  // Notificación pendiente (VITAL o encargado NCA puede notificar)
+  if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)&&(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador()))
+    h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();abrirNotifPqrsExpId(\''+id+'\')">📧 Notificar</button> ';
+  // Responder directo (offices + NCA encargado + secretary)
+  if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
+    if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
+  }
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))h+=pqrsBtnEdit(e._exp,'Editar')+' ';
   if(esSecretaria()&&puedeEliminarPqrs(e))h+='<button type="button" class="btn bsm bd2" onclick="event.stopPropagation();eliminarPqrs(\''+id+'\')">Eliminar</button> ';
   return h;
@@ -344,14 +358,17 @@ function renderPqrsOficinaInbox(){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
+    const enRevision=listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION).length;
     const onAll=filtro==='all'?'outline:2px solid var(--bl);':'';
     const onPend=filtro==='pend'?'outline:2px solid var(--or);':'';
     const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
     const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
+    const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
     mets.innerHTML=
       pqrsMetCard('all',onAll+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+listAll.length+'</div><div class="l">Total</div>')+
       pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
       pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
+      (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
       pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
   }
   if(!list.length){
@@ -365,7 +382,8 @@ function renderPqrsOficinaInbox(){
   tb.innerHTML=list.map(e=>{
     const asunto=e.f_f1||e._pqrs_detalle||'—';
     const on=String(window._pqrsOfiSelExp||'').trim()===String(e._exp||'').trim();
-    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="openPqrsSidePanel(\''+escAttr(e._exp)+'\')"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+pqrsEstadoConsultaBadge(e)+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+    const wfBadge=typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'';
+    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="openPqrsSidePanel(\''+escAttr(e._exp)+'\')"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+pqrsEstadoConsultaBadge(e)+' '+wfBadge+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
   renderPqrsOficinaDetallePanel();
 }

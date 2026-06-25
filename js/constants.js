@@ -186,8 +186,42 @@ const TIPOS_ACTO_DEF=[
   {nombre:'Resolución que levanta suspensión',tieneVencimiento:false,efecto:'levanta_susp'}
 ];
 
+// ================================================================
+// PQRS WORKFLOW — fases y tipos de respuesta
+// ================================================================
+// Fases del workflow de respuesta PQRSD:
+const PQRS_WF = {
+  // Encargado de oficina / NCA responde directo → cierre inmediato
+  SIN_RESPUESTA:       'sin_respuesta',
+  // Responsable entregó, esperando revisión NCA
+  PENDIENTE_REVISION:  'pendiente_revision_nca',
+  // NCA aprobó mensaje simple, listo para enviar
+  LISTA_ENVIO:         'lista_para_envio',
+  // NCA aprobó oficio, VITAL gestiona firma Director
+  VITAL_GESTION:       'pendiente_gestion_vital',
+  // VITAL subió PDF firmado, esperando notificación
+  PENDIENTE_NOTIF:     'pendiente_notificacion',
+  // Notificación presencial: NCA hace revisión final antes de cerrar
+  REVISION_FINAL:      'revision_final_nca',
+  // PQRSD respondida y cerrada
+  CERRADA:             'cerrada_atendida',
+  // Devuelta al responsable por NCA
+  RECHAZADA:           'rechazada'
+};
+const PQRS_WF_TIPO = { MENSAJE: 'mensaje', OFICIO: 'oficio_firmado', INFORMATIVA: 'informativa' };
+const PQRS_WF_CANAL = {
+  CORREO:     'correo',
+  WHATSAPP:   'whatsapp',
+  PRESENCIAL: 'presencial',
+  FISICA:     'fisica',
+  PAGINA:     'pagina',
+  AVISO:      'aviso'
+};
+// Departamentos que usan Drive institucional (cdaguaviare1)
+const DRIVE_INST_DEPTOS = new Set(['guaviare','secretaria','oap_deguv','rn_deguv','admin_deguv','ds_deguv']);
+
 // Claves que contienen JSON blobs (para sanitización XSS)
-const XSS_JSON_BLOB_KEYS=new Set(['_fechas_estado','_actos_admin','_conceptos_seg','_detalle_notas','_facturas_extra','_info_tecnica_items','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_tasks']);
+const XSS_JSON_BLOB_KEYS=new Set(['_fechas_estado','_actos_admin','_conceptos_seg','_detalle_notas','_facturas_extra','_info_tecnica_items','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_workflow','_tasks']);
 
 // Roles de personas en expedientes
 const PERSONA_ROLES={interesado:'Interesado',peticionario:'Quejoso / peticionario',apoderado:'Apoderado',autorizado:'Autorizado',infractor:'Presunto infractor'};

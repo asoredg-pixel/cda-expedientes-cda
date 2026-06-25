@@ -251,6 +251,29 @@ function enforceUniqueEncargadoOficina(idx,oficinaId){
   });
 }
 function esModoResponsable(){return deptoActivo==='responsables'||rolSesion==='responsables';}
+
+// ── VITAL (cargo especial sobre contratista de NCA) ──────────────────────────
+// El cargo 'vital' se guarda en el campo 'cargo' del usuario autorizado.
+function esCargoVital(){
+  if(!esModoResponsable()||!responsableActivo)return false;
+  const u=typeof getUsuarioAutorizadoByNombre==='function'
+    ? getUsuarioAutorizadoByNombre(responsableActivo)
+    : (_usuariosCache||[]).find(x=>agendaNorm(x.nombre||'')===agendaNorm(responsableActivo));
+  return !!(u&&String(u.cargo||'').toLowerCase()==='vital');
+}
+// Retorna true si el usuario VITAL puede actuar sobre la PQRSD indicada
+// (puede enviar correo aunque no tenga la PQRSD asignada)
+function vitalPuedeActuar(e){
+  if(!esCargoVital())return false;
+  if(!e||!esPqrsSecretaria(e))return false;
+  const wf=e._pqrs_workflow||{};
+  return wf.fase===PQRS_WF.VITAL_GESTION||wf.fase===PQRS_WF.PENDIENTE_NOTIF||wf.fase===PQRS_WF.LISTA_ENVIO;
+}
+// Helper para buscar usuario por nombre
+function getUsuarioAutorizadoByNombre(nombre){
+  const n=agendaNorm(String(nombre||'').trim());
+  return (_usuariosCache||[]).find(u=>agendaNorm(String(u.nombre||'').trim())===n)||null;
+}
 // REG_EDIT_SECS → js/constants.js
 function getInstructorByNombre(nombre){
   const n=String(nombre||'').trim();

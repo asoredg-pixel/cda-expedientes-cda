@@ -589,6 +589,136 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
   };
 }
 
+// ----------------------------------------------------------------
+// Drive institucional — carpeta raíz compartida de cdaguaviare1
+// Todas las subidas PQRSD de Guaviare van aquí (oficinas + NCA + secretaría).
+// Guainía y Vaupés usan links manuales (su propio Drive).
+// La carpeta raíz debe compartirse con EDITOR para cada correo de oficina.
+// ----------------------------------------------------------------
+const DRIVE_ROOT_PQRSD_ID = '1SgWKCPR_9FClu4l0oV1kxJoZxUnwRr0k';
+
+// Obtiene el mejor token disponible para subir al Drive institucional.
+// Prioridad: secretaria (cdaguaviare1) > token de oficina conectada.
+function _driveGetBestToken() {
+  const secTok = gmailGetToken();
+  if (secTok && gmailIsTokenValid()) return secTok;
+  const ofiTok = gmailOfiGetToken ? gmailOfiGetToken() : '';
+  if (ofiTok && gmailOfiIsTokenValid && gmailOfiIsTokenValid()) return ofiTok;
+  return '';
+}
+
+// Devuelve true si el depto activo es Guaviare (usa Drive institucional).
+function _driveEsGuaviare() {
+  const d = typeof deptoActivo !== 'undefined' ? deptoActivo : '';
+  return d === 'guaviare' || d === 'secretaria' || d === 'oap_deguv' ||
+         d === 'rn_deguv' || d === 'admin_deguv' || d === 'ds_deguv' ||
+         (typeof rolSesion !== 'undefined' && rolSesion === 'responsables' &&
+          typeof deptoCfg !== 'undefined' && deptoCfg === 'guaviare');
+}
+
+// Obtiene o crea una carpeta dentro de un padre dado usando el token indicado.
+async function _driveEnsureFolder(token, folderName, parentId) {
+  const q = 'name="' + folderName.replace(/"/g, '\\"') +
+            '" and mimeType="application/vnd.google-apps.folder"' +
+            (parentId ? ' and "' + parentId + '" in parents' : '') +
+            ' and trashed=false';
+  const cacheKey = 'sst_df_' + (parentId || 'root') + '_' + folderName.replace(/\s/g, '_');
+  try { const c = sessionStorage.getItem(cacheKey); if (c) return c; } catch (e) {}
+  const res = await fetch(DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) + '&fields=files(id)', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  const data = await res.json();
+  if (data.files && data.files.length > 0) {
+    try { sessionStorage.setItem(cacheKey, data.files[0].id); } catch (e) {}
+    return data.files[0].id;
+  }
+  const body = { name: folderName, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentId) body.parents = [parentId];
+  const cr = await fetch(DRIVE_API_BASE + '/files', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const folder = await cr.json();
+  try { sessionStorage.setItem(cacheKey, folder.id); } catch (e) {}
+  return folder.id;
+}
+
+// Sube un archivo al Drive institucional en la ruta correcta según tipo.
+// tipo: 'radicacion_correo'|'radicacion_ventanilla'|'radicacion_oficio'|
+//       'radicacion_otro'|'respuesta_borrador'|'respuesta_aprobada'|
+//       'respuesta_pendiente'|'soporte_notificacion'|'caratula'
+// pqrsNum: número del expediente, nombre: apellido o asunto para carpeta.
+async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+
+  const anio = new Date().getFullYear().toString();
+  let subcarpetaRaiz, subsubcarpeta;
+
+  if (tipo && tipo.startsWith('radicacion')) {
+    subcarpetaRaiz = 'Radicacion';
+    subsubcarpeta = tipo === 'radicacion_correo'     ? 'Por-correo'  :
+                    tipo === 'radicacion_ventanilla'  ? 'Ventanilla'  :
+                    tipo === 'radicacion_oficio'      ? 'Oficio'      : 'Otros';
+  } else if (tipo === 'respuesta_borrador') {
+    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Pendiente-revision';
+  } else if (tipo === 'respuesta_aprobada') {
+    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Aprobadas';
+  } else if (tipo === 'respuesta_pendiente' || tipo === 'respuesta_vital') {
+    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Pendiente-gestion-vital';
+  } else if (tipo === 'soporte_notificacion') {
+    subcarpetaRaiz = 'Respuestas'; subsubcarpeta = 'Aprobadas';
+  } else {
+    subcarpetaRaiz = 'Caratulas'; subsubcarpeta = anio;
+  }
+
+  // Construir ruta: raíz / subcarpetaRaiz / subsubcarpeta / anio / PQRSD-{num}-{nombre}
+  const r1 = await _driveEnsureFolder(token, subcarpetaRaiz, DRIVE_ROOT_PQRSD_ID);
+  const r2 = await _driveEnsureFolder(token, subsubcarpeta, r1);
+  const r3 = subcarpetaRaiz !== 'Caratulas' ? await _driveEnsureFolder(token, anio, r2) : r2;
+  let folderId = r3;
+  if (pqrsNum) {
+    const carpNom = 'PQRSD-' + pqrsNum + (nombreCarpeta ? '-' + nombreCarpeta.slice(0, 30) : '');
+    folderId = await _driveEnsureFolder(token, carpNom, r3);
+  }
+
+  // Upload multipart
+  const form = new FormData();
+  const meta = { name: filename, mimeType: mimeType, parents: [folderId] };
+  form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+  form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType }));
+  const up = await fetch(DRIVE_UPLOAD_URL, {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
+  });
+  if (!up.ok) { const t = await up.text().catch(() => ''); throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120)); }
+  const file = await up.json();
+
+  // Compartir como lector público (anyoneWithLink)
+  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  }).catch(() => {});
+
+  return {
+    fileId: file.id,
+    driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
+    previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
+    nombre: filename
+  };
+}
+
+// Versión base64url para adjuntos de correo (usa la misma infraestructura).
+async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, tipo, pqrsNum, nombreCarpeta) {
+  const b64 = base64urlData.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mimeType });
+  return driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta);
+}
+
 // Auto-upload adjuntos al radicar desde correo si aún no se han subido.
 // Llamada desde pqrs.js antes de guardar el expediente.
 async function gmailAutoUploadPendingAttachments() {
@@ -664,6 +794,10 @@ async function gmailSend(to, subject, htmlBody, threadId) {
   const body = { raw };
   if (threadId) body.threadId = threadId;
   return gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', body);
+}
+// Alias used by core.js workflow (sends via secretary token)
+async function gmailSendMessage(to, subject, htmlBody) {
+  return gmailSend(to, subject, htmlBody);
 }
 
 async function reenviarEmailAOficina(msg, ofiId, expId) {
@@ -1251,9 +1385,11 @@ async function gmailSubirAdjuntosYVincular() {
 // ================================================================
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
+// drive.file: needed for offices to upload to the institutional shared Drive folder
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
-  'https://www.googleapis.com/auth/gmail.send'
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/drive.file'
 ].join(' ');
 const GMAIL_OFI_SYS_LABELS = new Set([
   'INBOX','UNREAD','SENT','DRAFT','IMPORTANT','STARRED',
@@ -1843,6 +1979,12 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
     '--' + boundary + '--'
   ].filter(l => l !== null).join('\r\n');
   return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+
+// Alias used by core.js workflow — sends a plain HTML email using the office token
+async function gmailOfiSendMessage(to, subject, htmlBody) {
+  const mime = _gmailOfiBuildMime(to, '', subject, htmlBody, '');
+  await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
 
 async function gmailOfiSendCompose() {
