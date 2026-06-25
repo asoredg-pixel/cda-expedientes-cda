@@ -2189,17 +2189,27 @@ function _gmailPqrsRespCandidatas() {
 
 function gmailFiltrarPqrsRespSug(inp) {
   const q = (inp && inp.value || '').trim().toLowerCase();
+  const box = document.getElementById('gmail-resp-pqrs-sug');
+  if (!box) return;
+  // Solo buscar cuando el usuario escribe (no al abrir/focus). Números: 1+ dígito; texto: 2+ chars.
+  const minLen = /^\d+$/.test(q) ? 1 : 2;
+  if (q.length < minLen) {
+    box.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
   const list = _gmailPqrsRespCandidatas().filter(function(e) {
-    if (!q) return true;
     const num = String(e._exp || '').toLowerCase();
     const asunto = String(e.f_f1 || e._pqrs_detalle || '').toLowerCase();
     const nom = (typeof getNom === 'function' ? getNom(e) : '').toLowerCase();
     return num.includes(q) || asunto.includes(q) || nom.includes(q);
-  }).slice(0, 12);
+  }).slice(0, 10);
   window._gmailPqrsRespSugList = list;
-  const box = document.getElementById('gmail-resp-pqrs-sug');
-  if (!box) return;
-  if (!list.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  if (!list.length) {
+    box.style.display = 'block';
+    box.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--tx3)">Sin coincidencias. Pruebe con el número o parte del asunto.</div>';
+    return;
+  }
   box.style.display = 'block';
   box.innerHTML = list.map(function(ex, i) {
     const asunto = ex.f_f1 || ex._pqrs_detalle || '—';
@@ -2208,11 +2218,26 @@ function gmailFiltrarPqrsRespSug(inp) {
   }).join('');
 }
 
+function gmailTogglePqrsRespSearch(show) {
+  const wrap = document.getElementById('gmail-resp-pqrs-search-wrap');
+  const toggle = document.getElementById('gmail-resp-pqrs-toggle-search');
+  const search = document.getElementById('gmail-resp-pqrs-search');
+  const sug = document.getElementById('gmail-resp-pqrs-sug');
+  if (!wrap) return;
+  const abrir = show === undefined ? wrap.style.display === 'none' : !!show;
+  wrap.style.display = abrir ? '' : 'none';
+  if (toggle) toggle.style.display = abrir ? 'none' : '';
+  if (sug && !abrir) { sug.style.display = 'none'; sug.innerHTML = ''; }
+  if (search) {
+    if (abrir) { search.value = ''; setTimeout(function(){ search.focus(); }, 60); }
+    else search.value = '';
+  }
+}
+
 function gmailSetPqrsRespSel(e, opts) {
   opts = opts || {};
   const hid = document.getElementById('gmail-resp-pqrs-hid');
   const chip = document.getElementById('gmail-resp-pqrs-chip');
-  const search = document.getElementById('gmail-resp-pqrs-search');
   const sug = document.getElementById('gmail-resp-pqrs-sug');
   if (hid) hid.value = e ? String(e._exp || '').trim() : '';
   if (chip) {
@@ -2221,19 +2246,16 @@ function gmailSetPqrsRespSel(e, opts) {
       const det = opts.detectada ? ' <span style="font-weight:400;font-size:11px;color:var(--tx2)">— detectada del asunto</span>' : '';
       chip.style.display = '';
       chip.innerHTML =
-        '<div style="padding:10px 12px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r);display:flex;gap:8px;align-items:flex-start">' +
-        '<div style="flex:1;min-width:0">' +
+        '<div style="padding:10px 12px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">' +
         '<div style="font-weight:600;color:var(--bl);font-size:13px">📌 PQRSD #' + escAttr(e._exp) + det + '</div>' +
-        '<div style="font-size:12px;color:var(--tx2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escAttr(asunto.slice(0, 90)) + '</div>' +
-        '</div>' +
-        '<button type="button" class="btn bsm bd2" style="flex-shrink:0;font-size:11px" onclick="gmailClearPqrsRespSel()" title="Quitar selección">✕</button>' +
+        '<div style="font-size:12px;color:var(--tx2);margin-top:2px">' + escAttr(asunto.slice(0, 90)) + '</div>' +
         '</div>';
+      gmailTogglePqrsRespSearch(false);
     } else {
       chip.style.display = 'none';
       chip.innerHTML = '';
     }
   }
-  if (search && e) search.value = '';
   if (sug) { sug.style.display = 'none'; sug.innerHTML = ''; }
   if (e && !opts.keepEmail) {
     const emailInp = document.getElementById('gmail-resp-pqrs-email');
@@ -2250,8 +2272,7 @@ function gmailPickPqrsRespSug(idx) {
 
 function gmailClearPqrsRespSel() {
   gmailSetPqrsRespSel(null);
-  const search = document.getElementById('gmail-resp-pqrs-search');
-  if (search) { search.value = ''; search.focus(); }
+  gmailTogglePqrsRespSearch(true);
 }
 
 // ---- Responder PQRSD desde Correos (todas las oficinas) ----
@@ -2283,7 +2304,7 @@ function gmailOfiVincularRespuestaPqrs() {
     '<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow(\'gmail-resp-adj-rows\')">🔗 + Link Drive</button>' +
     '</div>';
   const adjInfo = usaDriveInst
-    ? '<div style="font-size:11px;color:var(--tx2);margin-top:4px">' + (hayToken ? 'Los archivos se subirán al Drive institucional.' : 'Conecte su correo para subir archivos al Drive.') + '</div>'
+    ? '<div style="font-size:11px;color:var(--tx2);margin-top:4px">' + (hayToken ? 'Los archivos se suben al Drive institucional en <em>Respuestas → Aprobadas → año → mes → PQRSD-{número}</em>.' : 'Conecte su correo para subir archivos al Drive.') + '</div>'
     : '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue links de Drive de su carpeta personal.</div>';
 
   body.innerHTML =
@@ -2292,9 +2313,15 @@ function gmailOfiVincularRespuestaPqrs() {
     '<div class="fld" style="margin-bottom:10px"><label>PQRSD a cerrar</label>' +
     '<input type="hidden" id="gmail-resp-pqrs-hid" value="">' +
     '<div id="gmail-resp-pqrs-chip" style="display:none;margin-top:4px;margin-bottom:6px"></div>' +
-    '<input type="text" id="gmail-resp-pqrs-search" placeholder="Buscar PQRSD por número, interesado o asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;margin-top:4px" oninput="gmailFiltrarPqrsRespSug(this)" onfocus="gmailFiltrarPqrsRespSug(this)">' +
-    '<div id="gmail-resp-pqrs-sug" style="max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);margin-top:4px;display:none"></div>' +
+    '<button type="button" class="btn bsm bd2" id="gmail-resp-pqrs-toggle-search" style="margin-top:4px;font-size:12px" onclick="gmailTogglePqrsRespSearch(true)">🔍 Buscar otra PQRSD</button>' +
+    '<div id="gmail-resp-pqrs-search-wrap" style="display:none;margin-top:6px">' +
+    '<div style="position:relative">' +
+    '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.5;pointer-events:none">🔍</span>' +
+    '<input type="text" id="gmail-resp-pqrs-search" placeholder="Escriba número, asunto o interesado…" style="width:100%;padding:8px 8px 8px 32px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box" oninput="gmailFiltrarPqrsRespSug(this)">' +
     '</div>' +
+    '<div id="gmail-resp-pqrs-sug" style="max-height:160px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);margin-top:4px;display:none"></div>' +
+    '<button type="button" class="btn bsm" style="margin-top:6px;font-size:11px" onclick="gmailTogglePqrsRespSearch(false)">Cancelar búsqueda</button>' +
+    '</div></div>' +
 
     '<div class="fg" style="margin-bottom:10px">' +
     '<div class="fld"><label>Fecha de la respuesta</label><input type="date" id="gmail-resp-pqrs-fecha" value="' + (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0,10)) + '"></div>' +
@@ -2315,8 +2342,12 @@ function gmailOfiVincularRespuestaPqrs() {
 
   ov.classList.add('on');
   window._taskModalCtx = { mode: 'gmailVincularPqrs' };
-  if (detectada) gmailSetPqrsRespSel(detectada, { detectada: true, keepEmail: true });
-  setTimeout(function(){ var s = document.getElementById('gmail-resp-pqrs-search'); if (s && !detectada) s.focus(); }, 80);
+  if (detectada) {
+    gmailSetPqrsRespSel(detectada, { detectada: true, keepEmail: true });
+  } else {
+    const toggle = document.getElementById('gmail-resp-pqrs-toggle-search');
+    if (toggle) toggle.textContent = '🔍 Buscar PQRSD';
+  }
 }
 
 function _gmailOfiParseFrom(str) {
