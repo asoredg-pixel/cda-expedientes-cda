@@ -2286,12 +2286,27 @@ function initPqrsSolRespCompareTab(){
   renderPqrsSolRespCompareStack(e,t);
 }
 function getDocsPqrsRespuestaCiudadano(e){
-  if(!e||!esPqrsSecretaria(e)||!pqrsEstaCerrada(e))return[];
+  if(!e||!esPqrsSecretaria(e))return[];
   const docs=[];
   const push=(url,preview,label,mime,fecha,tipo)=>{
     if(!url&&!preview)return;
     docs.push({url:url||preview,preview:preview||url,label:label||'Respuesta PQRSD',tipo:tipo||'Respuesta oficial PQRSD',mime:mime||'',fecha:fecha||e._pqrs_respuesta_fecha||''});
   };
+  // Workflow docs (from Sprint 3-7)
+  if(typeof getPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e);
+    if(wf&&Array.isArray(wf.documentos)){
+      wf.documentos.forEach((d,i)=>{
+        if(!d.driveLink)return;
+        const lbl=d.tipo==='oficio_firmado'?'Oficio firmado por el Director':
+                   d.tipo==='archivo'?'Documento adjunto':
+                   d.tipo==='correo'?'Correo enviado al ciudadano':
+                   d.nombre||('Documento '+(i+1));
+        push(d.driveLink,d.previewLink||d.driveLink,lbl,d.mime||'',wf.fecha_respuesta||e._pqrs_respuesta_fecha||'','Respuesta oficial PQRSD');
+      });
+    }
+  }
+  // Legacy links
   if(e._pqrs_respuesta_link)push(e._pqrs_respuesta_link,e._pqrs_respuesta_link,'Respuesta PQRSD','',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD');
   (e._pqrs_respuesta_links||[]).forEach((u,i)=>push(u,u,'Respuesta '+(i+1),'',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD'));
   (e._pqrs_respuesta_soportes||[]).forEach(s=>push(s.url,s.preview||s.url,s.label||'Respuesta',s.mime||'',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD'));

@@ -294,6 +294,26 @@ async function gmailGetOrCreateLabel(labelName) {
   return label.id;
 }
 
+// Apply "RAD APP" label to a message — works with secretary token (primary)
+async function _gmailApplyRadLabel(messageId) {
+  if (!messageId) return;
+  // Try secretary token first, then office token
+  const useSec = gmailIsTokenValid();
+  const useOfi = !useSec && gmailOfiIsTokenValid && gmailOfiIsTokenValid();
+  if (!useSec && !useOfi) return;
+  let labelId = _gmailRadicadoLabelId;
+  if (!labelId) {
+    try { labelId = _gmailRadicadoLabelId = await gmailGetOrCreateLabel(GMAIL_RADICADO_LABEL); } catch(e) { console.warn('Label get:', e); }
+  }
+  if (!labelId) return;
+  const modify = { addLabelIds: [labelId] };
+  if (useSec) {
+    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify', modify);
+  } else {
+    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + messageId + '/modify', modify);
+  }
+}
+
 async function gmailMarkAsRead(messageId) {
   if (!messageId || !gmailIsTokenValid()) return;
   try {
@@ -721,35 +741,53 @@ async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, ti
 
 // Auto-upload adjuntos al radicar desde correo si aún no se han subido.
 // Llamada desde pqrs.js antes de guardar el expediente.
-async function gmailAutoUploadPendingAttachments() {
+async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
   if (!window._gmailPendingMsgId) return;           // no viene de Gmail
   if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) return; // ya subidos
   const ed = window._gmailPendingEmailData;
-  if (!ed || !Array.isArray(ed.adjuntosInfo) || !ed.adjuntosInfo.length) return; // sin adjuntos
   if (!_gmailCurrentMsg || _gmailCurrentMsg.id !== window._gmailPendingMsgId) return; // sin msg en memoria
   if (!gmailIsTokenValid()) {
     notif('⚠️ La sesión de Gmail expiró. Los adjuntos NO se vincularán a este PQRSD. Reconecte la bandeja y vuelva a radicar.', 'err');
     return;
   }
   try {
-    notif('📎 Subiendo adjuntos a Drive…', 'info');
-    const files = await subirAdjuntosEmailADrive(_gmailCurrentMsg);
+    notif('📎 Subiendo correo y adjuntos a Drive institucional…', 'info');
+    const files = await subirAdjuntosEmailADrive(_gmailCurrentMsg, expIdHint, nombreHint);
     if (files && files.length) {
       window._gmailPendingAttachments = files;
-      notif('✅ ' + files.length + ' adjunto(s) subido(s) a Drive automáticamente', 'ok');
+      notif('✅ ' + files.length + ' elemento(s) subido(s) al Drive institucional', 'ok');
+    }
+    // Also upload email body as HTML file
+    if (ed && ed.cuerpoHtml) {
+      try {
+        const htmlBlob = new Blob([ed.cuerpoHtml], { type: 'text/html' });
+        const asunto = (ed.asunto || 'correo').replace(/[<>:"/\\|?*]/g, '_').slice(0, 60);
+        const htmlFile = await driveUploadInstitutional(htmlBlob, 'correo_' + asunto + '.html', 'text/html', 'radicacion_correo', expIdHint || '', nombreHint || '');
+        if (htmlFile && !window._gmailPendingAttachments) window._gmailPendingAttachments = [];
+        if (htmlFile) window._gmailPendingAttachments.push(htmlFile);
+      } catch (e) { console.warn('Upload email body HTML:', e); }
     }
   } catch (e) {
     console.warn('gmailAutoUploadPendingAttachments:', e.message);
   }
 }
-async function subirAdjuntosEmailADrive(msg) {
+
+async function subirAdjuntosEmailADrive(msg, expIdHint, nombreHint) {
   const parts = gmailExtractParts(msg.payload);
   const results = [];
+  const pqrsNum = expIdHint || '';
+  const nombreCarpeta = nombreHint || '';
   for (const att of parts.attachments) {
     if (!att.attachmentId) continue;
     try {
       const data = await gmailGetAttachment(msg.id, att.attachmentId);
-      const file = await driveUploadFile(att.filename, att.mimeType, data);
+      let file;
+      if (_driveEsGuaviare()) {
+        // Use institutional Drive with correct folder type
+        file = await driveUploadInstitutionalB64(att.filename, att.mimeType || 'application/octet-stream', data, 'radicacion_correo', pqrsNum, nombreCarpeta);
+      } else {
+        file = await driveUploadFile(att.filename, att.mimeType, data);
+      }
       results.push(file);
     } catch (e) {
       console.error('Error subiendo adjunto:', att.filename, e);
@@ -1824,6 +1862,10 @@ function _renderGmailOfiMsgView(msg) {
     ? '<button type="button" class="gm-action-btn gm-radicar-btn" onclick="gmailOfiRadicarDesdeCorreo()">📋 Radicar desde este correo</button>'
     : '';
 
+  // Responder PQRSD: permite a cualquier oficina vincular este correo como respuesta oficial
+  const pqrsRelacionada = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg._pqrsVinculada || '' : '';
+  const respPqrsBtn = '<button type="button" class="gm-action-btn" style="background:var(--bll);border:1px solid var(--bl);color:var(--bl)" onclick="gmailOfiVincularRespuestaPqrs()" title="Abrir modal para elegir PQRSD y registrar este correo como respuesta oficial">📨 Responder PQRSD</button>';
+
   viewEl.innerHTML =
     '<div class="gm-msg-header">' +
       '<h2 class="gm-msg-title">' + escAttr(subject) + '</h2>' +
@@ -1837,6 +1879,7 @@ function _renderGmailOfiMsgView(msg) {
       '<div class="gm-msg-actions">' +
         (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiReplyCurrent()">↩ Responder</button>' : '') +
         '<button type="button" class="gm-action-btn" onclick="gmailOfiForwardCurrent()">↪ Reenviar</button>' +
+        respPqrsBtn +
         radicarBtn +
       '</div>' +
     '</div>' +
@@ -2021,6 +2064,163 @@ async function gmailOfiSaveDraft() {
     gmailOfiDiscardDraft();
     setTimeout(_gmailOfiUpdateBadges, 600);
   } catch(e) { notif('Error al guardar borrador: ' + e.message, 'err'); }
+}
+
+// ---- Responder PQRSD desde Correos (todas las oficinas) ----
+// El usuario elige la PQRSD a vincular con el mensaje actual (en vista o a componer)
+function gmailOfiVincularRespuestaPqrs() {
+  // Collect PQRSDs assigned to this office that are open
+  const depto = typeof deptoActivo !== 'undefined' ? deptoActivo : '';
+  const pqrsAbiertas = (typeof exps !== 'undefined' ? exps : []).filter(function(e) {
+    if (!e || !(e._radicado_secretaria || e._es_pqrs)) return false;
+    if (typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e)) return false;
+    if (e._pqrs_oficina && e._pqrs_oficina !== depto &&
+        !(typeof esNcaDeguv === 'function' && esNcaDeguv() && e._pqrs_oficina === 'guaviare') &&
+        !(typeof esCargoVital === 'function' && esCargoVital())) return false;
+    return true;
+  });
+
+  if (!pqrsAbiertas.length) {
+    notif('No hay PQRSD abiertas asignadas a su oficina.', 'warn');
+    return;
+  }
+
+  // Build options list
+  const opts = pqrsAbiertas.map(function(e) {
+    const asunto = e.f_f1 || e._pqrs_detalle || '—';
+    return '<option value="' + escAttr(e._exp) + '">' + escAttr(e._exp) + ' — ' + escAttr(asunto.slice(0, 60)) + '</option>';
+  }).join('');
+
+  // Show quick modal using task-modal
+  if (typeof abrirPqrsModalPrep === 'function') abrirPqrsModalPrep();
+  const ov = document.getElementById('task-modal-overlay');
+  const tit = document.getElementById('task-modal-title');
+  const body = document.getElementById('task-modal-body');
+  if (!ov || !body) return;
+  if (tit) tit.textContent = 'Vincular correo como respuesta PQRSD';
+  const msg = _gmailOfiCurrentMsg;
+  const fromEmail = msg ? _gmailOfiParseFrom(msg.payload && msg.payload.headers ? msg.payload.headers.find(h => h.name === 'From') && msg.payload.headers.find(h => h.name === 'From').value || '' : '') : {email:'',name:''};
+  const subject = msg ? (msg.payload && msg.payload.headers && (msg.payload.headers.find(h => h.name === 'Subject') || {}).value || '') : '';
+
+  body.innerHTML =
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Este correo quedará registrado como la notificación oficial enviada al ciudadano y cerrará la PQRSD.</div>' +
+    '<div class="fld" style="margin-bottom:10px"><label>Seleccione la PQRSD a cerrar</label>' +
+    '<select id="gmail-resp-pqrs-sel" style="margin-top:4px;width:100%"><option value="">— Elegir PQRSD —</option>' + opts + '</select></div>' +
+    '<div class="fg" style="margin-bottom:10px">' +
+    '<div class="fld"><label>Fecha de la respuesta</label><input type="date" id="gmail-resp-pqrs-fecha" value="' + (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0,10)) + '"></div>' +
+    '<div class="fld"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="gmail-resp-pqrs-oficio" placeholder="OFI-2026-045"></div>' +
+    '</div>' +
+    '<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano al que se respondió</label>' +
+    '<input type="email" id="gmail-resp-pqrs-email" value="' + escAttr(fromEmail.email || '') + '" style="margin-top:4px"></div>' +
+    '<div class="fld" style="margin-bottom:10px"><label>Resumen de la respuesta</label>' +
+    '<textarea id="gmail-resp-pqrs-cuerpo" placeholder="Resuma la respuesta enviada por correo…" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">' + escAttr(subject) + '</textarea></div>' +
+    '<div class="fx" style="gap:8px;flex-wrap:wrap">' +
+    '<button type="button" class="btn bsm bp" onclick="gmailOfiConfirmarRespuestaPqrs()">✅ Registrar como respuesta oficial</button>' +
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>' +
+    '</div>';
+
+  ov.classList.add('on');
+  window._taskModalCtx = { mode: 'gmailVincularPqrs' };
+}
+
+function _gmailOfiParseFrom(str) {
+  str = str || '';
+  const m = str.match(/^(.+?)\s*<([^>]+)>$/);
+  if (m) return { name: m[1].trim(), email: m[2].trim() };
+  return { name: '', email: str.trim() };
+}
+
+async function gmailOfiConfirmarRespuestaPqrs() {
+  const expId = String((document.getElementById('gmail-resp-pqrs-sel') || {}).value || '').trim();
+  const fecha = String((document.getElementById('gmail-resp-pqrs-fecha') || {}).value || '').trim();
+  const oficio = String((document.getElementById('gmail-resp-pqrs-oficio') || {}).value || '').trim();
+  const ciudEmail = String((document.getElementById('gmail-resp-pqrs-email') || {}).value || '').trim().toLowerCase();
+  const cuerpo = String((document.getElementById('gmail-resp-pqrs-cuerpo') || {}).value || '').trim();
+
+  if (!expId) { notif('Seleccione la PQRSD a cerrar', 'err'); return; }
+  if (!fecha) { notif('Indique la fecha de la respuesta', 'err'); return; }
+  if (!cuerpo) { notif('Escriba el resumen de la respuesta', 'err'); return; }
+
+  const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === expId);
+  if (!e) { notif('PQRSD no encontrada', 'err'); return; }
+
+  // Build workflow patch — mark as closed via email
+  if (typeof setPqrsWorkflow === 'function') {
+    const docs = [];
+    // Add the Gmail thread URL if available
+    const msgId = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg.id : null;
+    if (msgId) docs.push({ nombre: 'Correo enviado (Gmail)', driveLink: 'https://mail.google.com/mail/u/0/#inbox/' + msgId, tipo: 'correo' });
+    setPqrsWorkflow(e, {
+      fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
+      tipo: typeof PQRS_WF_TIPO !== 'undefined' ? PQRS_WF_TIPO.MENSAJE : 'mensaje',
+      canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
+      cuerpo,
+      oficio,
+      fecha_respuesta: fecha,
+      documentos: docs,
+      notificacion_correo: { enviado: true, a: ciudEmail, en: new Date().toISOString() },
+      cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+      cerrado_en: new Date().toISOString()
+    });
+  } else {
+    // Fallback: legacy fields only
+    e._pqrs_estado_oficina = 'cerrado';
+    e._estado = 'Atendido';
+    e._fecha_res = fecha;
+    e._pqrs_respuesta_fecha = fecha;
+    e._pqrs_respuesta_medio = 'electronica';
+    e._pqrs_respuesta_nota = cuerpo;
+    if (oficio) e._pqrs_respuesta_oficio = oficio;
+  }
+
+  if (!Array.isArray(e._pqrs_historial)) e._pqrs_historial = [];
+  e._pqrs_historial.push({
+    tipo: 'notificacion_correo',
+    fecha: fecha,
+    nota: 'Respuesta enviada por correo a ' + (ciudEmail || 'ciudadano') + (oficio ? ' · Oficio ' + oficio : ''),
+    oficina: e._pqrs_oficina || (typeof deptoActivo !== 'undefined' ? deptoActivo : '')
+  });
+
+  if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
+  if (typeof closeTaskModal === 'function') closeTaskModal();
+  if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
+  if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
+  notif('✅ PQRSD ' + expId + ' cerrada como respondida por correo', 'ok');
+
+  // Apply RAD APP label on message (already-sent email)
+  if (_gmailOfiCurrentMsg && _gmailOfiTokenValid()) {
+    try { await _gmailApplyRadLabel(_gmailOfiCurrentMsg.id); } catch (err) { console.warn('Label error:', err); }
+  }
+}
+
+// ---- Abrir compose pre-llenado para responder una PQRSD ----
+// Llama desde la bandeja PQRSD de la oficina para componer la respuesta por correo
+function gmailOfiAbrirComposeRespuestaPqrs(expId) {
+  const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(expId || '').trim());
+  if (!e) { notif('PQRSD no encontrada', 'err'); return; }
+  const ciudEmail = (e._qd_correo || e._pn_correo || '').trim();
+  const asunto = 'Respuesta a su ' + (e._tipo_solicitud || 'solicitud PQRSD') + ' — ' + e._exp;
+  const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
+  const cuerpo = wf.cuerpo || e._pqrs_respuesta_nota || '';
+  // Build document links for compose body
+  const docs = (wf.documentos || []).filter(d => d.driveLink);
+  const linksText = docs.length ? '\n\n' + docs.map(d => d.nombre + ': ' + d.driveLink).join('\n') : '';
+
+  // Navigate to Correos tab and open compose
+  if (typeof showTab === 'function') showTab('correos');
+  setTimeout(function() {
+    if (typeof gmailOfiOpenCompose === 'function') {
+      gmailOfiOpenCompose({
+        to: ciudEmail,
+        subject: asunto,
+        body: cuerpo + linksText
+      });
+      // Store the PQRSD context so we can close it after sending
+      window._gmailOfiPqrsRespCtx = { expId, ciudEmail };
+    } else {
+      notif('Conecte su correo primero para enviar la respuesta.', 'warn');
+    }
+  }, 200);
 }
 
 // ---- Radicar desde correo (secretaría) ----

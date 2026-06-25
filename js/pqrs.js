@@ -168,7 +168,7 @@ async function guardarPqrsSecretaria(){
   const gmailMsgId=window._gmailPendingMsgId||'';
   // Auto-subir adjuntos a Drive si aún no se han subido (secretaria radica sin pulsar "Subir")
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
-    try{await gmailAutoUploadPendingAttachments();}catch(e){console.warn('auto-upload adjuntos:',e);}
+    try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload adjuntos:',e);}
   }
   // Sprint C: capturar adjuntos subidos a Drive
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
@@ -179,6 +179,8 @@ async function guardarPqrsSecretaria(){
   // Si hay adjuntos de Drive y no se puso link manual, usar el primer link como principal
   // El campo _pqrs_gmail_attachments guarda todos los links para acceso completo
   const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
+  // Registrar tipo de radicación en workflow para Drive
+  const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
   // Responsable: encargado configurado para la oficina destino
   const encargadoOfi=typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'';
   const data=normalizePqrsOficinaFields({
@@ -201,7 +203,9 @@ async function guardarPqrsSecretaria(){
     // Sprint C: links de adjuntos subidos a Drive
     _pqrs_gmail_attachments:gmailAtts||null,
     // Sprint E: cuerpo y metadatos del correo para visualización offline por oficinas
-    _gmail_email_data:gmailEmailData
+    _gmail_email_data:gmailEmailData,
+    // Sprint 9: tipo de radicación y workflow inicial
+    _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion})
   });
   exps.push(data);
   if(oficina==='guaviare')ensureTareaPqrsNca(data);
@@ -333,6 +337,9 @@ function pqrsAccionesTablaHtml(e){
   // Responder directo (offices + NCA encargado + secretary)
   if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
     if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
+    // También ofrecer responder directamente por correo desde Correos
+    if(puedeMarcarPqrsRespondida(e)&&(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid()||typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()))
+      h+='<button type="button" class="btn bsm" title="Abrir compose en el módulo Correos para responder al ciudadano" onclick="event.stopPropagation();gmailOfiAbrirComposeRespuestaPqrs(\''+id+'\')">📧 Enviar correo</button> ';
   }
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))h+=pqrsBtnEdit(e._exp,'Editar')+' ';
   if(esSecretaria()&&puedeEliminarPqrs(e))h+='<button type="button" class="btn bsm bd2" onclick="event.stopPropagation();eliminarPqrs(\''+id+'\')">Eliminar</button> ';
@@ -718,6 +725,13 @@ function ciudadanoEventoLabel(h){
   }
   if(h.tipo==='asignacion_oficina')return 'Asignación para atención';
   if(h.tipo==='respuesta_oficina')return 'Respuesta registrada';
+  // Sprint 10: nuevos tipos workflow
+  if(h.tipo==='entrega_respuesta_nca')return 'Respuesta en proceso de revisión interna';
+  if(h.tipo==='revision_nca_aprobado')return 'Respuesta aprobada — en preparación para envío';
+  if(h.tipo==='revision_nca_aprobado_oficio')return 'Respuesta aprobada — pendiente firma oficial';
+  if(h.tipo==='revision_nca_rechazado')return ''; // not shown to citizen
+  if(h.tipo==='vital_firma_completada')return 'Documento oficial firmado — pendiente notificación';
+  if(h.tipo==='notificacion_correo')return 'Respuesta notificada al ciudadano por correo';
   if(h.tipo==='recepcion_nca')return 'Recibido para trámite en NCA DEGUV';
   if(h.tipo==='informativa')return 'Solicitud informativa — atendida';
   return 'Actualización del trámite';
@@ -846,6 +860,24 @@ function buscarExpCiudadano(){
       '<span class="ciudadano-doc-card-tipo">'+escAttr(tipo)+'</span>'+
       '</span></button>';
   }).join(''):'<div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px">'+(pqrsEstaCerrada(e)&&esPqrs?'Sin documentos de respuesta adjuntos':'Sin documentos aprobados aún')+'</div>';
+  // Sprint 10: response summary for closed PQRSDs
+  let respuestaHtml='';
+  if(esPqrs&&pqrsEstaCerrada(e)){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const cuerpo=wf.cuerpo||e._pqrs_respuesta_nota||'';
+    const fechaResp=wf.fecha_respuesta||e._pqrs_respuesta_fecha||'';
+    const oficio=wf.oficio||e._pqrs_respuesta_oficio||'';
+    const canal=wf.canal||e._pqrs_respuesta_medio||'';
+    const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial/Ventanilla',fisica:'Correo físico',pagina:'Página web',aviso:'Por aviso'}[canal]||canal||'';
+    respuestaHtml='<div style="margin-bottom:12px;padding:12px;background:var(--gnl);border:1px solid #b2dfdb;border-radius:var(--r);border-left:4px solid var(--gn)">'+
+      '<div style="font-size:12px;font-weight:700;color:var(--gn);margin-bottom:6px">✅ Esta solicitud fue respondida</div>'+
+      (fechaResp?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Fecha de respuesta: <strong>'+fmtF(fechaResp)+'</strong></div>'):'')+
+      (oficio?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">N° de oficio: <strong>'+escAttr(oficio)+'</strong></div>'):'')+
+      (canalLabel?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Canal de notificación: <strong>'+escAttr(canalLabel)+'</strong></div>'):'')+
+      (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
+      '</div>';
+  }
+
   box.innerHTML='<div style="padding:14px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:16px;font-weight:700;margin-bottom:6px">'+escAttr(e._exp)+'</div>'+
     '<div style="font-size:13px;margin-bottom:4px">Trámite: <strong>'+escAttr(tram?tram.nombre:(esPqrs?'PQRSD':'—'))+'</strong></div>'+
@@ -853,6 +885,7 @@ function buscarExpCiudadano(){
     '<div style="font-size:13px;margin-bottom:4px">Estado actual: <strong>'+escAttr(est)+'</strong></div>'+
     (esPqrs&&e.f_f1?('<div style="font-size:12px;color:var(--tx2)">Asunto: '+escAttr(e.f_f1)+'</div>'):'')+
     '</div>'+
+    respuestaHtml+
     '<div class="ciudadano-result-layout">'+
     '<div><div class="slbl" style="font-size:14px">Línea de tiempo</div><div class="ciudadano-timeline">'+tlHtml+'</div></div>'+
     '<div class="ciudadano-docs-col"><div class="slbl" style="font-size:12px;margin-bottom:6px">Documentos</div>'+docsHtml+'</div>'+
