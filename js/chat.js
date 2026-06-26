@@ -44,6 +44,17 @@ function addChatContactoDepto(add,deptoId,skipEncNombre,opts){
     add({kind:'depto',key:'depto:'+deptoId,label:deptoLbl,deptoId,sub:opts.subFallback||'Departamento'});
   }
 }
+function addChatContactoOficina(add,oficinaId,skipEncNombre,opts){
+  opts=opts||{};
+  if(!oficinaId||oficinaId==='guaviare')return;
+  const enc=getEncargadoOficina(oficinaId);
+  const ofiLbl=labelOficina(oficinaId);
+  if(enc&&enc!==skipEncNombre){
+    add({kind:'ofi',key:'ofi:'+oficinaId,label:enc,oficinaId,sub:opts.subEnc||ofiLbl+' · Encargado'});
+  }else{
+    add({kind:'ofi',key:'ofi:'+oficinaId,label:ofiLbl,oficinaId,sub:opts.subFallback||'Oficina DEGUV'});
+  }
+}
 function addChatContactosOficina(add,oficinaId,skipEncNombre){
   if(!oficinaId||oficinaId==='guaviare')return;
   const enc=getEncargadoOficina(oficinaId);
@@ -123,6 +134,7 @@ function getChatContacts(){
         addChatContactoDepto(add,'guaviare',encYo,{subFallback:'NCA DEGUV (departamento)'});
         return;
       }
+      addChatContactoOficina(add,o.id,encYo);
       addChatContactosOficina(add,o.id,encYo);
     });
     addChatResponsablesOficinaPropia(add,me.oficinaId);
@@ -211,19 +223,45 @@ function initChatSync(convId){
   });
 }
 let _chatNotifyUnsubs=[];
+let _chatNotifySyncTimer=null;
 function stopChatNotifySync(){
   _chatNotifyUnsubs.forEach(function(fn){try{fn();}catch(e){}});
   _chatNotifyUnsubs=[];
+}
+function scheduleChatNotifySync(){
+  clearTimeout(_chatNotifySyncTimer);
+  _chatNotifySyncTimer=setTimeout(function(){
+    _chatNotifySyncTimer=null;
+    initChatNotifySync();
+  },350);
 }
 function chatNotifyConvIds(){
   const me=getChatIdentity();
   if(!me)return[];
   const ids=new Set();
+  function addPair(kA,kB){
+    if(!kA||!kB)return;
+    ids.add(chatConvFirestoreId(chatConvId(kA,kB)));
+  }
   getChatContacts().forEach(function(c){
-    ids.add(chatConvFirestoreId(chatConvId(me.key,c.key)));
+    addPair(me.key,c.key);
     if(me.kind==='depto'&&c.kind==='resp'){
       const enc=getEncargadoDepto(me.deptoId);
-      if(enc)ids.add(chatConvFirestoreId(chatConvId(c.key,'resp:'+enc)));
+      if(enc)addPair(c.key,'resp:'+enc);
+    }
+    if(me.kind==='ofi'){
+      const encYo=getEncargadoOficina(me.oficinaId);
+      const otroOfiId=c.oficinaId||(c.key.startsWith('ofi:')?c.key.slice(4):'');
+      if(c.key.startsWith('resp:')){
+        addPair(me.key,c.key);
+        if(encYo)addPair('resp:'+encYo,c.key);
+      }
+      if(c.key.startsWith('ofi:')&&otroOfiId){
+        const encOtro=getEncargadoOficina(otroOfiId);
+        if(encOtro)addPair(me.key,'resp:'+encOtro);
+        if(encYo)addPair('resp:'+encYo,c.key);
+        if(encYo&&encOtro)addPair('resp:'+encYo,'resp:'+encOtro);
+      }
     }
   });
   return [...ids];
@@ -258,6 +296,7 @@ function initChatNotifySync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   const convIds=chatNotifyConvIds();
+  if(!convIds.length)return;
   convIds.forEach(function(fsConvId){
     let primed=false;
     const unsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
@@ -822,5 +861,11 @@ async function chatEnviarArchivo(fileArg){
   }
 }
 initChatFileDropZone();
+if(!window._chatNotifyFirebaseHook){
+  window._chatNotifyFirebaseHook=true;
+  window.addEventListener('firebase-ready',function(){
+    if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+  });
+}
 
 // ================================================================

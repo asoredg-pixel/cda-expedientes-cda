@@ -256,6 +256,7 @@ async function loadLS(){
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
     postLoadInit();
     updateSyncIndicator('synced');
+    if(document.body.classList.contains('sesion-activa')&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
   }catch(err){
     console.error('Error cargando Firestore:',err);
     _loadLSLocal();
@@ -572,6 +573,8 @@ function suscribirCfgSync(deptoId){
     if(!data||!data.cfg)return;
     cfgByDepto[deptoId]=normalizeCfgObj(data.cfg);
     if(deptoCfg===deptoId)setCfgPtr(deptoId);
+    if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
     if(document.getElementById('pg-cfg')&&document.getElementById('pg-cfg').classList.contains('on')&&typeof renderCfg==='function')renderCfg();
   });
 }
@@ -607,6 +610,7 @@ function initRealtimeSync(){
     // Re-render all views that depend on exps so every role sees new/updated records
     renderTabla();
     renderChatBadge();
+    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
     if(typeof renderSecretariaPqrs==='function')try{renderSecretariaPqrs();}catch(e){}
     if(typeof renderPqrsOficinaInbox==='function')try{renderPqrsOficinaInbox();}catch(e){}
     if(typeof renderActividades==='function')try{renderActividades();}catch(e){}

@@ -241,7 +241,7 @@ function ingresarComoRol(rolId,respNombre){
   if(typeof initChatNotifySync==='function'){
     window._bandejaNotifySeeded=false;
     window._bandejaUnreadKeysPrev=[];
-    initChatNotifySync();
+    scheduleChatNotifySync();
   }
   if(responsableActivo){
     try{localStorage.setItem('sst_responsable',responsableActivo);}catch(e){}

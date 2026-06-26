@@ -8892,7 +8892,7 @@ function updateDeptoUI(){
   updateVerifyBanner();
   renderBandejaDepto();
   renderChatBadge();
-  if(typeof initChatNotifySync==='function')initChatNotifySync();
+  if(typeof initChatNotifySync==='function')scheduleChatNotifySync();
   const btnExport=document.querySelector('.hacts-export-respaldo');
   if(btnExport)btnExport.style.display=ciudadano?'none':'';
   const btnConExport=document.getElementById('btn-export-consulta');
