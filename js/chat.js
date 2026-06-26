@@ -492,7 +492,7 @@ function toggleChatWindow(force){
       });
     }
   }
-  else{window._chatConvActiva=null;window._chatVista='contactos';chatToggleDriveBar(false);initChatSync(null);chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatVista='contactos';initChatSync(null);chatSyncLayout();}
 }
 async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
@@ -621,12 +621,19 @@ function chatMsgDrivePreview(m){
   if(m.file&&m.file.name)return '📎 '+m.file.name;
   return chatMsgDriveUrl(m)?'📄 Documento adjunto':'';
 }
-function chatToggleDriveBar(force){
-  const bar=document.getElementById('chat-drive-bar');
-  if(!bar)return;
-  const show=typeof force==='boolean'?force:!bar.classList.contains('on');
-  bar.classList.toggle('on',show);
-  if(show){const inp=document.getElementById('chat-drive-inp');if(inp){inp.value='';setTimeout(()=>inp.focus(),40);}}
+function chatLinkifyText(text){
+  const s=String(text||'');
+  if(!s)return'';
+  const urlRe=/(https?:\/\/[^\s<>"']+)/gi;
+  let out='',last=0,m;
+  while((m=urlRe.exec(s))){
+    out+=escAttr(s.slice(last,m.index));
+    const url=m[1];
+    out+='<a class="chat-msg-link" href="'+escAttr(url)+'" target="_blank" rel="noopener noreferrer">'+escAttr(url)+'</a>';
+    last=m.index+m[0].length;
+  }
+  out+=escAttr(s.slice(last));
+  return out.replace(/\n/g,'<br>');
 }
 function renderChatMessages(){
   const el=document.getElementById('chat-msgs');
@@ -640,7 +647,7 @@ function renderChatMessages(){
     const sender=chatFromLabel(m);
     let body='';
     if(!mine&&sender)body+='<div style="font-size:10px;font-weight:700;color:var(--bl);margin-bottom:3px">'+escAttr(sender)+'</div>';
-    if(m.text)body+=escAttr(m.text);
+    if(m.text)body+=chatLinkifyText(m.text);
     const driveUrl=chatMsgDriveUrl(m);
     if(driveUrl){
       const chipLbl=(m.file&&m.file.nombre)?escAttr(m.file.nombre):((m.file&&m.file.name)?escAttr(m.file.name):'📄 Documento adjunto');
@@ -689,49 +696,6 @@ async function chatEnviarTexto(){
     renderChatContacts();
     renderChatBadge();
     notif('Error al guardar el mensaje en Firestore','err');
-  }
-}
-async function chatEnviarDriveLink(){
-  const inp=document.getElementById('chat-drive-inp');
-  const convId=window._chatConvActiva;
-  const me=getChatIdentity();
-  if(!inp||!convId||!me)return;
-  const raw=inp.value.trim();
-  if(!raw)return;
-  if(!esLinkDriveValid(raw)){notif('Solo se aceptan links de Google Drive','err');return;}
-  const link=normalizeDriveUrlInput(raw);
-  const keys=convId.split('|');
-  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
-  const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
-  const to=chatContactFromKey(otherKey);
-  const msg={
-    id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
-    convId:chatConvId(me.key,to.key),
-    fromKey:me.key,fromLabel:me.label,
-    toKey:to.key,toLabel:to.label,
-    text:'',
-    driveLink:link,
-    ts:new Date().toISOString(),
-    readBy:chatKeyAliases(me.key).map(chatNormKey)
-  };
-  inp.value='';
-  chatToggleDriveBar(false);
-  chatMensajes.push(msg);
-  renderChatMessages();
-  renderChatContacts();
-  renderChatBadge();
-  const db=window._db;
-  if(!db||!window._fsSetDoc||!window._fsDoc)return;
-  const fsConvId=chatConvFirestoreId(msg.convId);
-  try{
-    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
-  }catch(err){
-    console.error('chatEnviarDriveLink:',fsConvId,msg.id,err);
-    chatMensajes=chatMensajes.filter(m=>m.id!==msg.id);
-    renderChatMessages();
-    renderChatContacts();
-    renderChatBadge();
-    notif('Error al guardar el enlace en Firestore','err');
   }
 }
 let _chatFileUploading=false;
@@ -783,12 +747,6 @@ function initChatFileDropZone(){
     void chatEnviarArchivo(files[0]);
   });
 }
-function chatTriggerArchivo(){
-  const inp=document.getElementById('chat-file-inp');
-  if(!inp||_chatFileUploading)return;
-  inp.value='';
-  try{inp.showPicker();}catch(e){inp.click();}
-}
 async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
@@ -799,7 +757,7 @@ async function chatEnviarArchivo(fileArg){
   if(!file)return;
   const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
   if(file.size>maxBytes){
-    notif('Archivo demasiado grande (máx. 25 MB). Use el botón «Drive» para pegar un enlace.','err');
+    notif('Archivo demasiado grande (máx. 25 MB).','err');
     if(inp)inp.value='';
     return;
   }

@@ -618,7 +618,8 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 // Carpeta raíz PQRSD (cdaguaviare1@gmail.com):
 // https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
 const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
-// Carpeta compartida cdaguaviare1 — adjuntos del chat interno (retención 30 días).
+// Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días):
+// https://drive.google.com/drive/folders/1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU
 const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 
 // Nombres de carpeta mensual (índice = getMonth()).

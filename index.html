@@ -479,15 +479,9 @@
     <div id="chat-main" class="chat-main hidden">
       <div id="chat-drop-overlay" class="chat-drop-overlay" aria-hidden="true"><span>Suelte el archivo aquí para adjuntarlo al chat</span></div>
       <div id="chat-msgs" class="chat-msgs"></div>
-      <div id="chat-drive-bar" class="chat-drive-bar">
-        <input type="url" id="chat-drive-inp" placeholder="https://drive.google.com/… o https://docs.google.com/…" onkeydown="if(event.key==='Enter')chatEnviarDriveLink()">
-        <button type="button" class="btn bsm bp" onclick="chatEnviarDriveLink()">Enviar</button>
-        <button type="button" class="btn bsm" onclick="chatToggleDriveBar(false)" title="Cancelar">✕</button>
-      </div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div class="chat-compose">
-        <label for="chat-file-inp" class="btn bsm btn-chat-file" title="Subir archivo al Drive institucional (máx. 25 MB)">📁</label>
-        <button type="button" class="btn bsm btn-chat-drive" onclick="chatToggleDriveBar()" title="Adjuntar link de Google Drive">📎 Drive</button>
+        <label for="chat-file-inp" class="btn bsm btn-chat-attach" title="Adjuntar archivo (máx. 25 MB)">📎</label>
         <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
         <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
       </div>
