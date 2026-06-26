@@ -1018,6 +1018,8 @@ function actualizarConsultaPqrsUI(){
   const bas=esModoOficinaDeguv()||esSecretaria();
   const qTxt=document.getElementById('q-txt');
   const sl=document.querySelector('#pg-con .card > .slbl');
+  const btnMatriz=document.getElementById('btn-export-matriz-pqrs');
+  if(btnMatriz)btnMatriz.style.display=bas?'':'none';
   if(qTxt&&bas)qTxt.placeholder='N° PQRSD, nombre del interesado, asunto, NIT…';
   else if(qTxt)qTxt.placeholder='Nombre, expediente, resolución, NIT, ciudad…';
   if(sl&&bas)sl.textContent='Consulta PQRSD — búsqueda por número, interesado y asunto';
@@ -9021,11 +9023,170 @@ function exportarActividadesExcel(){
   exportarTablaExcel([{title:'Actividades',hdr,rows}],'actividades-'+labelDepto(deptoActivo).replace(/\W+/g,'-')+'-'+hoy());
 }
 function escCellExcel(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pqrsMatrizEstadoFinal(e){
+  if(!pqrsEstaCerrada(e))return '';
+  if(e._pqrs_informativa)return 'CONFORME';
+  if(pqrsRespuestaEnTermino(e)===false)return 'NO CONFORME';
+  return 'CONFORME';
+}
+function pqrsMatrizCanalLabel(canal){
+  const m={
+    correo:'NOTIFICACIÓN POR CORREO ELECTRÓNICO',
+    whatsapp:'NOTIFICACIÓN POR WHATSAPP',
+    presencial:'NOTIFICACIÓN PERSONAL',
+    fisica:'NOTIFICACIÓN POR CORREO FÍSICO',
+    pagina:'NOTIFICACIÓN POR PÁGINA WEB',
+    aviso:'NOTIFICACIÓN POR AVISO'
+  };
+  return m[canal]||'';
+}
+function pqrsMatrizObservaciones(e){
+  if(!pqrsEstaCerrada(e))return '';
+  const wf=getPqrsWorkflow(e);
+  const canal=wf.canal||e._pqrs_respuesta_medio||'';
+  const parts=[];
+  const canalLbl=pqrsMatrizCanalLabel(canal);
+  if(canalLbl)parts.push(canalLbl);
+  const mn=String(e._medio_notificacion||'').trim();
+  if(mn&&mn!=='no_indica'){
+    const ml=medioNotificacionLabel(mn);
+    if(ml&&!parts.some(p=>p.toLowerCase().includes(String(ml).toLowerCase())))parts.push('Medio notificación: '+ml);
+  }
+  return parts.join(' · ');
+}
+function pqrsMatrizOficinaResponsable(e){
+  const ofi=e._pqrs_oficina||'';
+  if(!ofi||ofi==='secretaria')return labelOficina('secretaria')||'Secretaría DEGUV';
+  return labelOficina(ofi)||ofi;
+}
+function pqrsMatrizDepartamento(e){
+  return String(labelDepto(e._depto||'guaviare')||'Guaviare').toUpperCase();
+}
+function pqrsMatrizDiasRespuesta(e){
+  if(!pqrsEstaCerrada(e))return '';
+  const wf=getPqrsWorkflow(e);
+  const resp=wf.fecha_respuesta||e._pqrs_respuesta_fecha||'';
+  if(!resp)return '';
+  const inicio=e._fecha||e._fecha_solicitud||'';
+  if(!inicio)return '';
+  return String(Math.max(0,diasEntre(inicio,resp)));
+}
+function pqrsMatrizDiasParaVencer(e){
+  const p=getPqrsPlazoInfo(e);
+  if(!p.vence)return '';
+  if(pqrsEstaCerrada(e)){
+    const wf=getPqrsWorkflow(e);
+    const resp=wf.fecha_respuesta||e._pqrs_respuesta_fecha||'';
+    if(resp)return String(diasEntre(resp,p.vence));
+  }
+  return String(diffDias(p.vence));
+}
+function buildPqrsMatrizRow(e,item){
+  const rec=typeof buildPqrsMatrizRecord==='function'?buildPqrsMatrizRecord(e,item):null;
+  if(rec)return[
+    rec.item,fmtF(rec.fechaRecibo),rec.radicadoRecibo,rec.departamento,rec.tipo,rec.nombre,rec.asunto,
+    rec.plazoDias,rec.responsable,fmtF(rec.fechaVence),rec.estado,
+    rec.diasParaVencer===''?'':rec.diasParaVencer,
+    rec.fechaContestacion?fmtF(rec.fechaContestacion):'',
+    rec.radicadoContestacion,
+    rec.diasRespuesta===''?'':rec.diasRespuesta,
+    rec.estadoFinal,rec.observaciones
+  ];
+  e=normalizePqrsOficinaFields(e);
+  const wf=getPqrsWorkflow(e);
+  const p=getPqrsPlazoInfo(e);
+  const plazo=p.plazo||getPqrsPlazoDias(e);
+  const vence=p.vence||'';
+  const cerrada=pqrsEstaCerrada(e);
+  const resp=cerrada?(wf.fecha_respuesta||e._pqrs_respuesta_fecha||''):'';
+  const oficio=cerrada?(wf.oficio||e._pqrs_respuesta_oficio||''):'';
+  return[
+    item,fmtF(e._fecha_solicitud||e._fecha||''),e._exp||'',pqrsMatrizDepartamento(e),e._tipo_solicitud||'',
+    String(e._qd_nombre||e._pn_nombre||e._nombre||'').trim(),String(e.f_f1||e._pqrs_detalle||'').trim(),
+    plazo,pqrsMatrizOficinaResponsable(e),fmtF(vence),getPqrsEstadoDisplay(e),pqrsMatrizDiasParaVencer(e),
+    resp?fmtF(resp):'',oficio,pqrsMatrizDiasRespuesta(e),pqrsMatrizEstadoFinal(e),pqrsMatrizObservaciones(e)
+  ];
+}
+function buildPqrsMatrizSeguimiento(list){
+  let oportunas=0,fuera=0,sinResolver=0,sumDias=0,cntDias=0;
+  list.forEach(e=>{
+    if(!pqrsEstaCerrada(e)){sinResolver++;return;}
+    const d=pqrsMatrizDiasRespuesta(e);
+    if(d!==''){sumDias+=Number(d);cntDias++;}
+    if(e._pqrs_informativa||pqrsRespuestaEnTermino(e)!==false)oportunas++;
+    else fuera++;
+  });
+  const prom=cntDias?String(Math.round(sumDias/cntDias*10)/10):'';
+  return{
+    hdr:['TOTAL PQRSD RECIBIDAS','RESUELTAS OPORTUNAMENTE','RESUELTAS FUERA DE TÉRMINO','SIN RESOLVER','PROMEDIO DÍAS DE RESPUESTA'],
+    rows:[[list.length,oportunas,fuera,sinResolver,prom]]
+  };
+}
+function ordenarListaMatrizPqrs(list){
+  return(list||[]).filter(e=>esPqrsSecretaria(e)).slice().sort((a,b)=>{
+    const fa=String(a._fecha_solicitud||a._fecha||'');
+    const fb=String(b._fecha_solicitud||b._fecha||'');
+    return fa.localeCompare(fb)||String(a._exp||'').localeCompare(String(b._exp||''));
+  });
+}
+async function exportarMatrizPqrsExcel(list,suffix,periodKey){
+  list=ordenarListaMatrizPqrs(list);
+  if(!list.length){notif('Sin PQRSD para exportar en el filtro actual','err');return;}
+  const pk=periodKey||(suffix==='consolidado'?'cons':'q');
+  const periodLbl=typeof labelPeriodo==='function'?labelPeriodo(pk):'';
+  if(typeof exportarMatrizPqrsDesdePlantilla==='function'){
+    try{
+      const ok=await exportarMatrizPqrsDesdePlantilla(list,suffix,periodLbl);
+      if(ok){
+        if(typeof logAudit==='function')logAudit('Exportó matriz oficial PQRSD (plantilla)','pqrsd',null,list.length+' solicitud(es)');
+        return;
+      }
+    }catch(err){
+      console.warn('exportarMatrizPqrsDesdePlantilla:',err);
+      notif('Plantilla no disponible — generando Excel simplificado ('+String(err.message||err).slice(0,60)+')','warn');
+    }
+  }
+  const hdr=[
+    'ITEM','FECHA RECIBO','RADICADO RECIBO','DEPARTAMENTO','TIPO PETICIÓN','NOMBRE DEL PETICIONARIO','ASUNTO',
+    'TIEMPO DE RESPUESTA (días)','RESPONSABLE DEPENDENCIA','FECHA VENCIMIENTO','ESTADO','DÍAS PARA VENCIMIENTO',
+    'FECHA CONTESTACIÓN','RADICADO CONTESTACIÓN','DÍAS DE RESPUESTA','ESTADO FINAL','OBSERVACIONES'
+  ];
+  const rows=list.map((e,i)=>buildPqrsMatrizRow(e,i+1));
+  const seg=buildPqrsMatrizSeguimiento(list);
+  exportarTablaExcel([
+    {
+      title:'CONSOLIDADO PQRSD',
+      preamble:[
+        'FORMATO: CONTROL PETICIONES, QUEJAS, RECLAMOS, SUGERENCIAS Y DENUNCIAS — PQRSD',
+        'UNIDAD DE GESTIÓN: SECRETARÍA GENERAL — CDA DEGUV',
+        'CÓDIGO: AGJ-CP-9-PR-02-FR-02 · VERSIÓN: 5',
+        'FECHA CORTE: '+fmtF(hoy())+(periodLbl?' · Período filtro: '+periodLbl:'')
+      ],
+      hdr,rows
+    },
+    {title:'SEGUIMIENTO',hdr:seg.hdr,rows:seg.rows}
+  ],'matriz-pqrs-'+(suffix||'reporte')+'-'+hoy());
+  if(typeof logAudit==='function')logAudit('Exportó matriz oficial PQRSD','pqrsd',null,list.length+' solicitud(es)');
+}
+function exportarMatrizPqrsConsulta(){
+  exportarMatrizPqrsExcel(window._conExportList||[],'consulta','q');
+}
+function exportarMatrizPqrsSecretaria(){
+  exportarMatrizPqrsExcel(typeof getSecretariaPqrsAll==='function'?getSecretariaPqrsAll():[],'secretaria','q');
+}
+function exportarMatrizPqrsConsolidado(){
+  const list=typeof filterExpsPeriodo==='function'?filterExpsPeriodo(expsAmbito().filter(esPqrsSecretaria),'cons'):[];
+  exportarMatrizPqrsExcel(list,'consolidado','cons');
+}
 function exportarTablaExcel(sheets,filename){
   sheets=sheets||[];
   if(!sheets.length||!sheets[0].rows||!sheets[0].rows.length){notif('Sin datos para exportar','err');return;}
   let html='<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>';
   sheets.forEach(sh=>{
+    if(sh.preamble&&sh.preamble.length){
+      sh.preamble.forEach(line=>{html+='<p style="margin:2px 0;font-size:12px">'+escCellExcel(line)+'</p>';});
+      html+='<br>';
+    }
     html+='<h3>'+escCellExcel(sh.title||'Datos')+'</h3><table border="1"><thead><tr>'+
       (sh.hdr||[]).map(h=>'<th>'+escCellExcel(h)+'</th>').join('')+'</tr></thead><tbody>'+
       (sh.rows||[]).map(r=>'<tr>'+r.map(c=>'<td>'+escCellExcel(c)+'</td>').join('')+'</tr>').join('')+

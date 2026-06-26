@@ -4,9 +4,9 @@
   "description": "Sistema de Seguimiento de Trámites CDA Guaviare",
   "scripts": {
     "backup": "node backup-firestore.js",
-    "test":       "node --experimental-vm-modules node_modules/vitest/vitest.mjs run",
+    "test": "node --experimental-vm-modules node_modules/vitest/vitest.mjs run",
     "test:watch": "node --experimental-vm-modules node_modules/vitest/vitest.mjs",
-    "test:ui":    "node --experimental-vm-modules node_modules/vitest/vitest.mjs --ui"
+    "test:ui": "node --experimental-vm-modules node_modules/vitest/vitest.mjs --ui"
   },
   "type": "module",
   "dependencies": {
@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "happy-dom": "^20.10.6",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "xlsx": "^0.18.5"
   }
 }
