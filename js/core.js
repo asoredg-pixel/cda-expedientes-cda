@@ -5831,6 +5831,22 @@ function eliminarBandejaItemIdx(idx,ev){
     renderBandejaDepto();
   });
 }
+function bandejaItemDesktopText(it){
+  if(!it)return'Nueva notificación';
+  const tit=it.tipo==='comentario'?(it.autor+' · '+it.exp):
+    it.tipo==='agenda'?(it.autor+' · Agenda'):
+    it.tipo==='agenda_recordatorio'?(it.autor+' · Recordatorio agenda'):
+    it.tipo==='auto_venc1'||it.tipo==='auto_venc3'?('Alerta · '+it.exp):
+    it.tipo==='auto_exp80'?('Plazo expediente · '+it.exp):
+    it.tipo==='obsdocumento'?(it.autor+' · '+it.exp):
+    it.tipo==='notadoc'?(it.autor+' · '+it.exp):
+    it.tipo==='devolucion'?('Departamento · '+it.exp):
+    it.tipo==='sol_traslado'||it.tipo==='sol_eliminacion'?('Solicitud · '+it.exp):
+    it.tipo==='pqrs_traslado'||it.tipo==='pqrs_fecha_sol'||it.tipo==='pqrs_aviso'?('PQRSD · '+it.exp):
+    ((it.responsable||'')+' · '+(it.exp||''));
+  const txt=it.tipo==='porverificar'?(it.texto||it.desc):it.texto;
+  return String(tit||'').trim()+(txt?(' — '+String(txt).slice(0,100)):'');
+}
 function bandejaItemKey(it){
   if(it.tipo==='comentario')return 'c|'+it.exp+'|'+it.taskId+'|'+it.cidx+'|'+(it.fecha||'');
   if(it.tipo==='obsdocumento')return 'ndall|'+it.exp+'|'+it.taskId+'|'+(it.batch||'');
@@ -6136,6 +6152,31 @@ function renderBandejaDepto(){
   const unreadItems=items.filter(it=>!leidos.includes(bandejaItemKey(it)));
   const readItems=items.filter(it=>leidos.includes(bandejaItemKey(it)));
   const unread=unreadItems.length;
+  const unreadKeys=unreadItems.map(bandejaItemKey);
+  if(!window._bandejaNotifySeeded){
+    window._bandejaUnreadKeysPrev=unreadKeys;
+    window._bandejaNotifySeeded=true;
+  }else if(typeof sstShowDesktopNotify==='function'){
+    const panelOpen=!!(document.getElementById('depto-inbox-panel')&&document.getElementById('depto-inbox-panel').classList.contains('on'));
+    const skip=panelOpen&&!document.hidden;
+    const prev=window._bandejaUnreadKeysPrev||[];
+    const newKeys=unreadKeys.filter(function(k){return !prev.includes(k);});
+    if(!skip&&newKeys.length){
+      const item=unreadItems.find(function(it){return bandejaItemKey(it)===newKeys[0];});
+      if(item){
+        sstShowDesktopNotify('CDA — Campanita',bandejaItemDesktopText(item),{
+          tag:'bandeja-'+newKeys[0],
+          onClick:function(){if(typeof toggleBandejaDepto==='function')toggleBandejaDepto();}
+        });
+      }
+      if(newKeys.length>1){
+        setTimeout(function(){
+          sstShowDesktopNotify('CDA — Campanita',newKeys.length-1+' notificación(es) adicional(es)',{tag:'bandeja-batch-'+Date.now()});
+        },600);
+      }
+    }
+  }
+  window._bandejaUnreadKeysPrev=unreadKeys;
   if(badge){
     if(unread>0){
       badge.textContent=unread;
@@ -8849,6 +8890,7 @@ function updateDeptoUI(){
   updateVerifyBanner();
   renderBandejaDepto();
   renderChatBadge();
+  if(typeof initChatNotifySync==='function')initChatNotifySync();
   const btnExport=document.querySelector('.hacts-export-respaldo');
   if(btnExport)btnExport.style.display=ciudadano?'none':'';
   const btnConExport=document.getElementById('btn-export-consulta');

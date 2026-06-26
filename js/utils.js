@@ -168,3 +168,66 @@ function updateSyncIndicator(estado){
   const textos={syncing:'⏳ Guardando…',synced:'✅ Sincronizado',offline:'📴 Modo local',error:'⚠️ Error al guardar'};
   el.textContent=textos[estado]||'';
 }
+
+// ── Notificaciones de escritorio (Web Notifications API) ───────────────────
+const _sstDeskNotifyRecent=new Map();
+function sstDesktopNotifySupported(){
+  return typeof window!=='undefined'&&'Notification' in window;
+}
+function sstDesktopNotifyGranted(){
+  return sstDesktopNotifySupported()&&Notification.permission==='granted';
+}
+async function sstRequestDesktopNotifyPermission(){
+  if(!sstDesktopNotifySupported())return false;
+  if(Notification.permission==='granted')return true;
+  if(Notification.permission==='denied')return false;
+  try{
+    const r=await Notification.requestPermission();
+    return r==='granted';
+  }catch(e){
+    return false;
+  }
+}
+function sstInitDesktopNotify(){
+  if(!sstDesktopNotifySupported())return;
+  if(Notification.permission==='granted'||Notification.permission==='denied')return;
+  setTimeout(function(){
+    if(!document.body.classList.contains('sesion-activa'))return;
+    notif('Active las notificaciones del navegador para recibir avisos de chat y campanita en el escritorio.','info');
+    void sstRequestDesktopNotifyPermission();
+  },2500);
+}
+function sstShowDesktopNotify(title,body,opts){
+  opts=opts||{};
+  if(!document.body.classList.contains('sesion-activa'))return false;
+  if(!sstDesktopNotifyGranted())return false;
+  const tag=String(opts.tag||title||'sst');
+  const now=Date.now();
+  const prev=_sstDeskNotifyRecent.get(tag);
+  if(prev&&now-prev<4000)return false;
+  _sstDeskNotifyRecent.set(tag,now);
+  try{
+    let icon=opts.icon||'';
+    if(!icon){
+      try{icon=new URL('assets/logo-cda-icon.png',window.location.href).href;}catch(e){}
+    }
+    const n=new Notification(String(title||'CDA Expedientes'),{
+      body:String(body||'').slice(0,240),
+      icon:icon||undefined,
+      tag:tag,
+      silent:!!opts.silent
+    });
+    n.onclick=function(){
+      try{window.focus();}catch(e){}
+      n.close();
+      if(typeof opts.onClick==='function')opts.onClick();
+    };
+    if(opts.autoClose!==false){
+      setTimeout(function(){try{n.close();}catch(e){}},opts.autoCloseMs||12000);
+    }
+    return true;
+  }catch(e){
+    console.warn('sstShowDesktopNotify:',e);
+    return false;
+  }
+}

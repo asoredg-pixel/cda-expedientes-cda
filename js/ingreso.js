@@ -237,6 +237,12 @@ function ingresarComoRol(rolId,respNombre){
   initPeriodoFiltros('pqrs-ofi');
   renderChatBadge();
   initRealtimeSync();
+  if(typeof sstInitDesktopNotify==='function')sstInitDesktopNotify();
+  if(typeof initChatNotifySync==='function'){
+    window._bandejaNotifySeeded=false;
+    window._bandejaUnreadKeysPrev=[];
+    initChatNotifySync();
+  }
   if(responsableActivo){
     try{localStorage.setItem('sst_responsable',responsableActivo);}catch(e){}
     const selR=document.getElementById('sel-responsable');
@@ -256,6 +262,9 @@ function salirDeSesionApp(){
   editId=null;
   try{sessionStorage.removeItem('sst_rol_sesion');}catch(e){}
   document.body.classList.remove('sesion-activa');
+  if(typeof stopChatNotifySync==='function')stopChatNotifySync();
+  window._bandejaNotifySeeded=false;
+  window._bandejaUnreadKeysPrev=[];
   cerrarConsultaPanel();
   closeTaskModal();
   closeBandejaDepto();

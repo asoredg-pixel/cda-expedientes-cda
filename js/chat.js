@@ -204,9 +204,83 @@ function initChatSync(convId){
         if(idx>=0)chatMensajes[idx]=msg;
         else chatMensajes.push(msg);
       }
+      if(change.type==='added')chatTryDesktopNotify(msg);
     });
     renderChatMessages();
     renderChatBadge();
+  });
+}
+let _chatNotifyUnsubs=[];
+function stopChatNotifySync(){
+  _chatNotifyUnsubs.forEach(function(fn){try{fn();}catch(e){}});
+  _chatNotifyUnsubs=[];
+}
+function chatNotifyConvIds(){
+  const me=getChatIdentity();
+  if(!me)return[];
+  const ids=new Set();
+  getChatContacts().forEach(function(c){
+    ids.add(chatConvFirestoreId(chatConvId(me.key,c.key)));
+    if(me.kind==='depto'&&c.kind==='resp'){
+      const enc=getEncargadoDepto(me.deptoId);
+      if(enc)ids.add(chatConvFirestoreId(chatConvId(c.key,'resp:'+enc)));
+    }
+  });
+  return [...ids];
+}
+function chatMergeIncomingMsg(msg){
+  if(!msg||!msg.id)return;
+  const idx=(chatMensajes||[]).findIndex(function(m){return m.id===msg.id;});
+  if(idx>=0)chatMensajes[idx]=msg;
+  else chatMensajes.push(msg);
+}
+function chatTryDesktopNotify(msg){
+  if(!msg||!chatMsgParticipa(msg)||chatEsMio(msg)||!chatMsgUnreadForMe(msg))return;
+  const convId=msg.convId||chatConvId(msg.fromKey,msg.toKey);
+  const chatWin=document.getElementById('chat-window');
+  const chatOpen=chatWin&&chatWin.classList.contains('on');
+  if(chatOpen&&window._chatConvActiva===convId&&!document.hidden)return;
+  if(typeof sstShowDesktopNotify!=='function')return;
+  const sender=chatFromLabel(msg)||'Chat interno';
+  const preview=msg.text||chatMsgDrivePreview(msg)||'Nuevo mensaje';
+  sstShowDesktopNotify('Chat interno — '+sender,preview,{
+    tag:'chat-'+msg.id,
+    onClick:function(){
+      const other=msg.fromKey;
+      if(other)void chatAbrirConv(other);
+      else if(typeof toggleChatWindow==='function')toggleChatWindow(true);
+    }
+  });
+}
+function initChatNotifySync(){
+  stopChatNotifySync();
+  if(!document.body.classList.contains('sesion-activa'))return;
+  const db=window._db;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
+  const convIds=chatNotifyConvIds();
+  convIds.forEach(function(fsConvId){
+    let primed=false;
+    const unsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
+      const initial=!primed;
+      primed=true;
+      snap.docChanges().forEach(function(change){
+        if(change.type==='removed'){
+          const msg={id:change.doc.id,...change.doc.data()};
+          chatMensajes=(chatMensajes||[]).filter(function(m){return m.id!==msg.id;});
+          return;
+        }
+        if(change.type!=='added'&&change.type!=='modified')return;
+        const msg={id:change.doc.id,...change.doc.data()};
+        chatMergeIncomingMsg(msg);
+        if(!initial&&change.type==='added')chatTryDesktopNotify(msg);
+      });
+      if(initial)renderChatBadge();
+      else{
+        renderChatBadge();
+        if(typeof renderChatContacts==='function'&&document.getElementById('chat-window')?.classList.contains('on'))renderChatContacts();
+      }
+    });
+    _chatNotifyUnsubs.push(unsub);
   });
 }
 function chatConvMessages(convId){
