@@ -8,6 +8,7 @@ rules_version = '2';
 //   departamentos/{deptoId}/expedientes/{expId}
 //   sistema/global                      — personas, actividadesLibres, agenda, etc.
 //   chats/{convId}/mensajes/{mensajeId}
+//   chat_drive_purge/{fileId}           — índice de adjuntos del chat para purga en Drive
 // =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -233,6 +234,14 @@ service cloud.firestore {
         allow update: if isActiveUser();
         allow delete: if isAdmin();
       }
+    }
+
+    // Índice de adjuntos del chat en Drive (purga automática a los 30 días).
+    match /chat_drive_purge/{fileId} {
+      allow read:   if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isActiveUser();
+      allow delete: if isActiveUser();
     }
   }
 }

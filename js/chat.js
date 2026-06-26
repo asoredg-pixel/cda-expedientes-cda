@@ -230,7 +230,7 @@ function chatEsMio(m){
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
-  const body=m.text||(m.file?('📎 '+m.file.name):'');
+  const body=m.text||(m.file?('📎 '+(m.file.nombre||m.file.name||'archivo')):'');
   if(!chatEsMio(m))return escAttr((chatFromLabel(m)||'')+(body?': '+body:''));
   return escAttr(body||'');
 }
@@ -370,7 +370,15 @@ function toggleChatWindow(force){
   if(!w)return;
   const open=force===true?true:force===false?false:!w.classList.contains('on');
   w.classList.toggle('on',open);
-  if(open){renderChatContacts();renderChatBadge();}
+  if(open){
+    renderChatContacts();
+    renderChatBadge();
+    if(typeof chatPurgeExpiredDriveFiles==='function'){
+      void chatPurgeExpiredDriveFiles().then(function(ok){
+        if(ok){renderChatMessages();renderChatContacts();}
+      });
+    }
+  }
   else{window._chatConvActiva=null;window._chatVista='contactos';chatToggleDriveBar(false);initChatSync(null);chatSyncLayout();}
 }
 async function chatMarcarNoLeido(){
@@ -496,6 +504,8 @@ function chatMsgDriveUrl(m){
   return'';
 }
 function chatMsgDrivePreview(m){
+  if(m.file&&m.file.nombre)return '📎 '+m.file.nombre;
+  if(m.file&&m.file.name)return '📎 '+m.file.name;
   return chatMsgDriveUrl(m)?'📄 Documento adjunto':'';
 }
 function chatToggleDriveBar(force){
@@ -519,7 +529,11 @@ function renderChatMessages(){
     if(!mine&&sender)body+='<div style="font-size:10px;font-weight:700;color:var(--bl);margin-bottom:3px">'+escAttr(sender)+'</div>';
     if(m.text)body+=escAttr(m.text);
     const driveUrl=chatMsgDriveUrl(m);
-    if(driveUrl)body+=(body?'<br>':'')+'<a class="chat-drive-chip" href="'+escAttr(driveUrl)+'" target="_blank" rel="noopener">📄 Documento adjunto</a>';
+    if(driveUrl){
+      const chipLbl=(m.file&&m.file.nombre)?escAttr(m.file.nombre):((m.file&&m.file.name)?escAttr(m.file.name):'📄 Documento adjunto');
+      const chipNote=(m.file&&m.file.driveDeleted)?' <span style="font-size:10px;opacity:.75">(expirado)</span>':'';
+      body+=(body?'<br>':'')+'<a class="chat-drive-chip" href="'+escAttr(driveUrl)+'" target="_blank" rel="noopener">'+chipLbl+'</a>'+chipNote;
+    }
     const t=m.ts?new Date(m.ts).toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
     return '<div class="chat-msg '+(mine?'me':'them')+'">'+body+'<div class="chat-msg-time">'+t+'</div></div>';
   }).join('');
@@ -607,8 +621,82 @@ async function chatEnviarDriveLink(){
     notif('Error al guardar el enlace en Firestore','err');
   }
 }
-function chatEnviarArchivo(){
-  notif('Solo se aceptan links de Google Drive. Use el botón «📎 Drive».','err');
+let _chatFileUploading=false;
+function chatTriggerArchivo(){
+  const inp=document.getElementById('chat-file-inp');
+  if(!inp||_chatFileUploading)return;
+  inp.value='';
+  inp.click();
+}
+async function chatEnviarArchivo(){
+  const inp=document.getElementById('chat-file-inp');
+  const convId=window._chatConvActiva;
+  const me=getChatIdentity();
+  if(!inp||!convId||!me||_chatFileUploading)return;
+  const file=inp.files&&inp.files[0];
+  if(!file)return;
+  const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
+  if(file.size>maxBytes){
+    notif('Archivo demasiado grande (máx. 25 MB). Use el botón «Drive» para pegar un enlace.','err');
+    inp.value='';
+    return;
+  }
+  if(typeof _driveGetBestToken!=='function'||!_driveGetBestToken()){
+    notif('Conecte su correo en la pestaña Correos para adjuntar archivos al Drive institucional.','warn');
+    inp.value='';
+    return;
+  }
+  if(typeof driveUploadChat!=='function'){
+    notif('Módulo Drive no disponible. Recargue la página.','err');
+    inp.value='';
+    return;
+  }
+  _chatFileUploading=true;
+  notif('Subiendo archivo al Drive institucional…','info');
+  const keys=convId.split('|');
+  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
+  const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
+  const to=chatContactFromKey(otherKey);
+  const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+  try{
+    const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
+    const msg={
+      id:msgId,
+      convId:chatConvId(me.key,to.key),
+      fromKey:me.key,fromLabel:me.label,
+      toKey:to.key,toLabel:to.label,
+      text:'',
+      driveLink:uploaded.driveLink,
+      file:{fileId:uploaded.fileId,driveLink:uploaded.driveLink,nombre:uploaded.nombre,expiresAt:uploaded.expiresAt},
+      ts:new Date().toISOString(),
+      readBy:chatKeyAliases(me.key).map(chatNormKey)
+    };
+    inp.value='';
+    chatMensajes.push(msg);
+    renderChatMessages();
+    renderChatContacts();
+    renderChatBadge();
+    const db=window._db;
+    if(!db||!window._fsSetDoc||!window._fsDoc)return;
+    const fsConvId=chatConvFirestoreId(msg.convId);
+    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+    if(typeof chatRegisterDrivePurge==='function'){
+      await chatRegisterDrivePurge(uploaded.fileId,{
+        expiresAt:uploaded.expiresAt,
+        msgId:msg.id,
+        fsConvId:fsConvId,
+        driveLink:uploaded.driveLink,
+        nombre:uploaded.nombre
+      });
+    }
+    notif('Archivo enviado correctamente.','ok');
+  }catch(err){
+    console.error('chatEnviarArchivo:',err);
+    notif('No se pudo subir el archivo: '+(err.message||'revise la conexión Gmail/Drive'),'err');
+    inp.value='';
+  }finally{
+    _chatFileUploading=false;
+  }
 }
 
 // ================================================================

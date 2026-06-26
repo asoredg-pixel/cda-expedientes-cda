@@ -616,6 +616,8 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 // La carpeta raíz debe compartirse con EDITOR para cada correo de oficina.
 // ----------------------------------------------------------------
 const DRIVE_ROOT_PQRSD_ID = '1SgWKCPR_9FClu4l0oV1kxJoZxUnwRr0k';
+// Carpeta compartida cdaguaviare1 — adjuntos del chat interno (retención 30 días).
+const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 
 // Nombres de carpeta mensual (índice = getMonth()).
 const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
@@ -745,6 +747,125 @@ async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, ti
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const blob = new Blob([bytes], { type: mimeType });
   return driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta);
+}
+
+// ----------------------------------------------------------------
+// Drive chat interno — carpeta institucional con retención 30 días
+// ----------------------------------------------------------------
+async function driveUploadChat(blob, filename, mimeType) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+
+  const ref = new Date();
+  const anio = ref.getFullYear().toString();
+  const mes = DRIVE_MESES_ES[ref.getMonth()];
+  let folderId = DRIVE_ROOT_CHAT_ID;
+  try {
+    folderId = await _driveEnsureFolder(token, anio, DRIVE_ROOT_CHAT_ID);
+    folderId = await _driveEnsureFolder(token, mes, folderId);
+  } catch (e) { console.warn('driveUploadChat folder:', e.message); }
+
+  const safeName = String(filename || 'archivo').replace(/[^\w.\- áéíóúñÁÉÍÓÚÑ]/g, '_').slice(0, 120);
+  const uploadName = ref.toISOString().slice(0, 10) + ' ' + safeName;
+  const retentionDays = (typeof CHAT_DRIVE_RETENTION_DIAS !== 'undefined') ? CHAT_DRIVE_RETENTION_DIAS : 30;
+  const expiresAt = new Date(ref.getTime() + retentionDays * 86400000).toISOString();
+
+  const form = new FormData();
+  const meta = { name: uploadName, mimeType: mimeType || 'application/octet-stream', parents: [folderId] };
+  form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+  form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType || 'application/octet-stream' }));
+  const up = await fetch(DRIVE_UPLOAD_URL, {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
+  });
+  if (!up.ok) {
+    const t = await up.text().catch(function() { return ''; });
+    throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120));
+  }
+  const file = await up.json();
+
+  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  }).catch(function() {});
+
+  return {
+    fileId: file.id,
+    driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
+    previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
+    nombre: uploadName,
+    expiresAt: expiresAt
+  };
+}
+
+async function driveDeleteFile(fileId) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId) return false;
+  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId), {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  return res.ok || res.status === 404;
+}
+
+async function chatRegisterDrivePurge(fileId, data) {
+  const db = window._db;
+  if (!db || !window._fsSetDoc || !window._fsDoc || !fileId) return;
+  await window._fsSetDoc(window._fsDoc(db, 'chat_drive_purge', fileId), Object.assign({ fileId: fileId }, data), { merge: true });
+}
+
+async function chatDeleteDriveForMessage(m) {
+  if (!m || !m.file || !m.file.fileId) return;
+  const fileId = m.file.fileId;
+  try { await driveDeleteFile(fileId); } catch (e) { console.warn('chatDeleteDriveForMessage:', e.message); }
+  const db = window._db;
+  if (db && window._fsDeleteDoc && window._fsDoc) {
+    try { await window._fsDeleteDoc(window._fsDoc(db, 'chat_drive_purge', fileId)); } catch (e) {}
+  }
+}
+
+async function chatPurgeExpiredDriveFiles() {
+  if (!document.body.classList.contains('sesion-activa')) return false;
+  if (!_driveGetBestToken()) return false;
+  const db = window._db;
+  if (!db || !window._fsGetDocs || !window._fsCollection || !window._fsDeleteDoc || !window._fsDoc) return false;
+
+  const now = new Date().toISOString();
+  let purged = false;
+  try {
+    const snap = await window._fsGetDocs(window._fsCollection(db, 'chat_drive_purge'));
+    const expired = snap.docs.filter(function(d) {
+      const exp = d.data().expiresAt || '';
+      return exp && exp < now;
+    });
+    for (let i = 0; i < expired.length; i++) {
+      const docSnap = expired[i];
+      const data = docSnap.data();
+      const fileId = data.fileId || docSnap.id;
+      await driveDeleteFile(fileId);
+      if (data.msgId && data.fsConvId && window._fsUpdateDoc && window._fsDeleteField) {
+        try {
+          await window._fsUpdateDoc(
+            window._fsDoc(db, 'chats', data.fsConvId, 'mensajes', data.msgId),
+            { 'file.fileId': window._fsDeleteField(), 'file.driveDeleted': true }
+          );
+        } catch (e) {}
+      }
+      await window._fsDeleteDoc(window._fsDoc(db, 'chat_drive_purge', docSnap.id));
+      if (typeof chatMensajes !== 'undefined' && Array.isArray(chatMensajes)) {
+        chatMensajes.forEach(function(m) {
+          if (m.id === data.msgId && m.file) {
+            delete m.file.fileId;
+            m.file.driveDeleted = true;
+          }
+        });
+      }
+      purged = true;
+    }
+  } catch (err) {
+    console.error('chatPurgeExpiredDriveFiles:', err);
+  }
+  return purged;
 }
 
 // Genera un PDF (soporte de solicitud) a partir del contenido del correo.

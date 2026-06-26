@@ -601,6 +601,7 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-drive-chip{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:5px 10px;border-radius:16px;background:var(--bll);border:1px solid #b8d2eb;color:var(--bld);font-size:11px;font-weight:600;text-decoration:none}
 .chat-drive-chip:hover{background:#e0eef9}
 .chat-compose .btn-chat-drive{border-radius:var(--r)!important;width:auto!important;min-width:0!important;padding:0 10px!important;font-size:11px!important;white-space:nowrap}
+.chat-compose .btn-chat-file{border-radius:var(--r)!important;width:34px!important;min-width:34px!important;padding:0!important;font-size:14px!important;flex-shrink:0}
 .chat-compose{display:flex;gap:4px;padding:6px 8px;background:#fff;border-top:1px solid var(--bd);align-items:center;flex-shrink:0}
 .chat-compose input[type=text]{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--bd);border-radius:20px;font-size:12px;font-family:'DM Sans',sans-serif;background:#fff}
 .chat-compose .btn{border-radius:50%;width:34px;height:34px;min-width:34px;padding:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}

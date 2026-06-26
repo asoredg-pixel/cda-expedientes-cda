@@ -5760,6 +5760,12 @@ async function purgeChatConversacionesLeidas(){
   const db=window._db;
   if(db&&window._fsDeleteDoc&&window._fsDoc){
     try{
+      for(let i=0;i<dropMsgs.length;i++){
+        const m=dropMsgs[i];
+        if(m.file&&m.file.fileId&&typeof chatDeleteDriveForMessage==='function'){
+          await chatDeleteDriveForMessage(m);
+        }
+      }
       await Promise.all(dropMsgs.map(function(m){
         const convId=m.convId||chatConvId(m.fromKey,m.toKey);
         const fsConvId=chatConvFirestoreId(convId);
@@ -5796,6 +5802,11 @@ function purgeBandejaLeidasAntiguas(){
 function purgeRetencionDatosLeidos(){
   let ch=purgeChatConversacionesLeidas();
   if(purgeBandejaLeidasAntiguas())ch=true;
+  if(typeof chatPurgeExpiredDriveFiles==='function'){
+    void chatPurgeExpiredDriveFiles().then(function(ok){
+      if(ok&&typeof renderChatMessages==='function'){renderChatMessages();renderChatContacts();}
+    });
+  }
   return ch;
 }
 function getBandejaLeidos(){try{return JSON.parse(localStorage.getItem('sst_bandeja_leidos')||'[]');}catch(e){return[];}}

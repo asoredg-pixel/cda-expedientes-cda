@@ -166,6 +166,9 @@ const PQRS_TRAM_VIRTUAL={id:'t_pqrs',nombre:'PQRSD',color:'#6366f1',plazo:15,uni
 
 // Retención de mensajes de chat leídos
 const RETENCION_LEIDOS_DIAS=30;
+// Retención de adjuntos del chat en Drive institucional (días)
+const CHAT_DRIVE_RETENTION_DIAS=30;
+const CHAT_DRIVE_MAX_BYTES=25*1024*1024;
 
 // LocalStorage
 const SST_LAST_EXPORT_KEY='sst_last_exportacion';

@@ -478,7 +478,9 @@
         <button type="button" class="btn bsm bp" onclick="chatEnviarDriveLink()">Enviar</button>
         <button type="button" class="btn bsm" onclick="chatToggleDriveBar(false)" title="Cancelar">✕</button>
       </div>
+      <input type="file" id="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" style="display:none" onchange="chatEnviarArchivo()">
       <div class="chat-compose">
+        <button type="button" class="btn bsm btn-chat-file" onclick="chatTriggerArchivo()" title="Subir archivo al Drive institucional (máx. 25 MB)">📁</button>
         <button type="button" class="btn bsm btn-chat-drive" onclick="chatToggleDriveBar()" title="Adjuntar link de Google Drive">📎 Drive</button>
         <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
         <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
