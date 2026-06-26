@@ -486,13 +486,6 @@
       </div>
     </div>
   </div>
-  <div id="chat-drop-overlay" class="chat-drop-overlay" aria-hidden="true">
-    <div class="chat-drop-card">
-      <span class="chat-drop-ico">📎</span>
-      <span class="chat-drop-txt">Suelte el archivo aquí</span>
-      <span class="chat-drop-sub">Se subirá al Drive institucional del chat</span>
-    </div>
-  </div>
   <div id="chat-upload-overlay" class="chat-upload-overlay" aria-hidden="true">
     <div class="chat-upload-box">
       <div class="chat-upload-hdr">
@@ -505,7 +498,7 @@
         <div id="chat-upload-detail" class="chat-upload-detail" style="display:none"></div>
       </div>
       <div id="chat-upload-foot" class="chat-upload-foot" style="display:none">
-        <button type="button" class="btn bsm" onclick="chatUploadOverlayHide()">Cerrar</button>
+        <button type="button" class="btn bsm" id="chat-upload-close-btn" onclick="chatUploadOverlayHide()">Cerrar</button>
       </div>
     </div>
   </div>

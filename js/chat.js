@@ -702,23 +702,6 @@ async function chatEnviarTexto(){
 }
 let _chatFileUploading=false;
 let _chatUploadHideTimer=null;
-function chatWinEl(){return document.getElementById('chat-window');}
-function chatWinOpen(){const w=chatWinEl();return !!(w&&w.classList.contains('on'));}
-function chatPointInWin(e){
-  const w=chatWinEl();
-  if(!w||!chatWinOpen())return false;
-  const r=w.getBoundingClientRect();
-  return e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom;
-}
-function chatDropHasFiles(e){
-  const dt=e&&e.dataTransfer;
-  if(!dt)return false;
-  if(dt.files&&dt.files.length)return true;
-  const types=Array.from(dt.types||[]);
-  if(types.includes('Files'))return true;
-  if(types.some(function(t){return /file/i.test(t);}))return true;
-  return false;
-}
 function chatUploadOverlayHide(){
   const ov=document.getElementById('chat-upload-overlay');
   if(_chatUploadHideTimer){clearTimeout(_chatUploadHideTimer);_chatUploadHideTimer=null;}
@@ -726,13 +709,41 @@ function chatUploadOverlayHide(){
   ov.classList.remove('on');
   ov.setAttribute('aria-hidden','true');
   const box=ov.querySelector('.chat-upload-box');
-  if(box){box.classList.remove('state-ok','state-err');}
+  if(box){box.classList.remove('state-ok','state-err','state-warn');}
   const foot=document.getElementById('chat-upload-foot');
   const spin=document.getElementById('chat-upload-spinner');
   const det=document.getElementById('chat-upload-detail');
+  const btn=document.getElementById('chat-upload-close-btn');
   if(foot)foot.style.display='none';
   if(spin)spin.style.display='';
   if(det){det.style.display='none';det.textContent='';}
+  if(btn)btn.textContent='Cerrar';
+}
+function chatModalAlert(opts){
+  const ov=document.getElementById('chat-upload-overlay');
+  const tit=document.getElementById('chat-upload-title');
+  const msg=document.getElementById('chat-upload-msg');
+  const ico=document.getElementById('chat-upload-emoji');
+  const foot=document.getElementById('chat-upload-foot');
+  const spin=document.getElementById('chat-upload-spinner');
+  const det=document.getElementById('chat-upload-detail');
+  const btn=document.getElementById('chat-upload-close-btn');
+  const box=ov?ov.querySelector('.chat-upload-box'):null;
+  if(_chatUploadHideTimer){clearTimeout(_chatUploadHideTimer);_chatUploadHideTimer=null;}
+  if(!ov)return;
+  if(box){box.classList.remove('state-ok','state-err','state-warn');box.classList.add(opts.tone==='err'?'state-err':'state-warn');}
+  if(tit)tit.textContent=opts.title||'Aviso';
+  if(ico)ico.textContent=opts.emoji||'⚠️';
+  if(msg)msg.textContent=opts.message||'';
+  if(det){
+    if(opts.detail){det.style.display='block';det.textContent=opts.detail;}
+    else{det.style.display='none';det.textContent='';}
+  }
+  if(spin)spin.style.display='none';
+  if(btn)btn.textContent=opts.btnLabel||'Entendido';
+  if(foot)foot.style.display='flex';
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden','false');
 }
 function chatUploadOverlayShow(fileName){
   chatUploadOverlayHide();
@@ -743,6 +754,7 @@ function chatUploadOverlayShow(fileName){
   const foot=document.getElementById('chat-upload-foot');
   const spin=document.getElementById('chat-upload-spinner');
   if(!ov)return;
+  if(box){box.classList.remove('state-ok','state-err','state-warn');}
   if(tit)tit.textContent='Subiendo archivo';
   if(ico)ico.textContent='📤';
   if(msg)msg.textContent='Cargando «'+(fileName||'archivo')+'» al Drive institucional para enviarlo en el chat…';
@@ -760,7 +772,7 @@ function chatUploadOverlaySuccess(fileName){
   const spin=document.getElementById('chat-upload-spinner');
   const box=ov?ov.querySelector('.chat-upload-box'):null;
   if(!ov)return;
-  if(box){box.classList.remove('state-err');box.classList.add('state-ok');}
+  if(box){box.classList.remove('state-ok','state-err','state-warn');box.classList.add('state-ok');}
   if(tit)tit.textContent='Archivo enviado';
   if(ico)ico.textContent='✓';
   if(msg)msg.textContent='«'+(fileName||'Archivo')+'» se subió correctamente al Drive y se envió en el chat.';
@@ -781,7 +793,7 @@ function chatUploadOverlayError(errMsg,fileName){
   const det=document.getElementById('chat-upload-detail');
   const box=ov?ov.querySelector('.chat-upload-box'):null;
   if(!ov)return;
-  if(box){box.classList.remove('state-ok');box.classList.add('state-err');}
+  if(box){box.classList.remove('state-ok','state-warn');box.classList.add('state-err');}
   if(tit)tit.textContent='No se pudo adjuntar';
   if(ico)ico.textContent='⚠️';
   if(msg)msg.textContent='No se pudo subir «'+(fileName||'archivo')+'» al Drive institucional.';
@@ -791,71 +803,53 @@ function chatUploadOverlayError(errMsg,fileName){
   ov.classList.add('on');
   ov.setAttribute('aria-hidden','false');
 }
-function initChatFileDropZone(){
-  const win=chatWinEl();
-  const overlay=document.getElementById('chat-drop-overlay');
-  if(!win||win.dataset.dropInit)return;
-  win.dataset.dropInit='1';
-  function showDrop(on){
-    if(overlay){
-      overlay.classList.toggle('on',on);
-      overlay.setAttribute('aria-hidden',on?'false':'true');
-    }
-    win.classList.toggle('chat-drop-active',on);
-  }
-  function onDocDragOver(e){
-    if(!chatWinOpen())return;
-    if(!chatPointInWin(e)&&!chatDropHasFiles(e))return;
-    e.preventDefault();
-    e.stopPropagation();
-    if(e.dataTransfer)e.dataTransfer.dropEffect='copy';
-    if(chatPointInWin(e))showDrop(true);
-  }
-  function onDocDragLeave(e){
-    if(!chatWinOpen())return;
-    if(chatPointInWin(e))return;
-    showDrop(false);
-  }
-  function onDocDrop(e){
-    if(!chatWinOpen())return;
-    const files=e.dataTransfer&&e.dataTransfer.files;
-    if(files&&files.length){
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    showDrop(false);
-    if(!chatPointInWin(e))return;
-    if(!files||!files.length)return;
-    if(!window._chatConvActiva){notif('Seleccione un contacto antes de adjuntar un archivo.','warn');return;}
-    void chatEnviarArchivo(files[0]);
-  }
-  document.addEventListener('dragover',onDocDragOver,true);
-  document.addEventListener('dragleave',onDocDragLeave,true);
-  document.addEventListener('drop',onDocDrop,true);
-  win.addEventListener('dragover',function(e){e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';});
-  win.addEventListener('drop',function(e){e.preventDefault();e.stopPropagation();});
-}
 async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
   const convId=window._chatConvActiva;
   const me=getChatIdentity();
-  if(!convId||!me||_chatFileUploading)return;
+  if(!convId||!me||_chatFileUploading){
+    if(file&&inp&&!convId){
+      chatModalAlert({
+        title:'Seleccione un contacto',
+        message:'Abra una conversación antes de adjuntar un archivo.',
+        detail:'Elija un contacto en la lista del chat y vuelva a intentar.',
+        tone:'warn'
+      });
+      inp.value='';
+    }
+    return;
+  }
   if(!file&&inp)file=inp.files&&inp.files[0];
   if(!file)return;
   const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
   if(file.size>maxBytes){
-    notif('Archivo demasiado grande (máx. 25 MB).','err');
+    chatModalAlert({
+      title:'Archivo demasiado grande',
+      message:'El archivo supera el límite de 25 MB permitido en el chat.',
+      detail:file.name,
+      tone:'warn'
+    });
     if(inp)inp.value='';
     return;
   }
   if(typeof _driveGetBestToken!=='function'||!_driveGetBestToken()){
-    notif('Conecte su correo en la pestaña Correos para adjuntar archivos al Drive institucional.','warn');
+    chatModalAlert({
+      title:'Correo no conectado',
+      message:'Conecte su correo en la pestaña Correos para adjuntar archivos al Drive institucional.',
+      detail:'Vaya a Correos y vincule la cuenta de su oficina o la cuenta institucional (cdaguaviare1).',
+      tone:'warn'
+    });
     if(inp)inp.value='';
     return;
   }
   if(typeof driveUploadChat!=='function'){
-    notif('Módulo Drive no disponible. Recargue la página.','err');
+    chatModalAlert({
+      title:'Drive no disponible',
+      message:'No se pudo cargar el módulo de Drive para adjuntar archivos.',
+      detail:'Recargue la página e intente de nuevo.',
+      tone:'err'
+    });
     if(inp)inp.value='';
     return;
   }
@@ -906,7 +900,6 @@ async function chatEnviarArchivo(fileArg){
     _chatFileUploading=false;
   }
 }
-initChatFileDropZone();
 if(!window._chatNotifyFirebaseHook){
   window._chatNotifyFirebaseHook=true;
   window.addEventListener('firebase-ready',function(){

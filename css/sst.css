@@ -623,23 +623,6 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-contact-unread{min-width:18px;height:18px;border-radius:9px;background:var(--bl);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#fff;position:relative}
 .chat-main.hidden{display:none}
-.chat-drop-overlay{
-  position:absolute;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
-  background:rgba(11,33,20,.42);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  border:2px dashed rgba(52,211,153,.65);border-radius:0 0 18px 18px;pointer-events:none;
-}
-.chat-drop-overlay.on{display:flex}
-.chat-drop-card{
-  display:flex;flex-direction:column;align-items:center;gap:6px;padding:18px 24px;border-radius:16px;
-  background:rgba(255,255,255,.96);border:1px solid rgba(52,211,153,.3);
-  box-shadow:0 12px 40px rgba(0,0,0,.18);text-align:center;
-  animation:chatDropCardIn .25s cubic-bezier(.22,1,.36,1) both;
-}
-@keyframes chatDropCardIn{from{opacity:0;transform:scale(.92) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
-.chat-drop-ico{font-size:28px;line-height:1}
-.chat-drop-txt{font-size:13px;font-weight:800;color:#163828;letter-spacing:-.02em}
-.chat-drop-sub{font-size:11px;color:#5a6b62;font-weight:500}
-.chat-window.chat-drop-active .chat-layout{opacity:.45;filter:blur(1px);transition:opacity .2s,filter .2s}
 .chat-upload-overlay{
   position:absolute;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
   background:rgba(11,33,20,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);padding:16px;
@@ -652,13 +635,16 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 }
 .chat-upload-box.state-ok{border-color:var(--gn)}
 .chat-upload-box.state-err{border-color:var(--or)}
+.chat-upload-box.state-warn{border-color:var(--or)}
 .chat-upload-hdr{background:var(--bll);padding:1rem 1.15rem;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bd)}
 .chat-upload-box.state-ok .chat-upload-hdr{background:var(--gnl)}
 .chat-upload-box.state-err .chat-upload-hdr{background:var(--orl)}
+.chat-upload-box.state-warn .chat-upload-hdr{background:var(--orl)}
 .chat-upload-emoji{font-size:26px;line-height:1}
 .chat-upload-hdr h3{margin:0;font-size:14px;font-weight:700;color:var(--bld)}
 .chat-upload-box.state-ok .chat-upload-hdr h3{color:var(--gn)}
 .chat-upload-box.state-err .chat-upload-hdr h3{color:var(--or)}
+.chat-upload-box.state-warn .chat-upload-hdr h3{color:var(--or)}
 .chat-upload-body{padding:1rem 1.15rem;font-size:13px;line-height:1.5;color:var(--tx)}
 .chat-upload-body p{margin:0 0 12px}
 .chat-upload-detail{font-size:12px;color:var(--tx2);background:var(--sf2);padding:8px 10px;border-radius:var(--r);border:1px solid var(--bd);word-break:break-word;margin-top:8px}
