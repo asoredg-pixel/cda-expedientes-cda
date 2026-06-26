@@ -480,9 +480,11 @@ function renderChatBadge(){
 }
 function toggleChatWindow(force){
   const w=document.getElementById('chat-window');
+  const fab=document.getElementById('chat-fab');
   if(!w)return;
   const open=force===true?true:force===false?false:!w.classList.contains('on');
   w.classList.toggle('on',open);
+  if(fab)fab.classList.toggle('open',open);
   if(open){
     renderChatContacts();
     renderChatBadge();
@@ -699,53 +701,71 @@ async function chatEnviarTexto(){
   }
 }
 let _chatFileUploading=false;
+function chatDropHasFiles(e){
+  const dt=e&&e.dataTransfer;
+  if(!dt)return false;
+  const types=Array.from(dt.types||[]);
+  if(types.includes('Files'))return true;
+  if(types.some(function(t){return /file/i.test(t);}))return true;
+  return !!(dt.files&&dt.files.length);
+}
 function initChatFileDropZone(){
-  const main=document.getElementById('chat-main');
+  const win=document.getElementById('chat-window');
   const overlay=document.getElementById('chat-drop-overlay');
-  if(!main||main.dataset.dropInit)return;
-  main.dataset.dropInit='1';
-  let dragDepth=0;
+  if(!win||win.dataset.dropInit)return;
+  win.dataset.dropInit='1';
+  function chatWinOpen(){return win.classList.contains('on');}
   function showDrop(on){
     if(overlay){
       overlay.classList.toggle('on',on);
       overlay.setAttribute('aria-hidden',on?'false':'true');
     }
-    main.classList.toggle('chat-drop-active',on);
+    win.classList.toggle('chat-drop-active',on);
   }
-  function hasFiles(e){
-    const dt=e.dataTransfer;
-    if(!dt)return false;
-    if(dt.types&&Array.from(dt.types).includes('Files'))return true;
-    return !!(dt.files&&dt.files.length);
-  }
-  main.addEventListener('dragenter',function(e){
-    if(!window._chatConvActiva||!hasFiles(e))return;
-    e.preventDefault();
-    dragDepth++;
-    showDrop(true);
-  });
-  main.addEventListener('dragover',function(e){
-    if(!window._chatConvActiva||!hasFiles(e))return;
-    e.preventDefault();
-    if(e.dataTransfer)e.dataTransfer.dropEffect='copy';
-    showDrop(true);
-  });
-  main.addEventListener('dragleave',function(e){
-    if(!window._chatConvActiva)return;
-    e.preventDefault();
-    dragDepth--;
-    if(dragDepth<=0){dragDepth=0;showDrop(false);}
-  });
-  main.addEventListener('drop',function(e){
+  function blockFileNav(e){
+    if(!chatWinOpen()||!chatDropHasFiles(e))return;
     e.preventDefault();
     e.stopPropagation();
-    dragDepth=0;
+    if(e.type==='dragover'&&e.dataTransfer)e.dataTransfer.dropEffect='copy';
+  }
+  win.addEventListener('dragenter',function(e){
+    if(!chatWinOpen()||!chatDropHasFiles(e))return;
+    blockFileNav(e);
+    showDrop(true);
+  });
+  win.addEventListener('dragover',blockFileNav);
+  win.addEventListener('dragleave',function(e){
+    if(!chatWinOpen())return;
+    const rel=e.relatedTarget;
+    if(rel&&win.contains(rel))return;
     showDrop(false);
+  });
+  win.addEventListener('drop',function(e){
+    if(!chatDropHasFiles(e))return;
+    e.preventDefault();
+    e.stopPropagation();
+    showDrop(false);
+    if(!chatWinOpen())return;
     if(!window._chatConvActiva){notif('Seleccione un contacto antes de adjuntar un archivo.','warn');return;}
     const files=e.dataTransfer&&e.dataTransfer.files;
     if(!files||!files.length)return;
     void chatEnviarArchivo(files[0]);
   });
+  if(!window._chatGlobalDropGuard){
+    window._chatGlobalDropGuard=true;
+    document.addEventListener('dragover',function(e){
+      if(!document.getElementById('chat-window')?.classList.contains('on'))return;
+      if(!chatDropHasFiles(e))return;
+      e.preventDefault();
+    });
+    document.addEventListener('drop',function(e){
+      const cw=document.getElementById('chat-window');
+      if(!cw||!cw.classList.contains('on')||!chatDropHasFiles(e))return;
+      if(cw.contains(e.target))return;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  }
 }
 async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;

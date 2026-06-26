@@ -455,8 +455,14 @@
 </div>
 
 <!-- Chat interno -->
-<div id="chat-fab" class="chat-fab" onclick="toggleChatWindow()" title="Chat interno">
-  <span class="chat-fab-icon"><span class="ico-chat-interno"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 4h16v12H5.17L4 17.17V4zm0-2c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4zm2 10h12v-2H6v2zm0-3h12V9H6v2zm0-3h12V6H6v2z"/></svg></span></span>
+<div id="chat-fab" class="chat-fab" onclick="toggleChatWindow()" title="Chat interno" role="button" aria-label="Chat interno">
+  <span class="chat-fab-rings" aria-hidden="true">
+    <span class="chat-fab-ring chat-fr1"></span>
+    <span class="chat-fab-ring chat-fr2"></span>
+    <span class="chat-fab-ring chat-fr3"></span>
+  </span>
+  <span class="chat-fab-glow" aria-hidden="true"></span>
+  <span class="chat-fab-icon"><span class="ico-chat-interno"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h10v2H7V9zm0-3h10v2H7V6zm0 6h7v2H7v-2z"/></svg></span></span>
   <span id="chat-fab-badge" class="chat-fab-badge" style="display:none">0</span>
 </div>
 <div id="chat-window" class="chat-window">
@@ -477,7 +483,6 @@
   <div class="chat-layout">
     <div id="chat-contacts" class="chat-contacts"></div>
     <div id="chat-main" class="chat-main hidden">
-      <div id="chat-drop-overlay" class="chat-drop-overlay" aria-hidden="true"><span>Suelte el archivo aquí para adjuntarlo al chat</span></div>
       <div id="chat-msgs" class="chat-msgs"></div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div class="chat-compose">
@@ -485,6 +490,13 @@
         <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
         <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
       </div>
+    </div>
+  </div>
+  <div id="chat-drop-overlay" class="chat-drop-overlay" aria-hidden="true">
+    <div class="chat-drop-card">
+      <span class="chat-drop-ico">📎</span>
+      <span class="chat-drop-txt">Suelte el archivo aquí</span>
+      <span class="chat-drop-sub">Se subirá al Drive institucional del chat</span>
     </div>
   </div>
 </div>
