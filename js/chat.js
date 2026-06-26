@@ -837,7 +837,6 @@ async function chatEnviarArchivo(fileArg){
     chatModalAlert({
       title:'Correo no conectado',
       message:'Conecte su correo en la pestaña Correos para adjuntar archivos al Drive institucional.',
-      detail:'Vaya a Correos y vincule la cuenta de su oficina o la cuenta institucional (cdaguaviare1).',
       tone:'warn'
     });
     if(inp)inp.value='';
