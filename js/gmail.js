@@ -615,7 +615,9 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 // Guainía y Vaupés usan links manuales (su propio Drive).
 // La carpeta raíz debe compartirse con EDITOR para cada correo de oficina.
 // ----------------------------------------------------------------
-const DRIVE_ROOT_PQRSD_ID = '1SgWKCPR_9FClu4l0oV1kxJoZxUnwRr0k';
+// Carpeta raíz PQRSD (cdaguaviare1@gmail.com):
+// https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
+const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
 // Carpeta compartida cdaguaviare1 — adjuntos del chat interno (retención 30 días).
 const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 
