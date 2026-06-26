@@ -587,8 +587,14 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-contact-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-contact-prev{font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-contact-unread{min-width:18px;height:18px;border-radius:9px;background:var(--bl);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
-.chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#fff}
+.chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#fff;position:relative}
 .chat-main.hidden{display:none}
+.chat-drop-overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(37,99,235,.12);border:2px dashed var(--bl);pointer-events:none}
+.chat-drop-overlay.on{display:flex}
+.chat-drop-overlay span{padding:10px 16px;border-radius:var(--r);background:#fff;border:1px solid var(--bd);font-size:12px;font-weight:600;color:var(--bld);box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.chat-main.chat-drop-active .chat-msgs,.chat-main.chat-drop-active .chat-compose,.chat-main.chat-drop-active .chat-drive-bar{opacity:.55}
+.chat-file-inp{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.chat-compose .btn-chat-file{cursor:pointer}
 .chat-msgs{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:6px;background:#fff}
 .chat-msg{max-width:88%;padding:7px 9px;border-radius:8px;font-size:12px;line-height:1.35;word-break:break-word;position:relative}
 .chat-msg.me{align-self:flex-end;background:#f0f7f0;border-top-right-radius:2px;border:1px solid #e0ebe0}
