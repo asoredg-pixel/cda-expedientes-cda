@@ -602,16 +602,14 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-contact.has-unread{background:#f0f7ff}
 .chat-contact.has-unread .chat-contact-name{font-weight:700}
 .chat-contact-av{width:40px;height:40px;border-radius:50%;background:var(--bl);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
-.chat-contact-av.depto{background:#1a7a4a}
-.chat-contact-av.juris{background:#185FA5}
-.chat-contact-av.ofi{background:#b87d0a}
-.chat-contact-av.resp{background:#6d3fa8}
-.chat-contact-av.enc_ofi{background:#00796b}
-.chat-contact.on .chat-contact-av.depto{box-shadow:0 0 0 2px #1a7a4a44}
-.chat-contact.on .chat-contact-av.juris{box-shadow:0 0 0 2px #185FA544}
-.chat-contact.on .chat-contact-av.ofi{box-shadow:0 0 0 2px #b87d0a44}
-.chat-contact.on .chat-contact-av.resp{box-shadow:0 0 0 2px #6d3fa844}
-.chat-contact.on .chat-contact-av.enc_ofi{box-shadow:0 0 0 2px #00796b44}
+.chat-contact-av.chat-region-guaviare{background:#185FA5}
+.chat-contact-av.chat-region-guainia{background:#1a7a4a}
+.chat-contact-av.chat-region-vaupes{background:#6d3fa8}
+.chat-contact-av.chat-region-juris{background:#b87d0a}
+.chat-contact.on .chat-contact-av.chat-region-guaviare{box-shadow:0 0 0 2px #185FA544}
+.chat-contact.on .chat-contact-av.chat-region-guainia{box-shadow:0 0 0 2px #1a7a4a44}
+.chat-contact.on .chat-contact-av.chat-region-vaupes{box-shadow:0 0 0 2px #6d3fa844}
+.chat-contact.on .chat-contact-av.chat-region-juris{box-shadow:0 0 0 2px #b87d0a44}
 .storage-full-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:30000;background:#b91c1c;color:#fff;padding:10px 44px 10px 16px;font-size:13px;font-weight:600;line-height:1.45;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .storage-full-banner.on{display:block}
 .storage-full-banner-close{position:absolute;top:50%;right:10px;transform:translateY(-50%);background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;padding:4px 8px;line-height:1}
@@ -624,7 +622,8 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .export-reminder-btns{display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap}
 .chat-contact-info{flex:1;min-width:0}
 .chat-contact-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat-contact-prev{font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-contact-meta{font-size:9px;color:var(--tx3);line-height:1.25;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-contact-prev{font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .chat-contact-unread{min-width:20px;height:20px;border-radius:10px;background:var(--gn,#1a7a4a);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0}
 .chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#fff;position:relative}
 .chat-main.hidden{display:none}

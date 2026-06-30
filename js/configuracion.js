@@ -364,6 +364,7 @@ function renderListasCfg(){
       cfgSectionFold('Tipos de conducta — trámite Sancionatorio','Opciones del selector «Tipo de conducta / caso» en expedientes Sancionatorio.',ro?cfgCardReadonlyStrings(cfg.tiposSancionatorio||[]):tiposSancionatorioCardBody(),false);
     el.innerHTML=html;
     restoreCfgFoldState(open);
+    if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
   });
 }
 function tiposSancionatorioCardBody(){

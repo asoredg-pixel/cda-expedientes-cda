@@ -3688,6 +3688,7 @@ function startUsuariosFirestoreListener(){
     paintUsuariosCfgTable();
     aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
     if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+    if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
   },err=>{
     console.error('Error escuchando usuarios Firestore:',err);
     refreshUsuariosAutorizadosUi();
