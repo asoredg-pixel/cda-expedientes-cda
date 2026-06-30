@@ -9,7 +9,7 @@ const firebaseConfig={
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,deleteDoc,deleteField,arrayUnion,arrayRemove}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,deleteDoc,deleteField,arrayUnion,arrayRemove}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
@@ -23,6 +23,7 @@ window._fsUpdateDoc=updateDoc;
 window._fsAddDoc=addDoc;
 window._fsOnSnapshot=onSnapshot;
 window._fsCollection=collection;
+window._fsCollectionGroup=collectionGroup;
 window._fsGetDocs=getDocs;
 window._fsDeleteDoc=deleteDoc;
 window._fsDeleteField=deleteField;

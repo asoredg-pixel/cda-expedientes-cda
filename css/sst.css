@@ -550,6 +550,8 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-fab:hover{transform:scale(1.05);box-shadow:0 8px 24px rgba(22,163,74,.5),0 3px 10px rgba(8,145,178,.32),inset 0 1px 0 rgba(255,255,255,.28)}
 .chat-fab:active{transform:scale(.98)}
 .chat-fab.open{transform:scale(.94);box-shadow:0 4px 16px rgba(22,163,74,.38)}
+.chat-fab.chat-fab-pulse{animation:chatFabPulse .6s ease}
+@keyframes chatFabPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 .chat-fab-icon{display:flex;align-items:center;justify-content:center;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.25))}
 .chat-fab-icon svg,.ico-chat-bubble svg,.ico-chat-interno svg{display:block;fill:currentColor}
 .ico-chat-bubble{display:inline-flex;align-items:center;justify-content:center;color:var(--bl);vertical-align:middle}
