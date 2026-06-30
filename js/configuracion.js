@@ -7,8 +7,8 @@
 // ================================================================
 // CFG_PANELS → js/constants.js
 function instructoresPanelSub(){
-  if(esAdminModoGlobal())return 'Responsables vinculados a Usuarios autorizados (rol Responsables + departamento). Los encargados de módulo se asignan al definir el rol en Usuarios autorizados.';
-  if(esEncargadoDepartamentalUsuarios())return 'Seleccione responsables registrados en «Responsables autorizados» para su departamento, o regístrelos allí antes de vincularlos aquí.';
+  if(esAdminModoGlobal())return 'Encargados de módulo: se asignan en Usuarios autorizados (rol del departamento u oficina). Aquí solo vincule responsables/contratistas con permisos de registro — use «+» o «Registrar nuevo usuario».';
+  if(esEncargadoDepartamentalUsuarios())return 'Seleccione responsables registrados en «Usuarios autorizados» para su departamento, o regístrelos allí antes de vincularlos aquí.';
   return 'Seleccione responsables previamente registrados para su departamento.';
 }
 function instructorUsuarioLinkRow(i,ins,deptoId){
@@ -113,6 +113,7 @@ function instructoresCardBody(){
     cfg.instructores=migrateInstructoresList(cfg.instructores||[]);
     h+=cfg.instructores.map((ins,i)=>{
       if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return '';
+      if(typeof instructorEsVinculoReal==='function'&&!instructorEsVinculoReal(ins))return '';
       if(instructorEditableContratista(ins))return instructorRowEditable(i,ins,deptoCfg);
       return '';
     }).filter(Boolean).join('');

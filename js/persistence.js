@@ -205,6 +205,13 @@ function postLoadInit(){
   // Apply encargados from encargadosGlobal → cfgByDepto[deptoId].instructores
   // so getEncargadoDepto() returns the correct name for chat and other consumers.
   if(typeof syncEncargadosGlobalToInstructores==='function')syncEncargadosGlobalToInstructores();
+  let cfgPurged=false;
+  if(typeof purgeLegacyPlaceholderInstructores==='function'){
+    DEPTOS.forEach(function(d){
+      if(cfgByDepto[d.id]&&purgeLegacyPlaceholderInstructores(cfgByDepto[d.id]))cfgPurged=true;
+    });
+  }
+  if(cfgPurged&&typeof saveLS==='function')saveLS();
 }
 function _loadLSLocal(){
   try{

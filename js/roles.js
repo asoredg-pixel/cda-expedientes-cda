@@ -174,9 +174,35 @@ function puedeGestionarEncargadosCfg(){return esAdminModoGlobal();}
 function esVistaEncargadosModuloCfg(){return esAdminModoGlobal();}
 function muestraOficinasContratistaCfg(){return deptoCfg==='guaviare'&&(esAdminModoGlobal()||getRolEfectivo()==='guaviare');}
 function muestraOficinasContratistaIns(deptoId){return deptoId==='guaviare'&&(esAdminModoGlobal()||getRolEfectivo()==='guaviare');}
+// Nombres de ejemplo del DEF antiguo (sin email) — no deben persistir en cfg ni chat
+const LEGACY_INSTRUCTOR_PLACEHOLDERS=new Set([
+  'dr. ricardo leal','dra. patricia gómez','dr. carlos mora','dra. laura díaz'
+]);
+function esInstructorPlaceholderLegacy(ins){
+  if(!ins)return false;
+  if(String(ins.email||'').trim())return false;
+  if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return false;
+  const nom=String(ins.nombre||'').trim().toLowerCase();
+  return LEGACY_INSTRUCTOR_PLACEHOLDERS.has(nom);
+}
+function purgeLegacyPlaceholderInstructores(c){
+  if(!c||!Array.isArray(c.instructores))return false;
+  const antes=c.instructores.length;
+  c.instructores=c.instructores.filter(function(ins){return !esInstructorPlaceholderLegacy(ins);});
+  return c.instructores.length!==antes;
+}
+function instructorEsVinculoReal(ins){
+  if(!ins||ins.activo===false)return false;
+  if(esInstructorPlaceholderLegacy(ins))return false;
+  if(String(ins.email||'').trim())return true;
+  if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return true;
+  return false;
+}
 function getInstructoresContratistasDepto(deptoId){
   const c=cfgByDepto[deptoId]||{};
-  return migrateInstructoresList(c.instructores||[]).map((ins,i)=>({ins,i})).filter(x=>x.ins.rol==='contratista');
+  return migrateInstructoresList(c.instructores||[]).map((ins,i)=>({ins,i})).filter(function(x){
+    return x.ins.rol==='contratista'&&instructorEsVinculoReal(x.ins);
+  });
 }
 function withCfgDepto(deptoId,fn){
   syncCfgToStore();
@@ -205,7 +231,12 @@ function delInstructorDepto(deptoId,i){
         if(idx<0){notif('No se encontró el responsable en '+labelDepartamento(deptoId),'err');return;}
         cfg.instructores.splice(idx,1);
         syncInstructoresToEncargadosGlobal();
-        saveLS();renderListasCfg();poblarSelResponsable();notif('Eliminado de la lista','ok');
+        saveLS();renderListasCfg();poblarSelResponsable();
+        if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
+        if(window._db&&typeof saveFirestore==='function'){
+          void saveFirestore().catch(function(err){console.error('delInstructorDepto saveFirestore:',err);});
+        }
+        notif('Eliminado de la lista','ok');
       });
     });
   });
@@ -552,14 +583,12 @@ function syncResponsablesDesdeUsuariosAutorizados(){
     if(!email||!nombre||!deptoId||!cfgByDepto[deptoId])return;
     const c=cfgByDepto[deptoId];
     c.instructores=migrateInstructoresList(c.instructores||[]);
-    let ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
-    if(ins){
-      if(ins.rol!=='encargado_depto'&&ins.rol!=='encargado_oficina'){
-        ins.nombre=nombre;ins.email=email;ins.activo=true;ins.rol='contratista';
-      }
-    }else{
-      c.instructores.push({id:'ins_'+Date.now()+'_'+deptoId,nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
-    }
+    const ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
+    if(!ins)return;
+    if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return;
+    ins.nombre=nombre;
+    ins.email=email;
+    ins.activo=true;
   });
 }
 async function aplicarSyncUsuariosAutorizados(opts){

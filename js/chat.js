@@ -223,6 +223,7 @@ function getChatContacts(){
     }
     getInstructoresActivos(d.id).forEach(function(ins){
       if(!ins.nombre||ins.rol==='encargado_depto')return;
+      if(typeof instructorEsVinculoReal==='function'&&!instructorEsVinculoReal(ins))return;
       if(enc&&chatNombresIguales(ins.nombre,enc))return;
       push({
         key:'resp:'+ins.nombre,
@@ -245,6 +246,7 @@ function getChatContacts(){
     }
     getInstructoresOficina(o.id).forEach(function(ins){
       if(!ins.nombre||ins.rol==='encargado_oficina')return;
+      if(typeof instructorEsVinculoReal==='function'&&!instructorEsVinculoReal(ins))return;
       if(enc&&chatNombresIguales(ins.nombre,enc))return;
       push({
         key:'resp:'+ins.nombre,

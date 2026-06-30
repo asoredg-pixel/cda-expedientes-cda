@@ -54,7 +54,7 @@ const DEPTO_CHART_COLORS={guaviare:'#185FA5',guainia:'#1a7a4a',vaupes:'#6d3fa8'}
 const DEF={
   gravedades:['Leve','Grave','Gravísima'],
   cargos:['Auxiliar administrativo','Profesional universitario','Técnico operativo','Secretaria','Conductor','Director','Subdirector','Asesor','Contratista'],
-  instructores:['Dr. Ricardo Leal','Dra. Patricia Gómez','Dr. Carlos Mora','Dra. Laura Díaz'],
+  instructores:[],
   actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Proyectar acto administrativo','Notificar decisión'],
   actividadesCortasPred:['Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
   etapasPred:['Radicación','Revisión documental','Evaluación técnica','Visita de campo','Concepto técnico','Acto administrativo','Notificación','Archivo'],

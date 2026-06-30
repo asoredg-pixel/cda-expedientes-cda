@@ -27,6 +27,7 @@ function normalizeCfgObj(c){
     c.tiposActoAdmin=c.tiposActoAdmin.map(n=>({nombre:n,tieneVencimiento:true}));
   }
   if(c.instructores)c.instructores=migrateInstructoresList(c.instructores);
+  purgeLegacyPlaceholderInstructores(c);
   c.tramites.forEach(t=>{
     if(!t.campos)t.campos=[];
     if(!t.etapasSeg)t.etapasSeg=[];
