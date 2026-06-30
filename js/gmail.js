@@ -27,65 +27,52 @@ const GMAIL_SCOPES = [
 const GMAIL_TOKEN_KEY = 'sst_gmail_token';
 const GMAIL_TOKEN_EXP_KEY = 'sst_gmail_token_exp';
 
-function _gmailSesionEmailHint() {
-  if (typeof esSecretaria === 'function' && esSecretaria()) {
-    try {
-      const sec = typeof encargadosGlobal !== 'undefined' && encargadosGlobal.secretaria && encargadosGlobal.secretaria.email;
-      if (sec) return String(sec).trim().toLowerCase();
-    } catch (e) {}
-    return 'cdaguaviare1@gmail.com';
-  }
-  if (typeof getAuthEmailNorm === 'function') {
-    const e = getAuthEmailNorm();
-    if (e) return e;
-  }
-  return String(window._usuarioActual && window._usuarioActual.email || '').trim().toLowerCase();
-}
 function _gmailGisReady() {
   return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
-}
-let _gmailGisWaiting = false;
-function _gmailWaitForGis(thenFn, attempt) {
-  attempt = attempt || 0;
-  _gmailGisWaiting = true;
-  if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
-  if (_gmailGisReady()) {
-    _gmailGisWaiting = false;
-    thenFn();
-    return;
-  }
-  if (attempt >= 50) {
-    _gmailGisWaiting = false;
-    if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
-    notif('Google Identity Services no se cargó. Recargue la página (Ctrl+F5) e intente de nuevo.', 'err');
-    return;
-  }
-  setTimeout(function() { _gmailWaitForGis(thenFn, attempt + 1); }, 200);
-}
-function _gmailOfiRequestAccessToken(tokenClient) {
-  if (!tokenClient) return;
-  const hint = _gmailSesionEmailHint();
-  const opts = { prompt: 'select_account' };
-  if (hint) opts.hint = hint;
-  try {
-    tokenClient.requestAccessToken(opts);
-  } catch (err) {
-    console.error('requestAccessToken:', err);
-    _gmailConnecting = false;
-    _gmailOfiConnecting = false;
-    _gmailConnectStartedAt = null;
-    updateGmailConnectBtn();
-    if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
-    notif('No se pudo abrir la ventana de Google: ' + (err.message || err), 'err');
-  }
 }
 function _gmailResetConnectFlags() {
   _gmailConnecting = false;
   _gmailOfiConnecting = false;
-  _gmailGisWaiting = false;
   _gmailConnectStartedAt = null;
   updateGmailConnectBtn();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
+}
+function _gmailConnectBusy() {
+  if (!_gmailConnecting && !_gmailOfiConnecting) return false;
+  if (_gmailConnectStartedAt && Date.now() - _gmailConnectStartedAt > 60000) {
+    _gmailResetConnectFlags();
+    return false;
+  }
+  return true;
+}
+function _gmailRunWhenGisReady(fn) {
+  if (_gmailGisReady()) {
+    fn();
+    return;
+  }
+  var attempt = 0;
+  (function tick() {
+    if (_gmailGisReady()) {
+      fn();
+      return;
+    }
+    attempt++;
+    if (attempt > 50) {
+      notif('Google Identity Services no se cargó. Recargue la página (Ctrl+F5) e intente de nuevo.', 'err');
+      return;
+    }
+    setTimeout(tick, 200);
+  })();
+}
+function _gmailRequestOAuth(tokenClient) {
+  if (!tokenClient) return;
+  try {
+    tokenClient.requestAccessToken({ prompt: 'select_account' });
+  } catch (err) {
+    console.error('requestAccessToken:', err);
+    _gmailResetConnectFlags();
+    notif('No se pudo abrir la ventana de Google: ' + (err.message || err), 'err');
+  }
 }
 
 let _gmailTokenClient = null;
@@ -155,16 +142,17 @@ function gmailIsTokenValid() {
 // OAuth — GIS initTokenClient
 // ----------------------------------------------------------------
 function gmailConnect(callback) {
-  if (_gmailConnecting) {
-    if (_gmailConnectStartedAt && Date.now() - _gmailConnectStartedAt > 120000) _gmailResetConnectFlags();
-    else return;
-  }
+  if (_gmailConnectBusy()) return;
   const clientId = (typeof window._gmailClientId !== 'undefined') ? window._gmailClientId : '';
   if (!clientId || clientId.includes('TU_CLIENT_ID')) {
     notif('Falta configurar el Client ID OAuth en firebase-init.js (window._gmailClientId).', 'err');
     return;
   }
-  _gmailWaitForGis(function() {
+  _gmailRunWhenGisReady(function() {
+    if (!_gmailGisReady()) {
+      notif('Google Identity Services no disponible. Verifique su conexión a internet.', 'err');
+      return;
+    }
     _gmailConnecting = true;
     _gmailConnectStartedAt = Date.now();
     updateGmailConnectBtn();
@@ -178,13 +166,17 @@ function gmailConnect(callback) {
           notif('Error al conectar bandeja: ' + (response.error_description || response.error), 'err');
           return;
         }
+        if (!response.access_token) {
+          notif('Google no devolvió un token de acceso. Intente de nuevo.', 'err');
+          return;
+        }
         gmailSetToken(response.access_token, response.expires_in);
         notif('Bandeja conectada correctamente.', 'ok');
         if (typeof callback === 'function') callback();
         else gmailLoadInbox();
       }
     });
-    _gmailOfiRequestAccessToken(_gmailTokenClient);
+    _gmailRequestOAuth(_gmailTokenClient);
   });
 }
 
@@ -2194,11 +2186,6 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     notif('Error al verificar cuenta Gmail: ' + String(err.message || err).slice(0, 100), 'err');
     return false;
   }
-  const sesion = _gmailSesionEmailHint();
-  if (sesion && email && email !== sesion) {
-    notif('Debe conectar la cuenta registrada (' + sesion + '). Seleccionó: ' + email + '.', 'err');
-    return false;
-  }
   gmailOfiSetToken(tok, expiresInSec, email);
   return true;
 }
@@ -2213,7 +2200,6 @@ function gmailOfiIsTokenValid() {
 
 // ---- Connect / disconnect ----
 function gmailOfiConnect() {
-  // Secretary: reuse her primary Gmail OAuth (managed in gmail.js secretary section)
   if (_gmailOfiIsSecretaria()) {
     if (gmailIsTokenValid()) {
       _updateGmailOfiBtn();
@@ -2222,11 +2208,6 @@ function gmailOfiConnect() {
       if (!_gmailOfiSignature) _gmailOfiLoadSignature();
       return;
     }
-    if (_gmailConnecting) {
-      if (_gmailConnectStartedAt && Date.now() - _gmailConnectStartedAt > 120000) _gmailResetConnectFlags();
-      else return;
-    }
-    _updateGmailOfiBtn();
     if (typeof gmailConnect === 'function') {
       gmailConnect(function() {
         _updateGmailOfiBtn();
@@ -2239,16 +2220,17 @@ function gmailOfiConnect() {
     }
     return;
   }
-  if (_gmailOfiConnecting) {
-    if (_gmailConnectStartedAt && Date.now() - _gmailConnectStartedAt > 120000) _gmailResetConnectFlags();
-    else return;
-  }
+  if (_gmailConnectBusy()) return;
   const clientId = (typeof window._gmailClientId !== 'undefined') ? window._gmailClientId : '';
   if (!clientId || clientId.includes('TU_CLIENT_ID')) {
     notif('Falta configurar el Client ID OAuth.', 'err');
     return;
   }
-  _gmailWaitForGis(function() {
+  _gmailRunWhenGisReady(function() {
+    if (!_gmailGisReady()) {
+      notif('Google Identity Services no disponible. Verifique su conexión a internet.', 'err');
+      return;
+    }
     _gmailOfiConnecting = true;
     _gmailConnectStartedAt = Date.now();
     _updateGmailOfiBtn();
@@ -2261,15 +2243,20 @@ function gmailOfiConnect() {
           notif('Error al conectar correo: ' + (response.error_description || response.error), 'err');
           return;
         }
+        if (!response.access_token) {
+          notif('Google no devolvió un token de acceso. Intente de nuevo.', 'err');
+          return;
+        }
         const ok = await _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in);
         if (!ok) return;
+        _updateGmailOfiBtn();
         notif('✅ Correo conectado.', 'ok');
         gmailOfiFolder('INBOX');
         gmailOfiLoadLabels();
         _gmailOfiLoadSignature();
       }
     });
-    _gmailOfiRequestAccessToken(_gmailOfiTokenClient);
+    _gmailRequestOAuth(_gmailOfiTokenClient);
   });
 }
 
@@ -2302,7 +2289,7 @@ function _gmailOfiTokenValid() {
 function _updateGmailOfiBtn() {
   const btn = document.getElementById('gmail-ofi-connect-btn');
   if (!btn) return;
-  const connecting = _gmailOfiConnecting || _gmailGisWaiting || (_gmailOfiIsSecretaria() && _gmailConnecting);
+  const connecting = _gmailOfiConnecting || (_gmailOfiIsSecretaria() && _gmailConnecting);
   if (connecting) { btn.textContent = '⏳ Conectando…'; btn.disabled = true; return; }
   const valid = _gmailOfiTokenValid();
   if (valid) {
