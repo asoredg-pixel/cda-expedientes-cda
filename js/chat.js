@@ -90,23 +90,43 @@ function getChatIdentity(){
   if(deptoActivo==='jurisdiccional'||deptoActivo==='responsables')return null;
   return{kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
 }
+function chatIdentityKeysForKey(key){
+  key=chatNormKey(key);
+  const set=new Set([key]);
+  if(key.startsWith('depto:')){
+    const id=key.slice(6);
+    const enc=getEncargadoDepto(id);
+    if(enc)set.add('resp:'+enc);
+    if(id==='guaviare')set.add('ofi:guaviare');
+  }else if(key.startsWith('ofi:')){
+    const id=key.slice(4);
+    const enc=getEncargadoOficina(id);
+    if(enc)set.add('resp:'+enc);
+    if(id==='guaviare')set.add('depto:guaviare');
+  }else if(key.startsWith('resp:')){
+    const nm=key.slice(5);
+    DEPTOS.forEach(function(d){
+      const enc=getEncargadoDepto(d.id);
+      if(enc&&enc===nm)set.add('depto:'+d.id);
+      getInstructoresActivos(d.id).forEach(function(ins){
+        if(ins.nombre!==nm)return;
+        set.add('depto:'+d.id);
+        (ins.oficinas||[]).forEach(function(ofi){
+          if(ins.rol==='encargado_oficina')set.add('ofi:'+ofi);
+        });
+      });
+    });
+  }
+  return[...set];
+}
 function getMyChatKeys(){
   const me=getChatIdentity();
   if(!me)return[];
-  const keys=[me.key];
-  if(me.kind==='depto'){
-    const enc=getEncargadoDepto(me.deptoId);
-    if(enc)keys.push('resp:'+enc);
-    if(me.deptoId==='guaviare')keys.push('ofi:guaviare');
-  }
-  if(me.kind==='ofi'){
-    const enc=getEncargadoOficina(me.oficinaId);
-    if(enc)keys.push('resp:'+enc);
-    if(me.oficinaId==='guaviare')keys.push('depto:guaviare');
-  }
   const out=new Set();
-  keys.forEach(k=>chatKeyAliases(k).forEach(a=>out.add(chatNormKey(a))));
-  return [...out];
+  chatIdentityKeysForKey(me.key).forEach(function(k){
+    chatKeyAliases(k).forEach(function(a){out.add(chatNormKey(a));});
+  });
+  return[...out];
 }
 function getChatContacts(){
   const me=getChatIdentity();
@@ -416,36 +436,51 @@ function chatMsgUnreadForMe(m){
   const rb=(m.readBy||[]).map(chatNormKey);
   return !my.some(k=>rb.includes(k));
 }
+function chatKeyInMyKeys(k){
+  const nk=chatNormKey(k);
+  const my=getMyChatKeys();
+  if(my.includes(nk))return true;
+  return chatKeyAliases(k).some(function(a){return my.includes(chatNormKey(a));});
+}
+function chatMyKeysCanon(){
+  const s=new Set();
+  getMyChatKeys().forEach(function(k){s.add(chatCanonicalKey(k));});
+  return s;
+}
+function chatPickSendRoute(me,contactKey){
+  contactKey=String(contactKey||'').trim();
+  const fallback=chatContactFromKey(contactKey);
+  const msgs=chatMsgsForContact(me,contactKey);
+  if(!msgs.length){
+    return{
+      convId:chatConvId(me.key,fallback.key),
+      fromKey:me.key,
+      toKey:fallback.key,
+      toLabel:fallback.label
+    };
+  }
+  const last=msgs[msgs.length-1];
+  const convId=last.convId||chatConvId(last.fromKey,last.toKey);
+  const keys=convId.split('|');
+  let fromKey=me.key;
+  keys.forEach(function(k){
+    if(chatKeyInMyKeys(k))fromKey=k;
+  });
+  const myCanon=chatMyKeysCanon();
+  const otherKey=keys.find(function(k){return !myCanon.has(chatCanonicalKey(k));})||contactKey;
+  const to=chatContactFromKey(otherKey);
+  return{convId,fromKey,toKey:to.key,toLabel:to.label};
+}
 function chatConvIdsForContact(me,contactKey){
   contactKey=String(contactKey||'');
   if(!me||!contactKey)return[];
   const ids=new Set();
-  function add(kA,kB){if(kA&&kB)ids.add(chatConvId(kA,kB));}
-  add(me.key,contactKey);
-  if(me.kind==='depto'&&contactKey.startsWith('resp:')){
-    const enc=getEncargadoDepto(me.deptoId);
-    if(enc)add(contactKey,'resp:'+enc);
-  }
-  if(me.kind==='ofi'){
-    const encYo=getEncargadoOficina(me.oficinaId);
-    if(contactKey.startsWith('resp:')){
-      add(me.key,contactKey);
-      if(encYo)add('resp:'+encYo,contactKey);
-    }
-    if(contactKey.startsWith('ofi:')){
-      const otroId=contactKey.slice(4);
-      const encOtro=getEncargadoOficina(otroId);
-      add(me.key,contactKey);
-      if(encOtro)add(me.key,'resp:'+encOtro);
-      if(encYo)add('resp:'+encYo,contactKey);
-      if(encYo&&encOtro)add('resp:'+encYo,'resp:'+encOtro);
-    }
-    if(contactKey.startsWith('depto:')){
-      add(me.key,contactKey);
-      if(encYo)add('resp:'+encYo,contactKey);
-    }
-  }
-  return [...ids];
+  chatIdentityKeysForKey(me.key).forEach(function(a){
+    chatIdentityKeysForKey(contactKey).forEach(function(b){
+      if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvId(a,b));
+    });
+  });
+  return[...ids];
 }
 function chatMsgsForContact(me,contactKey){
   if(!me||!contactKey)return[];
@@ -547,6 +582,11 @@ function chatMsgParticipa(m){
       const fk2=chatNormKey(m.fromKey),tk2=chatNormKey(m.toKey);
       if(fk2===ek||tk2===ek)return true;
     }
+  }
+  if(me&&me.kind==='resp'){
+    const deptoId=me.deptoId||deptoCfg||'guaviare';
+    const dk=chatNormKey('depto:'+deptoId);
+    if(fk===dk||tk===dk)return true;
   }
   return false;
 }
@@ -764,8 +804,6 @@ function renderChatContacts(){
 async function chatAbrirConv(contactKey){
   const me=getChatIdentity();
   if(!me)return;
-  const convId=chatConvId(me.key,contactKey);
-  window._chatConvActiva=convId;
   window._chatActiveContactKey=contactKey;
   window._chatVista='chat';
   window._chatContactsCollapsed=window.innerWidth<640;
@@ -775,6 +813,11 @@ async function chatAbrirConv(contactKey){
   if(tit)tit.textContent=c.label;
   if(sub)sub.textContent=c.sub||'Conversación';
   await loadChatMensajesForContact(me,contactKey);
+  const msgs=chatMsgsForContact(me,contactKey);
+  const convId=msgs.length
+    ?(msgs[msgs.length-1].convId||chatConvId(msgs[msgs.length-1].fromKey,msgs[msgs.length-1].toKey))
+    :chatConvId(me.key,contactKey);
+  window._chatConvActiva=convId;
   initChatSyncForContact(contactKey);
   await chatMarcarLeido(convId);
   chatSyncLayout();
@@ -834,23 +877,22 @@ function renderChatMessages(){
 }
 async function chatEnviarTexto(){
   const inp=document.getElementById('chat-inp');
-  const convId=window._chatConvActiva;
   const me=getChatIdentity();
-  if(!inp||!convId||!me)return;
+  if(!inp||!me)return;
   const text=inp.value.trim();
   if(!text)return;
-  const keys=convId.split('|');
-  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
-  const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
-  const to=chatContactFromKey(otherKey);
+  const contactKey=chatActiveContactKey();
+  if(!contactKey)return;
+  const route=chatPickSendRoute(me,contactKey);
+  window._chatConvActiva=route.convId;
   const msg={
     id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
-    convId:chatConvId(me.key,to.key),
-    fromKey:me.key,fromLabel:me.label,
-    toKey:to.key,toLabel:to.label,
+    convId:route.convId,
+    fromKey:route.fromKey,fromLabel:me.label,
+    toKey:route.toKey,toLabel:route.toLabel,
     text,
     ts:new Date().toISOString(),
-    readBy:chatKeyAliases(me.key).map(chatNormKey)
+    readBy:getMyChatKeys()
   };
   inp.value='';
   chatMensajes.push(msg);
@@ -977,10 +1019,10 @@ function chatUploadOverlayError(errMsg,fileName){
 async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
-  const convId=window._chatConvActiva;
   const me=getChatIdentity();
-  if(!convId||!me||_chatFileUploading){
-    if(file&&inp&&!convId){
+  const contactKey=chatActiveContactKey();
+  if(!contactKey||!me||_chatFileUploading){
+    if(file&&inp&&!contactKey){
       chatModalAlert({
         title:'Seleccione un contacto',
         message:'Abra una conversación antes de adjuntar un archivo.',
@@ -1025,23 +1067,21 @@ async function chatEnviarArchivo(fileArg){
   }
   _chatFileUploading=true;
   chatUploadOverlayShow(file.name);
-  const keys=convId.split('|');
-  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
-  const otherKey=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)))||keys[1];
-  const to=chatContactFromKey(otherKey);
+  const route=chatPickSendRoute(me,contactKey);
+  window._chatConvActiva=route.convId;
   const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
   try{
     const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
     const msg={
       id:msgId,
-      convId:chatConvId(me.key,to.key),
-      fromKey:me.key,fromLabel:me.label,
-      toKey:to.key,toLabel:to.label,
+      convId:route.convId,
+      fromKey:route.fromKey,fromLabel:me.label,
+      toKey:route.toKey,toLabel:route.toLabel,
       text:'',
       driveLink:uploaded.driveLink,
       file:{fileId:uploaded.fileId,driveLink:uploaded.driveLink,nombre:uploaded.nombre,expiresAt:uploaded.expiresAt},
       ts:new Date().toISOString(),
-      readBy:chatKeyAliases(me.key).map(chatNormKey)
+      readBy:getMyChatKeys()
     };
     if(inp)inp.value='';
     chatMensajes.push(msg);
