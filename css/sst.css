@@ -1194,16 +1194,10 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
 .tab.tab-gmail-ofi-only.tab-gmail-ofi-on{display:inline-flex!important}
 .tab.tab-rec-only{display:none!important}
 .tab.tab-rec-only.tab-rec-on{display:inline-flex!important}
-.tab.tab-sesion-off{display:none!important}
-/* tab-sesion-off tiene prioridad; si la pestaña está permitida, anula ocultamiento legacy */
-.tab:not(.tab-sesion-off).tab-modulo-only{display:inline-flex!important}
-.tab:not(.tab-sesion-off).tab-resp-only{display:inline-flex!important}
-.tab:not(.tab-sesion-off).tab-agenda-only{display:inline-flex!important}
-.tab:not(.tab-sesion-off).tab-gmail-ofi-only{display:inline-flex!important}
-.tab:not(.tab-sesion-off).tab-rec-only{display:inline-flex!important}
-.tab.tab-sesion-off.tab-gmail-ofi-on,
-.tab.tab-sesion-off.tab-rec-on,
-.tab.tab-sesion-off.on{display:none!important}
+/* Visibilidad por rol — solo pestañas con tab-sesion-on (sesión activa) */
+body.sesion-activa .tabsi .tab{display:none!important}
+body.sesion-activa .tabsi .tab.tab-sesion-on{display:inline-flex!important}
+body.sesion-activa .tabsi .tab.tab-resp-reg-off{display:none!important}
 /* Recursos — enlaces y biblioteca */
 .rec-wrap{padding:.5rem 0 2rem}
 .rec-title{margin:0;font-size:1.25rem}
@@ -1649,6 +1643,8 @@ body:not(.sesion-activa) #pg-login{
     color:#6b6960!important;background:transparent!important;
   }
   body.sesion-activa .tab:active{opacity:.75}
+  body.sesion-activa .tabsi .tab:not(.tab-sesion-on){display:none!important}
+  body.sesion-activa .tabsi .tab.tab-sesion-on{display:inline-flex!important}
 
   /* Contenido: espacio para barra inferior */
   body.sesion-activa .main{

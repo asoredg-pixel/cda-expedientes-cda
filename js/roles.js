@@ -770,10 +770,10 @@ function aplicarVisibilidadTabsSesion(){
   document.querySelectorAll('.tabsi .tab').forEach(el=>{
     const key=el.id?el.id.replace(/^tab-/,''):'';
     const show=visibles.has(key);
+    el.classList.toggle('tab-sesion-on',show);
     el.classList.toggle('tab-sesion-off',!show);
-    el.classList.toggle('tab-gmail-ofi-on',show&&key==='gmail-ofi');
-    el.classList.toggle('tab-rec-on',show&&key==='rec');
-    if(!show){el.classList.remove('on','tab-selected');el.style.display='';}
+    if(!show)el.classList.remove('on','tab-selected');
+    el.style.display='';
   });
   const pgOn=document.querySelector('.pg.on');
   if(pgOn&&pgOn.id&&pgOn.id.startsWith('pg-')){

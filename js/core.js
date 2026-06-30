@@ -8941,7 +8941,7 @@ function updateDeptoUI(){
   const tabReg=document.getElementById('tab-reg');
   const hideRegResp=resp&&!responsablePuedeVerRegistro();
   if(tabReg){tabReg.classList.toggle('tab-resp-reg-off',hideRegResp);}
-  aplicarVisibilidadTabsSesion();
+  if(typeof aplicarVisibilidadTabsSesion==='function')aplicarVisibilidadTabsSesion();
   document.querySelectorAll('.hacts-juris-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||resp||sec||ciudadano||ofi));
   document.querySelectorAll('.hacts-nuevo-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||(resp&&(!responsableActivo||!responsablePuedeEditarSec('control')))||sec||ciudadano||ofi));
   const optPqrsRec=document.getElementById('f-act-opt-pqrsrec');
