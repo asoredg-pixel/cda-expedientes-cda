@@ -235,8 +235,8 @@ async function loadLS(){
       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
-      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=g.recursosEnlaces;
-      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=g.bibliotecaRepos;
+      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
+      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
     }
     const [deptoResults,expSnaps]=await Promise.all([
@@ -690,8 +690,8 @@ async function reloadRecursosFirestore(){
     const snap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
     if(snap.exists()){
       const g=snap.data();
-      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=g.recursosEnlaces;
-      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=g.bibliotecaRepos;
+      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
+      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
     }
     return true;

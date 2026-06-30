@@ -1189,6 +1189,15 @@ details.ec-fold>summary.ec:hover .ech{background:color-mix(in srgb,var(--ac) 5%,
 .ec-fold-ico{display:inline-block;font-size:10px;margin-right:4px;color:var(--tx3);transition:transform .15s}
 .ec-fold-ico::before{content:'▸'}
 details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
+details.ec-fold .ecb{
+  background:#fff;
+  border:1px solid var(--bd);
+  border-top:none;
+  border-radius:0 0 var(--r) var(--r);
+  padding:1rem 1.3rem;
+  box-shadow:var(--sh);
+}
+details.ec-fold[open]{margin-bottom:10px}
 /* Tab visibility — correos oficina/nca/resp */
 .tab.tab-gmail-ofi-only{display:none!important}
 .tab.tab-gmail-ofi-only.tab-gmail-ofi-on{display:inline-flex!important}
@@ -1202,9 +1211,16 @@ body.sesion-activa .tabsi .tab.tab-resp-reg-off{display:none!important}
 .rec-wrap{padding:.5rem 0 2rem}
 .rec-title{margin:0;font-size:1.25rem}
 .rec-sub{margin:.25rem 0 0;font-size:13px;color:var(--tx2)}
-.rec-subtabs{display:flex;gap:8px;margin:1rem 0;flex-wrap:wrap}
-.rec-subtab{padding:8px 14px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;font-size:13px;font-weight:500}
-.rec-subtab.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.rec-subtabs{display:flex;gap:0;border-bottom:1px solid var(--bd);margin:1rem 0 1.25rem;overflow-x:auto}
+.rec-subtab{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 16px;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:600;
+  background:none;border:none;border-bottom:2px solid transparent;
+  cursor:pointer;color:var(--tx2);transition:color .15s,border-color .15s;white-space:nowrap;
+}
+.rec-subtab:hover{color:var(--tx)}
+.rec-subtab.on{color:var(--bl);border-bottom-color:var(--bl);background:color-mix(in srgb,var(--bl) 6%,transparent)}
+.rec-subtab-ico{font-size:1em;line-height:1}
 .rec-card{margin-top:0}
 .rec-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .rec-inp{min-width:120px;flex:1;max-width:200px;padding:6px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px}

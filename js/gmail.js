@@ -838,13 +838,26 @@ async function driveEnsureBibliotecaOficinaFolder(oficinaId) {
   return { folderId: parent, link: 'https://drive.google.com/drive/folders/' + parent };
 }
 
-// Crea carpeta de repositorio dentro de la oficina.
-async function driveEnsureBibliotecaRepoFolder(oficinaId, repoTitulo) {
+// Crea carpeta de repositorio según ámbito (sistema, departamento u oficina).
+async function driveEnsureBibliotecaRepoFolder(scope, scopeId, repoTitulo) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
-  const base = await driveEnsureBibliotecaOficinaFolder(oficinaId);
   const nom = String(repoTitulo || 'Repositorio').trim().slice(0, 80) || 'Repositorio';
-  const folderId = await _driveEnsureFolder(token, nom, base.folderId);
+  let parentId = '';
+  if (scope === 'oficina' || (!scope && scopeId)) {
+    const ofiId = scopeId || scope;
+    const base = await driveEnsureBibliotecaOficinaFolder(ofiId);
+    parentId = base.folderId;
+  } else if (scope === 'departamento') {
+    const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId(scopeId) : DRIVE_ROOT_RECURSOS_ID;
+    let parent = await _driveEnsureFolder(token, 'Departamentos', rootId);
+    parent = await _driveEnsureFolder(token, scopeId, parent);
+    parentId = parent;
+  } else {
+    const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId('guaviare') : DRIVE_ROOT_RECURSOS_ID;
+    parentId = await _driveEnsureFolder(token, 'Sistema', rootId);
+  }
+  const folderId = await _driveEnsureFolder(token, nom, parentId);
   return { folderId: folderId, link: 'https://drive.google.com/drive/folders/' + folderId };
 }
 
