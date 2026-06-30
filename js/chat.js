@@ -81,14 +81,24 @@ function addChatResponsablesOficinaPropia(add,oficinaId){
 function getChatIdentity(){
   if(esJurisdiccional())return{kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION};
   if(esModoResponsable()){
-    const nm=String(responsableActivo||'').trim();
+    let nm=String(responsableActivo||'').trim();
+    if(!nm){
+      const ses=chatSessionUserContact();
+      if(ses&&ses.key.startsWith('resp:'))nm=ses.key.slice(5);
+    }
     if(!nm)return null;
     return{kind:'resp',key:'resp:'+nm,label:nm,deptoId:deptoCfg||'guaviare'};
   }
   if(esModoOficinaDeguv())return{kind:'ofi',key:'ofi:'+deptoActivo,label:labelOficina(deptoActivo),oficinaId:deptoActivo};
   if(esSecretaria())return{kind:'ofi',key:'ofi:secretaria',label:'Secretaría DEGUV',oficinaId:'secretaria'};
-  if(deptoActivo==='jurisdiccional'||deptoActivo==='responsables')return null;
-  return{kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
+  if(deptoActivo==='jurisdiccional'||deptoActivo==='responsables'){
+    const ses=chatSessionUserContact();
+    if(ses)return ses;
+    return null;
+  }
+  const base={kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
+  const ses=chatSessionUserContact();
+  return ses||base;
 }
 function chatIdentityKeysForKey(key){
   key=chatNormKey(key);
@@ -98,35 +108,114 @@ function chatIdentityKeysForKey(key){
     const enc=getEncargadoDepto(id);
     if(enc)set.add('resp:'+enc);
     if(id==='guaviare')set.add('ofi:guaviare');
+    (_usuariosCache||[]).forEach(function(u){
+      if(u.activo===false)return;
+      const rol=String(u.rol||'').trim();
+      const nom=String(u.nombre||'').trim();
+      if(!nom)return;
+      if(rol===id||(enc&&chatNombresIguales(enc,nom)))set.add('resp:'+nom);
+    });
   }else if(key.startsWith('ofi:')){
     const id=key.slice(4);
     const enc=getEncargadoOficina(id);
     if(enc)set.add('resp:'+enc);
     if(id==='guaviare')set.add('depto:guaviare');
+    (_usuariosCache||[]).forEach(function(u){
+      if(u.activo===false)return;
+      const rol=String(u.rol||'').trim();
+      const nom=String(u.nombre||'').trim();
+      if(!nom)return;
+      if(rol===id||(enc&&chatNombresIguales(enc,nom)))set.add('resp:'+nom);
+    });
+  }else if(key.startsWith('juris:')){
+    set.add('juris:jurisdiccional');
   }else if(key.startsWith('resp:')){
     const nm=key.slice(5);
     DEPTOS.forEach(function(d){
       const enc=getEncargadoDepto(d.id);
-      if(enc&&enc===nm)set.add('depto:'+d.id);
+      if(enc&&chatNombresIguales(enc,nm))set.add('depto:'+d.id);
       getInstructoresActivos(d.id).forEach(function(ins){
-        if(ins.nombre!==nm)return;
+        if(!chatNombresIguales(ins.nombre,nm))return;
         set.add('depto:'+d.id);
         (ins.oficinas||[]).forEach(function(ofi){
           if(ins.rol==='encargado_oficina')set.add('ofi:'+ofi);
         });
       });
     });
+    OFICINAS_DEGUV.forEach(function(o){
+      if(o.id==='guaviare')return;
+      const enc=getEncargadoOficina(o.id);
+      if(enc&&chatNombresIguales(enc,nm))set.add('ofi:'+o.id);
+    });
+    (_usuariosCache||[]).forEach(function(u){
+      if(u.activo===false||!chatNombresIguales(u.nombre,nm))return;
+      const rol=String(u.rol||'').trim();
+      if(rol==='jurisdiccional')set.add('juris:jurisdiccional');
+      else if(DEPTOS.some(function(d){return d.id===rol;}))set.add('depto:'+rol);
+      else if(rol==='secretaria'||OFICINAS_DEGUV.some(function(o){return o.id===rol;}))set.add('ofi:'+rol);
+      else if((rol==='responsables'||rol==='contratista')&&u.deptoResponsable)set.add('depto:'+u.deptoResponsable);
+    });
   }
   return[...set];
 }
-function getMyChatKeys(){
+function chatAllKeysFor(key){
+  const set=new Set();
+  function add(k){
+    k=chatNormKey(k);
+    if(!k)return;
+    set.add(k);
+    chatKeyAliases(k).forEach(function(a){set.add(chatNormKey(a));});
+  }
+  add(key);
+  chatIdentityKeysForKey(key).forEach(add);
+  return set;
+}
+function chatSessionUserContact(){
+  const u=window._usuarioActual;
+  if(!u||u.activo===false)return null;
+  return chatUsuarioToContact(u);
+}
+function chatMyKeySet(){
+  const set=new Set();
   const me=getChatIdentity();
-  if(!me)return[];
-  const out=new Set();
-  chatIdentityKeysForKey(me.key).forEach(function(k){
-    chatKeyAliases(k).forEach(function(a){out.add(chatNormKey(a));});
-  });
-  return[...out];
+  if(me)chatAllKeysFor(me.key).forEach(function(k){set.add(k);});
+  const ses=chatSessionUserContact();
+  if(ses)chatAllKeysFor(ses.key).forEach(function(k){set.add(k);});
+  return set;
+}
+function getMyChatKeys(){
+  return[...chatMyKeySet()];
+}
+function chatKeyInMyKeys(k){
+  const mine=chatMyKeySet();
+  const nk=chatNormKey(k);
+  if(mine.has(nk))return true;
+  return chatAllKeysFor(k).some(function(a){return mine.has(a);});
+}
+function chatMsgParticipa(m){
+  if(!m)return false;
+  const mine=chatMyKeySet();
+  if(!mine.size)return false;
+  if(m.fromKey||m.toKey){
+    const from=chatAllKeysFor(m.fromKey||'');
+    const to=chatAllKeysFor(m.toKey||'');
+    for(const k of mine){
+      if(from.has(k)||to.has(k))return true;
+    }
+  }
+  const cid=String(m.convId||'').trim();
+  if(cid){
+    const parts=cid.indexOf('|')>=0?cid.split('|'):[cid];
+    if(parts.some(function(p){return chatKeyInMyKeys(p);}))return true;
+    if(m.fromKey&&m.toKey){
+      const alt=chatConvId(m.fromKey,m.toKey);
+      if(alt!==cid){
+        const altParts=alt.indexOf('|')>=0?alt.split('|'):[alt];
+        if(altParts.some(function(p){return chatKeyInMyKeys(p);}))return true;
+      }
+    }
+  }
+  return false;
 }
 function chatRegionForDepto(deptoId){
   deptoId=String(deptoId||'');
@@ -223,7 +312,6 @@ function getChatContacts(){
     }
     getInstructoresActivos(d.id).forEach(function(ins){
       if(!ins.nombre||ins.rol==='encargado_depto')return;
-      if(typeof instructorEsVinculoReal==='function'&&!instructorEsVinculoReal(ins))return;
       if(enc&&chatNombresIguales(ins.nombre,enc))return;
       push({
         key:'resp:'+ins.nombre,
@@ -246,7 +334,6 @@ function getChatContacts(){
     }
     getInstructoresOficina(o.id).forEach(function(ins){
       if(!ins.nombre||ins.rol==='encargado_oficina')return;
-      if(typeof instructorEsVinculoReal==='function'&&!instructorEsVinculoReal(ins))return;
       if(enc&&chatNombresIguales(ins.nombre,enc))return;
       push({
         key:'resp:'+ins.nombre,
@@ -350,22 +437,32 @@ function scheduleChatNotifySync(){
 }
 function chatNotifyConvIds(){
   const me=getChatIdentity();
-  if(!me)return[];
+  const ses=chatSessionUserContact();
+  if(!me&&!ses)return[];
+  const myKeys=new Set();
+  if(me)chatAllKeysFor(me.key).forEach(function(k){myKeys.add(k);});
+  if(ses)chatAllKeysFor(ses.key).forEach(function(k){myKeys.add(k);});
   const ids=new Set();
   getChatContacts().forEach(function(c){
-    chatConvIdsForContact(me,c.key).forEach(function(id){
-      ids.add(chatConvFirestoreId(id));
+    [...myKeys].forEach(function(a){
+      chatAllKeysFor(c.key).forEach(function(b){
+        if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvFirestoreId(chatConvId(a,b)));
+      });
     });
   });
-  return [...ids];
+  (chatMensajes||[]).forEach(function(m){
+    if(!chatMsgParticipa(m))return;
+    const cid=m.convId||chatConvId(m.fromKey,m.toKey);
+    if(cid)ids.add(chatConvFirestoreId(cid));
+  });
+  return[...ids];
 }
 function chatContactKeyFromMsg(msg){
   const me=getChatIdentity();
   if(!me||!msg)return null;
-  const my=getMyChatKeys();
+  const mine=chatMyKeySet();
   function esMioKey(k){
-    k=chatNormKey(k);
-    return my.includes(k)||chatKeyAliases(k).some(function(a){return my.includes(chatNormKey(a));});
+    return chatAllKeysFor(k).some(function(a){return mine.has(a);});
   }
   let other=esMioKey(msg.fromKey)?msg.toKey:msg.fromKey;
   if(!other)return null;
@@ -447,7 +544,7 @@ function initChatNotifySync(){
     const chatWin=document.getElementById('chat-window');
     if(chatWin&&chatWin.classList.contains('on')){
       renderChatContacts();
-      if(incoming&&window._chatConvActiva)renderChatMessages();
+      if(window._chatConvActiva)renderChatMessages();
     }
   },function(err){
     console.error('initChatNotifySync collectionGroup:',err);
@@ -478,7 +575,10 @@ function chatNotifyConvIdsFallback(){
         if(!initial&&change.type==='added'&&!chatEsMio(msg))chatTryDesktopNotify(msg);
       });
       renderChatBadge();
-      if(document.getElementById('chat-window')?.classList.contains('on'))renderChatContacts();
+      if(document.getElementById('chat-window')?.classList.contains('on')){
+        renderChatContacts();
+        if(window._chatConvActiva)renderChatMessages();
+      }
     });
     _chatNotifyUnsubs.push(unsub);
   });
@@ -503,9 +603,9 @@ function chatContactFromKey(key){
 function chatAvClass(kind){return kind==='depto'?' depto':kind==='juris'?' juris':kind==='ofi'?' ofi':kind==='enc_ofi'?' enc_ofi':kind==='resp'?' resp':'';}
 function chatAvLetter(label){return String(label||'?').trim().charAt(0).toUpperCase();}
 function chatEsMio(m){
-  const my=getMyChatKeys();
-  const fk=chatNormKey(m.fromKey);
-  return my.includes(fk)||chatKeyAliases(m.fromKey).some(a=>my.includes(chatNormKey(a)));
+  if(!m||!m.fromKey)return false;
+  const mine=chatMyKeySet();
+  return chatAllKeysFor(m.fromKey).some(function(k){return mine.has(k);});
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
@@ -529,16 +629,9 @@ function chatFromLabel(m){
 function chatMsgUnreadForMe(m){
   const my=getMyChatKeys();
   if(!my.length)return false;
-  if(my.includes(chatNormKey(m.fromKey)))return false;
-  if(chatKeyAliases(m.fromKey).some(a=>my.includes(chatNormKey(a))))return false;
+  if(chatEsMio(m))return false;
   const rb=(m.readBy||[]).map(chatNormKey);
-  return !my.some(k=>rb.includes(k));
-}
-function chatKeyInMyKeys(k){
-  const nk=chatNormKey(k);
-  const my=getMyChatKeys();
-  if(my.includes(nk))return true;
-  return chatKeyAliases(k).some(function(a){return my.includes(chatNormKey(a));});
+  return !my.some(function(k){return rb.includes(k);});
 }
 function chatMyKeysCanon(){
   const s=new Set();
@@ -571,10 +664,17 @@ function chatPickSendRoute(me,contactKey){
 }
 function chatConvIdsForContact(me,contactKey){
   contactKey=String(contactKey||'');
-  if(!me||!contactKey)return[];
+  if(!contactKey)return[];
   const ids=new Set();
-  chatIdentityKeysForKey(me.key).forEach(function(a){
-    chatIdentityKeysForKey(contactKey).forEach(function(b){
+  const to=chatContactFromKey(contactKey);
+  const myKeys=new Set();
+  if(me)chatAllKeysFor(me.key).forEach(function(k){myKeys.add(k);});
+  const ses=chatSessionUserContact();
+  if(ses)chatAllKeysFor(ses.key).forEach(function(k){myKeys.add(k);});
+  if(!myKeys.size&&me)myKeys.add(chatNormKey(me.key));
+  [...myKeys].forEach(function(a){
+    ids.add(chatConvId(a,to.key));
+    chatAllKeysFor(to.key).forEach(function(b){
       if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvId(a,b));
     });
   });
@@ -652,45 +752,9 @@ function chatMsgsForDeptResp(deptoId,respKey){
 }
 function chatMsgsForActiveConv(){
   const me=getChatIdentity();
-  const contactKey=chatActiveContactKey();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!me||!contactKey)return[];
   return chatMsgsForContact(me,contactKey);
-}
-function chatMsgParticipa(m){
-  const my=getMyChatKeys();
-  if(!my.length)return false;
-  const fk=chatNormKey(m.fromKey),tk=chatNormKey(m.toKey);
-  let involved=false;
-  if(my.includes(fk)||my.includes(tk))involved=true;
-  if(chatKeyAliases(m.fromKey).some(function(a){return my.includes(chatNormKey(a));}))involved=true;
-  if(chatKeyAliases(m.toKey).some(function(a){return my.includes(chatNormKey(a));}))involved=true;
-  const me=getChatIdentity();
-  if(me&&me.kind==='depto'){
-    const enc=getEncargadoDepto(me.deptoId);
-    if(enc){
-      const ek=chatNormKey('resp:'+enc);
-      const fk2=chatNormKey(m.fromKey),tk2=chatNormKey(m.toKey);
-      if(fk2===ek||tk2===ek){
-        const ins=new Set(getInstructoresActivos(me.deptoId).map(function(i){return chatNormKey('resp:'+i.nombre);}));
-        if(ins.has(fk2)||ins.has(tk2))involved=true;
-      }
-    }
-  }
-  if(me&&me.kind==='ofi'){
-    const enc=getEncargadoOficina(me.oficinaId);
-    if(enc){
-      const ek=chatNormKey('resp:'+enc);
-      const fk2=chatNormKey(m.fromKey),tk2=chatNormKey(m.toKey);
-      if(fk2===ek||tk2===ek)involved=true;
-    }
-  }
-  if(me&&me.kind==='resp'){
-    const deptoId=me.deptoId||deptoCfg||'guaviare';
-    const dk=chatNormKey('depto:'+deptoId);
-    if(fk===dk||tk===dk)involved=true;
-  }
-  if(!involved)return false;
-  return true;
 }
 function chatUnreadCount(){
   const me=getChatIdentity();
@@ -1004,7 +1068,14 @@ async function chatEnviarTexto(){
   renderChatContacts();
   renderChatBadge();
   const db=window._db;
-  if(!db||!window._fsSetDoc||!window._fsDoc)return;
+  if(!db||!window._fsSetDoc||!window._fsDoc){
+    chatMensajes=chatMensajes.filter(function(m){return m.id!==msg.id;});
+    renderChatMessages();
+    renderChatContacts();
+    renderChatBadge();
+    notif('No hay conexión con Firestore. El mensaje no se envió.','err');
+    return;
+  }
   const fsConvId=chatConvFirestoreId(msg.convId);
   try{
     await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
