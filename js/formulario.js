@@ -16,6 +16,7 @@ function showTab(t){
   if(esModoResponsable()&&t==='cfg')t='act';
   // gmail-ofi tab requires one of: secretary, office, NCA or responsable
   if(t==='gmail-ofi'&&!esSecretaria()&&!esModoOficinaDeguv()&&!esOficinaPqrsNca()&&!esNcaDeguv()&&!esModoResponsable())t='con';
+  if(t==='rec'&&!puedeVerRecursos())t='con';
   // secretary can switch between sec and gmail-ofi freely
   if(esSecretaria()&&t==='gmail-ofi')t='gmail-ofi';
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
@@ -31,6 +32,7 @@ function showTab(t){
   if(t==='sec'){poblarSecOficinaSelect();renderSecretariaPqrs();}
   if(t==='pqrs-ofi'){initPeriodoFiltros('pqrs-ofi');renderPqrsOficinaInbox();}
   if(t==='gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
+  if(t==='rec'){if(typeof recursosInitPanel==='function')recursosInitPanel();}
   if(t==='ciudadano'){
     const inp=document.getElementById('ciudadano-exp');
     if(inp&&!inp.value&&window._ciudadanoUltExp)inp.value=window._ciudadanoUltExp;

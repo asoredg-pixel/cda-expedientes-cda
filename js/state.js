@@ -35,6 +35,9 @@ window._chatVista='contactos';
 
 // ── Auth / Firestore ──────────────────────────────────────────────────────────
 let encargadosGlobal=null;
+let recursosEnlaces=[];
+let bibliotecaRepos=[];
+let recursosConfig={guainiaDriveRoot:'',vaupesDriveRoot:''};
 let authUsuario=null;
 let _localSaving=false;
 let _fsUnsub=null;

@@ -507,6 +507,7 @@ function renderConPanelDocumentosBlock(e,taskIdFilter,open){
   const list=conArchivosListHtml(items,'renderConPanelArchivoPreview');
   const canGestionar=window._conPanelEditMode&&puedeGestionarDocsTramite();
   const tramDocs=docsTramiteData(e._docs_tramite);
+  const driveFolderHtml=e._drive_folder_link?('<div style="margin-bottom:8px"><a href="'+escAttr(e._drive_folder_link)+'" target="_blank" rel="noopener" class="btn bsm">📁 Carpeta Drive del expediente</a></div>'):'';
   const tramGestionHtml=canGestionar?(
     '<div style="margin-bottom:10px">'+
     '<button type="button" class="btn bsm bp" data-sst-action="openAnadirDocTramiteModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openAnadirDocTramiteModal(\''+jsStr(e._exp)+'\')">➕ Añadir documento</button>'+
@@ -516,26 +517,49 @@ function renderConPanelDocumentosBlock(e,taskIdFilter,open){
     '</div>'):'';
   const hintAsoc=(incluirAsoc&&getExpAsociadosAll(e).length)?'<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Incluye documentos de PQRSD y expedientes vinculados.</div>':'';
   const body=items.length?
-    (tramGestionHtml+hintAsoc+'<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-panel-arch-preview"></div></div>'):
-    (tramGestionHtml+'');
+    (driveFolderHtml+tramGestionHtml+hintAsoc+'<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-panel-arch-preview"></div></div>'):
+    (driveFolderHtml+tramGestionHtml+'');
   return '<details class="con-fold con-panel-archivos-wrap" id="con-panel-archivos-wrap"'+(open?' open':'')+'>'+
     '<summary>📁 Documentos / archivos ('+items.length+')</summary><div class="item-fold-body">'+body+'</div></details>';
+}
+function collectDocTramiteAdjFiles(){
+  const files=[];
+  document.querySelectorAll('#doc-tram-adj-rows .pqrs-adj-file-row').forEach(function(row){
+    if(row._adjFile)files.push({file:row._adjFile,statusEl:row.querySelector('.adj-upload-status')});
+  });
+  return files;
 }
 function openAnadirDocTramiteModal(expId){
   expId=String(expId||'').trim();
   if(!expId||!puedeGestionarDocsTramite()){notif('No puede añadir documentos en este modo','err');return;}
+  const e=getExpById(expId);
+  const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has((typeof deptoActivo!=='undefined'?deptoActivo:'')||(typeof deptoCfg!=='undefined'?deptoCfg:'')||'');
+  const hayToken=(typeof _driveGetBestToken==='function'&&!!_driveGetBestToken())||(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid());
+  const puedeSubirPqrs=esPqrs&&usaDriveInst&&hayToken;
   abrirPqrsModalPrep();
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body){cerrarPqrsModalPrep();return;}
-  if(tit)tit.textContent='Añadir documento al trámite';
+  if(tit)tit.textContent=esPqrs?'Añadir documento a la PQRSD':'Añadir documento al trámite';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  const adjInfo=puedeSubirPqrs
+    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">El archivo se subirá a la carpeta Drive institucional de esta PQRSD (misma carpeta de radicación).</div>'
+    :'';
+  const uploadBtn=puedeSubirPqrs
+    ?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile(\'doc-tram-adj-rows\')">📎 Subir archivo</button>'
+    :'';
+  const linkReq=puedeSubirPqrs?'':'<span class="req-star">*</span>';
+  const linkHint=puedeSubirPqrs?' <span style="font-weight:400;color:var(--tx3)">(opcional si sube archivo)</span>':'';
   body.innerHTML=
-    '<div class="fld" style="margin-bottom:10px"><label>Nombre / tipo de documento<span class="req-star">*</span></label><input type="text" id="doc-tram-label" placeholder="Ej. Resolución N° 123, Concepto técnico, Oficio…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Enlace Google Drive<span class="req-star">*</span></label><input type="url" id="doc-tram-url" placeholder="https://drive.google.com/file/d/…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitAnadirDocTramite(\''+jsStr(expId)+'\')">Guardar documento</button>'+
+    '<div class="fld" style="margin-bottom:10px"><label>Nombre / tipo de documento<span class="req-star">*</span></label><input type="text" id="doc-tram-label" placeholder="Ej. Factura, Requerimiento, Resolución N° 123…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    (puedeSubirPqrs?('<div class="fld" style="margin-bottom:10px"><label>Archivo</label>'+adjInfo+
+      '<div id="doc-tram-adj-rows" style="margin-top:6px"></div>'+
+      '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+uploadBtn+'</div></div>'):'')+
+    '<div class="fld" style="margin-bottom:12px"><label>Enlace Google Drive'+linkReq+linkHint+'</label><input type="url" id="doc-tram-url" placeholder="https://drive.google.com/file/d/…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" id="doc-tram-submit-btn" onclick="event.stopPropagation();SST.submitAnadirDocTramite(\''+jsStr(expId)+'\')">Guardar documento</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'docTramite',expId:expId};
@@ -544,23 +568,72 @@ function openAnadirDocTramiteModal(expId){
     if(inp)inp.focus();
   },80);
 }
-function submitAnadirDocTramite(expId){
+async function submitAnadirDocTramite(expId){
   expId=String(expId||'').trim();
   if(!puedeGestionarDocsTramite())return;
   const label=String((document.getElementById('doc-tram-label')||{}).value||'').trim();
   const urlRaw=String((document.getElementById('doc-tram-url')||{}).value||'').trim();
+  const adjFiles=collectDocTramiteAdjFiles();
   if(!label){notif('Indique el nombre o tipo de documento','err');return;}
-  if(!urlRaw){notif('Indique el enlace de Google Drive','err');return;}
-  const url=normalizeDriveUrlInput(urlRaw);
-  const p=parseDrivePreviewUrl(url);
-  if(!p.valid){notif('Enlace no válido — pegue la URL completa de Google Drive (archivo, documento o enlace compartido)','err');return;}
   const e=getExpById(expId);
   if(!e){notif('Expediente no encontrado','err');return;}
+  const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  let url='';
+  let preview='';
+  const btn=document.getElementById('doc-tram-submit-btn');
+  if(esPqrs&&adjFiles.length){
+    if(typeof driveUploadPqrsExpediente!=='function'){notif('Módulo Drive no disponible. Recargue la página.','err');return;}
+    if(btn){btn.disabled=true;btn.textContent='Subiendo al Drive…';}
+    try{
+      for(let i=0;i<adjFiles.length;i++){
+        const item=adjFiles[i];
+        const file=item.file;
+        if(!file)continue;
+        if(item.statusEl)item.statusEl.textContent='⬆ Subiendo…';
+        const docLabel=adjFiles.length>1?(label+' · '+file.name):label;
+        const res=await driveUploadPqrsExpediente(file,file.name,file.type||'application/octet-stream',e,{label:docLabel});
+        if(!Array.isArray(e._docs_tramite))e._docs_tramite=[];
+        e._docs_tramite.push({
+          id:'dt_'+Date.now().toString(36)+'_'+i,
+          label:docLabel,
+          url:res.driveLink,
+          preview:res.previewLink||res.driveLink,
+          fecha:hoy(),
+          por:taskComentarioAutor()
+        });
+        if(item.statusEl)item.statusEl.textContent='✅ Subido';
+      }
+    }catch(err){
+      console.error('submitAnadirDocTramite drive:',err);
+      notif('No se pudo subir el archivo: '+(err.message||'revise la conexión Gmail/Drive'),'err');
+      if(btn){btn.disabled=false;btn.textContent='Guardar documento';}
+      return;
+    }
+    if(btn){btn.disabled=false;btn.textContent='Guardar documento';}
+    persistExpedienteGranular(e,false);
+    closeTaskModal();
+    notif('Documento(s) añadido(s) y guardado(s) en la carpeta Drive de la PQRSD','ok');
+    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
+      if(window._conPanelEditMode)renderConSidePanel();
+      else refreshConPanelDocumentos(expId,null,false);
+      if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+      if(document.getElementById('pg-reg')&&document.getElementById('pg-reg').classList.contains('on'))renderTabla();
+    }
+    return;
+  }
+  if(!url){
+    if(!urlRaw){notif('Indique un enlace de Google Drive o suba un archivo','err');return;}
+    url=normalizeDriveUrlInput(urlRaw);
+    const p=parseDrivePreviewUrl(url);
+    if(!p.valid){notif('Enlace no válido — pegue la URL completa de Google Drive (archivo, documento o enlace compartido)','err');return;}
+    url=p.url||url;
+    preview=p.preview||p.url||url;
+  }
   if(!Array.isArray(e._docs_tramite))e._docs_tramite=[];
-  e._docs_tramite.push({id:'dt_'+Date.now().toString(36),label,url:p.url||url,preview:p.preview||p.url||url,fecha:hoy(),por:taskComentarioAutor()});
+  e._docs_tramite.push({id:'dt_'+Date.now().toString(36),label,url:url,preview:preview||url,fecha:hoy(),por:taskComentarioAutor()});
   persistExpedienteGranular(e,false);
   closeTaskModal();
-  notif('Documento añadido al trámite','ok');
+  notif(esPqrs?'Documento añadido y guardado en la carpeta Drive de la PQRSD':'Documento añadido al trámite','ok');
   if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
     if(window._conPanelEditMode)renderConSidePanel();
     else refreshConPanelDocumentos(expId,null,false);

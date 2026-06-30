@@ -243,6 +243,9 @@ async function guardarPqrsSecretaria(modo){
   upsertPersonaCatalog(data);
   logAudit('Creó PQRSD ['+expId+']'+(soloRadicar?' (sin traslado)':''),'pqrsd',expId);
   persistExpedienteGranular(data,true);
+  try{
+    await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
+  }catch(err){console.warn('notif radicacion auto:',err);}
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
@@ -866,6 +869,8 @@ function ciudadanoEventoLabel(h){
   if(h.tipo==='revision_nca_rechazado')return ''; // not shown to citizen
   if(h.tipo==='vital_firma_completada')return 'Documento oficial firmado — pendiente notificación';
   if(h.tipo==='notificacion_correo')return 'Respuesta notificada al ciudadano por correo';
+  if(h.tipo==='notificacion_radicacion')return 'Radicación notificada al ciudadano por correo';
+  if(h.tipo==='notificacion_excepcion')return 'Notificación por correo — excepción registrada';
   if(h.tipo==='recepcion_nca')return 'Recibido para trámite en NCA DEGUV';
   if(h.tipo==='informativa')return 'Solicitud informativa — atendida';
   return 'Actualización del trámite';

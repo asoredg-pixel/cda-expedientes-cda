@@ -235,6 +235,9 @@ async function loadLS(){
       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
       if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
       if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
+      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=g.recursosEnlaces;
+      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=g.bibliotecaRepos;
+      if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
     }
     const [deptoResults,expSnaps]=await Promise.all([
       Promise.allSettled(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
@@ -659,5 +662,41 @@ async function migrarLocalStorageAFirestore(){
   }catch(err){
     console.error('migrarLocalStorageAFirestore:',err);
     notif('Error en migración: '+(err&&err.message||err),'err');
+  }
+}
+
+async function saveRecursosFirestore(){
+  const db=window._db;
+  if(!db||!window._fsSetDoc)return false;
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+      recursosEnlaces:recursosEnlaces||[],
+      bibliotecaRepos:bibliotecaRepos||[],
+      recursosConfig:recursosConfig||{guainiaDriveRoot:'',vaupesDriveRoot:''},
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.error('saveRecursosFirestore:',err);
+    if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Recursos: '+(err&&err.message||'Error')};
+    return false;
+  }
+}
+
+async function reloadRecursosFirestore(){
+  const db=window._db;
+  if(!db||!window._fsGetDoc)return false;
+  try{
+    const snap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+    if(snap.exists()){
+      const g=snap.data();
+      if(Array.isArray(g.recursosEnlaces))recursosEnlaces=g.recursosEnlaces;
+      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=g.bibliotecaRepos;
+      if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
+    }
+    return true;
+  }catch(err){
+    console.error('reloadRecursosFirestore:',err);
+    return false;
   }
 }

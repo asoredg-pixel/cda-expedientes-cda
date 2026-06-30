@@ -654,3 +654,88 @@ function normalizePqrsOficinaFields(e){
   if(e.f_f2)e.f_f2=normMedioRecepcionPqrs(e.f_f2);
   return e;
 }
+
+// ── Recursos (enlaces externos + biblioteca) ───────────────────────────────────
+function getAuthEmailNorm(){
+  const e=window._usuarioActual&&window._usuarioActual.email;
+  return e?String(e).trim().toLowerCase():'';
+}
+function getEncargadoOficinaEmail(oficinaId){
+  oficinaId=oficinaId||getRecursosOficinaActiva();
+  const ins=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes(oficinaId));
+  if(ins&&ins.email)return String(ins.email).trim().toLowerCase();
+  if(oficinaId==='guaviare'){
+    const encDept=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_depto'&&String(i.nombre||'').trim());
+    if(encDept&&encDept.email)return String(encDept.email).trim().toLowerCase();
+  }
+  return '';
+}
+function esEncargadoOficinaUsuario(oficinaId){
+  const email=getAuthEmailNorm();
+  if(!email)return false;
+  const enc=getEncargadoOficinaEmail(oficinaId);
+  return !!(enc&&enc===email);
+}
+function esEncargadoDeptoUsuario(deptoId){
+  if(esAdministrador()||esAdminFirestore())return true;
+  const u=window._usuarioActual;
+  if(!u)return false;
+  const rol=String(u.rol||'').trim();
+  return rol===deptoId&&DEPTOS.some(d=>d.id===deptoId);
+}
+function puedeVerRecursos(){
+  if(esModoCiudadano()||esJurisdiccional())return false;
+  return document.body.classList.contains('sesion-activa');
+}
+function getRecursosDeptoContext(){
+  if(DEPTOS.some(d=>d.id===deptoActivo))return deptoActivo;
+  if(esModoResponsable()||esModoContratista()){
+    const d=window._usuarioActual&&window._usuarioActual.deptoResponsable;
+    if(d&&DEPTOS.some(x=>x.id===d))return d;
+    return 'guaviare';
+  }
+  if(esModoOficinaDeguv()||esSecretaria()||esNcaDeguv())return 'guaviare';
+  if(rolSesion==='admin')return deptoActivo&&DEPTOS.some(d=>d.id===deptoActivo)?deptoActivo:'guaviare';
+  return 'guaviare';
+}
+function getRecursosOficinaActiva(){
+  if(esModoOficinaDeguv())return deptoActivo;
+  if(esSecretaria())return 'secretaria';
+  if(esNcaDeguv()&&!esModoResponsable())return 'guaviare';
+  return '';
+}
+function oficinasBibliotecaVisibles(){
+  return OFICINAS_DEGUV.filter(o=>o.id!=='guaviare'||true);
+}
+function puedeEditarRecursosEnlaces(scope,scopeId){
+  if(esAdministrador()||esAdminFirestore())return true;
+  if(scope==='departamento')return esEncargadoDeptoUsuario(scopeId);
+  if(scope==='oficina')return esEncargadoOficinaUsuario(scopeId);
+  return false;
+}
+function puedeEditarBiblioteca(oficinaId){
+  if(esAdministrador()||esAdminFirestore())return true;
+  return esEncargadoOficinaUsuario(oficinaId);
+}
+function bibliotecaDriveDisponible(deptoCtx){
+  const d=deptoCtx||getRecursosDeptoContext();
+  if(d==='guainia')return !!(recursosConfig&&String(recursosConfig.guainiaDriveRoot||'').trim());
+  if(d==='vaupes')return !!(recursosConfig&&String(recursosConfig.vaupesDriveRoot||'').trim());
+  return d==='guaviare'||esModoOficinaDeguv()||esSecretaria()||esNcaDeguv()||esModoResponsable()||esModoContratista();
+}
+function getBibliotecaDriveRootId(deptoCtx){
+  const d=deptoCtx||getRecursosDeptoContext();
+  const folderFromUrl=function(url){
+    const m=String(url||'').match(/\/folders\/([^/?#]+)/);
+    return m?m[1]:'';
+  };
+  if(d==='guainia'&&recursosConfig&&recursosConfig.guainiaDriveRoot){
+    const id=folderFromUrl(recursosConfig.guainiaDriveRoot);
+    if(id)return id;
+  }
+  if(d==='vaupes'&&recursosConfig&&recursosConfig.vaupesDriveRoot){
+    const id=folderFromUrl(recursosConfig.vaupesDriveRoot);
+    if(id)return id;
+  }
+  return typeof DRIVE_ROOT_RECURSOS_ID!=='undefined'?DRIVE_ROOT_RECURSOS_ID:'';
+}

@@ -1192,6 +1192,38 @@ details.ec-fold[open] .ec-fold-ico::before{content:'▾'}
 /* Tab visibility — correos oficina/nca/resp */
 .tab.tab-gmail-ofi-only{display:none!important}
 .tab.tab-gmail-ofi-only.tab-gmail-ofi-on{display:inline-flex!important}
+.tab.tab-rec-only{display:none!important}
+.tab.tab-rec-only.tab-rec-on{display:inline-flex!important}
+/* Recursos — enlaces y biblioteca */
+.rec-wrap{padding:.5rem 0 2rem}
+.rec-title{margin:0;font-size:1.25rem}
+.rec-sub{margin:.25rem 0 0;font-size:13px;color:var(--tx2)}
+.rec-subtabs{display:flex;gap:8px;margin:1rem 0;flex-wrap:wrap}
+.rec-subtab{padding:8px 14px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);cursor:pointer;font-size:13px;font-weight:500}
+.rec-subtab.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.rec-card{margin-top:0}
+.rec-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.rec-inp{min-width:120px;flex:1;max-width:200px;padding:6px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px}
+.rec-enlace-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.rec-enlace-item{border:1px solid var(--bd);border-radius:var(--r);padding:12px;background:var(--sf)}
+.rec-enlace-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.rec-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:color-mix(in srgb,var(--bl) 12%,var(--sf));color:var(--bl)}
+.rec-tag{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--sf2);color:var(--tx2)}
+.rec-tag-2{background:color-mix(in srgb,var(--ac) 10%,var(--sf))}
+.rec-enlace-tit{display:block;font-weight:600;font-size:14px;color:var(--bl);text-decoration:none;margin-bottom:4px}
+.rec-enlace-tit:hover{text-decoration:underline}
+.rec-enlace-desc{font-size:12px;color:var(--tx2);margin-bottom:8px}
+.rec-enlace-actions{display:flex;gap:6px;flex-wrap:wrap}
+.rec-empty{padding:1.5rem;text-align:center;color:var(--tx3);font-size:13px}
+.rec-info-banner{padding:12px 14px;border-radius:var(--r);background:color-mix(in srgb,var(--bl) 8%,var(--sf));border:1px solid color-mix(in srgb,var(--bl) 20%,var(--bd));font-size:13px;line-height:1.5}
+.rec-info-banner.warn{background:color-mix(in srgb,#b87d0a 10%,var(--sf));border-color:color-mix(in srgb,#b87d0a 30%,var(--bd))}
+.rec-repo-list{display:flex;flex-direction:column;gap:8px}
+.rec-repo-row{display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--bd);border-radius:var(--r);cursor:pointer;background:var(--sf)}
+.rec-repo-row:hover{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 4%,var(--sf))}
+.rec-repo-hdr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.rec-files-list{display:flex;flex-direction:column;gap:6px}
+.rec-file-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px}
+.rec-form-card{margin-bottom:12px;border:1px dashed var(--bd)}
 /* =====================================================================
    GMAIL PANEL — OFICINAS / NCA / RESPONSABLES
    ===================================================================== */

@@ -621,6 +621,12 @@ const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
 // Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días):
 // https://drive.google.com/drive/folders/1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU
 const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
+// Carpeta raíz Expedientes (cdaguaviare1@gmail.com) — actividades de trámites Guaviare:
+// https://drive.google.com/drive/folders/1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ
+const DRIVE_ROOT_EXPEDIENTES_ID = '1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ';
+// Carpeta raíz Recursos / Biblioteca (Guaviare):
+// https://drive.google.com/drive/folders/18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29
+const DRIVE_ROOT_RECURSOS_ID = '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
 
 // Nombres de carpeta mensual (índice = getMonth()).
 const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
@@ -642,6 +648,138 @@ function _driveEsGuaviare() {
          d === 'rn_deguv' || d === 'admin_deguv' || d === 'ds_deguv' ||
          (typeof rolSesion !== 'undefined' && rolSesion === 'responsables' &&
           typeof deptoCfg !== 'undefined' && deptoCfg === 'guaviare');
+}
+
+// Expedientes Guaviare (excluye Guainía y Vaupés).
+function _driveExpedienteEsGuaviare(e) {
+  if (!_driveEsGuaviare()) return false;
+  const d = e && e._depto ? String(e._depto).trim().toLowerCase() : '';
+  if (d === 'guainia' || d === 'vaupes') return false;
+  return true;
+}
+
+function _driveSlug(s, maxLen) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .slice(0, maxLen || 25) || 'doc';
+}
+
+function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
+  const exp = String(e && e._exp || '').trim().replace(/\s/g, '');
+  const act = _driveSlug(task && (task.desc || task.actividad) || 'actividad', 25);
+  const resp = _driveSlug(responsable, 20);
+  const fecha = (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+  const extMatch = String(origName || '').match(/\.([a-zA-Z0-9]{1,8})$/);
+  const ext = extMatch ? extMatch[1].toLowerCase() : 'pdf';
+  const pref = estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' ? 'corregir' : 'revision');
+  return pref + '-' + exp + '-' + act + '-' + fecha + '-' + resp + '.' + ext;
+}
+
+async function driveEnsureExpedienteFolder(e) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  if (e._drive_folder_id) {
+    return {
+      folderId: e._drive_folder_id,
+      folderLink: e._drive_folder_link || ('https://drive.google.com/drive/folders/' + e._drive_folder_id)
+    };
+  }
+  let ref = new Date(e._fecha || e._fecha_solicitud || '');
+  if (isNaN(ref.getTime())) ref = new Date();
+  const anio = ref.getFullYear().toString();
+  const expNum = String(e._exp || '').trim();
+  const nomSlug = _driveSlug(typeof getNom === 'function' ? getNom(e) : '', 30);
+  const carpNom = 'EXP-' + expNum.replace(/\s/g, '') + (nomSlug ? '-' + nomSlug : '');
+  let parent = DRIVE_ROOT_EXPEDIENTES_ID;
+  parent = await _driveEnsureFolder(token, anio, parent);
+  const folderId = await _driveEnsureFolder(token, carpNom, parent);
+  const folderLink = 'https://drive.google.com/drive/folders/' + folderId;
+  e._drive_folder_id = folderId;
+  e._drive_folder_link = folderLink;
+  return { folderId: folderId, folderLink: folderLink };
+}
+
+async function driveRenameInstitutional(fileId, newName) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId) return false;
+  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId), {
+    method: 'PATCH',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName })
+  });
+  if (!res.ok) {
+    console.warn('driveRenameInstitutional:', fileId, res.status);
+    return false;
+  }
+  return true;
+}
+
+async function driveDeleteInstitutional(fileId) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId) return false;
+  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId), {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  return res.ok || res.status === 404;
+}
+
+async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable) {
+  if (!soporte || !soporte.driveFileId || soporte.driveInstitutional === false) return false;
+  const origName = soporte.driveFilename || soporte.label || '';
+  const newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName);
+  const ok = await driveRenameInstitutional(soporte.driveFileId, newName);
+  if (ok) {
+    soporte.driveFilename = newName;
+    soporte.label = newName;
+    soporte.driveEstado = newEstado;
+  }
+  return ok;
+}
+
+async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task, responsable, estado) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  const folder = await driveEnsureExpedienteFolder(e);
+  const filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName);
+  const form = new FormData();
+  const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folder.folderId] };
+  form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+  form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType }));
+  const up = await fetch(DRIVE_UPLOAD_URL, {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
+  });
+  if (!up.ok) {
+    const t = await up.text().catch(function() { return ''; });
+    throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120));
+  }
+  const file = await up.json();
+  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  }).catch(function() {});
+  return {
+    fileId: file.id,
+    driveFileId: file.id,
+    driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
+    previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
+    nombre: filename,
+    driveFilename: filename,
+    driveEstado: estado || 'revision',
+    driveInstitutional: true
+  };
+}
+
+async function drivePurgeTaskInstitutionalSoportes(task) {
+  if (!task || !Array.isArray(task.soportes)) return;
+  const ids = [];
+  task.soportes.forEach(function(s) {
+    if (s && s.driveFileId && s.driveInstitutional !== false) ids.push(s.driveFileId);
+  });
+  for (let i = 0; i < ids.length; i++) {
+    await driveDeleteInstitutional(ids[i]).catch(function() {});
+  }
 }
 
 // Obtiene o crea una carpeta dentro de un padre dado usando el token indicado.
@@ -670,6 +808,72 @@ async function _driveEnsureFolder(token, folderName, parentId) {
   const folder = await cr.json();
   try { sessionStorage.setItem(cacheKey, folder.id); } catch (e) {}
   return folder.id;
+}
+
+// Lista archivos y subcarpetas de una carpeta Drive (biblioteca de recursos).
+async function driveListFolderContents(folderId, pageToken) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  const q = '"' + folderId + '" in parents and trashed=false';
+  let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,iconLink)' +
+    '&orderBy=folder,name&pageSize=50';
+  if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error && data.error.message || 'Error listando Drive');
+  return data;
+}
+
+// Crea o reutiliza carpeta de oficina bajo la raíz de Recursos (Guaviare).
+async function driveEnsureBibliotecaOficinaFolder(oficinaId) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  const ofi = (typeof OFICINAS_DEGUV !== 'undefined' ? OFICINAS_DEGUV : []).find(o => o.id === oficinaId);
+  const cod = ofi ? (ofi.codigo || ofi.id) : String(oficinaId || 'Oficina');
+  const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId('guaviare') : DRIVE_ROOT_RECURSOS_ID;
+  let parent = await _driveEnsureFolder(token, 'Oficinas', rootId);
+  parent = await _driveEnsureFolder(token, cod, parent);
+  return { folderId: parent, link: 'https://drive.google.com/drive/folders/' + parent };
+}
+
+// Crea carpeta de repositorio dentro de la oficina.
+async function driveEnsureBibliotecaRepoFolder(oficinaId, repoTitulo) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  const base = await driveEnsureBibliotecaOficinaFolder(oficinaId);
+  const nom = String(repoTitulo || 'Repositorio').trim().slice(0, 80) || 'Repositorio';
+  const folderId = await _driveEnsureFolder(token, nom, base.folderId);
+  return { folderId: folderId, link: 'https://drive.google.com/drive/folders/' + folderId };
+}
+
+// Sube archivo a carpeta de biblioteca.
+async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  if (!folderId) throw new Error('Carpeta de repositorio no definida.');
+  const form = new FormData();
+  const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folderId] };
+  form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+  form.append('file', blob, filename);
+  const res = await fetch(DRIVE_UPLOAD_URL, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token },
+    body: form
+  });
+  const file = await res.json();
+  if (!res.ok) throw new Error(file.error && file.error.message || 'Error subiendo archivo');
+  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  }).catch(function() {});
+  return {
+    fileId: file.id,
+    driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
+    previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
+    nombre: filename
+  };
 }
 
 // Sube un archivo al Drive institucional en la ruta correcta según tipo.
@@ -740,6 +944,43 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
     previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
     nombre: filename
   };
+}
+
+// Metadatos Drive para un expediente PQRSD (misma carpeta PQRSD-{núm}-{nombre} que radicación).
+function pqrsExpDriveNombreCarpeta(e) {
+  if (!e) return '';
+  return String(e._qd_nombre || e._nombre || e._pn_nombre || e._exp || '').trim();
+}
+
+function pqrsExpDriveTipoRadicacion(e) {
+  if (!e) return 'radicacion_otro';
+  let wf = {};
+  try { if (e._pqrs_workflow) wf = JSON.parse(e._pqrs_workflow); } catch (err) { wf = {}; }
+  if (wf.tipo_radicacion) return wf.tipo_radicacion;
+  if (e._gmail_message_id) return 'radicacion_correo';
+  return typeof tipoRadicacionDesdeMedioPqrs === 'function'
+    ? tipoRadicacionDesdeMedioPqrs(e.f_f2 || '')
+    : 'radicacion_otro';
+}
+
+function pqrsExpDriveFechaRef(e) {
+  if (!e) return '';
+  return e._fecha_solicitud || e._fecha || '';
+}
+
+async function driveUploadPqrsExpediente(blob, filename, mimeType, e, opts) {
+  opts = opts || {};
+  if (!e || typeof esPqrsSecretaria !== 'function' || !esPqrsSecretaria(e)) {
+    throw new Error('No es un expediente PQRSD');
+  }
+  const expId = String(e._exp || '').trim();
+  const nombreCarpeta = pqrsExpDriveNombreCarpeta(e);
+  const tipo = opts.tipo || pqrsExpDriveTipoRadicacion(e);
+  const fechaRef = opts.fechaRef || pqrsExpDriveFechaRef(e);
+  const safeLabel = String(opts.label || filename || 'Documento').replace(/[<>:"/\\|?*]/g, '_').slice(0, 80);
+  const safeFile = String(filename || 'archivo').replace(/[<>:"/\\|?*]/g, '_');
+  const driveName = opts.driveName || (safeLabel + ' PQRSD ' + expId + ' ' + safeFile).slice(0, 180);
+  return driveUploadInstitutional(blob, driveName, mimeType || 'application/octet-stream', tipo, expId, nombreCarpeta, fechaRef);
 }
 
 // Versión base64url para adjuntos de correo (usa la misma infraestructura).
@@ -2444,7 +2685,7 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
 // Alias used by core.js workflow — sends a plain HTML email using the office token
 async function gmailOfiSendMessage(to, subject, htmlBody) {
   const mime = _gmailOfiBuildMime(to, '', subject, htmlBody, '');
-  await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
+  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
 
 async function gmailOfiSendCompose() {

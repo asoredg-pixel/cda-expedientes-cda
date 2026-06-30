@@ -189,6 +189,9 @@ const TIPOS_ACTO_DEF=[
   {nombre:'Resolución que levanta suspensión',tieneVencimiento:false,efecto:'levanta_susp'}
 ];
 
+// URL pública de la app (consulta ciudadana en correos al solicitante)
+const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes/';
+
 // ================================================================
 // PQRS WORKFLOW — fases y tipos de respuesta
 // ================================================================
@@ -222,6 +225,10 @@ const PQRS_WF_CANAL = {
 };
 // Departamentos que usan Drive institucional (cdaguaviare1)
 const DRIVE_INST_DEPTOS = new Set(['guaviare','secretaria','oap_deguv','rn_deguv','admin_deguv','ds_deguv']);
+
+// Carpeta raíz Recursos / Biblioteca (Guaviare — cdaguaviare1@gmail.com):
+// https://drive.google.com/drive/folders/18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29
+const DRIVE_ROOT_RECURSOS_ID = '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
 
 // Claves que contienen JSON blobs (para sanitización XSS)
 const XSS_JSON_BLOB_KEYS=new Set(['_fechas_estado','_actos_admin','_conceptos_seg','_detalle_notas','_facturas_extra','_info_tecnica_items','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_workflow','_tasks']);

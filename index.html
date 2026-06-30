@@ -12,25 +12,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260625g"></script>
-<script src="js/constants.js?v=20260625g"></script>
+<script src="js/constants.js?v=20260626d"></script>
 <script src="js/utils.js?v=20260625g"></script>
 <script src="js/state.js?v=20260625g"></script>
 <script src="js/persistence.js?v=20260625g"></script>
 <script src="js/roles.js?v=20260625g"></script>
 <script src="js/config-store.js?v=20260625g"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260626b"></script>
+<script src="js/core.js?v=20260626d"></script>
 <script src="js/formulario.js?v=20260625g"></script>
 <script src="js/tareas.js?v=20260625g"></script>
 <script src="js/guardar-exp.js?v=20260625g"></script>
-<script src="js/consulta.js?v=20260625g"></script>
+<script src="js/consulta.js?v=20260626c"></script>
 <script src="js/consolidado.js?v=20260625g"></script>
 <script src="js/configuracion.js?v=20260625g"></script>
 <script src="js/export.js?v=20260625g"></script>
 <script src="js/chat.js?v=20260625g"></script>
-<script src="js/pqrs.js?v=20260626b"></script>
+<script src="js/pqrs.js?v=20260626d"></script>
 <script src="js/pqrs-matriz-export.js?v=20260626b"></script>
-<script src="js/gmail.js?v=20260625g"></script>
+<script src="js/gmail.js?v=20260626d"></script>
+<script src="js/recursos.js?v=20260630a"></script>
 <script src="js/ingreso.js?v=20260625g"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -102,6 +103,7 @@
     <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act">📌 Actividades</button>
     <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda">📅 Agenda</button>
     <button class="tab" onclick="showTab('con')" id="tab-con">🔍 Consulta</button>
+    <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec">📚 Recursos</button>
     <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano">🔍 Consulta</button>
     <button class="tab" onclick="showTab('cons')" id="tab-cons">📊 Consolidado</button>
     <button class="tab" onclick="showTab('cfg')" id="tab-cfg">⚙️ Configuración</button>
@@ -728,6 +730,11 @@
     <div class="tw"><table><thead><tr><th>Expediente</th><th>Tipo</th><th>Asunto</th><th>Radicación</th><th>Estado</th><th></th></tr></thead><tbody id="tbl-pqrs-ofi"></tbody></table></div>
     <div id="pqrs-ofi-detalle" class="pqrs-ofi-detalle pqrs-ofi-det-below" style="display:none"></div>
   </div>
+</div>
+
+<!-- ===== RECURSOS — Enlaces externos + Biblioteca ===== -->
+<div class="pg" id="pg-rec">
+  <div class="app-inner" id="recursos-panel-root"></div>
 </div>
 
 <!-- ===== CORREOS PQRSD — OFICINAS / NCA / RESPONSABLES ===== -->
