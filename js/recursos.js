@@ -11,6 +11,57 @@ function parseDriveFolderId(url) {
   return m ? m[1] : '';
 }
 
+function recursosDriveConectado() {
+  return typeof _driveGetBestToken === 'function' && !!_driveGetBestToken();
+}
+
+function recursosModalCorreoRequerido(accion) {
+  const ov = document.getElementById('rec-drive-overlay');
+  const msg = document.getElementById('rec-drive-msg');
+  const det = document.getElementById('rec-drive-detail');
+  if (!ov) {
+    notif('Conecte su correo en la pestaña Correos para ' + (accion || 'usar la biblioteca Drive') + '.', 'err');
+    return;
+  }
+  const txt = accion || 'crear repositorios, adjuntar documentos y gestionar carpetas en Drive';
+  if (msg) msg.textContent = 'Para ' + txt + ' debe conectar su cuenta de correo institucional.';
+  if (det) det.textContent = 'Vaya a la pestaña Correos, inicie sesión con Google y autorice el acceso a Gmail y Drive. Sin conexión no es posible crear carpetas ni subir archivos.';
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden', 'false');
+}
+
+function recursosCerrarModalCorreo() {
+  const ov = document.getElementById('rec-drive-overlay');
+  if (ov) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function recursosIrACorreos() {
+  recursosCerrarModalCorreo();
+  if (typeof showTab === 'function') showTab('gmail-ofi');
+}
+
+function recursosPreUploadDrive(ev) {
+  if (recursosDriveConectado()) return true;
+  if (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+  recursosModalCorreoRequerido('adjuntar documentos al repositorio');
+  return false;
+}
+
+function recursosRequiereDrive(accion, fn) {
+  if (recursosDriveConectado()) {
+    if (typeof fn === 'function') fn();
+    return true;
+  }
+  recursosModalCorreoRequerido(accion);
+  return false;
+}
+
 function recursosInitPanel() {
   if (!puedeVerRecursos()) return;
   reloadRecursosFirestore().then(function() {
@@ -35,8 +86,7 @@ function getRepoScope(r) {
 
 function enlacesVisiblesParaSesion() {
   return normalizeRecursosEnlacesList(recursosEnlaces).filter(function(l) {
-    if (l.activo === false) return false;
-    return recursosScopeVisibleParaSesion(l.scope, l.scopeId);
+    return recursosItemVisibleParaSesion(l);
   });
 }
 
@@ -46,10 +96,20 @@ function enlacesVisiblesAdminTodos() {
 
 function reposBibliotecaVisibles() {
   return normalizeBibliotecaReposList(bibliotecaRepos).filter(function(r) {
-    if (r.activo === false) return false;
-    const s = getRepoScope(r);
-    return recursosScopeVisibleParaSesion(s.scope, s.scopeId);
+    return recursosItemVisibleParaSesion(r);
   });
+}
+
+function archivosBibliotecaCompartidosVisibles() {
+  const out = [];
+  normalizeBibliotecaReposList(bibliotecaRepos).forEach(function(r) {
+    if (r.activo === false) return;
+    archivosRepoCompartidosConmigo(r).forEach(function(a) {
+      if (recursosItemVisiblePorScope(r)) return;
+      out.push({ repo: r, archivo: a });
+    });
+  });
+  return out;
 }
 
 function labelScopeEnlace(l) {
@@ -58,7 +118,7 @@ function labelScopeEnlace(l) {
 
 function labelScopeRepo(r) {
   const s = getRepoScope(r);
-  return labelRecursosScope(s.scope, s.scopeId);
+  return labelRecursosScopeContexto(s.scope, s.scopeId);
 }
 
 function recursosContextoLabel() {
@@ -133,8 +193,13 @@ function renderRecursosEnlacesPanel(depto) {
     h += '<div class="rec-enlace-grid">';
     filtrada.forEach(function(l) {
       const canEdit = puedeEditarRecursosEnlaces(l.scope, l.scopeId);
+      const canDel = puedeEliminarRecursosItem(l);
+      const canShare = puedeCompartirRecursosItem(l);
+      const compLbl = labelRecursosCompartidoCon(l.compartidoCon);
       h += '<div class="rec-enlace-item">';
-      h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelScopeEnlace(l)) + '</span>';
+      h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelRecursosScopeContexto(l.scope, l.scopeId)) + '</span>';
+      if (recursosItemCompartidoVisible(l) && !recursosItemVisiblePorScope(l)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
+      if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
       if (l.area) h += '<span class="rec-tag">' + escAttr(l.area) + '</span>';
       if (l.tematica) h += '<span class="rec-tag rec-tag-2">' + escAttr(l.tematica) + '</span>';
       h += '</div>';
@@ -144,6 +209,11 @@ function renderRecursosEnlacesPanel(depto) {
       h += '<a class="btn bsm" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Abrir ↗</a>';
       if (canEdit) {
         h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormEnlace(\'' + escAttr(l.id) + '\')">Editar</button>';
+      }
+      if (canShare) {
+        h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">Compartir</button>';
+      }
+      if (canDel) {
         h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">Eliminar</button>';
       }
       h += '</div></div>';
@@ -177,6 +247,9 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   if (getRecursosScopesCreablesSesion().length > 0) {
     h += '<button type="button" class="btn bsm bp" onclick="recursosMostrarFormRepo()">+ Repositorio</button>';
   }
+  if (!recursosDriveConectado()) {
+    h += '<span class="rec-drive-hint" style="font-size:12px;color:var(--tx2)">⚠️ Conecte correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para crear carpetas y subir archivos.</span>';
+  }
   h += '</div>';
 
   if (window._recursosRepoForm && !window._recursosRepoSel) {
@@ -195,8 +268,12 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   } else {
     h += '<div class="rec-repo-list">';
     repos.forEach(function(r) {
+      const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
       h += '<div class="rec-repo-row" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')">';
-      h += '<div><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span> <strong>' + escAttr(r.titulo) + '</strong>';
+      h += '<div><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
+      if (recursosItemCompartidoVisible(r) && !recursosItemVisiblePorScope(r)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
+      if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
+      h += ' <strong>' + escAttr(r.titulo) + '</strong>';
       if (r.tematica) h += ' <span class="rec-tag">' + escAttr(r.tematica) + '</span>';
       if (r.descripcion) h += '<div style="font-size:12px;color:var(--tx2);margin-top:4px">' + escAttr(r.descripcion) + '</div>';
       h += '</div>';
@@ -205,6 +282,17 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
     h += '</div>';
   }
   h += '</div>';
+  const compArch = archivosBibliotecaCompartidosVisibles();
+  if (compArch.length) {
+    h += '<div class="card rec-card" style="margin-top:12px"><div class="cft">Documentos compartidos con su oficina</div><div class="rec-files-list">';
+    compArch.forEach(function(x) {
+      const a = x.archivo;
+      const link = a.driveLink || (a.fileId ? 'https://drive.google.com/file/d/' + a.fileId + '/view' : '#');
+      h += '<div class="rec-file-row"><span>📄 ' + escAttr(a.fileName || 'Documento') + ' <span style="color:var(--tx3);font-size:11px">· ' + escAttr(x.repo.titulo) + '</span></span>';
+      h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a></div>';
+    });
+    h += '</div></div>';
+  }
   return h;
 }
 
@@ -212,6 +300,13 @@ function abrirRecursosRepo(repoId) {
   window._recursosRepoSel = repoId;
   window._recursosDrivePage = null;
   renderRecursosPanel();
+  if (!recursosDriveConectado()) {
+    const el = document.getElementById('rec-repo-files');
+    if (el) {
+      el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en la pestaña <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para listar y adjuntar archivos del repositorio.</div>';
+    }
+    return;
+  }
   cargarRecursosRepoArchivos();
 }
 
@@ -230,17 +325,28 @@ function renderRecursosRepoDetalle(repoId) {
   if (!r) return '<div class="rec-empty">Repositorio no encontrado.</div>';
   const s = getRepoScope(r);
   const canEdit = puedeEditarBiblioteca(s.scope, s.scopeId);
+  const canDel = puedeEliminarRecursosItem(r);
+  const canShare = puedeCompartirRecursosItem(r);
+  const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
   let h = '<div class="card rec-card">';
   h += '<div class="rec-repo-hdr"><button type="button" class="btn bsm" onclick="cerrarRecursosRepo()">← Volver</button>';
   h += '<div><strong>' + escAttr(r.titulo) + '</strong> · ' + escAttr(labelScopeRepo(r)) + '</div>';
   if (r.driveFolderLink) h += '<a class="btn bsm" href="' + escAttr(r.driveFolderLink) + '" target="_blank" rel="noopener">Drive ↗</a>';
   h += '</div>';
   if (r.descripcion) h += '<p style="font-size:13px;color:var(--tx2);margin:8px 0">' + escAttr(r.descripcion) + '</p>';
-  if (canEdit) {
+  if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
+  if (canEdit || canShare) {
     h += '<div class="rec-toolbar" style="margin:10px 0">';
-    h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">Editar datos</button>';
-    h += '<label class="btn bsm" style="cursor:pointer">📤 Subir archivo<input type="file" style="display:none" multiple onchange="subirRecursosRepoArchivos(event,\'' + escAttr(r.id) + '\')"></label>';
-    h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">Eliminar repo</button>';
+    if (canEdit) {
+      h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">Editar datos</button>';
+      h += '<label class="btn bsm" style="cursor:pointer" onclick="return recursosPreUploadDrive(event)">📤 Subir archivo<input type="file" style="display:none" multiple onclick="return recursosPreUploadDrive(event)" onchange="subirRecursosRepoArchivos(event,\'' + escAttr(r.id) + '\')"></label>';
+    }
+    if (canShare) {
+      h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">Compartir repositorio</button>';
+    }
+    if (canDel) {
+      h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">Eliminar repo</button>';
+    }
     h += '</div>';
   }
   if (window._recursosRepoForm === r.id) {
@@ -256,6 +362,12 @@ async function cargarRecursosRepoArchivos(pageToken) {
   const r = getRecursosRepoById(repoId);
   const el = document.getElementById('rec-repo-files');
   if (!r || !el) return;
+  if (!recursosDriveConectado()) {
+    el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver y adjuntar archivos. <button type="button" class="btn bsm" style="margin-left:8px" onclick="recursosModalCorreoRequerido(\'listar y adjuntar documentos en el repositorio\')">Más información</button></div>';
+    return;
+  }
+  const s = getRepoScope(r);
+  const canShare = puedeCompartirRecursosItem(r);
   const folderId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
   if (!folderId) {
     el.innerHTML = '<div class="rec-empty">Sin carpeta Drive vinculada.</div>';
@@ -267,9 +379,16 @@ async function cargarRecursosRepoArchivos(pageToken) {
     (data.files || []).forEach(function(f) {
       const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
       const link = f.webViewLink || ('https://drive.google.com/' + (isFolder ? 'drive/folders/' : 'file/d/') + f.id + '/view');
+      const archComp = (r.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; });
+      const archShareLbl = archComp ? labelRecursosCompartidoCon(archComp.compartidoCon) : '';
       h += '<div class="rec-file-row">';
-      h += '<span>' + (isFolder ? '📁' : '📄') + ' ' + escAttr(f.name) + '</span>';
+      h += '<span>' + (isFolder ? '📁' : '📄') + ' ' + escAttr(f.name);
+      if (archShareLbl) h += ' <span class="rec-tag rec-tag-share" title="Compartido">↗ ' + escAttr(archShareLbl) + '</span>';
+      h += '</span>';
       h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a>';
+      if (!isFolder && canShare) {
+        h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'archivo\',\'' + escAttr(r.id) + '\',\'' + escAttr(f.id) + '\',\'' + escAttr(f.name) + '\')">Compartir</button>';
+      }
       if (!isFolder && typeof parseDrivePreviewUrl === 'function') {
         const prev = parseDrivePreviewUrl(link);
         if (prev.preview) {
@@ -285,7 +404,11 @@ async function cargarRecursosRepoArchivos(pageToken) {
     if (!(data.files || []).length) h = '<div class="rec-empty">Carpeta vacía.</div>';
     el.innerHTML = h;
   } catch (err) {
-    el.innerHTML = '<div class="rec-info-banner warn">' + escAttr(err.message || 'Error al listar Drive') + '. Conecte correo en la pestaña Correos.</div>';
+    const msg = String(err.message || 'Error al listar Drive');
+    if (msg.toLowerCase().includes('token') || msg.toLowerCase().includes('correo')) {
+      recursosModalCorreoRequerido('listar y adjuntar documentos en el repositorio');
+    }
+    el.innerHTML = '<div class="rec-info-banner warn">' + escAttr(msg) + '. <button type="button" class="btn bsm" onclick="recursosModalCorreoRequerido(\'usar la biblioteca Drive\')">Conectar correo</button></div>';
   }
 }
 
@@ -301,27 +424,19 @@ function recursosOcultarFormEnlace() {
 
 function renderRecursosEnlaceForm(editId) {
   const existing = editId && editId !== '__new__' ? enlacesVisiblesAdminTodos().find(function(l) { return l.id === editId; }) : null;
-  const creables = getRecursosScopesCreablesSesion();
-  const def = creables[0] || { scope: 'departamento', scopeId: getRecursosDeptoContext() };
-  const scope = existing ? existing.scope : def.scope;
-  const scopeId = existing ? existing.scopeId : def.scopeId;
+  const auto = getRecursosScopeAutoSesion();
+  const scope = existing ? existing.scope : auto.scope;
+  const scopeId = existing ? existing.scopeId : auto.scopeId;
 
   let h = '<div class="card rec-card rec-form-card"><div class="cft">' + (existing ? 'Editar enlace' : 'Nuevo enlace externo') + '</div><div class="fg">';
-  if (esAdministrador() || esAdminFirestore()) {
+  if (recursosMuestraSelectorAmbito()) {
     h += renderRecursosScopeFields(scope, scopeId, 'rec-enl');
-  } else if (creables.length > 1) {
-    h += '<div class="fld"><label>Dirigido a</label><select id="rec-enl-scope-pick" onchange="recEnlaceFormScopePickChange()">';
-    creables.forEach(function(c, idx) {
-      const sel = c.scope === scope && c.scopeId === scopeId;
-      h += '<option value="' + idx + '"' + (sel ? ' selected' : '') + '>' + escAttr(labelRecursosScope(c.scope, c.scopeId)) + '</option>';
-    });
-    h += '</select></div>';
-    h += '<input type="hidden" id="rec-enl-scope" value="' + escAttr(scope) + '">';
-    h += '<input type="hidden" id="rec-enl-scope-id" value="' + escAttr(scopeId) + '">';
   } else {
     h += '<input type="hidden" id="rec-enl-scope" value="' + escAttr(scope) + '">';
     h += '<input type="hidden" id="rec-enl-scope-id" value="' + escAttr(scopeId) + '">';
-    h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Dirigido a: <strong>' + escAttr(labelRecursosScope(scope, scopeId)) + '</strong></p>';
+    if (!existing) {
+      h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong> y sus responsables asignados.</p>';
+    }
   }
   h += '<div class="fld"><label>Título</label><input type="text" id="rec-enl-titulo" value="' + escAttr(existing && existing.titulo || '') + '"></div>';
   h += '<div class="fld"><label>URL</label><input type="url" id="rec-enl-url" value="' + escAttr(existing && existing.url || '') + '" placeholder="https://…"></div>';
@@ -401,6 +516,7 @@ async function guardarRecursosEnlace(editId) {
   }
   const isNew = !editId || editId === '__new__';
   const email = getAuthEmailNorm() || (window._usuarioActual && window._usuarioActual.email) || '';
+  const byAdmin = esAdministrador() || esAdminFirestore();
   if (!isNew) {
     const idx = recursosEnlaces.findIndex(function(l) { return l.id === editId; });
     if (idx < 0) return;
@@ -412,7 +528,7 @@ async function guardarRecursosEnlace(editId) {
     recursosEnlaces.push({
       id: 'enl' + Date.now(),
       titulo: titulo, url: url, area: area, tematica: tematica, descripcion: descripcion,
-      scope: scope, scopeId: scopeId, activo: true,
+      scope: scope, scopeId: scopeId, activo: true, createdByAdmin: byAdmin, compartidoCon: [],
       createdAt: new Date().toISOString(), createdBy: email, updatedAt: new Date().toISOString()
     });
   }
@@ -429,7 +545,10 @@ async function guardarRecursosEnlace(editId) {
 
 async function eliminarRecursosEnlace(id) {
   const l = (recursosEnlaces || []).find(function(x) { return x.id === id; });
-  if (!l || !puedeEditarRecursosEnlaces(l.scope, l.scopeId)) { notif('Sin permiso', 'err'); return; }
+  if (!l || !puedeEliminarRecursosItem(l)) {
+    notif(l && recursosCreadoPorAdmin(l) ? 'Solo el administrador puede eliminar este enlace' : 'Sin permiso', 'err');
+    return;
+  }
   if (!confirm('¿Eliminar este enlace?')) return;
   recursosEnlaces = recursosEnlaces.filter(function(x) { return x.id !== id; });
   const ok = await saveRecursosFirestore();
@@ -448,27 +567,19 @@ function recursosOcultarFormRepo() {
 
 function renderRecursosRepoForm(editId) {
   const existing = editId && editId !== '__new__' ? getRecursosRepoById(editId) : null;
-  const creables = getRecursosScopesCreablesSesion();
-  const def = creables[0] || { scope: 'oficina', scopeId: getBibliotecaOficinaSesion() };
-  const s = existing ? getRepoScope(existing) : def;
+  const auto = getRecursosScopeAutoSesion();
+  const s = existing ? getRepoScope(existing) : auto;
   const scope = s.scope;
   const scopeId = s.scopeId;
   let h = '<div class="card rec-card rec-form-card"><div class="cft">' + (existing ? 'Editar repositorio' : 'Nuevo repositorio') + '</div><div class="fg">';
-  if (esAdministrador() || esAdminFirestore()) {
+  if (recursosMuestraSelectorAmbito()) {
     h += renderRecursosScopeFields(scope, scopeId, 'rec-repo');
-  } else if (creables.length > 1) {
-    h += '<div class="fld"><label>Dirigido a</label><select id="rec-repo-scope-pick" onchange="recRepoFormScopePickChange()">';
-    creables.forEach(function(c, idx) {
-      const sel = c.scope === scope && c.scopeId === scopeId;
-      h += '<option value="' + idx + '"' + (sel ? ' selected' : '') + '>' + escAttr(labelRecursosScope(c.scope, c.scopeId)) + '</option>';
-    });
-    h += '</select></div>';
-    h += '<input type="hidden" id="rec-repo-scope" value="' + escAttr(scope) + '">';
-    h += '<input type="hidden" id="rec-repo-scope-id" value="' + escAttr(scopeId) + '">';
   } else {
     h += '<input type="hidden" id="rec-repo-scope" value="' + escAttr(scope) + '">';
     h += '<input type="hidden" id="rec-repo-scope-id" value="' + escAttr(scopeId) + '">';
-    h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Dirigido a: <strong>' + escAttr(labelRecursosScope(scope, scopeId)) + '</strong></p>';
+    if (!existing) {
+      h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong> y sus responsables asignados.</p>';
+    }
   }
   h += '<div class="fld"><label>Título</label><input type="text" id="rec-repo-titulo" value="' + escAttr(existing && existing.titulo || '') + '"></div>';
   h += '<div class="fld"><label>Temática</label><input type="text" id="rec-repo-tematica" value="' + escAttr(existing && existing.tematica || '') + '"></div>';
@@ -503,6 +614,7 @@ async function guardarRecursosRepo(editId) {
   if (!titulo) { notif('El título es obligatorio', 'err'); return; }
   const isNew = !editId || editId === '__new__';
   const email = getAuthEmailNorm() || '';
+  const byAdmin = esAdministrador() || esAdminFirestore();
   if (!isNew) {
     const idx = bibliotecaRepos.findIndex(function(r) { return r.id === editId; });
     if (idx < 0) return;
@@ -522,8 +634,19 @@ async function guardarRecursosRepo(editId) {
       driveFolderLink = manualLink;
       if (!driveFolderId) { notif('Enlace de carpeta Drive no válido', 'err'); return; }
     } else {
+      if (!recursosDriveConectado()) {
+        recursosModalCorreoRequerido('crear carpetas en Drive y adjuntar documentos al repositorio');
+        return;
+      }
+      const driveFn = typeof driveEnsureBibliotecaRepoFolder === 'function'
+        ? driveEnsureBibliotecaRepoFolder
+        : (typeof window.driveEnsureBibliotecaRepoFolder === 'function' ? window.driveEnsureBibliotecaRepoFolder : null);
+      if (!driveFn) {
+        notif('No se cargó el módulo Drive. Recargue la página (Ctrl+F5) y conecte correo en Correos.', 'err');
+        return;
+      }
       try {
-        const created = await driveEnsureBibliotecaRepoFolder(scope, scopeId, titulo);
+        const created = await driveFn(scope, scopeId, titulo);
         driveFolderId = created.folderId;
         driveFolderLink = created.link;
       } catch (err) {
@@ -537,7 +660,9 @@ async function guardarRecursosRepo(editId) {
       scope: scope, scopeId: scopeId,
       oficinaId: scope === 'oficina' ? scopeId : '',
       driveFolderId: driveFolderId, driveFolderLink: driveFolderLink,
-      activo: true,
+      activo: true, createdByAdmin: byAdmin,
+      compartidoCon: [],
+      archivosCompartidos: [],
       createdAt: new Date().toISOString(), createdBy: email,
       updatedAt: new Date().toISOString()
     });
@@ -555,8 +680,10 @@ async function guardarRecursosRepo(editId) {
 
 async function eliminarRecursosRepo(id) {
   const r = getRecursosRepoById(id);
-  const s = r ? getRepoScope(r) : {};
-  if (!r || !puedeEditarBiblioteca(s.scope, s.scopeId)) { notif('Sin permiso', 'err'); return; }
+  if (!r || !puedeEliminarRecursosItem(r)) {
+    notif(r && recursosCreadoPorAdmin(r) ? 'Solo el administrador puede eliminar este repositorio' : 'Sin permiso', 'err');
+    return;
+  }
   if (!confirm('¿Eliminar este repositorio de la biblioteca? (La carpeta en Drive no se borra)')) return;
   bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
   const ok = await saveRecursosFirestore();
@@ -569,6 +696,11 @@ async function eliminarRecursosRepo(id) {
 }
 
 async function subirRecursosRepoArchivos(ev, repoId) {
+  if (!recursosDriveConectado()) {
+    recursosModalCorreoRequerido('adjuntar documentos al repositorio');
+    if (ev && ev.target) ev.target.value = '';
+    return;
+  }
   const r = getRecursosRepoById(repoId);
   const s = r ? getRepoScope(r) : {};
   if (!r || !puedeEditarBiblioteca(s.scope, s.scopeId)) return;
@@ -591,6 +723,115 @@ async function subirRecursosRepoArchivos(ev, repoId) {
     cargarRecursosRepoArchivos();
   }
   ev.target.value = '';
+}
+
+function recursosAbrirCompartir(tipo, id, fileId, fileName) {
+  window._recShareCtx = { tipo: tipo, id: id, fileId: fileId || '', fileName: fileName || '' };
+  const ov = document.getElementById('rec-share-overlay');
+  const body = document.getElementById('rec-share-body');
+  if (!ov || !body) return;
+  let item = null;
+  let titulo = '';
+  if (tipo === 'enlace') {
+    item = (recursosEnlaces || []).find(function(l) { return l.id === id; });
+    titulo = item ? (item.titulo || 'Enlace') : 'Enlace';
+  } else if (tipo === 'repo') {
+    item = getRecursosRepoById(id);
+    titulo = item ? item.titulo : 'Repositorio';
+  } else if (tipo === 'archivo') {
+    item = getRecursosRepoById(id);
+    const f = item && (item.archivosCompartidos || []).find(function(a) { return a.fileId === fileId; });
+    titulo = f ? f.fileName : 'Documento';
+  }
+  if (!item || !puedeCompartirRecursosItem(item)) {
+    notif('Sin permiso para compartir', 'err');
+    return;
+  }
+  let sel = [];
+  if (tipo === 'archivo') {
+    const f = (item.archivosCompartidos || []).find(function(a) { return a.fileId === fileId; });
+    sel = f ? (f.compartidoCon || []).slice() : [];
+  } else {
+    sel = (item.compartidoCon || []).slice();
+  }
+  const ofis = getRecursosOficinasParaCompartir(item);
+  let h = '<p style="font-size:13px;color:var(--tx2);margin:0 0 12px">Seleccione las oficinas que podrán ver <strong>' + escAttr(titulo) + '</strong> en su pestaña Recursos.</p>';
+  h += '<div class="rec-share-ofis">';
+  ofis.forEach(function(o) {
+    const checked = sel.includes(o.id);
+    h += '<label class="rec-share-ofi-lbl"><input type="checkbox" value="' + escAttr(o.id) + '"' + (checked ? ' checked' : '') + '> ' + escAttr(o.nombre) + '</label>';
+  });
+  h += '</div>';
+  if (!ofis.length) h += '<p style="font-size:12px;color:var(--tx3)">No hay otras oficinas disponibles para compartir.</p>';
+  body.innerHTML = h;
+  const titEl = document.getElementById('rec-share-title');
+  if (titEl) titEl.textContent = tipo === 'archivo' ? 'Compartir documento' : (tipo === 'repo' ? 'Compartir repositorio' : 'Compartir enlace');
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden', 'false');
+}
+
+function recursosCerrarCompartir() {
+  const ov = document.getElementById('rec-share-overlay');
+  if (ov) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+  window._recShareCtx = null;
+}
+
+async function recursosGuardarCompartir() {
+  const ctx = window._recShareCtx;
+  if (!ctx) return;
+  const body = document.getElementById('rec-share-body');
+  const checks = body ? body.querySelectorAll('input[type=checkbox]:checked') : [];
+  const sel = Array.from(checks).map(function(c) { return c.value; });
+  const email = getAuthEmailNorm() || '';
+  if (ctx.tipo === 'enlace') {
+    const idx = recursosEnlaces.findIndex(function(l) { return l.id === ctx.id; });
+    if (idx < 0) return;
+    recursosEnlaces[idx] = Object.assign({}, recursosEnlaces[idx], {
+      compartidoCon: sel,
+      updatedAt: new Date().toISOString(),
+      updatedBy: email
+    });
+  } else if (ctx.tipo === 'repo') {
+    const idx = bibliotecaRepos.findIndex(function(r) { return r.id === ctx.id; });
+    if (idx < 0) return;
+    bibliotecaRepos[idx] = Object.assign({}, bibliotecaRepos[idx], {
+      compartidoCon: sel,
+      updatedAt: new Date().toISOString(),
+      updatedBy: email
+    });
+  } else if (ctx.tipo === 'archivo') {
+    const idx = bibliotecaRepos.findIndex(function(r) { return r.id === ctx.id; });
+    if (idx < 0) return;
+    const repo = bibliotecaRepos[idx];
+    if (!Array.isArray(repo.archivosCompartidos)) repo.archivosCompartidos = [];
+    let arch = repo.archivosCompartidos.find(function(a) { return a.fileId === ctx.fileId; });
+    if (!arch) {
+      arch = {
+        fileId: ctx.fileId,
+        fileName: ctx.fileName || 'Documento',
+        driveLink: 'https://drive.google.com/file/d/' + ctx.fileId + '/view',
+        compartidoCon: []
+      };
+      repo.archivosCompartidos.push(arch);
+    }
+    arch.compartidoCon = sel;
+    bibliotecaRepos[idx] = Object.assign({}, repo, {
+      archivosCompartidos: repo.archivosCompartidos.slice(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: email
+    });
+  }
+  const ok = await saveRecursosFirestore();
+  if (ok) {
+    notif('Compartido actualizado', 'ok');
+    recursosCerrarCompartir();
+    renderRecursosPanel();
+    if (window._recursosRepoSel && ctx.tipo === 'archivo') cargarRecursosRepoArchivos();
+    if (typeof renderListasCfg === 'function') renderListasCfg();
+  } else notif('Error al guardar', 'err');
 }
 
 async function guardarRecursosConfigDrive() {
@@ -632,7 +873,10 @@ function recursosCfgCardBody() {
       if (l.area) h += ' <span class="rec-tag">' + escAttr(l.area) + '</span>';
       h += '</div><div class="fx" style="gap:4px;flex-shrink:0">';
       h += '<button type="button" class="btn bsm" onclick="recursosCfgEditarEnlace(\'' + escAttr(l.id) + '\')">Editar</button>';
-      h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">✕</button></div></li>';
+      if (puedeEliminarRecursosItem(l)) {
+        h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">✕</button>';
+      }
+      h += '</div></li>';
     });
     h += '</ul>';
   }

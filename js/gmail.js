@@ -832,33 +832,41 @@ async function driveEnsureBibliotecaOficinaFolder(oficinaId) {
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   const ofi = (typeof OFICINAS_DEGUV !== 'undefined' ? OFICINAS_DEGUV : []).find(o => o.id === oficinaId);
   const cod = ofi ? (ofi.codigo || ofi.id) : String(oficinaId || 'Oficina');
-  const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId('guaviare') : DRIVE_ROOT_RECURSOS_ID;
-  let parent = await _driveEnsureFolder(token, 'Oficinas', rootId);
-  parent = await _driveEnsureFolder(token, cod, parent);
-  return { folderId: parent, link: 'https://drive.google.com/drive/folders/' + parent };
+  const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+  const folderId = await _driveEnsureFolder(token, cod, rootId);
+  return { folderId: folderId, link: 'https://drive.google.com/drive/folders/' + folderId };
 }
 
-// Crea carpeta de repositorio según ámbito (sistema, departamento u oficina).
+// Crea carpeta de repositorio: Guaviare → subcarpeta de oficina bajo raíz institucional;
+// Guainía/Vaupés → carpeta regional configurada por el administrador.
 async function driveEnsureBibliotecaRepoFolder(scope, scopeId, repoTitulo) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   const nom = String(repoTitulo || 'Repositorio').trim().slice(0, 80) || 'Repositorio';
   let parentId = '';
-  if (scope === 'oficina' || (!scope && scopeId)) {
-    const ofiId = scopeId || scope;
-    const base = await driveEnsureBibliotecaOficinaFolder(ofiId);
-    parentId = base.folderId;
-  } else if (scope === 'departamento') {
-    const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId(scopeId) : DRIVE_ROOT_RECURSOS_ID;
-    let parent = await _driveEnsureFolder(token, 'Departamentos', rootId);
-    parent = await _driveEnsureFolder(token, scopeId, parent);
-    parentId = parent;
-  } else {
-    const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId('guaviare') : DRIVE_ROOT_RECURSOS_ID;
+  const esRegional = scope === 'departamento' && (scopeId === 'guainia' || scopeId === 'vaupes');
+  if (esRegional) {
+    const rootId = typeof getBibliotecaDriveRootId === 'function' ? getBibliotecaDriveRootId(scopeId) : '';
+    if (!rootId) throw new Error('Configure la carpeta Drive regional en Configuración → Recursos.');
+    parentId = rootId;
+  } else if (scope === 'sistema') {
+    const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
     parentId = await _driveEnsureFolder(token, 'Sistema', rootId);
+  } else {
+    let ofiId = scopeId;
+    if (scope === 'departamento' && scopeId === 'guaviare') ofiId = 'guaviare';
+    if (scope === 'oficina') ofiId = scopeId;
+    const base = await driveEnsureBibliotecaOficinaFolder(ofiId || 'guaviare');
+    parentId = base.folderId;
   }
   const folderId = await _driveEnsureFolder(token, nom, parentId);
   return { folderId: folderId, link: 'https://drive.google.com/drive/folders/' + folderId };
+}
+if (typeof window !== 'undefined') {
+  window.driveEnsureBibliotecaOficinaFolder = driveEnsureBibliotecaOficinaFolder;
+  window.driveEnsureBibliotecaRepoFolder = driveEnsureBibliotecaRepoFolder;
+  window.driveListFolderContents = driveListFolderContents;
+  window.driveUploadBiblioteca = driveUploadBiblioteca;
 }
 
 // Sube archivo a carpeta de biblioteca.

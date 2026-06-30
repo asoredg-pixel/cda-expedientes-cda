@@ -783,37 +783,94 @@ function recursosScopeVisibleParaSesion(scope,scopeId){
   if(scope==='oficina')return getRecursosOficinasVisiblesSesion().includes(scopeId);
   return false;
 }
-function labelRecursosScope(scope,scopeId){
-  if(scope==='sistema')return 'Sistema (todos)';
-  if(scope==='departamento')return 'Depto: '+labelDepartamento(scopeId);
-  if(scope==='oficina')return 'Oficina: '+labelOficina(scopeId);
-  return String(scope||'')+': '+String(scopeId||'');
+function recursosItemVisiblePorScope(item){
+  if(!item)return false;
+  const n=normalizeRecursosScopeItem(item);
+  return recursosScopeVisibleParaSesion(n.scope,n.scopeId);
+}
+function recursosItemCompartidoVisible(item){
+  const comp=Array.isArray(item&&item.compartidoCon)?item.compartidoCon:[];
+  if(!comp.length)return false;
+  const vis=getRecursosOficinasVisiblesSesion();
+  return comp.some(function(id){return vis.includes(id);});
+}
+function recursosItemVisibleParaSesion(item){
+  if(!item||item.activo===false)return false;
+  if(recursosItemVisiblePorScope(item))return true;
+  return recursosItemCompartidoVisible(item);
+}
+function getRecursosOficinasParaCompartir(item){
+  const n=normalizeRecursosScopeItem(item||{});
+  const ownerOfi=n.scope==='oficina'?n.scopeId:'';
+  return OFICINAS_DEGUV.filter(function(o){return o.id!==ownerOfi;});
+}
+function labelRecursosCompartidoCon(ids){
+  const arr=Array.isArray(ids)?ids:[];
+  if(!arr.length)return '';
+  return arr.map(labelOficina).join(', ');
+}
+function puedeCompartirRecursosItem(item){
+  if(!item)return false;
+  const n=normalizeRecursosScopeItem(item);
+  return puedeEditarRecursosItem(n.scope,n.scopeId);
+}
+function archivosRepoCompartidosConmigo(repo){
+  const vis=getRecursosOficinasVisiblesSesion();
+  return (repo&&repo.archivosCompartidos||[]).filter(function(a){
+    return (a.compartidoCon||[]).some(function(id){return vis.includes(id);});
+  });
+}
+function getRecursosScopeAutoSesion(){
+  if(esModoOficinaDeguv())return {scope:'oficina',scopeId:deptoActivo};
+  if(esSecretaria())return {scope:'oficina',scopeId:'secretaria'};
+  if(esNcaDeguv())return {scope:'oficina',scopeId:'guaviare'};
+  if(deptoActivo==='guainia'||deptoActivo==='vaupes')return {scope:'departamento',scopeId:deptoActivo};
+  if(DEPTOS.some(function(d){return d.id===deptoActivo;})&&deptoActivo!=='guaviare')return {scope:'departamento',scopeId:deptoActivo};
+  const o=getRecursosOficinaActiva();
+  if(o)return {scope:'oficina',scopeId:o};
+  return {scope:'departamento',scopeId:getRecursosDeptoContext()};
+}
+function recursosMuestraSelectorAmbito(){
+  return (esAdministrador()||esAdminFirestore())&&(esAdminModoGlobal()||!!window._recursosCfgForm);
+}
+function labelRecursosScopeContexto(scope,scopeId){
+  if(scope==='oficina')return labelOficina(scopeId);
+  if(scope==='departamento')return labelDepartamento(scopeId);
+  return labelRecursosScope(scope,scopeId);
 }
 function puedeEditarRecursosItem(scope,scopeId){
   if(esAdministrador()||esAdminFirestore())return true;
   if(scope==='sistema')return false;
-  if(scope==='departamento')return esEncargadoDeptoUsuario(scopeId);
-  if(scope==='oficina')return esEncargadoOficinaUsuario(scopeId);
+  if(scope==='departamento'){
+    if(scopeId==='guaviare'&&esNcaDeguv())return true;
+    return esEncargadoDeptoUsuario(scopeId);
+  }
+  if(scope==='oficina'){
+    if(esEncargadoOficinaUsuario(scopeId))return true;
+    if(scopeId==='guaviare'&&esEncargadoDeptoUsuario('guaviare'))return true;
+    return false;
+  }
   return false;
 }
 function puedeCrearRecursosEnScope(scope,scopeId){
   return puedeEditarRecursosItem(scope,scopeId);
 }
 function getRecursosScopesCreablesSesion(){
-  const out=[];
-  if(esAdministrador()||esAdminFirestore()){
-    out.push({scope:'sistema',scopeId:'sistema'});
+  if(recursosMuestraSelectorAmbito()){
+    const out=[{scope:'sistema',scopeId:'sistema'}];
     DEPTOS.forEach(function(d){out.push({scope:'departamento',scopeId:d.id});});
     OFICINAS_DEGUV.forEach(function(o){out.push({scope:'oficina',scopeId:o.id});});
     return out;
   }
-  DEPTOS.forEach(function(d){
-    if(esEncargadoDeptoUsuario(d.id))out.push({scope:'departamento',scopeId:d.id});
-  });
-  getRecursosOficinasVisiblesSesion().forEach(function(o){
-    if(esEncargadoOficinaUsuario(o))out.push({scope:'oficina',scopeId:o});
-  });
-  return out;
+  const auto=getRecursosScopeAutoSesion();
+  if(puedeEditarRecursosItem(auto.scope,auto.scopeId))return [auto];
+  return [];
+}
+function labelRecursosScope(scope,scopeId){
+  if(scope==='sistema')return 'Sistema (todos)';
+  if(scope==='departamento')return 'Depto: '+labelDepartamento(scopeId);
+  if(scope==='oficina')return 'Oficina: '+labelOficina(scopeId);
+  return String(scope||'')+': '+String(scopeId||'');
 }
 function puedeEditarRecursosEnlaces(scope,scopeId){
   return puedeEditarRecursosItem(scope,scopeId);
@@ -823,6 +880,17 @@ function puedeEditarBiblioteca(scope,scopeId){
 }
 function puedeEditarBibliotecaLegacy(oficinaId){
   return puedeEditarBiblioteca('oficina',oficinaId);
+}
+function recursosCreadoPorAdmin(item){
+  return !!(item&&item.createdByAdmin===true);
+}
+function puedeEliminarRecursosItem(item){
+  if(!item)return false;
+  if(esAdministrador()||esAdminFirestore())return true;
+  if(recursosCreadoPorAdmin(item))return false;
+  const scope=item.scope||'oficina';
+  const scopeId=item.scopeId||(scope==='oficina'?item.oficinaId:'');
+  return puedeEditarRecursosItem(scope,scopeId);
 }
 function bibliotecaDriveDisponible(deptoCtx){
   const d=deptoCtx||getRecursosDeptoContext();
