@@ -189,7 +189,10 @@ function getChatContacts(){
   return out;
 }
 function chatConvId(keyA,keyB){
-  return [chatCanonicalKey(keyA),chatCanonicalKey(keyB)].sort().join('|');
+  const a=chatCanonicalKey(keyA);
+  const b=chatCanonicalKey(keyB);
+  if(a===b)return a;
+  return [a,b].sort().join('|');
 }
 function chatConvFirestoreId(convId){
   return String(convId||'').replace(/\|/g,'__');
@@ -392,7 +395,10 @@ function chatNotifyConvIdsFallback(){
 }
 function chatConvMessages(convId){
   const canon=String(convId||'');
-  return (chatMensajes||[]).filter(m=>chatConvId(m.fromKey,m.toKey)===canon).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
+  return (chatMensajes||[]).filter(function(m){
+    const cid=m.convId||chatConvId(m.fromKey,m.toKey);
+    return cid===canon;
+  }).sort(function(a,b){return(a.ts||'').localeCompare(b.ts||'');});
 }
 function chatContactFromKey(key){
   key=String(key||'');
@@ -493,12 +499,14 @@ function chatMsgsForContact(me,contactKey){
   return out.sort(function(a,b){return(a.ts||'').localeCompare(b.ts||'');});
 }
 function chatActiveContactKey(){
+  if(window._chatActiveContactKey)return window._chatActiveContactKey;
   const convId=window._chatConvActiva;
   const me=getChatIdentity();
   if(!me||!convId)return null;
-  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
-  const keys=convId.split('|');
-  return keys.find(function(k){return !myCanon.includes(chatCanonicalKey(k));})||null;
+  const myCanon=chatMyKeysCanon();
+  const keys=convId.split('|').filter(Boolean);
+  const other=keys.find(function(k){return !myCanon.has(chatCanonicalKey(k));});
+  return other||null;
 }
 function chatContactUnreadCount(me,contactKey){
   let n=chatMsgsForContact(me,contactKey).filter(chatMsgUnreadForMe).length;
@@ -619,7 +627,7 @@ async function chatMarcarLeido(convId){
   const my=getMyChatKeys();
   if(!my.length)return;
   const me=getChatIdentity();
-  const contactKey=chatActiveContactKey();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(window._chatManualUnread&&contactKey)window._chatManualUnread.delete(chatNormKey(contactKey));
   let msgs=contactKey&&me?chatMsgsForContact(me,contactKey):chatConvMessages(convId);
   let ch=false;
@@ -691,7 +699,7 @@ async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
   const my=getMyChatKeys();
   const me=getChatIdentity();
-  const contactKey=chatActiveContactKey();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!convId||!my.length||!me)return;
   let ch=false;
   const db=window._db;
@@ -793,7 +801,7 @@ function renderChatContacts(){
     const last=msgs[msgs.length-1];
     const prev=last?((!chatEsMio(last)?(chatFromLabel(last)+': '):'')+(last.text||chatMsgDrivePreview(last))): 'Sin mensajes';
     const unread=chatContactUnreadCount(me,c.key);
-    const active=window._chatConvActiva===convId||chatActiveContactKey()===c.key;
+    const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
     return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
       '<div class="chat-contact-av'+chatAvClass(c.kind)+'">'+chatAvLetter(c.label)+'</div>'+
       '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div><div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
@@ -881,7 +889,7 @@ async function chatEnviarTexto(){
   if(!inp||!me)return;
   const text=inp.value.trim();
   if(!text)return;
-  const contactKey=chatActiveContactKey();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!contactKey)return;
   const route=chatPickSendRoute(me,contactKey);
   window._chatConvActiva=route.convId;
@@ -1065,7 +1073,7 @@ async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
   const me=getChatIdentity();
-  const contactKey=chatActiveContactKey();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!contactKey||!me||_chatFileUploading){
     if(file&&inp&&!contactKey){
       chatModalAlert({
