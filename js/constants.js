@@ -141,6 +141,10 @@ const CDA_LOCK_RENEW_MS=2*60*1000;
 const CDA_AUDIT_KEY='cda_audit_log';
 const CDA_LOCK_UI_REFRESH_MS=15000;
 
+// OAuth Client ID (también en firebase-init.js; aquí garantiza carga síncrona antes de gmail.js)
+const GMAIL_OAUTH_CLIENT_ID='215089141263-gl6q8pkgkr7ul5epq75nbepjp60jseh0.apps.googleusercontent.com';
+if(typeof window!=='undefined'&&!window._gmailClientId)window._gmailClientId=GMAIL_OAUTH_CLIENT_ID;
+
 // Firebase / Firestore
 const ADMIN_GMAIL='ncacdaguaviare@gmail.com';
 const DEPTOS_FIRESTORE=['guaviare','guainia','vaupes'];
