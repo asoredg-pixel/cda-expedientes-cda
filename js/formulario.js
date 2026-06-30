@@ -18,8 +18,6 @@ function showTab(t){
   if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='con';
   if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
-  // gmail-ofi tab requires one of: secretary, office, NCA or responsable
-  if(t==='gmail-ofi'&&!esSecretaria()&&!esModoOficinaDeguv()&&!esOficinaPqrsNca()&&!esNcaDeguv()&&!esModoResponsable())t='con';
   if(t==='rec'&&!puedeVerRecursos())t='con';
   // secretary can switch between sec and gmail-ofi freely
   if(esSecretaria()&&t==='gmail-ofi')t='gmail-ofi';

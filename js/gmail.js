@@ -123,7 +123,7 @@ function gmailConnect(callback) {
       else gmailLoadInbox();
     }
   });
-  _gmailTokenClient.requestAccessToken({ prompt: 'select_account' });
+  _gmailTokenClient.requestAccessToken({ prompt: 'select_account', hint: _gmailSesionEmailHint() || undefined });
 }
 
 function gmailDisconnect() {
@@ -2123,12 +2123,31 @@ async function _gmailFetchProfileEmail(token) {
   const data = await res.json();
   return String(data.emailAddress || '').trim().toLowerCase();
 }
+function _gmailSesionEmailHint() {
+  if (typeof getAuthEmailNorm === 'function') {
+    const e = getAuthEmailNorm();
+    if (e) return e;
+  }
+  return String(window._usuarioActual && window._usuarioActual.email || '').trim().toLowerCase();
+}
+function _gmailOfiRequestAccessToken(tokenClient) {
+  if (!tokenClient) return;
+  const hint = _gmailSesionEmailHint();
+  const opts = { prompt: 'select_account' };
+  if (hint) opts.hint = hint;
+  tokenClient.requestAccessToken(opts);
+}
 async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
   let email = '';
   try {
     email = await _gmailFetchProfileEmail(tok);
   } catch (err) {
     notif('Error al verificar cuenta Gmail: ' + String(err.message || err).slice(0, 100), 'err');
+    return false;
+  }
+  const sesion = _gmailSesionEmailHint();
+  if (sesion && email && email !== sesion) {
+    notif('Debe conectar la cuenta registrada (' + sesion + '). Seleccionó: ' + email + '.', 'err');
     return false;
   }
   gmailOfiSetToken(tok, expiresInSec, email);
@@ -2171,6 +2190,10 @@ function gmailOfiConnect() {
     notif('Falta configurar el Client ID OAuth.', 'err');
     return;
   }
+  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+    notif('Google Identity Services no disponible. Verifique su conexión a internet.', 'err');
+    return;
+  }
   _gmailOfiConnecting = true;
   _updateGmailOfiBtn();
   _gmailOfiTokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -2195,7 +2218,7 @@ function gmailOfiConnect() {
       _gmailOfiLoadSignature();
     }
   });
-  _gmailOfiTokenClient.requestAccessToken({ prompt: '' });
+  _gmailOfiRequestAccessToken(_gmailOfiTokenClient);
 }
 
 function gmailOfiDisconnect() {
