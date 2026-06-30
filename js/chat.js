@@ -156,6 +156,10 @@ function chatScopeForIdentity(me){
   if(me.kind==='resp')return me.deptoId||deptoCfg||'guaviare';
   return 'guaviare';
 }
+function chatEsScopeRegional(scope){
+  scope=String(scope||'');
+  return scope==='guainia'||scope==='vaupes'||scope==='juris';
+}
 function chatScopesCanTalk(scopeA,scopeB){
   scopeA=String(scopeA||'');
   scopeB=String(scopeB||'');
@@ -163,6 +167,7 @@ function chatScopesCanTalk(scopeA,scopeB){
   if(scopeA===scopeB)return true;
   if(scopeA==='guaviare'&&(scopeB==='guainia'||scopeB==='vaupes'||scopeB==='juris'))return true;
   if(scopeB==='guaviare'&&(scopeA==='guainia'||scopeA==='vaupes'||scopeA==='juris'))return true;
+  if(chatEsScopeRegional(scopeA)&&chatEsScopeRegional(scopeB))return true;
   return false;
 }
 function chatContactAllowed(contactKey){
@@ -193,6 +198,14 @@ function addChatEnlacesNcaRegional(add,skipEncNombre){
   });
   add({kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION,sub:'Subdirección DEGUV'});
 }
+function addChatEnlacesRegionalExternos(add,deptoPropio,skipEncNombre){
+  addChatContactoDepto(add,'guaviare',skipEncNombre,{subFallback:'NCA DEGUV',subEnc:'NCA DEGUV · Encargado'});
+  DEPTOS.forEach(function(d){
+    if(d.id==='guaviare'||d.id===deptoPropio)return;
+    addChatContactoDepto(add,d.id,skipEncNombre,{subFallback:labelDepto(d.id)});
+  });
+  add({kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION,sub:'Subdirección DEGUV'});
+}
 function getChatContacts(){
   const me=getChatIdentity();
   if(!me)return[];
@@ -200,13 +213,15 @@ function getChatContacts(){
   function add(c){const k=chatNormKey(c.key);if(seen.has(k)||k===chatNormKey(me.key))return;seen.add(k);out.push(c);}
   if(me.kind==='juris'){
     addChatContactoDepto(add,'guaviare',null,{subFallback:'NCA DEGUV'});
+    addChatContactoDepto(add,'guainia',null,{subFallback:'Guainía'});
+    addChatContactoDepto(add,'vaupes',null,{subFallback:'Vaupés'});
     return out.sort(function(a,b){return a.label.localeCompare(b.label,'es');});
   }
   if(me.kind==='resp'){
     const depto=me.deptoId||deptoCfg||'guaviare';
     if(depto==='guainia'||depto==='vaupes'){
       addChatContactoDepto(add,depto,null,{subEnc:labelDepto(depto)+' · Encargado',subFallback:'Mensaje al departamento'});
-      addChatContactoDepto(add,'guaviare',null,{subFallback:'NCA DEGUV',subEnc:'NCA DEGUV · Encargado'});
+      addChatEnlacesRegionalExternos(add,depto,me.label);
       addChatContactosInternosDepto(add,depto,me.label);
       return out.sort(function(a,b){return a.label.localeCompare(b.label,'es');});
     }
@@ -260,7 +275,7 @@ function getChatContacts(){
       });
     }
     if(me.deptoId==='guainia'||me.deptoId==='vaupes'){
-      addChatContactoDepto(add,'guaviare',encYo,{subFallback:'NCA DEGUV',subEnc:'NCA DEGUV · Encargado'});
+      addChatEnlacesRegionalExternos(add,me.deptoId,encYo);
       addChatContactosInternosDepto(add,me.deptoId,encYo);
       return out.sort(function(a,b){return a.label.localeCompare(b.label,'es');});
     }
