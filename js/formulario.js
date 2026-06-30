@@ -7,6 +7,10 @@
 // TABS
 // ================================================================
 function showTab(t){
+  if(typeof puedeVerTabSesion==='function'&&!puedeVerTabSesion(t)){
+    const vis=getTabsVisiblesSesion();
+    t=vis.length?vis[0]:'con';
+  }
   if(esModoCiudadano()&&t!=='ciudadano')t='ciudadano';
   if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi')t='sec';
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');

@@ -739,3 +739,48 @@ function getBibliotecaDriveRootId(deptoCtx){
   }
   return typeof DRIVE_ROOT_RECURSOS_ID!=='undefined'?DRIVE_ROOT_RECURSOS_ID:'';
 }
+
+// Pestañas visibles por rol / módulo activo (menú principal)
+function getTabsVisiblesSesion(){
+  const G='gmail-ofi',S='sec',P='pqrs-ofi',R='reg',A='act',Gnd='agenda',C='con',Rec='rec',Co='cons',Cfg='cfg',Ciu='ciudadano';
+  const deptTabs=[G,R,A,Gnd,Rec,C,Co,Cfg];
+  if(esModoCiudadano())return[Ciu];
+  if(esJurisdiccional())return[C,Co];
+  if(esSecretaria())return[G,S,P,C,Rec];
+  if(esModoOficinaDeguv())return[G,P,C,Rec];
+  if(esModoResponsable()||esModoContratista())return[G,A,C,Rec];
+  if(esAdministrador()){
+    const sel=getSelDeptoVal();
+    if(sel==='secretaria')return[G,S,P,C,Rec];
+    if(esModuloOficina(sel))return[G,P,C,Rec];
+    if(sel==='jurisdiccional')return[C,Co];
+    if(sel==='responsables')return[G,A,C,Rec];
+    if(sel==='ciudadano')return[Ciu];
+    if(sel==='admin')return[R,G,S,P,A,Gnd,C,Rec,Co,Cfg];
+    if(DEPTOS.some(d=>d.id===sel))return deptTabs;
+  }
+  if(DEPTOS.some(d=>d.id===deptoActivo))return deptTabs;
+  return[C];
+}
+function puedeVerTabSesion(tabId){
+  return getTabsVisiblesSesion().includes(tabId);
+}
+function aplicarVisibilidadTabsSesion(){
+  const visibles=new Set(getTabsVisiblesSesion());
+  document.querySelectorAll('.tabsi .tab').forEach(el=>{
+    const key=el.id?el.id.replace(/^tab-/,''):'';
+    const show=visibles.has(key);
+    el.classList.toggle('tab-sesion-off',!show);
+    el.classList.toggle('tab-gmail-ofi-on',show&&key==='gmail-ofi');
+    el.classList.toggle('tab-rec-on',show&&key==='rec');
+    if(!show){el.classList.remove('on','tab-selected');el.style.display='';}
+  });
+  const pgOn=document.querySelector('.pg.on');
+  if(pgOn&&pgOn.id&&pgOn.id.startsWith('pg-')){
+    const cur=pgOn.id.slice(3);
+    if(cur!=='login'&&!visibles.has(cur)){
+      const first=Array.from(visibles)[0]||'con';
+      if(typeof showTab==='function')showTab(first);
+    }
+  }
+}

@@ -8940,32 +8940,8 @@ function updateDeptoUI(){
   }
   const tabReg=document.getElementById('tab-reg');
   const hideRegResp=resp&&!responsablePuedeVerRegistro();
-  if(tabReg){tabReg.classList.toggle('tab-juris-off',juris||sec||ciudadano||ofi);tabReg.classList.toggle('tab-resp-reg-off',hideRegResp);}
-  const tabCfg=document.getElementById('tab-cfg');if(tabCfg)tabCfg.classList.toggle('tab-juris-off',juris||resp||sec||ciudadano||ofi||esModoContratista());
-  // Secretaría y NCA necesitan consulta (búsqueda general de PQRSD y expedientes)
-  // Solo se oculta para: responsable individual, ciudadano, y oficinas deguv (tienen su propia bandeja)
-  const tabCons=document.getElementById('tab-cons');if(tabCons)tabCons.classList.toggle('tab-resp-reg-off',resp||ciudadano||ofi||sec);
-  document.querySelectorAll('.tab-modulo-only').forEach(el=>el.classList.remove('on'));
-  const tabSec=document.getElementById('tab-sec');if(tabSec)tabSec.classList.toggle('on',sec);
-  const tabOfi=document.getElementById('tab-pqrs-ofi');if(tabOfi)tabOfi.classList.toggle('on',ofiVista);
-  // Gmail Correos tab — visible for secretary, offices, NCA and responsables
-  const tabGmailOfi=document.getElementById('tab-gmail-ofi');
-  if(tabGmailOfi){const showGmail=sec||ofi||esOficinaPqrsNca()||esNcaDeguv()||resp;tabGmailOfi.classList.toggle('tab-gmail-ofi-on',showGmail);}
-  const tabRec=document.getElementById('tab-rec');
-  if(tabRec)tabRec.classList.toggle('tab-rec-on',puedeVerRecursos());
-  const tabCiu=document.getElementById('tab-ciudadano');if(tabCiu)tabCiu.classList.toggle('on',ciudadano);
-  document.querySelectorAll('.tabsi .tab').forEach(el=>{
-    if(ciudadano)el.style.display=el.id==='tab-ciudadano'?'inline-flex':'none';
-    else el.style.display='';
-  });
-  document.querySelectorAll('.tab-resp-only').forEach(el=>{
-    el.classList.toggle('tab-resp-on',resp);
-    el.classList.toggle('tab-enc-on',encDepto);
-  });
-  document.querySelectorAll('.tab-agenda-only').forEach(el=>{
-    el.classList.toggle('tab-resp-on',resp);
-    el.classList.toggle('tab-enc-on',encDepto);
-  });
+  if(tabReg){tabReg.classList.toggle('tab-resp-reg-off',hideRegResp);}
+  aplicarVisibilidadTabsSesion();
   document.querySelectorAll('.hacts-juris-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||resp||sec||ciudadano||ofi));
   document.querySelectorAll('.hacts-nuevo-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||(resp&&(!responsableActivo||!responsablePuedeEditarSec('control')))||sec||ciudadano||ofi));
   const optPqrsRec=document.getElementById('f-act-opt-pqrsrec');

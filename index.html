@@ -81,11 +81,15 @@
           <option value="responsables">Responsables</option>
         </optgroup>
       </select>
+      <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
+        <span id="hdr-user-label"></span>
+        <button type="button" class="btn bsm hdr-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
+      </div>
       <details class="hdr-more-menu">
         <summary class="hdr-more-btn" aria-label="Más acciones">⋮</summary>
         <div class="hdr-more-panel">
-          <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
-            <span id="hdr-user-label"></span>
+          <div id="hdr-user-bar-mobile" class="hdr-user-bar hdr-user-bar-mobile" style="display:none">
+            <span id="hdr-user-label-mobile"></span>
             <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
           </div>
           <span class="hacts-juris-hide">

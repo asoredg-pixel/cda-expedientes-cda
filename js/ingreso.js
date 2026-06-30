@@ -39,17 +39,24 @@ function initLoginScreen(){
 function updateHeaderUsuario(){
   const bar=document.getElementById('hdr-user-bar');
   const lbl=document.getElementById('hdr-user-label');
-  if(!bar||!lbl)return;
+  const barMob=document.getElementById('hdr-user-bar-mobile');
+  const lblMob=document.getElementById('hdr-user-label-mobile');
+  if(!lbl)return;
   if(!document.body.classList.contains('sesion-activa')||!window._usuarioActual){
-    bar.style.display='none';
+    if(bar)bar.style.display='none';
+    if(barMob)barMob.style.display='none';
     lbl.textContent='';
+    if(lblMob)lblMob.textContent='';
     return;
   }
   const u=window._usuarioActual;
   const rolInfo=ROLES_INGRESO.find(r=>r.id===rolSesion);
   const rolTit=rolInfo?rolInfo.titulo:tituloRolFirestore(rolSesion||u.rol);
-  lbl.innerHTML='<strong>'+escAttr(u.nombre||u.email)+'</strong> · '+escAttr(rolTit);
-  bar.style.display='inline-flex';
+  const html='<strong>'+escAttr(u.nombre||u.email)+'</strong> · '+escAttr(rolTit);
+  lbl.innerHTML=html;
+  if(lblMob)lblMob.innerHTML=html;
+  if(bar)bar.style.display='inline-flex';
+  if(barMob)barMob.style.display='flex';
 }
 async function verificarUsuarioFirestore(fbUser){
   const email=String(fbUser&&fbUser.email||'').trim().toLowerCase();
