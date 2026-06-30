@@ -284,8 +284,14 @@ function chatTryDesktopNotify(msg){
   sstShowDesktopNotify('Chat interno — '+sender,preview,{
     tag:'chat-'+msg.id,
     onClick:function(){
-      const other=msg.fromKey;
-      if(other)void chatAbrirConv(other);
+      const me=getChatIdentity();
+      let key=msg.fromKey;
+      if(me){
+        const my=getMyChatKeys();
+        const fk=chatNormKey(msg.fromKey);
+        if(my.includes(fk)||chatKeyAliases(msg.fromKey).some(function(a){return my.includes(chatNormKey(a));}))key=msg.toKey;
+      }
+      if(key)void chatAbrirConv(key);
       else if(typeof toggleChatWindow==='function')toggleChatWindow(true);
     }
   });
@@ -368,31 +374,110 @@ function chatMsgUnreadForMe(m){
   const rb=(m.readBy||[]).map(chatNormKey);
   return !my.some(k=>rb.includes(k));
 }
-function chatMsgsForDeptResp(deptoId,respKey){
-  const ids=[chatConvId('depto:'+deptoId,respKey)];
-  const enc=getEncargadoDepto(deptoId);
-  if(enc){
-    const alt=chatConvId(respKey,'resp:'+enc);
-    if(!ids.includes(alt))ids.push(alt);
+function chatConvIdsForContact(me,contactKey){
+  contactKey=String(contactKey||'');
+  if(!me||!contactKey)return[];
+  const ids=new Set();
+  function add(kA,kB){if(kA&&kB)ids.add(chatConvId(kA,kB));}
+  add(me.key,contactKey);
+  if(me.kind==='depto'&&contactKey.startsWith('resp:')){
+    const enc=getEncargadoDepto(me.deptoId);
+    if(enc)add(contactKey,'resp:'+enc);
   }
-  const seen=new Set();
-  const out=[];
-  ids.forEach(id=>{
-    chatConvMessages(id).forEach(m=>{
+  if(me.kind==='ofi'){
+    const encYo=getEncargadoOficina(me.oficinaId);
+    if(contactKey.startsWith('resp:')){
+      add(me.key,contactKey);
+      if(encYo)add('resp:'+encYo,contactKey);
+    }
+    if(contactKey.startsWith('ofi:')){
+      const otroId=contactKey.slice(4);
+      const encOtro=getEncargadoOficina(otroId);
+      add(me.key,contactKey);
+      if(encOtro)add(me.key,'resp:'+encOtro);
+      if(encYo)add('resp:'+encYo,contactKey);
+      if(encYo&&encOtro)add('resp:'+encYo,'resp:'+encOtro);
+    }
+    if(contactKey.startsWith('depto:')){
+      add(me.key,contactKey);
+      if(encYo)add('resp:'+encYo,contactKey);
+    }
+  }
+  return [...ids];
+}
+function chatMsgsForContact(me,contactKey){
+  if(!me||!contactKey)return[];
+  const seen=new Set(),out=[];
+  chatConvIdsForContact(me,contactKey).forEach(function(id){
+    chatConvMessages(id).forEach(function(m){
       if(!seen.has(m.id)){seen.add(m.id);out.push(m);}
     });
   });
-  return out.sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
+  return out.sort(function(a,b){return(a.ts||'').localeCompare(b.ts||'');});
+}
+function chatActiveContactKey(){
+  const convId=window._chatConvActiva;
+  const me=getChatIdentity();
+  if(!me||!convId)return null;
+  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
+  const keys=convId.split('|');
+  return keys.find(function(k){return !myCanon.includes(chatCanonicalKey(k));})||null;
+}
+function chatContactUnreadCount(me,contactKey){
+  let n=chatMsgsForContact(me,contactKey).filter(chatMsgUnreadForMe).length;
+  if(window._chatManualUnread&&window._chatManualUnread.has(chatNormKey(contactKey)))n=Math.max(n,1);
+  return n;
+}
+async function loadChatMensajesForContact(me,contactKey){
+  const ids=chatConvIdsForContact(me,contactKey);
+  let total=0;
+  for(let i=0;i<ids.length;i++)total+=await loadChatMensajes(ids[i]);
+  return total;
+}
+let _chatActiveUnsubs=[];
+function stopChatActiveSync(){
+  _chatActiveUnsubs.forEach(function(fn){try{fn();}catch(e){}});
+  _chatActiveUnsubs=[];
+  if(_chatUnsub){try{_chatUnsub();}catch(e){}_chatUnsub=null;}
+}
+function initChatSyncForContact(contactKey){
+  stopChatActiveSync();
+  contactKey=String(contactKey||'').trim();
+  if(!contactKey)return;
+  const me=getChatIdentity();
+  if(!me)return;
+  const db=window._db;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
+  const convIds=chatConvIdsForContact(me,contactKey);
+  convIds.forEach(function(convId){
+    const fsConvId=chatConvFirestoreId(convId);
+    const unsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
+      snap.docChanges().forEach(function(change){
+        const msg={id:change.doc.id,...change.doc.data()};
+        if(change.type==='removed'){
+          chatMensajes=(chatMensajes||[]).filter(function(m){return m.id!==msg.id;});
+        }else{
+          const idx=(chatMensajes||[]).findIndex(function(m){return m.id===msg.id;});
+          if(idx>=0)chatMensajes[idx]=msg;
+          else chatMensajes.push(msg);
+        }
+        if(change.type==='added')chatTryDesktopNotify(msg);
+      });
+      renderChatMessages();
+      renderChatContacts();
+      renderChatBadge();
+    });
+    _chatActiveUnsubs.push(unsub);
+  });
+}
+function chatMsgsForDeptResp(deptoId,respKey){
+  return chatMsgsForContact({kind:'depto',key:'depto:'+deptoId,deptoId:deptoId},respKey);
 }
 function chatMsgsForActiveConv(){
   const me=getChatIdentity();
-  const convId=window._chatConvActiva;
-  if(!me||!convId)return[];
-  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
-  const keys=convId.split('|');
-  const other=keys.find(k=>!myCanon.includes(chatCanonicalKey(k)));
-  if(me.kind==='depto'&&other&&other.startsWith('resp:'))return chatMsgsForDeptResp(me.deptoId,other);
-  return chatConvMessages(convId);
+  const contactKey=chatActiveContactKey();
+  if(!me||!contactKey)return[];
+  return chatMsgsForContact(me,contactKey);
 }
 function chatMsgParticipa(m){
   const my=getMyChatKeys();
@@ -406,45 +491,56 @@ function chatMsgParticipa(m){
     const enc=getEncargadoDepto(me.deptoId);
     if(enc){
       const ek=chatNormKey('resp:'+enc);
-      const fk=chatNormKey(m.fromKey),tk=chatNormKey(m.toKey);
-      if(fk===ek||tk===ek){
+      const fk2=chatNormKey(m.fromKey),tk2=chatNormKey(m.toKey);
+      if(fk2===ek||tk2===ek){
         const ins=new Set(getInstructoresActivos(me.deptoId).map(i=>chatNormKey('resp:'+i.nombre)));
-        if(ins.has(fk)||ins.has(tk))return true;
+        if(ins.has(fk2)||ins.has(tk2))return true;
       }
+    }
+  }
+  if(me&&me.kind==='ofi'){
+    const enc=getEncargadoOficina(me.oficinaId);
+    if(enc){
+      const ek=chatNormKey('resp:'+enc);
+      const fk2=chatNormKey(m.fromKey),tk2=chatNormKey(m.toKey);
+      if(fk2===ek||tk2===ek)return true;
     }
   }
   return false;
 }
 function chatUnreadCount(){
-  const my=getMyChatKeys();
-  if(!my.length)return 0;
+  const me=getChatIdentity();
+  if(!me)return 0;
   let n=0;
-  (chatMensajes||[]).forEach(m=>{
-    if(!chatMsgParticipa(m))return;
-    if(chatMsgUnreadForMe(m))n++;
+  const covered=new Set();
+  getChatContacts().forEach(function(c){
+    n+=chatContactUnreadCount(me,c.key);
+    chatConvIdsForContact(me,c.key).forEach(function(id){covered.add(id);});
+  });
+  (chatMensajes||[]).forEach(function(m){
+    if(!chatMsgParticipa(m)||!chatMsgUnreadForMe(m))return;
+    const cid=m.convId||chatConvId(m.fromKey,m.toKey);
+    if(!covered.has(cid))n++;
   });
   return n;
 }
 function chatUnreadConv(convId){
   const me=getChatIdentity();
-  if(me&&me.kind==='depto'){
-    const keys=convId.split('|');
-    const other=keys.find(k=>chatNormKey(k)!==chatNormKey(me.key));
-    if(other&&other.startsWith('resp:'))return chatMsgsForDeptResp(me.deptoId,other).filter(chatMsgUnreadForMe).length;
-  }
+  if(!me||!convId)return 0;
+  const myCanon=chatKeyAliases(me.key).map(chatCanonicalKey);
+  const keys=convId.split('|');
+  const other=keys.find(function(k){return !myCanon.includes(chatCanonicalKey(k));});
+  if(other)return chatContactUnreadCount(me,other);
   return chatConvMessages(convId).filter(chatMsgUnreadForMe).length;
 }
 async function chatMarcarLeido(convId){
   const my=getMyChatKeys();
   if(!my.length)return;
-  let ch=false;
   const me=getChatIdentity();
-  let msgs=chatConvMessages(convId);
-  if(me&&me.kind==='depto'){
-    const keys=convId.split('|');
-    const other=keys.find(k=>chatNormKey(k)!==chatNormKey(me.key));
-    if(other&&other.startsWith('resp:'))msgs=chatMsgsForDeptResp(me.deptoId,other);
-  }
+  const contactKey=chatActiveContactKey();
+  if(window._chatManualUnread&&contactKey)window._chatManualUnread.delete(chatNormKey(contactKey));
+  let msgs=contactKey&&me?chatMsgsForContact(me,contactKey):chatConvMessages(convId);
+  let ch=false;
   const db=window._db;
   const fsUpdates=[];
   msgs.forEach(m=>{
@@ -464,6 +560,7 @@ async function chatMarcarLeido(convId){
   });
   if(ch){
     renderChatBadge();
+    renderChatContacts();
     if(fsUpdates.length){
       try{await Promise.all(fsUpdates);}
       catch(err){console.error('chatMarcarLeido:',err);}
@@ -488,31 +585,33 @@ function toggleChatWindow(force){
   if(open){
     renderChatContacts();
     renderChatBadge();
+    if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
     if(typeof chatPurgeExpiredDriveFiles==='function'){
       void chatPurgeExpiredDriveFiles().then(function(ok){
         if(ok){renderChatMessages();renderChatContacts();}
       });
     }
   }
-  else{window._chatConvActiva=null;window._chatVista='contactos';chatUploadOverlayHide();initChatSync(null);chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatVista='contactos';chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
 async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
   const my=getMyChatKeys();
-  if(!convId||!my.length)return;
+  const me=getChatIdentity();
+  const contactKey=chatActiveContactKey();
+  if(!convId||!my.length||!me)return;
   let ch=false;
   const db=window._db;
   const fsUpdates=[];
   chatMsgsForActiveConv().forEach(m=>{
-    if(my.includes(chatNormKey(m.fromKey)))return;
+    if(chatEsMio(m))return;
     if(!m.readBy)m.readBy=[];
     const rb=m.readBy.map(chatNormKey);
-    const nxt=rb.filter(k=>!my.includes(k));
-    if(nxt.length!==rb.length){
-      const removed=rb.filter(k=>my.includes(k));
-      m.readBy=nxt;
+    const removed=my.filter(function(k){return rb.includes(k);});
+    if(removed.length){
+      m.readBy=rb.filter(function(k){return !my.includes(k);});
       ch=true;
-      if(removed.length&&db&&window._fsUpdateDoc&&window._fsDoc&&window._fsArrayRemove&&m.id){
+      if(db&&window._fsUpdateDoc&&window._fsDoc&&window._fsArrayRemove&&m.id){
         const fsConvId=chatConvFirestoreId(m.convId||convId);
         fsUpdates.push(window._fsUpdateDoc(
           window._fsDoc(db,'chats',fsConvId,'mensajes',m.id),
@@ -521,8 +620,14 @@ async function chatMarcarNoLeido(){
       }
     }
   });
+  if(!ch&&contactKey){
+    if(!window._chatManualUnread)window._chatManualUnread=new Set();
+    window._chatManualUnread.add(chatNormKey(contactKey));
+    ch=true;
+  }
   if(ch){
     renderChatBadge();
+    renderChatContacts();
     chatVolverContactos();
     notif('Conversación marcada como no leída','ok');
     if(fsUpdates.length){
@@ -547,20 +652,21 @@ function chatSyncLayout(){
   const collapsed=!!window._chatContactsCollapsed;
   if(contacts){
     contacts.classList.toggle('wide',!conv);
-    contacts.classList.toggle('collapsed',!!conv&&collapsed&&!mobile);
-    contacts.style.display=(conv&&collapsed&&!mobile)?'none':'';
+    contacts.classList.toggle('with-conv',!!conv&&!mobile);
+    contacts.classList.toggle('collapsed',!!conv&&collapsed&&mobile);
+    contacts.style.display=(conv&&collapsed&&mobile)?'none':'';
   }
   if(main){
     main.classList.toggle('hidden',!conv);
     if(conv)main.style.flex='1';
   }
-  if(back)back.style.display=conv?'inline-block':'none';
-  if(toggleBtn)toggleBtn.style.display=conv&&!mobile?'inline-block':'none';
+  if(back)back.style.display=(conv&&mobile)?'inline-flex':'none';
+  if(toggleBtn)toggleBtn.style.display=conv&&mobile?'inline-block':'none';
   if(unreadBtn)unreadBtn.style.display=conv?'inline-block':'none';
   if(conv&&contacts&&!mobile&&!collapsed)contacts.classList.remove('wide');
 }
 function chatVolverContactos(){
-  initChatSync(null);
+  stopChatActiveSync();
   window._chatConvActiva=null;
   window._chatVista='contactos';
   window._chatContactsCollapsed=false;
@@ -576,15 +682,26 @@ function renderChatContacts(){
   if(!el)return;
   const me=getChatIdentity();
   if(!me){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Seleccione departamento o responsable para usar el chat.</div>';return;}
-  const contacts=getChatContacts();
+  let contacts=getChatContacts();
   if(!contacts.length){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';return;}
+  contacts=contacts.slice().sort(function(a,b){
+    const ua=chatContactUnreadCount(me,a.key);
+    const ub=chatContactUnreadCount(me,b.key);
+    if(ua!==ub)return ub-ua;
+    const ma=chatMsgsForContact(me,a.key);
+    const mb=chatMsgsForContact(me,b.key);
+    const ta=(ma[ma.length-1]||{}).ts||'';
+    const tb=(mb[mb.length-1]||{}).ts||'';
+    return tb.localeCompare(ta)||a.label.localeCompare(b.label,'es');
+  });
   el.innerHTML=contacts.map(c=>{
     const convId=chatConvId(me.key,c.key);
-    const msgs=me.kind==='depto'&&c.kind==='resp'?chatMsgsForDeptResp(me.deptoId,c.key):chatConvMessages(convId);
+    const msgs=chatMsgsForContact(me,c.key);
     const last=msgs[msgs.length-1];
     const prev=last?((!chatEsMio(last)?(chatFromLabel(last)+': '):'')+(last.text||chatMsgDrivePreview(last))): 'Sin mensajes';
-    const unread=me.kind==='depto'&&c.kind==='resp'?msgs.filter(chatMsgUnreadForMe).length:chatUnreadConv(convId);
-    return '<div class="chat-contact'+(window._chatConvActiva===convId?' on':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
+    const unread=chatContactUnreadCount(me,c.key);
+    const active=window._chatConvActiva===convId||chatActiveContactKey()===c.key;
+    return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
       '<div class="chat-contact-av'+chatAvClass(c.kind)+'">'+chatAvLetter(c.label)+'</div>'+
       '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div><div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
       (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+
@@ -596,20 +713,21 @@ async function chatAbrirConv(contactKey){
   if(!me)return;
   const convId=chatConvId(me.key,contactKey);
   window._chatConvActiva=convId;
+  window._chatActiveContactKey=contactKey;
   window._chatVista='chat';
-  window._chatContactsCollapsed=true;
+  window._chatContactsCollapsed=window.innerWidth<640;
   const c=chatContactFromKey(contactKey);
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent=c.label;
   if(sub)sub.textContent=c.sub||'Conversación';
-  await loadChatMensajes(convId);
-  initChatSync(convId);
-  chatMarcarLeido(convId);
+  await loadChatMensajesForContact(me,contactKey);
+  initChatSyncForContact(contactKey);
+  await chatMarcarLeido(convId);
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
-  setTimeout(()=>{const inp=document.getElementById('chat-inp');if(inp)inp.focus();},80);
+  setTimeout(function(){const inp=document.getElementById('chat-inp');if(inp)inp.focus();},80);
 }
 function chatMsgDriveUrl(m){
   if(!m)return'';
