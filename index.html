@@ -7,7 +7,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260625g">
+<link rel="stylesheet" href="css/sst.css?v=20260630b">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -56,10 +56,6 @@
       <div><div class="ltx">Sistema de Seguimiento de Trámites</div><div class="lsb">Con seguimiento post-atención y control de términos <span id="sync-indicator" style="font-size:11px;color:var(--tx3);margin-left:6px"></span></div></div>
     </div>
     <div class="hacts">
-      <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
-        <span id="hdr-user-label"></span>
-        <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
-      </div>
       <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar módulo (solo Administrador)">
         <optgroup label="Administración">
           <option value="admin">Administrador</option>
@@ -84,29 +80,38 @@
           <option value="responsables">Responsables</option>
         </optgroup>
       </select>
-      <span class="hacts-juris-hide">
-        <button class="btn bsm" onclick="importarDatos()" title="Importar respaldo completo (.json)">↑ Importar</button>
-        <input type="file" id="imp-file" accept=".json,.xls,.xlsx,.csv,.html" onchange="leerImportFile(event)">
-      </span>
-      <button class="btn bsm bp hacts-export-respaldo" onclick="exportarRespaldoCompleto()" title="Exportar respaldo completo (.json)">↓ Exportar</button>
-      <button class="btn bsm bp hacts-juris-hide hacts-nuevo-hide" onclick="nuevoExp()">+ Nuevo expediente</button>
+      <details class="hdr-more-menu">
+        <summary class="hdr-more-btn" aria-label="Más acciones">⋮</summary>
+        <div class="hdr-more-panel">
+          <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
+            <span id="hdr-user-label"></span>
+            <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
+          </div>
+          <span class="hacts-juris-hide">
+            <button class="btn bsm" onclick="importarDatos()" title="Importar respaldo completo (.json)">↑ Importar</button>
+            <input type="file" id="imp-file" accept=".json,.xls,.xlsx,.csv,.html" onchange="leerImportFile(event)">
+          </span>
+          <button class="btn bsm bp hacts-export-respaldo" onclick="exportarRespaldoCompleto()" title="Exportar respaldo completo (.json)">↓ Exportar</button>
+          <button class="btn bsm bp hacts-juris-hide hacts-nuevo-hide" onclick="nuevoExp()">+ Nuevo expediente</button>
+        </div>
+      </details>
     </div>
   </div>
 </header>
 <nav class="tabs">
   <div class="tabs-wrap">
   <div class="tabsi">
-    <button class="tab on" onclick="showTab('reg')" id="tab-reg">📋 Registro</button>
-    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi">📧 Correos</button>
-    <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec">📥 Radicación</button>
-    <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi">📌 PQRSD</button>
-    <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act">📌 Actividades</button>
-    <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda">📅 Agenda</button>
-    <button class="tab" onclick="showTab('con')" id="tab-con">🔍 Consulta</button>
-    <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec">📚 Recursos</button>
-    <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano">🔍 Consulta</button>
-    <button class="tab" onclick="showTab('cons')" id="tab-cons">📊 Consolidado</button>
-    <button class="tab" onclick="showTab('cfg')" id="tab-cfg">⚙️ Configuración</button>
+    <button class="tab on" onclick="showTab('reg')" id="tab-reg"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-lbl">Registro</span></button>
+    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi"><span class="tab-ico" aria-hidden="true">📧</span><span class="tab-lbl">Correos</span></button>
+    <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec"><span class="tab-ico" aria-hidden="true">📥</span><span class="tab-lbl">Radicación</span></button>
+    <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">PQRSD</span></button>
+    <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">Actividades</span></button>
+    <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda"><span class="tab-ico" aria-hidden="true">📅</span><span class="tab-lbl">Agenda</span></button>
+    <button class="tab" onclick="showTab('con')" id="tab-con"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
+    <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec"><span class="tab-ico" aria-hidden="true">📚</span><span class="tab-lbl">Recursos</span></button>
+    <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
+    <button class="tab" onclick="showTab('cons')" id="tab-cons"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-lbl">Consolidado</span></button>
+    <button class="tab" onclick="showTab('cfg')" id="tab-cfg"><span class="tab-ico" aria-hidden="true">⚙️</span><span class="tab-lbl">Config</span></button>
   </div>
   <div class="tabs-right" id="depto-inbox-wrap" style="display:none">
     <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja — chat de actividades y solicitudes de traslado o eliminación">

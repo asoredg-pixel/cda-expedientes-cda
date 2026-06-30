@@ -1038,8 +1038,8 @@ body.sesion-activa #pg-login{display:none!important}
   .hdri{align-items:flex-start}
   .hacts{width:100%;flex:1 1 100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(148px,100%),1fr));gap:6px;align-items:stretch;justify-content:stretch}
   .hacts>.depto-sel,.hacts #sel-depto{grid-column:1/-1;max-width:none;width:100%;min-width:0}
-  .hacts>.btn,.hacts>.hacts-juris-hide>.btn{justify-content:center;width:100%;min-height:36px}
-  .hacts>.hacts-juris-hide{display:contents}
+  .hacts>.btn,.hacts>.hdr-more-menu .btn,.hacts .hacts-juris-hide>.btn{justify-content:center;width:100%;min-height:36px}
+  .hacts>.hacts-juris-hide,.hacts .hacts-juris-hide{display:contents}
 }
 @media(max-width:768px){
   .hdr,.tabs,.resp-global-bar{padding-left:.75rem;padding-right:.75rem}
@@ -1464,3 +1464,206 @@ tr:last-child td{border-bottom:none!important}
 }
 
 /* ─── END APP INTERIOR REDESIGN ─── */
+
+/* ================================================================
+   LOGIN FULL-BLEED + MOBILE APP SHELL (solo diseño, sin lógica JS)
+   ================================================================ */
+
+/* Grupo A — pantalla de inicio a ancho completo en PC */
+body:not(.sesion-activa) .main{
+  max-width:none;margin:0;padding:0;width:100%;
+}
+body:not(.sesion-activa) #pg-login{
+  width:100%;min-height:100vh;min-height:100dvh;
+  overflow-x:hidden;overflow-y:auto;
+}
+
+/* Tab icon + label (desktop: fila; móvil: columna en barra inferior) */
+.tab{display:inline-flex;align-items:center;gap:5px}
+.tab .tab-ico{font-size:1.05em;line-height:1;flex-shrink:0}
+.tab .tab-lbl{font-size:inherit;line-height:1.2}
+
+/* Header ⋮ menu — escritorio: botones en línea como antes */
+.hdr-more-menu{position:relative}
+.hdr-more-menu summary.hdr-more-btn{list-style:none;display:none}
+.hdr-more-menu summary.hdr-more-btn::-webkit-details-marker{display:none}
+.hdr-more-panel{display:contents}
+@media(min-width:769px){
+  .hdr-more-menu{display:contents}
+}
+
+/* ─── MÓVIL: barra inferior tipo app + header compacto ─── */
+@media(max-width:768px){
+
+  /* Header compacto */
+  body.sesion-activa .hdr{
+    padding:.45rem .65rem!important;
+    padding-top:calc(.45rem + env(safe-area-inset-top,0px))!important;
+  }
+  body.sesion-activa .hdri{
+    flex-wrap:nowrap;align-items:center;gap:8px;padding:4px 0;
+  }
+  body.sesion-activa .logo{flex:1 1 auto;min-width:0;gap:6px}
+  body.sesion-activa .lic-logo{width:36px!important;height:36px!important;padding:2px!important}
+  body.sesion-activa .hdr-logo-img{width:30px!important;height:30px!important}
+  body.sesion-activa .ltx{font-size:12px!important;white-space:nowrap}
+  body.sesion-activa .lsb{display:none!important}
+  body.sesion-activa .hacts{
+    width:auto;flex:0 0 auto;display:flex;flex-wrap:nowrap;
+    grid-template-columns:none;gap:6px;align-items:center;
+  }
+  body.sesion-activa .hacts #hdr-user-bar.hdr-user-bar{
+    flex-direction:column;align-items:stretch;gap:6px;
+    padding-bottom:6px;margin-bottom:2px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  body.sesion-activa .hacts #hdr-user-bar .btn{width:100%;justify-content:center}
+  body.sesion-activa .depto-sel{
+    min-width:0;max-width:min(148px,38vw);width:auto;
+    min-height:36px;padding:6px 8px;font-size:11px;
+    flex:0 1 auto;
+  }
+
+  /* Menú ⋮ acciones */
+  body.sesion-activa .hdr-more-menu{display:block;flex-shrink:0}
+  body.sesion-activa .hdr-more-menu summary.hdr-more-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:40px;height:40px;border-radius:10px;cursor:pointer;
+    background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+    color:#fff;font-size:1.35rem;font-weight:700;line-height:1;
+    user-select:none;touch-action:manipulation;
+    transition:background .15s,border-color .15s;
+  }
+  body.sesion-activa .hdr-more-menu summary.hdr-more-btn:hover,
+  body.sesion-activa .hdr-more-menu[open] summary.hdr-more-btn{
+    background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.35);
+  }
+  body.sesion-activa .hdr-more-panel{
+    display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:250;
+    min-width:min(260px,calc(100vw - 24px));
+    flex-direction:column;gap:6px;padding:10px;
+    background:linear-gradient(160deg,#0f2418 0%,#0e2035 100%);
+    border:1px solid rgba(52,211,153,.22);border-radius:14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.06);
+  }
+  body.sesion-activa .hdr-more-menu[open] .hdr-more-panel{display:flex}
+  body.sesion-activa .hdr-more-panel .btn{
+    width:100%;justify-content:center;min-height:42px;font-size:13px;
+  }
+  body.sesion-activa .hdr-more-panel .hacts-juris-hide{display:flex;flex-direction:column;gap:6px}
+
+  /* Barra inferior fija */
+  body.sesion-activa .tabs{
+    position:fixed!important;left:0;right:0;bottom:0;top:auto!important;
+    z-index:195;padding:0!important;
+    padding-bottom:env(safe-area-inset-bottom,0px)!important;
+    background:rgba(255,255,255,.94)!important;
+    backdrop-filter:blur(16px) saturate(1.4);
+    -webkit-backdrop-filter:blur(16px) saturate(1.4);
+    border-top:1px solid rgba(0,0,0,.08)!important;
+    border-bottom:none!important;
+    box-shadow:0 -6px 28px rgba(0,0,0,.12),0 -1px 0 rgba(255,255,255,.8) inset!important;
+  }
+  body.sesion-activa .tabs-wrap{
+    max-width:none;margin:0;width:100%;
+    flex-direction:row;align-items:stretch;gap:0;
+    min-height:calc(58px + env(safe-area-inset-bottom,0px));
+  }
+  body.sesion-activa .tabsi{
+    flex:1;min-width:0;width:auto;
+    display:flex;align-items:stretch;
+    overflow-x:auto;overflow-y:hidden;
+    -webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;
+    scrollbar-width:none;mask-image:none;padding:0;
+  }
+  body.sesion-activa .tabsi::-webkit-scrollbar{display:none}
+  body.sesion-activa .tabs-right{
+    width:auto;flex:0 0 auto;
+    padding:0;border-left:1px solid rgba(0,0,0,.07);
+    align-items:stretch;justify-content:center;
+  }
+  body.sesion-activa .tabs-right .inbox-btn{
+    height:100%;min-width:52px;border:none;border-radius:0;
+    background:transparent;font-size:1.25rem;
+    display:flex;align-items:center;justify-content:center;
+    padding:0 12px;
+  }
+  body.sesion-activa .tabs-right .inbox-panel{
+    position:fixed!important;left:8px!important;right:8px!important;
+    bottom:calc(64px + env(safe-area-inset-bottom,0px))!important;
+    top:auto!important;width:auto!important;max-width:none!important;
+    max-height:min(52vh,420px);border-radius:16px!important;
+  }
+
+  /* Pestañas en columna (icono + etiqueta) */
+  body.sesion-activa .tab{
+    flex-direction:column!important;justify-content:center;align-items:center;
+    gap:3px!important;flex:0 0 auto;
+    min-width:58px;max-width:76px;padding:7px 5px 5px!important;
+    margin:0!important;border-radius:0!important;
+    scroll-snap-align:start;
+    color:#6b6960!important;background:transparent!important;
+    box-shadow:none!important;border-bottom:none!important;
+    touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    position:relative;
+  }
+  body.sesion-activa .tab .tab-ico{font-size:1.28rem;line-height:1}
+  body.sesion-activa .tab .tab-lbl{
+    font-size:.6rem;font-weight:700;letter-spacing:.02em;
+    max-width:68px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    text-align:center;line-height:1.15;
+  }
+  body.sesion-activa .tab.tab-selected{
+    color:#163828!important;
+    background:linear-gradient(180deg,rgba(26,73,46,.1) 0%,transparent 100%)!important;
+    box-shadow:none!important;
+  }
+  body.sesion-activa .tab.tab-selected::after{
+    content:'';position:absolute;top:0;left:18%;right:18%;height:3px;
+    border-radius:0 0 3px 3px;
+    background:linear-gradient(90deg,#1a4a2e,#185FA5);
+  }
+  body.sesion-activa .tab.on:not(.tab-selected){
+    color:#6b6960!important;background:transparent!important;
+  }
+  body.sesion-activa .tab:active{opacity:.75}
+
+  /* Contenido: espacio para barra inferior */
+  body.sesion-activa .main{
+    padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))!important;
+  }
+  body.sesion-activa .resp-global-bar{
+    padding-left:.65rem;padding-right:.65rem;
+  }
+
+  /* Chat FAB sobre la barra */
+  body.sesion-activa .chat-fab{
+    bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;
+    right:14px!important;width:52px;height:52px;
+  }
+  body.sesion-activa .storage-cap-toast{
+    bottom:calc(76px + env(safe-area-inset-bottom,0px));
+  }
+  body.sesion-activa .gm-compose-modal{
+    bottom:calc(58px + env(safe-area-inset-bottom,0px));
+  }
+}
+
+@media(max-width:480px){
+  body.sesion-activa .tab{min-width:54px;padding:6px 4px 4px!important}
+  body.sesion-activa .tab .tab-ico{font-size:1.2rem}
+  body.sesion-activa .tab .tab-lbl{font-size:.58rem;max-width:62px}
+  body.sesion-activa .depto-sel{max-width:min(120px,34vw);font-size:10.5px}
+}
+
+@media(max-width:768px) and (orientation:landscape){
+  body.sesion-activa .tabs-wrap{min-height:calc(50px + env(safe-area-inset-bottom,0px))}
+  body.sesion-activa .tab{padding:5px 4px 3px!important;min-width:50px}
+  body.sesion-activa .tab .tab-ico{font-size:1.1rem}
+  body.sesion-activa .tab .tab-lbl{font-size:.55rem}
+  body.sesion-activa .main{padding-bottom:calc(62px + env(safe-area-inset-bottom,0px))!important}
+  body.sesion-activa .chat-fab{bottom:calc(56px + env(safe-area-inset-bottom,0px))!important}
+}
+
+/* ─── END MOBILE APP SHELL ─── */
