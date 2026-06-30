@@ -664,9 +664,7 @@ const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 // Carpeta raíz Expedientes (cdaguaviare1@gmail.com) — actividades de trámites Guaviare:
 // https://drive.google.com/drive/folders/1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ
 const DRIVE_ROOT_EXPEDIENTES_ID = '1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ';
-// Carpeta raíz Recursos / Biblioteca (Guaviare):
-// https://drive.google.com/drive/folders/18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29
-const DRIVE_ROOT_RECURSOS_ID = '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+// DRIVE_ROOT_RECURSOS_ID → constants.js (no redeclarar: rompe la carga de este script)
 
 // Nombres de carpeta mensual (índice = getMonth()).
 const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
