@@ -73,6 +73,7 @@ function poblarSecOficinaSelect(){
   sel.innerHTML='<option value="">— Seleccione oficina —</option>'+OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   updateSecFechaRadicVisibility();
   initSecMedioNotificacion(true);
+  if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }
 function toggleSecAnonimo(){
   const anon=!!(document.getElementById('sec-anonimo')&&document.getElementById('sec-anonimo').checked);
@@ -105,6 +106,7 @@ function limpiarFormSecretaria(){
   poblarSecOficinaSelect();
   const hid=document.getElementById('sec-medio-notif');if(hid){hid.value='';delete hid.dataset.userSet;}
   initSecMedioNotificacion(true);
+  if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }
 async function guardarPqrsSecretaria(modo){
   modo=modo||'trasladar';
@@ -246,6 +248,9 @@ async function guardarPqrsSecretaria(modo){
   try{
     await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
   }catch(err){console.warn('notif radicacion auto:',err);}
+  try{
+    if(typeof pqrsMatrizSyncAfterSave==='function')await pqrsMatrizSyncAfterSave(data,{warnNoToken:true});
+  }catch(err){console.warn('matriz sheets radicacion:',err);}
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;

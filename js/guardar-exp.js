@@ -310,6 +310,8 @@ function guardarExpCore(stayOnForm){
     data._depto=prev._depto||deptoSave;
     if(Array.isArray(prev._docs_tramite))data._docs_tramite=prev._docs_tramite;
     if(prev._pqrs_informativa)data._pqrs_informativa=prev._pqrs_informativa;
+    if(prev._pqrs_matriz_fila)data._pqrs_matriz_fila=prev._pqrs_matriz_fila;
+    if(prev._pqrs_matriz_hoja)data._pqrs_matriz_hoja=prev._pqrs_matriz_hoja;
     const prevEstado=prev._estado||'';
     exps[idx]={...data,historial:rebuildHistorial(data,prev.historial)};
     editId=expId;

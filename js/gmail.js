@@ -20,7 +20,8 @@ const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploa
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',  // read + modify labels/messages (not delete)
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/drive.file'
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/spreadsheets'
 ].join(' ');
 
 const GMAIL_TOKEN_KEY = 'sst_gmail_token';
@@ -2059,7 +2060,8 @@ const GMAIL_OFI_ACCOUNT_KEY = 'sst_gmail_ofi_account';
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/drive.file'
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/spreadsheets'
 ].join(' ');
 const GMAIL_OFI_SYS_LABELS = new Set([
   'INBOX','UNREAD','SENT','DRAFT','IMPORTANT','STARRED',
@@ -3020,6 +3022,7 @@ async function gmailOfiConfirmarRespuestaPqrs() {
   });
 
   if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
+  if (typeof pqrsMatrizSyncAfterSave === 'function') pqrsMatrizSyncAfterSave(e);
   if (typeof closeTaskModal === 'function') closeTaskModal();
   if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();

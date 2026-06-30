@@ -800,6 +800,7 @@ async function submitPqrsRespuesta(expId){
   refreshPqrsDetalleViews(expId);
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
+  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
 
   // Enviar correo si canal=correo y hay token
   if(canal===PQRS_WF_CANAL.CORREO&&ciudEmail){
@@ -2601,6 +2602,7 @@ function marcarPqrsInformativaCore(expId,nota){
   e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:notaHist+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
   completarTareasAtenderPqrs(e,notaHist);
   persistExpedienteGranular(e);
+  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
   notif('PQRSD marcada como informativa y cerrada','ok');
   return true;
 }
@@ -8995,7 +8997,7 @@ function updateDeptoUI(){
   const chatFab=document.getElementById('chat-fab');
   if(chatFab)chatFab.style.display=(ciudadano||!document.body.classList.contains('sesion-activa'))?'none':'';
   const qTxt=document.getElementById('q-txt');
-  if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. PQRSD-2026-001)':'Nombre, expediente, resolución, NIT, ciudad…';
+  if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. 260132)':'Nombre, expediente, resolución, NIT, ciudad…';
   if(ciudadano){
     const pgCiu=document.getElementById('pg-ciudadano');
     if(pgCiu&&!pgCiu.classList.contains('on'))showTab('ciudadano');
@@ -11660,6 +11662,7 @@ async function enviarCorreoRespuestaPqrs(expId){
     e._fechas_estado=JSON.stringify(fe);
     e.historial=rebuildHistorial(e,e.historial||[]);
     persistExpedienteGranular(e);
+    if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
     if(statusEl)statusEl.textContent='✅ Correo enviado exitosamente';
     notif('✅ Correo enviado a '+para+' — PQRSD cerrada','ok');
     setTimeout(()=>{closeTaskModal();renderPqrsOficinaInbox();renderSecretariaPqrs();},1800);
