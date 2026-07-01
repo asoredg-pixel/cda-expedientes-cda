@@ -19,7 +19,7 @@
 <script src="js/roles.js?v=20260630h"></script>
 <script src="js/config-store.js?v=20260625g"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260702g"></script>
+<script src="js/core.js?v=20260702h"></script>
 <script src="js/formulario.js?v=20260630c"></script>
 <script src="js/tareas.js?v=20260625g"></script>
 <script src="js/guardar-exp.js?v=20260625g"></script>
@@ -29,8 +29,8 @@
 <script src="js/export.js?v=20260625g"></script>
 <script src="js/chat.js?v=20260702m"></script>
 <script src="js/pqrs-matriz-export.js?v=20260702b"></script>
-<script src="js/pqrs-matriz-sheets.js?v=20260702g"></script>
-<script src="js/pqrs.js?v=20260702g"></script>
+<script src="js/pqrs-matriz-sheets.js?v=20260702h"></script>
+<script src="js/pqrs.js?v=20260702h"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260702g"></script>
 <script src="js/recursos.js?v=20260630h"></script>
@@ -434,7 +434,6 @@
     <div class="fx" style="justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:8px">
       <div id="q-cnt" style="font-size:12px;color:var(--tx2)"></div>
       <div class="fx" style="gap:6px;flex-wrap:wrap">
-        <button type="button" class="btn bsm bp con-filtro-avanzado" id="btn-export-matriz-pqrs" onclick="exportarMatrizPqrsConsulta()" style="display:none">⬇ Matriz PQRSD</button>
         <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-consulta" onclick="exportarConsultaExcel()">⬇ Descargar</button>
       </div>
     </div>
@@ -527,7 +526,6 @@
       <label>Desde<input type="date" id="cons-desde" onchange="onRangoManualPeriodo('cons')"></label>
       <label>Hasta<input type="date" id="cons-hasta" onchange="onRangoManualPeriodo('cons')"></label>
       <button type="button" class="btn bsm" onclick="limpiarPeriodo('cons')">Limpiar fechas</button>
-      <button type="button" class="btn bsm bp" onclick="exportarMatrizPqrsConsolidado()">⬇ Matriz PQRSD</button>
       <button type="button" class="btn bsm" onclick="exportarConsolidadoExcel()">⬇ Descargar</button>
     </div>
     <div id="cons-periodo-resumen" style="font-size:12px;color:var(--tx2);margin-top:6px"></div>
@@ -642,7 +640,7 @@
       <div id="sec-form-lock" class="sec-form-lock" role="alert" aria-hidden="true">
         <div class="sec-form-lock-icon" aria-hidden="true">🔒</div>
         <div class="sec-form-lock-tit">Bandeja Gmail no conectada</div>
-        <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexión no se genera el soporte PDF ni se actualiza la matriz en Drive.</p>
+        <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexión no se genera el soporte PDF ni se sincroniza la hoja PQRSD en Google Sheets.</p>
         <button type="button" class="btn bp" id="sec-gmail-connect-btn" onclick="secGmailConnectParaRadicar()">Conectar bandeja Gmail</button>
       </div>
       <div class="slbl">Nueva radicación PQRSD</div>
@@ -714,9 +712,6 @@
 
   </div><!-- /sec-radicar-split -->
   <div id="sec-pqrs-mets" class="pqrs-ofi-mets" style="margin-top:1rem"></div>
-  <div class="fx" style="justify-content:flex-end;margin-top:8px;gap:6px;flex-wrap:wrap">
-    <button type="button" class="btn bsm bp" onclick="exportarMatrizPqrsSecretaria()">⬇ Matriz oficial PQRSD</button>
-  </div>
   <div class="card" id="sec-pend-trasl-wrap" style="margin-top:1rem">
     <div class="slbl">Pendientes por trasladar</div>
     <div class="ssub" style="margin-bottom:8px">Radicadas sin oficina asignada. El director DS DEGUV o Secretaría pueden trasladarlas a la oficina competente.</div>

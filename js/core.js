@@ -1022,8 +1022,6 @@ function actualizarConsultaPqrsUI(){
   const bas=esModoOficinaDeguv()||esSecretaria();
   const qTxt=document.getElementById('q-txt');
   const sl=document.querySelector('#pg-con .card > .slbl');
-  const btnMatriz=document.getElementById('btn-export-matriz-pqrs');
-  if(btnMatriz)btnMatriz.style.display=bas?'':'none';
   if(qTxt&&bas)qTxt.placeholder='N° PQRSD, nombre del interesado, asunto, NIT…';
   else if(qTxt)qTxt.placeholder='Nombre, expediente, resolución, NIT, ciudad…';
   if(sl&&bas)sl.textContent='Consulta PQRSD — búsqueda por número, interesado y asunto';

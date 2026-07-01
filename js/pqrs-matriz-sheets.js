@@ -219,6 +219,55 @@ function pqrsMatrizBuildRec(e, itemNum) {
   return buildPqrsMatrizRecord(e, itemNum);
 }
 
+function pqrsCompareRadicado(a, b) {
+  const da = parseInt(String(a || '').replace(/\D/g, ''), 10) || 0;
+  const db = parseInt(String(b || '').replace(/\D/g, ''), 10) || 0;
+  return da - db;
+}
+
+async function pqrsMatrizLeerFilasData(sheetName) {
+  const range = encodeURIComponent(pqrsMatrizSheetRange(sheetName, 'C' + PQRS_MATRIZ_DATA_ROW + ':S'));
+  const data = await _pqrsSheetsApi('GET', '/values/' + range + '?majorDimension=ROWS');
+  return (data.values || []).map(function(cells, i) {
+    const rowCells = cells.slice();
+    while (rowCells.length < 17) rowCells.push('');
+    return {
+      row: PQRS_MATRIZ_DATA_ROW + i,
+      cells: rowCells,
+      radicado: String(rowCells[2] || '').trim()
+    };
+  }).filter(function(r) { return r.radicado; });
+}
+
+async function pqrsMatrizReordenarHojaPorRadicado(sheetName) {
+  const filas = await pqrsMatrizLeerFilasData(sheetName);
+  if (!filas.length) return;
+  const sorted = filas.slice().sort(function(a, b) {
+    return pqrsCompareRadicado(a.radicado, b.radicado);
+  });
+  sorted.forEach(function(f, i) { f.cells[0] = String(i + 1); });
+  const yaOrdenada = filas.every(function(f, i) {
+    return f.radicado === sorted[i].radicado && String(f.cells[0]) === String(i + 1);
+  });
+  if (yaOrdenada) return;
+  const endRow = PQRS_MATRIZ_DATA_ROW + sorted.length - 1;
+  const range = encodeURIComponent(pqrsMatrizSheetRange(sheetName, 'C' + PQRS_MATRIZ_DATA_ROW + ':S' + endRow));
+  await _pqrsSheetsApi('PUT', '/values/' + range + '?valueInputOption=USER_ENTERED', {
+    values: sorted.map(function(f) { return f.cells; })
+  });
+  if (typeof exps !== 'undefined' && Array.isArray(exps)) {
+    sorted.forEach(function(f, i) {
+      const row = PQRS_MATRIZ_DATA_ROW + i;
+      exps.forEach(function(e) {
+        if (e && String(e._exp || '').trim() === f.radicado) {
+          e._pqrs_matriz_fila = row;
+          e._pqrs_matriz_hoja = sheetName;
+        }
+      });
+    });
+  }
+}
+
 async function pqrsMatrizBuscarFila(sheetName, expId) {
   const radicados = await pqrsMatrizLeerRadicados(sheetName);
   const target = String(expId || '').trim();
@@ -235,34 +284,38 @@ async function pqrsMatrizEscribirFila(sheetName, row, rec) {
   });
 }
 
-async function pqrsMatrizAppendExpediente(e) {
-  if (!e || !e._exp) return { skipped: true };
-  const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
-  let row = Number(e._pqrs_matriz_fila) || 0;
-  if (!row) row = await pqrsMatrizBuscarFila(sheetName, e._exp);
-  const radicados = await pqrsMatrizLeerRadicados(sheetName);
-  if (!row) row = PQRS_MATRIZ_DATA_ROW + radicados.length;
-  const item = row - PQRS_MATRIZ_DATA_ROW + 1;
-  const rec = pqrsMatrizBuildRec(e, item);
-  if (!rec) return { skipped: true };
-  rec.radicadoRecibo = e._exp;
-  await pqrsMatrizEscribirFila(sheetName, row, rec);
-  e._pqrs_matriz_fila = row;
-  e._pqrs_matriz_hoja = sheetName;
-  return { ok: true, row: row, sheetName: sheetName };
-}
-
 async function pqrsMatrizUpdateExpediente(e) {
   if (!e || !e._exp) return { skipped: true };
   const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
-  let row = Number(e._pqrs_matriz_fila) || 0;
-  if (!row) row = await pqrsMatrizBuscarFila(sheetName, e._exp);
+  let row = await pqrsMatrizBuscarFila(sheetName, e._exp);
   if (!row) return pqrsMatrizAppendExpediente(e);
   const item = row - PQRS_MATRIZ_DATA_ROW + 1;
   const rec = pqrsMatrizBuildRec(e, item);
   if (!rec) return { skipped: true };
   rec.radicadoRecibo = e._exp;
   await pqrsMatrizEscribirFila(sheetName, row, rec);
+  await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  row = await pqrsMatrizBuscarFila(sheetName, e._exp);
+  e._pqrs_matriz_fila = row;
+  e._pqrs_matriz_hoja = sheetName;
+  return { ok: true, row: row, sheetName: sheetName };
+}
+
+async function pqrsMatrizAppendExpediente(e) {
+  if (!e || !e._exp) return { skipped: true };
+  const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+  const expId = String(e._exp).trim();
+  let row = await pqrsMatrizBuscarFila(sheetName, expId);
+  if (row) return pqrsMatrizUpdateExpediente(e);
+  const radicados = await pqrsMatrizLeerRadicados(sheetName);
+  row = PQRS_MATRIZ_DATA_ROW + radicados.length;
+  const item = row - PQRS_MATRIZ_DATA_ROW + 1;
+  const rec = pqrsMatrizBuildRec(e, item);
+  if (!rec) return { skipped: true };
+  rec.radicadoRecibo = expId;
+  await pqrsMatrizEscribirFila(sheetName, row, rec);
+  await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  row = await pqrsMatrizBuscarFila(sheetName, expId);
   e._pqrs_matriz_fila = row;
   e._pqrs_matriz_hoja = sheetName;
   return { ok: true, row: row, sheetName: sheetName };
@@ -272,11 +325,8 @@ async function pqrsMatrizSyncExpediente(e) {
   if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return { skipped: true };
   try {
-    if (e._pqrs_matriz_fila) return await pqrsMatrizUpdateExpediente(e);
-    const found = await pqrsMatrizBuscarFila(
-      await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e)),
-      e._exp
-    );
+    const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+    const found = await pqrsMatrizBuscarFila(sheetName, e._exp);
     if (found) {
       e._pqrs_matriz_fila = found;
       return await pqrsMatrizUpdateExpediente(e);
@@ -296,13 +346,10 @@ function pqrsMatrizSyncAfterSave(e, opts) {
       if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
     } else if (res && res.noToken) {
       if (opts.warnNoToken && !opts.silent && typeof notif === 'function') {
-        notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la matriz PQRSD en Drive.', 'warn');
+        notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la hoja PQRSD en Google Sheets.', 'warn');
       }
     } else if (res && res.error && !opts.silent && typeof notif === 'function') {
-      notif('⚠️ Guardado en sistema; matriz Drive no actualizada: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
-    }
-    if (!opts.skipDrivePublish && typeof pqrsMatrizPublicarEnDriveAsync === 'function') {
-      pqrsMatrizPublicarEnDriveAsync();
+      notif('⚠️ Guardado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
     }
     return res;
   });

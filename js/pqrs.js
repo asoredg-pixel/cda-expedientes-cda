@@ -326,44 +326,23 @@ async function guardarPqrsSecretaria(modo){
   }catch(err){console.warn('notif radicacion auto:',err);}
   const matrizDetalle=[];
   let matrizWarn=false;
-  let xlsxOk=false;
   try{
     if(typeof pqrsMatrizSyncAfterSave==='function'){
-      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true,skipDrivePublish:true});
+      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true});
       if(syncRes&&syncRes.ok){
-        matrizDetalle.push('Registro en hoja Google Sheets actualizado.');
+        matrizDetalle.push('Hoja Google Sheets actualizada (orden por número de radicación).');
       }else if(syncRes&&syncRes.noToken){
-        matrizDetalle.push('Hoja Google Sheets: no sincronizada (sin conexión).');
+        matrizWarn=true;
+        matrizDetalle.push('Google Sheets: no sincronizado (sin conexión).');
       }else if(syncRes&&syncRes.error){
-        matrizDetalle.push('Hoja Google Sheets: no actualizada ('+String(syncRes.error.message||syncRes.error).slice(0,72)+').');
+        matrizWarn=true;
+        matrizDetalle.push('Google Sheets: no actualizado ('+String(syncRes.error.message||syncRes.error).slice(0,72)+').');
       }
     }
   }catch(err){
     console.warn('matriz sheets radicacion:',err);
-    matrizDetalle.push('Hoja Google Sheets: error al sincronizar.');
-  }
-  try{
-    if(typeof pqrsMatrizPublicarEnDrive==='function'){
-      const list=typeof getSecretariaPqrsAll==='function'?getSecretariaPqrsAll():[data];
-      const pubRes=await pqrsMatrizPublicarEnDrive(list,'');
-      if(pubRes&&pubRes.ok){
-        xlsxOk=true;
-        matrizDetalle.push('Matriz oficial XLSX publicada en Drive.');
-      }else if(pubRes&&pubRes.noToken){
-        matrizWarn=true;
-        matrizDetalle.push('Matriz oficial en Drive: no publicada (sin conexión).');
-      }else if(!(pubRes&&pubRes.empty)){
-        matrizWarn=true;
-        matrizDetalle.push('Matriz oficial en Drive: no se pudo publicar.');
-      }
-    }
-  }catch(err){
-    console.warn('matriz drive xlsx:',err);
     matrizWarn=true;
-    matrizDetalle.push('Matriz oficial en Drive: '+String(err.message||err).slice(0,72));
-  }
-  if(!xlsxOk&&matrizDetalle.some(function(l){return /Sheets|Drive/.test(l)&&!/actualizada|publicada/.test(l);})){
-    matrizWarn=true;
+    matrizDetalle.push('Google Sheets: error al sincronizar.');
   }
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
