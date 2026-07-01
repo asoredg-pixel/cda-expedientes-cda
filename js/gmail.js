@@ -41,6 +41,7 @@ function _gmailOAuthDone() {
   _gmailConnecting = false;
   updateGmailConnectBtn();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
+  if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
 }
 function _gmailStartOAuth(scope, onToken) {
   if (_gmailConnecting) {
@@ -175,6 +176,7 @@ function gmailDisconnect() {
   _gmailRadicadoLabelId = '';
   updateGmailConnectBtn();
   renderGmailInboxList();
+  if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
   const view = document.getElementById('gmail-msg-view');
   if (view) view.innerHTML = '';
 }
@@ -1696,6 +1698,7 @@ function updateGmailConnectBtn() {
   }
   if (refreshBtn) refreshBtn.disabled = !gmailIsTokenValid();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
+  if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
 }
 
 function toggleGmailPanel() {

@@ -67,6 +67,36 @@ function descargarConsChart(){
 // ================================================================
 // MÓDULO SECRETARÍA / OFICINAS DEGUV / CONSULTA CIUDADANA PQRSD
 // ================================================================
+function secGmailRadicacionConectada(){
+  return typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+}
+function renderSecGmailBloqueoRadicacion(){
+  if(typeof esSecretaria==='function'&&!esSecretaria())return;
+  const ok=secGmailRadicacionConectada();
+  const lock=document.getElementById('sec-form-lock');
+  const btnTrasl=document.getElementById('sec-btn-radicar-trasl');
+  const btnSolo=document.getElementById('sec-btn-radicar-solo');
+  const connBtn=document.getElementById('sec-gmail-connect-btn');
+  if(lock){
+    lock.classList.toggle('on',!ok);
+    lock.setAttribute('aria-hidden',ok?'true':'false');
+  }
+  if(btnTrasl)btnTrasl.disabled=!ok;
+  if(btnSolo)btnSolo.disabled=!ok;
+  if(connBtn){
+    connBtn.disabled=false;
+    connBtn.textContent='Conectar bandeja Gmail';
+  }
+}
+function secGmailConnectParaRadicar(){
+  if(typeof gmailConnect!=='function'){notif('Conexión Gmail no disponible','err');return;}
+  const connBtn=document.getElementById('sec-gmail-connect-btn');
+  if(connBtn){connBtn.disabled=true;connBtn.textContent='Conectando…';}
+  gmailConnect(function(){
+    renderSecGmailBloqueoRadicacion();
+    if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
+  });
+}
 function secAnexoFileLabel(inp){
   const lbl=document.getElementById('sec-anexo-label');
   if(!lbl)return;
@@ -80,6 +110,7 @@ function poblarSecOficinaSelect(){
   sel.innerHTML='<option value="">— Seleccione oficina —</option>'+OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   updateSecFechaRadicVisibility();
   initSecMedioNotificacion(true);
+  renderSecGmailBloqueoRadicacion();
   if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }
 function toggleSecAnonimo(){
@@ -165,6 +196,11 @@ async function guardarPqrsSecretaria(modo){
     const valNum=pqrsValidarNumeroRadicado(expId,fecha);
     if(!valNum.ok){notif(valNum.msg,'err');return;}
   }
+  if(!secGmailRadicacionConectada()){
+    notif('Conecte la bandeja Gmail (cdaguaviare1) para radicar. Use el botón en el formulario.','err');
+    renderSecGmailBloqueoRadicacion();
+    return;
+  }
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
   if(!asunto){notif('Indique el asunto de la solicitud','err');return;}
   if(!soloRadicar&&!oficina){notif('Seleccione la oficina destino','err');return;}
@@ -188,13 +224,6 @@ async function guardarPqrsSecretaria(modo){
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoEl=document.getElementById('sec-anexo');
   const anexoFiles=anexoEl&&anexoEl.files&&anexoEl.files.length?Array.from(anexoEl.files):[];
-  if(!gmailMsgId&&anexoFiles.length){
-    const tokOk=typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
-    if(!tokOk){
-      notif('Conecte la bandeja Gmail (cdaguaviare1) en Correos para subir el anexo al Drive antes de radicar.','err');
-      return;
-    }
-  }
   if(!soloRadicar&&gmailMsgId){
     const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
     const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
@@ -213,8 +242,7 @@ async function guardarPqrsSecretaria(modo){
   let manualDriveAtts=null;
   let archivoFinal='';
   const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
-  const driveTokOk=typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
-  if(!gmailMsgId&&driveTokOk&&typeof subirSoporteRadicacionManual==='function'){
+  if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
     try{
       const manualRes=await subirSoporteRadicacionManual({
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
@@ -224,6 +252,10 @@ async function guardarPqrsSecretaria(modo){
       });
       if(anexoFiles.length&&(!manualRes.all||!manualRes.all.length)){
         notif('No se pudo subir el anexo al Drive. Revise la conexión Gmail e intente de nuevo.','err');
+        return;
+      }
+      if(!manualRes.soporte){
+        notif('No se pudo generar el soporte PDF en Drive. Revise la conexión e intente de nuevo.','err');
         return;
       }
       if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
@@ -367,6 +399,7 @@ function getPqrsPendientesTrasladoList(skipPeriodo){
   return list.sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
 }
 function renderSecretariaPqrs(){
+  renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
   const pendientes=getPqrsPendientesTrasladoList(true);
   const asignadas=all.filter(e=>e._pqrs_oficina&&!pqrsPendienteTraslado(e));

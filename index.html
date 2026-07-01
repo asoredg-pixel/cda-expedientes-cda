@@ -7,7 +7,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260702k">
+<link rel="stylesheet" href="css/sst.css?v=20260702l">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -30,9 +30,9 @@
 <script src="js/chat.js?v=20260702m"></script>
 <script src="js/pqrs-matriz-export.js?v=20260702b"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702e"></script>
-<script src="js/pqrs.js?v=20260702d"></script>
+<script src="js/pqrs.js?v=20260702f"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260702c"></script>
+<script src="js/gmail.js?v=20260702f"></script>
 <script src="js/recursos.js?v=20260630h"></script>
 <script src="js/ingreso.js?v=20260630c"></script>
 </head>
@@ -638,7 +638,13 @@
     </div>
 
     <!-- PANEL DERECHO: formulario de radicación -->
-    <div id="sec-form-card" class="card" style="border-left:4px solid var(--pu)">
+    <div id="sec-form-card" class="card sec-form-card-wrap" style="border-left:4px solid var(--pu);position:relative">
+      <div id="sec-form-lock" class="sec-form-lock" role="alert" aria-hidden="true">
+        <div class="sec-form-lock-icon" aria-hidden="true">🔒</div>
+        <div class="sec-form-lock-tit">Bandeja Gmail no conectada</div>
+        <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexión no se genera el soporte PDF ni se actualiza la matriz en Drive.</p>
+        <button type="button" class="btn bp" id="sec-gmail-connect-btn" onclick="secGmailConnectParaRadicar()">Conectar bandeja Gmail</button>
+      </div>
       <div class="slbl">Nueva radicación PQRSD</div>
       <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino.</div>
       <div class="fg" style="margin-bottom:10px">
@@ -701,9 +707,9 @@
           <label class="btn bsm" style="cursor:pointer;margin:0">📎 Elegir archivos<input type="file" id="sec-anexo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" multiple style="display:none" onchange="secAnexoFileLabel(this)"></label>
           <span id="sec-anexo-label" style="font-size:12px;color:var(--tx2)">Ningún archivo seleccionado</span>
         </div>
-        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Con Gmail conectado se genera soporte PDF en Drive; los archivos adjuntos también se suben al radicar.</span>
+        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos seleccionados también se suben.</span>
       </div>
-      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" onclick="guardarPqrsSecretaria('trasladar')">📤 Radicar y trasladar a oficina</button><button type="button" class="btn" onclick="guardarPqrsSecretaria('solo')">📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
+      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 
   </div><!-- /sec-radicar-split -->

@@ -855,6 +855,12 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-plazo-fill.warn{background:var(--am)}
 .pqrs-plazo-fill.over{background:var(--rd)}
 .bdg-prior{background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:600}
+.sec-form-card-wrap{position:relative}
+.sec-form-lock{display:none;position:absolute;inset:0;z-index:8;background:rgba(255,255,255,.94);border-radius:var(--rl);flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:28px 24px;text-align:center;box-shadow:inset 0 0 0 1px var(--bd)}
+.sec-form-lock.on{display:flex}
+.sec-form-lock-icon{font-size:2.2rem;line-height:1}
+.sec-form-lock-tit{font-size:15px;font-weight:700;color:var(--tx)}
+.sec-form-lock-txt{font-size:13px;color:var(--tx2);max-width:360px;line-height:1.45;margin:0}
 .pqrs-ofi-row-sel{background:var(--bll)!important}
 .ciudadano-result-layout{display:grid;grid-template-columns:1fr;gap:1rem;margin-top:8px}
 @media(min-width:768px){.ciudadano-result-layout{grid-template-columns:1fr minmax(220px,300px)}}
