@@ -1,6 +1,6 @@
 // =============================================================================
 // pqrs-matriz-sheets.js — Consecutivo PQRSD y sync opcional con Google Sheets
-// Formato radicado: AA + MM + NNN (7 dígitos, ej. 2602010). Consecutivo anual.
+// Formato radicado: AA + MM + NNN (7 dígitos). AA y MM = fecha de radicación; NNN = consecutivo mensual (reinicia cada mes).
 // Requiere: buildPqrsMatrizRecord (pqrs-matriz-export.js)
 // =============================================================================
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -46,21 +46,30 @@ function pqrsAnioCortoDesdeFecha(fechaRef) {
   return String(new Date().getFullYear()).slice(-2);
 }
 
-function pqrsValidarNumeroRadicado(val, fechaRef) {
+function pqrsFechaRadicacionRef() {
+  const puedeEdit = typeof puedeEditarFechaRadicacionPqrs === 'function' && puedeEditarFechaRadicacionPqrs();
+  if (puedeEdit) {
+    const f = String((document.getElementById('sec-fecha') || {}).value || '').trim();
+    if (f) return f;
+  }
+  return typeof hoy === 'function' ? hoy() : '';
+}
+
+function pqrsValidarNumeroRadicado(val, fechaRadicacion) {
   const digits = String(val || '').replace(/\D/g, '');
   if (digits.length !== 7) {
-    return { ok: false, msg: 'Use 7 dígitos: AA + MM + NNN (ej. 2602010 = feb. 2026, consecutivo 010).' };
+    return { ok: false, msg: 'Use 7 dígitos: AA + MM + NNN (ej. 2607001 = jul. 2026, consecutivo 001).' };
   }
   const p = pqrsParseNumeroRadicado(val);
   if (!p || p.legacy) {
-    return { ok: false, msg: 'Formato inválido. Ejemplo: 2602010 (año 26, mes 02, consecutivo 010).' };
+    return { ok: false, msg: 'Formato inválido. Ejemplo: 2607001 (año 26, mes de radicación 07, consecutivo 001).' };
   }
-  const aa = pqrsAnioCortoDesdeFecha(fechaRef);
+  const aa = pqrsAnioCortoDesdeFecha(fechaRadicacion);
   if (p.aa !== aa) {
-    return { ok: false, msg: 'El año del número (' + p.aa + ') no coincide con la fecha de solicitud (20' + aa + ').' };
+    return { ok: false, msg: 'El año del número (' + p.aa + ') no coincide con la fecha de radicación (20' + aa + ').' };
   }
-  if (p.mm !== '00' && p.mm !== pqrsMesDesdeFecha(fechaRef)) {
-    return { ok: false, msg: 'El mes del número (' + p.mm + ') no coincide con la fecha de solicitud (mes ' + pqrsMesDesdeFecha(fechaRef) + ').' };
+  if (p.mm !== '00' && p.mm !== pqrsMesDesdeFecha(fechaRadicacion)) {
+    return { ok: false, msg: 'El mes del número (' + p.mm + ') no coincide con el mes de radicación (' + pqrsMesDesdeFecha(fechaRadicacion) + ').' };
   }
   if (p.seq < 1 || p.seq > 999) {
     return { ok: false, msg: 'El consecutivo debe estar entre 001 y 999.' };
@@ -68,18 +77,19 @@ function pqrsValidarNumeroRadicado(val, fechaRef) {
   return { ok: true, parsed: p };
 }
 
-function pqrsMatrizRegistrarRadicadoEnMax(raw, aa, maxRef) {
+function pqrsMatrizRegistrarRadicadoEnMax(raw, aa, mm, maxRef) {
   const p = pqrsParseNumeroRadicado(raw);
-  if (!p || p.aa !== aa) return;
+  if (!p || p.legacy) return;
+  if (p.aa !== aa || p.mm !== mm) return;
   if (p.seq > maxRef.v) maxRef.v = p.seq;
 }
 
-function pqrsMatrizMaxConsecutivoAnio(aa) {
+function pqrsMatrizMaxConsecutivoMes(aa, mm) {
   const maxRef = { v: 0 };
   if (typeof exps !== 'undefined' && Array.isArray(exps)) {
     exps.forEach(function(e) {
       if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return;
-      pqrsMatrizRegistrarRadicadoEnMax(e._exp, aa, maxRef);
+      pqrsMatrizRegistrarRadicadoEnMax(e._exp, aa, mm, maxRef);
     });
   }
   return maxRef.v;
@@ -156,7 +166,7 @@ async function pqrsMatrizLeerRadicadosSheetTabs() {
 async function pqrsMatrizSiguienteNumero(fechaRef) {
   const aa = pqrsAnioCortoDesdeFecha(fechaRef);
   const mm = pqrsMesDesdeFecha(fechaRef);
-  let maxSeq = pqrsMatrizMaxConsecutivoAnio(aa);
+  let maxSeq = pqrsMatrizMaxConsecutivoMes(aa, mm);
 
   if (_pqrsMatrizSheetsToken()) {
     try {
@@ -165,7 +175,7 @@ async function pqrsMatrizSiguienteNumero(fechaRef) {
       const radicados = await pqrsMatrizLeerRadicadosSheetTabs();
       const maxRef = { v: maxSeq };
       radicados.forEach(function(r) {
-        pqrsMatrizRegistrarRadicadoEnMax(r, aa, maxRef);
+        pqrsMatrizRegistrarRadicadoEnMax(r, aa, mm, maxRef);
       });
       maxSeq = maxRef.v;
     } catch (err) {
@@ -308,29 +318,23 @@ async function sugerirNumeroPqrsDesdeMatriz(fechaRef) {
 async function aplicarSugerenciaNumeroPqrsSec() {
   const inp = document.getElementById('sec-exp');
   if (!inp || String(inp.value || '').trim()) return;
-  const fecha = (document.getElementById('sec-fecha-solicitud') || {}).value
-    || (document.getElementById('sec-fecha') || {}).value
-    || (typeof hoy === 'function' ? hoy() : '');
-  const num = await sugerirNumeroPqrsDesdeMatriz(fecha);
+  const num = await sugerirNumeroPqrsDesdeMatriz(pqrsFechaRadicacionRef());
   if (num) {
     inp.value = num;
   } else if (typeof notif === 'function') {
-    notif('No se pudo sugerir consecutivo. Verifique la fecha de solicitud.', 'warn');
+    notif('No se pudo sugerir consecutivo.', 'warn');
   }
 }
 
 async function refrescarSugerenciaNumeroPqrsSec() {
   const inp = document.getElementById('sec-exp');
   if (!inp) return;
-  const fecha = (document.getElementById('sec-fecha-solicitud') || {}).value
-    || (document.getElementById('sec-fecha') || {}).value
-    || (typeof hoy === 'function' ? hoy() : '');
   inp.value = '';
-  const num = await sugerirNumeroPqrsDesdeMatriz(fecha);
+  const num = await sugerirNumeroPqrsDesdeMatriz(pqrsFechaRadicacionRef());
   if (num) {
     inp.value = num;
     if (typeof notif === 'function') notif('Siguiente consecutivo sugerido: ' + num, 'ok');
   } else if (typeof notif === 'function') {
-    notif('No se pudo calcular el consecutivo. Revise la fecha de solicitud o ingrese el número manualmente.', 'err');
+    notif('No se pudo calcular el consecutivo. Ingrese el número manualmente.', 'err');
   }
 }

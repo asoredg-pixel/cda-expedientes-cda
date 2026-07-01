@@ -162,7 +162,7 @@ async function guardarPqrsSecretaria(modo){
   let prioritaria=!!((document.getElementById('sec-prioritaria')||{}).checked);
   if(!expId){notif('Indique el número de PQRSD','err');return;}
   if(typeof pqrsValidarNumeroRadicado==='function'){
-    const valNum=pqrsValidarNumeroRadicado(expId,fechaSol);
+    const valNum=pqrsValidarNumeroRadicado(expId,fecha);
     if(!valNum.ok){notif(valNum.msg,'err');return;}
   }
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
