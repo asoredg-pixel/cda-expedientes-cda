@@ -80,25 +80,36 @@ function addChatResponsablesOficinaPropia(add,oficinaId){
 }
 function getChatIdentity(){
   if(esJurisdiccional())return{kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION};
+  if(esModoOficinaDeguv())return{kind:'ofi',key:'ofi:'+deptoActivo,label:labelOficina(deptoActivo),oficinaId:deptoActivo};
+  if(esSecretaria())return{kind:'ofi',key:'ofi:secretaria',label:'Secretaría DEGUV',oficinaId:'secretaria'};
+  const rolEf=typeof getRolEfectivo==='function'?getRolEfectivo():String(rolSesion||'');
+  if(DEPTOS.some(function(d){return d.id===deptoActivo&&d.id===rolEf;})){
+    const enc=getEncargadoDepto(deptoActivo);
+    if(enc)return{kind:'enc_depto',key:'resp:'+enc,label:enc,deptoId:deptoActivo};
+    return{kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
+  }
   if(esModoResponsable()){
     let nm=String(responsableActivo||'').trim();
-    if(!nm){
-      const ses=chatSessionUserContact();
-      if(ses&&ses.key.startsWith('resp:'))nm=ses.key.slice(5);
+    const ses=chatSessionUserContact();
+    if(!nm&&ses){
+      if(ses.key.startsWith('resp:'))nm=ses.key.slice(5);
+      else return ses;
     }
     if(!nm)return null;
     return{kind:'resp',key:'resp:'+nm,label:nm,deptoId:deptoCfg||'guaviare'};
   }
-  if(esModoOficinaDeguv())return{kind:'ofi',key:'ofi:'+deptoActivo,label:labelOficina(deptoActivo),oficinaId:deptoActivo};
-  if(esSecretaria())return{kind:'ofi',key:'ofi:secretaria',label:'Secretaría DEGUV',oficinaId:'secretaria'};
   if(deptoActivo==='jurisdiccional'||deptoActivo==='responsables'){
-    const ses=chatSessionUserContact();
-    if(ses)return ses;
-    return null;
+    return chatSessionUserContact()||null;
   }
-  const base={kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
-  const ses=chatSessionUserContact();
-  return ses||base;
+  if(DEPTOS.some(function(d){return d.id===deptoActivo;})){
+    const enc=getEncargadoDepto(deptoActivo);
+    if(enc)return{kind:'enc_depto',key:'resp:'+enc,label:enc,deptoId:deptoActivo};
+    return{kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
+  }
+  return chatSessionUserContact();
+}
+function chatEffectiveIdentity(){
+  return getChatIdentity()||chatSessionUserContact();
 }
 function chatIdentityKeysForKey(key){
   key=chatNormKey(key);
@@ -239,11 +250,18 @@ function chatInstructorMeta(ins,deptoId){
     return labelOficina(ofi)+' · '+rolLbl;
   return labelDepto(deptoId)+' · '+rolLbl;
 }
+function chatContactIsSelf(me,c){
+  if(!me||!c||!c.key)return false;
+  if(chatNormKey(c.key)===chatNormKey(me.key))return true;
+  if(chatKeysMatch(c.key,me.key))return true;
+  const mine=chatMyKeySet();
+  return chatAllKeysFor(c.key).some(function(k){return mine.has(k);});
+}
 function chatPushContact(seen,out,me,c){
   if(!c||!c.key)return;
   const k=chatNormKey(c.key);
   if(seen.has(k))return;
-  if(me&&k===chatNormKey(me.key))return;
+  if(chatContactIsSelf(me,c))return;
   seen.add(k);
   if(!c.meta&&c.sub)c.meta=c.sub;
   if(!c.region){
@@ -289,7 +307,7 @@ function chatContactAllowed(contactKey){
   return true;
 }
 function getChatContacts(){
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity();
   if(!me)return[];
   if(typeof ensureUsuariosFirestoreCache==='function')void ensureUsuariosFirestoreCache();
   const seen=new Set(),out=[];
@@ -325,8 +343,15 @@ function getChatContacts(){
     });
   });
   OFICINAS_DEGUV.forEach(function(o){
-    if(o.id==='guaviare')return;
     const enc=getEncargadoOficina(o.id);
+    if(o.id==='guaviare'){
+      if(enc){
+        push({key:'resp:'+enc,kind:'enc_depto',label:enc,meta:labelOficina(o.id)+' · NCA DEGUV',region:'guaviare',oficinaId:o.id,deptoId:'guaviare'});
+      }else{
+        push({key:'depto:guaviare',kind:'depto',label:labelOficina(o.id),meta:labelOficina(o.id)+' · NCA DEGUV',region:'guaviare',deptoId:'guaviare',oficinaId:o.id});
+      }
+      return;
+    }
     if(enc){
       push({key:'resp:'+enc,kind:'enc_ofi',label:enc,meta:labelOficina(o.id)+' · Encargado de oficina',region:'guaviare',oficinaId:o.id});
     }else{
@@ -939,7 +964,7 @@ function chatVolverContactos(){
 function renderChatContacts(){
   const el=document.getElementById('chat-contacts');
   if(!el)return;
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity();
   if(!me){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Seleccione departamento o responsable para usar el chat.</div>';return;}
   let contacts=getChatContacts();
   if(!contacts.length){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';return;}
