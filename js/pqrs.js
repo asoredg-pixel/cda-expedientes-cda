@@ -213,7 +213,8 @@ async function guardarPqrsSecretaria(modo){
   let manualDriveAtts=null;
   let archivoFinal='';
   const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
-  if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
+  const driveTokOk=typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
+  if(!gmailMsgId&&driveTokOk&&typeof subirSoporteRadicacionManual==='function'){
     try{
       const manualRes=await subirSoporteRadicacionManual({
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,

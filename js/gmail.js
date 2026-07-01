@@ -1378,7 +1378,9 @@ async function subirSoporteRadicacionManual(opts) {
   const anexosNombres = anexosFiles.map(function(f) { return f.name || 'anexo'; });
 
   if (!_driveGetBestToken()) {
-    notif('⚠️ Conecte la bandeja Gmail (cdaguaviare1) en la pestaña Correos para generar el soporte PDF en Drive.', 'warn');
+    if (anexosFiles.length) {
+      throw new Error('Sin token Gmail/Drive para subir anexos.');
+    }
     return { soporte: null, anexos: [], all: [], link: '' };
   }
 
