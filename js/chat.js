@@ -144,25 +144,11 @@ function chatIdentityKeysForKey(key){
     const enc=getEncargadoDepto(id);
     if(enc)set.add('resp:'+enc);
     if(id==='guaviare')set.add('ofi:guaviare');
-    (_usuariosCache||[]).forEach(function(u){
-      if(u.activo===false)return;
-      const rol=String(u.rol||'').trim();
-      const nom=String(u.nombre||'').trim();
-      if(!nom)return;
-      if(rol===id||(enc&&chatNombresIguales(enc,nom)))set.add('resp:'+nom);
-    });
   }else if(key.startsWith('ofi:')){
     const id=key.slice(4);
     const enc=getEncargadoOficina(id);
     if(enc)set.add('resp:'+enc);
     if(id==='guaviare')set.add('depto:guaviare');
-    (_usuariosCache||[]).forEach(function(u){
-      if(u.activo===false)return;
-      const rol=String(u.rol||'').trim();
-      const nom=String(u.nombre||'').trim();
-      if(!nom)return;
-      if(rol===id||(enc&&chatNombresIguales(enc,nom)))set.add('resp:'+nom);
-    });
   }else if(key.startsWith('juris:')){
     set.add('juris:jurisdiccional');
   }else if(key.startsWith('resp:')){
@@ -194,6 +180,56 @@ function chatIdentityKeysForKey(key){
   }
   return[...set];
 }
+/** Claves de una sola persona/rol — sin incluir a otros del mismo departamento. */
+function chatPersonKeysFor(key){
+  key=chatNormKey(key);
+  const set=new Set([key]);
+  chatKeyAliases(key).forEach(function(a){set.add(chatNormKey(a));});
+  if(key.startsWith('resp:')){
+    const nm=key.slice(5);
+    DEPTOS.forEach(function(d){
+      const enc=getEncargadoDepto(d.id);
+      if(enc&&chatNombresIguales(enc,nm))set.add('depto:'+d.id);
+    });
+    OFICINAS_DEGUV.forEach(function(o){
+      const enc=getEncargadoOficina(o.id);
+      if(enc&&chatNombresIguales(enc,nm)){
+        set.add('ofi:'+o.id);
+        if(o.id==='guaviare')set.add('depto:guaviare');
+      }
+    });
+    DEPTOS.forEach(function(d){
+      getInstructoresActivos(d.id).forEach(function(ins){
+        if(!chatNombresIguales(ins.nombre,nm))return;
+        if(ins.rol==='encargado_depto')set.add('depto:'+d.id);
+        (ins.oficinas||[]).forEach(function(ofi){
+          if(ins.rol==='encargado_oficina')set.add('ofi:'+ofi);
+        });
+      });
+    });
+    (_usuariosCache||[]).forEach(function(u){
+      if(u.activo===false||!chatNombresIguales(u.nombre,nm))return;
+      const rol=String(u.rol||'').trim();
+      if(rol==='jurisdiccional')set.add('juris:jurisdiccional');
+      else if(DEPTOS.some(function(d){return d.id===rol;}))set.add('depto:'+rol);
+      else if(rol==='secretaria'||OFICINAS_DEGUV.some(function(o){return o.id===rol;}))set.add('ofi:'+rol);
+      else if((rol==='responsables'||rol==='contratista')&&u.deptoResponsable)set.add('depto:'+u.deptoResponsable);
+    });
+  }else if(key.startsWith('depto:')){
+    const id=key.slice(6);
+    const enc=getEncargadoDepto(id);
+    if(enc)set.add('resp:'+enc);
+    if(id==='guaviare')set.add('ofi:guaviare');
+  }else if(key.startsWith('ofi:')){
+    const id=key.slice(4);
+    const enc=getEncargadoOficina(id);
+    if(enc)set.add('resp:'+enc);
+    if(id==='guaviare')set.add('depto:guaviare');
+  }else if(key.startsWith('juris:')){
+    set.add('juris:jurisdiccional');
+  }
+  return set;
+}
 function chatAllKeysFor(key){
   const set=new Set();
   function add(k){
@@ -210,7 +246,7 @@ function chatKeyInSet(key,set){
   if(!set||!set.size)return false;
   key=chatNormKey(key);
   if(set.has(key))return true;
-  for(const k of chatAllKeysFor(key)){
+  for(const k of chatPersonKeysFor(key)){
     if(set.has(k))return true;
   }
   return false;
@@ -223,9 +259,9 @@ function chatSessionUserContact(){
 function chatMyKeySet(){
   const set=new Set();
   const me=getChatIdentity();
-  if(me)chatAllKeysFor(me.key).forEach(function(k){set.add(k);});
+  if(me)chatPersonKeysFor(me.key).forEach(function(k){set.add(k);});
   const ses=chatSessionUserContact();
-  if(ses)chatAllKeysFor(ses.key).forEach(function(k){set.add(k);});
+  if(ses)chatPersonKeysFor(ses.key).forEach(function(k){set.add(k);});
   return set;
 }
 function getMyChatKeys(){
@@ -239,8 +275,8 @@ function chatMsgParticipa(m){
   const mine=chatMyKeySet();
   if(!mine.size)return false;
   if(m.fromKey||m.toKey){
-    const from=chatAllKeysFor(m.fromKey||'');
-    const to=chatAllKeysFor(m.toKey||'');
+    const from=chatPersonKeysFor(m.fromKey||'');
+    const to=chatPersonKeysFor(m.toKey||'');
     for(const k of mine){
       if(from.has(k)||to.has(k))return true;
     }
@@ -508,7 +544,7 @@ function chatNotifyConvIds(){
 function chatContactKeyFromMsg(msg){
   const me=getChatIdentity()||chatEffectiveIdentity();
   if(!me||!msg)return null;
-  const mine=chatAllKeysFor(me.key);
+  const mine=chatPersonKeysFor(me.key);
   function esMioKey(k){
     return chatKeyInSet(k,mine);
   }
@@ -652,7 +688,7 @@ function chatEsMio(m){
   if(!m||!m.fromKey)return false;
   const me=getChatIdentity()||chatEffectiveIdentity();
   if(!me)return false;
-  return chatKeyInSet(m.fromKey,chatAllKeysFor(me.key));
+  return chatKeyInSet(m.fromKey,chatPersonKeysFor(me.key));
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
@@ -696,14 +732,14 @@ function chatMsgBetweenContact(m,me,contactKey){
   const primary=chatConvId(me.key,to.key);
   const mConv=m.convId||chatConvId(m.fromKey,m.toKey);
   if(mConv===primary)return true;
-  const mine=chatAllKeysFor(me.key);
-  const theirs=chatAllKeysFor(to.key);
+  const mine=chatPersonKeysFor(me.key);
+  const theirs=chatPersonKeysFor(to.key);
   let fromMe=false,fromThem=false,toMe=false,toThem=false;
-  chatAllKeysFor(m.fromKey||'').forEach(function(k){
+  chatPersonKeysFor(m.fromKey||'').forEach(function(k){
     if(mine.has(k))fromMe=true;
     if(theirs.has(k))fromThem=true;
   });
-  chatAllKeysFor(m.toKey||'').forEach(function(k){
+  chatPersonKeysFor(m.toKey||'').forEach(function(k){
     if(mine.has(k))toMe=true;
     if(theirs.has(k))toThem=true;
   });
