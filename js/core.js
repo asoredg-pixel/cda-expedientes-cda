@@ -8974,7 +8974,7 @@ function updateDeptoUI(){
   const chatFab=document.getElementById('chat-fab');
   if(chatFab)chatFab.style.display=(ciudadano||!document.body.classList.contains('sesion-activa'))?'none':'';
   const qTxt=document.getElementById('q-txt');
-  if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. 260132)':'Nombre, expediente, resolución, NIT, ciudad…';
+  if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. 2602010)':'Nombre, expediente, resolución, NIT, ciudad…';
   if(ciudadano){
     const pgCiu=document.getElementById('pg-ciudadano');
     if(pgCiu&&!pgCiu.classList.contains('on'))showTab('ciudadano');
