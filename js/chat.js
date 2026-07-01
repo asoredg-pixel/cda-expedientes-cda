@@ -109,7 +109,32 @@ function getChatIdentity(){
   return chatSessionUserContact();
 }
 function chatEffectiveIdentity(){
-  return getChatIdentity()||chatSessionUserContact();
+  let me=getChatIdentity();
+  if(me)return me;
+  const ses=chatSessionUserContact();
+  if(ses)return ses;
+  if(DEPTOS.some(function(d){return d.id===deptoActivo;})){
+    const enc=getEncargadoDepto(deptoActivo);
+    if(enc)return{kind:'enc_depto',key:'resp:'+enc,label:enc,deptoId:deptoActivo};
+    return{kind:'depto',key:'depto:'+deptoActivo,label:labelDepto(deptoActivo),deptoId:deptoActivo};
+  }
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()){
+    return{kind:'ofi',key:'ofi:'+deptoActivo,label:labelOficina(deptoActivo),oficinaId:deptoActivo};
+  }
+  if(typeof esSecretaria==='function'&&esSecretaria()){
+    return{kind:'ofi',key:'ofi:secretaria',label:'Secretaría DEGUV',oficinaId:'secretaria'};
+  }
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional()){
+    return{kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION};
+  }
+  return null;
+}
+function chatInvalidateContactsCache(){
+  window._chatContactsCache=null;
+}
+function getChatContactsList(){
+  if(Array.isArray(window._chatContactsCache))return window._chatContactsCache;
+  return getChatContacts();
 }
 function chatIdentityKeysForKey(key){
   key=chatNormKey(key);
@@ -621,7 +646,7 @@ function chatConvMessages(convId){
 }
 function chatContactFromKey(key){
   key=String(key||'');
-  const found=getChatContacts().find(function(c){return chatKeysMatch(c.key,key);});
+  const found=getChatContactsList().find(function(c){return chatKeysMatch(c.key,key);});
   if(found)return found;
   if(key.startsWith('juris:'))return{kind:'juris',key,label:CHAT_LABEL_SUBDIRECCION,meta:'Subdirección · Jurisdiccional',region:'juris'};
   if(key.startsWith('depto:')){const id=key.slice(6);const enc=getEncargadoDepto(id);return{kind:'depto',key,label:enc||labelDepto(id),deptoId:id,meta:labelDepto(id)+' · Departamento',region:chatRegionForDepto(id)};}
@@ -872,6 +897,7 @@ function toggleChatWindow(force){
   if(open){
     window._chatConvActiva=null;
     window._chatVista='contactos';
+    chatInvalidateContactsCache();
     const sub=document.getElementById('chat-hdr-sub');
     if(sub)sub.textContent='Seleccione un contacto';
     chatSyncLayout();
@@ -972,35 +998,53 @@ function chatVolverContactos(){
 function renderChatContacts(){
   const el=document.getElementById('chat-contacts');
   if(!el)return;
-  const me=chatEffectiveIdentity();
-  if(!me){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Seleccione departamento o responsable para usar el chat.</div>';return;}
-  let contacts=getChatContacts();
-  if(!contacts.length){el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';return;}
-  contacts=contacts.slice().sort(function(a,b){
-    const ta=chatContactLastTs(me,a.key);
-    const tb=chatContactLastTs(me,b.key);
-    if(ta!==tb)return tb.localeCompare(ta);
-    const ua=chatContactUnreadCount(me,a.key);
-    const ub=chatContactUnreadCount(me,b.key);
-    if(ua!==ub)return ub-ua;
-    return a.label.localeCompare(b.label,'es');
-  });
-  el.innerHTML=contacts.map(function(c){
-    const convId=chatConvId(me.key,c.key);
-    const msgs=chatMsgsForContact(me,c.key);
-    const last=msgs[msgs.length-1];
-    const prev=last?((!chatEsMio(last)?(chatFromLabel(last)+': '):'')+(last.text||chatMsgDrivePreview(last))):'Sin mensajes';
-    const unread=chatContactUnreadCount(me,c.key);
-    const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
-    const meta=c.meta||c.sub||'';
-    return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
-      '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
-      '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
-      (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
-      '<div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
-      (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+
-      '</div>';
-  }).join('');
+  try{
+    const me=chatEffectiveIdentity();
+    if(!me){
+      el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Seleccione departamento o responsable para usar el chat.</div>';
+      return;
+    }
+    chatInvalidateContactsCache();
+    let contacts=getChatContacts();
+    window._chatContactsCache=contacts;
+    if(!contacts.length){
+      el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';
+      return;
+    }
+    contacts=contacts.slice().sort(function(a,b){
+      let ta='',tb='';
+      try{ta=chatContactLastTs(me,a.key);tb=chatContactLastTs(me,b.key);}catch(e){}
+      if(ta!==tb)return tb.localeCompare(ta);
+      let ua=0,ub=0;
+      try{ua=chatContactUnreadCount(me,a.key);ub=chatContactUnreadCount(me,b.key);}catch(e){}
+      if(ua!==ub)return ub-ua;
+      return String(a.label||'').localeCompare(String(b.label||''),'es');
+    });
+    el.innerHTML=contacts.map(function(c){
+      const convId=chatConvId(me.key,c.key);
+      let msgs=[],last=null,prev='Sin mensajes',unread=0;
+      try{
+        msgs=chatMsgsForContact(me,c.key);
+        last=msgs[msgs.length-1];
+        prev=last?((!chatEsMio(last)?(chatFromLabel(last)+': '):'')+(last.text||chatMsgDrivePreview(last))):'Sin mensajes';
+        unread=chatContactUnreadCount(me,c.key);
+      }catch(e){}
+      const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
+      const meta=c.meta||c.sub||'';
+      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
+        '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
+        '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
+        (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
+        '<div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
+        (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+
+        '</div>';
+    }).join('');
+    const contactsEl=document.getElementById('chat-contacts');
+    if(contactsEl&&!window._chatConvActiva)contactsEl.classList.add('wide');
+  }catch(err){
+    console.error('renderChatContacts:',err);
+    el.innerHTML='<div style="padding:14px;font-size:12px;color:#b42318">No se pudo cargar la lista de contactos. Recargue con Ctrl+F5.</div>';
+  }
 }
 async function chatAbrirConv(contactKey){
   const me=getChatIdentity();
