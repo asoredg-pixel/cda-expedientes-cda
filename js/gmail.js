@@ -660,7 +660,8 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
 // Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días):
 // https://drive.google.com/drive/folders/1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU
-const DRIVE_ROOT_CHAT_ID = '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
+const DRIVE_ROOT_CHAT_ID = (typeof CHAT_DRIVE_FOLDER_ID !== 'undefined' && CHAT_DRIVE_FOLDER_ID)
+  ? CHAT_DRIVE_FOLDER_ID : '1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 // Carpeta raíz Expedientes (cdaguaviare1@gmail.com) — actividades de trámites Guaviare:
 // https://drive.google.com/drive/folders/1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ
 const DRIVE_ROOT_EXPEDIENTES_ID = '1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ';
@@ -1057,16 +1058,19 @@ async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, ti
 // ----------------------------------------------------------------
 async function driveUploadChat(blob, filename, mimeType) {
   const token = _driveGetBestToken();
-  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo desde el chat o la pestaña Correos.');
 
   const ref = new Date();
   const anio = ref.getFullYear().toString();
   const mes = DRIVE_MESES_ES[ref.getMonth()];
   let folderId = DRIVE_ROOT_CHAT_ID;
   try {
-    folderId = await _driveEnsureFolder(token, anio, DRIVE_ROOT_CHAT_ID);
-    folderId = await _driveEnsureFolder(token, mes, folderId);
+    const yId = await _driveEnsureFolder(token, anio, DRIVE_ROOT_CHAT_ID);
+    if (yId) folderId = yId;
+    const mId = await _driveEnsureFolder(token, mes, folderId);
+    if (mId) folderId = mId;
   } catch (e) { console.warn('driveUploadChat folder:', e.message); }
+  if (!folderId) folderId = DRIVE_ROOT_CHAT_ID;
 
   const safeName = String(filename || 'archivo').replace(/[^\w.\- áéíóúñÁÉÍÓÚÑ]/g, '_').slice(0, 120);
   const uploadName = ref.toISOString().slice(0, 10) + ' ' + safeName;
@@ -1082,9 +1086,14 @@ async function driveUploadChat(blob, filename, mimeType) {
   });
   if (!up.ok) {
     const t = await up.text().catch(function() { return ''; });
-    throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120));
+    let hint = '';
+    if (up.status === 403) {
+      hint = ' Verifique que su correo tenga permiso de edición en la carpeta del chat institucional.';
+    }
+    throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120) + hint);
   }
   const file = await up.json();
+  if (!file || !file.id) throw new Error('Drive no devolvió el archivo subido.');
 
   await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
     method: 'POST',

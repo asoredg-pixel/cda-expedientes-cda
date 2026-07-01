@@ -173,6 +173,9 @@ const RETENCION_LEIDOS_DIAS=30;
 // Retención de adjuntos del chat en Drive institucional (días)
 const CHAT_DRIVE_RETENTION_DIAS=30;
 const CHAT_DRIVE_MAX_BYTES=25*1024*1024;
+// Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días)
+const CHAT_DRIVE_FOLDER_ID='1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
+const CHAT_DRIVE_FOLDER_URL='https://drive.google.com/drive/folders/'+CHAT_DRIVE_FOLDER_ID;
 
 // LocalStorage
 const SST_LAST_EXPORT_KEY='sst_last_exportacion';

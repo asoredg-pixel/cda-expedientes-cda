@@ -12,7 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260625g"></script>
-<script src="js/constants.js?v=20260701c"></script>
+<script src="js/constants.js?v=20260702f"></script>
 <script src="js/utils.js?v=20260625g"></script>
 <script src="js/state.js?v=20260625g"></script>
 <script src="js/persistence.js?v=20260625g"></script>
@@ -27,12 +27,12 @@
 <script src="js/consolidado.js?v=20260625g"></script>
 <script src="js/configuracion.js?v=20260630e"></script>
 <script src="js/export.js?v=20260625g"></script>
-<script src="js/chat.js?v=20260702e"></script>
+<script src="js/chat.js?v=20260702f"></script>
 <script src="js/pqrs-matriz-export.js?v=20260626e"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260626e"></script>
 <script src="js/pqrs.js?v=20260626e"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260701d"></script>
+<script src="js/gmail.js?v=20260702f"></script>
 <script src="js/recursos.js?v=20260630h"></script>
 <script src="js/ingreso.js?v=20260630c"></script>
 </head>
@@ -492,7 +492,7 @@
       <div id="chat-msgs" class="chat-msgs"></div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div class="chat-compose">
-        <label for="chat-file-inp" class="btn bsm btn-chat-attach" title="Adjuntar archivo (máx. 25 MB)">📎</label>
+        <button type="button" class="btn bsm btn-chat-attach" title="Adjuntar archivo (máx. 25 MB)" onclick="chatAdjuntarArchivoClick()">📎</button>
         <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
         <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
       </div>

@@ -971,7 +971,7 @@ function toggleChatWindow(force){
       });
     }
   }
-  else{window._chatConvActiva=null;window._chatVista='contactos';chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatVista='contactos';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
 async function chatMarcarNoLeido(){
   const convId=window._chatConvActiva;
@@ -1234,6 +1234,25 @@ function chatCorreoSesionEmail(){
 function chatDriveConectado(){
   return typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
 }
+function chatAdjuntarArchivoClick(){
+  const inp=document.getElementById('chat-file-inp');
+  if(!inp)return;
+  if(!window._chatActiveContactKey&&!chatActiveContactKey()){
+    chatModalAlert({
+      title:'Seleccione un contacto',
+      message:'Abra una conversación antes de adjuntar un archivo.',
+      detail:'Elija un contacto en la lista del chat y vuelva a intentar.',
+      tone:'warn'
+    });
+    return;
+  }
+  if(!chatDriveConectado()){
+    chatModalCorreoRequerido();
+    return;
+  }
+  inp.value='';
+  inp.click();
+}
 function chatConectarCorreo(){
   chatUploadOverlayHide();
   if(typeof gmailOfiConnect==='function'){
@@ -1372,24 +1391,44 @@ function chatUploadOverlayError(errMsg,fileName){
   ov.setAttribute('aria-hidden','false');
 }
 async function chatEnviarArchivo(fileArg){
-  let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
-  const me=chatEffectiveIdentity();
-  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
-  if(!contactKey||!me||_chatFileUploading){
-    if(file&&inp&&!contactKey){
-      chatModalAlert({
-        title:'Seleccione un contacto',
-        message:'Abra una conversación antes de adjuntar un archivo.',
-        detail:'Elija un contacto en la lista del chat y vuelva a intentar.',
-        tone:'warn'
-      });
-      inp.value='';
-    }
-    return;
-  }
+  let file=(fileArg instanceof File)?fileArg:null;
   if(!file&&inp)file=inp.files&&inp.files[0];
   if(!file)return;
+
+  const me=chatEffectiveIdentity();
+  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
+
+  if(!contactKey){
+    chatModalAlert({
+      title:'Seleccione un contacto',
+      message:'Abra una conversación antes de adjuntar un archivo.',
+      detail:'Elija un contacto en la lista del chat y vuelva a intentar.',
+      tone:'warn'
+    });
+    if(inp)inp.value='';
+    return;
+  }
+  if(!me){
+    chatModalAlert({
+      title:'Chat no disponible',
+      message:'No se pudo identificar su usuario para enviar el adjunto.',
+      detail:'Recargue la página e inicie sesión de nuevo.',
+      tone:'warn'
+    });
+    if(inp)inp.value='';
+    return;
+  }
+  if(_chatFileUploading){
+    chatModalAlert({
+      title:'Subida en curso',
+      message:'Ya hay un archivo subiéndose. Espere a que termine.',
+      tone:'warn'
+    });
+    if(inp)inp.value='';
+    return;
+  }
+
   const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
   if(file.size>maxBytes){
     chatModalAlert({
@@ -1401,7 +1440,7 @@ async function chatEnviarArchivo(fileArg){
     if(inp)inp.value='';
     return;
   }
-  if(typeof _driveGetBestToken!=='function'||!_driveGetBestToken()){
+  if(!chatDriveConectado()){
     chatModalCorreoRequerido();
     if(inp)inp.value='';
     return;
@@ -1416,12 +1455,13 @@ async function chatEnviarArchivo(fileArg){
     if(inp)inp.value='';
     return;
   }
+
   _chatFileUploading=true;
-  const route=chatPickSendRoute(me,contactKey);
-  window._chatConvActiva=route.convId;
-  const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
   try{
     chatUploadOverlayShow(file.name);
+    const route=chatPickSendRoute(me,contactKey);
+    window._chatConvActiva=route.convId;
+    const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
     const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
     const msg={
       id:msgId,
@@ -1440,17 +1480,22 @@ async function chatEnviarArchivo(fileArg){
     renderChatContacts();
     renderChatBadge();
     const db=window._db;
-    if(!db||!window._fsSetDoc||!window._fsDoc)return;
-    const fsConvId=chatConvFirestoreId(msg.convId);
-    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
-    if(typeof chatRegisterDrivePurge==='function'){
-      await chatRegisterDrivePurge(uploaded.fileId,{
-        expiresAt:uploaded.expiresAt,
-        msgId:msg.id,
-        fsConvId:fsConvId,
-        driveLink:uploaded.driveLink,
-        nombre:uploaded.nombre
-      });
+    if(db&&window._fsSetDoc&&window._fsDoc){
+      const fsConvId=chatConvFirestoreId(msg.convId);
+      await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+      if(typeof chatRegisterDrivePurge==='function'){
+        try{
+          await chatRegisterDrivePurge(uploaded.fileId,{
+            expiresAt:uploaded.expiresAt,
+            msgId:msg.id,
+            fsConvId:fsConvId,
+            driveLink:uploaded.driveLink,
+            nombre:uploaded.nombre
+          });
+        }catch(purgeErr){
+          console.warn('chatRegisterDrivePurge:',purgeErr);
+        }
+      }
     }
     chatUploadOverlaySuccess(uploaded.nombre||file.name);
   }catch(err){
@@ -1461,6 +1506,8 @@ async function chatEnviarArchivo(fileArg){
     _chatFileUploading=false;
   }
 }
+window.chatEnviarArchivo=chatEnviarArchivo;
+window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
 if(!window._chatNotifyFirebaseHook){
   window._chatNotifyFirebaseHook=true;
   window.addEventListener('firebase-ready',function(){
