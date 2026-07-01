@@ -213,7 +213,6 @@ function chatPersonKeysFor(key){
       if(rol==='jurisdiccional')set.add('juris:jurisdiccional');
       else if(DEPTOS.some(function(d){return d.id===rol;}))set.add('depto:'+rol);
       else if(rol==='secretaria'||OFICINAS_DEGUV.some(function(o){return o.id===rol;}))set.add('ofi:'+rol);
-      else if((rol==='responsables'||rol==='contratista')&&u.deptoResponsable)set.add('depto:'+u.deptoResponsable);
     });
   }else if(key.startsWith('depto:')){
     const id=key.slice(6);
@@ -265,7 +264,12 @@ function chatMyKeySet(){
   return set;
 }
 function getMyChatKeys(){
-  return[...chatMyKeySet()];
+  const out=new Set();
+  const me=getChatIdentity();
+  if(me)chatPersonKeysFor(me.key).forEach(function(k){out.add(chatNormKey(k));});
+  const ses=chatSessionUserContact();
+  if(ses)chatPersonKeysFor(ses.key).forEach(function(k){out.add(chatNormKey(k));});
+  return[...out];
 }
 function chatKeyInMyKeys(k){
   return chatKeyInSet(k,chatMyKeySet());
@@ -686,9 +690,10 @@ function chatAvClass(kind){return kind==='depto'?' depto':kind==='juris'?' juris
 function chatAvLetter(label){return String(label||'?').trim().charAt(0).toUpperCase();}
 function chatEsMio(m){
   if(!m||!m.fromKey)return false;
-  const me=getChatIdentity()||chatEffectiveIdentity();
-  if(!me)return false;
-  return chatKeyInSet(m.fromKey,chatPersonKeysFor(me.key));
+  const my=getMyChatKeys();
+  const fk=chatNormKey(m.fromKey);
+  if(my.includes(fk))return true;
+  return chatKeyAliases(m.fromKey).some(function(a){return my.includes(chatNormKey(a));});
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
@@ -721,52 +726,70 @@ function chatMyKeysCanon(){
   getMyChatKeys().forEach(function(k){s.add(chatCanonicalKey(k));});
   return s;
 }
+function chatPreferSendKey(me){
+  if(!me)return'';
+  const ses=chatSessionUserContact();
+  if(ses&&ses.key.startsWith('resp:'))return ses.key;
+  if(me.key.startsWith('resp:'))return me.key;
+  if(me.kind==='ofi'&&me.oficinaId){
+    const enc=getEncargadoOficina(me.oficinaId);
+    if(enc)return'resp:'+enc;
+  }
+  if(me.kind==='depto'&&me.deptoId){
+    const enc=getEncargadoDepto(me.deptoId);
+    if(enc)return'resp:'+enc;
+  }
+  return me.key;
+}
+function chatConvIdsForPair(meKey,contactKey){
+  const ids=new Set();
+  const to=chatContactFromKey(contactKey);
+  chatPersonKeysFor(meKey).forEach(function(a){
+    chatPersonKeysFor(to.key).forEach(function(b){
+      if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvId(a,b));
+    });
+  });
+  return ids;
+}
 function chatPrimaryConvId(me,contactKey){
   if(!me||!contactKey)return'';
   const to=chatContactFromKey(contactKey);
-  return chatConvId(me.key,to.key);
+  return chatConvId(chatPreferSendKey(me),to.key);
 }
 function chatMsgBetweenContact(m,me,contactKey){
   if(!m||!me||!contactKey)return false;
-  const to=chatContactFromKey(contactKey);
-  const primary=chatConvId(me.key,to.key);
   const mConv=m.convId||chatConvId(m.fromKey,m.toKey);
-  if(mConv===primary)return true;
-  const mine=chatPersonKeysFor(me.key);
-  const theirs=chatPersonKeysFor(to.key);
-  let fromMe=false,fromThem=false,toMe=false,toThem=false;
-  chatPersonKeysFor(m.fromKey||'').forEach(function(k){
-    if(mine.has(k))fromMe=true;
-    if(theirs.has(k))fromThem=true;
-  });
-  chatPersonKeysFor(m.toKey||'').forEach(function(k){
-    if(mine.has(k))toMe=true;
-    if(theirs.has(k))toThem=true;
-  });
-  return (fromMe&&toThem)||(fromThem&&toMe);
+  return chatConvIdsForPair(me.key,contactKey).has(mConv);
 }
 function chatPickSendRoute(me,contactKey){
   contactKey=String(contactKey||'').trim();
-  const to=chatContactFromKey(contactKey);
-  return{
-    convId:chatConvId(me.key,to.key),
-    fromKey:me.key,
-    toKey:to.key,
-    toLabel:to.label
-  };
+  const fallback=chatContactFromKey(contactKey);
+  const msgs=chatMsgsForContact(me,contactKey);
+  if(!msgs.length){
+    const fromKey=chatPreferSendKey(me);
+    return{
+      convId:chatConvId(fromKey,fallback.key),
+      fromKey:fromKey,
+      toKey:fallback.key,
+      toLabel:fallback.label
+    };
+  }
+  const last=msgs[msgs.length-1];
+  const convId=last.convId||chatConvId(last.fromKey,last.toKey);
+  const keys=convId.split('|');
+  let fromKey=chatPreferSendKey(me);
+  keys.forEach(function(k){
+    if(chatKeyInMyKeys(k))fromKey=k;
+  });
+  const myCanon=chatMyKeysCanon();
+  const otherKey=keys.find(function(k){return !myCanon.has(chatCanonicalKey(k));})||contactKey;
+  const to=chatContactFromKey(otherKey);
+  return{convId:convId,fromKey:fromKey,toKey:to.key,toLabel:to.label};
 }
 function chatConvIdsForContact(me,contactKey){
   contactKey=String(contactKey||'');
   if(!me||!contactKey)return[];
-  const ids=new Set();
-  const primary=chatPrimaryConvId(me,contactKey);
-  if(primary)ids.add(primary);
-  (chatMensajes||[]).forEach(function(m){
-    if(!chatMsgBetweenContact(m,me,contactKey))return;
-    const cid=m.convId||chatConvId(m.fromKey,m.toKey);
-    if(cid)ids.add(cid);
-  });
-  return[...ids];
+  return[...chatConvIdsForPair(me.key,contactKey)];
 }
 function chatMsgsForContact(me,contactKey){
   if(!me||!contactKey)return[];
