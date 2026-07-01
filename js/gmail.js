@@ -1350,7 +1350,8 @@ async function generarPdfSolicitudManual(opts) {
   y += 8;
   doc.setFont('helvetica', 'bold'); doc.text('Detalle de la solicitud:', margin, y); y += 14;
   doc.setFont('helvetica', 'normal');
-  const detalle = String(opts.detalle || opts.asunto || '(sin detalle adicional)').replace(/\r/g, '');
+  const detRaw = String(opts.detalle || '').trim();
+  const detalle = (detRaw || '(sin detalle adicional)').replace(/\r/g, '');
   y = _pdfWriteLines(doc, doc.splitTextToSize(detalle, maxW), margin, y, lineH, pageH, margin);
 
   const anexosNombres = opts.anexosNombres || [];
@@ -1388,8 +1389,9 @@ async function subirSoporteRadicacionManual(opts) {
 
   const uploaded = [];
   let soporte = null;
+  const silentNotif = !!opts.silentNotif;
   try {
-    notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
+    if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
     const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
     if (pdfBlob) {
       const asuntoSlug = String(opts.asunto || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
@@ -1403,7 +1405,7 @@ async function subirSoporteRadicacionManual(opts) {
         fechaRef
       );
       uploaded.push(soporte);
-    } else {
+    } else if (!silentNotif) {
       notif('⚠️ No se pudo generar el PDF (jsPDF no disponible).', 'warn');
     }
 
@@ -1425,15 +1427,17 @@ async function subirSoporteRadicacionManual(opts) {
       uploaded.push(up);
     }
 
-    if (soporte) {
-      const extra = uploaded.length > 1 ? ' y ' + (uploaded.length - 1) + ' anexo(s)' : '';
-      notif('✅ Soporte PDF' + extra + ' subido(s) al Drive institucional.', 'ok');
-    } else if (uploaded.length) {
-      notif('✅ ' + uploaded.length + ' anexo(s) subido(s) al Drive institucional.', 'ok');
+    if (!silentNotif) {
+      if (soporte) {
+        const extra = uploaded.length > 1 ? ' y ' + (uploaded.length - 1) + ' anexo(s)' : '';
+        notif('✅ Soporte PDF' + extra + ' subido(s) al Drive institucional.', 'ok');
+      } else if (uploaded.length) {
+        notif('✅ ' + uploaded.length + ' anexo(s) subido(s) al Drive institucional.', 'ok');
+      }
     }
   } catch (e) {
     console.warn('subirSoporteRadicacionManual:', e);
-    notif('⚠️ No se pudo subir el soporte al Drive: ' + (e.message || 'revise la conexión Gmail'), 'warn');
+    if (!silentNotif) notif('⚠️ No se pudo subir el soporte al Drive: ' + (e.message || 'revise la conexión Gmail'), 'warn');
   }
 
   return {

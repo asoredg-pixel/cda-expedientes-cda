@@ -8644,8 +8644,9 @@ function confirmExito(opts){
   if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
   window._confirmExitoMode=true;
   window._confirmPrecOk=null;
-  if(box)box.className='confirm-prec-box tone-success';
-  if(ico)ico.textContent='✓';
+  const tone=opts.tone||'success';
+  if(box)box.className='confirm-prec-box tone-'+tone;
+  if(ico)ico.textContent=tone==='warn'?'⚠️':'✓';
   if(tit)tit.textContent=opts.title||'Guardado exitosamente';
   msg.textContent=opts.message||'Los cambios se registraron correctamente.';
   if(det){
@@ -8659,7 +8660,10 @@ function confirmExito(opts){
     btn.onclick=function(){closeConfirmDialog(true);};
   }
   ov.classList.add('on');
-  window._confirmExitoTimer=setTimeout(function(){closeConfirmExito();},opts.autoCloseMs||1000);
+  const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(tone==='warn'?null:1000);
+  if(autoMs){
+    window._confirmExitoTimer=setTimeout(function(){closeConfirmExito();},autoMs);
+  }
 }
 function closeConfirmDialog(ok){
   if(window._confirmExitoMode){closeConfirmExito();return;}

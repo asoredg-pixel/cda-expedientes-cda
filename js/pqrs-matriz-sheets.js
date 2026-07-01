@@ -295,13 +295,15 @@ function pqrsMatrizSyncAfterSave(e, opts) {
     if (res && res.ok) {
       if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
     } else if (res && res.noToken) {
-      if (opts.warnNoToken && typeof notif === 'function') {
+      if (opts.warnNoToken && !opts.silent && typeof notif === 'function') {
         notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la matriz PQRSD en Drive.', 'warn');
       }
-    } else if (res && res.error && typeof notif === 'function') {
+    } else if (res && res.error && !opts.silent && typeof notif === 'function') {
       notif('⚠️ Guardado en sistema; matriz Drive no actualizada: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
     }
-    if (typeof pqrsMatrizPublicarEnDriveAsync === 'function') pqrsMatrizPublicarEnDriveAsync();
+    if (!opts.skipDrivePublish && typeof pqrsMatrizPublicarEnDriveAsync === 'function') {
+      pqrsMatrizPublicarEnDriveAsync();
+    }
     return res;
   });
 }

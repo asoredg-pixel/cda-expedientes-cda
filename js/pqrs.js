@@ -147,6 +147,22 @@ function limpiarFormSecretaria(){
   initSecMedioNotificacion(true);
   if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }
+function notificarResultadoRadicacionPqrs(opts){
+  opts=opts||{};
+  const msg=opts.message||'';
+  if(!msg){if(typeof notif==='function')notif('Operación completada','ok');return;}
+  if(typeof confirmExito==='function'){
+    confirmExito({
+      title:opts.title||'PQRSD radicada',
+      message:msg,
+      detail:opts.detail||'',
+      tone:opts.warn?'warn':'success',
+      autoCloseMs:opts.warn?undefined:2800
+    });
+  }else if(typeof notif==='function'){
+    notif(msg,opts.warn?'warn':'ok');
+  }
+}
 async function guardarPqrsSecretaria(modo){
   modo=modo||'trasladar';
   const soloRadicar=modo==='solo';
@@ -248,7 +264,8 @@ async function guardarPqrsSecretaria(modo){
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
         asunto,detalle,tipoPersona,
         pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
-        tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles
+        tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles,
+        silentNotif:true
       });
       if(anexoFiles.length&&(!manualRes.all||!manualRes.all.length)){
         notif('No se pudo subir el anexo al Drive. Revise la conexión Gmail e intente de nuevo.','err');
@@ -307,14 +324,59 @@ async function guardarPqrsSecretaria(modo){
   try{
     await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
   }catch(err){console.warn('notif radicacion auto:',err);}
+  const matrizDetalle=[];
+  let matrizWarn=false;
+  let xlsxOk=false;
   try{
-    if(typeof pqrsMatrizSyncAfterSave==='function')await pqrsMatrizSyncAfterSave(data,{warnNoToken:true});
-  }catch(err){console.warn('matriz sheets radicacion:',err);}
+    if(typeof pqrsMatrizSyncAfterSave==='function'){
+      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true,skipDrivePublish:true});
+      if(syncRes&&syncRes.ok){
+        matrizDetalle.push('Registro en hoja Google Sheets actualizado.');
+      }else if(syncRes&&syncRes.noToken){
+        matrizDetalle.push('Hoja Google Sheets: no sincronizada (sin conexión).');
+      }else if(syncRes&&syncRes.error){
+        matrizDetalle.push('Hoja Google Sheets: no actualizada ('+String(syncRes.error.message||syncRes.error).slice(0,72)+').');
+      }
+    }
+  }catch(err){
+    console.warn('matriz sheets radicacion:',err);
+    matrizDetalle.push('Hoja Google Sheets: error al sincronizar.');
+  }
+  try{
+    if(typeof pqrsMatrizPublicarEnDrive==='function'){
+      const list=typeof getSecretariaPqrsAll==='function'?getSecretariaPqrsAll():[data];
+      const pubRes=await pqrsMatrizPublicarEnDrive(list,'');
+      if(pubRes&&pubRes.ok){
+        xlsxOk=true;
+        matrizDetalle.push('Matriz oficial XLSX publicada en Drive.');
+      }else if(pubRes&&pubRes.noToken){
+        matrizWarn=true;
+        matrizDetalle.push('Matriz oficial en Drive: no publicada (sin conexión).');
+      }else if(!(pubRes&&pubRes.empty)){
+        matrizWarn=true;
+        matrizDetalle.push('Matriz oficial en Drive: no se pudo publicar.');
+      }
+    }
+  }catch(err){
+    console.warn('matriz drive xlsx:',err);
+    matrizWarn=true;
+    matrizDetalle.push('Matriz oficial en Drive: '+String(err.message||err).slice(0,72));
+  }
+  if(!xlsxOk&&matrizDetalle.some(function(l){return /Sheets|Drive/.test(l)&&!/actualizada|publicada/.test(l);})){
+    matrizWarn=true;
+  }
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  notif('PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina))),'ok');
+  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)));
+  const detalleLines=[linkFinal?'Soporte PDF generado en Drive.':''].concat(matrizDetalle).filter(Boolean).join('\n');
+  notificarResultadoRadicacionPqrs({
+    title:soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada'),
+    message:msgPrincipal,
+    detail:detalleLines||undefined,
+    warn:matrizWarn
+  });
   limpiarFormSecretaria();
   renderSecretariaPqrs();
 }
