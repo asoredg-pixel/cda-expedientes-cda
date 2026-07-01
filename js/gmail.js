@@ -2100,9 +2100,6 @@ async function gmailSubirAdjuntosYVincular() {
     if (files.length) {
       window._gmailPendingAttachments = files;
       window._gmailPendingMsgId = _gmailCurrentMsg.id;
-      // Populate Drive link field with the first attachment
-      const linkEl = document.getElementById('sec-link');
-      if (linkEl) linkEl.value = files[0].driveLink;
       if (btn) btn.textContent = '✅ ' + files.length + ' adjunto(s) en Drive';
       notif(files.length + ' adjunto(s) subidos a Drive y vinculados al formulario', 'ok');
     } else {

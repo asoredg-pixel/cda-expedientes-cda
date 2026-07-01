@@ -67,6 +67,13 @@ function descargarConsChart(){
 // ================================================================
 // MÓDULO SECRETARÍA / OFICINAS DEGUV / CONSULTA CIUDADANA PQRSD
 // ================================================================
+function secAnexoFileLabel(inp){
+  const lbl=document.getElementById('sec-anexo-label');
+  if(!lbl)return;
+  const files=inp&&inp.files&&inp.files.length?Array.from(inp.files):[];
+  if(!files.length){lbl.textContent='Ningún archivo seleccionado';return;}
+  lbl.textContent=files.length===1?files[0].name:(files.length+' archivos seleccionados');
+}
 function poblarSecOficinaSelect(){
   const sel=document.getElementById('sec-oficina');
   if(!sel)return;
@@ -97,11 +104,12 @@ function limpiarFormSecretaria(){
   if(typeof cerrarSplitView==='function')cerrarSplitView();
   // Compatibilidad con ref-card legacy
   const refCard=document.getElementById('gmail-ref-card');if(refCard)refCard.style.display='none';
-  ['sec-exp','sec-asunto','sec-detalle','sec-link','sec-archivo','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['sec-exp','sec-asunto','sec-detalle','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const tp=document.getElementById('sec-tipo-persona');if(tp)tp.value='natural';
   const anon=document.getElementById('sec-anonimo');if(anon)anon.checked=false;
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
   const anexo=document.getElementById('sec-anexo');if(anexo)anexo.value='';
+  secAnexoFileLabel(anexo);
   toggleSecAnonimo();
   poblarSecOficinaSelect();
   const hid=document.getElementById('sec-medio-notif');if(hid){hid.value='';delete hid.dataset.userSet;}
@@ -150,8 +158,6 @@ async function guardarPqrsSecretaria(modo){
   const asunto=String((document.getElementById('sec-asunto')||{}).value||'').trim();
   const detalle=String((document.getElementById('sec-detalle')||{}).value||'').trim();
   let oficina=(document.getElementById('sec-oficina')||{}).value||'';
-  const link=String((document.getElementById('sec-link')||{}).value||'').trim();
-  const archivo=String((document.getElementById('sec-archivo')||{}).value||'').trim();
   const medioNotif=medioNotificacionNorm((document.getElementById('sec-medio-notif')||{}).value||'');
   let prioritaria=!!((document.getElementById('sec-prioritaria')||{}).checked);
   if(!expId){notif('Indique el número de PQRSD','err');return;}
@@ -180,6 +186,15 @@ async function guardarPqrsSecretaria(modo){
     }
   }
   const gmailMsgId=window._gmailPendingMsgId||'';
+  const anexoEl=document.getElementById('sec-anexo');
+  const anexoFiles=anexoEl&&anexoEl.files&&anexoEl.files.length?Array.from(anexoEl.files):[];
+  if(!gmailMsgId&&anexoFiles.length){
+    const tokOk=typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
+    if(!tokOk){
+      notif('Conecte la bandeja Gmail (cdaguaviare1) en Correos para subir el anexo al Drive antes de radicar.','err');
+      return;
+    }
+  }
   if(!soloRadicar&&gmailMsgId){
     const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
     const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
@@ -196,11 +211,9 @@ async function guardarPqrsSecretaria(modo){
     try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
   }
   let manualDriveAtts=null;
-  let archivoFinal=archivo;
+  let archivoFinal='';
   const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
   if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
-    const anexoEl=document.getElementById('sec-anexo');
-    const anexoFiles=anexoEl&&anexoEl.files&&anexoEl.files.length?Array.from(anexoEl.files):[];
     try{
       const manualRes=await subirSoporteRadicacionManual({
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
@@ -208,16 +221,25 @@ async function guardarPqrsSecretaria(modo){
         pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
         tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles
       });
+      if(anexoFiles.length&&(!manualRes.all||!manualRes.all.length)){
+        notif('No se pudo subir el anexo al Drive. Revise la conexión Gmail e intente de nuevo.','err');
+        return;
+      }
       if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
-      if(!link&&manualRes.link)link=manualRes.link;
-      if(!archivoFinal&&anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
-    }catch(e){console.warn('soporte manual drive:',e);}
+      if(anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
+    }catch(e){
+      console.warn('soporte manual drive:',e);
+      if(anexoFiles.length){
+        notif('No se pudo subir el anexo al Drive: '+(e.message||'revise la conexión Gmail'),'err');
+        return;
+      }
+    }
   }
   const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
     ?window._gmailPendingAttachments:(manualDriveAtts||null);
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
     ?window._gmailPendingEmailData:null;
-  const linkFinal=link||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'');
+  const linkFinal=(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
   const encargadoOfi=soloRadicar?'':(typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'');
   const data=normalizePqrsOficinaFields({
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:fechaTermino||'',
@@ -603,10 +625,6 @@ function openEditPqrsSecretariaModal(expId){
     '<div class="fld" style="margin-bottom:10px"><label>Asunto / tema</label><input type="text" id="pqrs-edit-asunto" value="'+escAttr(e.f_f1||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:10px"><label>Detalle</label><textarea id="pqrs-edit-detalle" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif">'+escTextarea(e._pqrs_detalle||e._detalle_general||'')+'</textarea></div>'+
     '<div class="fg" style="margin-bottom:10px"><div class="fld"><label>Oficina destino</label><select id="pqrs-edit-oficina">'+ofOpts+'</select></div></div>'+
-    '<div class="fg" style="margin-bottom:10px">'+
-    '<div class="fld"><label>Link documento</label><input type="url" id="pqrs-edit-link" value="'+escAttr(e._pqrs_solicitud_link||'')+'"></div>'+
-    '<div class="fld"><label>Referencia archivo</label><input type="text" id="pqrs-edit-archivo" value="'+escAttr(e._pqrs_solicitud_archivo||'')+'"></div>'+
-    '</div>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" data-pqrs-edit-submit="'+escAttr(expId)+'">Guardar cambios</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
     const btns=document.getElementById('pqrs-edit-medio-notif-btns');
     if(btns)btns.innerHTML=htmlMedioNotificacionBtns(rec._medio_notificacion||'','pqrs-edit','setEditPqrsMedioNotificacion');
@@ -631,8 +649,6 @@ function submitEditPqrsSecretaria(expId){
   const asunto=String((document.getElementById('pqrs-edit-asunto')||{}).value||'').trim();
   const oficina=(document.getElementById('pqrs-edit-oficina')||{}).value||'';
   const detalle=String((document.getElementById('pqrs-edit-detalle')||{}).value||'').trim();
-  const link=String((document.getElementById('pqrs-edit-link')||{}).value||'').trim();
-  const archivo=String((document.getElementById('pqrs-edit-archivo')||{}).value||'').trim();
   const medioNotif=medioNotificacionNorm((document.getElementById('pqrs-edit-medio-notif')||{}).value||'');
   const prior=!!((document.getElementById('pqrs-edit-prior')||{}).checked);
   if(!asunto){notif('Indique el asunto','err');return;}
@@ -649,7 +665,6 @@ function submitEditPqrsSecretaria(expId){
   });
   e.f_f1=asunto;e._pqrs_detalle=detalle;e._detalle_general=detalle;
   if(detalle)e._detalle_notas=JSON.stringify([{texto:detalle,autor:'Secretaría DEGUV',fecha:fecha}]);
-  e._pqrs_solicitud_link=link;e._pqrs_solicitud_archivo=archivo;
   if(anon){
     e._pn_nombre='';e._pn_identificacion='';e._pn_correo='';e._pn_telefono='';
     e._pj_empresa='';e._pj_nit='';e._pj_correo='';e._pj_telefono='';

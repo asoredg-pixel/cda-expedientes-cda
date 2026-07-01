@@ -112,9 +112,17 @@ function xlsxClearMatrizDataRows(ws,startRow0,count){
     PQRS_MATRIZ_DATA_COLS.forEach(c=>xlsxDeleteCell(ws,XLSX.utils.encode_cell({r:startRow0+r,c:c})));
   }
 }
+function pqrsMatrizFmtFechaCeldaXlsx(iso){
+  if(!iso)return'';
+  if(typeof fmtF==='function'){
+    const f=fmtF(iso);
+    return f&&f!=='-'?f:'';
+  }
+  return String(iso);
+}
 function xlsxWriteMatrizDataRow(ws,row0,rec){
   xlsxSetCell(ws,row0,2,rec.item,'n');
-  xlsxSetCell(ws,row0,3,rec.fechaRecibo,'d');
+  xlsxSetCell(ws,row0,3,pqrsMatrizFmtFechaCeldaXlsx(rec.fechaRecibo),'s');
   xlsxSetCell(ws,row0,4,rec.radicadoRecibo,'s');
   xlsxSetCell(ws,row0,5,rec.departamento,'s');
   xlsxSetCell(ws,row0,6,rec.tipo,'s');
@@ -122,10 +130,10 @@ function xlsxWriteMatrizDataRow(ws,row0,rec){
   xlsxSetCell(ws,row0,8,rec.asunto,'s');
   xlsxSetCell(ws,row0,9,rec.plazoDias,'n');
   xlsxSetCell(ws,row0,10,rec.responsable,'s');
-  xlsxSetCell(ws,row0,11,rec.fechaVence,'d');
+  xlsxSetCell(ws,row0,11,pqrsMatrizFmtFechaCeldaXlsx(rec.fechaVence),'s');
   xlsxSetCell(ws,row0,12,rec.estado,'s');
   if(rec.diasParaVencer!=='')xlsxSetCell(ws,row0,13,rec.diasParaVencer,'n');
-  if(rec.fechaContestacion)xlsxSetCell(ws,row0,14,rec.fechaContestacion,'d');
+  if(rec.fechaContestacion)xlsxSetCell(ws,row0,14,pqrsMatrizFmtFechaCeldaXlsx(rec.fechaContestacion),'s');
   if(rec.radicadoContestacion)xlsxSetCell(ws,row0,15,rec.radicadoContestacion,'s');
   if(rec.diasRespuesta!=='')xlsxSetCell(ws,row0,16,rec.diasRespuesta,'n');
   if(rec.estadoFinal)xlsxSetCell(ws,row0,17,rec.estadoFinal,'s');

@@ -28,9 +28,9 @@
 <script src="js/configuracion.js?v=20260630e"></script>
 <script src="js/export.js?v=20260625g"></script>
 <script src="js/chat.js?v=20260702m"></script>
-<script src="js/pqrs-matriz-export.js?v=20260702a"></script>
+<script src="js/pqrs-matriz-export.js?v=20260702b"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702a"></script>
-<script src="js/pqrs.js?v=20260702a"></script>
+<script src="js/pqrs.js?v=20260702b"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260702f"></script>
 <script src="js/recursos.js?v=20260630h"></script>
@@ -640,14 +640,13 @@
     <!-- PANEL DERECHO: formulario de radicación -->
     <div id="sec-form-card" class="card" style="border-left:4px solid var(--pu)">
       <div class="slbl">Nueva radicación PQRSD</div>
-      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud (link o referencia) e indique la oficina destino.</div>
+      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino.</div>
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label>
           <div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">
             <input type="text" id="sec-exp" placeholder="Ej. 2602010 (26 + mes 02 + consecutivo 010)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
             <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo anual" onclick="refrescarSugerenciaNumeroPqrsSec()">↻ Sugerir</button>
           </div>
-          <span style="font-size:11px;color:var(--tx3)">Formato: AA + MM + NNN (7 dígitos). Consecutivo anual; reinicia en enero (ej. 2701001). Se sugiere desde el sistema y, si Gmail está conectado, también desde la matriz en Drive.</span>
         </div>
         <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
         <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
@@ -696,18 +695,20 @@
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
       </div>
-      <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>Link de la solicitud (Drive, etc.)</label><input type="url" id="sec-link" placeholder="https://…"><span style="font-size:11px;color:var(--tx3)">Opcional si se genera soporte automático al radicar.</span></div>
-        <div class="fld"><label>Referencia de archivo adjunto</label><input type="text" id="sec-archivo" placeholder="Nombre del documento o carpeta"></div>
+      <div class="fld" style="margin-bottom:10px">
+        <label>Solicitud digital (opcional)</label>
+        <div class="sec-anexo-wrap fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
+          <label class="btn bsm" style="cursor:pointer;margin:0">📎 Elegir archivos<input type="file" id="sec-anexo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" multiple style="display:none" onchange="secAnexoFileLabel(this)"></label>
+          <span id="sec-anexo-label" style="font-size:12px;color:var(--tx2)">Ningún archivo seleccionado</span>
+        </div>
+        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Se sube al Drive institucional al radicar (requiere bandeja Gmail conectada en Correos).</span>
       </div>
-      <div class="fld" style="margin-bottom:10px"><label>Anexo digital (opcional)</label><input type="file" id="sec-anexo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" multiple style="width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><span style="font-size:11px;color:var(--tx3)">Se sube al Drive institucional junto con el soporte PDF (nombre: ANEXO PQRSD {número} {archivo}). Requiere bandeja Gmail conectada.</span></div>
       <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" onclick="guardarPqrsSecretaria('trasladar')">📤 Radicar y trasladar a oficina</button><button type="button" class="btn" onclick="guardarPqrsSecretaria('solo')">📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 
   </div><!-- /sec-radicar-split -->
   <div id="sec-pqrs-mets" class="pqrs-ofi-mets" style="margin-top:1rem"></div>
-  <div class="fx" style="justify-content:flex-end;margin-top:8px;gap:6px;flex-wrap:wrap;align-items:center">
-    <a href="https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS" target="_blank" rel="noopener" style="font-size:12px;color:var(--bl)">📁 Matriz en Drive</a>
+  <div class="fx" style="justify-content:flex-end;margin-top:8px;gap:6px;flex-wrap:wrap">
     <button type="button" class="btn bsm bp" onclick="exportarMatrizPqrsSecretaria()">⬇ Matriz oficial PQRSD</button>
   </div>
   <div class="card" id="sec-pend-trasl-wrap" style="margin-top:1rem">
