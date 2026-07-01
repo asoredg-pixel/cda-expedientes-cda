@@ -842,12 +842,8 @@ function chatActiveContactKey(){
   const other=keys.find(function(k){return !myCanon.has(chatCanonicalKey(k));});
   return other||null;
 }
-function chatContactHasUnread(me,contactKey){
-  if(!me||!contactKey)return false;
-  return chatMsgsForContact(me,contactKey).some(chatMsgUnreadForMe);
-}
 function chatContactUnreadCount(me,contactKey){
-  return chatContactHasUnread(me,contactKey)?1:0;
+  return chatMsgsForContact(me,contactKey).filter(chatMsgUnreadForMe).length;
 }
 async function loadChatMensajesForContact(me,contactKey){
   const ids=chatConvIdsForContact(me,contactKey);
@@ -906,16 +902,15 @@ function chatUnreadCount(){
   let n=0;
   const covered=new Set();
   getChatContacts().forEach(function(c){
-    if(chatContactHasUnread(me,c.key))n++;
+    n+=chatContactUnreadCount(me,c.key);
     chatConvIdsForContact(me,c.key).forEach(function(id){covered.add(id);});
   });
-  const orphan=new Set();
   (chatMensajes||[]).forEach(function(m){
     if(!chatMsgParticipa(m)||!chatMsgUnreadForMe(m))return;
     const cid=m.convId||chatConvId(m.fromKey,m.toKey);
-    if(!covered.has(cid))orphan.add(cid);
+    if(!covered.has(cid))n++;
   });
-  return n+orphan.size;
+  return n;
 }
 function chatUnreadConv(convId){
   const me=getChatIdentity();
@@ -968,9 +963,9 @@ function renderChatBadge(){
   const prev=Number(b.dataset.count||'0');
   if(n>0){
     b.style.display='flex';
-    b.textContent='';
+    b.textContent=n>99?'99+':String(n);
     b.dataset.count=String(n);
-    b.setAttribute('aria-label',n===1?'1 conversación con mensajes no leídos':n+' conversaciones con mensajes no leídos');
+    b.setAttribute('aria-label',n===1?'1 mensaje no leído':n+' mensajes no leídos');
     if(fab&&n>prev)fab.classList.add('chat-fab-pulse');
   }else{
     b.style.display='none';
@@ -1100,7 +1095,7 @@ function renderChatContacts(){
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
         '<div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
-        (unread?'<span class="chat-contact-unread" aria-label="No leído"></span>':'')+
+        (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+
         '</div>';
     }).join('');
     const contactsEl=document.getElementById('chat-contacts');

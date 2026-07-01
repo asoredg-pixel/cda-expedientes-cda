@@ -558,8 +558,8 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .ico-chat-interno{display:inline-flex;align-items:center;justify-content:center;color:#fff;vertical-align:middle}
 .btn.bic .ico-chat-bubble{color:var(--bl)}
 .chat-fab-badge{
-  position:absolute;top:-3px;right:-3px;width:12px;height:12px;min-width:12px;padding:0;border-radius:50%;
-  background:linear-gradient(135deg,#ef4444,#dc2626);color:transparent;font-size:0;
+  position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;
+  background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:10px;font-weight:800;
   display:flex;align-items:center;justify-content:center;border:2px solid #fff;
   box-shadow:0 2px 8px rgba(220,38,38,.45);z-index:3;
 }
@@ -625,7 +625,7 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .chat-contact-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-contact-meta{font-size:9px;color:var(--tx3);line-height:1.25;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-contact-prev{font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.chat-contact-unread{width:10px;height:10px;min-width:10px;border-radius:50%;background:var(--gn,#1a7a4a);flex-shrink:0}
+.chat-contact-unread{min-width:20px;height:20px;border-radius:10px;background:var(--gn,#1a7a4a);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0}
 .chat-main{flex:1;display:flex;flex-direction:column;min-width:0;background:#fff;position:relative}
 .chat-main.hidden{display:none}
 .chat-upload-overlay{
