@@ -701,18 +701,46 @@ function chatPreviewMsg(m,me){
   if(!chatEsMio(m))return escAttr((chatFromLabel(m)||'')+(body?': '+body:''));
   return escAttr(body||'');
 }
+function chatPersonLabelFromKey(key){
+  key=chatNormKey(key);
+  if(!key)return'';
+  if(key.startsWith('resp:'))return key.slice(5);
+  if(key.startsWith('depto:')){
+    const id=key.slice(6);
+    const enc=getEncargadoDepto(id);
+    return enc||labelDepto(id);
+  }
+  if(key.startsWith('ofi:')){
+    const id=key.slice(4);
+    const enc=getEncargadoOficina(id);
+    if(enc)return enc;
+    return labelOficina(id);
+  }
+  if(key.startsWith('juris:')){
+    const u=(_usuariosCache||[]).find(function(x){return x&&x.activo!==false&&x.rol==='jurisdiccional'&&String(x.nombre||'').trim();});
+    if(u)return String(u.nombre).trim();
+    return CHAT_LABEL_SUBDIRECCION;
+  }
+  const c=chatContactFromKey(key);
+  return c.label||'';
+}
+function chatSendFromLabel(me){
+  if(!me)return'';
+  const ses=chatSessionUserContact();
+  if(ses&&ses.label)return ses.label;
+  const lbl=chatPersonLabelFromKey(chatPreferSendKey(me)||me.key);
+  if(lbl)return lbl;
+  return me.label||'';
+}
 function chatFromLabel(m){
   if(!m)return'';
+  const byKey=chatPersonLabelFromKey(m.fromKey||'');
+  if(byKey)return byKey;
   if(m.fromLabel){
     if(m.fromLabel==='Jurisdiccional')return CHAT_LABEL_SUBDIRECCION;
     return m.fromLabel;
   }
-  const k=String(m.fromKey||'');
-  if(k.startsWith('resp:'))return k.slice(5);
-  if(k.startsWith('depto:')){const enc=getEncargadoDepto(k.slice(6));return enc||labelDepto(k.slice(6));}
-  if(k.startsWith('ofi:'))return labelOficina(k.slice(4));
-  if(k.startsWith('juris:'))return CHAT_LABEL_SUBDIRECCION;
-  return chatContactFromKey(k).label||'';
+  return'';
 }
 function chatMsgUnreadForMe(m){
   const my=getMyChatKeys();
@@ -977,8 +1005,18 @@ function toggleChatWindow(force){
   else{window._chatConvActiva=null;window._chatVista='contactos';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
 function chatPurgeUnreadButton(){
-  const btn=document.getElementById('chat-unread-btn');
-  if(btn)btn.remove();
+  document.querySelectorAll('#chat-unread-btn,[onclick*="chatMarcarNoLeido"],[title*="Marcar como no leído"],[title*="no leído"]').forEach(function(el){el.remove();});
+}
+function chatInitUnreadButtonGuard(){
+  if(window._chatUnreadBtnGuard)return;
+  window._chatUnreadBtnGuard=true;
+  window.chatMarcarNoLeido=function(){};
+  chatPurgeUnreadButton();
+  const hdr=document.querySelector('.chat-hdr-actions');
+  if(hdr&&typeof MutationObserver!=='undefined'){
+    const obs=new MutationObserver(function(){chatPurgeUnreadButton();});
+    obs.observe(hdr,{childList:true,subtree:true});
+  }
 }
 function chatToggleContactos(force){
   if(typeof force==='boolean')window._chatContactsCollapsed=force;
@@ -986,6 +1024,7 @@ function chatToggleContactos(force){
   chatSyncLayout();
 }
 function chatSyncLayout(){
+  chatInitUnreadButtonGuard();
   chatPurgeUnreadButton();
   const contacts=document.getElementById('chat-contacts');
   const main=document.getElementById('chat-main');
@@ -1155,7 +1194,7 @@ async function chatEnviarTexto(){
   const msg={
     id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
     convId:route.convId,
-    fromKey:route.fromKey,fromLabel:me.label,
+    fromKey:route.fromKey,fromLabel:chatSendFromLabel(me),
     toKey:route.toKey,toLabel:route.toLabel,
     text,
     ts:new Date().toISOString(),
@@ -1431,7 +1470,7 @@ async function chatEnviarArchivo(fileArg){
     const msg={
       id:msgId,
       convId:route.convId,
-      fromKey:route.fromKey,fromLabel:me.label,
+      fromKey:route.fromKey,fromLabel:chatSendFromLabel(me),
       toKey:route.toKey,toLabel:route.toLabel,
       text:'',
       driveLink:uploaded.driveLink,
@@ -1475,6 +1514,7 @@ window.chatEnviarArchivo=chatEnviarArchivo;
 window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
 if(!window._chatNotifyFirebaseHook){
   window._chatNotifyFirebaseHook=true;
+  chatInitUnreadButtonGuard();
   chatPurgeUnreadButton();
   if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',chatPurgeUnreadButton);
