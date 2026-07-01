@@ -896,8 +896,11 @@ function chatMsgsForActiveConv(){
   if(!me||!contactKey)return[];
   return chatMsgsForContact(me,contactKey);
 }
+function chatUnreadMe(){
+  return chatEffectiveIdentity()||getChatIdentity();
+}
 function chatUnreadCount(){
-  const me=getChatIdentity();
+  const me=chatUnreadMe();
   if(!me)return 0;
   let n=0;
   const covered=new Set();
@@ -962,8 +965,9 @@ function renderChatBadge(){
   if(!b)return;
   const prev=Number(b.dataset.count||'0');
   if(n>0){
-    b.style.display='flex';
-    b.textContent=n>99?'99+':String(n);
+    const txt=n>99?'99+':String(n);
+    b.textContent=txt;
+    b.style.cssText='position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;font-size:10px;font-weight:800;line-height:1;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(220,38,38,.45);z-index:3;';
     b.dataset.count=String(n);
     b.setAttribute('aria-label',n===1?'1 mensaje no leído':n+' mensajes no leídos');
     if(fab&&n>prev)fab.classList.add('chat-fab-pulse');
@@ -1095,7 +1099,7 @@ function renderChatContacts(){
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
         '<div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
-        (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+
+        (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
         '</div>';
     }).join('');
     const contactsEl=document.getElementById('chat-contacts');
