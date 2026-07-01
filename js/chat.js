@@ -816,8 +816,6 @@ function chatActiveContactKey(){
 }
 function chatContactHasUnread(me,contactKey){
   if(!me||!contactKey)return false;
-  const key=chatNormKey(contactKey);
-  if(window._chatManualUnread&&window._chatManualUnread.has(key))return true;
   return chatMsgsForContact(me,contactKey).some(chatMsgUnreadForMe);
 }
 function chatContactUnreadCount(me,contactKey){
@@ -905,7 +903,6 @@ async function chatMarcarLeido(convId){
   if(!my.length)return;
   const me=getChatIdentity();
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
-  if(window._chatManualUnread&&contactKey)window._chatManualUnread.delete(chatNormKey(contactKey));
   let msgs=contactKey&&me?chatMsgsForContact(me,contactKey):chatConvMessages(convId);
   let ch=false;
   const db=window._db;
@@ -979,16 +976,6 @@ function toggleChatWindow(force){
   }
   else{window._chatConvActiva=null;window._chatVista='contactos';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
-async function chatMarcarNoLeido(){
-  const contactKey=window._chatActiveContactKey||chatActiveContactKey();
-  if(!contactKey)return;
-  if(!window._chatManualUnread)window._chatManualUnread=new Set();
-  window._chatManualUnread.add(chatNormKey(contactKey));
-  renderChatBadge();
-  renderChatContacts();
-  chatVolverContactos();
-  notif('Conversación marcada como no leída','ok');
-}
 function chatToggleContactos(force){
   if(typeof force==='boolean')window._chatContactsCollapsed=force;
   else window._chatContactsCollapsed=!window._chatContactsCollapsed;
@@ -999,7 +986,6 @@ function chatSyncLayout(){
   const main=document.getElementById('chat-main');
   const back=document.getElementById('chat-back-btn');
   const toggleBtn=document.getElementById('chat-toggle-contacts-btn');
-  const unreadBtn=document.getElementById('chat-unread-btn');
   const conv=window._chatConvActiva;
   const mobile=window.innerWidth<640;
   const collapsed=!!window._chatContactsCollapsed;
@@ -1015,7 +1001,6 @@ function chatSyncLayout(){
   }
   if(back)back.style.display=(conv&&mobile)?'inline-flex':'none';
   if(toggleBtn)toggleBtn.style.display=conv&&mobile?'inline-block':'none';
-  if(unreadBtn)unreadBtn.style.display=conv?'inline-block':'none';
   if(conv&&contacts&&!mobile&&!collapsed)contacts.classList.remove('wide');
 }
 function chatVolverContactos(){

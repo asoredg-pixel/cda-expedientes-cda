@@ -248,7 +248,6 @@ function ingresarComoRol(rolId,respNombre){
   if(typeof initChatNotifySync==='function'){
     window._bandejaNotifySeeded=false;
     window._bandejaUnreadKeysPrev=[];
-    window._chatManualUnread=new Set();
     scheduleChatNotifySync();
   }
   if(responsableActivo){
@@ -274,7 +273,6 @@ function salirDeSesionApp(){
   if(typeof stopChatActiveSync==='function')stopChatActiveSync();
   window._bandejaNotifySeeded=false;
   window._bandejaUnreadKeysPrev=[];
-  window._chatManualUnread=new Set();
   cerrarConsultaPanel();
   closeTaskModal();
   closeBandejaDepto();
