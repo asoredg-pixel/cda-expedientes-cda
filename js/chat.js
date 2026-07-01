@@ -181,6 +181,15 @@ function chatAllKeysFor(key){
   chatIdentityKeysForKey(key).forEach(add);
   return set;
 }
+function chatKeyInSet(key,set){
+  if(!set||!set.size)return false;
+  key=chatNormKey(key);
+  if(set.has(key))return true;
+  for(const k of chatAllKeysFor(key)){
+    if(set.has(k))return true;
+  }
+  return false;
+}
 function chatSessionUserContact(){
   const u=window._usuarioActual;
   if(!u||u.activo===false)return null;
@@ -198,10 +207,7 @@ function getMyChatKeys(){
   return[...chatMyKeySet()];
 }
 function chatKeyInMyKeys(k){
-  const mine=chatMyKeySet();
-  const nk=chatNormKey(k);
-  if(mine.has(nk))return true;
-  return chatAllKeysFor(k).some(function(a){return mine.has(a);});
+  return chatKeyInSet(k,chatMyKeySet());
 }
 function chatMsgParticipa(m){
   if(!m)return false;
@@ -253,9 +259,7 @@ function chatInstructorMeta(ins,deptoId){
 function chatContactIsSelf(me,c){
   if(!me||!c||!c.key)return false;
   if(chatNormKey(c.key)===chatNormKey(me.key))return true;
-  if(chatKeysMatch(c.key,me.key))return true;
-  const mine=chatMyKeySet();
-  return chatAllKeysFor(c.key).some(function(k){return mine.has(k);});
+  return chatKeysMatch(c.key,me.key);
 }
 function chatPushContact(seen,out,me,c){
   if(!c||!c.key)return;
@@ -487,7 +491,7 @@ function chatContactKeyFromMsg(msg){
   if(!me||!msg)return null;
   const mine=chatMyKeySet();
   function esMioKey(k){
-    return chatAllKeysFor(k).some(function(a){return mine.has(a);});
+    return chatKeyInSet(k,mine);
   }
   let other=esMioKey(msg.fromKey)?msg.toKey:msg.fromKey;
   if(!other)return null;
@@ -629,8 +633,7 @@ function chatAvClass(kind){return kind==='depto'?' depto':kind==='juris'?' juris
 function chatAvLetter(label){return String(label||'?').trim().charAt(0).toUpperCase();}
 function chatEsMio(m){
   if(!m||!m.fromKey)return false;
-  const mine=chatMyKeySet();
-  return chatAllKeysFor(m.fromKey).some(function(k){return mine.has(k);});
+  return chatKeyInSet(m.fromKey,chatMyKeySet());
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
@@ -867,6 +870,11 @@ function toggleChatWindow(force){
   w.classList.toggle('on',open);
   if(fab)fab.classList.toggle('open',open);
   if(open){
+    window._chatConvActiva=null;
+    window._chatVista='contactos';
+    const sub=document.getElementById('chat-hdr-sub');
+    if(sub)sub.textContent='Seleccione un contacto';
+    chatSyncLayout();
     renderChatContacts();
     renderChatBadge();
     if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
