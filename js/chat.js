@@ -1320,6 +1320,7 @@ function chatUploadOverlayShow(fileName){
   const ico=document.getElementById('chat-upload-emoji');
   const foot=document.getElementById('chat-upload-foot');
   const spin=document.getElementById('chat-upload-spinner');
+  const box=ov?ov.querySelector('.chat-upload-box'):null;
   if(!ov)return;
   if(box){box.classList.remove('state-ok','state-err','state-warn');}
   if(tit)tit.textContent='Subiendo archivo';
@@ -1416,11 +1417,11 @@ async function chatEnviarArchivo(fileArg){
     return;
   }
   _chatFileUploading=true;
-  chatUploadOverlayShow(file.name);
   const route=chatPickSendRoute(me,contactKey);
   window._chatConvActiva=route.convId;
   const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
   try{
+    chatUploadOverlayShow(file.name);
     const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
     const msg={
       id:msgId,
