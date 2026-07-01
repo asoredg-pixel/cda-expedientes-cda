@@ -976,12 +976,17 @@ function toggleChatWindow(force){
   }
   else{window._chatConvActiva=null;window._chatVista='contactos';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
+function chatPurgeUnreadButton(){
+  const btn=document.getElementById('chat-unread-btn');
+  if(btn)btn.remove();
+}
 function chatToggleContactos(force){
   if(typeof force==='boolean')window._chatContactsCollapsed=force;
   else window._chatContactsCollapsed=!window._chatContactsCollapsed;
   chatSyncLayout();
 }
 function chatSyncLayout(){
+  chatPurgeUnreadButton();
   const contacts=document.getElementById('chat-contacts');
   const main=document.getElementById('chat-main');
   const back=document.getElementById('chat-back-btn');
@@ -1067,6 +1072,7 @@ function renderChatContacts(){
   }
 }
 async function chatAbrirConv(contactKey){
+  chatPurgeUnreadButton();
   const me=getChatIdentity();
   if(!me)return;
   window._chatActiveContactKey=contactKey;
@@ -1469,6 +1475,10 @@ window.chatEnviarArchivo=chatEnviarArchivo;
 window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
 if(!window._chatNotifyFirebaseHook){
   window._chatNotifyFirebaseHook=true;
+  chatPurgeUnreadButton();
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',chatPurgeUnreadButton);
+  }
   window.addEventListener('firebase-ready',function(){
     if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
   });
