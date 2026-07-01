@@ -490,18 +490,12 @@ function scheduleChatNotifySync(){
   },350);
 }
 function chatNotifyConvIds(){
-  const me=getChatIdentity();
-  const ses=chatSessionUserContact();
-  if(!me&&!ses)return[];
-  const myKeys=new Set();
-  if(me)chatAllKeysFor(me.key).forEach(function(k){myKeys.add(k);});
-  if(ses)chatAllKeysFor(ses.key).forEach(function(k){myKeys.add(k);});
+  const me=chatEffectiveIdentity();
+  if(!me)return[];
   const ids=new Set();
   getChatContacts().forEach(function(c){
-    [...myKeys].forEach(function(a){
-      chatAllKeysFor(c.key).forEach(function(b){
-        if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvFirestoreId(chatConvId(a,b)));
-      });
+    chatConvIdsForContact(me,c.key).forEach(function(id){
+      ids.add(chatConvFirestoreId(id));
     });
   });
   (chatMensajes||[]).forEach(function(m){
@@ -512,9 +506,9 @@ function chatNotifyConvIds(){
   return[...ids];
 }
 function chatContactKeyFromMsg(msg){
-  const me=getChatIdentity();
+  const me=getChatIdentity()||chatEffectiveIdentity();
   if(!me||!msg)return null;
-  const mine=chatMyKeySet();
+  const mine=chatAllKeysFor(me.key);
   function esMioKey(k){
     return chatKeyInSet(k,mine);
   }
@@ -525,10 +519,8 @@ function chatContactKeyFromMsg(msg){
   for(let i=0;i<contacts.length;i++){
     const c=contacts[i];
     if(chatNormKey(c.key)===chatNormKey(other))return c.key;
-    const paths=chatConvIdsForContact(me,c.key);
-    for(let j=0;j<paths.length;j++){
-      if(paths[j]===msgConv)return c.key;
-    }
+    if(chatPrimaryConvId(me,c.key)===msgConv)return c.key;
+    if(chatMsgBetweenContact(msg,me,c.key))return c.key;
   }
   return other;
 }
@@ -658,7 +650,9 @@ function chatAvClass(kind){return kind==='depto'?' depto':kind==='juris'?' juris
 function chatAvLetter(label){return String(label||'?').trim().charAt(0).toUpperCase();}
 function chatEsMio(m){
   if(!m||!m.fromKey)return false;
-  return chatKeyInSet(m.fromKey,chatMyKeySet());
+  const me=getChatIdentity()||chatEffectiveIdentity();
+  if(!me)return false;
+  return chatKeyInSet(m.fromKey,chatAllKeysFor(me.key));
 }
 function chatPreviewMsg(m,me){
   if(!m)return'Sin mensajes';
@@ -691,45 +685,50 @@ function chatMyKeysCanon(){
   getMyChatKeys().forEach(function(k){s.add(chatCanonicalKey(k));});
   return s;
 }
+function chatPrimaryConvId(me,contactKey){
+  if(!me||!contactKey)return'';
+  const to=chatContactFromKey(contactKey);
+  return chatConvId(me.key,to.key);
+}
+function chatMsgBetweenContact(m,me,contactKey){
+  if(!m||!me||!contactKey)return false;
+  const to=chatContactFromKey(contactKey);
+  const primary=chatConvId(me.key,to.key);
+  const mConv=m.convId||chatConvId(m.fromKey,m.toKey);
+  if(mConv===primary)return true;
+  const mine=chatAllKeysFor(me.key);
+  const theirs=chatAllKeysFor(to.key);
+  let fromMe=false,fromThem=false,toMe=false,toThem=false;
+  chatAllKeysFor(m.fromKey||'').forEach(function(k){
+    if(mine.has(k))fromMe=true;
+    if(theirs.has(k))fromThem=true;
+  });
+  chatAllKeysFor(m.toKey||'').forEach(function(k){
+    if(mine.has(k))toMe=true;
+    if(theirs.has(k))toThem=true;
+  });
+  return (fromMe&&toThem)||(fromThem&&toMe);
+}
 function chatPickSendRoute(me,contactKey){
   contactKey=String(contactKey||'').trim();
-  const fallback=chatContactFromKey(contactKey);
-  const msgs=chatMsgsForContact(me,contactKey);
-  if(!msgs.length){
-    return{
-      convId:chatConvId(me.key,fallback.key),
-      fromKey:me.key,
-      toKey:fallback.key,
-      toLabel:fallback.label
-    };
-  }
-  const last=msgs[msgs.length-1];
-  const convId=last.convId||chatConvId(last.fromKey,last.toKey);
-  const keys=convId.split('|');
-  let fromKey=me.key;
-  keys.forEach(function(k){
-    if(chatKeyInMyKeys(k))fromKey=k;
-  });
-  const myCanon=chatMyKeysCanon();
-  const otherKey=keys.find(function(k){return !myCanon.has(chatCanonicalKey(k));})||contactKey;
-  const to=chatContactFromKey(otherKey);
-  return{convId,fromKey,toKey:to.key,toLabel:to.label};
+  const to=chatContactFromKey(contactKey);
+  return{
+    convId:chatConvId(me.key,to.key),
+    fromKey:me.key,
+    toKey:to.key,
+    toLabel:to.label
+  };
 }
 function chatConvIdsForContact(me,contactKey){
   contactKey=String(contactKey||'');
-  if(!contactKey)return[];
+  if(!me||!contactKey)return[];
   const ids=new Set();
-  const to=chatContactFromKey(contactKey);
-  const myKeys=new Set();
-  if(me)chatAllKeysFor(me.key).forEach(function(k){myKeys.add(k);});
-  const ses=chatSessionUserContact();
-  if(ses)chatAllKeysFor(ses.key).forEach(function(k){myKeys.add(k);});
-  if(!myKeys.size&&me)myKeys.add(chatNormKey(me.key));
-  [...myKeys].forEach(function(a){
-    ids.add(chatConvId(a,to.key));
-    chatAllKeysFor(to.key).forEach(function(b){
-      if(chatNormKey(a)!==chatNormKey(b))ids.add(chatConvId(a,b));
-    });
+  const primary=chatPrimaryConvId(me,contactKey);
+  if(primary)ids.add(primary);
+  (chatMensajes||[]).forEach(function(m){
+    if(!chatMsgBetweenContact(m,me,contactKey))return;
+    const cid=m.convId||chatConvId(m.fromKey,m.toKey);
+    if(cid)ids.add(cid);
   });
   return[...ids];
 }
@@ -738,7 +737,10 @@ function chatMsgsForContact(me,contactKey){
   const seen=new Set(),out=[];
   chatConvIdsForContact(me,contactKey).forEach(function(id){
     chatConvMessages(id).forEach(function(m){
-      if(!seen.has(m.id)){seen.add(m.id);out.push(m);}
+      if(seen.has(m.id))return;
+      if(!chatMsgBetweenContact(m,me,contactKey))return;
+      seen.add(m.id);
+      out.push(m);
     });
   });
   return out.sort(function(a,b){return(a.ts||'').localeCompare(b.ts||'');});
@@ -1058,13 +1060,9 @@ async function chatAbrirConv(contactKey){
   if(tit)tit.textContent=c.label;
   if(sub)sub.textContent=c.meta||c.sub||'Conversación';
   await loadChatMensajesForContact(me,contactKey);
-  const msgs=chatMsgsForContact(me,contactKey);
-  const convId=msgs.length
-    ?(msgs[msgs.length-1].convId||chatConvId(msgs[msgs.length-1].fromKey,msgs[msgs.length-1].toKey))
-    :chatConvId(me.key,contactKey);
-  window._chatConvActiva=convId;
+  window._chatConvActiva=chatPrimaryConvId(me,contactKey);
   initChatSyncForContact(contactKey);
-  await chatMarcarLeido(convId);
+  await chatMarcarLeido(window._chatConvActiva);
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
@@ -1122,7 +1120,7 @@ function renderChatMessages(){
 }
 async function chatEnviarTexto(){
   const inp=document.getElementById('chat-inp');
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity();
   if(!inp||!me)return;
   const text=inp.value.trim();
   if(!text)return;
@@ -1316,7 +1314,7 @@ function chatUploadOverlayError(errMsg,fileName){
 async function chatEnviarArchivo(fileArg){
   let file=(fileArg instanceof File)?fileArg:null;
   const inp=document.getElementById('chat-file-inp');
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity();
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!contactKey||!me||_chatFileUploading){
     if(file&&inp&&!contactKey){
