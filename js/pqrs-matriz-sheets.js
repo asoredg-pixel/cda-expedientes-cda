@@ -9,6 +9,144 @@ function _pqrsMatrizSheetsToken() {
   return typeof _driveGetBestToken === 'function' ? _driveGetBestToken() : '';
 }
 
+const PQRS_MATRIZ_SHEET_LS_KEY = 'sst_pqrs_matriz_sheet_id';
+const PQRS_MATRIZ_HEADER_LABELS = [
+  'Item', 'Fecha recibo', 'Radicado recibo', 'Departamento', 'Tipo solicitud', 'Nombre / solicitante',
+  'Asunto', 'Plazo (días)', 'Responsable', 'Fecha vence', 'Estado', 'Días para vencer',
+  'Fecha contestación', 'Radicado contestación', 'Días respuesta', 'Estado final', 'Observaciones'
+];
+
+function pqrsMatrizActiveSheetId() {
+  try {
+    const ls = localStorage.getItem(PQRS_MATRIZ_SHEET_LS_KEY);
+    if (ls && String(ls).trim()) return String(ls).trim();
+  } catch (e) {}
+  return typeof PQRS_MATRIZ_SHEET_ID !== 'undefined' ? String(PQRS_MATRIZ_SHEET_ID || '').trim() : '';
+}
+
+function pqrsMatrizSheetUrl(id) {
+  id = id || pqrsMatrizActiveSheetId();
+  return id ? 'https://docs.google.com/spreadsheets/d/' + id + '/edit' : '';
+}
+
+function pqrsMatrizSetActiveSheetId(id, persistFs) {
+  id = String(id || '').trim();
+  if (!id) return;
+  try { localStorage.setItem(PQRS_MATRIZ_SHEET_LS_KEY, id); } catch (e) {}
+  _pqrsMatrizInvalidateMetaCache();
+  if (persistFs !== false) pqrsMatrizPersistSheetIdFirestore(id);
+}
+
+function pqrsMatrizApplySheetIdFromGlobal(g) {
+  if (g && g.pqrsMatrizSheetId) pqrsMatrizSetActiveSheetId(g.pqrsMatrizSheetId, false);
+}
+
+async function pqrsMatrizPersistSheetIdFirestore(id) {
+  const db = window._db;
+  if (!db || !window._fsSetDoc || !window._fsDoc) return false;
+  try {
+    await window._fsSetDoc(window._fsDoc(db, 'sistema', 'global'), {
+      pqrsMatrizSheetId: String(id || '').trim(),
+      pqrsMatrizSheetUrl: pqrsMatrizSheetUrl(id),
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+    return true;
+  } catch (err) {
+    console.warn('pqrsMatrizPersistSheetIdFirestore:', err);
+    return false;
+  }
+}
+
+function _pqrsMatrizParseApiError(status, text) {
+  let msg = String(text || '').slice(0, 240);
+  try {
+    const j = JSON.parse(text);
+    if (j.error && j.error.message) msg = j.error.message;
+  } catch (e) {}
+  const low = msg.toLowerCase();
+  if (status === 403) {
+    if (/insufficient|scope|credential/i.test(low)) return { kind: 'scope', msg: msg };
+    if (/not supported|cannot be loaded|unable to parse|invalid value/i.test(low)) return { kind: 'unsupported', msg: msg };
+    return { kind: 'permission', msg: msg };
+  }
+  if (status === 404) return { kind: 'missing', msg: msg };
+  return { kind: 'other', msg: msg };
+}
+
+function _pqrsMatrizErrFromException(err) {
+  const raw = String(err && err.message || err || '');
+  const m = raw.match(/Sheets API (\d+):\s*(.*)/);
+  if (m) return _pqrsMatrizParseApiError(parseInt(m[1], 10), m[2]);
+  if (/403|permission|denied/i.test(raw)) return { kind: 'permission', msg: raw };
+  return { kind: 'other', msg: raw };
+}
+
+function _pqrsMatrizShouldBootstrapFromErr(parsed) {
+  return parsed && (parsed.kind === 'permission' || parsed.kind === 'unsupported' || parsed.kind === 'missing');
+}
+
+async function _pqrsMatrizMoveToDriveFolder(fileId) {
+  const token = _pqrsMatrizSheetsToken();
+  const folderId = typeof PQRS_MATRIZ_DRIVE_FOLDER_ID !== 'undefined' ? PQRS_MATRIZ_DRIVE_FOLDER_ID : '';
+  if (!token || !folderId || !fileId) return;
+  const metaRes = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=parents', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!metaRes.ok) return;
+  const meta = await metaRes.json();
+  const prev = (meta.parents || []).join(',');
+  if (prev && prev.indexOf(folderId) >= 0) return;
+  await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?addParents=' + encodeURIComponent(folderId) + (prev ? '&removeParents=' + encodeURIComponent(prev) : ''), {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token }
+  });
+}
+
+async function _pqrsMatrizWriteHeaders(spreadsheetId, sheetName) {
+  const token = _pqrsMatrizSheetsToken();
+  if (!token) return;
+  const row = (typeof PQRS_MATRIZ_DATA_ROW !== 'undefined' ? PQRS_MATRIZ_DATA_ROW : 16) - 1;
+  const range = encodeURIComponent("'" + String(sheetName).replace(/'/g, "''") + "'!C" + row + ':S' + row);
+  await fetch(SHEETS_API_BASE + '/' + spreadsheetId + '/values/' + range + '?valueInputOption=USER_ENTERED', {
+    method: 'PUT',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values: [PQRS_MATRIZ_HEADER_LABELS] })
+  });
+}
+
+async function pqrsMatrizCrearHojaNativa() {
+  const token = _pqrsMatrizSheetsToken();
+  if (!token) throw new Error('Sin token Google. Conecte Gmail en Secretaría.');
+  const year = String(new Date().getFullYear());
+  const consName = _pqrsMatrizConsolidadoName();
+  const title = 'Matriz oficial PQRSD DEGUV ' + year + ' (SST)';
+  const res = await fetch(SHEETS_API_BASE, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      properties: { title: title },
+      sheets: [
+        { properties: { title: consName } },
+        { properties: { title: year } }
+      ]
+    })
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    const p = _pqrsMatrizParseApiError(res.status, text);
+    if (p.kind === 'scope') throw new Error('SCOPE_SHEETS: Falta permiso Google Sheets. Reconecte Gmail.');
+    throw new Error('No se pudo crear hoja: ' + (p.msg || text.slice(0, 100)));
+  }
+  const created = JSON.parse(text);
+  const spreadsheetId = created.spreadsheetId;
+  await _pqrsMatrizMoveToDriveFolder(spreadsheetId);
+  await _pqrsMatrizWriteHeaders(spreadsheetId, consName);
+  pqrsMatrizSetActiveSheetId(spreadsheetId, true);
+  return { spreadsheetId: spreadsheetId, url: pqrsMatrizSheetUrl(spreadsheetId), title: title, sheetName: consName };
+}
+window.pqrsMatrizCrearHojaNativa = pqrsMatrizCrearHojaNativa;
+window.pqrsMatrizActiveSheetId = pqrsMatrizActiveSheetId;
+
 /** Formato oficial: AA + MM + NNN (7 dígitos). Ej. 26 + 02 + 010 → 2602010 */
 function pqrsFormatNumeroRadicado(aa, mm, seq) {
   return String(aa).padStart(2, '0') + String(mm).padStart(2, '0') + String(seq).padStart(3, '0');
@@ -98,7 +236,9 @@ function pqrsMatrizMaxConsecutivoMes(aa, mm) {
 async function _pqrsSheetsApi(method, path, body) {
   const token = _pqrsMatrizSheetsToken();
   if (!token) throw new Error('Sin token Google. Conecte correo en Secretaría o Correos.');
-  const url = SHEETS_API_BASE + '/' + PQRS_MATRIZ_SHEET_ID + path;
+  const sheetId = pqrsMatrizActiveSheetId();
+  if (!sheetId) throw new Error('Sin ID de hoja matriz PQRSD configurado.');
+  const url = SHEETS_API_BASE + '/' + sheetId + path;
   const opts = {
     method: method,
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }
@@ -107,7 +247,8 @@ async function _pqrsSheetsApi(method, path, body) {
   const res = await fetch(url, opts);
   if (!res.ok) {
     const t = await res.text().catch(function() { return ''; });
-    throw new Error('Sheets API ' + res.status + ': ' + t.slice(0, 140));
+    const p = _pqrsMatrizParseApiError(res.status, t);
+    throw new Error('Sheets API ' + res.status + ': ' + (p.msg || t.slice(0, 140)));
   }
   if (res.status === 204) return null;
   const ct = res.headers.get('content-type') || '';
@@ -435,7 +576,8 @@ async function pqrsMatrizAppendExpediente(e) {
   return { ok: true, row: row, sheetName: sheetName };
 }
 
-async function pqrsMatrizSyncExpediente(e) {
+async function pqrsMatrizSyncExpediente(e, opts) {
+  opts = opts || {};
   if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return { skipped: true };
   try {
@@ -460,8 +602,24 @@ async function pqrsMatrizSyncExpediente(e) {
     e._pqrs_matriz_hoja = targetSheet;
     return await pqrsMatrizAppendExpediente(e);
   } catch (err) {
+    const parsed = _pqrsMatrizErrFromException(err);
+    if (!opts._bootstrapped && _pqrsMatrizShouldBootstrapFromErr(parsed)) {
+      try {
+        const created = await pqrsMatrizCrearHojaNativa();
+        if (typeof notif === 'function') {
+          notif('✅ Matriz PQRSD creada en Google Sheets. Datos desde fila ' + PQRS_MATRIZ_DATA_ROW + '.', 'ok');
+        }
+        console.info('Matriz PQRSD (Google Sheets nativo):', created.url);
+        return await pqrsMatrizSyncExpediente(e, Object.assign({}, opts, { _bootstrapped: true }));
+      } catch (bootErr) {
+        console.warn('pqrsMatrizSyncExpediente bootstrap:', bootErr);
+        if (String(bootErr.message || '').indexOf('SCOPE_SHEETS') >= 0 && typeof notif === 'function') {
+          notif('⚠️ Reconecte Gmail (Correos) y acepte el permiso de Google Sheets.', 'warn');
+        }
+      }
+    }
     console.warn('pqrsMatrizSyncExpediente:', err);
-    return { ok: false, error: err };
+    return { ok: false, error: err, parsed: parsed };
   }
 }
 
@@ -518,7 +676,16 @@ function pqrsMatrizSyncAfterSave(e, opts) {
         notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la hoja PQRSD en Google Sheets.', 'warn');
       }
     } else if (res && res.error && notify && typeof notif === 'function') {
-      notif('⚠️ Guardado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
+      const p = res.parsed || _pqrsMatrizErrFromException(res.error);
+      let msg = '⚠️ Guardado en sistema; Google Sheets no actualizado: ';
+      if (p.kind === 'scope') {
+        msg += 'reconecte Gmail y acepte permiso de Google Sheets.';
+      } else if (p.kind === 'permission' || p.kind === 'unsupported') {
+        msg += 'use una hoja Google Sheets nativa (no Excel). Vuelva a radicar para crearla automáticamente.';
+      } else {
+        msg += String(p.msg || res.error.message || res.error).slice(0, 72);
+      }
+      notif(msg, 'warn');
     }
     return res;
   });

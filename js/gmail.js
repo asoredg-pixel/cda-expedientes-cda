@@ -43,7 +43,7 @@ function _gmailOAuthDone() {
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
   if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
 }
-function _gmailStartOAuth(scope, onToken) {
+function _gmailStartOAuth(scope, onToken, promptOpt) {
   if (_gmailConnecting) {
     notif('Ya hay una conexión en curso. Si no aparece Google, espere unos segundos e intente de nuevo.', 'warn');
     return;
@@ -83,7 +83,7 @@ function _gmailStartOAuth(scope, onToken) {
     }
   });
   try {
-    tokenClient.requestAccessToken({ prompt: 'select_account' });
+    tokenClient.requestAccessToken({ prompt: promptOpt || 'select_account' });
   } catch (err) {
     console.error('requestAccessToken:', err);
     _gmailOAuthDone();
@@ -164,7 +164,15 @@ function gmailConnect(callback) {
     else gmailLoadInbox();
   });
 }
+function gmailReconnectForMatriz(callback) {
+  _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
+    gmailSetToken(tok, exp);
+    notif('Gmail reconectado con permiso de Google Sheets.', 'ok');
+    if (typeof callback === 'function') callback();
+  }, 'consent');
+}
 window.gmailConnect = gmailConnect;
+window.gmailReconnectForMatriz = gmailReconnectForMatriz;
 
 function gmailDisconnect() {
   gmailSetToken('');
