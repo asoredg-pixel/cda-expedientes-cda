@@ -18,6 +18,21 @@ Script para exportar a JSON las colecciones `usuarios`, `sistema/global` y `depa
 npm install
 ```
 
+### Sitio en GitHub Pages
+
+URL pública: `https://asoredg-pixel.github.io/cda-expedientes-cda/`
+
+El despliegue se hace con GitHub Actions (workflow `.github/workflows/deploy-pages.yml`) al hacer push a `main`.
+
+**Primera vez o si la web no actualiza:**
+
+1. En GitHub: **Settings → Pages → Build and deployment**
+2. **Source:** seleccione **GitHub Actions** (no “Deploy from a branch” antiguo)
+3. Haga push a `main` y espere que termine el workflow **Deploy GitHub Pages**
+4. Abra la app y verifique en Radicación el texto **· v20260702p** (o la versión actual de `SST_BUILD_ID` en `js/constants.js`)
+
+Si no aparece esa versión, el navegador o GitHub Pages aún sirven archivos viejos: use Ctrl+Shift+R o espere 2–5 minutos tras el deploy.
+
 ### Ejecución
 
 **Windows (PowerShell):**

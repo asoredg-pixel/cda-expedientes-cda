@@ -11408,7 +11408,7 @@ async function vitalFinalizarGestion(expId){
 // Notificaciones al ciudadano — correo automático (radicación / respuesta)
 // ===========================================================================
 function pqrsConsultaCiudadanaUrl(){
-  const base=typeof PUBLIC_APP_URL!=='undefined'?PUBLIC_APP_URL:'https://asoredg-pixel.github.io/cda-expedientes/';
+  const base=typeof PUBLIC_APP_URL!=='undefined'?PUBLIC_APP_URL:'https://asoredg-pixel.github.io/cda-expedientes-cda/';
   return String(base).replace(/\/?$/,'/');
 }
 function pqrsCorreoCiudadano(e){

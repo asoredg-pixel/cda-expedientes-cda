@@ -197,7 +197,9 @@ const TIPOS_ACTO_DEF=[
 ];
 
 // URL pública de la app (consulta ciudadana en correos al solicitante)
-const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes/';
+const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
+// Identificador de build (visible en Radicación para confirmar despliegue)
+const SST_BUILD_ID = '20260702p';
 
 // Matriz oficial PQRSD — Google Sheet en Drive (una pestaña por año)
 const PQRS_MATRIZ_SHEET_ID = '1MKh8YttjkDqqsyLmZtYP_0fOfWmYEIvpoqeO5nI9DuA';

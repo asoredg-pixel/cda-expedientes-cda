@@ -126,12 +126,18 @@ function resetSecRadicacionFormulario(){
   if(typeof onSecMedioRecepcionChange==='function')onSecMedioRecepcionChange();
   toggleSecPersona();
 }
+function secFormularioPristine(){
+  const exp=String((document.getElementById('sec-exp')||{}).value||'').trim();
+  const asu=String((document.getElementById('sec-asunto')||{}).value||'').trim();
+  return !exp&&!asu;
+}
 function poblarSecOficinaSelect(){
   const sel=document.getElementById('sec-oficina');
   if(!sel)return;
   sel.innerHTML='<option value="">— Seleccione oficina —</option>'+OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   updateSecFechaRadicVisibility();
-  initSecMedioNotificacion(true);
+  if(typeof resetSecRadicacionFormulario==='function'&&secFormularioPristine())resetSecRadicacionFormulario();
+  else if(typeof initSecMedioNotificacion==='function')initSecMedioNotificacion(true);
   renderSecGmailBloqueoRadicacion();
   if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }

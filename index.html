@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- SST UI v20260702o — formulario radicación sin valores por defecto -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<!-- SST UI v20260702p — deploy Pages + formulario radicación sin defaults -->
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,15 +15,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260625g"></script>
-<script src="js/constants.js?v=20260702g"></script>
+<script src="js/constants.js?v=20260702p"></script>
 <script src="js/utils.js?v=20260625g"></script>
 <script src="js/state.js?v=20260625g"></script>
 <script src="js/persistence.js?v=20260702n"></script>
 <script src="js/roles.js?v=20260702k"></script>
 <script src="js/config-store.js?v=20260625g"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260702n"></script>
-<script src="js/formulario.js?v=20260630c"></script>
+<script src="js/core.js?v=20260702p"></script>
+<script src="js/formulario.js?v=20260702p"></script>
 <script src="js/tareas.js?v=20260625g"></script>
 <script src="js/guardar-exp.js?v=20260702k"></script>
 <script src="js/consulta.js?v=20260702k"></script>
@@ -30,7 +33,7 @@
 <script src="js/chat.js?v=20260702m"></script>
 <script src="js/pqrs-matriz-export.js?v=20260702b"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702n"></script>
-<script src="js/pqrs.js?v=20260702o"></script>
+<script src="js/pqrs.js?v=20260702p"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260702g"></script>
 <script src="js/recursos.js?v=20260630h"></script>
@@ -644,7 +647,7 @@
         <button type="button" class="btn bp" id="sec-gmail-connect-btn" onclick="secGmailConnectParaRadicar()">Conectar bandeja Gmail</button>
       </div>
       <div class="slbl">Nueva radicación PQRSD</div>
-      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino.</div>
+      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino. <span id="sst-build-tag" style="font-size:10px;color:var(--tx3)"></span></div>
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label>
           <div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">
@@ -1054,6 +1057,8 @@ async function bootstrapApp(){
   initFirebaseAuthListener();
   initSecMedioNotificacion(true);
   if(typeof resetSecRadicacionFormulario==='function')resetSecRadicacionFormulario();
+  const buildTag=document.getElementById('sst-build-tag');
+  if(buildTag&&typeof SST_BUILD_ID!=='undefined')buildTag.textContent='· v'+SST_BUILD_ID;
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
