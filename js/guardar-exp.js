@@ -407,7 +407,7 @@ function editarExp(expId){
 }
 function eliminarExp(expId){
   const e=exps.find(x=>x._exp===expId);
-  if(e&&esPqrsSecretaria(e)&&!esSecretaria()){notif('Solo Secretaría puede eliminar PQRSD','err');return;}
+  if(e&&esPqrsSecretaria(e)&&!esSecretaria()&&!esAdministrador()){notif('Solo Secretaría o el administrador pueden eliminar PQRSD','err');return;}
   if(esUsuarioContratista()){notif('No puede eliminar expedientes','err');return;}
   if(esSoloLectura()){notif('En este modo no puede eliminar expedientes','err');return;}
   confirmPrecaucion({

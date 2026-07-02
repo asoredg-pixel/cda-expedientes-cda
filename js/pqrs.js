@@ -462,7 +462,7 @@ function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
   const pendientes=getPqrsPendientesTrasladoList(true);
-  const asignadas=all.filter(e=>e._pqrs_oficina&&!pqrsPendienteTraslado(e));
+  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e));
   const atendidas=all.filter(e=>pqrsEstaCerrada(e));
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
@@ -487,7 +487,8 @@ function renderSecretariaPqrs(){
     if(!asignadas.length)tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
     else tb.innerHTML=asignadas.map(e=>{
       const asunto=e.f_f1||e._pqrs_detalle||'—';
-      return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(labelOficina(e._pqrs_oficina))+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
+      const ofiLbl=e._pqrs_oficina?labelOficina(e._pqrs_oficina):'Sin oficina (registro anterior)';
+      return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(ofiLbl)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
         '<td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
     }).join('');
   }

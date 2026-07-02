@@ -504,8 +504,9 @@ function puedeMarcarPqrsInformativa(e){
   return false;
 }
 function puedeEliminarPqrs(e){
-  if(!e||!esPqrsSecretaria(e)||!esSecretaria())return false;
-  if(pqrsEstaCerrada(e))return esAdminActuandoComoSecretaria();
+  if(!e||!esPqrsSecretaria(e))return false;
+  if(!esSecretaria()&&!esAdministrador())return false;
+  if(pqrsEstaCerrada(e))return esAdministrador()||esAdminActuandoComoSecretaria();
   return true;
 }
 function pushPqrsAvisoOficina(e,oficinaId,tipo,texto){
@@ -980,7 +981,7 @@ function togglePqrsPrioritariaDs(expId){
   refreshPqrsDetalleViews(expId);
 }
 function eliminarPqrs(expId){
-  if(!esSecretaria()){notif('Solo Secretaría puede eliminar PQRSD','err');return;}
+  if(!esSecretaria()&&!esAdministrador()){notif('Solo Secretaría o el administrador pueden eliminar PQRSD','err');return;}
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e||!esPqrsSecretaria(e)){notif('PQRSD no encontrado','err');return;}
   if(!puedeEliminarPqrs(e)){

@@ -653,7 +653,7 @@ function getEncargadoOficina(oficinaId){
   return '';
 }
 function esPqrsSecretaria(e){
-  return !!(e&&e._radicado_secretaria&&esTramitePqrs(e._tramite));
+  return !!(e&&esTramitePqrs(e._tramite));
 }
 function pqrsPendienteTraslado(e){
   return !!(e&&e._pqrs_pendiente_traslado);

@@ -968,6 +968,7 @@ function conConsultaOneCard(e){
     const btnTrasIni=puedeTrasladarPqrsInicial(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+jsStr(e._exp)+'\')">↪ Trasladar a oficina</button>':'';
     const btnTras=puedeTrasladarPqrs(e)&&!pqrsEstaCerrada(e)?'<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+jsStr(e._exp)+'\')">↪ Trasladar</button>':'';
     const btnEdit=(esSecretaria()&&puedeEditarPqrsSecretaria(e))?pqrsBtnEdit(e._exp,'✏ Editar'):'';
+    const btnDel=puedeEliminarPqrs(e)?'<button type="button" class="btn bsm bd2" onclick="eliminarPqrs(\''+escAttr(e._exp)+'\')">🗑 Eliminar</button>':'';
     const docBtn=htmlPqrsDocumentoBtns(e);
     const abrirFn=esSecretaria()?"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('sec')":"openPqrsSidePanel('"+escAttr(e._exp)+"');showTab('pqrs-ofi')";
     return '<details class="ec-fold">'+
@@ -985,7 +986,7 @@ function conConsultaOneCard(e){
         (docBtn?('<div class="fx" style="gap:6px;margin-top:8px">'+docBtn+'</div>'):'')+
         renderPqrsTrazabilidadHtml(e)+
         htmlPqrsRespuestaRegistrada(e)+
-        '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTrasIni+btnTras+btnEdit+'</div>'+
+        '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTrasIni+btnTras+btnEdit+btnDel+'</div>'+
       '</div></details>';
   }
   const today=_conConsultaPag.today;
