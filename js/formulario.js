@@ -31,7 +31,13 @@ function showTab(t){
   const tabBtn=document.getElementById('tab-'+t);
   if(tabBtn){tabBtn.classList.add('on');tabBtn.classList.add('tab-selected');}
   if(t==='reg'){poblarTramSelect();renderTabla();}
-  if(t==='sec'){poblarSecOficinaSelect();renderSecretariaPqrs();}
+  if (t==='sec'){
+    poblarSecOficinaSelect();
+    renderSecretariaPqrs();
+    if(window._gmailPendingMsgId&&_gmailCurrentMsg&&typeof renderSecEmailPanel==='function'){
+      renderSecEmailPanel(_gmailCurrentMsg);
+    }
+  }
   if(t==='pqrs-ofi'){initPeriodoFiltros('pqrs-ofi');renderPqrsOficinaInbox();}
   if(t==='gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
   if(t==='rec'){if(typeof recursosInitPanel==='function')recursosInitPanel();}

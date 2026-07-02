@@ -1164,15 +1164,23 @@ details.pqrs-email-origen[open] summary::before{transform:rotate(90deg)}
    VISTA PARALELA CORREO / FORMULARIO (Split radicación secretaría)
    ===================================================================== */
 #sec-radicar-split{display:flex;gap:1rem;align-items:flex-start}
+#sec-radicar-split.split-active{align-items:stretch}
 /* Panel izquierdo — correo (oculto por defecto, visible cuando activo) */
-#sec-email-panel{display:none;flex-direction:column;flex:0 0 47%;max-width:47%;min-width:0;position:sticky;top:8px;max-height:calc(100vh - 80px);overflow:hidden;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg);box-shadow:var(--sh)}
+#sec-email-panel{display:none;flex-direction:column;flex:0 0 47%;max-width:47%;min-width:0;position:sticky;top:8px;min-height:min(72vh,calc(100vh - 100px));height:min(72vh,calc(100vh - 100px));max-height:calc(100vh - 80px);overflow:hidden;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg);box-shadow:var(--sh)}
 #sec-email-panel.active{display:flex}
 #sec-form-card{flex:1 1 0;min-width:0}
 /* Cabecera del panel de correo */
-#sec-email-panel-hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0}
-#sec-email-panel-from{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sec-email-panel-hdr{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--sf);border-bottom:1px solid var(--bd);flex-shrink:0}
+#sec-email-panel-from{min-width:0;overflow:hidden;line-height:1.45}
 /* Cuerpo del correo — con scroll propio */
-#sec-email-panel-body{flex:1;overflow-y:auto;padding:12px 14px;font-size:13px;line-height:1.6}
+#sec-email-panel-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:auto;padding:12px 14px;font-size:13px;line-height:1.6;-webkit-overflow-scrolling:touch}
+#sec-email-panel-body .sec-split-email-body{user-select:text;-webkit-user-select:text}
+#sec-email-panel-body blockquote,
+#sec-email-panel-body .gmail_quote,
+#sec-email-panel-body div[style*="border-left"]{border-left:3px solid color-mix(in srgb,var(--tx3) 55%,transparent)!important;margin:10px 0!important;padding:4px 0 4px 12px!important;color:var(--tx2)}
+#sec-email-panel-body .gm-msg-plain{white-space:pre-wrap;word-break:break-word;font-family:'DM Sans',sans-serif;margin:0}
+#sec-email-panel-body img{max-width:100%;height:auto}
+#sec-email-panel-body a{color:var(--ac)}
 /* Visor inline de adjunto — overlay dentro del panel izquierdo */
 #sec-att-inline{display:none;position:absolute;inset:0;flex-direction:column;background:var(--bg);border-radius:var(--r);z-index:10}
 #sec-att-inline.open{display:flex}
@@ -1184,6 +1192,7 @@ details.pqrs-email-origen[open] summary::before{transform:rotate(90deg)}
 /* En pantallas pequeñas el split pasa a columna */
 @media(max-width:860px){
   #sec-radicar-split{flex-direction:column}
+  #sec-radicar-split.split-active #sec-email-panel{flex:none;max-width:100%;width:100%;position:static;min-height:min(55vh,480px);height:min(55vh,480px);max-height:55vh}
   #sec-email-panel{flex:none;max-width:100%;width:100%;position:static;max-height:50vh}
   #sec-form-card{width:100%}
 }

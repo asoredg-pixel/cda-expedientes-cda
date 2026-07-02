@@ -415,6 +415,8 @@ function gmailGetHeader(headers, name) {
 
 function gmailExtractParts(payload) {
   const result = { textHtml: '', textPlain: '', attachments: [] };
+  const htmlParts = [];
+  const plainParts = [];
   if (!payload) return result;
   function walk(p) {
     if (!p) return;
@@ -427,13 +429,21 @@ function gmailExtractParts(payload) {
         size: (p.body.size || 0)
       });
     } else if (mime === 'text/html' && p.body && p.body.data) {
-      result.textHtml = gmailDecodeBase64url(p.body.data);
+      htmlParts.push(gmailDecodeBase64url(p.body.data));
     } else if (mime === 'text/plain' && p.body && p.body.data) {
-      result.textPlain = gmailDecodeBase64url(p.body.data);
+      plainParts.push(gmailDecodeBase64url(p.body.data));
     }
     if (Array.isArray(p.parts)) p.parts.forEach(walk);
   }
   walk(payload);
+  if (htmlParts.length) {
+    htmlParts.sort(function(a, b) { return b.length - a.length; });
+    result.textHtml = htmlParts[0];
+  }
+  if (plainParts.length) {
+    plainParts.sort(function(a, b) { return b.length - a.length; });
+    result.textPlain = plainParts[0];
+  }
   return result;
 }
 
@@ -454,6 +464,100 @@ function gmailFmtDate(dateStr) {
     return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) +
       ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   } catch (e) { return dateStr; }
+}
+
+function gmailMsgBodyHtmlForView(parts) {
+  parts = parts || {};
+  if (parts.textHtml) {
+    const safe = (typeof DOMPurify !== 'undefined')
+      ? DOMPurify.sanitize(parts.textHtml, { USE_PROFILES: { html: true }, ADD_ATTR: ['target', 'style', 'class'] })
+      : parts.textHtml;
+    return '<div class="gmail-msg-body sec-split-email-body">' + safe + '</div>';
+  }
+  if (parts.textPlain) {
+    return '<pre class="gmail-msg-body gm-msg-plain sec-split-email-body">' + escTextarea(parts.textPlain) + '</pre>';
+  }
+  return '<div class="gmail-msg-body sec-split-email-body" style="color:var(--tx3)">(Sin contenido visible en el correo)</div>';
+}
+
+function gmailSplitAttsHtml(msg, atts, chipPrefix) {
+  chipPrefix = chipPrefix || 'split-chip-';
+  if (!atts || !atts.length) return '';
+  return '<span style="font-weight:600;font-size:12px;flex-shrink:0">Adjuntos (' + atts.length + '):</span> ' +
+    atts.map(function(a) {
+      var sizeStr = a.size > 1024 ? Math.round(a.size / 1024) + ' KB' : (a.size || '?') + ' B';
+      var isImg = (a.mimeType || '').startsWith('image/');
+      var ico = isImg ? '🖼️' : ((a.mimeType || '').includes('pdf') ? '📄' : '📎');
+      if (a.attachmentId) {
+        return '<button id="' + chipPrefix + escAttr(a.attachmentId) + '" class="gmail-att-chip" ' +
+          'onclick="openSplitAttViewer(\'' + escAttr(msg.id) + '\',\'' + escAttr(a.attachmentId) + '\',\'' + escAttr(a.filename) + '\',\'' + escAttr(a.mimeType || '') + '\')" ' +
+          'title="' + escAttr(a.filename) + ' (' + sizeStr + ')">' +
+          '<span class="att-ico">' + ico + '</span>' +
+          '<span class="att-name">' + escAttr(a.filename) + '</span>' +
+          '<em class="att-size">(' + sizeStr + ')</em>' +
+          '</button>';
+      }
+      return '<span class="gmail-att-chip"><span class="att-ico">' + ico + '</span><span class="att-name">' + escAttr(a.filename) + '</span></span>';
+    }).join('');
+}
+
+function renderSecEmailPanel(msg) {
+  if (!msg) return;
+  var headers = (msg.payload && msg.payload.headers) || [];
+  var from = gmailParseFrom(gmailGetHeader(headers, 'from'));
+  var to = gmailGetHeader(headers, 'to') || '';
+  var cc = gmailGetHeader(headers, 'cc') || '';
+  var subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
+  var date = gmailFmtDate(gmailGetHeader(headers, 'date') || '');
+  var parts = gmailExtractParts(msg.payload);
+  var atts = parts.attachments || [];
+
+  var fromEl = document.getElementById('sec-email-panel-from');
+  var dateEl = document.getElementById('sec-email-panel-date');
+  var subjectEl = document.getElementById('sec-email-panel-subject');
+  var metaEl = document.getElementById('sec-email-panel-meta');
+  if (fromEl) {
+    fromEl.innerHTML = 'De: <strong>' + escAttr(from.name || from.email || 'Remitente desconocido') + '</strong>' +
+      (from.email ? ' <span style="font-weight:400;color:var(--tx2)">&lt;' + escAttr(from.email) + '&gt;</span>' : '');
+  }
+  if (dateEl) dateEl.textContent = date;
+  if (subjectEl) subjectEl.textContent = subject;
+  if (metaEl) {
+    var meta = [];
+    if (to) meta.push('Para: ' + escAttr(to));
+    if (cc) meta.push('Cc: ' + escAttr(cc));
+    metaEl.innerHTML = meta.length ? meta.join(' · ') : '';
+    metaEl.style.display = meta.length ? '' : 'none';
+  }
+
+  var attsEl = document.getElementById('sec-email-panel-atts');
+  if (attsEl) {
+    if (atts.length) {
+      attsEl.style.display = '';
+      attsEl.innerHTML = gmailSplitAttsHtml(msg, atts, 'split-chip-');
+    } else {
+      attsEl.style.display = 'none';
+      attsEl.innerHTML = '';
+    }
+  }
+
+  var bodyEl = document.getElementById('sec-email-panel-body');
+  if (bodyEl) bodyEl.innerHTML = gmailMsgBodyHtmlForView(parts);
+
+  var emailPanel = document.getElementById('sec-email-panel');
+  var split = document.getElementById('sec-radicar-split');
+  if (emailPanel) emailPanel.classList.add('active');
+  if (split) split.classList.add('split-active');
+  closeSplitAttViewer();
+}
+
+function activarSplitRadicacionEmail(msg) {
+  if (!msg) return;
+  renderSecEmailPanel(msg);
+  var split = document.getElementById('sec-radicar-split');
+  if (split) split.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  var bodyEl = document.getElementById('sec-email-panel-body');
+  if (bodyEl) bodyEl.scrollTop = 0;
 }
 
 function gmailMsgHasAttachments(msg) {
@@ -1823,9 +1927,7 @@ function renderGmailMessageView(msg) {
   const date = gmailGetHeader(headers, 'date') || '';
   const parts = gmailExtractParts(msg.payload);
   const atts = parts.attachments;
-  // Sanitize body HTML with DOMPurify (already loaded in the app)
-  const rawBody = parts.textHtml || ('<pre style="white-space:pre-wrap;font-size:13px">' + escAttr(parts.textPlain || '(sin cuerpo)') + '</pre>');
-  const safeBody = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(rawBody, { USE_PROFILES: { html: true } }) : rawBody;
+  const bodyBlock = gmailMsgBodyHtmlForView(parts);
   const attsHtml = atts.length
     ? '<div class="gmail-atts-bar">' +
       '<span style="font-weight:600;font-size:12px">Adjuntos (' + atts.length + '):</span> ' +
@@ -1862,7 +1964,7 @@ function renderGmailMessageView(msg) {
       : '') +
     '</div>' +
     attsHtml +
-    '<div class="gmail-msg-body">' + safeBody + '</div>';
+    bodyBlock;
 }
 
 // ----------------------------------------------------------------
@@ -1946,77 +2048,14 @@ function prePopularFormDesdeEmail(msg) {
 
 function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
-  // Pre-llenar el formulario con datos del correo
   prePopularFormDesdeEmail(_gmailCurrentMsg);
-  // Cerrar visor de adjuntos full-screen si estaba abierto
   if (typeof gmailCloseAttViewer === 'function') gmailCloseAttViewer();
-  // Ocultar panel Gmail (bandeja) para liberar espacio
   var panelBody = document.getElementById('gmail-panel-body');
   var toggleBtn = document.getElementById('gmail-toggle-btn');
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
-
-  // Construir la previsualización del correo en el panel izquierdo
-  var msg = _gmailCurrentMsg;
-  var headers = (msg.payload && msg.payload.headers) || [];
-  var from = gmailParseFrom(gmailGetHeader(headers, 'from'));
-  var subject = gmailGetHeader(headers, 'subject') || '(Sin asunto)';
-  var date = gmailFmtDate(gmailGetHeader(headers, 'date') || '');
-  var parts = gmailExtractParts(msg.payload);
-  var atts = parts.attachments || [];
-  var rawBody = parts.textHtml || ('<pre style="white-space:pre-wrap;font-size:13px;margin:0">' + escAttr(parts.textPlain || '(sin cuerpo)') + '</pre>');
-  var safeBody = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(rawBody, { USE_PROFILES: { html: true } }) : rawBody;
-
-  // Cabecera
-  var fromEl = document.getElementById('sec-email-panel-from');
-  var dateEl = document.getElementById('sec-email-panel-date');
-  var subjectEl = document.getElementById('sec-email-panel-subject');
-  if (fromEl) fromEl.textContent = (from.name || from.email || 'Remitente desconocido');
-  if (dateEl) dateEl.textContent = date;
-  if (subjectEl) subjectEl.textContent = subject;
-
-  // Adjuntos
-  var attsEl = document.getElementById('sec-email-panel-atts');
-  if (attsEl) {
-    if (atts.length) {
-      attsEl.style.display = '';
-      attsEl.innerHTML = '<span style="font-weight:600;font-size:12px;flex-shrink:0">Adjuntos (' + atts.length + '):</span> ' +
-        atts.map(function(a) {
-          var sizeStr = a.size > 1024 ? Math.round(a.size / 1024) + ' KB' : (a.size || '?') + ' B';
-          var isImg = (a.mimeType || '').startsWith('image/');
-          var ico = isImg ? '🖼️' : ((a.mimeType || '').includes('pdf') ? '📄' : '📎');
-          if (a.attachmentId) {
-            return '<button id="split-chip-' + escAttr(a.attachmentId) + '" class="gmail-att-chip" ' +
-              'onclick="openSplitAttViewer(\'' + escAttr(msg.id) + '\',\'' + escAttr(a.attachmentId) + '\',\'' + escAttr(a.filename) + '\',\'' + escAttr(a.mimeType || '') + '\')" ' +
-              'title="' + escAttr(a.filename) + ' (' + sizeStr + ')">' +
-              '<span class="att-ico">' + ico + '</span>' +
-              '<span class="att-name">' + escAttr(a.filename) + '</span>' +
-              '<em class="att-size">(' + sizeStr + ')</em>' +
-              '</button>';
-          }
-          return '<span class="gmail-att-chip"><span class="att-ico">' + ico + '</span><span class="att-name">' + escAttr(a.filename) + '</span></span>';
-        }).join('');
-    } else {
-      attsEl.style.display = 'none';
-      attsEl.innerHTML = '';
-    }
-  }
-
-  // Cuerpo del correo
-  var bodyEl = document.getElementById('sec-email-panel-body');
-  if (bodyEl) bodyEl.innerHTML = safeBody;
-
-  // Activar la vista paralela
-  var emailPanel = document.getElementById('sec-email-panel');
-  if (emailPanel) emailPanel.classList.add('active');
-
-  // Asegurar que el visor inline esté cerrado
-  closeSplitAttViewer();
-
-  // Scroll al inicio del split
-  var split = document.getElementById('sec-radicar-split');
-  if (split) split.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  notif('Formulario pre-llenado. Revise el correo a la izquierda y complete la radicación.', 'ok');
+  activarSplitRadicacionEmail(_gmailCurrentMsg);
+  notif('Formulario pre-llenado. Revise el correo a la izquierda y copie los datos al formulario.', 'ok');
 }
 
 // Abre el visor inline de adjuntos dentro del panel izquierdo del split
@@ -2086,7 +2125,9 @@ function closeSplitAttViewer() {
 // Cierra el split view y vuelve al layout normal
 function cerrarSplitView() {
   var emailPanel = document.getElementById('sec-email-panel');
+  var split = document.getElementById('sec-radicar-split');
   if (emailPanel) emailPanel.classList.remove('active');
+  if (split) split.classList.remove('split-active');
   closeSplitAttViewer();
   // Mostrar la bandeja Gmail de nuevo
   var panelBody = document.getElementById('gmail-panel-body');
@@ -2547,11 +2588,8 @@ function _renderGmailOfiMsgView(msg) {
   const parts    = gmailExtractParts(msg.payload);
   // Body
   let bodyHtml = '';
-  if (parts.textHtml) {
-    const safe = (typeof DOMPurify !== 'undefined') ? DOMPurify.sanitize(parts.textHtml, { USE_PROFILES:{html:true} }) : parts.textHtml;
-    bodyHtml = '<div class="gm-msg-body">' + safe + '</div>';
-  } else if (parts.textPlain) {
-    bodyHtml = '<pre class="gm-msg-body gm-msg-plain">' + escAttr(parts.textPlain) + '</pre>';
+  if (parts.textHtml || parts.textPlain) {
+    bodyHtml = gmailMsgBodyHtmlForView(parts).replace('sec-split-email-body', 'gm-msg-body');
   }
   // Attachments
   let attsHtml = '';
@@ -3122,16 +3160,15 @@ function gmailOfiAbrirComposeRespuestaPqrs(expId) {
 function gmailOfiRadicarDesdeCorreo() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) return;
-  // Bridge: make this the active message for the secretary's radicación flow
   _gmailCurrentMsg = msg;
-  window._gmailPendingMsgId    = msg.id;
+  window._gmailPendingMsgId = msg.id;
   window._gmailPendingAttachments = null;
-  // Navigate to Radicación tab
   if (typeof showTab === 'function') showTab('sec');
-  // Trigger split-view + form pre-population (existing secretary function)
-  setTimeout(function() {
-    if (typeof gmailPreRadicarPqrs === 'function') gmailPreRadicarPqrs();
-  }, 120);
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (typeof gmailPreRadicarPqrs === 'function') gmailPreRadicarPqrs();
+    });
+  });
 }
 
 // ---- Init panel ----
