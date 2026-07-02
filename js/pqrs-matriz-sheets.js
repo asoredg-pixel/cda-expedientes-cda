@@ -57,13 +57,37 @@ async function pqrsMatrizPersistSheetIdFirestore(id) {
   }
 }
 
+function _pqrsMatrizGcpProjectNumber() {
+  if (typeof GOOGLE_CLOUD_PROJECT_NUMBER !== 'undefined' && GOOGLE_CLOUD_PROJECT_NUMBER) {
+    return String(GOOGLE_CLOUD_PROJECT_NUMBER);
+  }
+  const cid = typeof GMAIL_OAUTH_CLIENT_ID !== 'undefined' ? GMAIL_OAUTH_CLIENT_ID : (window._gmailClientId || '');
+  const m = String(cid).match(/^(\d+)-/);
+  return m ? m[1] : '215089141263';
+}
+
+function pqrsMatrizSheetsApiEnableUrl() {
+  if (typeof GOOGLE_SHEETS_API_ENABLE_URL !== 'undefined' && GOOGLE_SHEETS_API_ENABLE_URL) {
+    return GOOGLE_SHEETS_API_ENABLE_URL;
+  }
+  return 'https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=' + _pqrsMatrizGcpProjectNumber();
+}
+
+function _pqrsMatrizMsgLooksApiDisabled(msg) {
+  const low = String(msg || '').toLowerCase();
+  return /has not been used|not been enabled|service_disabled|access not configured|sheets api has not/i.test(low);
+}
+
 function _pqrsMatrizParseApiError(status, text) {
-  let msg = String(text || '').slice(0, 240);
+  let msg = String(text || '').slice(0, 400);
   try {
     const j = JSON.parse(text);
     if (j.error && j.error.message) msg = j.error.message;
   } catch (e) {}
   const low = msg.toLowerCase();
+  if (_pqrsMatrizMsgLooksApiDisabled(msg)) {
+    return { kind: 'api_disabled', msg: msg, enableUrl: pqrsMatrizSheetsApiEnableUrl() };
+  }
   if (status === 403) {
     if (/insufficient|scope|credential/i.test(low)) return { kind: 'scope', msg: msg };
     if (/not supported|cannot be loaded|unable to parse|invalid value/i.test(low)) return { kind: 'unsupported', msg: msg };
@@ -75,11 +99,27 @@ function _pqrsMatrizParseApiError(status, text) {
 
 function _pqrsMatrizErrFromException(err) {
   const raw = String(err && err.message || err || '');
+  if (_pqrsMatrizMsgLooksApiDisabled(raw)) {
+    return { kind: 'api_disabled', msg: raw, enableUrl: pqrsMatrizSheetsApiEnableUrl() };
+  }
   const m = raw.match(/Sheets API (\d+):\s*(.*)/);
   if (m) return _pqrsMatrizParseApiError(parseInt(m[1], 10), m[2]);
   if (/403|permission|denied/i.test(raw)) return { kind: 'permission', msg: raw };
   return { kind: 'other', msg: raw };
 }
+
+function pqrsMatrizSyncErrorMessage(parsed) {
+  parsed = parsed || { kind: 'other', msg: '' };
+  if (parsed.kind === 'scope') return 'reconecte Gmail y acepte permiso de Google Sheets.';
+  if (parsed.kind === 'api_disabled') {
+    return 'falta habilitar Google Sheets API en Google Cloud (proyecto Firebase). Abra el enlace en consola (F12) o pida al administrador.';
+  }
+  if (parsed.kind === 'permission' || parsed.kind === 'unsupported') {
+    return 'use una hoja Google Sheets nativa (no Excel). Vuelva a radicar para crearla en la carpeta PQRSD.';
+  }
+  return String(parsed.msg || '').slice(0, 120);
+}
+window.pqrsMatrizSheetsApiEnableUrl = pqrsMatrizSheetsApiEnableUrl;
 
 function _pqrsMatrizShouldBootstrapFromErr(parsed) {
   return parsed && (parsed.kind === 'permission' || parsed.kind === 'unsupported' || parsed.kind === 'missing');
@@ -157,6 +197,10 @@ async function pqrsMatrizCrearHojaNativa() {
   if (!res.ok) {
     const p = _pqrsMatrizParseApiError(res.status, text);
     if (p.kind === 'scope') throw new Error('SCOPE_SHEETS: Falta permiso Google Sheets. Reconecte Gmail.');
+    if (p.kind === 'api_disabled') {
+      console.error('Habilitar Google Sheets API:', p.enableUrl);
+      throw new Error('API_DISABLED_SHEETS: ' + (p.msg || 'Google Sheets API no habilitada en el proyecto Firebase.'));
+    }
     throw new Error('No se pudo crear hoja: ' + (p.msg || text.slice(0, 100)));
   }
   const created = JSON.parse(text);
@@ -608,6 +652,11 @@ async function pqrsMatrizSyncExpediente(e, opts) {
     if (ready && ready.error) {
       if (ready.parsed && ready.parsed.kind === 'scope' && typeof notif === 'function') {
         notif('⚠️ Reconecte Gmail (Correos → Reconectar) y acepte permiso de Google Sheets.', 'warn');
+      } else if (ready.parsed && ready.parsed.kind === 'api_disabled') {
+        console.error('Habilitar Google Sheets API:', ready.parsed.enableUrl || pqrsMatrizSheetsApiEnableUrl());
+        if (typeof notif === 'function') {
+          notif('⚠️ ' + pqrsMatrizSyncErrorMessage(ready.parsed), 'warn');
+        }
       }
       return { ok: false, error: ready.error, parsed: ready.parsed };
     }
@@ -710,15 +759,10 @@ function pqrsMatrizSyncAfterSave(e, opts) {
       }
     } else if (res && res.error && notify && typeof notif === 'function') {
       const p = res.parsed || _pqrsMatrizErrFromException(res.error);
-      let msg = '⚠️ Guardado en sistema; Google Sheets no actualizado: ';
-      if (p.kind === 'scope') {
-        msg += 'reconecte Gmail y acepte permiso de Google Sheets.';
-      } else if (p.kind === 'permission' || p.kind === 'unsupported') {
-        msg += 'use una hoja Google Sheets nativa (no Excel). Vuelva a radicar para crearla automáticamente.';
-      } else {
-        msg += String(p.msg || res.error.message || res.error).slice(0, 72);
+      if (p.kind === 'api_disabled') {
+        console.error('Habilitar Google Sheets API:', p.enableUrl || pqrsMatrizSheetsApiEnableUrl());
       }
-      notif(msg, 'warn');
+      notif('⚠️ Guardado en sistema; Google Sheets no actualizado: ' + pqrsMatrizSyncErrorMessage(p), 'warn');
     }
     return res;
   });

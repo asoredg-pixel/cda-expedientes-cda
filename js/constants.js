@@ -199,14 +199,18 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260702t';
+const SST_BUILD_ID = '20260702u';
 
 // Matriz oficial PQRSD — Google Sheet en Drive (pestaña por año o CONSOLIDADO PQRSD)
 const PQRS_MATRIZ_SHEET_ID = '1FaaTezSwWZmcDjlzEEu4FEgL5vLdaWau';
 const PQRS_MATRIZ_DATA_ROW = 16;
 // Carpeta Drive matriz oficial PQRSD (cdaguaviare1)
+// https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
 const PQRS_MATRIZ_DRIVE_FOLDER_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
 const PQRS_MATRIZ_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/' + PQRS_MATRIZ_DRIVE_FOLDER_ID;
+// Habilitar una sola vez en Google Cloud (proyecto Firebase cda-tramites)
+const GOOGLE_CLOUD_PROJECT_NUMBER = '215089141263';
+const GOOGLE_SHEETS_API_ENABLE_URL = 'https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=' + GOOGLE_CLOUD_PROJECT_NUMBER;
 
 // ================================================================
 // PQRS WORKFLOW — fases y tipos de respuesta

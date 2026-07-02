@@ -41,6 +41,17 @@ El despliegue se hace con GitHub Actions (workflow `.github/workflows/deploy-pag
 
 Si no aparece la versión nueva, el navegador o GitHub Pages aún sirven archivos viejos: use Ctrl+Shift+R o espere 2–5 minutos tras el deploy.
 
+### Matriz PQRSD → Google Sheets (una sola vez en Google Cloud)
+
+Si al radicar aparece *"Google Sheets API has not been used in project…"*:
+
+1. Entre con cuenta administradora del proyecto Firebase (**cda-tramites**).
+2. Abra: [Habilitar Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=215089141263)
+3. Pulse **Habilitar** / **Enable** y espere 2–5 minutos.
+4. En la app: **Correos → Reconectar** Gmail (cuenta institucional) y radique de prueba.
+
+La hoja se crea en la carpeta Drive PQRSD: `https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS` (pestaña **CONSOLIDADO PQRSD**, datos desde fila 16).
+
 ### Ejecución
 
 **Windows (PowerShell):**
