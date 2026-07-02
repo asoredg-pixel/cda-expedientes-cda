@@ -1,7 +1,6 @@
 // =============================================================================
-// pqrs-matriz-sheets.js — Consecutivo PQRSD y sync opcional con Google Sheets
-// Formato radicado: AA + MM + NNN (7 dígitos). AA y MM = fecha de radicación; NNN = consecutivo mensual (reinicia cada mes).
-// Requiere: buildPqrsMatrizRecord (pqrs-matriz-export.js)
+// pqrs-matriz-sheets.js — Consecutivo PQRSD (AAMMNNN) y helpers legacy Sheets API.
+// Al guardar PQRSD: persistExpedienteGranular → pqrsMatrizSyncAfterSave → publica XLSX en Drive.
 // =============================================================================
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -484,23 +483,7 @@ async function pqrsMatrizLeerRadicadosSheetTabs() {
 async function pqrsMatrizSiguienteNumero(fechaRef) {
   const aa = pqrsAnioCortoDesdeFecha(fechaRef);
   const mm = pqrsMesDesdeFecha(fechaRef);
-  let maxSeq = pqrsMatrizMaxConsecutivoMes(aa, mm);
-
-  if (_pqrsMatrizSheetsToken()) {
-    try {
-      const year = String(fechaRef || '').slice(0, 4) || String(new Date().getFullYear());
-      await pqrsMatrizEnsureTabAnio(year);
-      const radicados = await pqrsMatrizLeerRadicadosSheetTabs();
-      const maxRef = { v: maxSeq };
-      radicados.forEach(function(r) {
-        pqrsMatrizRegistrarRadicadoEnMax(r, aa, mm, maxRef);
-      });
-      maxSeq = maxRef.v;
-    } catch (err) {
-      console.warn('pqrsMatrizSiguienteNumero (sheet):', err);
-    }
-  }
-
+  const maxSeq = pqrsMatrizMaxConsecutivoMes(aa, mm);
   return pqrsFormatNumeroRadicado(aa, mm, maxSeq + 1);
 }
 
@@ -778,13 +761,10 @@ function _pqrsMatrizSyncNotify(opts) {
 function pqrsMatrizSyncAfterDelete(e, opts) {
   opts = opts || {};
   const notify = _pqrsMatrizSyncNotify(opts);
-  return pqrsMatrizDeleteExpediente(e, opts).then(function(res) {
-    if (res && res.noToken) {
-      if ((opts.warnNoToken || notify) && typeof notif === 'function') {
-        notif('⚠️ Conecte Gmail (Secretaría) para eliminar la fila en Google Sheets.', 'warn');
-      }
-    } else if (res && res.error && notify && typeof notif === 'function') {
-      notif('⚠️ Eliminado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
+  if (typeof pqrsMatrizPublicarEnDriveAsync !== 'function') return Promise.resolve(null);
+  return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(res) {
+    if (res && res.noToken && (opts.warnNoToken || notify) && typeof notif === 'function') {
+      notif('⚠️ Conecte Gmail (Secretaría) para actualizar la matriz PQRSD en Drive.', 'warn');
     }
     return res;
   });
@@ -794,19 +774,10 @@ function pqrsMatrizSyncAfterSave(e, opts) {
   opts = opts || {};
   const notify = _pqrsMatrizSyncNotify(opts);
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return Promise.resolve(null);
-  return pqrsMatrizSyncExpediente(e).then(function(res) {
-    if (res && res.ok) {
-      if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
-    } else if (res && res.noToken) {
-      if ((opts.warnNoToken || notify) && typeof notif === 'function') {
-        notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la hoja PQRSD en Google Sheets.', 'warn');
-      }
-    } else if (res && res.error && notify && typeof notif === 'function') {
-      const p = res.parsed || _pqrsMatrizErrFromException(res.error);
-      if (p.kind === 'api_disabled') {
-        console.error('Habilitar Google Sheets API:', p.enableUrl || pqrsMatrizSheetsApiEnableUrl());
-      }
-      notif('⚠️ Guardado en sistema; Google Sheets no actualizado: ' + pqrsMatrizSyncErrorMessage(p), 'warn');
+  if (typeof pqrsMatrizPublicarEnDriveAsync !== 'function') return Promise.resolve(null);
+  return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(res) {
+    if (res && res.noToken && (opts.warnNoToken || notify) && typeof notif === 'function') {
+      notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
     }
     return res;
   });

@@ -396,18 +396,6 @@ async function guardarPqrsSecretaria(modo){
   try{
     await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
   }catch(err){console.warn('notif radicacion auto:',err);}
-  try{
-    if(typeof pqrsMatrizSyncAfterSave==='function'){
-      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true,notifyOnError:true});
-      if(syncRes&&syncRes.error){
-        console.warn('Google Sheets PQRSD:',syncRes.error);
-        const errMsg=String(syncRes.error.message||syncRes.error||'');
-        if(/403|permission|denied/i.test(errMsg)){
-          console.warn('Sheets 403: verifique que cdaguaviare1 tenga permiso de edición en la hoja matriz y reconecte Gmail (Secretaría).');
-        }
-      }
-    }
-  }catch(err){console.warn('matriz sheets radicacion:',err);}
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;

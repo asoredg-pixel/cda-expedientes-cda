@@ -801,7 +801,6 @@ async function submitPqrsRespuesta(expId){
   refreshPqrsDetalleViews(expId);
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
 
   // Enviar correo si canal=correo y hay token
   if(canal===PQRS_WF_CANAL.CORREO&&ciudEmail){
@@ -1000,13 +999,13 @@ function eliminarPqrs(expId){
       notif(errMsg,'err');
       return;
     }
+    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
     let sheetWarn='';
     if(typeof pqrsMatrizSyncAfterDelete==='function'){
       const sheetRes=await pqrsMatrizSyncAfterDelete(expRef,{silent:true,notifyOnError:true});
-      if(sheetRes&&sheetRes.error)sheetWarn=' (hoja Google no actualizada)';
-      else if(sheetRes&&sheetRes.noToken)sheetWarn=' (conecte Gmail para actualizar la hoja)';
+      if(sheetRes&&sheetRes.error)sheetWarn=' (matriz Drive no actualizada)';
+      else if(sheetRes&&sheetRes.noToken)sheetWarn=' (conecte Gmail para actualizar la matriz)';
     }
-    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
     logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
@@ -2616,7 +2615,6 @@ function marcarPqrsInformativaCore(expId,nota){
   e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:notaHist+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
   completarTareasAtenderPqrs(e,notaHist);
   persistExpedienteGranular(e);
-  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
   notif('PQRSD marcada como informativa y cerrada','ok');
   return true;
 }
@@ -11688,7 +11686,6 @@ async function enviarCorreoRespuestaPqrs(expId){
     e._fechas_estado=JSON.stringify(fe);
     e.historial=rebuildHistorial(e,e.historial||[]);
     persistExpedienteGranular(e);
-    if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e);
     if(statusEl)statusEl.textContent='✅ Correo enviado exitosamente';
     notif('✅ Correo enviado a '+para+' — PQRSD cerrada','ok');
     setTimeout(()=>{closeTaskModal();renderPqrsOficinaInbox();renderSecretariaPqrs();},1800);

@@ -3121,7 +3121,6 @@ async function gmailOfiConfirmarRespuestaPqrs() {
   });
 
   if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
-  if (typeof pqrsMatrizSyncAfterSave === 'function') pqrsMatrizSyncAfterSave(e);
   if (typeof closeTaskModal === 'function') closeTaskModal();
   if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();

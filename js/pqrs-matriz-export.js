@@ -274,20 +274,33 @@ async function pqrsMatrizPublicarEnDrive(list,periodLbl){
   const wb=await pqrsMatrizBuildWorkbookFromList(list,periodLbl||'');
   return pqrsMatrizDriveUpsertWorkbook(wb,pqrsMatrizOfficialDriveFilename(year));
 }
+let _pqrsMatrizDrivePublishTimer=null;
+let _pqrsMatrizDrivePublishOpts=null;
 function pqrsMatrizPublicarEnDriveAsync(opts){
   opts=opts||{};
-  if(typeof getSecretariaPqrsAll!=='function')return;
-  const list=getSecretariaPqrsAll();
-  if(!list.length)return;
-  pqrsMatrizPublicarEnDrive(list,'').then(function(res){
-    if(res&&res.ok&&opts.notify&&typeof notif==='function'){
-      notif('Matriz oficial PQRSD actualizada en Drive ('+list.length+' solicitud(es)).','ok');
-    }
-  }).catch(function(err){
-    console.warn('pqrsMatrizPublicarEnDriveAsync:',err);
-    if(opts.notify&&typeof notif==='function'){
-      notif('No se pudo actualizar la matriz en Drive: '+String(err.message||err).slice(0,72),'warn');
-    }
+  _pqrsMatrizDrivePublishOpts=Object.assign(_pqrsMatrizDrivePublishOpts||{},opts);
+  return new Promise(function(resolve){
+    if(_pqrsMatrizDrivePublishTimer)clearTimeout(_pqrsMatrizDrivePublishTimer);
+    _pqrsMatrizDrivePublishTimer=setTimeout(function(){
+      _pqrsMatrizDrivePublishTimer=null;
+      const runOpts=_pqrsMatrizDrivePublishOpts||{};
+      _pqrsMatrizDrivePublishOpts=null;
+      if(typeof getSecretariaPqrsAll!=='function'){resolve(null);return;}
+      const list=getSecretariaPqrsAll();
+      if(!list.length){resolve({ok:false,empty:true});return;}
+      pqrsMatrizPublicarEnDrive(list,'').then(function(res){
+        if(res&&res.ok&&runOpts.notify&&typeof notif==='function'){
+          notif('Matriz oficial PQRSD actualizada en Drive ('+list.length+' solicitud(es)).','ok');
+        }
+        resolve(res);
+      }).catch(function(err){
+        console.warn('pqrsMatrizPublicarEnDriveAsync:',err);
+        if((runOpts.notify||runOpts.notifyOnError)&&typeof notif==='function'){
+          notif('No se pudo actualizar la matriz en Drive: '+String(err.message||err).slice(0,72),'warn');
+        }
+        resolve({ok:false,error:err});
+      });
+    },1200);
   });
 }
 async function exportarMatrizPqrsDesdePlantilla(list,suffix,periodLbl){
