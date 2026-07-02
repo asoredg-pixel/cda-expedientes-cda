@@ -114,6 +114,28 @@ async function _pqrsMatrizWriteHeaders(spreadsheetId, sheetName) {
   });
 }
 
+async function pqrsMatrizEnsureWorkbookReady() {
+  const token = _pqrsMatrizSheetsToken();
+  if (!token) return { ok: false, noToken: true };
+  const id = pqrsMatrizActiveSheetId();
+  if (!id) {
+    const created = await pqrsMatrizCrearHojaNativa();
+    return { ok: true, created: true, url: created.url };
+  }
+  try {
+    await _pqrsSheetsApi('GET', '?fields=spreadsheetId,properties.title');
+    return { ok: true };
+  } catch (err) {
+    const parsed = _pqrsMatrizErrFromException(err);
+    if (parsed.kind === 'scope') return { ok: false, error: err, parsed: parsed };
+    if (_pqrsMatrizShouldBootstrapFromErr(parsed)) {
+      const created = await pqrsMatrizCrearHojaNativa();
+      return { ok: true, created: true, url: created.url };
+    }
+    throw err;
+  }
+}
+
 async function pqrsMatrizCrearHojaNativa() {
   const token = _pqrsMatrizSheetsToken();
   if (!token) throw new Error('Sin token Google. Conecte Gmail en Secretaría.');
@@ -581,6 +603,17 @@ async function pqrsMatrizSyncExpediente(e, opts) {
   if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return { skipped: true };
   try {
+    const ready = await pqrsMatrizEnsureWorkbookReady();
+    if (ready && ready.noToken) return { ok: false, noToken: true };
+    if (ready && ready.error) {
+      if (ready.parsed && ready.parsed.kind === 'scope' && typeof notif === 'function') {
+        notif('⚠️ Reconecte Gmail (Correos → Reconectar) y acepte permiso de Google Sheets.', 'warn');
+      }
+      return { ok: false, error: ready.error, parsed: ready.parsed };
+    }
+    if (ready && ready.created && typeof notif === 'function') {
+      notif('✅ Matriz PQRSD en Google Sheets lista. Datos desde fila ' + PQRS_MATRIZ_DATA_ROW + '.', 'ok');
+    }
     const targetSheet = await pqrsMatrizResolveDataSheet(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
     const found = await pqrsMatrizBuscarFilaGlobal(e._exp, e._pqrs_matriz_hoja || targetSheet);
     if (found && found.sheetName !== targetSheet) {

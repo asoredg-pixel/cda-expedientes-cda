@@ -4,9 +4,9 @@
 // El access_token se guarda en sessionStorage y caduca en 1h.
 //
 // REQUISITO (configuración única en Google Cloud Console):
-//   1. Habilitar Gmail API y Google Drive API en el proyecto Firebase.
+//   1. Habilitar Gmail API, Google Drive API y Google Sheets API en el proyecto Firebase.
 //   2. Pantalla de consentimiento OAuth → agregar scopes:
-//      gmail.readonly · gmail.send · drive.file
+//      gmail.readonly · gmail.send · drive.file · spreadsheets
 //   3. Agregar usuarios de prueba: cdaguaviare1@gmail.com + correo secretaria.
 //   4. Credencial OAuth web → Orígenes autorizados:
 //      https://asoredg-pixel.github.io

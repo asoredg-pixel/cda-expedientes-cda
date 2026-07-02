@@ -398,7 +398,7 @@ async function guardarPqrsSecretaria(modo){
   }catch(err){console.warn('notif radicacion auto:',err);}
   try{
     if(typeof pqrsMatrizSyncAfterSave==='function'){
-      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true});
+      const syncRes=await pqrsMatrizSyncAfterSave(data,{silent:true,notifyOnError:true});
       if(syncRes&&syncRes.error){
         console.warn('Google Sheets PQRSD:',syncRes.error);
         const errMsg=String(syncRes.error.message||syncRes.error||'');
