@@ -19,7 +19,7 @@
 <script src="js/roles.js?v=20260702k"></script>
 <script src="js/config-store.js?v=20260625g"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260702k"></script>
+<script src="js/core.js?v=20260702l"></script>
 <script src="js/formulario.js?v=20260630c"></script>
 <script src="js/tareas.js?v=20260625g"></script>
 <script src="js/guardar-exp.js?v=20260702k"></script>
@@ -30,7 +30,7 @@
 <script src="js/chat.js?v=20260702m"></script>
 <script src="js/pqrs-matriz-export.js?v=20260702b"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702i"></script>
-<script src="js/pqrs.js?v=20260702k"></script>
+<script src="js/pqrs.js?v=20260702l"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260702g"></script>
 <script src="js/recursos.js?v=20260630h"></script>
@@ -655,8 +655,8 @@
         <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud (puede ser anterior a la radicación)"></div>
         <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
         <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
-        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo"><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
-        <div class="fld"><label>Medio de recepción</label><select id="sec-medio" onchange="onSecMedioRecepcionChange()"><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
+        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="">— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
+        <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="">— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
       </div>
       <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
         <label>Medio de notificación</label>

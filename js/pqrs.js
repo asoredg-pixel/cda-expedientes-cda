@@ -141,11 +141,10 @@ function limpiarFormSecretaria(){
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
   const anexo=document.getElementById('sec-anexo');if(anexo)anexo.value='';
   secAnexoFileLabel(anexo);
+  const tipoSel=document.getElementById('sec-tipo');if(tipoSel)tipoSel.value='';
+  const medioSel=document.getElementById('sec-medio');if(medioSel)medioSel.value='';
   toggleSecAnonimo();
   poblarSecOficinaSelect();
-  const hid=document.getElementById('sec-medio-notif');if(hid){hid.value='';delete hid.dataset.userSet;}
-  initSecMedioNotificacion(true);
-  if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
 }
 function secRadicacionBusy(busy){
   ['sec-btn-radicar-trasl','sec-btn-radicar-solo'].forEach(function(id){
@@ -187,8 +186,8 @@ async function guardarPqrsSecretaria(modo){
   const fecha=puedeEditarFechaRadicacionPqrs()?((document.getElementById('sec-fecha')||{}).value||hoy()):hoy();
   const fechaSol=String((document.getElementById('sec-fecha-solicitud')||{}).value||'').trim();
   const fechaTermino=String((document.getElementById('sec-fecha-termino')||{}).value||'').trim();
-  const tipo=(document.getElementById('sec-tipo')||{}).value||'Petición';
-  const medio=normMedioRecepcionPqrs((document.getElementById('sec-medio')||{}).value||'');
+  const tipoRaw=String((document.getElementById('sec-tipo')||{}).value||'').trim();
+  const medioRaw=String((document.getElementById('sec-medio')||{}).value||'').trim();
   const anon=!!((document.getElementById('sec-anonimo')||{}).checked);
   const tipoPersona=anon?'natural':((document.getElementById('sec-tipo-persona')||{}).value||'natural');
   let nombre='',ident='',correo='',tel='';
@@ -235,6 +234,10 @@ async function guardarPqrsSecretaria(modo){
     return;
   }
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
+  if(!tipoRaw){notif('Seleccione el tipo de solicitud','err');return;}
+  if(!medioRaw){notif('Seleccione el medio de recepción','err');return;}
+  const tipo=tipoRaw;
+  const medio=normMedioRecepcionPqrs(medioRaw);
   if(!asunto){notif('Indique el asunto de la solicitud','err');return;}
   if(!soloRadicar&&!oficina){notif('Seleccione la oficina destino','err');return;}
   if(soloRadicar){
