@@ -988,16 +988,25 @@ function eliminarPqrs(expId){
     return;
   }
   const msg=pqrsEstaCerrada(e)?'¿Eliminar esta PQRSD atendida del registro? (solo administrador)':'¿Eliminar esta PQRSD del registro?';
-  confirmPrecaucion({title:'Eliminar PQRSD',message:msg,detail:expId,confirmLabel:'Sí, eliminar'},function(){
-    const expRef=e||{_exp:expId,_depto:e._depto||deptoActivo||'guaviare'};
-    exps=exps.filter(x=>x._exp!==expId);
+  confirmPrecaucion({title:'Eliminar PQRSD',message:msg,detail:expId,confirmLabel:'Sí, eliminar'},async function(){
+    const expRef={...e,_exp:expId,_depto:e._depto||'guaviare'};
+    const res=await persistExpedienteDelete(expRef);
+    if(!res||!res.ok){
+      const code=res&&res.error&&res.error.code;
+      let errMsg='No se pudo eliminar en Firebase. El registro reaparecerá al recargar.';
+      if(code==='permission-denied')errMsg='Sin permisos para eliminar en Firebase. Verifique que su usuario tenga rol Secretaría activo.';
+      else if(code==='unauthenticated')errMsg='Sesión expirada. Cierre sesión y vuelva a ingresar.';
+      notif(errMsg,'err');
+      return;
+    }
+    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
     logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
-    persistExpedienteDelete(expRef);
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
     cerrarPqrsSidePanel();
     renderSecretariaPqrs();
     renderPqrsOficinaInbox();
+    renderTabla();
     notif('PQRSD eliminada','ok');
   });
 }

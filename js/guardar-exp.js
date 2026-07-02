@@ -415,32 +415,24 @@ function eliminarExp(expId){
     message:'Esta acción eliminará el expediente del registro activo. ¿Está seguro de que desea continuar?',
     detail:expId+(e?' · '+getNom(e):''),
     confirmLabel:'Sí, eliminar expediente'
-  },function(){
+  },async function(){
     const esPqrsExp=e&&esPqrsSecretaria(e);
-    const expRef=e||{_exp:expId,_depto:deptoActivo||'guaviare'};
-    exps=exps.filter(x=>x._exp!==expId);
+    const expRef=e||{_exp:expId,_depto:(e&&e._depto)||'guaviare'};
+    const res=await persistExpedienteDelete(expRef);
+    if(!res||!res.ok){
+      const code=res&&res.error&&res.error.code;
+      let errMsg='No se pudo eliminar en Firebase. El registro reaparecerá al recargar.';
+      if(code==='permission-denied')errMsg='Sin permisos para eliminar en Firebase.';
+      else if(code==='unauthenticated')errMsg='Sesión expirada. Vuelva a ingresar.';
+      notif(errMsg,'err');
+      return;
+    }
+    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
     if(esPqrsExp)logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     else logAudit('Eliminó expediente ['+expId+']','expedientes',expId);
     if(editId===expId){editId=null;showTab('reg');}
-    try{
-      _saveLSLocal();
-      checkLocalStorageCapacityAfterSave();
-    }catch(err){
-      if(isQuotaExceededError(err)){
-        showStorageFullBanner();
-        console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',err);
-      }else{
-        console.error('Error al guardar en localStorage:',err);
-      }
-      return;
-    }
-    updateSyncIndicator('syncing');
-    deleteExpedienteDoc(deptoActivo,expRef).then(function(ok){
-      updateSyncIndicator(ok?'synced':'error');
-    }).catch(function(){
-      updateSyncIndicator('error');
-    });
-    renderTabla();notif('Expediente eliminado','ok');
+    renderTabla();
+    notif('Expediente eliminado','ok');
   });
 }
 function verCon(expId){

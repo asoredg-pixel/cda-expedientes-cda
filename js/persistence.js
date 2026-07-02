@@ -264,6 +264,7 @@ async function loadLS(){
     });
     expSnaps.forEach(deptoExps=>{exps=exps.concat(deptoExps);});
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
+    clearLegacyExpsLocalStorage();
     postLoadInit();
     updateSyncIndicator('synced');
     if(document.body.classList.contains('sesion-activa')&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
@@ -326,11 +327,28 @@ async function deleteExpedienteDoc(deptoId,exp){
   if(!ref)return false;
   try{
     await window._fsDeleteDoc(ref);
+    window._lastFsSaveError=null;
     return true;
   }catch(err){
     console.error('deleteExpedienteDoc:',depto,expId,err);
+    window._lastFsSaveError={code:err&&err.code||'unknown',msg:err&&err.message||'Error desconocido'};
     return false;
   }
+}
+function purgeExpFromLocalStorageCache(expId){
+  const id=String(expId||'').trim();
+  if(!id)return;
+  try{
+    const cached=lsLoadJson('sst_e');
+    if(!Array.isArray(cached)||!cached.length)return;
+    const next=cached.filter(function(e){return String(e&&e._exp||'').trim()!==id;});
+    if(next.length===cached.length)return;
+    if(next.length)lsStoreJson('sst_e',next);
+    else localStorage.removeItem('sst_e');
+  }catch(e){console.warn('purgeExpFromLocalStorageCache:',e);}
+}
+function clearLegacyExpsLocalStorage(){
+  try{localStorage.removeItem('sst_e');}catch(e){}
 }
 async function loadExpedientesDepto(deptoId){
   const db=window._db;
@@ -482,10 +500,23 @@ async function limpiarCamposObsoletos(){
     return false;
   }
 }
-function persistExpedienteDelete(expRef){
-  // Elimina directo de Firestore. No escribe a localStorage.
+async function persistExpedienteDelete(expRef){
+  if(!expRef)return {ok:false,error:{msg:'Sin referencia de expediente'}};
+  const expId=expedienteDocId(expRef);
+  const depto=resolveDeptoFirestoreId(deptoActivo,expRef);
   updateSyncIndicator('syncing');
-  deleteExpedienteDoc(deptoActivo,expRef).then(function(ok){updateSyncIndicator(ok?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+  try{
+    const ok=await deleteExpedienteDoc(depto,expRef);
+    updateSyncIndicator(ok?'synced':'error');
+    if(ok){
+      purgeExpFromLocalStorageCache(expId);
+      return {ok:true};
+    }
+    return {ok:false,error:window._lastFsSaveError||{msg:'Error al eliminar en Firestore'}};
+  }catch(err){
+    updateSyncIndicator('error');
+    return {ok:false,error:{code:err&&err.code,msg:err&&err.message||String(err)}};
+  }
 }
 
 async function saveFirestore(){
@@ -663,6 +694,7 @@ async function migrarLocalStorageAFirestore(){
     // 4. Also save cfg/config (non-destructive merge)
     await saveGlobalFirestore().catch(()=>{});
     notif('✅ Migración completada: '+uploaded+' subidos, '+skipped+' ya existían en Firestore.','ok');
+    clearLegacyExpsLocalStorage();
     // 5. Reload from Firestore so the view is consistent
     await loadLS();
     updateDeptoUI();
