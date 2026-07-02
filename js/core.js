@@ -1000,6 +1000,12 @@ function eliminarPqrs(expId){
       notif(errMsg,'err');
       return;
     }
+    let sheetWarn='';
+    if(typeof pqrsMatrizSyncAfterDelete==='function'){
+      const sheetRes=await pqrsMatrizSyncAfterDelete(expRef,{silent:true});
+      if(sheetRes&&sheetRes.error)sheetWarn=' (hoja Google no actualizada)';
+      else if(sheetRes&&sheetRes.noToken)sheetWarn=' (conecte Gmail para actualizar la hoja)';
+    }
     exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
     logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     window._secPqrsSelExp=null;
@@ -1008,7 +1014,7 @@ function eliminarPqrs(expId){
     renderSecretariaPqrs();
     renderPqrsOficinaInbox();
     renderTabla();
-    notif('PQRSD eliminada','ok');
+    notif('PQRSD eliminada'+sheetWarn,'ok');
   });
 }
 function getSecretariaPqrsAll(){

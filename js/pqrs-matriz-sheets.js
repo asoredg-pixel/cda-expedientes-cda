@@ -115,6 +115,30 @@ async function _pqrsSheetsApi(method, path, body) {
   return null;
 }
 
+let _pqrsMatrizSheetsMetaCache = null;
+function _pqrsMatrizInvalidateMetaCache() {
+  _pqrsMatrizSheetsMetaCache = null;
+}
+async function _pqrsMatrizGetSheetsMeta(force) {
+  if (!force && _pqrsMatrizSheetsMetaCache) return _pqrsMatrizSheetsMetaCache;
+  const meta = await _pqrsSheetsApi('GET', '?fields=sheets.properties');
+  _pqrsMatrizSheetsMetaCache = meta;
+  return meta;
+}
+async function pqrsMatrizGetSheetIdByTitle(sheetName) {
+  const meta = await _pqrsMatrizGetSheetsMeta();
+  const sh = (meta.sheets || []).find(function(s) {
+    return s.properties && s.properties.title === sheetName;
+  });
+  return sh && sh.properties ? sh.properties.sheetId : null;
+}
+async function pqrsMatrizListAnioTabs() {
+  const meta = await _pqrsMatrizGetSheetsMeta();
+  return (meta.sheets || [])
+    .map(function(s) { return s.properties && s.properties.title; })
+    .filter(function(t) { return t && /^\d{4}$/.test(t); });
+}
+
 function pqrsMatrizTabAnio(e, fechaRef) {
   const f = fechaRef || (e && (e._fecha || e._fecha_solicitud)) || (typeof hoy === 'function' ? hoy() : '');
   const y = String(f).slice(0, 4);
@@ -127,12 +151,13 @@ function pqrsMatrizSheetRange(sheetName, a1) {
 
 async function pqrsMatrizEnsureTabAnio(year) {
   year = String(year || new Date().getFullYear());
-  const meta = await _pqrsSheetsApi('GET', '?fields=sheets.properties.title');
+  const meta = await _pqrsMatrizGetSheetsMeta();
   const titles = (meta.sheets || []).map(function(s) { return s.properties && s.properties.title; }).filter(Boolean);
   if (titles.indexOf(year) >= 0) return year;
   await _pqrsSheetsApi('POST', ':batchUpdate', {
     requests: [{ addSheet: { properties: { title: year } } }]
   });
+  _pqrsMatrizInvalidateMetaCache();
   return year;
 }
 
@@ -146,16 +171,22 @@ async function pqrsMatrizLeerRadicadosSheetTabs() {
   const out = [];
   const seen = {};
   try {
-    const meta = await _pqrsSheetsApi('GET', '?fields=sheets.properties.title');
-    const tabs = (meta.sheets || []).map(function(s) { return s.properties && s.properties.title; }).filter(Boolean);
+    const tabs = await pqrsMatrizListAnioTabs();
     const consName = typeof PQRS_MATRIZ_SHEET_CONS !== 'undefined' ? PQRS_MATRIZ_SHEET_CONS : 'CONSOLIDADO PQRSD';
     for (let i = 0; i < tabs.length; i++) {
       const title = tabs[i];
-      if (!/^\d{4}$/.test(title) && title !== consName) continue;
       const rads = await pqrsMatrizLeerRadicados(title);
       rads.forEach(function(r) {
         if (!seen[r]) { seen[r] = true; out.push(r); }
       });
+    }
+    if (tabs.indexOf(consName) < 0) {
+      try {
+        const rads = await pqrsMatrizLeerRadicados(consName);
+        rads.forEach(function(r) {
+          if (!seen[r]) { seen[r] = true; out.push(r); }
+        });
+      } catch (err) { /* tab opcional */ }
     }
   } catch (err) {
     console.warn('pqrsMatrizLeerRadicadosSheetTabs:', err);
@@ -277,6 +308,40 @@ async function pqrsMatrizBuscarFila(sheetName, expId) {
   return 0;
 }
 
+async function pqrsMatrizBuscarFilaGlobal(expId, hintSheet) {
+  const target = String(expId || '').trim();
+  if (!target) return null;
+  const tabs = await pqrsMatrizListAnioTabs();
+  const order = [];
+  if (hintSheet && tabs.indexOf(hintSheet) >= 0) order.push(hintSheet);
+  tabs.forEach(function(t) {
+    if (order.indexOf(t) < 0) order.push(t);
+  });
+  for (let i = 0; i < order.length; i++) {
+    const row = await pqrsMatrizBuscarFila(order[i], target);
+    if (row) return { sheetName: order[i], row: row };
+  }
+  return null;
+}
+
+async function pqrsMatrizEliminarFila(sheetName, row) {
+  const sheetId = await pqrsMatrizGetSheetIdByTitle(sheetName);
+  if (sheetId == null) throw new Error('Hoja no encontrada: ' + sheetName);
+  await _pqrsSheetsApi('POST', ':batchUpdate', {
+    requests: [{
+      deleteDimension: {
+        range: {
+          sheetId: sheetId,
+          dimension: 'ROWS',
+          startIndex: row - 1,
+          endIndex: row
+        }
+      }
+    }]
+  });
+  _pqrsMatrizInvalidateMetaCache();
+}
+
 async function pqrsMatrizEscribirFila(sheetName, row, rec) {
   const range = encodeURIComponent(pqrsMatrizSheetRange(sheetName, 'C' + row + ':S' + row));
   await _pqrsSheetsApi('PUT', '/values/' + range + '?valueInputOption=USER_ENTERED', {
@@ -286,8 +351,17 @@ async function pqrsMatrizEscribirFila(sheetName, row, rec) {
 
 async function pqrsMatrizUpdateExpediente(e) {
   if (!e || !e._exp) return { skipped: true };
-  const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+  let sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
   let row = await pqrsMatrizBuscarFila(sheetName, e._exp);
+  if (!row) {
+    const global = await pqrsMatrizBuscarFilaGlobal(e._exp, sheetName);
+    if (global) {
+      e._pqrs_matriz_hoja = global.sheetName;
+      e._pqrs_matriz_fila = global.row;
+      row = global.row;
+      sheetName = global.sheetName;
+    }
+  }
   if (!row) return pqrsMatrizAppendExpediente(e);
   const item = row - PQRS_MATRIZ_DATA_ROW + 1;
   const rec = pqrsMatrizBuildRec(e, item);
@@ -333,17 +407,66 @@ async function pqrsMatrizSyncExpediente(e) {
   if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return { skipped: true };
   try {
-    const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
-    const found = await pqrsMatrizBuscarFila(sheetName, e._exp);
+    const targetSheet = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+    const found = await pqrsMatrizBuscarFilaGlobal(e._exp, e._pqrs_matriz_hoja || targetSheet);
+    if (found && found.sheetName !== targetSheet) {
+      await pqrsMatrizEliminarFila(found.sheetName, found.row);
+      try {
+        await pqrsMatrizReordenarHojaPorRadicado(found.sheetName);
+      } catch (err) {
+        console.warn('pqrsMatrizReordenarHojaPorRadicado (move):', err);
+      }
+      e._pqrs_matriz_hoja = targetSheet;
+      delete e._pqrs_matriz_fila;
+      return await pqrsMatrizAppendExpediente(e);
+    }
     if (found) {
-      e._pqrs_matriz_fila = found;
+      e._pqrs_matriz_fila = found.row;
+      e._pqrs_matriz_hoja = found.sheetName;
       return await pqrsMatrizUpdateExpediente(e);
     }
+    e._pqrs_matriz_hoja = targetSheet;
     return await pqrsMatrizAppendExpediente(e);
   } catch (err) {
     console.warn('pqrsMatrizSyncExpediente:', err);
     return { ok: false, error: err };
   }
+}
+
+async function pqrsMatrizDeleteExpediente(e, opts) {
+  opts = opts || {};
+  if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
+  const expId = typeof e === 'object' ? e._exp : e;
+  if (!expId) return { skipped: true };
+  try {
+    const hint = typeof e === 'object' ? e._pqrs_matriz_hoja : null;
+    const found = await pqrsMatrizBuscarFilaGlobal(expId, hint);
+    if (!found) return { ok: true, notFound: true };
+    await pqrsMatrizEliminarFila(found.sheetName, found.row);
+    try {
+      await pqrsMatrizReordenarHojaPorRadicado(found.sheetName);
+    } catch (err) {
+      console.warn('pqrsMatrizReordenarHojaPorRadicado (delete):', err);
+    }
+    return { ok: true, sheetName: found.sheetName, row: found.row };
+  } catch (err) {
+    console.warn('pqrsMatrizDeleteExpediente:', err);
+    return { ok: false, error: err };
+  }
+}
+
+function pqrsMatrizSyncAfterDelete(e, opts) {
+  opts = opts || {};
+  return pqrsMatrizDeleteExpediente(e, opts).then(function(res) {
+    if (res && res.noToken) {
+      if (opts.warnNoToken && !opts.silent && typeof notif === 'function') {
+        notif('⚠️ Conecte Gmail (Secretaría) para eliminar la fila en Google Sheets.', 'warn');
+      }
+    } else if (res && res.error && !opts.silent && typeof notif === 'function') {
+      notif('⚠️ Eliminado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
+    }
+    return res;
+  });
 }
 
 function pqrsMatrizSyncAfterSave(e, opts) {

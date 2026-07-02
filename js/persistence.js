@@ -435,6 +435,10 @@ function persistExpedienteGranular(exp,withGlobal){
         else msg+=' Verifique conexión o permisos.';
         notif(msg,'err');
       }
+      return;
+    }
+    if((exp._es_pqrs||exp._radicado_secretaria)&&typeof pqrsMatrizSyncAfterSave==='function'){
+      pqrsMatrizSyncAfterSave(exp,{silent:true});
     }
   }).catch(function(err){
     updateSyncIndicator('error');
