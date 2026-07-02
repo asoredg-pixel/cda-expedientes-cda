@@ -27,11 +27,19 @@ El despliegue se hace con GitHub Actions (workflow `.github/workflows/deploy-pag
 **Primera vez o si la web no actualiza:**
 
 1. En GitHub: **Settings → Pages → Build and deployment**
-2. **Source:** seleccione **GitHub Actions** (no “Deploy from a branch” antiguo)
-3. Haga push a `main` y espere que termine el workflow **Deploy GitHub Pages**
-4. Abra la app y verifique en Radicación el texto **· v20260702p** (o la versión actual de `SST_BUILD_ID` en `js/constants.js`)
+2. **Source:** seleccione **GitHub Actions** (no “Deploy from a branch”)
+3. Si antes usaba despliegue por rama, desactívelo: solo debe quedar **GitHub Actions** como origen
+4. Haga push a `main` y espere que termine el workflow **Deploy GitHub Pages** (debe quedar en verde)
+5. Abra la app y verifique en Radicación el texto **· v20260702r** (o la versión actual de `SST_BUILD_ID` en `js/constants.js`)
 
-Si no aparece esa versión, el navegador o GitHub Pages aún sirven archivos viejos: use Ctrl+Shift+R o espere 2–5 minutos tras el deploy.
+**Si llegan correos “Deploy GitHub Pages: All jobs have failed”:**
+
+- Suele deberse a tener **dos despliegues a la vez** (GitHub Actions + rama `main`) o a que Pages no está en modo Actions.
+- En **Settings → Pages**, confirme **Source: GitHub Actions**.
+- En **Actions**, el workflow que debe quedar verde es **Deploy GitHub Pages**; puede ignorar o desactivar el antiguo **pages build and deployment** una vez migrado.
+- La anotación *“Deployment failed, try again later”* es del paso `deploy-pages`; la advertencia de Node.js 20 no es la causa del fallo.
+
+Si no aparece la versión nueva, el navegador o GitHub Pages aún sirven archivos viejos: use Ctrl+Shift+R o espere 2–5 minutos tras el deploy.
 
 ### Ejecución
 
