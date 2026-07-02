@@ -294,7 +294,11 @@ async function pqrsMatrizUpdateExpediente(e) {
   if (!rec) return { skipped: true };
   rec.radicadoRecibo = e._exp;
   await pqrsMatrizEscribirFila(sheetName, row, rec);
-  await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  try {
+    await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  } catch (err) {
+    console.warn('pqrsMatrizReordenarHojaPorRadicado (update):', err);
+  }
   row = await pqrsMatrizBuscarFila(sheetName, e._exp);
   e._pqrs_matriz_fila = row;
   e._pqrs_matriz_hoja = sheetName;
@@ -314,7 +318,11 @@ async function pqrsMatrizAppendExpediente(e) {
   if (!rec) return { skipped: true };
   rec.radicadoRecibo = expId;
   await pqrsMatrizEscribirFila(sheetName, row, rec);
-  await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  try {
+    await pqrsMatrizReordenarHojaPorRadicado(sheetName);
+  } catch (err) {
+    console.warn('pqrsMatrizReordenarHojaPorRadicado (append):', err);
+  }
   row = await pqrsMatrizBuscarFila(sheetName, expId);
   e._pqrs_matriz_fila = row;
   e._pqrs_matriz_hoja = sheetName;

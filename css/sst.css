@@ -295,6 +295,13 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .confirm-prec-box.tone-success .confirm-prec-icon{background:var(--gnl);border-bottom-color:var(--bd)}
 .confirm-prec-box.tone-success .confirm-prec-icon h3{color:var(--gn)}
 .confirm-prec-box.tone-success #confirm-prec-ok{background:var(--gn);color:#fff;border-color:var(--gn)}
+.confirm-prec-box.tone-radicacion{border-color:color-mix(in srgb,var(--bl) 45%,var(--bd))}
+.confirm-prec-box.tone-radicacion .confirm-prec-icon{background:var(--bll);border-bottom-color:color-mix(in srgb,var(--bl) 18%,var(--bd))}
+.confirm-prec-box.tone-radicacion .confirm-prec-icon h3{color:var(--bl)}
+.confirm-prec-box.tone-radicacion #confirm-prec-ok{background:var(--bl);color:#fff;border-color:var(--bl)}
+.confirm-prec-icon .radicacion-spinner{display:inline-block;width:26px;height:26px;border:3px solid var(--bll);border-top-color:var(--bl);border-radius:50%;animation:radicacionSpin .75s linear infinite;flex-shrink:0}
+@keyframes radicacionSpin{to{transform:rotate(360deg)}}
+.confirm-prec-box.confirm-prec-loading .confirm-prec-foot{display:none}
 .confirm-prec-input{display:none;width:100%;min-height:56px;margin-top:8px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:'DM Sans',sans-serif;resize:vertical}
 .confirm-prec-foot{padding:.85rem 1.25rem;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--bd);background:var(--sf2)}
 .soporte-annot-wrap.annot-navigable .soporte-annot-overlay{pointer-events:none!important}

@@ -8643,27 +8643,48 @@ function confirmExito(opts){
   window._confirmExitoMode=true;
   window._confirmPrecOk=null;
   const tone=opts.tone||'success';
-  if(box)box.className='confirm-prec-box tone-'+tone;
-  if(ico)ico.textContent=tone==='warn'?'⚠️':'✓';
+  if(box){
+    box.className='confirm-prec-box tone-'+tone+(opts.loading?' confirm-prec-loading':'');
+  }
+  if(ico){
+    if(opts.loading){
+      ico.className='radicacion-spinner';
+      ico.textContent='';
+    }else{
+      ico.className='';
+      if(tone==='warn')ico.textContent='⚠️';
+      else if(tone==='radicacion')ico.textContent='✓';
+      else ico.textContent='✓';
+    }
+  }
   if(tit)tit.textContent=opts.title||'Guardado exitosamente';
   msg.textContent=opts.message||'Los cambios se registraron correctamente.';
   if(det){
-    if(opts.detail){det.textContent=opts.detail;det.style.display='';}
+    if(opts.detail&&!opts.loading){det.textContent=opts.detail;det.style.display='';}
     else det.style.display='none';
   }
   if(inp){inp.style.display='none';inp.value='';}
   if(cancel)cancel.style.display='none';
+  const foot=box?box.querySelector('.confirm-prec-foot'):null;
+  if(foot)foot.style.display=(opts.hideFooter||opts.loading)?'none':'';
   if(btn){
-    btn.textContent=opts.confirmLabel||'Entendido';
-    btn.onclick=function(){closeConfirmDialog(true);};
+    if(opts.hideFooter||opts.loading){
+      btn.style.display='none';
+    }else{
+      btn.style.display='';
+      btn.textContent=opts.confirmLabel||'Entendido';
+      btn.onclick=function(){closeConfirmDialog(true);};
+    }
   }
+  window._confirmRadicacionLoading=!!opts.loading;
   ov.classList.add('on');
-  const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(tone==='warn'?null:1000);
+  const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(opts.loading?null:(tone==='warn'?null:1000));
   if(autoMs){
     window._confirmExitoTimer=setTimeout(function(){closeConfirmExito();},autoMs);
   }
 }
 function closeConfirmDialog(ok){
+  if(window._confirmRadicacionLoading)return;
   if(window._confirmExitoMode){closeConfirmExito();return;}
   closeConfirmPrecaucion(ok);
 }
@@ -8671,12 +8692,17 @@ function closeConfirmExito(){
   if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
   const ov=document.getElementById('confirm-prec-overlay');
   const cancel=document.getElementById('confirm-prec-cancel');
+  const btn=document.getElementById('confirm-prec-ok');
   const ico=document.getElementById('confirm-prec-icon-emoji');
+  const foot=ov?ov.querySelector('.confirm-prec-foot'):null;
   const box=ov?ov.querySelector('.confirm-prec-box'):null;
   if(ov)ov.classList.remove('on');
   window._confirmExitoMode=false;
+  window._confirmRadicacionLoading=false;
   if(cancel)cancel.style.display='';
-  if(ico)ico.textContent='⚠️';
+  if(btn)btn.style.display='';
+  if(foot)foot.style.display='';
+  if(ico){ico.className='';ico.textContent='⚠️';}
   if(box)box.className='confirm-prec-box';
 }
 function esTramitePqrs(tid){
