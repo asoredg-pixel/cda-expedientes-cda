@@ -236,6 +236,17 @@ async function guardarPqrsSecretaria(modo){
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
   if(!tipoRaw){notif('Seleccione el tipo de solicitud','err');return;}
   if(!medioRaw){notif('Seleccione el medio de recepción','err');return;}
+  if(!anon){
+    if(tipoPersona==='natural'){
+      const pnNom=String((document.getElementById('sec-pn-nombre')||{}).value||'').trim();
+      if(!pnNom){notif('Indique el nombre del solicitante','err');return;}
+    }else if(tipoPersona==='juridica'){
+      const pjEmp=String((document.getElementById('sec-pj-empresa')||{}).value||'').trim();
+      const ofiNom=String((document.getElementById('sec-pj-ofi-nombre')||{}).value||'').trim();
+      if(!pjEmp){notif('Indique la razón social o entidad','err');return;}
+      if(!ofiNom){notif('Indique el nombre de quien radica la solicitud','err');return;}
+    }
+  }
   const tipo=tipoRaw;
   const medio=normMedioRecepcionPqrs(medioRaw);
   if(!asunto){notif('Indique el asunto de la solicitud','err');return;}
