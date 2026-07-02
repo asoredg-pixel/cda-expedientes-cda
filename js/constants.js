@@ -199,10 +199,10 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260702p';
+const SST_BUILD_ID = '20260702r';
 
-// Matriz oficial PQRSD — Google Sheet en Drive (una pestaña por año)
-const PQRS_MATRIZ_SHEET_ID = '1MKh8YttjkDqqsyLmZtYP_0fOfWmYEIvpoqeO5nI9DuA';
+// Matriz oficial PQRSD — Google Sheet en Drive (pestaña por año o CONSOLIDADO PQRSD)
+const PQRS_MATRIZ_SHEET_ID = '1FaaTezSwWZmcDjlzEEu4FEgL5vLdaWau';
 const PQRS_MATRIZ_DATA_ROW = 16;
 // Carpeta Drive matriz oficial PQRSD (cdaguaviare1)
 const PQRS_MATRIZ_DRIVE_FOLDER_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';

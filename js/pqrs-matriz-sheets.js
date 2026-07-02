@@ -139,6 +139,38 @@ async function pqrsMatrizListAnioTabs() {
     .filter(function(t) { return t && /^\d{4}$/.test(t); });
 }
 
+function _pqrsMatrizConsolidadoName() {
+  return typeof PQRS_MATRIZ_SHEET_CONS !== 'undefined' ? PQRS_MATRIZ_SHEET_CONS : 'CONSOLIDADO PQRSD';
+}
+
+async function pqrsMatrizSheetTitles() {
+  const meta = await _pqrsMatrizGetSheetsMeta();
+  return (meta.sheets || [])
+    .map(function(s) { return s.properties && s.properties.title; })
+    .filter(Boolean);
+}
+
+async function pqrsMatrizListDataTabs() {
+  const titles = await pqrsMatrizSheetTitles();
+  const yearTabs = titles.filter(function(t) { return /^\d{4}$/.test(t); });
+  const consName = _pqrsMatrizConsolidadoName();
+  const out = yearTabs.slice();
+  if (titles.indexOf(consName) >= 0 && out.indexOf(consName) < 0) out.push(consName);
+  return out;
+}
+
+/** Pestaña destino: año (2026), CONSOLIDADO PQRSD si existe, o crea pestaña anual. */
+async function pqrsMatrizResolveDataSheet(yearOrHint) {
+  const hint = String(yearOrHint || '').trim();
+  const titles = await pqrsMatrizSheetTitles();
+  if (hint && titles.indexOf(hint) >= 0) return hint;
+  const year = /^\d{4}$/.test(hint) ? hint : String(new Date().getFullYear());
+  if (titles.indexOf(year) >= 0) return year;
+  const consName = _pqrsMatrizConsolidadoName();
+  if (titles.indexOf(consName) >= 0) return consName;
+  return pqrsMatrizEnsureTabAnio(year);
+}
+
 function pqrsMatrizTabAnio(e, fechaRef) {
   const f = fechaRef || (e && (e._fecha || e._fecha_solicitud)) || (typeof hoy === 'function' ? hoy() : '');
   const y = String(f).slice(0, 4);
@@ -311,7 +343,7 @@ async function pqrsMatrizBuscarFila(sheetName, expId) {
 async function pqrsMatrizBuscarFilaGlobal(expId, hintSheet) {
   const target = String(expId || '').trim();
   if (!target) return null;
-  const tabs = await pqrsMatrizListAnioTabs();
+  const tabs = await pqrsMatrizListDataTabs();
   const order = [];
   if (hintSheet && tabs.indexOf(hintSheet) >= 0) order.push(hintSheet);
   tabs.forEach(function(t) {
@@ -351,7 +383,7 @@ async function pqrsMatrizEscribirFila(sheetName, row, rec) {
 
 async function pqrsMatrizUpdateExpediente(e) {
   if (!e || !e._exp) return { skipped: true };
-  let sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+  let sheetName = await pqrsMatrizResolveDataSheet(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
   let row = await pqrsMatrizBuscarFila(sheetName, e._exp);
   if (!row) {
     const global = await pqrsMatrizBuscarFilaGlobal(e._exp, sheetName);
@@ -381,7 +413,7 @@ async function pqrsMatrizUpdateExpediente(e) {
 
 async function pqrsMatrizAppendExpediente(e) {
   if (!e || !e._exp) return { skipped: true };
-  const sheetName = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+  const sheetName = await pqrsMatrizResolveDataSheet(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
   const expId = String(e._exp).trim();
   let row = await pqrsMatrizBuscarFila(sheetName, expId);
   if (row) return pqrsMatrizUpdateExpediente(e);
@@ -407,7 +439,7 @@ async function pqrsMatrizSyncExpediente(e) {
   if (!_pqrsMatrizSheetsToken()) return { ok: false, noToken: true };
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return { skipped: true };
   try {
-    const targetSheet = await pqrsMatrizEnsureTabAnio(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
+    const targetSheet = await pqrsMatrizResolveDataSheet(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
     const found = await pqrsMatrizBuscarFilaGlobal(e._exp, e._pqrs_matriz_hoja || targetSheet);
     if (found && found.sheetName !== targetSheet) {
       await pqrsMatrizEliminarFila(found.sheetName, found.row);
@@ -455,14 +487,19 @@ async function pqrsMatrizDeleteExpediente(e, opts) {
   }
 }
 
+function _pqrsMatrizSyncNotify(opts) {
+  return !opts.silent || !!opts.notifyOnError;
+}
+
 function pqrsMatrizSyncAfterDelete(e, opts) {
   opts = opts || {};
+  const notify = _pqrsMatrizSyncNotify(opts);
   return pqrsMatrizDeleteExpediente(e, opts).then(function(res) {
     if (res && res.noToken) {
-      if (opts.warnNoToken && !opts.silent && typeof notif === 'function') {
+      if ((opts.warnNoToken || notify) && typeof notif === 'function') {
         notif('⚠️ Conecte Gmail (Secretaría) para eliminar la fila en Google Sheets.', 'warn');
       }
-    } else if (res && res.error && !opts.silent && typeof notif === 'function') {
+    } else if (res && res.error && notify && typeof notif === 'function') {
       notif('⚠️ Eliminado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
     }
     return res;
@@ -471,15 +508,16 @@ function pqrsMatrizSyncAfterDelete(e, opts) {
 
 function pqrsMatrizSyncAfterSave(e, opts) {
   opts = opts || {};
+  const notify = _pqrsMatrizSyncNotify(opts);
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return Promise.resolve(null);
   return pqrsMatrizSyncExpediente(e).then(function(res) {
     if (res && res.ok) {
       if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
     } else if (res && res.noToken) {
-      if (opts.warnNoToken && !opts.silent && typeof notif === 'function') {
+      if ((opts.warnNoToken || notify) && typeof notif === 'function') {
         notif('⚠️ Conecte Gmail (Secretaría o Correos) para sincronizar la hoja PQRSD en Google Sheets.', 'warn');
       }
-    } else if (res && res.error && !opts.silent && typeof notif === 'function') {
+    } else if (res && res.error && notify && typeof notif === 'function') {
       notif('⚠️ Guardado en sistema; Google Sheets no actualizado: ' + String(res.error.message || res.error).slice(0, 72), 'warn');
     }
     return res;

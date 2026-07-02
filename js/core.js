@@ -1002,7 +1002,7 @@ function eliminarPqrs(expId){
     }
     let sheetWarn='';
     if(typeof pqrsMatrizSyncAfterDelete==='function'){
-      const sheetRes=await pqrsMatrizSyncAfterDelete(expRef,{silent:true});
+      const sheetRes=await pqrsMatrizSyncAfterDelete(expRef,{silent:true,notifyOnError:true});
       if(sheetRes&&sheetRes.error)sheetWarn=' (hoja Google no actualizada)';
       else if(sheetRes&&sheetRes.noToken)sheetWarn=' (conecte Gmail para actualizar la hoja)';
     }
