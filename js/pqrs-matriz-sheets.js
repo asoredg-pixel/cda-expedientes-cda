@@ -19,9 +19,35 @@ const PQRS_MATRIZ_HEADER_LABELS = [
 function pqrsMatrizActiveSheetId() {
   try {
     const ls = localStorage.getItem(PQRS_MATRIZ_SHEET_LS_KEY);
-    if (ls && String(ls).trim()) return String(ls).trim();
+    if (ls && String(ls).trim()) {
+      const id = String(ls).trim();
+      if (!pqrsMatrizIsLegacyExcelSheetId(id)) return id;
+    }
   } catch (e) {}
-  return typeof PQRS_MATRIZ_SHEET_ID !== 'undefined' ? String(PQRS_MATRIZ_SHEET_ID || '').trim() : '';
+  const def = typeof PQRS_MATRIZ_SHEET_ID !== 'undefined' ? String(PQRS_MATRIZ_SHEET_ID || '').trim() : '';
+  if (def && !pqrsMatrizIsLegacyExcelSheetId(def)) return def;
+  return '';
+}
+
+function _pqrsMatrizLegacyExcelIds() {
+  const ids = ['1FaaTezSwWZmcDjlzEEu4FEgL5vLdaWau'];
+  if (typeof PQRS_MATRIZ_LEGACY_EXCEL_IDS !== 'undefined' && Array.isArray(PQRS_MATRIZ_LEGACY_EXCEL_IDS)) {
+    PQRS_MATRIZ_LEGACY_EXCEL_IDS.forEach(function(x) {
+      const s = String(x || '').trim();
+      if (s && ids.indexOf(s) < 0) ids.push(s);
+    });
+  }
+  return ids;
+}
+
+function pqrsMatrizIsLegacyExcelSheetId(id) {
+  id = String(id || '').trim();
+  return id ? _pqrsMatrizLegacyExcelIds().indexOf(id) >= 0 : false;
+}
+
+function pqrsMatrizClearActiveSheetIdCache() {
+  try { localStorage.removeItem(PQRS_MATRIZ_SHEET_LS_KEY); } catch (e) {}
+  _pqrsMatrizInvalidateMetaCache();
 }
 
 function pqrsMatrizSheetUrl(id) {
@@ -38,7 +64,9 @@ function pqrsMatrizSetActiveSheetId(id, persistFs) {
 }
 
 function pqrsMatrizApplySheetIdFromGlobal(g) {
-  if (g && g.pqrsMatrizSheetId) pqrsMatrizSetActiveSheetId(g.pqrsMatrizSheetId, false);
+  if (g && g.pqrsMatrizSheetId && !pqrsMatrizIsLegacyExcelSheetId(g.pqrsMatrizSheetId)) {
+    pqrsMatrizSetActiveSheetId(g.pqrsMatrizSheetId, false);
+  }
 }
 
 async function pqrsMatrizPersistSheetIdFirestore(id) {
@@ -78,6 +106,11 @@ function _pqrsMatrizMsgLooksApiDisabled(msg) {
   return /has not been used|not been enabled|service_disabled|access not configured|sheets api has not/i.test(low);
 }
 
+function _pqrsMatrizMsgLooksUnsupported(msg) {
+  const low = String(msg || '').toLowerCase();
+  return /not supported for this document|must be a native|cannot be loaded as a spreadsheet|unable to parse range|this operation is not supported/i.test(low);
+}
+
 function _pqrsMatrizParseApiError(status, text) {
   let msg = String(text || '').slice(0, 400);
   try {
@@ -88,12 +121,14 @@ function _pqrsMatrizParseApiError(status, text) {
   if (_pqrsMatrizMsgLooksApiDisabled(msg)) {
     return { kind: 'api_disabled', msg: msg, enableUrl: pqrsMatrizSheetsApiEnableUrl() };
   }
+  if (_pqrsMatrizMsgLooksUnsupported(msg)) {
+    return { kind: 'unsupported', msg: msg };
+  }
   if (status === 403) {
     if (/insufficient|scope|credential/i.test(low)) return { kind: 'scope', msg: msg };
-    if (/not supported|cannot be loaded|unable to parse|invalid value/i.test(low)) return { kind: 'unsupported', msg: msg };
     return { kind: 'permission', msg: msg };
   }
-  if (status === 404) return { kind: 'missing', msg: msg };
+  if (status === 400 || status === 404) return { kind: 'missing', msg: msg };
   return { kind: 'other', msg: msg };
 }
 
@@ -101,6 +136,9 @@ function _pqrsMatrizErrFromException(err) {
   const raw = String(err && err.message || err || '');
   if (_pqrsMatrizMsgLooksApiDisabled(raw)) {
     return { kind: 'api_disabled', msg: raw, enableUrl: pqrsMatrizSheetsApiEnableUrl() };
+  }
+  if (_pqrsMatrizMsgLooksUnsupported(raw)) {
+    return { kind: 'unsupported', msg: raw };
   }
   const m = raw.match(/Sheets API (\d+):\s*(.*)/);
   if (m) return _pqrsMatrizParseApiError(parseInt(m[1], 10), m[2]);
@@ -115,7 +153,7 @@ function pqrsMatrizSyncErrorMessage(parsed) {
     return 'falta habilitar Google Sheets API en Google Cloud (proyecto Firebase). Abra el enlace en consola (F12) o pida al administrador.';
   }
   if (parsed.kind === 'permission' || parsed.kind === 'unsupported') {
-    return 'use una hoja Google Sheets nativa (no Excel). Vuelva a radicar para crearla en la carpeta PQRSD.';
+    return 'se está creando una Google Sheet nativa en la carpeta PQRSD. Radique de nuevo si no aparece la fila.';
   }
   return String(parsed.msg || '').slice(0, 120);
 }
@@ -154,22 +192,32 @@ async function _pqrsMatrizWriteHeaders(spreadsheetId, sheetName) {
   });
 }
 
+async function pqrsMatrizBootstrapNativeSheet() {
+  pqrsMatrizClearActiveSheetIdCache();
+  const created = await pqrsMatrizCrearHojaNativa();
+  if (typeof notif === 'function') {
+    notif('✅ Matriz PQRSD creada en Google Sheets (carpeta PQRSD). Datos desde fila ' + PQRS_MATRIZ_DATA_ROW + '.', 'ok');
+  }
+  console.info('Matriz PQRSD nativa:', created.url);
+  return created;
+}
+
 async function pqrsMatrizEnsureWorkbookReady() {
   const token = _pqrsMatrizSheetsToken();
   if (!token) return { ok: false, noToken: true };
-  const id = pqrsMatrizActiveSheetId();
+  let id = pqrsMatrizActiveSheetId();
   if (!id) {
-    const created = await pqrsMatrizCrearHojaNativa();
+    const created = await pqrsMatrizBootstrapNativeSheet();
     return { ok: true, created: true, url: created.url };
   }
   try {
-    await _pqrsSheetsApi('GET', '?fields=spreadsheetId,properties.title');
+    await _pqrsSheetsApi('GET', '?fields=spreadsheetId,properties.title,mimeType');
     return { ok: true };
   } catch (err) {
     const parsed = _pqrsMatrizErrFromException(err);
     if (parsed.kind === 'scope') return { ok: false, error: err, parsed: parsed };
     if (_pqrsMatrizShouldBootstrapFromErr(parsed)) {
-      const created = await pqrsMatrizCrearHojaNativa();
+      const created = await pqrsMatrizBootstrapNativeSheet();
       return { ok: true, created: true, url: created.url };
     }
     throw err;
@@ -687,11 +735,7 @@ async function pqrsMatrizSyncExpediente(e, opts) {
     const parsed = _pqrsMatrizErrFromException(err);
     if (!opts._bootstrapped && _pqrsMatrizShouldBootstrapFromErr(parsed)) {
       try {
-        const created = await pqrsMatrizCrearHojaNativa();
-        if (typeof notif === 'function') {
-          notif('✅ Matriz PQRSD creada en Google Sheets. Datos desde fila ' + PQRS_MATRIZ_DATA_ROW + '.', 'ok');
-        }
-        console.info('Matriz PQRSD (Google Sheets nativo):', created.url);
+        await pqrsMatrizBootstrapNativeSheet();
         return await pqrsMatrizSyncExpediente(e, Object.assign({}, opts, { _bootstrapped: true }));
       } catch (bootErr) {
         console.warn('pqrsMatrizSyncExpediente bootstrap:', bootErr);
