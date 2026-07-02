@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- SST UI v20260702j — chat sin No leído; nombre persona en mensajes -->
+<!-- SST UI v20260702o — formulario radicación sin valores por defecto -->
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -30,7 +30,7 @@
 <script src="js/chat.js?v=20260702m"></script>
 <script src="js/pqrs-matriz-export.js?v=20260702b"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702n"></script>
-<script src="js/pqrs.js?v=20260702m"></script>
+<script src="js/pqrs.js?v=20260702o"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260702g"></script>
 <script src="js/recursos.js?v=20260630h"></script>
@@ -655,8 +655,8 @@
         <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud (puede ser anterior a la radicación)"></div>
         <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
         <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
-        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="">— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
-        <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="">— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
+        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="" selected>— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option></select></div>
+        <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="" selected>— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
       </div>
       <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
         <label>Medio de notificación</label>
@@ -665,9 +665,9 @@
         <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
       </div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>Tipo de persona</label><select id="sec-tipo-persona" onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
+        <div class="fld"><label>Tipo de persona<span class="req-star">*</span></label><select id="sec-tipo-persona" required onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="" selected>— Seleccionar —</option><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
       </div>
-      <div id="sec-pn-block">
+      <div id="sec-pn-block" style="display:none">
         <div class="fg" style="margin-bottom:10px">
           <div class="fld"><label>Nombre del solicitante<span class="req-star">*</span></label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
@@ -1053,6 +1053,7 @@ async function bootstrapApp(){
   initLoginScreen();
   initFirebaseAuthListener();
   initSecMedioNotificacion(true);
+  if(typeof resetSecRadicacionFormulario==='function')resetSecRadicacionFormulario();
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});

@@ -104,6 +104,28 @@ function secAnexoFileLabel(inp){
   if(!files.length){lbl.textContent='Ningún archivo seleccionado';return;}
   lbl.textContent=files.length===1?files[0].name:(files.length+' archivos seleccionados');
 }
+function secEnsureSelectPlaceholder(selId,label){
+  const sel=document.getElementById(selId);
+  if(!sel)return null;
+  if(!sel.querySelector('option[value=""]')){
+    const o=document.createElement('option');
+    o.value='';
+    o.textContent=label||'— Seleccionar —';
+    sel.insertBefore(o,sel.firstChild);
+  }
+  return sel;
+}
+function resetSecRadicacionFormulario(){
+  const tipoSel=secEnsureSelectPlaceholder('sec-tipo');
+  if(tipoSel)tipoSel.value='';
+  const medioSel=secEnsureSelectPlaceholder('sec-medio');
+  if(medioSel)medioSel.value='';
+  const tpSel=secEnsureSelectPlaceholder('sec-tipo-persona');
+  const anon=!!(document.getElementById('sec-anonimo')&&document.getElementById('sec-anonimo').checked);
+  if(tpSel&&!anon)tpSel.value='';
+  if(typeof onSecMedioRecepcionChange==='function')onSecMedioRecepcionChange();
+  toggleSecPersona();
+}
 function poblarSecOficinaSelect(){
   const sel=document.getElementById('sec-oficina');
   if(!sel)return;
@@ -115,16 +137,21 @@ function poblarSecOficinaSelect(){
 }
 function toggleSecAnonimo(){
   const anon=!!(document.getElementById('sec-anonimo')&&document.getElementById('sec-anonimo').checked);
-  ['sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono','sec-tipo-persona'].forEach(id=>{
+  const tp=document.getElementById('sec-tipo-persona');
+  ['sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){el.disabled=anon;if(anon)el.value='';}
   });
-  const tp=document.getElementById('sec-tipo-persona');if(tp&&anon)tp.value='natural';
+  if(tp){
+    tp.disabled=anon;
+    if(anon)tp.value='';
+    else secEnsureSelectPlaceholder('sec-tipo-persona');
+  }
   toggleSecPersona();
 }
 function toggleSecPersona(){
   const anon=!!(document.getElementById('sec-anonimo')&&document.getElementById('sec-anonimo').checked);
-  const tp=(document.getElementById('sec-tipo-persona')||{}).value||'natural';
+  const tp=String((document.getElementById('sec-tipo-persona')||{}).value||'').trim();
   const pn=document.getElementById('sec-pn-block');
   const pj=document.getElementById('sec-pj-block');
   if(pn)pn.style.display=(!anon&&tp==='natural')?'':'none';
@@ -136,13 +163,11 @@ function limpiarFormSecretaria(){
   // Compatibilidad con ref-card legacy
   const refCard=document.getElementById('gmail-ref-card');if(refCard)refCard.style.display='none';
   ['sec-exp','sec-asunto','sec-detalle','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const tp=document.getElementById('sec-tipo-persona');if(tp)tp.value='natural';
   const anon=document.getElementById('sec-anonimo');if(anon)anon.checked=false;
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
   const anexo=document.getElementById('sec-anexo');if(anexo)anexo.value='';
   secAnexoFileLabel(anexo);
-  const tipoSel=document.getElementById('sec-tipo');if(tipoSel)tipoSel.value='';
-  const medioSel=document.getElementById('sec-medio');if(medioSel)medioSel.value='';
+  resetSecRadicacionFormulario();
   toggleSecAnonimo();
   poblarSecOficinaSelect();
 }
@@ -189,11 +214,11 @@ async function guardarPqrsSecretaria(modo){
   const tipoRaw=String((document.getElementById('sec-tipo')||{}).value||'').trim();
   const medioRaw=String((document.getElementById('sec-medio')||{}).value||'').trim();
   const anon=!!((document.getElementById('sec-anonimo')||{}).checked);
-  const tipoPersona=anon?'natural':((document.getElementById('sec-tipo-persona')||{}).value||'natural');
+  const tipoPersonaRaw=anon?'':String((document.getElementById('sec-tipo-persona')||{}).value||'').trim();
   let nombre='',ident='',correo='',tel='';
   const pjFields={};
   if(!anon){
-    if(tipoPersona==='juridica'){
+    if(tipoPersonaRaw==='juridica'){
       pjFields._tipo_persona='juridica';
       pjFields._pj_empresa=String((document.getElementById('sec-pj-empresa')||{}).value||'').trim();
       pjFields._pj_nit=String((document.getElementById('sec-pj-nit')||{}).value||'').trim();
@@ -211,7 +236,7 @@ async function guardarPqrsSecretaria(modo){
       ident=pjFields._pj_nit||ofiId;
       correo=pjFields._pj_correo||ofiCorreo;
       tel=pjFields._pj_telefono||ofiTel;
-    }else{
+    }else if(tipoPersonaRaw==='natural'){
       nombre=String((document.getElementById('sec-pn-nombre')||{}).value||'').trim();
       ident=String((document.getElementById('sec-pn-identificacion')||{}).value||'').trim();
       correo=String((document.getElementById('sec-pn-correo')||{}).value||'').trim();
@@ -236,17 +261,21 @@ async function guardarPqrsSecretaria(modo){
   if(!fechaSol){notif('Indique la fecha de solicitud del ciudadano','err');return;}
   if(!tipoRaw){notif('Seleccione el tipo de solicitud','err');return;}
   if(!medioRaw){notif('Seleccione el medio de recepción','err');return;}
+  if(!anon&&!tipoPersonaRaw){notif('Seleccione el tipo de persona','err');return;}
   if(!anon){
-    if(tipoPersona==='natural'){
+    if(tipoPersonaRaw==='natural'){
       const pnNom=String((document.getElementById('sec-pn-nombre')||{}).value||'').trim();
       if(!pnNom){notif('Indique el nombre del solicitante','err');return;}
-    }else if(tipoPersona==='juridica'){
+    }else if(tipoPersonaRaw==='juridica'){
       const pjEmp=String((document.getElementById('sec-pj-empresa')||{}).value||'').trim();
       const ofiNom=String((document.getElementById('sec-pj-ofi-nombre')||{}).value||'').trim();
       if(!pjEmp){notif('Indique la razón social o entidad','err');return;}
       if(!ofiNom){notif('Indique el nombre de quien radica la solicitud','err');return;}
+    }else{
+      notif('Seleccione el tipo de persona','err');return;
     }
   }
+  const tipoPersona=anon?'natural':tipoPersonaRaw;
   const tipo=tipoRaw;
   const medio=normMedioRecepcionPqrs(medioRaw);
   if(!asunto){notif('Indique el asunto de la solicitud','err');return;}
