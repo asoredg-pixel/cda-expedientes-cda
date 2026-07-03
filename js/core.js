@@ -2342,21 +2342,28 @@ function initPqrsSolRespCompareTab(){
 function getDocsPqrsRespuestaCiudadano(e){
   if(!e||!esPqrsSecretaria(e))return[];
   const docs=[];
+  const seen=new Set();
   const push=(url,preview,label,mime,fecha,tipo)=>{
     if(!url&&!preview)return;
+    const key=String(url||preview||'');
+    if(seen.has(key))return;
+    seen.add(key);
     docs.push({url:url||preview,preview:preview||url,label:label||'Respuesta PQRSD',tipo:tipo||'Respuesta oficial PQRSD',mime:mime||'',fecha:fecha||e._pqrs_respuesta_fecha||''});
   };
-  // Workflow docs (from Sprint 3-7)
+  // Workflow docs (from Sprint 3-7). Captura links Drive, previews y base64 (data).
   if(typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
     if(wf&&Array.isArray(wf.documentos)){
       wf.documentos.forEach((d,i)=>{
-        if(!d.driveLink)return;
+        if(!d)return;
+        const raw=d.driveLink||d.previewLink||d.url||d.data||'';
+        if(!raw)return;
+        const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):{url:raw,preview:raw};
         const lbl=d.tipo==='oficio_firmado'?'Oficio firmado por el Director':
                    d.tipo==='archivo'?'Documento adjunto':
                    d.tipo==='correo'?'Correo enviado al ciudadano':
-                   d.nombre||('Documento '+(i+1));
-        push(d.driveLink,d.previewLink||d.driveLink,lbl,d.mime||'',wf.fecha_respuesta||e._pqrs_respuesta_fecha||'','Respuesta oficial PQRSD');
+                   d.nombre||d.name||d.label||('Documento '+(i+1));
+        push(d.driveLink||p.url||raw,d.previewLink||p.preview||raw,lbl,d.mime||'',wf.fecha_respuesta||e._pqrs_respuesta_fecha||'','Respuesta oficial PQRSD');
       });
     }
   }

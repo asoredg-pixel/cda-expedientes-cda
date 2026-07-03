@@ -2957,9 +2957,38 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
   return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
+// Construye un MIME cuyo cuerpo YA es HTML (no lo re-escapa como texto de usuario).
+// Se usa para las notificaciones automáticas al ciudadano (radicación/respuesta PQRSD).
+function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
+  const boundary = 'sst_ofihtml_' + Date.now();
+  const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
+  const plainAlt = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
+  const lines = [
+    'To: ' + to,
+    'Subject: ' + subjectEnc,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="' + boundary + '"',
+    '',
+    '--' + boundary,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    plainAlt,
+    '',
+    '--' + boundary,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + boundary + '--'
+  ].join('\r\n');
+  return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 // Alias used by core.js workflow — sends a plain HTML email using the office token
 async function gmailOfiSendMessage(to, subject, htmlBody) {
-  const mime = _gmailOfiBuildMime(to, '', subject, htmlBody, '');
+  const mime = _gmailOfiBuildHtmlMime(to, subject, htmlBody);
   return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
 
