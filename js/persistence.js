@@ -295,6 +295,21 @@ function expedienteDocRef(db,deptoId,expOrId){
   if(!expId||!db||!window._fsDoc)return null;
   return window._fsDoc(db,'departamentos',deptoId,'expedientes',expId);
 }
+// Elimina recursivamente valores undefined (Firestore v10 lanza invalid-argument
+// ante cualquier undefined, incluso anidado en arrays/objetos).
+function _fsStripUndefinedDeep(v){
+  if(Array.isArray(v))return v.map(_fsStripUndefinedDeep);
+  if(v&&typeof v==='object'&&!(v instanceof Date)){
+    const out={};
+    for(const k in v){
+      if(!Object.prototype.hasOwnProperty.call(v,k))continue;
+      if(v[k]===undefined)continue;
+      out[k]=_fsStripUndefinedDeep(v[k]);
+    }
+    return out;
+  }
+  return v;
+}
 async function saveExpedienteDoc(deptoId,exp){
   const db=window._db;
   if(!db||!window._fsSetDoc||!exp)return false;
@@ -303,9 +318,9 @@ async function saveExpedienteDoc(deptoId,exp){
   const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
-  // Strip undefined values — Firestore v10 throws invalid-argument on undefined fields
+  // Strip undefined values (incluye anidados) — Firestore v10 throws invalid-argument on undefined fields
   const rawPayload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
-  const payload=Object.fromEntries(Object.entries(rawPayload).filter(([,v])=>v!==undefined));
+  const payload=_fsStripUndefinedDeep(rawPayload);
   try{
     console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
     await window._fsSetDoc(ref,payload,{merge:true});

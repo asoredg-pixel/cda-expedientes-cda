@@ -1768,8 +1768,6 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
 
     if (soporte) {
       window._gmailPendingAttachments = [soporte];
-      const loc = pqrsFolder.pathLabel ? ' · ' + pqrsFolder.pathLabel + '/Solicitud' : '';
-      notif('✅ Soporte de la solicitud subido al Drive institucional' + loc + '. Los anexos quedan en el correo de la oficina.', 'ok');
     } else {
       notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');
     }
@@ -2861,6 +2859,8 @@ function gmailOfiOpenCompose(opts) {
   const modal = document.getElementById('gm-compose-modal');
   if (!modal) return;
   if (!_gmailOfiTokenValid()) { notif('Conecte su correo para redactar.', 'err'); return; }
+  // Limpiar contexto de respuesta PQRSD: solo aplica cuando se abre vía gmailOfiAbrirComposeRespuestaPqrs.
+  window._gmailOfiPqrsRespCtx = null;
   opts = opts || {};
   const f = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   f('gm-compose-to',      opts.to || '');
@@ -2915,6 +2915,7 @@ function gmailOfiForwardCurrent() {
 function gmailOfiDiscardDraft() {
   const modal = document.getElementById('gm-compose-modal');
   if (modal) modal.style.display = 'none';
+  window._gmailOfiPqrsRespCtx = null;
 }
 
 function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
@@ -3005,13 +3006,63 @@ async function gmailOfiSendCompose() {
   if (sendBtn) { sendBtn.textContent = '⏳ Enviando…'; sendBtn.disabled = true; }
   try {
     await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) });
+    // Capturar el contexto de respuesta PQRSD antes de descartar (discardDraft lo limpia).
+    const pqrsCtx = window._gmailOfiPqrsRespCtx;
     notif('✅ Mensaje enviado.', 'ok');
     gmailOfiDiscardDraft();
     if (_gmailOfiActiveFolder === 'SENT') gmailOfiFolder('SENT');
+    if (pqrsCtx && pqrsCtx.expId) {
+      try { _gmailOfiFinalizarRespuestaPqrsDesdeCompose(pqrsCtx, { subject: subject, body: body, to: to }); }
+      catch (err) { console.warn('finalizar PQRSD tras compose:', err); }
+    }
   } catch(e) {
     notif('Error al enviar: ' + e.message, 'err');
     if (sendBtn) { sendBtn.textContent = '📤 Enviar'; sendBtn.disabled = false; }
   }
+}
+
+// Cierra y persiste la PQRSD cuando el compose se abrió vía "📧 Enviar correo".
+// Registra la notificación por correo y sincroniza a Firestore (sin subir adjuntos:
+// para adjuntar documentos al Drive use "📨 Responder PQRSD").
+function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
+  const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(ctx.expId || '').trim());
+  if (!e) return;
+  const yaCerrada = typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e);
+  const fecha = typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10);
+  const cuerpo = String((mail && mail.body) || '').trim();
+  const para = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
+  if (!yaCerrada && typeof setPqrsWorkflow === 'function') {
+    const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
+    setPqrsWorkflow(e, {
+      fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
+      canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
+      cuerpo: cuerpo || (wf.cuerpo || ''),
+      fecha_respuesta: wf.fecha_respuesta || fecha
+    });
+  } else if (!yaCerrada) {
+    e._pqrs_estado_oficina = 'cerrado';
+    e._estado = 'Atendido';
+    e._fecha_res = fecha;
+    e._pqrs_respuesta_fecha = fecha;
+    e._pqrs_respuesta_medio = 'electronica';
+    if (cuerpo) e._pqrs_respuesta_nota = cuerpo;
+  }
+  if (typeof registrarNotificacionCiudadanoPqrs === 'function') {
+    registrarNotificacionCiudadanoPqrs(e, {
+      tipo: 'respuesta', medio: 'correo', enviado: true, a: para,
+      por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+      histTipo: 'notificacion_correo',
+      histNota: 'Respuesta enviada por correo a ' + (para || 'ciudadano')
+    });
+  } else {
+    if (!Array.isArray(e._pqrs_historial)) e._pqrs_historial = [];
+    e._pqrs_historial.push({ tipo: 'notificacion_correo', fecha: fecha, nota: 'Respuesta enviada por correo a ' + (para || 'ciudadano'), oficina: e._pqrs_oficina || '' });
+  }
+  if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
+  if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
+  if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
+  if (typeof refreshPqrsDetalleViews === 'function') refreshPqrsDetalleViews(e._exp);
+  notif('✅ PQRSD ' + e._exp + ' registrada como respondida por correo', 'ok');
 }
 
 async function gmailOfiSaveDraft() {

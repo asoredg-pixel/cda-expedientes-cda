@@ -2203,7 +2203,11 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
   if(adj.links.length)e._pqrs_respuesta_link=adj.links[0];
   if(adj.links.length>1)e._pqrs_respuesta_links=adj.links;
   if(archivos.length){
-    e._pqrs_respuesta_soportes=archivos.map((a,i)=>({label:a.name||('Respuesta '+(i+1)),url:a.data,mime:a.mime,preview:a.data}));
+    e._pqrs_respuesta_soportes=archivos.map((a,i)=>{
+      const url=a.driveLink||a.url||a.data||a.previewLink||'';
+      const preview=a.previewLink||a.preview||a.driveLink||a.url||a.data||'';
+      return {label:a.nombre||a.name||a.label||('Respuesta '+(i+1)),url:url,mime:a.mime||'',preview:preview};
+    });
   }
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   const cuerpo=opts.cuerpo||'';
