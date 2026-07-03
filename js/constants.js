@@ -199,9 +199,14 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260702w';
+const SST_BUILD_ID = '20260703a';
 
-// Matriz PQRSD — la app crea/usa Google Sheet nativa (no Excel en Drive).
+// Radicación PQRSD — PDF, anexos y carpetas Radicacion/año/mes/medio (cdaguaviare1)
+// https://drive.google.com/drive/folders/1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF
+const DRIVE_ROOT_PQRSD_ID = '1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF';
+const DRIVE_ROOT_PQRSD_URL = 'https://drive.google.com/drive/folders/' + DRIVE_ROOT_PQRSD_ID;
+
+// Matriz oficial PQRSD — archivo XLSX (carpeta distinta a radicación)
 const PQRS_MATRIZ_SHEET_ID = '';
 const PQRS_MATRIZ_LEGACY_EXCEL_IDS = ['1FaaTezSwWZmcDjlzEEu4FEgL5vLdaWau'];
 const PQRS_MATRIZ_DATA_ROW = 16;

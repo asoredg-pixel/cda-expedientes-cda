@@ -769,9 +769,7 @@ async function driveUploadFile(filename, mimeType, base64urlData) {
 // Guainía y Vaupés usan links manuales (su propio Drive).
 // La carpeta raíz debe compartirse con EDITOR para cada correo de oficina.
 // ----------------------------------------------------------------
-// Carpeta raíz PQRSD (cdaguaviare1@gmail.com):
-// https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
-const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
+// DRIVE_ROOT_PQRSD_ID → constants.js (PDF/anexos; Radicacion/año/mes/medio)
 // Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días):
 // https://drive.google.com/drive/folders/1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU
 const DRIVE_ROOT_CHAT_ID = (typeof CHAT_DRIVE_FOLDER_ID !== 'undefined' && CHAT_DRIVE_FOLDER_ID)
@@ -936,6 +934,17 @@ async function drivePurgeTaskInstitutionalSoportes(task) {
 }
 
 // Obtiene o crea una carpeta dentro de un padre dado usando el token indicado.
+function _driveClearFolderCache() {
+  try {
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.indexOf('sst_df_') === 0) keys.push(k);
+    }
+    keys.forEach(function(k) { sessionStorage.removeItem(k); });
+  } catch (e) {}
+}
+
 async function _driveEnsureFolder(token, folderName, parentId) {
   const q = 'name="' + folderName.replace(/"/g, '\\"') +
             '" and mimeType="application/vnd.google-apps.folder"' +
@@ -1058,6 +1067,7 @@ async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
 async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  _driveClearFolderCache();
 
   // Fecha de referencia para organizar año/mes (radicación o respuesta).
   let ref = fechaRef ? new Date(fechaRef) : new Date();
@@ -1086,7 +1096,8 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
   }
 
   // Crear (o reutilizar) la cadena de carpetas.
-  let parent = DRIVE_ROOT_PQRSD_ID;
+  const pqrsRoot = typeof DRIVE_ROOT_PQRSD_ID !== 'undefined' ? DRIVE_ROOT_PQRSD_ID : '1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF';
+  let parent = pqrsRoot;
   for (const seg of segments) parent = await _driveEnsureFolder(token, seg, parent);
   let folderId = parent;
   if (pqrsNum) {
