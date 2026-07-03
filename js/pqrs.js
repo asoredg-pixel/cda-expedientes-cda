@@ -326,8 +326,9 @@ async function guardarPqrsSecretaria(modo){
   }
   let manualDriveAtts=null;
   let manualDriveFolderLink='';
+  let driveFolderMeta={};
   let archivoFinal='';
-  const tipoRadicacion=gmailMsgId?'radicacion_correo':(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
+  const tipoRadicacion=gmailMsgId?'radicacion_correo':(typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro'));
   if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
     try{
       const manualRes=await subirSoporteRadicacionManual({
@@ -351,7 +352,14 @@ async function guardarPqrsSecretaria(modo){
         return;
       }
       if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
-      manualDriveFolderLink=manualRes.folderLink||'';
+      manualDriveFolderLink=manualRes.folderLink||manualRes.pqrsFolderLink||'';
+      driveFolderMeta={
+        pqrsFolderId:manualRes.pqrsFolderId||'',
+        pqrsFolderLink:manualRes.folderLink||manualRes.pqrsFolderLink||'',
+        solicitudFolderId:manualRes.solicitudFolderId||'',
+        respuestaFolderId:manualRes.respuestaFolderId||'',
+        pathLabel:manualRes.pathLabel||''
+      };
       if(anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
     }catch(e){
       console.warn('soporte manual drive:',e);
@@ -367,7 +375,18 @@ async function guardarPqrsSecretaria(modo){
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
     ?window._gmailPendingEmailData:null;
   const linkFinal=(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
-  const folderLinkFinal=manualDriveFolderLink||(gmailAtts&&gmailAtts[0]&&gmailAtts[0].folderLink)||'';
+  const gFolders=window._gmailPendingPqrsFolders;
+  if(gFolders&&!driveFolderMeta.pqrsFolderId){
+    driveFolderMeta={
+      pqrsFolderId:gFolders.pqrsFolderId||'',
+      pqrsFolderLink:gFolders.pqrsFolderLink||'',
+      solicitudFolderId:gFolders.solicitudFolderId||'',
+      respuestaFolderId:gFolders.respuestaFolderId||'',
+      pathLabel:gFolders.pathLabel||''
+    };
+  }
+  window._gmailPendingPqrsFolders=null;
+  const folderLinkFinal=manualDriveFolderLink||driveFolderMeta.pqrsFolderLink||(gmailAtts&&gmailAtts[0]&&gmailAtts[0].folderLink)||'';
   const encargadoOfi=soloRadicar?'':(typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'');
   const data=normalizePqrsOficinaFields({
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:fechaTermino||'',
@@ -386,6 +405,10 @@ async function guardarPqrsSecretaria(modo){
     _pqrs_estado_oficina:'pendiente',_pqrs_responsable_oficina:encargadoOfi,
     _pqrs_solicitud_link:linkFinal,_pqrs_solicitud_archivo:archivoFinal,_pqrs_detalle:detalle,
     _pqrs_drive_folder_link:folderLinkFinal,
+    _pqrs_drive_folder_id:driveFolderMeta.pqrsFolderId||'',
+    _pqrs_drive_solicitud_folder_id:driveFolderMeta.solicitudFolderId||'',
+    _pqrs_drive_respuesta_folder_id:driveFolderMeta.respuestaFolderId||'',
+    _pqrs_drive_path_label:driveFolderMeta.pathLabel||'',
     _pqrs_historial:hist,tasks:[],
     _gmail_message_id:gmailMsgId||null,
     _pqrs_gmail_attachments:gmailAtts||null,

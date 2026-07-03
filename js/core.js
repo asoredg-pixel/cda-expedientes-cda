@@ -769,7 +769,7 @@ async function submitPqrsRespuesta(expId){
     for(const {file,statusEl} of adj.files){
       try{
         if(statusEl)statusEl.textContent='⬆ Subiendo…';
-        const res=await driveUploadInstitutional(file,file.name,file.type||'application/octet-stream','respuesta_aprobada',expId,nombreCarpeta);
+        const res=await driveUploadInstitutional(file,file.name,file.type||'application/octet-stream','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
         if(statusEl)statusEl.textContent='✅ Subido';
         documentos.push({nombre:file.name,driveLink:res.driveLink,previewLink:res.previewLink,fileId:res.fileId,tipo:'archivo'});
       }catch(err){
@@ -11355,7 +11355,7 @@ async function vitalSubirPdfFirmado(expId){
   if(statusEl)statusEl.textContent='⬆ Subiendo…';
   try{
     const nombreCarpeta=(e._qd_nombre||e._nombre||e._pn_nombre||expId);
-    const res=await driveUploadInstitutional(file,file.name,'application/pdf','respuesta_aprobada',expId,nombreCarpeta);
+    const res=await driveUploadInstitutional(file,file.name,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
     if(statusEl)statusEl.textContent='✅ PDF subido: '+file.name;
     // Store the link in session for finalize
     window._vitalPdfLink=res.driveLink;

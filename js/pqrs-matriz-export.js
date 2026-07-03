@@ -230,7 +230,8 @@ async function pqrsMatrizBuildWorkbookFromList(list,periodLbl){
 async function pqrsMatrizDriveUpsertWorkbook(wb,filename){
   const token=typeof _driveGetBestToken==='function'?_driveGetBestToken():'';
   if(!token)return{ok:false,noToken:true};
-  const folderId=typeof PQRS_MATRIZ_DRIVE_FOLDER_ID!=='undefined'?PQRS_MATRIZ_DRIVE_FOLDER_ID:'16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
+  const folderId=typeof PQRS_MATRIZ_DRIVE_FOLDER_ID!=='undefined'?PQRS_MATRIZ_DRIVE_FOLDER_ID
+    :(typeof DRIVE_ROOT_PQRSD_ID!=='undefined'?DRIVE_ROOT_PQRSD_ID:'16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS');
   const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
   const uploadUrl=typeof DRIVE_UPLOAD_URL!=='undefined'?DRIVE_UPLOAD_URL:'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   const blob=pqrsMatrizWorkbookToBlob(wb);

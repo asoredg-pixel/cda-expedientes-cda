@@ -199,21 +199,19 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260703b';
+const SST_BUILD_ID = '20260703c';
 
-// Radicación PQRSD — PDF, anexos y carpetas Radicacion/año/mes/medio (cdaguaviare1)
-// https://drive.google.com/drive/folders/1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF
-const DRIVE_ROOT_PQRSD_ID = '1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF';
+// Carpeta PQRSD institucional — matriz XLSX + Radicacion/año/mes/PQRSD-xxx (cdaguaviare1)
+// https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
+const DRIVE_ROOT_PQRSD_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
 const DRIVE_ROOT_PQRSD_URL = 'https://drive.google.com/drive/folders/' + DRIVE_ROOT_PQRSD_ID;
 
-// Matriz oficial PQRSD — archivo XLSX (carpeta distinta a radicación)
+// Matriz oficial PQRSD — mismo directorio raíz que radicación
 const PQRS_MATRIZ_SHEET_ID = '';
 const PQRS_MATRIZ_LEGACY_EXCEL_IDS = ['1FaaTezSwWZmcDjlzEEu4FEgL5vLdaWau'];
 const PQRS_MATRIZ_DATA_ROW = 16;
-// Carpeta Drive matriz oficial PQRSD (cdaguaviare1)
-// https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
-const PQRS_MATRIZ_DRIVE_FOLDER_ID = '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
-const PQRS_MATRIZ_DRIVE_FOLDER_URL = 'https://drive.google.com/drive/folders/' + PQRS_MATRIZ_DRIVE_FOLDER_ID;
+const PQRS_MATRIZ_DRIVE_FOLDER_ID = DRIVE_ROOT_PQRSD_ID;
+const PQRS_MATRIZ_DRIVE_FOLDER_URL = DRIVE_ROOT_PQRSD_URL;
 // Habilitar una sola vez en Google Cloud (proyecto Firebase cda-tramites)
 const GOOGLE_CLOUD_PROJECT_NUMBER = '215089141263';
 const GOOGLE_SHEETS_API_ENABLE_URL = 'https://console.cloud.google.com/apis/library/sheets.googleapis.com?project=' + GOOGLE_CLOUD_PROJECT_NUMBER;
