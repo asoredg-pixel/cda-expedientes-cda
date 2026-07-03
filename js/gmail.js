@@ -6,8 +6,7 @@
 // REQUISITO (configuración única en Google Cloud Console):
 //   1. Habilitar Gmail API, Google Drive API y Google Sheets API en el proyecto Firebase.
 //   2. Pantalla de consentimiento OAuth → agregar scopes:
-//      gmail.modify · gmail.send · drive · spreadsheets
-//      (drive completo: necesario para carpetas institucionales ya existentes en Drive)
+//      gmail.modify · gmail.send · drive.file · spreadsheets
 //   3. Agregar usuarios de prueba: cdaguaviare1@gmail.com + correo secretaria.
 //   4. Credencial OAuth web → Orígenes autorizados:
 //      https://asoredg-pixel.github.io
@@ -19,36 +18,11 @@ const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 const GMAIL_SCOPES = [
-  'https://www.googleapis.com/auth/gmail.modify',  // read + modify labels/messages (not delete)
+  'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/spreadsheets'
 ].join(' ');
-
-// Incrementar al cambiar scopes OAuth → fuerza reconexión con consentimiento.
-const GMAIL_OAUTH_SCOPE_VER = 3;
-const GMAIL_SCOPE_VER_KEY = 'sst_gmail_scope_ver';
-const GMAIL_OFI_SCOPE_VER_KEY = 'sst_gmail_ofi_scope_ver';
-
-function _gmailOAuthPromptFor(storageKey, minVer) {
-  try {
-    const v = parseInt(sessionStorage.getItem(storageKey) || '0', 10);
-    return v < minVer ? 'consent' : 'select_account';
-  } catch (e) { return 'consent'; }
-}
-function _gmailMarkScopeVer(storageKey, ver) {
-  try { sessionStorage.setItem(storageKey, String(ver)); } catch (e) {}
-}
-function gmailNeedsDriveScopeUpgrade() {
-  try {
-    return parseInt(sessionStorage.getItem(GMAIL_SCOPE_VER_KEY) || '0', 10) < GMAIL_OAUTH_SCOPE_VER;
-  } catch (e) { return true; }
-}
-function gmailIsDriveScopeCurrent() {
-  return !gmailNeedsDriveScopeUpgrade();
-}
-window.gmailNeedsDriveScopeUpgrade = gmailNeedsDriveScopeUpgrade;
-window.gmailIsDriveScopeCurrent = gmailIsDriveScopeCurrent;
 
 const GMAIL_TOKEN_KEY = 'sst_gmail_token';
 const GMAIL_TOKEN_EXP_KEY = 'sst_gmail_token_exp';
@@ -144,7 +118,6 @@ function gmailSetToken(tok, expiresInSec) {
     } else {
       sessionStorage.removeItem(GMAIL_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_TOKEN_EXP_KEY);
-      sessionStorage.removeItem(GMAIL_SCOPE_VER_KEY);
       if (_gmailTokenWarnTimer) { clearTimeout(_gmailTokenWarnTimer); _gmailTokenWarnTimer = null; }
     }
   } catch (e) {}
@@ -186,31 +159,20 @@ function gmailIsTokenValid() {
 function gmailConnect(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp);
-    _gmailMarkScopeVer(GMAIL_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER);
     notif('Bandeja conectada correctamente.', 'ok');
     if (typeof callback === 'function') callback();
     else gmailLoadInbox();
-  }, _gmailOAuthPromptFor(GMAIL_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER));
+  });
 }
 function gmailReconnectForMatriz(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp);
-    _gmailMarkScopeVer(GMAIL_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER);
     notif('Gmail reconectado con permiso de Google Sheets.', 'ok');
-    if (typeof callback === 'function') callback();
-  }, 'consent');
-}
-function gmailReconnectForDrive(callback) {
-  _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
-    gmailSetToken(tok, exp);
-    _gmailMarkScopeVer(GMAIL_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER);
-    notif('Gmail reconectado con permiso de Google Drive.', 'ok');
     if (typeof callback === 'function') callback();
   }, 'consent');
 }
 window.gmailConnect = gmailConnect;
 window.gmailReconnectForMatriz = gmailReconnectForMatriz;
-window.gmailReconnectForDrive = gmailReconnectForDrive;
 
 function gmailDisconnect() {
   gmailSetToken('');
@@ -1017,12 +979,6 @@ async function _driveVerifyFolderId(token, folderId) {
 async function _driveEnsureFolder(token, folderName, parentId) {
   folderName = String(folderName || '').trim();
   if (!folderName) throw new Error('Nombre de carpeta Drive vacío');
-  if (parentId) {
-    const parentOk = await _driveVerifyFolderId(token, parentId);
-    if (!parentOk) {
-      throw new Error('Carpeta padre no disponible en Drive ("' + folderName + '"). Verifique permisos de Editor en la carpeta PQRSD institucional.');
-    }
-  }
   const cacheKey = 'sst_df_' + (parentId || 'root') + '_' + folderName.replace(/\s/g, '_');
   try {
     const c = sessionStorage.getItem(cacheKey);
@@ -1127,12 +1083,6 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
   }
 
   const pqrsRoot = typeof DRIVE_ROOT_PQRSD_ID !== 'undefined' ? DRIVE_ROOT_PQRSD_ID : '16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS';
-  if (!(await _driveVerifyFolderId(token, pqrsRoot))) {
-    const scopeHint = (typeof gmailNeedsDriveScopeUpgrade === 'function' && gmailNeedsDriveScopeUpgrade())
-      ? ' Desconecte y vuelva a conectar la bandeja Gmail (aparecerá permiso de Google Drive).'
-      : ' Verifique que la cuenta conectada sea propietaria o tenga Editor en la carpeta PQRSD.';
-    throw new Error('Sin acceso a la carpeta raíz PQRSD en Drive.' + scopeHint);
-  }
 
   const ym = _drivePqrsFechaRefAnioMes(fechaRef);
   const pathParts = [];
@@ -1277,9 +1227,6 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
     const target = uploadOpts.uploadTarget || _driveUploadTargetFromTipo(tipoS);
     folderId = target === 'solicitud' ? pqrsFolders.solicitudFolderId : pqrsFolders.respuestaFolderId;
     folderLink = target === 'solicitud' ? pqrsFolders.solicitudFolderLink : pqrsFolders.respuestaFolderLink;
-  }
-  if (!(await _driveVerifyFolderId(token, folderId))) {
-    throw new Error('Carpeta destino PQRSD no válida en Drive. Intente de nuevo tras reconectar Gmail.');
   }
 
   // Upload multipart
@@ -2405,11 +2352,11 @@ async function gmailSubirAdjuntosYVincular() {
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
 const GMAIL_OFI_ACCOUNT_KEY = 'sst_gmail_ofi_account';
-// drive: acceso a carpetas institucionales compartidas por ID (no solo drive.file)
+// drive.file: upload y crear carpetas; acceso a lo que la app creó
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/spreadsheets'
 ].join(' ');
 const GMAIL_OFI_SYS_LABELS = new Set([
@@ -2438,7 +2385,6 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_EXP_KEY);
       sessionStorage.removeItem(GMAIL_OFI_ACCOUNT_KEY);
-      sessionStorage.removeItem(GMAIL_OFI_SCOPE_VER_KEY);
     }
   } catch(e) {}
 }
@@ -2495,13 +2441,12 @@ function gmailOfiConnect() {
       _updateGmailOfiBtn();
       return;
     }
-    _gmailMarkScopeVer(GMAIL_OFI_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER);
     _updateGmailOfiBtn();
     notif('✅ Correo conectado.', 'ok');
     gmailOfiFolder('INBOX');
     gmailOfiLoadLabels();
     _gmailOfiLoadSignature();
-  }, _gmailOAuthPromptFor(GMAIL_OFI_SCOPE_VER_KEY, GMAIL_OAUTH_SCOPE_VER));
+  });
 }
 window.gmailOfiConnect = gmailOfiConnect;
 
