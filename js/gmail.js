@@ -815,6 +815,13 @@ function _driveSlug(s, maxLen) {
     .slice(0, maxLen || 25) || 'doc';
 }
 
+function _driveSafeFolderName(s, maxLen) {
+  return String(s || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim()
+    .slice(0, maxLen || 30) || 'sin-nombre';
+}
+
+const _DRIVE_API_QS = '&supportsAllDrives=true&includeItemsFromAllDrives=true';
+
 function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
   const exp = String(e && e._exp || '').trim().replace(/\s/g, '');
   const act = _driveSlug(task && (task.desc || task.actividad) || 'actividad', 25);
@@ -945,31 +952,128 @@ function _driveClearFolderCache() {
   } catch (e) {}
 }
 
+function driveResetPqrsRadicacionCaches() {
+  _driveClearFolderCache();
+  try { window._drivePqrsUploadFolderCache = {}; } catch (e) {}
+}
+
+async function _driveVerifyFolderId(token, folderId) {
+  if (!token || !folderId) return false;
+  try {
+    const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+      '?fields=id,trashed,mimeType' + _DRIVE_API_QS, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return !!(data && data.id && !data.trashed && data.mimeType === 'application/vnd.google-apps.folder');
+  } catch (e) {
+    return false;
+  }
+}
+
 async function _driveEnsureFolder(token, folderName, parentId) {
+  folderName = String(folderName || '').trim();
+  if (!folderName) throw new Error('Nombre de carpeta Drive vacío');
+  if (parentId) {
+    const parentOk = await _driveVerifyFolderId(token, parentId);
+    if (!parentOk) {
+      throw new Error('Carpeta padre no disponible en Drive ("' + folderName + '"). Verifique permisos de Editor en la carpeta PQRSD institucional.');
+    }
+  }
+  const cacheKey = 'sst_df_' + (parentId || 'root') + '_' + folderName.replace(/\s/g, '_');
+  try {
+    const c = sessionStorage.getItem(cacheKey);
+    if (c) {
+      if (await _driveVerifyFolderId(token, c)) return c;
+      sessionStorage.removeItem(cacheKey);
+    }
+  } catch (e) {}
   const q = 'name="' + folderName.replace(/"/g, '\\"') +
             '" and mimeType="application/vnd.google-apps.folder"' +
             (parentId ? ' and "' + parentId + '" in parents' : '') +
             ' and trashed=false';
-  const cacheKey = 'sst_df_' + (parentId || 'root') + '_' + folderName.replace(/\s/g, '_');
-  try { const c = sessionStorage.getItem(cacheKey); if (c) return c; } catch (e) {}
-  const res = await fetch(DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) + '&fields=files(id)', {
-    headers: { 'Authorization': 'Bearer ' + token }
+  const res = await fetch(DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name)' + _DRIVE_API_QS, {
+    headers: { Authorization: 'Bearer ' + token }
   });
   const data = await res.json();
+  if (!res.ok) {
+    const msg = data && data.error && data.error.message ? data.error.message : ('HTTP ' + res.status);
+    throw new Error('Error buscando carpeta "' + folderName + '": ' + msg);
+  }
   if (data.files && data.files.length > 0) {
     try { sessionStorage.setItem(cacheKey, data.files[0].id); } catch (e) {}
     return data.files[0].id;
   }
   const body = { name: folderName, mimeType: 'application/vnd.google-apps.folder' };
   if (parentId) body.parents = [parentId];
-  const cr = await fetch(DRIVE_API_BASE + '/files', {
+  const cr = await fetch(DRIVE_API_BASE + '/files' + _DRIVE_API_QS.replace('&', '?'), {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
   const folder = await cr.json();
+  if (!cr.ok || !folder.id) {
+    const msg = folder && folder.error && folder.error.message ? folder.error.message : ('HTTP ' + cr.status);
+    throw new Error('No se pudo crear carpeta "' + folderName + '": ' + msg);
+  }
   try { sessionStorage.setItem(cacheKey, folder.id); } catch (e) {}
   return folder.id;
+}
+
+function _driveInstitutionalSegments(tipo, fechaRef) {
+  let ref = fechaRef ? new Date(fechaRef) : new Date();
+  if (isNaN(ref.getTime())) ref = new Date();
+  const anio = ref.getFullYear().toString();
+  const mes = DRIVE_MESES_ES[ref.getMonth()];
+  if (tipo && tipo.startsWith('radicacion')) {
+    const medio = tipo === 'radicacion_correo' ? 'Por-correo' :
+      tipo === 'radicacion_ventanilla' ? 'Ventanilla' :
+      tipo === 'radicacion_oficio' ? 'Oficio' : 'Otros';
+    return ['Radicacion', anio, mes, medio];
+  }
+  if (tipo === 'respuesta_borrador') return ['Respuestas', 'Pendiente-revision', anio, mes];
+  if (tipo === 'respuesta_aprobada' || tipo === 'soporte_notificacion') return ['Respuestas', 'Aprobadas', anio, mes];
+  if (tipo === 'respuesta_pendiente' || tipo === 'respuesta_vital') return ['Respuestas', 'Pendiente-gestion-vital', anio, mes];
+  return ['Caratulas', anio, mes];
+}
+
+async function driveEnsurePqrsUploadFolder(tipo, pqrsNum, nombreCarpeta, fechaRef) {
+  const tipoS = String(tipo || 'radicacion_otro');
+  const numS = String(pqrsNum || '').trim();
+  const fechaS = String(fechaRef || '').slice(0, 10);
+  const nomSlug = _driveSafeFolderName(nombreCarpeta, 30);
+  const cacheKey = tipoS + '|' + numS + '|' + fechaS + '|' + nomSlug;
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  window._drivePqrsUploadFolderCache = window._drivePqrsUploadFolderCache || {};
+  if (window._drivePqrsUploadFolderCache[cacheKey]) {
+    const cached = window._drivePqrsUploadFolderCache[cacheKey];
+    if (await _driveVerifyFolderId(token, cached.folderId)) return cached;
+    delete window._drivePqrsUploadFolderCache[cacheKey];
+  }
+  const pqrsRoot = typeof DRIVE_ROOT_PQRSD_ID !== 'undefined' ? DRIVE_ROOT_PQRSD_ID : '1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF';
+  if (!(await _driveVerifyFolderId(token, pqrsRoot))) {
+    throw new Error('Sin acceso a la carpeta raíz PQRSD en Drive. Verifique permisos de Editor para cdaguaviare1@gmail.com.');
+  }
+  const segments = _driveInstitutionalSegments(tipoS, fechaRef);
+  let parent = pqrsRoot;
+  const pathParts = [];
+  for (let i = 0; i < segments.length; i++) {
+    parent = await _driveEnsureFolder(token, segments[i], parent);
+    pathParts.push(segments[i]);
+  }
+  let folderId = parent;
+  if (numS) {
+    const carpNom = 'PQRSD-' + numS + (nomSlug ? '-' + nomSlug : '');
+    folderId = await _driveEnsureFolder(token, carpNom, parent);
+    pathParts.push(carpNom);
+  }
+  const folderLink = 'https://drive.google.com/drive/folders/' + folderId;
+  const result = { folderId: folderId, folderLink: folderLink, pathLabel: pathParts.join(' / ') };
+  window._drivePqrsUploadFolderCache[cacheKey] = result;
+  return result;
 }
 
 // Lista archivos y subcarpetas de una carpeta Drive (biblioteca de recursos).
@@ -1064,45 +1168,20 @@ async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
 //       'radicacion_otro'|'respuesta_borrador'|'respuesta_aprobada'|
 //       'respuesta_pendiente'|'soporte_notificacion'|'caratula'
 // pqrsNum: número del expediente, nombre: apellido o asunto para carpeta.
-async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef) {
+async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef, uploadOpts) {
+  uploadOpts = uploadOpts || {};
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
-  _driveClearFolderCache();
 
-  // Fecha de referencia para organizar año/mes (radicación o respuesta).
-  let ref = fechaRef ? new Date(fechaRef) : new Date();
-  if (isNaN(ref.getTime())) ref = new Date();
-  const anio = ref.getFullYear().toString();
-  const mes = DRIVE_MESES_ES[ref.getMonth()];
-
-  // Segmentos de ruta dentro de la raíz institucional.
-  // Radicación: Radicacion / {año} / {mes} / {medio} / PQRSD-{num}-{nombre}
-  // Respuestas: Respuestas / {estado} / {año} / {mes} / PQRSD-{num}-{nombre}
-  // Carátulas:  Caratulas / {año} / {mes} / PQRSD-{num}-{nombre}
-  let segments;
-  if (tipo && tipo.startsWith('radicacion')) {
-    const medio = tipo === 'radicacion_correo'     ? 'Por-correo'  :
-                  tipo === 'radicacion_ventanilla'  ? 'Ventanilla'  :
-                  tipo === 'radicacion_oficio'      ? 'Oficio'      : 'Otros';
-    segments = ['Radicacion', anio, mes, medio];
-  } else if (tipo === 'respuesta_borrador') {
-    segments = ['Respuestas', 'Pendiente-revision', anio, mes];
-  } else if (tipo === 'respuesta_aprobada' || tipo === 'soporte_notificacion') {
-    segments = ['Respuestas', 'Aprobadas', anio, mes];
-  } else if (tipo === 'respuesta_pendiente' || tipo === 'respuesta_vital') {
-    segments = ['Respuestas', 'Pendiente-gestion-vital', anio, mes];
-  } else {
-    segments = ['Caratulas', anio, mes];
+  let folderId = uploadOpts.folderId || '';
+  let folderLink = uploadOpts.folderLink || '';
+  if (!folderId) {
+    const folder = await driveEnsurePqrsUploadFolder(tipo, pqrsNum, nombreCarpeta, fechaRef);
+    folderId = folder.folderId;
+    folderLink = folder.folderLink;
   }
-
-  // Crear (o reutilizar) la cadena de carpetas.
-  const pqrsRoot = typeof DRIVE_ROOT_PQRSD_ID !== 'undefined' ? DRIVE_ROOT_PQRSD_ID : '1c5nmXJD8iNgYvbIifdDt0Ul1ai33UFpF';
-  let parent = pqrsRoot;
-  for (const seg of segments) parent = await _driveEnsureFolder(token, seg, parent);
-  let folderId = parent;
-  if (pqrsNum) {
-    const carpNom = 'PQRSD-' + pqrsNum + (nombreCarpeta ? '-' + nombreCarpeta.slice(0, 30) : '');
-    folderId = await _driveEnsureFolder(token, carpNom, parent);
+  if (!(await _driveVerifyFolderId(token, folderId))) {
+    throw new Error('Carpeta destino PQRSD no válida en Drive. Intente de nuevo tras reconectar Gmail.');
   }
 
   // Upload multipart
@@ -1111,23 +1190,25 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
   form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType }));
   const up = await fetch(DRIVE_UPLOAD_URL, {
-    method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
+    method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: form
   });
-  if (!up.ok) { const t = await up.text().catch(() => ''); throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120)); }
+  if (!up.ok) { const t = await up.text().catch(function() { return ''; }); throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120)); }
   const file = await up.json();
 
   // Compartir como lector público (anyoneWithLink)
   await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'reader', type: 'anyone' })
-  }).catch(() => {});
+  }).catch(function() {});
 
   return {
     fileId: file.id,
     driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
     previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
-    nombre: filename
+    nombre: filename,
+    folderId: folderId,
+    folderLink: folderLink
   };
 }
 
@@ -1512,8 +1593,12 @@ async function subirSoporteRadicacionManual(opts) {
 
   const uploaded = [];
   let soporte = null;
+  let pqrsFolder = null;
   const silentNotif = !!opts.silentNotif;
   try {
+    driveResetPqrsRadicacionCaches();
+    pqrsFolder = await driveEnsurePqrsUploadFolder(tipoRad, expId, nombreCarpeta, fechaRef);
+    const uploadOpts = { folderId: pqrsFolder.folderId, folderLink: pqrsFolder.folderLink };
     if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
     const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
     if (pdfBlob) {
@@ -1525,7 +1610,8 @@ async function subirSoporteRadicacionManual(opts) {
         tipoRad,
         expId,
         nombreCarpeta,
-        fechaRef
+        fechaRef,
+        uploadOpts
       );
       uploaded.push(soporte);
     } else if (!silentNotif) {
@@ -1544,7 +1630,8 @@ async function subirSoporteRadicacionManual(opts) {
         tipoRad,
         expId,
         nombreCarpeta,
-        fechaRef
+        fechaRef,
+        uploadOpts
       );
       up.nombre = driveName;
       uploaded.push(up);
@@ -1553,21 +1640,27 @@ async function subirSoporteRadicacionManual(opts) {
     if (!silentNotif) {
       if (soporte) {
         const extra = uploaded.length > 1 ? ' y ' + (uploaded.length - 1) + ' anexo(s)' : '';
-        notif('✅ Soporte PDF' + extra + ' subido(s) al Drive institucional.', 'ok');
+        const loc = pqrsFolder && pqrsFolder.pathLabel ? ' · ' + pqrsFolder.pathLabel : '';
+        notif('✅ Soporte PDF' + extra + ' subido(s) al Drive institucional' + loc + '.', 'ok');
       } else if (uploaded.length) {
         notif('✅ ' + uploaded.length + ' anexo(s) subido(s) al Drive institucional.', 'ok');
       }
     }
   } catch (e) {
     console.warn('subirSoporteRadicacionManual:', e);
-    if (!silentNotif) notif('⚠️ No se pudo subir el soporte al Drive: ' + (e.message || 'revise la conexión Gmail'), 'warn');
+    if (!silentNotif && typeof notif === 'function') {
+      notif('⚠️ No se pudo subir el soporte al Drive: ' + (e.message || 'revise la conexión Gmail'), 'warn');
+    }
+    throw e;
   }
 
   return {
     soporte: soporte,
     anexos: uploaded.filter(function(u) { return u !== soporte; }),
     all: uploaded,
-    link: soporte ? soporte.driveLink : (uploaded[0] ? uploaded[0].driveLink : '')
+    link: soporte ? soporte.driveLink : (uploaded[0] ? uploaded[0].driveLink : ''),
+    folderLink: pqrsFolder ? pqrsFolder.folderLink : (soporte && soporte.folderLink) || '',
+    pathLabel: pqrsFolder ? pqrsFolder.pathLabel : ''
   };
 }
 
@@ -1585,6 +1678,9 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
     return;
   }
   try {
+    driveResetPqrsRadicacionCaches();
+    const pqrsFolder = await driveEnsurePqrsUploadFolder('radicacion_correo', expIdHint || '', nombreHint || '', typeof hoy === 'function' ? hoy() : '');
+    const uploadOpts = { folderId: pqrsFolder.folderId, folderLink: pqrsFolder.folderLink };
     notif('🖨️ Generando PDF de la solicitud y subiéndolo al Drive…', 'info');
     const asunto = ((ed && ed.asunto) || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
     let soporte = null;
@@ -1594,20 +1690,21 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
     if (pdfBlob) {
       soporte = await driveUploadInstitutional(
         pdfBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.pdf',
-        'application/pdf', 'radicacion_correo', expIdHint || '', nombreHint || ''
+        'application/pdf', 'radicacion_correo', expIdHint || '', nombreHint || '', typeof hoy === 'function' ? hoy() : '', uploadOpts
       );
     } else if (ed && ed.cuerpoHtml) {
       // 2) Respaldo: subir el cuerpo como HTML si jsPDF no está disponible.
       const htmlBlob = new Blob([ed.cuerpoHtml], { type: 'text/html' });
       soporte = await driveUploadInstitutional(
         htmlBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.html',
-        'text/html', 'radicacion_correo', expIdHint || '', nombreHint || ''
+        'text/html', 'radicacion_correo', expIdHint || '', nombreHint || '', typeof hoy === 'function' ? hoy() : '', uploadOpts
       );
     }
 
     if (soporte) {
       window._gmailPendingAttachments = [soporte];
-      notif('✅ Soporte de la solicitud subido al Drive institucional. Los anexos quedan en el correo de la oficina.', 'ok');
+      const loc = pqrsFolder.pathLabel ? ' · ' + pqrsFolder.pathLabel : '';
+      notif('✅ Soporte de la solicitud subido al Drive institucional' + loc + '. Los anexos quedan en el correo de la oficina.', 'ok');
     } else {
       notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');
     }
