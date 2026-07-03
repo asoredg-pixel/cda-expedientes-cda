@@ -68,11 +68,14 @@ function descargarConsChart(){
 // MÓDULO SECRETARÍA / OFICINAS DEGUV / CONSULTA CIUDADANA PQRSD
 // ================================================================
 function secGmailRadicacionConectada(){
-  return typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  if(typeof gmailIsTokenValid!=='function'||!gmailIsTokenValid())return false;
+  if(typeof gmailIsDriveScopeCurrent==='function'&&!gmailIsDriveScopeCurrent())return false;
+  return true;
 }
 function renderSecGmailBloqueoRadicacion(){
   if(typeof esSecretaria==='function'&&!esSecretaria())return;
   const ok=secGmailRadicacionConectada();
+  const needsDrive=typeof gmailNeedsDriveScopeUpgrade==='function'&&gmailNeedsDriveScopeUpgrade()&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
   const lock=document.getElementById('sec-form-lock');
   const btnTrasl=document.getElementById('sec-btn-radicar-trasl');
   const btnSolo=document.getElementById('sec-btn-radicar-solo');
@@ -85,14 +88,16 @@ function renderSecGmailBloqueoRadicacion(){
   if(btnSolo)btnSolo.disabled=!ok;
   if(connBtn){
     connBtn.disabled=false;
-    connBtn.textContent='Conectar bandeja Gmail';
+    connBtn.textContent=needsDrive?'Actualizar permiso Drive':'Conectar bandeja Gmail';
   }
 }
 function secGmailConnectParaRadicar(){
   if(typeof gmailConnect!=='function'){notif('Conexión Gmail no disponible','err');return;}
+  const needsDrive=typeof gmailNeedsDriveScopeUpgrade==='function'&&gmailNeedsDriveScopeUpgrade();
+  const connectFn=needsDrive&&typeof gmailReconnectForDrive==='function'?gmailReconnectForDrive:gmailConnect;
   const connBtn=document.getElementById('sec-gmail-connect-btn');
   if(connBtn){connBtn.disabled=true;connBtn.textContent='Conectando…';}
-  gmailConnect(function(){
+  connectFn(function(){
     renderSecGmailBloqueoRadicacion();
     if(typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec();
   });
