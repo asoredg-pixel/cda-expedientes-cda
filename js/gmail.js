@@ -1844,7 +1844,8 @@ async function gmailSendMessage(to, subject, htmlBody) {
   return gmailSend(to, subject, htmlBody);
 }
 
-async function reenviarEmailAOficina(msg, ofiId, expId) {
+async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
+  opts = opts || {};
   const ofiData = (encargadosGlobal && encargadosGlobal.oficinas && encargadosGlobal.oficinas[ofiId]) || {};
   const ofiEmail = (ofiData.email || '').trim();
   const ofiLabel = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
@@ -1911,7 +1912,7 @@ async function reenviarEmailAOficina(msg, ofiId, expId) {
     var encoded = btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
     await gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
-    notif('Correo reenviado con adjuntos a ' + ofiLabel + ' (' + ofiEmail + ')', 'ok');
+    if (!opts.silent) notif('Correo reenviado con adjuntos a ' + ofiLabel + ' (' + ofiEmail + ')', 'ok');
     return true;
   } catch (e) {
     console.error('reenviarEmailAOficina:', e);

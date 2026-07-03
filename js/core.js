@@ -4380,7 +4380,7 @@ function collectEnlacesExpediente(e){
   actosAdminData(e._actos_admin).forEach((a,i)=>{
     ['documento','link','url','enlace','drive'].forEach(k=>{if(a[k])pushUrlsFromValor(add,'Acto administrativo',(a.tipo||'Acto')+' · '+(a.numero||('#'+(i+1))),a[k]);});
   });
-  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes']);
+  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_drive_folder_link','_pqrs_drive_folder_id','_pqrs_drive_solicitud_folder_id','_pqrs_drive_respuesta_folder_id','_pqrs_drive_path_label']);
   Object.keys(e).forEach(k=>{
     if(!k.startsWith('_')||skipUnderscore.has(k))return;
     if(k.endsWith('_link')||k.includes('link')||k.includes('url')||k.includes('documento')){
@@ -11537,7 +11537,6 @@ async function enviarNotificacionRadicacionPqrsAuto(e,opts){
       histNota:'Correo de radicación enviado a '+para
     });
     if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
-    if(typeof notif==='function')notif('📧 Notificación de radicación enviada a '+para,'ok');
     return{ok:true,a:para};
   }catch(err){
     console.warn('enviarNotificacionRadicacionPqrsAuto:',err);

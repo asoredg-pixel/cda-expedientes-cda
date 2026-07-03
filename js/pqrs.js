@@ -314,7 +314,7 @@ async function guardarPqrsSecretaria(modo){
     const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
     if(_tokOk){
       if(oficina!=='secretaria'&&typeof reenviarEmailAOficina==='function'){
-        try{await reenviarEmailAOficina(_msgParaReenvio,oficina,expId);}catch(err){console.warn('reenvio oficina:',err);}
+        try{await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});}catch(err){console.warn('reenvio oficina:',err);}
       }
       if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
     }else if(oficina!=='secretaria'){
