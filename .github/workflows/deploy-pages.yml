@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy3.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy1.outputs.page_url }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +45,29 @@ jobs:
         with:
           path: _site
 
-      - name: Deploy to GitHub Pages
-        id: deployment
+      # El API de Pages a veces responde "Deployment failed, try again later."
+      # de forma transitoria. Reintentamos hasta 3 veces para que un fallo
+      # temporal no deje el sitio desactualizado ni genere correos de fallo.
+      - name: Deploy to GitHub Pages (intento 1)
+        id: deploy1
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Esperar antes de reintentar
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (intento 2)
+        id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Esperar antes del último intento
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (intento 3)
+        id: deploy3
+        if: steps.deploy1.outcome == 'failure' && steps.deploy2.outcome == 'failure'
         uses: actions/deploy-pages@v4
