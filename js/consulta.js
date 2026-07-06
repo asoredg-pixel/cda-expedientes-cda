@@ -986,6 +986,7 @@ function conConsultaOneCard(e){
         (docBtn?('<div class="fx" style="gap:6px;margin-top:8px">'+docBtn+'</div>'):'')+
         renderPqrsTrazabilidadHtml(e)+
         htmlPqrsRespuestaRegistrada(e)+
+        htmlPqrsNotasInternasHtml(e)+
         '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:12px">'+btnResp+btnAsig+btnTrasIni+btnTras+btnEdit+btnDel+'</div>'+
       '</div></details>';
   }

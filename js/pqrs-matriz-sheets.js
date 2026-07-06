@@ -691,8 +691,8 @@ async function pqrsMatrizSyncExpediente(e, opts) {
       }
       return { ok: false, error: ready.error, parsed: ready.parsed };
     }
-    if (ready && ready.created && typeof notif === 'function') {
-      notif('✅ Matriz PQRSD en Google Sheets lista. Datos desde fila ' + PQRS_MATRIZ_DATA_ROW + '.', 'ok');
+    if (ready && ready.created) {
+      /* Matriz creada en silencio — sin notificación al usuario */
     }
     const targetSheet = await pqrsMatrizResolveDataSheet(e._pqrs_matriz_hoja || pqrsMatrizTabAnio(e));
     const found = await pqrsMatrizBuscarFilaGlobal(e._exp, e._pqrs_matriz_hoja || targetSheet);

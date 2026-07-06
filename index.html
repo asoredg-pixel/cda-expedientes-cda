@@ -19,23 +19,23 @@
 <script src="js/utils.js?v=20260702t"></script>
 <script src="js/state.js?v=20260702t"></script>
 <script src="js/persistence.js?v=20260706f"></script>
-<script src="js/roles.js?v=20260702t"></script>
+<script src="js/roles.js?v=20260706g"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260706f"></script>
+<script src="js/core.js?v=20260706g"></script>
 <script src="js/formulario.js?v=20260706d"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
-<script src="js/consulta.js?v=20260702t"></script>
+<script src="js/consulta.js?v=20260706g"></script>
 <script src="js/consolidado.js?v=20260702t"></script>
 <script src="js/configuracion.js?v=20260702t"></script>
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260706f"></script>
-<script src="js/pqrs-matriz-sheets.js?v=20260706f"></script>
-<script src="js/pqrs.js?v=20260706d"></script>
+<script src="js/pqrs-matriz-sheets.js?v=20260706g"></script>
+<script src="js/pqrs.js?v=20260706g"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260706f"></script>
+<script src="js/gmail.js?v=20260706g"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260706e"></script>
 </head>
@@ -858,7 +858,9 @@
     </div>
     <textarea id="gm-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje…"></textarea>
     <div id="gm-sig-preview" class="gm-sig-preview" style="display:none"></div>
+    <div id="gm-compose-att-list" class="pqrs-compose-att-list"></div>
     <div class="gm-compose-footer">
+      <button type="button" class="btn bsm" onclick="gmailOfiAddComposeAttachment()">📎 Adjuntar</button>
       <button type="button" class="btn bsm bp gm-compose-send" onclick="gmailOfiSendCompose()">📤 Enviar</button>
       <button type="button" class="btn bsm" onclick="gmailOfiSaveDraft()">💾 Guardar borrador</button>
       <button type="button" class="gm-compose-discard-btn" onclick="gmailOfiDiscardDraft()" title="Descartar">🗑️</button>

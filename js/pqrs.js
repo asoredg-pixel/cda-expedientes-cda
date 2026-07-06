@@ -578,7 +578,7 @@ function renderSecretariaPqrs(){
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
     '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
-    '<div class="met met-click" style="border-left:3px solid #7c5cbf" onclick="setPqrsOfiFiltro(\'por_trasladar\');showTab(\'pqrs-ofi\')" title="Ver bandeja por trasladar"><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
+    '<div class="met'+(puedeVerFiltroPorTrasladarOficina()?' met-click':'')+'" style="border-left:3px solid #7c5cbf"'+(puedeVerFiltroPorTrasladarOficina()?' onclick="setPqrsOfiFiltro(\'por_trasladar\');showTab(\'pqrs-ofi\')" title="Ver bandeja por trasladar"':'')+'><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
@@ -678,7 +678,7 @@ function renderPqrsOficinaInbox(){
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   const list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
   const pendTraslCount=getPqrsPendientesTrasladoList().length;
-  const showPorTrasl=puedeGestionarPendientesTraslado();
+  const showPorTrasl=puedeVerFiltroPorTrasladarOficina();
   if(mets){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
@@ -1126,8 +1126,10 @@ async function submitTrasladoPqrsInicial(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
+  delete e._pqrs_matriz_fila;
   await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
   persistExpedienteGranular(e);
+  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
   closeTaskModal();
   notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
   renderBandejaDepto();
@@ -1178,7 +1180,9 @@ function submitTrasladoPqrsInterOficina(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
+  delete e._pqrs_matriz_fila;
   persistExpedienteGranular(e);
+  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
   closeTaskModal();
   notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
   renderBandejaDepto();

@@ -662,6 +662,9 @@ function esDirectorDsDeguv(){return deptoActivo==='ds_deguv';}
 function puedeGestionarPendientesTraslado(){
   return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
 }
+function puedeVerFiltroPorTrasladarOficina(){
+  return esDirectorDsDeguv()||esAdministrador();
+}
 function puedeTrasladarPqrsInicial(e){
   if(!e||!esPqrsSecretaria(e)||!pqrsPendienteTraslado(e)||pqrsEstaCerrada(e))return false;
   return esSecretaria()||esDirectorDsDeguv()||esAdministrador();

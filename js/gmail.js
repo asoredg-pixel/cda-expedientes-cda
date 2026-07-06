@@ -3023,6 +3023,8 @@ function gmailOfiOpenCompose(opts) {
   const modal = document.getElementById('gm-compose-modal');
   if (!modal) return;
   if (!_gmailOfiTokenValid()) { notif('Conecte su correo para redactar.', 'err'); return; }
+  window._gmailOfiComposeAttachments = [];
+  gmailOfiRenderComposeAttachments();
   // Limpiar contexto de respuesta PQRSD: solo aplica cuando se abre vía gmailOfiAbrirComposeRespuestaPqrs.
   window._gmailOfiPqrsRespCtx = null;
   opts = opts || {};
@@ -3080,6 +3082,104 @@ function gmailOfiDiscardDraft() {
   const modal = document.getElementById('gm-compose-modal');
   if (modal) modal.style.display = 'none';
   window._gmailOfiPqrsRespCtx = null;
+  window._gmailOfiComposeAttachments = [];
+  gmailOfiRenderComposeAttachments();
+}
+function gmailOfiAddComposeAttachment() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.multiple = true;
+  inp.accept = '*/*';
+  inp.onchange = function() {
+    window._gmailOfiComposeAttachments = window._gmailOfiComposeAttachments || [];
+    Array.from(inp.files || []).forEach(function(f) { window._gmailOfiComposeAttachments.push(f); });
+    gmailOfiRenderComposeAttachments();
+  };
+  inp.click();
+}
+function gmailOfiRenderComposeAttachments() {
+  const box = document.getElementById('gm-compose-att-list');
+  if (!box) return;
+  const files = window._gmailOfiComposeAttachments || [];
+  if (!files.length) { box.innerHTML = ''; return; }
+  box.innerHTML = files.map(function(f, i) {
+    return '<div class="fx" style="gap:6px;align-items:center;margin-top:4px;font-size:12px;padding:4px 6px;background:var(--sf2);border-radius:var(--r)">' +
+      '📎 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escAttr(f.name) + '</span>' +
+      '<button type="button" class="btn bsm bd2" onclick="gmailOfiRemoveComposeAttachment(' + i + ')">✕</button></div>';
+  }).join('');
+}
+function gmailOfiRemoveComposeAttachment(idx) {
+  window._gmailOfiComposeAttachments = (window._gmailOfiComposeAttachments || []).filter(function(_, i) { return i !== idx; });
+  gmailOfiRenderComposeAttachments();
+}
+function _gmailOfiFileToBase64(file) {
+  return new Promise(function(resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const res = reader.result || '';
+      const b64 = String(res).split(',')[1] || '';
+      resolve(b64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inReplyTo, files) {
+  files = files || [];
+  if (!files.length) return _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo);
+  const altBoundary = 'sst_alt_' + Date.now();
+  const mixBoundary = 'sst_mix_' + Date.now();
+  const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  const plainBody = (userText || '') + (_gmailOfiSignature || '');
+  const userHtml = '<div style="font-family:Arial,sans-serif;font-size:14px">' + _gmailOfiTextToHtml(userText || '') + '</div>';
+  const sigHtml = _gmailOfiSignatureHtml
+    ? '<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">' + _gmailOfiSignatureHtml + '</div></div>'
+    : '';
+  const htmlB64 = btoa(unescape(encodeURIComponent(userHtml + sigHtml)));
+  const altPart = [
+    '--' + altBoundary,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    plainBody,
+    '',
+    '--' + altBoundary,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + altBoundary + '--'
+  ].join('\r\n');
+  const attParts = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const b64 = await _gmailOfiFileToBase64(f);
+    const fnameEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(f.name || 'adjunto'))) + '?=';
+    attParts.push(
+      '--' + mixBoundary,
+      'Content-Type: ' + (f.type || 'application/octet-stream') + '; name="' + fnameEnc + '"',
+      'Content-Disposition: attachment; filename="' + fnameEnc + '"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64.replace(/\s/g, '')
+    );
+  }
+  const lines = [
+    'To: ' + to,
+    cc ? 'Cc: ' + cc : null,
+    'Subject: ' + subjectEnc,
+    inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
+    inReplyTo ? 'References: ' + inReplyTo : null,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + mixBoundary + '"',
+    '',
+    '--' + mixBoundary,
+    'Content-Type: multipart/alternative; boundary="' + altBoundary + '"',
+    '',
+    altPart,
+    ''
+  ].concat(attParts).concat(['--' + mixBoundary + '--']).filter(function(l) { return l !== null; });
+  return btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
@@ -3169,7 +3269,11 @@ async function gmailOfiSendCompose() {
   const sendBtn = document.querySelector('#gm-compose-modal .gm-compose-send');
   if (sendBtn) { sendBtn.textContent = '⏳ Enviando…'; sendBtn.disabled = true; }
   try {
-    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: _gmailOfiBuildMime(to, cc, subject, body, inReplyTo) });
+    const files = window._gmailOfiComposeAttachments || [];
+    const raw = files.length
+      ? await _gmailOfiBuildMimeWithAttachments(to, cc, subject, body, inReplyTo, files)
+      : _gmailOfiBuildMime(to, cc, subject, body, inReplyTo);
+    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
     // Capturar el contexto de respuesta PQRSD antes de descartar (discardDraft lo limpia).
     const pqrsCtx = window._gmailOfiPqrsRespCtx;
     notif('✅ Mensaje enviado.', 'ok');
@@ -3192,9 +3296,10 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(ctx.expId || '').trim());
   if (!e) return;
   const yaCerrada = typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e);
-  const fecha = typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10);
+  const fecha = ctx.fechaResp || (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10));
   const cuerpo = String((mail && mail.body) || '').trim();
-  // Resolver todos los correos destino (multi-email para jurídica)
+  const tipo = ctx.tipo || (typeof PQRS_WF_TIPO !== 'undefined' ? PQRS_WF_TIPO.MENSAJE : 'mensaje');
+  const oficio = ctx.oficio || '';
   const todosCorreos = typeof pqrsCorreosCiudadano === 'function' ? pqrsCorreosCiudadano(e) : [];
   const paraRaw = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
   const para = todosCorreos.length ? todosCorreos.join(', ') : paraRaw;
@@ -3202,8 +3307,10 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   if (!yaCerrada && typeof setPqrsWorkflow === 'function') {
     setPqrsWorkflow(e, {
       fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
+      tipo: tipo,
       canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
       cuerpo: cuerpo || (wf.cuerpo || ''),
+      oficio: oficio,
       fecha_respuesta: wf.fecha_respuesta || fecha,
       cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
       cerrado_en: new Date().toISOString()
@@ -3216,6 +3323,8 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
     e._pqrs_respuesta_medio = 'electronica';
     if (cuerpo) e._pqrs_respuesta_nota = cuerpo;
   }
+  if (ctx.notaInterna) e._pqrs_notas_internas = ctx.notaInterna;
+  if (oficio) e._pqrs_respuesta_oficio = oficio;
   if (typeof registrarNotificacionCiudadanoPqrs === 'function') {
     registrarNotificacionCiudadanoPqrs(e, {
       tipo: 'respuesta', medio: 'correo', enviado: true, a: para,
@@ -3573,11 +3682,38 @@ async function gmailOfiConfirmarRespuestaPqrs() {
 }
 
 // ---- Abrir compose pre-llenado para responder una PQRSD ----
+async function gmailOfiSendPqrsRespuestaInline(opts) {
+  opts = opts || {};
+  const expId = opts.expId;
+  const to = String(opts.to || '').trim();
+  const subject = String(opts.subject || '').trim();
+  const body = String(opts.body || '').trim();
+  const attachments = opts.attachments || [];
+  if (!expId || !to || !body) throw new Error('Datos incompletos para enviar');
+  if (!_gmailOfiTokenValid() && !(typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())) {
+    throw new Error('Conecte su correo Gmail');
+  }
+  const raw = attachments.length
+    ? await _gmailOfiBuildMimeWithAttachments(to, '', subject, body, '', attachments)
+    : _gmailOfiBuildMime(to, '', subject, body, '');
+  await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
+  notif('✅ Mensaje enviado.', 'ok');
+  await _gmailOfiFinalizarRespuestaPqrsDesdeCompose({
+    expId: expId,
+    ciudEmail: to,
+    tipo: opts.tipo,
+    oficio: opts.oficio,
+    fechaResp: opts.fechaResp,
+    notaInterna: opts.notaInterna
+  }, { subject: subject, body: body, to: to });
+}
+window.gmailOfiSendPqrsRespuestaInline = gmailOfiSendPqrsRespuestaInline;
+
 // Llama desde la bandeja PQRSD de la oficina para componer la respuesta por correo
 function gmailOfiAbrirComposeRespuestaPqrs(expId) {
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(expId || '').trim());
   if (!e) { notif('PQRSD no encontrada', 'err'); return; }
-  const ciudEmail = (e._qd_correo || e._pn_correo || '').trim();
+  const ciudEmail = typeof pqrsCorreoCiudadano === 'function' ? pqrsCorreoCiudadano(e) : ((e._qd_correo || e._pn_correo || '').trim());
   const asunto = 'Respuesta a su ' + (e._tipo_solicitud || 'solicitud PQRSD') + ' — ' + e._exp;
   const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
   const cuerpo = wf.cuerpo || e._pqrs_respuesta_nota || '';
