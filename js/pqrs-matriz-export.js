@@ -3,6 +3,7 @@
 // Requiere: SheetJS (XLSX global), funciones PQRSD en core.js
 // =============================================================================
 const PQRS_MATRIZ_TEMPLATE_URL='assets/templates/matriz-pqrs-deguv.xlsx';
+const PQRS_MATRIZ_XLSX_LS_KEY='sst_pqrs_matriz_xlsx_file_id';
 const PQRS_MATRIZ_SHEET_CONS='CONSOLIDADO PQRSD';
 const PQRS_MATRIZ_SHEET_SEG='SEGUIMIENTO';
 const PQRS_MATRIZ_DATA_ROW_0=15;
@@ -208,6 +209,85 @@ function pqrsMatrizDownloadWorkbook(wb,filename){
 function pqrsMatrizOfficialDriveFilename(year){
   return 'Matriz-oficial-PQRSD-DEGUV-'+(year||String(new Date().getFullYear()))+'.xlsx';
 }
+function pqrsMatrizGetStoredXlsxFileId(){
+  try{return localStorage.getItem(PQRS_MATRIZ_XLSX_LS_KEY)||'';}catch(e){return '';}
+}
+function pqrsMatrizSetStoredXlsxFileId(id){
+  id=String(id||'').trim();
+  if(!id)return;
+  try{localStorage.setItem(PQRS_MATRIZ_XLSX_LS_KEY,id);}catch(e){}
+  pqrsMatrizPersistXlsxFileIdFirestore(id);
+}
+async function pqrsMatrizPersistXlsxFileIdFirestore(id){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc)return false;
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+      pqrsMatrizXlsxFileId:String(id||'').trim(),
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.warn('pqrsMatrizPersistXlsxFileIdFirestore:',err);
+    return false;
+  }
+}
+function pqrsMatrizApplyXlsxFileIdFromGlobal(g){
+  if(g&&g.pqrsMatrizXlsxFileId)pqrsMatrizSetStoredXlsxFileId(g.pqrsMatrizXlsxFileId);
+}
+async function _pqrsMatrizDriveFileExists(token,fileId){
+  if(!token||!fileId)return false;
+  const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
+  try{
+    const res=await fetch(driveApi+'/'+fileId+'?fields=id,trashed',{headers:{Authorization:'Bearer '+token}});
+    if(!res.ok)return false;
+    const meta=await res.json();
+    return !!(meta&&meta.id&&!meta.trashed);
+  }catch(err){return false;}
+}
+async function _pqrsMatrizDriveSearchFiles(token,q,pageSize){
+  const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
+  const res=await fetch(driveApi+'?q='+encodeURIComponent(q)+'&fields=files(id,name,createdTime)&orderBy=createdTime&pageSize='+(pageSize||10),{
+    headers:{Authorization:'Bearer '+token}
+  });
+  const data=await res.json();
+  if(!res.ok||!data.files)return [];
+  return data.files;
+}
+function _pqrsMatrizPickBestMatrizFile(files){
+  if(!files||!files.length)return '';
+  const clean=files.filter(function(f){
+    return f&&f.name&&!/\(\d+\)/.test(String(f.name));
+  });
+  const pick=(clean.length?clean:files)[0];
+  return pick&&pick.id?pick.id:'';
+}
+async function pqrsMatrizDriveResolveXlsxFileId(){
+  const token=typeof _driveGetBestToken==='function'?_driveGetBestToken():'';
+  if(!token)return '';
+  const folderId=typeof PQRS_MATRIZ_DRIVE_FOLDER_ID!=='undefined'?PQRS_MATRIZ_DRIVE_FOLDER_ID
+    :(typeof DRIVE_ROOT_PQRSD_ID!=='undefined'?DRIVE_ROOT_PQRSD_ID:'16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS');
+  const year=String(new Date().getFullYear());
+  const exactName=pqrsMatrizOfficialDriveFilename(year);
+  const basePrefix='Matriz-oficial-PQRSD-DEGUV-'+year;
+  let id=pqrsMatrizGetStoredXlsxFileId();
+  if(id&&await _pqrsMatrizDriveFileExists(token,id))return id;
+  id='';
+  const esc=function(s){return String(s||'').replace(/'/g,"\\'");};
+  let files=await _pqrsMatrizDriveSearchFiles(token,'"'+folderId+'" in parents and trashed=false and (name=\''+esc(exactName)+'\' or name contains \''+esc(basePrefix)+'\')');
+  id=_pqrsMatrizPickBestMatrizFile(files);
+  if(id){pqrsMatrizSetStoredXlsxFileId(id);return id;}
+  const radFolders=await _pqrsMatrizDriveSearchFiles(token,'"'+folderId+'" in parents and trashed=false and mimeType=\'application/vnd.google-apps.folder\' and name=\'Radicacion\'',3);
+  if(radFolders[0]&&radFolders[0].id){
+    files=await _pqrsMatrizDriveSearchFiles(token,'"'+radFolders[0].id+'" in parents and trashed=false and name contains \''+esc(basePrefix)+'\'');
+    id=_pqrsMatrizPickBestMatrizFile(files);
+    if(id){pqrsMatrizSetStoredXlsxFileId(id);return id;}
+  }
+  files=await _pqrsMatrizDriveSearchFiles(token,'trashed=false and name contains \''+esc(basePrefix)+'\'');
+  id=_pqrsMatrizPickBestMatrizFile(files);
+  if(id)pqrsMatrizSetStoredXlsxFileId(id);
+  return id||'';
+}
 function pqrsMatrizWorkbookToBlob(wb){
   const out=XLSX.write(wb,{bookType:'xlsx',type:'array',cellDates:true});
   return new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -227,7 +307,7 @@ async function pqrsMatrizBuildWorkbookFromList(list,periodLbl){
   if(wsSeg)xlsxFillMatrizSeguimiento(wsSeg,list,seg);
   return wb;
 }
-async function pqrsMatrizDriveUpsertWorkbook(wb,filename){
+async function pqrsMatrizDriveUpsertWorkbook(wb,filename,knownFileId){
   const token=typeof _driveGetBestToken==='function'?_driveGetBestToken():'';
   if(!token)return{ok:false,noToken:true};
   const folderId=typeof PQRS_MATRIZ_DRIVE_FOLDER_ID!=='undefined'?PQRS_MATRIZ_DRIVE_FOLDER_ID
@@ -235,18 +315,10 @@ async function pqrsMatrizDriveUpsertWorkbook(wb,filename){
   const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
   const uploadUrl=typeof DRIVE_UPLOAD_URL!=='undefined'?DRIVE_UPLOAD_URL:'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   const blob=pqrsMatrizWorkbookToBlob(wb);
-  const safeName=String(filename||'Matriz-oficial-PQRSD-DEGUV.xlsx');
-  let fileId='';
-  try{
-    const q='"'+folderId+'" in parents and name=\''+safeName.replace(/'/g,"\\'")+'\' and trashed=false';
-    const listRes=await fetch(driveApi+'/files?q='+encodeURIComponent(q)+'&fields=files(id,name)&pageSize=1',{
-      headers:{Authorization:'Bearer '+token}
-    });
-    const listData=await listRes.json();
-    if(listRes.ok&&listData.files&&listData.files[0])fileId=listData.files[0].id;
-  }catch(err){
-    console.warn('pqrsMatrizDriveUpsertWorkbook list:',err);
-  }
+  const safeName=String(filename||pqrsMatrizOfficialDriveFilename(String(new Date().getFullYear())));
+  let fileId=knownFileId||'';
+  if(fileId&&!await _pqrsMatrizDriveFileExists(token,fileId))fileId='';
+  if(!fileId)fileId=await pqrsMatrizDriveResolveXlsxFileId();
   const form=new FormData();
   const meta={name:safeName,mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
   if(!fileId)meta.parents=[folderId];
@@ -257,6 +329,7 @@ async function pqrsMatrizDriveUpsertWorkbook(wb,filename){
   const upRes=await fetch(url,{method:method,headers:{Authorization:'Bearer '+token},body:form});
   const file=await upRes.json();
   if(!upRes.ok)throw new Error((file.error&&file.error.message)||('Drive upload '+upRes.status));
+  if(file.id)pqrsMatrizSetStoredXlsxFileId(file.id);
   const folderUrl=typeof PQRS_MATRIZ_DRIVE_FOLDER_URL!=='undefined'?PQRS_MATRIZ_DRIVE_FOLDER_URL
     :('https://drive.google.com/drive/folders/'+folderId);
   return{
@@ -267,6 +340,41 @@ async function pqrsMatrizDriveUpsertWorkbook(wb,filename){
     nombre:safeName
   };
 }
+async function pqrsMatrizDriveUpdateExpedienteRow(e,opts){
+  opts=opts||{};
+  if(!e||!e._exp)return{skipped:true};
+  const token=typeof _driveGetBestToken==='function'?_driveGetBestToken():'';
+  if(!token)return{ok:false,noToken:true};
+  if(typeof XLSX==='undefined')return{ok:false,error:new Error('SheetJS no disponible')};
+  const fileId=await pqrsMatrizDriveResolveXlsxFileId();
+  if(!fileId)return{ok:false,noFile:true};
+  const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
+  const buf=await fetch(driveApi+'/'+fileId+'?alt=media',{headers:{Authorization:'Bearer '+token}}).then(function(r){
+    if(!r.ok)throw new Error('No se pudo leer la matriz PQRSD en Drive');
+    return r.arrayBuffer();
+  });
+  const wb=XLSX.read(buf,{type:'array',cellDates:true,cellStyles:true});
+  const ws=wb.Sheets[PQRS_MATRIZ_SHEET_CONS];
+  if(!ws)return{ok:false,error:new Error('Matriz sin hoja CONSOLIDADO PQRSD')};
+  const expDigits=String(e._exp||'').replace(/\D/g,'');
+  let row0=-1;
+  const maxScan=500;
+  for(let r=PQRS_MATRIZ_DATA_ROW_0;r<PQRS_MATRIZ_DATA_ROW_0+maxScan;r++){
+    const addr=XLSX.utils.encode_cell({r:r,c:3});
+    const cell=ws[addr];
+    if(!cell||cell.v==null||cell.v==='')break;
+    const rad=String(cell.v).replace(/\D/g,'');
+    if(rad===expDigits){row0=r;break;}
+  }
+  if(row0<0)return{ok:false,notFound:true};
+  const item=row0-PQRS_MATRIZ_DATA_ROW_0+1;
+  const rec=buildPqrsMatrizRecord(e,item);
+  xlsxWriteMatrizDataRow(ws,row0,rec);
+  const year=String(new Date().getFullYear());
+  return pqrsMatrizDriveUpsertWorkbook(wb,pqrsMatrizOfficialDriveFilename(year),fileId);
+}
+window.pqrsMatrizDriveUpdateExpedienteRow=pqrsMatrizDriveUpdateExpedienteRow;
+window.pqrsMatrizApplyXlsxFileIdFromGlobal=pqrsMatrizApplyXlsxFileIdFromGlobal;
 async function pqrsMatrizPublicarEnDrive(list,periodLbl){
   list=(typeof ordenarListaMatrizPqrs==='function'?ordenarListaMatrizPqrs(list):list)||[];
   if(!list.length)return{ok:false,empty:true};

@@ -114,12 +114,14 @@ let _gmailTokenWarnTimer = null;
 let _gmailTokenExpiryTimer = null;
 let _gmailOfiTokenExpiryTimer = null;
 let _sstGmailAutoConnectScheduled = false;
+let _sstGmailExpiryWarnShown = false;
 function gmailSetToken(tok, expiresInSec) {
   try {
     if (tok) {
       sessionStorage.setItem(GMAIL_TOKEN_KEY, tok);
       const expMs = Date.now() + (expiresInSec || 3600) * 1000;
       sessionStorage.setItem(GMAIL_TOKEN_EXP_KEY, String(expMs));
+      _sstGmailExpiryWarnShown = false;
       _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'sec');
     } else {
@@ -132,24 +134,23 @@ function gmailSetToken(tok, expiresInSec) {
 }
 function _gmailScheduleTokenWarning(expMs) {
   if (_gmailTokenWarnTimer) clearTimeout(_gmailTokenWarnTimer);
-  const warn50 = expMs - Date.now() - 600000; // 10 min antes de expirar (50 min después de conectar)
-  const warn2  = expMs - Date.now() - 120000; // 2 min antes de expirar (aviso crítico)
-  if (warn50 > 0) {
+  const warn10 = expMs - Date.now() - 600000;
+  if (warn10 > 0) {
     _gmailTokenWarnTimer = setTimeout(function() {
-      if (gmailIsTokenValid()) {
-        notif('⏰ El permiso de Gmail expira en ~10 minutos. Reconecte la bandeja para evitar interrupciones al radicar.', 'warn');
-        // Schedule critical warning
-        _gmailTokenWarnTimer = setTimeout(function() {
-          if (gmailIsTokenValid()) {
-            notif('⚠️ El permiso de Gmail expira en ~2 minutos. Reconecte la bandeja YA para no perder la carga automática de adjuntos.', 'err');
-          }
-        }, warn2 > 0 ? warn2 - warn50 : 0);
+      if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) return;
+      if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
+      if (_sstGmailExpiryWarnShown) return;
+      _sstGmailExpiryWarnShown = true;
+      if (typeof confirmPrecaucion === 'function') {
+        confirmPrecaucion({
+          title: 'Sesión de correo por expirar',
+          message: 'En aproximadamente 10 minutos caducará la conexión Gmail (~1 hora). Al expirar se cerrará su sesión y deberá ingresar de nuevo para reconectar el correo y continuar.',
+          confirmLabel: 'Entendido',
+          tone: 'warn',
+          hideCancel: true
+        }, function() {});
       }
-    }, warn50);
-  } else if (warn2 > 0) {
-    _gmailTokenWarnTimer = setTimeout(function() {
-      if (gmailIsTokenValid()) notif('⚠️ El permiso de Gmail expira en ~2 minutos. Reconecte la bandeja.', 'err');
-    }, warn2);
+    }, warn10);
   }
 }
 function _gmailClearExpiryTimer(which) {
@@ -2536,6 +2537,8 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
       sessionStorage.setItem(GMAIL_OFI_TOKEN_KEY, tok);
       const expMs = Date.now() + (expiresInSec || 3600) * 1000;
       sessionStorage.setItem(GMAIL_OFI_TOKEN_EXP_KEY, String(expMs));
+      _sstGmailExpiryWarnShown = false;
+      _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'ofi');
       if (accountEmail) sessionStorage.setItem(GMAIL_OFI_ACCOUNT_KEY, String(accountEmail).trim().toLowerCase());
     } else {

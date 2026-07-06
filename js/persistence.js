@@ -248,6 +248,7 @@ async function loadLS(){
       if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
       if(typeof pqrsMatrizApplySheetIdFromGlobal==='function')pqrsMatrizApplySheetIdFromGlobal(g);
+      if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
     }
     const [deptoResults,expSnaps]=await Promise.all([
       Promise.allSettled(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),

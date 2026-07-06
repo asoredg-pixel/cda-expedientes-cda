@@ -4559,7 +4559,7 @@ function confirmPrecaucion(opts,onOk){
     box.className='confirm-prec-box'+(opts.tone?' tone-'+opts.tone:'');
   }
   if(ico)ico.textContent='⚠️';
-  if(cancel)cancel.style.display='';
+  if(cancel)cancel.style.display=opts.hideCancel?'none':'';
   if(tit)tit.textContent=opts.title||'Precaución — acción irreversible';
   msg.textContent=opts.message||'¿Está seguro de continuar? Esta acción no se puede deshacer fácilmente.';
   if(det){
@@ -9202,6 +9202,7 @@ function pqrsMatrizObservaciones(e){
   const wf=getPqrsWorkflow(e);
   const canal=wf.canal||e._pqrs_respuesta_medio||'';
   const parts=[];
+  if(e._pqrs_informativa)parts.push('PQRSD informativa');
   const canalLbl=pqrsMatrizCanalLabel(canal);
   if(canalLbl)parts.push(canalLbl);
   const mn=String(e._medio_notificacion||'').trim();

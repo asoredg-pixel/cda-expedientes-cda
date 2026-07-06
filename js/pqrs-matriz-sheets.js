@@ -774,12 +774,35 @@ function pqrsMatrizSyncAfterSave(e, opts) {
   opts = opts || {};
   const notify = _pqrsMatrizSyncNotify(opts);
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return Promise.resolve(null);
-  if (typeof pqrsMatrizPublicarEnDriveAsync !== 'function') return Promise.resolve(null);
-  return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(res) {
-    if (res && res.noToken && (opts.warnNoToken || notify) && typeof notif === 'function') {
+
+  const sheetsP = typeof pqrsMatrizSyncExpediente === 'function'
+    ? pqrsMatrizSyncExpediente(e, opts).catch(function(err) {
+      console.warn('pqrsMatrizSyncExpediente:', err);
+      return { ok: false, error: err };
+    })
+    : Promise.resolve(null);
+
+  const xlsxP = typeof pqrsMatrizDriveUpdateExpedienteRow === 'function'
+    ? pqrsMatrizDriveUpdateExpedienteRow(e, opts).catch(function(err) {
+      console.warn('pqrsMatrizDriveUpdateExpedienteRow:', err);
+      return { ok: false, error: err };
+    })
+    : Promise.resolve(null);
+
+  return Promise.all([sheetsP, xlsxP]).then(function(results) {
+    const xlsxRes = results[1];
+    if (xlsxRes && xlsxRes.noToken && notify && typeof notif === 'function') {
       notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
     }
-    return res;
+    if (xlsxRes && (xlsxRes.notFound || xlsxRes.noFile) && typeof pqrsMatrizPublicarEnDriveAsync === 'function') {
+      return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(pubRes) {
+        if (pubRes && pubRes.noToken && notify && typeof notif === 'function') {
+          notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
+        }
+        return pubRes;
+      });
+    }
+    return xlsxRes || results[0];
   });
 }
 
