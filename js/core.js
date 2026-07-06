@@ -11637,12 +11637,9 @@ async function _pqrsSubirSoporteRespuesta(e,opts){
   }
 }
 function pqrsDebeNotificarRadicacionCorreo(e,opts){
-  if(!pqrsCorreoCiudadano(e))return false;
-  opts=opts||{};
-  const medioRec=typeof normMedioRecepcionPqrs==='function'?normMedioRecepcionPqrs(e.f_f2||opts.medio||''):'';
-  const medioNotif=typeof medioNotificacionNorm==='function'?medioNotificacionNorm(e._medio_notificacion||opts.medioNotif||''):'';
-  const viaCorreo=!!(e._gmail_message_id||opts.gmailMsgId||medioRec==='Correo');
-  return viaCorreo||medioNotif==='electronica';
+  // Enviar siempre que haya al menos un correo registrado, independientemente del
+  // medio de recepción o del medio de notificación elegido.
+  return pqrsCorreosCiudadano(e).length>0||!!pqrsCorreoCiudadano(e);
 }
 function pqrsRequiereCorreoNotificacion(e){
   if(!e)return false;
