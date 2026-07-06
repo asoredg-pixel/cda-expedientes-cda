@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260702t"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260706b"></script>
+<script src="js/core.js?v=20260706c"></script>
 <script src="js/formulario.js?v=20260702t"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -33,7 +33,7 @@
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260703c"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260702w"></script>
-<script src="js/pqrs.js?v=20260703f"></script>
+<script src="js/pqrs.js?v=20260706c"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260706a"></script>
 <script src="js/recursos.js?v=20260702t"></script>
@@ -697,7 +697,14 @@
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
+      <div id="sec-anon-contact-block" style="display:none;margin-bottom:10px;padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Datos de contacto opcionales — solo para notificación (no identifican al solicitante en el expediente)</div>
+        <div class="fg">
+          <div class="fld"><label>Correo (notificación)</label><input type="email" id="sec-anon-correo" placeholder="correo@ejemplo.com"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-anon-tel" placeholder="3001234567"></div>
+        </div>
+      </div>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
       <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
       <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
@@ -705,12 +712,10 @@
         <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
       </div>
       <div class="fld" style="margin-bottom:10px">
-        <label>Solicitud digital (opcional)</label>
-        <div class="sec-anexo-wrap fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px">
-          <label class="btn bsm" style="cursor:pointer;margin:0">📎 Elegir archivos<input type="file" id="sec-anexo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" multiple style="display:none" onchange="secAnexoFileLabel(this)"></label>
-          <span id="sec-anexo-label" style="font-size:12px;color:var(--tx2)">Ningún archivo seleccionado</span>
-        </div>
-        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos seleccionados también se suben.</span>
+        <label>Solicitud digital — anexos (opcional)</label>
+        <div id="sec-anexo-list" style="margin-top:6px"></div>
+        <button type="button" class="btn bsm" style="margin-top:6px" onclick="secAnexoAdd()">📎 Agregar archivo</button>
+        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos también se suben. Use <strong>Agregar archivo</strong> para añadir varios.</span>
       </div>
       <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>

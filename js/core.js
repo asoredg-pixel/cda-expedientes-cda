@@ -11499,26 +11499,30 @@ function pqrsConsultaCiudadanaUrl(){
   return String(base).replace(/\/?$/,'/');
 }
 function pqrsCorreoCiudadano(e){
-  if(!e||e._qd_anonimo)return'';
-  const em=String(e._qd_correo||e._pn_correo||e._pj_correo||'').trim().toLowerCase();
+  if(!e)return'';
+  // Para anónimos: si se registró _qd_correo explícitamente para notificación, usarlo.
+  const em=String(e._qd_correo||(e._qd_anonimo?'':e._pn_correo||e._pj_correo)||'').trim().toLowerCase();
   if(!em||!em.includes('@'))return'';
   return(typeof emailValido==='function'&&emailValido(em))?em:'';
 }
 // Devuelve todos los correos únicos válidos del expediente (solicitante, empresa, representante, apoderado, autorizado).
-// Usado para notificaciones a persona jurídica y cuando hay apoderado/autorizado.
+// Para anónimos con correo de notificación, incluye ese correo.
 function pqrsCorreosCiudadano(e){
-  if(!e||e._qd_anonimo)return[];
+  if(!e)return[];
   const valida=em=>{
     const v=String(em||'').trim().toLowerCase();
     return v&&v.includes('@')&&(typeof emailValido!=='function'||emailValido(v))?v:'';
   };
   const set=new Set();
   const add=em=>{const v=valida(em);if(v)set.add(v);};
+  // _qd_correo se usa siempre (incluye anónimos con correo de notificación)
   add(e._qd_correo);
-  add(e._pn_correo);
-  if(e._tipo_persona==='juridica'){add(e._pj_correo);add(e._pj_rep_correo);}
-  if(e._apoderado){add(e._apo_correo);}
-  if(e._autorizado){add(e._aut_correo);}
+  if(!e._qd_anonimo){
+    add(e._pn_correo);
+    if(e._tipo_persona==='juridica'){add(e._pj_correo);add(e._pj_rep_correo);}
+    if(e._apoderado){add(e._apo_correo);}
+    if(e._autorizado){add(e._aut_correo);}
+  }
   return Array.from(set);
 }
 // Genera el PDF de soporte de respuesta (equivalente al soporte de radicación) usando jsPDF.
