@@ -3024,20 +3024,25 @@ async function gmailOfiSendCompose() {
 // Cierra y persiste la PQRSD cuando el compose se abrió vía "📧 Enviar correo".
 // Registra la notificación por correo y sincroniza a Firestore (sin subir adjuntos:
 // para adjuntar documentos al Drive use "📨 Responder PQRSD").
-function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
+async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(ctx.expId || '').trim());
   if (!e) return;
   const yaCerrada = typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e);
   const fecha = typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10);
   const cuerpo = String((mail && mail.body) || '').trim();
-  const para = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
+  // Resolver todos los correos destino (multi-email para jurídica)
+  const todosCorreos = typeof pqrsCorreosCiudadano === 'function' ? pqrsCorreosCiudadano(e) : [];
+  const paraRaw = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
+  const para = todosCorreos.length ? todosCorreos.join(', ') : paraRaw;
+  const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
   if (!yaCerrada && typeof setPqrsWorkflow === 'function') {
-    const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
     setPqrsWorkflow(e, {
       fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
       canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
       cuerpo: cuerpo || (wf.cuerpo || ''),
-      fecha_respuesta: wf.fecha_respuesta || fecha
+      fecha_respuesta: wf.fecha_respuesta || fecha,
+      cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+      cerrado_en: new Date().toISOString()
     });
   } else if (!yaCerrada) {
     e._pqrs_estado_oficina = 'cerrado';
@@ -3063,6 +3068,23 @@ function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
   if (typeof refreshPqrsDetalleViews === 'function') refreshPqrsDetalleViews(e._exp);
   notif('✅ PQRSD ' + e._exp + ' registrada como respondida por correo', 'ok');
+  // Generar y subir soporte PDF de respuesta en background (no bloquea)
+  if (typeof _pqrsSubirSoporteRespuesta === 'function') {
+    try {
+      const soporteRes = await _pqrsSubirSoporteRespuesta(e, { fechaResp: fecha, cuerpo });
+      if (soporteRes && soporteRes.driveLink) {
+        const wfNow = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
+        const docsNow = Array.isArray(wfNow.documentos) ? wfNow.documentos : [];
+        const yaTiene = docsNow.some(d => d && d.tipo === 'soporte_respuesta');
+        if (!yaTiene) {
+          if (typeof setPqrsWorkflow === 'function') {
+            setPqrsWorkflow(e, { documentos: docsNow.concat([{ nombre: 'Soporte de respuesta', driveLink: soporteRes.driveLink, previewLink: soporteRes.previewLink || '', fileId: soporteRes.fileId || '', tipo: 'soporte_respuesta' }]) });
+          }
+          if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
+        }
+      }
+    } catch (err) { console.warn('Soporte respuesta compose:', err); }
+  }
 }
 
 async function gmailOfiSaveDraft() {
