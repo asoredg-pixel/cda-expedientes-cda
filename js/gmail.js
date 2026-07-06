@@ -1435,6 +1435,41 @@ async function chatPurgeExpiredDriveFiles() {
   return purged;
 }
 
+// Limpia el cuerpo de un correo para el PDF: elimina citas (líneas con >) y bloques "escribió:".
+function _gmailCleanBodyForPdf(txt) {
+  const raw = String(txt || '').replace(/\r/g, '');
+  if (!raw.trim()) return '';
+  const lines = raw.split('\n');
+  const out = [];
+  let inQuote = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!inQuote && (
+      /^>{1,}\s*$/.test(trimmed) ||
+      /^On .+wrote:$/i.test(trimmed) ||
+      /^El .+ escribi[oó]:$/i.test(trimmed) ||
+      /^-{3,}\s*(Original Message|Mensaje original)/i.test(trimmed)
+    )) {
+      inQuote = true;
+      continue;
+    }
+    if (inQuote) {
+      if (/^>{0,1}\s*$/.test(trimmed)) continue;
+      if (!/^>/.test(trimmed) && trimmed.length > 0 && !/^On .+wrote:$/i.test(trimmed)) {
+        inQuote = false;
+      } else {
+        continue;
+      }
+    }
+    const cleaned = line.replace(/^>+\s?/g, '').trimEnd();
+    if (cleaned.trim()) out.push(cleaned);
+  }
+  let result = out.join('\n').trim();
+  result = result.replace(/\n{3,}/g, '\n\n');
+  return result;
+}
+
 // Genera un PDF (soporte de solicitud) a partir del contenido del correo.
 // Replica la idea de "imprimir el correo en PDF" como soporte de radicación.
 // Devuelve un Blob application/pdf, o null si jsPDF no está disponible.
@@ -1476,7 +1511,8 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
   doc.text('Contenido de la solicitud:', margin, y); y += 16;
   doc.setFont('helvetica', 'normal');
-  const cuerpo = String(ed.cuerpoTxt || ed.asunto || '(sin contenido de texto)').replace(/\r/g, '');
+  const cuerpoRaw = String(ed.cuerpoTxt || ed.asunto || '').replace(/\r/g, '');
+  const cuerpo = _gmailCleanBodyForPdf(cuerpoRaw) || String(ed.asunto || '(sin contenido de texto)').trim();
   const bodyLines = doc.splitTextToSize(cuerpo, maxW);
   const lineH = 13;
   for (let i = 0; i < bodyLines.length; i++) {

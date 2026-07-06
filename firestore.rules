@@ -197,8 +197,11 @@ service cloud.firestore {
       allow delete: if isAdmin() && deptoIdValido(deptoId);
 
       match /expedientes/{expId} {
-        allow read: if puedeLeerDepartamento(deptoId);
-        allow write: if puedeEscribirDepartamento(deptoId);
+        // Consulta ciudadana: lectura pública de un expediente por su número (get).
+        // No permite listar la colección completa sin autenticación.
+        allow get: if deptoIdValido(deptoId);
+        allow list: if isActiveUser() && puedeLeerDepartamento(deptoId);
+        allow create, update, delete: if isActiveUser() && puedeEscribirDepartamento(deptoId);
       }
     }
 

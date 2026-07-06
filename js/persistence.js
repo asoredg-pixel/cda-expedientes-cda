@@ -381,6 +381,30 @@ async function loadExpedientesDepto(deptoId){
     return [];
   }
 }
+// Busca un expediente/PQRSD por número en Firestore (consulta ciudadana sin sesión).
+async function fetchExpedientePorNumero(expId){
+  const db=window._db;
+  if(!db||!window._fsGetDoc||!window._fsDoc)return null;
+  const id=String(expId||'').trim();
+  if(!id)return null;
+  const deptos=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare','guainia','vaupes'];
+  for(let i=0;i<deptos.length;i++){
+    const depto=deptos[i];
+    try{
+      const ref=window._fsDoc(db,'departamentos',depto,'expedientes',id);
+      const snap=await window._fsGetDoc(ref);
+      if(snap.exists()){
+        const data=snap.data()||{};
+        const expIdNorm=String(data._exp||data.id||snap.id||'').trim();
+        return Object.assign({},data,{_exp:expIdNorm,id:expIdNorm,_depto:data._depto||depto});
+      }
+    }catch(err){
+      console.warn('fetchExpedientePorNumero:',depto,id,err&&err.code||err);
+    }
+  }
+  return null;
+}
+window.fetchExpedientePorNumero=fetchExpedientePorNumero;
 async function saveDeptMeta(deptoId){
   const db=window._db;
   if(!db||!window._fsSetDoc||!deptoId)return false;

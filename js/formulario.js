@@ -219,7 +219,7 @@ function renderFormulario(tid,ed,targetId){
   const esQuejaDen=esPqrs&&(tipoSol==='Queja'||tipoSol==='Denuncia');
   const personaHtml='<details class="form-section" id="sec-persona"><summary class="form-section-hdr">Datos del interesado</summary><div class="form-section-body">'+
     '<div id="pqrs-tipo-box" style="'+(esPqrs?'':'display:none')+';margin-bottom:.7rem"><div class="fld"><label>Tipo de solicitud</label><select id="fld__tipo_solicitud" onchange="toggleCasoEspecialMode()">'+
-    ['PQRS','Petición','Queja','Denuncia','Reclamo','Sugerencia'].map(t=>'<option'+(tipoSol===t?' selected':'')+'>'+t+'</option>').join('')+
+    ['PQRS','Petición','Queja','Denuncia','Reclamo','Sugerencia','Reunión','Audiencia'].map(t=>'<option'+(tipoSol===t?' selected':'')+'>'+t+'</option>').join('')+
     '</select></div></div>'+
     '<div id="sanc-tipo-box" style="'+(esSanc?'':'display:none')+';margin-bottom:.7rem"><div class="fld"><label>Tipo de conducta / caso</label><select id="fld__tipo_sancionatorio" onchange="toggleCasoEspecialMode()">'+
     (cfg.tiposSancionatorio||['Deforestación']).map(t=>'<option'+(tipoSanc===t?' selected':'')+'>'+t+'</option>').join('')+

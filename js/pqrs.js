@@ -856,7 +856,7 @@ function openEditPqrsSecretariaModal(expId){
   if(modal){modal.classList.add('task-modal-wide');modal.classList.remove('enviar-modal-only');}
     const tp=rec._tipo_persona||'natural';
     const anon=!!rec._qd_anonimo;
-    const tipos=['Petición','Queja','Reclamo','Denuncia','Sugerencia'];
+    const tipos=['Petición','Queja','Reclamo','Denuncia','Sugerencia','Reunión','Audiencia'];
     const tipoOpts=tipos.map(t=>'<option value="'+escAttr(t)+'"'+(rec._tipo_solicitud===t?' selected':'')+'>'+escAttr(t)+'</option>').join('');
     const medioVal=normMedioRecepcionPqrs(rec.f_f2||'Ventanilla');
     const medioOpts=mediosRecepcionPqrsOptsHtml(medioVal);
@@ -1281,13 +1281,27 @@ function closeCiudadanoDocViewer(){
   if(ifr)ifr.src='';
   if(foot)foot.innerHTML='';
 }
-function buscarExpCiudadano(){
+async function buscarExpCiudadano(){
   const q=String((document.getElementById('ciudadano-exp')||{}).value||'').trim();
   const box=document.getElementById('ciudadano-resultado');
   if(!box)return;
   if(!q){box.innerHTML='<div style="color:var(--tx3);font-size:12px">Ingrese el número de su trámite o PQRSD.</div>';return;}
   window._ciudadanoUltExp=q;
-  const e=exps.find(x=>String(x._exp||'').trim().toLowerCase()===q.toLowerCase());
+  let e=exps.find(x=>String(x._exp||'').trim().toLowerCase()===q.toLowerCase());
+  if(!e){
+    box.innerHTML='<div style="padding:12px;color:var(--tx2);font-size:13px">⏳ Buscando en el sistema…</div>';
+    if(typeof fetchExpedientePorNumero==='function'){
+      try{
+        e=await fetchExpedientePorNumero(q);
+        if(e){
+          const idx=exps.findIndex(x=>String(x._exp||'').trim().toLowerCase()===String(e._exp||'').trim().toLowerCase());
+          if(idx>=0)exps[idx]=e;else exps.push(e);
+        }
+      }catch(err){
+        console.warn('buscarExpCiudadano fetch:',err);
+      }
+    }
+  }
   if(!e){box.innerHTML='<div style="padding:12px;background:var(--rdl);border:1px solid #e8a8a8;border-radius:var(--r);color:var(--rd);font-size:13px">No se encontró un trámite con el número «'+escAttr(q)+'».</div>';return;}
   const esPqrs=esPqrsSecretaria(e)||esTramitePqrs(e._tramite);
   if(esPqrs)normalizePqrsOficinaFields(e);
