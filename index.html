@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260702t">
+<link rel="stylesheet" href="css/sst.css?v=20260706e">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -18,11 +18,11 @@
 <script src="js/constants.js?v=20260703f"></script>
 <script src="js/utils.js?v=20260702t"></script>
 <script src="js/state.js?v=20260702t"></script>
-<script src="js/persistence.js?v=20260706d"></script>
+<script src="js/persistence.js?v=20260706e"></script>
 <script src="js/roles.js?v=20260702t"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260706c"></script>
+<script src="js/core.js?v=20260706e"></script>
 <script src="js/formulario.js?v=20260706d"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -35,9 +35,9 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260702w"></script>
 <script src="js/pqrs.js?v=20260706d"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260706d"></script>
+<script src="js/gmail.js?v=20260706e"></script>
 <script src="js/recursos.js?v=20260702t"></script>
-<script src="js/ingreso.js?v=20260702t"></script>
+<script src="js/ingreso.js?v=20260706e"></script>
 </head>
 <body>
 <div id="storage-full-banner" class="storage-full-banner" role="alert">
@@ -50,6 +50,18 @@
     <div class="export-reminder-btns">
       <button type="button" class="btn bp" onclick="SST.exportarAhoraFromReminder()">Exportar ahora</button>
       <button type="button" class="btn bs" onclick="SST.recordarDespuesExport()">Recordar después</button>
+    </div>
+  </div>
+</div>
+<div id="gmail-sesion-overlay" class="gmail-sesion-overlay" aria-hidden="true">
+  <div class="gmail-sesion-box">
+    <div class="gmail-sesion-icon" aria-hidden="true">📧</div>
+    <h2 class="gmail-sesion-tit">Conexión Gmail requerida</h2>
+    <p class="gmail-sesion-txt">Para usar el sistema debe tener su correo institucional conectado (válido ~1 hora). Esto permite sincronizar la matriz PQRSD, subir archivos a Drive y gestionar actividades.</p>
+    <p class="gmail-sesion-txt gmail-sesion-txt-sm">Al expirar el permiso deberá ingresar de nuevo y reconectar el correo.</p>
+    <div class="gmail-sesion-btns">
+      <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar correo Gmail</button>
+      <button type="button" class="btn bs hdr-sesion-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
     </div>
   </div>
 </div>

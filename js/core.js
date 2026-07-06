@@ -8960,6 +8960,7 @@ function onDeptoChange(){
   if(document.getElementById('pg-cfg').classList.contains('on'))renderCfg();
   if(document.getElementById('pg-sec').classList.contains('on')){poblarSecOficinaSelect();renderSecretariaPqrs();}
   if(document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
+  if(typeof sstIniciarGmailObligatorio==='function'&&!esModoCiudadano())sstIniciarGmailObligatorio();
 }
 function updateDeptoUI(){
   if(esVistaActividadesDepto())ensureEncargadoActivo();
@@ -9059,6 +9060,9 @@ function updateDeptoUI(){
     const pgCiu=document.getElementById('pg-ciudadano');
     if(pgCiu&&!pgCiu.classList.contains('on'))showTab('ciudadano');
   }
+  document.body.classList.toggle('modo-ciudadano',ciudadano);
+  if(typeof renderSstGmailSesionBloqueo==='function')renderSstGmailSesionBloqueo();
+  if(typeof sstRescheduleGmailExpiryTimers==='function')sstRescheduleGmailExpiryTimers();
   if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on'))showTab('act');
 }
 function renderResponsableRegistro(){}

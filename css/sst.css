@@ -626,6 +626,17 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .storage-cap-toast.crit{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
 .export-reminder-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:26000;align-items:center;justify-content:center;padding:1rem}
 .export-reminder-overlay.on{display:flex}
+.gmail-sesion-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:29000;align-items:center;justify-content:center;padding:1rem}
+.gmail-sesion-overlay.on{display:flex}
+.gmail-sesion-box{background:var(--sf);border-radius:var(--rl);padding:28px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25);border:1px solid var(--bd)}
+.gmail-sesion-icon{font-size:2.4rem;line-height:1;margin-bottom:8px}
+.gmail-sesion-tit{font-size:17px;font-weight:700;color:var(--tx);margin:0 0 10px}
+.gmail-sesion-txt{font-size:13px;color:var(--tx2);line-height:1.5;margin:0 0 8px}
+.gmail-sesion-txt-sm{font-size:12px;color:var(--tx3)}
+.gmail-sesion-btns{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+body.modo-ciudadano .hdr-logout-btn,
+body.modo-ciudadano .hdr-user-bar-mobile .btn,
+body.modo-ciudadano .hdr-more-menu{display:none!important}
 .export-reminder-box{background:#fff;border-radius:var(--r);padding:1.25rem;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .export-reminder-btns{display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap}
 .chat-contact-info{flex:1;min-width:0}

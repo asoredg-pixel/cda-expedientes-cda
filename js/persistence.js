@@ -111,6 +111,8 @@ function exportarAhoraFromReminder(){
 }
 function maybeShowExportReminder(){
   if(!document.body.classList.contains('sesion-activa'))return;
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano())return;
+  if(typeof esAdministrador==='function'&&!esAdministrador())return;
   try{if(sessionStorage.getItem('sst_export_remind_dismissed'))return;}catch(e){}
   const dias=diasSinExportar();
   if(dias<=7)return;

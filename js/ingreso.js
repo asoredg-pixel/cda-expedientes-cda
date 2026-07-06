@@ -42,6 +42,13 @@ function updateHeaderUsuario(){
   const barMob=document.getElementById('hdr-user-bar-mobile');
   const lblMob=document.getElementById('hdr-user-label-mobile');
   if(!lbl)return;
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano()){
+    if(bar)bar.style.display='none';
+    if(barMob)barMob.style.display='none';
+    lbl.textContent='';
+    if(lblMob)lblMob.textContent='';
+    return;
+  }
   if(!document.body.classList.contains('sesion-activa')||!window._usuarioActual){
     if(bar)bar.style.display='none';
     if(barMob)barMob.style.display='none';
@@ -260,6 +267,7 @@ function ingresarComoRol(rolId,respNombre){
   const rolInfo=ROLES_INGRESO.find(r=>r.id===rolId);
   logAudit('Inició sesión con rol '+(rolInfo?rolInfo.titulo:rolId),'configuracion',null);
   updateHeaderUsuario();
+  if(typeof sstIniciarGmailObligatorio==='function')sstIniciarGmailObligatorio();
   setTimeout(()=>maybeShowExportReminder(),800);
 }
 function salirDeSesionApp(){
