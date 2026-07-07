@@ -160,9 +160,11 @@ function addInstructor(){
     cfg.instructores.push({id:'ins_'+Date.now(),nombre:u.nombre||email,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]});
   });
   if(sel)sel.value='';
-  saveLS();renderListasCfg();poblarSelResponsable();
-  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-  notif('Responsable agregado en '+labelDepto(targetDepto),'ok');
+  void persistCfgDepto(targetDepto).then(function(){
+    renderListasCfg();poblarSelResponsable();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    notif('Responsable agregado en '+labelDepto(targetDepto),'ok');
+  });
 }
 function toggleInstructorRegSec(i,key,checked){
   if(!puedeEditarRegSecContratistaCfg())return;

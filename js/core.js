@@ -2704,7 +2704,8 @@ function puedeAsignarPqrsOficina(e){
   const ofi=e._pqrs_oficina||getPqrsOficinaActiva();
   if(!oficinaPuedeAsignarPqrs(ofi))return false;
   if(esModoOficinaDeguv()&&e._pqrs_oficina===deptoActivo)return true;
-  if(esOficinaPqrsNca()&&e._pqrs_oficina==='guaviare')return true;
+  if((esOficinaPqrsNca()||esNcaDeguv())&&e._pqrs_oficina==='guaviare')return true;
+  if(esAdministrador()&&e._pqrs_oficina==='guaviare')return true;
   return false;
 }
 function ensureTareaPqrsOficina(e,oficinaId){
@@ -4456,7 +4457,7 @@ async function eliminarUsuarioFirestore(email){
       if(prev&&prev.rol==='responsables'&&removeInstructorByEmail(email,prev.deptoResponsable)){
         syncCfgToStore();
         _saveLSLocal();
-        try{await saveDepartamentoCfgFirestore(prev.deptoResponsable);}catch(depErr){console.warn(depErr);}
+        try{await persistCfgDepto(prev.deptoResponsable);}catch(depErr){console.warn(depErr);}
       }
       await persistUsuariosIndexGlobal();
       await aplicarSyncUsuariosAutorizados();

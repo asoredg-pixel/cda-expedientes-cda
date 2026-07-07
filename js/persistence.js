@@ -626,6 +626,18 @@ function saveLS(){
   }
 }
 function saveCfg(){saveLS();}
+async function persistCfgDepto(deptoId){
+  deptoId=String(deptoId||'').trim();
+  if(!deptoId||!DEPTOS_FIRESTORE.includes(deptoId))return false;
+  syncCfgToStore();
+  try{_saveLSLocal();}catch(e){}
+  _localSaving=true;
+  try{
+    return await saveDeptMeta(deptoId);
+  }finally{
+    setTimeout(function(){_localSaving=false;},1500);
+  }
+}
 // updateSyncIndicator → js/utils.js
 function renderTabActual(){
   const pg=document.querySelector('.pg.on');

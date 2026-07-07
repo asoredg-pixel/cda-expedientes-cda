@@ -1126,7 +1126,7 @@ function openAsignarPqrsOficinaModal(expId){
   const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
   if(!oficinaPuedeAsignarPqrs(oficina)){notif('Esta oficina no tiene contratistas de apoyo configurados para asignar','err');return;}
   abrirPqrsModalPrep();
-  let responsables=oficina==='guaviare'?getContratistasOficinaPqrs('guaviare'):getContratistasOficinaPqrs(oficina);
+  let responsables=getAsignablesPqrsOficina(oficina);
   if(!responsables.length){notif('No hay responsables configurados para esta oficina','err');return;}
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');

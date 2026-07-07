@@ -45,12 +45,24 @@ function getContratistasOficinaPqrs(oficinaId){
   oficinaId=oficinaId||getPqrsOficinaActiva();
   if(oficinaId==='secretaria'||oficinaId==='admin_deguv')return [];
   if(oficinaId==='guaviare'){
-    return getInstructoresActivos('guaviare').filter(i=>i.rol==='contratista'&&instructorEsSoloNcaDeguv(i)).map(i=>i.nombre).filter(Boolean);
+    return getInstructoresActivos('guaviare').filter(contratistaEsAsignablePqrsGuaviare).map(i=>i.nombre).filter(Boolean);
   }
   return getInstructoresOficina(oficinaId).filter(i=>i.rol==='contratista').map(i=>i.nombre).filter(Boolean);
 }
+function contratistaEsAsignablePqrsGuaviare(ins){
+  if(!ins||ins.activo===false||ins.rol!=='contratista')return false;
+  const ofs=ins.oficinas||[];
+  if(!ofs.length)return true;
+  if(ofs.includes('guaviare'))return true;
+  return instructorEsSoloNcaDeguv(ins);
+}
+function getAsignablesPqrsOficina(oficinaId){
+  oficinaId=oficinaId||getPqrsOficinaActiva();
+  if(oficinaId==='guaviare')return getResponsablesNcaDeguv();
+  return getContratistasOficinaPqrs(oficinaId);
+}
 function oficinaPuedeAsignarPqrs(oficinaId){
-  return getContratistasOficinaPqrs(oficinaId).length>0;
+  return getAsignablesPqrsOficina(oficinaId).length>0;
 }
 function oficinaTieneResponsables(oficinaId){
   oficinaId=oficinaId||getPqrsOficinaActiva();
@@ -231,11 +243,11 @@ function delInstructorDepto(deptoId,i){
         if(idx<0){notif('No se encontró el responsable en '+labelDepartamento(deptoId),'err');return;}
         cfg.instructores.splice(idx,1);
         syncInstructoresToEncargadosGlobal();
-        saveLS();renderListasCfg();poblarSelResponsable();
+        void persistCfgDepto(deptoId).then(function(ok){
+          if(ok===false)notif('No se pudo guardar en Firestore','err');
+        });
+        renderListasCfg();poblarSelResponsable();
         if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
-        if(window._db&&typeof saveFirestore==='function'){
-          void saveFirestore().catch(function(err){console.error('delInstructorDepto saveFirestore:',err);});
-        }
         notif('Eliminado de la lista','ok');
       });
     });

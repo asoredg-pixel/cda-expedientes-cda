@@ -1,30 +1,78 @@
 ﻿// =============================================================================
 // ingreso.js — INGRESO POR ROLES
-// Dependencias de runtime resueltas desde el scope global.
+// Depende de: persistence.js (persistCfgDepto), roles.js, core.js
 // Cargar antes del script principal de index.html.
 // =============================================================================
 // INGRESO POR ROLES
 // ================================================================
 // ROLES_INGRESO → js/constants.js
+const SESSION_STALE_MS=2*60*1000;
+
 function generateSessionId(){
   return 'sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,12);
+}
+function sesionRemotaEstaViva(data){
+  data=data||{};
+  const sid=String(data.activeSessionId||'').trim();
+  if(!sid)return false;
+  const hb=String(data.activeSessionHeartbeat||data.activeSessionAt||'').trim();
+  if(!hb)return true;
+  const t=Date.parse(hb);
+  if(!t||isNaN(t))return true;
+  return (Date.now()-t)<SESSION_STALE_MS;
+}
+async function verificarSesionDisponible(email){
+  email=String(email||'').trim().toLowerCase();
+  const db=window._db;
+  if(!email||!db||!window._fsGetDoc||!window._fsDoc)return{ok:true};
+  try{
+    const snap=await window._fsGetDoc(window._fsDoc(db,'usuarios',email));
+    if(!snap.exists())return{ok:true};
+    if(sesionRemotaEstaViva(snap.data())){
+      return{ok:false,msg:'❌ Ya tiene una sesión abierta en otro dispositivo, navegador o pestaña.\n\nCierre sesión allí antes de ingresar aquí.'};
+    }
+    return{ok:true};
+  }catch(err){
+    console.warn('verificarSesionDisponible:',err);
+    return{ok:true};
+  }
 }
 async function claimActiveSession(email){
   email=String(email||'').trim().toLowerCase();
   const db=window._db;
-  if(!email||!db||!window._fsSetDoc||!window._fsDoc)return null;
+  if(!email||!db||!window._fsDoc)return null;
   const sid=generateSessionId();
+  const now=new Date().toISOString();
+  const payload={
+    activeSessionId:sid,
+    activeSessionAt:now,
+    activeSessionHeartbeat:now,
+    activeSessionUserAgent:String(navigator.userAgent||'').slice(0,200)
+  };
   try{
-    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{
-      activeSessionId:sid,
-      activeSessionAt:new Date().toISOString(),
-      activeSessionHeartbeat:new Date().toISOString(),
-      activeSessionUserAgent:String(navigator.userAgent||'').slice(0,200)
-    },{merge:true});
+    if(window._fsRunTransaction){
+      await window._fsRunTransaction(db,async function(transaction){
+        const ref=window._fsDoc(db,'usuarios',email);
+        const snap=await transaction.get(ref);
+        const data=snap.exists()?snap.data():{};
+        if(sesionRemotaEstaViva(data)){
+          const err=new Error('SESSION_BUSY');
+          err.code='SESSION_BUSY';
+          throw err;
+        }
+        transaction.set(ref,payload,{merge:true});
+      });
+    }else{
+      const check=await verificarSesionDisponible(email);
+      if(!check.ok)return'BUSY';
+      if(!window._fsSetDoc)return null;
+      await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    }
     _sessionId=sid;
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
+    if(err&&err.code==='SESSION_BUSY')return'BUSY';
     console.warn('No se pudo registrar sesión activa:',err);
     return null;
   }
@@ -39,7 +87,8 @@ async function releaseActiveSession(email){
     if(snap.exists()&&String(snap.data().activeSessionId||'')===_sessionId){
       await window._fsSetDoc(ref,{
         activeSessionId:'',
-        activeSessionAt:new Date().toISOString()
+        activeSessionAt:new Date().toISOString(),
+        activeSessionHeartbeat:new Date().toISOString()
       },{merge:true});
     }
   }catch(err){console.warn('releaseActiveSession:',err);}
@@ -53,7 +102,7 @@ function stopSessionGuard(){
 function cerrarSesionPorConflicto(){
   stopSessionGuard();
   _sessionId=null;
-  notif('Su sesión se cerró porque inició sesión en otro dispositivo, navegador o pestaña.','err');
+  notif('Su sesión finalizó porque se cerró o se abrió en otro lugar.','err');
   if(window._authSignOut)window._authSignOut().catch(()=>{});
   window._usuarioActual=null;
   authUsuario=null;
@@ -69,8 +118,10 @@ function startSessionGuard(email){
   _sessionUnsub=window._fsOnSnapshot(window._fsDoc(db,'usuarios',email),function(snap){
     if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
     if(!snap.exists())return;
-    const remoteSid=String((snap.data()||{}).activeSessionId||'');
-    if(remoteSid&&remoteSid!==_sessionId)cerrarSesionPorConflicto();
+    const data=snap.data()||{};
+    const remoteSid=String(data.activeSessionId||'');
+    if(!remoteSid||remoteSid===_sessionId)return;
+    if(sesionRemotaEstaViva(data))cerrarSesionPorConflicto();
   },function(err){console.warn('Error escuchando sesión:',err);});
   _sessionHeartbeatTimer=setInterval(function(){
     if(!document.body.classList.contains('sesion-activa')||!_sessionId||!email)return;
@@ -181,11 +232,23 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
+    const sesion=await claimActiveSession(email);
+    if(sesion==='BUSY'){
+      window._usuarioActual=null;
+      setLoginAuthMsg('❌ Ya tiene una sesión abierta en otro dispositivo, navegador o pestaña.\n\nCierre sesión allí antes de ingresar aquí.','err');
+      if(window._authSignOut)await window._authSignOut().catch(()=>{});
+      return;
+    }
+    if(!sesion){
+      window._usuarioActual=null;
+      setLoginAuthMsg('❌ No se pudo registrar la sesión segura. Si el problema continúa, contacte al administrador (reglas Firestore).','err');
+      if(window._authSignOut)await window._authSignOut().catch(()=>{});
+      return;
+    }
     const authPanel=document.getElementById('login-auth-panel');
     const rolesWrap=document.getElementById('login-roles-wrap');
     if(authPanel)authPanel.style.display='none';
     if(rolesWrap)rolesWrap.style.display='none';
-    await claimActiveSession(email);
     ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
@@ -245,32 +308,23 @@ function mostrarSelectorRolesAdmin(nombre){
   const authPanel=document.getElementById('login-auth-panel');
   const rolesWrap=document.getElementById('login-roles-wrap');
   const sub=document.getElementById('login-sub');
-  const statusEl=document.getElementById('login-status');
   if(authPanel)authPanel.style.display='none';
   if(rolesWrap)rolesWrap.style.display='';
-  if(statusEl)statusEl.style.display='none';
-  if(sub)sub.textContent='Bienvenido '+ (nombre||window._usuarioActual.nombre||window._usuarioActual.email) + '. Seleccione rol para ingresar (administrador).';
-  renderLoginRoles();
+  if(sub)sub.textContent='Seleccione el módulo con el que desea trabajar:';
+  setLoginAuthMsg('');
+  setLoginStatus('');
+  renderLoginRolesGrid();
 }
-function renderLoginRoles(){
-  if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
-    if(window._usuarioActual&&window._usuarioActual.rol){
-      const u=window._usuarioActual;
-      const respNom=u&&u.rol==='responsables'?getResponsableLoginNombre():'';
-      ingresarComoRol(normalizarRolLoginFirestore(u.rol),respNom);
-    }
-    return;
-  }
+function renderLoginRolesGrid(){
   const el=document.getElementById('login-roles-grid');
   if(!el)return;
   el.innerHTML=ROLES_INGRESO.map(r=>'<button type="button" class="login-rol-card '+r.cls+'" onclick="ingresarComoRol(\''+escAttr(r.id)+'\')"><span class="login-rol-icon">'+r.icon+'</span><span class="login-rol-tit">'+escAttr(r.titulo)+'</span><span class="login-rol-desc">'+escAttr(r.desc)+'</span></button>').join('');
 }
 function rutaInicialPorRol(rolId){
-  if(rolId==='secretaria')return'sec';
   if(rolId==='ciudadano')return'ciudadano';
-  if(rolId==='contratista')return'reg';
+  if(rolId==='secretaria')return'sec';
+  if(rolId==='responsables')return'con';
   if(rolId==='jurisdiccional')return'con';
-  if(rolId==='responsables')return responsableActivo?'act':'con';
   if(OFICINAS_DEGUV.some(o=>o.id===rolId&&o.id!=='guaviare'&&o.id!=='secretaria'))return'pqrs-ofi';
   if(rolId==='admin'||DEPTOS.some(d=>d.id===rolId))return'reg';
   return'con';
@@ -327,8 +381,8 @@ function ingresarComoRol(rolId,respNombre){
   initAppRealtimeSync();
   if(window._usuarioActual&&window._usuarioActual.email){
     if(!_sessionId){
-      void claimActiveSession(window._usuarioActual.email).then(function(){
-        startSessionGuard(window._usuarioActual.email);
+      void claimActiveSession(window._usuarioActual.email).then(function(sid){
+        if(sid&&sid!=='BUSY')startSessionGuard(window._usuarioActual.email);
       });
     }else{
       startSessionGuard(window._usuarioActual.email);
@@ -396,4 +450,3 @@ function cerrarSesionGoogle(){
 initPqrsUiDelegation();
 initSstUiDelegation();
 ensureOverlaysClosed();
-// Namespace público — funciones llamadas desde onclick en el HTML

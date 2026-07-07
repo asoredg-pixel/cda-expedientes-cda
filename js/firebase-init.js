@@ -9,7 +9,7 @@ const firebaseConfig={
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,deleteDoc,deleteField,arrayUnion,arrayRemove}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
@@ -29,6 +29,7 @@ window._fsDeleteDoc=deleteDoc;
 window._fsDeleteField=deleteField;
 window._fsArrayUnion=arrayUnion;
 window._fsArrayRemove=arrayRemove;
+window._fsRunTransaction=runTransaction;
 window._googleProvider=new GoogleAuthProvider();
 // Force account picker every time so users can switch accounts after logout
 window._googleProvider.setCustomParameters({prompt:'select_account'});
