@@ -1342,7 +1342,7 @@ async function buscarExpCiudadano(){
     const estT=estadoTask(t);
     if(estT==='Atendida'&&taskDocAprobadoCiudadano(t))eventos.push({fecha:t.fechaAtendida||t.fechaReportada||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.fechaAtendida||t.fechaReportada||'')+'</div><div class="tl-nota"><strong>Respuesta aprobada y publicada</strong></div></div>'});
     else if(estT==='Por verificar')eventos.push({fecha:t.fechaReportada||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.fechaReportada||'')+'</div><div class="tl-nota"><strong>Respuesta en revisión</strong></div></div>'});
-    else if(estT==='En ejecución'||estT==='Vencida'||estT==='Por corregir')eventos.push({fecha:t.vence||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.vence||'')+'</div><div class="tl-nota">Actividad en gestión</div></div>'});
+    else if((estT==='En ejecución'||estT==='Vencida'||estT==='Por corregir')&&!pqrsEstaCerrada(e))eventos.push({fecha:t.vence||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.vence||'')+'</div><div class="tl-nota">Actividad en gestión</div></div>'});
   });
   eventos.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
   const tlHtml=eventos.length?eventos.map(ev=>ev.html).join(''):'<div style="font-size:12px;color:var(--tx3)">Sin movimientos registrados aún.</div>';

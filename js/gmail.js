@@ -1596,13 +1596,42 @@ async function driveUploadPqrsExpediente(blob, filename, mimeType, e, opts) {
 }
 
 // Versión base64url para adjuntos de correo (usa la misma infraestructura).
-async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, tipo, pqrsNum, nombreCarpeta) {
+async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, tipo, pqrsNum, nombreCarpeta, fechaRef, uploadOpts) {
   const b64 = base64urlData.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const blob = new Blob([bytes], { type: mimeType });
-  return driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta);
+  return driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef, uploadOpts);
+}
+
+async function _gmailGetAttachmentAny(messageId, attachmentId) {
+  if (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid()) {
+    const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + messageId + '/attachments/' + attachmentId);
+    return data.data;
+  }
+  return gmailGetAttachment(messageId, attachmentId);
+}
+
+async function subirAdjuntosGmailMsgRespuestaADrive(msg, e) {
+  if (!msg || !e || !msg.payload) return [];
+  const parts = gmailExtractParts(msg.payload);
+  const documentos = [];
+  const expId = e._exp || '';
+  const nombreCarpeta = e._qd_nombre || e._pn_nombre || expId;
+  const fechaExp = e._fecha || e._fecha_solicitud || '';
+  const uploadOpts = { expediente: e, uploadTarget: 'respuesta' };
+  for (const att of parts.attachments) {
+    if (!att.attachmentId) continue;
+    try {
+      const b64 = await _gmailGetAttachmentAny(msg.id, att.attachmentId);
+      const res = await driveUploadInstitutionalB64(att.filename, att.mimeType || 'application/octet-stream', b64, 'respuesta_aprobada', expId, nombreCarpeta, fechaExp, uploadOpts);
+      documentos.push({ nombre: att.filename, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo', mime: att.mimeType || '' });
+    } catch (err) {
+      console.warn('subirAdjuntosGmailMsgRespuestaADrive:', att.filename, err);
+    }
+  }
+  return documentos;
 }
 
 // ----------------------------------------------------------------
@@ -2185,61 +2214,60 @@ async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
     return false;
   }
   try {
-    // Obtener el correo en formato raw (incluye todos los adjuntos tal como llegaron)
     const rawData = await gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
     if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
 
-    // Decodificar base64url → bytes → texto
     const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
     const binaryStr = atob(b64std);
     const bytes = new Uint8Array(binaryStr.length);
     for (var bi = 0; bi < binaryStr.length; bi++) bytes[bi] = binaryStr.charCodeAt(bi);
-    const rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
 
-    // Localizar separador cabecera/cuerpo
-    var sep = '\r\n\r\n';
-    var headerEnd = rawText.indexOf(sep);
-    if (headerEnd === -1) { sep = '\n\n'; headerEnd = rawText.indexOf(sep); }
-    if (headerEnd === -1) throw new Error('Estructura del correo no reconocida');
+    var sepPos = -1, sepLen = 4;
+    for (var si = 0; si < bytes.length - 3; si++) {
+      if (bytes[si] === 13 && bytes[si + 1] === 10 && bytes[si + 2] === 13 && bytes[si + 3] === 10) { sepPos = si; sepLen = 4; break; }
+    }
+    if (sepPos < 0) {
+      for (var sj = 0; sj < bytes.length - 1; sj++) {
+        if (bytes[sj] === 10 && bytes[sj + 1] === 10) { sepPos = sj; sepLen = 2; break; }
+      }
+    }
+    if (sepPos < 0) throw new Error('Estructura del correo no reconocida');
 
-    var lb = sep === '\r\n\r\n' ? '\r\n' : '\n';
-    var origHeaders = rawText.substring(0, headerEnd);
-    var body = rawText.substring(headerEnd + sep.length);
-
-    // Reconstruir cabeceras: eliminar To/Cc/Bcc, añadir nuevo To, poner prefijo en Subject
-    var headerLines = origHeaders.split(lb);
+    var headerBytes = bytes.slice(0, sepPos);
+    var bodyBytes = bytes.slice(sepPos + sepLen);
+    var headerText = '';
+    for (var hi = 0; hi < headerBytes.length; hi++) headerText += String.fromCharCode(headerBytes[hi]);
+    var lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+    var headerLines = headerText.split(lb);
     var newHeaderLines = [];
-    var hi = 0;
-    while (hi < headerLines.length) {
-      var hline = headerLines[hi];
+    var hj = 0;
+    while (hj < headerLines.length) {
+      var hline = headerLines[hj];
       if (/^(To|Cc|Bcc):/i.test(hline)) {
-        hi++;
-        while (hi < headerLines.length && /^[ \t]/.test(headerLines[hi])) hi++;
+        hj++;
+        while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
         continue;
       }
       if (/^Subject:/i.test(hline)) {
         var origSubj = hline.replace(/^Subject:\s*/i, '');
-        // Quitar prefijos FWD anteriores para no acumularlos
         var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*(\[PQRSD[^\]]*\]\s*:?\s*)?)+/i, '');
         var expTag = expId ? '[PQRSD #' + expId + '] ' : '';
         newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
-        hi++;
-        while (hi < headerLines.length && /^[ \t]/.test(headerLines[hi])) hi++;
+        hj++;
+        while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
         continue;
       }
       newHeaderLines.push(hline);
-      hi++;
+      hj++;
     }
-    // To va primero
     newHeaderLines.unshift('To: ' + ofiEmail);
-
-    // Reconstruir correo completo
-    var newRaw = newHeaderLines.join(lb) + lb + lb + body;
-
-    // Re-codificar a base64url preservando bytes UTF-8
-    var newBytes = new TextEncoder().encode(newRaw);
+    var newHeaderText = newHeaderLines.join(lb) + lb + lb;
+    var newHeaderEnc = new TextEncoder().encode(newHeaderText);
+    var out = new Uint8Array(newHeaderEnc.length + bodyBytes.length);
+    out.set(newHeaderEnc, 0);
+    out.set(bodyBytes, newHeaderEnc.length);
     var binOut = '';
-    newBytes.forEach(function(b) { binOut += String.fromCharCode(b); });
+    out.forEach(function(b) { binOut += String.fromCharCode(b); });
     var encoded = btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
     await gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
@@ -2922,7 +2950,15 @@ function gmailOfiLoadInbox(query) {
   if (query) gmailOfiSearch(query); else gmailOfiFolder('INBOX');
 }
 
-async function _gmailOfiLoadMessages(opts) {
+let _gmailOfiNextPageToken = '';
+let _gmailOfiListOpts = null;
+
+async function _gmailOfiLoadMessages(opts, append) {
+  opts = opts || {};
+  if (!append) {
+    _gmailOfiNextPageToken = '';
+    _gmailOfiListOpts = opts;
+  }
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (!listEl) return;
   if (!_gmailOfiTokenValid()) {
@@ -2930,38 +2966,56 @@ async function _gmailOfiLoadMessages(opts) {
     _updateGmailOfiBtn();
     return;
   }
-  listEl.innerHTML = '<div class="gm-loading-state"><div class="gm-spinner"></div><span>Cargando…</span></div>';
+  if (!append) listEl.innerHTML = '<div class="gm-loading-state"><div class="gm-spinner"></div><span>Cargando…</span></div>';
   const countEl = document.getElementById('gm-list-count');
-  if (countEl) countEl.textContent = '';
+  if (!append && countEl) countEl.textContent = '';
+  const loadMoreBtn = document.getElementById('gm-load-more-btn');
+  if (loadMoreBtn && append) { loadMoreBtn.disabled = true; loadMoreBtn.textContent = 'Cargando…'; }
   try {
     let url;
     if (opts.query) {
-      url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(opts.query) + '&maxResults=30';
+      url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(opts.query) + '&maxResults=50';
     } else {
-      url = GMAIL_API_BASE + '/messages?labelIds=' + encodeURIComponent(opts.labelId) + '&maxResults=30';
+      url = GMAIL_API_BASE + '/messages?labelIds=' + encodeURIComponent(opts.labelId || 'INBOX') + '&maxResults=50';
     }
+    if (append && _gmailOfiNextPageToken) url += '&pageToken=' + encodeURIComponent(_gmailOfiNextPageToken);
     const data = await _gmailOfiApi('GET', url);
     const ids = (data.messages || []).map(m => m.id);
-    if (!ids.length) {
+    _gmailOfiNextPageToken = data.nextPageToken || '';
+    if (!ids.length && !append) {
       listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">📭</div><div>No hay mensajes aquí</div></div>';
       if (countEl) countEl.textContent = '';
+      if (loadMoreBtn) loadMoreBtn.style.display = 'none';
       return;
     }
     const msgs = [];
-    for (let i = 0; i < Math.min(ids.length, 30); i += 10) {
+    for (let i = 0; i < ids.length; i += 10) {
       const batch = ids.slice(i, i + 10);
       const res = await Promise.all(
         batch.map(id => _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full').catch(() => null))
       );
       msgs.push(...res.filter(Boolean));
     }
-    _gmailOfiMessages = msgs;
-    if (countEl) countEl.textContent = msgs.length + ' mensaje' + (msgs.length !== 1 ? 's' : '');
+    if (append) _gmailOfiMessages = _gmailOfiMessages.concat(msgs);
+    else _gmailOfiMessages = msgs;
+    if (countEl) countEl.textContent = _gmailOfiMessages.length + ' mensaje' + (_gmailOfiMessages.length !== 1 ? 's' : '') + (_gmailOfiNextPageToken ? '+' : '');
     _renderGmailOfiList();
+    if (loadMoreBtn) {
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.style.display = _gmailOfiNextPageToken ? '' : 'none';
+      loadMoreBtn.textContent = 'Cargar más mensajes';
+    }
   } catch(e) {
-    if (listEl) listEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div>' + escAttr(e.message) + '</div></div>';
+    if (!append) listEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div>' + escAttr(e.message) + '</div></div>';
+    if (loadMoreBtn) { loadMoreBtn.disabled = false; loadMoreBtn.textContent = 'Cargar más mensajes'; }
   }
 }
+
+function gmailOfiLoadMore() {
+  if (!_gmailOfiListOpts || !_gmailOfiNextPageToken) return;
+  _gmailOfiLoadMessages(_gmailOfiListOpts, true);
+}
+window.gmailOfiLoadMore = gmailOfiLoadMore;
 
 // ---- Labels ----
 async function gmailOfiLoadLabels() {
@@ -3712,6 +3766,9 @@ function gmailPickPqrsRespSug(idx) {
   const ex = (window._gmailPqrsRespSugList || [])[idx];
   if (!ex) return;
   gmailSetPqrsRespSel(ex);
+  const tit = document.getElementById('task-modal-title');
+  if (tit) tit.textContent = 'Registrar respuesta por correo · ' + ex._exp;
+  if (window._taskModalCtx) window._taskModalCtx.expId = ex._exp;
 }
 
 function gmailClearPqrsRespSel() {
@@ -3719,117 +3776,63 @@ function gmailClearPqrsRespSel() {
   gmailTogglePqrsRespSearch(true);
 }
 
-// ---- Responder PQRSD desde Correos (todas las oficinas) ----
 function gmailOfiVincularRespuestaPqrs() {
   const msg = _gmailOfiCurrentMsg;
-  const headers = msg && msg.payload && msg.payload.headers ? msg.payload.headers : [];
-  const findH = function(n){ var h = headers.find(function(x){ return x.name === n; }); return h ? (h.value || '') : ''; };
-  const fromEmail = _gmailOfiParseFrom(findH('From'));
+  if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
+  const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
+  const findH = function(n) { var h = headers.find(function(x) { return x.name === n; }); return h ? (h.value || '') : ''; };
   const subject = findH('Subject');
-
   const radTok = _gmailExtractRadicadoFromSubject(subject);
   const detectada = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
-
-  if (typeof abrirPqrsModalPrep === 'function') abrirPqrsModalPrep();
-  const ov = document.getElementById('task-modal-overlay');
-  const tit = document.getElementById('task-modal-title');
-  const body = document.getElementById('task-modal-body');
-  const modal = ov ? ov.querySelector('.task-modal') : null;
-  if (!ov || !body) return;
-  if (tit) tit.textContent = 'Vincular correo como respuesta PQRSD';
-  if (modal) { modal.classList.remove('task-modal-wide'); modal.classList.add('task-modal-wide'); }
-
-  const emailCiu = detectada ? (detectada._qd_correo || detectada._pn_correo || fromEmail.email || '') : (fromEmail.email || '');
-  const usaDriveInst = typeof DRIVE_INST_DEPTOS !== 'undefined' && DRIVE_INST_DEPTOS.has((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || (typeof deptoCfg !== 'undefined' ? deptoCfg : '') || '');
-  const hayToken = (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid()) || (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid());
-  const adjBtns =
-    '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">' +
-    (usaDriveInst && hayToken ? '<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile(\'gmail-resp-adj-rows\')">📎 Adjuntar archivo</button>' : '') +
-    '<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow(\'gmail-resp-adj-rows\')">🔗 + Link Drive</button>' +
-    '</div>';
-  const adjInfo = usaDriveInst
-    ? '<div style="font-size:11px;color:var(--tx2);margin-top:4px">' + (hayToken ? 'Los archivos se suben a la carpeta <em>Respuesta</em> de la PQRSD en Drive (Radicacion → año → mes → PQRSD-{número}-{medio}).' : 'Conecte su correo para subir archivos al Drive.') + '</div>'
-    : '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue links de Drive de su carpeta personal.</div>';
-
-  body.innerHTML =
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Este correo quedará registrado como la notificación oficial enviada al ciudadano y cerrará la PQRSD.</div>' +
-
-    '<div class="fld" style="margin-bottom:10px"><label>PQRSD a cerrar</label>' +
-    '<input type="hidden" id="gmail-resp-pqrs-hid" value="">' +
-    '<div id="gmail-resp-pqrs-chip" style="display:none;margin-top:4px;margin-bottom:6px"></div>' +
-    '<button type="button" class="btn bsm bd2" id="gmail-resp-pqrs-toggle-search" style="margin-top:4px;font-size:12px" onclick="gmailTogglePqrsRespSearch(true)">🔍 Buscar otra PQRSD</button>' +
-    '<div id="gmail-resp-pqrs-search-wrap" style="display:none;margin-top:6px">' +
-    '<div style="position:relative">' +
-    '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.5;pointer-events:none">🔍</span>' +
-    '<input type="text" id="gmail-resp-pqrs-search" placeholder="Escriba número, asunto o interesado…" style="width:100%;padding:8px 8px 8px 32px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box" oninput="gmailFiltrarPqrsRespSug(this)">' +
-    '</div>' +
-    '<div id="gmail-resp-pqrs-sug" style="max-height:160px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);margin-top:4px;display:none"></div>' +
-    '<button type="button" class="btn bsm" style="margin-top:6px;font-size:11px" onclick="gmailTogglePqrsRespSearch(false)">Cancelar búsqueda</button>' +
-    '</div></div>' +
-
-    '<div class="fg" style="margin-bottom:10px">' +
-    '<div class="fld"><label>Fecha de la respuesta</label><input type="date" id="gmail-resp-pqrs-fecha" value="' + (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0,10)) + '"></div>' +
-    '<div class="fld"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="gmail-resp-pqrs-oficio" placeholder="OFI-2026-045"></div>' +
-    '</div>' +
-    '<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano al que se respondió</label>' +
-    '<input type="email" id="gmail-resp-pqrs-email" value="' + escAttr(emailCiu) + '" style="margin-top:4px"></div>' +
-    '<div class="fld" style="margin-bottom:10px"><label>Resumen de la respuesta</label>' +
-    '<textarea id="gmail-resp-pqrs-cuerpo" placeholder="Resuma la respuesta enviada por correo…" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">' + escAttr(subject) + '</textarea></div>' +
-
-    '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documentos de la respuesta</label>' + adjInfo +
-    '<div id="gmail-resp-adj-rows" style="margin-top:6px"></div>' + adjBtns + '</div>' +
-
-    '<div class="fx" style="gap:8px;flex-wrap:wrap">' +
-    '<button type="button" class="btn bsm bp" id="gmail-resp-pqrs-submit" onclick="gmailOfiConfirmarRespuestaPqrs()">✅ Registrar como respuesta oficial</button>' +
-    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>' +
-    '</div>';
-
-  ov.classList.add('on');
-  window._taskModalCtx = { mode: 'gmailVincularPqrs' };
-  if (detectada) {
-    gmailSetPqrsRespSel(detectada, { detectada: true, keepEmail: true });
-  } else {
-    const toggle = document.getElementById('gmail-resp-pqrs-toggle-search');
-    if (toggle) toggle.textContent = '🔍 Buscar PQRSD';
+  if (typeof openPqrsRespuestaModal === 'function') {
+    openPqrsRespuestaModal(detectada ? detectada._exp : '', { fromGmail: true, gmailMsg: msg, detectada: !!detectada });
   }
 }
 
-function _gmailOfiParseFrom(str) {
-  str = str || '';
-  const m = str.match(/^(.+?)\s*<([^>]+)>$/);
-  if (m) return { name: m[1].trim(), email: m[2].trim() };
-  return { name: '', email: str.trim() };
-}
-
-async function gmailOfiConfirmarRespuestaPqrs() {
+async function submitPqrsRespuestaGmailVinculo() {
   const expId = String((document.getElementById('gmail-resp-pqrs-hid') || {}).value || '').trim();
-  const fecha = String((document.getElementById('gmail-resp-pqrs-fecha') || {}).value || '').trim();
-  const oficio = String((document.getElementById('gmail-resp-pqrs-oficio') || {}).value || '').trim();
+  const fecha = String((document.getElementById('pqrs-resp-fecha') || {}).value || '').trim();
+  const oficio = String((document.getElementById('pqrs-resp-oficio') || {}).value || '').trim();
   const ciudEmail = String((document.getElementById('gmail-resp-pqrs-email') || {}).value || '').trim().toLowerCase();
-  const cuerpo = String((document.getElementById('gmail-resp-pqrs-cuerpo') || {}).value || '').trim();
+  const cuerpo = String((document.getElementById('pqrs-resp-cuerpo') || {}).value || '').trim();
+  const tipoResp = String((document.getElementById('pqrs-resp-tipo') || {}).value || PQRS_WF_TIPO.MENSAJE).trim();
+  const notaInterna = String((document.getElementById('pqrs-resp-nota') || {}).value || '').trim();
 
-  if (!expId) { notif('Seleccione la PQRSD a cerrar (busque por número o asunto)', 'err'); return; }
+  if (!expId) { notif('Seleccione la PQRSD a cerrar', 'err'); return; }
   if (!fecha) { notif('Indique la fecha de la respuesta', 'err'); return; }
+  if (tipoResp === PQRS_WF_TIPO.OFICIO && !oficio) { notif('Indique el N° de oficio', 'err'); return; }
   if (!cuerpo) { notif('Escriba el resumen de la respuesta', 'err'); return; }
 
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === expId);
   if (!e) { notif('PQRSD no encontrada', 'err'); return; }
-  if (typeof esPqrsSecretaria === 'function' && !esPqrsSecretaria(e)) {
-    notif('Solo puede vincular PQRSD radicadas por Secretaría, no expedientes de trámite', 'err');
-    return;
-  }
+  if (typeof pqrsEstaCerrada === 'function' && pqrsEstaCerrada(e)) { notif('Esta PQRSD ya está cerrada', 'err'); return; }
 
-  const btn = document.getElementById('gmail-resp-pqrs-submit');
+  const btn = document.getElementById('pqrs-resp-submit-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Procesando…'; }
 
-  const adj = typeof collectPqrsRespAdjuntos === 'function'
-    ? collectPqrsRespAdjuntos('gmail-resp-adj-rows')
-    : { links: [], files: [] };
-  const documentos = [];
-  const usaDriveInst = typeof DRIVE_INST_DEPTOS !== 'undefined' && DRIVE_INST_DEPTOS.has((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || (typeof deptoCfg !== 'undefined' ? deptoCfg : '') || '');
-  const nombreCarpeta = (e._qd_nombre || e._nombre || e._pn_nombre || expId);
+  const adj = typeof collectPqrsRespAdjuntos === 'function' ? collectPqrsRespAdjuntos('pqrs-resp-adj-rows') : { links: [], files: [] };
+  let documentos = [];
+  const usaDriveInst = typeof DRIVE_INST_DEPTOS !== 'undefined' && DRIVE_INST_DEPTOS.has((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '');
+  const nombreCarpeta = e._qd_nombre || e._pn_nombre || expId;
+  const gmailMsg = window._gmailVinculoMsg || _gmailOfiCurrentMsg;
+
+  if (gmailMsg && typeof subirAdjuntosGmailMsgRespuestaADrive === 'function') {
+    const driveOkGmail = typeof sstSolicitarGmailParaAdjuntar === 'function' ? await sstSolicitarGmailParaAdjuntar() : true;
+    if (!driveOkGmail) {
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
+      return;
+    }
+    if (btn) btn.textContent = 'Subiendo adjuntos del correo…';
+    const gmailDocs = await subirAdjuntosGmailMsgRespuestaADrive(gmailMsg, e);
+    documentos = documentos.concat(gmailDocs);
+  }
 
   if (usaDriveInst && adj.files && adj.files.length) {
+    const driveOk = typeof sstSolicitarGmailParaAdjuntar === 'function' ? await sstSolicitarGmailParaAdjuntar() : true;
+    if (!driveOk) {
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
+      return;
+    }
     for (const item of adj.files) {
       const file = item.file;
       const statusEl = item.statusEl;
@@ -3840,8 +3843,7 @@ async function gmailOfiConfirmarRespuestaPqrs() {
         documentos.push({ nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo' });
       } catch (err) {
         if (statusEl) statusEl.textContent = '❌ Error';
-        console.error('Drive upload error:', err);
-        notif('Error al subir ' + file.name + ': ' + String(err.message || err).slice(0, 80), 'err');
+        console.error('Drive upload:', err);
       }
     }
   }
@@ -3849,62 +3851,51 @@ async function gmailOfiConfirmarRespuestaPqrs() {
     documentos.push({ nombre: 'Link Drive', driveLink: lnk, tipo: 'link' });
   });
 
-  const msgId = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg.id : null;
-  if (msgId) documentos.push({ nombre: 'Correo enviado (Gmail)', driveLink: 'https://mail.google.com/mail/u/0/#inbox/' + msgId, tipo: 'correo' });
-
-  if (typeof setPqrsWorkflow === 'function') {
-    setPqrsWorkflow(e, {
-      fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
-      tipo: typeof PQRS_WF_TIPO !== 'undefined' ? PQRS_WF_TIPO.MENSAJE : 'mensaje',
-      canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
-      cuerpo,
-      oficio,
-      fecha_respuesta: fecha,
-      documentos: documentos,
-      notificacion_correo: { enviado: true, a: ciudEmail, en: new Date().toISOString() },
-      cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
-      cerrado_en: new Date().toISOString()
-    });
-  } else {
-    e._pqrs_estado_oficina = 'cerrado';
-    e._estado = 'Atendido';
-    e._fecha_res = fecha;
-    e._pqrs_respuesta_fecha = fecha;
-    e._pqrs_respuesta_medio = 'electronica';
-    e._pqrs_respuesta_nota = cuerpo;
-    if (oficio) e._pqrs_respuesta_oficio = oficio;
+  if (btn) btn.textContent = 'Generando soporte…';
+  const soporteRes = typeof _pqrsSubirSoporteRespuesta === 'function'
+    ? await _pqrsSubirSoporteRespuesta(e, { fechaResp: fecha, cuerpo, documentos })
+    : null;
+  if (soporteRes && soporteRes.driveLink && !documentos.some(d => d && d.tipo === 'soporte_respuesta')) {
+    documentos.push({ nombre: 'Soporte de respuesta', driveLink: soporteRes.driveLink, previewLink: soporteRes.previewLink || '', fileId: soporteRes.fileId || '', tipo: 'soporte_respuesta' });
   }
 
+  const wfPatch = {
+    fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
+    tipo: tipoResp,
+    canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
+    cuerpo, oficio, fecha_respuesta: fecha, documentos,
+    cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+    cerrado_en: new Date().toISOString()
+  };
+  if (typeof setPqrsWorkflow === 'function') setPqrsWorkflow(e, wfPatch);
   if (typeof registrarPqrsRespuestaCore === 'function') {
     registrarPqrsRespuestaCore(e, {
-      fechaResp: fecha,
-      oficioExt: oficio,
-      medioResp: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
-      nota: cuerpo,
-      adj: { links: adj.links || [], files: [] },
-      archivos: documentos
+      fechaResp: fecha, oficioExt: oficio, medioResp: 'correo', cuerpo, tipo: tipoResp,
+      canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
+      notaInterna, esNotaPublica: false, adj: { links: adj.links || [], files: [] }, archivos: documentos
     });
   }
-
-  if (!Array.isArray(e._pqrs_historial)) e._pqrs_historial = [];
-  e._pqrs_historial.push({
-    tipo: 'notificacion_correo',
-    fecha: fecha,
-    nota: 'Respuesta enviada por correo a ' + (ciudEmail || 'ciudadano') + (oficio ? ' · Oficio ' + oficio : ''),
-    oficina: e._pqrs_oficina || (typeof deptoActivo !== 'undefined' ? deptoActivo : '')
-  });
-
+  if (typeof registrarNotificacionCiudadanoPqrs === 'function') {
+    registrarNotificacionCiudadanoPqrs(e, {
+      tipo: 'respuesta', medio: 'correo', enviado: true, a: ciudEmail,
+      por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+      histTipo: 'notificacion_correo',
+      histNota: 'Respuesta registrada por correo a ' + (ciudEmail || 'ciudadano')
+    });
+  }
   if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
+  window._gmailVinculoMsg = null;
   if (typeof closeTaskModal === 'function') closeTaskModal();
   if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
   if (typeof refreshPqrsDetalleViews === 'function') refreshPqrsDetalleViews(expId);
   notif('✅ PQRSD ' + expId + ' cerrada como respondida por correo', 'ok');
-
+  if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
   if (_gmailOfiCurrentMsg && _gmailOfiTokenValid()) {
     try { await _gmailApplyRadLabel(_gmailOfiCurrentMsg.id); } catch (err) { console.warn('Label error:', err); }
   }
 }
+window.submitPqrsRespuestaGmailVinculo = submitPqrsRespuestaGmailVinculo;
 
 // ---- Abrir compose pre-llenado para responder una PQRSD ----
 async function gmailOfiSendPqrsRespuestaInline(opts) {
