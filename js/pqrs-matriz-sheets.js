@@ -1,6 +1,6 @@
 // =============================================================================
 // pqrs-matriz-sheets.js — Consecutivo PQRSD (AAMMNNN) y helpers legacy Sheets API.
-// Al guardar PQRSD: persistExpedienteGranular → pqrsMatrizSyncAfterSave → publica XLSX en Drive.
+// Al guardar PQRSD: persistExpedienteGranular → pqrsMatrizSyncAfterSave → actualiza fila XLSX en Drive.
 // =============================================================================
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -775,13 +775,6 @@ function pqrsMatrizSyncAfterSave(e, opts) {
   const notify = _pqrsMatrizSyncNotify(opts);
   if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return Promise.resolve(null);
 
-  const sheetsP = typeof pqrsMatrizSyncExpediente === 'function'
-    ? pqrsMatrizSyncExpediente(e, opts).catch(function(err) {
-      console.warn('pqrsMatrizSyncExpediente:', err);
-      return { ok: false, error: err };
-    })
-    : Promise.resolve(null);
-
   const xlsxP = typeof pqrsMatrizDriveUpdateExpedienteRow === 'function'
     ? pqrsMatrizDriveUpdateExpedienteRow(e, opts).catch(function(err) {
       console.warn('pqrsMatrizDriveUpdateExpedienteRow:', err);
@@ -789,8 +782,7 @@ function pqrsMatrizSyncAfterSave(e, opts) {
     })
     : Promise.resolve(null);
 
-  return Promise.all([sheetsP, xlsxP]).then(function(results) {
-    const xlsxRes = results[1];
+  return xlsxP.then(function(xlsxRes) {
     if (xlsxRes && xlsxRes.noToken && notify && typeof notif === 'function') {
       notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
     }
@@ -802,7 +794,7 @@ function pqrsMatrizSyncAfterSave(e, opts) {
         return pubRes;
       });
     }
-    return xlsxRes || results[0];
+    return xlsxRes;
   });
 }
 

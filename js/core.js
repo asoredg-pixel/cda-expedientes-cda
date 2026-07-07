@@ -2327,13 +2327,14 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
   const oficioExt=opts.oficioExt||'';
   const medioResp=opts.medioResp||'';
   const nota=opts.nota||'';
+  const cuerpo=opts.cuerpo||'';
   const adj=opts.adj||{links:[],files:[]};
   const archivos=opts.archivos||[];
   if(fechaResp)e._pqrs_respuesta_fecha=fechaResp;
   if(oficioExt!==undefined)e._pqrs_respuesta_oficio=oficioExt;
   if(medioResp!==undefined)e._pqrs_respuesta_medio=medioResp;
   if(opts.notaInterna!==undefined)e._pqrs_notas_internas=opts.notaInterna;
-  else if(nota!==undefined&&opts.esNotaPublica!==false)e._pqrs_respuesta_nota=nota;
+  else if((nota||cuerpo)&&opts.esNotaPublica!==false)e._pqrs_respuesta_nota=nota||cuerpo;
   if(adj.links.length)e._pqrs_respuesta_link=adj.links[0];
   if(adj.links.length>1)e._pqrs_respuesta_links=adj.links;
   if(archivos.length){
@@ -2344,7 +2345,6 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
     });
   }
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  const cuerpo=opts.cuerpo||'';
   const tipo=opts.tipo||PQRS_WF_TIPO.MENSAJE;
   const canal=opts.canal||medioResp||'';
   if(cerrar){
@@ -6592,6 +6592,12 @@ function respMarcarPorVerificar(expId,taskId){
   if(esModoResponsable()&&!puedeReportarTask(t,responsableActivo)&&estadoTaskForAsignado(t,responsableActivo)!=='Por verificar'){notif('No puede reportar esta actividad en su estado actual','err');return;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está finalizada','err');return;}
   if(esEncOwn){
+    const ePqrs=getExpById(expId);
+    const tPqrs=ePqrs?getTaskFromExp(ePqrs,taskId):t;
+    if(ePqrs&&tPqrs&&taskEsAtenderPqrs(tPqrs,ePqrs)&&puedeMarcarPqrsRespondida(ePqrs)){
+      openPqrsRespuestaModal(expId);
+      return;
+    }
     openFinalizarEncargadoModal(expId,taskId);
     return;
   }

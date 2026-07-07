@@ -1148,6 +1148,28 @@ function _drivePqrsFechaRefAnioMes(fechaRef) {
 }
 
 const DRIVE_PQRSD_FOLDER_RADICACION = 'Radicacion';
+const _DRIVE_LS_RADICACION_ID = 'sst_pqrs_radicacion_subfolder_id';
+
+function _drivePersistPqrsFoldersOnExp(expRef, folders) {
+  if (!expRef || !folders) return;
+  if (folders.pqrsFolderId) {
+    expRef._pqrs_drive_folder_id = folders.pqrsFolderId;
+    expRef._pqrs_drive_folder_link = folders.pqrsFolderLink || expRef._pqrs_drive_folder_link || '';
+  }
+  if (folders.solicitudFolderId) expRef._pqrs_drive_solicitud_folder_id = folders.solicitudFolderId;
+  if (folders.respuestaFolderId) expRef._pqrs_drive_respuesta_folder_id = folders.respuestaFolderId;
+  if (folders.pathLabel) expRef._pqrs_drive_path_label = folders.pathLabel;
+}
+
+async function _driveGetPqrsRadicacionParent(token, pqrsRoot) {
+  try {
+    const stored = localStorage.getItem(_DRIVE_LS_RADICACION_ID) || '';
+    if (stored && await _driveVerifyFolderId(token, stored)) return stored;
+  } catch (e) {}
+  const id = await _driveEnsureFolder(token, DRIVE_PQRSD_FOLDER_RADICACION, pqrsRoot);
+  try { localStorage.setItem(_DRIVE_LS_RADICACION_ID, id); } catch (e) {}
+  return id;
+}
 const DRIVE_PQRSD_SUB_SOLICITUD = 'Solicitud';
 const DRIVE_PQRSD_SUB_RESPUESTA = 'Respuesta';
 
@@ -1176,12 +1198,37 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
 
+  if (expRef && expRef._pqrs_drive_folder_id) {
+    const pqrsOk = await _driveVerifyFolderId(token, expRef._pqrs_drive_folder_id);
+    if (pqrsOk) {
+      let solId = expRef._pqrs_drive_solicitud_folder_id || '';
+      let resId = expRef._pqrs_drive_respuesta_folder_id || '';
+      if (!solId || !await _driveVerifyFolderId(token, solId)) {
+        solId = await _driveEnsureFolder(token, DRIVE_PQRSD_SUB_SOLICITUD, expRef._pqrs_drive_folder_id);
+      }
+      if (!resId || !await _driveVerifyFolderId(token, resId)) {
+        resId = await _driveEnsureFolder(token, DRIVE_PQRSD_SUB_RESPUESTA, expRef._pqrs_drive_folder_id);
+      }
+      const result = {
+        pqrsFolderId: expRef._pqrs_drive_folder_id,
+        pqrsFolderLink: expRef._pqrs_drive_folder_link || 'https://drive.google.com/drive/folders/' + expRef._pqrs_drive_folder_id,
+        solicitudFolderId: solId,
+        solicitudFolderLink: 'https://drive.google.com/drive/folders/' + solId,
+        respuestaFolderId: resId,
+        respuestaFolderLink: 'https://drive.google.com/drive/folders/' + resId,
+        pathLabel: expRef._pqrs_drive_path_label || ''
+      };
+      _drivePersistPqrsFoldersOnExp(expRef, result);
+      return result;
+    }
+  }
+
   if (expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id) {
     const solOk = await _driveVerifyFolderId(token, expRef._pqrs_drive_solicitud_folder_id);
     const resOk = await _driveVerifyFolderId(token, expRef._pqrs_drive_respuesta_folder_id);
     if (solOk && resOk) {
       const pqrsId = expRef._pqrs_drive_folder_id || '';
-      return {
+      const result = {
         pqrsFolderId: pqrsId,
         pqrsFolderLink: expRef._pqrs_drive_folder_link || (pqrsId ? 'https://drive.google.com/drive/folders/' + pqrsId : ''),
         solicitudFolderId: expRef._pqrs_drive_solicitud_folder_id,
@@ -1190,6 +1237,8 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
         respuestaFolderLink: 'https://drive.google.com/drive/folders/' + expRef._pqrs_drive_respuesta_folder_id,
         pathLabel: expRef._pqrs_drive_path_label || ''
       };
+      _drivePersistPqrsFoldersOnExp(expRef, result);
+      return result;
     }
   }
 
@@ -1207,7 +1256,7 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
 
   const ym = _drivePqrsFechaRefAnioMes(fechaRef);
   const pathParts = [];
-  let parent = await _driveEnsureFolder(token, DRIVE_PQRSD_FOLDER_RADICACION, pqrsRoot);
+  let parent = await _driveGetPqrsRadicacionParent(token, pqrsRoot);
   pathParts.push(DRIVE_PQRSD_FOLDER_RADICACION);
   parent = await _driveEnsureFolder(token, ym.anio, parent);
   pathParts.push(ym.anio);
@@ -1231,6 +1280,7 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
     pathLabel: pathParts.join(' / ')
   };
   window._drivePqrsUploadFolderCache[cacheKey] = result;
+  _drivePersistPqrsFoldersOnExp(expRef, result);
   return result;
 }
 
@@ -1368,6 +1418,9 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
     body: JSON.stringify({ role: 'reader', type: 'anyone' })
   }).catch(function() {});
 
+  if (uploadOpts.expediente && pqrsFolders) {
+    _drivePersistPqrsFoldersOnExp(uploadOpts.expediente, pqrsFolders);
+  }
   return {
     fileId: file.id,
     driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
@@ -3289,9 +3342,7 @@ async function gmailOfiSendCompose() {
   }
 }
 
-// Cierra y persiste la PQRSD cuando el compose se abrió vía "📧 Enviar correo".
-// Registra la notificación por correo y sincroniza a Firestore (sin subir adjuntos:
-// para adjuntar documentos al Drive use "📨 Responder PQRSD").
+// Cierra y persiste la PQRSD tras enviar respuesta por correo (compose inline o bandeja).
 async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === String(ctx.expId || '').trim());
   if (!e) return;
@@ -3303,17 +3354,67 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   const todosCorreos = typeof pqrsCorreosCiudadano === 'function' ? pqrsCorreosCiudadano(e) : [];
   const paraRaw = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
   const para = todosCorreos.length ? todosCorreos.join(', ') : paraRaw;
-  const wf = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
+  const canalCorreo = typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo';
+  const cerradoPor = typeof responsableActivo !== 'undefined' ? responsableActivo : '';
+  const documentos = [];
+  const adjFiles = ctx.attachments || [];
+  const expId = e._exp || ctx.expId || '';
+  const nombreCarpeta = e._qd_nombre || e._pn_nombre || e._pj_empresa || expId;
+  const fechaExp = e._fecha || e._fecha_solicitud || '';
+
+  if (!yaCerrada && adjFiles.length && typeof driveUploadInstitutional === 'function') {
+    for (let i = 0; i < adjFiles.length; i++) {
+      const file = adjFiles[i];
+      if (!file) continue;
+      try {
+        const res = await driveUploadInstitutional(
+          file, file.name, file.type || 'application/octet-stream',
+          'respuesta_aprobada', expId, nombreCarpeta, fechaExp,
+          { expediente: e, uploadTarget: 'respuesta' }
+        );
+        documentos.push({
+          nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink || '',
+          fileId: res.fileId || '', tipo: 'archivo', mime: file.type || ''
+        });
+      } catch (err) {
+        console.warn('Adjunto respuesta PQRSD:', file.name, err);
+      }
+    }
+  }
+
+  if (!yaCerrada && typeof _pqrsSubirSoporteRespuesta === 'function') {
+    try {
+      const soporteRes = await _pqrsSubirSoporteRespuesta(e, { fechaResp: fecha, cuerpo, documentos, cerradoPor: cerradoPor });
+      if (soporteRes && soporteRes.driveLink) {
+        const yaTiene = documentos.some(d => d && d.tipo === 'soporte_respuesta');
+        if (!yaTiene) {
+          documentos.push({
+            nombre: 'Soporte de respuesta', driveLink: soporteRes.driveLink,
+            previewLink: soporteRes.previewLink || '', fileId: soporteRes.fileId || '', tipo: 'soporte_respuesta'
+          });
+        }
+      }
+    } catch (err) { console.warn('Soporte respuesta compose:', err); }
+  }
+
   if (!yaCerrada && typeof setPqrsWorkflow === 'function') {
     setPqrsWorkflow(e, {
       fase: typeof PQRS_WF !== 'undefined' ? PQRS_WF.CERRADA : 'cerrada_atendida',
       tipo: tipo,
-      canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
-      cuerpo: cuerpo || (wf.cuerpo || ''),
+      canal: canalCorreo,
+      cuerpo: cuerpo || '',
       oficio: oficio,
-      fecha_respuesta: wf.fecha_respuesta || fecha,
-      cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
+      fecha_respuesta: fecha,
+      documentos: documentos,
+      cerrado_por: cerradoPor,
       cerrado_en: new Date().toISOString()
+    });
+  }
+  if (!yaCerrada && typeof registrarPqrsRespuestaCore === 'function') {
+    registrarPqrsRespuestaCore(e, {
+      fechaResp: fecha, oficioExt: oficio, medioResp: canalCorreo, cuerpo: cuerpo,
+      tipo: tipo, canal: canalCorreo, notaInterna: ctx.notaInterna, esNotaPublica: false,
+      adj: { links: [], files: [] }, archivos: documentos
     });
   } else if (!yaCerrada) {
     e._pqrs_estado_oficina = 'cerrado';
@@ -3322,6 +3423,16 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
     e._pqrs_respuesta_fecha = fecha;
     e._pqrs_respuesta_medio = 'electronica';
     if (cuerpo) e._pqrs_respuesta_nota = cuerpo;
+    if (documentos.length) {
+      e._pqrs_respuesta_soportes = documentos.map(function(a, i) {
+        return {
+          label: a.nombre || ('Respuesta ' + (i + 1)),
+          url: a.driveLink || a.previewLink || '',
+          preview: a.previewLink || a.driveLink || '',
+          mime: a.mime || ''
+        };
+      });
+    }
   }
   if (ctx.notaInterna) e._pqrs_notas_internas = ctx.notaInterna;
   if (oficio) e._pqrs_respuesta_oficio = oficio;
@@ -3341,23 +3452,6 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   if (typeof renderSecretariaPqrs === 'function') renderSecretariaPqrs();
   if (typeof refreshPqrsDetalleViews === 'function') refreshPqrsDetalleViews(e._exp);
   notif('✅ PQRSD ' + e._exp + ' registrada como respondida por correo', 'ok');
-  // Generar y subir soporte PDF de respuesta en background (no bloquea)
-  if (typeof _pqrsSubirSoporteRespuesta === 'function') {
-    try {
-      const soporteRes = await _pqrsSubirSoporteRespuesta(e, { fechaResp: fecha, cuerpo });
-      if (soporteRes && soporteRes.driveLink) {
-        const wfNow = typeof getPqrsWorkflow === 'function' ? getPqrsWorkflow(e) : {};
-        const docsNow = Array.isArray(wfNow.documentos) ? wfNow.documentos : [];
-        const yaTiene = docsNow.some(d => d && d.tipo === 'soporte_respuesta');
-        if (!yaTiene) {
-          if (typeof setPqrsWorkflow === 'function') {
-            setPqrsWorkflow(e, { documentos: docsNow.concat([{ nombre: 'Soporte de respuesta', driveLink: soporteRes.driveLink, previewLink: soporteRes.previewLink || '', fileId: soporteRes.fileId || '', tipo: 'soporte_respuesta' }]) });
-          }
-          if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e, false);
-        }
-      }
-    } catch (err) { console.warn('Soporte respuesta compose:', err); }
-  }
 }
 
 async function gmailOfiSaveDraft() {
@@ -3693,6 +3787,9 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
   if (!_gmailOfiTokenValid() && !(typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())) {
     throw new Error('Conecte su correo Gmail');
   }
+  if (!_gmailOfiSignature && !_gmailOfiSignatureHtml) {
+    await _gmailOfiLoadSignature();
+  }
   const raw = attachments.length
     ? await _gmailOfiBuildMimeWithAttachments(to, '', subject, body, '', attachments)
     : _gmailOfiBuildMime(to, '', subject, body, '');
@@ -3704,7 +3801,8 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
     tipo: opts.tipo,
     oficio: opts.oficio,
     fechaResp: opts.fechaResp,
-    notaInterna: opts.notaInterna
+    notaInterna: opts.notaInterna,
+    attachments: attachments
   }, { subject: subject, body: body, to: to });
 }
 window.gmailOfiSendPqrsRespuestaInline = gmailOfiSendPqrsRespuestaInline;
