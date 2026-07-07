@@ -578,6 +578,10 @@ function renderSecretariaPqrs(){
   const pendientes=getPqrsPendientesTrasladoList(true);
   const asignadas=all.filter(e=>!pqrsPendienteTraslado(e));
   const atendidas=all.filter(e=>pqrsEstaCerrada(e));
+  const SEC_PQRS_PAGE=10;
+  const SEC_PQRS_MAX=30;
+  if(window._secPendTraslShown==null)window._secPendTraslShown=SEC_PQRS_PAGE;
+  if(window._secAsignadasShown==null)window._secAsignadasShown=SEC_PQRS_PAGE;
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
     '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
@@ -586,28 +590,68 @@ function renderSecretariaPqrs(){
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
   const pendTb=document.getElementById('tbl-sec-pend-trasl');
+  const pendMore=document.getElementById('sec-pend-trasl-more');
   if(pendWrap&&pendTb){
     const showPend=puedeGestionarPendientesTraslado();
     pendWrap.style.display=showPend?'':'none';
-    if(!showPend)pendTb.innerHTML='';
-    else if(!pendientes.length)pendTb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">No hay PQRSD pendientes de traslado.</td></tr>';
-    else pendTb.innerHTML=pendientes.map(e=>{
-      const asunto=e.f_f1||e._pqrs_detalle||'—';
-      return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+fmtF(e._fecha_solicitud||e._fecha)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
-    }).join('');
+    if(!showPend){
+      pendTb.innerHTML='';
+      if(pendMore)pendMore.style.display='none';
+    }else if(!pendientes.length){
+      pendTb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">No hay PQRSD pendientes de traslado.</td></tr>';
+      if(pendMore)pendMore.style.display='none';
+    }else{
+      const lim=Math.min(window._secPendTraslShown,SEC_PQRS_MAX,pendientes.length);
+      const slice=pendientes.slice(0,lim);
+      pendTb.innerHTML=slice.map(e=>{
+        const asunto=e.f_f1||e._pqrs_detalle||'—';
+        return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+fmtF(e._fecha_solicitud||e._fecha)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+      }).join('');
+      if(pendMore){
+        const rest=Math.min(pendientes.length,SEC_PQRS_MAX)-lim;
+        if(rest>0){
+          pendMore.style.display='';
+          pendMore.textContent='Ver 10 más ('+rest+' restantes, máx. '+SEC_PQRS_MAX+')';
+        }else pendMore.style.display='none';
+      }
+    }
   }
   const tb=document.getElementById('tbl-sec-pqrs');
+  const asigMore=document.getElementById('sec-asignadas-more');
   if(tb){
-    if(!asignadas.length)tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
-    else tb.innerHTML=asignadas.map(e=>{
-      const asunto=e.f_f1||e._pqrs_detalle||'—';
-      const ofiLbl=e._pqrs_oficina?labelOficina(e._pqrs_oficina):'Sin oficina (registro anterior)';
-      return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(ofiLbl)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
-        '<td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
-    }).join('');
+    if(!asignadas.length){
+      tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
+      if(asigMore)asigMore.style.display='none';
+    }else{
+      const lim=Math.min(window._secAsignadasShown,SEC_PQRS_MAX,asignadas.length);
+      const slice=asignadas.slice(0,lim);
+      tb.innerHTML=slice.map(e=>{
+        const asunto=e.f_f1||e._pqrs_detalle||'—';
+        const ofiLbl=e._pqrs_oficina?labelOficina(e._pqrs_oficina):'Sin oficina (registro anterior)';
+        return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(ofiLbl)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
+          '<td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+      }).join('');
+      if(asigMore){
+        const rest=Math.min(asignadas.length,SEC_PQRS_MAX)-lim;
+        if(rest>0){
+          asigMore.style.display='';
+          asigMore.textContent='Ver 10 más ('+rest+' restantes, máx. '+SEC_PQRS_MAX+')';
+        }else asigMore.style.display='none';
+      }
+    }
   }
   renderSecretariaPqrsDetalle();
 }
+function secPqrsVerMasPendientes(){
+  window._secPendTraslShown=Math.min((window._secPendTraslShown||10)+10,30);
+  renderSecretariaPqrs();
+}
+function secPqrsVerMasAsignadas(){
+  window._secAsignadasShown=Math.min((window._secAsignadasShown||10)+10,30);
+  renderSecretariaPqrs();
+}
+window.secPqrsVerMasPendientes=secPqrsVerMasPendientes;
+window.secPqrsVerMasAsignadas=secPqrsVerMasAsignadas;
 function pqrsOfiEstBadge(est){
   const lbl=PQRS_EST_OFICINA[est]||est||'—';
   const cls=est==='cerrado'?'cerr':est==='atendiendo'?'aten':est==='asignado'?'asig':'pend';
@@ -1374,13 +1418,21 @@ async function buscarExpCiudadano(){
     const oficio=wf.oficio||e._pqrs_respuesta_oficio||'';
     const canal=wf.canal||e._pqrs_respuesta_medio||'';
     const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial/Ventanilla',fisica:'Correo físico',pagina:'Página web',aviso:'Por aviso'}[canal]||canal||'';
-    respuestaHtml='<div style="margin-bottom:12px;padding:12px;background:var(--gnl);border:1px solid #b2dfdb;border-radius:var(--r);border-left:4px solid var(--gn)">'+
-      '<div style="font-size:12px;font-weight:700;color:var(--gn);margin-bottom:6px">✅ Esta solicitud fue respondida</div>'+
-      (fechaResp?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Fecha de respuesta: <strong>'+fmtF(fechaResp)+'</strong></div>'):'')+
-      (oficio?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">N° de oficio: <strong>'+escAttr(oficio)+'</strong></div>'):'')+
-      (canalLabel?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Canal de notificación: <strong>'+escAttr(canalLabel)+'</strong></div>'):'')+
-      (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
-      '</div>';
+    if(e._pqrs_informativa){
+      respuestaHtml='<div style="margin-bottom:12px;padding:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);border-left:4px solid var(--tx2)">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:6px">ℹ Solicitud informativa — atendida</div>'+
+        (fechaResp?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Fecha: <strong>'+fmtF(fechaResp)+'</strong></div>'):'')+
+        (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
+        '</div>';
+    }else{
+      respuestaHtml='<div style="margin-bottom:12px;padding:12px;background:var(--gnl);border:1px solid #b2dfdb;border-radius:var(--r);border-left:4px solid var(--gn)">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--gn);margin-bottom:6px">✅ Esta solicitud fue respondida</div>'+
+        (fechaResp?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Fecha de respuesta: <strong>'+fmtF(fechaResp)+'</strong></div>'):'')+
+        (oficio?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">N° de oficio: <strong>'+escAttr(oficio)+'</strong></div>'):'')+
+        (canalLabel?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Canal de notificación: <strong>'+escAttr(canalLabel)+'</strong></div>'):'')+
+        (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
+        '</div>';
+    }
   }
 
   box.innerHTML='<div style="padding:14px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+

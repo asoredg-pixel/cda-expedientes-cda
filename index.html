@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260706j">
+<link rel="stylesheet" href="css/sst.css?v=20260707a">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260706g"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260706j"></script>
+<script src="js/core.js?v=20260707a"></script>
 <script src="js/formulario.js?v=20260706d"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -31,11 +31,11 @@
 <script src="js/configuracion.js?v=20260702t"></script>
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260702t"></script>
-<script src="js/pqrs-matriz-export.js?v=20260706f"></script>
+<script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260706h"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260706j"></script>
-<script src="js/pqrs.js?v=20260706j"></script>
+<script src="js/gmail.js?v=20260707a"></script>
+<script src="js/pqrs.js?v=20260707a"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260706i"></script>
 </head>
@@ -454,6 +454,7 @@
       <div id="q-cnt" style="font-size:12px;color:var(--tx2)"></div>
       <div class="fx" style="gap:6px;flex-wrap:wrap">
         <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-consulta" onclick="exportarConsultaExcel()">⬇ Descargar</button>
+        <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-matriz-pqrs" style="display:none" onclick="exportarConsultaMatrizPqrs()" title="Descargar matriz oficial PQRSD con los resultados filtrados">📊 Matriz PQRSD</button>
       </div>
     </div>
   </div>
@@ -742,11 +743,13 @@
     <div class="slbl">Pendientes por trasladar</div>
     <div class="ssub" style="margin-bottom:8px">Radicadas sin oficina asignada. El director DS DEGUV o Secretaría pueden trasladarlas a la oficina competente.</div>
     <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Radicación</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pend-trasl"></tbody></table></div>
+    <button type="button" class="btn bsm" id="sec-pend-trasl-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasPendientes()">Ver 10 más</button>
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="slbl">PQRSD asignadas a oficinas</div>
-    <div class="ssub" style="margin-bottom:8px">Seguimiento de solicitudes radicadas (oficinas DEGUV y Secretaría). Use Editar o Ver para gestionar cada PQRSD.</div>
+    <div class="ssub" style="margin-bottom:8px">Seguimiento de solicitudes radicadas (oficinas DEGUV y Secretaría). Use Editar o Ver para gestionar cada PQRSD. Se muestran las más recientes (máx. 30); use Consulta para buscar anteriores.</div>
     <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Oficina</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pqrs"></tbody></table></div>
+    <button type="button" class="btn bsm" id="sec-asignadas-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasAsignadas()">Ver 10 más</button>
   </div>
   <div class="card" id="sec-pqrs-det-wrap" style="margin-top:1rem;display:none">
     <div class="slbl">Detalle PQRSD</div>

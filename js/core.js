@@ -684,7 +684,7 @@ function openPqrsRespuestaModal(expId,opts){
     '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(wf.tipo||PQRS_WF_TIPO.MENSAJE)+'"></div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
-    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. OFI-2026-045" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'"></div>'+
+    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E2026-001" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput()"></div>'+
     '</div>'+
     (fromGmail?('<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano</label><input type="email" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px"></div>'):'')+
     '<div class="fld" id="pqrs-resp-canal-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Canal de notificación al ciudadano</label>'+
@@ -713,7 +713,7 @@ function openPqrsRespuestaModal(expId,opts){
     '<div id="pqrs-resp-adj-rows" style="margin-top:6px"></div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">'+
     (usaDriveInst?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
-    '<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow()">🔗 + Link Drive</button>'+
+    (fromGmail?'':'<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow()">🔗 + Link Drive</button>')+
     '</div></div>'+
     '<div class="fld" id="pqrs-resp-nota-wrap" style="margin-bottom:10px"><label>Notas internas <span style="font-weight:400;color:var(--tx3)">(solo funcionarios)</span></label>'+
     '<textarea id="pqrs-resp-nota" placeholder="Notas para trazabilidad interna…" style="min-height:52px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:11px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr((e&&e._pqrs_notas_internas)||'')+'</textarea></div>'+
@@ -733,16 +733,42 @@ function openPqrsRespuestaModal(expId,opts){
   ov.classList.add('on');
   window._taskModalCtx={mode:fromGmail?'gmailVincularPqrs':'pqrsRespuesta',expId:expLabel};
 }
+function pqrsPlantillaOficioFirmado(expId,oficio){
+  const num=String(expId||'').trim()||'XXXXXXX';
+  const ofi=String(oficio||'').trim()||'DSGV-E________';
+  return 'Cordial saludo,\n\nEn atención a su comunicación identificada con el No. '+num+', esta Dirección Seccional, en ejercicio de sus competencias legales y reglamentarias, se permite dar respuesta de fondo a su solicitud mediante el oficio '+ofi+'.\n\nEl detalle completo de la respuesta, con el análisis correspondiente, se encuentra en el oficio adjunto al presente correo electrónico.\n\nQuedamos atentos a cualquier inquietud adicional.';
+}
+function pqrsAplicarPlantillaOficioSiCorresponde(force){
+  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
+  if(tipo!==PQRS_WF_TIPO.OFICIO)return;
+  const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
+  if(!cuerpoEl)return;
+  const cur=cuerpoEl.value.trim();
+  const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
+  const oficio=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
+  const plantilla=pqrsPlantillaOficioFirmado(expId,oficio);
+  const esFwd=/^(\s*(fwd?|re):)/i.test(cur);
+  const esPlantillaAnterior=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
+  if(force||!cur||esFwd||esPlantillaAnterior||cur.length<40){
+    cuerpoEl.value=plantilla;
+    window._pqrsUltimaPlantillaOficio=plantilla;
+  }
+}
 function pqrsRespRefreshModalUiGmail(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
   const canalWrap=document.getElementById('pqrs-resp-canal-wrap');
   const adjWrap=document.getElementById('pqrs-resp-adj-wrap');
+  const submitBtn=document.getElementById('pqrs-resp-submit-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
   const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
   if(cuerpoWrap)cuerpoWrap.style.display='';
   if(canalWrap)canalWrap.style.display='none';
   if(adjWrap)adjWrap.style.display='';
+  if(submitBtn){
+    submitBtn.style.display='';
+    submitBtn.textContent='✅ Registrar como respuesta oficial';
+  }
   if(oficioReq)oficioReq.style.display=tipo===PQRS_WF_TIPO.OFICIO?'':'none';
   if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
 }
@@ -803,13 +829,23 @@ function setPqrsRespTipo(val){
   const hid=document.getElementById('pqrs-resp-tipo');if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
   if(val===PQRS_WF_TIPO.MENSAJE&&!window._gmailVinculoMsg)setPqrsRespCanal(PQRS_WF_CANAL.CORREO);
+  if(val===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde();
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
   else pqrsRespRefreshModalUi();
 }
 function setPqrsRespCanal(val){
   const hid=document.getElementById('pqrs-resp-canal');if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
-  pqrsRespRefreshModalUi();
+  if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
+  else pqrsRespRefreshModalUi();
+}
+function onPqrsRespOficioInput(){
+  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
+  if(tipo!==PQRS_WF_TIPO.OFICIO)return;
+  const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
+  const cur=cuerpoEl?cuerpoEl.value.trim():'';
+  const esPlantilla=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
+  if(esPlantilla||!cur||/^(\s*(fwd?|re):)/i.test(cur))pqrsAplicarPlantillaOficioSiCorresponde(true);
 }
 function addPqrsRespAdjFile(boxId){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -1232,8 +1268,22 @@ function renderSecretariaPqrsDetalle(){
   const wrap=document.getElementById('sec-pqrs-det-wrap');
   if(wrap){wrap.style.display='none';wrap.innerHTML='';}
 }
+async function exportarConsultaMatrizPqrs(){
+  if(!esSecretaria()){notif('Solo Secretaría puede descargar la matriz oficial','err');return;}
+  const list=(window._conExportList||[]).filter(e=>esPqrsSecretaria(e));
+  if(!list.length){notif('No hay PQRSD en los resultados actuales','err');return;}
+  if(typeof exportarMatrizPqrsDesdePlantilla!=='function'){notif('Módulo de matriz no disponible','err');return;}
+  try{
+    await exportarMatrizPqrsDesdePlantilla(list,'consulta',labelPeriodo('q')||'',{skipDrive:true});
+  }catch(err){
+    console.error('exportarConsultaMatrizPqrs:',err);
+    notif('No se pudo generar la matriz: '+(err.message||err),'err');
+  }
+}
 function actualizarConsultaPqrsUI(){
   const bas=esModoOficinaDeguv()||esSecretaria();
+  const btnMatriz=document.getElementById('btn-export-matriz-pqrs');
+  if(btnMatriz)btnMatriz.style.display=esSecretaria()?'':'none';
   const qTxt=document.getElementById('q-txt');
   const sl=document.querySelector('#pg-con .card > .slbl');
   if(qTxt&&bas)qTxt.placeholder='N° PQRSD, nombre del interesado, asunto, NIT…';
@@ -2821,7 +2871,9 @@ function marcarPqrsInformativaCore(expId,nota){
   if(!e||!puedeMarcarPqrsInformativa(e)){notif('No puede marcar esta PQRSD como informativa','err');return false;}
   e._pqrs_informativa=true;
   const notaHist=(nota||'PQRSD informativa — sin respuesta formal requerida').trim();
-  registrarPqrsRespuestaCore(e,{fechaResp:hoy(),nota:notaHist,oficioExt:'',medioResp:''});
+  setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.INFORMATIVA,canal:'',cuerpo:notaHist,oficio:'',fecha_respuesta:hoy(),cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',cerrado_en:new Date().toISOString()});
+  if(notaHist)e._pqrs_notas_internas=notaHist;
+  registrarPqrsRespuestaCore(e,{fechaResp:hoy(),nota:notaHist,cuerpo:notaHist,oficioExt:'',medioResp:'',tipo:PQRS_WF_TIPO.INFORMATIVA});
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:notaHist+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
   completarTareasAtenderPqrs(e,notaHist);
@@ -2847,7 +2899,7 @@ function openMarcarPqrsInformativaModal(expId){
   if(!ov||!body){cerrarPqrsModalPrep();return;}
   if(tit)tit.textContent='Marcar PQRSD informativa · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Use cuando la PQRSD solo aporta información (respuesta a requerimiento, datos sobre un trámite activo, etc.) y <strong>no requiere respuesta formal</strong> al ciudadano. Se dará por <strong>atendida</strong> y se cerrará la actividad «Atender PQRSD».</div>'+
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Use cuando la PQRSD solo aporta información (respuesta a requerimiento, datos sobre un trámite activo, etc.) y <strong>no requiere respuesta formal</strong> al ciudadano. Se dará por <strong>atendida</strong> sin enviar correo. La observación quedará visible para funcionarios y en consulta ciudadana.</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Observación (opcional)</label><textarea id="pqrs-inf-nota" placeholder="Ej. Información sobre el trámite EXP-2026-015 — respuesta a requerimiento" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitMarcarPqrsInformativa(\''+jsStr(expId)+'\')">ℹ Marcar informativa y cerrar</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -2859,6 +2911,8 @@ function submitMarcarPqrsInformativa(expId){
   if(marcarPqrsInformativaCore(expId,nota)){
     closeTaskModal();
     refreshPqrsPanelViews(expId);
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
   }
 }
 function ensureTareaPqrsNca(e){
