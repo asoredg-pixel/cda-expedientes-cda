@@ -6,6 +6,79 @@
 // INGRESO POR ROLES
 // ================================================================
 // ROLES_INGRESO → js/constants.js
+function generateSessionId(){
+  return 'sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,12);
+}
+async function claimActiveSession(email){
+  email=String(email||'').trim().toLowerCase();
+  const db=window._db;
+  if(!email||!db||!window._fsSetDoc||!window._fsDoc)return null;
+  const sid=generateSessionId();
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),{
+      activeSessionId:sid,
+      activeSessionAt:new Date().toISOString(),
+      activeSessionHeartbeat:new Date().toISOString(),
+      activeSessionUserAgent:String(navigator.userAgent||'').slice(0,200)
+    },{merge:true});
+    _sessionId=sid;
+    try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
+    return sid;
+  }catch(err){
+    console.warn('No se pudo registrar sesión activa:',err);
+    return null;
+  }
+}
+async function releaseActiveSession(email){
+  email=String(email||'').trim().toLowerCase();
+  const db=window._db;
+  if(!email||!_sessionId||!db||!window._fsGetDoc||!window._fsSetDoc||!window._fsDoc)return;
+  try{
+    const ref=window._fsDoc(db,'usuarios',email);
+    const snap=await window._fsGetDoc(ref);
+    if(snap.exists()&&String(snap.data().activeSessionId||'')===_sessionId){
+      await window._fsSetDoc(ref,{
+        activeSessionId:'',
+        activeSessionAt:new Date().toISOString()
+      },{merge:true});
+    }
+  }catch(err){console.warn('releaseActiveSession:',err);}
+  _sessionId=null;
+  try{sessionStorage.removeItem('sst_session_id');}catch(e){}
+}
+function stopSessionGuard(){
+  if(_sessionUnsub){try{_sessionUnsub();}catch(e){}_sessionUnsub=null;}
+  if(_sessionHeartbeatTimer){clearInterval(_sessionHeartbeatTimer);_sessionHeartbeatTimer=null;}
+}
+function cerrarSesionPorConflicto(){
+  stopSessionGuard();
+  _sessionId=null;
+  notif('Su sesión se cerró porque inició sesión en otro dispositivo, navegador o pestaña.','err');
+  if(window._authSignOut)window._authSignOut().catch(()=>{});
+  window._usuarioActual=null;
+  authUsuario=null;
+  salirDeSesionApp();
+  initLoginScreen();
+  updateHeaderUsuario();
+}
+function startSessionGuard(email){
+  stopSessionGuard();
+  email=String(email||'').trim().toLowerCase();
+  const db=window._db;
+  if(!email||!_sessionId||!db||!window._fsOnSnapshot||!window._fsDoc)return;
+  _sessionUnsub=window._fsOnSnapshot(window._fsDoc(db,'usuarios',email),function(snap){
+    if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
+    if(!snap.exists())return;
+    const remoteSid=String((snap.data()||{}).activeSessionId||'');
+    if(remoteSid&&remoteSid!==_sessionId)cerrarSesionPorConflicto();
+  },function(err){console.warn('Error escuchando sesión:',err);});
+  _sessionHeartbeatTimer=setInterval(function(){
+    if(!document.body.classList.contains('sesion-activa')||!_sessionId||!email)return;
+    window._fsSetDoc(window._fsDoc(db,'usuarios',email),{
+      activeSessionHeartbeat:new Date().toISOString()
+    },{merge:true}).catch(function(){});
+  },30000);
+}
 function setLoginAuthMsg(msg,err){
   const el=document.getElementById('login-auth-msg');
   if(!el)return;
@@ -112,6 +185,7 @@ async function verificarUsuarioFirestore(fbUser){
     const rolesWrap=document.getElementById('login-roles-wrap');
     if(authPanel)authPanel.style.display='none';
     if(rolesWrap)rolesWrap.style.display='none';
+    await claimActiveSession(email);
     ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
@@ -250,7 +324,16 @@ function ingresarComoRol(rolId,respNombre){
   initPeriodoFiltros('act');
   initPeriodoFiltros('pqrs-ofi');
   renderChatBadge();
-  initRealtimeSync();
+  initAppRealtimeSync();
+  if(window._usuarioActual&&window._usuarioActual.email){
+    if(!_sessionId){
+      void claimActiveSession(window._usuarioActual.email).then(function(){
+        startSessionGuard(window._usuarioActual.email);
+      });
+    }else{
+      startSessionGuard(window._usuarioActual.email);
+    }
+  }
   if(typeof sstInitDesktopNotify==='function')sstInitDesktopNotify();
   if(typeof initChatNotifySync==='function'){
     window._bandejaNotifySeeded=false;
@@ -271,11 +354,15 @@ function ingresarComoRol(rolId,respNombre){
   setTimeout(()=>maybeShowExportReminder(),800);
 }
 function salirDeSesionApp(){
+  const email=window._usuarioActual&&window._usuarioActual.email;
   rolSesion=null;
   deptoActivo='guaviare';
   responsableActivo='';
   editId=null;
   try{sessionStorage.removeItem('sst_rol_sesion');}catch(e){}
+  stopSessionGuard();
+  if(typeof stopAllRealtimeSync==='function')stopAllRealtimeSync();
+  if(email)void releaseActiveSession(email);
   document.body.classList.remove('sesion-activa');
   if(typeof stopChatNotifySync==='function')stopChatNotifySync();
   if(typeof stopChatActiveSync==='function')stopChatActiveSync();

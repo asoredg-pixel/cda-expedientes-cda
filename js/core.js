@@ -4040,8 +4040,7 @@ function startUsuariosFirestoreListener(){
     }
     paintUsuariosCfgTable();
     aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
-    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
-    if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   },err=>{
     console.error('Error escuchando usuarios Firestore:',err);
     refreshUsuariosAutorizadosUi();
@@ -4388,6 +4387,10 @@ async function guardarUsuarioFirestore(){
   paintUsuariosCfgTable();
   let syncParcial=false;
   try{
+    if(rol==='responsables'){
+      upsertInstructorFromUsuario({email,nombre,rol,deptoResponsable,activo});
+      syncCfgToStore();
+    }
     if(esVistaUsuariosAdminCompleta()){
       await persistUsuariosIndexGlobal();
       await aplicarSyncUsuariosAutorizados();
@@ -4395,7 +4398,10 @@ async function guardarUsuarioFirestore(){
       syncResponsablesDesdeUsuariosAutorizados();
       syncCfgToStore();
       _saveLSLocal();
-      try{await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());}catch(depErr){console.warn(depErr);syncParcial=true;}
+      try{
+        if(rol==='responsables')await saveDepartamentoCfgFirestore(deptoResponsable);
+        else await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());
+      }catch(depErr){console.warn(depErr);syncParcial=true;}
     }
   }catch(syncErr){
     console.warn(syncErr);
@@ -4405,6 +4411,7 @@ async function guardarUsuarioFirestore(){
   ocultarFormUsuarioFirestore();
   invalidateUsuariosCache();
   await refreshUsuariosAutorizadosUi();
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
 }
 async function toggleUsuarioFirestoreActivo(email,activo){
@@ -4444,7 +4451,13 @@ async function eliminarUsuarioFirestore(email){
     try{
       await window._fsDeleteDoc(window._fsDoc(db,'usuarios',email));
       logAudit('Eliminó usuario autorizado '+email,'configuracion',null);
+      const prev=getUsuarioAutorizadoByEmail(email);
       removeUsuarioDeCache(email);
+      if(prev&&prev.rol==='responsables'&&removeInstructorByEmail(email,prev.deptoResponsable)){
+        syncCfgToStore();
+        _saveLSLocal();
+        try{await saveDepartamentoCfgFirestore(prev.deptoResponsable);}catch(depErr){console.warn(depErr);}
+      }
       await persistUsuariosIndexGlobal();
       await aplicarSyncUsuariosAutorizados();
       notif('Usuario eliminado','ok');
@@ -4471,7 +4484,7 @@ async function renderUsuariosCfg(forceRebuild){
     if(tb)tb.dataset.mode=modeKey;
   }
   await refreshUsuariosAutorizadosUi();
-  if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection)startUsuariosFirestoreListener();
+  if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection&&document.body.classList.contains('sesion-activa'))startUsuariosFirestoreListener();
 }
 function prepararVistaAdminUsuariosAutorizados(){
   if(!esAdministrador())return;
@@ -9302,7 +9315,7 @@ function onDeptoChange(){
     if(selAdmin)selAdmin.style.display='';
   }
   poblarTramSelect();
-  initRealtimeSync();
+  initAppRealtimeSync();
   if(esSecretaria()){cerrarConsultaPanel();showTab('sec');}
   else if(esModoCiudadano())showTab('ciudadano');
   else if(esModoOficinaDeguv()){cerrarConsultaPanel();showTab('pqrs-ofi');}

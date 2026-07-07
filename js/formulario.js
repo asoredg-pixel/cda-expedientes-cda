@@ -24,7 +24,7 @@ function showTab(t){
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
   if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t='con';}
   if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}
-  if(t!=='cfg')desuscribirCfgSync();
+  if(t!=='cfg'){/* cfg sync global durante toda la sesión */}
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(b=>{b.classList.remove('on');b.classList.remove('tab-selected');});
   document.getElementById('pg-'+t).classList.add('on');
@@ -57,7 +57,6 @@ function showCfgTab(t){
   if(t==='auditoria'&&!esAdministrador()){notif('Solo administrador','err');t='listas';}
   if(t==='usuarios'&&!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');t='listas';}
   if(t==='nuevo'&&cfgEsSoloLectura()){notif('No puede crear trámites en este departamento','err');t='listas';}
-  if(t!=='usuarios')stopUsuariosFirestoreListener();
   document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
   document.getElementById('cpg-'+t).classList.add('on');

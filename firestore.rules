@@ -172,14 +172,22 @@ service cloud.firestore {
         || (rolEsEncargadoDepto() && responsableDeMiDepto(request.resource.data))
       );
 
+      // Campos de sesión única: el propio usuario puede actualizar solo estos campos.
+      function soloCamposSesionPropia() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['activeSessionId', 'activeSessionAt', 'activeSessionHeartbeat', 'activeSessionUserAgent']);
+      }
+
       // Actualización:
       // - admin: cualquier usuario
       // - encargado dept.: solo si ya era responsable de su dept. y sigue siéndolo
+      // - cualquier usuario activo: solo campos de sesión en su propio documento
       allow update: if isActiveUser() && (
         isAdmin()
         || (rolEsEncargadoDepto()
             && responsableExistenteDeMiDepto()
             && responsableDeMiDepto(request.resource.data))
+        || (email.lower() == authEmail() && soloCamposSesionPropia())
       );
 
       // Eliminación: solo administrador.

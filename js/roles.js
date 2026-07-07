@@ -576,20 +576,59 @@ function syncEncargadosDesdeUsuariosAutorizados(){
   syncEncargadosGlobalToInstructores();
 }
 function syncResponsablesDesdeUsuariosAutorizados(){
-  (_usuariosCache||[]).filter(u=>u.activo!==false&&u.rol==='responsables').forEach(u=>{
+  (_usuariosCache||[]).filter(u=>u.rol==='responsables').forEach(u=>{
     const email=String(u.email||'').trim().toLowerCase();
     const nombre=String(u.nombre||'').trim();
     const deptoId=String(u.deptoResponsable||'').trim();
-    if(!email||!nombre||!deptoId||!cfgByDepto[deptoId])return;
+    if(!email||!deptoId||!cfgByDepto[deptoId])return;
     const c=cfgByDepto[deptoId];
     c.instructores=migrateInstructoresList(c.instructores||[]);
     const ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
-    if(!ins)return;
+    if(u.activo===false){
+      if(ins&&ins.rol==='contratista')ins.activo=false;
+      return;
+    }
+    if(!nombre||!ins)return;
     if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return;
     ins.nombre=nombre;
     ins.email=email;
     ins.activo=true;
   });
+}
+function upsertInstructorFromUsuario(u){
+  if(!u||u.activo===false||u.rol!=='responsables')return false;
+  const email=String(u.email||'').trim().toLowerCase();
+  const nombre=String(u.nombre||'').trim();
+  const deptoId=String(u.deptoResponsable||'').trim();
+  if(!email||!nombre||!deptoId||!cfgByDepto[deptoId])return false;
+  const c=cfgByDepto[deptoId];
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  let ins=c.instructores.find(i=>String(i.email||'').toLowerCase()===email);
+  if(ins){
+    if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return false;
+    ins.nombre=nombre;
+    ins.email=email;
+    ins.activo=true;
+    return true;
+  }
+  c.instructores.push({
+    id:'ins_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    nombre,email,rol:'contratista',activo:true,regSecciones:[],oficinas:[]
+  });
+  return true;
+}
+function removeInstructorByEmail(email,deptoId){
+  email=String(email||'').trim().toLowerCase();
+  deptoId=String(deptoId||'').trim();
+  if(!email||!deptoId||!cfgByDepto[deptoId])return false;
+  const c=cfgByDepto[deptoId];
+  c.instructores=migrateInstructoresList(c.instructores||[]);
+  const antes=c.instructores.length;
+  c.instructores=c.instructores.filter(i=>{
+    if(i.rol==='encargado_depto'||i.rol==='encargado_oficina')return true;
+    return String(i.email||'').trim().toLowerCase()!==email;
+  });
+  return c.instructores.length!==antes;
 }
 async function aplicarSyncUsuariosAutorizados(opts){
   opts=opts||{};
@@ -601,6 +640,7 @@ async function aplicarSyncUsuariosAutorizados(opts){
     try{await saveFirestore();}catch(err){console.error('Error sincronizando encargados/responsables:',err);}
   }
   if(!opts.silent&&(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')))renderListasCfg();
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
 }
 function findInstructorByEmail(email){
   email=String(email||'').toLowerCase().trim();
