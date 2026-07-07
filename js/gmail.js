@@ -1342,6 +1342,22 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
 
+  // Reutilizar carpetas ya guardadas en el expediente (evita Radicacion (1) al responder desde otra cuenta)
+  if (expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id) {
+    const pqrsId = expRef._pqrs_drive_folder_id || '';
+    const result = {
+      pqrsFolderId: pqrsId,
+      pqrsFolderLink: expRef._pqrs_drive_folder_link || (pqrsId ? 'https://drive.google.com/drive/folders/' + pqrsId : ''),
+      solicitudFolderId: expRef._pqrs_drive_solicitud_folder_id,
+      solicitudFolderLink: 'https://drive.google.com/drive/folders/' + expRef._pqrs_drive_solicitud_folder_id,
+      respuestaFolderId: expRef._pqrs_drive_respuesta_folder_id,
+      respuestaFolderLink: 'https://drive.google.com/drive/folders/' + expRef._pqrs_drive_respuesta_folder_id,
+      pathLabel: expRef._pqrs_drive_path_label || ''
+    };
+    _drivePersistPqrsFoldersOnExp(expRef, result);
+    return result;
+  }
+
   if (expRef && expRef._pqrs_drive_folder_id) {
     const pqrsOk = await _driveVerifyFolderId(token, expRef._pqrs_drive_folder_id);
     if (pqrsOk) {
@@ -3626,6 +3642,19 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
       tipo: tipo, canal: canalCorreo, notaInterna: ctx.notaInterna, esNotaPublica: false,
       adj: { links: [], files: [] }, archivos: documentos
     });
+    if (documentos.length) {
+      e._pqrs_respuesta_soportes = documentos.map(function(a, i) {
+        return {
+          label: a.nombre || ('Respuesta ' + (i + 1)),
+          url: a.driveLink || a.previewLink || '',
+          preview: a.previewLink || a.driveLink || '',
+          mime: a.mime || ''
+        };
+      });
+      if (!e._pqrs_respuesta_link && documentos[0]) {
+        e._pqrs_respuesta_link = documentos[0].driveLink || documentos[0].previewLink || '';
+      }
+    }
   } else if (!yaCerrada) {
     e._pqrs_estado_oficina = 'cerrado';
     e._estado = 'Atendido';

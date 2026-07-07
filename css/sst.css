@@ -662,7 +662,13 @@ body.sesion-activa .sst-drive-status-btn.sst-drive-expired{
 }
 .gm-load-more-btn{border-radius:0 0 8px 8px;border-top:1px solid var(--bd);padding:10px;background:var(--sf2);color:var(--bl);font-weight:600}
 .gm-load-more-btn:hover{background:var(--bll)}
-.pqrs-resp-compose-inline .pqrs-resp-compose-box{border:1px solid var(--bd);border-radius:var(--r);padding:10px;background:var(--sf2)}
+.pqrs-resp-compose-inline{width:100%}
+.pqrs-resp-compose-inline .pqrs-resp-compose-box{width:100%;box-sizing:border-box;border:1px solid var(--bd);border-radius:var(--r);padding:10px;background:var(--sf2)}
+.pqrs-resp-compose-inline .gm-compose-field{width:100%;box-sizing:border-box}
+.pqrs-resp-compose-inline .gm-compose-field input{width:100%;box-sizing:border-box}
+.pqrs-resp-compose-inline .gm-compose-textarea{width:100%;box-sizing:border-box;display:block;min-height:160px;resize:vertical}
+.fld-err{font-size:11px;color:var(--rd);margin-top:4px}
+input.fld-invalid,textarea.fld-invalid{border-color:var(--rd)!important;background:#fff8f8}
 .pqrs-compose-att-list{margin-top:6px}
 body.modo-ciudadano .hdr-logout-btn,
 body.modo-ciudadano .hdr-user-bar-mobile .btn,

@@ -322,9 +322,13 @@ function renderFullTimeline(e){
 function collectArchivosPqrsLinks(e){
   const items=[];
   if(!e||!esPqrsSecretaria(e))return items;
+  const seen=new Set();
   const push=(url,label,fecha)=>{
     if(!url)return;
     const p=parseDrivePreviewUrl(url);
+    const key=String(p.url||url||'').trim();
+    if(!key||seen.has(key))return;
+    seen.add(key);
     items.push({exp:e._exp,taskId:'',taskDesc:'PQRSD',label:label||'Documento PQRSD',url:p.url||url,local:false,mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||'',version:''});
   };
   push(e._pqrs_solicitud_link,'Solicitud PQRSD',e._fecha_solicitud||e._fecha);
@@ -332,15 +336,20 @@ function collectArchivosPqrsLinks(e){
     if(!att||!att.driveLink||att.driveLink===e._pqrs_solicitud_link)return;
     push(att.driveLink,att.nombre||'Anexo PQRSD',e._fecha_solicitud||e._fecha);
   });
-  push(e._pqrs_respuesta_link,'Respuesta PQRSD',e._pqrs_respuesta_fecha);
-  (e._pqrs_respuesta_links||[]).forEach((u,i)=>push(u,'Respuesta PQRSD '+(i+1),e._pqrs_respuesta_fecha));
-  (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>push(s.url||s.preview,s.label||('Respuesta '+(i+1)),e._pqrs_respuesta_fecha));
+  const tieneSoportesResp=Array.isArray(e._pqrs_respuesta_soportes)&&e._pqrs_respuesta_soportes.length>0;
+  if(tieneSoportesResp){
+    (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>{
+      push(s.url||s.preview,s.label||('Respuesta '+(i+1)),e._pqrs_respuesta_fecha);
+    });
+  }else{
+    push(e._pqrs_respuesta_link,'Respuesta PQRSD',e._pqrs_respuesta_fecha);
+    (e._pqrs_respuesta_links||[]).forEach((u,i)=>push(u,'Respuesta PQRSD '+(i+1),e._pqrs_respuesta_fecha));
+  }
   return items;
 }
 function collectArchivosExp(e,taskIdFilter){
   const items=[];
   if(!e)return items;
-  if(!taskIdFilter)collectArchivosPqrsLinks(e).forEach(it=>items.push(it));
   (e.tasks||[]).map(normalizeTask).forEach(t=>{
     if(t.eliminada)return;
     if(taskIdFilter&&t.id!==taskIdFilter)return;
@@ -382,7 +391,10 @@ function archivosItemFromRaw(raw){
 function pushArchivosExpedienteRaw(raws,e,taskIdFilter){
   if(!e||!Array.isArray(raws))return;
   const expId=e._exp||'';
+  const seenPqrsUrls=new Set();
   collectArchivosPqrsLinks(e).forEach(function(it){
+    const u=String(it.url||'').trim().toLowerCase();
+    if(u)seenPqrsUrls.add(u);
     raws.push({exp:expId,taskId:it.taskId||'',taskDesc:it.taskDesc||'PQRSD',label:it.label,url:it.url,local:!!it.local,mime:it.mime||'',fecha:it.fecha||'',version:it.version||'',origen:'PQRSD',tipoDoc:'PQRSD',descDoc:it.label||'Documento PQRSD'});
   });
   docsTramiteData(e._docs_tramite).forEach(function(d){
@@ -393,6 +405,11 @@ function pushArchivosExpedienteRaw(raws,e,taskIdFilter){
   });
   collectEnlacesExpediente(e).forEach(function(l){
     if(l.tipo==='Actividad')return;
+    if(l.tipo==='PQRSD'){
+      const u=String(l.url||'').trim().toLowerCase();
+      if(u&&seenPqrsUrls.has(u))return;
+      if(u)seenPqrsUrls.add(u);
+    }
     const lbl=[l.ref||'Enlace',l.version?'v'+l.version:''].filter(Boolean).join(' · ');
     raws.push({exp:expId,label:lbl,tipoDoc:l.tipo||'Trámite',descDoc:lbl,url:l.url,taskDesc:l.tipo||'Expediente',fecha:l.fecha||'',taskId:l.taskId||'',origen:'Trámite'});
   });
@@ -441,7 +458,7 @@ function collectArchivosConsultaCompleto(e,taskIdFilter,opts){
     if(!it)return;
     const u=String(it.preview||it.url||'').trim().toLowerCase();
     if(!u&&!it.local)return;
-    const key=(u||('local:'+(it.label||'')))+'|'+(it.label||'')+'|'+(raw.exp||e._exp);
+    const key=u||('local:'+(it.label||''));
     if(seen.has(key))return;
     seen.add(key);
     it.exp=raw.exp||e._exp;

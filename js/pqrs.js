@@ -357,26 +357,26 @@ async function guardarPqrsSecretaria(modo){
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[];
   let reenvioOficinaOk=false;
-  if(!soloRadicar&&gmailMsgId&&oficina!=='secretaria'){
+  let reenvioDsOk=false;
+  if(gmailMsgId){
     let _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
     const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
-    if(_tokOk){
-      if(!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
-        _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
-        if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
+    if(_tokOk&&!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
+      _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
+      if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
+    }
+    if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+      try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
+      if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
+    }else if(!soloRadicar&&oficina!=='secretaria'){
+      if(_tokOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+        try{reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});}catch(err){console.warn('reenvio oficina:',err);}
       }
-      if(_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-        try{
-          reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});
-        }catch(err){console.warn('reenvio oficina:',err);}
-      }
+      if(!reenvioOficinaOk)notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
       if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
+    }else if(!soloRadicar&&oficina==='secretaria'&&typeof gmailMarkAsRead==='function'){
+      gmailMarkAsRead(gmailMsgId);
     }
-    if(!reenvioOficinaOk){
-      notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
-    }
-  }else if(!soloRadicar&&gmailMsgId&&oficina==='secretaria'&&typeof gmailMarkAsRead==='function'){
-    gmailMarkAsRead(gmailMsgId);
   }
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
     try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
@@ -487,7 +487,7 @@ async function guardarPqrsSecretaria(modo){
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'');
+  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina'+(reenvioDsOk?' · Correo reenviado a DS DEGUV':''):(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'');
   notificarResultadoRadicacionPqrs({
     title:soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada'),
     message:msgPrincipal
@@ -1247,16 +1247,18 @@ function submitTrasladoPqrsInterOficina(expId){
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
   delete e._pqrs_matriz_fila;
-  persistExpedienteGranular(e);
-  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
-  closeTaskModal();
-  notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
-  renderBandejaDepto();
-  renderPqrsOficinaInbox();
-  renderSecretariaPqrs();
-  if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-  if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-  if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+  tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(function(){
+    persistExpedienteGranular(e);
+    if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
+    closeTaskModal();
+    notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
+    renderBandejaDepto();
+    renderPqrsOficinaInbox();
+    renderSecretariaPqrs();
+    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+  });
 }
 function anonimizarParaCiudadano(txt){
   if(!txt)return txt;
