@@ -6,8 +6,15 @@
 // INGRESO POR ROLES
 // ================================================================
 // ROLES_INGRESO → js/constants.js
-const SESSION_STALE_MS=2*60*1000;
+const SESSION_STALE_MS=90*1000;
+const SESSION_HEARTBEAT_MS=25000;
 
+function sessionDocRef(email){
+  const db=window._db;
+  email=String(email||'').trim().toLowerCase();
+  if(!db||!window._fsDoc||!email)return null;
+  return window._fsDoc(db,'sesiones',email);
+}
 function generateSessionId(){
   return 'sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,12);
 }
@@ -16,43 +23,48 @@ function sesionRemotaEstaViva(data){
   const sid=String(data.activeSessionId||'').trim();
   if(!sid)return false;
   const hb=String(data.activeSessionHeartbeat||data.activeSessionAt||'').trim();
-  if(!hb)return true;
+  if(!hb)return false;
   const t=Date.parse(hb);
-  if(!t||isNaN(t))return true;
+  if(!t||isNaN(t))return false;
   return (Date.now()-t)<SESSION_STALE_MS;
+}
+async function leerSesionFirestore(email){
+  const ref=sessionDocRef(email);
+  if(!ref||!window._fsGetDoc)return null;
+  try{
+    const snap=await window._fsGetDoc(ref);
+    return snap.exists()?snap.data():null;
+  }catch(err){
+    console.warn('leerSesionFirestore:',err);
+    return null;
+  }
 }
 async function verificarSesionDisponible(email){
   email=String(email||'').trim().toLowerCase();
-  const db=window._db;
-  if(!email||!db||!window._fsGetDoc||!window._fsDoc)return{ok:true};
-  try{
-    const snap=await window._fsGetDoc(window._fsDoc(db,'usuarios',email));
-    if(!snap.exists())return{ok:true};
-    if(sesionRemotaEstaViva(snap.data())){
-      return{ok:false,msg:'❌ Ya tiene una sesión abierta en otro dispositivo, navegador o pestaña.\n\nCierre sesión allí antes de ingresar aquí.'};
-    }
-    return{ok:true};
-  }catch(err){
-    console.warn('verificarSesionDisponible:',err);
-    return{ok:true};
+  if(!email)return{ok:true};
+  const data=await leerSesionFirestore(email);
+  if(sesionRemotaEstaViva(data)){
+    return{ok:false,msg:'❌ Ya tiene una sesión abierta en otro dispositivo, navegador o pestaña.\n\nCierre sesión allí antes de ingresar aquí.'};
   }
+  return{ok:true};
 }
 async function claimActiveSession(email){
   email=String(email||'').trim().toLowerCase();
   const db=window._db;
-  if(!email||!db||!window._fsDoc)return null;
+  const ref=sessionDocRef(email);
+  if(!email||!db||!ref)return null;
   const sid=generateSessionId();
   const now=new Date().toISOString();
   const payload={
     activeSessionId:sid,
     activeSessionAt:now,
     activeSessionHeartbeat:now,
-    activeSessionUserAgent:String(navigator.userAgent||'').slice(0,200)
+    activeSessionUserAgent:String(navigator.userAgent||'').slice(0,200),
+    email:email
   };
   try{
     if(window._fsRunTransaction){
       await window._fsRunTransaction(db,async function(transaction){
-        const ref=window._fsDoc(db,'usuarios',email);
         const snap=await transaction.get(ref);
         const data=snap.exists()?snap.data():{};
         if(sesionRemotaEstaViva(data)){
@@ -66,34 +78,50 @@ async function claimActiveSession(email){
       const check=await verificarSesionDisponible(email);
       if(!check.ok)return'BUSY';
       if(!window._fsSetDoc)return null;
-      await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+      await window._fsSetDoc(ref,payload,{merge:true});
     }
     _sessionId=sid;
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
     if(err&&err.code==='SESSION_BUSY')return'BUSY';
+    if(err&&err.code==='permission-denied')return'RULES';
     console.warn('No se pudo registrar sesión activa:',err);
     return null;
   }
 }
-async function releaseActiveSession(email){
+async function releaseActiveSession(email,opts){
+  opts=opts||{};
   email=String(email||'').trim().toLowerCase();
-  const db=window._db;
-  if(!email||!_sessionId||!db||!window._fsGetDoc||!window._fsSetDoc||!window._fsDoc)return;
+  const ref=sessionDocRef(email);
+  const sid=String(_sessionId||sessionStorage.getItem('sst_session_id')||'').trim();
+  if(!email||!ref||!window._fsSetDoc)return;
   try{
-    const ref=window._fsDoc(db,'usuarios',email);
-    const snap=await window._fsGetDoc(ref);
-    if(snap.exists()&&String(snap.data().activeSessionId||'')===_sessionId){
-      await window._fsSetDoc(ref,{
-        activeSessionId:'',
-        activeSessionAt:new Date().toISOString(),
-        activeSessionHeartbeat:new Date().toISOString()
-      },{merge:true});
+    if(sid){
+      const data=await leerSesionFirestore(email);
+      const remote=String(data&&data.activeSessionId||'').trim();
+      if(remote&&remote!==sid&&!opts.force)return;
     }
+    await window._fsSetDoc(ref,{
+      activeSessionId:'',
+      activeSessionAt:new Date().toISOString(),
+      activeSessionHeartbeat:new Date().toISOString()
+    },{merge:true});
   }catch(err){console.warn('releaseActiveSession:',err);}
   _sessionId=null;
   try{sessionStorage.removeItem('sst_session_id');}catch(e){}
+}
+function installSessionPageLifecycle(){
+  if(window._sessionLifecycleInstalled)return;
+  window._sessionLifecycleInstalled=true;
+  const liberarAlSalir=function(){
+    if(!document.body.classList.contains('sesion-activa'))return;
+    const email=window._usuarioActual&&window._usuarioActual.email;
+    if(!email)return;
+    stopSessionGuard();
+    void releaseActiveSession(email,{force:true});
+  };
+  window.addEventListener('pagehide',liberarAlSalir);
 }
 function stopSessionGuard(){
   if(_sessionUnsub){try{_sessionUnsub();}catch(e){}_sessionUnsub=null;}
@@ -113,22 +141,23 @@ function cerrarSesionPorConflicto(){
 function startSessionGuard(email){
   stopSessionGuard();
   email=String(email||'').trim().toLowerCase();
-  const db=window._db;
-  if(!email||!_sessionId||!db||!window._fsOnSnapshot||!window._fsDoc)return;
-  _sessionUnsub=window._fsOnSnapshot(window._fsDoc(db,'usuarios',email),function(snap){
+  const ref=sessionDocRef(email);
+  if(!email||!_sessionId||!ref||!window._fsOnSnapshot)return;
+  _sessionUnsub=window._fsOnSnapshot(ref,function(snap){
     if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
-    if(!snap.exists())return;
-    const data=snap.data()||{};
-    const remoteSid=String(data.activeSessionId||'');
+    const data=snap.exists()?snap.data():{};
+    const remoteSid=String(data.activeSessionId||'').trim();
     if(!remoteSid||remoteSid===_sessionId)return;
     if(sesionRemotaEstaViva(data))cerrarSesionPorConflicto();
   },function(err){console.warn('Error escuchando sesión:',err);});
   _sessionHeartbeatTimer=setInterval(function(){
     if(!document.body.classList.contains('sesion-activa')||!_sessionId||!email)return;
-    window._fsSetDoc(window._fsDoc(db,'usuarios',email),{
+    const hbRef=sessionDocRef(email);
+    if(!hbRef||!window._fsSetDoc)return;
+    window._fsSetDoc(hbRef,{
       activeSessionHeartbeat:new Date().toISOString()
     },{merge:true}).catch(function(){});
-  },30000);
+  },SESSION_HEARTBEAT_MS);
 }
 function setLoginAuthMsg(msg,err){
   const el=document.getElementById('login-auth-msg');
@@ -239,9 +268,15 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
+    if(sesion==='RULES'){
+      window._usuarioActual=null;
+      setLoginAuthMsg('❌ Permiso denegado al registrar sesión. Despliegue las reglas Firestore actualizadas (colección sesiones).','err');
+      if(window._authSignOut)await window._authSignOut().catch(()=>{});
+      return;
+    }
     if(!sesion){
       window._usuarioActual=null;
-      setLoginAuthMsg('❌ No se pudo registrar la sesión segura. Si el problema continúa, contacte al administrador (reglas Firestore).','err');
+      setLoginAuthMsg('❌ No se pudo registrar la sesión. Verifique conexión e intente de nuevo.','err');
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
@@ -378,6 +413,7 @@ function ingresarComoRol(rolId,respNombre){
   initPeriodoFiltros('act');
   initPeriodoFiltros('pqrs-ofi');
   renderChatBadge();
+  installSessionPageLifecycle();
   initAppRealtimeSync();
   if(window._usuarioActual&&window._usuarioActual.email){
     if(!_sessionId){
@@ -450,3 +486,4 @@ function cerrarSesionGoogle(){
 initPqrsUiDelegation();
 initSstUiDelegation();
 ensureOverlaysClosed();
+installSessionPageLifecycle();
