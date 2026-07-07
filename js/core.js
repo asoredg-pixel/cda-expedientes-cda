@@ -730,6 +730,7 @@ function openPqrsRespuestaModal(expId,opts){
   if(fromGmail&&e&&typeof gmailSetPqrsRespSel==='function')gmailSetPqrsRespSel(e,{detectada:!!opts.detectada,keepEmail:true});
   else if(fromGmail&&!e){const tg=document.getElementById('gmail-resp-pqrs-toggle-search');if(tg)tg.textContent='🔍 Buscar PQRSD';}
   if(fromGmail)pqrsRespRefreshModalUiGmail();
+  else pqrsRespRefreshModalUi();
   ov.classList.add('on');
   window._taskModalCtx={mode:fromGmail?'gmailVincularPqrs':'pqrsRespuesta',expId:expLabel};
 }
@@ -741,18 +742,20 @@ function pqrsPlantillaOficioFirmado(expId,oficio){
 function pqrsAplicarPlantillaOficioSiCorresponde(force){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
   if(tipo!==PQRS_WF_TIPO.OFICIO)return;
-  const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
-  if(!cuerpoEl)return;
-  const cur=cuerpoEl.value.trim();
   const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
   const oficio=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
   const plantilla=pqrsPlantillaOficioFirmado(expId,oficio);
-  const esFwd=/^(\s*(fwd?|re):)/i.test(cur);
-  const esPlantillaAnterior=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
-  if(force||!cur||esFwd||esPlantillaAnterior||cur.length<40){
-    cuerpoEl.value=plantilla;
-    window._pqrsUltimaPlantillaOficio=plantilla;
-  }
+  ['pqrs-resp-cuerpo','pqrs-compose-body'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(!el)return;
+    const cur=el.value.trim();
+    const esFwd=/^(\s*(fwd?|re):)/i.test(cur);
+    const esPlantillaAnterior=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
+    if(force||!cur||esFwd||esPlantillaAnterior||cur.length<40){
+      el.value=plantilla;
+    }
+  });
+  window._pqrsUltimaPlantillaOficio=plantilla;
 }
 function pqrsRespRefreshModalUiGmail(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
@@ -771,12 +774,15 @@ function pqrsRespRefreshModalUiGmail(){
   }
   if(oficioReq)oficioReq.style.display=tipo===PQRS_WF_TIPO.OFICIO?'':'none';
   if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
+  if(tipo===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde();
 }
 function pqrsRespRefreshModalUi(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
-  const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'');
   const isInfo=tipo===PQRS_WF_TIPO.INFORMATIVA;
-  const useEmail=!isInfo&&(tipo===PQRS_WF_TIPO.MENSAJE||canal===PQRS_WF_CANAL.CORREO);
+  const isOficio=tipo===PQRS_WF_TIPO.OFICIO;
+  const isMensaje=tipo===PQRS_WF_TIPO.MENSAJE;
+  const soloCorreo=isMensaje||isOficio;
+  const useEmail=!isInfo&&soloCorreo;
   const compose=document.getElementById('pqrs-resp-email-compose');
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
   const canalWrap=document.getElementById('pqrs-resp-canal-wrap');
@@ -785,17 +791,30 @@ function pqrsRespRefreshModalUi(){
   const submitBtn=document.getElementById('pqrs-resp-submit-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
   const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
+  if(soloCorreo&&!window._gmailVinculoMsg){
+    const hid=document.getElementById('pqrs-resp-canal');
+    if(hid)hid.value=PQRS_WF_CANAL.CORREO;
+    document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(function(b){
+      const v=b.getAttribute('data-val');
+      b.style.display=(soloCorreo&&v!==PQRS_WF_CANAL.CORREO)?'none':'';
+      b.classList.toggle('on',v===PQRS_WF_CANAL.CORREO);
+    });
+  }
   if(compose)compose.style.display=useEmail?'':'none';
   if(cuerpoWrap)cuerpoWrap.style.display=(!useEmail&&!isInfo)?'':'none';
-  if(canalWrap)canalWrap.style.display=isInfo?'none':'';
+  if(canalWrap)canalWrap.style.display=(isInfo||soloCorreo)?'none':'';
   if(adjWrap)adjWrap.style.display=(useEmail||isInfo)?'none':'';
-  if(emailBtn)emailBtn.style.display=useEmail?'':'none';
+  if(emailBtn){
+    emailBtn.style.display=useEmail?'':'none';
+    emailBtn.textContent=isOficio?'📤 Enviar oficio por correo y cerrar PQRSD':'📤 Enviar correo y cerrar PQRSD';
+  }
   if(submitBtn){
     submitBtn.style.display=useEmail?'none':'';
     submitBtn.textContent=isInfo?'ℹ️ Marcar informativa y cerrar':'✅ Confirmar y cerrar PQRSD';
   }
-  if(oficioReq)oficioReq.style.display=tipo===PQRS_WF_TIPO.OFICIO?'':'none';
-  if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
+  if(oficioReq)oficioReq.style.display=isOficio?'':'none';
+  if(oficioHint)oficioHint.style.display=isOficio?'none':'';
+  if(isOficio)pqrsAplicarPlantillaOficioSiCorresponde();
 }
 function pqrsComposeAddAttachment(){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -828,8 +847,11 @@ function pqrsComposeRemoveAttachment(idx){
 function setPqrsRespTipo(val){
   const hid=document.getElementById('pqrs-resp-tipo');if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
-  if(val===PQRS_WF_TIPO.MENSAJE&&!window._gmailVinculoMsg)setPqrsRespCanal(PQRS_WF_CANAL.CORREO);
-  if(val===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde();
+  if((val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO)&&!window._gmailVinculoMsg){
+    const canHid=document.getElementById('pqrs-resp-canal');
+    if(canHid)canHid.value=PQRS_WF_CANAL.CORREO;
+  }
+  if(val===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde(true);
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
   else pqrsRespRefreshModalUi();
 }

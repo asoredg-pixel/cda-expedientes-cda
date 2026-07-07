@@ -458,6 +458,27 @@ async function gmailApiCall(method, url, body) {
   return res.json();
 }
 
+async function _gmailApiBest(method, url, body) {
+  if (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) {
+    return gmailApiCall(method, url, body);
+  }
+  if (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid()) {
+    return _gmailOfiApi(method, url, body);
+  }
+  throw new Error('Sin sesión Gmail. Conecte la bandeja.');
+}
+
+async function _gmailFetchMessageFull(msgId) {
+  if (!msgId) return null;
+  const url = GMAIL_API_BASE + '/messages/' + msgId + '?format=full';
+  try {
+    return await _gmailApiBest('GET', url);
+  } catch (e) {
+    console.warn('_gmailFetchMessageFull:', e);
+    return null;
+  }
+}
+
 // ----------------------------------------------------------------
 // Gmail API — inbox
 // ----------------------------------------------------------------
@@ -2214,7 +2235,7 @@ async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
     return false;
   }
   try {
-    const rawData = await gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
+    const rawData = await _gmailApiBest('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
     if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
 
     const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -2270,7 +2291,7 @@ async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
     out.forEach(function(b) { binOut += String.fromCharCode(b); });
     var encoded = btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-    await gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
+    await _gmailApiBest('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
     if (!opts.silent) notif('Correo reenviado con adjuntos a ' + ofiLabel + ' (' + ofiEmail + ')', 'ok');
     return true;
   } catch (e) {
@@ -3198,9 +3219,7 @@ function _renderGmailOfiMsgView(msg) {
   // Responder PQRSD: permite a cualquier oficina vincular este correo como respuesta oficial
   const pqrsRelacionada = _gmailOfiCurrentMsg ? _gmailOfiCurrentMsg._pqrsVinculada || '' : '';
   const respPqrsBtn = '<button type="button" class="gm-action-btn" style="background:var(--bll);border:1px solid var(--bl);color:var(--bl)" onclick="gmailOfiVincularRespuestaPqrs()" title="Abrir modal para elegir PQRSD y registrar este correo como respuesta oficial">📨 Responder PQRSD</button>';
-  const radTokInf = _gmailExtractRadicadoFromSubject(subject);
-  const pqrsInf = radTokInf ? _gmailFindPqrsByRadicado(radTokInf) : null;
-  const infPqrsBtn = (pqrsInf && typeof puedeMarcarPqrsInformativa === 'function' && puedeMarcarPqrsInformativa(pqrsInf))
+  const infPqrsBtn = !_gmailOfiIsSecretaria()
     ? '<button type="button" class="gm-action-btn" style="background:var(--sf2);border:1px solid var(--bd);color:var(--tx)" onclick="gmailOfiMarcarInformativaPqrs()" title="Marcar PQRSD como informativa y cerrar sin enviar correo al ciudadano">ℹ Informativa</button>'
     : '';
 
@@ -3795,15 +3814,33 @@ function gmailOfiVincularRespuestaPqrs() {
   }
 }
 
+function _gmailFindPqrsForCurrentMsg(msg) {
+  if (!msg) return null;
+  const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
+  const subjH = headers.find(function(h) { return h.name === 'Subject'; });
+  const subject = subjH ? String(subjH.value || '') : '';
+  const radTok = _gmailExtractRadicadoFromSubject(subject);
+  let hit = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
+  if (hit) return hit;
+  const mid = String(msg.id || '').trim();
+  if (!mid) return null;
+  return (typeof exps !== 'undefined' ? exps : []).find(function(e) {
+    return e && String(e._gmail_message_id || '') === mid && typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e);
+  }) || null;
+}
+
 function gmailOfiMarcarInformativaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
-  const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
-  const findH = function(n) { var h = headers.find(function(x) { return x.name === n; }); return h ? (h.value || '') : ''; };
-  const subject = findH('Subject');
-  const radTok = _gmailExtractRadicadoFromSubject(subject);
-  const detectada = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
-  if (!detectada) { notif('No se detectó PQRSD en el asunto del correo', 'err'); return; }
+  const detectada = _gmailFindPqrsForCurrentMsg(msg);
+  if (!detectada) {
+    notif('No se detectó PQRSD en el asunto. Busque el número en el menú PQRSD → ℹ Informativa.', 'err');
+    return;
+  }
+  if (typeof puedeMarcarPqrsInformativa === 'function' && !puedeMarcarPqrsInformativa(detectada)) {
+    notif('No puede marcar esta PQRSD como informativa', 'err');
+    return;
+  }
   if (typeof SST !== 'undefined' && typeof SST.openMarcarPqrsInformativaModal === 'function') {
     SST.openMarcarPqrsInformativaModal(detectada._exp);
   } else if (typeof openMarcarPqrsInformativaModal === 'function') {

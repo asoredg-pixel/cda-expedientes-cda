@@ -356,17 +356,27 @@ async function guardarPqrsSecretaria(modo){
   }
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[];
-  if(!soloRadicar&&gmailMsgId){
-    const _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
-    const _tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&_msgParaReenvio;
+  let reenvioOficinaOk=false;
+  if(!soloRadicar&&gmailMsgId&&oficina!=='secretaria'){
+    let _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+    const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
     if(_tokOk){
-      if(oficina!=='secretaria'&&typeof reenviarEmailAOficina==='function'){
-        try{await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});}catch(err){console.warn('reenvio oficina:',err);}
+      if(!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
+        _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
+        if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
+      }
+      if(_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+        try{
+          reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});
+        }catch(err){console.warn('reenvio oficina:',err);}
       }
       if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
-    }else if(oficina!=='secretaria'){
-      notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina (sesión Gmail expirada). Reconecte la bandeja y use «Reenviar» o notifique manualmente.','warn');
     }
+    if(!reenvioOficinaOk){
+      notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
+    }
+  }else if(!soloRadicar&&gmailMsgId&&oficina==='secretaria'&&typeof gmailMarkAsRead==='function'){
+    gmailMarkAsRead(gmailMsgId);
   }
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
     try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
@@ -477,7 +487,7 @@ async function guardarPqrsSecretaria(modo){
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)));
+  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'');
   notificarResultadoRadicacionPqrs({
     title:soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada'),
     message:msgPrincipal
@@ -497,13 +507,17 @@ async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
   if(normMedioRecepcionPqrs(e.f_f2||'')!=='Correo')return;
   const gmailMsgId=e._gmail_message_id||'';
   if(!gmailMsgId)return;
-  const tokOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  let msg=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk){
     notif('⚠️ PQRSD trasladada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja y reenvíe manualmente.','warn');
     return;
   }
-  let msg=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
-  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'){
+  if(!msg&&typeof _gmailFetchMessageFull==='function'){
+    msg=await _gmailFetchMessageFull(gmailMsgId);
+    if(msg) _gmailCurrentMsg=msg;
+  }
+  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
     try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
   }
   if(msg&&typeof reenviarEmailAOficina==='function'){
@@ -567,6 +581,11 @@ function renderPqrsOficinaDetallePanel(){
 function marcarPqrsRespondidaOficina(expId){
   openPqrsRespuestaModal(expId);
 }
+function pqrsSortByNumDesc(a,b){
+  const na=parseInt(String(a._exp||'').replace(/\D/g,''),10)||0;
+  const nb=parseInt(String(b._exp||'').replace(/\D/g,''),10)||0;
+  return nb-na;
+}
 function getPqrsPendientesTrasladoList(skipPeriodo){
   let list=exps.filter(e=>esPqrsSecretaria(e)&&pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
   if(!skipPeriodo)list=filterExpsPeriodo(list,'pqrs-ofi');
@@ -575,8 +594,8 @@ function getPqrsPendientesTrasladoList(skipPeriodo){
 function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
-  const pendientes=getPqrsPendientesTrasladoList(true);
-  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e));
+  const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortByNumDesc);
+  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortByNumDesc);
   const atendidas=all.filter(e=>pqrsEstaCerrada(e));
   const SEC_PQRS_PAGE=10;
   const SEC_PQRS_MAX=30;
