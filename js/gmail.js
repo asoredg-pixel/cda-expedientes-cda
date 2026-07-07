@@ -289,38 +289,75 @@ function sstToggleDriveConnectPanel(ev) {
   }
   sstAbrirGmailDriveModal();
 }
-function sstAbrirGmailDriveModal() {
+function sstSecretariaDriveActiva() {
+  return !!(typeof _driveGetSecretariaToken === 'function' && _driveGetSecretariaToken());
+}
+function sstAbrirGmailDriveModal(opts) {
+  opts = opts || {};
   const ov = document.getElementById('gmail-sesion-overlay');
   if (!ov) return;
+  const tit = ov.querySelector('.gmail-sesion-tit');
+  const txt = ov.querySelector('.gmail-sesion-txt');
+  const skipBtn = ov.querySelector('.gmail-sesion-btns .bs');
+  if (opts.requireSecretaria) {
+    if (tit) tit.textContent = 'Conectar Drive institucional PQRSD';
+    if (txt) txt.innerHTML = 'Para guardar archivos en la carpeta oficial de la PQRSD debe autorizar la bandeja Gmail de <strong>Secretaría (cdaguaviare1)</strong> o tener su correo de oficina conectado con acceso editor a esa carpeta.';
+  } else if (opts.force) {
+    if (tit) tit.textContent = 'Conectar Gmail / Drive';
+    if (txt) txt.innerHTML = 'Para <strong>adjuntar archivos</strong> o registrar la respuesta debe autorizar su correo institucional antes de continuar.';
+  } else {
+    if (tit) tit.textContent = 'Conectar Gmail / Drive';
+    if (txt) txt.innerHTML = 'Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.';
+  }
+  if (skipBtn) skipBtn.style.display = opts.force ? 'none' : '';
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
 }
 function sstCerrarGmailAttachModal(success) {
+  if (window._sstGmailAttachForce && !success) return;
   const ov = document.getElementById('gmail-sesion-overlay');
   if (ov) {
     ov.classList.remove('on');
     ov.setAttribute('aria-hidden', 'true');
+    const skipBtn = ov.querySelector('.gmail-sesion-btns .bs');
+    if (skipBtn) skipBtn.style.display = '';
   }
+  const reqSec = window._sstGmailAttachRequireSecretaria;
+  window._sstGmailAttachForce = false;
+  window._sstGmailAttachRequireSecretaria = false;
   if (window._sstGmailAttachCb) {
     const cb = window._sstGmailAttachCb;
     window._sstGmailAttachCb = null;
-    cb(!!success);
+    const ok = !!success && (!reqSec || sstSecretariaDriveActiva() || sstGmailSesionActiva());
+    cb(ok);
   }
 }
 function sstFinalizeGmailConnect() {
   renderSstGmailSesionBloqueo();
   if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
-  if (sstGmailSesionActiva()) sstCerrarGmailAttachModal(true);
+  const reqSec = window._sstGmailAttachRequireSecretaria;
+  const ok = reqSec ? (sstSecretariaDriveActiva() || sstGmailSesionActiva()) : sstGmailSesionActiva();
+  if (ok) sstCerrarGmailAttachModal(true);
 }
-function sstSolicitarGmailParaAdjuntar() {
+function sstSolicitarGmailParaAdjuntar(opts) {
+  opts = opts || {};
   if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) {
     return Promise.resolve(true);
   }
-  if (sstGmailSesionActiva()) return Promise.resolve(true);
+  const active = opts.requireSecretaria
+    ? (sstSecretariaDriveActiva() || sstGmailSesionActiva())
+    : sstGmailSesionActiva();
+  if (active) return Promise.resolve(true);
   return new Promise(function(resolve) {
     window._sstGmailAttachCb = resolve;
-    sstAbrirGmailDriveModal();
+    window._sstGmailAttachForce = !!opts.force;
+    window._sstGmailAttachRequireSecretaria = !!opts.requireSecretaria;
+    sstAbrirGmailDriveModal(opts);
   });
+}
+function sstSolicitarDriveParaPqrs(expRef) {
+  const tieneCarp = typeof _drivePqrsExpTieneCarpetas === 'function' && _drivePqrsExpTieneCarpetas(expRef);
+  return sstSolicitarGmailParaAdjuntar({ requireSecretaria: !tieneCarp, force: true });
 }
 function renderSstGmailSesionBloqueo() {
   const ov = document.getElementById('gmail-sesion-overlay');
@@ -348,9 +385,11 @@ function sstOnGmailTokenExpiradoForceLogout() {
   }
 }
 function sstConectarGmailObligatorio(doneCb) {
-  if (!sstRolRequiereGmailConectado() || sstGmailSesionActiva()) {
+  const reqSec = window._sstGmailAttachRequireSecretaria;
+  const needSec = reqSec && !sstSecretariaDriveActiva() && !sstGmailSesionActiva();
+  if (!sstRolRequiereGmailConectado() || (!needSec && sstGmailSesionActiva()) || (reqSec && sstSecretariaDriveActiva())) {
     sstFinalizeGmailConnect();
-    if (doneCb) doneCb(sstGmailSesionActiva());
+    if (doneCb) doneCb(sstGmailSesionActiva() || sstSecretariaDriveActiva());
     return;
   }
   const btn = document.getElementById('gmail-sesion-connect-btn');
@@ -358,9 +397,9 @@ function sstConectarGmailObligatorio(doneCb) {
   const finish = function() {
     if (btn) { btn.disabled = false; btn.textContent = 'Conectar Gmail / Drive'; }
     sstFinalizeGmailConnect();
-    if (doneCb) doneCb(sstGmailSesionActiva());
+    if (doneCb) doneCb(sstGmailSesionActiva() || sstSecretariaDriveActiva());
   };
-  if (typeof esSecretaria === 'function' && esSecretaria()) {
+  if (reqSec || (typeof esSecretaria === 'function' && esSecretaria())) {
     gmailConnect(finish);
     return;
   }
@@ -383,6 +422,8 @@ window.sstConectarGmailObligatorio = sstConectarGmailObligatorio;
 window.renderSstGmailSesionBloqueo = renderSstGmailSesionBloqueo;
 window.sstIniciarGmailObligatorio = sstIniciarGmailObligatorio;
 window.sstSolicitarGmailParaAdjuntar = sstSolicitarGmailParaAdjuntar;
+window.sstSolicitarDriveParaPqrs = sstSolicitarDriveParaPqrs;
+window._driveGetSecretariaToken = _driveGetSecretariaToken;
 window.sstCerrarGmailAttachModal = sstCerrarGmailAttachModal;
 window.sstToggleDriveConnectPanel = sstToggleDriveConnectPanel;
 window.sstRenderGmailDriveStatusBtn = sstRenderGmailDriveStatusBtn;
@@ -1049,12 +1090,29 @@ const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo',
 
 // Obtiene el mejor token disponible para subir al Drive institucional.
 // Prioridad: secretaria (cdaguaviare1) > token de oficina conectada.
+function _driveGetSecretariaToken() {
+  const secTok = typeof gmailGetToken === 'function' ? gmailGetToken() : '';
+  if (secTok && typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) return secTok;
+  return '';
+}
 function _driveGetBestToken() {
-  const secTok = gmailGetToken();
-  if (secTok && gmailIsTokenValid()) return secTok;
+  const secTok = _driveGetSecretariaToken();
+  if (secTok) return secTok;
   const ofiTok = gmailOfiGetToken ? gmailOfiGetToken() : '';
   if (ofiTok && gmailOfiIsTokenValid && gmailOfiIsTokenValid()) return ofiTok;
   return '';
+}
+// Token para subir a carpetas PQRSD ya creadas por Secretaría (oficinas con permiso editor).
+function _driveGetPqrsUploadToken(expRef) {
+  const sec = _driveGetSecretariaToken();
+  if (sec) return sec;
+  if (expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id) {
+    return _driveGetBestToken();
+  }
+  return '';
+}
+function _drivePqrsExpTieneCarpetas(expRef) {
+  return !!(expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id);
 }
 
 // Devuelve true si el depto activo es Guaviare (usa Drive institucional).
@@ -1339,8 +1397,6 @@ function _driveUploadTargetFromTipo(tipo) {
 async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fechaRef, expRef) {
   const tipoS = String(tipo || 'radicacion_otro');
   const numS = String(pqrsNum || '').trim();
-  const token = _driveGetBestToken();
-  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
 
   // Reutilizar carpetas ya guardadas en el expediente (evita Radicacion (1) al responder desde otra cuenta)
   if (expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id) {
@@ -1356,6 +1412,11 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
     };
     _drivePersistPqrsFoldersOnExp(expRef, result);
     return result;
+  }
+
+  const token = _driveGetSecretariaToken();
+  if (!token) {
+    throw new Error('Para crear la carpeta PQRSD en Drive institucional conecte la bandeja Gmail de Secretaría (cdaguaviare1).');
   }
 
   if (expRef && expRef._pqrs_drive_folder_id) {
@@ -1546,8 +1607,11 @@ async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
 // pqrsNum: número del expediente, nombre: apellido o asunto para carpeta.
 async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef, uploadOpts) {
   uploadOpts = uploadOpts || {};
-  const token = _driveGetBestToken();
-  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  const expRef = uploadOpts.expediente || null;
+  const token = _driveGetPqrsUploadToken(expRef);
+  if (!token) {
+    throw new Error('Sin token Gmail/Drive. Conecte la bandeja de Secretaría o su correo de oficina con acceso a la carpeta PQRSD.');
+  }
 
   let folderId = uploadOpts.folderId || '';
   let folderLink = uploadOpts.folderLink || '';
@@ -1571,25 +1635,38 @@ async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum,
   if (!up.ok) { const t = await up.text().catch(function() { return ''; }); throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120)); }
   const file = await up.json();
 
-  // Compartir como lector público (anyoneWithLink)
-  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'reader', type: 'anyone' })
-  }).catch(function() {});
+  // Compartir como lector público (anyoneWithLink) — consulta ciudadana
+  try {
+    await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    });
+  } catch (permErr) { console.warn('driveUploadInstitutional perm:', permErr); }
 
+  const previewLink = _drivePreviewLinkForFile(file.id, mimeType, filename);
   if (uploadOpts.expediente && pqrsFolders) {
     _drivePersistPqrsFoldersOnExp(uploadOpts.expediente, pqrsFolders);
   }
   return {
     fileId: file.id,
     driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
-    previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
+    previewLink: previewLink,
     nombre: filename,
     folderId: folderId,
     folderLink: folderLink,
     pqrsFolders: pqrsFolders
   };
+}
+
+function _drivePreviewLinkForFile(fileId, mimeType, filename) {
+  const id = String(fileId || '').trim();
+  if (!id) return '';
+  const mime = String(mimeType || '').toLowerCase();
+  const name = String(filename || '').toLowerCase();
+  const isImg = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+  if (isImg) return 'https://drive.google.com/uc?export=view&id=' + id;
+  return 'https://drive.google.com/file/d/' + id + '/preview';
 }
 
 // Metadatos Drive para un expediente PQRSD (misma carpeta PQRSD-{núm}-{nombre} que radicación).
@@ -3906,7 +3983,7 @@ async function submitPqrsRespuestaGmailVinculo() {
   const gmailMsg = window._gmailVinculoMsg || _gmailOfiCurrentMsg;
 
   if (gmailMsg && typeof subirAdjuntosGmailMsgRespuestaADrive === 'function') {
-    const driveOkGmail = typeof sstSolicitarGmailParaAdjuntar === 'function' ? await sstSolicitarGmailParaAdjuntar() : true;
+    const driveOkGmail = typeof sstSolicitarDriveParaPqrs === 'function' ? await sstSolicitarDriveParaPqrs(e) : true;
     if (!driveOkGmail) {
       if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
       return;
@@ -3917,7 +3994,7 @@ async function submitPqrsRespuestaGmailVinculo() {
   }
 
   if (usaDriveInst && adj.files && adj.files.length) {
-    const driveOk = typeof sstSolicitarGmailParaAdjuntar === 'function' ? await sstSolicitarGmailParaAdjuntar() : true;
+    const driveOk = typeof sstSolicitarDriveParaPqrs === 'function' ? await sstSolicitarDriveParaPqrs(e) : true;
     if (!driveOk) {
       if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
       return;

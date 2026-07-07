@@ -165,7 +165,7 @@ function toggleSecAnonimo(){
 // ─── Gestión dinámica de anexos (radicación) ───────────────────────────────
 if(typeof window!=='undefined'&&!window._secAnexoFiles)window._secAnexoFiles=[];
 function secAnexoAdd(){
-  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+  (typeof sstSolicitarDriveParaPqrs==='function'?sstSolicitarDriveParaPqrs(null):(typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar({requireSecretaria:true,force:true}):Promise.resolve(true))).then(function(ok){
     if(!ok)return;
     const inp=document.createElement('input');
     inp.type='file';inp.multiple=true;
@@ -368,14 +368,12 @@ async function guardarPqrsSecretaria(modo){
     if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
       try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
       if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
-    }else if(!soloRadicar&&oficina!=='secretaria'){
-      if(_tokOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-        try{reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true});}catch(err){console.warn('reenvio oficina:',err);}
+    }else if(!soloRadicar){
+      const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
+      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio);
+      if(!reenvioOficinaOk&&_tokOk&&gmailMsgId){
+        notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+'. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
       }
-      if(!reenvioOficinaOk)notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a la oficina. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
-      if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
-    }else if(!soloRadicar&&oficina==='secretaria'&&typeof gmailMarkAsRead==='function'){
-      gmailMarkAsRead(gmailMsgId);
     }
   }
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
@@ -502,28 +500,52 @@ async function guardarPqrsSecretaria(modo){
     secRadicacionBusy(false);
   }
 }
-async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
-  if(!e||oficina==='secretaria')return;
-  if(normMedioRecepcionPqrs(e.f_f2||'')!=='Correo')return;
+function pqrsFueRadicadaPorCorreo(e){
+  if(!e)return false;
+  if(typeof normMedioRecepcionPqrs==='function'&&normMedioRecepcionPqrs(e.f_f2||'')==='Correo')return true;
+  if(e._gmail_message_id)return true;
+  if(typeof getPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e);
+    if(wf&&String(wf.tipo_radicacion||'').indexOf('correo')>=0)return true;
+  }
+  return false;
+}
+async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMsg){
+  if(!e||!oficina||!expId)return false;
+  if(!pqrsFueRadicadaPorCorreo(e))return false;
   const gmailMsgId=e._gmail_message_id||'';
-  if(!gmailMsgId)return;
-  let msg=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+  if(!gmailMsgId)return false;
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  if(!tokOk)return false;
+  let msg=prefetchedMsg||null;
+  if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
+  if(!msg&&typeof _gmailFetchMessageFull==='function'){
+    msg=await _gmailFetchMessageFull(gmailMsgId);
+    if(msg)_gmailCurrentMsg=msg;
+  }
+  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
+  }
+  if(!msg||typeof reenviarEmailAOficina!=='function')return false;
+  try{
+    const ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true});
+    if(ok&&typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
+    return ok;
+  }catch(err){
+    console.warn('reenvio oficina:',err);
+    return false;
+  }
+}
+async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
+  if(!e||!oficina)return;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk){
     notif('⚠️ PQRSD trasladada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja y reenvíe manualmente.','warn');
     return;
   }
-  if(!msg&&typeof _gmailFetchMessageFull==='function'){
-    msg=await _gmailFetchMessageFull(gmailMsgId);
-    if(msg) _gmailCurrentMsg=msg;
-  }
-  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
-    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
-  }
-  if(msg&&typeof reenviarEmailAOficina==='function'){
-    try{await reenviarEmailAOficina(msg,oficina,expId);if(typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);}catch(err){console.warn('reenvio oficina:',err);notif('⚠️ Traslado registrado, pero falló el reenvío del correo.','warn');}
-  }else{
-    notif('⚠️ PQRSD trasladada, pero no se pudo reenviar el correo a la oficina.','warn');
+  const ok=await reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId);
+  if(!ok&&pqrsFueRadicadaPorCorreo(e)&&(e._gmail_message_id||'')){
+    notif('⚠️ Traslado registrado, pero falló el reenvío del correo a '+labelOficina(oficina)+'.','warn');
   }
 }
 // Genera HTML con TODOS los links de adjuntos Drive de una PQRSD
@@ -708,8 +730,7 @@ function pqrsAccionesTablaHtml(e){
   // Responder directo (offices + NCA encargado + secretary)
   if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
     if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
-    // También ofrecer responder directamente por correo desde Correos
-    if(puedeMarcarPqrsRespondida(e)&&(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid()||typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()))
+    if(puedeMarcarPqrsRespondida(e)&&!esSecretaria()&&(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid()||typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()))
       h+='<button type="button" class="btn bsm" title="Abrir compose en el módulo Correos para responder al ciudadano" onclick="event.stopPropagation();gmailOfiAbrirComposeRespuestaPqrs(\''+id+'\')">📧 Enviar correo</button> ';
   }
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))h+=pqrsBtnEdit(e._exp,'Editar')+' ';
@@ -1059,15 +1080,18 @@ async function submitEditPqrsSecretaria(expId){
   // Subir nuevos archivos si hay token
   if(nuevosFiles.length&&typeof driveUploadInstitutional==='function'){
     const usaDrive=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has('guaviare');
-    const hayTok=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid());
-    if(usaDrive&&hayTok){
+    if(usaDrive){
+      const driveOk=typeof sstSolicitarDriveParaPqrs==='function'?await sstSolicitarDriveParaPqrs(e):false;
+      if(!driveOk){notif('Conecte Drive institucional para subir anexos','warn');}
+      else{
       const nombreCarpeta=e._qd_nombre||e._pn_nombre||e._pj_empresa||expId;
       const fechaRef=e._fecha||e._fecha_solicitud||'';
       for(const f of nuevosFiles){
         try{
           const up=await driveUploadInstitutional(f,'ANEXO PQRSD '+expId+' '+f.name,f.type||'application/octet-stream','radicacion_ventanilla',expId,nombreCarpeta,fechaRef,{expediente:e,uploadTarget:'solicitud'});
-          attsRestantes.push({nombre:f.name,driveLink:up.driveLink,previewLink:up.previewLink||'',fileId:up.fileId||'',tipo:'archivo'});
+          attsRestantes.push({nombre:f.name,driveLink:up.driveLink,previewLink:up.previewLink||'',fileId:up.fileId||'',tipo:'archivo',mime:f.type||''});
         }catch(err){notif('No se pudo subir '+f.name+': '+String(err.message||err).slice(0,60),'warn');}
+      }
       }
     }else{
       notif('Para subir nuevos anexos conecte su correo (Gmail/Drive)','warn');
@@ -1192,10 +1216,8 @@ async function submitTrasladoPqrsInicial(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  delete e._pqrs_matriz_fila;
   await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
   persistExpedienteGranular(e);
-  if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
   closeTaskModal();
   notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
   renderBandejaDepto();
@@ -1246,10 +1268,8 @@ function submitTrasladoPqrsInterOficina(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  delete e._pqrs_matriz_fila;
   tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(function(){
     persistExpedienteGranular(e);
-    if(typeof pqrsMatrizSyncAfterSave==='function')pqrsMatrizSyncAfterSave(e,{silent:true,notifyOnError:false});
     closeTaskModal();
     notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
     renderBandejaDepto();

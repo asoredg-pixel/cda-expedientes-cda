@@ -480,9 +480,6 @@ function persistExpedienteGranular(exp,withGlobal){
       }
       return;
     }
-    if((exp._es_pqrs||exp._radicado_secretaria)&&typeof pqrsMatrizSyncAfterSave==='function'){
-      pqrsMatrizSyncAfterSave(exp,{silent:true,notifyOnError:true});
-    }
   }).catch(function(err){
     updateSyncIndicator('error');
     console.error('persistExpedienteGranular catch:',err);

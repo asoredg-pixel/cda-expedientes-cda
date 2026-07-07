@@ -1,6 +1,6 @@
 // =============================================================================
 // pqrs-matriz-sheets.js — Consecutivo PQRSD (AAMMNNN) y helpers legacy Sheets API.
-// Al guardar PQRSD: persistExpedienteGranular → pqrsMatrizSyncAfterSave → actualiza fila XLSX en Drive.
+// Al guardar PQRSD: la matriz oficial se descarga desde Consulta (📊 Matriz PQRSD).
 // =============================================================================
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
@@ -759,43 +759,11 @@ function _pqrsMatrizSyncNotify(opts) {
 }
 
 function pqrsMatrizSyncAfterDelete(e, opts) {
-  opts = opts || {};
-  const notify = _pqrsMatrizSyncNotify(opts);
-  if (typeof pqrsMatrizPublicarEnDriveAsync !== 'function') return Promise.resolve(null);
-  return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(res) {
-    if (res && res.noToken && (opts.warnNoToken || notify) && typeof notif === 'function') {
-      notif('⚠️ Conecte Gmail (Secretaría) para actualizar la matriz PQRSD en Drive.', 'warn');
-    }
-    return res;
-  });
+  return Promise.resolve(null);
 }
 
 function pqrsMatrizSyncAfterSave(e, opts) {
-  opts = opts || {};
-  const notify = _pqrsMatrizSyncNotify(opts);
-  if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return Promise.resolve(null);
-
-  const xlsxP = typeof pqrsMatrizDriveUpdateExpedienteRow === 'function'
-    ? pqrsMatrizDriveUpdateExpedienteRow(e, opts).catch(function(err) {
-      console.warn('pqrsMatrizDriveUpdateExpedienteRow:', err);
-      return { ok: false, error: err };
-    })
-    : Promise.resolve(null);
-
-  return xlsxP.then(function(xlsxRes) {
-    if (xlsxRes && xlsxRes.noToken && notify && typeof notif === 'function') {
-      notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
-    }
-    if (xlsxRes && (xlsxRes.notFound || xlsxRes.noFile) && typeof pqrsMatrizPublicarEnDriveAsync === 'function') {
-      return pqrsMatrizPublicarEnDriveAsync({ silent: true, notifyOnError: notify }).then(function(pubRes) {
-        if (pubRes && pubRes.noToken && notify && typeof notif === 'function') {
-          notif('⚠️ Conecte Gmail (Secretaría o Correos) para actualizar la matriz PQRSD en Drive.', 'warn');
-        }
-        return pubRes;
-      });
-    }
-    return xlsxRes;
-  });
+  return Promise.resolve(null);
 }
 
 async function sugerirNumeroPqrsDesdeMatriz(fechaRef) {

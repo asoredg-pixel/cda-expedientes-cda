@@ -5,6 +5,8 @@
 // =============================================================================
 // TABLA REGISTRO
 // ================================================================
+const REG_TABLA_PAGE=10;
+const REG_TABLA_MAX=30;
 function renderTabla(){
   poblarTramSelect();
   const q=(document.getElementById('sreg').value||'').toLowerCase();
@@ -19,11 +21,18 @@ function renderTabla(){
     return m&&(!ft||e._tramite===ft)&&(!fe||e._estado===fe)&&mter;
   });
   if(esUsuarioContratista())list=list.filter(expVisibleParaContratista);
+  list=list.slice().sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
+  const filterKey=q+'|'+ft+'|'+fe+'|'+fter;
+  if(window._regTablaFilterKey!==filterKey){window._regTablaShown=REG_TABLA_PAGE;window._regTablaFilterKey=filterKey;}
   document.getElementById('cnt-bdg').textContent=expsAmbito().length;
   const tb=document.getElementById('tbl-reg');
+  const moreBtn=document.getElementById('reg-tabla-more');
   const soloLec=esSoloLectura();
-  if(!list.length){tb.innerHTML='<tr><td colspan="8" class="emp">Sin expedientes.</td></tr>';return;}
-  tb.innerHTML=list.map(e=>{
+  if(!list.length){tb.innerHTML='<tr><td colspan="8" class="emp">Sin expedientes.</td></tr>';if(moreBtn)moreBtn.style.display='none';return;}
+  if(window._regTablaShown==null)window._regTablaShown=REG_TABLA_PAGE;
+  const lim=Math.min(window._regTablaShown,REG_TABLA_MAX,list.length);
+  const slice=list.slice(0,lim);
+  tb.innerHTML=slice.map(e=>{
     const ter=calcTerminos(e);
     const myPend=esModoResponsable()&&responsableActivo?(e.tasks||[]).filter(t=>t.responsable===responsableActivo&&estadoTask(t)!=='Atendida'):[];
     const pendHtml=myPend.length?'<div style="font-size:11px;color:var(--pu)">'+myPend.length+' actividad(es) suya(s) pendiente(s)</div>':'';
@@ -41,6 +50,19 @@ function renderTabla(){
       '<td>'+flagsHtml(e,true)+'</td>'+
       '<td style="white-space:nowrap">'+acts+'</td></tr>';
   }).join('');
+  if(moreBtn){
+    const rest=Math.min(list.length,REG_TABLA_MAX)-lim;
+    if(rest>0){
+      moreBtn.style.display='';
+      moreBtn.textContent='Ver 10 más ('+rest+' restantes, máx. '+REG_TABLA_MAX+') — anteriores en Consulta';
+    }else{
+      moreBtn.style.display='none';
+    }
+  }
+}
+function regTablaVerMas(){
+  window._regTablaShown=Math.min((window._regTablaShown||REG_TABLA_PAGE)+REG_TABLA_PAGE,REG_TABLA_MAX);
+  renderTabla();
 }
 
 // ================================================================

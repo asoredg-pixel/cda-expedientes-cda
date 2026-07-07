@@ -625,11 +625,16 @@ function refreshPqrsDetalleViews(expId){
   }
   if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
 }
-function openPqrsRespuestaModal(expId,opts){
+async function openPqrsRespuestaModal(expId,opts){
   opts=opts||{};
   const fromGmail=!!opts.fromGmail;
-  const gmailMsg=opts.gmailMsg||null;
   let e=expId?exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim()):null;
+  const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
+  if(usaDriveInst&&typeof sstSolicitarDriveParaPqrs==='function'){
+    const ok=await sstSolicitarDriveParaPqrs(e);
+    if(!ok)return;
+  }
+  const gmailMsg=opts.gmailMsg||null;
   if(!fromGmail){
     if(!e||!puedeMarcarPqrsRespondida(e)){notif('No puede registrar respuesta para esta PQRSD','err');return;}
   }else if(e&&(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))){
@@ -649,7 +654,6 @@ function openPqrsRespuestaModal(expId,opts){
   const mkCan=(v,lbl,ico)=>'<button type="button" class="btn bsm canal-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespCanal(\''+jsStr(v)+'\')">'+ico+' '+escAttr(lbl)+'</button>';
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   const asuntoMail='Respuesta a su '+((e&&e._tipo_solicitud)||'solicitud PQRSD')+' — '+(expLabel||'');
-  const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
   const adjInfo=usaDriveInst
     ?'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Los archivos se suben a la carpeta <em>Respuesta</em> de la PQRSD en Drive. Conecte Gmail/Drive si va a adjuntar.</div>'
     :'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue el link de Drive de su carpeta personal.</div>';
@@ -1000,7 +1004,7 @@ async function submitPqrsRespuesta(expId){
   const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
   const nombreCarpeta=(e._qd_nombre||e._nombre||e._pn_nombre||expId);
   if(usaDriveInst&&adj.files&&adj.files.length){
-    const driveOk=await (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true));
+    const driveOk=typeof sstSolicitarDriveParaPqrs==='function'?await sstSolicitarDriveParaPqrs(e):(typeof sstSolicitarGmailParaAdjuntar==='function'?await sstSolicitarGmailParaAdjuntar():Promise.resolve(true));
     if(!driveOk){
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar y cerrar PQRSD';}
       return;
@@ -1307,12 +1311,6 @@ function eliminarPqrs(expId){
       return;
     }
     exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
-    let sheetWarn='';
-    if(typeof pqrsMatrizSyncAfterDelete==='function'){
-      const sheetRes=await pqrsMatrizSyncAfterDelete(expRef,{silent:true,notifyOnError:true});
-      if(sheetRes&&sheetRes.error)sheetWarn=' (matriz Drive no actualizada)';
-      else if(sheetRes&&sheetRes.noToken)sheetWarn=' (conecte Gmail para actualizar la matriz)';
-    }
     logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
@@ -1320,7 +1318,7 @@ function eliminarPqrs(expId){
     renderSecretariaPqrs();
     renderPqrsOficinaInbox();
     renderTabla();
-    notif('PQRSD eliminada'+sheetWarn,'ok');
+    notif('PQRSD eliminada','ok');
   });
 }
 function getSecretariaPqrsAll(){
@@ -3652,7 +3650,11 @@ function parseDrivePreviewUrl(url){
   }
   const m2=u.match(/[?&]id=([^&]+)/);
   if(!id&&m2)id=m2[1];
-  if(id)return{url:'https://drive.google.com/file/d/'+id+'/view',preview:'https://drive.google.com/file/d/'+id+'/preview',valid:true,id};
+  if(id){
+    const isImg=/\.(png|jpe?g|gif|webp|bmp)$/i.test(u)||/^image\//i.test(u);
+    if(isImg)return{url:'https://drive.google.com/file/d/'+id+'/view',preview:'https://drive.google.com/uc?export=view&id='+id,valid:true,id};
+    return{url:'https://drive.google.com/file/d/'+id+'/view',preview:'https://drive.google.com/file/d/'+id+'/preview',valid:true,id};
+  }
   if(/^https?:\/\//i.test(u))return{url:u,preview:u,valid:true,id:''};
   return{url:u,preview:'',valid:false,id:''};
 }
@@ -4527,18 +4529,26 @@ function soporteEsImagen(s){
   const t=s.tipo||'';
   return (t&&t.startsWith('image/'))||/^data:image\//i.test(src)||/\.(png|jpe?g|gif|webp)$/i.test(s.label||'');
 }
+function soporteEsExcel(s){
+  const t=s.tipo||'';
+  return/(spreadsheet|excel|ms-excel)/i.test(t)||/\.(xlsx?|csv)$/i.test(s.label||'');
+}
 function renderSoporteEmbedHtml(sel){
   const src=sel.preview||sel.url;
   if(soporteEsImagen(sel)){
-    return '<img id="soporte-iframe" class="soporte-local-img" src="'+escAttr(src)+'" alt="'+escAttr(sel.label||'Adjunto')+'">';
+    const imgSrc=/^https:\/\/drive\.google\.com\/uc\?/i.test(src)?src:(function(){
+      const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(sel.url||src):{preview:src};
+      return p.preview||src;
+    })();
+    return '<img id="soporte-iframe" class="soporte-local-img" src="'+escAttr(imgSrc)+'" alt="'+escAttr(sel.label||'Adjunto')+'" style="max-width:100%;max-height:100%;object-fit:contain">';
   }
   if(soporteEsVideo(sel)){
     return '<video id="soporte-iframe" class="soporte-local-vid" controls style="width:100%;height:100%;object-fit:contain;background:#000" src="'+escAttr(src)+'"></video>';
   }
-  if(soporteEsWord(sel)){
-    return '<div style="padding:1.2rem;text-align:center;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'+
-      '<div style="font-size:13px;color:var(--tx2)">Documento Word — descargue para revisar</div>'+
-      '<a class="btn bsm bp" href="'+escAttr(sel.url||src)+'" download="'+escAttr(sel.label||'documento')+'">Descargar / abrir</a></div>';
+  if(soporteEsWord(sel)||soporteEsExcel(sel)){
+    const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(sel.url||src):{preview:src};
+    const emb=p.preview||src;
+    return '<iframe id="soporte-iframe" sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(emb)+'" title="Vista previa documento" style="width:100%;height:100%;border:0"></iframe>';
   }
   return '<iframe id="soporte-iframe" sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(src)+'" title="Vista previa documento"></iframe>';
 }
@@ -6789,7 +6799,7 @@ function taskComentarioAutor(){
   if((esModoResponsable()||esVistaActividadesDepto())&&responsableActivo)return responsableActivo;
   return labelDepto(getDeptoOperativo())+' (asignador)';
 }
-function respMarcarPorVerificar(expId,taskId){
+async function respMarcarPorVerificar(expId,taskId){
   if(esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable','err');return;}
   if(esVistaActividadesDepto())ensureEncargadoActivo();
   let t=getTaskAny(expId,taskId);
@@ -6799,6 +6809,19 @@ function respMarcarPorVerificar(expId,taskId){
   if(esModoResponsable()&&!taskUsuarioEsAsignado(t,responsableActivo)){notif('Actividad no asignada a usted','err');return;}
   if(esModoResponsable()&&!puedeReportarTask(t,responsableActivo)&&estadoTaskForAsignado(t,responsableActivo)!=='Por verificar'){notif('No puede reportar esta actividad en su estado actual','err');return;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está finalizada','err');return;}
+  const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
+  if(usaDriveInst){
+    const ePqrs=getExpById(expId);
+    const tPqrs=ePqrs?getTaskFromExp(ePqrs,taskId):t;
+    const esPqrsTask=ePqrs&&tPqrs&&taskEsAtenderPqrs(tPqrs,ePqrs);
+    if(esPqrsTask&&typeof sstSolicitarDriveParaPqrs==='function'){
+      const ok=await sstSolicitarDriveParaPqrs(ePqrs);
+      if(!ok)return;
+    }else if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+      const ok=await sstSolicitarGmailParaAdjuntar({force:true});
+      if(!ok)return;
+    }
+  }
   if(esEncOwn){
     const ePqrs=getExpById(expId);
     const tPqrs=ePqrs?getTaskFromExp(ePqrs,taskId):t;
