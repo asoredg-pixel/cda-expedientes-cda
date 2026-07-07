@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260706e">
+<link rel="stylesheet" href="css/sst.css?v=20260706i">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260706g"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260706h"></script>
+<script src="js/core.js?v=20260706i"></script>
 <script src="js/formulario.js?v=20260706d"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -33,11 +33,11 @@
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260706f"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260706h"></script>
-<script src="js/pqrs.js?v=20260706g"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260706h"></script>
+<script src="js/gmail.js?v=20260706i"></script>
+<script src="js/pqrs.js?v=20260706i"></script>
 <script src="js/recursos.js?v=20260702t"></script>
-<script src="js/ingreso.js?v=20260706e"></script>
+<script src="js/ingreso.js?v=20260706i"></script>
 </head>
 <body>
 <div id="storage-full-banner" class="storage-full-banner" role="alert">
@@ -55,13 +55,13 @@
 </div>
 <div id="gmail-sesion-overlay" class="gmail-sesion-overlay" aria-hidden="true">
   <div class="gmail-sesion-box">
-    <div class="gmail-sesion-icon" aria-hidden="true">📧</div>
-    <h2 class="gmail-sesion-tit">Conexión Gmail requerida</h2>
-    <p class="gmail-sesion-txt">Para continuar usando el sistema debe reconectar su correo institucional o volver a iniciar sesión.</p>
-    <p class="gmail-sesion-txt gmail-sesion-txt-sm">La conexión dura aproximadamente 1 hora; al expirar, la sesión se cerrará automáticamente.</p>
+    <div class="gmail-sesion-icon" aria-hidden="true">☁️</div>
+    <h2 class="gmail-sesion-tit">Conectar Gmail / Drive</h2>
+    <p class="gmail-sesion-txt">Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.</p>
+    <p class="gmail-sesion-txt gmail-sesion-txt-sm">Puede seguir navegando sin conectar. La conexión dura ~1 hora; el botón <strong>Drive</strong> junto a la campanita muestra el tiempo restante.</p>
     <div class="gmail-sesion-btns">
-      <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar correo Gmail</button>
-      <button type="button" class="btn bs hdr-sesion-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
+      <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar Gmail / Drive</button>
+      <button type="button" class="btn bs" onclick="sstCerrarGmailAttachModal(false)">Continuar sin conectar</button>
     </div>
   </div>
 </div>
@@ -134,6 +134,10 @@
     <button class="tab" onclick="showTab('cfg')" id="tab-cfg"><span class="tab-ico" aria-hidden="true">⚙️</span><span class="tab-lbl">Config</span></button>
   </div>
   <div class="tabs-right" id="depto-inbox-wrap" style="display:none">
+    <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">
+      <span class="sst-drive-status-dot" aria-hidden="true"></span>
+      <span class="sst-drive-status-label" id="sst-drive-status-label">Drive</span>
+    </button>
     <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja — chat de actividades y solicitudes de traslado o eliminación">
       🔔<span class="inbox-badge" id="depto-inbox-badge"></span>
     </button>

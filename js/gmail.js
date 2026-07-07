@@ -111,10 +111,14 @@ function gmailGetToken() {
   try { return sessionStorage.getItem(GMAIL_TOKEN_KEY) || ''; } catch (e) { return ''; }
 }
 let _gmailTokenWarnTimer = null;
+let _gmailTokenRefreshTimer = null;
 let _gmailTokenExpiryTimer = null;
 let _gmailOfiTokenExpiryTimer = null;
 let _sstGmailAutoConnectScheduled = false;
 let _sstGmailExpiryWarnShown = false;
+let _sstGmailDriveStatusInterval = null;
+const SST_GMAIL_DRIVE_WARN_MS = 60000;
+const SST_GMAIL_DRIVE_REFRESH_MS = 1200000;
 function gmailSetToken(tok, expiresInSec) {
   try {
     if (tok) {
@@ -124,18 +128,28 @@ function gmailSetToken(tok, expiresInSec) {
       _sstGmailExpiryWarnShown = false;
       _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'sec');
+      if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
     } else {
       sessionStorage.removeItem(GMAIL_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_TOKEN_EXP_KEY);
       if (_gmailTokenWarnTimer) { clearTimeout(_gmailTokenWarnTimer); _gmailTokenWarnTimer = null; }
+      if (_gmailTokenRefreshTimer) { clearTimeout(_gmailTokenRefreshTimer); _gmailTokenRefreshTimer = null; }
       _gmailClearExpiryTimer('sec');
     }
   } catch (e) {}
 }
 function _gmailScheduleTokenWarning(expMs) {
   if (_gmailTokenWarnTimer) clearTimeout(_gmailTokenWarnTimer);
-  const warn10 = expMs - Date.now() - 600000;
-  if (warn10 > 0) {
+  if (_gmailTokenRefreshTimer) clearTimeout(_gmailTokenRefreshTimer);
+  const refreshAt = expMs - Date.now() - SST_GMAIL_DRIVE_REFRESH_MS;
+  if (refreshAt > 0) {
+    _gmailTokenRefreshTimer = setTimeout(function() {
+      _gmailTokenRefreshTimer = null;
+      _gmailTrySilentTokenRefresh();
+    }, refreshAt);
+  }
+  const warnAt = expMs - Date.now() - SST_GMAIL_DRIVE_WARN_MS;
+  if (warnAt > 0) {
     _gmailTokenWarnTimer = setTimeout(function() {
       if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) return;
       if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
@@ -143,15 +157,33 @@ function _gmailScheduleTokenWarning(expMs) {
       _sstGmailExpiryWarnShown = true;
       if (typeof confirmPrecaucion === 'function') {
         confirmPrecaucion({
-          title: 'Sesión de correo por expirar',
-          message: 'En aproximadamente 10 minutos caducará la conexión Gmail (~1 hora). Al expirar se cerrará su sesión y deberá ingresar de nuevo para reconectar el correo y continuar.',
+          title: 'Conexión Drive por expirar',
+          message: 'En 1 minuto caducará la conexión Gmail/Drive. Después podrá seguir navegando, pero deberá reconectar para adjuntar archivos o radicar con anexos.',
           confirmLabel: 'Entendido',
           tone: 'warn',
           hideCancel: true
         }, function() {});
       }
-    }, warn10);
+    }, warnAt);
   }
+}
+function _gmailTrySilentTokenRefresh() {
+  if (_gmailConnecting) return;
+  if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
+  const clientId = _gmailGetClientId();
+  if (!clientId || !_gmailGisReady()) return;
+  const useSec = typeof esSecretaria === 'function' && esSecretaria();
+  const scope = useSec ? GMAIL_SCOPES : GMAIL_OFI_SCOPES;
+  _gmailStartOAuth(scope, function(tok, exp) {
+    if (useSec) {
+      gmailSetToken(tok, exp);
+    } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
+      _gmailOfiValidarYGuardarToken(tok, exp);
+    } else {
+      gmailOfiSetToken(tok, exp);
+    }
+    if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+  }, '');
 }
 function _gmailClearExpiryTimer(which) {
   if (which === 'ofi') {
@@ -176,9 +208,12 @@ function _gmailScheduleTokenExpiry(expMs, which) {
 function sstRescheduleGmailExpiryTimers() {
   try {
     const secExp = parseInt(sessionStorage.getItem(GMAIL_TOKEN_EXP_KEY) || '0', 10);
-    if (secExp > Date.now()) _gmailScheduleTokenExpiry(secExp, 'sec');
     const ofiExp = parseInt(sessionStorage.getItem(GMAIL_OFI_TOKEN_EXP_KEY) || '0', 10);
-    if (ofiExp > Date.now()) _gmailScheduleTokenExpiry(ofiExp, 'ofi');
+    const now = Date.now();
+    if (secExp > now) _gmailScheduleTokenExpiry(secExp, 'sec');
+    if (ofiExp > now) _gmailScheduleTokenExpiry(ofiExp, 'ofi');
+    const best = Math.max(secExp, ofiExp);
+    if (best > now) _gmailScheduleTokenWarning(best);
   } catch (e) {}
 }
 function sstRolRequiereGmailConectado() {
@@ -191,20 +226,112 @@ function sstGmailSesionActiva() {
   return (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) ||
     (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid());
 }
-function renderSstGmailSesionBloqueo() {
-  const ov = document.getElementById('gmail-sesion-overlay');
-  if (!ov) return;
-  const need = sstRolRequiereGmailConectado();
-  const ok = sstGmailSesionActiva();
-  ov.classList.toggle('on', need && !ok);
-  ov.setAttribute('aria-hidden', need && !ok ? 'false' : 'true');
-  document.body.classList.toggle('gmail-sesion-bloqueado', need && !ok);
+function sstGmailDriveExpiryMs() {
+  let best = 0;
+  try {
+    const sec = parseInt(sessionStorage.getItem(GMAIL_TOKEN_EXP_KEY) || '0', 10);
+    const ofi = parseInt(sessionStorage.getItem(GMAIL_OFI_TOKEN_EXP_KEY) || '0', 10);
+    const now = Date.now();
+    if (sec > now) best = Math.max(best, sec);
+    if (ofi > now) best = Math.max(best, ofi);
+  } catch (e) {}
+  return best;
 }
-function sstOnGmailTokenExpiradoCheck() {
-  if (!sstRolRequiereGmailConectado()) {
-    renderSstGmailSesionBloqueo();
+function sstFormatDriveCountdown(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  return m + ':' + String(sec).padStart(2, '0');
+}
+function sstRenderGmailDriveStatusBtn() {
+  const btn = document.getElementById('sst-drive-status-btn');
+  const label = document.getElementById('sst-drive-status-label');
+  if (!btn) return;
+  const show = typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado();
+  btn.style.display = show ? '' : 'none';
+  if (!show) return;
+  btn.classList.remove('sst-drive-ok', 'sst-drive-warn', 'sst-drive-expired');
+  const connected = sstGmailSesionActiva();
+  const expMs = sstGmailDriveExpiryMs();
+  const rem = expMs - Date.now();
+  if (!connected || rem <= 0) {
+    btn.classList.add('sst-drive-expired');
+    if (label) label.textContent = 'Drive · Conectar';
+    btn.title = 'Conecte Gmail/Drive para adjuntar archivos al expediente';
     return;
   }
+  const txt = sstFormatDriveCountdown(rem);
+  if (label) label.textContent = 'Drive · ' + txt;
+  btn.title = 'Conexión Drive activa · ' + txt + ' restantes';
+  if (rem <= 300000) btn.classList.add('sst-drive-warn');
+  else btn.classList.add('sst-drive-ok');
+}
+function sstStartGmailDriveStatusTick() {
+  if (_sstGmailDriveStatusInterval) return;
+  sstRenderGmailDriveStatusBtn();
+  _sstGmailDriveStatusInterval = setInterval(function() {
+    if (!document.body.classList.contains('sesion-activa')) return;
+    sstRenderGmailDriveStatusBtn();
+  }, 1000);
+}
+function sstToggleDriveConnectPanel(ev) {
+  if (ev) ev.stopPropagation();
+  if (sstGmailSesionActiva()) {
+    const rem = sstGmailDriveExpiryMs() - Date.now();
+    if (typeof notif === 'function') {
+      notif(rem > 0
+        ? 'Conexión Drive activa · ' + sstFormatDriveCountdown(rem) + ' restantes'
+        : 'Conexión Drive expirada — reconecte para adjuntar archivos', rem > 0 ? 'ok' : 'warn');
+    }
+    return;
+  }
+  sstAbrirGmailDriveModal();
+}
+function sstAbrirGmailDriveModal() {
+  const ov = document.getElementById('gmail-sesion-overlay');
+  if (!ov) return;
+  ov.classList.add('on');
+  ov.setAttribute('aria-hidden', 'false');
+}
+function sstCerrarGmailAttachModal(success) {
+  const ov = document.getElementById('gmail-sesion-overlay');
+  if (ov) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+  if (window._sstGmailAttachCb) {
+    const cb = window._sstGmailAttachCb;
+    window._sstGmailAttachCb = null;
+    cb(!!success);
+  }
+}
+function sstFinalizeGmailConnect() {
+  renderSstGmailSesionBloqueo();
+  if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+  if (sstGmailSesionActiva()) sstCerrarGmailAttachModal(true);
+}
+function sstSolicitarGmailParaAdjuntar() {
+  if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) {
+    return Promise.resolve(true);
+  }
+  if (sstGmailSesionActiva()) return Promise.resolve(true);
+  return new Promise(function(resolve) {
+    window._sstGmailAttachCb = resolve;
+    sstAbrirGmailDriveModal();
+  });
+}
+function renderSstGmailSesionBloqueo() {
+  const ov = document.getElementById('gmail-sesion-overlay');
+  if (ov && !window._sstGmailAttachCb) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+  document.body.classList.remove('gmail-sesion-bloqueado');
+  sstRenderGmailDriveStatusBtn();
+}
+function sstOnGmailTokenExpiradoCheck() {
   if (sstGmailSesionActiva()) {
     renderSstGmailSesionBloqueo();
     return;
@@ -215,32 +342,33 @@ function sstOnGmailTokenExpiradoForceLogout() {
   if (typeof gmailDisconnect === 'function') gmailDisconnect();
   if (typeof gmailOfiDisconnect === 'function') gmailOfiDisconnect();
   renderSstGmailSesionBloqueo();
+  if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
   if (typeof notif === 'function') {
-    notif('La conexión Gmail expiró (1 hora). Debe ingresar de nuevo y reconectar el correo.', 'err');
+    notif('Conexión Gmail/Drive expirada. Puede seguir navegando; reconecte para adjuntar archivos o radicar con anexos.', 'warn');
   }
-  if (typeof cerrarSesionGoogle === 'function') cerrarSesionGoogle();
-  else if (typeof salirDeSesionApp === 'function') salirDeSesionApp();
 }
-function sstConectarGmailObligatorio() {
+function sstConectarGmailObligatorio(doneCb) {
   if (!sstRolRequiereGmailConectado() || sstGmailSesionActiva()) {
-    renderSstGmailSesionBloqueo();
+    sstFinalizeGmailConnect();
+    if (doneCb) doneCb(sstGmailSesionActiva());
     return;
   }
   const btn = document.getElementById('gmail-sesion-connect-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
-  const done = function() {
-    if (btn) { btn.disabled = false; btn.textContent = 'Conectar correo Gmail'; }
-    renderSstGmailSesionBloqueo();
+  const finish = function() {
+    if (btn) { btn.disabled = false; btn.textContent = 'Conectar Gmail / Drive'; }
+    sstFinalizeGmailConnect();
+    if (doneCb) doneCb(sstGmailSesionActiva());
   };
   if (typeof esSecretaria === 'function' && esSecretaria()) {
-    gmailConnect(done);
+    gmailConnect(finish);
     return;
   }
   if (typeof gmailOfiConnect === 'function') {
-    gmailOfiConnect();
+    gmailOfiConnect(finish);
     return;
   }
-  gmailConnect(done);
+  gmailConnect(finish);
 }
 function sstIniciarGmailObligatorio() {
   if (!sstRolRequiereGmailConectado()) {
@@ -248,22 +376,16 @@ function sstIniciarGmailObligatorio() {
     return;
   }
   sstRescheduleGmailExpiryTimers();
+  sstStartGmailDriveStatusTick();
   renderSstGmailSesionBloqueo();
-  if (sstGmailSesionActiva()) return;
-  if (_sstGmailAutoConnectScheduled || _gmailConnecting) return;
-  _sstGmailAutoConnectScheduled = true;
-  setTimeout(function() {
-    _sstGmailAutoConnectScheduled = false;
-    if (!sstRolRequiereGmailConectado() || sstGmailSesionActiva()) {
-      renderSstGmailSesionBloqueo();
-      return;
-    }
-    sstConectarGmailObligatorio();
-  }, 600);
 }
 window.sstConectarGmailObligatorio = sstConectarGmailObligatorio;
 window.renderSstGmailSesionBloqueo = renderSstGmailSesionBloqueo;
 window.sstIniciarGmailObligatorio = sstIniciarGmailObligatorio;
+window.sstSolicitarGmailParaAdjuntar = sstSolicitarGmailParaAdjuntar;
+window.sstCerrarGmailAttachModal = sstCerrarGmailAttachModal;
+window.sstToggleDriveConnectPanel = sstToggleDriveConnectPanel;
+window.sstRenderGmailDriveStatusBtn = sstRenderGmailDriveStatusBtn;
 function gmailIsTokenValid() {
   const tok = gmailGetToken();
   if (!tok) return false;
@@ -280,6 +402,7 @@ function gmailConnect(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp);
     notif('Bandeja conectada correctamente.', 'ok');
+    if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
     if (typeof callback === 'function') callback();
     else gmailLoadInbox();
   });
@@ -2593,6 +2716,7 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
       _sstGmailExpiryWarnShown = false;
       _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'ofi');
+      if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
       if (accountEmail) sessionStorage.setItem(GMAIL_OFI_ACCOUNT_KEY, String(accountEmail).trim().toLowerCase());
     } else {
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_KEY);
@@ -2633,13 +2757,15 @@ function gmailOfiIsTokenValid() {
 }
 
 // ---- Connect / disconnect ----
-function gmailOfiConnect() {
+function gmailOfiConnect(callback) {
   if (_gmailOfiIsSecretaria()) {
     if (gmailIsTokenValid()) {
       _updateGmailOfiBtn();
       gmailOfiFolder('INBOX');
       gmailOfiLoadLabels();
       if (!_gmailOfiSignature) _gmailOfiLoadSignature();
+      if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
+      if (callback) callback();
       return;
     }
     gmailConnect(function() {
@@ -2647,6 +2773,8 @@ function gmailOfiConnect() {
       gmailOfiFolder('INBOX');
       gmailOfiLoadLabels();
       _gmailOfiLoadSignature();
+      if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
+      if (callback) callback();
     });
     return;
   }
@@ -2654,6 +2782,7 @@ function gmailOfiConnect() {
     const ok = await _gmailOfiValidarYGuardarToken(tok, exp);
     if (!ok) {
       _updateGmailOfiBtn();
+      if (callback) callback();
       return;
     }
     _updateGmailOfiBtn();
@@ -2661,6 +2790,8 @@ function gmailOfiConnect() {
     gmailOfiFolder('INBOX');
     gmailOfiLoadLabels();
     _gmailOfiLoadSignature();
+    if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
+    if (callback) callback();
   });
 }
 window.gmailOfiConnect = gmailOfiConnect;

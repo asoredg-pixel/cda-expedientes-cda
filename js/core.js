@@ -673,7 +673,7 @@ function openPqrsRespuestaModal(expId){
     '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documentos adjuntos (soporte notificación)</label>'+adjInfo+
     '<div id="pqrs-resp-adj-rows" style="margin-top:6px"></div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">'+
-    (usaDriveInst&&hayToken?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
+    (usaDriveInst?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
     '<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow()">🔗 + Link Drive</button>'+
     '</div></div>'+
 
@@ -718,14 +718,17 @@ function pqrsRespRefreshModalUi(){
   if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
 }
 function pqrsComposeAddAttachment(){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='*/*';
-  inp.onchange=function(){
-    window._pqrsComposeAttachments=window._pqrsComposeAttachments||[];
-    Array.from(inp.files||[]).forEach(function(f){window._pqrsComposeAttachments.push(f);});
-    pqrsComposeRenderAttachments();
-  };
-  inp.click();
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+    if(!ok)return;
+    const inp=document.createElement('input');
+    inp.type='file';inp.multiple=true;inp.accept='*/*';
+    inp.onchange=function(){
+      window._pqrsComposeAttachments=window._pqrsComposeAttachments||[];
+      Array.from(inp.files||[]).forEach(function(f){window._pqrsComposeAttachments.push(f);});
+      pqrsComposeRenderAttachments();
+    };
+    inp.click();
+  });
 }
 function pqrsComposeRenderAttachments(){
   const box=document.getElementById('pqrs-compose-att-list');
@@ -754,25 +757,28 @@ function setPqrsRespCanal(val){
   pqrsRespRefreshModalUi();
 }
 function addPqrsRespAdjFile(boxId){
-  const boxSel=boxId||'pqrs-resp-adj-rows';
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='*/*';
-  inp.onchange=function(){
-    const box=document.getElementById(boxSel);
-    if(!box)return;
-    Array.from(inp.files||[]).forEach(f=>{
-      const row=document.createElement('div');
-      row.className='fx pqrs-adj-file-row';
-      row.style.cssText='gap:6px;margin-bottom:5px;align-items:center;padding:5px;background:var(--sf2);border-radius:var(--r);font-size:12px';
-      row.dataset.file=f.name;
-      const icon=f.type.startsWith('image/')?'🖼️':f.type.includes('pdf')?'📄':'📎';
-      row.innerHTML=icon+' <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.name)+'</span>'+
-        '<span class="adj-upload-status" style="font-size:11px;color:var(--tx2)">Listo</span>'+
-        '<button type="button" class="btn bsm bd2" onclick="this.parentElement.remove()">✕</button>';
-      row._adjFile=f;
-      box.appendChild(row);
-    });
-  };
-  inp.click();
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+    if(!ok)return;
+    const boxSel=boxId||'pqrs-resp-adj-rows';
+    const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='*/*';
+    inp.onchange=function(){
+      const box=document.getElementById(boxSel);
+      if(!box)return;
+      Array.from(inp.files||[]).forEach(f=>{
+        const row=document.createElement('div');
+        row.className='fx pqrs-adj-file-row';
+        row.style.cssText='gap:6px;margin-bottom:5px;align-items:center;padding:5px;background:var(--sf2);border-radius:var(--r);font-size:12px';
+        row.dataset.file=f.name;
+        const icon=f.type.startsWith('image/')?'🖼️':f.type.includes('pdf')?'📄':'📎';
+        row.innerHTML=icon+' <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(f.name)+'</span>'+
+          '<span class="adj-upload-status" style="font-size:11px;color:var(--tx2)">Listo</span>'+
+          '<button type="button" class="btn bsm bd2" onclick="this.parentElement.remove()">✕</button>';
+        row._adjFile=f;
+        box.appendChild(row);
+      });
+    };
+    inp.click();
+  });
 }
 function setPqrsRespMedioNotif(val){
   // Legacy compat — delegate to canal
@@ -831,6 +837,11 @@ async function submitPqrsRespuesta(expId){
   const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
   const nombreCarpeta=(e._qd_nombre||e._nombre||e._pn_nombre||expId);
   if(usaDriveInst&&adj.files&&adj.files.length){
+    const driveOk=await (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true));
+    if(!driveOk){
+      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar y cerrar PQRSD';}
+      return;
+    }
     for(const {file,statusEl} of adj.files){
       try{
         if(statusEl)statusEl.textContent='⬆ Subiendo…';
@@ -5278,9 +5289,11 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     closeTaskModal();
   };
   if(adj.files.length&&e&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(e)&&typeof driveUploadExpedienteActividad==='function'){
-    const rep=responsableActivo||taskComentarioAutor();
-    notif('Subiendo archivo al Drive institucional…','info');
-    (async function(){
+    (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+      if(!ok)return;
+      const rep=responsableActivo||taskComentarioAutor();
+      notif('Subiendo archivo al Drive institucional…','info');
+      (async function(){
       try{
         if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function')await drivePurgeTaskInstitutionalSoportes(t);
         const up=await driveUploadExpedienteActividad(adj.files[0].blob,adj.files[0].nombre,adj.files[0].tipo,e,t,rep,'revision');
@@ -5291,6 +5304,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         notif('No se pudo subir al Drive: '+(err.message||'revise la conexión Gmail'),'err');
       }
     })();
+    });
     return;
   }
   if(adj.files.length){
@@ -6448,6 +6462,7 @@ function renderBandejaDepto(){
     const i=items.indexOf(it);
     return renderBandejaItemHtml(it,i,leidos,vista);
   }).join('');
+  if(typeof sstRenderGmailDriveStatusBtn==='function')sstRenderGmailDriveStatusBtn();
 }
 function toggleBandejaDepto(ev){
   if(ev)ev.stopPropagation();
@@ -6703,7 +6718,16 @@ function submitFinalizarEncargado(expId,taskId){
   }
   const adj=collectEnviarAdjuntos();
   const cmt=(document.getElementById('enviar-cmt-opcional')||{}).value;
-  if(finalizarTaskEncargado(expId,taskId,adj.links,cmt,[],pqrsOpts))closeTaskModal();
+  const run=function(){
+    if(finalizarTaskEncargado(expId,taskId,adj.links,cmt,[],pqrsOpts))closeTaskModal();
+  };
+  if(adj.files&&adj.files.length){
+    (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+      if(ok)run();
+    });
+    return;
+  }
+  run();
 }
 function verificarTaskExp(expId,taskId,fecha){
   if(esModoResponsable()){notif('Solo el departamento puede verificar','err');return;}

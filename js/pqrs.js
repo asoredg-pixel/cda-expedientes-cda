@@ -165,18 +165,21 @@ function toggleSecAnonimo(){
 // ─── Gestión dinámica de anexos (radicación) ───────────────────────────────
 if(typeof window!=='undefined'&&!window._secAnexoFiles)window._secAnexoFiles=[];
 function secAnexoAdd(){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;
-  inp.accept='.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip';
-  inp.onchange=function(){
-    if(!window._secAnexoFiles)window._secAnexoFiles=[];
-    Array.from(inp.files||[]).forEach(f=>{
-      if(!window._secAnexoFiles.some(x=>x.name===f.name&&x.size===f.size))
-        window._secAnexoFiles.push(f);
-    });
-    secAnexoRenderList();
-  };
-  inp.click();
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+    if(!ok)return;
+    const inp=document.createElement('input');
+    inp.type='file';inp.multiple=true;
+    inp.accept='.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip';
+    inp.onchange=function(){
+      if(!window._secAnexoFiles)window._secAnexoFiles=[];
+      Array.from(inp.files||[]).forEach(f=>{
+        if(!window._secAnexoFiles.some(x=>x.name===f.name&&x.size===f.size))
+          window._secAnexoFiles.push(f);
+      });
+      secAnexoRenderList();
+    };
+    inp.click();
+  });
 }
 function secAnexoRemove(idx){
   if(!window._secAnexoFiles)return;
