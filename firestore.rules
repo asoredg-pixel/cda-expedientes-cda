@@ -24,7 +24,9 @@ service cloud.firestore {
 
     // Correo del token, normalizado a minúsculas (ID del doc usuarios/{email}).
     function authEmail() {
-      return request.auth.token.email.lower();
+      return request.auth != null && request.auth.token.email != null
+        ? request.auth.token.email.lower()
+        : '';
     }
 
     // Ruta del documento del usuario que inició sesión.
@@ -163,9 +165,9 @@ service cloud.firestore {
       // - admin: cualquier usuario
       // - encargado dept.: responsables de su departamento
       // - cualquier usuario activo: su propio documento (login / sesión)
+      allow read: if isAuthenticated() && email.lower() == authEmail();
       allow read: if isActiveUser() && (
         isAdmin()
-        || email.lower() == authEmail()
         || (rolEsEncargadoDepto()
             && resource.data.rol == 'responsables'
             && resource.data.deptoResponsable == userRol())
@@ -197,7 +199,8 @@ service cloud.firestore {
     // sesiones/{email} — sesión única por usuario (independiente de usuarios/{email})
     // -------------------------------------------------------------------------
     match /sesiones/{email} {
-      allow read, create, update, delete: if esUsuarioAutorizadoActivo()
+      allow read, create, update, delete: if isAuthenticated()
+        && authEmail() != ''
         && email.lower() == authEmail();
     }
 

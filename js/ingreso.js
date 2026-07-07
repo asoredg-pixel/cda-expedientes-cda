@@ -50,9 +50,19 @@ async function verificarSesionDisponible(email){
 }
 async function claimActiveSession(email){
   email=String(email||'').trim().toLowerCase();
-  const db=window._db;
   const ref=sessionDocRef(email);
-  if(!email||!db||!ref)return null;
+  if(!email||!ref||!window._fsSetDoc)return null;
+  const existing=await leerSesionFirestore(email);
+  const localSid=String(sessionStorage.getItem('sst_session_id')||'').trim();
+  if(sesionRemotaEstaViva(existing)){
+    const remoteSid=String(existing.activeSessionId||'').trim();
+    if(localSid&&localSid===remoteSid){
+      _sessionId=localSid;
+      try{await window._fsSetDoc(ref,{activeSessionHeartbeat:new Date().toISOString()},{merge:true});}catch(e){}
+      return localSid;
+    }
+    return'BUSY';
+  }
   const sid=generateSessionId();
   const now=new Date().toISOString();
   const payload={
@@ -63,30 +73,13 @@ async function claimActiveSession(email){
     email:email
   };
   try{
-    if(window._fsRunTransaction){
-      await window._fsRunTransaction(db,async function(transaction){
-        const snap=await transaction.get(ref);
-        const data=snap.exists()?snap.data():{};
-        if(sesionRemotaEstaViva(data)){
-          const err=new Error('SESSION_BUSY');
-          err.code='SESSION_BUSY';
-          throw err;
-        }
-        transaction.set(ref,payload,{merge:true});
-      });
-    }else{
-      const check=await verificarSesionDisponible(email);
-      if(!check.ok)return'BUSY';
-      if(!window._fsSetDoc)return null;
-      await window._fsSetDoc(ref,payload,{merge:true});
-    }
+    await window._fsSetDoc(ref,payload,{merge:true});
     _sessionId=sid;
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
-    if(err&&err.code==='SESSION_BUSY')return'BUSY';
     if(err&&err.code==='permission-denied')return'RULES';
-    console.warn('No se pudo registrar sesión activa:',err);
+    console.warn('claimActiveSession:',err);
     return null;
   }
 }
@@ -268,17 +261,10 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
-    if(sesion==='RULES'){
-      window._usuarioActual=null;
-      setLoginAuthMsg('❌ Permiso denegado al registrar sesión. Despliegue las reglas Firestore actualizadas (colección sesiones).','err');
-      if(window._authSignOut)await window._authSignOut().catch(()=>{});
-      return;
-    }
-    if(!sesion){
-      window._usuarioActual=null;
-      setLoginAuthMsg('❌ No se pudo registrar la sesión. Verifique conexión e intente de nuevo.','err');
-      if(window._authSignOut)await window._authSignOut().catch(()=>{});
-      return;
+    if(sesion==='RULES'||!sesion){
+      console.warn('Sesión en Firestore no disponible; ingreso sin bloqueo remoto.');
+      _sessionId='local_'+generateSessionId();
+      try{sessionStorage.setItem('sst_session_id',_sessionId);}catch(e){}
     }
     const authPanel=document.getElementById('login-auth-panel');
     const rolesWrap=document.getElementById('login-roles-wrap');
@@ -415,14 +401,8 @@ function ingresarComoRol(rolId,respNombre){
   renderChatBadge();
   installSessionPageLifecycle();
   initAppRealtimeSync();
-  if(window._usuarioActual&&window._usuarioActual.email){
-    if(!_sessionId){
-      void claimActiveSession(window._usuarioActual.email).then(function(sid){
-        if(sid&&sid!=='BUSY')startSessionGuard(window._usuarioActual.email);
-      });
-    }else{
-      startSessionGuard(window._usuarioActual.email);
-    }
+  if(window._usuarioActual&&window._usuarioActual.email&&_sessionId&&!String(_sessionId).startsWith('local_')){
+    startSessionGuard(window._usuarioActual.email);
   }
   if(typeof sstInitDesktopNotify==='function')sstInitDesktopNotify();
   if(typeof initChatNotifySync==='function'){
