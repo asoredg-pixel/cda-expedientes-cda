@@ -109,6 +109,7 @@ async function releaseActiveSession(email,opts){
   }catch(err){console.warn('releaseActiveSession:',err);}
   _sessionId=null;
   try{sessionStorage.removeItem('sst_session_id');}catch(e){}
+  stopLocalStorageSessionGuard();
 }
 function installSessionPageLifecycle(){
   if(window._sessionLifecycleInstalled)return;
@@ -122,9 +123,44 @@ function installSessionPageLifecycle(){
   };
   window.addEventListener('pagehide',liberarAlSalir);
 }
+// ── Guard basado en localStorage (respaldo cuando Firestore sesiones/ no tiene permisos) ──
+// Funciona entre pestañas del mismo navegador; entre dispositivos distintos el guard
+// de Firestore ya es el responsable.
+const SST_LS_SESSION_KEY='sst_active_session_ls';
+let _lsSessionGuardListener=null;
+function claimLocalStorageSession(sid){
+  try{
+    const entry=JSON.stringify({sid:sid,at:Date.now(),email:(window._usuarioActual&&window._usuarioActual.email)||''});
+    localStorage.setItem(SST_LS_SESSION_KEY,entry);
+  }catch(e){}
+}
+function startLocalStorageSessionGuard(sid){
+  if(_lsSessionGuardListener)return;
+  claimLocalStorageSession(sid);
+  _lsSessionGuardListener=function(ev){
+    if(ev.key!==SST_LS_SESSION_KEY)return;
+    if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
+    try{
+      const data=JSON.parse(ev.newValue||'{}');
+      if(data.sid&&data.sid!==sid){
+        // Otra pestaña/ventana tomó la sesión
+        cerrarSesionPorConflicto();
+      }
+    }catch(e){}
+  };
+  window.addEventListener('storage',_lsSessionGuardListener);
+}
+function stopLocalStorageSessionGuard(){
+  if(_lsSessionGuardListener){
+    window.removeEventListener('storage',_lsSessionGuardListener);
+    _lsSessionGuardListener=null;
+  }
+  try{localStorage.removeItem(SST_LS_SESSION_KEY);}catch(e){}
+}
 function stopSessionGuard(){
   if(_sessionUnsub){try{_sessionUnsub();}catch(e){}_sessionUnsub=null;}
   if(_sessionHeartbeatTimer){clearInterval(_sessionHeartbeatTimer);_sessionHeartbeatTimer=null;}
+  stopLocalStorageSessionGuard();
 }
 function cerrarSesionPorConflicto(){
   stopSessionGuard();
@@ -404,8 +440,12 @@ function ingresarComoRol(rolId,respNombre){
   if(typeof syncPendingExpedientesToFirestore==='function'){
     syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
   }
-  if(window._usuarioActual&&window._usuarioActual.email&&_sessionId&&!String(_sessionId).startsWith('local_')){
-    startSessionGuard(window._usuarioActual.email);
+  if(window._usuarioActual&&window._usuarioActual.email&&_sessionId){
+    if(!String(_sessionId).startsWith('local_')){
+      startSessionGuard(window._usuarioActual.email);
+    }
+    // Guard localStorage: activo siempre (protege multi-pestaña en el mismo navegador)
+    startLocalStorageSessionGuard(_sessionId);
   }
   if(typeof sstInitDesktopNotify==='function')sstInitDesktopNotify();
   if(typeof initChatNotifySync==='function'){

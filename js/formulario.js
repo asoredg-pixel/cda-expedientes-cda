@@ -12,7 +12,7 @@ function showTab(t){
     t=vis.length?vis[0]:'con';
   }
   if(esModoCiudadano()&&t!=='ciudadano')t='ciudadano';
-  if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi')t='sec';
+  if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi'&&t!=='rec')t='sec';
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');
   if(esJurisdiccional()&&t!=='con'&&t!=='cons')t='con';
   if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='con';
