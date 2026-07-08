@@ -268,10 +268,12 @@ async function loadLS(){
     });
     expSnaps.forEach(deptoExps=>{exps=exps.concat(deptoExps);});
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
+    mergePendingExpBackup();
     clearLegacyExpsLocalStorage();
     postLoadInit();
     updateSyncIndicator('synced');
     if(document.body.classList.contains('sesion-activa')&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+    if(document.body.classList.contains('sesion-activa'))syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
   }catch(err){
     console.error('Error cargando Firestore:',err);
     _loadLSLocal();
@@ -316,6 +318,11 @@ function _fsStripUndefinedDeep(v){
 async function saveExpedienteDoc(deptoId,exp){
   const db=window._db;
   if(!db||!window._fsSetDoc||!exp)return false;
+  const auth=window._firebaseAuth;
+  if(!auth||!auth.currentUser){
+    window._lastFsSaveError={code:'unauthenticated',msg:'Sin sesión Firebase'};
+    return false;
+  }
   const expId=expedienteDocId(exp);
   if(!expId){console.warn('saveExpedienteDoc: expediente sin _exp');return false;}
   const depto=resolveDeptoFirestoreId(deptoId,exp);
@@ -323,6 +330,8 @@ async function saveExpedienteDoc(deptoId,exp){
   if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
   // Strip undefined values (incluye anidados) — Firestore v10 throws invalid-argument on undefined fields
   const rawPayload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
+  delete rawPayload._pending_fs_sync;
+  delete rawPayload._pending_fs_at;
   const payload=_fsStripUndefinedDeep(rawPayload);
   try{
     console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
@@ -455,36 +464,145 @@ function persistExpLocal(){
   _saveLSLocal();
   checkLocalStorageCapacityAfterSave();
 }
-function persistExpedienteGranular(exp,withGlobal){
+const SST_PENDING_EXP_KEY='sst_e_pending';
+function _pendingExpBackupList(){
+  try{return lsLoadJson(SST_PENDING_EXP_KEY)||[];}catch(e){return[];}
+}
+function persistExpLocalBackup(exp){
   if(!exp)return;
-  // Expedientes se persisten solo en Firestore (subcollección). No escribe a localStorage.
-  const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
-  console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
-  const fs=[saveExpedienteDoc(deptoResolved,exp)];
-  if(withGlobal)fs.push(saveGlobalFirestore());
-  updateSyncIndicator('syncing');
-  Promise.all(fs).then(function(r){
-    const ok=r.every(x=>x!==false);
-    updateSyncIndicator(ok?'synced':'error');
-    if(!ok){
-      const lastErr=window._lastFsSaveError||null;
-      const errCode=lastErr&&lastErr.code||'unknown';
-      console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
-      if(typeof notif==='function'){
-        let msg='⚠️ No se pudo guardar en Firestore.';
-        if(errCode==='permission-denied')msg+=' Sin permisos: verifique que el usuario "'+((window._usuarioActual&&window._usuarioActual.email)||'?')+'" tenga rol secretaria activo en la configuración.';
-        else if(errCode==='unauthenticated')msg+=' Sesión expirada — cierre sesión y vuelva a ingresar.';
-        else if(errCode&&errCode!=='unknown')msg+=' Código: '+errCode;
-        else msg+=' Verifique conexión o permisos.';
-        notif(msg,'err');
-      }
+  const id=expedienteDocId(exp);
+  if(!id)return;
+  try{
+    const list=_pendingExpBackupList();
+    const row=Object.assign({},exp,{_pending_fs_sync:true,_pending_fs_at:new Date().toISOString()});
+    const idx=list.findIndex(function(e){return expedienteDocId(e)===id;});
+    if(idx>=0)list[idx]=row;else list.push(row);
+    lsStoreJson(SST_PENDING_EXP_KEY,list);
+  }catch(e){console.warn('persistExpLocalBackup:',e);}
+}
+function removeExpLocalBackup(expId){
+  const id=String(expId||'').trim();
+  if(!id)return;
+  try{
+    const list=_pendingExpBackupList().filter(function(e){return expedienteDocId(e)!==id;});
+    if(list.length)lsStoreJson(SST_PENDING_EXP_KEY,list);
+    else localStorage.removeItem(SST_PENDING_EXP_KEY);
+  }catch(e){}
+}
+function mergeExpIntoExpsCache(exp){
+  if(!exp)return;
+  const id=expedienteDocId(exp);
+  if(!id)return;
+  if(!Array.isArray(exps))exps=[];
+  const idx=exps.findIndex(function(e){return expedienteDocId(e)===id;});
+  if(idx>=0)exps[idx]=exp;
+  else exps.push(exp);
+}
+function mergePendingExpBackup(){
+  const pending=_pendingExpBackupList();
+  if(!pending.length)return;
+  pending.forEach(function(exp){
+    const id=expedienteDocId(exp);
+    if(!id)return;
+    const idx=(exps||[]).findIndex(function(e){return expedienteDocId(e)===id;});
+    if(idx<0){
+      mergeExpIntoExpsCache(exp);
       return;
     }
-  }).catch(function(err){
-    updateSyncIndicator('error');
-    console.error('persistExpedienteGranular catch:',err);
-    if(typeof notif==='function')notif('⚠️ Error al guardar en Firestore: '+(err&&err.message||'desconocido'),'err');
+    const remote=exps[idx];
+    const remoteAt=String(remote.updatedAt||remote._fecha||'');
+    const pendingAt=String(exp._pending_fs_at||'');
+    if(!remoteAt||pendingAt>remoteAt)exps[idx]=exp;
   });
+}
+async function ensureFirestoreAuthReady(){
+  const auth=window._firebaseAuth;
+  if(!auth||!auth.currentUser){
+    window._lastFsSaveError={code:'unauthenticated',msg:'Sin sesión Firebase activa'};
+    return{ok:false,code:'unauthenticated'};
+  }
+  try{
+    await auth.currentUser.getIdToken(true);
+    return{ok:true,email:auth.currentUser.email||''};
+  }catch(err){
+    window._lastFsSaveError={code:'unauthenticated',msg:err&&err.message||'Token expirado'};
+    return{ok:false,code:'unauthenticated'};
+  }
+}
+async function syncPendingExpedientesToFirestore(){
+  const pending=_pendingExpBackupList();
+  if(!pending.length)return 0;
+  const authOk=await ensureFirestoreAuthReady();
+  if(!authOk.ok)return 0;
+  let synced=0;
+  const remaining=[];
+  for(let i=0;i<pending.length;i++){
+    const exp=pending[i];
+    const depto=resolveDeptoFirestoreId(exp._depto||deptoActivo||'guaviare',exp);
+    const ok=await saveExpedienteDoc(depto,exp);
+    if(ok){
+      removeExpLocalBackup(expedienteDocId(exp));
+      mergeExpIntoExpsCache(exp);
+      synced++;
+    }else remaining.push(exp);
+  }
+  try{
+    if(remaining.length)lsStoreJson(SST_PENDING_EXP_KEY,remaining);
+    else localStorage.removeItem(SST_PENDING_EXP_KEY);
+  }catch(e){}
+  if(synced>0&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  return synced;
+}
+window.syncPendingExpedientesToFirestore=syncPendingExpedientesToFirestore;
+function _firestoreSaveErrorMessage(errCode){
+  const email=(window._usuarioActual&&window._usuarioActual.email)||(window._firebaseAuth&&window._firebaseAuth.currentUser&&window._firebaseAuth.currentUser.email)||'?';
+  const rol=(window._usuarioActual&&window._usuarioActual.rol)||'?';
+  let msg='⚠️ No se pudo guardar en Firestore.';
+  if(errCode==='permission-denied'){
+    msg+=' Sin permisos para "'+email+'" (rol: '+rol+').';
+    if(rol==='secretaria'||rol==='admin'){
+      msg+=' Revise que la cuenta esté activa en Configuración → Usuarios y vuelva a iniciar sesión.';
+    }else{
+      msg+=' Ingrese con una cuenta Secretaría o Administrador autorizada.';
+    }
+  }else if(errCode==='unauthenticated'){
+    msg+=' Sesión de Google expirada — cierre sesión y vuelva a ingresar con su cuenta institucional.';
+  }else if(errCode==='invalid-argument'){
+    msg+=' Datos del expediente demasiado grandes o inválidos. Intente sin adjuntos pesados en el cuerpo del correo.';
+  }else if(errCode&&errCode!=='unknown'){
+    msg+=' Código: '+errCode+'.';
+  }else{
+    msg+=' Verifique conexión o permisos.';
+  }
+  return msg;
+}
+async function persistExpedienteGranular(exp,withGlobal){
+  if(!exp)return;
+  const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
+  console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
+  updateSyncIndicator('syncing');
+  const authOk=await ensureFirestoreAuthReady();
+  if(!authOk.ok){
+    persistExpLocalBackup(exp);
+    updateSyncIndicator('error');
+    if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+' La PQRSD quedó guardada localmente y se sincronizará al reconectar.','err');
+    return;
+  }
+  const expOk=await saveExpedienteDoc(deptoResolved,exp);
+  let globalOk=true;
+  if(withGlobal)globalOk=await saveGlobalFirestore();
+  if(expOk){
+    removeExpLocalBackup(expedienteDocId(exp));
+    updateSyncIndicator(globalOk?'synced':'synced');
+    if(!globalOk&&typeof notif==='function')notif('⚠️ PQRSD guardada, pero no se actualizó el índice global.','warn');
+    return;
+  }
+  persistExpLocalBackup(exp);
+  updateSyncIndicator('error');
+  const lastErr=window._lastFsSaveError||null;
+  const errCode=lastErr&&lastErr.code||'unknown';
+  console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
+  if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+' La PQRSD quedó guardada localmente y se reintentará al sincronizar.','err');
 }
 function diagTestSaveExpedienteDoc(){
   saveExpedienteDoc('guaviare',{

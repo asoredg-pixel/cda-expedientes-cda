@@ -401,6 +401,9 @@ function ingresarComoRol(rolId,respNombre){
   renderChatBadge();
   installSessionPageLifecycle();
   initAppRealtimeSync();
+  if(typeof syncPendingExpedientesToFirestore==='function'){
+    syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
+  }
   if(window._usuarioActual&&window._usuarioActual.email&&_sessionId&&!String(_sessionId).startsWith('local_')){
     startSessionGuard(window._usuarioActual.email);
   }

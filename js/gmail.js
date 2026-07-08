@@ -2351,8 +2351,8 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
     }
     if (/^Subject:/i.test(hline)) {
       var origSubj = hline.replace(/^Subject:\s*/i, '');
-      var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*(\[PQRSD[^\]]*\]\s*:?\s*)?)+/i, '');
-      var expTag = expId ? '[PQRSD #' + expId + '] ' : '';
+      var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '');
+      var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
       newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
       hj++;
       while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
@@ -3811,11 +3811,20 @@ async function gmailOfiSaveDraft() {
   } catch(e) { notif('Error al guardar borrador: ' + e.message, 'err'); }
 }
 
-// Extrae el número de radicado del asunto, ej. "[PQRSD #707]" → "707".
+// Extrae el número de radicado del asunto, ej. "PQRSD #707" o "[PQRSD #707]" → "707".
 function _gmailExtractRadicadoFromSubject(subject) {
   if (!subject) return '';
-  const m = String(subject).match(/PQRSD\s*[#N°ºo:.\-]*\s*([A-Za-z0-9\-]+)/i);
-  return m ? m[1].trim() : '';
+  const s = String(subject);
+  const patterns = [
+    /\[?\s*PQRSD\s*[#N°ºo:.\-\s]*\s*([A-Za-z0-9\-]+)\s*\]?/i,
+    /PQRSD\s*[#N°ºo:.\-\s]*\s*([A-Za-z0-9\-]+)/i,
+    /radicado\s*[#N°ºo:.\-\s]*\s*([A-Za-z0-9\-]+)/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    const m = s.match(patterns[i]);
+    if (m && m[1]) return String(m[1]).replace(/\]$/, '').trim();
+  }
+  return '';
 }
 
 // Busca un expediente PQRSD abierto cuyo radicado coincide con el token del asunto.
@@ -3934,14 +3943,10 @@ function gmailClearPqrsRespSel() {
   gmailTogglePqrsRespSearch(true);
 }
 
-function gmailOfiVincularRespuestaPqrs() {
+async function gmailOfiVincularRespuestaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
-  const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
-  const findH = function(n) { var h = headers.find(function(x) { return x.name === n; }); return h ? (h.value || '') : ''; };
-  const subject = findH('Subject');
-  const radTok = _gmailExtractRadicadoFromSubject(subject);
-  const detectada = radTok ? _gmailFindPqrsByRadicado(radTok) : null;
+  const detectada = await _gmailFindPqrsForCurrentMsgAsync(msg);
   if (typeof openPqrsRespuestaModal === 'function') {
     openPqrsRespuestaModal(detectada ? detectada._exp : '', { fromGmail: true, gmailMsg: msg, detectada: !!detectada });
   }
@@ -3962,12 +3967,41 @@ function _gmailFindPqrsForCurrentMsg(msg) {
   }) || null;
 }
 
-function gmailOfiMarcarInformativaPqrs() {
+async function _gmailFindPqrsForCurrentMsgAsync(msg) {
+  let hit = _gmailFindPqrsForCurrentMsg(msg);
+  if (hit) return hit;
+  const headers = msg && msg.payload && msg.payload.headers ? msg.payload.headers : [];
+  const subjH = headers.find(function(h) { return h.name === 'Subject'; });
+  const subject = subjH ? String(subjH.value || '') : '';
+  const radTok = _gmailExtractRadicadoFromSubject(subject);
+  if (!radTok || typeof fetchExpedientePorNumero !== 'function') return null;
+  try {
+    const remote = await fetchExpedientePorNumero(radTok);
+    if (!remote || typeof esPqrsSecretaria !== 'function' || !esPqrsSecretaria(remote)) return null;
+    if (typeof mergeExpIntoExpsCache === 'function') mergeExpIntoExpsCache(remote);
+    else if (typeof exps !== 'undefined') {
+      const idx = exps.findIndex(function(e) { return String(e._exp || '').trim() === String(remote._exp || '').trim(); });
+      if (idx >= 0) exps[idx] = remote; else exps.push(remote);
+    }
+    return remote;
+  } catch (err) {
+    console.warn('_gmailFindPqrsForCurrentMsgAsync:', err);
+    return null;
+  }
+}
+
+async function gmailOfiMarcarInformativaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
-  const detectada = _gmailFindPqrsForCurrentMsg(msg);
+  const detectada = await _gmailFindPqrsForCurrentMsgAsync(msg);
   if (!detectada) {
-    notif('No se detectó PQRSD en el asunto. Busque el número en el menú PQRSD → ℹ Informativa.', 'err');
+    const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
+    const subjH = headers.find(function(h) { return h.name === 'Subject'; });
+    const subject = subjH ? String(subjH.value || '') : '';
+    const tok = _gmailExtractRadicadoFromSubject(subject);
+    notif(tok
+      ? ('No se encontró la PQRSD #' + tok + ' en el sistema. Verifique que esté radicada y sincronizada en Firestore.')
+      : 'No se detectó PQRSD en el asunto. Busque el número en el menú PQRSD → ℹ Informativa.', 'err');
     return;
   }
   if (typeof puedeMarcarPqrsInformativa === 'function' && !puedeMarcarPqrsInformativa(detectada)) {
