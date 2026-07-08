@@ -1257,6 +1257,41 @@ async function submitEditPqrsSecretaria(expId){
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
 }
+function _pqrsNecesitaCorreoParaAsignar(e){
+  if(!e)return false;
+  if(!pqrsFueRadicadaPorCorreo(e))return false;
+  if(!(e._gmail_message_id||''))return false;
+  return true;
+}
+function _pqrsTokOk(){
+  return (typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||
+         (typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+}
+function _pqrsHtmlBannerCorreoDesconectado(expId){
+  return '<div id="pqrs-asig-gmail-warn" style="background:var(--warnl,#fff8e1);border:1px solid var(--warn,#f59e0b);border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--tx)">'+
+    '⚠️ Esta PQRSD fue radicada por correo. Para reenviar el correo original con sus anexos al responsable debe estar conectado a Gmail.<br>'+
+    '<div class="fx" style="gap:8px;margin-top:8px">'+
+    '<button type="button" class="btn bsm bp" id="pqrs-asig-gmail-conn-btn" onclick="_pqrsConectarCorreoYAsignar(\''+escAttr(expId)+'\')">📧 Conectar correo ahora</button>'+
+    '<button type="button" class="btn bsm" onclick="_pqrsAsignarSinCorreo(\''+escAttr(expId)+'\')">Asignar sin reenviar correo</button>'+
+    '</div></div>';
+}
+function _pqrsConectarCorreoYAsignar(expId){
+  const btn=document.getElementById('pqrs-asig-gmail-conn-btn');
+  if(btn){btn.disabled=true;btn.textContent='Conectando…';}
+  const fn=typeof gmailOfiConnect==='function'?gmailOfiConnect:
+            (typeof gmailConnect==='function'?gmailConnect:null);
+  if(!fn){notif('Conexión Gmail no disponible','err');if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}return;}
+  fn(function(){
+    // Ya conectado → ejecutar asignación normalmente
+    const warn=document.getElementById('pqrs-asig-gmail-warn');
+    if(warn)warn.remove();
+    submitAsignarPqrsOficina(expId);
+  });
+}
+function _pqrsAsignarSinCorreo(expId){
+  window._pqrsAsignarForzarSinCorreo=true;
+  submitAsignarPqrsOficina(expId);
+}
 function openAsignarPqrsOficinaModal(expId){
   const e=exps.find(x=>x._exp===expId);
   if(!e){notif('Expediente no encontrado','err');return;}
@@ -1273,15 +1308,22 @@ function openAsignarPqrsOficinaModal(expId){
   if(tit)tit.textContent='Asignar PQRSD · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const opts=responsables.map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('');
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(labelOficina(oficina))+'</strong></div>'+
+  const necesitaCorreo=_pqrsNecesitaCorreoParaAsignar(e);
+  const tokOk=_pqrsTokOk();
+  const bannerCorreo=(necesitaCorreo&&!tokOk)?_pqrsHtmlBannerCorreoDesconectado(expId):'';
+  body.innerHTML=bannerCorreo+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(labelOficina(oficina))+'</strong></div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Responsable que atenderá<span class="req-star">*</span></label>'+
     '<select id="pqrs-ofi-resp-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+opts+'</select></div>'+
     htmlPqrsAdjuntosDrive(e)+
     (e._pqrs_solicitud_archivo?'<div style="font-size:12px;margin-bottom:8px;color:var(--tx2)">📄 Referencia: '+escAttr(e._pqrs_solicitud_archivo)+'</div>':'')+
-    '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    '<div class="fx" style="gap:8px">'+
+    (necesitaCorreo&&!tokOk?'':('<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'))+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'asignarPqrsOfi',expId};
+  window._pqrsAsignarForzarSinCorreo=false;
 }
 async function submitAsignarPqrsOficina(expId){
   const sel=document.getElementById('pqrs-ofi-resp-sel');
@@ -1289,6 +1331,12 @@ async function submitAsignarPqrsOficina(expId){
   if(!resp){notif('Seleccione responsable','err');return;}
   const e=exps.find(x=>x._exp===expId);
   if(!e){notif('Expediente no encontrado','err');return;}
+  // Si viene de correo y no hay token: redirigir a conectar (a menos que el usuario eligió asignar sin correo)
+  if(!window._pqrsAsignarForzarSinCorreo&&_pqrsNecesitaCorreoParaAsignar(e)&&!_pqrsTokOk()){
+    notif('Conecte el correo para reenviar al responsable los anexos de la PQRSD, o use "Asignar sin reenviar correo".','warn');
+    return;
+  }
+  window._pqrsAsignarForzarSinCorreo=false;
   e._pqrs_responsable_oficina=resp;
   e._pqrs_estado_oficina='asignado';
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];

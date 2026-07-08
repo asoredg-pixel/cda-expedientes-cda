@@ -86,7 +86,9 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
     }
   });
   try {
-    tokenClient.requestAccessToken({ prompt: promptOpt || 'select_account' });
+    // promptOpt==='' → renovación silenciosa (sin popup); undefined/null → 'select_account'
+    const promptVal = (promptOpt === '' || promptOpt === 'none') ? '' : (promptOpt || 'select_account');
+    tokenClient.requestAccessToken({ prompt: promptVal });
   } catch (err) {
     console.error('requestAccessToken:', err);
     _gmailOAuthDone();
@@ -167,23 +169,52 @@ function _gmailScheduleTokenWarning(expMs) {
     }, warnAt);
   }
 }
+let _gmailSilentRefreshInFlight = false;
 function _gmailTrySilentTokenRefresh() {
+  // No interferir si hay una conexión manual en curso
   if (_gmailConnecting) return;
+  if (_gmailSilentRefreshInFlight) return;
   if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
   const clientId = _gmailGetClientId();
   if (!clientId || !_gmailGisReady()) return;
   const useSec = typeof esSecretaria === 'function' && esSecretaria();
   const scope = useSec ? GMAIL_SCOPES : GMAIL_OFI_SCOPES;
-  _gmailStartOAuth(scope, function(tok, exp) {
-    if (useSec) {
-      gmailSetToken(tok, exp);
-    } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
-      _gmailOfiValidarYGuardarToken(tok, exp);
-    } else {
-      gmailOfiSetToken(tok, exp);
-    }
-    if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
-  }, '');
+  // Usar initTokenClient directamente para NO bloquear la UI ni mostrar notificaciones
+  try {
+    _gmailSilentRefreshInFlight = true;
+    const silentClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: scope,
+      callback: function(response) {
+        _gmailSilentRefreshInFlight = false;
+        if (response && response.access_token) {
+          if (useSec) {
+            gmailSetToken(response.access_token, response.expires_in || 3600);
+          } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
+            _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in || 3600);
+          } else if (typeof gmailOfiSetToken === 'function') {
+            gmailOfiSetToken(response.access_token, response.expires_in || 3600);
+          }
+          // Indicador se actualiza dentro de gmailSetToken / gmailOfiSetToken,
+          // pero lo forzamos también por si acaso
+          if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+          console.log('Gmail: token renovado silenciosamente (' + (response.expires_in || 3600) + 's)');
+        }
+        // Si falla (response.error), simplemente no renovamos — el token expirará normalmente
+        // y el temporizador de expiración lo manejará. Sin notificación al usuario.
+      },
+      error_callback: function(err) {
+        _gmailSilentRefreshInFlight = false;
+        // Fallo silencioso esperado (sin sesión Google, cookies bloqueadas, etc.)
+        console.log('Gmail: renovación silenciosa no disponible (' + (err && err.type || 'desconocido') + ')');
+      }
+    });
+    // prompt: '' → sin diálogo, intento totalmente silencioso
+    silentClient.requestAccessToken({ prompt: '' });
+  } catch (err) {
+    _gmailSilentRefreshInFlight = false;
+    console.warn('Gmail silent refresh error:', err);
+  }
 }
 function _gmailClearExpiryTimer(which) {
   if (which === 'ofi') {
