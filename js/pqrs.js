@@ -548,6 +548,121 @@ async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
     notif('⚠️ Traslado registrado, pero falló el reenvío del correo a '+labelOficina(oficina)+'.','warn');
   }
 }
+function getEmailResponsablePqrs(nombre){
+  const n=String(nombre||'').trim();
+  if(!n)return'';
+  if(typeof getUsuarioAutorizadoByNombre==='function'){
+    const u=getUsuarioAutorizadoByNombre(n);
+    if(u&&u.email)return String(u.email).trim();
+  }
+  if(typeof getInstructorByNombre==='function'){
+    const ins=getInstructorByNombre(n);
+    if(ins&&ins.email)return String(ins.email).trim();
+  }
+  return'';
+}
+function pqrsNombresPendientesReenvioCorreo(e,nombres){
+  if(!e||!Array.isArray(nombres))return[];
+  if(!Array.isArray(e._pqrs_correo_reenviado_a))e._pqrs_correo_reenviado_a=[];
+  const ya=new Set(e._pqrs_correo_reenviado_a.map(function(x){return String(x||'').trim().toLowerCase();}));
+  const out=[];
+  const seenNom={};
+  nombres.forEach(function(nom){
+    const n=String(nom||'').trim();
+    if(!n)return;
+    const nk=typeof agendaNorm==='function'?agendaNorm(n):n.toLowerCase();
+    if(seenNom[nk])return;
+    seenNom[nk]=true;
+    const em=getEmailResponsablePqrs(n);
+    if(!em||ya.has(em.toLowerCase()))return;
+    out.push({nombre:n,email:em});
+  });
+  return out;
+}
+function pqrsMarcarCorreosReenviados(e,emails){
+  if(!e||!Array.isArray(emails))return;
+  if(!Array.isArray(e._pqrs_correo_reenviado_a))e._pqrs_correo_reenviado_a=[];
+  emails.forEach(function(em){
+    const k=String(em||'').trim().toLowerCase();
+    if(k&&!e._pqrs_correo_reenviado_a.some(function(x){return String(x).toLowerCase()===k;})){
+      e._pqrs_correo_reenviado_a.push(em);
+    }
+  });
+}
+async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
+  const gmailMsgId=e._gmail_message_id||'';
+  if(!gmailMsgId)return null;
+  let msg=prefetchedMsg||null;
+  if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
+  if(!msg&&typeof _gmailFetchMessageFull==='function'){
+    msg=await _gmailFetchMessageFull(gmailMsgId);
+    if(msg)_gmailCurrentMsg=msg;
+  }
+  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
+  }
+  return msg;
+}
+async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg){
+  if(!e||!expId||!nombres||!nombres.length)return false;
+  if(!pqrsFueRadicadaPorCorreo(e))return false;
+  const pendientes=pqrsNombresPendientesReenvioCorreo(e,nombres);
+  if(!pendientes.length)return true;
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  if(!tokOk)return false;
+  const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
+  if(!msg||typeof reenviarEmailRawARecipientes!=='function')return false;
+  const emails=pendientes.map(function(p){return p.email;});
+  try{
+    const ok=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});
+    if(ok){
+      pqrsMarcarCorreosReenviados(e,emails);
+      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+      e._pqrs_historial.push({
+        tipo:'reenvio_correo_responsable',
+        fecha:hoy(),
+        nota:'Correo de radicación reenviado a responsable(s): '+pendientes.map(function(p){return p.nombre;}).join(', ')
+      });
+    }
+    return ok;
+  }catch(err){
+    console.warn('reenvio responsable:',err);
+    return false;
+  }
+}
+async function tryReenvioPqrsCorreoAResponsables(e,nombres,expId,opts){
+  opts=opts||{};
+  if(!e||!nombres||!nombres.length)return false;
+  const pendientes=pqrsNombresPendientesReenvioCorreo(e,nombres);
+  if(!pendientes.length)return true;
+  if(!pqrsFueRadicadaPorCorreo(e)||!(e._gmail_message_id||''))return false;
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  if(!tokOk){
+    if(!opts.silent)notif('⚠️ PQRSD asignada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja.','warn');
+    return false;
+  }
+  const ok=await reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId);
+  if(!ok&&!opts.silent){
+    const sinEmail=nombres.filter(function(n){return!getEmailResponsablePqrs(n);});
+    if(sinEmail.length){
+      notif('⚠️ Asignación registrada, pero falta correo de: '+sinEmail.join(', ')+'. Configure el email del usuario.','warn');
+    }else{
+      notif('⚠️ Asignación registrada, pero falló el reenvío del correo con anexos.','warn');
+    }
+  }else if(ok&&!opts.silent){
+    notif('Correo de radicación reenviado a '+pendientes.map(function(p){return p.nombre;}).join(', '),'ok');
+  }
+  return ok;
+}
+async function pqrsTryReenvioCorreoNuevosResponsables(expId,nombres,opts){
+  const e=exps.find(function(x){return String(x._exp||'').trim()===String(expId||'').trim();});
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
+  const noms=(Array.isArray(nombres)?nombres:[nombres]).map(function(n){return String(n||'').trim();}).filter(Boolean);
+  if(!noms.length)return false;
+  const ok=await tryReenvioPqrsCorreoAResponsables(e,noms,expId,opts);
+  if(e._pqrs_correo_reenviado_a&&e._pqrs_correo_reenviado_a.length)persistExpedienteGranular(e);
+  return ok;
+}
 // Genera HTML con TODOS los links de adjuntos Drive de una PQRSD
 function htmlPqrsAdjuntosDrive(e){
   var links=[];
@@ -1146,7 +1261,7 @@ function openAsignarPqrsOficinaModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'asignarPqrsOfi',expId};
 }
-function submitAsignarPqrsOficina(expId){
+async function submitAsignarPqrsOficina(expId){
   const sel=document.getElementById('pqrs-ofi-resp-sel');
   const resp=sel?sel.value:'';
   if(!resp){notif('Seleccione responsable','err');return;}
@@ -1172,6 +1287,10 @@ function submitAsignarPqrsOficina(expId){
   persistExpedienteGranular(e);
   closeTaskModal();
   notif('PQRSD asignado a '+resp,'ok');
+  if(typeof tryReenvioPqrsCorreoAResponsables==='function'){
+    await tryReenvioPqrsCorreoAResponsables(e,[resp],expId,{silent:false});
+    if(e._pqrs_correo_reenviado_a&&e._pqrs_correo_reenviado_a.length)persistExpedienteGranular(e);
+  }
   renderPqrsOficinaInbox();
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();

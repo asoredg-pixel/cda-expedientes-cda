@@ -3411,6 +3411,12 @@ function submitEditarActTask(expId,taskId){
     syncTaskAggregateState(t);
   })){
     syncPqrsResponsableDesdeTask(expId,taskId,responsables[0]);
+    const nuevosResp=responsables.filter(n=>!prevAsig.some(a=>agendaNorm(a.nombre)===agendaNorm(n)));
+    const exPqrs=getExpById(expId);
+    const tPqrs=getTaskAny(expId,taskId);
+    if(exPqrs&&tPqrs&&taskEsAtenderPqrs(tPqrs,exPqrs)&&nuevosResp.length&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
+      pqrsTryReenvioCorreoNuevosResponsables(expId,nuevosResp,{silent:false});
+    }
     closeTaskModal();notif('Actividad actualizada','ok');
     if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
     if(!prevT.sinExpediente&&isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
@@ -3541,7 +3547,12 @@ function aprobarSolicitudTraslado(expId,taskId){
   if(trasladarTaskExp(expId,taskId,dest)){
     syncPqrsResponsableDesdeTask(expId,taskId,dest);
     clearTaskSolicitudPendiente(expId,taskId,'aprobada','Traslado aprobado a '+dest);
-    persistExpedienteGranular(e);
+    const e=getExpById(expId);
+    const tPqrs=getTaskAny(expId,taskId);
+    if(e&&tPqrs&&taskEsAtenderPqrs(tPqrs,e)&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
+      pqrsTryReenvioCorreoNuevosResponsables(expId,[dest],{silent:false});
+    }
+    if(e)persistExpedienteGranular(e);
     closeTaskModal();notif('Traslado realizado a '+dest,'ok');renderActividades();renderBandejaDepto();
     refreshPqrsDetalleViews(expId);
     if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
@@ -7132,6 +7143,11 @@ function submitAnadirResponsableTask(expId,taskId){
     return;
   }
   if(anadirResponsableTask(expId,taskId,v,entregaModo)){
+    const e=getExpById(expId);
+    const t=getTaskAny(expId,taskId);
+    if(e&&t&&taskEsAtenderPqrs(t,e)&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
+      pqrsTryReenvioCorreoNuevosResponsables(expId,[v],{silent:false});
+    }
     notif('Co-ejecutor añadido','ok');
     openTaskCommentsModal(expId,taskId,{gestionAsignados:true});
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
@@ -7142,6 +7158,12 @@ function submitTrasladoTaskModal(expId,taskId){
   const v=sel?sel.value:'';
   if(!v){notif('Seleccione responsable','err');return;}
   if(trasladarTaskExp(expId,taskId,v)){
+    syncPqrsResponsableDesdeTask(expId,taskId,v);
+    const e=getExpById(expId);
+    const t=getTaskAny(expId,taskId);
+    if(e&&t&&taskEsAtenderPqrs(t,e)&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
+      pqrsTryReenvioCorreoNuevosResponsables(expId,[v],{silent:false});
+    }
     notif('Actividad trasladada a '+v,'ok');
     openTaskCommentsModal(expId,taskId);
   }

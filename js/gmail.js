@@ -2318,6 +2318,95 @@ async function gmailSendMessage(to, subject, htmlBody) {
   return gmailSend(to, subject, htmlBody);
 }
 
+function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
+  if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
+  const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
+  const binaryStr = atob(b64std);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (var bi = 0; bi < binaryStr.length; bi++) bytes[bi] = binaryStr.charCodeAt(bi);
+  var sepPos = -1, sepLen = 4;
+  for (var si = 0; si < bytes.length - 3; si++) {
+    if (bytes[si] === 13 && bytes[si + 1] === 10 && bytes[si + 2] === 13 && bytes[si + 3] === 10) { sepPos = si; sepLen = 4; break; }
+  }
+  if (sepPos < 0) {
+    for (var sj = 0; sj < bytes.length - 1; sj++) {
+      if (bytes[sj] === 10 && bytes[sj + 1] === 10) { sepPos = sj; sepLen = 2; break; }
+    }
+  }
+  if (sepPos < 0) throw new Error('Estructura del correo no reconocida');
+  var headerBytes = bytes.slice(0, sepPos);
+  var bodyBytes = bytes.slice(sepPos + sepLen);
+  var headerText = '';
+  for (var hi = 0; hi < headerBytes.length; hi++) headerText += String.fromCharCode(headerBytes[hi]);
+  var lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  var headerLines = headerText.split(lb);
+  var newHeaderLines = [];
+  var hj = 0;
+  while (hj < headerLines.length) {
+    var hline = headerLines[hj];
+    if (/^(To|Cc|Bcc):/i.test(hline)) {
+      hj++;
+      while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
+      continue;
+    }
+    if (/^Subject:/i.test(hline)) {
+      var origSubj = hline.replace(/^Subject:\s*/i, '');
+      var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*(\[PQRSD[^\]]*\]\s*:?\s*)?)+/i, '');
+      var expTag = expId ? '[PQRSD #' + expId + '] ' : '';
+      newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
+      hj++;
+      while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
+      continue;
+    }
+    newHeaderLines.push(hline);
+    hj++;
+  }
+  newHeaderLines.unshift('To: ' + toEmail);
+  var newHeaderText = newHeaderLines.join(lb) + lb + lb;
+  var newHeaderEnc = new TextEncoder().encode(newHeaderText);
+  var out = new Uint8Array(newHeaderEnc.length + bodyBytes.length);
+  out.set(newHeaderEnc, 0);
+  out.set(bodyBytes, newHeaderEnc.length);
+  var binOut = '';
+  out.forEach(function(b) { binOut += String.fromCharCode(b); });
+  return btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
+  opts = opts || {};
+  const emails = (Array.isArray(recipientEmails) ? recipientEmails : [recipientEmails])
+    .map(function(em) { return String(em || '').trim(); })
+    .filter(Boolean);
+  const uniq = [];
+  const seen = {};
+  emails.forEach(function(em) {
+    const k = em.toLowerCase();
+    if (!seen[k]) { seen[k] = true; uniq.push(em); }
+  });
+  if (!uniq.length) {
+    if (!opts.silent) notif('Sin correo destino configurado', 'warn');
+    return false;
+  }
+  try {
+    const rawData = await _gmailApiBest('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
+    var okCount = 0;
+    for (var ri = 0; ri < uniq.length; ri++) {
+      const encoded = _reenviarEmailEncodeRawForRecipient(rawData, uniq[ri], expId);
+      await _gmailApiBest('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
+      okCount++;
+    }
+    if (!opts.silent && okCount) {
+      const lbl = opts.label || uniq.join(', ');
+      notif('Correo reenviado con adjuntos a ' + lbl, 'ok');
+    }
+    return okCount > 0;
+  } catch (e) {
+    console.error('reenviarEmailRawARecipientes:', e);
+    if (!opts.silent) notif('Error al reenviar correo: ' + e.message, 'err');
+    return false;
+  }
+}
+
 async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
   opts = opts || {};
   const ofiData = (encargadosGlobal && encargadosGlobal.oficinas && encargadosGlobal.oficinas[ofiId]) || {};
@@ -2327,71 +2416,9 @@ async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
     notif('La oficina ' + ofiLabel + ' no tiene correo configurado en Encargados.', 'warn');
     return false;
   }
-  try {
-    const rawData = await _gmailApiBest('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
-    if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
-
-    const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
-    const binaryStr = atob(b64std);
-    const bytes = new Uint8Array(binaryStr.length);
-    for (var bi = 0; bi < binaryStr.length; bi++) bytes[bi] = binaryStr.charCodeAt(bi);
-
-    var sepPos = -1, sepLen = 4;
-    for (var si = 0; si < bytes.length - 3; si++) {
-      if (bytes[si] === 13 && bytes[si + 1] === 10 && bytes[si + 2] === 13 && bytes[si + 3] === 10) { sepPos = si; sepLen = 4; break; }
-    }
-    if (sepPos < 0) {
-      for (var sj = 0; sj < bytes.length - 1; sj++) {
-        if (bytes[sj] === 10 && bytes[sj + 1] === 10) { sepPos = sj; sepLen = 2; break; }
-      }
-    }
-    if (sepPos < 0) throw new Error('Estructura del correo no reconocida');
-
-    var headerBytes = bytes.slice(0, sepPos);
-    var bodyBytes = bytes.slice(sepPos + sepLen);
-    var headerText = '';
-    for (var hi = 0; hi < headerBytes.length; hi++) headerText += String.fromCharCode(headerBytes[hi]);
-    var lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
-    var headerLines = headerText.split(lb);
-    var newHeaderLines = [];
-    var hj = 0;
-    while (hj < headerLines.length) {
-      var hline = headerLines[hj];
-      if (/^(To|Cc|Bcc):/i.test(hline)) {
-        hj++;
-        while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
-        continue;
-      }
-      if (/^Subject:/i.test(hline)) {
-        var origSubj = hline.replace(/^Subject:\s*/i, '');
-        var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*(\[PQRSD[^\]]*\]\s*:?\s*)?)+/i, '');
-        var expTag = expId ? '[PQRSD #' + expId + '] ' : '';
-        newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
-        hj++;
-        while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
-        continue;
-      }
-      newHeaderLines.push(hline);
-      hj++;
-    }
-    newHeaderLines.unshift('To: ' + ofiEmail);
-    var newHeaderText = newHeaderLines.join(lb) + lb + lb;
-    var newHeaderEnc = new TextEncoder().encode(newHeaderText);
-    var out = new Uint8Array(newHeaderEnc.length + bodyBytes.length);
-    out.set(newHeaderEnc, 0);
-    out.set(bodyBytes, newHeaderEnc.length);
-    var binOut = '';
-    out.forEach(function(b) { binOut += String.fromCharCode(b); });
-    var encoded = btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-    await _gmailApiBest('POST', GMAIL_API_BASE + '/messages/send', { raw: encoded });
-    if (!opts.silent) notif('Correo reenviado con adjuntos a ' + ofiLabel + ' (' + ofiEmail + ')', 'ok');
-    return true;
-  } catch (e) {
-    console.error('reenviarEmailAOficina:', e);
-    notif('Error al reenviar correo: ' + e.message, 'err');
-    return false;
-  }
+  return reenviarEmailRawARecipientes(msg, [ofiEmail], expId, Object.assign({}, opts, {
+    label: ofiLabel + ' (' + ofiEmail + ')'
+  }));
 }
 
 // Envío legacy al ciudadano (Secretaría). El flujo PQRSD usa confirmarEnvioRespuestaEmailPqrs en core.js.
