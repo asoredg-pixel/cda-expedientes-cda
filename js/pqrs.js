@@ -428,6 +428,17 @@ async function guardarPqrsSecretaria(modo){
     }else if(!soloRadicar){
       const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
       reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio||null);
+      // Fallback: si el reenvío raw falló, enviar notificación estructurada al correo de la oficina
+      if(!reenvioOficinaOk&&_tokOk&&typeof _pqrsEnviarNotifAsignacion==='function'){
+        const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
+        const _ofiEmail=(_ofiData.email||'').trim();
+        if(_ofiEmail){
+          try{
+            reenvioOficinaOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId);
+            if(reenvioOficinaOk)console.log('reenvio oficina: notificación de respaldo enviada a',oficina,_ofiEmail);
+          }catch(_fe){console.warn('reenvio oficina fallback:',_fe);}
+        }
+      }
       if(!reenvioOficinaOk){
         if(!_tokOk){
           notif('⚠️ La PQRSD se radicó, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+' porque la sesión Gmail expiró. Reconecte el correo y reenvíe manualmente con ↪ Reenviar.','warn');
