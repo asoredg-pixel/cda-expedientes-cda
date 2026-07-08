@@ -185,10 +185,23 @@ function startSessionGuard(email){
     if(!remoteSid||remoteSid===_sessionId)return;
     if(sesionRemotaEstaViva(data))cerrarSesionPorConflicto();
   },function(err){console.warn('Error escuchando sesión:',err);});
+  let _hbTick=0;
   _sessionHeartbeatTimer=setInterval(function(){
     if(!document.body.classList.contains('sesion-activa')||!_sessionId||!email)return;
     const hbRef=sessionDocRef(email);
     if(!hbRef||!window._fsSetDoc)return;
+    // Cada 3 latidos (~75 s) verificamos que el sessionId sigue siendo el nuestro
+    _hbTick++;
+    if(_hbTick%3===0&&window._fsGetDoc){
+      window._fsGetDoc(hbRef).then(function(snap){
+        if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
+        const d=snap.exists()?snap.data():{};
+        const remote=String(d.activeSessionId||'').trim();
+        if(remote&&remote!==_sessionId&&sesionRemotaEstaViva(d)){
+          cerrarSesionPorConflicto();
+        }
+      }).catch(function(){});
+    }
     window._fsSetDoc(hbRef,{
       activeSessionHeartbeat:new Date().toISOString()
     },{merge:true}).catch(function(){});

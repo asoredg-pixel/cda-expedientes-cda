@@ -629,6 +629,63 @@ async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
   }
   return msg;
 }
+function _pqrsHtmlNotifAsignacion(e,expId){
+  const num=expId||e._exp||'';
+  const asunto=e.f_f1||e._tipo_solicitud||'PQRSD';
+  const fecha=e._fecha_solicitud||e._fecha||'';
+  const solNombre=e._qd_nombre||e._pn_nombre||'Ciudadano';
+  const detalle=e._pqrs_detalle||e._detalle_general||'';
+  const oficina=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):e._pqrs_oficina||'';
+  const responsable=e._pqrs_responsable_oficina||'';
+  // Links de anexos en Drive
+  const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
+  const solLink=e._pqrs_solicitud_link||'';
+  const folderLink=e._pqrs_drive_folder_link||'';
+  let linksHtml='';
+  if(solLink)linksHtml+='<li><a href="'+escAttr(solLink)+'">Solicitud / Soporte PDF</a></li>';
+  atts.forEach(function(a){if(a&&a.driveLink)linksHtml+='<li><a href="'+escAttr(a.driveLink)+'">'+escAttr(a.nombre||a.name||'Adjunto')+'</a></li>';});
+  if(folderLink&&!linksHtml)linksHtml='<li><a href="'+escAttr(folderLink)+'">Carpeta Drive de la PQRSD</a></li>';
+  const adjuntosHtml=linksHtml
+    ?('<p><strong>Documentos adjuntos en Drive:</strong></p><ul>'+linksHtml+'</ul>')
+    :(folderLink?'<p><a href="'+escAttr(folderLink)+'">Abrir carpeta Drive de la PQRSD</a></p>':'<p><em>Sin adjuntos registrados. Revise la carpeta Drive si fue asignado recientemente.</em></p>');
+  return '<p>Estimado/a <strong>'+escAttr(responsable||'responsable')+'</strong>,</p>'+
+    '<p>Se le ha asignado o notificado la siguiente PQRSD para su atención:</p>'+
+    '<table style="border-collapse:collapse;font-size:13px;width:100%;max-width:520px">'+
+    '<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">N° PQRSD</td><td style="padding:4px 8px">'+escAttr(num)+'</td></tr>'+
+    '<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">Asunto</td><td style="padding:4px 8px">'+escAttr(asunto)+'</td></tr>'+
+    '<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">Fecha solicitud</td><td style="padding:4px 8px">'+escAttr(fecha)+'</td></tr>'+
+    '<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">Ciudadano</td><td style="padding:4px 8px">'+escAttr(solNombre)+'</td></tr>'+
+    (detalle?'<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">Detalle</td><td style="padding:4px 8px">'+escAttr(detalle)+'</td></tr>':'')+
+    (oficina?'<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">Oficina</td><td style="padding:4px 8px">'+escAttr(oficina)+'</td></tr>':'')+
+    '</table>'+
+    adjuntosHtml+
+    '<hr><p style="font-size:11px;color:#888">Notificación automática del Sistema de Seguimiento de Trámites — CDA Delegación Guaviare. No responda a este correo.</p>';
+}
+async function _pqrsEnviarNotifAsignacion(e,emails,expId){
+  // Enviar notificación estructurada cuando no se puede reenviar el correo original
+  if(!emails||!emails.length)return false;
+  const fn=typeof _gmailApiBest==='function'?_gmailApiBest:null;
+  if(!fn&&typeof gmailSend!=='function')return false;
+  const num=expId||e._exp||'';
+  const asunto='[PQRSD '+num+'] '+((e.f_f1||e._tipo_solicitud||'Solicitud').slice(0,80));
+  const body=_pqrsHtmlNotifAsignacion(e,num);
+  let okCount=0;
+  for(let i=0;i<emails.length;i++){
+    try{
+      const raw=typeof _buildMimeEmail==='function'?_buildMimeEmail(emails[i],asunto,body):null;
+      if(raw){
+        await _gmailApiBest('POST',GMAIL_API_BASE+'/messages/send',{raw:raw});
+        okCount++;
+      }else if(typeof gmailSend==='function'){
+        await gmailSend(emails[i],asunto,body);
+        okCount++;
+      }
+    }catch(err){
+      console.warn('_pqrsEnviarNotifAsignacion:',emails[i],err.message);
+    }
+  }
+  return okCount>0;
+}
 async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg){
   if(!e||!expId||!nombres||!nombres.length)return false;
   if(!pqrsFueRadicadaPorCorreo(e))return false;
@@ -636,25 +693,29 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
   if(!pendientes.length)return true;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk)return false;
-  const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
-  if(!msg||typeof reenviarEmailRawARecipientes!=='function')return false;
   const emails=pendientes.map(function(p){return p.email;});
-  try{
-    const ok=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});
-    if(ok){
-      pqrsMarcarCorreosReenviados(e,emails);
-      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-      e._pqrs_historial.push({
-        tipo:'reenvio_correo_responsable',
-        fecha:hoy(),
-        nota:'Correo de radicación reenviado a responsable(s): '+pendientes.map(function(p){return p.nombre;}).join(', ')
-      });
-    }
-    return ok;
-  }catch(err){
-    console.warn('reenvio responsable:',err);
-    return false;
+  // Intento 1: reenvío del correo original (funciona cuando tenemos el token de secretaria)
+  const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
+  let ok=false;
+  if(msg&&typeof reenviarEmailRawARecipientes==='function'){
+    try{ok=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});}
+    catch(err){console.warn('reenvio raw responsable:',err);}
   }
+  // Intento 2: notificación estructurada con links Drive (funciona con cualquier token OFI)
+  if(!ok){
+    try{ok=await _pqrsEnviarNotifAsignacion(e,emails,expId);}
+    catch(err){console.warn('notif asignacion responsable:',err);}
+  }
+  if(ok){
+    pqrsMarcarCorreosReenviados(e,emails);
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({
+      tipo:'reenvio_correo_responsable',
+      fecha:hoy(),
+      nota:'Notificación de PQRSD enviada a responsable(s): '+pendientes.map(function(p){return p.nombre;}).join(', ')
+    });
+  }
+  return ok;
 }
 async function tryReenvioPqrsCorreoAResponsables(e,nombres,expId,opts){
   opts=opts||{};

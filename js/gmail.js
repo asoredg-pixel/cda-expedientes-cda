@@ -2943,6 +2943,19 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     notif('Error al verificar cuenta Gmail: ' + String(err.message || err).slice(0, 100), 'err');
     return false;
   }
+  // Verificar que la cuenta conectada coincide con el email autorizado del usuario actual
+  const usuarioEmail = String(
+    (window._usuarioActual && window._usuarioActual.email) || ''
+  ).trim().toLowerCase();
+  if (usuarioEmail && email && email !== usuarioEmail) {
+    notif(
+      '⛔ No puede conectar la cuenta "' + email + '".\n' +
+      'Su cuenta autorizada en el sistema es "' + usuarioEmail + '".\n' +
+      'Cierre sesión en Google y vuelva a conectar con su cuenta institucional.',
+      'err'
+    );
+    return false;
+  }
   gmailOfiSetToken(tok, expiresInSec, email);
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
   return true;
