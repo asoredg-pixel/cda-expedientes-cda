@@ -617,15 +617,35 @@ function pqrsMarcarCorreosReenviados(e,emails){
 }
 async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
   const gmailMsgId=e._gmail_message_id||'';
-  if(!gmailMsgId)return null;
   let msg=prefetchedMsg||null;
-  if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
-  if(!msg&&typeof _gmailFetchMessageFull==='function'){
-    msg=await _gmailFetchMessageFull(gmailMsgId);
-    if(msg)_gmailCurrentMsg=msg;
+  // Intento 1: mensaje original por ID (requiere token de secretaria / cdaguaviare1)
+  if(gmailMsgId){
+    if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
+    if(!msg&&typeof _gmailFetchMessageFull==='function'){
+      msg=await _gmailFetchMessageFull(gmailMsgId);
+      if(msg)_gmailCurrentMsg=msg;
+    }
+    if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+      try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg (sec):',err);}
+    }
   }
-  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
-    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
+  // Intento 2: buscar en la bandeja OFI del usuario actual (ej. NCA ya recibió el reenvío de secretaria)
+  // Esto permite que NCA reenvíe el correo que ÉL recibió, sin necesitar acceso a cdaguaviare1.
+  if(!msg&&typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid()&&typeof _gmailOfiApi==='function'&&typeof GMAIL_API_BASE!=='undefined'){
+    const expId=String(e._exp||'').trim();
+    if(expId){
+      try{
+        const q=encodeURIComponent('subject:"PQRSD #'+expId+'"');
+        const sr=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages?q='+q+'&maxResults=3');
+        if(sr&&sr.messages&&sr.messages.length){
+          const found=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages/'+sr.messages[0].id+'?format=full');
+          if(found){
+            msg=found;
+            console.log('_pqrsFetchGmailMsgForReenvio: mensaje encontrado en bandeja OFI para PQRSD',expId);
+          }
+        }
+      }catch(err){console.warn('_pqrsFetchGmailMsgForReenvio búsqueda OFI:',err);}
+    }
   }
   return msg;
 }
