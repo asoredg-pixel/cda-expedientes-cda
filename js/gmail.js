@@ -2371,11 +2371,15 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   for (var hi = 0; hi < headerBytes.length; hi++) headerText += String.fromCharCode(headerBytes[hi]);
   var lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
   var headerLines = headerText.split(lb);
+  // Headers que deben eliminarse del mensaje original al reenviar desde una cuenta diferente.
+  // "From/Sender" → Gmail los rellena con la cuenta autenticada, evitando el bloqueo 550 5.7.1.
+  // "DKIM/ARC/Received/SPF/Auth" → son específicos de la entrega original; re-incluirlos activa filtros anti-spam.
+  var SKIP_HEADERS = /^(To|Cc|Bcc|From|Sender|Reply-To|Return-Path|Message-ID|DKIM-Signature|ARC-Seal|ARC-Message-Signature|ARC-Authentication-Results|Authentication-Results|Received-SPF|Received|X-Received|X-Forwarded-To|X-Original-To|Delivered-To|X-Google-DKIM-Signature):/i;
   var newHeaderLines = [];
   var hj = 0;
   while (hj < headerLines.length) {
     var hline = headerLines[hj];
-    if (/^(To|Cc|Bcc):/i.test(hline)) {
+    if (SKIP_HEADERS.test(hline)) {
       hj++;
       while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
       continue;
