@@ -4506,8 +4506,15 @@ async function renderUsuariosCfg(forceRebuild){
     const tb=document.getElementById('usuarios-fs-tbody');
     if(tb)tb.dataset.mode=modeKey;
   }
-  await refreshUsuariosAutorizadosUi();
-  if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection&&document.body.classList.contains('sesion-activa'))startUsuariosFirestoreListener();
+  // Mostrar caché local de inmediato (sin esperar Firestore)
+  paintUsuariosCfgTable();
+  // Arrancar listener en tiempo real si no estaba activo
+  if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection&&document.body.classList.contains('sesion-activa')){
+    startUsuariosFirestoreListener();
+  }else{
+    // Listener ya activo → solo refrescar si la caché está vacía o se pide rebuild
+    if(!_usuariosCacheLoaded||forceRebuild)await refreshUsuariosAutorizadosUi();
+  }
 }
 function prepararVistaAdminUsuariosAutorizados(){
   if(!esAdministrador())return;

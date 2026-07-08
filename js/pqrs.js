@@ -358,90 +358,10 @@ async function guardarPqrsSecretaria(modo){
   const anexoFiles=Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[];
   let reenvioOficinaOk=false;
   let reenvioDsOk=false;
-  if(gmailMsgId){
-    let _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
-    const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
-    if(_tokOk&&!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
-      _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
-      if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
-    }
-    if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-      try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
-      if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
-    }else if(!soloRadicar){
-      const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
-      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio);
-      if(!reenvioOficinaOk&&_tokOk&&gmailMsgId){
-        notif('⚠️ La PQRSD se radicará, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+'. Verifique la conexión Gmail y reenvíe manualmente con el botón ↪ Reenviar.','warn');
-      }
-    }
-  }
-  if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
-    try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
-  }
-  let manualDriveAtts=null;
-  let manualDriveFolderLink='';
-  let driveFolderMeta={};
-  let archivoFinal='';
-  const tipoRadicacion=gmailMsgId?'radicacion_correo':(typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro'));
-  if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
-    try{
-      const manualRes=await subirSoporteRadicacionManual({
-        expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
-        asunto,detalle,tipoPersona,
-        pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
-        tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles,
-        silentNotif:true
-      });
-      if(anexoFiles.length){
-        const subidos=(manualRes.anexos&&manualRes.anexos.length)||0;
-        if(subidos<anexoFiles.length){
-          if(typeof closeConfirmExito==='function')closeConfirmExito();
-          notif('No se pudo subir el anexo al Drive. Revise la conexión Gmail e intente de nuevo.','err');
-          return;
-        }
-      }
-      if(!manualRes.soporte){
-        if(typeof closeConfirmExito==='function')closeConfirmExito();
-        notif('No se pudo generar el soporte PDF en Drive. Revise la conexión e intente de nuevo.','err');
-        return;
-      }
-      if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
-      manualDriveFolderLink=manualRes.folderLink||manualRes.pqrsFolderLink||'';
-      driveFolderMeta={
-        pqrsFolderId:manualRes.pqrsFolderId||'',
-        pqrsFolderLink:manualRes.folderLink||manualRes.pqrsFolderLink||'',
-        solicitudFolderId:manualRes.solicitudFolderId||'',
-        respuestaFolderId:manualRes.respuestaFolderId||'',
-        pathLabel:manualRes.pathLabel||''
-      };
-      if(anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
-    }catch(e){
-      console.warn('soporte manual drive:',e);
-      if(anexoFiles.length){
-        if(typeof closeConfirmExito==='function')closeConfirmExito();
-        notif('No se pudo subir el anexo al Drive: '+(e.message||'revise la conexión Gmail'),'err');
-        return;
-      }
-    }
-  }
-  const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
-    ?window._gmailPendingAttachments:(manualDriveAtts||null);
+  // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
     ?window._gmailPendingEmailData:null;
-  const linkFinal=(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
-  const gFolders=window._gmailPendingPqrsFolders;
-  if(gFolders&&!driveFolderMeta.pqrsFolderId){
-    driveFolderMeta={
-      pqrsFolderId:gFolders.pqrsFolderId||'',
-      pqrsFolderLink:gFolders.pqrsFolderLink||'',
-      solicitudFolderId:gFolders.solicitudFolderId||'',
-      respuestaFolderId:gFolders.respuestaFolderId||'',
-      pathLabel:gFolders.pathLabel||''
-    };
-  }
-  window._gmailPendingPqrsFolders=null;
-  const folderLinkFinal=manualDriveFolderLink||driveFolderMeta.pqrsFolderLink||(gmailAtts&&gmailAtts[0]&&gmailAtts[0].folderLink)||'';
+  const tipoRadicacion=gmailMsgId?'radicacion_correo':(typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro'));
   const encargadoOfi=soloRadicar?'':(typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'');
   const data=normalizePqrsOficinaFields({
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:fechaTermino||'',
@@ -458,15 +378,12 @@ async function guardarPqrsSecretaria(modo){
     _pqrs_pendiente_traslado:soloRadicar||undefined,
     _pqrs_traslado_fecha:soloRadicar?'':hoy(),_pqrs_traslado_por:soloRadicar?'':'Secretaría DEGUV',
     _pqrs_estado_oficina:'pendiente',_pqrs_responsable_oficina:encargadoOfi,
-    _pqrs_solicitud_link:linkFinal,_pqrs_solicitud_archivo:archivoFinal,_pqrs_detalle:detalle,
-    _pqrs_drive_folder_link:folderLinkFinal,
-    _pqrs_drive_folder_id:driveFolderMeta.pqrsFolderId||'',
-    _pqrs_drive_solicitud_folder_id:driveFolderMeta.solicitudFolderId||'',
-    _pqrs_drive_respuesta_folder_id:driveFolderMeta.respuestaFolderId||'',
-    _pqrs_drive_path_label:driveFolderMeta.pathLabel||'',
+    _pqrs_solicitud_link:'',_pqrs_solicitud_archivo:'',_pqrs_detalle:detalle,
+    _pqrs_drive_folder_link:'',_pqrs_drive_folder_id:'',
+    _pqrs_drive_solicitud_folder_id:'',_pqrs_drive_respuesta_folder_id:'',_pqrs_drive_path_label:'',
     _pqrs_historial:hist,tasks:[],
     _gmail_message_id:gmailMsgId||null,
-    _pqrs_gmail_attachments:gmailAtts||null,
+    _pqrs_gmail_attachments:null,
     _gmail_email_data:gmailEmailData,
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion})
   });
@@ -477,7 +394,112 @@ async function guardarPqrsSecretaria(modo){
   }
   upsertPersonaCatalog(data);
   logAudit('Creó PQRSD ['+expId+']'+(soloRadicar?' (sin traslado)':''),'pqrsd',expId);
-  persistExpedienteGranular(data,true);
+  // Guardado en Firestore (paso crítico — debe completarse antes de Drive)
+  const fsOk=await (typeof persistExpedienteGranularAsync==='function'
+    ?persistExpedienteGranularAsync(data,true)
+    :Promise.resolve(null));
+  if(fsOk===false){
+    // persistExpedienteGranular guardó backup local; avisamos y salimos de drive
+    window._gmailPendingMsgId=null;
+    window._gmailPendingAttachments=null;
+    window._gmailPendingEmailData=null;
+    limpiarFormSecretaria();
+    renderBandejaDepto();
+    renderSecretariaPqrs();
+    return;
+  }
+  // fsOk===null → función sync (no retorna promesa) → asumimos que no falló de inmediato
+  if(fsOk===undefined||fsOk===null){
+    // Llamada fire-and-forget de la versión anterior; continuamos
+    persistExpedienteGranular(data,true);
+  }
+  // ── PASO 2: Reenviar correo a la oficina (solo si viene de Gmail) ────────
+  let _msgParaReenvio=null;
+  if(gmailMsgId){
+    _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+    const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+    if(_tokOk&&!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
+      _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
+      if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
+    }
+    if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+      try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
+      if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
+    }else if(!soloRadicar){
+      const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
+      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio||null);
+      if(!reenvioOficinaOk&&_tokOk){
+        notif('⚠️ La PQRSD se radicó, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+'. Reenvíe manualmente desde Correos.','warn');
+      }
+    }
+  }
+  // ── PASO 3: Subir PDF/anexos a Drive (solo si Firestore ya se guardó) ────
+  let manualDriveAtts=null;
+  let manualDriveFolderLink='';
+  let driveFolderMeta={};
+  let archivoFinal='';
+  if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
+    try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
+  }
+  if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
+    try{
+      const manualRes=await subirSoporteRadicacionManual({
+        expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
+        asunto,detalle,tipoPersona,
+        pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
+        tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles,
+        silentNotif:true
+      });
+      if(anexoFiles.length){
+        const subidos=(manualRes.anexos&&manualRes.anexos.length)||0;
+        if(subidos<anexoFiles.length){
+          notif('No se pudo subir algún anexo al Drive. La PQRSD ya quedó radicada — adjunte el archivo manualmente luego.','warn');
+        }
+      }
+      if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
+      manualDriveFolderLink=manualRes.folderLink||manualRes.pqrsFolderLink||'';
+      driveFolderMeta={
+        pqrsFolderId:manualRes.pqrsFolderId||'',
+        pqrsFolderLink:manualRes.folderLink||manualRes.pqrsFolderLink||'',
+        solicitudFolderId:manualRes.solicitudFolderId||'',
+        respuestaFolderId:manualRes.respuestaFolderId||'',
+        pathLabel:manualRes.pathLabel||''
+      };
+      if(anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
+    }catch(e){
+      console.warn('soporte manual drive:',e);
+      notif('No se pudo subir al Drive: '+(e.message||'revise la conexión Gmail')+'. La PQRSD ya quedó radicada — reintente adjuntar luego.','warn');
+    }
+  }
+  // ── PASO 4: Actualizar expediente con metadatos Drive ───────────────────
+  const gmailAtts=Array.isArray(window._gmailPendingAttachments)&&window._gmailPendingAttachments.length
+    ?window._gmailPendingAttachments:(manualDriveAtts||null);
+  const gFolders=window._gmailPendingPqrsFolders;
+  if(gFolders&&!driveFolderMeta.pqrsFolderId){
+    driveFolderMeta={
+      pqrsFolderId:gFolders.pqrsFolderId||'',
+      pqrsFolderLink:gFolders.pqrsFolderLink||'',
+      solicitudFolderId:gFolders.solicitudFolderId||'',
+      respuestaFolderId:gFolders.respuestaFolderId||'',
+      pathLabel:gFolders.pathLabel||''
+    };
+  }
+  window._gmailPendingPqrsFolders=null;
+  const linkFinal=(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
+  const folderLinkFinal=manualDriveFolderLink||driveFolderMeta.pqrsFolderLink||(gmailAtts&&gmailAtts[0]&&gmailAtts[0].folderLink)||'';
+  const hayMetadrive=!!(linkFinal||folderLinkFinal||driveFolderMeta.pqrsFolderId||(gmailAtts&&gmailAtts.length));
+  if(hayMetadrive){
+    data._pqrs_solicitud_link=linkFinal;
+    data._pqrs_solicitud_archivo=archivoFinal;
+    data._pqrs_drive_folder_link=folderLinkFinal;
+    data._pqrs_drive_folder_id=driveFolderMeta.pqrsFolderId||'';
+    data._pqrs_drive_solicitud_folder_id=driveFolderMeta.solicitudFolderId||'';
+    data._pqrs_drive_respuesta_folder_id=driveFolderMeta.respuestaFolderId||'';
+    data._pqrs_drive_path_label=driveFolderMeta.pathLabel||'';
+    data._pqrs_gmail_attachments=gmailAtts||null;
+    // Sincroniza metadata Drive al registro ya guardado en Firestore
+    persistExpedienteGranular(data,false);
+  }
   try{
     await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
   }catch(err){console.warn('notif radicacion auto:',err);}

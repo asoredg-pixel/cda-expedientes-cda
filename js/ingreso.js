@@ -48,12 +48,16 @@ async function verificarSesionDisponible(email){
   }
   return{ok:true};
 }
+// Desplaza cualquier sesión anterior (modelo WhatsApp Web):
+// el nuevo login siempre toma el control; la sesión anterior recibe el cambio
+// por su listener de Firestore y se cierra automáticamente.
 async function claimActiveSession(email){
   email=String(email||'').trim().toLowerCase();
   const ref=sessionDocRef(email);
   if(!email||!ref||!window._fsSetDoc)return null;
   const existing=await leerSesionFirestore(email);
   const localSid=String(sessionStorage.getItem('sst_session_id')||'').trim();
+  // Si la sesión existente es esta misma pestaña/dispositivo, renovar heartbeat
   if(sesionRemotaEstaViva(existing)){
     const remoteSid=String(existing.activeSessionId||'').trim();
     if(localSid&&localSid===remoteSid){
@@ -61,7 +65,9 @@ async function claimActiveSession(email){
       try{await window._fsSetDoc(ref,{activeSessionHeartbeat:new Date().toISOString()},{merge:true});}catch(e){}
       return localSid;
     }
-    return'BUSY';
+    // Hay otra sesión activa: la desplazamos escribiendo un nuevo ID
+    // (la sesión anterior lo detectará en su listener y se cerrará)
+    console.log('claimActiveSession: desplazando sesión anterior de',email);
   }
   const sid=generateSessionId();
   const now=new Date().toISOString();
@@ -255,12 +261,6 @@ async function verificarUsuarioFirestore(fbUser){
       return;
     }
     const sesion=await claimActiveSession(email);
-    if(sesion==='BUSY'){
-      window._usuarioActual=null;
-      setLoginAuthMsg('❌ Ya tiene una sesión abierta en otro dispositivo, navegador o pestaña.\n\nCierre sesión allí antes de ingresar aquí.','err');
-      if(window._authSignOut)await window._authSignOut().catch(()=>{});
-      return;
-    }
     if(sesion==='RULES'||!sesion){
       console.warn('Sesión en Firestore no disponible; ingreso sin bloqueo remoto.');
       _sessionId='local_'+generateSessionId();
