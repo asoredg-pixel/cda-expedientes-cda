@@ -543,8 +543,29 @@ async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMs
   if(!gmailMsgId)return false;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk)return false;
-  // Usa _pqrsFetchGmailMsgForReenvio para beneficiarse del fallback de búsqueda en bandeja OFI
-  const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg||null);
+  let msg=prefetchedMsg||null;
+  if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
+  if(!msg&&typeof _gmailFetchMessageFull==='function'){
+    msg=await _gmailFetchMessageFull(gmailMsgId);
+    if(msg)_gmailCurrentMsg=msg;
+  }
+  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
+  }
+  // Fallback: buscar en bandeja OFI del usuario actual (ej. NCA ya recibió el reenvío de secretaria)
+  if(!msg&&typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid()&&typeof _gmailOfiApi==='function'&&typeof GMAIL_API_BASE!=='undefined'){
+    const eExpId=String(e._exp||expId||'').trim();
+    if(eExpId){
+      try{
+        const q=encodeURIComponent('subject:"PQRSD #'+eExpId+'"');
+        const sr=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages?q='+q+'&maxResults=3');
+        if(sr&&sr.messages&&sr.messages.length){
+          const found=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages/'+sr.messages[0].id+'?format=full');
+          if(found){msg=found;console.log('reenvioOficina: mensaje encontrado en bandeja OFI para PQRSD',eExpId);}
+        }
+      }catch(err){console.warn('reenvioOficina búsqueda OFI:',err);}
+    }
+  }
   if(!msg||typeof reenviarEmailAOficina!=='function')return false;
   try{
     const ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true});
