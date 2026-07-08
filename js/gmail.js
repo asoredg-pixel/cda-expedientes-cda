@@ -2349,6 +2349,39 @@ async function gmailSendMessage(to, subject, htmlBody) {
   return gmailSend(to, subject, htmlBody);
 }
 
+// Decodifica encoded-words RFC 2047 (=?charset?B/Q?text?=) en cabeceras de correo.
+// Necesario para limpiar asuntos como "=?UTF-8?B?[base64 de 'Fwd: PQRSD #... asunto']?="
+// antes de aplicar el regex que elimina prefijos duplicados.
+function _decodeEmailHeaderRfc2047(str) {
+  if (!str || str.indexOf('=?') < 0) return str;
+  return str.replace(/=\?([A-Za-z0-9\-]+)\?(B|Q)\?([^?]*)\?=/gi, function(match, charset, enc, text) {
+    try {
+      var bytes;
+      if (enc.toUpperCase() === 'B') {
+        var bin = atob(text.replace(/\s/g, ''));
+        bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      } else {
+        var qp = text.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, function(_, h) {
+          return String.fromCharCode(parseInt(h, 16));
+        });
+        bytes = new TextEncoder().encode(qp);
+      }
+      return new TextDecoder(charset || 'utf-8').decode(bytes);
+    } catch (e) { return match; }
+  });
+}
+// Codifica un subject con caracteres no-ASCII como encoded-word UTF-8 base64.
+function _encodeEmailSubject(subj) {
+  if (!/[^\x00-\x7F]/.test(subj)) return subj;
+  try {
+    var bytes = new TextEncoder().encode(subj);
+    var bin = '';
+    bytes.forEach(function(b) { bin += String.fromCharCode(b); });
+    return '=?UTF-8?B?' + btoa(bin) + '?=';
+  } catch (e) { return subj; }
+}
+
 function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
   const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -2386,9 +2419,14 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
     }
     if (/^Subject:/i.test(hline)) {
       var origSubj = hline.replace(/^Subject:\s*/i, '');
-      var cleanSubj = origSubj.replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '');
+      // Decodificar RFC 2047 para que el regex pueda limpiar prefijos aunque estén base64/QP
+      var decodedSubj = _decodeEmailHeaderRfc2047(origSubj.trim());
+      var cleanSubj = decodedSubj
+        .replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '')
+        .trim();
       var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
-      newHeaderLines.push('Subject: Fwd: ' + expTag + cleanSubj);
+      var newSubj = 'Fwd: ' + expTag + cleanSubj;
+      newHeaderLines.push('Subject: ' + _encodeEmailSubject(newSubj));
       hj++;
       while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
       continue;
@@ -2952,12 +2990,19 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     (window._usuarioActual && window._usuarioActual.email) || ''
   ).trim().toLowerCase();
   if (usuarioEmail && email && email !== usuarioEmail) {
-    notif(
-      '⛔ No puede conectar la cuenta "' + email + '".\n' +
-      'Su cuenta autorizada en el sistema es "' + usuarioEmail + '".\n' +
-      'Cierre sesión en Google y vuelva a conectar con su cuenta institucional.',
-      'err'
-    );
+    if (typeof confirmPrecaucion === 'function') {
+      confirmPrecaucion({
+        title: '⛔ Cuenta de Gmail no autorizada',
+        message: 'No puede conectar la cuenta "' + email + '" a este perfil.',
+        detail: 'Su cuenta autorizada en el sistema es "' + usuarioEmail + '".\n' +
+                'Cierre sesión en Google y vuelva a conectar con su cuenta institucional.',
+        confirmLabel: 'Entendido',
+        hideCancel: true,
+        tone: 'delete'
+      }, function() {});
+    } else {
+      notif('⛔ No puede conectar "' + email + '". Su cuenta autorizada es "' + usuarioEmail + '".', 'err');
+    }
     return false;
   }
   gmailOfiSetToken(tok, expiresInSec, email);
