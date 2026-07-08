@@ -906,6 +906,20 @@ function setPqrsRespTipo(val){
   }
   if(val===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde(true);
   else pqrsClearRespOficioError();
+  // Entrega-form: hide/show canal row and adapt cuerpo label when informativa
+  const isInfo=val===PQRS_WF_TIPO.INFORMATIVA;
+  const canalRow=document.getElementById('pqrs-entrega-canal-row');
+  const oficioRow=document.getElementById('pqrs-entrega-oficio-row');
+  const cuerpoLbl=document.getElementById('pqrs-entrega-cuerpo-label');
+  const cuerpoTxt=document.getElementById('pqrs-entrega-resp-cuerpo');
+  if(canalRow)canalRow.style.display=isInfo?'none':'';
+  if(oficioRow)oficioRow.style.display=isInfo?'none':'';
+  if(cuerpoLbl)cuerpoLbl.innerHTML=isInfo
+    ?'Descripción informativa <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
+    :'Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span>';
+  if(cuerpoTxt&&!cuerpoTxt.value)cuerpoTxt.placeholder=isInfo
+    ?'Describa la respuesta que el ciudadano verá al consultar…'
+    :'Describa brevemente la respuesta elaborada…';
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
   else pqrsRespRefreshModalUi();
 }
@@ -2594,29 +2608,39 @@ function getPqrsRespuestaDocPreview(e,t){
 function renderPqrsEntregaCamposHtml(e){
   e=e||{};
   const wf=getPqrsWorkflow(e);
-  const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
-  const mkCan=(v,lbl,ico)=>'<button type="button" class="btn bsm canal-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespCanal(\''+jsStr(v)+'\')">'+ico+' '+escAttr(lbl)+'</button>';
+  const tipoActual=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const canalActual=wf.canal||e._pqrs_respuesta_medio||'';
+  const esInformativa=tipoActual===PQRS_WF_TIPO.INFORMATIVA;
+  const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoActual===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
+  const mkCan=(v,lbl,ico)=>'<button type="button" class="btn bsm canal-resp-btn'+(canalActual===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespCanal(\''+jsStr(v)+'\')">'+ico+' '+escAttr(lbl)+'</button>';
   let h='<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
-  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cuando el encargado revise y apruebe, se enviará la notificación al ciudadano.</div>';
+  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cuando el encargado revise y apruebe, se registrará la respuesta.</div>';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
-    '<div class="fld"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. OFI-2026-045" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'"></div>'+
+    '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. OFI-2026-045" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'"></div>'+
     '</div>';
   h+='<div class="fld" style="margin-bottom:8px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
     mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+
     mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
     mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
-    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(wf.tipo||PQRS_WF_TIPO.MENSAJE)+'"></div>';
-  h+='<div class="fld" style="margin-bottom:8px"><label style="font-size:11px;font-weight:600">Canal propuesto</label>'+
+    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>';
+  h+='<div class="fld" id="pqrs-entrega-canal-row" style="margin-bottom:8px'+(esInformativa?';display:none':'')+'"><label style="font-size:11px;font-weight:600">Canal de notificación</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-canal-btns">'+
     mkCan(PQRS_WF_CANAL.CORREO,'Correo','📧')+
     mkCan(PQRS_WF_CANAL.WHATSAPP,'WhatsApp','💬')+
     mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial','🤝')+
-    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(wf.canal||e._pqrs_respuesta_medio||'')+'"></div>';
-  h+='<div class="fld"><label style="font-size:11px;font-weight:600">Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span></label>'+
-    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Describa brevemente la respuesta elaborada…" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea></div>';
+    mkCan('aviso','Aviso/Personal','📋')+
+    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalActual)+'"></div>';
+  h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">'+
+    (esInformativa
+      ?'Descripción informativa <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
+      :'Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span>')+
+    '</label>'+
+    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Describa la respuesta que el ciudadano verá al consultar…':'Describa brevemente la respuesta elaborada…')+'" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
+    (esInformativa?'<div style="font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ El encargado revisará y podrá editar este texto antes de aprobar. No se enviará correo al ciudadano.</div>':'')+
+    '</div>';
   h+='</div>';
   return h;
 }
@@ -2629,7 +2653,11 @@ function collectPqrsEntregaDatos(expId){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE).trim();
   const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim();
   if(!fechaResp){notif('Indique la fecha de la respuesta al ciudadano','err');return null;}
-  if(!cuerpo){notif('Escriba un resumen de la respuesta elaborada','err');return null;}
+  if(!cuerpo){
+    if(tipo===PQRS_WF_TIPO.INFORMATIVA){notif('Escriba la descripción informativa (será visible al ciudadano)','err');}
+    else{notif('Escriba un resumen de la respuesta elaborada','err');}
+    return null;
+  }
   const adj=collectEnviarAdjuntos();
   return{fechaResp,oficioExt,cuerpo,tipo,canal,adj};
 }
@@ -5526,11 +5554,18 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         if(activo&&(activo.url||activo.preview)&&!activo.local)pq.adj.links=[activo.url||activo.preview];
       }
       const adjDocumentos=pq.adj.links.map(lnk=>({nombre:'Link Drive',driveLink:lnk,tipo:'link'}));
-      guardarPqrsRespuestaDatos(e,{fechaResp:pq.fechaResp,oficioExt:pq.oficioExt,cuerpo:pq.cuerpo,tipo:pq.tipo,canal:pq.canal,nota:cmt,adj:pq.adj,archivos:adjDocumentos},false);
+      // Include Drive-uploaded files with fileId for later renaming by NCA
+      (driveArchivos||[]).forEach(function(da){
+        if(da&&da.driveLink&&!adjDocumentos.find(function(x){return x.driveLink===da.driveLink;})){
+          adjDocumentos.push({nombre:da.nombre||da.driveFilename||'Documento',driveLink:da.driveLink,fileId:da.fileId||da.driveFileId||'',tipo:'drive',driveFilename:da.driveFilename||''});
+        }
+      });
+      const canalFinal=pq.tipo===PQRS_WF_TIPO.INFORMATIVA?'':pq.canal;
+      guardarPqrsRespuestaDatos(e,{fechaResp:pq.fechaResp,oficioExt:pq.oficioExt,cuerpo:pq.cuerpo,tipo:pq.tipo,canal:canalFinal,nota:cmt,adj:pq.adj,archivos:adjDocumentos},false);
       persistExpedienteGranular(e,false);
       renderPqrsOficinaInbox();
       renderSecretariaPqrs();
-      notif('📤 Respuesta enviada a revisión del encargado NCA','ok');
+      notif(pq.tipo===PQRS_WF_TIPO.INFORMATIVA?'ℹ️ Respuesta informativa enviada a revisión del encargado':'📤 Respuesta enviada a revisión del encargado NCA','ok');
     }
     closeTaskModal();
   };
@@ -11628,35 +11663,49 @@ function openNcaRevisionModal(expId){
         '</div>').join('')
     :'<div style="font-size:11px;color:var(--tx3)">Sin documentos adjuntos</div>';
 
+  const tipoRevision=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const canalRevision=wf.canal||'';
+  const esInfo=tipoRevision===PQRS_WF_TIPO.INFORMATIVA;
+  const esCanalFisico=['aviso','presencial','fisica'].includes(canalRevision);
+
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 Revisión de respuesta — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px">Revise la respuesta elaborada por <strong>'+escAttr(wf.entregado_por||'responsable')+'</strong>. Puede aprobarla (simple o con oficio) o devolverla para corrección.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px">Revise la respuesta elaborada por <strong>'+escAttr(wf.entregado_por||'responsable')+'</strong>.</div>'+
+
+    (esInfo?'<div style="padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--r);margin-bottom:10px;font-size:12px">'+
+      '<strong>ℹ️ Respuesta Informativa</strong> — el responsable solicita cerrar sin enviar correo. '+
+      'Puede editar la descripción antes de aprobar; el ciudadano la verá en consulta ciudadana.</div>':'')+
 
     '<div style="padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd);margin-bottom:10px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Tipo propuesto</div>'+
-    '<div style="font-size:12px">'+escAttr(wf.tipo===PQRS_WF_TIPO.OFICIO?'📄 Oficio firmado':wf.tipo===PQRS_WF_TIPO.INFORMATIVA?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
-    '<div style="font-size:12px">'+escAttr(wf.canal||'—')+'</div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Resumen de la respuesta</div>'+
+    '<div style="font-size:12px">'+escAttr(tipoRevision===PQRS_WF_TIPO.OFICIO?'📄 Oficio firmado':tipoRevision===PQRS_WF_TIPO.INFORMATIVA?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
+    (esInfo?'':('<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
+    '<div style="font-size:12px">'+escAttr(canalRevision||'—')+'</div>'))+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">'+(esInfo?'Descripción informativa (editable abajo)':'Resumen de la respuesta')+'</div>'+
     '<div style="font-size:12px;white-space:pre-wrap">'+escAttr(wf.cuerpo||'—')+'</div>'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Documentos adjuntos</div>'+
     docsHtml+
     '</div>'+
 
-    // Correcciones NCA (opcionales)
-    '<div class="fld" style="margin-bottom:10px"><label>Correcciones al texto <span style="font-weight:400;color:var(--tx3)">(opcional — editará el cuerpo)</span></label>'+
+    '<div class="fld" style="margin-bottom:10px"><label>'+(esInfo?'Editar descripción informativa <span style="font-weight:400;color:var(--tx3)">(el ciudadano verá este texto)</span>':'Correcciones al texto <span style="font-weight:400;color:var(--tx3)">(opcional)</span>')+'</label>'+
     '<textarea id="nca-rev-cuerpo" style="min-height:80px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(wf.cuerpo||'')+'</textarea></div>'+
-    '<div class="fg" style="margin-bottom:10px">'+
+
+    (esInfo?'':('<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>N° de oficio confirmado</label><input type="text" id="nca-rev-oficio" value="'+escAttr(wf.oficio||'')+'"></div>'+
     '<div class="fld"><label>Fecha de respuesta</label><input type="date" id="nca-rev-fecha" value="'+escAttr(wf.fecha_respuesta||hoy())+'"></div>'+
-    '</div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(se envía al responsable)</span></label>'+
-    '<input type="text" id="nca-rev-comentario" placeholder="Ej: Aprobado. Envíelo al ciudadano." style="margin-top:4px"></div>'+
+    '</div>'))+
+
+    '<div class="fld" style="margin-bottom:12px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(se notifica al responsable)</span></label>'+
+    '<input type="text" id="nca-rev-comentario" placeholder="'+(esInfo?'Ej: Aprobado como informativa. Texto correcto.':'Ej: Aprobado. Proceda a enviar.')+'" style="margin-top:4px"></div>'+
 
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-    '<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar — Mensaje simple</button>'+
-    '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar — Requiere oficio firmado (VITAL)</button>'+
+    (esInfo
+      ?'<button type="button" class="btn bsm" style="background:#6c757d;color:#fff" onclick="ncaAprobarInformativa(\''+escAttr(expId)+'\')">ℹ️ Aprobar como Informativa (cerrar sin correo)</button>'
+      :(esCanalFisico
+        ?'<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarCanalFisico(\''+escAttr(expId)+'\')">✅ Aprobar — Notificación física (cerrar)</button>'
+        :'<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar — Mensaje simple</button>'+
+         '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar — Requiere oficio firmado (VITAL)</button>'))+
     '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver al responsable</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
@@ -11669,16 +11718,18 @@ function _ncaRevisionDatos(){
   return{
     cuerpo:String((document.getElementById('nca-rev-cuerpo')||{}).value||'').trim(),
     oficio:String((document.getElementById('nca-rev-oficio')||{}).value||'').trim(),
-    fecha:String((document.getElementById('nca-rev-fecha')||{}).value||hoy()).trim(),
+    fecha:String((document.getElementById('nca-rev-fecha')||{}).value||hoy()).trim()||hoy(),
     comentario:String((document.getElementById('nca-rev-comentario')||{}).value||'').trim()
   };
 }
 
-function ncaAprobarMensajeSimple(expId){
+async function ncaAprobarMensajeSimple(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
   const wf=getPqrsWorkflow(e);
+  // Rename Drive docs: revision → aprobado
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
   setPqrsWorkflow(e,{
     fase:PQRS_WF.LISTA_ENVIO,
     cuerpo:d.cuerpo||wf.cuerpo,
@@ -11695,11 +11746,13 @@ function ncaAprobarMensajeSimple(expId){
   notif('✅ Respuesta aprobada — lista para envío al ciudadano','ok');
 }
 
-function ncaAprobarOficioFirmado(expId){
+async function ncaAprobarOficioFirmado(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
   const wf=getPqrsWorkflow(e);
+  // Rename Drive docs: revision → aprobado (VITAL will replace with signed version)
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
   setPqrsWorkflow(e,{
     fase:PQRS_WF.VITAL_GESTION,
     cuerpo:d.cuerpo||wf.cuerpo,
@@ -11716,12 +11769,14 @@ function ncaAprobarOficioFirmado(expId){
   notif('📄 Respuesta con oficio — VITAL gestionará la firma del Director','ok');
 }
 
-function ncaRechazarRespuesta(expId){
+async function ncaRechazarRespuesta(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
   if(!d.comentario){notif('Indique el motivo de la devolución','err');return;}
   const wf=getPqrsWorkflow(e);
+  // Rename Drive docs: revision → acorregir
+  await _pqrsRenombrarDocsDriveWf(wf,'acorregir');
   setPqrsWorkflow(e,{
     fase:PQRS_WF.RECHAZADA,
     revision_nca:{aprobado:false,comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
@@ -11732,7 +11787,149 @@ function ncaRechazarRespuesta(expId){
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  notif('↩ Respuesta devuelta al responsable','ok');
+  notif('↩ Respuesta devuelta al responsable para corrección','ok');
+}
+
+// ---------------------------------------------------------------------------
+// Drive: renombrar documentos del workflow según estado NCA
+// ---------------------------------------------------------------------------
+async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado){
+  if(!wf||!Array.isArray(wf.documentos))return;
+  const ESTADOS=['revision','acorregir','aprobado'];
+  const prefRgx=/^(revision|acorregir|aprobado)-/i;
+  for(const doc of wf.documentos){
+    const fid=doc.fileId||(doc.tipo==='drive'?doc.fileId:null);
+    if(!fid)continue;
+    const origName=doc.nombre||doc.driveFilename||'documento';
+    const cleanName=origName.replace(prefRgx,'');
+    const newName=nuevoEstado+'-'+cleanName;
+    try{
+      if(typeof driveRenameInstitutional==='function'){
+        const ok=await driveRenameInstitutional(fid,newName);
+        if(ok){doc.nombre=newName;doc.driveFilename=newName;doc.driveEstado=nuevoEstado;}
+      }
+    }catch(err){console.warn('_pqrsRenombrarDocsDriveWf:',err);}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notificación de cierre al ciudadano (para canales no-correo)
+// ---------------------------------------------------------------------------
+async function _pqrsNotificarCierreCiudadano(e,opts){
+  if(!e)return;
+  opts=opts||{};
+  if(opts.canal===PQRS_WF_CANAL.CORREO)return; // already handled by correo flow
+  const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
+  if(!correos.length)return;
+  const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
+  if(!tokSec&&!tokOfi)return;
+  const expId=String(e._exp||'');
+  const nombre=e._qd_nombre||e._pn_nombre||'ciudadano/a';
+  const canal=(opts.canal||'');
+  const canalLabel={'aviso':'Aviso en cartelera','presencial':'Notificación presencial','fisica':'Correo físico','whatsapp':'WhatsApp'}[canal]||canal||'medio físico';
+  const cuerpoInfo=opts.cuerpo||e._pqrs_respuesta_nota||'';
+  const subject='PQRSD #'+expId+' — Su solicitud ha sido respondida';
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const htmlBody='<p>Estimado/a <strong>'+esc(nombre)+'</strong>,</p>'+
+    '<p>Le informamos que su solicitud <strong>PQRSD #'+esc(expId)+'</strong> ha sido atendida.</p>'+
+    (cuerpoInfo?'<blockquote style="border-left:3px solid #0078d4;padding:6px 12px;color:#333">'+esc(cuerpoInfo).replace(/\n/g,'<br>')+'</blockquote>':'')+
+    '<p>La notificación oficial fue realizada por: <strong>'+esc(canalLabel)+'</strong>.</p>'+
+    '<p>Para más información consulte el estado de su solicitud en línea o comuníquese con la entidad.</p>'+
+    '<hr><p style="font-size:11px;color:#888">Mensaje automático — no responda este correo. CDA Guaviare</p>';
+  try{
+    if(typeof pqrsEnviarCorreoCiudadano==='function'){
+      await pqrsEnviarCorreoCiudadano(correos,subject,htmlBody,true);
+      console.log('_pqrsNotificarCierreCiudadano: notificación enviada a',correos.join(','));
+    }
+  }catch(err){console.warn('_pqrsNotificarCierreCiudadano:',err);}
+}
+
+// ---------------------------------------------------------------------------
+// ncaAprobarInformativa — cierra la PQRSD como informativa (sin correo)
+// ---------------------------------------------------------------------------
+async function ncaAprobarInformativa(expId){
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  const d=_ncaRevisionDatos();
+  const wf=getPqrsWorkflow(e);
+  const cuerpoFinal=d.cuerpo||wf.cuerpo;
+  if(!cuerpoFinal){notif('Escriba la descripción informativa antes de aprobar','err');return;}
+  const cerradoPor=responsableActivo||'NCA';
+  const fechaResp=wf.fecha_respuesta||hoy();
+  // Rename Drive docs to aprobado
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.CERRADA,
+    cuerpo:cuerpoFinal,
+    fecha_respuesta:fechaResp,
+    revision_nca:{aprobado:true,tipo:'informativa',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
+    cerrado_por:cerradoPor,
+    cerrado_en:new Date().toISOString()
+  });
+  e._pqrs_informativa=true;
+  e._pqrs_respuesta_nota=cuerpoFinal;
+  e._pqrs_respuesta_fecha=fechaResp;
+  e._pqrs_estado_oficina='cerrado';
+  e._estado='Atendido';
+  e._fecha_res=fechaResp;
+  const fe=getFechasEstado(e);
+  fe.Atendido=fechaResp;
+  if(!fe['En trámite'])fe['En trámite']=fe.Solicitud||e._fecha||fechaResp;
+  e._fechas_estado=JSON.stringify(fe);
+  e.historial=typeof rebuildHistorial==='function'?rebuildHistorial(e,e.historial||[]):e.historial;
+  if(typeof finalizarTareasPqrsAlCerrar==='function')finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — respuesta informativa aprobada');
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({tipo:'informativa_aprobada',fecha:fechaResp,nota:'NCA aprobó respuesta informativa'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+  persistExpedienteGranular(e);
+  closeTaskModal();
+  renderPqrsOficinaInbox();
+  renderSecretariaPqrs();
+  notif('ℹ️ Respuesta informativa aprobada — PQRSD cerrada sin enviar correo al ciudadano','ok');
+}
+
+// ---------------------------------------------------------------------------
+// ncaAprobarCanalFisico — aprueba y cierra PQRSD notificada por aviso/presencial
+// ---------------------------------------------------------------------------
+async function ncaAprobarCanalFisico(expId){
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  const d=_ncaRevisionDatos();
+  const wf=getPqrsWorkflow(e);
+  const cerradoPor=responsableActivo||'NCA';
+  const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
+  const canal=wf.canal||'aviso';
+  // Rename Drive docs to aprobado
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  const wfPatch={
+    fase:PQRS_WF.CERRADA,
+    cuerpo:d.cuerpo||wf.cuerpo,
+    fecha_respuesta:fechaResp,
+    revision_nca:{aprobado:true,tipo:'canal_fisico',canal,comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
+    cerrado_por:cerradoPor,
+    cerrado_en:new Date().toISOString()
+  };
+  setPqrsWorkflow(e,wfPatch);
+  e._pqrs_respuesta_fecha=fechaResp;
+  e._pqrs_respuesta_nota=d.cuerpo||wf.cuerpo;
+  e._pqrs_estado_oficina='cerrado';
+  e._estado='Atendido';
+  e._fecha_res=fechaResp;
+  const fe=getFechasEstado(e);
+  fe.Atendido=fechaResp;
+  if(!fe['En trámite'])fe['En trámite']=fe.Solicitud||e._fecha||fechaResp;
+  e._fechas_estado=JSON.stringify(fe);
+  e.historial=typeof rebuildHistorial==='function'?rebuildHistorial(e,e.historial||[]):e.historial;
+  if(typeof finalizarTareasPqrsAlCerrar==='function')finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — notificación '+canal+' aprobada');
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({tipo:'revision_nca_canal_fisico',fecha:fechaResp,nota:'NCA aprobó respuesta con notificación '+canal+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+  persistExpedienteGranular(e);
+  // Notificar al ciudadano por correo que fue respondida (si tiene email)
+  _pqrsNotificarCierreCiudadano(e,{canal,cuerpo:d.cuerpo||wf.cuerpo});
+  closeTaskModal();
+  renderPqrsOficinaInbox();
+  renderSecretariaPqrs();
+  notif('✅ PQRSD cerrada — notificación física aprobada','ok');
 }
 
 // ===========================================================================
