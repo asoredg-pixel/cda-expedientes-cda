@@ -1416,10 +1416,21 @@ function instructorEsSoloNcaDeguv(ins){
   return ofs.includes('guaviare')&&!ofs.some(o=>o!=='guaviare'&&OFICINAS_DEGUV.some(x=>x.id===o&&x.id!=='secretaria'&&x.id!=='guaviare'));
 }
 function getResponsablesNcaDeguv(){
-  const names=getInstructoresActivos('guaviare').filter(instructorEsSoloNcaDeguv).map(i=>i.nombre).filter(Boolean);
-  const enc=getEncargadoDepto('guaviare');
-  if(enc&&!names.some(n=>agendaNorm(n)===agendaNorm(enc)))names.unshift(enc);
-  return [...new Set(names)];
+  const names=[];
+  (_usuariosCache||[]).forEach(function(u){
+    if(u&&u.activo!==false&&u.rol==='responsables'&&usuarioEsResponsableDepto(u,'guaviare')&&String(u.nombre||'').trim()){
+      names.push(String(u.nombre||'').trim());
+    }
+  });
+  getInstructoresActivos('guaviare').forEach(function(ins){
+    if(!ins||ins.rol!=='contratista')return;
+    if(!instructorEsSoloNcaDeguv(ins))return;
+    const nom=String(ins.nombre||'').trim();
+    if(nom)names.push(nom);
+  });
+  return [...new Set(names)].sort(function(a,b){
+    return String(a||'').localeCompare(String(b||''),'es');
+  });
 }
 function getResponsablesCoEjPool(expId,taskId,t){
   const e=getExpById(expId);
