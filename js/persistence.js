@@ -577,7 +577,11 @@ function _firestoreSaveErrorMessage(errCode){
   return msg;
 }
 async function persistExpedienteGranular(exp,withGlobal){
-  if(!exp)return;
+  return persistExpedienteGranularAsync(exp,withGlobal);
+}
+/** Guarda el expediente en Firestore y retorna true/false (para await en radicación). */
+async function persistExpedienteGranularAsync(exp,withGlobal){
+  if(!exp)return false;
   const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
   console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
   updateSyncIndicator('syncing');
@@ -586,16 +590,19 @@ async function persistExpedienteGranular(exp,withGlobal){
     persistExpLocalBackup(exp);
     updateSyncIndicator('error');
     if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+' La PQRSD quedó guardada localmente y se sincronizará al reconectar.','err');
-    return;
+    return false;
   }
+  // Evita que el listener ignore el snapshot del propio guardado (y el de otras pestañas
+  // en el mismo navegador) mientras corre un saveFirestore/cfg concurrente.
   const expOk=await saveExpedienteDoc(deptoResolved,exp);
   let globalOk=true;
   if(withGlobal)globalOk=await saveGlobalFirestore();
   if(expOk){
     removeExpLocalBackup(expedienteDocId(exp));
-    updateSyncIndicator(globalOk?'synced':'synced');
+    mergeExpIntoExpsCache(exp);
+    updateSyncIndicator('synced');
     if(!globalOk&&typeof notif==='function')notif('⚠️ PQRSD guardada, pero no se actualizó el índice global.','warn');
-    return;
+    return true;
   }
   persistExpLocalBackup(exp);
   updateSyncIndicator('error');
@@ -603,7 +610,9 @@ async function persistExpedienteGranular(exp,withGlobal){
   const errCode=lastErr&&lastErr.code||'unknown';
   console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
   if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+' La PQRSD quedó guardada localmente y se reintentará al sincronizar.','err');
+  return false;
 }
+window.persistExpedienteGranularAsync=persistExpedienteGranularAsync;
 function diagTestSaveExpedienteDoc(){
   saveExpedienteDoc('guaviare',{
     _exp:'TEST-001',
@@ -778,6 +787,14 @@ function refreshViewsAfterRemoteDataChange(){
     if(typeof poblarSelResponsable==='function')poblarSelResponsable();
     if(typeof renderTabActual==='function')renderTabActual();
     else if(typeof renderTabla==='function')renderTabla();
+    // Refresco explícito de vistas clave (radicación / traslado inmediato)
+    try{
+      if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+      if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
+      if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+      if(typeof renderSecretariaPqrs==='function'&&document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
+      if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+    }catch(_rv){}
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
     const sideExp=window._pqrsSideExp;
     if(sideExp&&typeof openPqrsSidePanel==='function')openPqrsSidePanel(sideExp);
@@ -873,20 +890,36 @@ function mergeExpFromFirestoreSnapshot(data,docId){
 }
 function applyExpedienteFirestoreChanges(changes){
   if(!changes||!changes.length)return false;
+  let changed=false;
   changes.forEach(function(change){
     if(change.type==='removed'){
       const expId=String(change.doc.id||'').trim();
       if(!expId)return;
+      const before=(exps||[]).length;
       exps=(exps||[]).filter(function(e){return String(e._exp||'').trim()!==expId;});
+      if(exps.length!==before)changed=true;
       return;
     }
     const exp=mergeExpFromFirestoreSnapshot(change.doc.data(),change.doc.id);
     if(!exp)return;
     const idx=(exps||[]).findIndex(function(e){return String(e._exp||'').trim()===exp._exp;});
-    if(idx>=0)exps[idx]=exp;
-    else exps.push(exp);
+    if(idx>=0){
+      const local=exps[idx];
+      // No pisar una copia local más reciente (p. ej. recién radicada con tasks)
+      // con un snapshot remoto incompleto o anterior.
+      const remoteAt=String(exp.updatedAt||'');
+      const localAt=String(local.updatedAt||local._pending_fs_at||'');
+      const localTasks=(local.tasks&&local.tasks.length)||0;
+      const remoteTasks=(exp.tasks&&exp.tasks.length)||0;
+      if(localAt&&remoteAt&&localAt>remoteAt&&localTasks>remoteTasks)return;
+      if(local._pending_fs_sync&&localTasks>remoteTasks)return;
+      exps[idx]=exp;
+    }else{
+      exps.push(exp);
+    }
+    changed=true;
   });
-  return true;
+  return changed;
 }
 function initRealtimeSync(){
   const db=window._db;
@@ -895,7 +928,8 @@ function initRealtimeSync(){
   const unsubs=[];
   DEPTOS_FIRESTORE.forEach(function(depto){
     const unsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
-      if(_localSaving)return;
+      // No bloquear por _localSaving: ese flag es de cfg/global y retrasaba
+      // la aparición de PQRSD recién radicadas en Actividades/Consulta (~1–3 min).
       const changes=snap.docChanges();
       if(!applyExpedienteFirestoreChanges(changes))return;
       refreshViewsAfterRemoteDataChange();

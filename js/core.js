@@ -1496,10 +1496,20 @@ function syncPqrsRadicacionFecha(e,fechaRadic){
 function getDocsPqrsSolicitudCiudadano(e){
   if(!e||!esPqrsSecretaria(e))return[];
   const docs=[];
-  if(e._pqrs_solicitud_link){
-    const p=parseDrivePreviewUrl(e._pqrs_solicitud_link);
-    docs.push({url:p.url||e._pqrs_solicitud_link,preview:p.preview||e._pqrs_solicitud_link,label:'Solicitud PQRSD',tipo:'Documento de solicitud',mime:'',fecha:e._fecha_solicitud||e._fecha||''});
-  }
+  const seen=new Set();
+  const push=function(url,label,tipo,fecha){
+    if(!url)return;
+    const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
+    const key=String(p.url||url||'').trim().toLowerCase();
+    if(!key||seen.has(key))return;
+    seen.add(key);
+    docs.push({url:p.url||url,preview:p.preview||p.url||url,label:label||'Documento',tipo:tipo||'Documento de solicitud',mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||''});
+  };
+  push(e._pqrs_solicitud_link,'Solicitud PQRSD','Documento de solicitud',e._fecha_solicitud||e._fecha);
+  (e._pqrs_gmail_attachments||[]).forEach(function(att){
+    if(!att||!att.driveLink)return;
+    push(att.driveLink,att.nombre||'Anexo de la solicitud','Anexo de la solicitud',e._fecha_solicitud||e._fecha);
+  });
   return docs;
 }
 function docsTramiteData(v){

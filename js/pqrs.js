@@ -395,6 +395,8 @@ async function guardarPqrsSecretaria(modo){
   upsertPersonaCatalog(data);
   logAudit('Creó PQRSD ['+expId+']'+(soloRadicar?' (sin traslado)':''),'pqrsd',expId);
   // Guardado en Firestore (paso crítico — debe completarse antes de Drive)
+  // Asegura que el registro (con tasks) quede en caché local inmediatamente.
+  if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
   const fsOk=await (typeof persistExpedienteGranularAsync==='function'
     ?persistExpedienteGranularAsync(data,true)
     :Promise.resolve(null));
@@ -406,12 +408,21 @@ async function guardarPqrsSecretaria(modo){
     limpiarFormSecretaria();
     renderBandejaDepto();
     renderSecretariaPqrs();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
     return;
   }
-  // fsOk===null → función sync (no retorna promesa) → asumimos que no falló de inmediato
   if(fsOk===undefined||fsOk===null){
-    // Llamada fire-and-forget de la versión anterior; continuamos
-    persistExpedienteGranular(data,true);
+    // Fallback si no existe la versión async: esperar el guardado sync.
+    await persistExpedienteGranular(data,true);
+    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
+  }
+  // Refresco inmediato: Actividades NCA / bandeja oficina / consulta
+  // (antes solo se actualizaba al llegar el snapshot remoto, ~1–3 min).
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  else{
+    if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
   }
   // ── PASO 2: Reenviar correo a la oficina (solo si viene de Gmail) ────────
   let _msgParaReenvio=null;
@@ -512,8 +523,11 @@ async function guardarPqrsSecretaria(modo){
     data._pqrs_drive_respuesta_folder_id=driveFolderMeta.respuestaFolderId||'';
     data._pqrs_drive_path_label=driveFolderMeta.pathLabel||'';
     data._pqrs_gmail_attachments=gmailAtts||null;
+    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
     // Sincroniza metadata Drive al registro ya guardado en Firestore
-    persistExpedienteGranular(data,false);
+    await (typeof persistExpedienteGranularAsync==='function'
+      ?persistExpedienteGranularAsync(data,false)
+      :persistExpedienteGranular(data,false));
   }
   try{
     await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
@@ -529,6 +543,13 @@ async function guardarPqrsSecretaria(modo){
   });
   limpiarFormSecretaria();
   renderSecretariaPqrs();
+  // Refresco final tras Drive/metadatos para que anexos y tasks se vean al instante
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  else{
+    if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+  }
   }catch(err){
     console.warn('guardarPqrsSecretaria:',err);
     if(typeof closeConfirmExito==='function')closeConfirmExito();
@@ -1557,15 +1578,19 @@ async function submitTrasladoPqrsInicial(expId){
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
   await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
-  persistExpedienteGranular(e);
+  if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
+  await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
   closeTaskModal();
   notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
-  renderBandejaDepto();
-  renderPqrsOficinaInbox();
-  renderSecretariaPqrs();
-  if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-  if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-  if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  else{
+    renderBandejaDepto();
+    renderPqrsOficinaInbox();
+    renderSecretariaPqrs();
+    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+  }
 }
 function openTrasladoPqrsInterOficinaModal(expId){
   const e=exps.find(x=>x._exp===expId);
@@ -1608,16 +1633,20 @@ function submitTrasladoPqrsInterOficina(expId){
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
   syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(function(){
-    persistExpedienteGranular(e);
+  tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(async function(){
+    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
+    await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
     closeTaskModal();
     notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
-    renderBandejaDepto();
-    renderPqrsOficinaInbox();
-    renderSecretariaPqrs();
-    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    else{
+      renderBandejaDepto();
+      renderPqrsOficinaInbox();
+      renderSecretariaPqrs();
+      if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+      if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+      if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+    }
   });
 }
 function anonimizarParaCiudadano(txt){
@@ -1779,6 +1808,27 @@ async function buscarExpCiudadano(){
   docsPqrs.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
   docsTram.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
   docsTask.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
+  // Documentos de PQRSD / expedientes vinculados (asociación bidireccional)
+  if(typeof getExpAsociadosAll==='function'){
+    getExpAsociadosAll(e).forEach(function(num){
+      if(typeof expAsocMatchNum==='function'&&expAsocMatchNum(num,e._exp))return;
+      const asoc=typeof findExpByNumPlain==='function'?findExpByNumPlain(num):null;
+      if(!asoc)return;
+      const tag=typeof expAsocEsRegistroPqrs==='function'&&expAsocEsRegistroPqrs(asoc)
+        ?('PQRSD asociada · '+asoc._exp):('Exp. asociado · '+asoc._exp);
+      const asocDocs=[].concat(
+        getDocsPqrsSolicitudCiudadano(asoc),
+        getDocsPqrsRespuestaCiudadano(asoc),
+        getDocsTramiteCiudadano(asoc),
+        getDocsAprobadosCiudadano(asoc)
+      );
+      asocDocs.forEach(function(d){
+        if(!d||!(d.url||d.preview))return;
+        if(docs.some(function(x){return (x.url||x.preview)===(d.url||d.preview);}))return;
+        docs.push({url:d.url,preview:d.preview||d.url,label:d.label||'Documento',tipo:tag+' · '+(d.tipo||'Documento'),mime:d.mime||'',fecha:d.fecha||''});
+      });
+    });
+  }
   const docsHtml=docs.length?docs.map(function(d){
     const ico=(d.mime||'').includes('pdf')||String(d.url||'').includes('pdf')?'📄':'📎';
     const nom=d.label||'Documento';
