@@ -680,7 +680,7 @@ async function openPqrsRespuestaModal(expId,opts){
   );
   const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
     (fromGmail?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa / sin respuesta formal'));
-  const cuerpoVal=fromGmail?(gmailSubj||wf.cuerpo||''):(wf.cuerpo||e&&e._pqrs_respuesta_nota||'');
+  const cuerpoVal=(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'');
   const emailCiu=fromGmail?(ciudEmail||''):ciudEmail;
   body.innerHTML=pqrsSelHtml+
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Tipo de respuesta</label>'+
@@ -774,39 +774,60 @@ function pqrsValidateOficioRespuesta(tipoResp,opts){
   }
   return true;
 }
-function pqrsResetComposeBodyForTipo(tipo){
-  const composeEl=document.getElementById('pqrs-compose-body');
-  if(!composeEl)return;
-  const cur=composeEl.value.trim();
-  const esPlantilla=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
-  const esPlantillaStart=/^Cordial saludo,/i.test(cur)&&/oficio adjunto al presente correo/i.test(cur);
-  if(tipo===PQRS_WF_TIPO.MENSAJE&&(esPlantilla||esPlantillaStart||!cur)){
-    composeEl.value='';
-    window._pqrsUltimaPlantillaOficio='';
-  }
+function pqrsPlantillaMensajeSimple(expId){
+  const num=String(expId||'').trim()||'XXXXXXX';
+  return 'Cordial saludo,\n\n'+
+    'Conforme a su solicitud radicada bajo el número de PQRSD '+num+', nos permitimos informarle lo siguiente:\n\n'+
+    '[Indique aquí la respuesta al ciudadano]\n\n'+
+    'Quedamos atentos a cualquier inquietud adicional.';
 }
 function pqrsPlantillaOficioFirmado(expId,oficio){
   const num=String(expId||'').trim()||'XXXXXXX';
   const ofi=String(oficio||'').trim()||'DSGV-E________';
   return 'Cordial saludo,\n\nEn atención a su comunicación identificada con el No. '+num+', esta Dirección Seccional, en ejercicio de sus competencias legales y reglamentarias, se permite dar respuesta de fondo a su solicitud mediante el oficio '+ofi+'.\n\nEl detalle completo de la respuesta, con el análisis correspondiente, se encuentra en el oficio adjunto al presente correo electrónico.\n\nQuedamos atentos a cualquier inquietud adicional.';
 }
+function _pqrsEsPlantillaRespuesta(txt){
+  const cur=String(txt||'').trim();
+  if(!cur)return true;
+  if(window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio)return true;
+  if(window._pqrsUltimaPlantillaMensaje&&cur===window._pqrsUltimaPlantillaMensaje)return true;
+  // Detectar plantillas aunque el N° de oficio/PQRSD haya cambiado
+  if(/^Cordial saludo,/i.test(cur)&&/oficio adjunto al presente correo/i.test(cur))return true;
+  if(/^Cordial saludo,/i.test(cur)&&/Conforme a su solicitud radicada bajo el número de PQRSD/i.test(cur))return true;
+  if(/^(\s*(fwd?|re):)/i.test(cur))return true;
+  return false;
+}
+function pqrsResetComposeBodyForTipo(tipo){
+  // Compat: el switch real lo hace pqrsAplicarPlantillaSegunTipo
+  pqrsAplicarPlantillaSegunTipo(tipo,true);
+}
 function pqrsAplicarPlantillaOficioSiCorresponde(force){
-  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
-  if(tipo!==PQRS_WF_TIPO.OFICIO)return;
+  pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.OFICIO,!!force);
+}
+function pqrsAplicarPlantillaSegunTipo(tipo,force){
+  tipo=String(tipo||(document.getElementById('pqrs-resp-tipo')||{}).value||'');
   const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
   const oficio=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
-  const plantilla=pqrsPlantillaOficioFirmado(expId,oficio);
+  let plantilla='';
+  if(tipo===PQRS_WF_TIPO.OFICIO){
+    plantilla=pqrsPlantillaOficioFirmado(expId,oficio);
+    window._pqrsUltimaPlantillaOficio=plantilla;
+    window._pqrsUltimaPlantillaMensaje='';
+  }else if(tipo===PQRS_WF_TIPO.MENSAJE){
+    plantilla=pqrsPlantillaMensajeSimple(expId);
+    window._pqrsUltimaPlantillaMensaje=plantilla;
+    window._pqrsUltimaPlantillaOficio='';
+  }else{
+    return;
+  }
   ['pqrs-resp-cuerpo','pqrs-compose-body'].forEach(function(id){
     const el=document.getElementById(id);
     if(!el)return;
     const cur=el.value.trim();
-    const esFwd=/^(\s*(fwd?|re):)/i.test(cur);
-    const esPlantillaAnterior=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
-    if(force||!cur||esFwd||esPlantillaAnterior||cur.length<40){
+    if(force||!cur||_pqrsEsPlantillaRespuesta(cur)||cur.length<40){
       el.value=plantilla;
     }
   });
-  window._pqrsUltimaPlantillaOficio=plantilla;
 }
 function pqrsRespRefreshModalUiGmail(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
@@ -825,7 +846,7 @@ function pqrsRespRefreshModalUiGmail(){
   }
   if(oficioReq)oficioReq.style.display=tipo===PQRS_WF_TIPO.OFICIO?'':'none';
   if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
-  if(tipo===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde();
+  if(tipo===PQRS_WF_TIPO.OFICIO||tipo===PQRS_WF_TIPO.MENSAJE)pqrsAplicarPlantillaSegunTipo(tipo,false);
 }
 function pqrsRespRefreshModalUi(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
@@ -865,7 +886,7 @@ function pqrsRespRefreshModalUi(){
   }
   if(oficioReq)oficioReq.style.display=isOficio?'':'none';
   if(oficioHint)oficioHint.style.display=isOficio?'none':'';
-  if(isOficio)pqrsAplicarPlantillaOficioSiCorresponde();
+  if(isOficio||isMensaje)pqrsAplicarPlantillaSegunTipo(tipo,false);
 }
 function pqrsComposeAddAttachment(){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -897,15 +918,25 @@ function pqrsComposeRemoveAttachment(idx){
   pqrsComposeRenderAttachments();
 }
 function setPqrsRespTipo(val){
-  const hid=document.getElementById('pqrs-resp-tipo');if(hid)hid.value=val||'';
+  const hid=document.getElementById('pqrs-resp-tipo');
+  const prev=String((hid&&hid.value)||'');
+  if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
-  if(val===PQRS_WF_TIPO.MENSAJE)pqrsResetComposeBodyForTipo(PQRS_WF_TIPO.MENSAJE);
   if((val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO)&&!window._gmailVinculoMsg){
     const canHid=document.getElementById('pqrs-resp-canal');
     if(canHid)canHid.value=PQRS_WF_CANAL.CORREO;
   }
-  if(val===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaOficioSiCorresponde(true);
-  else pqrsClearRespOficioError();
+  // Al cambiar entre mensaje ↔ oficio, forzar plantilla del tipo elegido.
+  // Al abrir el modal (mismo tipo), solo rellenar si está vacío o es plantilla previa.
+  if(val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO){
+    const cambioTipo=(prev===PQRS_WF_TIPO.MENSAJE||prev===PQRS_WF_TIPO.OFICIO)&&prev!==val;
+    pqrsAplicarPlantillaSegunTipo(val,cambioTipo);
+  }else{
+    pqrsClearRespOficioError();
+    window._pqrsUltimaPlantillaOficio='';
+    window._pqrsUltimaPlantillaMensaje='';
+  }
+  if(val!==PQRS_WF_TIPO.OFICIO)pqrsClearRespOficioError();
   // Entrega-form: hide/show canal row and adapt cuerpo label when informativa
   const isInfo=val===PQRS_WF_TIPO.INFORMATIVA;
   const canalRow=document.getElementById('pqrs-entrega-canal-row');
@@ -12217,9 +12248,11 @@ async function vitalFinalizarGestion(expId){
 // ===========================================================================
 // Notificaciones al ciudadano — correo automático (radicación / respuesta)
 // ===========================================================================
-function pqrsConsultaCiudadanaUrl(){
-  const base=typeof PUBLIC_APP_URL!=='undefined'?PUBLIC_APP_URL:'https://asoredg-pixel.github.io/cda-expedientes-cda/';
-  return String(base).replace(/\/?$/,'/');
+function pqrsConsultaCiudadanaUrl(expId){
+  const base=String(typeof PUBLIC_APP_URL!=='undefined'?PUBLIC_APP_URL:'https://asoredg-pixel.github.io/cda-expedientes-cda/').replace(/\/?$/,'/');
+  const num=String(expId||'').trim();
+  if(!num)return base;
+  return base+'?consulta='+encodeURIComponent(num);
 }
 function pqrsCorreoCiudadano(e){
   if(!e)return'';
@@ -12376,13 +12409,18 @@ function pqrsRequiereCorreoNotificacion(e){
   return medioNotificacionNorm(e._medio_notificacion||'')==='electronica';
 }
 function pqrsCorreoHtmlPieInstitucional(){
-  return'<hr style="border:none;border-top:1px solid #ddd;margin:16px 0">'+
-    '<p style="font-size:11px;color:#888;line-height:1.5">Mensaje enviado desde el Sistema de Seguimiento de Trámites — CDA Delegación Guaviare. No responda directamente a este correo automático.</p>';
+  return'<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e5e5">'+
+    '<p style="font-size:11px;color:#888;line-height:1.5;margin:0">Este mensaje es informativo. Conserve el número de radicado para consultar el estado de su solicitud.</p>'+
+    '</div>';
 }
 function pqrsCorreoHtmlBloqueConsulta(expId){
-  const url=pqrsConsultaCiudadanaUrl();
-  return'<p style="margin-top:12px"><strong>Consulte el estado de su solicitud:</strong></p>'+
-    '<p>Ingrese a <a href="'+escAttr(url)+'">'+escAttr(url)+'</a>, seleccione <strong>Consulta ciudadana</strong> e ingrese el número: <strong>'+escAttr(expId||'')+'</strong></p>';
+  const url=pqrsConsultaCiudadanaUrl(expId);
+  const num=String(expId||'').trim();
+  return'<div style="margin:20px 0;padding:16px 18px;background:#f6f8fb;border:1px solid #e2e8f0;border-radius:8px">'+
+    '<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#1a365d">Consulta ciudadana</p>'+
+    '<p style="margin:0 0 14px;font-size:13px;color:#4a5568;line-height:1.45">Puede consultar el estado de su solicitud en cualquier momento'+(num?' con el radicado <strong>'+escAttr(num)+'</strong>':'')+'.</p>'+
+    '<a href="'+escAttr(url)+'" style="display:inline-block;padding:11px 22px;background:#1a5f9e;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600">Consultar aquí</a>'+
+    '</div>';
 }
 function pqrsCorreoHtmlRadicacion(e){
   const expId=e._exp||'';
@@ -12391,13 +12429,18 @@ function pqrsCorreoHtmlRadicacion(e){
   const asunto=e.f_f1||e._pqrs_detalle||'';
   const fecha=e._fecha||e._fecha_solicitud||'';
   const fechaFmt=fecha?(typeof fmtF==='function'?fmtF(fecha):fecha):'';
-  let h='<p>Estimado/a <strong>'+escAttr(nombre)+'</strong>,</p>'+
-    '<p>Le informamos que su solicitud ha sido <strong>radicada</strong> en el CDA Delegación Guaviare con el siguiente número:</p>'+
-    '<p style="font-size:16px"><strong>'+escAttr(expId)+'</strong></p>'+
-    '<p><strong>Tipo:</strong> '+escAttr(tipo);
-  if(asunto)h+='<br><strong>Asunto:</strong> '+escAttr(asunto);
-  if(fechaFmt)h+='<br><strong>Fecha de radicación:</strong> '+escAttr(fechaFmt);
-  h+='</p>'+pqrsCorreoHtmlBloqueConsulta(expId)+pqrsCorreoHtmlPieInstitucional();
+  let h='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.5;max-width:640px">'+
+    '<p style="margin:0 0 12px">Estimado/a <strong>'+escAttr(nombre)+'</strong>,</p>'+
+    '<p style="margin:0 0 14px">Le informamos que su solicitud ha sido <strong>radicada</strong> ante la Dirección Seccional CDA — Delegación Guaviare.</p>'+
+    '<div style="margin:0 0 16px;padding:14px 16px;background:#eef6ff;border-left:4px solid #1a5f9e;border-radius:0 6px 6px 0">'+
+    '<div style="font-size:12px;color:#4a5568;margin-bottom:4px">Número de radicado</div>'+
+    '<div style="font-size:20px;font-weight:700;color:#1a365d;letter-spacing:.02em">'+escAttr(expId)+'</div>'+
+    '</div>'+
+    '<table style="border-collapse:collapse;width:100%;font-size:13px;margin-bottom:8px" cellpadding="0" cellspacing="0">'+
+    '<tr><td style="padding:4px 0;color:#718096;width:140px">Tipo</td><td style="padding:4px 0;color:#222"><strong>'+escAttr(tipo)+'</strong></td></tr>';
+  if(asunto)h+='<tr><td style="padding:4px 0;color:#718096;vertical-align:top">Asunto</td><td style="padding:4px 0;color:#222">'+escAttr(asunto)+'</td></tr>';
+  if(fechaFmt)h+='<tr><td style="padding:4px 0;color:#718096">Fecha de radicación</td><td style="padding:4px 0;color:#222">'+escAttr(fechaFmt)+'</td></tr>';
+  h+='</table>'+pqrsCorreoHtmlBloqueConsulta(expId)+pqrsCorreoHtmlPieInstitucional()+'</div>';
   return h;
 }
 function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos){

@@ -319,6 +319,8 @@ async function verificarUsuarioFirestore(fbUser){
     const rolesWrap=document.getElementById('login-roles-wrap');
     if(authPanel)authPanel.style.display='none';
     if(rolesWrap)rolesWrap.style.display='none';
+    // No pisar consulta ciudadana abierta por deep-link del correo
+    if(document.body.classList.contains('sesion-activa')&&typeof esModoCiudadano==='function'&&esModoCiudadano())return;
     ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
@@ -352,6 +354,8 @@ function initFirebaseAuthListener(){
   if(!window._authOnStateChanged||!window._firebaseAuth)return;
   window._authOnStateChanged(window._firebaseAuth,user=>{
     if(document.body.classList.contains('sesion-activa'))return;
+    // Prioridad al deep-link de consulta ciudadana (?consulta=…)
+    if(typeof leerConsultaCiudadanaDesdeUrl==='function'&&leerConsultaCiudadanaDesdeUrl())return;
     if(user&&!window._usuarioActual&&!window._authVerifying){
       window._authVerifying=true;
       verificarUsuarioFirestore(user).finally(()=>{window._authVerifying=false;});
@@ -365,6 +369,32 @@ function initFirebaseAuthListener(){
 }
 function ingresarConsultaCiudadana(){
   ingresarComoRol('ciudadano');
+}
+/** Lee ?consulta= / ?exp= / #consulta= del URL para prellenar consulta ciudadana. */
+function leerConsultaCiudadanaDesdeUrl(){
+  try{
+    const params=new URLSearchParams(window.location.search||'');
+    let num=String(params.get('consulta')||params.get('exp')||params.get('pqrsd')||'').trim();
+    if(!num&&window.location.hash){
+      const h=String(window.location.hash||'').replace(/^#/,'');
+      const hp=new URLSearchParams(h.indexOf('=')>=0?h:'');
+      num=String(hp.get('consulta')||hp.get('exp')||'').trim();
+      if(!num&&/^[\w\-./]+$/.test(h)&&!h.includes('='))num=h.trim();
+    }
+    return num;
+  }catch(e){return'';}
+}
+function aplicarConsultaCiudadanaDesdeUrl(opts){
+  opts=opts||{};
+  const num=leerConsultaCiudadanaDesdeUrl();
+  if(!num)return false;
+  window._ciudadanoUltExp=num;
+  const inp=document.getElementById('ciudadano-exp');
+  if(inp)inp.value=num;
+  if(opts.buscar!==false&&typeof buscarExpCiudadano==='function'){
+    setTimeout(function(){buscarExpCiudadano();},80);
+  }
+  return true;
 }
 function mostrarSelectorRolesAdmin(nombre){
   if(!window._usuarioActual||window._usuarioActual.rol!=='admin'){
@@ -472,6 +502,7 @@ function ingresarComoRol(rolId,respNombre){
     if(selR)selR.value=responsableActivo;
   }
   showTab(rutaInicialPorRol(rolId));
+  if(rolId==='ciudadano')aplicarConsultaCiudadanaDesdeUrl({buscar:true});
   iniciarRefrescoBloqueosUI();
   const rolInfo=ROLES_INGRESO.find(r=>r.id===rolId);
   logAudit('Inició sesión con rol '+(rolInfo?rolInfo.titulo:rolId),'configuracion',null);
@@ -523,3 +554,16 @@ initPqrsUiDelegation();
 initSstUiDelegation();
 ensureOverlaysClosed();
 installSessionPageLifecycle();
+// Deep-link desde correo de radicación: ?consulta=NUM → entra directo a consulta ciudadana
+(function bootConsultaCiudadanaDeepLink(){
+  try{
+    if(typeof leerConsultaCiudadanaDesdeUrl!=='function')return;
+    const num=leerConsultaCiudadanaDesdeUrl();
+    if(!num)return;
+    if(document.body.classList.contains('sesion-activa')){
+      if(typeof esModoCiudadano==='function'&&esModoCiudadano())aplicarConsultaCiudadanaDesdeUrl({buscar:true});
+      return;
+    }
+    ingresarComoRol('ciudadano');
+  }catch(e){console.warn('bootConsultaCiudadanaDeepLink:',e);}
+})();

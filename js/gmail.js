@@ -473,6 +473,8 @@ function gmailIsTokenValid() {
 function gmailConnect(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp);
+    _gmailSecSignatureLoaded = false;
+    gmailLoadSecSignature(true).catch(function(){});
     notif('Bandeja conectada correctamente.', 'ok');
     if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
     if (typeof callback === 'function') callback();
@@ -497,6 +499,8 @@ function gmailDisconnect() {
   window._gmailPendingAttachments = null;
   window._gmailPendingEmailData = null;
   _gmailRadicadoLabelId = '';
+  _gmailSecSignatureHtml = '';
+  _gmailSecSignatureLoaded = false;
   updateGmailConnectBtn();
   renderGmailInboxList();
   if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
@@ -2338,8 +2342,34 @@ function _buildMimeEmail(to, subject, htmlBody) {
   return raw.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
+// Firma HTML de la cuenta Secretaría (sendAs primario de Gmail)
+let _gmailSecSignatureHtml = '';
+let _gmailSecSignatureLoaded = false;
+async function gmailLoadSecSignature(force) {
+  if (_gmailSecSignatureLoaded && !force) return _gmailSecSignatureHtml;
+  try {
+    if (!gmailIsTokenValid()) { _gmailSecSignatureHtml = ''; return ''; }
+    const data = await gmailApiCall('GET', GMAIL_API_BASE + '/settings/sendAs');
+    const primary = (data.sendAs || []).find(function(s){ return s.isPrimary; }) || (data.sendAs || [])[0];
+    _gmailSecSignatureHtml = (primary && primary.signature) ? String(primary.signature) : '';
+    _gmailSecSignatureLoaded = true;
+  } catch (e) {
+    _gmailSecSignatureHtml = '';
+    _gmailSecSignatureLoaded = false;
+  }
+  return _gmailSecSignatureHtml;
+}
+function gmailAppendSecSignatureHtml(htmlBody) {
+  const sig = String(_gmailSecSignatureHtml || '').trim();
+  if (!sig) return htmlBody || '';
+  // Evitar duplicar si el cuerpo ya incluye la firma
+  if (htmlBody && sig.length > 40 && htmlBody.indexOf(sig.slice(0, Math.min(80, sig.length))) >= 0) return htmlBody;
+  return (htmlBody || '') +
+    '<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">' + sig + '</div></div>';
+}
 async function gmailSend(to, subject, htmlBody, threadId) {
-  const raw = _buildMimeEmail(to, subject, htmlBody);
+  try { await gmailLoadSecSignature(false); } catch (e) {}
+  const raw = _buildMimeEmail(to, subject, gmailAppendSecSignatureHtml(htmlBody));
   const body = { raw };
   if (threadId) body.threadId = threadId;
   return gmailApiCall('POST', GMAIL_API_BASE + '/messages/send', body);

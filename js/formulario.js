@@ -42,6 +42,7 @@ function showTab(t){
   if(t==='gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
   if(t==='rec'){if(typeof recursosInitPanel==='function')recursosInitPanel();}
   if(t==='ciudadano'){
+    if(typeof aplicarConsultaCiudadanaDesdeUrl==='function')aplicarConsultaCiudadanaDesdeUrl({buscar:false});
     const inp=document.getElementById('ciudadano-exp');
     if(inp&&!inp.value&&window._ciudadanoUltExp)inp.value=window._ciudadanoUltExp;
     if(inp&&String(inp.value||'').trim())buscarExpCiudadano();
