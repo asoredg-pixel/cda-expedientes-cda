@@ -1392,11 +1392,25 @@ function _pqrsConectarCorreoYAsignar(expId){
             (typeof gmailConnect==='function'?gmailConnect:null);
   if(!fn){notif('Conexión Gmail no disponible','err');if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}return;}
   fn(function(){
-    // Ya conectado → ejecutar asignación normalmente
+    // Ya conectado → SOLO habilitar el botón Confirmar; NO asignar automáticamente.
+    if(!_pqrsTokOk()){
+      if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}
+      notif('No se pudo conectar el correo. Intente de nuevo.','warn');
+      return;
+    }
     const warn=document.getElementById('pqrs-asig-gmail-warn');
     if(warn)warn.remove();
-    submitAsignarPqrsOficina(expId);
+    const footer=document.getElementById('pqrs-asig-footer');
+    if(footer)footer.innerHTML=
+      '<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'+
+      '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>';
+    notif('✅ Correo conectado. Ahora confirme la asignación.','ok');
   });
+}
+function togglePqrsAsigModo(){
+  const n=document.querySelectorAll('.pqrs-asig-resp-cb:checked').length;
+  const w=document.getElementById('pqrs-asig-modo-wrap');
+  if(w)w.style.display=n>1?'':'none';
 }
 function _pqrsAsignarSinCorreo(expId){
   window._pqrsAsignarForzarSinCorreo=true;
@@ -1417,28 +1431,44 @@ function openAsignarPqrsOficinaModal(expId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Asignar PQRSD · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  const opts=responsables.map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('');
+  // Responsable(s) ya asignados previamente (para preseleccionar al reasignar)
+  const yaAsig=[];
+  if(e._pqrs_responsable_oficina)yaAsig.push(String(e._pqrs_responsable_oficina).trim());
+  const existTk=(e.tasks||[]).find(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
+  if(existTk){getTaskResponsables(existTk).forEach(n=>{if(n&&!yaAsig.some(x=>agendaNorm(x)===agendaNorm(n)))yaAsig.push(n);});}
+  const respChecks=responsables.length
+    ?responsables.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"></label>').join('')
+    :'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
+  const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
   const necesitaCorreo=_pqrsNecesitaCorreoParaAsignar(e);
   const tokOk=_pqrsTokOk();
   const bannerCorreo=(necesitaCorreo&&!tokOk)?_pqrsHtmlBannerCorreoDesconectado(expId):'';
+  const obsPrev=String(e._pqrs_asig_observaciones||'').trim();
   body.innerHTML=bannerCorreo+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(labelOficina(oficina))+'</strong></div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Responsable que atenderá<span class="req-star">*</span></label>'+
-    '<select id="pqrs-ofi-resp-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+opts+'</select></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Responsable(s) que atenderá(n)<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">— marque uno o varios (co-ejecutores)</span></label>'+
+    '<div id="pqrs-asig-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
+    '<div class="fld" id="pqrs-asig-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label>'+
+    '<select id="pqrs-asig-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
+    '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
+    '</select></div>'+
+    '<div class="fld" style="margin-bottom:12px"><label>Observaciones para orientar la actividad <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+    '<textarea id="pqrs-asig-obs" placeholder="Indicaciones para el/los responsable(s)…" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif">'+escAttr(obsPrev)+'</textarea></div>'+
     htmlPqrsAdjuntosDrive(e)+
     (e._pqrs_solicitud_archivo?'<div style="font-size:12px;margin-bottom:8px;color:var(--tx2)">📄 Referencia: '+escAttr(e._pqrs_solicitud_archivo)+'</div>':'')+
-    '<div class="fx" style="gap:8px">'+
+    '<div class="fx" style="gap:8px" id="pqrs-asig-footer">'+
     (necesitaCorreo&&!tokOk?'':('<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'))+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'asignarPqrsOfi',expId};
   window._pqrsAsignarForzarSinCorreo=false;
+  togglePqrsAsigModo();
 }
 async function submitAsignarPqrsOficina(expId){
-  const sel=document.getElementById('pqrs-ofi-resp-sel');
-  const resp=sel?sel.value:'';
-  if(!resp){notif('Seleccione responsable','err');return;}
+  const responsables=[...document.querySelectorAll('.pqrs-asig-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
+  if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
   const e=exps.find(x=>x._exp===expId);
   if(!e){notif('Expediente no encontrado','err');return;}
   // Si viene de correo y no hay token: redirigir a conectar (a menos que el usuario eligió asignar sin correo)
@@ -1447,33 +1477,44 @@ async function submitAsignarPqrsOficina(expId){
     return;
   }
   window._pqrsAsignarForzarSinCorreo=false;
+  const modoEl=document.getElementById('pqrs-asig-modo');
+  const entregaModo=(modoEl&&responsables.length>1)?(modoEl.value==='unificada'?'unificada':'individual'):'individual';
+  const obs=String((document.getElementById('pqrs-asig-obs')||{}).value||'').trim();
+  const resp=responsables[0];
+  const asignadosArr=responsables.map(n=>({nombre:n,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}));
   e._pqrs_responsable_oficina=resp;
   e._pqrs_estado_oficina='asignado';
+  if(obs!==undefined)e._pqrs_asig_observaciones=obs;
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a responsable de la oficina',oficina:e._pqrs_oficina});
+  const nomList=responsables.join(', ');
+  e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   const prior=!!e._pqrs_prioritaria;
   const actNombre='Atender PQRSD: '+(e.f_f1||e._tipo_solicitud||'Solicitud');
+  const detalle=obs||e._pqrs_detalle||'';
   const tk=normalizeTask({
-    id:genTaskId(),actividad:actNombre,detalle:e._pqrs_detalle||'',desc:actNombre,
-    responsable:resp,responsables:[resp],asignados:[{nombre:resp,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}],
-    entregaModo:'individual',plazoDias:plazoDias,vence:vence,prioritaria:prior,
-    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'PQRSD asignado desde oficina '+labelOficina(e._pqrs_oficina)}],soportes:[],notasDoc:[]
+    id:genTaskId(),actividad:actNombre,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),
+    responsable:resp,responsables:responsables,asignados:asignadosArr,
+    entregaModo:entregaModo,plazoDias:plazoDias,vence:vence,prioritaria:prior,
+    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'PQRSD asignado desde oficina '+labelOficina(e._pqrs_oficina)+(obs?' · '+obs:'')}],soportes:[],notasDoc:[]
   });
   if(!Array.isArray(e.tasks))e.tasks=[];
   const existIdx=e.tasks.findIndex(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
-  if(existIdx>=0)e.tasks[existIdx]=normalizeTask({...e.tasks[existIdx],responsable:resp,responsables:[resp],asignados:[{nombre:resp,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}],eliminada:false,prioritaria:prior,vence:vence,plazoDias:plazoDias});
+  if(existIdx>=0)e.tasks[existIdx]=normalizeTask({...e.tasks[existIdx],responsable:resp,responsables:responsables,asignados:asignadosArr,entregaModo:entregaModo,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),eliminada:false,prioritaria:prior,vence:vence,plazoDias:plazoDias});
   else e.tasks.push(tk);
   persistExpedienteGranular(e);
   closeTaskModal();
-  notif('PQRSD asignado a '+resp,'ok');
+  notif('PQRSD asignado a '+nomList,'ok');
+  // Reenviar correo a los responsables que aún no lo han recibido
   if(typeof tryReenvioPqrsCorreoAResponsables==='function'){
-    await tryReenvioPqrsCorreoAResponsables(e,[resp],expId,{silent:false});
+    await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:false});
     if(e._pqrs_correo_reenviado_a&&e._pqrs_correo_reenviado_a.length)persistExpedienteGranular(e);
   }
   renderPqrsOficinaInbox();
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
+  refreshPqrsDetalleViews(expId);
+  if(typeof isFormExpVisible==='function'&&isFormExpVisible(expId)&&typeof syncTkRowsFromExp==='function')syncTkRowsFromExp(expId,(existIdx>=0?e.tasks[existIdx].id:tk.id));
 }
 function openTrasladoPqrsInicialModal(expId){
   const e=exps.find(x=>x._exp===expId);

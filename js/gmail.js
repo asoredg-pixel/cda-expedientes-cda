@@ -4040,10 +4040,48 @@ async function gmailOfiVincularRespuestaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
   const detectada = await _gmailFindPqrsForCurrentMsgAsync(msg);
+  // Los responsables NUNCA responden directo al ciudadano desde su correo:
+  // se enruta al flujo de entrega para revisión del encargado/NCA (igual que
+  // el botón "entregar actividad" del menú de Actividades).
+  if (typeof esModoResponsable === 'function' && esModoResponsable()) {
+    return _gmailResponsableEntregarPqrsDesdeCorreo(detectada, false);
+  }
   if (typeof openPqrsRespuestaModal === 'function') {
     openPqrsRespuestaModal(detectada ? detectada._exp : '', { fromGmail: true, gmailMsg: msg, detectada: !!detectada });
   }
 }
+
+// Enruta a un responsable al flujo de entrega (revisión NCA) desde su bandeja de correo.
+function _gmailResponsableEntregarPqrsDesdeCorreo(e, informativa) {
+  if (!e) {
+    notif('No se detectó la PQRSD de este correo. Verifique que el número esté en el asunto y radicado en el sistema.', 'err');
+    return;
+  }
+  const expId = String(e._exp || '').trim();
+  const task = (e.tasks || []).find(function(t) {
+    return t && !t.eliminada && typeof taskEsAtenderPqrs === 'function' && taskEsAtenderPqrs(t, e);
+  });
+  if (!task) { notif('No tiene una actividad de atención asignada para esta PQRSD.', 'err'); return; }
+  // Verificar que el responsable activo esté entre los asignados
+  if (typeof responsableActivo !== 'undefined' && responsableActivo && typeof getTaskResponsables === 'function') {
+    const rs = getTaskResponsables(task);
+    if (rs.length && !rs.some(function(n) { return agendaNorm(n) === agendaNorm(responsableActivo); })) {
+      notif('Esta PQRSD no está asignada a usted.', 'err');
+      return;
+    }
+  }
+  if (typeof openEnviarSoporteModal !== 'function') { notif('No se pudo abrir el formulario de entrega', 'err'); return; }
+  openEnviarSoporteModal(expId, task.id);
+  if (informativa) {
+    setTimeout(function() {
+      try { if (typeof setPqrsRespTipo === 'function' && typeof PQRS_WF_TIPO !== 'undefined') setPqrsRespTipo(PQRS_WF_TIPO.INFORMATIVA); } catch (_e) {}
+      const c = document.getElementById('pqrs-entrega-resp-cuerpo');
+      if (c) { c.focus(); }
+    }, 80);
+    notif('Indique el motivo por el cual es informativa. Se enviará a revisión de NCA.', 'info');
+  }
+}
+window._gmailResponsableEntregarPqrsDesdeCorreo = _gmailResponsableEntregarPqrsDesdeCorreo;
 
 function _gmailFindPqrsForCurrentMsg(msg) {
   if (!msg) return null;
@@ -4087,6 +4125,11 @@ async function gmailOfiMarcarInformativaPqrs() {
   const msg = _gmailOfiCurrentMsg;
   if (!msg) { notif('Seleccione un correo de la bandeja', 'err'); return; }
   const detectada = await _gmailFindPqrsForCurrentMsgAsync(msg);
+  // Responsables: la "informativa" pasa por revisión de NCA (con motivo obligatorio),
+  // no cierra directamente. Se enruta al flujo de entrega.
+  if (typeof esModoResponsable === 'function' && esModoResponsable()) {
+    return _gmailResponsableEntregarPqrsDesdeCorreo(detectada, true);
+  }
   if (!detectada) {
     const headers = msg.payload && msg.payload.headers ? msg.payload.headers : [];
     const subjH = headers.find(function(h) { return h.name === 'Subject'; });

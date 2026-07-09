@@ -1525,7 +1525,23 @@ function getDocsTramiteCiudadano(e){
   }).filter(d=>d.url||d.preview);
 }
 function instructoresOptsHtml(deptoId,selVal){
-  return getContratistasAsignables(deptoId).map(n=>'<option value="'+escAttr(n)+'"'+(selVal===n?' selected':'')+'>'+escAttr(n)+'</option>').join('');
+  const list=[];
+  const push=n=>{n=String(n||'').trim();if(n&&!list.some(x=>agendaNorm(x)===agendaNorm(n)))list.push(n);};
+  getContratistasAsignables(deptoId).forEach(push);
+  // PQRSD: los responsables de NCA / oficinas DEGUV provienen de _usuariosCache
+  // (rol 'responsables') y no de la lista de contratistas, por lo que hay que
+  // incluirlos explícitamente para que aparezcan al asignar actividades de PQRSD.
+  try{
+    if(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()&&typeof getResponsablesNcaDeguv==='function'){
+      getResponsablesNcaDeguv().forEach(push);
+    }else if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&typeof getContratistasOficinaPqrs==='function'){
+      getContratistasOficinaPqrs(deptoActivo).forEach(push);
+    }
+  }catch(_e){}
+  // Siempre incluir el valor ya seleccionado (aunque no esté en el pool) para que
+  // el responsable asignado se muestre correctamente en la fila de actividad.
+  if(selVal)push(selVal);
+  return list.map(n=>'<option value="'+escAttr(n)+'"'+(selVal===n?' selected':'')+'>'+escAttr(n)+'</option>').join('');
 }
 function esEncargadoDepto(nombre,deptoId){
   const ins=getInstructoresCfg(deptoId).find(i=>i.nombre===nombre);
@@ -5624,6 +5640,10 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
       'Entrega tras traslado — comentario sobre <strong>esta entrega</strong>. Sin enlace Drive, comentario obligatorio.'+
     '</div>';
+  }else if(esPqrsEntrega){
+    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
+      'Adjunte el documento de respuesta (se sube al Drive institucional) y/o un comentario sobre esta entrega.'+
+    '</div>';
   }else{
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
       'Adjunte enlace de Google Drive y/o comentario sobre esta entrega.'+
@@ -5633,18 +5653,24 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   if(!sol){
     const showDriveUp=eExp&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eExp);
     if(showDriveUp){
-      h+='<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Subir archivo (Drive institucional — opcional)</label>'+
+      h+='<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Subir archivo'+(esPqrsEntrega?' de respuesta':'')+' (Drive institucional'+(esPqrsEntrega?'':' — opcional')+')</label>'+
         '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px">'+
-        '<div style="font-size:10px;color:var(--tx3);margin-top:2px">Un documento por actividad. También puede pegar un enlace externo abajo o escribir el link en el comentario.</div></div>';
+        '<div style="font-size:10px;color:var(--tx3);margin-top:2px">'+(esPqrsEntrega?'El archivo se cargará al Drive institucional y podrá adjuntarse al ciudadano cuando NCA apruebe y envíe la respuesta.':'Un documento por actividad. También puede pegar un enlace externo abajo o escribir el link en el comentario.')+'</div></div>';
     }
-    h+='<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">'+(finalizarEnc?'Soporte opcional (link Drive)':'Enlaces Google Drive externos (opcionales)')+'</div>'+
-      '<div id="enviar-adjuntos-rows"></div>'+
-      '<div class="fx" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">'+
-        '<button type="button" class="btn bsm" onclick="addEnviarAdjuntoRow()">+ Link Drive</button>'+
-      '</div>'+
-      '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Enlace externo de Google Drive (archivos fuera del Drive institucional). También puede incluir el link en el comentario.</div>'+
-      '<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':nuevaEntrega?'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…':'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>'+
-      '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="'+(finalizarEnc?'submitFinalizarEncargado':'submitEnviarSoporteVerificacion')+'(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+(finalizarEnc?'✓ Finalizar actividad':nuevaEntrega?'📤 Enviar nueva entrega':'📤 Enviar para verificación')+'</button>'+
+    // Los enlaces externos de Drive no aplican para entregas de PQRSD:
+    // los archivos se cargan al Drive institucional y se adjuntan al enviar la respuesta.
+    if(!esPqrsEntrega){
+      h+='<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">'+(finalizarEnc?'Soporte opcional (link Drive)':'Enlaces Google Drive externos (opcionales)')+'</div>'+
+        '<div id="enviar-adjuntos-rows"></div>'+
+        '<div class="fx" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">'+
+          '<button type="button" class="btn bsm" onclick="addEnviarAdjuntoRow()">+ Link Drive</button>'+
+        '</div>'+
+        '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Enlace externo de Google Drive (archivos fuera del Drive institucional). También puede incluir el link en el comentario.</div>';
+    }else{
+      h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
+    }
+    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>'+
+      '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="'+(finalizarEnc?'submitFinalizarEncargado':'submitEnviarSoporteVerificacion')+'(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+(finalizarEnc?'✓ Finalizar actividad':nuevaEntrega?'📤 Enviar nueva entrega':esPqrsEntrega?'📤 Enviar a revisión del encargado':'📤 Enviar para verificación')+'</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   }else{
     h+='<div class="fx" style="gap:8px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
@@ -11728,22 +11754,66 @@ async function ncaAprobarMensajeSimple(expId){
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
   const wf=getPqrsWorkflow(e);
+  const cuerpoFinal=d.cuerpo||wf.cuerpo;
+  const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
+  const canal=wf.canal||PQRS_WF_CANAL.CORREO;
+  const cerradoPor=responsableActivo||'NCA';
   // Rename Drive docs: revision → aprobado
   await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  // Envío por correo: SIEMPRE desde el correo de NCA/oficina (preferOfi=true).
+  // Está prohibido que la respuesta al ciudadano salga desde el correo del responsable.
+  const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
+  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
+  const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  const puedeEnviar=canal===PQRS_WF_CANAL.CORREO&&correos.length&&(tokOfi||tokSec);
+  const btnBusy=(document.getElementById('nca-rev-cuerpo'));
+  if(puedeEnviar){
+    const asunto='Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+expId;
+    const htmlResp=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpoFinal,wf.documentos||[]):('<p>'+escAttr(cuerpoFinal)+'</p>');
+    try{
+      const sent=await pqrsEnviarCorreoCiudadano(correos,asunto,htmlResp,true);
+      setPqrsWorkflow(e,{
+        fase:PQRS_WF.CERRADA,
+        cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
+        revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
+        cerrado_por:cerradoPor,cerrado_en:new Date().toISOString()
+      });
+      e._pqrs_respuesta_nota=cuerpoFinal;
+      e._pqrs_respuesta_fecha=fechaResp;
+      e._pqrs_respuesta_medio='correo';
+      _pqrsAplicarCierrePqrs(e,fechaResp,'PQRSD cerrada — mensaje aprobado y enviado desde NCA');
+      if(typeof registrarNotificacionCiudadanoPqrs==='function'){
+        registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:'correo',enviado:true,a:correos.join(', '),cuenta_emisora:sent.cuenta,gmail_message_id:sent.messageId,por:cerradoPor,histTipo:'notificacion_correo',histNota:'Respuesta (mensaje) aprobada por NCA y enviada desde el correo institucional a '+correos.join(', ')});
+      }
+      e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó y envió el mensaje al ciudadano'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+      persistExpedienteGranular(e);
+      closeTaskModal();renderPqrsOficinaInbox();renderSecretariaPqrs();refreshPqrsDetalleViews&&refreshPqrsDetalleViews(expId);
+      notif('✅ Mensaje aprobado y enviado al ciudadano desde el correo de NCA — PQRSD cerrada','ok');
+      return;
+    }catch(err){
+      console.warn('ncaAprobarMensajeSimple envío:',err);
+      // Fallback: dejar lista para envío manual
+      setPqrsWorkflow(e,{fase:PQRS_WF.LISTA_ENVIO,cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()}});
+      e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje) — envío pendiente: '+String(err.message||err).slice(0,80),oficina:'guaviare',por:cerradoPor});
+      persistExpedienteGranular(e);
+      closeTaskModal();renderPqrsOficinaInbox();renderSecretariaPqrs();
+      notif('Aprobado, pero no se pudo enviar el correo ahora. Envíelo desde "Enviar correo": '+String(err.message||err).slice(0,80),'warn');
+      return;
+    }
+  }
+  // Sin correo del ciudadano o sin token: aprobar y dejar listo para envío/gestión manual
   setPqrsWorkflow(e,{
     fase:PQRS_WF.LISTA_ENVIO,
-    cuerpo:d.cuerpo||wf.cuerpo,
-    oficio:d.oficio||wf.oficio,
-    fecha_respuesta:d.fecha||wf.fecha_respuesta,
-    revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
+    cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
+    revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()}
   });
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje simple)'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
+  e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje simple)'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  notif('✅ Respuesta aprobada — lista para envío al ciudadano','ok');
+  notif(canal===PQRS_WF_CANAL.CORREO?'✅ Respuesta aprobada — conecte el correo de NCA para enviarla al ciudadano':'✅ Respuesta aprobada — lista para notificar al ciudadano','ok');
 }
 
 async function ncaAprobarOficioFirmado(expId){
@@ -11810,6 +11880,23 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado){
       }
     }catch(err){console.warn('_pqrsRenombrarDocsDriveWf:',err);}
   }
+}
+
+// ---------------------------------------------------------------------------
+// Aplica el estado de cierre estándar de una PQRSD (estado, fechas, tareas)
+// ---------------------------------------------------------------------------
+function _pqrsAplicarCierrePqrs(e,fechaResp,notaHist){
+  if(!e)return;
+  const fAt=fechaResp||hoy();
+  e._pqrs_estado_oficina='cerrado';
+  e._estado='Atendido';
+  e._fecha_res=fAt;
+  const fe=getFechasEstado(e);
+  fe.Atendido=fAt;
+  if(!fe['En trámite'])fe['En trámite']=fe.Solicitud||e._fecha||fAt;
+  e._fechas_estado=JSON.stringify(fe);
+  e.historial=typeof rebuildHistorial==='function'?rebuildHistorial(e,e.historial||[]):e.historial;
+  if(typeof finalizarTareasPqrsAlCerrar==='function')finalizarTareasPqrsAlCerrar(e,notaHist||'PQRSD cerrada — respuesta registrada');
 }
 
 // ---------------------------------------------------------------------------
