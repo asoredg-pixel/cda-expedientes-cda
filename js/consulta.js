@@ -539,7 +539,7 @@ function renderConsultaArchivoPreview(idx,opts){
 }
 function renderConPanelDocumentosBlock(e,taskIdFilter,open){
   if(!e)return '';
-  const incluirAsoc=!!window._conPanelEditMode;
+  const incluirAsoc=!!window._conPanelEditMode||getExpAsociadosAll(e).length>0;
   const items=collectArchivosConsultaCompleto(e,taskIdFilter||null,{incluirAsociados:incluirAsoc});
   window._conArchItems=items;
   window._conArchPanelExp=e._exp;
@@ -554,7 +554,7 @@ function renderConPanelDocumentosBlock(e,taskIdFilter,open){
       '<span style="flex:1;min-width:0"><strong>'+escAttr(d.label||'Documento')+'</strong><br><span style="font-size:10px;color:var(--tx3)">'+escAttr(fmtF((d.fecha||'').slice(0,10))||'Sin fecha')+'</span></span>'+
       '<button type="button" class="btn bsm bd2" onclick="SST.eliminarDocTramiteExp(\''+jsStr(e._exp)+'\',\''+jsStr(d.id)+'\')" title="Quitar documento">🗑</button></div>').join('')+'</div>'):'')+
     '</div>'):'';
-  const hintAsoc=(incluirAsoc&&getExpAsociadosAll(e).length)?'<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Incluye documentos de PQRSD y expedientes vinculados.</div>':'';
+  const hintAsoc=getExpAsociadosAll(e).length?'<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Incluye documentos de PQRSD y expedientes vinculados.</div>':'';
   const body=items.length?
     (driveFolderHtml+tramGestionHtml+hintAsoc+'<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-panel-arch-preview"></div></div>'):
     (driveFolderHtml+tramGestionHtml+'');
@@ -768,7 +768,7 @@ function openConsultaArchivos(expId,taskId,opts){
     return;
   }
   let items=[];
-  if(e)items=collectArchivosConsultaCompleto(e,null);
+  if(e)items=collectArchivosConsultaCompleto(e,null,{incluirAsociados:getExpAsociadosAll(e).length>0});
   else{
     const act=getActLibreByCodigo(id)||getActLibreById(taskId);
     if(act){
@@ -795,7 +795,8 @@ function openConsultaArchivos(expId,taskId,opts){
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>';
   }else{
     const list=conArchivosListHtml(items,'renderConsultaArchivoPreview');
-    body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento — enlaces Drive del expediente, actividades y PQRSD.</div>'+
+    const hasAsocMdl=e&&getExpAsociadosAll(e).length>0;
+    body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento — enlaces Drive del expediente, actividades y PQRSD.'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye PQRSD y expedientes vinculados.</span>':'')+'</div>'+
       '<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-arch-preview-wrap"></div></div>'+
       '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
     const selIdx=taskId?Math.max(0,(items||[]).findIndex(it=>it.taskId===taskId)):0;
