@@ -110,8 +110,8 @@ function esEncargadoDepartamentalUsuarios(){
   return DEPTOS.some(d=>d.id===rol);
 }
 function esVistaUsuariosAdminCompleta(){return esAdminFirestore()||esAdministrador();}
-function puedeGestionarUsuariosAutorizados(){return esAdminFirestore()||esEncargadoDepartamentalUsuarios();}
-function puedeEliminarUsuariosAutorizados(){return esAdminFirestore();}
+function puedeGestionarUsuariosAutorizados(){return esAdminFirestore()||esAdministrador()||esEncargadoDepartamentalUsuarios();}
+function puedeEliminarUsuariosAutorizados(){return esAdminFirestore()||esAdministrador();}
 function getDeptoGestionUsuariosAutorizados(){
   if(esEncargadoDepartamentalUsuarios())return String(window._usuarioActual.rol||'').trim();
   return '';

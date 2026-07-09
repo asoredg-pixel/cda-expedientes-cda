@@ -3996,8 +3996,9 @@ function fijarResponsableSesion(){
   if(!nom)return false;
   responsableActivo=nom;
   try{localStorage.setItem('sst_responsable',nom);}catch(e){}
+  // La barra «Conectado como» es redundante: el nombre ya está en el header.
   const hint=document.getElementById('resp-global-hint');
-  if(hint)hint.textContent='Sesión vinculada a su cuenta · '+nom;
+  if(hint)hint.textContent='';
   return true;
 }
 function normalizarRolLoginFirestore(rol){
@@ -4107,16 +4108,24 @@ function startUsuariosFirestoreListener(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   _usuariosFsUnsub=window._fsOnSnapshot(window._fsCollection(db,'usuarios'),snap=>{
-    if(!snap.empty){
-      _usuariosCache=[];
+    // Siempre actualizar caché (incluso si vacío) para no dejar la UI en estado “sin usuarios”
+    // por un snapshot inicial vacío o una carrera de permisos.
+    _usuariosCache=[];
+    if(snap&&!snap.empty){
       snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
       sortUsuariosCache();
-      _usuariosCacheLoaded=true;
-      try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
-      persistUsuariosIndexGlobal().catch(()=>{});
     }
+    _usuariosCacheLoaded=true;
+    try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+    if(_usuariosCache.length)persistUsuariosIndexGlobal().catch(()=>{});
     paintUsuariosCfgTable();
     aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
+    // Refrescar sección Responsables de Configuración base si está abierta
+    try{
+      if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')&&typeof renderListasCfg==='function'){
+        renderListasCfg();
+      }
+    }catch(_e){}
     if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   },err=>{
     console.error('Error escuchando usuarios Firestore:',err);
@@ -4224,7 +4233,9 @@ async function loadUsuariosFirestore(){
   return _usuariosCache;
 }
 async function ensureUsuariosFirestoreCache(force){
-  if(!force&&_usuariosCacheLoaded)return _usuariosCache;
+  // Si la caché quedó marcada como cargada pero vacía (carrera / snapshot vacío),
+  // forzar recarga para que Configuración muestre usuarios.
+  if(!force&&_usuariosCacheLoaded&&_usuariosCache.length>0)return _usuariosCache;
   return loadUsuariosFirestore();
 }
 function invalidateUsuariosCache(){_usuariosCacheLoaded=false;}
@@ -4562,12 +4573,13 @@ async function renderUsuariosCfg(forceRebuild){
   }
   // Mostrar caché local de inmediato (sin esperar Firestore)
   paintUsuariosCfgTable();
+  // Siempre asegurar carga si la lista está vacía (admin a veces ve panel vacío)
+  if(!_usuariosCacheLoaded||!_usuariosCache.length||forceRebuild){
+    await refreshUsuariosAutorizadosUi();
+  }
   // Arrancar listener en tiempo real si no estaba activo
   if(!_usuariosFsUnsub&&window._fsOnSnapshot&&window._fsCollection&&document.body.classList.contains('sesion-activa')){
     startUsuariosFirestoreListener();
-  }else{
-    // Listener ya activo → solo refrescar si la caché está vacía o se pide rebuild
-    if(!_usuariosCacheLoaded||forceRebuild)await refreshUsuariosAutorizadosUi();
   }
 }
 function prepararVistaAdminUsuariosAutorizados(){
@@ -9485,8 +9497,9 @@ function updateDeptoUI(){
     }else ban.style.display='none';
   }
   if(respBar){
-    respBar.classList.toggle('on',resp);
     const respFijo=esResponsableIdentidadFija();
+    // Con sesión vinculada a la cuenta el nombre ya está en el header: ocultar la barra.
+    respBar.classList.toggle('on',resp&&!respFijo);
     const selResp=document.getElementById('sel-responsable');
     const lblResp=document.getElementById('resp-global-label');
     const btnCambiarResp=respBar.querySelector('button[onclick="cambiarResponsable()"]');
@@ -9497,9 +9510,8 @@ function updateDeptoUI(){
       if(btnCambiarResp)btnCambiarResp.style.display=respFijo?'none':'';
       if(lblResp)lblResp.textContent=respFijo?'Conectado como:':'Responsable:';
       if(respFijo){
-        const nom=getResponsableLoginNombre();
         const hint=document.getElementById('resp-global-hint');
-        if(hint&&nom)hint.innerHTML='<strong style="color:var(--tx)">'+escAttr(nom)+'</strong> · '+escAttr(responsablePuedeVerRegistro()?'Consulta, actividades y registro según permisos':'Consulta y actividades asignadas');
+        if(hint)hint.textContent='';
       }
     }
   }

@@ -695,15 +695,15 @@ async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
   }
   return msg;
 }
-function _pqrsHtmlNotifAsignacion(e,expId){
+function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
   const num=expId||e._exp||'';
   const asunto=e.f_f1||e._tipo_solicitud||'PQRSD';
   const fecha=e._fecha_solicitud||e._fecha||'';
   const solNombre=e._qd_nombre||e._pn_nombre||'Ciudadano';
   const detalle=e._pqrs_detalle||e._detalle_general||'';
   const oficina=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):e._pqrs_oficina||'';
-  const responsable=e._pqrs_responsable_oficina||'';
-  // Links de anexos en Drive
+  // Saludo personalizado por destinatario (evita cruzar nombres entre coejecutores)
+  const responsable=String(destinatarioNombre||e._pqrs_responsable_oficina||'responsable').trim()||'responsable';
   const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
   const solLink=e._pqrs_solicitud_link||'';
   const folderLink=e._pqrs_drive_folder_link||'';
@@ -714,7 +714,7 @@ function _pqrsHtmlNotifAsignacion(e,expId){
   const adjuntosHtml=linksHtml
     ?('<p><strong>Documentos adjuntos en Drive:</strong></p><ul>'+linksHtml+'</ul>')
     :(folderLink?'<p><a href="'+escAttr(folderLink)+'">Abrir carpeta Drive de la PQRSD</a></p>':'<p><em>Sin adjuntos registrados. Revise la carpeta Drive si fue asignado recientemente.</em></p>');
-  return '<p>Estimado/a <strong>'+escAttr(responsable||'responsable')+'</strong>,</p>'+
+  return '<p>Estimado/a <strong>'+escAttr(responsable)+'</strong>,</p>'+
     '<p>Se le ha asignado o notificado la siguiente PQRSD para su atención:</p>'+
     '<table style="border-collapse:collapse;font-size:13px;width:100%;max-width:520px">'+
     '<tr><td style="padding:4px 8px;font-weight:600;background:#f5f5f5">N° PQRSD</td><td style="padding:4px 8px">'+escAttr(num)+'</td></tr>'+
@@ -727,30 +727,37 @@ function _pqrsHtmlNotifAsignacion(e,expId){
     adjuntosHtml+
     '<hr><p style="font-size:11px;color:#888">Notificación automática del Sistema de Seguimiento de Trámites — CDA Delegación Guaviare. No responda a este correo.</p>';
 }
-async function _pqrsEnviarNotifAsignacion(e,emails,expId){
-  // Enviar notificación estructurada cuando no se puede reenviar el correo original
-  if(!emails||!emails.length)return false;
-  const fn=typeof _gmailApiBest==='function'?_gmailApiBest:null;
-  if(!fn&&typeof gmailSend!=='function')return false;
+/** destinatarios: array de emails O de {email,nombre}. Cada uno recibe saludo con su propio nombre. */
+async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
+  if(!destinatarios||!destinatarios.length)return false;
+  if(typeof _gmailApiBest!=='function'&&typeof gmailSend!=='function')return false;
   const num=expId||e._exp||'';
   const asunto='[PQRSD '+num+'] '+((e.f_f1||e._tipo_solicitud||'Solicitud').slice(0,80));
-  const body=_pqrsHtmlNotifAsignacion(e,num);
+  const list=destinatarios.map(function(d){
+    if(typeof d==='string')return{email:String(d||'').trim(),nombre:''};
+    return{email:String(d&&d.email||'').trim(),nombre:String(d&&d.nombre||'').trim()};
+  }).filter(function(d){return!!d.email;});
   let okCount=0;
-  for(let i=0;i<emails.length;i++){
+  const okEmails=[];
+  for(let i=0;i<list.length;i++){
+    const dest=list[i];
+    const body=_pqrsHtmlNotifAsignacion(e,num,dest.nombre||e._pqrs_responsable_oficina||'');
     try{
-      const raw=typeof _buildMimeEmail==='function'?_buildMimeEmail(emails[i],asunto,body):null;
+      const raw=typeof _buildMimeEmail==='function'?_buildMimeEmail(dest.email,asunto,body):null;
       if(raw){
         await _gmailApiBest('POST',GMAIL_API_BASE+'/messages/send',{raw:raw});
         okCount++;
+        okEmails.push(dest.email);
       }else if(typeof gmailSend==='function'){
-        await gmailSend(emails[i],asunto,body);
+        await gmailSend(dest.email,asunto,body);
         okCount++;
+        okEmails.push(dest.email);
       }
     }catch(err){
-      console.warn('_pqrsEnviarNotifAsignacion:',emails[i],err.message);
+      console.warn('_pqrsEnviarNotifAsignacion:',dest.email,err.message);
     }
   }
-  return okCount>0;
+  return okCount>0?okEmails:false;
 }
 async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg){
   if(!e||!expId||!nombres||!nombres.length)return false;
@@ -759,29 +766,40 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
   if(!pendientes.length)return true;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk)return false;
-  const emails=pendientes.map(function(p){return p.email;});
-  // Intento 1: reenvío del correo original (funciona cuando tenemos el token de secretaria)
-  const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
-  let ok=false;
-  if(msg&&typeof reenviarEmailRawARecipientes==='function'){
-    try{ok=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});}
-    catch(err){console.warn('reenvio raw responsable:',err);}
+  // Preferir notificación estructurada personalizada (formato de asignación) a cada
+  // coejecutor con su propio nombre. El reenvío raw (Fwd) solo se usa si falla.
+  let okEmails=[];
+  try{
+    const r=await _pqrsEnviarNotifAsignacion(e,pendientes,expId);
+    if(Array.isArray(r))okEmails=r;
+  }catch(err){console.warn('notif asignacion responsable:',err);}
+  const faltantes=pendientes.filter(function(p){
+    return!okEmails.some(function(em){return String(em).toLowerCase()===String(p.email).toLowerCase();});
+  });
+  if(faltantes.length){
+    const emails=faltantes.map(function(p){return p.email;});
+    const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
+    if(msg&&typeof reenviarEmailRawARecipientes==='function'){
+      try{
+        const rawOk=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});
+        if(rawOk)okEmails=okEmails.concat(emails);
+      }catch(err){console.warn('reenvio raw responsable:',err);}
+    }
   }
-  // Intento 2: notificación estructurada con links Drive (funciona con cualquier token OFI)
-  if(!ok){
-    try{ok=await _pqrsEnviarNotifAsignacion(e,emails,expId);}
-    catch(err){console.warn('notif asignacion responsable:',err);}
-  }
-  if(ok){
-    pqrsMarcarCorreosReenviados(e,emails);
+  if(okEmails.length){
+    pqrsMarcarCorreosReenviados(e,okEmails);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    const enviados=pendientes.filter(function(p){
+      return okEmails.some(function(em){return String(em).toLowerCase()===String(p.email).toLowerCase();});
+    });
     e._pqrs_historial.push({
       tipo:'reenvio_correo_responsable',
       fecha:hoy(),
-      nota:'Notificación de PQRSD enviada a responsable(s): '+pendientes.map(function(p){return p.nombre;}).join(', ')
+      nota:'Notificación de PQRSD enviada a responsable(s): '+enviados.map(function(p){return p.nombre;}).join(', ')
     });
+    return true;
   }
-  return ok;
+  return false;
 }
 async function tryReenvioPqrsCorreoAResponsables(e,nombres,expId,opts){
   opts=opts||{};

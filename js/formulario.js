@@ -50,7 +50,20 @@ function showTab(t){
   if(t==='agenda')renderAgenda();
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){initPeriodoFiltros('cons');renderConsolidado();}
-  if(t==='cfg'){updateDeptoUI();renderCfg();suscribirCfgSync(deptoCfg||deptoActivo);}
+  if(t==='cfg'){
+    updateDeptoUI();
+    renderCfg();
+    suscribirCfgSync(deptoCfg||deptoActivo);
+    // Precargar usuarios autorizados al abrir Config (evita lista vacía en admin)
+    if(typeof ensureUsuariosFirestoreCache==='function'){
+      ensureUsuariosFirestoreCache(true).then(function(){
+        if(typeof renderListasCfg==='function'&&document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+      }).catch(function(){});
+    }
+    if(!_usuariosFsUnsub&&typeof startUsuariosFirestoreListener==='function'&&document.body.classList.contains('sesion-activa')){
+      startUsuariosFirestoreListener();
+    }
+  }
   updateDeptoUI();
 }
 function showCfgTab(t){
