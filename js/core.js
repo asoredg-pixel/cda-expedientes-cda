@@ -723,7 +723,7 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(wf.tipo||PQRS_WF_TIPO.MENSAJE)+'"></div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld" id="pqrs-resp-fecha-wrap"><label id="pqrs-resp-fecha-label">Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
-    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()">'+
+    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()" onblur="onPqrsRespOficioBlur()">'+
     '<div id="pqrs-resp-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>'+
     (fromGmail?('<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano</label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="varios@correo.com, separados@por.comas.com"></div>'):'')+
@@ -836,7 +836,115 @@ function pqrsValidateOficioRespuesta(tipoResp,opts){
       return false;
     }
   }
+  // Duplicado: bloquear y mostrar modal
+  if(!opts.skipDupCheck){
+    const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
+    if(!validarNumeroOficioDisponible(oficio,expId))return false;
+  }
   return true;
+}
+/** Normaliza N° de oficio para comparación (sin espacios, mayúsculas). */
+function pqrsNormOficioNum(s){
+  return String(s||'').trim().toUpperCase().replace(/\s+/g,'');
+}
+/**
+ * Busca usos previos del N° de oficio en PQRSD/trámites/actos/actividades.
+ * @returns {Array<{expId:string,contexto:string,detalle:string}>}
+ */
+function buscarUsosNumeroOficio(oficio,excludeExpId){
+  const needle=pqrsNormOficioNum(oficio);
+  if(!needle||needle.length<3)return[];
+  const excl=pqrsNormOficioNum(excludeExpId);
+  const hits=[];
+  const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  lista.forEach(function(e){
+    if(!e)return;
+    const id=String(e._exp||'').trim();
+    if(excl&&pqrsNormOficioNum(id)===excl)return;
+    const esPqrs=typeof esPqrsSecretaria==='function'?esPqrsSecretaria(e):(!!e._es_pqrs||String(e._tipo_solicitud||'').toUpperCase().indexOf('PQR')>=0);
+    const tipoLbl=esPqrs?'PQRSD':(e._tramite||'Trámite');
+    const asunto=String(e.f_f1||e._pqrs_detalle||e._asunto||'').trim().slice(0,80);
+    // Respuesta PQRSD
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const ofiResp=pqrsNormOficioNum(wf.oficio||e._pqrs_respuesta_oficio||'');
+    if(ofiResp&&ofiResp===needle){
+      hits.push({
+        expId:id,
+        contexto:tipoLbl+' · respuesta',
+        detalle:(asunto?asunto+' · ':'')+'Oficio de respuesta '+String(wf.oficio||e._pqrs_respuesta_oficio||'')
+      });
+    }
+    // Actos administrativos
+    let actos=[];
+    try{
+      actos=typeof e._actos_admin==='string'?JSON.parse(e._actos_admin||'[]'):(e._actos_admin||[]);
+    }catch(x){actos=[];}
+    if(Array.isArray(actos)){
+      actos.forEach(function(a,i){
+        if(!a)return;
+        const num=pqrsNormOficioNum(a.numero||a.oficio||'');
+        if(num&&num===needle){
+          hits.push({
+            expId:id,
+            contexto:tipoLbl+' · acto administrativo',
+            detalle:(a.tipo||'Acto')+(a.numero?' · '+a.numero:'')+(asunto?' · '+asunto:'')
+          });
+        }
+      });
+    }
+    // Actividades / tareas (campo oficio o descripción con el número exacto en metadatos)
+    const tasks=Array.isArray(e.tasks)?e.tasks:[];
+    tasks.forEach(function(t){
+      if(!t||t.eliminada)return;
+      const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||'');
+      if(tofi&&tofi===needle){
+        hits.push({
+          expId:id,
+          contexto:'Actividad',
+          detalle:String(t.desc||t.actividad||t.codigo||t.id||'Actividad').slice(0,80)
+        });
+      }
+    });
+  });
+  // Actividades libres (sin expediente)
+  if(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)){
+    try{
+      actividadesLibres.forEach(function(t){
+        if(!t||t.eliminada)return;
+        const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||'');
+        if(tofi&&tofi===needle){
+          hits.push({
+            expId:String(t.codigo||t.id||'—'),
+            contexto:'Actividad libre',
+            detalle:String(t.desc||t.actividad||'').slice(0,80)
+          });
+        }
+      });
+    }catch(x){}
+  }
+  return hits;
+}
+/** Si el N° ya existe, muestra modal de advertencia y retorna false. */
+function validarNumeroOficioDisponible(oficio,excludeExpId){
+  const usos=buscarUsosNumeroOficio(oficio,excludeExpId);
+  if(!usos.length)return true;
+  const u=usos[0];
+  const mas=usos.length>1?' (+'+(usos.length-1)+' más)':'';
+  const detail='Usado en: '+u.expId+' ('+u.contexto+')'+(u.detalle?' — '+u.detalle:'')+mas;
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'N° de oficio no válido',
+      message:'El número de oficio «'+String(oficio||'').trim()+'» ya fue usado en otra respuesta o registro.',
+      detail:detail,
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else if(typeof notif==='function'){
+    notif('N° de oficio ya usado: '+detail,'err');
+  }
+  pqrsShowRespOficioError('Este N° de oficio ya fue usado ('+u.expId+').');
+  return false;
 }
 /** Valida adjuntos según canal (oficio + soporte de notificación). */
 function pqrsValidateAdjuntosPorCanal(tipoResp,canal,opts){
@@ -938,6 +1046,9 @@ function pqrsRespRefreshModalUiGmail(){
   const submitBtn=document.getElementById('pqrs-resp-submit-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
   const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
+  const adjLabel=document.getElementById('pqrs-resp-adj-label');
+  const adjHint=document.getElementById('pqrs-resp-adj-hint');
+  const isOficio=tipo===PQRS_WF_TIPO.OFICIO;
   if(cuerpoWrap)cuerpoWrap.style.display='';
   if(canalWrap)canalWrap.style.display='none';
   if(adjWrap)adjWrap.style.display='';
@@ -945,8 +1056,10 @@ function pqrsRespRefreshModalUiGmail(){
     submitBtn.style.display='';
     submitBtn.textContent='✅ Registrar como respuesta oficial';
   }
-  if(oficioReq)oficioReq.style.display=tipo===PQRS_WF_TIPO.OFICIO?'':'none';
-  if(oficioHint)oficioHint.style.display=tipo===PQRS_WF_TIPO.OFICIO?'none':'';
+  if(oficioReq)oficioReq.style.display=isOficio?'':'none';
+  if(oficioHint)oficioHint.style.display=isOficio?'none':'';
+  if(adjLabel)adjLabel.textContent=isOficio?'Documento del oficio firmado (obligatorio)':'Documentos adjuntos';
+  if(adjHint)adjHint.textContent=isOficio?'Debe adjuntar el PDF u oficio firmado. Quedará en Drive y en consulta ciudadana.':'';
   if(tipo===PQRS_WF_TIPO.OFICIO||tipo===PQRS_WF_TIPO.MENSAJE)pqrsAplicarPlantillaSegunTipo(tipo,false);
 }
 function pqrsRespRefreshModalUi(){
@@ -1144,6 +1257,16 @@ function onPqrsRespOficioInput(){
   const cur=(composeEl&&composeEl.value.trim())||(cuerpoEl&&cuerpoEl.value.trim())||'';
   const esPlantilla=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
   if(esPlantilla||!cur||/^(\s*(fwd?|re):)/i.test(cur)||_pqrsEsPlantillaRespuesta(cur))pqrsAplicarPlantillaOficioSiCorresponde(true);
+}
+function onPqrsRespOficioBlur(){
+  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
+  const oficio=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
+  if(!oficio||oficio.length<4)return;
+  // Validar duplicado también en entrega (oficio opcional) y en respuesta
+  if(tipo&&tipo!==PQRS_WF_TIPO.OFICIO&&!document.getElementById('pqrs-entrega-resp-oficio'))return;
+  const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
+  const usos=buscarUsosNumeroOficio(oficio,expId);
+  if(usos.length)validarNumeroOficioDisponible(oficio,expId);
 }
 function addPqrsRespAdjFile(boxId){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -2915,6 +3038,10 @@ function collectPqrsEntregaDatos(expId){
     if(tipo===PQRS_WF_TIPO.INFORMATIVA){notif('Escriba la descripción informativa (será visible al ciudadano)','err');}
     else{notif('Escriba un resumen de la respuesta elaborada','err');}
     return null;
+  }
+  if(oficioExt&&typeof validarNumeroOficioDisponible==='function'){
+    const expExcl=String(expId||(e&&e._exp)||'').trim();
+    if(!validarNumeroOficioDisponible(oficioExt,expExcl))return null;
   }
   const adj=collectEnviarAdjuntos();
   return{fechaResp,oficioExt,cuerpo,tipo,canal,adj};

@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260707i">
+<link rel="stylesheet" href="css/sst.css?v=20260710a">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260709g"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260709i"></script>
+<script src="js/core.js?v=20260710a"></script>
 <script src="js/formulario.js?v=20260709h"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -33,7 +33,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260707e"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260709i"></script>
+<script src="js/gmail.js?v=20260710a"></script>
 <script src="js/pqrs.js?v=20260709g"></script>
 <script src="js/consulta.js?v=20260709f"></script>
 <script src="js/recursos.js?v=20260702t"></script>
@@ -836,6 +836,11 @@
           <div class="gm-list-toolbar">
             <span class="gm-list-title" id="gm-list-title">Recibidos</span>
             <span class="gm-list-count" id="gm-list-count"></span>
+          </div>
+          <div class="gm-read-filter" id="gm-read-filter" role="group" aria-label="Filtro de lectura">
+            <button type="button" class="gm-read-filter-btn on" data-filter="all" onclick="gmailOfiSetReadFilter('all')">Todos</button>
+            <button type="button" class="gm-read-filter-btn" data-filter="unread" onclick="gmailOfiSetReadFilter('unread')">No leídos</button>
+            <button type="button" class="gm-read-filter-btn" data-filter="read" onclick="gmailOfiSetReadFilter('read')">Leídos</button>
           </div>
           <div id="gmail-ofi-inbox-list" class="gm-email-list">
             <div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>

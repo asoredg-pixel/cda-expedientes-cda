@@ -3191,7 +3191,7 @@ function gmailOfiFolder(labelId) {
     titleEl.textContent = _gmailOfiSysNames[labelId] || (lbl ? lbl.name : labelId);
   }
   gmailOfiCloseMessage();
-  _gmailOfiLoadMessages({ labelId });
+  _gmailOfiLoadMessages({ labelId, readFilter: _gmailOfiReadFilter || 'all' });
 }
 
 function gmailOfiRefresh() {
@@ -3206,7 +3206,7 @@ function gmailOfiSearch(query) {
   const titleEl = document.getElementById('gm-list-title');
   if (titleEl) titleEl.textContent = 'Búsqueda: ' + q;
   gmailOfiCloseMessage();
-  _gmailOfiLoadMessages({ query: q });
+  _gmailOfiLoadMessages({ query: q, readFilter: _gmailOfiReadFilter || 'all' });
 }
 
 // Backward-compat alias
@@ -3216,9 +3216,59 @@ function gmailOfiLoadInbox(query) {
 
 let _gmailOfiNextPageToken = '';
 let _gmailOfiListOpts = null;
+let _gmailOfiReadFilter = 'all'; // all | unread | read
+
+function gmailOfiSetReadFilter(filter) {
+  filter = String(filter || 'all');
+  if (filter !== 'all' && filter !== 'unread' && filter !== 'read') filter = 'all';
+  _gmailOfiReadFilter = filter;
+  document.querySelectorAll('#gm-read-filter .gm-read-filter-btn').forEach(function(b) {
+    b.classList.toggle('on', b.getAttribute('data-filter') === filter);
+  });
+  gmailOfiCloseMessage();
+  // Recargar carpeta/búsqueda activa con el filtro
+  if (_gmailOfiListOpts && _gmailOfiListOpts.query && !_gmailOfiListOpts._fromReadFilter) {
+    _gmailOfiLoadMessages(Object.assign({}, _gmailOfiListOpts, { readFilter: filter }));
+  } else {
+    _gmailOfiLoadMessages({
+      labelId: _gmailOfiActiveFolder || 'INBOX',
+      readFilter: filter
+    });
+  }
+}
+window.gmailOfiSetReadFilter = gmailOfiSetReadFilter;
+
+function _gmailOfiBuildListUrl(opts, pageToken) {
+  opts = opts || {};
+  const filter = opts.readFilter || _gmailOfiReadFilter || 'all';
+  const labelId = opts.labelId || 'INBOX';
+  let url;
+  if (opts.query && !opts._fromReadFilter) {
+    // Búsqueda del usuario: combinar con filtro de lectura
+    let q = String(opts.query || '').trim();
+    if (filter === 'unread') q = (q + ' is:unread').trim();
+    else if (filter === 'read') q = (q + ' is:read').trim();
+    url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=50';
+  } else if (filter === 'unread') {
+    if (labelId === 'INBOX') {
+      url = GMAIL_API_BASE + '/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=50';
+    } else {
+      const q = 'label:' + labelId + ' is:unread';
+      url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=50';
+    }
+  } else if (filter === 'read') {
+    const q = (labelId === 'INBOX' ? 'in:inbox' : ('label:' + labelId)) + ' is:read';
+    url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=50';
+  } else {
+    url = GMAIL_API_BASE + '/messages?labelIds=' + encodeURIComponent(labelId) + '&maxResults=50';
+  }
+  if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+  return url;
+}
 
 async function _gmailOfiLoadMessages(opts, append) {
   opts = opts || {};
+  if (!opts.readFilter) opts.readFilter = _gmailOfiReadFilter || 'all';
   if (!append) {
     _gmailOfiNextPageToken = '';
     _gmailOfiListOpts = opts;
@@ -3236,18 +3286,13 @@ async function _gmailOfiLoadMessages(opts, append) {
   const loadMoreBtn = document.getElementById('gm-load-more-btn');
   if (loadMoreBtn && append) { loadMoreBtn.disabled = true; loadMoreBtn.textContent = 'Cargando…'; }
   try {
-    let url;
-    if (opts.query) {
-      url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(opts.query) + '&maxResults=50';
-    } else {
-      url = GMAIL_API_BASE + '/messages?labelIds=' + encodeURIComponent(opts.labelId || 'INBOX') + '&maxResults=50';
-    }
-    if (append && _gmailOfiNextPageToken) url += '&pageToken=' + encodeURIComponent(_gmailOfiNextPageToken);
+    const url = _gmailOfiBuildListUrl(opts, append ? _gmailOfiNextPageToken : '');
     const data = await _gmailOfiApi('GET', url);
     const ids = (data.messages || []).map(m => m.id);
     _gmailOfiNextPageToken = data.nextPageToken || '';
     if (!ids.length && !append) {
-      listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">📭</div><div>No hay mensajes aquí</div></div>';
+      const emptyLbl = opts.readFilter === 'unread' ? 'No hay mensajes no leídos' : (opts.readFilter === 'read' ? 'No hay mensajes leídos' : 'No hay mensajes aquí');
+      listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">📭</div><div>' + emptyLbl + '</div></div>';
       if (countEl) countEl.textContent = '';
       if (loadMoreBtn) loadMoreBtn.style.display = 'none';
       return;
@@ -3465,6 +3510,10 @@ function _renderGmailOfiMsgView(msg) {
   const infPqrsBtn = !_gmailOfiIsSecretaria()
     ? '<button type="button" class="gm-action-btn" style="background:var(--sf2);border:1px solid var(--bd);color:var(--tx)" onclick="gmailOfiMarcarInformativaPqrs()" title="Marcar PQRSD como informativa y cerrar sin enviar correo al ciudadano">ℹ Informativa</button>'
     : '';
+  const isUnread = Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD');
+  const unreadBtn = isUnread
+    ? ''
+    : '<button type="button" class="gm-action-btn" onclick="gmailOfiMarkUnread(\'' + escAttr(msg.id) + '\')" title="Marcar este mensaje como no leído">👁‍🗨 Marcar no leído</button>';
 
   viewEl.innerHTML =
     '<div class="gm-msg-header">' +
@@ -3479,6 +3528,7 @@ function _renderGmailOfiMsgView(msg) {
       '<div class="gm-msg-actions">' +
         (replyEmail ? '<button type="button" class="gm-action-btn" onclick="gmailOfiReplyCurrent()">↩ Responder</button>' : '') +
         '<button type="button" class="gm-action-btn" onclick="gmailOfiForwardCurrent()">↪ Reenviar</button>' +
+        unreadBtn +
         respPqrsBtn +
         infPqrsBtn +
         radicarBtn +
@@ -3486,6 +3536,27 @@ function _renderGmailOfiMsgView(msg) {
     '</div>' +
     attsHtml + bodyHtml;
 }
+
+async function gmailOfiMarkUnread(msgId) {
+  msgId = String(msgId || (_gmailOfiCurrentMsg && _gmailOfiCurrentMsg.id) || '').trim();
+  if (!msgId) return;
+  if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
+  try {
+    await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + msgId + '/modify', { addLabelIds: ['UNREAD'] });
+    const msg = _gmailOfiMessages.find(m => m.id === msgId) || _gmailOfiCurrentMsg;
+    if (msg) {
+      if (!Array.isArray(msg.labelIds)) msg.labelIds = [];
+      if (!msg.labelIds.includes('UNREAD')) msg.labelIds.push('UNREAD');
+    }
+    _renderGmailOfiList();
+    _gmailOfiUpdateBadges();
+    if (_gmailOfiCurrentMsg && _gmailOfiCurrentMsg.id === msgId) _renderGmailOfiMsgView(_gmailOfiCurrentMsg);
+    notif('Mensaje marcado como no leído', 'ok');
+  } catch (e) {
+    notif('No se pudo marcar como no leído: ' + e.message, 'err');
+  }
+}
+window.gmailOfiMarkUnread = gmailOfiMarkUnread;
 
 // ---- Star toggle ----
 async function gmailOfiToggleStar(msgId, event) {
@@ -4193,8 +4264,17 @@ async function submitPqrsRespuestaGmailVinculo() {
 
   if (!expId) { notif('Seleccione la PQRSD a cerrar', 'err'); return; }
   if (!fecha) { notif('Indique la fecha de la respuesta', 'err'); return; }
-  if (tipoResp === PQRS_WF_TIPO.OFICIO && !oficio) { notif('Indique el N° de oficio', 'err'); return; }
   if (!cuerpo) { notif('Escriba el resumen de la respuesta', 'err'); return; }
+
+  // Oficio firmado: N° + adjunto obligatorio + no duplicado
+  if (typeof pqrsValidateOficioRespuesta === 'function') {
+    if (!pqrsValidateOficioRespuesta(tipoResp, {
+      requireAdj: tipoResp === PQRS_WF_TIPO.OFICIO,
+      adjMsg: 'Para oficio firmado debe adjuntar el documento del oficio.'
+    })) return;
+  } else if (tipoResp === PQRS_WF_TIPO.OFICIO && !oficio) {
+    notif('Indique el N° de oficio', 'err'); return;
+  }
 
   const e = (typeof exps !== 'undefined' ? exps : []).find(x => String(x._exp || '').trim() === expId);
   if (!e) { notif('PQRSD no encontrada', 'err'); return; }
@@ -4226,6 +4306,7 @@ async function submitPqrsRespuestaGmailVinculo() {
       if (btn) { btn.disabled = false; btn.textContent = '✅ Registrar como respuesta oficial'; }
       return;
     }
+    let idxFile = 0;
     for (const item of adj.files) {
       const file = item.file;
       const statusEl = item.statusEl;
@@ -4233,7 +4314,12 @@ async function submitPqrsRespuestaGmailVinculo() {
         if (statusEl) statusEl.textContent = '⬆ Subiendo…';
         const res = await driveUploadInstitutional(file, file.name, file.type || 'application/octet-stream', 'respuesta_aprobada', expId, nombreCarpeta, e._fecha || e._fecha_solicitud || '', { expediente: e, uploadTarget: 'respuesta' });
         if (statusEl) statusEl.textContent = '✅ Subido';
-        documentos.push({ nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo' });
+        documentos.push({
+          nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId,
+          tipo: (tipoResp === PQRS_WF_TIPO.OFICIO && idxFile === 0) ? 'oficio_firmado' : 'archivo',
+          mime: file.type || ''
+        });
+        idxFile++;
       } catch (err) {
         if (statusEl) statusEl.textContent = '❌ Error';
         console.error('Drive upload:', err);
