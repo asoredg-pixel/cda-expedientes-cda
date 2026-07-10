@@ -4179,7 +4179,7 @@ function _gmailResponsableEntregarPqrsDesdeCorreo(e, informativa) {
       const c = document.getElementById('pqrs-entrega-resp-cuerpo');
       if (c) { c.focus(); }
     }, 80);
-    notif('Indique el motivo por el cual es informativa. Se enviará a revisión de NCA.', 'info');
+    notif('Indique la descripción informativa (obligatoria). Se enviará a revisión de NCA y será visible en consulta ciudadana.', 'info');
   }
 }
 window._gmailResponsableEntregarPqrsDesdeCorreo = _gmailResponsableEntregarPqrsDesdeCorreo;

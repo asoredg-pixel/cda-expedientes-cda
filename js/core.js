@@ -1110,9 +1110,23 @@ function pqrsRespRefreshModalUi(){
   });
 
   if(compose)compose.style.display=useEmail?'':'none';
-  const showCuerpo=!useEmail&&!isInfo&&isOficio&&isPersonal;
+  // Informativa: descripción pública obligatoria; otros: cuerpo solo en canales personales con oficio
+  const showCuerpo=isInfo||(!useEmail&&!isInfo&&isOficio&&isPersonal);
   if(cuerpoWrap)cuerpoWrap.style.display=showCuerpo?'':'none';
-  if(cuerpoLbl)cuerpoLbl.textContent=isPersonal?'Nota breve (opcional, para trazabilidad)':'Resumen de la respuesta';
+  if(cuerpoLbl){
+    if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
+    else if(isPersonal)cuerpoLbl.textContent='Nota breve (opcional, para trazabilidad)';
+    else cuerpoLbl.textContent='Resumen de la respuesta';
+  }
+  const cuerpoTxt=document.getElementById('pqrs-resp-cuerpo');
+  if(cuerpoTxt){
+    if(isInfo){
+      cuerpoTxt.placeholder='Describa por qué es informativa y qué información se aporta. El ciudadano verá este texto al consultar.';
+      if(_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
+    }else if(!cuerpoTxt.value){
+      cuerpoTxt.placeholder=isPersonal?'Nota breve…':'Resumen para trazabilidad…';
+    }
+  }
 
   if(adjWrap)adjWrap.style.display=(useEmail||isInfo)?'none':'';
   if(adjLabel){
@@ -1223,11 +1237,18 @@ function setPqrsRespTipo(val){
   if(canalRow)canalRow.style.display=isInfo?'none':'';
   if(oficioRow)oficioRow.style.display=isInfo?'none':'';
   if(cuerpoLbl)cuerpoLbl.innerHTML=isInfo
-    ?'Descripción informativa <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
+    ?'Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
     :'Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span>';
-  if(cuerpoTxt&&!cuerpoTxt.value)cuerpoTxt.placeholder=isInfo
-    ?'Describa la respuesta que el ciudadano verá al consultar…'
-    :'Describa brevemente la respuesta elaborada…';
+  if(cuerpoTxt){
+    if(isInfo){
+      cuerpoTxt.placeholder='Describa por qué es informativa. El ciudadano verá este texto al consultar…';
+      if(!cuerpoTxt.value||(typeof _pqrsEsPlantillaRespuesta==='function'&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value))){
+        if(typeof _pqrsEsPlantillaRespuesta==='function'&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
+      }
+    }else if(!cuerpoTxt.value){
+      cuerpoTxt.placeholder='Describa brevemente la respuesta elaborada…';
+    }
+  }
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
   else if(document.getElementById('pqrs-resp-email-compose')||document.getElementById('pqrs-resp-cuerpo'))pqrsRespRefreshModalUi();
 }
@@ -1333,16 +1354,28 @@ async function submitPqrsRespuesta(expId){
   if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:tipoResp===PQRS_WF_TIPO.OFICIO&&isPersonal}))return;
   if(!pqrsValidateAdjuntosPorCanal(tipoResp,canal))return;
   if(tipoResp===PQRS_WF_TIPO.INFORMATIVA){
+    // Descripción pública obligatoria (consulta ciudadana)
+    const descInfo=String(cuerpo||notaInterna||'').trim();
+    if(!descInfo){
+      notif('La descripción informativa es obligatoria y será visible en consulta ciudadana','err');
+      const cEl=document.getElementById('pqrs-resp-cuerpo');
+      if(cEl){cEl.focus();cEl.classList.add('fld-invalid');}
+      return;
+    }
     e._pqrs_informativa=true;
-    setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.INFORMATIVA,canal:'',cuerpo:'',oficio:'',fecha_respuesta:fechaResp,cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',cerrado_en:new Date().toISOString()});
+    setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.INFORMATIVA,canal:'',cuerpo:descInfo,oficio:'',fecha_respuesta:fechaResp,cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',cerrado_en:new Date().toISOString()});
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:(notaInterna||'PQRSD informativa — sin respuesta formal requerida')+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
-    if(notaInterna)e._pqrs_notas_internas=notaInterna;
+    e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:descInfo+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
+    e._pqrs_respuesta_nota=descInfo;
+    if(notaInterna&&notaInterna!==descInfo)e._pqrs_notas_internas=notaInterna;
     e._pqrs_estado_oficina='cerrado';e._estado='Atendido';e._fecha_res=fechaResp;e._pqrs_respuesta_fecha=fechaResp;
+    if(typeof completarTareasAtenderPqrs==='function')completarTareasAtenderPqrs(e,descInfo);
+    if(typeof finalizarTareasPqrsAlCerrar==='function')finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — respuesta informativa');
     persistExpedienteGranular(e);
     closeTaskModal();
     notif('PQRSD marcada como informativa y cerrada','ok');
     refreshPqrsDetalleViews(expId);renderPqrsOficinaInbox();renderSecretariaPqrs();
+    if(typeof renderActividades==='function')renderActividades();
     return;
   }
 
@@ -1540,8 +1573,10 @@ function renderPqrsTrazabilidadHtml(e){
 function htmlPqrsRespuestaRegistrada(e){
   if(!pqrsEstaCerrada(e))return'';
   if(e._pqrs_informativa){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const desc=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
     return '<div class="pqrs-det-sec"><div class="pqrs-det-k">Respuesta</div><div class="pqrs-det-v" style="color:var(--gn);font-weight:600">ℹ Informativa — atendida sin respuesta formal al ciudadano</div>'+
-      (e._pqrs_respuesta_nota?'<div style="margin-top:6px;font-size:13px">'+escAttr(e._pqrs_respuesta_nota)+'</div>':'')+'</div>';
+      (desc?'<div style="margin-top:6px;font-size:13px;white-space:pre-wrap">'+escAttr(desc)+'</div>':'')+'</div>';
   }
   const respNota=(e._pqrs_historial||[]).filter(h=>h.tipo==='respuesta_oficina').pop();
   const enTerm=pqrsRespuestaEnTermino(e);
@@ -3016,10 +3051,10 @@ function renderPqrsEntregaCamposHtml(e){
     '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalActual||(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO))+'"></div>';
   h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">'+
     (esInformativa
-      ?'Descripción informativa <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
+      ?'Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
       :'Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span>')+
     '</label>'+
-    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Describa la respuesta que el ciudadano verá al consultar…':'Describa brevemente la respuesta elaborada…')+'" style="min-height:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
+    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Describa por qué es informativa. El ciudadano verá este texto al consultar…':'Describa brevemente la respuesta elaborada…')+'" style="min-height:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
     (esInformativa?'<div style="font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ El encargado revisará y podrá editar este texto antes de aprobar. No se enviará correo al ciudadano.</div>':'')+
     '</div>';
   h+='</div>';
@@ -3035,8 +3070,11 @@ function collectPqrsEntregaDatos(expId){
   const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim();
   if(!fechaResp){notif('Indique la fecha de la respuesta al ciudadano','err');return null;}
   if(!cuerpo){
-    if(tipo===PQRS_WF_TIPO.INFORMATIVA){notif('Escriba la descripción informativa (será visible al ciudadano)','err');}
-    else{notif('Escriba un resumen de la respuesta elaborada','err');}
+    if(tipo===PQRS_WF_TIPO.INFORMATIVA){
+      notif('La descripción informativa es obligatoria y será visible en consulta ciudadana','err');
+      const el=document.getElementById('pqrs-entrega-resp-cuerpo');
+      if(el){el.focus();el.classList.add('fld-invalid');}
+    }else{notif('Escriba un resumen de la respuesta elaborada','err');}
     return null;
   }
   if(oficioExt&&typeof validarNumeroOficioDisponible==='function'){
@@ -3366,14 +3404,21 @@ function completarTareasAtenderPqrs(e,nota){
 function marcarPqrsInformativaCore(expId,nota){
   const e=getExpById(expId);
   if(!e||!puedeMarcarPqrsInformativa(e)){notif('No puede marcar esta PQRSD como informativa','err');return false;}
+  const notaHist=String(nota||'').trim();
+  if(!notaHist){
+    notif('La descripción informativa es obligatoria y será visible en consulta ciudadana','err');
+    const el=document.getElementById('pqrs-inf-nota');
+    if(el){el.focus();el.classList.add('fld-invalid');}
+    return false;
+  }
   e._pqrs_informativa=true;
-  const notaHist=(nota||'PQRSD informativa — sin respuesta formal requerida').trim();
   setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.INFORMATIVA,canal:'',cuerpo:notaHist,oficio:'',fecha_respuesta:hoy(),cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',cerrado_en:new Date().toISOString()});
-  if(notaHist)e._pqrs_notas_internas=notaHist;
-  registrarPqrsRespuestaCore(e,{fechaResp:hoy(),nota:notaHist,cuerpo:notaHist,oficioExt:'',medioResp:'',tipo:PQRS_WF_TIPO.INFORMATIVA});
+  e._pqrs_respuesta_nota=notaHist;
+  registrarPqrsRespuestaCore(e,{fechaResp:hoy(),nota:notaHist,cuerpo:notaHist,oficioExt:'',medioResp:'',tipo:PQRS_WF_TIPO.INFORMATIVA,esNotaPublica:true});
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'informativa',fecha:hoy(),nota:notaHist+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,por:pqrsComentarioAutor()});
   completarTareasAtenderPqrs(e,notaHist);
+  if(typeof finalizarTareasPqrsAlCerrar==='function')finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — respuesta informativa');
   persistExpedienteGranular(e);
   notif('PQRSD marcada como informativa y cerrada','ok');
   return true;
@@ -3396,15 +3441,28 @@ function openMarcarPqrsInformativaModal(expId){
   if(!ov||!body){cerrarPqrsModalPrep();return;}
   if(tit)tit.textContent='Marcar PQRSD informativa · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Use cuando la PQRSD solo aporta información (respuesta a requerimiento, datos sobre un trámite activo, etc.) y <strong>no requiere respuesta formal</strong> al ciudadano. Se dará por <strong>atendida</strong> sin enviar correo. La observación quedará visible para funcionarios y en consulta ciudadana.</div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Observación (opcional)</label><textarea id="pqrs-inf-nota" placeholder="Ej. Información sobre el trámite EXP-2026-015 — respuesta a requerimiento" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Use cuando la PQRSD solo aporta información (respuesta a requerimiento, datos sobre un trámite activo, etc.) y <strong>no requiere respuesta formal</strong> al ciudadano. Se dará por <strong>atendida</strong> sin enviar correo. La descripción es <strong>obligatoria</strong> y quedará visible en <strong>consulta ciudadana</strong>.</div>'+
+    '<div class="fld" style="margin-bottom:12px"><label>Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible al ciudadano)</span></label>'+
+    '<textarea id="pqrs-inf-nota" placeholder="Ej. Información sobre el trámite EXP-2026-015 — respuesta a requerimiento de documentos" style="width:100%;min-height:100px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:13px;line-height:1.45;box-sizing:border-box" oninput="this.classList.remove(\'fld-invalid\')"></textarea>'+
+    '<div id="pqrs-inf-nota-err" class="fld-err" style="display:none">Debe diligenciar la descripción informativa.</div></div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="event.stopPropagation();SST.submitMarcarPqrsInformativa(\''+jsStr(expId)+'\')">ℹ Marcar informativa y cerrar</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsInformativa',expId:expId};
+  setTimeout(function(){const el=document.getElementById('pqrs-inf-nota');if(el)el.focus();},50);
 }
 function submitMarcarPqrsInformativa(expId){
   const nota=String((document.getElementById('pqrs-inf-nota')||{}).value||'').trim();
+  if(!nota){
+    notif('La descripción informativa es obligatoria y será visible en consulta ciudadana','err');
+    const el=document.getElementById('pqrs-inf-nota');
+    const err=document.getElementById('pqrs-inf-nota-err');
+    if(el){el.classList.add('fld-invalid');el.focus();}
+    if(err)err.style.display='';
+    return;
+  }
+  const err=document.getElementById('pqrs-inf-nota-err');
+  if(err)err.style.display='none';
   if(marcarPqrsInformativaCore(expId,nota)){
     closeTaskModal();
     refreshPqrsPanelViews(expId);
