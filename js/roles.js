@@ -309,8 +309,8 @@ function esCargoVital(){
 function vitalPuedeActuar(e){
   if(!esCargoVital())return false;
   if(!e||!esPqrsSecretaria(e))return false;
-  const wf=e._pqrs_workflow||{};
-  return wf.fase===PQRS_WF.VITAL_GESTION||wf.fase===PQRS_WF.PENDIENTE_NOTIF||wf.fase===PQRS_WF.LISTA_ENVIO;
+  const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):(e._pqrs_workflow&&e._pqrs_workflow.fase)||'';
+  return f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
 }
 // Helper para buscar usuario por nombre
 function getUsuarioAutorizadoByNombre(nombre){

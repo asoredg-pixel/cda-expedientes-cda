@@ -3608,6 +3608,7 @@ function gmailOfiOpenCompose(opts) {
   const f = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
   f('gm-compose-to',      opts.to || '');
   f('gm-compose-cc',      opts.cc || '');
+  f('gm-compose-bcc',     opts.bcc || '');
   f('gm-compose-subject', opts.subject || '');
   // Body textarea: only user message / quoted text — NO plain-text signature (handled in MIME builder)
   f('gm-compose-body', opts.body || '');
@@ -3701,9 +3702,9 @@ function _gmailOfiFileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
-async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inReplyTo, files) {
+async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inReplyTo, files, bcc) {
   files = files || [];
-  if (!files.length) return _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo);
+  if (!files.length) return _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc);
   const altBoundary = 'sst_alt_' + Date.now();
   const mixBoundary = 'sst_mix_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
@@ -3744,6 +3745,7 @@ async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inRe
   const lines = [
     'To: ' + to,
     cc ? 'Cc: ' + cc : null,
+    bcc ? 'Bcc: ' + bcc : null,
     'Subject: ' + subjectEnc,
     inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
     inReplyTo ? 'References: ' + inReplyTo : null,
@@ -3759,7 +3761,7 @@ async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inRe
   return btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
+function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc) {
   const boundary = 'sst_ofi_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
@@ -3777,6 +3779,7 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo) {
   const lines = [
     'To: ' + to,
     cc ? 'Cc: ' + cc : null,
+    bcc ? 'Bcc: ' + bcc : null,
     'Subject: ' + subjectEnc,
     inReplyTo ? 'In-Reply-To: ' + inReplyTo : null,
     inReplyTo ? 'References: ' + inReplyTo : null,
@@ -3838,7 +3841,7 @@ async function gmailOfiSendCompose() {
   if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const modal = document.getElementById('gm-compose-modal');
   const g = id => (document.getElementById(id)||{}).value||'';
-  const to = g('gm-compose-to'), cc = g('gm-compose-cc'),
+  const to = g('gm-compose-to'), cc = g('gm-compose-cc'), bcc = g('gm-compose-bcc'),
         subject = g('gm-compose-subject'), body = g('gm-compose-body'),
         inReplyTo = (modal&&modal.dataset.inReplyTo)||'';
   if (!to.trim()) { notif('Ingrese el destinatario.', 'err'); return; }
@@ -3848,8 +3851,8 @@ async function gmailOfiSendCompose() {
   try {
     const files = window._gmailOfiComposeAttachments || [];
     const raw = files.length
-      ? await _gmailOfiBuildMimeWithAttachments(to, cc, subject, body, inReplyTo, files)
-      : _gmailOfiBuildMime(to, cc, subject, body, inReplyTo);
+      ? await _gmailOfiBuildMimeWithAttachments(to, cc, subject, body, inReplyTo, files, bcc)
+      : _gmailOfiBuildMime(to, cc, subject, body, inReplyTo, bcc);
     await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
     // Capturar el contexto de respuesta PQRSD antes de descartar (discardDraft lo limpia).
     const pqrsCtx = window._gmailOfiPqrsRespCtx;
@@ -4381,10 +4384,14 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
   opts = opts || {};
   const expId = opts.expId;
   const toRaw = String(opts.to || '').trim();
+  const ccRaw = String(opts.cc || '').trim();
+  const bccRaw = String(opts.bcc || '').trim();
   const subject = String(opts.subject || '').trim();
   const body = String(opts.body || '').trim();
   const attachments = opts.attachments || [];
   const toList = toRaw.split(/[,;]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(function(s){ return s && s.indexOf('@') > 0; });
+  const ccList = ccRaw.split(/[,;]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(function(s){ return s && s.indexOf('@') > 0; });
+  const bccList = bccRaw.split(/[,;]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(function(s){ return s && s.indexOf('@') > 0; });
   if (!expId || !toList.length || !body) throw new Error('Datos incompletos para enviar');
   if (!_gmailOfiTokenValid() && !(typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())) {
     throw new Error('Conecte su correo Gmail');
@@ -4392,33 +4399,24 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
   if (!_gmailOfiSignature && !_gmailOfiSignatureHtml) {
     await _gmailOfiLoadSignature();
   }
-  // Enviar a cada destinatario (mismo mensaje/adjuntos)
-  let lastErr = null;
-  let sentOk = 0;
-  for (let i = 0; i < toList.length; i++) {
-    const to = toList[i];
-    try {
-      const raw = attachments.length
-        ? await _gmailOfiBuildMimeWithAttachments(to, '', subject, body, '', attachments)
-        : _gmailOfiBuildMime(to, '', subject, body, '');
-      await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
-      sentOk++;
-    } catch (err) {
-      lastErr = err;
-      console.warn('Error enviando a', to, err);
-    }
-  }
-  if (!sentOk) throw lastErr || new Error('No se pudo enviar el correo');
-  notif(sentOk > 1 ? ('✅ Mensaje enviado a ' + sentOk + ' destinatarios.') : '✅ Mensaje enviado.', 'ok');
+  const cc = ccList.join(', ');
+  const bcc = bccList.join(', ');
+  // Un solo envío con To (todos) + Cc + Bcc — evita duplicar adjuntos por destinatario
+  const to = toList.join(', ');
+  const raw = attachments.length
+    ? await _gmailOfiBuildMimeWithAttachments(to, cc, subject, body, '', attachments, bcc)
+    : _gmailOfiBuildMime(to, cc, subject, body, '', bcc);
+  await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
+  notif(toList.length > 1 ? ('✅ Mensaje enviado a ' + toList.length + ' destinatarios.') : '✅ Mensaje enviado.', 'ok');
   await _gmailOfiFinalizarRespuestaPqrsDesdeCompose({
     expId: expId,
-    ciudEmail: toList.join(', '),
+    ciudEmail: to,
     tipo: opts.tipo,
     oficio: opts.oficio,
     fechaResp: opts.fechaResp,
     notaInterna: opts.notaInterna,
     attachments: attachments
-  }, { subject: subject, body: body, to: toList.join(', ') });
+  }, { subject: subject, body: body, to: to, cc: cc, bcc: bcc });
 }
 window.gmailOfiSendPqrsRespuestaInline = gmailOfiSendPqrsRespuestaInline;
 

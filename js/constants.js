@@ -227,11 +227,15 @@ const PQRS_WF = {
   PENDIENTE_REVISION:  'pendiente_revision_nca',
   // NCA aprobó mensaje simple, listo para enviar
   LISTA_ENVIO:         'lista_para_envio',
-  // NCA aprobó oficio, VITAL gestiona firma Director
+  // NCA aprobó oficio → VITAL/encargado preparan para firma del Director
+  PARA_FIRMA:          'para_firma',
+  // Alias legacy (casos previos a para_firma); se trata igual que PARA_FIRMA
   VITAL_GESTION:       'pendiente_gestion_vital',
-  // VITAL subió PDF firmado, esperando notificación
+  // Director (DS DEGUV) debe firmar / cargar PDF firmado
+  POR_FIRMAR:          'por_firmar',
+  // PDF firmado listo; VITAL/responsable/encargado notifican
   PENDIENTE_NOTIF:     'pendiente_notificacion',
-  // Notificación presencial: NCA hace revisión final antes de cerrar
+  // Notificación presencial/WhatsApp/aviso: 2ª revisión del encargado
   REVISION_FINAL:      'revision_final_nca',
   // PQRSD respondida y cerrada
   CERRADA:             'cerrada_atendida',
