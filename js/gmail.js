@@ -4261,6 +4261,8 @@ async function submitPqrsRespuestaGmailVinculo() {
   const fecha = String((document.getElementById('pqrs-resp-fecha') || {}).value || '').trim();
   const oficio = String((document.getElementById('pqrs-resp-oficio') || {}).value || '').trim();
   const ciudEmail = String((document.getElementById('gmail-resp-pqrs-email') || {}).value || '').trim().toLowerCase();
+  const ciudCc = String((document.getElementById('gmail-resp-pqrs-cc') || {}).value || '').trim().toLowerCase();
+  const ciudBcc = String((document.getElementById('gmail-resp-pqrs-bcc') || {}).value || '').trim().toLowerCase();
   const cuerpo = String((document.getElementById('pqrs-resp-cuerpo') || {}).value || '').trim();
   const tipoResp = String((document.getElementById('pqrs-resp-tipo') || {}).value || PQRS_WF_TIPO.MENSAJE).trim();
   const notaInterna = String((document.getElementById('pqrs-resp-nota') || {}).value || '').trim();
@@ -4346,6 +4348,9 @@ async function submitPqrsRespuestaGmailVinculo() {
     tipo: tipoResp,
     canal: typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo',
     cuerpo, oficio, fecha_respuesta: fecha, documentos,
+    email_to: ciudEmail,
+    email_cc: ciudCc,
+    email_bcc: ciudBcc,
     cerrado_por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
     cerrado_en: new Date().toISOString()
   };
@@ -4358,11 +4363,13 @@ async function submitPqrsRespuestaGmailVinculo() {
     });
   }
   if (typeof registrarNotificacionCiudadanoPqrs === 'function') {
+    const destNota = (ciudEmail || 'ciudadano') + (ciudCc ? ' · Cc: ' + ciudCc : '') + (ciudBcc ? ' · Cco: ' + ciudBcc : '');
     registrarNotificacionCiudadanoPqrs(e, {
       tipo: 'respuesta', medio: 'correo', enviado: true, a: ciudEmail,
+      cc: ciudCc, bcc: ciudBcc,
       por: typeof responsableActivo !== 'undefined' ? responsableActivo : '',
       histTipo: 'notificacion_correo',
-      histNota: 'Respuesta registrada por correo a ' + (ciudEmail || 'ciudadano')
+      histNota: 'Respuesta registrada por correo a ' + destNota
     });
   }
   if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);

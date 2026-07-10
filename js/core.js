@@ -755,7 +755,12 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()" onblur="onPqrsRespOficioBlur()">'+
     '<div id="pqrs-resp-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>'+
-    (fromGmail?('<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano</label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="varios@correo.com, separados@por.comas.com"></div>'):'')+
+    (fromGmail?('<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios</div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para <span style="font-weight:400;color:var(--tx3)">(varios separados por coma)</span></label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="ciudadano@ejemplo.com, empresa@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="gmail-resp-pqrs-cc" value="" style="margin-top:4px" placeholder="copia@ejemplo.com"></div>'+
+    '<div class="fld"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="gmail-resp-pqrs-bcc" value="" style="margin-top:4px" placeholder="oculto@ejemplo.com"></div>'+
+    '</div>'):'')+
     '<div class="fld" id="pqrs-resp-canal-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Canal de notificación al ciudadano</label>'+
     '<div style="font-size:11px;color:var(--tx3);margin-top:2px;margin-bottom:4px" id="pqrs-resp-canal-hint">Puede notificar por un medio distinto al registrado en la radicación.</div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:5px" id="pqrs-resp-canal-btns">'+
@@ -3087,14 +3092,15 @@ function renderPqrsEntregaCamposHtml(e){
   // Correo: verificar Para + CC + BCC (mismo criterio que oficinas)
   h+='<div id="pqrs-entrega-email-compose" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
-    '<div class="gm-compose-field" style="margin-bottom:6px"><label>Para <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(verifique o corrija — varios separados por coma)</span></label>'+
-    '<input type="text" id="pqrs-entrega-email-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'"></div>'+
-    '<div class="gm-compose-field" style="margin-bottom:6px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="pqrs-entrega-email-cc" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'"></div>'+
-    '<div class="gm-compose-field" style="margin-bottom:6px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="pqrs-entrega-email-bcc" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'"></div>'+
-    '<div class="gm-compose-field" style="margin-bottom:4px"><label>Asunto (referencia)</label>'+
-    '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wf.email_subject||asuntoMail)+'"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
+    '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Verifique o corrija — varios correos separados por coma</div>'+
+    '<input type="text" id="pqrs-entrega-email-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+    '<input type="text" id="pqrs-entrega-email-cc" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+    '<input type="text" id="pqrs-entrega-email-bcc" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Asunto (referencia)</label>'+
+    '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wf.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '<div style="font-size:10px;color:var(--tx3)">El envío al ciudadano lo hará el encargado al aprobar. Aquí se guarda el borrador y los destinatarios verificados.</div>'+
     '</div>';
   h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">'+
@@ -6175,6 +6181,29 @@ function renderTaskChatPanelHtml(expId,taskId,t){
   return '<div class="task-chat-sep" id="task-chat-sep"><div style="font-size:12px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat de actividad</div>'+
     '<div style="font-size:11px;color:var(--tx3);margin-bottom:6px">'+hint+'</div>'+lista+form+'</div>';
 }
+function _pqrsEsErrorPermisoDrive(err){
+  const msg=String((err&&err.message)||err||'').toLowerCase();
+  return /insufficient permissions|permission|no se pudo crear carpeta|access denied|403|forbidden|no tiene acceso|drive/i.test(msg)
+    &&(/permission|permiso|forbidden|403|insufficient|crear carpeta|parent/i.test(msg)||/drive/i.test(msg));
+}
+function alertErrorDriveAdjunto(err){
+  const raw=String((err&&err.message)||err||'').trim();
+  const esPerm=_pqrsEsErrorPermisoDrive(err)||/insufficient permissions|crear carpeta/i.test(raw);
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:esPerm?'Sin acceso a Drive':'Error al subir a Drive',
+      message:esPerm
+        ?'No tiene acceso a Drive para cargar la respuesta. Contacte al administrador para que le otorguen permisos en la carpeta institucional, o pida al encargado de la oficina que adjunte el archivo.'
+        :'No se pudo subir el archivo al Drive institucional. Intente de nuevo o contacte al administrador.',
+      detail:raw?raw.slice(0,180):'',
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else if(typeof notif==='function'){
+    notif(esPerm?'Sin acceso a Drive para cargar la respuesta. Contacte al administrador.':('No se pudo subir al Drive: '+raw),'err');
+  }
+}
 function submitEnviarSoporteVerificacion(expId,taskId){
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   const adj=collectEnviarAdjuntos();
@@ -6225,7 +6254,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         runSubmit([up]);
       }catch(err){
         console.warn('submitEnviarSoporteVerificacion drive:',err);
-        notif('No se pudo subir al Drive: '+(err.message||'revise la conexión Gmail'),'err');
+        alertErrorDriveAdjunto(err);
       }
     })();
     });
