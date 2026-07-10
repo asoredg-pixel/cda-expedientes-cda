@@ -4294,31 +4294,45 @@ window.submitPqrsRespuestaGmailVinculo = submitPqrsRespuestaGmailVinculo;
 async function gmailOfiSendPqrsRespuestaInline(opts) {
   opts = opts || {};
   const expId = opts.expId;
-  const to = String(opts.to || '').trim();
+  const toRaw = String(opts.to || '').trim();
   const subject = String(opts.subject || '').trim();
   const body = String(opts.body || '').trim();
   const attachments = opts.attachments || [];
-  if (!expId || !to || !body) throw new Error('Datos incompletos para enviar');
+  const toList = toRaw.split(/[,;]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(function(s){ return s && s.indexOf('@') > 0; });
+  if (!expId || !toList.length || !body) throw new Error('Datos incompletos para enviar');
   if (!_gmailOfiTokenValid() && !(typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())) {
     throw new Error('Conecte su correo Gmail');
   }
   if (!_gmailOfiSignature && !_gmailOfiSignatureHtml) {
     await _gmailOfiLoadSignature();
   }
-  const raw = attachments.length
-    ? await _gmailOfiBuildMimeWithAttachments(to, '', subject, body, '', attachments)
-    : _gmailOfiBuildMime(to, '', subject, body, '');
-  await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
-  notif('✅ Mensaje enviado.', 'ok');
+  // Enviar a cada destinatario (mismo mensaje/adjuntos)
+  let lastErr = null;
+  let sentOk = 0;
+  for (let i = 0; i < toList.length; i++) {
+    const to = toList[i];
+    try {
+      const raw = attachments.length
+        ? await _gmailOfiBuildMimeWithAttachments(to, '', subject, body, '', attachments)
+        : _gmailOfiBuildMime(to, '', subject, body, '');
+      await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: raw });
+      sentOk++;
+    } catch (err) {
+      lastErr = err;
+      console.warn('Error enviando a', to, err);
+    }
+  }
+  if (!sentOk) throw lastErr || new Error('No se pudo enviar el correo');
+  notif(sentOk > 1 ? ('✅ Mensaje enviado a ' + sentOk + ' destinatarios.') : '✅ Mensaje enviado.', 'ok');
   await _gmailOfiFinalizarRespuestaPqrsDesdeCompose({
     expId: expId,
-    ciudEmail: to,
+    ciudEmail: toList.join(', '),
     tipo: opts.tipo,
     oficio: opts.oficio,
     fechaResp: opts.fechaResp,
     notaInterna: opts.notaInterna,
     attachments: attachments
-  }, { subject: subject, body: body, to: to });
+  }, { subject: subject, body: body, to: toList.join(', ') });
 }
 window.gmailOfiSendPqrsRespuestaInline = gmailOfiSendPqrsRespuestaInline;
 

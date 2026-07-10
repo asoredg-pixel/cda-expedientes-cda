@@ -324,15 +324,45 @@ function pqrsInformativaBadge(e){
   return e&&e._pqrs_informativa?'<span class="bdg" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)" title="Sin respuesta formal requerida">ℹ Informativa</span>':'';
 }
 function medioNotificacionRespLabel(v){
-  if(v==='electronica')return 'Correo';
-  if(v==='fisica')return 'Física';
+  if(v==='electronica'||v==='correo')return 'Correo';
+  if(v==='fisica'||v==='presencial')return 'Presencial / física';
   if(v==='whatsapp')return 'WhatsApp';
   if(v==='pagina')return 'Por página web';
-  if(v==='aviso')return 'Por aviso';
+  if(v==='aviso'||v==='avisos')return 'Por aviso';
   return medioNotificacionLabel(v)||v||'—';
 }
 function medioNotificacionRespFlagHtml(v){
   return medioNotificacionFlagHtml(v,false)||'';
+}
+/** Mapea el medio de radicación (secretaría) al canal de respuesta del workflow. */
+function pqrsCanalDesdeMedioRadicacion(medio){
+  const m=String(medio||'').trim().toLowerCase();
+  if(m==='electronica'||m==='correo')return PQRS_WF_CANAL.CORREO;
+  if(m==='fisica'||m==='presencial')return PQRS_WF_CANAL.PRESENCIAL;
+  if(m==='whatsapp')return PQRS_WF_CANAL.WHATSAPP;
+  if(m==='avisos'||m==='aviso')return PQRS_WF_CANAL.AVISO;
+  return '';
+}
+/** Canal predeterminado al responder: workflow → medio radicación → correo si hay email → presencial. */
+function pqrsCanalDefaultRespuesta(e){
+  if(!e)return PQRS_WF_CANAL.CORREO;
+  const wf=getPqrsWorkflow(e);
+  if(wf.canal)return wf.canal;
+  if(e._pqrs_respuesta_medio){
+    const m=pqrsCanalDesdeMedioRadicacion(e._pqrs_respuesta_medio)||e._pqrs_respuesta_medio;
+    if(m===PQRS_WF_CANAL.CORREO||m===PQRS_WF_CANAL.WHATSAPP||m===PQRS_WF_CANAL.PRESENCIAL||m===PQRS_WF_CANAL.AVISO||m===PQRS_WF_CANAL.FISICA)return m===PQRS_WF_CANAL.FISICA?PQRS_WF_CANAL.PRESENCIAL:m;
+  }
+  const desdeRad=pqrsCanalDesdeMedioRadicacion(e._medio_notificacion);
+  if(desdeRad)return desdeRad;
+  const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
+  return correos.length?PQRS_WF_CANAL.CORREO:PQRS_WF_CANAL.PRESENCIAL;
+}
+function pqrsEsCanalCorreo(canal){
+  return String(canal||'')===PQRS_WF_CANAL.CORREO||String(canal||'')==='electronica';
+}
+function pqrsEsCanalNotifPersonal(canal){
+  const c=String(canal||'');
+  return c===PQRS_WF_CANAL.PRESENCIAL||c===PQRS_WF_CANAL.FISICA||c===PQRS_WF_CANAL.WHATSAPP||c===PQRS_WF_CANAL.AVISO||c==='aviso';
 }
 function pqrsEstaCerrada(e){
   return !!(e&&(e._pqrs_estado_oficina==='cerrado'||e._estado==='Atendido'));
@@ -650,12 +680,14 @@ async function openPqrsRespuestaModal(expId,opts){
   if(tit)tit.textContent=(fromGmail?'Registrar respuesta por correo':'Registrar respuesta')+(expLabel?' · '+expLabel:'');
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('task-modal-wide');}
   const wf=e?getPqrsWorkflow(e):{};
-  const ciudEmail=e?pqrsCorreoCiudadano(e):'';
+  const todosCorreos=e?pqrsCorreosCiudadano(e):[];
+  const ciudEmail=todosCorreos.length?todosCorreos.join(', '):(e?pqrsCorreoCiudadano(e):'');
+  const canalDef=fromGmail?PQRS_WF_CANAL.CORREO:pqrsCanalDefaultRespuesta(e);
   const mkCan=(v,lbl,ico)=>'<button type="button" class="btn bsm canal-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespCanal(\''+jsStr(v)+'\')">'+ico+' '+escAttr(lbl)+'</button>';
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   const asuntoMail='Respuesta a su '+((e&&e._tipo_solicitud)||'solicitud PQRSD')+' — '+(expLabel||'');
   const adjInfo=usaDriveInst
-    ?'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Los archivos se suben a la carpeta <em>Respuesta</em> de la PQRSD en Drive. Conecte Gmail/Drive si va a adjuntar.</div>'
+    ?'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Los archivos se suben a la carpeta <em>Respuesta</em> de la PQRSD en Drive y quedan visibles en consulta ciudadana.</div>'
     :'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue el link de Drive de su carpeta personal.</div>';
   let gmailSubj='';
   if(fromGmail&&gmailMsg&&gmailMsg.payload){
@@ -663,6 +695,7 @@ async function openPqrsRespuestaModal(expId,opts){
     const sh=gh.find(h=>h.name==='Subject');
     gmailSubj=sh?String(sh.value||'').trim():'';
   }
+  const medioRadLbl=e&&e._medio_notificacion?medioNotificacionLabel(e._medio_notificacion):'';
   const pqrsSelHtml=fromGmail?(
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">PQRSD a cerrar</label>'+
     '<input type="hidden" id="gmail-resp-pqrs-hid" value="'+escAttr(expLabel)+'">'+
@@ -676,7 +709,9 @@ async function openPqrsRespuestaModal(expId,opts){
     (gmailSubj?'<div style="font-size:11px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">📧 Correo vinculado: <strong>'+escAttr(gmailSubj.slice(0,100))+'</strong></div>':'')
   ):(
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Registre la respuesta definitiva al ciudadano. El expediente se marcará como <strong>Atendido</strong>.</div>'
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Registre la respuesta definitiva al ciudadano. El expediente se marcará como <strong>Atendido</strong>.'+
+    (medioRadLbl?' <span style="color:var(--tx3)">Medio de notificación en radicación: <strong>'+escAttr(medioRadLbl)+'</strong> (puede cambiarlo).</span>':'')+
+    '</div>'
   );
   const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
     (fromGmail?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa / sin respuesta formal'));
@@ -687,36 +722,40 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:5px" id="pqrs-resp-tipo-btns">'+tipoBtns+
     '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(wf.tipo||PQRS_WF_TIPO.MENSAJE)+'"></div>'+
     '<div class="fg" style="margin-bottom:10px">'+
-    '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
-    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E2026-001" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()">'+
+    '<div class="fld" id="pqrs-resp-fecha-wrap"><label id="pqrs-resp-fecha-label">Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
+    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()">'+
     '<div id="pqrs-resp-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>'+
-    (fromGmail?('<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano</label><input type="email" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px"></div>'):'')+
+    (fromGmail?('<div class="fld" style="margin-bottom:10px"><label>Correo del ciudadano</label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="varios@correo.com, separados@por.comas.com"></div>'):'')+
     '<div class="fld" id="pqrs-resp-canal-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Canal de notificación al ciudadano</label>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:2px;margin-bottom:4px" id="pqrs-resp-canal-hint">Puede notificar por un medio distinto al registrado en la radicación.</div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:5px" id="pqrs-resp-canal-btns">'+
     mkCan(PQRS_WF_CANAL.CORREO,'Correo electrónico','📧')+
+    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial / física','🤝')+
     mkCan(PQRS_WF_CANAL.WHATSAPP,'WhatsApp','💬')+
-    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial','🤝')+
     (fromGmail?'':mkCan(PQRS_WF_CANAL.AVISO,'Por aviso','📌'))+
-    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(fromGmail?PQRS_WF_CANAL.CORREO:(wf.canal||(e&&e._pqrs_respuesta_medio)||PQRS_WF_CANAL.CORREO))+'"></div>'+
+    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalDef)+'"></div>'+
     (fromGmail?'':(
     '<div id="pqrs-resp-email-compose" class="pqrs-resp-compose-inline" style="display:none;margin-bottom:10px">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Redactar respuesta por correo</div>'+
     '<div class="pqrs-resp-compose-box">'+
-    '<div class="gm-compose-field"><label>Para</label><input type="email" id="pqrs-compose-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
+    '<div class="gm-compose-field"><label>Para <span style="font-weight:400;color:var(--tx3)">(varios correos separados por coma)</span></label><input type="text" id="pqrs-compose-to" placeholder="ciudadano@ejemplo.com, empresa@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
     '<div class="gm-compose-field"><label>Asunto</label><input type="text" id="pqrs-compose-subject" value="'+escAttr(asuntoMail)+'"></div>'+
-    '<textarea id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje al ciudadano…" style="min-height:120px">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
+    '<label style="font-size:12px;font-weight:600;display:block;margin:6px 0 4px">Resumen de la respuesta / mensaje</label>'+
+    '<textarea id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje al ciudadano…" style="min-height:200px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
     '<div id="pqrs-compose-att-list" class="pqrs-compose-att-list"></div>'+
     '<div id="pqrs-compose-att-err" class="fld-err" style="display:none"></div>'+
     '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
     '<button type="button" class="btn bsm" onclick="pqrsComposeAddAttachment()">📎 Adjuntar archivo</button>'+
     '</div></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:6px">Al enviar se registrará la respuesta, el soporte PDF de trazabilidad y la notificación en consulta ciudadana.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:6px" id="pqrs-compose-hint">Al enviar se registra la respuesta, el soporte PDF y la notificación en consulta ciudadana. Si hay varios correos asociados (empresa, representante, apoderado, autorizado), se incluyen arriba.</div>'+
     '</div>'))+
-    '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Resumen de la respuesta</label>'+
-    '<textarea id="pqrs-resp-cuerpo" placeholder="Resumen para trazabilidad…" style="min-height:70px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px">'+escAttr(cuerpoVal)+'</textarea></div>'+
-    '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documentos adjuntos (soporte notificación)</label>'+adjInfo+
+    '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px;display:none"><label style="font-weight:600;font-size:12px" id="pqrs-resp-cuerpo-label">Resumen de la respuesta</label>'+
+    '<textarea id="pqrs-resp-cuerpo" placeholder="Resumen para trazabilidad…" style="min-height:200px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
+    '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px" id="pqrs-resp-adj-label">Documentos adjuntos</label>'+
+    '<div id="pqrs-resp-adj-hint" style="font-size:11px;color:var(--tx2);margin-top:2px"></div>'+adjInfo+
     '<div id="pqrs-resp-adj-rows" style="margin-top:6px"></div>'+
+    '<div id="pqrs-resp-adj-err" class="fld-err" style="display:none"></div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">'+
     (usaDriveInst?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
     (fromGmail?'':'<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow()">🔗 + Link Drive</button>')+
@@ -731,8 +770,13 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div>';
   window._pqrsComposeAttachments=[];
   window._gmailVinculoMsg=fromGmail?gmailMsg:null;
-  setPqrsRespTipo(wf.tipo||PQRS_WF_TIPO.MENSAJE);
-  setPqrsRespCanal(fromGmail?PQRS_WF_CANAL.CORREO:(wf.canal||(e&&e._pqrs_respuesta_medio)||PQRS_WF_CANAL.CORREO));
+  // Inicializar tipo sin forzar canal; luego aplicar canal por defecto de radicación
+  const tipoIni=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const hidTipo=document.getElementById('pqrs-resp-tipo');
+  if(hidTipo)hidTipo.value=tipoIni;
+  document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===tipoIni);});
+  setPqrsRespCanal(canalDef);
+  if(tipoIni===PQRS_WF_TIPO.MENSAJE||tipoIni===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaSegunTipo(tipoIni,false);
   if(fromGmail&&e&&typeof gmailSetPqrsRespSel==='function')gmailSetPqrsRespSel(e,{detectada:!!opts.detectada,keepEmail:true});
   else if(fromGmail&&!e){const tg=document.getElementById('gmail-resp-pqrs-toggle-search');if(tg)tg.textContent='🔍 Buscar PQRSD';}
   if(fromGmail)pqrsRespRefreshModalUiGmail();
@@ -750,6 +794,10 @@ function pqrsClearRespComposeAttError(){
   const el=document.getElementById('pqrs-compose-att-err');
   if(el){el.style.display='none';el.textContent='';}
 }
+function pqrsClearRespAdjError(){
+  const el=document.getElementById('pqrs-resp-adj-err');
+  if(el){el.style.display='none';el.textContent='';}
+}
 function pqrsShowRespOficioError(msg){
   const el=document.getElementById('pqrs-resp-oficio-err');
   const inp=document.getElementById('pqrs-resp-oficio');
@@ -761,16 +809,69 @@ function pqrsShowRespComposeAttError(msg){
   const el=document.getElementById('pqrs-compose-att-err');
   if(el){el.style.display='';el.textContent=msg||'Adjunte el oficio firmado.';}
 }
+function pqrsShowRespAdjError(msg){
+  const el=document.getElementById('pqrs-resp-adj-err');
+  if(el){el.style.display='';el.textContent=msg||'Adjunte los documentos requeridos.';}
+}
+function pqrsCountAdjuntosRespuesta(){
+  const adj=collectPqrsRespAdjuntos();
+  const compose=(window._pqrsComposeAttachments||[]).length;
+  return(adj.files?adj.files.length:0)+(adj.links?adj.links.length:0)+compose;
+}
 function pqrsValidateOficioRespuesta(tipoResp,opts){
   opts=opts||{};
   pqrsClearRespOficioError();
   pqrsClearRespComposeAttError();
+  pqrsClearRespAdjError();
   if(tipoResp!==PQRS_WF_TIPO.OFICIO)return true;
   const oficio=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
   if(!oficio){pqrsShowRespOficioError('Favor diligenciar el N° de oficio.');return false;}
   if(opts.requireComposeAtt){
     const files=window._pqrsComposeAttachments||[];
     if(!files.length){pqrsShowRespComposeAttError('Para oficio firmado debe adjuntar el documento del oficio.');return false;}
+  }
+  if(opts.requireAdj){
+    if(pqrsCountAdjuntosRespuesta()<1){
+      pqrsShowRespAdjError(opts.adjMsg||'Para oficio firmado debe adjuntar el documento del oficio.');
+      return false;
+    }
+  }
+  return true;
+}
+/** Valida adjuntos según canal (oficio + soporte de notificación). */
+function pqrsValidateAdjuntosPorCanal(tipoResp,canal,opts){
+  opts=opts||{};
+  pqrsClearRespAdjError();
+  pqrsClearRespComposeAttError();
+  const n=pqrsCountAdjuntosRespuesta();
+  if(tipoResp===PQRS_WF_TIPO.OFICIO&&pqrsEsCanalCorreo(canal)){
+    // En correo el adjunto va en compose
+    return true;
+  }
+  if(tipoResp===PQRS_WF_TIPO.OFICIO&&!pqrsEsCanalCorreo(canal)){
+    if(n<1){pqrsShowRespAdjError('Adjunte el oficio firmado.');return false;}
+  }
+  if(canal===PQRS_WF_CANAL.WHATSAPP){
+    // Oficio (si aplica) + soporte de notificación (img/pdf)
+    const min=tipoResp===PQRS_WF_TIPO.OFICIO?2:1;
+    if(n<min){
+      pqrsShowRespAdjError(tipoResp===PQRS_WF_TIPO.OFICIO
+        ?'Adjunte el oficio firmado y el soporte de notificación por WhatsApp (imagen o PDF).'
+        :'Adjunte el soporte de notificación por WhatsApp.');
+      return false;
+    }
+  }
+  if(canal===PQRS_WF_CANAL.AVISO){
+    const min=tipoResp===PQRS_WF_TIPO.OFICIO?2:1;
+    if(n<min){
+      pqrsShowRespAdjError(tipoResp===PQRS_WF_TIPO.OFICIO
+        ?'Adjunte el oficio y el soporte de notificación por aviso.'
+        :'Adjunte el soporte de notificación por aviso.');
+      return false;
+    }
+  }
+  if((canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)&&tipoResp===PQRS_WF_TIPO.OFICIO){
+    if(n<1){pqrsShowRespAdjError('Adjunte el oficio firmado (y constancia de notificación si la tiene).');return false;}
   }
   return true;
 }
@@ -849,12 +950,27 @@ function pqrsRespRefreshModalUiGmail(){
   if(tipo===PQRS_WF_TIPO.OFICIO||tipo===PQRS_WF_TIPO.MENSAJE)pqrsAplicarPlantillaSegunTipo(tipo,false);
 }
 function pqrsRespRefreshModalUi(){
+  // Formulario de entrega (responsable): no alterar UI del modal de respuesta
+  if(document.getElementById('pqrs-entrega-resp-cuerpo')&&!document.getElementById('pqrs-resp-email-compose')&&!document.getElementById('pqrs-resp-cuerpo')){
+    return;
+  }
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
+  const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||PQRS_WF_CANAL.CORREO);
   const isInfo=tipo===PQRS_WF_TIPO.INFORMATIVA;
   const isOficio=tipo===PQRS_WF_TIPO.OFICIO;
   const isMensaje=tipo===PQRS_WF_TIPO.MENSAJE;
-  const soloCorreo=isMensaje||isOficio;
-  const useEmail=!isInfo&&soloCorreo;
+  const isCorreo=pqrsEsCanalCorreo(canal);
+  const isPersonal=pqrsEsCanalNotifPersonal(canal);
+  // Mensaje simple solo por correo; si canal no es correo, pasar a oficio
+  if(!isInfo&&isMensaje&&!isCorreo){
+    const hid=document.getElementById('pqrs-resp-tipo');
+    if(hid)hid.value=PQRS_WF_TIPO.OFICIO;
+    document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{
+      b.classList.toggle('on',b.getAttribute('data-val')===PQRS_WF_TIPO.OFICIO);
+    });
+    return pqrsRespRefreshModalUi();
+  }
+  const useEmail=!isInfo&&isCorreo&&(isMensaje||isOficio);
   const compose=document.getElementById('pqrs-resp-email-compose');
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
   const canalWrap=document.getElementById('pqrs-resp-canal-wrap');
@@ -863,30 +979,73 @@ function pqrsRespRefreshModalUi(){
   const submitBtn=document.getElementById('pqrs-resp-submit-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
   const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
-  if(soloCorreo&&!window._gmailVinculoMsg){
-    const hid=document.getElementById('pqrs-resp-canal');
-    if(hid)hid.value=PQRS_WF_CANAL.CORREO;
-    document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(function(b){
-      const v=b.getAttribute('data-val');
-      b.style.display=(soloCorreo&&v!==PQRS_WF_CANAL.CORREO)?'none':'';
-      b.classList.toggle('on',v===PQRS_WF_CANAL.CORREO);
-    });
-  }
+  const oficioWrap=document.getElementById('pqrs-resp-oficio-wrap');
+  const fechaLbl=document.getElementById('pqrs-resp-fecha-label');
+  const adjLabel=document.getElementById('pqrs-resp-adj-label');
+  const adjHint=document.getElementById('pqrs-resp-adj-hint');
+  const cuerpoLbl=document.getElementById('pqrs-resp-cuerpo-label');
+  const canalHint=document.getElementById('pqrs-resp-canal-hint');
+
+  if(canalWrap)canalWrap.style.display=isInfo?'none':'';
+  document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(function(b){
+    b.style.display=isInfo?'none':'';
+    b.classList.toggle('on',b.getAttribute('data-val')===canal);
+  });
+  document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
+    const v=b.getAttribute('data-val');
+    if(v===PQRS_WF_TIPO.MENSAJE)b.style.display=(!isInfo&&!isCorreo)?'none':'';
+  });
+
   if(compose)compose.style.display=useEmail?'':'none';
-  if(cuerpoWrap)cuerpoWrap.style.display=(!useEmail&&!isInfo)?'':'none';
-  if(canalWrap)canalWrap.style.display=(isInfo||soloCorreo)?'none':'';
+  const showCuerpo=!useEmail&&!isInfo&&isOficio&&isPersonal;
+  if(cuerpoWrap)cuerpoWrap.style.display=showCuerpo?'':'none';
+  if(cuerpoLbl)cuerpoLbl.textContent=isPersonal?'Nota breve (opcional, para trazabilidad)':'Resumen de la respuesta';
+
   if(adjWrap)adjWrap.style.display=(useEmail||isInfo)?'none':'';
+  if(adjLabel){
+    if(canal===PQRS_WF_CANAL.WHATSAPP)adjLabel.textContent='Oficio y soporte de notificación WhatsApp';
+    else if(canal===PQRS_WF_CANAL.AVISO)adjLabel.textContent='Oficio y soporte de notificación por aviso';
+    else if(isPersonal)adjLabel.textContent='Oficio / constancia de notificación presencial';
+    else adjLabel.textContent='Documentos adjuntos';
+  }
+  if(adjHint){
+    if(canal===PQRS_WF_CANAL.WHATSAPP)adjHint.textContent='Adjunte el oficio firmado y una imagen o PDF del soporte de envío por WhatsApp.';
+    else if(canal===PQRS_WF_CANAL.AVISO)adjHint.textContent='Adjunte el oficio y el soporte de la notificación por aviso.';
+    else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)adjHint.textContent='Adjunte el oficio firmado. Si hay constancia de notificación personal, inclúyala.';
+    else adjHint.textContent='';
+  }
+
+  if(fechaLbl){
+    fechaLbl.innerHTML=isPersonal
+      ?'Fecha de notificación<span class="req-star">*</span>'
+      :'Fecha de la respuesta<span class="req-star">*</span>';
+  }
+  if(canalHint){
+    if(isCorreo)canalHint.textContent='Al enviar por correo se responde y notifica al mismo tiempo. Se incluye a todos los correos asociados a la PQRSD.';
+    else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)canalHint.textContent='Notificación presencial/física: cargue el oficio (si aplica) y cierre como atendida. Indique la fecha en que se notificó.';
+    else if(canal===PQRS_WF_CANAL.WHATSAPP)canalHint.textContent='Notificación por WhatsApp: cargue el oficio y el soporte (imagen). Indique la fecha de notificación.';
+    else if(canal===PQRS_WF_CANAL.AVISO)canalHint.textContent='Último medio: notificación por aviso. Cargue el oficio y el soporte. Indique la fecha de notificación.';
+  }
+
   if(emailBtn){
     emailBtn.style.display=useEmail?'':'none';
     emailBtn.textContent=isOficio?'📤 Enviar oficio por correo y cerrar PQRSD':'📤 Enviar correo y cerrar PQRSD';
   }
   if(submitBtn){
     submitBtn.style.display=useEmail?'none':'';
-    submitBtn.textContent=isInfo?'ℹ️ Marcar informativa y cerrar':'✅ Confirmar y cerrar PQRSD';
+    if(isInfo)submitBtn.textContent='ℹ️ Marcar informativa y cerrar';
+    else if(isPersonal)submitBtn.textContent='✅ Registrar notificación y cerrar PQRSD';
+    else submitBtn.textContent='✅ Confirmar y cerrar PQRSD';
   }
+  if(oficioWrap)oficioWrap.style.display=isInfo?'none':'';
   if(oficioReq)oficioReq.style.display=isOficio?'':'none';
   if(oficioHint)oficioHint.style.display=isOficio?'none':'';
-  if(isOficio||isMensaje)pqrsAplicarPlantillaSegunTipo(tipo,false);
+
+  if(useEmail&&(isOficio||isMensaje))pqrsAplicarPlantillaSegunTipo(tipo,false);
+  else if(isPersonal){
+    const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
+    if(cuerpoEl&&_pqrsEsPlantillaRespuesta(cuerpoEl.value))cuerpoEl.value='';
+  }
 }
 function pqrsComposeAddAttachment(){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -922,22 +1081,27 @@ function setPqrsRespTipo(val){
   const prev=String((hid&&hid.value)||'');
   if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
-  if((val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO)&&!window._gmailVinculoMsg){
+  if(val===PQRS_WF_TIPO.MENSAJE&&!window._gmailVinculoMsg){
     const canHid=document.getElementById('pqrs-resp-canal');
-    if(canHid)canHid.value=PQRS_WF_CANAL.CORREO;
+    if(canHid&&!pqrsEsCanalCorreo(canHid.value)){
+      canHid.value=PQRS_WF_CANAL.CORREO;
+      document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(b=>{
+        b.classList.toggle('on',b.getAttribute('data-val')===PQRS_WF_CANAL.CORREO);
+      });
+    }
   }
-  // Al cambiar entre mensaje ↔ oficio, forzar plantilla del tipo elegido.
-  // Al abrir el modal (mismo tipo), solo rellenar si está vacío o es plantilla previa.
   if(val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO){
-    const cambioTipo=(prev===PQRS_WF_TIPO.MENSAJE||prev===PQRS_WF_TIPO.OFICIO)&&prev!==val;
-    pqrsAplicarPlantillaSegunTipo(val,cambioTipo);
+    const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'');
+    if(pqrsEsCanalCorreo(canal)){
+      const cambioTipo=(prev===PQRS_WF_TIPO.MENSAJE||prev===PQRS_WF_TIPO.OFICIO)&&prev!==val;
+      pqrsAplicarPlantillaSegunTipo(val,cambioTipo);
+    }
   }else{
     pqrsClearRespOficioError();
     window._pqrsUltimaPlantillaOficio='';
     window._pqrsUltimaPlantillaMensaje='';
   }
   if(val!==PQRS_WF_TIPO.OFICIO)pqrsClearRespOficioError();
-  // Entrega-form: hide/show canal row and adapt cuerpo label when informativa
   const isInfo=val===PQRS_WF_TIPO.INFORMATIVA;
   const canalRow=document.getElementById('pqrs-entrega-canal-row');
   const oficioRow=document.getElementById('pqrs-entrega-oficio-row');
@@ -952,21 +1116,34 @@ function setPqrsRespTipo(val){
     ?'Describa la respuesta que el ciudadano verá al consultar…'
     :'Describa brevemente la respuesta elaborada…';
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
-  else pqrsRespRefreshModalUi();
+  else if(document.getElementById('pqrs-resp-email-compose')||document.getElementById('pqrs-resp-cuerpo'))pqrsRespRefreshModalUi();
 }
 function setPqrsRespCanal(val){
   const hid=document.getElementById('pqrs-resp-canal');if(hid)hid.value=val||'';
   document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===val);});
+  if(!pqrsEsCanalCorreo(val)){
+    const tipoHid=document.getElementById('pqrs-resp-tipo');
+    if(tipoHid&&tipoHid.value===PQRS_WF_TIPO.MENSAJE){
+      tipoHid.value=PQRS_WF_TIPO.OFICIO;
+      document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{
+        b.classList.toggle('on',b.getAttribute('data-val')===PQRS_WF_TIPO.OFICIO);
+      });
+    }
+  }
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
-  else pqrsRespRefreshModalUi();
+  else if(document.getElementById('pqrs-resp-email-compose')||document.getElementById('pqrs-resp-cuerpo'))pqrsRespRefreshModalUi();
 }
+
 function onPqrsRespOficioInput(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
   if(tipo!==PQRS_WF_TIPO.OFICIO)return;
+  const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'');
+  if(!pqrsEsCanalCorreo(canal))return;
+  const composeEl=document.getElementById('pqrs-compose-body');
   const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
-  const cur=cuerpoEl?cuerpoEl.value.trim():'';
+  const cur=(composeEl&&composeEl.value.trim())||(cuerpoEl&&cuerpoEl.value.trim())||'';
   const esPlantilla=window._pqrsUltimaPlantillaOficio&&cur===window._pqrsUltimaPlantillaOficio;
-  if(esPlantilla||!cur||/^(\s*(fwd?|re):)/i.test(cur))pqrsAplicarPlantillaOficioSiCorresponde(true);
+  if(esPlantilla||!cur||/^(\s*(fwd?|re):)/i.test(cur)||_pqrsEsPlantillaRespuesta(cur))pqrsAplicarPlantillaOficioSiCorresponde(true);
 }
 function addPqrsRespAdjFile(boxId){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
@@ -987,6 +1164,7 @@ function addPqrsRespAdjFile(boxId){
           '<button type="button" class="btn bsm bd2" onclick="this.parentElement.remove()">✕</button>';
         row._adjFile=f;
         box.appendChild(row);
+        if(typeof pqrsClearRespAdjError==='function')pqrsClearRespAdjError();
       });
     };
     inp.click();
@@ -1027,8 +1205,10 @@ async function submitPqrsRespuesta(expId){
   const cuerpo=String((document.getElementById('pqrs-resp-cuerpo')||{}).value||'').trim();
   const notaInterna=String((document.getElementById('pqrs-resp-nota')||{}).value||'').trim();
   const adj=collectPqrsRespAdjuntos();
-  if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
-  if(!pqrsValidateOficioRespuesta(tipoResp))return;
+  const isPersonal=pqrsEsCanalNotifPersonal(canal);
+  if(!fechaResp){notif(isPersonal?'Indique la fecha de notificación':'Indique la fecha de la respuesta','err');return;}
+  if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:tipoResp===PQRS_WF_TIPO.OFICIO&&isPersonal}))return;
+  if(!pqrsValidateAdjuntosPorCanal(tipoResp,canal))return;
   if(tipoResp===PQRS_WF_TIPO.INFORMATIVA){
     e._pqrs_informativa=true;
     setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.INFORMATIVA,canal:'',cuerpo:'',oficio:'',fecha_respuesta:fechaResp,cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',cerrado_en:new Date().toISOString()});
@@ -1054,12 +1234,23 @@ async function submitPqrsRespuesta(expId){
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar y cerrar PQRSD';}
       return;
     }
+    let idxFile=0;
     for(const {file,statusEl} of adj.files){
       try{
         if(statusEl)statusEl.textContent='⬆ Subiendo…';
         const res=await driveUploadInstitutional(file,file.name,file.type||'application/octet-stream','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
         if(statusEl)statusEl.textContent='✅ Subido';
-        documentos.push({nombre:file.name,driveLink:res.driveLink,previewLink:res.previewLink,fileId:res.fileId,tipo:'archivo'});
+        const esOficioDoc=tipoResp===PQRS_WF_TIPO.OFICIO&&idxFile===0;
+        const esSoporteNotif=isPersonal&&(tipoResp!==PQRS_WF_TIPO.OFICIO||idxFile>0);
+        documentos.push({
+          nombre:file.name,
+          driveLink:res.driveLink,
+          previewLink:res.previewLink,
+          fileId:res.fileId,
+          tipo:esOficioDoc?'oficio_firmado':(esSoporteNotif?'soporte_notificacion':'archivo'),
+          mime:file.type||''
+        });
+        idxFile++;
       }catch(err){
         if(statusEl)statusEl.textContent='❌ Error';
         console.error('Drive upload error:',err);
@@ -1069,55 +1260,56 @@ async function submitPqrsRespuesta(expId){
   }
   adj.links.forEach(lnk=>documentos.push({nombre:'Link Drive',driveLink:lnk,tipo:'link'}));
 
+  const histNotaCanal=isPersonal
+    ?('Notificación '+medioNotificacionRespLabel(canal)+' el '+fechaResp+(oficioExt?' · Oficio '+oficioExt:''))
+    :(cuerpo||'Respuesta registrada');
   const wfPatch={
     fase:PQRS_WF.CERRADA,
     tipo:tipoResp,
     canal,
-    cuerpo,
+    cuerpo:cuerpo||histNotaCanal,
     oficio:oficioExt,
     fecha_respuesta:fechaResp,
+    fecha_notificacion:isPersonal?fechaResp:fechaResp,
     documentos,
     cerrado_por:responsableActivo||labelOficina(deptoActivo)||rolSesion||'',
     cerrado_en:new Date().toISOString()
   };
   // Generar y subir soporte PDF de respuesta antes de persistir
   if(btn)btn.textContent='Generando soporte…';
-  const soporteRes=await _pqrsSubirSoporteRespuesta(e,{fechaResp,cuerpo,documentos,cerradoPor:wfPatch.cerrado_por});
+  const soporteRes=await _pqrsSubirSoporteRespuesta(e,{fechaResp,cuerpo:wfPatch.cuerpo,documentos,cerradoPor:wfPatch.cerrado_por});
   if(soporteRes&&soporteRes.driveLink){
     documentos.push({nombre:'Soporte de respuesta',driveLink:soporteRes.driveLink,previewLink:soporteRes.previewLink||'',fileId:soporteRes.fileId||'',tipo:'soporte_respuesta'});
     wfPatch.documentos=documentos;
   }
   setPqrsWorkflow(e,wfPatch);
-  registrarPqrsRespuestaCore(e,{fechaResp,oficioExt,medioResp:canal,cuerpo,tipo:tipoResp,canal,notaInterna,esNotaPublica:false,adj:{links:adj.links,files:[]},archivos:documentos});
+  registrarPqrsRespuestaCore(e,{fechaResp,oficioExt,medioResp:canal,cuerpo:wfPatch.cuerpo,tipo:tipoResp,canal,notaInterna,esNotaPublica:false,adj:{links:adj.links,files:[]},archivos:documentos});
+  if(isPersonal){
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({
+      tipo:'notificacion_'+canal,
+      fecha:fechaResp,
+      nota:histNotaCanal+' — '+pqrsComentarioAutor(),
+      oficina:e._pqrs_oficina,
+      por:pqrsComentarioAutor()
+    });
+  }
   persistExpedienteGranular(e);
   if(btn){btn.disabled=false;btn.textContent='✅ Confirmar y cerrar PQRSD';}
   closeTaskModal();
-  notif('✅ Respuesta PQRSD registrada — expediente Atendido','ok');
+  notif(isPersonal?'✅ Notificación registrada — PQRSD atendida':'✅ Respuesta PQRSD registrada — expediente Atendido','ok');
   refreshPqrsDetalleViews(expId);
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
 
-  const todosCorreos=pqrsCorreosCiudadano(e);
-  const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
-  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
-
-  if(canal===PQRS_WF_CANAL.CORREO){
-    const ciudEmail=pqrsCorreoCiudadano(e);
-    const destinos=todosCorreos.length?todosCorreos:(ciudEmail?[ciudEmail]:[]);
+  // Canal correo por este submit solo si no usó el compose (caso raro); los personales ya cargaron soporte
+  if(pqrsEsCanalCorreo(canal)){
+    const todosCorreos=pqrsCorreosCiudadano(e);
+    const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+    const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
+    const destinos=todosCorreos.length?todosCorreos:[];
     if(destinos.length&&(tokSec||tokOfi)){
       if(typeof confirmarEnvioRespuestaEmailPqrs==='function')confirmarEnvioRespuestaEmailPqrs(e,destinos.join(', '),cuerpo,documentos);
-    }else if(!destinos.length){
-      notif('La PQRSD fue cerrada. No hay correo registrado para notificar al ciudadano.','info');
-    }else{
-      notif('La PQRSD fue cerrada. Conecte correo para enviar notificación al ciudadano.','info');
-    }
-  }else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.AVISO||canal===PQRS_WF_CANAL.WHATSAPP){
-    // Crear tarea de seguimiento para soporte de notificación personal (aparece en actividades pendientes)
-    _pqrsCrearTareaNotificacionPersonal(e,canal);
-    persistExpedienteGranular(e,false);
-    // Si hay correo registrado, ofrecer aviso simple opcional
-    if(todosCorreos.length&&(tokSec||tokOfi)){
-      _pqrsOfrecerAvisoSimple(e,todosCorreos);
     }
   }
 }
@@ -1127,16 +1319,25 @@ async function submitPqrsRespuestaPorCorreo(expId){
   const fechaResp=String((document.getElementById('pqrs-resp-fecha')||{}).value||'').trim();
   const oficioExt=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
   const tipoResp=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE).trim();
-  const to=String((document.getElementById('pqrs-compose-to')||{}).value||'').trim();
+  const toRaw=String((document.getElementById('pqrs-compose-to')||{}).value||'').trim();
   const subject=String((document.getElementById('pqrs-compose-subject')||{}).value||'').trim();
   const body=String((document.getElementById('pqrs-compose-body')||{}).value||'').trim();
   const notaInterna=String((document.getElementById('pqrs-resp-nota')||{}).value||'').trim();
+  // Unir correos digitados + todos los asociados a la PQRSD
+  const asociados=pqrsCorreosCiudadano(e);
+  const digitados=toRaw.split(/[,;\s]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.includes('@');});
+  const toSet=new Set(asociados.concat(digitados));
+  const toList=Array.from(toSet);
+  const to=toList.join(', ');
   if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
-  if(!pqrsValidateOficioRespuesta(tipoResp,{requireComposeAtt:true}))return;
-  if(!to){notif('Indique el correo del ciudadano','err');return;}
+  if(!pqrsValidateOficioRespuesta(tipoResp,{requireComposeAtt:tipoResp===PQRS_WF_TIPO.OFICIO}))return;
+  if(!toList.length){notif('Indique al menos un correo del ciudadano','err');return;}
   if(!body.trim()){notif('Escriba el mensaje de respuesta','err');return;}
   const tokOk=(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())||(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid());
   if(!tokOk){notif('Conecte su correo Gmail para enviar la respuesta','err');return;}
+  // Sincronizar campo Para con la lista completa
+  const toEl=document.getElementById('pqrs-compose-to');
+  if(toEl)toEl.value=to;
   const btn=document.getElementById('pqrs-resp-email-send-btn');
   if(btn){btn.disabled=true;btn.textContent='⏳ Enviando…';}
   try{
@@ -2675,7 +2876,7 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cuando el encargado revise y apruebe, se registrará la respuesta.</div>';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
-    '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. OFI-2026-045" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'"></div>'+
+    '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'"></div>'+
     '</div>';
   h+='<div class="fld" style="margin-bottom:8px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
@@ -2686,16 +2887,16 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div class="fld" id="pqrs-entrega-canal-row" style="margin-bottom:8px'+(esInformativa?';display:none':'')+'"><label style="font-size:11px;font-weight:600">Canal de notificación</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-canal-btns">'+
     mkCan(PQRS_WF_CANAL.CORREO,'Correo','📧')+
+    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial / física','🤝')+
     mkCan(PQRS_WF_CANAL.WHATSAPP,'WhatsApp','💬')+
-    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial','🤝')+
-    mkCan('aviso','Aviso/Personal','📋')+
-    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalActual)+'"></div>';
+    mkCan(PQRS_WF_CANAL.AVISO,'Por aviso','📌')+
+    '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalActual||(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO))+'"></div>';
   h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">'+
     (esInformativa
       ?'Descripción informativa <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>'
       :'Resumen de la respuesta <span style="font-weight:400;color:var(--tx3)">(obligatorio)</span>')+
     '</label>'+
-    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Describa la respuesta que el ciudadano verá al consultar…':'Describa brevemente la respuesta elaborada…')+'" style="min-height:68px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
+    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Describa la respuesta que el ciudadano verá al consultar…':'Describa brevemente la respuesta elaborada…')+'" style="min-height:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
     (esInformativa?'<div style="font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ El encargado revisará y podrá editar este texto antes de aprobar. No se enviará correo al ciudadano.</div>':'')+
     '</div>';
   h+='</div>';
