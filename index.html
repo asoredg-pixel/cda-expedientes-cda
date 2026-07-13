@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260710c">
+<link rel="stylesheet" href="css/sst.css?v=20260713a">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260710c"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260710f"></script>
+<script src="js/core.js?v=20260713a"></script>
 <script src="js/formulario.js?v=20260709h"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -339,8 +339,8 @@
     <div id="act-periodo-resumen" style="font-size:11px;color:var(--tx2);margin-bottom:8px"></div>
     <div class="act-filtros-bar">
       <div id="act-dept-resp-bar" style="display:none;gap:6px;align-items:center" class="fx">
-        <label style="font-size:12px;font-weight:600;white-space:nowrap">Responsable:</label>
-        <select id="act-dept-resp-sel" class="depto-sel" style="min-width:200px" onchange="renderActividades()"></select>
+        <label style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--tx,#1a1a1a)">Responsable:</label>
+        <select id="act-dept-resp-sel" style="min-width:200px;padding:6px 8px;border:1px solid var(--bd,#c5c5c5);border-radius:var(--r,6px);background:#fff;color:#1a1a1a;font-size:13px" onchange="renderActividades()"></select>
       </div>
       <div class="sb" style="flex:1;margin-bottom:0">
         <select id="f-act-est" onchange="renderActividades()">

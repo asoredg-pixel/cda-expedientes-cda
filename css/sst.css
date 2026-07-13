@@ -1505,6 +1505,14 @@ body.sesion-activa .hdr-logout-btn:hover{background:rgba(255,255,255,.18)!import
 .depto-sel{background:rgba(255,255,255,.12)!important;border-color:rgba(255,255,255,.25)!important;color:#fff!important}
 .depto-sel option,.depto-sel optgroup{background:#fff!important;color:#1a1a1a!important}
 .depto-sel optgroup{font-weight:700!important;color:#1a4a2e!important}
+/* Actividades filter: light bar — must override .depto-sel dark styles if class reused */
+#act-dept-resp-bar label{color:#1a1a1a!important}
+#act-dept-resp-sel,
+#act-dept-resp-bar select{
+  background:#fff!important;border:1px solid #c5c5c5!important;color:#1a1a1a!important;
+  min-width:200px;padding:6px 8px;border-radius:6px;font-size:13px;
+}
+#act-dept-resp-sel option{background:#fff!important;color:#1a1a1a!important}
 /* Bell icon */
 .inbox-btn{background:rgba(255,255,255,.09)!important;border-color:rgba(255,255,255,.18)!important;color:rgba(255,255,255,.8)!important;border-radius:9px!important}
 .inbox-btn:hover{background:rgba(255,255,255,.18)!important;color:#fff!important}
