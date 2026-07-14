@@ -310,6 +310,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .asist-pdf-hallazgo{padding:6px 8px;margin-bottom:6px;border-left:3px solid var(--or);background:var(--sf);font-size:12px;border-radius:0 var(--r) var(--r) 0}
 .task-modal{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);box-shadow:var(--shm);width:min(520px,96vw);max-height:85vh;display:flex;flex-direction:column}
 .task-modal.task-modal-wide{width:min(1100px,98vw)}
+.task-modal.task-modal-firma{width:min(1280px,98vw);max-height:94vh}
+.task-modal.task-modal-firma .task-modal-body{padding:.75rem 1rem}
 .task-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--bd);font-weight:600;font-size:14px}
 .task-modal-body{padding:1rem;overflow:auto;flex:1}
 .soporte-split{display:grid;grid-template-columns:1fr minmax(300px,400px);gap:10px;margin:.5rem 0}
