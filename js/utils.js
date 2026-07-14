@@ -9,6 +9,63 @@ function hoy(){return new Date().toISOString().split('T')[0];}
 function dias(f){return Math.floor((new Date()-new Date(f))/86400000);}
 function fmtF(f){if(!f||f==='—')return'-';const p=String(f).split('-');if(p.length!==3||isNaN(+p[0])||isNaN(+p[1])||isNaN(+p[2]))return'-';return p[2]+'/'+p[1]+'/'+p[0];}
 function diffDias(fecha){if(!fecha)return'';const a=new Date(hoy()+'T00:00:00');const b=new Date(fecha+'T00:00:00');return Math.round((b-a)/86400000);}
+function _isoDateLocal(d){
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+/** Domingo de Pascua (algoritmo de Meeus/Jones/Butcher). */
+function pascuaDomingo(year){
+  const a=year%19,b=Math.floor(year/100),c=year%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4;
+  const l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const month=Math.floor((h+l-7*m+114)/31),day=((h+l-7*m+114)%31)+1;
+  return new Date(year,month-1,day);
+}
+function _siguienteLunes(d){
+  const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  const dow=x.getDay();
+  const add=dow===1?0:(dow===0?1:(8-dow));
+  x.setDate(x.getDate()+add);
+  return x;
+}
+/** Festivos Colombia (nacionales + traslado a lunes donde aplica). */
+function festivosColombiaSet(year){
+  const set=new Set();
+  const add=d=>set.add(_isoDateLocal(d));
+  const fixed=[[1,1],[5,1],[7,20],[8,7],[12,8],[12,25]];
+  fixed.forEach(([mo,da])=>add(new Date(year,mo-1,da)));
+  const pascua=pascuaDomingo(year);
+  add(new Date(pascua.getFullYear(),pascua.getMonth(),pascua.getDate()-3)); // Jueves Santo
+  add(new Date(pascua.getFullYear(),pascua.getMonth(),pascua.getDate()-2)); // Viernes Santo
+  // Festivos que se trasladan al lunes siguiente
+  [[1,6],[3,19],[6,29],[8,15],[10,12],[11,1],[11,11]].forEach(([mo,da])=>add(_siguienteLunes(new Date(year,mo-1,da))));
+  // Ascensión (+39), Corpus (+60), Sagrado Corazón (+71) → lunes
+  add(_siguienteLunes(new Date(pascua.getFullYear(),pascua.getMonth(),pascua.getDate()+39)));
+  add(_siguienteLunes(new Date(pascua.getFullYear(),pascua.getMonth(),pascua.getDate()+60)));
+  add(_siguienteLunes(new Date(pascua.getFullYear(),pascua.getMonth(),pascua.getDate()+71)));
+  return set;
+}
+function esDiaHabilCO(fechaStr){
+  const s=String(fechaStr||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+  const d=new Date(s+'T12:00:00');
+  const dow=d.getDay();
+  if(dow===0||dow===6)return false;
+  const y=d.getFullYear();
+  if(!esDiaHabilCO._cache)esDiaHabilCO._cache={};
+  if(!esDiaHabilCO._cache[y])esDiaHabilCO._cache[y]=festivosColombiaSet(y);
+  return !esDiaHabilCO._cache[y].has(s);
+}
+/** Suma N días hábiles colombianos a partir del día siguiente a `desde`. */
+function addDiasHabilesCO(desde,n){
+  const nNum=Math.max(0,Number(n)||0);
+  let d=new Date(String(desde||hoy()).slice(0,10)+'T12:00:00');
+  let left=nNum;
+  while(left>0){
+    d.setDate(d.getDate()+1);
+    if(esDiaHabilCO(_isoDateLocal(d)))left--;
+  }
+  return _isoDateLocal(d);
+}
 
 // ── DOM / Inputs ──────────────────────────────────────────────────────────────
 function gv(id){const e=document.getElementById(id);return e?e.value.trim():'';}
