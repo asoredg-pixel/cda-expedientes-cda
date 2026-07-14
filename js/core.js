@@ -431,6 +431,54 @@ function pqrsPuedeNotificarOficio(e){
   }
   return false;
 }
+/** Documento marcado / nombrado como versión enviada a corrección (hay que conservarlo para comparar). */
+function _pqrsDocEsPorCorregir(d){
+  if(!d)return false;
+  const est=String(d.driveEstado||'').toLowerCase();
+  const nom=String(d.nombre||d.driveFilename||'');
+  return est==='acorregir'||/^acorregir[-_]/i.test(nom)||d.version_historial===true;
+}
+/** Entrega actual pendiente de revisión NCA. */
+function _pqrsDocEsRevisionActual(d){
+  if(!d||_pqrsDocEsPorCorregir(d))return false;
+  const est=String(d.driveEstado||'').toLowerCase();
+  return !est||est==='revision'||est==='drive'||est==='archivo'||est==='oficio_firmado'||est==='link';
+}
+function _pqrsDocKey(d){
+  return String((d&&(d.fileId||d.driveFileId||d.driveLink||d.previewLink||d.url))||'').trim().toLowerCase();
+}
+/**
+ * Conserva historial de versiones «por corregir» y agrega la nueva entrega.
+ * Al aprobar se limpian las versiones viejas (_pqrsLimpiarVersionesCorreccionWf).
+ */
+function _pqrsMergeDocumentosEntrega(prevDocs,nuevos,entregaN){
+  const hist=(Array.isArray(prevDocs)?prevDocs:[]).filter(d=>d&&(_pqrsDocEsPorCorregir(d)||d.conservar_version));
+  const seen=new Set(hist.map(_pqrsDocKey).filter(Boolean));
+  const added=[];
+  (Array.isArray(nuevos)?nuevos:[]).forEach(function(a){
+    if(!a)return;
+    const key=_pqrsDocKey(a);
+    if(key&&seen.has(key))return;
+    if(key)seen.add(key);
+    added.push(Object.assign({},a,{
+      driveEstado:a.driveEstado||'revision',
+      entrega_n:entregaN,
+      entregado_en:a.entregado_en||new Date().toISOString(),
+      entregado_por:a.entregado_por||responsableActivo||'',
+      conservar_version:false,
+      version_historial:false
+    }));
+  });
+  return hist.concat(added);
+}
+function _pqrsEtiquetaDocWf(d){
+  if(!d)return'Documento';
+  const base=String(d.nombre||d.driveFilename||d.label||'Documento').replace(/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido)-/i,'');
+  const n=d.entrega_n?(' · entrega '+d.entrega_n):'';
+  if(_pqrsDocEsPorCorregir(d))return base+n+' · por corregir';
+  if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return base+n+' · entrega actual';
+  return base+n+(d.driveEstado?' · '+d.driveEstado:'');
+}
 // Quién puede marcar respuesta (directo, sin revisión NCA)
 function puedeResponderDirecto(e){
   if(!e||pqrsEstaCerrada(e))return false;
@@ -2994,11 +3042,31 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
   if(opts.notaInterna!==undefined)e._pqrs_notas_internas=opts.notaInterna;
   else if((nota||cuerpo)&&opts.esNotaPublica!==false)e._pqrs_respuesta_nota=nota||cuerpo;
   if(archivos.length){
-    e._pqrs_respuesta_soportes=archivos.map((a,i)=>{
+    const mapSop=function(a,i,ver){
       const url=a.driveLink||a.url||a.data||a.previewLink||'';
       const preview=a.previewLink||a.preview||a.driveLink||a.url||a.data||'';
-      return {label:a.nombre||a.name||a.label||('Respuesta '+(i+1)),url:url,mime:a.mime||'',preview:preview};
-    });
+      const baseLbl=a.nombre||a.name||a.label||('Respuesta '+(i+1));
+      const estTag=_pqrsDocEsPorCorregir(a)?' · por corregir':(ver?' · entrega v'+ver:'');
+      return {label:baseLbl+estTag,url:url,mime:a.mime||'',preview:preview,version:ver||a.entrega_n||null,activo:!_pqrsDocEsPorCorregir(a),driveEstado:a.driveEstado||''};
+    };
+    if(cerrar){
+      e._pqrs_respuesta_soportes=archivos.map(function(a,i){return mapSop(a,i,null);});
+    }else{
+      // Conservar soportes de versiones anteriores (por corregir) para comparar
+      const prev=Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes.slice():[];
+      prev.forEach(function(s){if(s)s.activo=false;});
+      const wfPrev=getPqrsWorkflow(e);
+      const entregaN=(Number(wfPrev.entrega_n)||prev.filter(function(s){return s&&s.activo!==false;}).length||0)+1;
+      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);});
+      const seen=new Set(prev.map(function(s){return String((s&&(s.url||s.preview))||'').toLowerCase();}).filter(Boolean));
+      nuevos.forEach(function(s){
+        const k=String((s.url||s.preview)||'').toLowerCase();
+        if(k&&seen.has(k))return;
+        if(k)seen.add(k);
+        prev.push(s);
+      });
+      e._pqrs_respuesta_soportes=prev;
+    }
   }else{
     if(adj.links.length)e._pqrs_respuesta_link=adj.links[0];
     if(adj.links.length>1)e._pqrs_respuesta_links=adj.links;
@@ -3021,13 +3089,17 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
     const histNota=[nota||cuerpo||'Respuesta registrada',oficioExt?'Oficio '+oficioExt:'',canal?medioNotificacionRespLabel(canal):''].filter(Boolean).join(' · ')+' — '+pqrsComentarioAutor();
     e._pqrs_historial.push({tipo:'respuesta_oficina',fecha:fechaResp||hoy(),nota:histNota,oficina:e._pqrs_oficina});
   }else if(fechaResp){
-    // Responsable NCA delivery: sets pending_revision state, no close
+    // Responsable NCA delivery: sets pending_revision — conserva docs «por corregir» previos
+    const wfPrev=getPqrsWorkflow(e);
+    const entregaN=(Number(wfPrev.entrega_n)||0)+1;
+    const docsMerged=_pqrsMergeDocumentosEntrega(wfPrev.documentos||[],archivos||[],entregaN);
     const wfPatch={
       fase:PQRS_WF.PENDIENTE_REVISION,
       tipo,canal,cuerpo,
       oficio:oficioExt,
       fecha_respuesta:fechaResp,
-      documentos:archivos||[],
+      documentos:docsMerged,
+      entrega_n:entregaN,
       entregado_por:responsableActivo||'',
       entregado_en:new Date().toISOString()
     };
@@ -3036,7 +3108,7 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
     if(opts.emailBcc!==undefined)wfPatch.email_bcc=opts.emailBcc;
     if(opts.emailSubject!==undefined)wfPatch.email_subject=opts.emailSubject;
     setPqrsWorkflow(e,wfPatch);
-    e._pqrs_historial.push({tipo:'entrega_respuesta_nca',fecha:fechaResp,nota:'Entrega de respuesta para revisión NCA'+(oficioExt?' · Oficio '+oficioExt:'')+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,responsable:responsableActivo||''});
+    e._pqrs_historial.push({tipo:'entrega_respuesta_nca',fecha:fechaResp,nota:'Entrega de respuesta para revisión NCA (v'+entregaN+')'+(oficioExt?' · Oficio '+oficioExt:'')+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,responsable:responsableActivo||''});
   }
 }
 function registrarPqrsRespuestaCore(e,opts){
@@ -5497,6 +5569,16 @@ function collectDocsComparables(e,taskId,tDirect){
   const t=tDirect||(e&&taskId?getTaskFromExp(e,taskId):null);
   if(e){
     if(esPqrsSecretaria(e)&&e._pqrs_solicitud_link)pushUrl('pqrs_sol','PQRSD','Solicitud PQRSD',e._pqrs_solicitud_link,e._fecha_solicitud||e._fecha);
+    // Documentos del workflow (incluye versiones «por corregir» + entrega actual)
+    if(esPqrsSecretaria(e)&&typeof getPqrsWorkflow==='function'){
+      const wf=getPqrsWorkflow(e);
+      (wf.documentos||[]).forEach(function(d,i){
+        if(!d)return;
+        const url=d.driveLink||d.previewLink||d.url||'';
+        if(!url)return;
+        pushUrl('wf_doc_'+i,'PQRSD',_pqrsEtiquetaDocWf(d),url,d.entregado_en||wf.fecha_respuesta||e._pqrs_respuesta_fecha,d.driveEstado||'');
+      });
+    }
     const tieneSoportesResp=Array.isArray(e._pqrs_respuesta_soportes)&&e._pqrs_respuesta_soportes.length>0;
     if(esPqrsSecretaria(e)&&tieneSoportesResp){
       (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>pushUrl('pqrs_rsp_'+i,'PQRSD',s.label||('Respuesta '+(i+1)),s.url||s.preview,e._pqrs_respuesta_fecha));
@@ -5949,9 +6031,12 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     const rep=responsableActivo||taskComentarioAutor();
     const loteId='lot_'+Date.now();
     const hasNewInstitutional=archivos.some(a=>a&&(a.driveFileId||a.fileId));
+    const eCtx=getExpById(expId);
+    const esPqrsEntregaAct=!!(eCtx&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eCtx));
     if(parsedLinks.length||hasLocalFile||hasNewInstitutional){
       t.soportes.forEach(s=>{s.activo=false;});
-      if(hasNewInstitutional){
+      // En trámites normales se reemplaza el soporte institucional; en PQRSD se conservan versiones (por corregir)
+      if(hasNewInstitutional&&!esPqrsEntregaAct){
         t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId);
       }
     }
@@ -6232,7 +6317,15 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       // Include Drive-uploaded files with fileId for later renaming by NCA
       (driveArchivos||[]).forEach(function(da){
         if(da&&da.driveLink&&!adjDocumentos.find(function(x){return x.driveLink===da.driveLink;})){
-          adjDocumentos.push({nombre:da.nombre||da.driveFilename||'Documento',driveLink:da.driveLink,fileId:da.fileId||da.driveFileId||'',tipo:'drive',driveFilename:da.driveFilename||''});
+          adjDocumentos.push({
+            nombre:da.nombre||da.driveFilename||'Documento',
+            driveLink:da.driveLink,
+            previewLink:da.previewLink||da.driveLink||'',
+            fileId:da.fileId||da.driveFileId||'',
+            tipo:'drive',
+            driveFilename:da.driveFilename||da.nombre||'',
+            driveEstado:da.driveEstado||'revision'
+          });
         }
       });
       const canalFinal=pq.tipo===PQRS_WF_TIPO.INFORMATIVA?'':pq.canal;
@@ -6251,7 +6344,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       notif('Subiendo archivo al Drive institucional…','info');
       (async function(){
       try{
-        if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function')await drivePurgeTaskInstitutionalSoportes(t);
+        // PQRSD: no borrar versiones anteriores en Drive — se conservan para comparar con la nueva entrega
+        if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs)await drivePurgeTaskInstitutionalSoportes(t);
         const up=await driveUploadExpedienteActividad(adj.files[0].blob,adj.files[0].nombre,adj.files[0].tipo,e,t,rep,'revision');
         await persistExpedienteGranular(e,false);
         runSubmit([up]);
@@ -6825,8 +6919,9 @@ function _pqrsHtmlDocsWfLinks(wf){
   return '<div style="font-size:11px;margin-bottom:8px">'+docs.map(d=>{
     const url=d.driveLink||d.previewLink;
     const view=String(url||'').replace(/\/preview(\?.*)?$/,'/view');
-    return '<a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--bl);margin-right:8px">📎 '+escAttr(d.nombre||'Documento')+'</a>'+
-      '<a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--tx2);margin-right:10px;font-size:10px" title="En Drive puede seleccionar texto y dejar comentarios visibles para los responsables">💬 Comentar en Drive</a>';
+    const tag=_pqrsDocEsPorCorregir(d)?' <span style="color:var(--or)">(por corregir)</span>':(_pqrsDocEsRevisionActual(d)?' <span style="color:var(--gn)">(actual)</span>':'');
+    return '<div style="margin-bottom:4px"><a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--bl);margin-right:8px">📎 '+escAttr(_pqrsEtiquetaDocWf(d))+'</a>'+tag+
+      ' <a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--tx2);font-size:10px" title="En Drive puede seleccionar texto y dejar comentarios visibles para los responsables">💬 Comentar en Drive</a></div>';
   }).join('')+'</div>';
 }
 function renderTaskVerifyBarHtml(expId,taskId,t){
@@ -12450,11 +12545,22 @@ function openNcaRevisionModal(expId){
   if(modal){modal.classList.add('task-modal-wide');}
   const wf=getPqrsWorkflow(e);
   const docs=wf.documentos||[];
+  const hayPorCorregir=docs.some(_pqrsDocEsPorCorregir);
+  const hayActual=docs.some(_pqrsDocEsRevisionActual);
   const docsHtml=docs.length
-    ?docs.map(d=>'<div style="font-size:11px;margin-top:4px">'+
-        (d.driveLink?'<a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(d.nombre||d.driveLink)+'</a>':'📎 '+escAttr(d.nombre||'—'))+
-        '</div>').join('')
+    ?docs.map(function(d){
+        const tag=_pqrsDocEsPorCorregir(d)
+          ?' <span style="color:var(--or,#b45309);font-weight:600">(por corregir'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>'
+          :' <span style="color:var(--gn,#15803d);font-weight:600">(entrega actual'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>';
+        return '<div style="font-size:11px;margin-top:4px">'+
+          (d.driveLink?'<a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(d.nombre||d.driveLink)+'</a>':'📎 '+escAttr(d.nombre||'—'))+
+          tag+
+          '</div>';
+      }).join('')
     :'<div style="font-size:11px;color:var(--tx3)">Sin documentos adjuntos</div>';
+  const hintCompare=hayPorCorregir&&hayActual
+    ?'<div style="padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--r);margin-bottom:10px;font-size:12px">⇅ Hay <strong>versión por corregir</strong> y <strong>nueva entrega</strong>. Use la pestaña «Comparar documentos» de la actividad o abra ambos enlaces para verificar si se corrigieron los apartes señalados.</div>'
+    :'';
 
   const tipoRevision=wf.tipo||PQRS_WF_TIPO.MENSAJE;
   const canalRevision=wf.canal||'';
@@ -12483,6 +12589,7 @@ function openNcaRevisionModal(expId){
     (esInfo?'<div style="padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--r);margin-bottom:10px;font-size:12px">'+
       '<strong>ℹ️ Respuesta Informativa</strong> — el responsable solicita cerrar sin enviar correo. '+
       'Puede editar la descripción antes de aprobar; el ciudadano la verá en consulta ciudadana.</div>':'')+
+    hintCompare+
 
     '<div style="padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd);margin-bottom:10px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Tipo propuesto</div>'+
@@ -12535,8 +12642,9 @@ async function ncaAprobarMensajeSimple(expId){
   const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
   const canal=wf.canal||PQRS_WF_CANAL.CORREO;
   const cerradoPor=responsableActivo||'NCA';
-  // Rename Drive docs: revision → aprobado
-  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  // Conservar solo la entrega aprobada; eliminar versiones «por corregir»
+  await _pqrsLimpiarVersionesCorreccionWf(e,wf);
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado',{onlyEstados:['revision','']});
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   // Envío por correo: SIEMPRE desde el correo de NCA/oficina (preferOfi=true).
   // Está prohibido que la respuesta al ciudadano salga desde el correo del responsable.
@@ -12553,6 +12661,7 @@ async function ncaAprobarMensajeSimple(expId){
       setPqrsWorkflow(e,{
         fase:PQRS_WF.CERRADA,
         cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
+        documentos:wf.documentos||[],
         revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
         cerrado_por:cerradoPor,cerrado_en:new Date().toISOString()
       });
@@ -12571,7 +12680,7 @@ async function ncaAprobarMensajeSimple(expId){
     }catch(err){
       console.warn('ncaAprobarMensajeSimple envío:',err);
       // Fallback: dejar lista para envío manual
-      setPqrsWorkflow(e,{fase:PQRS_WF.LISTA_ENVIO,cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()}});
+      setPqrsWorkflow(e,{fase:PQRS_WF.LISTA_ENVIO,cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,documentos:wf.documentos||[],revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()}});
       e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje) — envío pendiente: '+String(err.message||err).slice(0,80),oficina:'guaviare',por:cerradoPor});
       persistExpedienteGranular(e);
       closeTaskModal();renderPqrsOficinaInbox();renderSecretariaPqrs();
@@ -12583,6 +12692,7 @@ async function ncaAprobarMensajeSimple(expId){
   setPqrsWorkflow(e,{
     fase:PQRS_WF.LISTA_ENVIO,
     cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
+    documentos:wf.documentos||[],
     revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()}
   });
   e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje simple)'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
@@ -12598,13 +12708,15 @@ async function ncaAprobarOficioFirmado(expId){
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
   const wf=getPqrsWorkflow(e);
-  // Un solo archivo en Drive: renombrar a por_firma (no duplicar por estado)
-  await _pqrsRenombrarDocsDriveWf(wf,'por_firma');
+  // Un solo archivo vigente: limpiar versiones por corregir y renombrar entrega actual → por_firma
+  await _pqrsLimpiarVersionesCorreccionWf(e,wf);
+  await _pqrsRenombrarDocsDriveWf(wf,'por_firma',{onlyEstados:['revision','']});
   setPqrsWorkflow(e,{
     fase:PQRS_WF.PARA_FIRMA,
     cuerpo:d.cuerpo||wf.cuerpo,
     oficio:d.oficio||wf.oficio,
     fecha_respuesta:d.fecha||wf.fecha_respuesta,
+    documentos:wf.documentos||[],
     revision_nca:{aprobado:true,tipo:'oficio',comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
@@ -12623,10 +12735,29 @@ async function ncaRechazarRespuesta(expId){
   const d=_ncaRevisionDatos();
   if(!d.comentario){notif('Indique el motivo de la devolución','err');return;}
   const wf=getPqrsWorkflow(e);
-  // Rename Drive docs: revision → acorregir
-  await _pqrsRenombrarDocsDriveWf(wf,'acorregir');
+  // Solo renombrar la entrega actual (revision) → acorregir; conservar versiones previas
+  await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['revision','']});
+  // Sincronizar soportes de la tarea / lista de respuesta
+  const t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+  if(t&&Array.isArray(t.soportes)){
+    t.soportes.forEach(function(s){
+      if(!s||!s.activo)return;
+      s.driveEstado='acorregir';
+      if(s.label&&!/por corregir/i.test(s.label))s.label=String(s.label)+' · por corregir';
+      s.activo=false;
+    });
+  }
+  if(Array.isArray(e._pqrs_respuesta_soportes)){
+    e._pqrs_respuesta_soportes.forEach(function(s){
+      if(!s||s.activo===false)return;
+      s.activo=false;
+      s.driveEstado='acorregir';
+      if(s.label&&!/por corregir/i.test(s.label))s.label=String(s.label)+' · por corregir';
+    });
+  }
   setPqrsWorkflow(e,{
     fase:PQRS_WF.RECHAZADA,
+    documentos:wf.documentos||[],
     revision_nca:{aprobado:false,comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
@@ -12635,27 +12766,95 @@ async function ncaRechazarRespuesta(expId){
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  notif('↩ Respuesta devuelta al responsable para corrección','ok');
+  notif('↩ Respuesta devuelta al responsable para corrección (se conserva la versión anterior para comparar)','ok');
 }
 
 // ---------------------------------------------------------------------------
 // Drive: renombrar documentos del workflow según estado NCA
+// opts.onlyEstados: si se indica, solo renombra docs con esos driveEstado (p.ej. ['revision'] al devolver)
 // ---------------------------------------------------------------------------
-async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado){
+async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
   if(!wf||!Array.isArray(wf.documentos))return;
+  opts=opts||{};
+  const only=Array.isArray(opts.onlyEstados)?opts.onlyEstados.map(function(s){return String(s||'').toLowerCase();}):null;
   const prefRgx=/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido)-/i;
   for(const doc of wf.documentos){
-    const fid=doc.fileId||(doc.tipo==='drive'?doc.fileId:null);
-    if(!fid)continue;
+    const estEff=String(doc.driveEstado||'revision').toLowerCase()||'revision';
+    if(only&&only.indexOf(estEff)<0&&!(only.indexOf('revision')>=0&&!doc.driveEstado))continue;
+    // No re-renombrar versiones ya archivadas como por corregir cuando el destino también es acorregir
+    if(nuevoEstado==='acorregir'&&_pqrsDocEsPorCorregir(doc)&&estEff==='acorregir')continue;
+    const fid=doc.fileId||doc.driveFileId||null;
+    if(!fid){
+      doc.driveEstado=nuevoEstado;
+      if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
+      continue;
+    }
     const origName=doc.nombre||doc.driveFilename||'documento';
     const cleanName=origName.replace(prefRgx,'');
-    const newName=nuevoEstado+'-'+cleanName;
+    const verPref=doc.entrega_n?('v'+doc.entrega_n+'-'):'';
+    const newName=nuevoEstado+'-'+verPref+cleanName;
     try{
       if(typeof driveRenameInstitutional==='function'){
         const ok=await driveRenameInstitutional(fid,newName);
         if(ok){doc.nombre=newName;doc.driveFilename=newName;doc.driveEstado=nuevoEstado;}
+        else doc.driveEstado=nuevoEstado;
+      }else doc.driveEstado=nuevoEstado;
+      if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
+    }catch(err){console.warn('_pqrsRenombrarDocsDriveWf:',err);doc.driveEstado=nuevoEstado;}
+  }
+}
+/** Tras aprobar: elimina de Drive y del workflow las versiones «por corregir»; deja solo la entrega aprobada. */
+async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
+  if(!wf||!Array.isArray(wf.documentos))return;
+  const keep=[],trash=[];
+  wf.documentos.forEach(function(d){
+    if(!d)return;
+    if(_pqrsDocEsPorCorregir(d))trash.push(d);
+    else keep.push(d);
+  });
+  for(let i=0;i<trash.length;i++){
+    const fid=trash[i].fileId||trash[i].driveFileId;
+    if(fid&&typeof driveDeleteInstitutional==='function'){
+      try{await driveDeleteInstitutional(fid);}catch(err){console.warn('_pqrsLimpiarVersionesCorreccionWf delete:',err);}
+    }
+  }
+  wf.documentos=keep;
+  if(e){
+    const keepKeys=new Set(keep.map(_pqrsDocKey).filter(Boolean));
+    if(Array.isArray(e._pqrs_respuesta_soportes)&&keepKeys.size){
+      e._pqrs_respuesta_soportes=e._pqrs_respuesta_soportes.filter(function(s){
+        const k=String((s&&(s.url||s.preview))||'').toLowerCase();
+        return !k||keepKeys.has(k);
+      }).map(function(s){
+        return Object.assign({},s,{activo:true,label:String(s.label||'Respuesta').replace(/\s*·\s*por corregir/i,'').replace(/\s*·\s*entrega v\d+/i,'')});
+      });
+    }
+    // Limpiar soportes de la tarea Atender PQRSD que eran por corregir
+    const t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+    if(t&&Array.isArray(t.soportes)&&keepKeys.size){
+      const dropIds=[];
+      t.soportes.forEach(function(s){
+        if(!s)return;
+        const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
+        const est=String(s.driveEstado||'').toLowerCase();
+        if((est==='acorregir'||/^acorregir[-_]/i.test(s.driveFilename||s.label||''))&&k&&!keepKeys.has(k)){
+          dropIds.push(s.driveFileId);
+        }
+      });
+      t.soportes=t.soportes.filter(function(s){
+        if(!s)return false;
+        const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
+        if(k&&keepKeys.has(k))return true;
+        const est=String(s.driveEstado||'').toLowerCase();
+        if(est==='acorregir'||/^acorregir[-_]/i.test(s.driveFilename||s.label||''))return false;
+        return true;
+      });
+      for(let j=0;j<dropIds.length;j++){
+        if(dropIds[j]&&typeof driveDeleteInstitutional==='function'){
+          try{await driveDeleteInstitutional(dropIds[j]);}catch(err){}
+        }
       }
-    }catch(err){console.warn('_pqrsRenombrarDocsDriveWf:',err);}
+    }
   }
 }
 
@@ -12721,12 +12920,13 @@ async function ncaAprobarInformativa(expId){
   if(!cuerpoFinal){notif('Escriba la descripción informativa antes de aprobar','err');return;}
   const cerradoPor=responsableActivo||'NCA';
   const fechaResp=wf.fecha_respuesta||hoy();
-  // Rename Drive docs to aprobado
-  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  await _pqrsLimpiarVersionesCorreccionWf(e,wf);
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado',{onlyEstados:['revision','']});
   setPqrsWorkflow(e,{
     fase:PQRS_WF.CERRADA,
     cuerpo:cuerpoFinal,
     fecha_respuesta:fechaResp,
+    documentos:wf.documentos||[],
     revision_nca:{aprobado:true,tipo:'informativa',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
     cerrado_por:cerradoPor,
     cerrado_en:new Date().toISOString()
@@ -12763,12 +12963,13 @@ async function ncaAprobarCanalFisico(expId){
   const cerradoPor=responsableActivo||'NCA';
   const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
   const canal=wf.canal||'aviso';
-  // Rename Drive docs to aprobado
-  await _pqrsRenombrarDocsDriveWf(wf,'aprobado');
+  await _pqrsLimpiarVersionesCorreccionWf(e,wf);
+  await _pqrsRenombrarDocsDriveWf(wf,'aprobado',{onlyEstados:['revision','']});
   const wfPatch={
     fase:PQRS_WF.CERRADA,
     cuerpo:d.cuerpo||wf.cuerpo,
     fecha_respuesta:fechaResp,
+    documentos:wf.documentos||[],
     revision_nca:{aprobado:true,tipo:'canal_fisico',canal,comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
     cerrado_por:cerradoPor,
     cerrado_en:new Date().toISOString()
