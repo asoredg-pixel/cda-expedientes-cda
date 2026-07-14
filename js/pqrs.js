@@ -1018,9 +1018,12 @@ function pqrsAccionesTablaHtml(e){
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')">⏳ Revisar</button> ';
   if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+id+'\')">✅ Aprobar notificación</button> ';
-  // Para firma (VITAL o encargado)
-  if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e)||esAdministrador()))
-    h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">✍ Para firma</button> ';
+  // Por imprimir / Para firma (VITAL o encargado)
+  if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e)||esAdministrador())){
+    const wfB=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const imp=!!(wfB.impreso&&wfB.impreso.en);
+    h+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">'+(imp?'✓ Impreso':'🖨 Por imprimir')+'</button> ';
+  }
   // Por firmar (Director DS)
   if(fase===PQRS_WF.POR_FIRMAR&&(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()||esAdministrador()||typeof esCargoVital==='function'&&esCargoVital()))
     h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')">🖊 Firmar</button> ';

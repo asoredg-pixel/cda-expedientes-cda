@@ -5814,8 +5814,7 @@ function releaseAnnotMarkingMode(){
 function renderAnnotSidebarFooter(expId,taskId,canAnnot){
   if(!canAnnot)return'';
   return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)">'+
-    '<button type="button" class="btn bsm bd2" style="width:100%" onclick="devolverDocumentoConObservaciones(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">↩ Devolver documento (tras marcar)</button>'+
-    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Guarde todos los marcadores y luego devuelva una sola vez.</div></div>';
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Guarde los marcadores. Use <strong>↩ Devolver</strong> en la barra de revisión (una sola vez).</div></div>';
 }
 function refreshAnnotAfterPinSave(expId,taskId,soporteId){
   cancelPendingAnnotPin();
@@ -6316,7 +6315,6 @@ function renderTaskChatPanelHtml(expId,taskId,t){
   if(canWriteDept){
     form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje al responsable sobre la actividad…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
       '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Enviar mensaje</button>'+
-      (taskPendienteVerificacion(t)?'<button type="button" class="btn bsm bd2" onclick="devolverTaskConComentario(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">↩ Devolver con comentario</button>':'')+
       '</div></div>';
   }else if(canWriteResp){
     form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Consulta o mensaje sobre la actividad (las entregas se hacen con 📤, no por este chat)…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
@@ -7042,7 +7040,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     if(wf.cuerpo)h+='<div style="font-size:12px;white-space:pre-wrap;margin-bottom:8px;padding:8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+escAttr(String(wf.cuerpo).slice(0,400))+(String(wf.cuerpo).length>400?'…':'')+'</div>';
     h+=_pqrsHtmlDocsWfLinks(wf);
     h+='<div class="fx" style="gap:8px;flex-wrap:wrap">'+btns+
-      (pendVer&&(pqrsEnRevisionNca(e)||fase===PQRS_WF.RECHAZADA)?'<button type="button" class="btn bsm bd2" onclick="devolverTaskAlResponsable(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\',\'Devuelta para corrección\')">↩ Devolver actividad</button>':'')+
+      (pendVer?'<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>':'')+
       '</div></div>';
     return h;
   }
@@ -7054,10 +7052,30 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
     '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>';
   if(pendVer){
-    h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskAlResponsable(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\',\'Devuelta para corrección\')">↩ Devolver (por corregir)</button>';
+    h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>';
   }
   h+='</div></div>';
   return h;
+}
+/** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o pide motivo. */
+function devolverTaskUnificado(expId,taskId){
+  const t=getTaskAny(expId,taskId);
+  const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
+  const wrap=document.getElementById('soporte-annot-wrap');
+  const sopId=wrap?wrap.dataset.sop:(getSoporteActivo(t)||{}).id;
+  const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&(!sopId||!n.soporteId||n.soporteId===sopId);});
+  const nObs=obs.length;
+  let nota=chat;
+  if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
+  if(!nota){
+    const p=typeof prompt==='function'?prompt('Motivo de la devolución (obligatorio):',''):'';
+    nota=String(p||'').trim();
+  }
+  if(!nota){notif('Indique el motivo de la devolución','err');return;}
+  if(chat){
+    try{addTaskComentario(expId,taskId,chat);}catch(err){}
+  }
+  devolverTaskAlResponsable(expId,taskId,nota);
 }
 function confirmarCierreTask(expId,taskId){
   const e=getExpById(expId);
@@ -10452,6 +10470,19 @@ function getTaskRevisionDepto(t){
   }
   return null;
 }
+function taskEsReentregaTrasCorreccion(t){
+  if(!t)return false;
+  if(estadoTask(t)!=='Por verificar')return false;
+  const hist=t.historial||[];
+  const huboAjuste=hist.some(h=>h&&(h.tipo==='ajuste_soporte'||h.tipo==='revision_nca_rechazado'));
+  const huboReenvio=hist.some(h=>h&&h.tipo==='reenvio_verificacion');
+  return huboAjuste&&huboReenvio;
+}
+function taskReentregaBadgeHtml(t){
+  if(!taskEsReentregaTrasCorreccion(t))return'';
+  const n=(t.historial||[]).filter(h=>h&&h.tipo==='reenvio_verificacion').length;
+  return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Nueva entrega tras devolución a corrección">↩ Reentrega'+(n>1?' v'+n:'')+'</span>';
+}
 function taskEsRevisada(t){return !!getTaskRevisionDepto(t);}
 function taskRevisionDeptoLabel(rev){
   if(!rev)return'';
@@ -10495,8 +10526,11 @@ function renderActividadesRowHtml(t){
   if(expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)&&typeof pqrsWorkflowFase==='function'){
     const faseWf=pqrsWorkflowFase(expAct);
     const eid=jsStr(expAct._exp||t.exp);
-    if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct))
-      acts+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')">✍ Para firma</button>';
+    if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
+      const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
+      const imp=!!(wfRow.impreso&&wfRow.impreso.en);
+      acts+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')">'+(imp?'✓ Impreso':'🖨 Por imprimir')+'</button>';
+    }
     if(faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO){
       if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
         acts+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+eid+'\')">📬 Notificar</button>';
@@ -10505,7 +10539,11 @@ function renderActividadesRowHtml(t){
       acts+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+eid+'\')">✅ Aprobar notif.</button>';
   }
   const respCol=esVistaActividadesDepto()?('<td style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
-  return '<tr'+(t.prioritaria?' class="prioritaria" style="background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)"':'')+'><td><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+lbl+'</span>'+priorBadge+solBadge+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
+  const rowStyle=[
+    t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':'',
+    taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
+  ].filter(Boolean).join(';');
+  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+lbl+'</span>'+priorBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td><td>'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
@@ -10520,9 +10558,20 @@ function updateActEstFilterForEnc(forEnc){
   const optCorr=sel.querySelector('option[value="porcorr"]');
   const optVer=sel.querySelector('option[value="porver"]');
   const optRev=sel.querySelector('option[value="revisados"]');
+  const optFirma=sel.querySelector('option[value="parafirma"]');
   if(optCorr)optCorr.hidden=deptView?!!forEnc:false;
   if(optVer){optVer.hidden=false;optVer.textContent=deptView?'Por revisar':'Por verificar';}
   if(optRev)optRev.hidden=!deptView;
+  if(optFirma){
+    const showFirma=deptView||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esNcaDeguv==='function'&&esNcaDeguv());
+    optFirma.hidden=!showFirma;
+    optFirma.textContent=(typeof esCargoVital==='function'&&esCargoVital()&&!deptView)?'Por imprimir':'Para firma';
+  }
+  const optNotif=sel.querySelector('option[value="pornotif"]');
+  if(optNotif){
+    const showN=deptView||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esNcaDeguv==='function'&&esNcaDeguv());
+    optNotif.hidden=!showN;
+  }
   if(forEnc&&cv==='porcorr')sel.value='pend';
 }
 function exportarActividadesExcel(){
@@ -11369,7 +11418,7 @@ function getTareasPqrsPorFaseWorkflow(matchFn){
     (e.tasks||[]).forEach(function(t){
       if(!t||t.eliminada)return;
       if(typeof taskEsAtenderPqrs==='function'&&!taskEsAtenderPqrs(t,e))return;
-      const nt=typeof normalizeTask==='function'?normalizeTask(Object.assign({},t,{codigo:e._exp,exp:e._exp,tram:e._tramite||'PQRSD',nombre:e._qd_nombre||e._pn_nombre||''})):t;
+      const nt=typeof normalizeTask==='function'?normalizeTask(Object.assign({},t,{codigo:e._exp,exp:e._exp,tram:(typeof getTram==='function'&&(getTram(e._tramite,e)||{}).nombre)||(e._tramite==='t_pqrs'||typeof esTramitePqrs==='function'&&esTramitePqrs(e)?'PQRSD':(e._tramite||'PQRSD')),nombre:e._qd_nombre||e._pn_nombre||''})):t;
       out.push(nt);
     });
   });
@@ -11379,7 +11428,7 @@ function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='venc')return list.filter(t=>estadoTask(t)==='Vencida');
   if(filtro==='porver')return list.filter(t=>getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar');
   if(filtro==='porcorr')return list.filter(t=>estadoTask(t)==='Por corregir');
-  if(filtro==='parafirma'){
+  if(filtro==='parafirma'||filtro==='porimprimir'){
     return getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e);});
   }
   if(filtro==='pornotif'){
@@ -11469,7 +11518,8 @@ function renderActividades(){
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
     }).length;
-    metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">Para firma</div>');
+    const lblFirma=(typeof esCargoVital==='function'&&esCargoVital()&&!deptView)?'Por imprimir':'Para firma';
+    metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">'+lblFirma+'</div>');
     metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>');
   }
   if(mets)mets.innerHTML=metsHtml;
@@ -12660,14 +12710,11 @@ function openNcaRevisionModal(expId){
     '<div style="font-size:12px">'+escAttr(esOficio?'📄 Oficio firmado':esInfo?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
     (esInfo?'':('<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
     '<div style="font-size:12px">'+escAttr(canalRevision||'—')+'</div>'))+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">'+(esInfo?'Descripción informativa (editable abajo)':'Resumen de la respuesta')+'</div>'+
-    '<div style="font-size:12px;white-space:pre-wrap">'+escAttr(wf.cuerpo||'—')+'</div>'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">'+(esInfo?'Descripción informativa <span style="font-weight:400">(editable — visible al ciudadano)</span>':'Resumen de la respuesta <span style="font-weight:400">(editable)</span>')+'</div>'+
+    '<textarea id="nca-rev-cuerpo" style="min-height:100px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Documentos adjuntos</div>'+
     docsHtml+docsComentar+
     '</div>'+
-
-    '<div class="fld" style="margin-bottom:10px"><label>'+(esInfo?'Editar descripción informativa <span style="font-weight:400;color:var(--tx3)">(el ciudadano verá este texto)</span>':'Correcciones al texto <span style="font-weight:400;color:var(--tx3)">(opcional)</span>')+'</label>'+
-    '<textarea id="nca-rev-cuerpo" style="min-height:80px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(wf.cuerpo||'')+'</textarea></div>'+
 
     (esInfo?'':('<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>N° de oficio confirmado</label><input type="text" id="nca-rev-oficio" value="'+escAttr(wf.oficio||'')+'"></div>'+
@@ -12680,7 +12727,7 @@ function openNcaRevisionModal(expId){
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
     btnsDecision+
-    '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver al responsable</button>'+
+    '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
 
@@ -12826,10 +12873,18 @@ async function ncaRechazarRespuesta(expId){
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:'NCA devolvió la respuesta: '+d.comentario,oficina:'guaviare',por:responsableActivo||'NCA'});
+  // Devolver también la actividad → Por corregir (así la reentrega vuelve a «Por revisar»)
+  if(t){
+    normalizeTask(t);
+    if(!Array.isArray(t.historial))t.historial=[];
+    t.historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:d.comentario,por:responsableActivo||'NCA'});
+    resetTaskPorCorregir(t,d.comentario||'Devuelta desde revisión NCA');
+  }
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
+  if(typeof renderActividades==='function')renderActividades();
   notif('↩ Respuesta devuelta al responsable para corrección (se conserva la versión anterior para comparar)','ok');
 }
 
@@ -13109,16 +13164,19 @@ function openPqrsParaFirmaModal(expId){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Para firma — '+expId;
+  if(tit)tit.textContent='Por imprimir — '+expId;
   if(modal)modal.classList.add('task-modal-wide');
   const wf=getPqrsWorkflow(e);
+  const yaImpreso=!!(wf.impreso&&wf.impreso.en);
   const docs=(wf.documentos||[]).filter(d=>d&&(d.driveLink||d.previewLink));
   const docsHtml=docs.length
     ?docs.map(d=>'<div style="font-size:12px;margin-top:4px"><a href="'+escAttr(d.driveLink||d.previewLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(d.nombre||'Documento')+'</a> <span style="color:var(--tx3)">(descargar / imprimir)</span></div>').join('')
     :'<div style="font-size:12px;color:var(--tx3)">Sin documento en Drive — revise la entrega del responsable.</div>';
+  const esEnc=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
   body.innerHTML=
-    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">✍ Para firma del Director — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Descargue o imprima el oficio. Cuando esté listo para que el Director firme (digital o física), márquelo <strong>listo para firma</strong>. Aparecerá en el menú PQRSD de DS DEGUV como <strong>Por firmar</strong>. Tanto VITAL como el encargado pueden indicar para firma.</div>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖨 Por imprimir — firma del Director — '+escAttr(expId)+'</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">1) Descargue e <strong>imprima</strong> el oficio. 2) Marque <strong>✓ Impreso</strong>. 3) Cuando el Director firme, el PDF firmado pasa a <strong>Por notificar</strong> (VITAL o el notificador indicado pueden enviar el correo desde la cuenta de oficina).</div>'+
+    (yaImpreso?'<div style="padding:8px 10px;background:#dcfce7;border:1px solid #86efac;border-radius:var(--r);margin-bottom:10px;font-size:12px">✅ <strong>Impreso</strong> · '+escAttr((wf.impreso&&wf.impreso.por)||'')+' · '+escAttr(fmtF((wf.impreso&&wf.impreso.en||'').slice(0,10)))+'</div>':'')+
     '<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Resumen aprobado</div>'+
     '<div style="font-size:12px;white-space:pre-wrap;margin-bottom:6px">'+escAttr(wf.cuerpo||'—')+'</div>'+
@@ -13126,10 +13184,26 @@ function openPqrsParaFirmaModal(expId){
     '<div style="margin-top:8px">'+docsHtml+'</div></div>'+
     _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.entregado_por)+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-    '<button type="button" class="btn bsm bp" onclick="pqrsMarcarListoParaFirmaDirector(\''+escAttr(expId)+'\')">🖊 Listo para firma del Director</button>'+
+    (!yaImpreso?'<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="pqrsMarcarOficioImpreso(\''+escAttr(expId)+'\')">✓ Marcar impreso</button>':'')+
+    '<button type="button" class="btn bsm bp" onclick="pqrsMarcarListoParaFirmaDirector(\''+escAttr(expId)+'\')">🖊 '+(yaImpreso?'Enviar a firma del Director':'Impreso y listo para firma del Director')+'</button>'+
+    (esEnc?'<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="openPqrsDirectorFirmarModal(\''+escAttr(expId)+'\')" title="Atajo: si el Director ya firmó, cargue el PDF y avance">⚡ Cargar firmado (encargado)</button>':'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsParaFirma',expId};
+}
+function pqrsMarcarOficioImpreso(expId){
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede marcar como impreso','err');return;}
+  const notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||'').trim();
+  const patch={impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}};
+  if(notifPor)patch.notificar_por=notifPor;
+  setPqrsWorkflow(e,patch);
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({tipo:'oficio_impreso',fecha:hoy(),nota:'Oficio marcado como impreso'+(notifPor?' · Notificará: '+notifPor:''),por:responsableActivo||''});
+  persistExpedienteGranular(e);
+  notif('✅ Marcado como impreso','ok');
+  openPqrsParaFirmaModal(expId);
+  if(typeof renderActividades==='function')renderActividades();
 }
 
 async function pqrsMarcarListoParaFirmaDirector(expId){
@@ -13156,8 +13230,8 @@ async function pqrsMarcarListoParaFirmaDirector(expId){
 function openPqrsDirectorFirmarModal(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
-  if(!pqrsPuedeFirmarDirector(e)&&!esCargoVital()&&!esAdministrador()&&!esNcaDeguv()){
-    notif('Solo el Director (DS DEGUV) carga el oficio firmado','err');return;
+  if(!pqrsPuedeFirmarDirector(e)&&!esCargoVital()&&!esAdministrador()&&!esNcaDeguv()&&!esOficinaPqrsNca()){
+    notif('Solo el Director (DS DEGUV), VITAL o el encargado puede cargar el oficio firmado','err');return;
   }
   abrirPqrsModalPrep();
   const ov=document.getElementById('task-modal-overlay');
