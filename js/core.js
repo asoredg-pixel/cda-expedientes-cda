@@ -7211,7 +7211,8 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       else btns='<span style="font-size:11px;color:var(--tx2)">Pendiente de quien notifica'+(wf.notificar_por?': '+escAttr(wf.notificar_por):'')+'</span>';
     }else if(fase===PQRS_WF.REVISION_FINAL){
       titulo='⏳ Revisión final de notificación';
-      hint='El encargado debe aprobar la notificación reportada (presencial / WhatsApp / aviso).';
+      const sop=wf.notificacion_reportada||{};
+      hint='Revise el soporte de notificación ('+escAttr(wf.canal||'medio físico')+')'+(sop.soporteLink?' — <a href="'+escAttr(sop.soporteLink)+'" target="_blank" rel="noopener">ver soporte</a>':'')+' y apruebe para cerrar la PQRSD.';
       if(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())
         btns='<button type="button" class="btn bsm bp" style="background:#6d3fa8;border-color:#6d3fa8" onclick="ncaAprobarRevisionFinalNotif(\''+jsStr(expId)+'\')">✅ Aprobar y cerrar PQRSD</button>';
     }else if(fase===PQRS_WF.RECHAZADA){
@@ -10742,8 +10743,13 @@ function renderActividadesRowHtml(t){
     const eid=jsStr(expAct._exp||t.exp);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
     if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
-      const imp=!!(wfRow.impreso&&wfRow.impreso.en);
-      acts+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')">'+(imp?'✓ Impreso → firma':'🖨 Por imprimir')+'</button>';
+      const docsImp=((wfRow.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));
+      if(docsImp.length){
+        const u0=docsImp[0].driveLink||docsImp[0].previewLink;
+        const view=String(u0||'').replace(/\/preview(\?.*)?$/,'/view');
+        acts+='<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e" title="Ver archivo aprobado para imprimir">👁 Ver archivo</a>';
+      }
+      acts+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')" title="Imprimir y pasar a firma del Director">🖊 Pasar a firma</button>';
     }
     if(faseWf===PQRS_WF.POR_FIRMAR){
       const quienN=String(wfRow.notificar_por||'').trim();
@@ -13482,16 +13488,19 @@ function openPqrsParaFirmaModal(expId){
   if(tit)tit.textContent='Por imprimir — '+expId;
   if(modal)modal.classList.add('task-modal-wide');
   const wf=getPqrsWorkflow(e);
-  const yaImpreso=!!(wf.impreso&&wf.impreso.en);
   const docs=(wf.documentos||[]).filter(d=>d&&(d.driveLink||d.previewLink));
   const docsHtml=docs.length
-    ?docs.map(d=>'<div style="font-size:12px;margin-top:4px"><a href="'+escAttr(d.driveLink||d.previewLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(d.nombre||'Documento')+'</a> <span style="color:var(--tx3)">(descargar / imprimir)</span></div>').join('')
+    ?docs.map(d=>{
+        const url=d.driveLink||d.previewLink;
+        const view=String(url||'').replace(/\/preview(\?.*)?$/,'/view');
+        return '<div style="font-size:12px;margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          '<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e">👁 Ver archivo aprobado</a> '+
+          '<span style="color:var(--tx2)">'+escAttr(d.nombre||'Documento')+'</span></div>';
+      }).join('')
     :'<div style="font-size:12px;color:var(--tx3)">Sin documento en Drive — revise la entrega del responsable.</div>';
-  const esEnc=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
   body.innerHTML=
-    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖨 Por imprimir — firma del Director — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">1) Descargue e <strong>imprima</strong> el oficio. 2) Marque <strong>✓ Impreso</strong>. 3) Indique quién notificará. 4) Envíe a firma del Director. Cuando el PDF firmado quede registrado, arrancan <strong>5 días hábiles</strong> para notificar (VITAL o el encargado del departamento pueden hacer este flujo).</div>'+
-    (yaImpreso?'<div style="padding:8px 10px;background:#dcfce7;border:1px solid #86efac;border-radius:var(--r);margin-bottom:10px;font-size:12px">✅ <strong>Impreso</strong> · '+escAttr((wf.impreso&&wf.impreso.por)||'')+' · '+escAttr(fmtF((wf.impreso&&wf.impreso.en||'').slice(0,10)))+'</div>':'')+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖨 Por imprimir — pasar a firma del Director — '+escAttr(expId)+'</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Abra el archivo aprobado, imprímalo y use <strong>Pasar a firma</strong>. Quedará en «Por firmar» para el Director. Indique quién notificará después de la firma (VITAL o el encargado pueden hacer este flujo).</div>'+
     '<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Resumen aprobado</div>'+
     '<div style="font-size:12px;white-space:pre-wrap;margin-bottom:6px">'+escAttr(wf.cuerpo||'—')+'</div>'+
@@ -13499,50 +13508,36 @@ function openPqrsParaFirmaModal(expId){
     '<div style="margin-top:8px">'+docsHtml+'</div></div>'+
     _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.entregado_por)+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-    (!yaImpreso?'<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="pqrsMarcarOficioImpreso(\''+escAttr(expId)+'\')">✓ Marcar impreso</button>':'')+
-    '<button type="button" class="btn bsm bp" onclick="pqrsMarcarListoParaFirmaDirector(\''+escAttr(expId)+'\')">🖊 '+(yaImpreso?'Enviar a firma del Director':'Impreso y listo para firma del Director')+'</button>'+
-    (esEnc?'<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="openPqrsDirectorFirmarModal(\''+escAttr(expId)+'\')" title="Atajo: si el Director ya firmó, cargue el PDF y avance">⚡ Cargar firmado (encargado)</button>':'')+
+    '<button type="button" class="btn bsm bp" onclick="pqrsPasarAFirmaDirector(\''+escAttr(expId)+'\')">🖊 Pasar a firma</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsParaFirma',expId};
 }
-function pqrsMarcarOficioImpreso(expId){
+/** Impreso + envío a firma del Director en un solo paso. */
+async function pqrsPasarAFirmaDirector(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
-  if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede marcar como impreso','err');return;}
-  const notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||'').trim();
-  const patch={impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}};
-  if(notifPor)patch.notificar_por=notifPor;
-  setPqrsWorkflow(e,patch);
-  pqrsSincronizarParticipacionPostAprobacion(e);
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'oficio_impreso',fecha:hoy(),nota:'Oficio marcado como impreso'+(notifPor?' · Notificará: '+notifPor:''),por:responsableActivo||''});
-  persistExpedienteGranular(e);
-  notif('✅ Marcado como impreso','ok');
-  openPqrsParaFirmaModal(expId);
-  if(typeof renderActividades==='function')renderActividades();
-}
-
-async function pqrsMarcarListoParaFirmaDirector(expId){
-  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
-  if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede marcar esta PQRSD para firma','err');return;}
+  if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede pasar esta PQRSD a firma','err');return;}
   const wf=getPqrsWorkflow(e);
   const notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||'').trim();
   await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
   const patch={
     fase:PQRS_WF.POR_FIRMAR,
+    impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()},
     listo_firma:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}
   };
   if(notifPor)patch.notificar_por=notifPor;
   setPqrsWorkflow(e,patch);
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'listo_para_firma_director',fecha:hoy(),nota:'Marcado listo para firma del Director'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
+  e._pqrs_historial.push({tipo:'pasar_a_firma_director',fecha:hoy(),nota:'Impreso y pasado a firma del Director'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
-  notif('🖊 Oficio impreso enviado a «Por firmar» (Director). Cuando firme, pasará a «Por notificar»'+(notifPor?' para '+notifPor:''),'ok');
+  notif('🖊 Pasó a «Por firmar» (Director)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
 }
+function pqrsMarcarOficioImpreso(expId){return pqrsPasarAFirmaDirector(expId);}
+async function pqrsMarcarListoParaFirmaDirector(expId){return pqrsPasarAFirmaDirector(expId);}
 
 function openPqrsDirectorFirmarModal(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -13564,9 +13559,13 @@ function openPqrsDirectorFirmarModal(expId){
     ?docs.map(d=>'<div style="font-size:12px;margin-top:4px"><a href="'+escAttr(d.driveLink||d.previewLink)+'" target="_blank" style="color:var(--bl)">⬇ '+escAttr(d.nombre||'Descargar oficio')+'</a></div>').join('')
     :'';
   const usaDrive=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has('guaviare');
+  const puedeNotificarYa=(typeof esCargoVital==='function'&&esCargoVital())||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
+  const canal=wf.canal||PQRS_WF_CANAL.CORREO;
+  const emailTo=String(wf.email_to||(typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e).join(', '):'')||e._qd_correo||'').trim();
+  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖊 Firmar oficio — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Descargue el documento, fírmelo (digital o física escaneada) y adjunte el PDF firmado. Quedará en <strong>Por notificar</strong> para VITAL o el responsable.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Adjunte el PDF firmado. Si usted mismo(a) notificará, puede hacerlo aquí; si no, confirme firmado y quede en <strong>Por notificar</strong> (plazo 5 días hábiles).</div>'+
     '<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:11px">Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong></div>'+docsHtml+'</div>'+
     (usaDrive
@@ -13574,13 +13573,57 @@ function openPqrsDirectorFirmarModal(expId){
         '<input type="file" id="director-pdf-file" accept=".pdf,application/pdf" style="display:none" onchange="pqrsDirectorOnSignedPdf(this)">'+
         '<div id="director-pdf-list" class="pqrs-compose-att-list" style="margin-top:6px"></div></div>'
       :'<div class="fld" style="margin-bottom:10px"><label>Link Drive del PDF firmado</label><input type="url" id="director-pdf-link" placeholder="https://drive.google.com/…"></div>')+
-    _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.entregado_por)+
+    _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||responsableActivo||wf.entregado_por)+
+    (puedeNotificarYa
+      ?('<div id="director-inline-notif" style="display:none;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:#185fa510;margin-bottom:12px">'+
+        '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📬 Notificar ahora (usted está seleccionado como notificador)</div>'+
+        '<div class="fld" style="margin-bottom:8px"><label style="font-weight:600;font-size:12px">Medio</label>'+
+        '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-notif-canal-btns">'+
+        '<button type="button" class="btn bsm canal-resp-btn'+(canal===PQRS_WF_CANAL.CORREO?' on':'')+'" data-val="correo" onclick="pqrsNotifSetCanal(\'correo\')">📧 Correo</button>'+
+        '<button type="button" class="btn bsm canal-resp-btn'+(canal===PQRS_WF_CANAL.PRESENCIAL?' on':'')+'" data-val="presencial" onclick="pqrsNotifSetCanal(\'presencial\')">🤝 Presencial</button>'+
+        '<button type="button" class="btn bsm canal-resp-btn'+(canal===PQRS_WF_CANAL.WHATSAPP?' on':'')+'" data-val="whatsapp" onclick="pqrsNotifSetCanal(\'whatsapp\')">💬 WhatsApp</button>'+
+        '<button type="button" class="btn bsm canal-resp-btn'+(canal===PQRS_WF_CANAL.AVISO?' on':'')+'" data-val="aviso" onclick="pqrsNotifSetCanal(\'aviso\')">📌 Por aviso</button>'+
+        '</div><input type="hidden" id="pqrs-notif-canal" value="'+escAttr(canal)+'"></div>'+
+        '<div id="pqrs-notif-correo-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'':'display:none')+'">'+
+        '<div class="fld" style="margin-bottom:6px"><label>Para *</label><input type="text" id="pqrs-notif-to" value="'+escAttr(emailTo)+'"></div>'+
+        '<div class="fld" style="margin-bottom:6px"><label>Cc</label><input type="text" id="pqrs-notif-cc" value="'+escAttr(wf.email_cc||'')+'"></div>'+
+        '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="pqrs-notif-asunto" value="Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+escAttr(expId)+'"></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Mensaje</label><textarea id="pqrs-notif-cuerpo" style="min-height:80px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(wf.cuerpo||'')+'</textarea></div>'+
+        '<div style="font-size:11px;color:'+(tokOfi?'var(--gn)':'var(--or)')+';margin-bottom:6px">'+(tokOfi?'✅ Correo de oficina conectado':'⚠️ Conecte el correo de oficina para enviar ahora')+'</div></div>'+
+        '<div id="pqrs-notif-otro-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'display:none':'')+'">'+
+        '<div class="fld" style="margin-bottom:8px"><label>Fecha *</label><input type="date" id="pqrs-notif-fecha" value="'+escAttr(hoy())+'"></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="pqrs-notif-obs" style="min-height:50px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación * <span style="font-weight:400;color:var(--tx3)">(PDF o imagen)</span></label>'+
+        '<input type="file" id="pqrs-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">'+
+        '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Obligatorio. Pasará a revisión del departamento para cerrar.</div></div></div>'+
+        '</div>')
+      :'')+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+    (puedeNotificarYa?'<button type="button" class="btn bsm bp" id="director-firmar-notif-btn" style="display:none;background:#185fa5;border-color:#185fa5" onclick="pqrsDirectorConfirmarFirmadoYNotificar(\''+escAttr(expId)+'\')">📬 Confirmar firmado y notificar ahora</button>':'')+
     '<button type="button" class="btn bsm bp" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">✅ Confirmar firmado → Por notificar</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   window._directorSignedFile=null;
+  window._pqrsNotifSoporteFile=null;
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsDirectorFirmar',expId};
+  const sel=document.getElementById('pqrs-notif-por-sel');
+  if(sel){
+    sel.addEventListener('change',pqrsDirectorToggleInlineNotif);
+    pqrsDirectorToggleInlineNotif();
+  }
+  const sop=document.getElementById('pqrs-notif-soporte');
+  if(sop)sop.addEventListener('change',function(){window._pqrsNotifSoporteFile=(this.files&&this.files[0])||null;});
+}
+function pqrsDirectorToggleInlineNotif(){
+  const wrap=document.getElementById('director-inline-notif');
+  const btnNow=document.getElementById('director-firmar-notif-btn');
+  const sel=document.getElementById('pqrs-notif-por-sel');
+  if(!wrap)return;
+  const yo=String(responsableActivo||'').trim();
+  const quien=String(sel&&sel.value||'').trim();
+  const soyYo=!!(yo&&quien&&agendaNorm(yo)===agendaNorm(quien));
+  wrap.style.display=soyYo?'':'none';
+  if(btnNow)btnNow.style.display=soyYo?'':'none';
 }
 
 function pqrsDirectorAddSignedPdf(){
@@ -13600,11 +13643,13 @@ function pqrsDirectorOnSignedPdf(inp){
     '<button type="button" class="btn bsm bd2" onclick="window._directorSignedFile=null;document.getElementById(\'director-pdf-file\').value=\'\';document.getElementById(\'director-pdf-list\').innerHTML=\'\'">✕</button></div>';
 }
 
-async function pqrsDirectorConfirmarFirmado(expId){
+async function pqrsDirectorConfirmarFirmado(expId,skipClose){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
-  if(!e){notif('PQRSD no encontrada','err');return;}
+  if(!e){notif('PQRSD no encontrada','err');return false;}
   const btn=document.getElementById('director-firmar-btn');
+  const btnN=document.getElementById('director-firmar-notif-btn');
   if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  if(btnN)btnN.disabled=true;
   const wf=getPqrsWorkflow(e);
   let pdfLink='',pdfFileId='',pdfNombre='oficio-firmado.pdf';
   const file=window._directorSignedFile;
@@ -13614,7 +13659,6 @@ async function pqrsDirectorConfirmarFirmado(expId){
       const nombreCarpeta=(e._qd_nombre||e._pn_nombre||expId);
       const res=await driveUploadInstitutional(file,'por_notificar-'+file.name,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
       pdfLink=res.driveLink;pdfFileId=res.fileId||'';pdfNombre='por_notificar-'+file.name;
-      // Sustituir docs previos de oficio por el firmado (un archivo vigente)
       const otros=(wf.documentos||[]).filter(d=>d&&d.tipo!=='oficio_firmado'&&d.tipo!=='drive');
       wf.documentos=otros.concat([{nombre:pdfNombre,driveLink:pdfLink,previewLink:pdfLink,fileId:pdfFileId,tipo:'oficio_firmado',driveEstado:'por_notificar'}]);
     }else if(linkManual){
@@ -13623,7 +13667,8 @@ async function pqrsDirectorConfirmarFirmado(expId){
     }else{
       notif('Adjunte el PDF firmado o pegue el link Drive','err');
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar firmado → Por notificar';}
-      return;
+      if(btnN){btnN.disabled=false;}
+      return false;
     }
     await _pqrsRenombrarDocsDriveWf(wf,'por_notificar');
     const notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||wf.notificar_por||'').trim();
@@ -13639,20 +13684,43 @@ async function pqrsDirectorConfirmarFirmado(expId){
     };
     if(notifPor)patchFirma.notificar_por=notifPor;
     setPqrsWorkflow(e,patchFirma);
-    // Desde aquí corren los 5 días hábiles para notificar; reabre deuda solo del notificador
     pqrsSincronizarParticipacionPostAprobacion(e);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → por notificar (vence '+fmtF(notifVence)+', 5 d.h.)'+(notifPor?' · Notificará: '+notifPor:''),oficina:'ds_deguv',por:responsableActivo||'DS'});
     persistExpedienteGranular(e);
     window._directorSignedFile=null;
+    if(skipClose){
+      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar firmado → Por notificar';}
+      if(btnN){btnN.disabled=false;btnN.textContent='📬 Confirmar firmado y notificar ahora';}
+      return true;
+    }
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
     notif('📬 Oficio firmado — por notificar · vence '+fmtF(notifVence)+' (5 días hábiles)','ok');
+    return true;
   }catch(err){
     notif('Error: '+String(err.message||err).slice(0,100),'err');
     if(btn){btn.disabled=false;btn.textContent='✅ Confirmar firmado → Por notificar';}
+    if(btnN){btnN.disabled=false;btnN.textContent='📬 Confirmar firmado y notificar ahora';}
+    return false;
   }
+}
+
+/** VITAL / encargado: carga firmado y notifica en el mismo paso (si se seleccionó a sí misma). */
+async function pqrsDirectorConfirmarFirmadoYNotificar(expId){
+  const sel=document.getElementById('pqrs-notif-por-sel');
+  const yo=String(responsableActivo||'').trim();
+  const quien=String(sel&&sel.value||'').trim();
+  if(!yo||!quien||agendaNorm(yo)!==agendaNorm(quien)){
+    notif('Seleccione su nombre como notificador para notificar ahora','err');return;
+  }
+  if(!(typeof esCargoVital==='function'&&esCargoVital())&&!esNcaDeguv()&&!esOficinaPqrsNca()&&!esAdministrador()){
+    notif('Solo VITAL o el encargado pueden notificar al cargar el firmado','err');return;
+  }
+  const ok=await pqrsDirectorConfirmarFirmado(expId,true);
+  if(!ok)return;
+  await pqrsConfirmarNotificacionOficio(expId);
 }
 
 function openPqrsNotificarOficioModal(expId){
@@ -13701,14 +13769,19 @@ function openPqrsNotificarOficioModal(expId){
     '</div>'+
     '<div id="pqrs-notif-otro-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'display:none':'')+'">'+
     '<div class="fld" style="margin-bottom:8px"><label>Fecha de notificación<span class="req-star">*</span></label><input type="date" id="pqrs-notif-fecha" value="'+escAttr(hoy())+'"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Observación / soporte de la notificación</label><textarea id="pqrs-notif-obs" placeholder="Ej. Entregado en ventanilla / enviado por WhatsApp…" style="min-height:60px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Al reportar, pasa a <strong>revisión final</strong> del encargado. Cuando apruebe, la PQRSD queda atendida.</div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="pqrs-notif-obs" placeholder="Ej. Entregado en ventanilla / enviado por WhatsApp…" style="min-height:60px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(PDF o imagen del constancia/aviso)</span></label>'+
+    '<input type="file" id="pqrs-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a <strong>revisión del departamento</strong> para revisar el soporte y cerrar la actividad.</div></div>'+
     '</div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
     '<button type="button" class="btn bsm bp" id="pqrs-notif-btn" onclick="pqrsConfirmarNotificacionOficio(\''+escAttr(expId)+'\')">✅ Confirmar notificación</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsNotificarOficio',expId};
+  window._pqrsNotifSoporteFile=null;
+  const sop=document.getElementById('pqrs-notif-soporte');
+  if(sop)sop.addEventListener('change',function(){window._pqrsNotifSoporteFile=(this.files&&this.files[0])||null;});
 }
 function pqrsNotifSetCanal(val){
   const hid=document.getElementById('pqrs-notif-canal');
@@ -13780,21 +13853,47 @@ async function pqrsConfirmarNotificacionOficio(expId){
     return;
   }
 
-  // Canales no correo → revisión final del encargado
+  // Canales no correo → exigir soporte documental y revisión final del departamento
   const fechaN=String((document.getElementById('pqrs-notif-fecha')||{}).value||hoy()).trim()||hoy();
   const obs=String((document.getElementById('pqrs-notif-obs')||{}).value||'').trim();
-  setPqrsWorkflow(e,{
-    fase:PQRS_WF.REVISION_FINAL,
-    canal:canal,
-    notificacion_reportada:{fecha:fechaN,obs:obs,por:por,en:new Date().toISOString()}
-  });
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'notif_reportada_revision',fecha:hoy(),nota:'Notificación '+canal+' reportada — pendiente revisión final'+(obs?' · '+obs:''),por:por});
-  persistExpedienteGranular(e);
-  closeTaskModal();
-  renderPqrsOficinaInbox();
-  if(typeof renderActividades==='function')renderActividades();
-  notif('⏳ Notificación reportada — el encargado debe hacer la revisión final','ok');
+  const fileSop=window._pqrsNotifSoporteFile||((document.getElementById('pqrs-notif-soporte')||{}).files||[])[0]||null;
+  if(!fileSop){
+    notif('Adjunte el soporte de la notificación (PDF o imagen)','err');
+    if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
+    return;
+  }
+  try{
+    const nombreCarpeta=(e._qd_nombre||e._pn_nombre||expId);
+    const mime=fileSop.type||'application/octet-stream';
+    const res=await driveUploadInstitutional(fileSop,'notif-soporte-'+fileSop.name,mime,'respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+    const docs=(wf.documentos||[]).slice();
+    docs.push({
+      nombre:'Soporte notificación '+canal+' — '+fileSop.name,
+      driveLink:res.driveLink,
+      previewLink:res.driveLink,
+      fileId:res.fileId||'',
+      tipo:'notificacion_soporte',
+      driveEstado:'revision_final',
+      canal:canal
+    });
+    setPqrsWorkflow(e,{
+      fase:PQRS_WF.REVISION_FINAL,
+      canal:canal,
+      documentos:docs,
+      notificacion_reportada:{fecha:fechaN,obs:obs,por:por,en:new Date().toISOString(),soporteLink:res.driveLink,soporteFileId:res.fileId||'',soporteNombre:fileSop.name}
+    });
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({tipo:'notif_reportada_revision',fecha:hoy(),nota:'Notificación '+canal+' reportada con soporte — pendiente revisión del departamento'+(obs?' · '+obs:''),por:por});
+    window._pqrsNotifSoporteFile=null;
+    persistExpedienteGranular(e);
+    closeTaskModal();
+    renderPqrsOficinaInbox();
+    if(typeof renderActividades==='function')renderActividades();
+    notif('⏳ Soporte cargado — pasa a revisión del departamento para cerrar','ok');
+  }catch(err){
+    notif('No se pudo subir el soporte: '+String(err.message||err).slice(0,90),'err');
+    if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
+  }
 }
 
 async function ncaAprobarRevisionFinalNotif(expId){

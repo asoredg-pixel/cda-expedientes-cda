@@ -1018,11 +1018,16 @@ function pqrsAccionesTablaHtml(e){
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')">⏳ Revisar</button> ';
   if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+id+'\')">✅ Aprobar notificación</button> ';
-  // Por imprimir / Para firma (VITAL o encargado)
+  // Por imprimir → Pasar a firma (VITAL o encargado)
   if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e)||esAdministrador())){
     const wfB=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
-    const imp=!!(wfB.impreso&&wfB.impreso.en);
-    h+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">'+(imp?'✓ Impreso':'🖨 Por imprimir')+'</button> ';
+    const docsImp=((wfB.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));
+    if(docsImp.length){
+      const u0=docsImp[0].driveLink||docsImp[0].previewLink;
+      const view=String(u0||'').replace(/\/preview(\?.*)?$/,'/view');
+      h+='<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e">👁 Ver archivo</a> ';
+    }
+    h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">🖊 Pasar a firma</button> ';
   }
   // Por firmar (Director DS)
   if(fase===PQRS_WF.POR_FIRMAR&&(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()||esAdministrador()||typeof esCargoVital==='function'&&esCargoVital()))
