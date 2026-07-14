@@ -448,6 +448,7 @@ async function saveGlobalFirestore(){
         nombre:u.nombre||'',
         rol:u.rol||'',
         codigo:u.codigo||'',
+        cargo:String(u.cargo||'').trim().toLowerCase(),
         activo:u.activo!==false,
         deptoResponsable:String(u.deptoResponsable||'').trim()
       })),
@@ -709,6 +710,7 @@ async function saveFirestore(){
         nombre:u.nombre||'',
         rol:u.rol||'',
         codigo:u.codigo||'',
+        cargo:String(u.cargo||'').trim().toLowerCase(),
         activo:u.activo!==false,
         deptoResponsable:String(u.deptoResponsable||'').trim()
       })),

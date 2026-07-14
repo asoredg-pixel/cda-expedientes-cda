@@ -298,10 +298,18 @@ function esModoResponsable(){return deptoActivo==='responsables'||rolSesion==='r
 // ── VITAL (cargo especial sobre contratista de NCA) ──────────────────────────
 // El cargo 'vital' se guarda en el campo 'cargo' del usuario autorizado.
 function esCargoVital(){
-  if(!esModoResponsable()||!responsableActivo)return false;
-  const u=typeof getUsuarioAutorizadoByNombre==='function'
-    ? getUsuarioAutorizadoByNombre(responsableActivo)
-    : (_usuariosCache||[]).find(x=>agendaNorm(x.nombre||'')===agendaNorm(responsableActivo));
+  if(!esModoResponsable())return false;
+  // Sesión: el doc usuarios/{email} trae cargo al login (independiente del índice global)
+  if(String(window._usuarioActual&&window._usuarioActual.cargo||'').toLowerCase()==='vital')return true;
+  // Preferir el usuario de la sesión (email) — evita fallar por nombre distinto al del select
+  const email=String(window._usuarioActual&&window._usuarioActual.email||'').trim().toLowerCase();
+  let u=null;
+  if(email&&typeof getUsuarioAutorizadoByEmail==='function')u=getUsuarioAutorizadoByEmail(email);
+  if(!u&&responsableActivo){
+    u=typeof getUsuarioAutorizadoByNombre==='function'
+      ? getUsuarioAutorizadoByNombre(responsableActivo)
+      : (_usuariosCache||[]).find(x=>agendaNorm(x.nombre||'')===agendaNorm(responsableActivo));
+  }
   return !!(u&&String(u.cargo||'').toLowerCase()==='vital');
 }
 // Retorna true si el usuario VITAL puede actuar sobre la PQRSD indicada

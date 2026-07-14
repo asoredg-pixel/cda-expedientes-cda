@@ -4806,14 +4806,26 @@ function removeUsuarioDeCache(email){
 }
 function aplicarUsuariosIndex(arr){
   if(!Array.isArray(arr))return false;
-  _usuariosCache=arr.map(u=>({
-    email:String(u.email||'').trim().toLowerCase(),
-    nombre:u.nombre||'',
-    rol:u.rol||'',
-    codigo:u.codigo||'',
-    activo:u.activo!==false,
-    deptoResponsable:String(u.deptoResponsable||'').trim()
-  })).filter(u=>u.email);
+  // Conservar cargo ya conocido si el índice global aún no lo trae (migración)
+  const prevCargo={};
+  (_usuariosCache||[]).forEach(u=>{
+    const em=String(u.email||'').trim().toLowerCase();
+    const c=String(u.cargo||'').trim().toLowerCase();
+    if(em&&c)prevCargo[em]=c;
+  });
+  _usuariosCache=arr.map(u=>{
+    const email=String(u.email||'').trim().toLowerCase();
+    const cargo=String(u.cargo||'').trim().toLowerCase()||prevCargo[email]||'';
+    return{
+      email,
+      nombre:u.nombre||'',
+      rol:u.rol||'',
+      codigo:u.codigo||'',
+      cargo,
+      activo:u.activo!==false,
+      deptoResponsable:String(u.deptoResponsable||'').trim()
+    };
+  }).filter(u=>u.email);
   sortUsuariosCache();
   _usuariosCacheLoaded=true;
   try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
@@ -4827,6 +4839,7 @@ async function persistUsuariosIndexGlobal(){
     nombre:u.nombre||'',
     rol:u.rol||'',
     codigo:u.codigo||'',
+    cargo:String(u.cargo||'').trim().toLowerCase(),
     activo:u.activo!==false,
     deptoResponsable:String(u.deptoResponsable||'').trim()
   }));

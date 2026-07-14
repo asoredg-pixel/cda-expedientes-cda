@@ -298,7 +298,10 @@ async function verificarUsuarioFirestore(fbUser){
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
-    window._usuarioActual={email,nombre:data.nombre||email,rol:normalizarRolLoginFirestore(data.rol||''),codigo:data.codigo||'',uid,rolOriginal:data.rol||''};
+    window._usuarioActual={email,nombre:data.nombre||email,rol:normalizarRolLoginFirestore(data.rol||''),codigo:data.codigo||'',cargo:String(data.cargo||'').trim().toLowerCase(),uid,rolOriginal:data.rol||''};
+    if(typeof mergeUsuarioEnCache==='function'){
+      mergeUsuarioEnCache({email,nombre:data.nombre||email,rol:data.rol||'',codigo:data.codigo||'',cargo:data.cargo||'',activo:data.activo!==false,deptoResponsable:data.deptoResponsable||''});
+    }
     authUsuario=fbUser;
     setLoginStatus('');
     setLoginAuthMsg('');
