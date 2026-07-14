@@ -397,9 +397,12 @@ function setPqrsWorkflow(e,patch){
   if(next.canal)e._pqrs_respuesta_medio=next.canal;
   if(next.cuerpo)e._pqrs_respuesta_nota=next.cuerpo;
   if(next.documentos&&Array.isArray(next.documentos)){
-    const links=next.documentos.filter(d=>d.driveLink).map(d=>d.driveLink);
+    const defs=_pqrsDocsDefinitivosParaPublico(next.documentos);
+    const fuente=defs.length?defs:next.documentos.filter(function(d){return d&&d.driveLink&&!_pqrsDocEsBorradorInterno(d);});
+    const links=fuente.filter(function(d){return d.driveLink;}).map(function(d){return d.driveLink;});
     if(links.length)e._pqrs_respuesta_link=links[0];
     if(links.length>1)e._pqrs_respuesta_links=links;
+    else if(links.length===1)e._pqrs_respuesta_links=[links[0]];
   }
 }
 function pqrsWorkflowFase(e){return getPqrsWorkflow(e).fase||PQRS_WF.SIN_RESPUESTA;}
@@ -478,6 +481,53 @@ function _pqrsEtiquetaDocWf(d){
   if(_pqrsDocEsPorCorregir(d))return base+n+' · por corregir';
   if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return base+n+' · entrega actual';
   return base+n+(d.driveEstado?' · '+d.driveEstado:'');
+}
+/** URL de carpeta Drive (no es un archivo previsualizable; provoca 403 en el visor). */
+function esUrlCarpetaDrive(url){
+  const u=String(url||'').trim();
+  if(!u)return false;
+  return /drive\.google\.com\/drive\/folders\//i.test(u)||/drive\.google\.com\/open\?id=.*folder/i.test(u);
+}
+/**
+ * Borrador interno (corrección / firma / entrega intermedia) — no debe verse en consulta ciudadana.
+ */
+function _pqrsDocEsBorradorInterno(d){
+  if(!d)return false;
+  if(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d))return true;
+  const est=String(d.driveEstado||'').toLowerCase();
+  if(['revision','acorregir','por_firma','por_firmar','vital_gestion'].includes(est))return true;
+  const lbl=String(d.label||d.nombre||d.driveFilename||d.name||'');
+  if(/por corregir|entrega\s*v\d+|por firmar|para firma/i.test(lbl))return true;
+  if(/^(revision|acorregir|por_firma|por_firmar)[-_]/i.test(lbl))return true;
+  if(d.version_historial)return true;
+  if(d.activo===false&&(/por corregir|entrega\s*v\d+/i.test(lbl)||est==='acorregir'||est==='revision'))return true;
+  return false;
+}
+/**
+ * Documento definitivo visible al ciudadano (solicitud siempre; respuesta solo cerrada y no borrador).
+ * opts.tipo: 'solicitud'|'respuesta'|'any'
+ */
+function _pqrsDocEsVisibleCiudadano(d,e,opts){
+  opts=opts||{};
+  if(!d)return false;
+  const url=d.driveLink||d.url||d.preview||d.previewLink||'';
+  if(esUrlCarpetaDrive(url))return false;
+  if(_pqrsDocEsBorradorInterno(d))return false;
+  const tipo=opts.tipo||'any';
+  if(tipo==='solicitud')return true;
+  if(tipo==='respuesta'){
+    if(e&&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e))return false;
+    const est=String(d.driveEstado||'').toLowerCase();
+    if(est&&['por_firma','por_firmar','revision','acorregir'].includes(est))return false;
+    return true;
+  }
+  return true;
+}
+/** Preferir enlace definitivo al sincronizar respuesta (no el de «por corregir»). */
+function _pqrsDocsDefinitivosParaPublico(docs){
+  const list=(Array.isArray(docs)?docs:[]).filter(function(d){return d&&(d.driveLink||d.url||d.previewLink);});
+  const buenos=list.filter(function(d){return !_pqrsDocEsBorradorInterno(d)&&!esUrlCarpetaDrive(d.driveLink||d.url||d.previewLink);});
+  return buenos.length?buenos:[];
 }
 // Quién puede marcar respuesta (directo, sin revisión NCA)
 function puedeResponderDirecto(e){
@@ -1660,10 +1710,19 @@ function htmlPqrsRespuestaRegistrada(e){
   if(e._pqrs_respuesta_oficio)h+='<div style="margin-top:4px;font-size:12px"><strong>Oficio:</strong> '+escAttr(e._pqrs_respuesta_oficio)+'</div>';
   if(e._pqrs_respuesta_medio)h+='<div style="margin-top:4px;font-size:12px"><strong>Notificación:</strong> '+escAttr(medioNotificacionRespLabel(e._pqrs_respuesta_medio))+'</div>';
   if(e._pqrs_respuesta_nota)h+='<div style="margin-top:6px;font-size:13px">'+escAttr(e._pqrs_respuesta_nota)+'</div>';
-  if(e._pqrs_respuesta_link)h+='<div style="margin-top:6px"><button type="button" class="btn bsm" onclick="openPqrsDocViewer(\''+escAttr(e._pqrs_respuesta_link)+'\',\'Respuesta PQRSD\')">📎 Ver respuesta</button></div>';
-  (e._pqrs_respuesta_soportes||[]).forEach(s=>{
-    if(s.url||s.preview)h+='<div style="margin-top:4px"><button type="button" class="btn bsm" onclick="openPqrsDocViewer(\''+escAttr(s.preview||s.url)+'\',\''+escAttr(s.label||'Adjunto')+'\')">📄 '+escAttr(s.label||'Adjunto')+'</button></div>';
+  // Ciudadano / público: solo documentos definitivos (no versiones por corregir ni en firma)
+  const soportesPub=(e._pqrs_respuesta_soportes||[]).filter(function(s){
+    return _pqrsDocEsVisibleCiudadano(s,e,{tipo:'respuesta'});
   });
+  const linkPub=e._pqrs_respuesta_link&&!_pqrsDocEsBorradorInterno({url:e._pqrs_respuesta_link,label:'',driveEstado:''})&&!esUrlCarpetaDrive(e._pqrs_respuesta_link)
+    ?e._pqrs_respuesta_link:'';
+  if(soportesPub.length){
+    soportesPub.forEach(function(s){
+      if(s.url||s.preview)h+='<div style="margin-top:4px"><button type="button" class="btn bsm" onclick="openPqrsDocViewer(\''+escAttr(s.preview||s.url)+'\',\''+escAttr(s.label||'Adjunto')+'\')">📄 '+escAttr(String(s.label||'Adjunto').replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim()||'Adjunto')+'</button></div>';
+    });
+  }else if(linkPub){
+    h+='<div style="margin-top:6px"><button type="button" class="btn bsm" onclick="openPqrsDocViewer(\''+escAttr(linkPub)+'\',\'Respuesta PQRSD\')">📎 Ver respuesta</button></div>';
+  }
   return h+'</div>';
 }
 function abrirVisorAdjunto(urlView,nombreArchivo){
@@ -5528,22 +5587,27 @@ function collectEnlacesExpediente(e){
   actosAdminData(e._actos_admin).forEach((a,i)=>{
     ['documento','link','url','enlace','drive'].forEach(k=>{if(a[k])pushUrlsFromValor(add,'Acto administrativo',(a.tipo||'Acto')+' · '+(a.numero||('#'+(i+1))),a[k]);});
   });
-  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_pqrs_historial','_pqrs_workflow','_gmail_email_data','_pqrs_gmail_attachments','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_drive_folder_link','_pqrs_drive_folder_id','_pqrs_drive_solicitud_folder_id','_pqrs_drive_respuesta_folder_id','_pqrs_drive_path_label']);
+  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_pqrs_historial','_pqrs_workflow','_gmail_email_data','_pqrs_gmail_attachments','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_drive_folder_link','_pqrs_drive_folder_id','_pqrs_drive_solicitud_folder_id','_pqrs_drive_respuesta_folder_id','_pqrs_drive_path_label','_drive_folder_link','_drive_folder_id']);
   Object.keys(e).forEach(k=>{
     if(!k.startsWith('_')||skipUnderscore.has(k))return;
+    if(/folder[_ ]?id$/i.test(k)||/folder[_ ]?link$/i.test(k)||/path[_ ]?label$/i.test(k))return;
     if(k.endsWith('_link')||k.includes('link')||k.includes('url')||k.includes('documento')){
-      pushUrlsFromValor(add,'Expediente',k.replace(/^_+/,'').replace(/_/g,' '),e[k]);
+      const val=e[k];
+      if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(val))return;
+      pushUrlsFromValor(add,'Expediente',k.replace(/^_+/,'').replace(/_/g,' '),val);
       return;
     }
     const s=String(e[k]||'');
     if(!s||s.length>2000)return;
+    if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(s))return;
     pushUrlsFromValor(add,'Expediente',k.replace(/^_+/,'').replace(/_/g,' '),s);
   });
   Object.keys(e).forEach(k=>{
     if(k.startsWith('_'))return;
+    if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(e[k]))return;
     pushUrlsFromValor(add,'Expediente',k,e[k]);
   });
-  return links;
+  return links.filter(function(l){return l&&l.url&&!(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(l.url));});
 }
 function collectDocsComparables(e,taskId,tDirect){
   const docs=[],seen=new Set();
