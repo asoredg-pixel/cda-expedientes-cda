@@ -414,6 +414,37 @@ function pqrsEnParaFirma(e){
 function pqrsEnPorFirmar(e){return pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR;}
 function pqrsEnGestionVital(e){return pqrsEnParaFirma(e);} // compat
 function pqrsListaParaEnvio(e){const f=pqrsWorkflowFase(e);return f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.PENDIENTE_NOTIF;}
+/** Fases posteriores a la entrega: ya no son «por ejecutar» / «por revisar». */
+function pqrsEnFlujoFirmaNotif(e){
+  if(!e)return false;
+  const f=pqrsWorkflowFase(e);
+  return f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR
+    ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
+}
+function taskPqrsEnFlujoFirmaNotif(t){
+  if(!t||t.sinExpediente)return false;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(!e||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return false;
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
+  return pqrsEnFlujoFirmaNotif(e);
+}
+/** Etiqueta/estilo de estado para la tabla de actividades según fase PQRSD. */
+function pqrsEstadoActividadUi(e){
+  if(!e)return null;
+  const f=pqrsWorkflowFase(e);
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const quien=String(wf.notificar_por||'').trim();
+  const imp=!!(wf.impreso&&wf.impreso.en);
+  if(f===PQRS_WF.PENDIENTE_REVISION)return{lbl:'En revisión NCA',bg:'#6d3fa822',fg:'#6d3fa8'};
+  if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)
+    return{lbl:imp?'✓ Impreso · listo firma':'🖨 Por imprimir',bg:imp?'#dcfce7':'#1a7a4a22',fg:imp?'#15803d':'#1a7a4a'};
+  if(f===PQRS_WF.POR_FIRMAR)
+    return{lbl:'🖊 Por firmar (Director)'+(quien?' · notif: '+quien:''),bg:'#0d5c2e22',fg:'#0d5c2e'};
+  if(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO)
+    return{lbl:quien?'📬 Por notificar · '+quien:'📬 Por notificar',bg:'#185fa522',fg:'var(--bl)'};
+  if(f===PQRS_WF.REVISION_FINAL)return{lbl:'⏳ Revisión final notif.',bg:'#6d3fa822',fg:'#6d3fa8'};
+  return null;
+}
 function pqrsPuedeMarcarParaFirma(e){
   if(!e||!pqrsEnParaFirma(e))return false;
   return !!(esCargoVital()||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador());
@@ -427,6 +458,13 @@ function pqrsPuedeNotificarOficio(e){
   const f=pqrsWorkflowFase(e);
   if(f!==PQRS_WF.PENDIENTE_NOTIF&&f!==PQRS_WF.LISTA_ENVIO)return false;
   if(esCargoVital()||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())return true;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const notifPor=String(wf.notificar_por||'').trim();
+  // Designado explícitamente como notificador
+  if(esModoResponsable()&&responsableActivo&&notifPor){
+    if(agendaNorm(notifPor)===agendaNorm(responsableActivo))return true;
+    if(/^vital$/i.test(notifPor)&&typeof esCargoVital==='function'&&esCargoVital())return true;
+  }
   // Responsable asignado a la actividad Atender PQRSD
   if(esModoResponsable()&&responsableActivo){
     const t=(e.tasks||[]).find(x=>x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e));
@@ -7023,17 +7061,21 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       else btns='<span style="font-size:11px;color:var(--tx2)">Pendiente de VITAL / encargado</span>';
     }else if(fase===PQRS_WF.POR_FIRMAR){
       titulo='🖊 Por firmar — Director';
-      hint='El Director (DS DEGUV) debe descargar, firmar y cargar el PDF firmado.';
+      const quien=wf.notificar_por?' Cuando firme, notificará: <strong>'+escAttr(wf.notificar_por)+'</strong>.':'';
+      const imp=wf.impreso&&wf.impreso.en?' Oficio marcado <strong>impreso</strong>.':'';
+      hint='Pendiente de firma del Director (DS DEGUV).'+imp+quien+' No figura en «Por ejecutar»: use la tarjeta <strong>Por firmar</strong>.';
       if(typeof pqrsPuedeFirmarDirector==='function'&&pqrsPuedeFirmarDirector(e))
         btns='<button type="button" class="btn bsm bp" onclick="openPqrsDirectorFirmarModal(\''+jsStr(expId)+'\')">🖊 Cargar oficio firmado</button>';
-      else btns='<span style="font-size:11px;color:var(--tx2)">Visible en menú PQRSD de DS DEGUV</span>';
+      else if((typeof esCargoVital==='function'&&esCargoVital())||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())
+        btns='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="openPqrsDirectorFirmarModal(\''+jsStr(expId)+'\')">⬆ Cargar firmado (atajo)</button>';
+      else btns='<span style="font-size:11px;color:var(--tx2)">Visible en menú PQRSD de DS DEGUV · luego «Por notificar»</span>';
     }else if(fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO){
       titulo='📬 Por notificar — PQRSD';
       const quien=wf.notificar_por?' · Encargado de notificar: <strong>'+escAttr(wf.notificar_por)+'</strong>':'';
-      hint='Oficio firmado listo para notificar al ciudadano'+(quien||'. VITAL, el responsable o el encargado pueden notificar.')+'.';
+      hint='Oficio firmado listo para notificar al ciudadano'+(quien||'. VITAL, el responsable o el encargado pueden notificar.')+'. Use la tarjeta <strong>Por notificar</strong> (ya no es «por ejecutar»).';
       if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e))
         btns='<button type="button" class="btn bsm bp" onclick="openPqrsNotificarOficioModal(\''+jsStr(expId)+'\')">📬 Notificar</button>';
-      else btns='<span style="font-size:11px;color:var(--tx2)">Pendiente de quien notifica</span>';
+      else btns='<span style="font-size:11px;color:var(--tx2)">Pendiente de quien notifica'+(wf.notificar_por?': '+escAttr(wf.notificar_por):'')+'</span>';
     }else if(fase===PQRS_WF.REVISION_FINAL){
       titulo='⏳ Revisión final de notificación';
       hint='El encargado debe aprobar la notificación reportada (presencial / WhatsApp / aviso).';
@@ -7108,6 +7150,11 @@ function confirmarCierreTask(expId,taskId){
   verificarTaskExp(expId,taskId,fechaCierre);
 }
 function estadoTaskLabel(t){
+  const eExp=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
+  if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&typeof pqrsEstadoActividadUi==='function'){
+    const ui=pqrsEstadoActividadUi(eExp);
+    if(ui&&ui.lbl)return ui.lbl;
+  }
   const e=estadoTask(t);
   if(e==='En ejecución')return'Por ejecutar';
   if(e==='Parcial'){
@@ -7118,8 +7165,14 @@ function estadoTaskLabel(t){
   if(e==='Por verificar')return(esModoResponsable()&&!esVistaActividadesDepto())?'Por verificar':'Por revisar';
   return e;
 }
-function taskEstadoStyle(est){
-  const e=est==='En ejecución'?'Por ejecutar':est;
+function taskEstadoStyle(est,tOpt){
+  if(tOpt){
+    const eExp=typeof getExpById==='function'?getExpById(tOpt.exp||tOpt.codigo):null;
+    if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(tOpt,eExp)&&typeof pqrsEstadoActividadUi==='function'){
+      const ui=pqrsEstadoActividadUi(eExp);
+      if(ui)return{bg:ui.bg,fg:ui.fg};
+    }
+  }
   if(est==='Atendida')return{bg:'var(--gnl)',fg:'var(--gn)'};
   if(est==='Parcial')return{bg:'var(--aml)',fg:'var(--am)'};
   if(est==='Por verificar')return{bg:'var(--bll)',fg:'var(--bl)'};
@@ -10502,7 +10555,7 @@ function taskRevisionDeptoLabel(rev){
   return rev.tipo==='aprobada'?'<span class="bdg" style="background:var(--gnl);color:var(--gn);font-size:10px;margin-left:4px" title="Revisada — aprobada">✓ Aprobada</span>':'<span class="bdg" style="background:var(--orl);color:var(--or);font-size:10px;margin-left:4px" title="Revisada — enviada a corregir">↩ A corregir</span>';
 }
 function renderActividadesRowHtml(t){
-  const est=estadoTask(t),lbl=estadoTaskLabel(t),st=taskEstadoStyle(est),vencE=est==='Vencida';
+  const est=estadoTask(t),lbl=estadoTaskLabel(t),st=taskEstadoStyle(est,t),vencE=est==='Vencida';
   const esEncOwn=esTareaDelEncargado(t);
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esEncOwn);
   const ns=(t.soportes||[]).length;
@@ -10533,20 +10586,30 @@ function renderActividadesRowHtml(t){
     acts+=taskChatBtnHtml(t.exp,t.id,t);
   }
   if(ns)acts+='<button type="button" class="btn bsm bic" title="'+ns+' documento(s) — ver o entregar soporte" onclick="event.stopPropagation();openTaskCommentsModal(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\')">📎</button>';
-  const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&taskPendienteVerificacion(t);
+  const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&taskPendienteVerificacion(t)&&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(canRevisarDept)acts+='<button type="button" class="btn bsm bp" title="Revisar entrega del responsable: verificar cierre o devolver" onclick="event.stopPropagation();openTaskCommentsModal(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\')">📋 Revisar</button>';
-  // Acciones de flujo oficio firmado (para firma / por notificar)
+  // Acciones de flujo oficio firmado (imprimir / firma Director / notificar)
   if(expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)&&typeof pqrsWorkflowFase==='function'){
     const faseWf=pqrsWorkflowFase(expAct);
     const eid=jsStr(expAct._exp||t.exp);
+    const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
     if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
-      const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
       const imp=!!(wfRow.impreso&&wfRow.impreso.en);
-      acts+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')">'+(imp?'✓ Impreso':'🖨 Por imprimir')+'</button>';
+      acts+='<button type="button" class="btn bsm" style="background:'+(imp?'#0f766e':'#1a7a4a')+';color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')">'+(imp?'✓ Impreso → firma':'🖨 Por imprimir')+'</button>';
+    }
+    if(faseWf===PQRS_WF.POR_FIRMAR){
+      const quienN=String(wfRow.notificar_por||'').trim();
+      acts+='<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e;font-size:10px" title="Impreso; pendiente firma del Director'+(quienN?'. Notificará: '+quienN:'')+'">🖊 Firma Director</span>';
+      if((typeof pqrsPuedeFirmarDirector==='function'&&pqrsPuedeFirmarDirector(expAct))||(typeof esCargoVital==='function'&&esCargoVital())||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())
+        acts+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')">⬆ Cargar firmado</button>';
     }
     if(faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO){
       if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
         acts+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+eid+'\')">📬 Notificar</button>';
+      else{
+        const quien=String(wfRow.notificar_por||'').trim();
+        acts+='<span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">📬 '+(quien?'Notifica: '+escAttr(quien):'Por notificar')+'</span>';
+      }
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
       acts+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+eid+'\')">✅ Aprobar notif.</button>';
@@ -10579,6 +10642,11 @@ function updateActEstFilterForEnc(forEnc){
     const showFirma=deptView||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esNcaDeguv==='function'&&esNcaDeguv());
     optFirma.hidden=!showFirma;
     optFirma.textContent=(typeof esCargoVital==='function'&&esCargoVital()&&!deptView)?'Por imprimir':'Para firma';
+  }
+  const optPorFirmar=sel.querySelector('option[value="porfirmar"]');
+  if(optPorFirmar){
+    const showPf=deptView||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esNcaDeguv==='function'&&esNcaDeguv())||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
+    optPorFirmar.hidden=!showPf;
   }
   const optNotif=sel.querySelector('option[value="pornotif"]');
   if(optNotif){
@@ -10902,6 +10970,8 @@ function esActividadPrioritariaPendiente(t){
   return true;
 }
 function esActividadPorEjecutar(t){
+  // Oficio en imprimir / firma Director / notificar: no es «por ejecutar»
+  if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
   if(esModoResponsable()&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo)){
     const est=estadoTaskForAsignado(t,responsableActivo);
     if(t.eliminada||est==='Atendida'||est==='Eliminada'||est==='Por verificar')return false;
@@ -11438,11 +11508,11 @@ function getTareasPqrsPorFaseWorkflow(matchFn){
   return out;
 }
 function filtrarActividadesPorEstado(list,filtro){
-  if(filtro==='venc')return list.filter(t=>estadoTask(t)==='Vencida');
-  if(filtro==='porver')return list.filter(t=>getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar');
-  if(filtro==='porcorr')return list.filter(t=>estadoTask(t)==='Por corregir');
   if(filtro==='parafirma'||filtro==='porimprimir'){
     return getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e);});
+  }
+  if(filtro==='porfirmar'){
+    return getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR;});
   }
   if(filtro==='pornotif'){
     return getTareasPqrsPorFaseWorkflow(function(e){
@@ -11450,6 +11520,12 @@ function filtrarActividadesPorEstado(list,filtro){
       return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
     });
   }
+  if(filtro==='porver')return list.filter(t=>{
+    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
+    return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
+  });
+  if(filtro==='venc')return list.filter(t=>estadoTask(t)==='Vencida'&&!(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t)));
+  if(filtro==='porcorr')return list.filter(t=>estadoTask(t)==='Por corregir');
   if(filtro==='done')return list.filter(t=>{
     if(esModoResponsable()&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo))return estadoTaskForAsignado(t,responsableActivo)==='Atendida';
     return estadoTask(t)==='Atendida';
@@ -11508,14 +11584,17 @@ function renderActividades(){
   const porEjec=all.filter(t=>esActividadPorEjecutar(t)).length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?(filterIsEnc?0:all.filter(t=>estadoTask(t)==='Por corregir').length):all.filter(t=>estadoTask(t)==='Por corregir').length;
-  const porrevisar=allTodos.filter(t=>getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar').length;
+  const porrevisar=allTodos.filter(t=>{
+    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
+    return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
+  }).length;
   const revisadosSrc=deptView?(filterIsEnc||!respFilter?allTodos:allBase):[];
   const revisados=deptView?revisadosSrc.filter(t=>taskEsRevisada(t)).length:0;
   const done=all.filter(t=>estadoTask(t)==='Atendida').length;
   const colSpan=deptView?9:8;
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
-  if(sub)sub.textContent=deptView?(filtroAct==='prior'?'Prioritarias: actividades con flag ⚡ que aún no han sido reportadas — al enviar entrega pasan a «Por revisar».':filtroAct==='pend'?'Por ejecutar: actividades en término, vencidas o prioritarias sin entrega reportada.':filtroAct==='porver'&&filterIsEnc?'Por revisar: actividades reportadas por los responsables del departamento (filtro de responsable: encargado).':filtroAct==='revisados'&&filterIsEnc?'Revisadas: actividades evaluadas por el departamento sobre todos los responsables — orden: devueltas a corregir, prioritarias, vencidas, a tiempo y aprobadas.':filtroAct==='revisados'&&respFilter&&!filterIsEnc?'Revisadas de '+respFilter+': solo las actividades de este responsable ya evaluadas por el departamento.':filtroAct==='revisados'?'Revisadas: actividades ya evaluadas por el departamento — indica si se aprobaron o se devolvieron para corregir.':'Filtre por responsable y rango de fechas (opcional). Use «Por revisar» para actividades reportadas por los responsables; desde ahí puede verificar el cierre o devolverlas.'):(filtroAct==='prior'?'Prioritarias: actividades marcadas ⚡ que aún no ha reportado — al enviar entrega pasan a «Por verificar».':filtroAct==='pend'?'Por ejecutar: actividades en término, vencidas o prioritarias sin entrega reportada.':'Reporte con 📤 → el departamento revisa en su menú de actividades. Use «Por verificar» para ver las que ya envió.');
+  if(sub)sub.textContent=deptView?(filtroAct==='prior'?'Prioritarias: actividades con flag ⚡ que aún no han sido reportadas — al enviar entrega pasan a «Por revisar».':filtroAct==='pend'?'Por ejecutar: actividades en término, vencidas o prioritarias sin entrega reportada.':filtroAct==='porver'&&filterIsEnc?'Por revisar: actividades reportadas por los responsables del departamento (filtro de responsable: encargado).':filtroAct==='revisados'&&filterIsEnc?'Revisadas: actividades evaluadas por el departamento sobre todos los responsables — orden: devueltas a corregir, prioritarias, vencidas, a tiempo y aprobadas.':filtroAct==='revisados'&&respFilter&&!filterIsEnc?'Revisadas de '+respFilter+': solo las actividades de este responsable ya evaluadas por el departamento.':filtroAct==='revisados'?'Revisadas: actividades ya evaluadas por el departamento — indica si se aprobaron o se devolvieron para corregir.':filtroAct==='porfirmar'?'Oficios impresos en espera de firma del Director (DS DEGUV). Tras firmar pasan a «Por notificar».':filtroAct==='pornotif'?'Oficios firmados listos para notificar al ciudadano (correo de oficina / medio físico).':'Filtre por responsable y rango de fechas (opcional). Use «Por revisar» para actividades reportadas por los responsables; desde ahí puede verificar el cierre o devolverlas.'):(filtroAct==='prior'?'Prioritarias: actividades marcadas ⚡ que aún no ha reportado — al enviar entrega pasan a «Por verificar».':filtroAct==='pend'?'Por ejecutar: actividades en término, vencidas o prioritarias sin entrega reportada (oficios en firma/notificación van en sus tarjetas).':filtroAct==='porfirmar'?'Ya impresos: esperan la firma del Director. Quien notificará se indica en el estado.':filtroAct==='pornotif'?'El Director ya firmó: notifique al ciudadano (o deje listo para el encargado si no hay correo de oficina).':'Reporte con 📤 → el departamento revisa en su menú de actividades. Use «Por verificar» para ver las que ya envió.');
   let metsHtml=
     actMetCard('venc','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div>')+
     actMetCard('pend','','<div class="v">'+porEjec+'</div><div class="l">Por ejecutar</div>')+
@@ -11524,15 +11603,17 @@ function renderActividades(){
   if(deptView)metsHtml+=actMetCard('revisados','border-left:3px solid var(--pu)','<div class="v" style="color:var(--pu)">'+revisados+'</div><div class="l">Revisadas</div>');
   if(!filterIsEnc||!deptView)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>');
   metsHtml+=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>');
-  // VITAL / encargado: contadores de firma y notificación PQRSD
+  // VITAL / encargado: imprimir → firma Director → notificar
   if(typeof esCargoVital==='function'&&esCargoVital()||deptView||(typeof esNcaDeguv==='function'&&esNcaDeguv())){
     const nPara=getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e);}).length;
+    const nPorFirmar=getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR;}).length;
     const nNotif=getTareasPqrsPorFaseWorkflow(function(e){
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
     }).length;
     const lblFirma=(typeof esCargoVital==='function'&&esCargoVital()&&!deptView)?'Por imprimir':'Para firma';
     metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">'+lblFirma+'</div>');
+    metsHtml+=actMetCard('porfirmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirmar+'</div><div class="l">Por firmar</div>');
     metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>');
   }
   if(mets)mets.innerHTML=metsHtml;
@@ -13149,7 +13230,10 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected){
   const names=new Set();
   const add=n=>{const v=String(n||'').trim();if(v)names.add(v);};
   add(enc);
-  add('VITAL');
+  // Usuarios con cargo VITAL (nombre real, no la etiqueta genérica)
+  (typeof _usuariosCache!=='undefined'?_usuariosCache:[]).forEach(function(u){
+    if(u&&u.activo!==false&&String(u.cargo||'').toLowerCase()==='vital')add(u.nombre);
+  });
   add(wf&&wf.entregado_por);
   add(wf&&wf.notificar_por);
   add(selected);
@@ -13161,11 +13245,14 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected){
   const cur=String(selected||(wf&&wf.notificar_por)||(wf&&wf.entregado_por)||enc||'').trim();
   let opts='<option value="">— Quien proyectó / VITAL / encargado —</option>';
   [...names].sort((a,b)=>a.localeCompare(b,'es')).forEach(n=>{
-    opts+='<option value="'+escAttr(n)+'"'+(cur===n?' selected':'')+'>'+escAttr(n)+(n===enc?' · Encargado':'')+(n===(wf&&wf.entregado_por)?' · Proyectó':'')+'</option>';
+    const esVitalUser=(typeof _usuariosCache!=='undefined'?_usuariosCache:[]).some(function(u){
+      return u&&agendaNorm(u.nombre||'')===agendaNorm(n)&&String(u.cargo||'').toLowerCase()==='vital';
+    });
+    opts+='<option value="'+escAttr(n)+'"'+(cur===n?' selected':'')+'>'+escAttr(n)+(n===enc?' · Encargado':'')+(n===(wf&&wf.entregado_por)?' · Proyectó':'')+(esVitalUser?' · VITAL':'')+'</option>';
   });
-  return '<div class="fld" style="margin-bottom:10px"><label>Quién notificará al ciudadano <span style="font-weight:400;color:var(--tx3)">(si es distinto de quien proyectó)</span></label>'+
+  return '<div class="fld" style="margin-bottom:10px"><label>Quién notificará al ciudadano <span style="font-weight:400;color:var(--tx3)">(después de la firma del Director)</span></label>'+
     '<select id="pqrs-notif-por-sel" style="width:100%;max-width:360px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;margin-top:4px">'+opts+'</select>'+
-    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">VITAL y el encargado también pueden notificar. El correo al ciudadano solo sale desde el Gmail de la oficina.</div></div>';
+    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Tras imprimir y firmar, esa persona verá la PQRSD en <strong>Por notificar</strong>. El correo al ciudadano solo sale desde el Gmail de la oficina.</div></div>';
 }
 function openPqrsParaFirmaModal(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -13237,7 +13324,7 @@ async function pqrsMarcarListoParaFirmaDirector(expId){
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
-  notif('🖊 PQRSD enviada a «Por firmar» (DS DEGUV)','ok');
+  notif('🖊 Oficio impreso enviado a «Por firmar» (Director). Cuando firme, pasará a «Por notificar»'+(notifPor?' para '+notifPor:''),'ok');
 }
 
 function openPqrsDirectorFirmarModal(expId){
