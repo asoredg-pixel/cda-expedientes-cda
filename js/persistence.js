@@ -247,6 +247,8 @@ async function loadLS(){
       if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
       if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
+      if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function')setMantenimientoEstadoLocal(g.mantenimiento);
+      else if(typeof setMantenimientoEstadoLocal==='function')setMantenimientoEstadoLocal({activo:false});
       if(typeof pqrsMatrizApplySheetIdFromGlobal==='function')pqrsMatrizApplySheetIdFromGlobal(g);
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
     }
@@ -432,6 +434,24 @@ async function saveDeptMeta(deptoId){
     return false;
   }
 }
+async function persistMantenimientoFirestore(data){
+  const db=window._db;
+  if(!db||!window._fsSetDoc){notif('Firestore no disponible','err');return false;}
+  const payload=typeof normalizeMantenimiento==='function'?normalizeMantenimiento(data):data;
+  setMantenimientoEstadoLocal(payload);
+  try{
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+      mantenimiento:payload,
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.error('persistMantenimientoFirestore:',err);
+    notif('No se pudo guardar el modo mantenimiento','err');
+    return false;
+  }
+}
+window.persistMantenimientoFirestore=persistMantenimientoFirestore;
 async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
@@ -443,6 +463,7 @@ async function saveGlobalFirestore(){
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
+      mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
       usuariosIndex:_usuariosCache.map(u=>({
         email:String(u.email||'').trim().toLowerCase(),
         nombre:u.nombre||'',
@@ -705,6 +726,7 @@ async function saveFirestore(){
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
+      mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
       usuariosIndex:_usuariosCache.map(u=>({
         email:String(u.email||'').trim().toLowerCase(),
         nombre:u.nombre||'',
@@ -862,6 +884,9 @@ function initRealtimeGlobalSync(){
     if(_localSaving||!snap.exists())return;
     const g=snap.data()||{};
     let changed=false;
+    if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
+      setMantenimientoEstadoLocal(g.mantenimiento);
+    }
     if(g.encargadosGlobal){
       encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
       if(typeof syncEncargadosGlobalToInstructores==='function')syncEncargadosGlobalToInstructores();

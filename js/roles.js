@@ -378,11 +378,66 @@ function mergeExpDataPorSecciones(data,prev,secs){
   return out;
 }
 function esSoloLectura(){
+  if(typeof esMantenimientoActivo==='function'&&esMantenimientoActivo())return true;
   if(esModoCiudadano())return true;
   if(esJurisdiccional())return true;
   if(esModoContratista())return true;
   if(esModoResponsable())return !responsablePuedeVerRegistro();
   return false;
+}
+function esMantenimientoActivo(){
+  return !!(typeof mantenimientoEstado!=='undefined'&&mantenimientoEstado&&mantenimientoEstado.activo);
+}
+/** Bloquea mutaciones cuando el modo mantenimiento está activo. Devuelve true si hay que abortar. */
+function guardMantenimientoSoloConsulta(msg){
+  if(!esMantenimientoActivo())return false;
+  if(typeof notif==='function')notif(msg||'Modo mantenimiento: solo consulta. No se pueden modificar datos ni adjuntar archivos.','err');
+  return true;
+}
+window.guardMantenimientoSoloConsulta=guardMantenimientoSoloConsulta;
+function normalizeMantenimiento(raw){
+  raw=raw&&typeof raw==='object'?raw:{};
+  return{
+    activo:!!raw.activo,
+    restableceAt:String(raw.restableceAt||raw.restablece||'').trim(),
+    mensaje:String(raw.mensaje||'').trim(),
+    por:String(raw.por||'').trim(),
+    desde:String(raw.desde||'').trim()
+  };
+}
+function fmtMantenimientoRestablece(iso){
+  const s=String(iso||'').trim();
+  if(!s)return'—';
+  const d=new Date(s);
+  if(isNaN(d.getTime()))return s.replace('T',' ').slice(0,16);
+  const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes());
+}
+function aplicarModoMantenimientoUI(){
+  const on=esMantenimientoActivo();
+  document.body.classList.toggle('modo-mantenimiento',on);
+  const ban=document.getElementById('mant-banner');
+  if(ban){
+    if(on){
+      const when=fmtMantenimientoRestablece(mantenimientoEstado.restableceAt);
+      const extra=mantenimientoEstado.mensaje?(' · '+mantenimientoEstado.mensaje):'';
+      ban.innerHTML='🛠️ <strong>Modo mantenimiento</strong> — solo consulta. Restablecimiento estimado: <strong>'+escAttr(when)+'</strong>'+escAttr(extra)+
+        (typeof esAdministrador==='function'&&esAdministrador()?' <button type="button" class="btn bsm mant-ok" style="margin-left:10px;background:#fff;color:#7c2d12;border:none" onclick="showTab(\'cfg\');showCfgTab(\'listas\')">Configurar</button>':'');
+    }else ban.innerHTML='';
+  }
+  if(document.body.classList.contains('sesion-activa')&&typeof aplicarVisibilidadTabsSesion==='function'){
+    aplicarVisibilidadTabsSesion();
+  }
+  if(on&&document.body.classList.contains('sesion-activa')){
+    const pg=document.querySelector('.pg.on');
+    const cur=pg&&pg.id?pg.id.slice(3):'';
+    const ok=esAdministrador()?(['con','cfg','cons','ciudadano'].includes(cur)):(['con','cons','ciudadano'].includes(cur));
+    if(cur&&cur!=='login'&&!ok&&typeof showTab==='function')showTab(esModoCiudadano()?'ciudadano':'con');
+  }
+}
+function setMantenimientoEstadoLocal(data){
+  mantenimientoEstado=normalizeMantenimiento(data);
+  aplicarModoMantenimientoUI();
 }
 function getDeptoOperativo(){
   if(esJurisdiccional())return deptoCfg||'guaviare';
@@ -1010,6 +1065,13 @@ function getBibliotecaDriveRootId(deptoCtx){
 // Pestañas visibles por rol / módulo activo (menú principal)
 function getTabsVisiblesSesion(){
   const G='gmail-ofi',S='sec',P='pqrs-ofi',R='reg',A='act',Gnd='agenda',C='con',Rec='rec',Co='cons',Cfg='cfg',Ciu='ciudadano';
+  // Mantenimiento: solo consulta (admin también Config para apagar el modo)
+  if(typeof esMantenimientoActivo==='function'&&esMantenimientoActivo()){
+    if(esModoCiudadano())return[Ciu];
+    if(esAdministrador())return[C,Co,Cfg];
+    if(esJurisdiccional())return[C,Co];
+    return[C];
+  }
   const deptTabs=[G,R,A,Gnd,Rec,C,Co,Cfg];
   if(esModoCiudadano())return[Ciu];
   if(esJurisdiccional())return[C,Co];

@@ -7398,6 +7398,77 @@ function canDeptVerificarCierre(t){
   t=normalizeTask(t);
   return!t.eliminada&&estadoTask(t)!=='Atendida'&&getTaskResponsables(t).length>0;
 }
+function _pqrsDocsSeparados(wf){
+  const docs=((wf&&wf.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink||d.url));
+  return{
+    docs:docs,
+    oficios:docs.filter(function(d){return !_pqrsDocEsAnexoRespuesta(d);}),
+    anexos:docs.filter(_pqrsDocEsAnexoRespuesta)
+  };
+}
+/** Botones de icono: proyección + anexos (por imprimir / firmar / notificar). */
+function _pqrsActDocsIconBtnsHtml(wf,opts){
+  opts=opts||{};
+  const sep=_pqrsDocsSeparados(wf);
+  let h='';
+  const ofic=sep.oficios[0]||null;
+  if(ofic){
+    const u=typeof _pqrsDocDriveUrls==='function'?_pqrsDocDriveUrls(ofic):{view:ofic.driveLink||ofic.previewLink};
+    const view=String((u&&u.view)||ofic.driveLink||ofic.previewLink||'').replace(/\/preview(\?.*)?$/,'/view');
+    if(view)h+='<a class="btn bsm act-ico" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e" title="Ver proyección / oficio">👁</a>';
+  }
+  if(sep.anexos.length){
+    const expId=String(opts.expId||'').trim();
+    h+='<button type="button" class="btn bsm act-ico" style="background:#5b21b6;color:#fff;border-color:#5b21b6" onclick="event.stopPropagation();openPqrsAnexosModal(\''+escAttr(expId)+'\')" title="Ver anexos ('+sep.anexos.length+')">📎'+(sep.anexos.length>1?'<span style="font-size:10px;margin-left:2px">'+sep.anexos.length+'</span>':'')+'</button>';
+  }
+  return h;
+}
+function openPqrsAnexosModal(expId){
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const sep=_pqrsDocsSeparados(wf);
+  if(!sep.anexos.length){notif('Esta entrega no tiene anexos','warn');return;}
+  if(typeof confirmExito==='function'){
+    let detail=sep.anexos.map(function(d,i){
+      const u=typeof _pqrsDocDriveUrls==='function'?_pqrsDocDriveUrls(d):{view:d.driveLink||d.previewLink};
+      const view=String((u&&u.view)||d.driveLink||'');
+      const lbl=_pqrsEtiquetaDocWf(d,sep.docs)||('Anexo '+(i+1));
+      return lbl+(view?' → '+view:'');
+    }).join('\n');
+    // Overlay propio sencillo con enlaces clicables
+  }
+  abrirPqrsModalPrep();
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body)return;
+  if(tit)tit.textContent='Anexos — '+expId;
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.remove('task-modal-firma');}
+  const oficHtml=sep.oficios.length
+    ?('<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--tx2)">Proyección / oficio</div>'+
+      sep.oficios.map(function(d){
+        const u=_pqrsDocDriveUrls(d);
+        return '<div style="margin-bottom:6px"><a class="btn bsm" href="'+escAttr(u.view||u.preview)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e;text-decoration:none">👁 '+escAttr(_pqrsEtiquetaDocWf(d,sep.docs))+'</a></div>';
+      }).join(''))
+    :'';
+  const anxHtml='<div style="font-size:12px;font-weight:600;margin:10px 0 6px;color:var(--tx2)">Anexos ('+sep.anexos.length+')</div>'+
+    sep.anexos.map(function(d){
+      const u=_pqrsDocDriveUrls(d);
+      return '<div style="margin-bottom:8px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+        '<div style="font-size:13px;font-weight:600;margin-bottom:6px">📎 '+escAttr(_pqrsEtiquetaDocWf(d,sep.docs))+'</div>'+
+        '<div class="fx" style="gap:6px;flex-wrap:wrap">'+
+        (u.view?'<a class="btn bsm act-ico" href="'+escAttr(u.view)+'" target="_blank" rel="noopener" style="background:#5b21b6;color:#fff;border-color:#5b21b6;text-decoration:none" title="Ver anexo">👁</a>':'')+
+        (u.download?'<a class="btn bsm act-ico" href="'+escAttr(u.download)+'" target="_blank" rel="noopener" style="text-decoration:none" title="Descargar">⬇</a>':'')+
+        '</div></div>';
+    }).join('');
+  body.innerHTML='<div style="font-size:13px;font-weight:600;margin-bottom:8px">Documentos de la respuesta — '+escAttr(expId)+'</div>'+
+    oficHtml+anxHtml+
+    '<div class="fx" style="gap:8px;margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+  ov.classList.add('on');
+  window._taskModalCtx={mode:'pqrsAnexos',expId};
+}
 function _pqrsHtmlDocsWfLinks(wf){
   const docs=((wf&&wf.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));
   if(!docs.length)return'';
@@ -11063,6 +11134,7 @@ function onDeptoChange(){
 function updateDeptoUI(){
   if(esVistaActividadesDepto())ensureEncargadoActivo();
   if(esModoResponsable()&&esResponsableIdentidadFija())fijarResponsableSesion();
+  if(typeof aplicarModoMantenimientoUI==='function')aplicarModoMantenimientoUI();
   const ban=document.getElementById('reg-depto-banner');
   const respBar=document.getElementById('resp-global-bar');
   const sub=document.querySelector('.lsb');
@@ -11075,7 +11147,8 @@ function updateDeptoUI(){
   const ofi=esModoOficinaDeguv();
   const ofiVista=esVistaPqrsOficinaDeguv();
   const ofiNom=ofi?labelOficina(deptoActivo):(ofiVista&&deptoActivo==='guaviare'?'NCA DEGUV':'');
-  if(sub)sub.textContent=juris?'Vista jurisdiccional — solo consulta y consolidado':ciudadano?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':sec?'Secretaría DEGUV — radicación y traslado de PQRSD a oficinas':ofi?('Oficina: '+ofiNom+' — bandeja de PQRSD trasladados'):resp?(responsableActivo?(responsablePuedeVerRegistro()?'Vista responsable — edición parcial en Registro según permisos':'Vista responsable — Consulta y actividades'):'Seleccione responsable'):esAdminModoGlobal()?('Administrador — vista global'):encDepto?('Departamento: '+labelDepartamento(deptoActivo)+' · Encargado: '+encNom):esNcaDeguv()?('Departamento: '+labelDepartamento('guaviare')+' · Encargado: '+encNom):esRolDepartamentalCfg()?('Departamento: '+labelDepartamento(getRolEfectivo())+' · Encargado: '+encNom):'Departamento: '+labelDepartamento(getDeptoOperativo());
+  const mantOn=typeof esMantenimientoActivo==='function'&&esMantenimientoActivo();
+  if(sub)sub.textContent=mantOn?('🛠️ Mantenimiento — solo consulta · restablece '+((typeof fmtMantenimientoRestablece==='function'&&mantenimientoEstado)?fmtMantenimientoRestablece(mantenimientoEstado.restableceAt):'—')):juris?'Vista jurisdiccional — solo consulta y consolidado':ciudadano?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':sec?'Secretaría DEGUV — radicación y traslado de PQRSD a oficinas':ofi?('Oficina: '+ofiNom+' — bandeja de PQRSD trasladados'):resp?(responsableActivo?(responsablePuedeVerRegistro()?'Vista responsable — edición parcial en Registro según permisos':'Vista responsable — Consulta y actividades'):'Seleccione responsable'):esAdminModoGlobal()?('Administrador — vista global'):encDepto?('Departamento: '+labelDepartamento(deptoActivo)+' · Encargado: '+encNom):esNcaDeguv()?('Departamento: '+labelDepartamento('guaviare')+' · Encargado: '+encNom):esRolDepartamentalCfg()?('Departamento: '+labelDepartamento(getRolEfectivo())+' · Encargado: '+encNom):'Departamento: '+labelDepartamento(getDeptoOperativo());
   const selDepto=document.getElementById('sel-depto');
   if(selDepto)selDepto.style.display=esAdministrador()?'':'none';
   const tabAud=document.getElementById('ctab-auditoria');
@@ -11266,23 +11339,20 @@ function renderActividadesRowHtml(t){
     const eid=jsStr(expAct._exp||t.exp);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
     if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
-      const docsImp=((wfRow.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));
-      if(docsImp.length){
-        const u0=docsImp[0].driveLink||docsImp[0].previewLink;
-        const view=String(u0||'').replace(/\/preview(\?.*)?$/,'/view');
-        acts+='<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e" title="Ver archivo aprobado para imprimir">👁 Ver archivo</a>';
-      }
-      acts+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')" title="Imprimir y pasar a firma del Director">🖊 Pasar a firma</button>';
+      acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
+      acts+='<button type="button" class="btn bsm act-ico act-ico-with-lbl" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+eid+'\')" title="Imprimir y pasar a firma del Director">🖊<span class="act-ico-lbl">Firma</span></button>';
     }
     if(faseWf===PQRS_WF.POR_FIRMAR){
       const quienN=String(wfRow.notificar_por||'').trim();
-      acts+='<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e;font-size:10px" title="Impreso; pendiente firma del Director'+(quienN?'. Notificará: '+quienN:'')+'">🖊 Por firmar</span>';
+      acts+='<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e;font-size:10px" title="Impreso; pendiente firma del Director'+(quienN?'. Notificará: '+quienN:'')+'">🖊</span>';
+      acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
       if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-        acts+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')">🖊 Firmar</button>';
+        acts+='<button type="button" class="btn bsm act-ico act-ico-with-lbl" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')" title="Firmar">🖊<span class="act-ico-lbl">Firmar</span></button>';
     }
     if(faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO){
+      acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
       if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
-        acts+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+eid+'\')">📬 Notificar</button>';
+        acts+='<button type="button" class="btn bsm act-ico act-ico-with-lbl bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+eid+'\')" title="Notificar">📬<span class="act-ico-lbl">Notificar</span></button>';
       else{
         const quien=String(wfRow.notificar_por||'').trim();
         acts+='<span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">📬 '+(quien?'Notifica: '+escAttr(quien):'Por notificar')+'</span>';
@@ -14118,6 +14188,7 @@ function _pqrsLeerNotifPorSel(id){
   return String((document.getElementById(id||'pqrs-notif-por-sel')||{}).value||'').trim();
 }
 function openPqrsParaFirmaModal(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   if(!pqrsPuedeMarcarParaFirma(e)){notif('Solo VITAL o el encargado pueden preparar la firma','err');return;}
@@ -14130,19 +14201,32 @@ function openPqrsParaFirmaModal(expId){
   if(tit)tit.textContent='Por imprimir — '+expId;
   if(modal)modal.classList.add('task-modal-wide');
   const wf=getPqrsWorkflow(e);
-  const docs=(wf.documentos||[]).filter(d=>d&&(d.driveLink||d.previewLink));
-  const docsHtml=docs.length
-    ?docs.map(d=>{
-        const url=d.driveLink||d.previewLink;
-        const view=String(url||'').replace(/\/preview(\?.*)?$/,'/view');
-        return '<div style="font-size:12px;margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
-          '<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e">👁 Ver archivo aprobado</a> '+
-          '<span style="color:var(--tx2)">'+escAttr(d.nombre||'Documento')+'</span></div>';
-      }).join('')
-    :'<div style="font-size:12px;color:var(--tx3)">Sin documento en Drive — revise la entrega del responsable.</div>';
+  const sep=_pqrsDocsSeparados(wf);
+  let docsHtml='';
+  if(sep.oficios.length){
+    docsHtml+='<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--tx2)">Proyección / oficio (imprimir)</div>';
+    docsHtml+=sep.oficios.map(function(d){
+      const u=_pqrsDocDriveUrls(d);
+      return '<div style="font-size:12px;margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<a class="btn bsm act-ico" href="'+escAttr(u.view||u.preview)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e;text-decoration:none" title="Ver proyección">👁</a> '+
+        (u.download?'<a class="btn bsm act-ico" href="'+escAttr(u.download)+'" target="_blank" rel="noopener" style="text-decoration:none" title="Descargar">⬇</a> ':'')+
+        '<span style="color:var(--tx2)">'+escAttr(_pqrsEtiquetaDocWf(d,sep.docs))+'</span></div>';
+    }).join('');
+  }
+  if(sep.anexos.length){
+    docsHtml+='<div style="font-size:12px;font-weight:600;margin:12px 0 6px;color:var(--tx2)">Anexos (revisar / imprimir si aplica)</div>';
+    docsHtml+=sep.anexos.map(function(d){
+      const u=_pqrsDocDriveUrls(d);
+      return '<div style="font-size:12px;margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<a class="btn bsm act-ico" href="'+escAttr(u.view||u.preview)+'" target="_blank" rel="noopener" style="background:#5b21b6;color:#fff;border-color:#5b21b6;text-decoration:none" title="Ver anexo">📎</a> '+
+        (u.download?'<a class="btn bsm act-ico" href="'+escAttr(u.download)+'" target="_blank" rel="noopener" style="text-decoration:none" title="Descargar anexo">⬇</a> ':'')+
+        '<span style="color:var(--tx2)">'+escAttr(_pqrsEtiquetaDocWf(d,sep.docs))+'</span></div>';
+    }).join('');
+  }
+  if(!docsHtml)docsHtml='<div style="font-size:12px;color:var(--tx3)">Sin documento en Drive — revise la entrega del responsable.</div>';
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖨 Por imprimir — pasar a firma del Director — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Abra el archivo aprobado, imprímalo y use <strong>Pasar a firma</strong>. Quedará en «Por firmar» para el Director. Indique quién notificará después de la firma (VITAL o el encargado pueden hacer este flujo).</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Revise la <strong>proyección</strong> y los <strong>anexos</strong>, imprima lo necesario y use <strong>Pasar a firma</strong>. Quedará en «Por firmar» para el Director.</div>'+
     '<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Resumen aprobado</div>'+
     '<div style="font-size:12px;white-space:pre-wrap;margin-bottom:6px">'+escAttr(wf.cuerpo||'—')+'</div>'+
@@ -14157,6 +14241,7 @@ function openPqrsParaFirmaModal(expId){
 }
 /** Impreso + envío a firma del Director en un solo paso. */
 async function pqrsPasarAFirmaDirector(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede pasar esta PQRSD a firma','err');return;}
   const wf=getPqrsWorkflow(e);
@@ -14207,6 +14292,7 @@ function _pqrsDirectorInfoFirmaReadonlyHtml(e,wf){
     '</div>';
 }
 function openPqrsDirectorFirmarModal(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const esDirector=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
@@ -14456,6 +14542,7 @@ async function pqrsDirectorConfirmarFirmadoYNotificar(expId){
 }
 
 function openPqrsNotificarOficioModal(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   if(!pqrsPuedeNotificarOficio(e)){notif('No puede notificar esta PQRSD','err');return;}

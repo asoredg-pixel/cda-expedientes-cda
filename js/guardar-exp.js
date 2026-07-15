@@ -132,7 +132,7 @@ function guardarExp(stayOnForm){
   }
 }
 function guardarExpCore(stayOnForm){
-  if(esSoloLectura()){notif('En este modo no puede modificar expedientes','err');return;}
+  if(esSoloLectura()){notif((typeof esMantenimientoActivo==='function'&&esMantenimientoActivo())?'Modo mantenimiento: solo consulta':'En este modo no puede modificar expedientes','err');return;}
   let tid=(document.getElementById('r_tramite')||{}).value||'';
   if(!tid&&editId){const exT=exps.find(x=>x._exp===editId);if(exT)tid=exT._tramite||'';}
   if(!tid){notif('Seleccione un tipo de trámite','err');return;}

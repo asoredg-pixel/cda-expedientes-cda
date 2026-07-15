@@ -512,8 +512,39 @@ function ingresarComoRol(rolId,respNombre){
   updateHeaderUsuario();
   if(typeof sstIniciarGmailObligatorio==='function')sstIniciarGmailObligatorio();
   setTimeout(()=>maybeShowExportReminder(),800);
+  startIdleSessionWatch();
 }
+/** 1 hora sin actividad (mouse/teclado/toque) → cierre forzado de sesión. */
+const SST_IDLE_MS=60*60*1000;
+const SST_IDLE_CHECK_MS=30000;
+let _idleTimer=null;
+let _idleLastActivity=0;
+function _idleBumpActivity(){_idleLastActivity=Date.now();}
+function stopIdleSessionWatch(){
+  if(_idleTimer){clearInterval(_idleTimer);_idleTimer=null;}
+  ['mousemove','mousedown','keydown','touchstart','scroll','click','wheel'].forEach(function(ev){
+    window.removeEventListener(ev,_idleBumpActivity,true);
+  });
+}
+function startIdleSessionWatch(){
+  stopIdleSessionWatch();
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano())return;
+  _idleLastActivity=Date.now();
+  ['mousemove','mousedown','keydown','touchstart','scroll','click','wheel'].forEach(function(ev){
+    window.addEventListener(ev,_idleBumpActivity,{capture:true,passive:true});
+  });
+  _idleTimer=setInterval(function(){
+    if(!document.body.classList.contains('sesion-activa')){stopIdleSessionWatch();return;}
+    if(Date.now()-_idleLastActivity<SST_IDLE_MS)return;
+    stopIdleSessionWatch();
+    if(typeof notif==='function')notif('Sesión cerrada por inactividad (1 hora). Vuelva a iniciar sesión.','err');
+    try{cerrarSesionGoogle();}catch(e){try{salirDeSesionApp();}catch(x){}}
+  },SST_IDLE_CHECK_MS);
+}
+window.startIdleSessionWatch=startIdleSessionWatch;
+window.stopIdleSessionWatch=stopIdleSessionWatch;
 function salirDeSesionApp(){
+  stopIdleSessionWatch();
   const email=window._usuarioActual&&window._usuarioActual.email;
   rolSesion=null;
   deptoActivo='guaviare';

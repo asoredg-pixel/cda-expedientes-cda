@@ -359,6 +359,7 @@ function renderListasCfg(){
     let html='';
     if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','Asignación automática según el rol en Usuarios autorizados (Secretaría, NCA, departamentos y oficinas DEGUV).',encargadosGlobalCardBody(),false)+
       cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
+    if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Modo mantenimiento','Congela la aplicación para ajustes: los funcionarios pueden entrar y consultar, pero no diligenciar ni adjuntar. Indique fecha y hora de restablecimiento.',mantenimientoCfgCardBody(),false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Recursos (enlaces y biblioteca)','Enlaces externos y repositorios Drive por ámbito: sistema, departamento u oficina.',typeof recursosCfgCardBody==='function'?recursosCfgCardBody():'',false);
     html+=cfgSectionFold('Actividades predeterminadas','Crea opciones reutilizables para buscarlas al asignar actividades en el registro.',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
@@ -371,6 +372,61 @@ function renderListasCfg(){
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
   });
 }
+function _mantDtLocalValue(iso){
+  const s=String(iso||'').trim();
+  if(!s)return'';
+  const d=new Date(s);
+  if(isNaN(d.getTime()))return'';
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());
+}
+function mantenimientoCfgCardBody(){
+  const m=typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado): (mantenimientoEstado||{});
+  const on=!!m.activo;
+  return '<div class="cfcard">'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Al activarlo, toda la app queda en <strong>solo consulta</strong> (sin adjuntar, diligenciar ni cambiar estados). Úselo cuando entre en operación o haya fallas/ajustes para evitar conflictos. Los usuarios verán un aviso con la fecha y hora de restablecimiento.</p>'+
+    '<div class="fg" style="margin-bottom:10px">'+
+    '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="cfg-mant-activo" '+(on?'checked':'')+'> Activar modo mantenimiento</label></div>'+
+    '<div class="fld"><label for="cfg-mant-restablece">Fecha y hora de restablecimiento</label><input type="datetime-local" id="cfg-mant-restablece" value="'+escAttr(_mantDtLocalValue(m.restableceAt))+'"></div>'+
+    '</div>'+
+    '<div class="fld" style="margin-bottom:12px"><label for="cfg-mant-msg">Mensaje opcional (visible en el aviso)</label><input type="text" id="cfg-mant-msg" maxlength="180" placeholder="Ej. Ajustes de sincronización Drive" value="'+escAttr(m.mensaje||'')+'"></div>'+
+    (on?'<div style="font-size:12px;color:#7c2d12;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:12px">🛠️ Mantenimiento <strong>activo</strong>'+(m.restableceAt?' · Restablece: '+escAttr((typeof fmtMantenimientoRestablece==='function'?fmtMantenimientoRestablece(m.restableceAt):m.restableceAt)):'')+(m.por?' · Por: '+escAttr(m.por):'')+'</div>':'')+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+    '<button type="button" class="btn bsm bp mant-ok" onclick="guardarModoMantenimientoCfg(true)">Activar / actualizar</button>'+
+    '<button type="button" class="btn bsm mant-ok" onclick="guardarModoMantenimientoCfg(false)">Desactivar</button>'+
+    '</div></div>';
+}
+async function guardarModoMantenimientoCfg(activar){
+  if(!(esAdministrador()||esAdminFirestore())){notif('Solo el administrador puede cambiar el modo mantenimiento','err');return;}
+  const chk=document.getElementById('cfg-mant-activo');
+  const dtEl=document.getElementById('cfg-mant-restablece');
+  const msgEl=document.getElementById('cfg-mant-msg');
+  const wantOn=activar===true?true:(activar===false?false:!!(chk&&chk.checked));
+  const dtLocal=dtEl?String(dtEl.value||'').trim():'';
+  let restableceAt='';
+  if(dtLocal){
+    const d=new Date(dtLocal);
+    if(isNaN(d.getTime())){notif('Fecha/hora de restablecimiento inválida','err');return;}
+    restableceAt=d.toISOString();
+  }
+  if(wantOn&&!restableceAt){notif('Indique la fecha y hora estimada de restablecimiento','err');return;}
+  const por=(window._usuarioActual&&(window._usuarioActual.nombre||window._usuarioActual.email))||responsableActivo||rolSesion||'admin';
+  const payload={
+    activo:wantOn,
+    restableceAt:wantOn?restableceAt:'',
+    mensaje:msgEl?String(msgEl.value||'').trim():'',
+    por:String(por).trim(),
+    desde:wantOn?(mantenimientoEstado&&mantenimientoEstado.activo&&mantenimientoEstado.desde?mantenimientoEstado.desde:new Date().toISOString()):''
+  };
+  if(typeof persistMantenimientoFirestore!=='function'){notif('No se pudo guardar (Firestore)','err');return;}
+  const ok=await persistMantenimientoFirestore(payload);
+  if(ok){
+    notif(wantOn?'Modo mantenimiento activado — solo consulta hasta el restablecimiento':'Modo mantenimiento desactivado','ok');
+    if(typeof updateDeptoUI==='function')updateDeptoUI();
+    renderListasCfg();
+  }
+}
+window.guardarModoMantenimientoCfg=guardarModoMantenimientoCfg;
 function tiposSancionatorioCardBody(){
   const tipos=cfg.tiposSancionatorio||[];
   return '<div class="cfcard"><ul class="cfl cfl-vertical">'+

@@ -104,7 +104,33 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-
 .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
 .fld textarea{resize:vertical;min-height:58px}
 .req-star{color:var(--rd);font-size:11px;margin-left:2px}
-.btn{padding:6px 13px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf);color:var(--tx);font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
+.btn{padding:6px 13px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf);color:var(--tx);font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none}
+.btn.act-ico{min-width:36px;justify-content:center;padding:6px 9px;font-size:15px;line-height:1}
+.btn.act-ico .act-ico-lbl{display:none}
+@media(min-width:900px){
+  .btn.act-ico.act-ico-with-lbl{gap:5px}
+  .btn.act-ico.act-ico-with-lbl .act-ico-lbl{display:inline}
+}
+.mant-banner{display:none;position:sticky;top:0;z-index:240;background:#7c2d12;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+body.modo-mantenimiento .mant-banner{display:block}
+body.modo-mantenimiento .mant-banner strong{font-weight:700}
+body.modo-mantenimiento .tabsi .tab[data-mant-block]{opacity:.45;pointer-events:none}
+/* En mantenimiento: bloquea edición en pantallas operativas (consulta y cfg admin siguen usables) */
+body.modo-mantenimiento #pg-reg input,
+body.modo-mantenimiento #pg-reg select,
+body.modo-mantenimiento #pg-reg textarea,
+body.modo-mantenimiento #pg-reg button:not(.mant-ok),
+body.modo-mantenimiento #pg-act input,
+body.modo-mantenimiento #pg-act select,
+body.modo-mantenimiento #pg-act textarea,
+body.modo-mantenimiento #pg-sec input[type=file],
+body.modo-mantenimiento #pg-pqrs-ofi input[type=file],
+body.modo-mantenimiento #pg-gmail-ofi input[type=file]{pointer-events:none!important;opacity:.55}
+body.modo-mantenimiento #pg-cfg .cfcard:not(:has(#cfg-mant-activo)) input,
+body.modo-mantenimiento #pg-cfg .cfcard:not(:has(#cfg-mant-activo)) select,
+body.modo-mantenimiento #pg-cfg .cfcard:not(:has(#cfg-mant-activo)) textarea,
+body.modo-mantenimiento #pg-cfg .cfcard:not(:has(#cfg-mant-activo)) button:not(.mant-ok){pointer-events:none;opacity:.55}
 .btn:hover{background:var(--sf2);border-color:var(--bl)}
 .bp{background:var(--bl);color:#fff;border-color:var(--bl)}.bp:hover{background:var(--bld)}
 .bd2{background:var(--rd);color:#fff;border-color:var(--rd)}.bd2:hover{background:#791f1f}

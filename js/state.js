@@ -38,6 +38,8 @@ let encargadosGlobal=null;
 let recursosEnlaces=[];
 let bibliotecaRepos=[];
 let recursosConfig={guainiaDriveRoot:'',vaupesDriveRoot:''};
+/** Modo mantenimiento global (Firestore sistema/global.mantenimiento). */
+let mantenimientoEstado={activo:false,restableceAt:'',mensaje:'',por:'',desde:''};
 let authUsuario=null;
 let _localSaving=false;
 let _fsUnsub=null;
