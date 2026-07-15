@@ -230,6 +230,15 @@ function secRadicacionBusy(busy){
   });
 }
 function mostrarRadicacionPqrsProgreso(soloRadicar){
+  if(typeof sstCargaShow==='function'){
+    sstCargaShow({
+      title:soloRadicar?'Radicando PQRSD':'Radicando y trasladando',
+      message:'Generando soporte PDF y registrando la solicitud…',
+      sub:'Espere mientras se completa la carga',
+      pct:null
+    });
+    return;
+  }
   if(typeof confirmExito!=='function')return;
   confirmExito({
     title:soloRadicar?'Radicando PQRSD':'Radicando y trasladando',
@@ -243,13 +252,17 @@ function notificarResultadoRadicacionPqrs(opts){
   opts=opts||{};
   const msg=opts.message||'';
   if(!msg){if(typeof notif==='function')notif('Operación completada','ok');return;}
+  if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
+    sstCargaDone({title:opts.title||'PQRSD radicada',message:msg,autoCloseMs:500,holdMs:220});
+    return;
+  }
   if(typeof confirmExito==='function'){
     confirmExito({
       title:opts.title||'PQRSD radicada',
       message:msg,
       tone:'radicacion',
       hideFooter:true,
-      autoCloseMs:1000
+      autoCloseMs:500
     });
   }else if(typeof notif==='function'){
     notif(msg,'ok');

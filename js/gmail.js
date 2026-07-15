@@ -2279,10 +2279,12 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
 
     if (soporte) {
       window._gmailPendingAttachments = [soporte];
+      if (typeof sstCargaHide === 'function' && window._confirmRadicacionLoading) sstCargaHide();
     } else {
       notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');
     }
   } catch (e) {
+    if (typeof sstCargaHide === 'function' && window._confirmRadicacionLoading) sstCargaHide();
     console.warn('gmailAutoUploadPendingAttachments:', e.message);
   }
 }
