@@ -226,6 +226,8 @@ tr:hover td{background:var(--bg)}
 .ar{display:flex;justify-content:flex-end;gap:6px;margin-top:.8rem;flex-wrap:wrap}
 #imp-file{display:none}
 .nbdg{background:var(--bll);color:var(--bld);font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;vertical-align:middle}
+.bdg.act-est-stack{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;padding:4px 8px;white-space:normal;max-width:10rem;vertical-align:middle}
+.bdg.act-est-stack .act-est-sub{font-size:9px;font-weight:500;opacity:.92}
 .ntf{position:fixed;top:62px;right:16px;z-index:9999;padding:10px 16px;border-radius:var(--rl);font-size:13px;font-weight:500;box-shadow:var(--shm);animation:fi .2s ease}
 @keyframes fi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 .nok{background:var(--gn);color:#fff}.ner{background:var(--rd);color:#fff}

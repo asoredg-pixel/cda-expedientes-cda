@@ -426,7 +426,7 @@ function renderLoginRolesGrid(){
 function rutaInicialPorRol(rolId){
   if(rolId==='ciudadano')return'ciudadano';
   if(rolId==='secretaria')return'sec';
-  if(rolId==='responsables')return'con';
+  if(rolId==='responsables')return'act';
   if(rolId==='jurisdiccional')return'con';
   if(OFICINAS_DEGUV.some(o=>o.id===rolId&&o.id!=='guaviare'&&o.id!=='secretaria'))return'pqrs-ofi';
   if(rolId==='admin'||DEPTOS.some(d=>d.id===rolId))return'reg';

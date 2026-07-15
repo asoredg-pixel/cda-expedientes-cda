@@ -1046,7 +1046,13 @@ function aplicarVisibilidadTabsSesion(){
   if(pgOn&&pgOn.id&&pgOn.id.startsWith('pg-')){
     const cur=pgOn.id.slice(3);
     if(cur!=='login'&&!visibles.has(cur)){
-      const first=Array.from(visibles)[0]||'con';
+      // Preferir la pestaña "home" del rol (no el primer ítem del menú = Correos)
+      let first='';
+      if(typeof esModoResponsable==='function'&&esModoResponsable()&&visibles.has('act'))first='act';
+      else if(typeof esSecretaria==='function'&&esSecretaria()&&visibles.has('sec'))first='sec';
+      else if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&visibles.has('pqrs-ofi'))first='pqrs-ofi';
+      else if(typeof esModoCiudadano==='function'&&esModoCiudadano()&&visibles.has('ciudadano'))first='ciudadano';
+      else first=Array.from(visibles)[0]||'con';
       if(typeof showTab==='function')showTab(first);
     }
   }

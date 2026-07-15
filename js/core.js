@@ -494,7 +494,12 @@ function pqrsEstadoActividadUi(e){
   if(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO){
     const nv=pqrsNotifVence(e);
     const venc=nv&&nv<hoy();
-    return{lbl:(venc?'⚠ ':'📬 ')+'Por notificar'+(quienLbl?' · '+quienLbl:'')+(nv?' · vence '+fmtF(nv):' · 5 d.h.'),bg:venc?'var(--rdl)':'#185fa522',fg:venc?'var(--rd)':'var(--bl)'};
+    return{
+      lbl:(venc?'⚠ ':'📬 ')+'Por notificar'+(quienLbl?' · '+quienLbl:''),
+      sub:nv?('vence '+fmtF(nv)):'5 d.h.',
+      bg:venc?'var(--rdl)':'#185fa522',
+      fg:venc?'var(--rd)':'var(--bl)'
+    };
   }
   if(f===PQRS_WF.REVISION_FINAL)return{lbl:'⏳ Revisión final notif.',bg:'#6d3fa822',fg:'#6d3fa8'};
   return null;
@@ -650,14 +655,26 @@ function _pqrsMergeDocumentosEntrega(prevDocs,nuevos,entregaN){
   });
   return hist.concat(added);
 }
-function _pqrsEtiquetaDocWf(d){
+function _pqrsAnexoNumero(d,docs){
+  if(!d||!_pqrsDocEsAnexoRespuesta(d))return 0;
+  if(d.anexo_n&&Number(d.anexo_n)>0)return Number(d.anexo_n);
+  const list=(Array.isArray(docs)?docs:[]).filter(_pqrsDocEsAnexoRespuesta);
+  const key=_pqrsDocKey(d);
+  const i=list.findIndex(function(x){return _pqrsDocKey(x)===key;});
+  if(i>=0)return i+1;
+  const m=String(d.nombre||d.driveFilename||d.label||'').match(/anexo[-_\s]?(\d+)/i);
+  return m?parseInt(m[1],10):1;
+}
+function _pqrsEtiquetaDocWf(d,docsOpt){
   if(!d)return'Documento';
-  const base=String(d.nombre||d.driveFilename||d.label||'Documento').replace(/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido|anexo)-/i,'');
-  if(_pqrsDocEsAnexoRespuesta(d))return 'Anexo: '+base;
+  if(_pqrsDocEsAnexoRespuesta(d)){
+    const n=_pqrsAnexoNumero(d,docsOpt);
+    return 'Anexo '+n;
+  }
   const n=d.entrega_n?(' · entrega '+d.entrega_n):'';
-  if(_pqrsDocEsPorCorregir(d))return base+n+' · por corregir';
-  if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return base+n+' · entrega actual';
-  return base+n+(d.driveEstado?' · '+d.driveEstado:'');
+  if(_pqrsDocEsPorCorregir(d))return 'Proyección de respuesta'+n+' · por corregir';
+  if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return 'Proyección de respuesta'+n+' · entrega actual';
+  return 'Proyección de respuesta'+n+(d.driveEstado?' · '+d.driveEstado:'');
 }
 /** URL de carpeta Drive (no es un archivo previsualizable; provoca 403 en el visor). */
 function esUrlCarpetaDrive(url){
@@ -5647,6 +5664,14 @@ function getSoporteActivo(t){
   return(t.soportes||[]).length?(t.soportes||[])[t.soportes.length-1]:null;
 }
 function soporteTabLabel(s,idx,soportes){
+  if(s&&(s.es_anexo||s.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(s.label||'')))){
+    const anexos=(soportes||[]).filter(function(x){return x&&(x.es_anexo||x.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(x.label||'')));});
+    const n=anexos.indexOf(s)+1;
+    return 'Anexo '+(n>0?n:(s.anexo_n||1));
+  }
+  if(s&&(s.es_proyeccion||/^proyecci/i.test(String(s.label||''))||/^oficio\b/i.test(String(s.label||'')))){
+    return 'Proyección';
+  }
   const isLink=!s.local;
   const n=soportes.slice(0,idx+1).filter(x=>!x.local===isLink).length;
   return(isLink?'Link ':'Documento ')+n;
@@ -6028,12 +6053,24 @@ function renderTaskExpConsultaEmbed(e){
   return h;
 }
 function setTaskViewTab(tab){
+  window._taskViewTabPreferido=tab;
   document.querySelectorAll('.task-view-tab').forEach(b=>{
     b.classList.toggle('on',b.dataset.tab===tab);
   });
   document.querySelectorAll('.task-view-panel').forEach(p=>{
     p.classList.toggle('on',p.id==='task-view-'+tab);
   });
+  if(tab==='pqrscompare'&&typeof initPqrsSolRespCompareTab==='function')initPqrsSolRespCompareTab();
+  if(tab==='compare'&&typeof initCompareVersionesTab==='function')initCompareVersionesTab();
+}
+function selectTaskSoporte(expId,taskId,sopId){
+  window._taskSopSel=sopId;
+  window._annotSelId=null;
+  window._pendingAnnot=null;
+  window._annotMarking=false;
+  const curTab=document.querySelector('.task-view-tab.on');
+  if(curTab&&curTab.dataset.tab)window._taskViewTabPreferido=curTab.dataset.tab;
+  openTaskCommentsModal(expId,taskId);
 }
 function verConDesdeTaskModal(expId){
   closeTaskModal();
@@ -6057,6 +6094,9 @@ function confirmPrecaucion(opts,onOk){
   }
   if(ico)ico.textContent='⚠️';
   if(cancel)cancel.style.display=opts.hideCancel?'none':'';
+  const foot=box?box.querySelector('.confirm-prec-foot'):null;
+  if(foot)foot.style.display='';
+  if(btn)btn.style.display='';
   if(tit)tit.textContent=opts.title||'Precaución — acción irreversible';
   msg.textContent=opts.message||'¿Está seguro de continuar? Esta acción no se puede deshacer fácilmente.';
   if(det){
@@ -6329,8 +6369,20 @@ function devolverDocumentoConObservaciones(expId,taskId){
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
   const obs=(t.notasDoc||[]).filter(n=>n.rol==='revisor'&&(!sopId||n.soporteId===sopId));
   const nuevas=ultDev?obs.filter(n=>(n.fecha||'')>(ultDev.fecha||'')):obs;
-  if(!nuevas.length&&!confirm('No hay observaciones nuevas en el documento activo. ¿Devolver igualmente al responsable?'))return;
-  devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
+  const doDevolver=function(){
+    devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
+  };
+  if(nuevas.length){doDevolver();return;}
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'Devolver sin observaciones nuevas',
+      message:'No hay observaciones nuevas en el documento activo. ¿Devolver igualmente al responsable?',
+      confirmLabel:'↩ Devolver',
+      tone:'warn'
+    },doDevolver);
+    return;
+  }
+  doDevolver();
 }
 function resolveModoEnviar(t,modoHint){
   if(modoHint)return modoHint;
@@ -6429,11 +6481,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       const driveId=archivoOpt.driveFileId||archivoOpt.fileId;
       if(driveId){
         const version=(t.soportes||[]).length+1;
+        const esAnexo=!!(archivoOpt.esAnexo||archivoOpt.tipo==='anexo_respuesta'||archivoOpt.es_anexo);
+        const lbl=esAnexo
+          ?(archivoOpt.labelAnexo||archivoOpt.nombre||('Anexo '+(archivoOpt.anexo_n||'')))
+          :(archivoOpt.labelProyeccion||'Proyección de respuesta');
         t.soportes.push({
           id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
           url:archivoOpt.driveLink,
           preview:archivoOpt.previewLink||archivoOpt.driveLink,
-          label:archivoOpt.driveFilename||archivoOpt.nombre||('Documento Drive'),
+          label:lbl,
           fecha:new Date().toISOString(),
           autor:rep,
           reportadoPor:rep,
@@ -6441,9 +6497,13 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           driveFileId:driveId,
           driveFilename:archivoOpt.driveFilename||archivoOpt.nombre||'',
           driveEstado:archivoOpt.driveEstado||'revision',
-          driveInstitutional:true
+          driveInstitutional:true,
+          tipo:esAnexo?'anexo_respuesta':(archivoOpt.tipo||'drive'),
+          es_anexo:esAnexo,
+          es_proyeccion:!esAnexo,
+          anexo_n:esAnexo?(archivoOpt.anexo_n||null):null
         });
-        t.historial.push({tipo:'soporte',fecha:hoy(),version,url:archivoOpt.driveLink,por:rep,reportadoPor:rep,nota:'Drive institucional'});
+        t.historial.push({tipo:'soporte',fecha:hoy(),version,url:archivoOpt.driveLink,por:rep,reportadoPor:rep,nota:esAnexo?'Anexo Drive':'Proyección Drive'});
         return;
       }
       if(!archivoOpt.data)return;
@@ -6691,12 +6751,13 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         if(da&&da.driveLink&&!adjDocumentos.find(function(x){return x.driveLink===da.driveLink;})){
           const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
           adjDocumentos.push({
-            nombre:da.nombre||da.driveFilename||(esAnexo?'Anexo':'Documento'),
+            nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):('Proyección de respuesta'),
             driveLink:da.driveLink,
             previewLink:da.previewLink||da.driveLink||'',
             fileId:da.fileId||da.driveFileId||'',
             tipo:esAnexo?'anexo_respuesta':'drive',
             es_anexo:esAnexo,
+            anexo_n:esAnexo?(da.anexo_n||null):null,
             driveFilename:da.driveFilename||da.nombre||'',
             driveEstado:da.driveEstado||'revision'
           });
@@ -6730,16 +6791,30 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         // PQRSD: no borrar versiones anteriores en Drive — se conservan para comparar con la nueva entrega
         if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs)await drivePurgeTaskInstitutionalSoportes(t);
         const uploaded=[];
+        let anexoSeq=0;
         for(let i=0;i<allUpload.length;i++){
           const f=allUpload[i];
-          const pref=f.esAnexo?('anexo-'+f.nombre):f.nombre;
+          let pref=f.nombre;
+          if(f.esAnexo){
+            anexoSeq++;
+            pref='anexo-'+anexoSeq+'-'+(f.nombre||'doc');
+          }
           if(typeof sstCargaProgress==='function'){
             sstCargaProgress(Math.round((i/total)*90), 'Subiendo «'+(f.nombre||'archivo')+'» ('+(i+1)+' de '+total+')…');
           }
           const up=await driveUploadExpedienteActividad(f.blob,pref,f.tipo,e,t,rep,'revision');
           if(up){
             up.esAnexo=!!f.esAnexo;
-            if(f.esAnexo){up.tipo='anexo_respuesta';up.nombre=up.nombre||('Anexo: '+f.nombre);}
+            if(f.esAnexo){
+              up.tipo='anexo_respuesta';
+              up.es_anexo=true;
+              up.anexo_n=anexoSeq;
+              up.nombre='Anexo '+anexoSeq;
+              up.labelAnexo='Anexo '+anexoSeq;
+            }else{
+              up.nombre=up.nombre||'Proyección de respuesta';
+              up.labelProyeccion='Proyección de respuesta';
+            }
             uploaded.push(up);
           }
         }
@@ -7196,8 +7271,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
       return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">Ver '+escAttr(lbl)+'</button>';
     }).join('')+'</div>';
     if(sel){
+      const esAnx=!!(sel.es_anexo||sel.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(sel.label||'')));
+      const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección de respuesta':(sel.label||''));
       h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
-        '<span>'+escAttr(sel.label||'')+' · v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span>'+
+        '<span><strong style="color:var(--tx2)">'+escAttr(tipoDoc||sel.label||'')+'</strong>'+(sel.driveFilename&&sel.driveFilename!==sel.label?' · '+escAttr(sel.driveFilename):'')+' · v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span>'+
         '<a href="'+escAttr(sel.url||sel.preview)+'" target="_blank" rel="noopener" style="font-size:11px">'+(sel.local?'Abrir adjunto':'Abrir en Drive')+'</a></div>';
     }
   }else{
@@ -7206,16 +7283,26 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
       h+='<div style="font-size:12px;color:var(--tx3);margin-bottom:6px">Sin enlace de soporte adjunto.</div>';
     }
   }
+  const prefer=String(window._taskViewTabPreferido||'').trim();
+  const canPrefer=prefer&&(
+    (prefer==='pqrscompare'&&showPqrsCompare)||
+    (prefer==='doc')||
+    (prefer==='compare'&&showCompare)||
+    (prefer==='exp')||
+    (prefer==='links')||
+    (prefer==='asist'&&showAsist)
+  );
+  const defTab=canPrefer?prefer:(showPqrsCompare?'pqrscompare':(showCompareDocs&&!showPqrsCompare?'compare':'doc'));
   h+='<div class="task-view-tabs">'+
-    (showPqrsCompare?'<button type="button" class="task-view-tab on" data-tab="pqrscompare" onclick="setTaskViewTab(\'pqrscompare\');initPqrsSolRespCompareTab()">⇅ Solicitud / Respuesta</button>':'')+
-    '<button type="button" class="task-view-tab'+((showPqrsCompare||showCompare)?'':' on')+'" data-tab="doc" onclick="setTaskViewTab(\'doc\')">📄 Documento</button>'+
-    (showCompare?'<button type="button" class="task-view-tab'+(showCompareDocs&&!showPqrsCompare?' on':'')+'" data-tab="compare" onclick="setTaskViewTab(\'compare\');initCompareVersionesTab()">⇅ Comparar documentos</button>':'')+
-    '<button type="button" class="task-view-tab" data-tab="exp" onclick="setTaskViewTab(\'exp\')">📋 Expediente</button>'+
-    '<button type="button" class="task-view-tab" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
-    (showAsist?'<button type="button" class="task-view-tab" data-tab="asist" onclick="setTaskViewTab(\'asist\')">🤖 Asistente</button>':'')+
+    (showPqrsCompare?'<button type="button" class="task-view-tab'+(defTab==='pqrscompare'?' on':'')+'" data-tab="pqrscompare" onclick="setTaskViewTab(\'pqrscompare\')">⇅ Solicitud / Respuesta</button>':'')+
+    '<button type="button" class="task-view-tab'+(defTab==='doc'?' on':'')+'" data-tab="doc" onclick="setTaskViewTab(\'doc\')">📄 Documento</button>'+
+    (showCompare?'<button type="button" class="task-view-tab'+(defTab==='compare'?' on':'')+'" data-tab="compare" onclick="setTaskViewTab(\'compare\')">⇅ Comparar documentos</button>':'')+
+    '<button type="button" class="task-view-tab'+(defTab==='exp'?' on':'')+'" data-tab="exp" onclick="setTaskViewTab(\'exp\')">📋 Expediente</button>'+
+    '<button type="button" class="task-view-tab'+(defTab==='links'?' on':'')+'" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
+    (showAsist?'<button type="button" class="task-view-tab'+(defTab==='asist'?' on':'')+'" data-tab="asist" onclick="setTaskViewTab(\'asist\')">🤖 Asistente</button>':'')+
   '</div>';
-  h+='<div id="task-view-pqrscompare" class="task-view-panel'+(showPqrsCompare?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
-  h+='<div id="task-view-doc" class="task-view-panel'+((showPqrsCompare||showCompare)?'':' on')+'">';
+  h+='<div id="task-view-pqrscompare" class="task-view-panel'+(defTab==='pqrscompare'?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
+  h+='<div id="task-view-doc" class="task-view-panel'+(defTab==='doc'?' on':'')+'">';
   if(sel&&soporteTieneVista(sel)){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
@@ -7244,10 +7331,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     h+='<div style="font-size:12px;color:var(--tx3);padding:8px">Adjunte un enlace Drive o un archivo PDF/imagen para visualizar el documento.</div>';
   }
   h+='</div>';
-  h+='<div id="task-view-compare" class="task-view-panel'+(showCompareDocs&&!showPqrsCompare?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
-  h+='<div id="task-view-exp" class="task-view-panel">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>':renderTaskExpConsultaEmbed(e))+'</div>';
-  h+='<div id="task-view-links" class="task-view-panel">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
-  if(showAsist)h+='<div id="task-view-asist" class="task-view-panel">'+renderAsistenteRevisionPanel(expId,taskId,t)+'</div>';
+  h+='<div id="task-view-compare" class="task-view-panel'+(defTab==='compare'?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
+  h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>':renderTaskExpConsultaEmbed(e))+'</div>';
+  h+='<div id="task-view-links" class="task-view-panel'+(defTab==='links'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
+  if(showAsist)h+='<div id="task-view-asist" class="task-view-panel'+(defTab==='asist'?' on':'')+'">'+renderAsistenteRevisionPanel(expId,taskId,t)+'</div>';
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
   else if(canAddSop&&opts.hideEnviar&&!opts.hideEntrega){
     h+='<div style="margin-top:.65rem;padding:.55rem;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf2)">'+
@@ -7276,13 +7363,6 @@ function initCompareVersionesTab(){
   if(sa)sa.value=window._compareDocA;
   if(sb)sb.value=window._compareDocB;
   renderCompareVerStack(t,e);
-}
-function selectTaskSoporte(expId,taskId,sopId){
-  window._taskSopSel=sopId;
-  window._annotSelId=null;
-  window._pendingAnnot=null;
-  window._annotMarking=false;
-  openTaskCommentsModal(expId,taskId);
 }
 function estadoTaskRaw(t){
   if(!t||t.eliminada)return'Eliminada';
@@ -7327,16 +7407,101 @@ function _pqrsHtmlDocsWfLinks(wf){
     const url=d.driveLink||d.previewLink;
     const view=String(url||'').replace(/\/preview(\?.*)?$/,'/view');
     const tag=extraTag||(_pqrsDocEsPorCorregir(d)?' <span style="color:var(--or)">(por corregir)</span>':(_pqrsDocEsRevisionActual(d)?' <span style="color:var(--gn)">(actual)</span>':''));
-    return '<div style="margin-bottom:4px"><a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--bl);margin-right:8px">📎 '+escAttr(_pqrsEtiquetaDocWf(d))+'</a>'+tag+
+    return '<div style="margin-bottom:4px"><a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--bl);margin-right:8px">📎 '+escAttr(_pqrsEtiquetaDocWf(d,docs))+'</a>'+tag+
       ' <a href="'+escAttr(view)+'" target="_blank" rel="noopener" style="color:var(--tx2);font-size:10px" title="En Drive puede seleccionar texto y dejar comentarios visibles para los responsables">💬 Comentar en Drive</a></div>';
   };
   let h='<div style="font-size:11px;margin-bottom:8px">';
-  if(oficios.length)h+=oficios.map(function(d){return linkRow(d);}).join('');
+  if(oficios.length){
+    h+='<div style="font-size:11px;font-weight:600;margin:0 0 4px;color:var(--tx2)">Proyección de la respuesta</div>';
+    h+=oficios.map(function(d){return linkRow(d);}).join('');
+  }
   if(anexos.length){
-    h+='<div style="font-size:11px;font-weight:600;margin:8px 0 4px;color:var(--tx2)">Anexos de la respuesta</div>';
-    h+=anexos.map(function(d){return linkRow(d,' <span style="color:var(--tx2)">(anexo)</span>');}).join('');
+    h+='<div style="font-size:11px;font-weight:600;margin:8px 0 4px;color:var(--tx2)">Anexos</div>';
+    h+=anexos.map(function(d){return linkRow(d,' <span style="color:var(--tx2)">(anexo '+_pqrsAnexoNumero(d,docs)+')</span>');}).join('');
   }
   return h+'</div>';
+}
+function renderNcaDecisionFormHtml(expId,e,wf){
+  e=e||exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e)return'';
+  wf=wf||getPqrsWorkflow(e);
+  const docs=wf.documentos||[];
+  const hayPorCorregir=docs.some(_pqrsDocEsPorCorregir);
+  const hayActual=docs.some(_pqrsDocEsRevisionActual);
+  const docsHtml=docs.length
+    ?('<div style="margin-top:6px">'+
+      (()=>{
+        const oficios=docs.filter(d=>!_pqrsDocEsAnexoRespuesta(d));
+        const anexos=docs.filter(_pqrsDocEsAnexoRespuesta);
+        let out='';
+        if(oficios.length){
+          out+='<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:2px">Proyección de la respuesta</div>';
+          out+=oficios.map(function(d){
+            const tag=_pqrsDocEsPorCorregir(d)
+              ?' <span style="color:var(--or,#b45309);font-weight:600">(por corregir'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>'
+              :' <span style="color:var(--gn,#15803d);font-weight:600">(entrega actual'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>';
+            return '<div style="font-size:11px;margin-top:3px">'+(d.driveLink?'<a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">📄 '+escAttr(_pqrsEtiquetaDocWf(d,docs))+'</a>':'📄 '+escAttr(_pqrsEtiquetaDocWf(d,docs)))+tag+'</div>';
+          }).join('');
+        }
+        if(anexos.length){
+          out+='<div style="font-size:11px;font-weight:600;color:var(--tx2);margin:8px 0 2px">Anexos</div>';
+          out+=anexos.map(function(d){
+            return '<div style="font-size:11px;margin-top:3px">'+(d.driveLink?'<a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(_pqrsEtiquetaDocWf(d,docs))+'</a>':'📎 '+escAttr(_pqrsEtiquetaDocWf(d,docs)))+
+              ' <span style="color:var(--tx2)">(anexo)</span></div>';
+          }).join('');
+        }
+        return out;
+      })()+
+      '</div>')
+    :'<div style="font-size:11px;color:var(--tx3)">Sin documentos adjuntos</div>';
+  const hintCompare=hayPorCorregir&&hayActual
+    ?'<div style="padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--r);margin-bottom:10px;font-size:12px">⇅ Hay <strong>versión por corregir</strong> y <strong>nueva entrega</strong>. Use las pestañas de arriba para comparar.</div>'
+    :'';
+  const tipoRevision=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const canalRevision=wf.canal||'';
+  const esInfo=tipoRevision===PQRS_WF_TIPO.INFORMATIVA;
+  const esOficio=tipoRevision===PQRS_WF_TIPO.OFICIO;
+  const esCanalFisico=['aviso','presencial','fisica'].includes(canalRevision);
+  let btnsDecision='';
+  if(esInfo){
+    btnsDecision='<button type="button" class="btn bsm" style="background:#6c757d;color:#fff" onclick="ncaAprobarInformativa(\''+escAttr(expId)+'\')">ℹ️ Aprobar como Informativa (cerrar sin correo)</button>';
+  }else if(esCanalFisico&&!esOficio){
+    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarCanalFisico(\''+escAttr(expId)+'\')">✅ Aprobar — Notificación física (cerrar)</button>';
+  }else if(esOficio){
+    btnsDecision='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar → Para firma (VITAL / encargado)</button>'+
+      '<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Cambiar a mensaje simple</button>';
+  }else{
+    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar — Mensaje simple</button>'+
+      '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar → Para firma (oficio)</button>';
+  }
+  return hintCompare+
+    (esInfo?'<div style="padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--r);margin-bottom:10px;font-size:12px"><strong>ℹ️ Respuesta Informativa</strong> — el responsable solicita cerrar sin enviar correo.</div>':'')+
+    (wf.devolucion_director&&wf.devolucion_director.motivo
+      ?('<div style="padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--r);margin-bottom:10px;font-size:12px">'+
+        '<strong>↩ Devolución del Director</strong> ('+escAttr(wf.devolucion_director.por||'DS DEGUV')+'): '+escAttr(wf.devolucion_director.motivo)+'</div>')
+      :'')+
+    '<div style="padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd);margin-bottom:10px">'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Tipo propuesto</div>'+
+    '<div style="font-size:12px">'+escAttr(esOficio?'📄 Oficio firmado':esInfo?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
+    (esInfo?'':('<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
+    '<div style="font-size:12px">'+escAttr(canalRevision||'—')+'</div>'))+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">'+(esInfo?'Descripción informativa <span style="font-weight:400">(editable)</span>':'Resumen de la respuesta <span style="font-weight:400">(editable)</span>')+'</div>'+
+    '<textarea id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Documentos adjuntos</div>'+
+    docsHtml+
+    '</div>'+
+    (esInfo?'':('<div class="fg" style="margin-bottom:10px">'+
+    '<div class="fld"><label>N° de oficio confirmado</label><input type="text" id="nca-rev-oficio" value="'+escAttr(wf.oficio||'')+'"></div>'+
+    '<div class="fld"><label>Fecha de respuesta</label><input type="date" id="nca-rev-fecha" value="'+escAttr(wf.fecha_respuesta||hoy())+'"></div>'+
+    '</div>'))+
+    '<div class="fld" style="margin-bottom:12px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(solo en sistema — no se envía correo)</span></label>'+
+    '<input type="text" id="nca-rev-comentario" placeholder="'+(esInfo?'Ej: Aprobado como informativa.':(esOficio?'Ej: Aprobado. Pasa a para firma.':'Ej: Aprobado. Proceda a enviar.'))+'" style="margin-top:4px"></div>'+
+    (esOficio?_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por,{modo:'revision'}):'')+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+    btnsDecision+
+    '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver</button>'+
+    '</div>';
 }
 function renderTaskVerifyBarHtml(expId,taskId,t){
   const e=getExpById(expId);
@@ -7350,10 +7515,11 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     let titulo='📋 Gestión de respuesta PQRSD';
     let hint='Esta entrega no se cierra como una actividad de trámite. Use el flujo PQRSD.';
     let btns='';
+    let inlineNca='';
     if(pqrsEnRevisionNca(e)){
       titulo='⏳ Revisión de respuesta PQRSD';
-      hint='Revise la respuesta (aprobar mensaje, pasar a <strong>para firma</strong> si es oficio, o devolver). Tipo propuesto: <strong>'+escAttr(tipoLbl)+'</strong>.';
-      btns='<button type="button" class="btn bsm bp" style="background:#6d3fa8;border-color:#6d3fa8" onclick="openNcaRevisionModal(\''+jsStr(expId)+'\')">⏳ Revisar respuesta PQRSD</button>';
+      hint='Compare documentos arriba (proyección y anexos). Decida aquí mismo: aprobar, pasar a firma o devolver. Tipo propuesto: <strong>'+escAttr(tipoLbl)+'</strong>.';
+      inlineNca=renderNcaDecisionFormHtml(expId,e,wf);
     }else if(pqrsEnParaFirma(e)){
       titulo='✍ Para firma — PQRSD';
       hint='Oficio aprobado. VITAL o el encargado pueden marcarlo listo para firma del Director.';
@@ -7393,6 +7559,10 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     let h='<div class="task-cmt-form task-verify-bar task-chat-sep" style="padding:.65rem;border:1px solid #6d3fa8;border-radius:var(--r);background:#6d3fa812">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#6d3fa8">'+titulo+'</div>'+
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>';
+    if(inlineNca){
+      h+=inlineNca+'</div>';
+      return h;
+    }
     h+=htmlPqrsRespuestaDatosReadonly(e);
     if(wf.cuerpo)h+='<div style="font-size:12px;white-space:pre-wrap;margin-bottom:8px;padding:8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+escAttr(String(wf.cuerpo).slice(0,400))+(String(wf.cuerpo).length>400?'…':'')+'</div>';
     h+=_pqrsHtmlDocsWfLinks(wf);
@@ -7424,15 +7594,27 @@ function devolverTaskUnificado(expId,taskId){
   const nObs=obs.length;
   let nota=chat;
   if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
-  if(!nota){
-    const p=typeof prompt==='function'?prompt('Motivo de la devolución (obligatorio):',''):'';
-    nota=String(p||'').trim();
+  const fin=function(motivo){
+    motivo=String(motivo||'').trim();
+    if(!motivo){notif('Indique el motivo de la devolución','err');return;}
+    if(chat){
+      try{addTaskComentario(expId,taskId,chat);}catch(err){}
+    }
+    devolverTaskAlResponsable(expId,taskId,motivo);
+  };
+  if(nota){fin(nota);return;}
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'Devolver para corregir',
+      message:'Indique el motivo de la devolución (obligatorio).',
+      prompt:true,
+      promptPlaceholder:'Motivo de la devolución…',
+      confirmLabel:'↩ Devolver',
+      tone:'warn'
+    },function(val){fin(val);});
+    return;
   }
-  if(!nota){notif('Indique el motivo de la devolución','err');return;}
-  if(chat){
-    try{addTaskComentario(expId,taskId,chat);}catch(err){}
-  }
-  devolverTaskAlResponsable(expId,taskId,nota);
+  fin('');
 }
 function confirmarCierreTask(expId,taskId){
   const e=getExpById(expId);
@@ -7465,7 +7647,7 @@ function estadoTaskLabel(t){
   const eExp=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
   if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&typeof pqrsEstadoActividadUi==='function'){
     const ui=pqrsEstadoActividadUi(eExp);
-    if(ui&&ui.lbl)return ui.lbl;
+    if(ui&&ui.lbl)return ui.sub?(ui.lbl+' · '+ui.sub):ui.lbl;
   }
   const e=estadoTask(t);
   if(e==='En ejecución')return'Por ejecutar';
@@ -7476,6 +7658,20 @@ function estadoTaskLabel(t){
   }
   if(e==='Por verificar')return(esModoResponsable()&&!esVistaActividadesDepto())?'Por verificar':'Por revisar';
   return e;
+}
+/** Badge de estado (HTML); «Por notificar» muestra vence en segunda línea. */
+function taskEstadoBadgeHtml(t){
+  const est=estadoTask(t);
+  const st=taskEstadoStyle(est,t);
+  const eExp=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
+  let ui=null;
+  if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&typeof pqrsEstadoActividadUi==='function')
+    ui=pqrsEstadoActividadUi(eExp);
+  if(ui&&ui.lbl&&ui.sub){
+    return '<span class="bdg act-est-stack" style="background:'+st.bg+';color:'+st.fg+'"><span>'+escAttr(ui.lbl)+'</span><span class="act-est-sub">'+escAttr(ui.sub)+'</span></span>';
+  }
+  const lbl=estadoTaskLabel(t);
+  return '<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span>';
 }
 function taskEstadoStyle(est,tOpt){
   if(tOpt&&esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(tOpt,responsableActivo)
@@ -8810,8 +9006,12 @@ function openTaskCommentsModal(expId,taskId,opts){
     const selObj=soportes.find(s=>s.id===selSop)||activo;
     const canAnnot=canDeptMarcarEnSoporte(t,selObj);
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
-    if(e&&taskEsAtenderPqrs(t,e)&&!esModoResponsable()&&taskPendienteVerificacion(t))setTimeout(()=>initPqrsSolRespCompareTab(),100);
-    else if(canReviewSop){
+    const preferTab=String(window._taskViewTabPreferido||'').trim();
+    if(preferTab){
+      setTimeout(function(){setTaskViewTab(preferTab);},100);
+    }else if(e&&taskEsAtenderPqrs(t,e)&&!esModoResponsable()&&taskPendienteVerificacion(t)){
+      setTimeout(()=>initPqrsSolRespCompareTab(),100);
+    }else if(canReviewSop){
       const docsRev=collectDocsComparables(e,taskId,t);
       if(docsRev.length>=2)setTimeout(()=>initCompareVersionesTab(),120);
     }
@@ -8842,6 +9042,7 @@ function closeTaskModal(){
     if(modal)modal.classList.remove('task-modal-firma');
     if(modal)modal.classList.remove('enviar-modal-only');
   }
+  window._taskViewTabPreferido=null;
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');
   if(!panelArchOpen)window._conArchItems=null;
@@ -10425,8 +10626,8 @@ function notifEsGuardadoOk(msg){
   if(/eliminad|eliminada|eliminado|rechazad|descargad|exportad|migraci|marcada como no leída|csv exportado|excel descargado|planeador visual/i.test(m))return false;
   return /guardad|actualizad|registrad|exitosamente|añadid|agregad|cread|asignad|encargados guardados|persona guardada|comentario guardado|evento guardado|evento actualizado|trámite «|PQRSD actualizada|respuesta PQRSD registrada|respuesta registrada|actividad actualizada|actividad agendada|acto agregado|co-ejecutor añadido|modo de entrega actualizado|enviada a revisión|enviado a revisión/i.test(m);
 }
-/** Duración por defecto de mensajes centrales de éxito/aviso (1 minuto). */
-const SST_MSG_AUTO_MS=60000;
+/** Duración por defecto de mensajes centrales de éxito/aviso (1 segundo). */
+const SST_MSG_AUTO_MS=1000;
 function _sstCargaUiReset(){
   const wrap=document.getElementById('confirm-prec-carga');
   const fill=document.getElementById('confirm-prec-bar-fill');
@@ -10523,7 +10724,7 @@ function notif(msg,tipo){
   const m=String(msg||'').trim();
   if(!m)return;
   tipo=tipo||'ok';
-  // Ventanita central (duración 1 min; se puede cerrar con Entendido)
+  // Ventanita central (duración 1 s; se puede cerrar con Entendido)
   if(typeof confirmExito==='function'){
     if(tipo==='info'){
       if(/subiendo|generando|cargando|iniciando migración|procesando|radicando/i.test(m)){
@@ -10625,7 +10826,7 @@ function confirmExito(opts){
     _sstCargaUiReset();
   }
   ov.classList.add('on');
-  // Mensajes: 1 minuto (salvo carga, que queda abierta hasta sstCargaDone/Hide)
+  // Mensajes: 1 s (salvo carga, que queda abierta hasta sstCargaDone/Hide)
   const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(opts.loading?null:SST_MSG_AUTO_MS);
   if(autoMs){
     window._confirmExitoTimer=setTimeout(function(){closeConfirmExito();},autoMs);
@@ -10831,7 +11032,7 @@ function onDeptoChange(){
       try{localStorage.setItem('sst_responsable','');}catch(e){}
     }
     poblarSelResponsable();
-    if(document.getElementById('pg-cfg').classList.contains('on')||!document.querySelector('.pg.on'))showTab('con');
+    if(document.getElementById('pg-cfg').classList.contains('on')||!document.querySelector('.pg.on'))showTab('act');
   }else{
     ensureEncargadoActivo();
   }
@@ -10932,7 +11133,7 @@ function updateDeptoUI(){
   if(regPg&&ciudadano&&regPg.classList.contains('on'))showTab('ciudadano');
   if(regPg&&sec&&regPg.classList.contains('on'))showTab('sec');
   if(regPg&&ofi&&regPg.classList.contains('on'))showTab('pqrs-ofi');
-  if(regPg&&resp&&regPg.classList.contains('on')&&!responsablePuedeVerRegistro())showTab('con');
+  if(regPg&&resp&&regPg.classList.contains('on')&&!responsablePuedeVerRegistro())showTab('act');
   const actDeptActions=document.getElementById('act-dept-actions');
   const actDeptBar=document.getElementById('act-dept-resp-bar');
   if(actDeptActions)actDeptActions.style.display=encDepto?'flex':'none';
@@ -10961,6 +11162,13 @@ function updateDeptoUI(){
   if(typeof renderSstGmailSesionBloqueo==='function')renderSstGmailSesionBloqueo();
   if(typeof sstRescheduleGmailExpiryTimers==='function')sstRescheduleGmailExpiryTimers();
   if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on'))showTab('act');
+  // No forzar Consulta si el responsable está en Actividades
+  if(resp&&window._sstTabActual==='act'){
+    const pgAct=document.getElementById('pg-act');
+    if(pgAct&&!pgAct.classList.contains('on')&&typeof puedeVerTabActividades==='function'&&puedeVerTabActividades()){
+      showTab('act');
+    }
+  }
 }
 function renderResponsableRegistro(){}
 function migrarRevisionDeptoTask(t){
@@ -11018,6 +11226,7 @@ function taskRevisionDeptoLabel(rev){
 }
 function renderActividadesRowHtml(t){
   const est=estadoTask(t),lbl=estadoTaskLabel(t),st=taskEstadoStyle(est,t),vencE=taskActividadVencida(t);
+  const badgeHtml=typeof taskEstadoBadgeHtml==='function'?taskEstadoBadgeHtml(t):('<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span>');
   const venceShow=taskVenceEfectivo(t)||t.vence;
   const esEncOwn=esTareaDelEncargado(t);
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esEncOwn);
@@ -11087,7 +11296,7 @@ function renderActividadesRowHtml(t){
     t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':'',
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
-  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+lbl+'</span>'+priorBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
+  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td><td>'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
@@ -13305,6 +13514,17 @@ function openNcaRevisionModal(expId){
   // Only NCA encargado can review
   if(!esNcaDeguv()&&!esOficinaPqrsNca()&&!esAdministrador()){notif('Solo el encargado NCA puede revisar respuestas','err');return;}
   if(pqrsWorkflowFase(e)!==PQRS_WF.PENDIENTE_REVISION){notif('Esta PQRSD no está en fase de revisión','err');return;}
+  // Una sola ventana: abrir la actividad (docs/comparar + decisión integrada abajo)
+  const t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+  if(t&&typeof openTaskCommentsModal==='function'){
+    openTaskCommentsModal(e._exp||expId,t.id);
+    setTimeout(function(){
+      const bar=document.querySelector('.task-verify-bar');
+      if(bar)bar.scrollIntoView({behavior:'smooth',block:'nearest'});
+    },220);
+    return;
+  }
+  // Fallback sin tarea: formulario solo
   abrirPqrsModalPrep();
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
@@ -13313,89 +13533,11 @@ function openNcaRevisionModal(expId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Revisión NCA — '+expId;
   if(modal){modal.classList.add('task-modal-wide');}
-  const wf=getPqrsWorkflow(e);
-  const docs=wf.documentos||[];
-  const hayPorCorregir=docs.some(_pqrsDocEsPorCorregir);
-  const hayActual=docs.some(_pqrsDocEsRevisionActual);
-  const docsHtml=docs.length
-    ?docs.map(function(d){
-        const tag=_pqrsDocEsAnexoRespuesta(d)
-          ?' <span style="color:var(--tx2);font-weight:600">(anexo)</span>'
-          :(_pqrsDocEsPorCorregir(d)
-          ?' <span style="color:var(--or,#b45309);font-weight:600">(por corregir'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>'
-          :' <span style="color:var(--gn,#15803d);font-weight:600">(entrega actual'+(d.entrega_n?' · v'+d.entrega_n:'')+')</span>');
-        return '<div style="font-size:11px;margin-top:4px">'+
-          (d.driveLink?'<a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">📎 '+escAttr(_pqrsEtiquetaDocWf(d)||d.nombre||d.driveLink)+'</a>':'📎 '+escAttr(d.nombre||'—'))+
-          tag+
-          '</div>';
-      }).join('')
-    :'<div style="font-size:11px;color:var(--tx3)">Sin documentos adjuntos</div>';
-  const hintCompare=hayPorCorregir&&hayActual
-    ?'<div style="padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--r);margin-bottom:10px;font-size:12px">⇅ Hay <strong>versión por corregir</strong> y <strong>nueva entrega</strong>. Use la pestaña «Comparar documentos» de la actividad o abra ambos enlaces para verificar si se corrigieron los apartes señalados.</div>'
-    :'';
-
-  const tipoRevision=wf.tipo||PQRS_WF_TIPO.MENSAJE;
-  const canalRevision=wf.canal||'';
-  const esInfo=tipoRevision===PQRS_WF_TIPO.INFORMATIVA;
-  const esOficio=tipoRevision===PQRS_WF_TIPO.OFICIO;
-  const esCanalFisico=['aviso','presencial','fisica'].includes(canalRevision);
-  const docsComentar=_pqrsHtmlDocsWfLinks(wf);
-
-  let btnsDecision='';
-  if(esInfo){
-    btnsDecision='<button type="button" class="btn bsm" style="background:#6c757d;color:#fff" onclick="ncaAprobarInformativa(\''+escAttr(expId)+'\')">ℹ️ Aprobar como Informativa (cerrar sin correo)</button>';
-  }else if(esCanalFisico&&!esOficio){
-    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarCanalFisico(\''+escAttr(expId)+'\')">✅ Aprobar — Notificación física (cerrar)</button>';
-  }else if(esOficio){
-    btnsDecision='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar → Para firma (VITAL / encargado)</button>'+
-      '<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Cambiar a mensaje simple</button>';
-  }else{
-    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar — Mensaje simple</button>'+
-      '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">📄 Aprobar → Para firma (oficio)</button>';
-  }
-
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 Revisión de respuesta — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px">Revise la respuesta elaborada por <strong>'+escAttr(wf.entregado_por||'responsable')+'</strong>.'+(esOficio?' Tras aprobar, pasará a <strong>Para firma</strong> (VITAL o encargado).':'')+'</div>'+
-
-    (esInfo?'<div style="padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--r);margin-bottom:10px;font-size:12px">'+
-      '<strong>ℹ️ Respuesta Informativa</strong> — el responsable solicita cerrar sin enviar correo. '+
-      'Puede editar la descripción antes de aprobar; el ciudadano la verá en consulta ciudadana.</div>':'')+
-    (wf.devolucion_director&&wf.devolucion_director.motivo
-      ?('<div style="padding:8px 10px;background:#fff7ed;border:1px solid #fdba74;border-radius:var(--r);margin-bottom:10px;font-size:12px">'+
-        '<strong>↩ Devolución del Director</strong> ('+escAttr(wf.devolucion_director.por||'DS DEGUV')+'): '+escAttr(wf.devolucion_director.motivo)+
-        '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Revise y, si aplica, use <strong>Devolver</strong> para enviar al responsable a corregir (queda en chat de la actividad).</div></div>')
-      :'')+
-    hintCompare+
-
-    '<div style="padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd);margin-bottom:10px">'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Tipo propuesto</div>'+
-    '<div style="font-size:12px">'+escAttr(esOficio?'📄 Oficio firmado':esInfo?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
-    (esInfo?'':('<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
-    '<div style="font-size:12px">'+escAttr(canalRevision||'—')+'</div>'))+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">'+(esInfo?'Descripción informativa <span style="font-weight:400">(editable — visible al ciudadano)</span>':'Resumen de la respuesta <span style="font-weight:400">(editable)</span>')+'</div>'+
-    '<textarea id="nca-rev-cuerpo" style="min-height:100px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Documentos adjuntos</div>'+
-    docsHtml+docsComentar+
-    '</div>'+
-
-    (esInfo?'':('<div class="fg" style="margin-bottom:10px">'+
-    '<div class="fld"><label>N° de oficio confirmado</label><input type="text" id="nca-rev-oficio" value="'+escAttr(wf.oficio||'')+'"></div>'+
-    '<div class="fld"><label>Fecha de respuesta</label><input type="date" id="nca-rev-fecha" value="'+escAttr(wf.fecha_respuesta||hoy())+'"></div>'+
-    '</div>'))+
-
-    '<div class="fld" style="margin-bottom:12px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(solo en sistema — no se envía correo)</span></label>'+
-    '<input type="text" id="nca-rev-comentario" placeholder="'+(esInfo?'Ej: Aprobado como informativa. Texto correcto.':(esOficio?'Ej: Aprobado. Pasa a para firma.':'Ej: Aprobado. Proceda a enviar.'))+'" style="margin-top:4px"></div>'+
-
-    (esOficio?_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por,{modo:'revision'}):'')+
-
-    '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-    btnsDecision+
-    '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver</button>'+
-    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
-    '</div>';
-
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px">Revise y decida abajo.</div>'+
+    renderNcaDecisionFormHtml(expId,e)+
+    '<div class="fx" style="gap:8px;margin-top:10px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'ncaRevision',expId};
 }
@@ -13518,13 +13660,33 @@ async function ncaAprobarOficioFirmado(expId){
   notif('📄 Oficio aprobado — queda en «Para firma» (VITAL / encargado)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
 }
 
-async function ncaRechazarRespuesta(expId){
+async function ncaRechazarRespuesta(expId,motivoOpt){
   // Devolver por corregir: solo historial/campanita en sistema.
   // No enviar correo al responsable (el único correo al responsable es el reenvío de radicación por correo).
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
-  if(!d.comentario){notif('Indique el motivo de la devolución','err');return;}
+  let comentario=String(motivoOpt!=null?motivoOpt:d.comentario||'').trim();
+  if(!comentario){
+    if(typeof confirmPrecaucion==='function'){
+      confirmPrecaucion({
+        title:'Devolver para corregir',
+        message:'Indique el motivo de la devolución (obligatorio).',
+        prompt:true,
+        promptPlaceholder:'Motivo de la devolución…',
+        confirmLabel:'↩ Devolver',
+        tone:'warn'
+      },function(val){
+        const v=String(val||'').trim();
+        if(!v){notif('Indique el motivo de la devolución','err');return;}
+        const inp=document.getElementById('nca-rev-comentario');
+        if(inp)inp.value=v;
+        ncaRechazarRespuesta(expId,v);
+      });
+      return;
+    }
+    notif('Indique el motivo de la devolución','err');return;
+  }
   const wf=getPqrsWorkflow(e);
   // Solo renombrar la entrega actual (revision) → acorregir; conservar versiones previas
   await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['revision','']});
@@ -13549,16 +13711,16 @@ async function ncaRechazarRespuesta(expId){
   setPqrsWorkflow(e,{
     fase:PQRS_WF.RECHAZADA,
     documentos:wf.documentos||[],
-    revision_nca:{aprobado:false,comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
+    revision_nca:{aprobado:false,comentario:comentario,por:responsableActivo||'NCA',en:new Date().toISOString()}
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:'NCA devolvió la respuesta: '+d.comentario,oficina:'guaviare',por:responsableActivo||'NCA'});
+  e._pqrs_historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:'NCA devolvió la respuesta: '+comentario,oficina:'guaviare',por:responsableActivo||'NCA'});
   // Devolver también la actividad → Por corregir (así la reentrega vuelve a «Por revisar»)
   if(t){
     normalizeTask(t);
     if(!Array.isArray(t.historial))t.historial=[];
-    t.historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:d.comentario,por:responsableActivo||'NCA'});
-    resetTaskPorCorregir(t,d.comentario||'Devuelta desde revisión NCA');
+    t.historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:comentario,por:responsableActivo||'NCA'});
+    resetTaskPorCorregir(t,comentario||'Devuelta desde revisión NCA');
   }
   persistExpedienteGranular(e);
   closeTaskModal();

@@ -7,27 +7,45 @@
 // TABS
 // ================================================================
 function showTab(t){
+  // Recordar última pestaña elegida (evita saltos automáticos a Consulta)
+  const wanted=t;
   if(typeof puedeVerTabSesion==='function'&&!puedeVerTabSesion(t)){
     const vis=getTabsVisiblesSesion();
-    t=vis.length?vis[0]:'con';
+    // Si se pide act y el responsable puede verla, respetar (no caer a Correos/Consulta)
+    if(t==='act'&&typeof esModoResponsable==='function'&&esModoResponsable()&&typeof puedeVerTabActividades==='function'&&puedeVerTabActividades()){
+      /* keep act */
+    }else if(typeof esModoResponsable==='function'&&esModoResponsable()&&vis.includes('act')){
+      t='act';
+    }else{
+      t=vis.length?vis[0]:'con';
+    }
   }
   if(esModoCiudadano()&&t!=='ciudadano')t='ciudadano';
   if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi'&&t!=='rec')t='sec';
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');
   if(esJurisdiccional()&&t!=='con'&&t!=='cons')t='con';
-  if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='con';
+  if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='act';
   if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
-  if(t==='rec'&&!puedeVerRecursos())t='con';
+  if(t==='rec'&&!puedeVerRecursos())t=esModoResponsable()?'act':'con';
   // secretary can switch between sec and gmail-ofi freely
   if(esSecretaria()&&t==='gmail-ofi')t='gmail-ofi';
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
-  if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t='con';}
-  if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='con';}
+  if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t=esModoResponsable()?'act':'con';}
+  if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='act';}
+  // No empujar a Consulta si el responsable ya está (o pidió) Actividades
+  if(esModoResponsable()&&wanted==='act'&&puedeVerTabActividades())t='act';
   if(t!=='cfg'){/* cfg sync global durante toda la sesión */}
+  window._sstTabActual=t;
+  let pgTarget=document.getElementById('pg-'+t);
+  if(!pgTarget){
+    t=esModoResponsable()?'act':'con';
+    window._sstTabActual=t;
+    pgTarget=document.getElementById('pg-'+t);
+  }
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.tab').forEach(b=>{b.classList.remove('on');b.classList.remove('tab-selected');});
-  document.getElementById('pg-'+t).classList.add('on');
+  if(pgTarget)pgTarget.classList.add('on');
   const tabBtn=document.getElementById('tab-'+t);
   if(tabBtn){tabBtn.classList.add('on');tabBtn.classList.add('tab-selected');}
   if(t==='reg'){poblarTramSelect();renderTabla();}
