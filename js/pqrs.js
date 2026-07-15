@@ -1629,7 +1629,8 @@ function openTrasladoPqrsInicialModal(expId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Traslado inicial · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  const opts=OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
+  const opts='<option value="">— Seleccionar oficina —</option>'+
+    OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Radicada sin oficina asignada. Seleccione la oficina competente.</div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Oficina destino<span class="req-star">*</span></label>'+
@@ -1687,7 +1688,8 @@ function openTrasladoPqrsInterOficinaModal(expId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Trasladar PQRSD · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  const opts=destinos.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
+  const opts='<option value="">— Seleccionar oficina —</option>'+
+    destinos.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina actual: <strong>'+escAttr(labelOficina(actual))+'</strong></div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Nueva oficina destino<span class="req-star">*</span></label>'+

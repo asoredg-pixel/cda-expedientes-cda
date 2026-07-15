@@ -483,7 +483,10 @@ function pqrsEstadoActividadUi(e){
   const quien=String(wf.notificar_por||'').trim();
   const quienLbl=pqrsNotifQuienLabelUi(quien);
   const imp=!!(wf.impreso&&wf.impreso.en);
-  if(f===PQRS_WF.PENDIENTE_REVISION)return{lbl:'En revisión NCA',bg:'#6d3fa822',fg:'#6d3fa8'};
+  if(f===PQRS_WF.PENDIENTE_REVISION){
+    const devDir=!!(wf.devolucion_director&&wf.devolucion_director.motivo);
+    return{lbl:devDir?'↩ Devuelto Director · Por revisar':'⏳ Por revisar NCA',bg:'#6d3fa822',fg:'#6d3fa8'};
+  }
   if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)
     return{lbl:imp?'✓ Impreso · listo firma':'🖨 Por imprimir',bg:imp?'#dcfce7':'#1a7a4a22',fg:imp?'#15803d':'#1a7a4a'};
   if(f===PQRS_WF.POR_FIRMAR)
@@ -11882,6 +11885,14 @@ function filtrarActividadesPorEstado(list,filtro){
     return out;
   }
   if(filtro==='porver')return list.filter(t=>{
+    // Devolución del Director / entrega NCA: fase PENDIENTE_REVISION o REVISION_FINAL cuenta como Por revisar
+    if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
+      const ePv=getExpById(t.exp||t.codigo);
+      if(ePv&&taskEsAtenderPqrs(t,ePv)&&typeof pqrsWorkflowFase==='function'){
+        const fPv=pqrsWorkflowFase(ePv);
+        if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
+      }
+    }
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
     return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
   });
@@ -11955,6 +11966,13 @@ function renderActividades(){
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
   const porrevisar=allTodos.filter(t=>{
+    if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
+      const ePv=getExpById(t.exp||t.codigo);
+      if(ePv&&taskEsAtenderPqrs(t,ePv)&&typeof pqrsWorkflowFase==='function'){
+        const fPv=pqrsWorkflowFase(ePv);
+        if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
+      }
+    }
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
     return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
   }).length;
@@ -13104,7 +13122,11 @@ function termsBar(ter){
 // ===========================================================================
 function htmlNcaRevisionBadge(e){
   const f=pqrsWorkflowFase(e);
-  if(f===PQRS_WF.PENDIENTE_REVISION)return'<span class="bdg" style="background:#6d3fa822;color:#6d3fa8;border:1px solid #6d3fa8">⏳ Pendiente revisión NCA</span>';
+  if(f===PQRS_WF.PENDIENTE_REVISION){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const devDir=!!(wf.devolucion_director&&wf.devolucion_director.motivo);
+    return'<span class="bdg" style="background:#6d3fa822;color:#6d3fa8;border:1px solid #6d3fa8">'+(devDir?'↩ Devuelto Director · Por revisar':'⏳ Por revisar NCA')+'</span>';
+  }
   if(f===PQRS_WF.LISTA_ENVIO)return'<span class="bdg" style="background:var(--gnl);color:var(--gn)">✅ Aprobada — lista para envío</span>';
   if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)return'<span class="bdg" style="background:#1a7a4a22;color:#1a7a4a">✍ Para firma</span>';
   if(f===PQRS_WF.POR_FIRMAR)return'<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e">🖊 Por firmar</span>';
@@ -13894,10 +13916,10 @@ function openPqrsDirectorFirmarModal(expId){
   let previewBlock='';
   if(urls.preview){
     previewBlock=
-      '<div style="margin-bottom:12px;max-width:920px;margin-left:auto;margin-right:auto">'+
+      '<div style="margin-bottom:12px">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Documento a firmar'+(docFirma&&docFirma.nombre?' — '+escAttr(docFirma.nombre):'')+'</div>'+
-      '<div style="border:1px solid var(--bd);border-radius:var(--r);background:#525659;overflow:hidden;aspect-ratio:8.5/11;max-height:min(72vh,820px)">'+
-      '<iframe title="Vista del oficio" src="'+escAttr(urls.preview)+'" style="width:100%;height:100%;border:0;display:block;background:#525659"></iframe></div>'+
+      '<div class="pqrs-firma-preview">'+
+      '<iframe title="Vista del oficio" src="'+escAttr(urls.preview)+'"></iframe></div>'+
       '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
       '<a class="btn bsm" href="'+escAttr(urls.download||urls.view)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e">⬇ Descargar</a>'+
       (urls.view?'<a class="btn bsm" href="'+escAttr(urls.view)+'" target="_blank" rel="noopener">↗ Abrir en Drive</a>':'')+
@@ -13908,7 +13930,7 @@ function openPqrsDirectorFirmarModal(expId){
   }
   let anexosBlock='';
   if(anexosFirma.length){
-    anexosBlock='<div style="margin:0 auto 12px;max-width:920px;padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+    anexosBlock='<div style="margin:0 0 12px;padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Anexos de la respuesta</div>'+
       anexosFirma.map(function(d){
         const u=_pqrsDocDriveUrls(d);
@@ -13936,7 +13958,7 @@ function openPqrsDirectorFirmarModal(expId){
     '<textarea id="director-devolver-motivo" placeholder="Indique qué debe corregirse…" style="width:100%;min-height:64px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif"></textarea>'+
     '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bd2" onclick="pqrsDirectorDevolverParaCorregir(\''+escAttr(expId)+'\')">↩ Devolver a NCA</button></div></div>'+
     '<div style="margin-bottom:12px;border-top:1px solid var(--bd);padding-top:10px">'+chatHtml+'</div>'+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--sf);padding-top:8px;border-top:1px solid var(--bd)">'+
+    '<div class="pqrs-firma-actions">'+
     '<button type="button" class="btn bsm bp" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">✅ Confirmar firmado → Por notificar</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   window._directorSignedFile=null;
@@ -13944,7 +13966,7 @@ function openPqrsDirectorFirmarModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsDirectorFirmar',expId,taskId:tAct?tAct.id:null};
 }
-/** Director: oficial no firmable / con observaciones → revisión NCA. */
+/** Director: oficial no firmable / con observaciones → revisión NCA (Por revisar). */
 async function pqrsDirectorDevolverParaCorregir(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
@@ -13956,28 +13978,49 @@ async function pqrsDirectorDevolverParaCorregir(expId){
   if(!motivo){notif('Indique el motivo o las correcciones requeridas','err');return;}
   const wf=getPqrsWorkflow(e);
   const por=responsableActivo||'DS DEGUV';
-  await _pqrsRenombrarDocsDriveWf(wf,'revision',{onlyEstados:['por_firmar','por_firma','aprobado','']});
+  try{
+    await _pqrsRenombrarDocsDriveWf(wf,'revision',{onlyEstados:['por_firmar','por_firma','aprobado','por_notificar','']});
+  }catch(err){console.warn('pqrsDirectorDevolverParaCorregir rename:',err);}
   setPqrsWorkflow(e,{
     fase:PQRS_WF.PENDIENTE_REVISION,
+    documentos:wf.documentos||[],
     devolucion_director:{por:por,en:new Date().toISOString(),motivo:motivo},
-    revision_nca:{aprobado:false,origen:'director',comentario:motivo,por:por,en:new Date().toISOString()}
+    revision_nca:{aprobado:false,origen:'director',comentario:motivo,por:por,en:new Date().toISOString()},
+    // Limpiar marcas de impresión/firma para que vuelva al flujo de revisión
+    impreso:null,
+    listo_firma:null,
+    firma_director:null
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'devuelto_director_firma',fecha:hoy(),nota:'Director devolvió para corregir: '+motivo,oficina:'ds_deguv',por:por});
   const t=(e.tasks||[]).find(x=>x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e));
   if(t){
     normalizeTask(t);
+    t._pqrs_proyeccion_atendida=false;
+    t.fechaAtendida='';
+    t.fechaReportada=t.fechaReportada||hoy();
+    t.estado='Por verificar';
+    t.verificadoPor='';
+    migrateLegacyAsignados(t);
+    (t.asignados||[]).forEach(function(a){
+      if(!a)return;
+      a.fechaAtendida='';
+      if(a.estado==='atendido')a.estado=a.fechaReportada?'por_verificar':'pendiente';
+      else if(a.fechaReportada)a.estado='por_verificar';
+    });
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+    t.estado='Por verificar';
     if(!Array.isArray(t.comentarios))t.comentarios=[];
-    t.comentarios.push({autor:por,fecha:new Date().toISOString(),texto:'[Devolución Director — por firmar] '+motivo,rol:'asignador'});
+    t.comentarios.push({autor:por,fecha:new Date().toISOString(),texto:'[Devolución Director — por firmar] '+motivo,rol:'asignador',incluidoEnReporte:false});
     if(!Array.isArray(t.historial))t.historial=[];
     t.historial.push({tipo:'devuelto_director_firma',fecha:hoy(),ts:Date.now(),por:por,nota:motivo});
   }
-  pqrsSincronizarParticipacionPostAprobacion(e);
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
+  if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
   if(typeof renderActividades==='function')renderActividades();
-  notif('↩ Oficio devuelto a NCA para revisión (Por revisar)','ok');
+  notif('↩ Oficio devuelto al encargado (Por revisar / revisión NCA)','ok');
 }
 function pqrsMarcarOficioImpreso(expId){return pqrsPasarAFirmaDirector(expId);}
 async function pqrsMarcarListoParaFirmaDirector(expId){return pqrsPasarAFirmaDirector(expId);}
