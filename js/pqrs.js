@@ -253,7 +253,7 @@ function notificarResultadoRadicacionPqrs(opts){
   const msg=opts.message||'';
   if(!msg){if(typeof notif==='function')notif('Operación completada','ok');return;}
   if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
-    sstCargaDone({title:opts.title||'PQRSD radicada',message:msg,autoCloseMs:500,holdMs:220});
+    sstCargaDone({title:opts.title||'PQRSD radicada',message:msg,autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:60000,holdMs:220});
     return;
   }
   if(typeof confirmExito==='function'){
@@ -261,8 +261,9 @@ function notificarResultadoRadicacionPqrs(opts){
       title:opts.title||'PQRSD radicada',
       message:msg,
       tone:'radicacion',
-      hideFooter:true,
-      autoCloseMs:500
+      hideFooter:false,
+      confirmLabel:'Entendido',
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:60000
     });
   }else if(typeof notif==='function'){
     notif(msg,'ok');

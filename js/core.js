@@ -10425,25 +10425,22 @@ function notifEsGuardadoOk(msg){
   if(/eliminad|eliminada|eliminado|rechazad|descargad|exportad|migraci|marcada como no leída|csv exportado|excel descargado|planeador visual/i.test(m))return false;
   return /guardad|actualizad|registrad|exitosamente|añadid|agregad|cread|asignad|encargados guardados|persona guardada|comentario guardado|evento guardado|evento actualizado|trámite «|PQRSD actualizada|respuesta PQRSD registrada|respuesta registrada|actividad actualizada|actividad agendada|acto agregado|co-ejecutor añadido|modo de entrega actualizado|enviada a revisión|enviado a revisión/i.test(m);
 }
-/** Circunferencia del anillo (r=16 → 2πr ≈ 100.53). */
-const SST_CARGA_RING_LEN=100.53;
+/** Duración por defecto de mensajes centrales de éxito/aviso (1 minuto). */
+const SST_MSG_AUTO_MS=60000;
 function _sstCargaUiReset(){
   const wrap=document.getElementById('confirm-prec-carga');
   const fill=document.getElementById('confirm-prec-bar-fill');
-  const pct=document.getElementById('confirm-prec-ring-pct');
-  const fg=document.getElementById('confirm-prec-ring-fg');
+  const pct=document.getElementById('confirm-prec-carga-pct');
   const bar=wrap?wrap.querySelector('.sst-carga-bar'):null;
   if(wrap){wrap.classList.remove('is-indet','is-done');wrap.style.display='none';wrap.setAttribute('aria-hidden','true');}
-  if(fill)fill.style.width='0%';
-  if(pct)pct.textContent='0%';
-  if(fg)fg.style.strokeDashoffset=String(SST_CARGA_RING_LEN);
+  if(fill){fill.style.width='0%';fill.style.transform='';}
+  if(pct){pct.textContent='0%';pct.style.display='none';}
   if(bar)bar.setAttribute('aria-valuenow','0');
 }
 function _sstCargaUiApply(pct,sub){
   const wrap=document.getElementById('confirm-prec-carga');
   const fill=document.getElementById('confirm-prec-bar-fill');
-  const pctEl=document.getElementById('confirm-prec-ring-pct');
-  const fg=document.getElementById('confirm-prec-ring-fg');
+  const pctEl=document.getElementById('confirm-prec-carga-pct');
   const subEl=document.getElementById('confirm-prec-carga-sub');
   const bar=wrap?wrap.querySelector('.sst-carga-bar'):null;
   if(!wrap)return;
@@ -10454,19 +10451,17 @@ function _sstCargaUiApply(pct,sub){
   wrap.classList.toggle('is-done',!indet&&pct>=100);
   if(subEl&&sub!=null)subEl.textContent=sub;
   if(indet){
-    if(pctEl)pctEl.textContent='…';
-    if(fill)fill.style.width='';
-    if(fg)fg.style.strokeDashoffset='';
+    if(pctEl)pctEl.style.display='none';
+    if(fill){fill.style.width='';}
     if(bar)bar.setAttribute('aria-valuenow','0');
     return;
   }
   const p=Math.max(0,Math.min(100,Math.round(pct)));
-  if(pctEl)pctEl.textContent=p+'%';
-  if(fill)fill.style.width=p+'%';
-  if(fg)fg.style.strokeDashoffset=String(SST_CARGA_RING_LEN*(1-p/100));
+  if(fill){fill.style.width=p+'%';fill.style.transform='';}
+  if(pctEl){pctEl.style.display='';pctEl.textContent=p+'%';}
   if(bar)bar.setAttribute('aria-valuenow',String(p));
 }
-/** Muestra ventana central de carga (anillo + barra). */
+/** Muestra ventana central de carga (solo barra). pct null = indeterminada. */
 function sstCargaShow(opts){
   opts=opts||{};
   if(typeof confirmExito!=='function')return;
@@ -10482,15 +10477,13 @@ function sstCargaShow(opts){
   });
 }
 function sstCargaProgress(pct,sub){
-  const msg=document.getElementById('confirm-prec-msg');
-  if(sub&&msg&&window._confirmRadicacionLoading)_sstCargaUiApply(pct,sub);
-  else _sstCargaUiApply(pct,sub);
+  _sstCargaUiApply(pct,sub);
   if(sub){
     const subEl=document.getElementById('confirm-prec-carga-sub');
     if(subEl)subEl.textContent=sub;
   }
 }
-/** Completa la barra/anillo y cierra; opcional mensaje breve de éxito (0,5 s). */
+/** Completa la barra y cierra; opcional mensaje breve de éxito. */
 function sstCargaDone(opts){
   opts=opts||{};
   _sstCargaUiApply(100,opts.sub||'Carga completada');
@@ -10503,8 +10496,9 @@ function sstCargaDone(opts){
         title:opts.title||'Listo',
         message:opts.message,
         tone:'success',
-        hideFooter:true,
-        autoCloseMs:opts.autoCloseMs!=null?opts.autoCloseMs:500
+        hideFooter:false,
+        confirmLabel:'Entendido',
+        autoCloseMs:opts.autoCloseMs!=null?opts.autoCloseMs:SST_MSG_AUTO_MS
       });
     }
   },opts.holdMs!=null?opts.holdMs:280);
@@ -10519,8 +10513,9 @@ function sstCargaError(msg,detail){
       message:msg||'Error al cargar el archivo',
       detail:detail||'',
       tone:'warn',
-      hideFooter:true,
-      autoCloseMs:1800
+      hideFooter:false,
+      confirmLabel:'Entendido',
+      autoCloseMs:SST_MSG_AUTO_MS
     });
   }else if(typeof notif==='function')notif(msg||'Error al cargar','err');
 }
@@ -10528,10 +10523,9 @@ function notif(msg,tipo){
   const m=String(msg||'').trim();
   if(!m)return;
   tipo=tipo||'ok';
-  // Ventanita central breve (no toast esquina superior derecha)
+  // Ventanita central (duración 1 min; se puede cerrar con Entendido)
   if(typeof confirmExito==='function'){
     if(tipo==='info'){
-      // Avisos informativos breves al centro (no toast). Si parece carga prolongada, anillo.
       if(/subiendo|generando|cargando|iniciando migración|procesando|radicando/i.test(m)){
         sstCargaShow({title:'Procesando',message:m,sub:'Espere un momento…',pct:null});
       }else{
@@ -10539,8 +10533,9 @@ function notif(msg,tipo){
           title:'Información',
           message:m,
           tone:'radicacion',
-          hideFooter:true,
-          autoCloseMs:1200
+          hideFooter:false,
+          confirmLabel:'Entendido',
+          autoCloseMs:SST_MSG_AUTO_MS
         });
       }
       return;
@@ -10550,8 +10545,9 @@ function notif(msg,tipo){
         title:tipo==='err'?'Atención':'Aviso',
         message:m,
         tone:'warn',
-        hideFooter:true,
-        autoCloseMs:1600
+        hideFooter:false,
+        confirmLabel:'Entendido',
+        autoCloseMs:SST_MSG_AUTO_MS
       });
       return;
     }
@@ -10559,8 +10555,9 @@ function notif(msg,tipo){
       title:notifEsGuardadoOk(m)?'Guardado exitosamente':'Listo',
       message:m,
       tone:'success',
-      hideFooter:true,
-      autoCloseMs:500
+      hideFooter:false,
+      confirmLabel:'Entendido',
+      autoCloseMs:SST_MSG_AUTO_MS
     });
     return;
   }
@@ -10568,7 +10565,7 @@ function notif(msg,tipo){
   n.className='ntf '+(tipo==='err'?'ner':'nok');
   n.textContent=m;
   document.body.appendChild(n);
-  setTimeout(()=>n.remove(),tipo==='err'?3200:500);
+  setTimeout(()=>n.remove(),SST_MSG_AUTO_MS);
 }
 function confirmExito(opts){
   opts=opts||{};
@@ -10581,7 +10578,6 @@ function confirmExito(opts){
   const ico=document.getElementById('confirm-prec-icon-emoji');
   const inp=document.getElementById('confirm-prec-input');
   const box=ov?ov.querySelector('.confirm-prec-box'):null;
-  const carga=document.getElementById('confirm-prec-carga');
   if(!ov||!msg)return;
   if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
   window._confirmExitoMode=true;
@@ -10592,8 +10588,9 @@ function confirmExito(opts){
   }
   if(ico){
     if(opts.loading){
-      ico.className='radicacion-spinner';
-      ico.textContent='';
+      // Solo barra de progreso en el cuerpo (sin anillo/spinner adicional)
+      ico.className='';
+      ico.textContent='⬆';
     }else{
       ico.className='';
       if(tone==='warn')ico.textContent='⚠️';
@@ -10610,9 +10607,10 @@ function confirmExito(opts){
   if(inp){inp.style.display='none';inp.value='';}
   if(cancel)cancel.style.display='none';
   const foot=box?box.querySelector('.confirm-prec-foot'):null;
-  if(foot)foot.style.display=(opts.hideFooter||opts.loading)?'none':'';
+  const hideFoot=!!(opts.hideFooter||opts.loading);
+  if(foot)foot.style.display=hideFoot?'none':'';
   if(btn){
-    if(opts.hideFooter||opts.loading){
+    if(hideFoot){
       btn.style.display='none';
     }else{
       btn.style.display='';
@@ -10627,8 +10625,8 @@ function confirmExito(opts){
     _sstCargaUiReset();
   }
   ov.classList.add('on');
-  // Éxitos: ~0,5 s; avisos un poco más; carga sin auto-cierre
-  const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(opts.loading?null:(tone==='warn'?1600:500));
+  // Mensajes: 1 minuto (salvo carga, que queda abierta hasta sstCargaDone/Hide)
+  const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(opts.loading?null:SST_MSG_AUTO_MS);
   if(autoMs){
     window._confirmExitoTimer=setTimeout(function(){closeConfirmExito();},autoMs);
   }

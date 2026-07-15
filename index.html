@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260715a">
+<link rel="stylesheet" href="css/sst.css?v=20260715b">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260714d"></script>
 <script src="js/config-store.js?v=20260702t"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260715a"></script>
+<script src="js/core.js?v=20260715b"></script>
 <script src="js/formulario.js?v=20260709h"></script>
 <script src="js/tareas.js?v=20260702t"></script>
 <script src="js/guardar-exp.js?v=20260702t"></script>
@@ -34,7 +34,7 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260707e"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260715a"></script>
-<script src="js/pqrs.js?v=20260715a"></script>
+<script src="js/pqrs.js?v=20260715b"></script>
 <script src="js/consulta.js?v=20260714b"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260714d"></script>
@@ -972,16 +972,10 @@
       <textarea id="confirm-prec-input" class="confirm-prec-input" placeholder=""></textarea>
       <div id="confirm-prec-detail" class="confirm-prec-detail" style="display:none"></div>
       <div id="confirm-prec-carga" class="sst-carga" style="display:none" aria-hidden="true">
-        <div class="sst-carga-ring-wrap">
-          <svg class="sst-carga-ring" viewBox="0 0 40 40" aria-hidden="true">
-            <circle class="sst-carga-ring-bg" cx="20" cy="20" r="16" fill="none" stroke-width="3"></circle>
-            <circle id="confirm-prec-ring-fg" class="sst-carga-ring-fg" cx="20" cy="20" r="16" fill="none" stroke-width="3"></circle>
-          </svg>
-          <span id="confirm-prec-ring-pct" class="sst-carga-ring-pct">0%</span>
-        </div>
         <div class="sst-carga-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div id="confirm-prec-bar-fill" class="sst-carga-bar-fill"></div>
         </div>
+        <div id="confirm-prec-carga-pct" class="sst-carga-pct" style="display:none">0%</div>
         <div id="confirm-prec-carga-sub" class="sst-carga-sub">Espere mientras se completa la carga…</div>
       </div>
     </div>
