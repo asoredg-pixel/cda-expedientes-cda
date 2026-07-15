@@ -990,10 +990,16 @@ function getPqrsOficinaList(oficinaId,filtro){
   oficinaId=oficinaId||getPqrsOficinaActiva();
   filtro=filtro||window._pqrsOfiFiltro||'all';
   if(filtro==='por_trasladar')return getPqrsPendientesTrasladoList();
-  // Director: «Por firmar» es transversal (todas las oficinas) — exclusivo DS DEGUV
+  // «Por firmar»: exclusivo Director DS + NCA (no RN/Secretaría/Admin/OAP)
   if(filtro==='por_firmar'){
-    if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))return[];
+    const puedeVerPorFirmar=(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+      ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
+      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
+    if(!puedeVerPorFirmar)return[];
     let listF=exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).map(normalizePqrsOficinaFields);
+    // NCA: solo las de su oficina; Director: transversal
+    if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))
+      listF=listF.filter(e=>e._pqrs_oficina==='guaviare'||e._pqrs_oficina===getPqrsOficinaActiva());
     listF=filterExpsPeriodo(listF,'pqrs-ofi');
     return listF.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
@@ -1001,7 +1007,10 @@ function getPqrsOficinaList(oficinaId,filtro){
   if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e));
   else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
-  else if(filtro==='revision')list=list.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION);
+  else if(filtro==='revision')list=list.filter(e=>{
+    const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+    return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
+  });
   else if(filtro==='para_firma')list=list.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e));
   else if(filtro==='por_notificar')list=list.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;});
   list=filterExpsPeriodo(list,'pqrs-ofi');
@@ -1041,11 +1050,9 @@ function pqrsAccionesTablaHtml(e){
   // Por notificar
   if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)&&(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador())))
     h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+id+'\')">📬 Notificar</button> ';
-  // Responder directo (offices + NCA encargado + secretary)
+  // Responder directo (offices + NCA encargado + secretary) — sin botón «Enviar correo» aparte (está dentro de Responder)
   if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
     if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
-    if(puedeMarcarPqrsRespondida(e)&&!esSecretaria()&&(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid()||typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()))
-      h+='<button type="button" class="btn bsm" title="Abrir compose en el módulo Correos para responder al ciudadano" onclick="event.stopPropagation();gmailOfiAbrirComposeRespuestaPqrs(\''+id+'\')">📧 Enviar correo</button> ';
   }
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))h+=pqrsBtnEdit(e._exp,'Editar')+' ';
   if(esSecretaria()&&puedeEliminarPqrs(e))h+='<button type="button" class="btn bsm bd2" onclick="event.stopPropagation();eliminarPqrs(\''+id+'\')">Eliminar</button> ';
@@ -1059,8 +1066,10 @@ function renderPqrsOficinaInbox(){
   const detBox=document.getElementById('pqrs-ofi-detalle');
   const ofi=getOficinaActiva();
   let filtro=window._pqrsOfiFiltro||'all';
-  // «Por firmar» es exclusivo del Director DS DEGUV
-  if(filtro==='por_firmar'&&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
+  // «Por firmar» exclusivo Director DS; NCA sí lo ve (las otras oficinas RN/Secretaría/Admin/OAP no)
+  if(filtro==='por_firmar'&&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    &&!(typeof esNcaDeguv==='function'&&esNcaDeguv())
+    &&!(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())){
     filtro='all';
     window._pqrsOfiFiltro='all';
   }
@@ -1089,13 +1098,21 @@ function renderPqrsOficinaInbox(){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
-    const enRevision=listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION).length;
-    const showPorFirmarCard=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+    const showPorFirmarCard=(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+      ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
+      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
     const porFirmar=showPorFirmarCard
-      ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length
+      ?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()
+        ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length
+        :listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length)
       :0;
     const paraFirma=listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length;
     const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length;
+    // Por revisar = entrega NCA + notificación personal pendiente de aprobación del encargado
+    const enRevision=listAll.filter(e=>{
+      const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+      return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
+    }).length;
     const onAll=filtro==='all'?'outline:2px solid var(--bl);':'';
     const onPend=filtro==='pend'?'outline:2px solid var(--or);':'';
     const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
@@ -1731,17 +1748,21 @@ function ciudadanoEventoLabel(h){
   }
   if(h.tipo==='asignacion_oficina')return 'Asignación para atención';
   if(h.tipo==='respuesta_oficina')return 'Respuesta registrada';
-  // Sprint 10: nuevos tipos workflow
+  // Workflow interno (impresión, firma, asignación notificador): no visible al ciudadano
+  if(h.tipo==='pasar_a_firma_director'||h.tipo==='firma_director'||h.tipo==='impreso_oficio'||
+     h.tipo==='listo_firma'||h.tipo==='asignacion_notificador'||h.tipo==='vital_firma_completada'||
+     h.tipo==='devuelto_director_firma'||h.tipo==='notif_pendiente_encargado'||
+     h.tipo==='notif_reportada_revision'||h.tipo==='notificacion_personal_pendiente')return '';
   if(h.tipo==='entrega_respuesta_nca')return 'Respuesta en proceso de revisión interna';
-  if(h.tipo==='revision_nca_aprobado')return 'Respuesta aprobada — en preparación para envío';
-  if(h.tipo==='revision_nca_aprobado_oficio')return 'Respuesta aprobada — pendiente firma oficial';
-  if(h.tipo==='revision_nca_rechazado')return ''; // not shown to citizen
-  if(h.tipo==='vital_firma_completada')return 'Documento oficial firmado — pendiente notificación';
+  // Tras aprobación: un solo mensaje de proceso de notificación (sin detalle de imprimir/firmar)
+  if(h.tipo==='revision_nca_aprobado_oficio'||h.tipo==='revision_nca_aprobado')return 'Respuesta aprobada — en proceso de notificación';
+  if(h.tipo==='revision_nca_rechazado')return '';
   if(h.tipo==='notificacion_correo')return 'Respuesta notificada al ciudadano por correo';
   if(h.tipo==='notificacion_radicacion')return 'Radicación notificada al ciudadano por correo';
   if(h.tipo==='notificacion_excepcion')return 'Notificación por correo — excepción registrada';
+  if(h.tipo==='revision_final_aprobada'||h.tipo==='revision_nca_canal_fisico')return 'Respuesta notificada — solicitud atendida';
   if(h.tipo==='recepcion_nca')return 'Recibido para trámite en NCA DEGUV';
-  if(h.tipo==='informativa')return 'Solicitud informativa — atendida';
+  if(h.tipo==='informativa'||h.tipo==='informativa_aprobada')return 'Solicitud informativa — atendida';
   return 'Actualización del trámite';
 }
 function ciudadanoNotaPublica(h,nota){
@@ -1841,7 +1862,11 @@ async function buscarExpCiudadano(){
     hist.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
     hist.forEach(h=>{
       const lbl=ciudadanoEventoLabel(h);
-      const nota=ciudadanoNotaPublica(h,h.nota||'');
+      if(!lbl)return;
+      // Tras aprobación no mostrar detalle interno (quién firma / imprime / notifica)
+      let notaRaw=h.nota||'';
+      if(h.tipo==='revision_nca_aprobado'||h.tipo==='revision_nca_aprobado_oficio')notaRaw='';
+      const nota=ciudadanoNotaPublica(h,notaRaw);
       eventos.push({fecha:h.fecha||fr,html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(h.fecha||fr)+'</div><div class="tl-nota"><strong>'+escAttr(lbl)+'</strong>'+(nota?(': '+escAttr(nota)):'')+'</div></div>'});
     });
   }else{
@@ -1863,7 +1888,7 @@ async function buscarExpCiudadano(){
   });
   eventos.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
   const tlHtml=eventos.length?eventos.map(ev=>ev.html).join(''):'<div style="font-size:12px;color:var(--tx3)">Sin movimientos registrados aún.</div>';
-  const docsTask=getDocsAprobadosCiudadano(e);
+  const docsTask=(esPqrs&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))?[]:getDocsAprobadosCiudadano(e);
   const docsPqrsSol=getDocsPqrsSolicitudCiudadano(e);
   const docsPqrs=getDocsPqrsRespuestaCiudadano(e);
   const docsTram=getDocsTramiteCiudadano(e);
