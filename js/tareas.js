@@ -28,6 +28,15 @@ function syncTaskPrioritariaRow(cb){
 }
 function taskFormFootHtml(data){
   const m=normalizeTask(data||{});
+  // Heal: devolución Director no debe verse Atendida/Aprobada en el formulario
+  try{
+    const expId=typeof editId!=='undefined'?editId:(window._conPanelActive||'');
+    const eHeal=expId&&typeof getExpById==='function'?getExpById(expId):null;
+    if(eHeal&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(m,eHeal)&&typeof pqrsHealTaskTrasDevolucionDirector==='function'){
+      const real=(eHeal.tasks||[]).find(function(x){return x&&String(x.id)===String(m.id);})||m;
+      if(pqrsHealTaskTrasDevolucionDirector(eHeal,real))Object.assign(m,real);
+    }
+  }catch(e){}
   if(m.eliminada&&puedeRestaurarActividad()){
     return '<div class="tkr-foot"><span style="font-size:11px;color:var(--rd);font-weight:600">Eliminada — visible solo para administrador</span>'+
       '<button type="button" class="btn bsm bp" onclick="restaurarTaskFormRow(this)">↩ Restaurar</button></div>';
