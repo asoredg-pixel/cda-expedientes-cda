@@ -6,11 +6,11 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<!-- SST UI v20260715e -->
-<title>Sistema de Seguimiento ? CDA Guaviare</title>
+<!-- SST UI v20260716b -->
+<title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260715e">
+<link rel="stylesheet" href="css/sst.css?v=20260716b">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -42,24 +42,24 @@
 <body>
 <div id="mant-banner" class="mant-banner" role="status" aria-live="polite"></div>
 <div id="storage-full-banner" class="storage-full-banner" role="alert">
-  <span>?? ALMACENAMIENTO LLENO: Los datos NO se guardaron. Exporte sus datos inmediatamente desde Configuraci?n &gt; Exportar datos</span>
-  <button type="button" class="storage-full-banner-close" onclick="SST.cerrarStorageFullBanner()" aria-label="Cerrar">?</button>
+  <span>⚠️ ALMACENAMIENTO LLENO: Los datos NO se guardaron. Exporte sus datos inmediatamente desde Configuración &gt; Exportar datos</span>
+  <button type="button" class="storage-full-banner-close" onclick="SST.cerrarStorageFullBanner()" aria-label="Cerrar">✕</button>
 </div>
 <div id="export-reminder-overlay" class="export-reminder-overlay" onclick="if(event.target===this)SST.recordarDespuesExport()">
   <div class="export-reminder-box" onclick="event.stopPropagation()">
     <p id="export-reminder-msg" style="margin:0;font-size:14px;line-height:1.5"></p>
     <div class="export-reminder-btns">
       <button type="button" class="btn bp" onclick="SST.exportarAhoraFromReminder()">Exportar ahora</button>
-      <button type="button" class="btn bs" onclick="SST.recordarDespuesExport()">Recordar despu?s</button>
+      <button type="button" class="btn bs" onclick="SST.recordarDespuesExport()">Recordar después</button>
     </div>
   </div>
 </div>
 <div id="gmail-sesion-overlay" class="gmail-sesion-overlay" aria-hidden="true">
   <div class="gmail-sesion-box">
-    <div class="gmail-sesion-icon" aria-hidden="true">??</div>
+    <div class="gmail-sesion-icon" aria-hidden="true">☁️</div>
     <h2 class="gmail-sesion-tit">Conectar Gmail / Drive</h2>
     <p class="gmail-sesion-txt">Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.</p>
-    <p class="gmail-sesion-txt gmail-sesion-txt-sm">Puede seguir navegando sin conectar. La conexi?n dura ~1 hora; el bot?n <strong>Drive</strong> junto a la campanita muestra el tiempo restante.</p>
+    <p class="gmail-sesion-txt gmail-sesion-txt-sm">Puede seguir navegando sin conectar. La conexión dura ~1 hora; el botón <strong>Drive</strong> junto a la campanita muestra el tiempo restante.</p>
     <div class="gmail-sesion-btns">
       <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar Gmail / Drive</button>
       <button type="button" class="btn bs" onclick="sstCerrarGmailAttachModal(false)">Continuar sin conectar</button>
@@ -70,11 +70,11 @@
   <div class="hdri">
     <div class="logo">
       <div class="lic lic-logo"><img src="assets/logo-cda-icon.png" alt="CDA" class="hdr-logo-img"></div>
-      <div><div class="ltx">Sistema de Seguimiento de Tr?mites</div><div class="lsb">Con seguimiento post-atenci?n y control de t?rminos <span id="sync-indicator" style="font-size:11px;color:var(--tx3);margin-left:6px"></span></div></div>
+      <div><div class="ltx">Sistema de Seguimiento de Trámites</div><div class="lsb">Con seguimiento post-atención y control de términos <span id="sync-indicator" style="font-size:11px;color:var(--tx3);margin-left:6px"></span></div></div>
     </div>
     <div class="hacts">
-      <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar m?dulo (solo Administrador)">
-        <optgroup label="Administraci?n">
+      <select id="sel-depto" class="depto-sel" onchange="onDeptoChange()" title="Cambiar módulo (solo Administrador)">
+        <optgroup label="Administración">
           <option value="admin">Administrador</option>
         </optgroup>
         <optgroup label="Oficinas DEGUV">
@@ -84,12 +84,12 @@
           <option value="admin_deguv">ADMIN DEGUV</option>
           <option value="ds_deguv">DS DEGUV</option>
         </optgroup>
-        <optgroup label="Secretar?a">
-          <option value="secretaria">Secretar?a DEGUV ? Radicaci?n</option>
+        <optgroup label="Secretaría">
+          <option value="secretaria">Secretaría DEGUV — Radicación</option>
         </optgroup>
         <optgroup label="Departamentos regionales">
-          <option value="guainia">Guain?a</option>
-          <option value="vaupes">Vaup?s</option>
+          <option value="guainia">Guainía</option>
+          <option value="vaupes">Vaupés</option>
         </optgroup>
         <optgroup label="Consulta">
           <option value="ciudadano">Consulta ciudadana PQRSD</option>
@@ -99,20 +99,20 @@
       </select>
       <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
         <span id="hdr-user-label"></span>
-        <button type="button" class="btn bsm hdr-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesi?n</button>
+        <button type="button" class="btn bsm hdr-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
       </div>
       <details class="hdr-more-menu">
-        <summary class="hdr-more-btn" aria-label="M?s acciones">?</summary>
+        <summary class="hdr-more-btn" aria-label="Más acciones">⋮</summary>
         <div class="hdr-more-panel">
           <div id="hdr-user-bar-mobile" class="hdr-user-bar hdr-user-bar-mobile" style="display:none">
             <span id="hdr-user-label-mobile"></span>
-            <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesi?n</button>
+            <button type="button" class="btn bsm" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
           </div>
           <span class="hacts-juris-hide">
-            <button class="btn bsm" onclick="importarDatos()" title="Importar respaldo completo (.json)">? Importar</button>
+            <button class="btn bsm" onclick="importarDatos()" title="Importar respaldo completo (.json)">↑ Importar</button>
             <input type="file" id="imp-file" accept=".json,.xls,.xlsx,.csv,.html" onchange="leerImportFile(event)">
           </span>
-          <button class="btn bsm bp hacts-export-respaldo" onclick="exportarRespaldoCompleto()" title="Exportar respaldo completo (.json)">? Exportar</button>
+          <button class="btn bsm bp hacts-export-respaldo" onclick="exportarRespaldoCompleto()" title="Exportar respaldo completo (.json)">↓ Exportar</button>
           <button class="btn bsm bp hacts-juris-hide hacts-nuevo-hide" onclick="nuevoExp()">+ Nuevo expediente</button>
         </div>
       </details>
@@ -122,31 +122,31 @@
 <nav class="tabs">
   <div class="tabs-wrap">
   <div class="tabsi">
-    <button class="tab on" onclick="showTab('reg')" id="tab-reg"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Registro</span></button>
-    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Correos</span></button>
-    <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Radicaci?n</span></button>
-    <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">PQRSD</span></button>
-    <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Actividades</span></button>
-    <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Agenda</span></button>
-    <button class="tab" onclick="showTab('con')" id="tab-con"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Consulta</span></button>
-    <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Recursos</span></button>
-    <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Consulta</span></button>
-    <button class="tab" onclick="showTab('cons')" id="tab-cons"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Consolidado</span></button>
-    <button class="tab" onclick="showTab('cfg')" id="tab-cfg"><span class="tab-ico" aria-hidden="true">??</span><span class="tab-lbl">Config</span></button>
+    <button class="tab on" onclick="showTab('reg')" id="tab-reg"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-lbl">Registro</span></button>
+    <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi"><span class="tab-ico" aria-hidden="true">📧</span><span class="tab-lbl">Correos</span></button>
+    <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec"><span class="tab-ico" aria-hidden="true">📥</span><span class="tab-lbl">Radicación</span></button>
+    <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">PQRSD</span></button>
+    <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">Actividades</span></button>
+    <button class="tab tab-agenda-only" onclick="showTab('agenda')" id="tab-agenda"><span class="tab-ico" aria-hidden="true">📅</span><span class="tab-lbl">Agenda</span></button>
+    <button class="tab" onclick="showTab('con')" id="tab-con"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
+    <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec"><span class="tab-ico" aria-hidden="true">📚</span><span class="tab-lbl">Recursos</span></button>
+    <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
+    <button class="tab" onclick="showTab('cons')" id="tab-cons"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-lbl">Consolidado</span></button>
+    <button class="tab" onclick="showTab('cfg')" id="tab-cfg"><span class="tab-ico" aria-hidden="true">⚙️</span><span class="tab-lbl">Config</span></button>
   </div>
   <div class="tabs-right" id="depto-inbox-wrap" style="display:none">
-    <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexi?n Drive para archivos" style="display:none" aria-live="polite">
+    <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">
       <span class="sst-drive-status-dot" aria-hidden="true"></span>
       <span class="sst-drive-status-label" id="sst-drive-status-label">Drive</span>
     </button>
-    <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja ? chat de actividades y solicitudes de traslado o eliminaci?n">
-      ??<span class="inbox-badge" id="depto-inbox-badge"></span>
+    <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja — chat de actividades y solicitudes de traslado o eliminación">
+      🔔<span class="inbox-badge" id="depto-inbox-badge"></span>
     </button>
     <div class="inbox-panel" id="depto-inbox-panel" onclick="event.stopPropagation()">
       <div class="inbox-panel-hdr">Bandeja de actividades</div>
       <div class="inbox-panel-tabs" id="depto-inbox-tabs">
-        <button type="button" class="inbox-tab on" id="inbox-tab-pending" onclick="setBandejaVista('pending')" title="Por leer">?? <span class="inbox-tab-cnt" id="inbox-pending-count">0</span></button>
-        <button type="button" class="inbox-tab" id="inbox-tab-read" onclick="setBandejaVista('read')" title="Le?dos">??</button>
+        <button type="button" class="inbox-tab on" id="inbox-tab-pending" onclick="setBandejaVista('pending')" title="Por leer">📩 <span class="inbox-tab-cnt" id="inbox-pending-count">0</span></button>
+        <button type="button" class="inbox-tab" id="inbox-tab-read" onclick="setBandejaVista('read')" title="Leídos">📭</button>
       </div>
       <div id="depto-inbox-list"></div>
     </div>
@@ -157,16 +157,16 @@
   <div class="app-inner">
   <label for="sel-responsable" id="resp-global-label" style="font-weight:600;font-size:13px">Responsable:</label>
   <select id="sel-responsable" class="depto-sel" style="min-width:240px" onchange="onResponsableChange()" title="Seleccione o cambie de responsable">
-    <option value="">? Seleccione responsable ?</option>
+    <option value="">— Seleccione responsable —</option>
   </select>
-  <button type="button" class="btn bsm" onclick="cambiarResponsable()">? Cambiar responsable</button>
+  <button type="button" class="btn bsm" onclick="cambiarResponsable()">↻ Cambiar responsable</button>
   <span id="resp-global-hint" style="font-size:12px;color:var(--tx2)">Consulta de expedientes y bandeja de actividades.</span>
   </div>
 </div>
 <div id="verify-banner" class="verify-banner"></div>
 <main class="main">
 
-<!-- ===== INICIO ? SELECCI?N DE ROL ===== -->
+<!-- ===== INICIO — SELECCIÓN DE ROL ===== -->
 <div class="pg on" id="pg-login">
   <!-- Aurora background -->
   <div class="lbg" aria-hidden="true">
@@ -206,9 +206,9 @@
       <div class="lpb-logo-wrap">
         <img src="assets/logo-cda-icon.png" alt="CDA" class="lpb-logo">
       </div>
-      <h1 class="lpb-title">Sistema de<br>Seguimiento<br>de Tr?mites</h1>
-      <p class="lpb-org">Corporaci?n para el Desarrollo Sostenible del Norte y el Oriente Amaz?nico</p>
-      <div class="lpb-badge">? DEGUV ? Guaviare ? 2026</div>
+      <h1 class="lpb-title">Sistema de<br>Seguimiento<br>de Trámites</h1>
+      <p class="lpb-org">Corporación para el Desarrollo Sostenible del Norte y el Oriente Amazónico</p>
+      <div class="lpb-badge">⚡ DEGUV · Guaviare · 2026</div>
       <svg class="lpb-leaf" viewBox="0 0 110 170" aria-hidden="true">
         <path d="M55,165 C18,138 8,98 28,56 C38,30 55,14 78,6 C88,46 82,88 66,118 C60,132 55,150 55,165Z" fill="rgba(52,211,153,.1)" stroke="rgba(52,211,153,.28)" stroke-width="1"/>
         <path d="M55,165 C55,135 50,95 46,56" stroke="rgba(52,211,153,.22)" stroke-width="1" fill="none"/>
@@ -223,15 +223,15 @@
     <div class="login-panel-auth">
       <div class="lpa-header">
         <div class="lpa-welcome">Bienvenido</div>
-        <p class="lpa-hint">Seleccione c?mo desea ingresar al sistema</p>
+        <p class="lpa-hint">Seleccione cómo desea ingresar al sistema</p>
       </div>
 
       <div class="login-main-card">
-        <div class="lmc-icon">??</div>
+        <div class="lmc-icon">🌿</div>
         <div class="lmc-body">
           <h2>Consulta ciudadana</h2>
-          <p>Consulte el estado de su tr?mite o PQRSD sin necesidad de registrarse.</p>
-          <button type="button" class="login-cta-btn" onclick="SST.ingresarConsultaCiudadana()">Consultar mi tr?mite <span class="lmc-arr">?</span></button>
+          <p>Consulte el estado de su trámite o PQRSD sin necesidad de registrarse.</p>
+          <button type="button" class="login-cta-btn" onclick="SST.ingresarConsultaCiudadana()">Consultar mi trámite <span class="lmc-arr">→</span></button>
         </div>
       </div>
 
@@ -250,7 +250,7 @@
         <p class="login-sub" style="color:rgba(255,255,255,.6);margin-bottom:.5rem">Seleccione su rol para continuar</p>
         <div id="login-roles-grid" class="login-roles-grid"></div>
         <div style="text-align:center;margin-top:.9rem">
-          <button type="button" class="login-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesi?n de Google</button>
+          <button type="button" class="login-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión de Google</button>
         </div>
       </div>
     </div>
@@ -273,43 +273,43 @@
 <div class="pg" id="pg-reg">
   <div id="reg-depto-banner" class="depto-banner" style="display:none"></div>
   <div class="tram-selector" id="tram-selector-wrap">
-    <label>Tipo de tr?mite *</label>
+    <label>Tipo de trámite *</label>
     <select id="r_tramite" onchange="onTramiteChange()">
-      <option value="">? Seleccione el tipo de tr?mite ?</option>
+      <option value="">— Seleccione el tipo de trámite —</option>
     </select>
   </div>
   <div id="form-area">
-    <div style="text-align:center;padding:2rem;color:var(--tx3);background:var(--sf);border:1px dashed var(--bd);border-radius:var(--rl)">Seleccione un tipo de tr?mite para cargar el formulario</div>
+    <div style="text-align:center;padding:2rem;color:var(--tx3);background:var(--sf);border:1px dashed var(--bd);border-radius:var(--rl)">Seleccione un tipo de trámite para cargar el formulario</div>
   </div>
   <div style="margin-top:1.3rem">
     <div class="card">
       <div class="fx" style="justify-content:space-between;margin-bottom:.8rem;flex-wrap:wrap;gap:6px">
         <div class="slbl" style="margin:0">Expedientes <span class="nbdg" id="cnt-bdg">0</span></div>
         <div class="sb" style="margin:0">
-          <input type="text" id="sreg" placeholder="Buscar?" style="width:190px" oninput="renderTabla()">
-          <select id="freg-tr" onchange="renderTabla()"><option value="">Todos los tr?mites</option></select>
+          <input type="text" id="sreg" placeholder="Buscar…" style="width:190px" oninput="renderTabla()">
+          <select id="freg-tr" onchange="renderTabla()"><option value="">Todos los trámites</option></select>
           <select id="freg-est" onchange="renderTabla()">
             <option value="">Todos los estados</option>
-            <option>Solicitud</option><option>En tr?mite</option><option>Atendido</option><option>Seguimiento</option><option>Archivado o anulado</option>
+            <option>Solicitud</option><option>En trámite</option><option>Atendido</option><option>Seguimiento</option><option>Archivado o anulado</option>
           </select>
           <select id="freg-ter" onchange="renderTabla()">
-            <option value="">Sin filtro t?rminos</option>
-            <option value="ok">En t?rminos</option>
-            <option value="warn">Pr?ximo a vencer</option>
+            <option value="">Sin filtro términos</option>
+            <option value="ok">En términos</option>
+            <option value="warn">Próximo a vencer</option>
             <option value="venc">Vencido</option>
-            <option value="done-ok">Atendido en t?rminos</option>
+            <option value="done-ok">Atendido en términos</option>
             <option value="done-venc">Atendido vencido</option>
           </select>
         </div>
       </div>
       <div class="tw">
         <table>
-          <thead><tr><th>Expediente</th><th>Tr?mite</th><th>Nombre</th><th>Estado</th><th>T?rminos</th><th>D?as/Plazo</th><th>Flags</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Expediente</th><th>Trámite</th><th>Nombre</th><th>Estado</th><th>Términos</th><th>Días/Plazo</th><th>Flags</th><th>Acciones</th></tr></thead>
           <tbody id="tbl-reg"></tbody>
         </table>
       </div>
       <div style="margin-top:8px;text-align:center">
-        <button type="button" class="btn bsm" id="reg-tabla-more" style="display:none" onclick="regTablaVerMas()">Ver 10 m?s</button>
+        <button type="button" class="btn bsm" id="reg-tabla-more" style="display:none" onclick="regTablaVerMas()">Ver 10 más</button>
       </div>
     </div>
   </div>
@@ -322,16 +322,16 @@
       <div class="slbl" id="act-titulo" style="margin:0">Mis actividades asignadas</div>
       <div id="act-dept-actions" style="display:none" class="fx" style="gap:6px;align-items:center">
         <div id="act-vista-toggle" class="act-vista-toggle" style="display:none">
-          <button type="button" class="btn bsm on" id="act-vista-tabla" onclick="setActVista('tabla')">?? Tabla</button>
-          <button type="button" class="btn bsm" id="act-vista-gantt" onclick="setActVista('gantt')">?? Planeador</button>
+          <button type="button" class="btn bsm on" id="act-vista-tabla" onclick="setActVista('tabla')">📋 Tabla</button>
+          <button type="button" class="btn bsm" id="act-vista-gantt" onclick="setActVista('gantt')">📊 Planeador</button>
         </div>
         <button type="button" class="btn bsm bp" onclick="openCrearActLibreModal()">+ Actividad sin expediente</button>
       </div>
     </div>
     <div style="font-size:12px;color:var(--tx2);margin-bottom:.8rem" id="act-subtitulo">Seleccione su nombre en la barra superior para ver sus actividades.</div>
     <div class="sb periodo-filtro act-periodo-row">
-      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte r?pido</label><select id="act-preset" onchange="onPresetPeriodo('act')"><option value="">Todo el historial</option><option value="ano">A?o completo</option><option value="trim1">Trimestre 1 (ene?mar)</option><option value="trim2">Trimestre 2 (abr?jun)</option><option value="trim3">Trimestre 3 (jul?sep)</option><option value="trim4">Trimestre 4 (oct?dic)</option><option value="sem1">Semestre 1 (ene?jun)</option><option value="sem2">Semestre 2 (jul?dic)</option><option value="mes">Mes espec?fico</option><option value="custom">Rango personalizado</option></select></div>
-      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">A?o</label><select id="act-ano" onchange="onAnoPeriodoChange('act')"></select></div>
+      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="act-preset" onchange="onPresetPeriodo('act')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>
+      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">Año</label><select id="act-ano" onchange="onAnoPeriodoChange('act')"></select></div>
       <div class="fld" style="min-width:110px" id="act-mes-wrap"><label style="font-size:11px;color:var(--tx2)">Mes</label><select id="act-mes" onchange="onPresetPeriodo('act')"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
       <label>Desde<input type="date" id="act-desde" onchange="onRangoManualPeriodo('act')"></label>
       <label>Hasta<input type="date" id="act-hasta" onchange="onRangoManualPeriodo('act')"></label>
@@ -357,15 +357,15 @@
           <option value="done">Atendidas</option>
           <option value="all">Todas las asignadas</option>
         </select>
-        <input type="text" id="s-act" placeholder="Buscar actividad o expediente?" oninput="renderActividades()" style="flex:1;min-width:180px">
-        <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">? Descargar</button>
+        <input type="text" id="s-act" placeholder="Buscar actividad o expediente…" oninput="renderActividades()" style="flex:1;min-width:180px">
+        <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">⬇ Descargar</button>
       </div>
     </div>
     <div class="mets" id="act-mets" style="margin-bottom:.8rem"></div>
     <div id="act-gantt-wrap" class="act-gantt-wrap" style="display:none"></div>
     <div class="tw" id="act-table-wrap">
       <table>
-        <thead><tr><th>Estado</th><th>Ref.</th><th>Tr?mite</th><th>Interesado</th><th>Actividad</th><th>Vence</th><th>Cierre</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Estado</th><th>Ref.</th><th>Trámite</th><th>Interesado</th><th>Actividad</th><th>Vence</th><th>Cierre</th><th>Acciones</th></tr></thead>
         <tbody id="tbl-act"></tbody>
       </table>
     </div>
@@ -391,26 +391,26 @@
           <div class="agenda-view-tabs" id="agenda-view-tabs">
             <button type="button" class="on" onclick="agendaSetVista('mes')">Mes</button>
             <button type="button" onclick="agendaSetVista('semana')">Semana</button>
-            <button type="button" onclick="agendaSetVista('dia')">D?a</button>
+            <button type="button" onclick="agendaSetVista('dia')">Día</button>
           </div>
-          <button type="button" class="btn bsm" onclick="agendaNav(-1)">?</button>
+          <button type="button" class="btn bsm" onclick="agendaNav(-1)">◀</button>
           <strong id="agenda-mes-label" style="font-size:14px;min-width:180px;text-align:center;flex:1"></strong>
-          <button type="button" class="btn bsm" onclick="agendaNav(1)">?</button>
+          <button type="button" class="btn bsm" onclick="agendaNav(1)">▶</button>
           <button type="button" class="btn bsm bp" onclick="agendaIrHoy()">Hoy</button>
         </div>
         <div id="agenda-cal-wrap">
           <div id="agenda-cal-grid" class="agenda-cal"></div>
         </div>
         <div id="agenda-asig-gest" style="display:none;margin-top:.5rem"></div>
-        <div class="slbl" id="agenda-lista-titulo" style="margin-top:.5rem">Eventos del d?a</div>
+        <div class="slbl" id="agenda-lista-titulo" style="margin-top:.5rem">Eventos del día</div>
         <div id="agenda-lista" class="agenda-list"></div>
       </div>
       <div id="agenda-drawer" class="agenda-drawer">
         <div class="agenda-drawer-hdr">
           <strong id="agenda-drawer-tit" style="font-size:14px">Evento</strong>
-          <button type="button" class="btn bsm bic" onclick="agendaCerrarDrawer()" title="Cerrar">?</button>
+          <button type="button" class="btn bsm bic" onclick="agendaCerrarDrawer()" title="Cerrar">✕</button>
         </div>
-        <div id="agenda-drawer-body"><div style="font-size:12px;color:var(--tx3)">Seleccione un evento del calendario o pulse ?+ Evento personal?.</div></div>
+        <div id="agenda-drawer-body"><div style="font-size:12px;color:var(--tx3)">Seleccione un evento del calendario o pulse «+ Evento personal».</div></div>
       </div>
     </div>
   </div>
@@ -419,10 +419,10 @@
 <!-- ===== CONSULTA ===== -->
 <div class="pg" id="pg-con">
   <div class="card">
-    <div class="slbl">B?squeda avanzada ? l?nea de tiempo completa</div>
+    <div class="slbl">Búsqueda avanzada — línea de tiempo completa</div>
     <div class="sb periodo-filtro con-filtro-avanzado" style="margin-bottom:10px">
-      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte r?pido</label><select id="q-preset" onchange="onPresetPeriodo('q')"><option value="">Todo el historial</option><option value="ano">A?o completo</option><option value="trim1">Trimestre 1 (ene?mar)</option><option value="trim2">Trimestre 2 (abr?jun)</option><option value="trim3">Trimestre 3 (jul?sep)</option><option value="trim4">Trimestre 4 (oct?dic)</option><option value="sem1">Semestre 1 (ene?jun)</option><option value="sem2">Semestre 2 (jul?dic)</option><option value="mes">Mes espec?fico</option><option value="custom">Rango personalizado</option></select></div>
-      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">A?o</label><select id="q-ano" onchange="onAnoPeriodoChange('q')"></select></div>
+      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="q-preset" onchange="onPresetPeriodo('q')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>
+      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">Año</label><select id="q-ano" onchange="onAnoPeriodoChange('q')"></select></div>
       <div class="fld" style="min-width:110px" id="q-mes-wrap"><label style="font-size:11px;color:var(--tx2)">Mes</label><select id="q-mes" onchange="onPresetPeriodo('q')"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
       <label>Desde<input type="date" id="q-desde" onchange="onRangoManualPeriodo('q')"></label>
       <label>Hasta<input type="date" id="q-hasta" onchange="onRangoManualPeriodo('q')"></label>
@@ -430,16 +430,16 @@
     </div>
     <div id="q-periodo-resumen" style="font-size:11px;color:var(--tx2);margin:-4px 0 10px"></div>
     <div class="sb con-filtro-avanzado">
-      <input type="text" id="q-txt" placeholder="Nombre, expediente, resoluci?n, NIT, ciudad?" oninput="renderConsulta()" style="flex:2;min-width:200px">
-      <select id="q-tram" onchange="renderConsulta()"><option value="">Todos los tr?mites</option></select>
+      <input type="text" id="q-txt" placeholder="Nombre, expediente, resolución, NIT, ciudad…" oninput="renderConsulta()" style="flex:2;min-width:200px">
+      <select id="q-tram" onchange="renderConsulta()"><option value="">Todos los trámites</option></select>
       <select id="q-est" onchange="renderConsulta()">
         <option value="">Todos los estados</option>
-        <option>Solicitud</option><option>En tr?mite</option><option>Atendido</option><option>Seguimiento</option><option>Archivado o anulado</option>
+        <option>Solicitud</option><option>En trámite</option><option>Atendido</option><option>Seguimiento</option><option>Archivado o anulado</option>
       </select>
       <select id="q-inst" onchange="renderConsulta()"><option value="">Todos los responsables</option></select>
       <select id="q-act" onchange="renderConsulta()">
         <option value="">Actividades (todas)</option>
-        <option value="ejec">Con actividades en tr?mite</option>
+        <option value="ejec">Con actividades en trámite</option>
         <option value="ate">Con actividades atendidas</option>
         <option value="venc">Con actividades vencidas</option>
         <option value="porver">Con actividades por verificar</option>
@@ -460,8 +460,8 @@
     <div class="fx" style="justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:8px">
       <div id="q-cnt" style="font-size:12px;color:var(--tx2)"></div>
       <div class="fx" style="gap:6px;flex-wrap:wrap">
-        <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-consulta" onclick="exportarConsultaExcel()">? Descargar</button>
-        <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-matriz-pqrs" style="display:none" onclick="exportarConsultaMatrizPqrs()" title="Descargar matriz oficial PQRSD con los resultados filtrados">?? Matriz PQRSD</button>
+        <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-consulta" onclick="exportarConsultaExcel()">⬇ Descargar</button>
+        <button type="button" class="btn bsm con-filtro-avanzado" id="btn-export-matriz-pqrs" style="display:none" onclick="exportarConsultaMatrizPqrs()" title="Descargar matriz oficial PQRSD con los resultados filtrados">📊 Matriz PQRSD</button>
       </div>
     </div>
   </div>
@@ -471,7 +471,7 @@
 <div id="pqrs-side-panel" class="con-side-panel" style="z-index:15003;width:min(560px,96vw)" onclick="event.stopPropagation()">
   <div class="con-side-panel-hdr">
     <div><div class="slbl" style="margin:0" id="pqrs-side-tit">PQRSD</div><div id="pqrs-side-sub" style="font-size:12px;color:var(--tx2);margin-top:2px"></div></div>
-    <button type="button" class="btn bsm" onclick="cerrarPqrsSidePanel()">?</button>
+    <button type="button" class="btn bsm" onclick="cerrarPqrsSidePanel()">✕</button>
   </div>
   <div id="pqrs-side-body" class="pqrs-ofi-detalle"></div>
 </div>
@@ -479,7 +479,7 @@
 <div id="con-side-panel" class="con-side-panel" onclick="event.stopPropagation()">
   <div class="con-side-panel-hdr">
     <div><div class="slbl" style="margin:0" id="con-side-tit">Expediente</div><div id="con-side-sub" style="font-size:12px;color:var(--tx2);margin-top:2px"></div></div>
-    <button type="button" class="btn bsm" onclick="cerrarConsultaPanel()">?</button>
+    <button type="button" class="btn bsm" onclick="cerrarConsultaPanel()">✕</button>
   </div>
   <div id="con-side-body"></div>
 </div>
@@ -487,7 +487,7 @@
 <div id="act-agenda-panel" class="con-side-panel" style="z-index:15004" onclick="event.stopPropagation()">
   <div class="con-side-panel-hdr">
     <div><div class="slbl" style="margin:0" id="act-agenda-tit">Agendar actividad</div><div id="act-agenda-sub" style="font-size:12px;color:var(--tx2);margin-top:2px"></div></div>
-    <button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">?</button>
+    <button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">✕</button>
   </div>
   <div id="act-agenda-body"></div>
 </div>
@@ -500,15 +500,15 @@
 <div id="chat-window" class="chat-window">
   <div class="chat-hdr">
     <div style="display:flex;align-items:center;min-width:0;flex:1">
-      <button type="button" id="chat-back-btn" class="chat-back" style="display:none" onclick="chatVolverContactos()">?</button>
+      <button type="button" id="chat-back-btn" class="chat-back" style="display:none" onclick="chatVolverContactos()">←</button>
       <div style="min-width:0">
         <div class="chat-hdr-tit" id="chat-hdr-tit">Chat interno</div>
         <div class="chat-hdr-sub" id="chat-hdr-sub">Mensajes del sistema</div>
       </div>
     </div>
     <div class="chat-hdr-actions">
-      <button type="button" id="chat-toggle-contacts-btn" class="chat-hdr-btn" style="display:none" onclick="chatToggleContactos()" title="Mostrar u ocultar contactos">?</button>
-      <button type="button" class="chat-hdr-btn" onclick="toggleChatWindow(false)" title="Cerrar">?</button>
+      <button type="button" id="chat-toggle-contacts-btn" class="chat-hdr-btn" style="display:none" onclick="chatToggleContactos()" title="Mostrar u ocultar contactos">☰</button>
+      <button type="button" class="chat-hdr-btn" onclick="toggleChatWindow(false)" title="Cerrar">✕</button>
     </div>
   </div>
   <div class="chat-layout">
@@ -517,20 +517,20 @@
       <div id="chat-msgs" class="chat-msgs"></div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div class="chat-compose">
-        <button type="button" class="btn bsm btn-chat-attach" title="Adjuntar archivo (m?x. 25 MB)" onclick="chatAdjuntarArchivoClick()">??</button>
-        <input type="text" id="chat-inp" placeholder="Escriba un mensaje?" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
-        <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">?</button>
+        <button type="button" class="btn bsm btn-chat-attach" title="Adjuntar archivo (máx. 25 MB)" onclick="chatAdjuntarArchivoClick()">📎</button>
+        <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
+        <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
       </div>
     </div>
   </div>
   <div id="chat-upload-overlay" class="chat-upload-overlay" aria-hidden="true">
     <div class="chat-upload-box">
       <div class="chat-upload-hdr">
-        <span id="chat-upload-emoji" class="chat-upload-emoji">??</span>
+        <span id="chat-upload-emoji" class="chat-upload-emoji">📤</span>
         <h3 id="chat-upload-title">Subiendo archivo</h3>
       </div>
       <div class="chat-upload-body">
-        <p id="chat-upload-msg">Cargando al Drive institucional?</p>
+        <p id="chat-upload-msg">Cargando al Drive institucional…</p>
         <div id="chat-upload-spinner" class="chat-upload-spinner" aria-hidden="false"></div>
         <div id="chat-upload-detail" class="chat-upload-detail" style="display:none"></div>
       </div>
@@ -547,51 +547,51 @@
   <div class="card" style="margin-bottom:.8rem">
     <div class="slbl">Corte temporal del consolidado</div>
     <div class="sb periodo-filtro">
-      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte r?pido</label><select id="cons-preset" onchange="onPresetPeriodo('cons')"><option value="">Todo el historial</option><option value="ano">A?o completo</option><option value="trim1">Trimestre 1 (ene?mar)</option><option value="trim2">Trimestre 2 (abr?jun)</option><option value="trim3">Trimestre 3 (jul?sep)</option><option value="trim4">Trimestre 4 (oct?dic)</option><option value="sem1">Semestre 1 (ene?jun)</option><option value="sem2">Semestre 2 (jul?dic)</option><option value="mes">Mes espec?fico</option><option value="custom">Rango personalizado</option></select></div>
-      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">A?o</label><select id="cons-ano" onchange="onAnoPeriodoChange('cons')"></select></div>
+      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="cons-preset" onchange="onPresetPeriodo('cons')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>
+      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">Año</label><select id="cons-ano" onchange="onAnoPeriodoChange('cons')"></select></div>
       <div class="fld" style="min-width:110px" id="cons-mes-wrap"><label style="font-size:11px;color:var(--tx2)">Mes</label><select id="cons-mes" onchange="onPresetPeriodo('cons')"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
       <label>Desde<input type="date" id="cons-desde" onchange="onRangoManualPeriodo('cons')"></label>
       <label>Hasta<input type="date" id="cons-hasta" onchange="onRangoManualPeriodo('cons')"></label>
       <button type="button" class="btn bsm" onclick="limpiarPeriodo('cons')">Limpiar fechas</button>
-      <button type="button" class="btn bsm" onclick="exportarConsolidadoExcel()">? Descargar</button>
+      <button type="button" class="btn bsm" onclick="exportarConsolidadoExcel()">⬇ Descargar</button>
     </div>
     <div id="cons-periodo-resumen" style="font-size:12px;color:var(--tx2);margin-top:6px"></div>
     <div id="cons-cortes-panel" class="cons-cortes"></div>
   </div>
   <div id="cons-juris-panel" class="card" style="display:none;margin-bottom:.8rem;border-left:4px solid var(--bl)"></div>
   <div class="mets" id="mets"></div>
-  <!-- T?rminos highlight -->
+  <!-- Términos highlight -->
   <div class="card" style="border-left:4px solid var(--bl)">
-    <div class="slbl" style="margin:0">Control de t?rminos ? sem?foro global</div>
+    <div class="slbl" style="margin:0">Control de términos — semáforo global</div>
     <div class="cgr" id="terms-grid" style="margin-bottom:0"></div>
   </div>
   <div class="cgr">
-    <div class="card" style="border-left:3px solid var(--or)"><div class="slbl" style="margin:0">?? Con medida preventiva</div><div id="c-mp"></div></div>
-    <div class="card" style="border-left:3px solid var(--rd)"><div class="slbl" style="margin:0">?? Suspendidos</div><div id="c-sus"></div></div>
-    <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">?? Trasladados a sancionatorio</div><div id="c-san"></div></div>
-    <div class="card" style="border-left:3px solid var(--rd)"><div class="slbl" style="margin:0">?? En mora</div><div id="c-mora"></div></div>
-    <div class="card" style="border-left:3px solid var(--am)"><div class="slbl" style="margin:0">?? Persuasivo</div><div id="c-pers"></div></div>
-    <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">??? Coactivo</div><div id="c-coa"></div></div>
-    <div class="card" style="border-left:3px solid var(--bl)"><div class="slbl" style="margin:0">?? Acuerdo de pago</div><div id="c-acu"></div></div>
+    <div class="card" style="border-left:3px solid var(--or)"><div class="slbl" style="margin:0">⚠️ Con medida preventiva</div><div id="c-mp"></div></div>
+    <div class="card" style="border-left:3px solid var(--rd)"><div class="slbl" style="margin:0">🚫 Suspendidos</div><div id="c-sus"></div></div>
+    <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">⚖️ Trasladados a sancionatorio</div><div id="c-san"></div></div>
+    <div class="card" style="border-left:3px solid var(--rd)"><div class="slbl" style="margin:0">💰 En mora</div><div id="c-mora"></div></div>
+    <div class="card" style="border-left:3px solid var(--am)"><div class="slbl" style="margin:0">📨 Persuasivo</div><div id="c-pers"></div></div>
+    <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">🏛️ Coactivo</div><div id="c-coa"></div></div>
+    <div class="card" style="border-left:3px solid var(--bl)"><div class="slbl" style="margin:0">🤝 Acuerdo de pago</div><div id="c-acu"></div></div>
   </div>
   <div class="cgr">
-    <div class="card"><div class="slbl" style="margin:0">Por tipo de tr?mite</div><div class="bc" id="ch-tram"></div></div>
+    <div class="card"><div class="slbl" style="margin:0">Por tipo de trámite</div><div class="bc" id="ch-tram"></div></div>
     <div class="card"><div class="slbl" style="margin:0">Por estado</div><div class="bc" id="ch-est"></div></div>
   </div>
   <div class="cgr">
     <div class="card"><div class="slbl" style="margin:0">Por responsable de actividad</div><div class="bc" id="ch-inst"></div></div>
   </div>
   <div class="card">
-    <div class="slbl" style="margin:0">Cumplimiento de t?rminos de atenci?n</div>
-    <div class="tw"><table><thead><tr><th>Expediente</th><th>Tr?mite</th><th>Nombre</th><th>Estado</th><th>D?as transcurridos</th><th>Plazo (d?as)</th><th>% usado</th><th>T?rminos</th></tr></thead><tbody id="tbl-terms"></tbody></table></div>
+    <div class="slbl" style="margin:0">Cumplimiento de términos de atención</div>
+    <div class="tw"><table><thead><tr><th>Expediente</th><th>Trámite</th><th>Nombre</th><th>Estado</th><th>Días transcurridos</th><th>Plazo (días)</th><th>% usado</th><th>Términos</th></tr></thead><tbody id="tbl-terms"></tbody></table></div>
   </div>
   <div class="card">
     <div class="slbl" style="margin:0">Reporte por responsable de actividades</div>
-    <div class="tw"><table><thead><tr><th>Responsable</th><th>Tr?mites participa</th><th>Actividades asignadas</th><th>En ejecuci?n</th><th>Por corregir</th><th>Atendidas</th><th>Vencidas</th></tr></thead><tbody id="tbl-inst"></tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Responsable</th><th>Trámites participa</th><th>Actividades asignadas</th><th>En ejecución</th><th>Por corregir</th><th>Atendidas</th><th>Vencidas</th></tr></thead><tbody id="tbl-inst"></tbody></table></div>
   </div>
   <div class="card">
-    <div class="slbl" style="margin:0">Expedientes con m?s tiempo en tr?mite</div>
-    <div class="tw"><table><thead><tr><th>Expediente</th><th>Tr?mite</th><th>Nombre</th><th>Estado</th><th>D?as</th><th>Plazo</th><th>T?rminos</th><th>Flags</th><th>Ver</th></tr></thead><tbody id="tbl-dias"></tbody></table></div>
+    <div class="slbl" style="margin:0">Expedientes con más tiempo en trámite</div>
+    <div class="tw"><table><thead><tr><th>Expediente</th><th>Trámite</th><th>Nombre</th><th>Estado</th><th>Días</th><th>Plazo</th><th>Términos</th><th>Flags</th><th>Ver</th></tr></thead><tbody id="tbl-dias"></tbody></table></div>
   </div>
   <div class="card">
     <div class="slbl" style="margin:0">Actividades pendientes</div>
@@ -599,33 +599,33 @@
   </div>
 </div>
 
-<!-- ===== SECRETAR?A ? RADICACI?N PQRSD ===== -->
+<!-- ===== SECRETARÍA — RADICACIÓN PQRSD ===== -->
 <div class="pg" id="pg-sec">
 
-  <!-- Panel bandeja Gmail (secretar?a) ? ahora gestionado desde tab ?? Correos -->
+  <!-- Panel bandeja Gmail (secretaría) — ahora gestionado desde tab 📧 Correos -->
   <div class="card gmail-panel-wrap" id="gmail-panel-wrap" style="margin-bottom:1rem;border-left:4px solid #EA4335;display:none">
     <div class="fx" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div>
-        <div class="slbl" style="margin:0">?? Bandeja de entrada PQRSD</div>
+        <div class="slbl" style="margin:0">📧 Bandeja de entrada PQRSD</div>
         <span id="gmail-connect-status" style="font-size:11px;color:var(--tx2)"></span>
       </div>
       <div class="fx" style="gap:6px;flex-wrap:wrap">
         <button id="gmail-connect-btn" class="btn bp bsm" onclick="gmailConnect()">Conectar bandeja</button>
-        <button id="gmail-refresh-btn" class="btn bsm" onclick="gmailLoadInbox()" title="Actualizar bandeja" disabled>? Actualizar</button>
+        <button id="gmail-refresh-btn" class="btn bsm" onclick="gmailLoadInbox()" title="Actualizar bandeja" disabled>↻ Actualizar</button>
         <button class="btn bsm" onclick="toggleGmailPanel()" id="gmail-toggle-btn">Ver bandeja</button>
       </div>
     </div>
     <div id="gmail-panel-body" style="display:none;margin-top:1rem">
-      <!-- Barra de b?squeda y filtros ? una sola fila -->
+      <!-- Barra de búsqueda y filtros — una sola fila -->
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <input type="text" id="gmail-search-input" placeholder="Buscar por asunto, remitente, N? expediente?" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;background:var(--bg);color:var(--tx)" onkeydown="if(event.key==='Enter')gmailSearch(this.value)">
-        <button class="btn bp bsm" onclick="gmailSearch(document.getElementById('gmail-search-input').value)" title="Buscar">??</button>
-        <button class="btn bsm" id="gmail-clear-search-btn" onclick="gmailClearSearch()" style="display:none" title="Limpiar b?squeda">?</button>
+        <input type="text" id="gmail-search-input" placeholder="Buscar por asunto, remitente, N° expediente…" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;background:var(--bg);color:var(--tx)" onkeydown="if(event.key==='Enter')gmailSearch(this.value)">
+        <button class="btn bp bsm" onclick="gmailSearch(document.getElementById('gmail-search-input').value)" title="Buscar">🔍</button>
+        <button class="btn bsm" id="gmail-clear-search-btn" onclick="gmailClearSearch()" style="display:none" title="Limpiar búsqueda">✕</button>
         <div style="width:1px;height:24px;background:var(--bd);margin:0 2px"></div>
         <button id="gmail-filter-all" class="btn bp bsm" onclick="gmailSetFilter('all')">Todos</button>
         <button id="gmail-filter-unread" class="btn bsm" onclick="gmailSetFilter('unread')">Sin radicar <span id="gmail-unread-count" class="gmail-badge-new" style="display:none"></span></button>
         <button id="gmail-filter-read" class="btn bsm" onclick="gmailSetFilter('read')">Radicados</button>
-        <span id="gmail-search-badge" style="display:none;font-size:11px;color:#EA4335;font-weight:600">B?squeda activa</span>
+        <span id="gmail-search-badge" style="display:none;font-size:11px;color:#EA4335;font-weight:600">Búsqueda activa</span>
       </div>
       <div class="gmail-layout">
         <div class="gmail-inbox-col">
@@ -636,16 +636,16 @@
     </div>
   </div>
 
-  <!-- Vista paralela correo/formulario ? se activa al pulsar "Radicar desde este correo" -->
+  <!-- Vista paralela correo/formulario — se activa al pulsar "Radicar desde este correo" -->
   <div id="sec-radicar-split">
 
-    <!-- PANEL IZQUIERDO: previsualizaci?n del correo (oculto hasta activar split) -->
+    <!-- PANEL IZQUIERDO: previsualización del correo (oculto hasta activar split) -->
     <div id="sec-email-panel">
       <!-- Cabecera del panel -->
       <div id="sec-email-panel-hdr">
         <span id="sec-email-panel-from" style="font-weight:600;font-size:13px;color:var(--tx);flex:1;min-width:0"></span>
         <span id="sec-email-panel-date" style="font-size:11px;color:var(--tx2);flex-shrink:0"></span>
-        <button class="btn bsm" style="flex-shrink:0" onclick="cerrarSplitView()" title="Volver a la bandeja">? Cerrar vista</button>
+        <button class="btn bsm" style="flex-shrink:0" onclick="cerrarSplitView()" title="Volver a la bandeja">✕ Cerrar vista</button>
       </div>
       <div id="sec-email-panel-subject" style="padding:8px 14px 0;font-size:13px;font-weight:600;color:var(--tx)"></div>
       <div id="sec-email-panel-meta" style="display:none;padding:4px 14px 0;font-size:11px;color:var(--tx2);line-height:1.45;word-break:break-word"></div>
@@ -658,105 +658,105 @@
       <div id="sec-att-inline">
         <div id="sec-att-inline-hdr">
           <span id="sec-att-inline-title"></span>
-          <button class="btn bsm" onclick="closeSplitAttViewer()">? Cerrar</button>
+          <button class="btn bsm" onclick="closeSplitAttViewer()">✕ Cerrar</button>
         </div>
         <div id="sec-att-inline-body"></div>
       </div>
     </div>
 
-    <!-- PANEL DERECHO: formulario de radicaci?n -->
+    <!-- PANEL DERECHO: formulario de radicación -->
     <div id="sec-form-card" class="card sec-form-card-wrap" style="border-left:4px solid var(--pu);position:relative">
       <div id="sec-form-lock" class="sec-form-lock" role="alert" aria-hidden="true">
-        <div class="sec-form-lock-icon" aria-hidden="true">??</div>
+        <div class="sec-form-lock-icon" aria-hidden="true">🔒</div>
         <div class="sec-form-lock-tit">Bandeja Gmail no conectada</div>
-        <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexi?n no se genera el soporte PDF ni se sincroniza la hoja PQRSD en Google Sheets.</p>
+        <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexión no se genera el soporte PDF ni se sincroniza la hoja PQRSD en Google Sheets.</p>
         <button type="button" class="btn bp" id="sec-gmail-connect-btn" onclick="secGmailConnectParaRadicar()">Conectar bandeja Gmail</button>
       </div>
-      <div class="slbl">Nueva radicaci?n PQRSD</div>
+      <div class="slbl">Nueva radicación PQRSD</div>
       <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino. <span id="sst-build-tag" style="font-size:10px;color:var(--tx3)"></span></div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>N? PQRSD<span class="req-star">*</span></label>
+        <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label>
           <div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">
-            <input type="text" id="sec-exp" placeholder="Ej. 2607001 (mes/a?o de radicaci?n + consecutivo)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
-            <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo del mes" onclick="refrescarSugerenciaNumeroPqrsSec()">? Sugerir</button>
+            <input type="text" id="sec-exp" placeholder="Ej. 2607001 (mes/año de radicación + consecutivo)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
+            <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo del mes" onclick="refrescarSugerenciaNumeroPqrsSec()">↻ Sugerir</button>
           </div>
         </div>
-        <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cu?ndo el ciudadano present? la solicitud (puede ser anterior a la radicaci?n)"></div>
-        <div class="fld"><label>Fecha de t?rmino <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 d?as, indique la fecha en que vence la PQRSD"></div>
-        <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicaci?n <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
-        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="" selected>? Seleccionar ?</option><option value="Petici?n">Petici?n</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option><option value="Reuni?n">Reuni?n</option><option value="Audiencia">Audiencia</option></select></div>
-        <div class="fld"><label>Medio de recepci?n<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="" selected>? Seleccionar ?</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Tel?fono">Tel?fono</option><option value="Web">Web</option></select></div>
+        <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud (puede ser anterior a la radicación)"></div>
+        <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
+        <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
+        <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="" selected>— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option><option value="Reunión">Reunión</option><option value="Audiencia">Audiencia</option></select></div>
+        <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="" selected>— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
       </div>
       <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
-        <label>Medio de notificaci?n</label>
+        <label>Medio de notificación</label>
         <div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="sec-medio-notif-btns"></div>
         <input type="hidden" id="sec-medio-notif" value="">
-        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepci?n se predetermina el de notificaci?n. Si cambia la recepci?n despu?s, la notificaci?n vuelve a ?No indica?.</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
       </div>
       <div class="fg" style="margin-bottom:10px">
-        <div class="fld"><label>Tipo de persona<span class="req-star">*</span></label><select id="sec-tipo-persona" required onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="" selected>? Seleccionar ?</option><option value="natural">Persona natural</option><option value="juridica">Persona jur?dica</option></select></div>
+        <div class="fld"><label>Tipo de persona<span class="req-star">*</span></label><select id="sec-tipo-persona" required onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="" selected>— Seleccionar —</option><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
       </div>
       <div id="sec-pn-block" style="display:none">
         <div class="fg" style="margin-bottom:10px">
-          <div class="fld"><label>Nombre del solicitante<span class="req-star">*</span></label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre?" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>Identificaci?n</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificaci?n?" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Nombre del solicitante<span class="req-star">*</span></label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Correo</label><input type="email" id="sec-pn-correo"></div>
-          <div class="fld"><label>Tel?fono</label><input type="tel" id="sec-pn-telefono"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pn-telefono"></div>
         </div>
       </div>
       <div id="sec-pj-block" style="display:none">
         <div class="fg" style="margin-bottom:10px">
           <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Entidad / empresa</div>
-          <div class="fld"><label>Raz?n social / entidad<span class="req-star">*</span></label><input type="text" id="sec-pj-empresa" placeholder="Ej. Alcald?a Municipal?" oninput="filtrarPersonasSug(this,'sec-pj','empresa')" onfocus="filtrarPersonasSug(this,'sec-pj','empresa')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>NIT</label><input type="text" id="sec-pj-nit" placeholder="Buscar por NIT?" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Razón social / entidad<span class="req-star">*</span></label><input type="text" id="sec-pj-empresa" placeholder="Ej. Alcaldía Municipal…" oninput="filtrarPersonasSug(this,'sec-pj','empresa')" onfocus="filtrarPersonasSug(this,'sec-pj','empresa')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>NIT</label><input type="text" id="sec-pj-nit" placeholder="Buscar por NIT…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Correo entidad</label><input type="email" id="sec-pj-correo"></div>
-          <div class="fld"><label>Tel?fono entidad</label><input type="tel" id="sec-pj-telefono"></div>
+          <div class="fld"><label>Teléfono entidad</label><input type="tel" id="sec-pj-telefono"></div>
         </div>
         <div class="fg" style="margin-bottom:10px">
           <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Persona que radica / oficia en nombre de la entidad</div>
           <div style="grid-column:1/-1;font-size:11px;color:var(--tx2);margin-bottom:4px">Quien presenta el oficio o diligencia la solicitud (puede ser distinto al representante legal).</div>
-          <div class="fld"><label>Nombre<span class="req-star">*</span></label><input type="text" id="sec-pj-ofi-nombre" placeholder="Buscar por nombre?" oninput="filtrarPersonasSug(this,'sec-ofi','nombre')" onfocus="filtrarPersonasSug(this,'sec-ofi','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>Identificaci?n</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificaci?n?" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Nombre<span class="req-star">*</span></label><input type="text" id="sec-pj-ofi-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-ofi','nombre')" onfocus="filtrarPersonasSug(this,'sec-ofi','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Correo</label><input type="email" id="sec-pj-ofi-correo"></div>
-          <div class="fld"><label>Tel?fono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud an?nima</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
       <div id="sec-anon-contact-block" style="display:none;margin-bottom:10px;padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Datos de contacto opcionales ? solo para notificaci?n (no identifican al solicitante en el expediente)</div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Datos de contacto opcionales — solo para notificación (no identifican al solicitante en el expediente)</div>
         <div class="fg">
-          <div class="fld"><label>Correo (notificaci?n)</label><input type="email" id="sec-anon-correo" placeholder="correo@ejemplo.com"></div>
-          <div class="fld"><label>Tel?fono</label><input type="tel" id="sec-anon-tel" placeholder="3001234567"></div>
+          <div class="fld"><label>Correo (notificación)</label><input type="email" id="sec-anon-correo" placeholder="correo@ejemplo.com"></div>
+          <div class="fld"><label>Teléfono</label><input type="tel" id="sec-anon-tel" placeholder="3001234567"></div>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ? Marcar como prioritaria</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
       <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
-      <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripci?n adicional?" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
+      <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>Oficina destino (traslado)<span class="req-star">*</span></label><select id="sec-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></select></div>
       </div>
       <div class="fld" style="margin-bottom:10px">
-        <label>Solicitud digital ? anexos (opcional)</label>
+        <label>Solicitud digital — anexos (opcional)</label>
         <div id="sec-anexo-list" style="margin-top:6px"></div>
-        <button type="button" class="btn bsm" style="margin-top:6px" onclick="secAnexoAdd()">?? Agregar archivo</button>
-        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos tambi?n se suben. Use <strong>Agregar archivo</strong> para a?adir varios.</span>
+        <button type="button" class="btn bsm" style="margin-top:6px" onclick="secAnexoAdd()">📎 Agregar archivo</button>
+        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos también se suben. Use <strong>Agregar archivo</strong> para añadir varios.</span>
       </div>
-      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>?? Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>?? Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
+      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 
   </div><!-- /sec-radicar-split -->
   <div id="sec-pqrs-mets" class="pqrs-ofi-mets" style="margin-top:1rem"></div>
   <div class="card" id="sec-pend-trasl-wrap" style="margin-top:1rem">
     <div class="slbl">Pendientes por trasladar</div>
-    <div class="ssub" style="margin-bottom:8px">Radicadas sin oficina asignada. El director DS DEGUV o Secretar?a pueden trasladarlas a la oficina competente.</div>
-    <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Radicaci?n</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pend-trasl"></tbody></table></div>
-    <button type="button" class="btn bsm" id="sec-pend-trasl-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasPendientes()">Ver 10 m?s</button>
+    <div class="ssub" style="margin-bottom:8px">Radicadas sin oficina asignada. El director DS DEGUV o Secretaría pueden trasladarlas a la oficina competente.</div>
+    <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Radicación</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pend-trasl"></tbody></table></div>
+    <button type="button" class="btn bsm" id="sec-pend-trasl-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasPendientes()">Ver 10 más</button>
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="slbl">PQRSD asignadas a oficinas</div>
-    <div class="ssub" style="margin-bottom:8px">Seguimiento de solicitudes radicadas (oficinas DEGUV y Secretar?a). Use Editar o Ver para gestionar cada PQRSD. Se muestran las m?s recientes (m?x. 30); use Consulta para buscar anteriores.</div>
+    <div class="ssub" style="margin-bottom:8px">Seguimiento de solicitudes radicadas (oficinas DEGUV y Secretaría). Use Editar o Ver para gestionar cada PQRSD. Se muestran las más recientes (máx. 30); use Consulta para buscar anteriores.</div>
     <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Oficina</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pqrs"></tbody></table></div>
-    <button type="button" class="btn bsm" id="sec-asignadas-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasAsignadas()">Ver 10 m?s</button>
+    <button type="button" class="btn bsm" id="sec-asignadas-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasAsignadas()">Ver 10 más</button>
   </div>
   <div class="card" id="sec-pqrs-det-wrap" style="margin-top:1rem;display:none">
     <div class="slbl">Detalle PQRSD</div>
@@ -764,17 +764,17 @@
   </div>
 </div>
 
-<!-- ===== OFICINAS ? PQRSD RECIBIDOS ===== -->
+<!-- ===== OFICINAS — PQRSD RECIBIDOS ===== -->
 <div class="pg" id="pg-pqrs-ofi">
-  <div class="modulo-banner ofi" id="pqrs-ofi-banner">?? PQRSD trasladados a su oficina ? Consulte, traslade o indique si ya se dio respuesta.</div>
+  <div class="modulo-banner ofi" id="pqrs-ofi-banner">📌 PQRSD trasladados a su oficina — Consulte, traslade o indique si ya se dio respuesta.</div>
 
   <div class="card" style="border-left:4px solid var(--bl)">
     <div class="fx" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.8rem">
       <div class="slbl" style="margin:0" id="pqrs-ofi-titulo">PQRSD</div>
     </div>
     <div class="sb periodo-filtro act-periodo-row" style="margin-bottom:10px">
-      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte r?pido</label><select id="pqrs-ofi-preset" onchange="onPresetPeriodo('pqrs-ofi')"><option value="">Todo el historial</option><option value="ano">A?o completo</option><option value="trim1">Trimestre 1 (ene?mar)</option><option value="trim2">Trimestre 2 (abr?jun)</option><option value="trim3">Trimestre 3 (jul?sep)</option><option value="trim4">Trimestre 4 (oct?dic)</option><option value="sem1">Semestre 1 (ene?jun)</option><option value="sem2">Semestre 2 (jul?dic)</option><option value="mes">Mes espec?fico</option><option value="custom">Rango personalizado</option></select></div>
-      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">A?o</label><select id="pqrs-ofi-ano" onchange="onAnoPeriodoChange('pqrs-ofi')"></select></div>
+      <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="pqrs-ofi-preset" onchange="onPresetPeriodo('pqrs-ofi')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>
+      <div class="fld" style="min-width:90px"><label style="font-size:11px;color:var(--tx2)">Año</label><select id="pqrs-ofi-ano" onchange="onAnoPeriodoChange('pqrs-ofi')"></select></div>
       <div class="fld" style="min-width:110px" id="pqrs-ofi-mes-wrap"><label style="font-size:11px;color:var(--tx2)">Mes</label><select id="pqrs-ofi-mes" onchange="onPresetPeriodo('pqrs-ofi')"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
       <label>Desde<input type="date" id="pqrs-ofi-desde" onchange="onRangoManualPeriodo('pqrs-ofi')"></label>
       <label>Hasta<input type="date" id="pqrs-ofi-hasta" onchange="onRangoManualPeriodo('pqrs-ofi')"></label>
@@ -782,30 +782,30 @@
     </div>
     <div id="pqrs-ofi-periodo-resumen" style="font-size:11px;color:var(--tx2);margin-bottom:8px"></div>
     <div id="pqrs-ofi-mets" class="pqrs-ofi-mets"></div>
-    <div class="tw"><table><thead><tr><th>Expediente</th><th>Tipo</th><th>Asunto</th><th>Radicaci?n</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tbl-pqrs-ofi"></tbody></table></div>
+    <div class="tw"><table><thead><tr><th>Expediente</th><th>Tipo</th><th>Asunto</th><th>Radicación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tbl-pqrs-ofi"></tbody></table></div>
     <div id="pqrs-ofi-detalle" class="pqrs-ofi-detalle pqrs-ofi-det-below" style="display:none"></div>
   </div>
 </div>
 
-<!-- ===== RECURSOS ? Enlaces externos + Biblioteca ===== -->
+<!-- ===== RECURSOS — Enlaces externos + Biblioteca ===== -->
 <div class="pg" id="pg-rec">
   <div class="app-inner" id="recursos-panel-root"></div>
 </div>
 
-<!-- ===== CORREOS PQRSD ? OFICINAS / NCA / RESPONSABLES ===== -->
+<!-- ===== CORREOS PQRSD — OFICINAS / NCA / RESPONSABLES ===== -->
 <div class="pg" id="pg-gmail-ofi">
   <div class="gm-wrap">
     <!-- Top bar -->
     <div class="gm-topbar">
-      <button type="button" class="gm-compose-btn" onclick="gmailOfiOpenCompose()">?? Redactar</button>
+      <button type="button" class="gm-compose-btn" onclick="gmailOfiOpenCompose()">✏️ Redactar</button>
       <div class="gm-search-bar">
-        <span class="gm-search-ico">??</span>
-        <input type="text" id="gmail-ofi-search" class="gm-search-inp" placeholder="Buscar en el correo?" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
-        <button type="button" class="gm-search-clear" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiFolder(_gmailOfiActiveFolder||'INBOX')" title="Limpiar">?</button>
+        <span class="gm-search-ico">🔍</span>
+        <input type="text" id="gmail-ofi-search" class="gm-search-inp" placeholder="Buscar en el correo…" onkeydown="if(event.key==='Enter')gmailOfiSearch(this.value)">
+        <button type="button" class="gm-search-clear" onclick="document.getElementById('gmail-ofi-search').value='';gmailOfiFolder(_gmailOfiActiveFolder||'INBOX')" title="Limpiar">✕</button>
       </div>
       <div class="gm-topbar-right">
-        <button type="button" class="gm-icon-btn" id="gmail-ofi-refresh-btn" onclick="gmailOfiRefresh()" style="display:none" title="Actualizar">??</button>
-        <button type="button" class="btn bsm bp" id="gmail-ofi-connect-btn" onclick="gmailOfiConnect()">?? Conectar mi correo</button>
+        <button type="button" class="gm-icon-btn" id="gmail-ofi-refresh-btn" onclick="gmailOfiRefresh()" style="display:none" title="Actualizar">🔄</button>
+        <button type="button" class="btn bsm bp" id="gmail-ofi-connect-btn" onclick="gmailOfiConnect()">📧 Conectar mi correo</button>
       </div>
     </div>
     <!-- Body -->
@@ -813,22 +813,22 @@
       <!-- Sidebar -->
       <nav class="gm-sidebar">
         <div class="gm-folder gm-folder-active" id="gmf-INBOX" onclick="gmailOfiFolder('INBOX')">
-          <span class="gmf-ico">??</span><span class="gmf-name">Recibidos</span><span class="gmf-badge" id="gmb-INBOX"></span>
+          <span class="gmf-ico">📥</span><span class="gmf-name">Recibidos</span><span class="gmf-badge" id="gmb-INBOX"></span>
         </div>
         <div class="gm-folder" id="gmf-STARRED" onclick="gmailOfiFolder('STARRED')">
-          <span class="gmf-ico">?</span><span class="gmf-name">Destacados</span>
+          <span class="gmf-ico">⭐</span><span class="gmf-name">Destacados</span>
         </div>
         <div class="gm-folder" id="gmf-SENT" onclick="gmailOfiFolder('SENT')">
-          <span class="gmf-ico">??</span><span class="gmf-name">Enviados</span>
+          <span class="gmf-ico">📤</span><span class="gmf-name">Enviados</span>
         </div>
         <div class="gm-folder" id="gmf-DRAFT" onclick="gmailOfiFolder('DRAFT')">
-          <span class="gmf-ico">??</span><span class="gmf-name">Borradores</span><span class="gmf-badge" id="gmb-DRAFT"></span>
+          <span class="gmf-ico">📝</span><span class="gmf-name">Borradores</span><span class="gmf-badge" id="gmb-DRAFT"></span>
         </div>
         <div class="gm-folder" id="gmf-SPAM" onclick="gmailOfiFolder('SPAM')">
-          <span class="gmf-ico">??</span><span class="gmf-name">Spam</span>
+          <span class="gmf-ico">⚠️</span><span class="gmf-name">Spam</span>
         </div>
         <div class="gm-folder" id="gmf-TRASH" onclick="gmailOfiFolder('TRASH')">
-          <span class="gmf-ico">???</span><span class="gmf-name">Papelera</span>
+          <span class="gmf-ico">🗑️</span><span class="gmf-name">Papelera</span>
         </div>
         <div class="gm-sidebar-section">Etiquetas</div>
         <div id="gm-labels-list"></div>
@@ -843,18 +843,18 @@
           </div>
           <div class="gm-read-filter" id="gm-read-filter" role="group" aria-label="Filtro de lectura">
             <button type="button" class="gm-read-filter-btn on" data-filter="all" onclick="gmailOfiSetReadFilter('all')">Todos</button>
-            <button type="button" class="gm-read-filter-btn" data-filter="unread" onclick="gmailOfiSetReadFilter('unread')">No le?dos</button>
-            <button type="button" class="gm-read-filter-btn" data-filter="read" onclick="gmailOfiSetReadFilter('read')">Le?dos</button>
+            <button type="button" class="gm-read-filter-btn" data-filter="unread" onclick="gmailOfiSetReadFilter('unread')">No leídos</button>
+            <button type="button" class="gm-read-filter-btn" data-filter="read" onclick="gmailOfiSetReadFilter('read')">Leídos</button>
           </div>
           <div id="gmail-ofi-inbox-list" class="gm-email-list">
-            <div class="gm-empty-state"><div class="gm-empty-ico">??</div><div>Conecte su correo para ver los mensajes.</div></div>
+            <div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>
           </div>
-          <button type="button" class="btn bsm gm-load-more-btn" id="gm-load-more-btn" style="display:none" onclick="gmailOfiLoadMore()">Cargar m?s mensajes</button>
+          <button type="button" class="btn bsm gm-load-more-btn" id="gm-load-more-btn" style="display:none" onclick="gmailOfiLoadMore()">Cargar más mensajes</button>
         </div>
         <!-- Message pane -->
         <div class="gm-msg-pane" id="gm-msg-pane" style="display:none">
           <div class="gm-msg-nav">
-            <button type="button" class="gm-back-btn" onclick="gmailOfiCloseMessage()">? Volver a la lista</button>
+            <button type="button" class="gm-back-btn" onclick="gmailOfiCloseMessage()">← Volver a la lista</button>
           </div>
           <div id="gmail-ofi-msg-view" class="gm-msg-view-inner"></div>
         </div>
@@ -867,8 +867,8 @@
     <div class="gm-compose-hdr">
       <span id="gm-compose-title">Nuevo mensaje</span>
       <div class="gm-compose-hdr-btns">
-        <button type="button" title="Minimizar" onclick="document.getElementById('gm-compose-modal').style.display='none'">?</button>
-        <button type="button" title="Descartar" onclick="gmailOfiDiscardDraft()">?</button>
+        <button type="button" title="Minimizar" onclick="document.getElementById('gm-compose-modal').style.display='none'">—</button>
+        <button type="button" title="Descartar" onclick="gmailOfiDiscardDraft()">✕</button>
       </div>
     </div>
     <div class="gm-compose-fields">
@@ -877,14 +877,14 @@
       <div class="gm-compose-field"><label>Cco</label><input type="email" id="gm-compose-bcc" placeholder="(opcional)"></div>
       <div class="gm-compose-field"><label>Asunto</label><input type="text" id="gm-compose-subject" placeholder="Asunto del mensaje"></div>
     </div>
-    <textarea id="gm-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje?"></textarea>
+    <textarea id="gm-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje…"></textarea>
     <div id="gm-sig-preview" class="gm-sig-preview" style="display:none"></div>
     <div id="gm-compose-att-list" class="pqrs-compose-att-list"></div>
     <div class="gm-compose-footer">
-      <button type="button" class="btn bsm" onclick="gmailOfiAddComposeAttachment()">?? Adjuntar</button>
-      <button type="button" class="btn bsm bp gm-compose-send" onclick="gmailOfiSendCompose()">?? Enviar</button>
-      <button type="button" class="btn bsm" onclick="gmailOfiSaveDraft()">?? Guardar borrador</button>
-      <button type="button" class="gm-compose-discard-btn" onclick="gmailOfiDiscardDraft()" title="Descartar">???</button>
+      <button type="button" class="btn bsm" onclick="gmailOfiAddComposeAttachment()">📎 Adjuntar</button>
+      <button type="button" class="btn bsm bp gm-compose-send" onclick="gmailOfiSendCompose()">📤 Enviar</button>
+      <button type="button" class="btn bsm" onclick="gmailOfiSaveDraft()">💾 Guardar borrador</button>
+      <button type="button" class="gm-compose-discard-btn" onclick="gmailOfiDiscardDraft()" title="Descartar">🗑️</button>
     </div>
   </div>
 </div>
@@ -893,31 +893,31 @@
 <div class="pg" id="pg-ciudadano">
   <div class="modulo-banner ciudadano" style="display:none"></div>
   <div class="card" style="border-left:4px solid var(--gn);max-width:960px">
-    <div class="slbl">Buscar tr?mite</div>
+    <div class="slbl">Buscar trámite</div>
     <div class="fx" style="gap:8px;flex-wrap:wrap;margin-bottom:1rem">
-      <input type="text" id="ciudadano-exp" placeholder="N? de expediente o PQRSD (Ej. 2602010)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px" onkeydown="if(event.key==='Enter')buscarExpCiudadano()">
+      <input type="text" id="ciudadano-exp" placeholder="N° de expediente o PQRSD (Ej. 2602010)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px" onkeydown="if(event.key==='Enter')buscarExpCiudadano()">
       <button type="button" class="btn bp" onclick="buscarExpCiudadano()">Consultar</button>
     </div>
     <div id="ciudadano-resultado"></div>
     <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--bd)">
-      <button type="button" class="btn bsm" onclick="SST.volverPantallaPrincipal()">? Volver al inicio</button>
+      <button type="button" class="btn bsm" onclick="SST.volverPantallaPrincipal()">← Volver al inicio</button>
     </div>
   </div>
 </div>
 
-<!-- ===== CONFIGURACI?N ===== -->
+<!-- ===== CONFIGURACIÓN ===== -->
 <div class="pg" id="pg-cfg">
-  <div class="stit">Configuraci?n del sistema</div>
-  <div class="ssub">Gestiona listas, tr?mites y responsables del departamento activo.</div>
+  <div class="stit">Configuración del sistema</div>
+  <div class="ssub">Gestiona listas, trámites y responsables del departamento activo.</div>
   <div id="cfg-restrict-banner"></div>
   <div class="cfg-tabs">
-    <button class="cfg-tab on" onclick="showCfgTab('listas')" id="ctab-listas">Configuraci?n base</button>
-    <button class="cfg-tab" onclick="showCfgTab('info-tecnica')" id="ctab-info-tecnica">Informaci?n t?cnica</button>
-    <button class="cfg-tab" onclick="showCfgTab('tramites')" id="ctab-tramites">Tipos de tr?mite</button>
+    <button class="cfg-tab on" onclick="showCfgTab('listas')" id="ctab-listas">Configuración base</button>
+    <button class="cfg-tab" onclick="showCfgTab('info-tecnica')" id="ctab-info-tecnica">Información técnica</button>
+    <button class="cfg-tab" onclick="showCfgTab('tramites')" id="ctab-tramites">Tipos de trámite</button>
     <button class="cfg-tab" onclick="showCfgTab('personas')" id="ctab-personas">Personas / usuarios</button>
-    <button class="cfg-tab" onclick="showCfgTab('nuevo')" id="ctab-nuevo">+ Nuevo tr?mite</button>
-    <button class="cfg-tab" onclick="showCfgTab('auditoria')" id="ctab-auditoria" style="display:none">Log de Auditor?a</button>
-    <button class="cfg-tab" onclick="showCfgTab('usuarios')" id="ctab-usuarios" style="display:none">?? Usuarios autorizados</button>
+    <button class="cfg-tab" onclick="showCfgTab('nuevo')" id="ctab-nuevo">+ Nuevo trámite</button>
+    <button class="cfg-tab" onclick="showCfgTab('auditoria')" id="ctab-auditoria" style="display:none">Log de Auditoría</button>
+    <button class="cfg-tab" onclick="showCfgTab('usuarios')" id="ctab-usuarios" style="display:none">👥 Usuarios autorizados</button>
   </div>
   <div class="cfg-pg on" id="cpg-listas"><div class="cfgr" id="cfg-panels"></div></div>
   <div class="cfg-pg" id="cpg-personas"><div id="cfg-personas-panel"></div></div>
@@ -927,30 +927,30 @@
   <div class="cfg-pg" id="cpg-usuarios"><div id="cfg-usuarios-panel"></div></div>
   <div class="cfg-pg" id="cpg-nuevo">
     <div class="card">
-      <div style="font-size:14px;font-weight:600;margin-bottom:.8rem">Crear nuevo tipo de tr?mite</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:.8rem">Crear nuevo tipo de trámite</div>
       <div class="fg">
         <div class="fld"><label>Nombre *</label><input type="text" id="nt-nom" placeholder="Ej. Permiso de emisiones"></div>
-        <div class="fld"><label>Descripci?n</label><input type="text" id="nt-desc" placeholder="Descripci?n breve"></div>
+        <div class="fld"><label>Descripción</label><input type="text" id="nt-desc" placeholder="Descripción breve"></div>
         <div class="fld"><label>Color</label>
           <select id="nt-color">
             <option value="#185FA5">Azul</option><option value="#1a7a4a">Verde</option>
-            <option value="#b87d0a">?mbar</option><option value="#a32d2d">Rojo</option>
+            <option value="#b87d0a">Ámbar</option><option value="#a32d2d">Rojo</option>
             <option value="#6d3fa8">Morado</option><option value="#2196A8">Turquesa</option>
             <option value="#D85A30">Naranja</option><option value="#639922">Lima</option>
           </select>
         </div>
       </div>
       <div class="fg">
-        <div class="fld"><label>Plazo de atenci?n (d?as h?biles) *</label><input type="number" id="nt-plazo" placeholder="Ej. 60" min="1" value="60"></div>
+        <div class="fld"><label>Plazo de atención (días hábiles) *</label><input type="number" id="nt-plazo" placeholder="Ej. 60" min="1" value="60"></div>
         <div class="fld"><label>Alerta vencimiento (% del plazo)</label><input type="number" id="nt-alerta" placeholder="Ej. 80" min="1" max="100" value="80">
           <span style="font-size:11px;color:var(--tx2)">Muestra alerta cuando se ha usado este % del plazo</span>
         </div>
         <div class="fld"><label>Unidad del plazo</label>
-          <select id="nt-unidad"><option value="dias">D?as calendario</option><option value="habiles">D?as h?biles</option><option value="meses">Meses</option><option value="anos">A?os</option></select>
+          <select id="nt-unidad"><option value="dias">Días calendario</option><option value="habiles">Días hábiles</option><option value="meses">Meses</option><option value="anos">Años</option></select>
         </div>
       </div>
       <div class="ar">
-        <button class="btn bp" onclick="crearTramite()">?? Guardar tipo de tr?mite</button>
+        <button class="btn bp" onclick="crearTramite()">💾 Guardar tipo de trámite</button>
       </div>
     </div>
   </div>
@@ -961,15 +961,15 @@
 <div id="exp-asoc-sug-portal" class="act-sug-portal" role="listbox" onmousedown="event.preventDefault()"></div>
 <div id="task-modal-overlay" class="task-modal-overlay" onclick="if(event.target===this)closeTaskModal()">
   <div class="task-modal" onclick="event.stopPropagation()">
-    <div class="task-modal-hdr"><span id="task-modal-title">Actividad</span><button type="button" class="btn bsm" onclick="closeTaskModal()">?</button></div>
+    <div class="task-modal-hdr"><span id="task-modal-title">Actividad</span><button type="button" class="btn bsm" onclick="closeTaskModal()">✕</button></div>
     <div class="task-modal-body" id="task-modal-body"></div>
   </div>
 </div>
 <div id="confirm-prec-overlay" class="confirm-prec-overlay" onclick="if(event.target===this)closeConfirmDialog(false)">
   <div class="confirm-prec-box" onclick="event.stopPropagation()">
-    <div class="confirm-prec-icon"><span id="confirm-prec-icon-emoji">??</span><h3 id="confirm-prec-title">Precauci?n</h3></div>
+    <div class="confirm-prec-icon"><span id="confirm-prec-icon-emoji">⚠️</span><h3 id="confirm-prec-title">Precaución</h3></div>
     <div class="confirm-prec-body">
-      <p id="confirm-prec-msg">?Est? seguro de continuar?</p>
+      <p id="confirm-prec-msg">¿Está seguro de continuar?</p>
       <textarea id="confirm-prec-input" class="confirm-prec-input" placeholder=""></textarea>
       <div id="confirm-prec-detail" class="confirm-prec-detail" style="display:none"></div>
       <div id="confirm-prec-carga" class="sst-carga" style="display:none" aria-hidden="true">
@@ -977,18 +977,18 @@
           <div id="confirm-prec-bar-fill" class="sst-carga-bar-fill"></div>
         </div>
         <div id="confirm-prec-carga-pct" class="sst-carga-pct" style="display:none">0%</div>
-        <div id="confirm-prec-carga-sub" class="sst-carga-sub">Espere mientras se completa la carga?</div>
+        <div id="confirm-prec-carga-sub" class="sst-carga-sub">Espere mientras se completa la carga…</div>
       </div>
     </div>
     <div class="confirm-prec-foot">
       <button type="button" class="btn bsm" id="confirm-prec-cancel" onclick="closeConfirmDialog(false)">Cancelar</button>
-      <button type="button" class="btn bsm bd2" id="confirm-prec-ok">S?, eliminar</button>
+      <button type="button" class="btn bsm bd2" id="confirm-prec-ok">Sí, eliminar</button>
     </div>
   </div>
 </div>
 <div id="rec-drive-overlay" class="confirm-prec-overlay" onclick="if(event.target===this)recursosCerrarModalCorreo()" aria-hidden="true">
   <div class="confirm-prec-box tone-warn" onclick="event.stopPropagation()">
-    <div class="confirm-prec-icon"><span>??</span><h3 id="rec-drive-title">Correo no conectado</h3></div>
+    <div class="confirm-prec-icon"><span>📧</span><h3 id="rec-drive-title">Correo no conectado</h3></div>
     <div class="confirm-prec-body">
       <p id="rec-drive-msg">Para usar la biblioteca Drive debe conectar su cuenta de correo.</p>
       <div id="rec-drive-detail" class="confirm-prec-detail"></div>
@@ -1001,7 +1001,7 @@
 </div>
 <div id="rec-share-overlay" class="task-modal-overlay" onclick="if(event.target===this)recursosCerrarCompartir()" aria-hidden="true">
   <div class="task-modal" style="width:min(480px,96vw)" onclick="event.stopPropagation()">
-    <div class="task-modal-hdr"><span id="rec-share-title">Compartir</span><button type="button" class="btn bsm" onclick="recursosCerrarCompartir()">?</button></div>
+    <div class="task-modal-hdr"><span id="rec-share-title">Compartir</span><button type="button" class="btn bsm" onclick="recursosCerrarCompartir()">✕</button></div>
     <div class="task-modal-body" id="rec-share-body"></div>
     <div style="padding:0 1rem 1rem;display:flex;gap:8px;justify-content:flex-end">
       <button type="button" class="btn bsm" onclick="recursosCerrarCompartir()">Cancelar</button>
@@ -1011,7 +1011,7 @@
 </div>
 <div id="ciudadano-doc-overlay" class="task-modal-overlay" onclick="if(event.target===this)closeCiudadanoDocViewer()">
   <div class="task-modal" style="max-width:920px;width:96%" onclick="event.stopPropagation()">
-    <div class="task-modal-hdr"><span id="ciudadano-doc-tit">Documento</span><button type="button" class="btn bsm" onclick="closeCiudadanoDocViewer()">?</button></div>
+    <div class="task-modal-hdr"><span id="ciudadano-doc-tit">Documento</span><button type="button" class="btn bsm" onclick="closeCiudadanoDocViewer()">✕</button></div>
     <div style="padding:12px"><iframe id="ciudadano-doc-iframe" sandbox="allow-scripts allow-same-origin allow-popups" style="width:100%;height:min(72vh,580px);border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></iframe>
     <div id="ciudadano-doc-foot" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div></div>
   </div>
@@ -1022,18 +1022,18 @@
 // ================================================================
 // TIPOS, TIPO_KEYS, LISTA_FUENTES, PAL, FINALS, ESTADOS, EST_CL, UNIDAD_LABEL,
 // MUN_DEP, DEPTOS, OFICINAS_DEGUV, MODULOS_ESPECIALES, PQRS_EST_OFICINA,
-// DEPTO_CHART_COLORS ? extra?das a js/constants.js
-// Estado global mutable ? js/state.js
-// DEF ? js/constants.js
-// CDA_LOCKS_KEY, CDA_LOCK_TTL_MS, CDA_LOCK_RENEW_MS, CDA_AUDIT_KEY, CDA_LOCK_UI_REFRESH_MS ? js/constants.js
-// ADMIN_GMAIL, DEPTOS_FIRESTORE ? js/constants.js
+// DEPTO_CHART_COLORS → extraídas a js/constants.js
+// Estado global mutable → js/state.js
+// DEF → js/constants.js
+// CDA_LOCKS_KEY, CDA_LOCK_TTL_MS, CDA_LOCK_RENEW_MS, CDA_AUDIT_KEY, CDA_LOCK_UI_REFRESH_MS → js/constants.js
+// ADMIN_GMAIL, DEPTOS_FIRESTORE → js/constants.js
 
 // ================================================================
-// LOCALSTORAGE ? departamentos
+// LOCALSTORAGE — departamentos
 // ================================================================
-// Roles, permisos e instructor/encargado management ? js/roles.js
+// Roles, permisos e instructor/encargado management → js/roles.js
 // function esJurisdiccional(){ ... }
-// jsStr, escTextarea ? js/utils.js
+// jsStr, escTextarea → js/utils.js
 // Nucleo de logica de negocio (PQRS, agenda, tareas, soportes, etc.) -> js/core.js
 // Tabs, selects y formulario dinamico -> js/formulario.js
 // Tareas y actividades -> js/tareas.js
@@ -1107,7 +1107,7 @@ async function bootstrapApp(){
   initSecMedioNotificacion(true);
   if(typeof resetSecRadicacionFormulario==='function')resetSecRadicacionFormulario();
   const buildTag=document.getElementById('sst-build-tag');
-  if(buildTag&&typeof SST_BUILD_ID!=='undefined')buildTag.textContent='? v'+SST_BUILD_ID;
+  if(buildTag&&typeof SST_BUILD_ID!=='undefined')buildTag.textContent='· v'+SST_BUILD_ID;
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
   window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
@@ -1119,8 +1119,8 @@ bootstrapApp();
   <div id="gmail-att-viewer-header">
     <span id="gmail-att-viewer-title">Adjunto</span>
     <div style="display:flex;gap:6px;flex-shrink:0">
-      <a id="gmail-att-viewer-dl" download class="btn bsm" style="display:none">? Descargar</a>
-      <button class="btn bsm" onclick="gmailCloseAttViewer()" title="Cerrar panel">?</button>
+      <a id="gmail-att-viewer-dl" download class="btn bsm" style="display:none">⬇ Descargar</a>
+      <button class="btn bsm" onclick="gmailCloseAttViewer()" title="Cerrar panel">✕</button>
     </div>
   </div>
   <div id="gmail-att-viewer-body"></div>
