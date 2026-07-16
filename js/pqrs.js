@@ -1004,18 +1004,30 @@ function getPqrsOficinaList(oficinaId,filtro){
   oficinaId=oficinaId||getPqrsOficinaActiva();
   filtro=filtro||window._pqrsOfiFiltro||'all';
   if(filtro==='por_trasladar')return getPqrsPendientesTrasladoList();
-  // «Por firmar»: exclusivo Director DS + NCA (no RN/Secretaría/Admin/OAP)
+  // «Por firmar»: Director (todas las oficinas) + NCA + oficinas DEGUV / Secretaría
   if(filtro==='por_firmar'){
-    const puedeVerPorFirmar=(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-      ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
-      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
+    const puedeVerPorFirmar=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
     if(!puedeVerPorFirmar)return[];
-    let listF=exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).map(normalizePqrsOficinaFields);
-    // NCA: solo las de su oficina; Director: transversal
-    if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))
-      listF=listF.filter(e=>e._pqrs_oficina==='guaviare'||e._pqrs_oficina===getPqrsOficinaActiva());
+    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+    let listF=exps.filter(e=>{
+      if(!esPqrsSecretaria(e)||typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
+      // Director: firmados físicos van a «Firmados»
+      if(esDir&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))return false;
+      return true;
+    }).map(normalizePqrsOficinaFields);
+    // NCA / oficinas: solo las de su oficina; Director: transversal
+    if(!esDir){
+      const ofiAct=oficinaId||getPqrsOficinaActiva();
+      listF=listF.filter(e=>e._pqrs_oficina===ofiAct||(ofiAct==='guaviare'&&e._pqrs_oficina==='guaviare'));
+    }
     listF=filterExpsPeriodo(listF,'pqrs-ofi');
     return listF.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
+  }
+  if(filtro==='firmados'){
+    if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))return[];
+    let listFd=exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)).map(normalizePqrsOficinaFields);
+    listFd=filterExpsPeriodo(listFd,'pqrs-ofi');
+    return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
   let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId&&!pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
   if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e));
@@ -1047,29 +1059,42 @@ function pqrsAccionesTablaHtml(e){
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')">⏳ Revisar</button> ';
   if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
     h+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+id+'\')">✅ Aprobar notificación</button> ';
-  // Por imprimir → Pasar a firma (VITAL o encargado)
-  if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e)||esAdministrador())){
+  // Por imprimir → Pasar a firma (solo VITAL / NCA)
+  if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e))){
     const wfB=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const docsImp=((wfB.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));
     if(docsImp.length){
       const u0=docsImp[0].driveLink||docsImp[0].previewLink;
       const view=String(u0||'').replace(/\/preview(\?.*)?$/,'/view');
-      h+='<a class="btn bsm" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e">👁 Ver archivo</a> ';
+      h+='<a class="btn bsm act-ico" href="'+escAttr(view)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:#0f766e;color:#fff;border-color:#0f766e" title="Ver archivo">👁</a> ';
     }
-    h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">🖊 Pasar a firma</button> ';
+    h+='<button type="button" class="btn bsm act-ico" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')" title="Pasar a firma">🖊</button> ';
   }
-  // Por firmar — Director, o VITAL/NCA si ya hay firmado físico pendiente de asignar notif.
+  // Por firmar — Director firma; VITAL/NCA/oficina asignan notif. tras físico
   if(fase===PQRS_WF.POR_FIRMAR){
     const wfF=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const firmFis=!!(wfF.firma_fisica&&wfF.firma_fisica.en);
-    if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')">🖊 Firmar</button> ';
+    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+    if(esDir&&!firmFis)
+      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Firmar">🖊</button> ';
+    if(esDir&&firmFis)
+      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
     if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
-      h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+id+'\')">📬 Pasar a por notificar</button> ';
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+id+'\')" title="Pasar a por notificar">📬</button> ';
+    else if(!esDir&&!firmFis&&(typeof esCargoVital==='function'&&esCargoVital()||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())||(typeof esSecretaria==='function'&&esSecretaria())))
+      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ver / cargar firmado">⬆</button> ';
+  }
+  // Firmados (Director): solo icono informativo
+  if(filtroOfi==='firmados'&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()){
+    h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — en proceso de notificación">📬</span> ';
   }
   // Por notificar
-  if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)&&(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador())))
-    h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+id+'\')">📬 Notificar</button> ';
+  if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)){
+    if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — en proceso de notificación">📬</span> ';
+    else if(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador()))
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+id+'\')" title="Notificar">📬</button> ';
+  }
   // Responder directo (offices + NCA encargado + secretary) — sin botón «Enviar correo» aparte (está dentro de Responder)
   if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
     if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
@@ -1118,15 +1143,18 @@ function renderPqrsOficinaInbox(){
     const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
     const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
-    const showPorFirmarCard=(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-      ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
-      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
+    const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
+    const showParaImprimirCard=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
+    const esDirMets=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const porFirmar=showPorFirmarCard
-      ?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()
-        ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length
+      ?(esDirMets
+        ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR&&!(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))).length
         :listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length)
       :0;
-    const paraFirma=listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length;
+    const firmados=esDirMets
+      ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)).length
+      :0;
+    const paraFirma=showParaImprimirCard?listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length:0;
     const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length;
     // Por revisar = entrega NCA + notificación personal pendiente de aprobación del encargado
     const enRevision=listAll.filter(e=>{
@@ -1140,6 +1168,7 @@ function renderPqrsOficinaInbox(){
     const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
     const onPorTrasl=filtro==='por_trasladar'?'outline:2px solid #7c5cbf;':'';
     const onPorFirmar=filtro==='por_firmar'?'outline:2px solid #0d5c2e;':'';
+    const onFirmados=filtro==='firmados'?'outline:2px solid #15803d;':'';
     const onParaFirma=filtro==='para_firma'?'outline:2px solid #1a7a4a;':'';
     const onPorNotif=filtro==='por_notificar'?'outline:2px solid var(--bl);':'';
     const cardPorTrasl=showPorTrasl?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'';
@@ -1149,9 +1178,10 @@ function renderPqrsOficinaInbox(){
       pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
       pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
       (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
-      (paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>'):'')+
+      (showParaImprimirCard&&paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>'):'')+
       (showPorFirmarCard?pqrsMetCard('por_firmar',onPorFirmar+'border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>'):'')+
-      (porNotif?pqrsMetCard('por_notificar',onPorNotif+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>'):'')+
+      (esDirMets?pqrsMetCard('firmados',onFirmados+'border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+firmados+'</div><div class="l">Firmados</div>'):'')+
+      (!esDirMets&&(porNotif||showPorFirmarCard)?pqrsMetCard('por_notificar',onPorNotif+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>'):'')+
       pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
   }
   if(!list.length){

@@ -106,12 +106,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-
 .req-star{color:var(--rd);font-size:11px;margin-left:2px}
 a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
 .btn{padding:6px 13px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf);color:var(--tx);font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;text-decoration:none}
-.btn.act-ico{min-width:36px;justify-content:center;padding:6px 9px;font-size:15px;line-height:1}
-.btn.act-ico .act-ico-lbl{display:none}
-@media(min-width:900px){
-  .btn.act-ico.act-ico-with-lbl{gap:5px}
-  .btn.act-ico.act-ico-with-lbl .act-ico-lbl{display:inline}
-}
+.btn.act-ico{min-width:32px;width:32px;height:32px;justify-content:center;padding:0;font-size:14px;line-height:1;border-radius:8px}
+.btn.act-ico .act-ico-lbl{display:none!important}
+.sst-file-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+.sst-file-pick-name{font-size:12px;color:var(--tx2)}
 .mant-banner{display:none;position:sticky;top:0;z-index:240;background:#7c2d12;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.2)}
 body.modo-mantenimiento .mant-banner{display:block}
 body.modo-mantenimiento .mant-banner strong{font-weight:700}
