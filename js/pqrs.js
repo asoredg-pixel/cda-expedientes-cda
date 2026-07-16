@@ -1058,9 +1058,15 @@ function pqrsAccionesTablaHtml(e){
     }
     h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')">🖊 Pasar a firma</button> ';
   }
-  // Por firmar — exclusivo Director (DS DEGUV)
-  if(fase===PQRS_WF.POR_FIRMAR&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-    h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')">🖊 Firmar</button> ';
+  // Por firmar — Director, o VITAL/NCA si ya hay firmado físico pendiente de asignar notif.
+  if(fase===PQRS_WF.POR_FIRMAR){
+    const wfF=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const firmFis=!!(wfF.firma_fisica&&wfF.firma_fisica.en);
+    if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')">🖊 Firmar</button> ';
+    if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
+      h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+id+'\')">📬 Pasar a por notificar</button> ';
+  }
   // Por notificar
   if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)&&(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador())))
     h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+id+'\')">📬 Notificar</button> ';
@@ -1143,7 +1149,7 @@ function renderPqrsOficinaInbox(){
       pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
       pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
       (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
-      (paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Para firma</div>'):'')+
+      (paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>'):'')+
       (showPorFirmarCard?pqrsMetCard('por_firmar',onPorFirmar+'border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>'):'')+
       (porNotif?pqrsMetCard('por_notificar',onPorNotif+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>'):'')+
       pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
