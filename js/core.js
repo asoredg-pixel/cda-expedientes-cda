@@ -208,10 +208,8 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
   const respOfi=String(e._pqrs_responsable_oficina||'').trim();
   if(!respOfi&&ofi!=='guaviare')return false;
   if(!usuario)return true;
-  // El encargado de NCA (guaviare) siempre ve TODAS las tareas PQRSD asignadas a NCA
-  const encGuaviare=getEncargadoDepto('guaviare');
-  if(ofi==='guaviare'&&encGuaviare&&agendaNorm(usuario)===agendaNorm(encGuaviare))return true;
-  // Para responsables específicos, verificar asignación
+  // Encargado y responsables: solo las asignadas a ellos.
+  // Para ver todas use el filtro «Todos los responsables» (usuario=null).
   if(!taskUsuarioEsAsignado(t,usuario))return false;
   if(respOfi)return agendaNorm(respOfi)===agendaNorm(usuario);
   return ofi==='guaviare';
@@ -630,7 +628,10 @@ function _pqrsDocEsAnexoRespuesta(d){
   if(!d)return false;
   if(d.tipo==='anexo_respuesta'||d.es_anexo===true)return true;
   const nom=String(d.nombre||d.driveFilename||d.label||'');
-  return /^anexo[-_\s]/i.test(nom);
+  if(/^anexo[-_\s]?\d*/i.test(nom))return true;
+  // Tras renombre Drive (revision-anexo1-… / por_firmar-anexo2-…)
+  if(/(^|[-_])anexo[-_\s]?\d*/i.test(nom))return true;
+  return false;
 }
 /** Documento marcado / nombrado como versión enviada a corrección (hay que conservarlo para comparar). */
 function _pqrsDocEsPorCorregir(d){
@@ -3278,9 +3279,8 @@ function getTareasDeptActividades(respFilter){
       t=normalizeTask(t);
       if(t.eliminada)return;
       if(!pqrsTaskVisibleEnActividades(t,e,respFilter))return;
-      // Para tareas PQRSD, pqrsTaskVisibleEnActividades ya maneja el filtro de usuario;
-      // solo aplicar el filtro adicional para tareas normales
-      if(respFilter&&!taskEsAtenderPqrs(t,e)&&!taskUsuarioEsAsignado(t,respFilter))return;
+      // Mismo criterio que oficina PQRSD: el filtro por responsable aplica a todas las tareas
+      if(respFilter&&!taskUsuarioEsAsignado(t,respFilter))return;
       const tramObj=getTram(e._tramite,e);
       list.push({...t,exp:e._exp,depto:e._depto,nombre:getNom(e),tram:tramObj?tramObj.nombre:(esTramitePqrs(e._tramite)?'PQRSD':''),sinExpediente:false,esPqrs:esTramitePqrs(e._tramite),prioritaria:!!(t.prioritaria||(esTramitePqrs(e._tramite)&&e._pqrs_prioritaria))});
     });
@@ -6011,11 +6011,14 @@ function collectDocsComparables(e,taskId,tDirect){
     // Documentos del workflow (incluye versiones «por corregir» + entrega actual)
     if(esPqrsSecretaria(e)&&typeof getPqrsWorkflow==='function'){
       const wf=getPqrsWorkflow(e);
-      (wf.documentos||[]).forEach(function(d,i){
+      const wfDocs=wf.documentos||[];
+      wfDocs.forEach(function(d,i){
         if(!d)return;
         const url=d.driveLink||d.previewLink||d.url||'';
         if(!url)return;
-        pushUrl('wf_doc_'+i,'PQRSD',_pqrsEtiquetaDocWf(d),url,d.entregado_en||wf.fecha_respuesta||e._pqrs_respuesta_fecha,d.driveEstado||'');
+        const lbl=_pqrsEtiquetaDocWf(d,wfDocs);
+        const esAn=_pqrsDocEsAnexoRespuesta(d);
+        pushUrl('wf_doc_'+i,'PQRSD',(esAn?'📎 ':'📄 ')+lbl,url,d.entregado_en||wf.fecha_respuesta||e._pqrs_respuesta_fecha,d.driveEstado||'');
       });
     }
     const tieneSoportesResp=Array.isArray(e._pqrs_respuesta_soportes)&&e._pqrs_respuesta_soportes.length>0;
@@ -6033,14 +6036,25 @@ function collectDocsComparables(e,taskId,tDirect){
     });
   }
   if(t){
-    [...(t.soportes||[])].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(s=>{
+    const sops=t.soportes||[];
+    [...sops].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(s=>{
       const url=s.url||s.preview||'';
       if(!url&&!s.local)return;
+      const esAn=typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s);
+      let lab;
+      if(esAn){
+        const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
+        lab='📎 Anexo '+n;
+      }else if(s.es_proyeccion||/proyecci/i.test(String(s.label||''))){
+        lab='📄 Proyección de respuesta'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
+      }else{
+        lab='Entrega v'+(s.version||'?')+(s.activo?' · activa':'');
+      }
       add({
         id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,
-        label:'Entrega v'+(s.version||'?')+(s.activo?' · activa':''),
-        titulo:'Entrega v'+(s.version||'?'),
-        meta:[s.label,fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
+        label:lab,
+        titulo:lab,
+        meta:[!esAn&&s.label&&s.label!==lab?s.label:'',fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
         preview:s.preview||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
         sortKey:(s.fecha||'0000')+'_sop_'+String(s.version||0).padStart(5,'0')
       });
@@ -6992,15 +7006,36 @@ function renderCompareVersionesPanel(t,e,taskId){
   const defB=docs[docs.length-1].id;
   window._compareDocA=window._compareDocA||defA;
   window._compareDocB=window._compareDocB||defB;
-  const opts=docs.map(d=>'<option value="'+escAttr(d.id)+'">'+escAttr((d.origen||'')+' · '+d.label)+'</option>').join('');
-  let h='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Seleccione dos documentos para verlos lado a lado: entregas de la actividad, versiones anteriores y enlaces Drive registrados en el expediente.</div>';
+  const opts=docs.map(function(d){
+    const lab=String(d.label||d.titulo||'Documento');
+    return '<option value="'+escAttr(d.id)+'">'+escAttr(lab)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+  }).join('');
+  let h='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Seleccione dos documentos para verlos lado a lado (proyección vs anexos, versiones anteriores). Use <strong>Ampliar</strong> para leer a casi pantalla completa.</div>';
   h+='<div class="compare-ver-sel">'+
-    '<label>Documento izquierdo <select id="compare-ver-a" onchange="onCompareVerChange()">'+opts+'</select></label>'+
-    '<label>Documento derecho <select id="compare-ver-b" onchange="onCompareVerChange()">'+opts+'</select></label>'+
-    '<button type="button" class="btn bsm" onclick="setCompareUltimasDos()">Últimos dos</button></div>';
+    '<div class="fld compare-ver-fld"><label for="compare-ver-a">Documento izquierdo</label><select id="compare-ver-a" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
+    '<div class="fld compare-ver-fld"><label for="compare-ver-b">Documento derecho</label><select id="compare-ver-b" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
+    '<button type="button" class="btn bsm" onclick="setCompareUltimasDos()">Últimos dos</button>'+
+    '<button type="button" class="btn bsm bp" id="compare-ver-expand-btn" onclick="toggleCompareVerExpand()">⛶ Ampliar</button></div>';
   h+='<div id="compare-ver-stack" class="compare-ver-stack"></div>';
   return h;
 }
+function toggleCompareVerExpand(){
+  const modal=document.querySelector('#task-modal-overlay .task-modal');
+  const stack=document.getElementById('compare-ver-stack');
+  const btn=document.getElementById('compare-ver-expand-btn');
+  if(!modal||!stack)return;
+  const on=modal.classList.toggle('task-modal-compare-expand');
+  stack.classList.toggle('compare-ver-stack-expand',on);
+  document.body.classList.toggle('compare-docs-expanded',on);
+  if(btn)btn.textContent=on?'⛶ Reducir':'⛶ Ampliar';
+  if(on){
+    const ctx=window._taskModalCtx||{};
+    const e=getExpById(ctx.expId);
+    const t=getTaskFromExp(e,ctx.taskId);
+    renderCompareVerStack(t,e);
+  }
+}
+window.toggleCompareVerExpand=toggleCompareVerExpand;
 function setCompareUltimasDos(){
   const ctx=window._taskModalCtx||{};
   const e=getExpById(ctx.expId);
@@ -7036,11 +7071,12 @@ function renderCompareNotasHtml(t,sopId){
 function renderCompareDocSideHtml(doc,sideLbl,t){
   if(!doc)return'<div class="compare-ver-block"><div class="lbl">'+escAttr(sideLbl)+'</div><div style="padding:8px;font-size:12px">Sin documento</div></div>';
   const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
+  const expanded=!!(document.querySelector('#task-modal-overlay .task-modal.task-modal-compare-expand'));
   let vista='';
   if(soporteTieneVista(sopLike)){
     vista=soporteEsImagen(sopLike)
-      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;max-height:420px;object-fit:contain;display:block">'
-      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;'+(expanded?'max-height:78vh':'max-height:420px')+';object-fit:contain;display:block">'
+      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
   }
@@ -9165,10 +9201,14 @@ function closeTaskModal(){
     ov.style.zIndex='';
     ov.classList.remove('con-arch-modal-on');
     const modal=ov.querySelector('.task-modal');
-    if(modal)modal.classList.remove('task-modal-wide');
-    if(modal)modal.classList.remove('task-modal-firma');
-    if(modal)modal.classList.remove('enviar-modal-only');
+    if(modal){
+      modal.classList.remove('task-modal-wide');
+      modal.classList.remove('task-modal-firma');
+      modal.classList.remove('enviar-modal-only');
+      modal.classList.remove('task-modal-compare-expand');
+    }
   }
+  document.body.classList.remove('compare-docs-expanded');
   window._taskViewTabPreferido=null;
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');
@@ -10875,7 +10915,8 @@ function notif(msg,tipo){
         tone:'warn',
         hideFooter:false,
         confirmLabel:'Entendido',
-        autoCloseMs:SST_MSG_AUTO_MS
+        // Errores: no auto-cerrar (el mensaje de Firestore debe poder leerse)
+        autoCloseMs:0
       });
       return;
     }
@@ -11505,9 +11546,11 @@ function updateActEstFilterForEnc(forEnc){
     optFirma.textContent=(isVital&&!deptView)?'Por imprimir':'Por imprimir';
   }
   if(optPorFirmar){
-    const showPf=(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    const showPf=isVital
+      ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
       ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
-      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
+      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+      ||deptView;
     optPorFirmar.hidden=!showPf;
   }
   if(optNotif)optNotif.hidden=!(showFirmaflujo||isResp); // todos los responsables ven por notificar
@@ -11515,9 +11558,9 @@ function updateActEstFilterForEnc(forEnc){
   const order=deptView
     ?['pend','venc','prior','porver','parafirma','porfirmar','pornotif','done','all']
     :(isVital
-      ?['pend','venc','prior','porver','porcorr','parafirma','pornotif','done','all']
+      ?['pend','venc','prior','porver','porcorr','parafirma','porfirmar','pornotif','done','all']
       :['pend','venc','prior','porver','porcorr','pornotif','done','all']);
-  if(((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())||(typeof esNcaDeguv==='function'&&esNcaDeguv()))&&order.indexOf('porfirmar')<0){
+  if(((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())||(typeof esNcaDeguv==='function'&&esNcaDeguv())||isVital)&&order.indexOf('porfirmar')<0){
     const i=order.indexOf('parafirma');
     if(i>=0)order.splice(i+1,0,'porfirmar');
     else order.splice(order.length-2,0,'porfirmar');
@@ -12571,9 +12614,11 @@ function renderActividades(){
   if(deptView||isVital||(typeof esNcaDeguv==='function'&&esNcaDeguv())){
     metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">Por imprimir</div>');
   }
-  if((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+  if(isVital
+    ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
     ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
-    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())){
+    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+    ||deptView){
     metsHtml+=actMetCard('porfirmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirmar+'</div><div class="l">Por firmar</div>');
   }
   metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>');
@@ -14413,7 +14458,12 @@ async function pqrsPasarAFirmaDirector(expId){
   if(!e||!pqrsPuedeMarcarParaFirma(e)){notif('No puede pasar esta PQRSD a firma','err');return;}
   const wf=getPqrsWorkflow(e);
   const notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||'').trim();
-  await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
+  const fasePrev=pqrsWorkflowFase(e);
+  try{
+    await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
+  }catch(err){
+    console.warn('pqrsPasarAFirmaDirector rename:',err);
+  }
   const patch={
     fase:PQRS_WF.POR_FIRMAR,
     impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()},
@@ -14427,7 +14477,20 @@ async function pqrsPasarAFirmaDirector(expId){
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'pasar_a_firma_director',fecha:hoy(),nota:'Impreso y pasado a firma del Director'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
-  persistExpedienteGranular(e);
+  let ok=false;
+  try{
+    ok=typeof persistExpedienteGranularAsync==='function'
+      ?await persistExpedienteGranularAsync(e)
+      :await persistExpedienteGranular(e);
+  }catch(err){
+    console.error('pqrsPasarAFirmaDirector persist:',err);
+    ok=false;
+  }
+  if(!ok){
+    // Revertir fase en memoria; el aviso de Firestore ya quedó visible (sin auto-cierre)
+    setPqrsWorkflow(e,{fase:fasePrev});
+    return;
+  }
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
