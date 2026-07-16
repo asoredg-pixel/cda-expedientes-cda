@@ -830,18 +830,52 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
 .compare-ver-select:focus,.compare-ver-sel select:focus{
   outline:none;border-color:#1a4a2e;box-shadow:0 0 0 3px rgba(26,73,46,.13)
 }
+.doc-viewport-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.task-modal.task-modal-viewport-expand,
 .task-modal.task-modal-compare-expand{
-  width:min(1280px,98vw)!important;max-height:96vh!important;height:96vh
+  width:99.4vw!important;
+  max-width:99.4vw!important;
+  height:98.5vh!important;
+  max-height:98.5vh!important;
+  border-radius:8px
 }
-.task-modal.task-modal-compare-expand .task-modal-body{flex:1;overflow:auto;max-height:none}
+.task-modal.task-modal-viewport-expand .task-modal-body,
+.task-modal.task-modal-compare-expand .task-modal-body{
+  flex:1;overflow:auto;max-height:none;padding:.55rem .75rem
+}
 .compare-ver-stack.compare-ver-stack-expand,
-.task-modal.task-modal-compare-expand .compare-ver-stack{
-  max-height:none;min-height:70vh
+.task-modal.task-modal-viewport-expand .compare-ver-stack,
+.task-modal.task-modal-compare-expand .compare-ver-stack,
+.compare-pqrs-stack.compare-pqrs-stack-expand,
+.task-modal.task-modal-viewport-expand .compare-pqrs-stack{
+  max-height:none;min-height:calc(98.5vh - 140px)
 }
+.task-modal.task-modal-viewport-expand .compare-ver-block iframe,
 .task-modal.task-modal-compare-expand .compare-ver-block iframe,
-.compare-iframe-expand{height:min(78vh,820px)!important}
-body.compare-docs-expanded #task-modal-overlay{align-items:stretch;padding:1vh 1vw}
-body.compare-docs-expanded #task-modal-overlay .task-modal{margin:auto}
+.task-modal.task-modal-viewport-expand .compare-pqrs-stack iframe,
+.compare-iframe-expand{
+  height:calc(98.5vh - 150px)!important;
+  min-height:72vh
+}
+.task-modal.task-modal-viewport-expand .soporte-annot-wrap{
+  height:calc(98.5vh - 170px);
+  min-height:72vh
+}
+.task-modal.task-modal-viewport-expand .soporte-sidebar-col{
+  max-height:calc(98.5vh - 170px)
+}
+.task-modal.task-modal-viewport-expand .soporte-split{
+  grid-template-columns:minmax(0,1fr) minmax(260px,340px);
+  align-items:stretch
+}
+body.compare-docs-expanded #task-modal-overlay,
+body.task-doc-viewport-expanded #task-modal-overlay{
+  align-items:stretch;
+  padding:.35vh .3vw;
+  box-sizing:border-box
+}
+body.compare-docs-expanded #task-modal-overlay .task-modal,
+body.task-doc-viewport-expanded #task-modal-overlay .task-modal{margin:0 auto}
 .asist-rev{padding:.65rem;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2);font-size:12px}
 .asist-rev-item{padding:5px 0;border-bottom:1px solid var(--bd)}
 .asist-rev-item:last-child{border-bottom:none}

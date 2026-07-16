@@ -3749,10 +3749,14 @@ function htmlPqrsRespuestaDatosReadonly(e){
 }
 function renderComparePqrsDocBlock(titulo,previewUrl,openUrl,meta){
   const hasVista=!!previewUrl;
+  const expanded=typeof taskModalIsViewportExpanded==='function'&&taskModalIsViewportExpanded();
   let h='<div class="compare-ver-block"><div class="lbl">'+escAttr(titulo)+(meta?' · '+escAttr(meta):'')+'</div>';
   if(hasVista){
     const isImg=/\.(png|jpe?g|gif|webp)(\?|$)/i.test(String(previewUrl||''))||String(previewUrl||'').startsWith('data:image/');
-    h+=isImg?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;max-height:min(360px,42vh);object-fit:contain;display:block">'):('<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"></iframe>');
+    const imgMax=expanded?'max-height:88vh':'max-height:min(360px,42vh)';
+    h+=isImg
+      ?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;'+imgMax+';object-fit:contain;display:block">')
+      :('<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>');
     if(openUrl&&openUrl!==previewUrl)h+='<div style="padding:4px 8px;font-size:11px;border-top:1px solid var(--bd)"><a href="'+escAttr(openUrl)+'" target="_blank" rel="noopener">↗ Abrir en pestaña</a></div>';
   }else{
     h+='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin documento adjunto para comparar.</div>';
@@ -3760,7 +3764,10 @@ function renderComparePqrsDocBlock(titulo,previewUrl,openUrl,meta){
   return h+'</div>';
 }
 function renderPqrsSolRespCompareShell(e,t){
-  return '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Compare la solicitud del ciudadano (izquierda) con el documento de respuesta entregado (derecha).</div>'+
+  return '<div class="doc-viewport-toolbar">'+
+    '<div style="font-size:11px;color:var(--tx2);flex:1;min-width:180px">Compare la solicitud del ciudadano (izquierda) con el documento de respuesta (derecha). Use <strong>Ampliar</strong> para leer a casi pantalla completa.</div>'+
+    '<button type="button" class="btn bsm bp" id="pqrs-sol-resp-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
+    '</div>'+
     htmlPqrsRespuestaDatosReadonly(e)+
     '<div id="pqrs-sol-resp-compare-stack" class="compare-pqrs-stack"></div>';
 }
@@ -6123,6 +6130,13 @@ function setTaskViewTab(tab){
   });
   if(tab==='pqrscompare'&&typeof initPqrsSolRespCompareTab==='function')initPqrsSolRespCompareTab();
   if(tab==='compare'&&typeof initCompareVersionesTab==='function')initCompareVersionesTab();
+  if(typeof taskModalIsViewportExpanded==='function'&&taskModalIsViewportExpanded()&&typeof syncTaskViewportExpandBtns==='function'){
+    syncTaskViewportExpandBtns(true);
+    const pqrsStack=document.getElementById('pqrs-sol-resp-compare-stack');
+    if(pqrsStack)pqrsStack.classList.add('compare-pqrs-stack-expand');
+    const stack=document.getElementById('compare-ver-stack');
+    if(stack)stack.classList.add('compare-ver-stack-expand');
+  }
 }
 function selectTaskSoporte(expId,taskId,sopId){
   window._taskSopSel=sopId;
@@ -7015,27 +7029,43 @@ function renderCompareVersionesPanel(t,e,taskId){
     '<div class="fld compare-ver-fld"><label for="compare-ver-a">Documento izquierdo</label><select id="compare-ver-a" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
     '<div class="fld compare-ver-fld"><label for="compare-ver-b">Documento derecho</label><select id="compare-ver-b" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
     '<button type="button" class="btn bsm" onclick="setCompareUltimasDos()">Últimos dos</button>'+
-    '<button type="button" class="btn bsm bp" id="compare-ver-expand-btn" onclick="toggleCompareVerExpand()">⛶ Ampliar</button></div>';
+    '<button type="button" class="btn bsm bp" id="compare-ver-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button></div>';
   h+='<div id="compare-ver-stack" class="compare-ver-stack"></div>';
   return h;
 }
-function toggleCompareVerExpand(){
-  const modal=document.querySelector('#task-modal-overlay .task-modal');
-  const stack=document.getElementById('compare-ver-stack');
-  const btn=document.getElementById('compare-ver-expand-btn');
-  if(!modal||!stack)return;
-  const on=modal.classList.toggle('task-modal-compare-expand');
-  stack.classList.toggle('compare-ver-stack-expand',on);
-  document.body.classList.toggle('compare-docs-expanded',on);
-  if(btn)btn.textContent=on?'⛶ Reducir':'⛶ Ampliar';
-  if(on){
-    const ctx=window._taskModalCtx||{};
-    const e=getExpById(ctx.expId);
-    const t=getTaskFromExp(e,ctx.taskId);
-    renderCompareVerStack(t,e);
-  }
+function taskModalIsViewportExpanded(){
+  return!!document.querySelector('#task-modal-overlay .task-modal.task-modal-viewport-expand');
 }
+function syncTaskViewportExpandBtns(on){
+  const label=on?'⛶ Reducir':'⛶ Ampliar';
+  ['compare-ver-expand-btn','pqrs-sol-resp-expand-btn','task-doc-expand-btn'].forEach(function(id){
+    const b=document.getElementById(id);
+    if(b)b.textContent=label;
+  });
+}
+/** Amplía el modal casi al tamaño de la ventana del navegador (Documento / Solicitud·Respuesta / Comparar). */
+function toggleTaskViewportExpand(){
+  const modal=document.querySelector('#task-modal-overlay .task-modal');
+  if(!modal)return;
+  const on=modal.classList.toggle('task-modal-viewport-expand');
+  modal.classList.toggle('task-modal-compare-expand',on);
+  document.body.classList.toggle('compare-docs-expanded',on);
+  document.body.classList.toggle('task-doc-viewport-expanded',on);
+  const stack=document.getElementById('compare-ver-stack');
+  if(stack)stack.classList.toggle('compare-ver-stack-expand',on);
+  const pqrsStack=document.getElementById('pqrs-sol-resp-compare-stack');
+  if(pqrsStack)pqrsStack.classList.toggle('compare-pqrs-stack-expand',on);
+  syncTaskViewportExpandBtns(on);
+  const ctx=window._taskModalCtx||{};
+  const e=typeof getExpById==='function'?getExpById(ctx.expId):null;
+  const t=e&&typeof getTaskFromExp==='function'?getTaskFromExp(e,ctx.taskId):null;
+  if(document.getElementById('compare-ver-stack')&&typeof renderCompareVerStack==='function')renderCompareVerStack(t,e);
+  if(document.getElementById('pqrs-sol-resp-compare-stack')&&typeof renderPqrsSolRespCompareStack==='function')renderPqrsSolRespCompareStack(e,t);
+}
+function toggleCompareVerExpand(){return toggleTaskViewportExpand();}
+window.toggleTaskViewportExpand=toggleTaskViewportExpand;
 window.toggleCompareVerExpand=toggleCompareVerExpand;
+window.taskModalIsViewportExpanded=taskModalIsViewportExpanded;
 function setCompareUltimasDos(){
   const ctx=window._taskModalCtx||{};
   const e=getExpById(ctx.expId);
@@ -7071,11 +7101,11 @@ function renderCompareNotasHtml(t,sopId){
 function renderCompareDocSideHtml(doc,sideLbl,t){
   if(!doc)return'<div class="compare-ver-block"><div class="lbl">'+escAttr(sideLbl)+'</div><div style="padding:8px;font-size:12px">Sin documento</div></div>';
   const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
-  const expanded=!!(document.querySelector('#task-modal-overlay .task-modal.task-modal-compare-expand'));
+  const expanded=typeof taskModalIsViewportExpanded==='function'&&taskModalIsViewportExpanded();
   let vista='';
   if(soporteTieneVista(sopLike)){
     vista=soporteEsImagen(sopLike)
-      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;'+(expanded?'max-height:78vh':'max-height:420px')+';object-fit:contain;display:block">'
+      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;'+(expanded?'max-height:88vh':'max-height:420px')+';object-fit:contain;display:block">'
       :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
@@ -7390,7 +7420,8 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(sel&&soporteTieneVista(sel)){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
-    h+='<div class="soporte-annot-toolbar">'+
+    h+='<div class="soporte-annot-toolbar doc-viewport-toolbar">'+
+      '<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
       (canAnnot?'<button type="button" class="btn bsm" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">📍 Marcar en documento</button>':'')+
       (canAnnot?'<span style="font-size:11px;color:var(--tx3)">Seleccione cada documento arriba y agregue observaciones en todos los que requiera revisión</span>':'')+
       '</div>';
@@ -9206,9 +9237,11 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-firma');
       modal.classList.remove('enviar-modal-only');
       modal.classList.remove('task-modal-compare-expand');
+      modal.classList.remove('task-modal-viewport-expand');
     }
   }
   document.body.classList.remove('compare-docs-expanded');
+  document.body.classList.remove('task-doc-viewport-expanded');
   window._taskViewTabPreferido=null;
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');
