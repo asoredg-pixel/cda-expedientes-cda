@@ -1149,10 +1149,10 @@ async function openPqrsRespuestaModal(expId,opts){
     (gmailSubj?'<div style="font-size:11px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">📧 Correo vinculado: <strong>'+escAttr(gmailSubj.slice(0,100))+'</strong></div>':'')
   ):(
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Registre la respuesta al ciudadano.'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+
     (typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma()
-      ?' Si es <strong>oficio</strong>, puede enviarlo a <strong>firma del Director</strong> o, si prefiere, <strong>enviar por correo y cerrar</strong> saltándose ese paso.'
-      :' El expediente se marcará como <strong>Atendido</strong>.')+
+      ?'<strong>Oficio:</strong> cargue el documento y anexos y envíelo a <strong>firma del Director</strong> (la plantilla de correo aparece al notificar). <strong>Mensaje simple:</strong> atajo para enviar por correo y cerrar sin pasar por firma.'
+      :'Registre la respuesta definitiva al ciudadano. El expediente se marcará como <strong>Atendido</strong>.')+
     (medioRadLbl?' <span style="color:var(--tx3)">Medio de notificación en radicación: <strong>'+escAttr(medioRadLbl)+'</strong> (puede cambiarlo).</span>':'')+
     '</div>'
   );
@@ -1207,9 +1207,23 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div id="pqrs-resp-adj-rows" style="margin-top:6px"></div>'+
     '<div id="pqrs-resp-adj-err" class="fld-err" style="display:none"></div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">'+
-    (usaDriveInst?'<button type="button" class="btn bsm" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
-    (fromGmail?'':'<button type="button" class="btn bsm" onclick="addPqrsRespAdjRow()">🔗 + Link Drive</button>')+
-    '</div></div>'+
+    (usaDriveInst?'<button type="button" class="btn bsm" id="pqrs-resp-adj-btn" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
+    '</div>'+
+    '<div id="pqrs-resp-anexos-wrap" style="display:none;margin-top:10px;padding-top:8px;border-top:1px dashed var(--bd)">'+
+      '<label class="fx" style="gap:8px;align-items:flex-start;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" id="pqrs-resp-tiene-anexos" onchange="pqrsRespToggleAnexos()" style="margin-top:2px">'+
+        '<span><strong>Esta respuesta incluye anexos</strong><br><span style="font-size:10px;color:var(--tx2)">Los anexos van con el oficio a firma y se adjuntan al notificar por correo.</span></span>'+
+      '</label>'+
+      '<div id="pqrs-resp-anexos-box" style="display:none;margin-top:8px">'+
+        '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
+          '<button type="button" class="btn bsm bd2" onclick="pqrsRespAddAnexos()">📎 Adjuntar anexos</button>'+
+          '<span style="font-size:10px;color:var(--tx2)">Puede seleccionar varios archivos</span>'+
+        '</div>'+
+        '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
+        '<div id="pqrs-resp-anexos-list" style="margin-top:4px"></div>'+
+      '</div>'+
+    '</div>'+
+    '</div>'+
     '<div class="fld" id="pqrs-resp-nota-wrap" style="margin-bottom:10px"><label>Notas internas <span style="font-weight:400;color:var(--tx3)">(solo funcionarios)</span></label>'+
     '<textarea id="pqrs-resp-nota" placeholder="Notas para trazabilidad interna…" style="min-height:52px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:11px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr((e&&e._pqrs_notas_internas)||'')+'</textarea></div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
@@ -1228,7 +1242,8 @@ async function openPqrsRespuestaModal(expId,opts){
   if(hidTipo)hidTipo.value=tipoIni;
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===tipoIni);});
   setPqrsRespCanal(canalDef);
-  if(tipoIni===PQRS_WF_TIPO.MENSAJE||tipoIni===PQRS_WF_TIPO.OFICIO)pqrsAplicarPlantillaSegunTipo(tipoIni,false);
+  // Solo mensaje simple lleva plantilla aquí; oficio: plantilla al notificar
+  if(tipoIni===PQRS_WF_TIPO.MENSAJE)pqrsAplicarPlantillaSegunTipo(tipoIni,false);
   if(fromGmail&&e&&typeof gmailSetPqrsRespSel==='function')gmailSetPqrsRespSel(e,{detectada:!!opts.detectada,keepEmail:true});
   else if(fromGmail&&!e){const tg=document.getElementById('gmail-resp-pqrs-toggle-search');if(tg)tg.textContent='🔍 Buscar PQRSD';}
   if(fromGmail)pqrsRespRefreshModalUiGmail();
@@ -1481,10 +1496,10 @@ function pqrsAplicarPlantillaSegunTipo(tipo,force){
   }else{
     return;
   }
-  // Entrega del responsable: no inyectar plantilla de oficio (solo N° + archivo + anexos).
-  // La plantilla de oficio firmado se usa al notificar (VITAL / NCA).
+  // Oficio: plantilla solo al notificar (VITAL / NCA / oficina en Por notificar).
+  // Mensaje: plantilla en compose / entrega.
   const ids=tipo===PQRS_WF_TIPO.OFICIO
-    ?['pqrs-resp-cuerpo','pqrs-compose-body','pqrs-notif-cuerpo']
+    ?['pqrs-notif-cuerpo']
     :['pqrs-resp-cuerpo','pqrs-compose-body','pqrs-entrega-resp-cuerpo','pqrs-notif-cuerpo'];
   ids.forEach(function(id){
     const el=document.getElementById(id);
@@ -1494,6 +1509,13 @@ function pqrsAplicarPlantillaSegunTipo(tipo,force){
       el.value=plantilla;
     }
   });
+  // Al pasar a oficio en Responder, limpiar plantilla del compose (no se usa hasta notificar)
+  if(tipo===PQRS_WF_TIPO.OFICIO&&(force||true)){
+    ['pqrs-compose-body','pqrs-resp-cuerpo'].forEach(function(id){
+      const el=document.getElementById(id);
+      if(el&&_pqrsEsPlantillaRespuesta(el.value))el.value='';
+    });
+  }
 }
 function pqrsRespRefreshModalUiGmail(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
@@ -1540,13 +1562,17 @@ function pqrsRespRefreshModalUi(){
     });
     return pqrsRespRefreshModalUi();
   }
-  const useEmail=!isInfo&&isCorreo&&(isMensaje||isOficio);
+  // Compose/plantilla solo para mensaje + correo (atajo). Oficio: archivo + anexos → firma (como NCA).
+  const useEmail=!isInfo&&isCorreo&&isMensaje;
+  const puedeFirma=isOficio&&!isInfo&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
   const compose=document.getElementById('pqrs-resp-email-compose');
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
   const canalWrap=document.getElementById('pqrs-resp-canal-wrap');
   const adjWrap=document.getElementById('pqrs-resp-adj-wrap');
+  const anexosWrap=document.getElementById('pqrs-resp-anexos-wrap');
   const emailBtn=document.getElementById('pqrs-resp-email-send-btn');
   const submitBtn=document.getElementById('pqrs-resp-submit-btn');
+  const firmaBtn=document.getElementById('pqrs-resp-firma-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
   const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
   const oficioWrap=document.getElementById('pqrs-resp-oficio-wrap');
@@ -1567,8 +1593,7 @@ function pqrsRespRefreshModalUi(){
   });
 
   if(compose)compose.style.display=useEmail?'':'none';
-  // Informativa: descripción pública obligatoria; otros: cuerpo solo en canales personales con oficio
-  const showCuerpo=isInfo||(!useEmail&&!isInfo&&isOficio&&isPersonal);
+  const showCuerpo=isInfo||(!useEmail&&!isInfo&&isOficio&&isPersonal&&!puedeFirma);
   if(cuerpoWrap)cuerpoWrap.style.display=showCuerpo?'':'none';
   if(cuerpoLbl){
     if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
@@ -1580,20 +1605,33 @@ function pqrsRespRefreshModalUi(){
     if(isInfo){
       cuerpoTxt.placeholder='Describa por qué es informativa y qué información se aporta. El ciudadano verá este texto al consultar.';
       if(_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
+    }else if(isOficio&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value)){
+      cuerpoTxt.value='';
     }else if(!cuerpoTxt.value){
       cuerpoTxt.placeholder=isPersonal?'Nota breve…':'Resumen para trazabilidad…';
     }
   }
+  const composeBody=document.getElementById('pqrs-compose-body');
+  if(composeBody&&isOficio&&_pqrsEsPlantillaRespuesta(composeBody.value))composeBody.value='';
 
+  // Oficio: zona de documento + anexos (también con canal correo). Mensaje: adjuntos en compose.
   if(adjWrap)adjWrap.style.display=(useEmail||isInfo)?'none':'';
+  if(anexosWrap)anexosWrap.style.display=isOficio&&!isInfo?'':'none';
+  if(!isOficio){
+    const cb=document.getElementById('pqrs-resp-tiene-anexos');
+    if(cb&&cb.checked){cb.checked=false;pqrsRespToggleAnexos();}
+  }
   if(adjLabel){
-    if(canal===PQRS_WF_CANAL.WHATSAPP)adjLabel.textContent='Oficio y soporte de notificación WhatsApp';
+    if(isOficio&&(isCorreo||puedeFirma))adjLabel.textContent='Documento del oficio (obligatorio)';
+    else if(canal===PQRS_WF_CANAL.WHATSAPP)adjLabel.textContent='Oficio y soporte de notificación WhatsApp';
     else if(canal===PQRS_WF_CANAL.AVISO)adjLabel.textContent='Oficio y soporte de notificación por aviso';
     else if(isPersonal)adjLabel.textContent='Oficio / constancia de notificación presencial';
     else adjLabel.textContent='Documentos adjuntos';
   }
   if(adjHint){
-    if(canal===PQRS_WF_CANAL.WHATSAPP)adjHint.textContent='Adjunte el oficio firmado y una imagen o PDF del soporte de envío por WhatsApp.';
+    if(isOficio&&isCorreo)adjHint.textContent='Suba el PDF del oficio. Si hay anexos, márquelos abajo. La plantilla de correo se usa al notificar tras la firma del Director.';
+    else if(isOficio&&puedeFirma)adjHint.textContent='Suba el PDF del oficio que firmará el Director. Si hay anexos, márquelos abajo.';
+    else if(canal===PQRS_WF_CANAL.WHATSAPP)adjHint.textContent='Adjunte el oficio firmado y una imagen o PDF del soporte de envío por WhatsApp.';
     else if(canal===PQRS_WF_CANAL.AVISO)adjHint.textContent='Adjunte el oficio y el soporte de la notificación por aviso.';
     else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)adjHint.textContent='Adjunte el oficio firmado. Si hay constancia de notificación personal, inclúyala.';
     else adjHint.textContent='';
@@ -1605,43 +1643,37 @@ function pqrsRespRefreshModalUi(){
       :'Fecha de la respuesta<span class="req-star">*</span>';
   }
   if(canalHint){
-    if(isCorreo)canalHint.textContent='Al enviar por correo se responde y notifica al mismo tiempo. Se incluye a todos los correos asociados a la PQRSD.';
+    if(isOficio&&isCorreo)canalHint.textContent='El oficio irá a firma del Director. Al notificar por correo (después de firmar) se usa la plantilla y el Gmail de la oficina.';
+    else if(isMensaje&&isCorreo)canalHint.textContent='Atajo: envía por correo y cierra la PQRSD sin pasar por firma del Director. Puede adjuntar el oficio ya firmado.';
     else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)canalHint.textContent='Notificación presencial/física: cargue el oficio (si aplica) y cierre como atendida. Indique la fecha en que se notificó.';
     else if(canal===PQRS_WF_CANAL.WHATSAPP)canalHint.textContent='Notificación por WhatsApp: cargue el oficio y el soporte (imagen). Indique la fecha de notificación.';
     else if(canal===PQRS_WF_CANAL.AVISO)canalHint.textContent='Último medio: notificación por aviso. Cargue el oficio y el soporte. Indique la fecha de notificación.';
   }
 
-  if(emailBtn){
-    emailBtn.style.display=useEmail?'':'none';
-    emailBtn.textContent=isOficio?'📤 Enviar oficio por correo y cerrar PQRSD':'📤 Enviar correo y cerrar PQRSD';
-  }
-  const firmaBtn=document.getElementById('pqrs-resp-firma-btn');
-  const puedeFirma=isOficio&&!isInfo&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
   if(firmaBtn){
     firmaBtn.style.display=puedeFirma?'':'none';
     firmaBtn.textContent='🖊 Enviar a firma del Director';
   }
+  if(emailBtn){
+    // Solo mensaje + correo (atajo sin firma)
+    emailBtn.style.display=useEmail?'':'none';
+    emailBtn.textContent='📤 Enviar correo y cerrar PQRSD';
+  }
   if(submitBtn){
-    // Con correo: el cierre directo queda oculto (usar Enviar correo o Enviar a firma)
-    submitBtn.style.display=useEmail?'none':'';
+    // Oficio+correo con atajo firma: ocultar cierre directo (usar «Enviar a firma»)
+    // Mensaje+correo: ocultar (usar enviar correo)
+    const hideSubmit=useEmail||(puedeFirma&&isCorreo);
+    submitBtn.style.display=hideSubmit?'none':'';
     if(isInfo)submitBtn.textContent='ℹ️ Marcar informativa y cerrar';
     else if(isPersonal)submitBtn.textContent='✅ Registrar notificación y cerrar PQRSD';
+    else if(puedeFirma&&!isCorreo)submitBtn.textContent='✅ Confirmar y cerrar PQRSD';
     else submitBtn.textContent='✅ Confirmar y cerrar PQRSD';
   }
-  if(oficioWrap)oficioWrap.style.display=isInfo?'none':'';
+  if(oficioWrap)oficioWrap.style.display=isInfo?'none':(isMensaje?'none':'');
   if(oficioReq)oficioReq.style.display=isOficio?'':'none';
   if(oficioHint)oficioHint.style.display=isOficio?'none':'';
 
-  // Para firma: mostrar zona de adjuntos aunque el canal sea correo (además del compose)
-  if(puedeFirma&&adjWrap){
-    adjWrap.style.display='';
-    if(adjLabel)adjLabel.textContent='Documento del oficio (para firma del Director)';
-    if(adjHint)adjHint.textContent=useEmail
-      ?'Adjunte el PDF del oficio. Puede enviarlo a firma del Director o saltarse ese paso con «Enviar correo y cerrar».'
-      :'Adjunte el PDF del oficio que firmará el Director.';
-  }
-
-  if(useEmail&&(isOficio||isMensaje))pqrsAplicarPlantillaSegunTipo(tipo,false);
+  if(useEmail)pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.MENSAJE,false);
   else if(isPersonal){
     const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
     if(cuerpoEl&&_pqrsEsPlantillaRespuesta(cuerpoEl.value))cuerpoEl.value='';
@@ -1690,12 +1722,15 @@ function setPqrsRespTipo(val){
       });
     }
   }
-  if(val===PQRS_WF_TIPO.MENSAJE||val===PQRS_WF_TIPO.OFICIO){
+  if(val===PQRS_WF_TIPO.MENSAJE){
     const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'');
     if(pqrsEsCanalCorreo(canal)){
       const cambioTipo=(prev===PQRS_WF_TIPO.MENSAJE||prev===PQRS_WF_TIPO.OFICIO)&&prev!==val;
       pqrsAplicarPlantillaSegunTipo(val,cambioTipo);
     }
+  }else if(val===PQRS_WF_TIPO.OFICIO){
+    // Sin plantilla en Responder/entrega: se limpia compose y se usa al notificar
+    pqrsAplicarPlantillaSegunTipo(val,true);
   }else{
     pqrsClearRespOficioError();
     window._pqrsUltimaPlantillaOficio='';
@@ -1780,6 +1815,7 @@ function setPqrsRespMedioNotif(val){
   setPqrsRespCanal(val||'');
 }
 function addPqrsRespAdjRow(boxId){
+  // Legacy: ya no se usa «+ Link Drive» en Responder; se conserva por compatibilidad
   const box=document.getElementById(boxId||'pqrs-resp-adj-rows');
   if(!box)return;
   const row=document.createElement('div');
@@ -1787,6 +1823,50 @@ function addPqrsRespAdjRow(boxId){
   row.style.cssText='gap:6px;margin-bottom:6px;align-items:center';
   row.innerHTML='<input type="url" data-adj="link" placeholder="https://drive.google.com/file/d/…" style="flex:1;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><button type="button" class="btn bsm bd2" onclick="this.parentElement.remove()">✕</button>';
   box.appendChild(row);
+}
+function pqrsRespToggleAnexos(){
+  const cb=document.getElementById('pqrs-resp-tiene-anexos');
+  const box=document.getElementById('pqrs-resp-anexos-box');
+  if(!box)return;
+  const on=!!(cb&&cb.checked);
+  box.style.display=on?'':'none';
+  if(!on)pqrsRespClearAnexos();
+}
+function pqrsRespAddAnexos(){
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+    if(!ok)return;
+    const inp=document.getElementById('pqrs-resp-anexos-file');
+    if(inp)inp.click();
+  });
+}
+function pqrsRespOnAnexosChange(inp){
+  const box=document.getElementById('pqrs-resp-anexos-list');
+  if(!box)return;
+  const files=inp&&inp.files?Array.from(inp.files):[];
+  if(!files.length){box.innerHTML='';return;}
+  box.innerHTML=files.map(function(f,i){
+    return '<div class="fx" style="gap:6px;align-items:center;margin-top:4px;font-size:12px;padding:4px 6px;background:var(--sf2);border-radius:var(--r)">'+
+      '📎 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>Anexo '+(i+1)+'</strong> · '+escAttr(f.name)+'</span>'+
+      (i===0?'<button type="button" class="btn bsm bd2" onclick="pqrsRespClearAnexos()">✕</button>':'')+
+      '</div>';
+  }).join('');
+}
+function pqrsRespClearAnexos(){
+  const inp=document.getElementById('pqrs-resp-anexos-file');
+  if(inp)inp.value='';
+  const box=document.getElementById('pqrs-resp-anexos-list');
+  if(box)box.innerHTML='';
+  const cb=document.getElementById('pqrs-resp-tiene-anexos');
+  if(cb&&!cb.checked){
+    const wrap=document.getElementById('pqrs-resp-anexos-box');
+    if(wrap)wrap.style.display='none';
+  }
+}
+function collectPqrsRespAnexos(){
+  const inp=document.getElementById('pqrs-resp-anexos-file');
+  const tiene=!!(document.getElementById('pqrs-resp-tiene-anexos')||{}).checked;
+  if(!tiene||!inp||!inp.files||!inp.files.length)return[];
+  return Array.from(inp.files).filter(Boolean);
 }
 function collectPqrsRespAdjuntos(boxId){
   const sel=(boxId||'pqrs-resp-adj-rows');
@@ -1798,11 +1878,12 @@ function collectPqrsRespAdjuntos(boxId){
   document.querySelectorAll('#'+sel+' .pqrs-adj-file-row').forEach(row=>{
     if(row._adjFile)files.push({file:row._adjFile,statusEl:row.querySelector('.adj-upload-status')});
   });
-  return{links,files};
+  return{links,files,anexos:collectPqrsRespAnexos()};
 }
 /**
- * Oficinas (RN/OAP/Admin/Secretaría/NCA): envían oficio a «Por firmar» del Director
- * sin cerrar la PQRSD. Alternativa: «Enviar correo y cerrar» salta este paso.
+ * Oficinas (RN/OAP/Admin/Secretaría/NCA): oficio + anexos → «Por firmar» del Director
+ * (como NCA). Sin plantilla de correo aquí; la plantilla aparece al notificar.
+ * Mensaje simple = atajo enviar correo y cerrar (submitPqrsRespuestaPorCorreo).
  */
 async function submitPqrsRespuestaParaFirma(expId){
   if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
@@ -1815,22 +1896,22 @@ async function submitPqrsRespuestaParaFirma(expId){
   const oficioExt=String((document.getElementById('pqrs-resp-oficio')||{}).value||'').trim();
   const tipoResp=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE).trim();
   const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||PQRS_WF_CANAL.CORREO).trim();
-  const cuerpoCompose=String((document.getElementById('pqrs-compose-body')||{}).value||'').trim();
   const cuerpoTxt=String((document.getElementById('pqrs-resp-cuerpo')||{}).value||'').trim();
-  const cuerpo=cuerpoCompose||cuerpoTxt;
+  const cuerpo=(!_pqrsEsPlantillaRespuesta(cuerpoTxt)?cuerpoTxt:'');
   const notaInterna=String((document.getElementById('pqrs-resp-nota')||{}).value||'').trim();
   if(tipoResp!==PQRS_WF_TIPO.OFICIO){notif('Seleccione «Oficio firmado» para enviar a firma','err');return;}
   if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
-  if(!oficioExt){notif('Indique el N° de oficio','err');pqrsShowRespOficioError&&pqrsShowRespOficioError('Obligatorio para oficio');return;}
+  if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:true,adjMsg:'Adjunte el PDF del oficio para firma del Director',skipDupCheck:false}))return;
 
   const adj=collectPqrsRespAdjuntos();
-  const composeFiles=(window._pqrsComposeAttachments||[]).slice();
-  const filesFromAdj=(adj.files||[]).map(function(x){return x&&x.file;}).filter(Boolean);
-  const files=filesFromAdj.length?filesFromAdj:composeFiles;
-  const links=(adj.links||[]).slice();
-  if(!files.length&&!links.length){
-    notif('Adjunte el PDF del oficio (o un link Drive) para firma del Director','err');
-    return;
+  const oficioFiles=(adj.files||[]).map(function(x){return x&&x.file;}).filter(Boolean);
+  const anexosFiles=adj.anexos||[];
+  const tieneAnexos=!!(document.getElementById('pqrs-resp-tiene-anexos')||{}).checked;
+  if(tieneAnexos&&!anexosFiles.length){
+    notif('Marcó que hay anexos: adjunte al menos un archivo de anexo','err');return;
+  }
+  if(!oficioFiles.length){
+    notif('Adjunte el PDF del oficio para firma del Director','err');return;
   }
 
   const firmaBtn=document.getElementById('pqrs-resp-firma-btn');
@@ -1844,45 +1925,66 @@ async function submitPqrsRespuestaParaFirma(expId){
   const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
   const nombreCarpeta=(e._qd_nombre||e._nombre||e._pn_nombre||expId);
   try{
-    if(usaDriveInst&&files.length){
-      const driveOk=typeof sstSolicitarDriveParaPqrs==='function'?await sstSolicitarDriveParaPqrs(e):(typeof sstSolicitarGmailParaAdjuntar==='function'?await sstSolicitarGmailParaAdjuntar():Promise.resolve(true));
-      if(!driveOk){
-        if(firmaBtn){firmaBtn.disabled=false;firmaBtn.textContent='🖊 Enviar a firma del Director';}
-        if(emailBtn)emailBtn.disabled=false;
-        if(submitBtn)submitBtn.disabled=false;
-        return;
-      }
-      if(typeof sstCargaShow==='function')sstCargaShow({title:'Enviando a firma',message:'Subiendo oficio al Drive…',pct:10,sub:files[0].name||''});
-      for(let i=0;i<files.length;i++){
-        const file=files[i];
-        if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round(15+(i/files.length)*70),'Subiendo «'+file.name+'»…');
-        const res=await driveUploadInstitutional(file,'por_firmar-'+file.name,file.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+    if(!usaDriveInst){
+      notif('Se requiere Drive institucional para enviar a firma','err');
+      throw new Error('Sin Drive institucional');
+    }
+    const driveOk=typeof sstSolicitarDriveParaPqrs==='function'?await sstSolicitarDriveParaPqrs(e):(typeof sstSolicitarGmailParaAdjuntar==='function'?await sstSolicitarGmailParaAdjuntar():Promise.resolve(true));
+    if(!driveOk){
+      if(firmaBtn){firmaBtn.disabled=false;firmaBtn.textContent='🖊 Enviar a firma del Director';}
+      if(emailBtn)emailBtn.disabled=false;
+      if(submitBtn)submitBtn.disabled=false;
+      return;
+    }
+    const allUp=oficioFiles.map(function(f){return{file:f,esAnexo:false};})
+      .concat(anexosFiles.map(function(f){return{file:f,esAnexo:true};}));
+    if(typeof sstCargaShow==='function')sstCargaShow({title:'Enviando a firma',message:'Subiendo oficio y anexos al Drive…',pct:10,sub:oficioFiles[0].name||''});
+    let anexoSeq=0;
+    for(let i=0;i<allUp.length;i++){
+      const item=allUp[i];
+      const file=item.file;
+      const esAnexo=!!item.esAnexo;
+      if(esAnexo)anexoSeq++;
+      const pref=esAnexo
+        ?('por_firmar-anexo-'+anexoSeq+'-'+file.name)
+        :('por_firmar-'+file.name);
+      if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round(15+(i/allUp.length)*70),'Subiendo «'+file.name+'»…');
+      const res=await driveUploadInstitutional(file,pref,file.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+      if(esAnexo){
         documentos.push({
-          nombre:'por_firmar-'+file.name,
+          nombre:'Anexo '+anexoSeq,
+          labelAnexo:'Anexo '+anexoSeq,
           driveLink:res.driveLink,
           previewLink:res.previewLink||res.driveLink,
           fileId:res.fileId||'',
-          tipo:i===0?'oficio_firmado':'archivo',
+          tipo:'anexo_respuesta',
+          es_anexo:true,
+          anexo_n:anexoSeq,
+          mime:file.type||'',
+          driveEstado:'por_firmar'
+        });
+      }else{
+        documentos.push({
+          nombre:pref,
+          driveLink:res.driveLink,
+          previewLink:res.previewLink||res.driveLink,
+          fileId:res.fileId||'',
+          tipo:'oficio_firmado',
           mime:file.type||'',
           driveEstado:'por_firmar'
         });
       }
     }
-    links.forEach(function(lnk){
-      documentos.push({nombre:'Oficio (Drive)',driveLink:lnk,tipo:'oficio_firmado',driveEstado:'por_firmar'});
-    });
     if(!documentos.length){
       notif('No se pudo preparar el documento para firma','err');
       throw new Error('Sin documentos');
     }
 
     const wf=getPqrsWorkflow(e);
-    const prevDocs=(wf.documentos||[]).filter(function(d){
-      return d&&typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d);
-    });
-    const docsFinal=prevDocs.concat(documentos);
+    const docsFinal=documentos;
     let notifPor=pqrsAplicarReglaNotificadorCanal(e,canal,wf.notificar_por||wf.notificar_por_propuesto||'');
     const por=responsableActivo||labelOficina(deptoActivo)||rolSesion||'';
+    const correosCiud=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
     const patchWf={
       fase:PQRS_WF.POR_FIRMAR,
       tipo:PQRS_WF_TIPO.OFICIO,
@@ -1891,9 +1993,9 @@ async function submitPqrsRespuestaParaFirma(expId){
       oficio:oficioExt,
       fecha_respuesta:fechaResp,
       documentos:docsFinal,
-      email_to:String((document.getElementById('pqrs-compose-to')||{}).value||wf.email_to||'').trim(),
-      email_cc:String((document.getElementById('pqrs-compose-cc')||{}).value||wf.email_cc||'').trim(),
-      email_bcc:String((document.getElementById('pqrs-compose-bcc')||{}).value||wf.email_bcc||'').trim(),
+      email_to:String(wf.email_to||correosCiud.join(', ')||'').trim(),
+      email_cc:String(wf.email_cc||'').trim(),
+      email_bcc:String(wf.email_bcc||'').trim(),
       revision_nca:{aprobado:true,tipo:'oficio',comentario:'Atajo oficina → firma Director',por:por,en:new Date().toISOString(),atajo_firma:true},
       listo_firma:{por:por,en:new Date().toISOString(),atajo_digital:true},
       impreso:null,
@@ -1916,7 +2018,7 @@ async function submitPqrsRespuestaParaFirma(expId){
     e._pqrs_historial.push({
       tipo:'oficina_atajo_firma',
       fecha:hoy(),
-      nota:'Oficio enviado a firma del Director (atajo)'+(notifPor?' · Notificará: '+notifPor:''),
+      nota:'Oficio enviado a firma del Director'+(anexoSeq?' · '+anexoSeq+' anexo(s)':'')+(notifPor?' · Notificará: '+notifPor:''),
       oficina:e._pqrs_oficina||deptoActivo,
       por:por
     });
@@ -1928,7 +2030,7 @@ async function submitPqrsRespuestaParaFirma(expId){
     renderSecretariaPqrs();
     if(typeof renderActividades==='function')renderActividades();
     refreshPqrsDetalleViews(expId);
-    notif('🖊 Oficio en «Por firmar» — el Director lo verá en su bandeja'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    notif('🖊 Oficio en «Por firmar» — el Director lo verá en su bandeja'+(anexoSeq?' · '+anexoSeq+' anexo(s)':'')+(notifPor?' · Notificará: '+notifPor:''),'ok');
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();
     console.error('submitPqrsRespuestaParaFirma:',err);
@@ -15247,11 +15349,13 @@ function openPqrsNotificarOficioModal(expId){
       anexos.map(d=>'<div style="font-size:11px;margin-top:3px">📎 <a href="'+escAttr(d.driveLink)+'" target="_blank">'+escAttr(_pqrsEtiquetaDocWf(d)||d.nombre||'Anexo')+'</a></div>').join('');
   }
   if(!docsHtml)docsHtml='<div style="font-size:11px;color:var(--tx3)">Sin documentos</div>';
-  const esEncargado=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
-  const esVitalNcaPlantilla=(typeof esCargoVital==='function'&&esCargoVital())||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
+  const esEncargado=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()
+    ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())
+    ||(typeof esSecretaria==='function'&&esSecretaria());
+  const esVitalNcaPlantilla=esEncargado||(typeof esCargoVital==='function'&&esCargoVital());
   const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
   const notifAsignado=String(wf.notificar_por||'').trim();
-  // Plantilla de oficio firmado solo para VITAL/NCA al notificar (no en entrega del responsable)
+  // Plantilla de oficio firmado al notificar (VITAL / NCA / oficinas) — no en entrega/Responder
   let cuerpoNotif=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
   if(esVitalNcaPlantilla){
     const plant=typeof pqrsPlantillaOficioFirmado==='function'?pqrsPlantillaOficioFirmado(expId,wf.oficio):'';
@@ -15262,7 +15366,7 @@ function openPqrsNotificarOficioModal(expId){
   }
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📬 Notificar oficio firmado — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px"><strong>Importante:</strong> el correo al ciudadano solo puede salir del <strong>Gmail de la oficina</strong> (encargado). VITAL o el responsable preparan y confirman; si el correo de oficina está conectado se envía; si no, queda para que el encargado envíe.'+(notifAsignado?' Encargado de notificar indicado: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px"><strong>Importante:</strong> el correo al ciudadano sale del <strong>Gmail de la oficina</strong> conectado.'+(notifAsignado?' Encargado de notificar: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+
     (typeof pqrsNotifVence==='function'&&pqrsNotifVence(e)?' <span style="color:'+(pqrsNotifVence(e)<hoy()?'var(--rd)':'var(--bl)')+'">Plazo notificar: <strong>'+fmtF(pqrsNotifVence(e))+'</strong> (5 días hábiles).</span>':'')+'</div>'+
     '<div style="margin-bottom:10px">'+docsHtml+'</div>'+
     (esEncargado||typeof esCargoVital==='function'&&esCargoVital()?_pqrsOpcionesNotificadorHtml(e,wf,notifAsignado||wf.notificar_por_propuesto||wf.entregado_por,{modo:'director',canal:canal}):'')+
@@ -15279,7 +15383,7 @@ function openPqrsNotificarOficioModal(expId){
     '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="pqrs-notif-bcc" value="'+escAttr(wf.email_bcc||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="pqrs-notif-asunto" value="Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+escAttr(expId)+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Mensaje'+(esVitalNcaPlantilla?' <span style="font-weight:400;color:var(--tx3)">(plantilla de oficio firmado)</span>':'')+'</label><textarea id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoNotif)+'</textarea></div>'+
-    '<div style="font-size:11px;color:'+(tokOfi?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+(tokOfi?'✅ Correo del encargado NCA conectado — el envío saldrá de esa cuenta'+(typeof esCargoVital==='function'&&esCargoVital()?' (aunque quien confirme sea VITAL)':'')+'.':(esEncargado?'⚠️ Conecte el correo de la oficina (encargado NCA) en Correos para enviar.':'⚠️ Sin correo de oficina: al confirmar quedará pendiente de envío por el encargado NCA.'))+'</div>'+
+    '<div style="font-size:11px;color:'+(tokOfi?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+(tokOfi?'✅ Correo de oficina conectado — el envío saldrá de esa cuenta.':(esEncargado?'⚠️ Conecte el correo de la oficina en Correos para enviar.':'⚠️ Sin correo de oficina: al confirmar quedará pendiente de envío por el encargado.'))+'</div>'+
     (anexos.length?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">📎 Se adjuntarán al correo <strong>'+anexos.length+' anexo(s)</strong> junto con el oficio.</div>':'')+
     '</div>'+
     '<div id="pqrs-notif-otro-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'display:none':'')+'">'+

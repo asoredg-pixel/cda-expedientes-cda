@@ -1030,7 +1030,7 @@ function getPqrsOficinaList(oficinaId,filtro){
     return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
   let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId&&!pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
-  if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e));
+  if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e));
   else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
   else if(filtro==='revision')list=list.filter(e=>{
@@ -1147,8 +1147,8 @@ function renderPqrsOficinaInbox(){
   const pendTraslCount=getPqrsPendientesTrasladoList().length;
   const showPorTrasl=typeof puedeVerFiltroPorTrasladarOficina==='function'&&puedeVerFiltroPorTrasladarOficina();
   if(mets){
-    // Por ejecutar = sin respuesta / en plazo (como NCA); Vencidas = atrasadas
-    const porEjec=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
+    // Por ejecutar = todas sin respuesta (en término + vencidas); Vencidas = solo atrasadas
+    const porEjec=listAll.filter(e=>!pqrsEstaCerrada(e)).length;
     const vencidas=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
     const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
@@ -1168,7 +1168,7 @@ function renderPqrsOficinaInbox(){
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
     }).length;
-    const onPend=(filtro==='pend'||filtro==='all')?'outline:2px solid var(--or);':'';
+    const onPend=filtro==='pend'?'outline:2px solid var(--or);':'';
     const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
     const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
     const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
