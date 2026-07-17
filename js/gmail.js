@@ -3841,6 +3841,70 @@ async function gmailOfiSendMessage(to, subject, htmlBody) {
   return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
 
+/** MIME HTML institucional con adjuntos reales (oficio / anexos de notificación PQRSD). */
+async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, files, cc, bcc) {
+  files = files || [];
+  if (!files.length) return _gmailOfiBuildHtmlMime(to, subject, htmlBody);
+  const altBoundary = 'sst_ofihtml_alt_' + Date.now();
+  const mixBoundary = 'sst_ofihtml_mix_' + Date.now();
+  const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject || ''))) + '?=';
+  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
+  const plainAlt = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
+  const altPart = [
+    '--' + altBoundary,
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    plainAlt,
+    '',
+    '--' + altBoundary,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + altBoundary + '--'
+  ].join('\r\n');
+  const attParts = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (!f) continue;
+    const b64 = await _gmailOfiFileToBase64(f);
+    const fnameEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(f.name || 'adjunto'))) + '?=';
+    attParts.push(
+      '--' + mixBoundary,
+      'Content-Type: ' + (f.type || 'application/octet-stream') + '; name="' + fnameEnc + '"',
+      'Content-Disposition: attachment; filename="' + fnameEnc + '"',
+      'Content-Transfer-Encoding: base64',
+      '',
+      b64.replace(/\s/g, '')
+    );
+  }
+  const lines = [
+    'To: ' + to,
+    cc ? 'Cc: ' + cc : null,
+    bcc ? 'Bcc: ' + bcc : null,
+    'Subject: ' + subjectEnc,
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="' + mixBoundary + '"',
+    '',
+    '--' + mixBoundary,
+    'Content-Type: multipart/alternative; boundary="' + altBoundary + '"',
+    '',
+    altPart,
+    ''
+  ].concat(attParts).concat(['--' + mixBoundary + '--']).filter(function(l) { return l !== null; });
+  return btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Envía HTML desde el Gmail de oficina con adjuntos (File/Blob). opts: {cc,bcc} */
+async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opts) {
+  opts = opts || {};
+  const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
+    to, subject, htmlBody, files || [], opts.cc || '', opts.bcc || ''
+  );
+  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
+}
+
 async function gmailOfiSendCompose() {
   if (!_gmailOfiTokenValid()) { notif('⚠️ Reconecte su correo.', 'err'); return; }
   const modal = document.getElementById('gm-compose-modal');

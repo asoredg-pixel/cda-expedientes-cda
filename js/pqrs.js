@@ -1110,13 +1110,20 @@ function renderPqrsOficinaInbox(){
   const mets=document.getElementById('pqrs-ofi-mets');
   const detBox=document.getElementById('pqrs-ofi-detalle');
   const ofi=getOficinaActiva();
-  let filtro=window._pqrsOfiFiltro||'all';
-  // «Por firmar» exclusivo Director DS; NCA sí lo ve (las otras oficinas RN/Secretaría/Admin/OAP no)
-  if(filtro==='por_firmar'&&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-    &&!(typeof esNcaDeguv==='function'&&esNcaDeguv())
-    &&!(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())){
-    filtro='all';
-    window._pqrsOfiFiltro='all';
+  let filtro=window._pqrsOfiFiltro||'pend';
+  // «Por trasladar» solo Director / Secretaría
+  if(filtro==='por_trasladar'&&!(typeof puedeVerFiltroPorTrasladarOficina==='function'&&puedeVerFiltroPorTrasladarOficina())){
+    filtro='pend';
+    window._pqrsOfiFiltro='pend';
+  }
+  // «Por firmar»: NCA, Director, oficinas DEGUV y Secretaría (no resetear si tienen bandeja)
+  if(filtro==='por_firmar'&&!(typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja())){
+    filtro='pend';
+    window._pqrsOfiFiltro='pend';
+  }
+  if(filtro==='firmados'&&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
+    filtro='pend';
+    window._pqrsOfiFiltro='pend';
   }
   const esPendTrasl=filtro==='por_trasladar';
   if(tit){
@@ -1138,10 +1145,11 @@ function renderPqrsOficinaInbox(){
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   const list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
   const pendTraslCount=getPqrsPendientesTrasladoList().length;
-  const showPorTrasl=puedeVerFiltroPorTrasladarOficina();
+  const showPorTrasl=typeof puedeVerFiltroPorTrasladarOficina==='function'&&puedeVerFiltroPorTrasladarOficina();
   if(mets){
-    const pend=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
-    const atras=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
+    // Por ejecutar = sin respuesta / en plazo (como NCA); Vencidas = atrasadas
+    const porEjec=listAll.filter(e=>!pqrsEstaCerrada(e)&&!pqrsEstaAtrasada(e)).length;
+    const vencidas=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
     const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
     const showParaImprimirCard=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
@@ -1156,13 +1164,11 @@ function renderPqrsOficinaInbox(){
       :0;
     const paraFirma=showParaImprimirCard?listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length:0;
     const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length;
-    // Por revisar = entrega NCA + notificación personal pendiente de aprobación del encargado
     const enRevision=listAll.filter(e=>{
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
     }).length;
-    const onAll=filtro==='all'?'outline:2px solid var(--bl);':'';
-    const onPend=filtro==='pend'?'outline:2px solid var(--or);':'';
+    const onPend=(filtro==='pend'||filtro==='all')?'outline:2px solid var(--or);':'';
     const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
     const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
     const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
@@ -1174,9 +1180,8 @@ function renderPqrsOficinaInbox(){
     const cardPorTrasl=showPorTrasl?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'';
     mets.innerHTML=
       (showPorTrasl?cardPorTrasl:'')+
-      pqrsMetCard('all',onAll+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+listAll.length+'</div><div class="l">Total</div>')+
-      pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+pend+'</div><div class="l">Pendientes</div>')+
-      pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+atras+'</div><div class="l">Atrasados</div>')+
+      pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>')+
+      pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+vencidas+'</div><div class="l">Vencidas</div>')+
       (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
       (showParaImprimirCard&&paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>'):'')+
       (showPorFirmarCard?pqrsMetCard('por_firmar',onPorFirmar+'border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>'):'')+

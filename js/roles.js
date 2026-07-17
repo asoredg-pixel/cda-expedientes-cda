@@ -778,7 +778,8 @@ function puedeGestionarPendientesTraslado(){
   return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
 }
 function puedeVerFiltroPorTrasladarOficina(){
-  return esDirectorDsDeguv()||esAdministrador();
+  // Paleta «Por trasladar»: solo Director y Secretaría (no RN / OAP / Admin oficina)
+  return esDirectorDsDeguv()||esSecretaria();
 }
 function puedeTrasladarPqrsInicial(e){
   if(!e||!esPqrsSecretaria(e)||!pqrsPendienteTraslado(e)||pqrsEstaCerrada(e))return false;
