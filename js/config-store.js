@@ -28,6 +28,19 @@ function normalizeCfgObj(c){
   }
   if(c.instructores)c.instructores=migrateInstructoresList(c.instructores);
   purgeLegacyPlaceholderInstructores(c);
+  if(!c.actRegistroMap||typeof c.actRegistroMap!=='object')c.actRegistroMap={};
+  if(!c.actFirmaMap||typeof c.actFirmaMap!=='object')c.actFirmaMap={};
+  // Semillas por defecto (solo si la actividad existe y aún no tiene mapeo)
+  const seeds={
+    'Elaborar concepto técnico':'concepto',
+    'Proyectar acto administrativo':'acto',
+    'Notificar decisión':'ninguno'
+  };
+  Object.keys(seeds).forEach(function(nom){
+    if(c.actRegistroMap[nom]==null&&(c.actividadesPred||[]).indexOf(nom)>=0)c.actRegistroMap[nom]=seeds[nom];
+  });
+  if((c.actividadesPred||[]).indexOf('Proyectar acto administrativo')>=0&&c.actFirmaMap['Proyectar acto administrativo']==null)
+    c.actFirmaMap['Proyectar acto administrativo']=true;
   c.tramites.forEach(t=>{
     if(!t.campos)t.campos=[];
     if(!t.etapasSeg)t.etapasSeg=[];

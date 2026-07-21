@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260716e">
+<link rel="stylesheet" href="css/sst.css?v=20260721a">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -19,23 +19,25 @@
 <script src="js/utils.js?v=20260714f"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260721b"></script>
-<script src="js/roles.js?v=20260721b"></script>
-<script src="js/config-store.js?v=20260702t"></script>
+<script src="js/roles.js?v=20260721c"></script>
+<script src="js/config-store.js?v=20260721b"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260721b"></script>
-<script src="js/formulario.js?v=20260715c"></script>
-<script src="js/tareas.js?v=20260716b"></script>
-<script src="js/guardar-exp.js?v=20260702t"></script>
+<script src="js/core.js?v=20260721g"></script>
+<script src="js/formulario.js?v=20260721b"></script>
+<script src="js/tareas.js?v=20260721b"></script>
+<script src="js/guardar-exp.js?v=20260721d"></script>
 <script src="js/consolidado.js?v=20260702t"></script>
-<script src="js/configuracion.js?v=20260715e"></script>
+<script src="js/configuracion.js?v=20260721b"></script>
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260707e"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260717a"></script>
-<script src="js/pqrs.js?v=20260717c"></script>
-<script src="js/consulta.js?v=20260717e"></script>
+<script src="js/pqrs.js?v=20260721a"></script>
+<script src="js/consulta.js?v=20260721a"></script>
+<script src="js/entrega-responsable.js?v=20260721c"></script>
+<script src="js/tramite-firma.js?v=20260721b"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260715e"></script>
 </head>
@@ -320,6 +322,9 @@
   <div class="card" style="border-left:4px solid var(--pu)">
     <div class="fx" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
       <div class="slbl" id="act-titulo" style="margin:0">Mis actividades asignadas</div>
+      <div id="act-resp-actions" style="display:none" class="fx" style="gap:6px;align-items:center">
+        <button type="button" class="btn bsm bp" onclick="openEntregaResponsableModal()">📤 Entregar documento</button>
+      </div>
       <div id="act-dept-actions" style="display:none" class="fx" style="gap:6px;align-items:center">
         <div id="act-vista-toggle" class="act-vista-toggle" style="display:none">
           <button type="button" class="btn bsm on" id="act-vista-tabla" onclick="setActVista('tabla')">📋 Tabla</button>

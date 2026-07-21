@@ -1845,7 +1845,16 @@ function ciudadanoTaskEventoLabel(h){
 function taskDocAprobadoCiudadano(t){
   t=normalizeTask(t);
   if(t.eliminada||estadoTask(t)!=='Atendida')return false;
-  return !!(t.verificadoPor||(t.historial||[]).some(h=>h.tipo==='verificacion'));
+  // En flujo de firma de trámite: solo tras publicar/notificar
+  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
+  if(t.publicado===false)return false;
+  // Borradores internos (revisión / por firmar) no deben verse
+  const hasDraft=(t.soportes||[]).some(function(s){
+    const est=String(s.driveEstado||'').toLowerCase();
+    return['revision','acorregir','por_firma','por_firmar','vital_gestion'].indexOf(est)>=0;
+  });
+  if(hasDraft&&!t.publicado)return false;
+  return !!(t.publicado||t.verificadoPor||(t.historial||[]).some(h=>h.tipo==='verificacion'));
 }
 function getDocsAprobadosCiudadano(e){
   const docs=[];

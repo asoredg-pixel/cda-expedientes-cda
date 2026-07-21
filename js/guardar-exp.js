@@ -23,11 +23,20 @@ function mergeTasksForSave(formTasks,prevTasks){
       soportes:(ft.soportes&&ft.soportes.length)?ft.soportes:(p.soportes||[]),
       notasDoc:(ft.notasDoc&&ft.notasDoc.length)?ft.notasDoc:(p.notasDoc||[]),
       fechaReportada:p.fechaReportada||ft.fechaReportada,
-      verificadoPor:p.verificadoPor||ft.verificadoPor
+      verificadoPor:p.verificadoPor||ft.verificadoPor,
+      autoAsignadaPorResponsable:!!(ft.autoAsignadaPorResponsable||p.autoAsignadaPorResponsable),
+      origen:ft.origen||p.origen||'',
+      ultimaRevisionDepto:ft.ultimaRevisionDepto||p.ultimaRevisionDepto||null,
+      requiereFirma:ft.requiereFirma!=null?ft.requiereFirma:p.requiereFirma,
+      firmaWf:ft.firmaWf||p.firmaWf||null,
+      publicado:ft.publicado!=null?ft.publicado:p.publicado
     });
   });
   (prevTasks||[]).map(normalizeTask).forEach(p=>{
-    if(p.eliminada&&p.id&&!formIds.has(p.id))merged.push(p);
+    if(!p.id||formIds.has(p.id))return;
+    // Conservar eliminadas y entregas autoasignadas por responsable que aún no están en el formulario abierto
+    if(p.eliminada||p.autoAsignadaPorResponsable||p.origen==='responsable'||p.fechaReportada||(p.soportes&&p.soportes.length))
+      merged.push(p);
   });
   return merged;
 }
@@ -183,7 +192,10 @@ function guardarExpCore(stayOnForm){
         const tipoPersona=gv('fld__tipo_persona')||'natural';
         if(tipoPersona==='natural'&&!validarEmailCampo('fld__pn_correo','Correo de persona natural'))return;
         if(tipoPersona==='juridica'&&(!validarEmailCampo('fld__pj_rep_correo','Correo del representante legal')||!validarEmailCampo('fld__pj_correo','Correo de la empresa')))return;
-        if(document.getElementById('fld__est_com')&&document.getElementById('fld__est_com').checked&&!validarEmailCampo('fld__pn_correo','Correo de persona natural'))return;
+        if(document.getElementById('fld__est_com')&&document.getElementById('fld__est_com').checked){
+          if(!validarEmailCampo('fld__pn_correo','Correo de persona natural'))return;
+          if(document.getElementById('fld__ec_correo')&&String(gv('fld__ec_correo')||'').trim()&&!validarEmailCampo('fld__ec_correo','Correo del establecimiento'))return;
+        }
         if(document.getElementById('fld__apoderado')&&document.getElementById('fld__apoderado').checked&&!validarEmailCampo('fld__apo_correo','Correo del apoderado'))return;
       }else if(!(document.getElementById('fld__qd_anonimo')&&document.getElementById('fld__qd_anonimo').checked)&&!validarEmailCampo('fld__qd_correo','Correo del quejoso'))return;
     }
@@ -230,7 +242,7 @@ function guardarExpCore(stayOnForm){
     _pn_nombre:gv('fld__pn_nombre'),_pn_identificacion:gv('fld__pn_identificacion'),_pn_correo:gv('fld__pn_correo'),_pn_telefono:gv('fld__pn_telefono'),
     ...getDir('pn'),
     _est_com:document.getElementById('fld__est_com')?document.getElementById('fld__est_com').checked:false,
-    _ec_nombre:gv('fld__ec_nombre'),_ec_telefono:gv('fld__ec_telefono'),...getDir('ec'),
+    _ec_nombre:gv('fld__ec_nombre'),_ec_telefono:gv('fld__ec_telefono'),_ec_correo:gv('fld__ec_correo'),...getDir('ec'),
     _pj_rep_nombre:gv('fld__pj_rep_nombre'),_pj_rep_identificacion:gv('fld__pj_rep_identificacion'),_pj_rep_correo:gv('fld__pj_rep_correo'),_pj_rep_telefono:gv('fld__pj_rep_telefono'),
     _pj_empresa:gv('fld__pj_empresa'),_pj_nit:gv('fld__pj_nit'),_pj_correo:gv('fld__pj_correo'),_pj_telefono:gv('fld__pj_telefono'),...getDir('pj'),
     _apoderado:document.getElementById('fld__apoderado')?document.getElementById('fld__apoderado').checked:false,
@@ -260,7 +272,7 @@ function guardarExpCore(stayOnForm){
     if(esModoCasoEspecial(data)){
     data._tipo_persona='natural';
     data._pn_nombre='';data._pn_identificacion='';data._pn_correo='';data._pn_telefono='';limpiarDirData(data,'pn');
-    data._est_com=false;data._ec_nombre='';data._ec_telefono='';limpiarDirData(data,'ec');
+    data._est_com=false;data._ec_nombre='';data._ec_telefono='';data._ec_correo='';limpiarDirData(data,'ec');
     data._pj_rep_nombre='';data._pj_rep_identificacion='';data._pj_rep_correo='';data._pj_rep_telefono='';
     data._pj_empresa='';data._pj_nit='';data._pj_correo='';data._pj_telefono='';limpiarDirData(data,'pj');
     if(!data._apoderado){data._apo_nombre='';data._apo_identificacion='';data._apo_correo='';data._apo_telefono='';limpiarDirData(data,'apo');}
@@ -281,7 +293,7 @@ function guardarExpCore(stayOnForm){
     data._pi_empresa='';data._pi_nit='';data._pi_correo_emp='';data._pi_telefono_emp='';limpiarDirData(data,'pi_emp');
     if(data._tipo_persona==='juridica'){
       data._pn_nombre='';data._pn_identificacion='';data._pn_correo='';data._pn_telefono='';limpiarDirData(data,'pn');
-      data._est_com=false;data._ec_nombre='';data._ec_telefono='';limpiarDirData(data,'ec');
+      data._est_com=false;data._ec_nombre='';data._ec_telefono='';data._ec_correo='';limpiarDirData(data,'ec');
     }else{
       data._pj_rep_nombre='';data._pj_rep_identificacion='';data._pj_rep_correo='';data._pj_rep_telefono='';
       data._pj_empresa='';data._pj_nit='';data._pj_correo='';data._pj_telefono='';limpiarDirData(data,'pj');
@@ -312,6 +324,13 @@ function guardarExpCore(stayOnForm){
     if(prev._pqrs_informativa)data._pqrs_informativa=prev._pqrs_informativa;
     if(prev._pqrs_matriz_fila)data._pqrs_matriz_fila=prev._pqrs_matriz_fila;
     if(prev._pqrs_matriz_hoja)data._pqrs_matriz_hoja=prev._pqrs_matriz_hoja;
+    // Conservar metadatos de alta por responsable
+    if(prev._alta_por_responsable)data._alta_por_responsable=prev._alta_por_responsable;
+    if(prev._alta_por)data._alta_por=prev._alta_por;
+    if(prev._alta_fecha)data._alta_fecha=prev._alta_fecha;
+    if(prev._pendiente_revision_alta!==undefined)data._pendiente_revision_alta=prev._pendiente_revision_alta;
+    if(prev._alta_revisada_en)data._alta_revisada_en=prev._alta_revisada_en;
+    if(prev._alta_revisada_por)data._alta_revisada_por=prev._alta_revisada_por;
     const prevEstado=prev._estado||'';
     exps[idx]={...data,historial:rebuildHistorial(data,prev.historial)};
     editId=expId;
@@ -338,6 +357,11 @@ function guardarExpCore(stayOnForm){
     detenerRenovacionExpLock();
   }
   const savedExp=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(savedExp&&typeof maybeClearPendienteRevisionAltaOnSave==='function'){
+    if(maybeClearPendienteRevisionAltaOnSave(savedExp)){
+      // flags already set on object in exps array
+    }
+  }
   try{
     _saveLSLocal();
     checkLocalStorageCapacityAfterSave();

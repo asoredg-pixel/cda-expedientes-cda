@@ -955,6 +955,10 @@ body.task-doc-viewport-expanded #task-modal-overlay .task-modal{margin:0 auto}
 .act-sug-portal button{display:block;width:100%;border:0;border-bottom:1px solid var(--bd);background:transparent;text-align:left;padding:10px 12px;font-size:13px;line-height:1.4;font-family:'DM Sans',sans-serif;color:var(--tx);cursor:pointer;white-space:normal}
 .act-sug-portal button:last-child{border-bottom:0}
 .act-sug-portal button:hover{background:var(--bll);color:var(--bl)}
+.entrega-resp-sug{position:absolute;left:0;right:0;top:100%;z-index:40;margin-top:2px;background:var(--sf);border:1px solid var(--bl);border-radius:var(--rl);box-shadow:var(--shm);max-height:220px;overflow:auto}
+.entrega-resp-sug-btn{display:block;width:100%;border:0;border-bottom:1px solid var(--bd);background:transparent;text-align:left;padding:8px 10px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--tx);cursor:pointer}
+.entrega-resp-sug-btn:last-child{border-bottom:0}
+.entrega-resp-sug-btn:hover{background:var(--bll);color:var(--bl)}
 .flag-venc-acto{background:#fce8e8;color:#6e1515;border:1px solid #f7c1c1}
 .flag-prorroga{background:#fef3d8;color:#7a4e00;border:1px solid #fac775}
 .flag-arch-acto{background:#eeede8;color:#4a4940;border:1px solid #d8d6ce}

@@ -198,6 +198,7 @@ function filtrarActsPred(inp){
   let deptoId=getDeptoOperativo();
   const modalCtx=window._taskModalCtx;
   if(modalCtx&&modalCtx.mode==='crearActLibre')deptoId=deptoActivo;
+  else if(modalCtx&&modalCtx.mode==='entregaResponsable')deptoId=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   else if(modalCtx&&(modalCtx.mode==='editarActTask'||modalCtx.mode==='editarActLibre')&&modalCtx.taskId){
     const t=getTaskAny(modalCtx.expId,modalCtx.taskId);
     if(t){
@@ -223,6 +224,8 @@ function filtrarActsPred(inp){
 function pickActPred(btn,val){
   if(actSugInput)actSugInput.value=val;
   hideActSugPortal();
+  if(window._taskModalCtx&&window._taskModalCtx.mode==='entregaResponsable'&&typeof syncEntregaRespRegistroUi==='function')
+    syncEntregaRespRegistroUi();
 }
 function hideActsPred(inp){hideActSugPortal();}
 function hideActSugPortal(){

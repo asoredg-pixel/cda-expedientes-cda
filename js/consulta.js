@@ -963,6 +963,7 @@ function renderConSidePanel(){
   const canEdit=puedeEditarExpPanel();
   const lockedByOther=!window._conPanelEditMode&&!!getExpLockVigente(e._exp)&&!poseeExpLock(e._exp);
   const lockBanner=window._conPanelLockMsg?('<div style="padding:10px 12px;margin-bottom:10px;border-radius:var(--r);background:var(--aml);border:1px solid #e8c97a;font-size:12px;color:#7a5500;line-height:1.45">'+escAttr(window._conPanelLockMsg)+'</div>'):'';
+  const altaBanner=typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(e,{expId:e._exp,showDone:true}):'';
   const pqrsToolbarBtns=!window._conPanelEditMode&&esPqrsSecretaria(e)?(
     pqrsAsocToolbarBtnHtml(e)+
     (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'')+
@@ -975,6 +976,7 @@ function renderConSidePanel(){
   const editToggleBtn=!window._conPanelEditMode&&canEdit&&!window._conPanelPqrsNcaEdit&&!lockedByOther?'<button type="button" class="btn bsm bp" data-sst-action="conPanelActivarEdicion" data-sst-exp="'+escAttr(e._exp)+'">✏️ Editar</button>':'';
   const toolbar='<div class="con-panel-toolbar">'+
     badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+flagsHtmlCompact(e)+' '+pqrsPrioritariaBadge(e)+' '+pqrsInformativaBadge(e)+
+    (typeof expAltaResponsableBadgeHtml==='function'?expAltaResponsableBadgeHtml(e):'')+' '+
     pqrsToolbarBtns+
     archToolbarBtn+
     '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar expediente (.json)"><span class="export-ico">⬇</span></button>'+
@@ -989,13 +991,13 @@ function renderConSidePanel(){
     setCfgPtr(e._depto||getDeptoOperativo());
     editId=e._exp;
     const pqrsExtras=esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'';
-    body.innerHTML=tabs+lockBanner+toolbar+taskBar+archivosBlock+pqrsExtras+'<div id="con-side-form-wrap" class="con-panel-form-wrap"></div>';
+    body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+pqrsExtras+'<div id="con-side-form-wrap" class="con-panel-form-wrap"></div>';
     renderFormulario(e._tramite,e,'con-side-form-wrap');
     if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
     setTimeout(function(){conPanelColapsarTodasSecciones();},80);
     return;
   }
-  body.innerHTML=tabs+lockBanner+toolbar+taskBar+archivosBlock+(esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'')+renderConPanelExpContent(e,{foldOpen:!!(esOficinaPqrsNca()&&esPqrsSecretaria(e))});
+  body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+(esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'')+renderConPanelExpContent(e,{foldOpen:!!(esOficinaPqrsNca()&&esPqrsSecretaria(e))});
   if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
 }
 function conPanelVerSoloLectura(){
@@ -1130,7 +1132,7 @@ function conConsultaOneCard(e){
     '<summary class="ec">'+
     '<div class="ech">'+
       '<div class="ech-left">'+
-        '<div class="eid"><span class="ec-fold-ico"></span>'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,_conConsultaPag.qs)+'</span>':'')+'</div>'+
+        '<div class="eid"><span class="ec-fold-ico"></span>'+expIdHtml+(e._resolucion?' · <span style="color:var(--tx2);font-size:11px">'+hl(e._resolucion,_conConsultaPag.qs)+'</span>':'')+(typeof expAltaResponsableBadgeHtml==='function'?expAltaResponsableBadgeHtml(e):'')+'</div>'+
         '<div class="enm">'+hl(getNom(e),_conConsultaPag.qs)+'</div>'+
         '<div class="emta">'+(tram?tram.nombre:'')+badgeDepto(e._depto)+'</div>'+
         '<div style="margin-top:4px">'+flagsHtmlCompact(e)+'</div>'+

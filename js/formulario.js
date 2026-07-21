@@ -225,7 +225,8 @@ function renderFormulario(tid,ed,targetId){
   const terHtml=ter?('<div style="margin-top:.5rem">'+termsBdg(ter)+'</div>'+termsBar(ter)):'';
   const fechasEv=getFechasEstado(ev);
   const fechaEstadoVal=fechasEv[estadoActual]||fechasEv.Solicitud||ev._fecha||'';
-  const ctrlHtml='<details class="form-section" id="sec-control"><summary class="form-section-hdr" style="background:var(--bll);border-bottom-color:var(--bl);color:var(--bld)">Control del trámite</summary><div class="form-section-body">'+
+  const ctrlHtml=(typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(ev,{expId:ev._exp||'',showDone:true}):'')+
+    '<details class="form-section" id="sec-control"><summary class="form-section-hdr" style="background:var(--bll);border-bottom-color:var(--bl);color:var(--bld)">Control del trámite</summary><div class="form-section-body">'+
     fechasEstadoStoreHtml(ev)+
     '<input type="hidden" id="fld__fecha" value="'+(fechasEv.Solicitud||ev._fecha||'')+'">'+
     '<div class="fg ctrl-top-row">'+
@@ -271,6 +272,7 @@ function renderFormulario(tid,ed,targetId){
     '<div id="est-comercial" style="margin-top:.5rem;'+(ev._est_com?'':'display:none')+'"><div class="slbl" style="margin-bottom:.5rem">Establecimiento comercial</div><div class="fg">'+
     '<div class="fld"><label>Nombre del negocio</label><input type="text" id="fld__ec_nombre" value="'+(ev._ec_nombre||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__ec_telefono" value="'+(ev._ec_telefono||'')+'"'+numAttrs()+'></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="fld__ec_correo" value="'+(ev._ec_correo||'')+'" placeholder="correo@negocio.com"></div>'+
     dirHtml('ec',ev)+
     '</div></div></div>'+
     '<div id="persona-juridica" style="'+(tipoPersona==='juridica'?'':'display:none')+'">'+
