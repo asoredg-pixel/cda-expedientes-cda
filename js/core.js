@@ -2493,8 +2493,16 @@ function actualizarConsultaPqrsUI(){
   const qEst=document.getElementById('q-est');
   if(qEst&&bas){
     const cv=qEst.value;
-    qEst.innerHTML='<option value="">Todos los estados</option><option value="Solicitud">Solicitud</option><option value="En trámite">En trámite</option><option value="Atrasada">Atrasada / vencida</option><option value="Atendida">Atendida (en término)</option><option value="Atendido extemporánea">Atendida fuera de término</option><option value="Respondida">Todas respondidas</option>';
-    if(cv)qEst.value=cv;
+    qEst.innerHTML='<option value="">Todos los estados</option>'+
+      '<option value="Solicitud">Solicitud</option>'+
+      '<option value="En trámite">En trámite</option>'+
+      '<option value="Atrasada">Atrasada / vencida (sin respuesta)</option>'+
+      '<option value="Atendidas">Atendidas (en término + fuera de término)</option>'+
+      '<option value="Atendida">Solo atendidas en término</option>'+
+      '<option value="Atendido extemporánea">Solo atendidas fuera de término</option>';
+    // Compat: valor antiguo «Respondida» → Atendidas
+    if(cv==='Respondida')qEst.value='Atendidas';
+    else if(cv)qEst.value=cv;
   }else if(qEst&&!bas){
     const cv=qEst.value;
     qEst.innerHTML='<option value="">Todos los estados</option><option>Solicitud</option><option>En trámite</option><option>Atendido</option><option>Seguimiento</option><option>Archivado o anulado</option>';
@@ -2507,7 +2515,8 @@ function getPqrsEstadoConsulta(e){
 function matchPqrsEstadoConsulta(e,qe){
   if(!qe)return true;
   const st=getPqrsEstadoDisplay(e);
-  if(qe==='Respondida')return pqrsEstaCerrada(e);
+  // Unión: respondidas a tiempo + fuera de término (+ informativas cerradas)
+  if(qe==='Atendidas'||qe==='Respondida')return pqrsEstaCerrada(e);
   if(qe==='Atrasada'||qe==='Vencida')return pqrsEstaAtrasada(e);
   if(qe==='Atendido extemporánea')return pqrsEstaCerrada(e)&&!pqrsRespuestaEnTermino(e);
   if(qe==='Atendida')return pqrsEstaCerrada(e)&&(pqrsRespuestaEnTermino(e)||!!e._pqrs_informativa);
