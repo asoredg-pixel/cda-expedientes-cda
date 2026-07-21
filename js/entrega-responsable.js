@@ -118,11 +118,6 @@ function openEntregaResponsableModal(){
   if(tit)tit.textContent='Entregar documento · '+responsableActivo;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   body.innerHTML=
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+
-      'Si el expediente ya existe, búsquelo. Si es la primera entrega, créelo aquí (queda en <strong>En trámite</strong>). '+
-      'La actividad se autoasigna a usted, queda en <strong>Por verificar / Por revisar</strong> del departamento y se registra en <strong>Actividades asignadas</strong> (Registro y Consulta). '+
-      'La asignación por el encargado sigue disponible como siempre.'+
-    '</div>'+
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="syncEntregaRespModoUi()"> Expediente existente</label>'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-nuevo" onchange="syncEntregaRespModoUi()"> Crear expediente (1ª entrega)</label>'+
@@ -146,25 +141,35 @@ function openEntregaResponsableModal(){
         '<input type="text" id="entrega-resp-interesado" placeholder="Nombre del interesado" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
-      '<div class="act-wrap"><input type="text" id="entrega-resp-actividad" data-sug-src="exp" placeholder="Buscar actividad…" '+
-        'oninput="filtrarActsPred(this);syncEntregaRespRegistroUi()" onfocus="filtrarActsPred(this)" onblur="setTimeout(function(){hideActsPred(document.getElementById(\'entrega-resp-actividad\'));syncEntregaRespRegistroUi();},160)" '+
-        'style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+      '<div style="position:relative">'+
+        '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
+          'oninput="filtrarActEntregaRespSug(this)" onfocus="filtrarActEntregaRespSug(this)" '+
+          'onblur="setTimeout(function(){var p=document.getElementById(\'entrega-resp-act-sug\');if(p)p.style.display=\'none\';},200)" '+
+          'style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+
+        '<div id="entrega-resp-act-sug" class="entrega-resp-sug" style="display:none"></div>'+
+      '</div>'+
       '<div id="entrega-resp-reg-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div></div>'+
     '<div id="entrega-resp-registro-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label>'+
       '<input type="text" id="entrega-resp-detalle" placeholder="Detalles de la actividad" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Documento principal</label>'+
-      '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px">'+
-      '<div style="font-size:10px;color:var(--tx3);margin-top:2px">En Guaviare se sube al Drive institucional del expediente.</div></div>'+
-    '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Anexos (opcionales)</label>'+
-      '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px"></div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">Enlaces Google Drive (opcionales)</div>'+
-    '<div id="enviar-adjuntos-rows"></div>'+
-    '<div class="fx" style="gap:6px;margin-bottom:8px"><button type="button" class="btn bsm" onclick="addEnviarAdjuntoRow()">+ Link Drive</button></div>'+
+    '<div class="fld" style="margin-bottom:10px"><label>Documento principal</label>'+
+      '<div class="sst-file-pick">'+
+        '<button type="button" class="btn bsm bp" onclick="document.getElementById(\'enviar-adj-file\').click()">📎 Seleccionar archivo</button>'+
+        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-file-name\')">'+
+        '<span id="entrega-resp-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span>'+
+      '</div>'+
+      '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Se sube al Drive institucional del expediente.</div></div>'+
+    '<div class="fld" style="margin-bottom:10px"><label>Anexos (opcionales)</label>'+
+      '<div class="sst-file-pick">'+
+        '<button type="button" class="btn bsm" onclick="document.getElementById(\'enviar-anexos-file\').click()">📎 Seleccionar anexos</button>'+
+        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-anexos-name\',true)">'+
+        '<span id="entrega-resp-anexos-name" class="sst-file-pick-name">Sin anexos</span>'+
+      '</div></div>'+
     '<input type="hidden" id="enviar-requiere-link" value="0">'+
     '<input type="hidden" id="enviar-modo-nueva" value="0">'+
     '<input type="hidden" id="enviar-modo-traslado" value="0">'+
-    '<textarea id="enviar-cmt-opcional" placeholder="Comentario sobre esta entrega (obligatorio si no adjunta archivo ni link)…" '+
+    '<div id="enviar-adjuntos-rows" style="display:none"></div>'+
+    '<textarea id="enviar-cmt-opcional" placeholder="Comentario sobre esta entrega (obligatorio si no adjunta archivo)…" '+
       'style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>'+
     '<div class="fx" style="gap:8px">'+
       '<button type="button" class="btn bsm bp" onclick="submitEntregaResponsable()">📤 Entregar a revisión</button>'+
@@ -176,8 +181,54 @@ function openEntregaResponsableModal(){
   syncEntregaRespRegistroUi();
   setTimeout(function(){
     const a=document.getElementById('entrega-resp-actividad');
-    if(a)a.focus();
+    if(a){a.focus();filtrarActEntregaRespSug(a);}
   },80);
+}
+
+function syncEntregaRespFileLabel(inp,labelId,multi){
+  const nm=document.getElementById(labelId);
+  if(!nm||!inp)return;
+  const files=inp.files?Array.from(inp.files):[];
+  if(!files.length){nm.textContent=multi?'Sin anexos':'Sin archivo seleccionado';return;}
+  if(multi)nm.textContent=files.length===1?(files[0].name||'1 archivo'):(files.length+' archivos seleccionados');
+  else nm.textContent=files[0].name||'Archivo seleccionado';
+}
+
+function listActividadesPredEntregaResp(){
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(depto):(typeof cfgFor==='function'?cfgFor(depto):null);
+  return (cfgAct&&cfgAct.actividadesPred)||[];
+}
+
+function filtrarActEntregaRespSug(inp){
+  const portal=document.getElementById('entrega-resp-act-sug');
+  if(!portal||!inp)return;
+  const q=String(inp.value||'').trim().toLowerCase();
+  const words=q.split(/\s+/).filter(Boolean);
+  const acts=listActividadesPredEntregaResp().filter(function(a){
+    const s=String(a||'').toLowerCase();
+    return !words.length||words.every(function(w){return s.includes(w);});
+  }).slice(0,20);
+  if(!acts.length){
+    portal.style.display=q?'block':'none';
+    portal.innerHTML=q?'<div style="padding:8px 10px;font-size:12px;color:var(--tx3)">Sin coincidencias — escriba otra palabra o revise Configuración → Actividades</div>':'';
+    syncEntregaRespRegistroUi();
+    return;
+  }
+  portal.innerHTML=acts.map(function(a){
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();pickActEntregaResp(\''+
+      String(a).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+escAttr(a)+'</button>';
+  }).join('');
+  portal.style.display='block';
+  syncEntregaRespRegistroUi();
+}
+
+function pickActEntregaResp(val){
+  const inp=document.getElementById('entrega-resp-actividad');
+  if(inp)inp.value=val||'';
+  const portal=document.getElementById('entrega-resp-act-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  syncEntregaRespRegistroUi();
 }
 
 /** Tipo de Registro asociado a la actividad (concepto | factura | acto | ninguno | ''). */
@@ -494,20 +545,16 @@ function submitEntregaResponsable(){
 
 function updateActRespActionsUi(){
   const bar=document.getElementById('act-resp-actions');
-  const btnBar=document.getElementById('btn-entrega-resp-bar');
   const modoResp=(typeof esModoResponsable==='function'&&esModoResponsable())
     ||(typeof esModoContratista==='function'&&esModoContratista());
   const juris=typeof esJurisdiccional==='function'&&esJurisdiccional();
   const show=puedeEntregarComoResponsable();
-  if(bar){
-    // En modo responsable: mostrar la barra siempre (botón o aviso)
-    bar.style.display=(modoResp&&!juris)?'flex':'none';
-    const hint=document.getElementById('act-resp-entrega-hint');
-    if(hint)hint.style.display=show?'none':'';
-    const btn=document.getElementById('btn-entrega-resp');
-    if(btn)btn.style.display=show?'':'none';
-  }
-  if(btnBar)btnBar.style.display=show?'':'none';
+  if(!bar)return;
+  bar.style.display=(modoResp&&!juris)?'flex':'none';
+  const hint=document.getElementById('act-resp-entrega-hint');
+  if(hint)hint.style.display=show?'none':'';
+  const btn=document.getElementById('btn-entrega-resp');
+  if(btn)btn.style.display=show?'':'none';
 }
 
 window.puedeEntregarComoResponsable=puedeEntregarComoResponsable;
@@ -519,6 +566,9 @@ window.syncEntregaRespModoUi=syncEntregaRespModoUi;
 window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
 window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
+window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
+window.pickActEntregaResp=pickActEntregaResp;
+window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
 
 /** Expediente creado por responsable y aún pendiente de revisión/corrección del encargado. */
 function expPendienteRevisionAlta(e){

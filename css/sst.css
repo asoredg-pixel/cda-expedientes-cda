@@ -959,6 +959,7 @@ body.task-doc-viewport-expanded #task-modal-overlay .task-modal{margin:0 auto}
 .entrega-resp-sug-btn{display:block;width:100%;border:0;border-bottom:1px solid var(--bd);background:transparent;text-align:left;padding:8px 10px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--tx);cursor:pointer}
 .entrega-resp-sug-btn:last-child{border-bottom:0}
 .entrega-resp-sug-btn:hover{background:var(--bll);color:var(--bl)}
+#task-modal-overlay .entrega-resp-sug{z-index:30;max-height:min(240px,40vh)}
 .flag-venc-acto{background:#fce8e8;color:#6e1515;border:1px solid #f7c1c1}
 .flag-prorroga{background:#fef3d8;color:#7a4e00;border:1px solid #fac775}
 .flag-arch-acto{background:#eeede8;color:#4a4940;border:1px solid #d8d6ce}

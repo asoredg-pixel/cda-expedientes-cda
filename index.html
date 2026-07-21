@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260721a">
+<link rel="stylesheet" href="css/sst.css?v=20260721b">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -36,7 +36,7 @@
 <script src="js/gmail.js?v=20260717a"></script>
 <script src="js/pqrs.js?v=20260721a"></script>
 <script src="js/consulta.js?v=20260721a"></script>
-<script src="js/entrega-responsable.js?v=20260721d"></script>
+<script src="js/entrega-responsable.js?v=20260721e"></script>
 <script src="js/tramite-firma.js?v=20260721b"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260715e"></script>
@@ -365,7 +365,6 @@
           <option value="all">Todas las asignadas</option>
         </select>
         <input type="text" id="s-act" placeholder="Buscar actividad o expediente…" oninput="renderActividades()" style="flex:1;min-width:180px">
-        <button type="button" class="btn bsm bp" id="btn-entrega-resp-bar" style="display:none" onclick="openEntregaResponsableModal()" title="Entregar documento (VITAL / autoasignación)">📤 Entregar documento</button>
         <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">⬇ Descargar</button>
       </div>
     </div>
