@@ -5520,10 +5520,19 @@ function resolverAccesoLoginUsuario(data,email){
 }
 let _usuariosCache=[];
 let _usuariosCacheLoaded=false;
+/** true si la caché puede estar incompleta (p. ej. getDocs filtrado por rules de encargado). */
+let _usuariosCachePartial=false;
 let _usuariosEditEmail='';
 let _usuariosFsUnsub=null;
 function sortUsuariosCache(){
   _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
+}
+/** Solo el administrador puede reescribir usuariosIndex (evita que un listado parcial lo corrompa). */
+function puedePersistirUsuariosIndexGlobal(){
+  return !!(typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta())
+    &&!_usuariosCachePartial
+    &&Array.isArray(_usuariosCache)
+    &&_usuariosCache.length>0;
 }
 function mergeUsuarioEnCache(u){
   if(!u||!u.email)return;
@@ -5575,10 +5584,35 @@ function aplicarUsuariosIndex(arr){
   }).filter(u=>u.email);
   sortUsuariosCache();
   _usuariosCacheLoaded=true;
+  _usuariosCachePartial=false;
   try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
   return _usuariosCache.length>0;
 }
+/** Fusiona documentos visibles sin eliminar usuarios que las rules no dejan listar. */
+function mergeUsuariosColeccionEnCache(list){
+  if(!Array.isArray(list)||!list.length)return;
+  list.forEach(u=>{
+    const email=String(u.email||u.id||'').trim().toLowerCase();
+    if(!email)return;
+    mergeUsuarioEnCache({...u,email});
+  });
+}
+async function leerUsuariosIndexDesdeGlobal(){
+  const db=window._db;
+  if(!db||!window._fsGetDoc||!window._fsDoc)return null;
+  try{
+    const gSnap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+    if(gSnap.exists()){
+      const idx=gSnap.data().usuariosIndex;
+      if(Array.isArray(idx)&&idx.length)return idx;
+    }
+  }catch(err){
+    console.warn('No se pudo leer usuariosIndex en sistema/global:',err);
+  }
+  return null;
+}
 async function persistUsuariosIndexGlobal(){
+  if(!puedePersistirUsuariosIndexGlobal())return;
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc)return;
   const index=_usuariosCache.map(u=>({
@@ -5613,18 +5647,37 @@ function startUsuariosFirestoreListener(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   _usuariosFsUnsub=window._fsOnSnapshot(window._fsCollection(db,'usuarios'),snap=>{
-    // Siempre actualizar caché (incluso si vacío) para no dejar la UI en estado “sin usuarios”
-    // por un snapshot inicial vacío o una carrera de permisos.
-    _usuariosCache=[];
+    const isAdminVista=typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta();
+    const list=[];
     if(snap&&!snap.empty){
-      snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
-      sortUsuariosCache();
+      snap.forEach(d=>{list.push({email:d.id,...(d.data()||{})});});
     }
-    _usuariosCacheLoaded=true;
-    try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
-    if(_usuariosCache.length)persistUsuariosIndexGlobal().catch(()=>{});
+    // Admin: la colección completa es la fuente de verdad (ignorar snapshot vacío si ya hay caché).
+    // Encargado/otros: las rules solo devuelven un subconjunto — fusionar, no reemplazar ni persistir.
+    if(isAdminVista){
+      if(!list.length&&_usuariosCache.length){
+        // carrera inicial / permisos: no vaciar
+      }else{
+        aplicarUsuariosIndex(list);
+        _usuariosCachePartial=false;
+        persistUsuariosIndexGlobal().catch(()=>{});
+      }
+    }else{
+      mergeUsuariosColeccionEnCache(list);
+      _usuariosCacheLoaded=true;
+      try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
+    }
     paintUsuariosCfgTable();
-    aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
+    if(isAdminVista&&!_usuariosCachePartial){
+      aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
+    }else{
+      if(typeof syncEncargadosDesdeUsuariosAutorizados==='function'){
+        syncEncargadosDesdeUsuariosAutorizados({preserveMissing:true});
+      }
+      if(typeof syncResponsablesDesdeUsuariosAutorizados==='function'){
+        syncResponsablesDesdeUsuariosAutorizados();
+      }
+    }
     // Refrescar sección Responsables de Configuración base si está abierta
     try{
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')&&typeof renderListasCfg==='function'){
@@ -5697,42 +5750,53 @@ function buildUsuariosCfgShell(){
 async function loadUsuariosFirestore(){
   const db=window._db;
   if(!db)return _usuariosCache;
-  let loaded=false;
+  const isAdminVista=typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta();
+  let colList=[];
+  let colOk=false;
   if(window._fsGetDocs&&window._fsCollection){
     try{
       const snap=await window._fsGetDocs(window._fsCollection(db,'usuarios'));
-      if(!snap.empty){
-        _usuariosCache=[];
-        snap.forEach(d=>{_usuariosCache.push({email:d.id,...(d.data()||{})});});
-        sortUsuariosCache();
-        _usuariosCacheLoaded=true;
-        loaded=true;
+      colOk=true;
+      if(snap&&!snap.empty){
+        snap.forEach(d=>{colList.push({email:d.id,...(d.data()||{})});});
       }
     }catch(err){
       console.warn('No se pudo listar la colección usuarios:',err);
     }
   }
-  if(!loaded&&window._fsGetDoc&&window._fsDoc){
-    try{
-      const gSnap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
-      if(gSnap.exists()){
-        const idx=gSnap.data().usuariosIndex;
-        if(aplicarUsuariosIndex(idx))loaded=true;
+  if(colOk&&isAdminVista){
+    // Admin: listado completo según rules → reemplazar y poder reparar usuariosIndex.
+    if(colList.length||!_usuariosCache.length){
+      aplicarUsuariosIndex(colList);
+      _usuariosCachePartial=false;
+    }
+  }else{
+    // Base = índice global (directorio completo) o local; luego fusionar docs visibles.
+    const idx=await leerUsuariosIndexDesdeGlobal();
+    if(idx&&idx.length){
+      if(!_usuariosCache.length||idx.length>=_usuariosCache.length||_usuariosCachePartial){
+        aplicarUsuariosIndex(idx);
+      }else{
+        idx.forEach(u=>mergeUsuarioEnCache(u));
+        _usuariosCachePartial=false;
       }
-    }catch(err){
-      console.warn('No se pudo leer usuariosIndex en sistema/global:',err);
+    }else if(!_usuariosCache.length){
+      try{
+        const local=localStorage.getItem('sst_usuarios_index');
+        if(local)aplicarUsuariosIndex(JSON.parse(local));
+      }catch(e){}
+    }
+    const hadBase=_usuariosCache.length>0;
+    if(colList.length){
+      mergeUsuariosColeccionEnCache(colList);
+      if(!hadBase)_usuariosCachePartial=true;
     }
   }
-  if(!loaded){
-    try{
-      const local=localStorage.getItem('sst_usuarios_index');
-      if(local)aplicarUsuariosIndex(JSON.parse(local));
-    }catch(e){}
-  }
   try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
-  if(loaded)await persistUsuariosIndexGlobal().catch(()=>{});
+  if(puedePersistirUsuariosIndexGlobal())await persistUsuariosIndexGlobal().catch(()=>{});
   if(_usuariosCacheLoaded){
-    syncEncargadosDesdeUsuariosAutorizados();
+    if(_usuariosCachePartial)syncEncargadosDesdeUsuariosAutorizados({preserveMissing:true});
+    else syncEncargadosDesdeUsuariosAutorizados();
     syncResponsablesDesdeUsuariosAutorizados();
   }
   return _usuariosCache;

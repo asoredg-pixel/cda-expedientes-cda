@@ -290,7 +290,9 @@ service cloud.firestore {
 //    de las comprobaciones básicas del encargado departamental.
 //
 // 6. Sincronización usuariosIndex en sistema/global vs colección usuarios/
-//    (consistencia denormalizada).
+//    (consistencia denormalizada). El cliente solo debe reescribir el índice
+//    cuando un admin obtiene el listado completo; un getDocs parcial de
+//    encargado no debe sobrescribir sistema/global.usuariosIndex.
 //
 // 7. Acceso de contratista/responsable limitado a expedientes concretos dentro
 //    de departamentos/{deptoId}/expedientes/ (regSecciones, tareas por email).

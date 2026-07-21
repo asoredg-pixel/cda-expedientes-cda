@@ -456,7 +456,7 @@ async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
   try{
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+    const payload={
       personas:personas||[],
       actividadesLibres:actividadesLibres||[],
       agendaEventos:agendaEventos||[],
@@ -464,7 +464,11 @@ async function saveGlobalFirestore(){
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
       mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
-      usuariosIndex:_usuariosCache.map(u=>({
+      updatedAt:new Date().toISOString()
+    };
+    // No reescribir usuariosIndex con un listado parcial (encargado / rules filtradas).
+    if(typeof puedePersistirUsuariosIndexGlobal==='function'?puedePersistirUsuariosIndexGlobal():(typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta()&&(_usuariosCache||[]).length)){
+      payload.usuariosIndex=_usuariosCache.map(u=>({
         email:String(u.email||'').trim().toLowerCase(),
         nombre:u.nombre||'',
         rol:u.rol||'',
@@ -472,9 +476,9 @@ async function saveGlobalFirestore(){
         cargo:String(u.cargo||'').trim().toLowerCase(),
         activo:u.activo!==false,
         deptoResponsable:String(u.deptoResponsable||'').trim()
-      })),
-      updatedAt:new Date().toISOString()
-    },{merge:true});
+      }));
+    }
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
     return true;
   }catch(err){
     console.error('saveGlobalFirestore:',err);
@@ -719,7 +723,7 @@ async function saveFirestore(){
   updateSyncIndicator('syncing');
   try{
     syncCfgToStore();
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
+    const payload={
       personas:personas||[],
       actividadesLibres:actividadesLibres||[],
       agendaEventos:agendaEventos||[],
@@ -727,7 +731,10 @@ async function saveFirestore(){
       bandejaEliminados:getBandejaEliminados(),
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
       mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
-      usuariosIndex:_usuariosCache.map(u=>({
+      updatedAt:new Date().toISOString()
+    };
+    if(typeof puedePersistirUsuariosIndexGlobal==='function'?puedePersistirUsuariosIndexGlobal():(typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta()&&(_usuariosCache||[]).length)){
+      payload.usuariosIndex=_usuariosCache.map(u=>({
         email:String(u.email||'').trim().toLowerCase(),
         nombre:u.nombre||'',
         rol:u.rol||'',
@@ -735,9 +742,9 @@ async function saveFirestore(){
         cargo:String(u.cargo||'').trim().toLowerCase(),
         activo:u.activo!==false,
         deptoResponsable:String(u.deptoResponsable||'').trim()
-      })),
-      updatedAt:new Date().toISOString()
-    },{merge:true});
+      }));
+    }
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
     for(const depto of DEPTOS_FIRESTORE){
       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{
         cfg:cfgByDepto[depto]||{},
@@ -895,6 +902,15 @@ function initRealtimeGlobalSync(){
     if(Array.isArray(g.personas)&&g.personas.length){
       personas=g.personas.map(normalizePersonaRecord);
       changed=true;
+    }
+    if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length&&typeof aplicarUsuariosIndex==='function'){
+      const cur=(typeof _usuariosCache!=='undefined'&&_usuariosCache)?_usuariosCache.length:0;
+      const partial=typeof _usuariosCachePartial!=='undefined'&&_usuariosCachePartial;
+      if(!cur||g.usuariosIndex.length>=cur||partial){
+        aplicarUsuariosIndex(g.usuariosIndex);
+        if(typeof paintUsuariosCfgTable==='function')paintUsuariosCfgTable();
+        changed=true;
+      }
     }
     if(Array.isArray(g.actividadesLibres))actividadesLibres=g.actividadesLibres;
     if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;

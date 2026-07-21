@@ -632,12 +632,16 @@ function rolEsEncargadoModulo(rol){
   if(OFICINAS_DEGUV.some(o=>o.id===rol&&o.id!=='guaviare'&&o.id!=='secretaria'))return{type:'oficina',id:rol};
   return null;
 }
-function syncEncargadosDesdeUsuariosAutorizados(){
+function syncEncargadosDesdeUsuariosAutorizados(opts){
+  opts=opts||{};
   encargadosGlobal=normalizeEncargadosGlobal(encargadosGlobal);
-  const vacio={nombre:'',email:''};
-  encargadosGlobal.secretaria={...vacio};
-  DEPTOS.forEach(d=>{encargadosGlobal.departamentos[d.id]={...vacio};});
-  Object.keys(encargadosGlobal.oficinas||{}).forEach(id=>{encargadosGlobal.oficinas[id]={...vacio};});
+  // Con caché parcial (encargado solo ve responsables) no vaciar slots ajenos.
+  if(!opts.preserveMissing){
+    const vacio={nombre:'',email:''};
+    encargadosGlobal.secretaria={...vacio};
+    DEPTOS.forEach(d=>{encargadosGlobal.departamentos[d.id]={...vacio};});
+    Object.keys(encargadosGlobal.oficinas||{}).forEach(id=>{encargadosGlobal.oficinas[id]={...vacio};});
+  }
   (_usuariosCache||[]).filter(u=>u.activo!==false).forEach(u=>{
     const mod=rolEsEncargadoModulo(u.rol);
     if(!mod)return;
@@ -707,7 +711,8 @@ function removeInstructorByEmail(email,deptoId){
 }
 async function aplicarSyncUsuariosAutorizados(opts){
   opts=opts||{};
-  syncEncargadosDesdeUsuariosAutorizados();
+  const preserve=!!opts.preserveMissing||(typeof _usuariosCachePartial!=='undefined'&&_usuariosCachePartial);
+  syncEncargadosDesdeUsuariosAutorizados(preserve?{preserveMissing:true}:{});
   syncResponsablesDesdeUsuariosAutorizados();
   syncCfgToStore();
   _saveLSLocal();
