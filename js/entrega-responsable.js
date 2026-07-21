@@ -5,8 +5,17 @@
 // =============================================================================
 
 function puedeEntregarComoResponsable(){
-  return !!(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
-    &&!(typeof esJurisdiccional==='function'&&esJurisdiccional()));
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  const modoResp=typeof esModoResponsable==='function'&&esModoResponsable();
+  const modoCont=typeof esModoContratista==='function'&&esModoContratista();
+  if(!modoResp&&!modoCont)return false;
+  // Sesión Google vinculada: fijar nombre si aún no está en responsableActivo
+  if(!String(responsableActivo||'').trim()
+    &&typeof esResponsableIdentidadFija==='function'&&esResponsableIdentidadFija()
+    &&typeof fijarResponsableSesion==='function'){
+    fijarResponsableSesion();
+  }
+  return !!String(responsableActivo||'').trim();
 }
 
 function buscarExpedientesEntregaResp(q,lim){
@@ -485,9 +494,20 @@ function submitEntregaResponsable(){
 
 function updateActRespActionsUi(){
   const bar=document.getElementById('act-resp-actions');
-  if(!bar)return;
+  const btnBar=document.getElementById('btn-entrega-resp-bar');
+  const modoResp=(typeof esModoResponsable==='function'&&esModoResponsable())
+    ||(typeof esModoContratista==='function'&&esModoContratista());
+  const juris=typeof esJurisdiccional==='function'&&esJurisdiccional();
   const show=puedeEntregarComoResponsable();
-  bar.style.display=show?'flex':'none';
+  if(bar){
+    // En modo responsable: mostrar la barra siempre (botón o aviso)
+    bar.style.display=(modoResp&&!juris)?'flex':'none';
+    const hint=document.getElementById('act-resp-entrega-hint');
+    if(hint)hint.style.display=show?'none':'';
+    const btn=document.getElementById('btn-entrega-resp');
+    if(btn)btn.style.display=show?'':'none';
+  }
+  if(btnBar)btnBar.style.display=show?'':'none';
 }
 
 window.puedeEntregarComoResponsable=puedeEntregarComoResponsable;

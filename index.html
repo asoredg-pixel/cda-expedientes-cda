@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260721c"></script>
 <script src="js/config-store.js?v=20260721b"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260721g"></script>
+<script src="js/core.js?v=20260721h"></script>
 <script src="js/formulario.js?v=20260721b"></script>
 <script src="js/tareas.js?v=20260721b"></script>
 <script src="js/guardar-exp.js?v=20260721d"></script>
@@ -36,7 +36,7 @@
 <script src="js/gmail.js?v=20260717a"></script>
 <script src="js/pqrs.js?v=20260721a"></script>
 <script src="js/consulta.js?v=20260721a"></script>
-<script src="js/entrega-responsable.js?v=20260721c"></script>
+<script src="js/entrega-responsable.js?v=20260721d"></script>
 <script src="js/tramite-firma.js?v=20260721b"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260715e"></script>
@@ -322,10 +322,11 @@
   <div class="card" style="border-left:4px solid var(--pu)">
     <div class="fx" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:.5rem">
       <div class="slbl" id="act-titulo" style="margin:0">Mis actividades asignadas</div>
-      <div id="act-resp-actions" style="display:none" class="fx" style="gap:6px;align-items:center">
-        <button type="button" class="btn bsm bp" onclick="openEntregaResponsableModal()">📤 Entregar documento</button>
+      <div id="act-resp-actions" class="fx" style="display:none;gap:6px;align-items:center;flex-wrap:wrap">
+        <button type="button" class="btn bsm bp" id="btn-entrega-resp" onclick="openEntregaResponsableModal()" title="Entregar documento de VITAL / actividad sin asignación previa en la app">📤 Entregar documento</button>
+        <span id="act-resp-entrega-hint" style="display:none;font-size:11px;color:var(--tx2)">Seleccione su nombre arriba para poder entregar documentos.</span>
       </div>
-      <div id="act-dept-actions" style="display:none" class="fx" style="gap:6px;align-items:center">
+      <div id="act-dept-actions" class="fx" style="display:none;gap:6px;align-items:center">
         <div id="act-vista-toggle" class="act-vista-toggle" style="display:none">
           <button type="button" class="btn bsm on" id="act-vista-tabla" onclick="setActVista('tabla')">📋 Tabla</button>
           <button type="button" class="btn bsm" id="act-vista-gantt" onclick="setActVista('gantt')">📊 Planeador</button>
@@ -364,6 +365,7 @@
           <option value="all">Todas las asignadas</option>
         </select>
         <input type="text" id="s-act" placeholder="Buscar actividad o expediente…" oninput="renderActividades()" style="flex:1;min-width:180px">
+        <button type="button" class="btn bsm bp" id="btn-entrega-resp-bar" style="display:none" onclick="openEntregaResponsableModal()" title="Entregar documento (VITAL / autoasignación)">📤 Entregar documento</button>
         <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">⬇ Descargar</button>
       </div>
     </div>

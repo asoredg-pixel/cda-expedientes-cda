@@ -5491,6 +5491,7 @@ function fijarResponsableSesion(){
   // La barra «Conectado como» es redundante: el nombre ya está en el header.
   const hint=document.getElementById('resp-global-hint');
   if(hint)hint.textContent='';
+  if(typeof updateActRespActionsUi==='function')updateActRespActionsUi();
   return true;
 }
 function normalizarRolLoginFirestore(rol){
