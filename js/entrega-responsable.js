@@ -91,6 +91,134 @@ function syncEntregaRespModoUi(){
   if(boxExist)boxExist.style.display=nuevo?'none':'';
 }
 
+function entregaRespMunOptsHtml(dep,sel){
+  if(typeof munOpts==='function')return munOpts(dep||(typeof nombreDeptoOperativo==='function'?nombreDeptoOperativo():''),sel||'');
+  return '<option value="">— Municipio —</option>';
+}
+
+function htmlEntregaRespDir(prefix,ev){
+  ev=ev||{};
+  const depFijo=typeof nombreDeptoOperativo==='function'?nombreDeptoOperativo():'Guaviare';
+  const mun=ev['_'+prefix+'_mun']||'';
+  return '<input type="hidden" id="entrega-int-'+prefix+'-dep" value="'+escAttr(depFijo)+'">'+
+    '<div class="fld"><label>Municipio</label><select id="entrega-int-'+prefix+'-mun" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+entregaRespMunOptsHtml(depFijo,mun)+'</select></div>'+
+    '<div class="fld"><label>Vereda</label><input type="text" id="entrega-int-'+prefix+'-vereda" value="'+escAttr(ev['_'+prefix+'_vereda']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Predio</label><input type="text" id="entrega-int-'+prefix+'-predio" value="'+escAttr(ev['_'+prefix+'_predio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Barrio</label><input type="text" id="entrega-int-'+prefix+'-barrio" value="'+escAttr(ev['_'+prefix+'_barrio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Dirección</label><input type="text" id="entrega-int-'+prefix+'-direccion" value="'+escAttr(ev['_'+prefix+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
+}
+
+function htmlEntregaRespInteresadoBox(){
+  const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  return '<div style="margin-top:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (Registro)</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Tipo de persona</label><select id="entrega-int-tipo" onchange="syncEntregaRespInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>'+
+    '</div>'+
+    '<div id="entrega-int-natural">'+
+      '<div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
+      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pn-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pn-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pn-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pn-telefono" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('pn',{})+
+      '</div>'+
+      '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;margin-top:8px"><input type="checkbox" id="entrega-int-est-com" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--bl)"> Tiene establecimiento comercial</label>'+
+      '<div id="entrega-int-ec" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Establecimiento comercial</div><div class="fg">'+
+      '<div class="fld"><label>Nombre del negocio</label><input type="text" id="entrega-int-ec-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-ec-telefono" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-ec-correo" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('ec',{})+
+      '</div></div>'+
+    '</div>'+
+    '<div id="entrega-int-juridica" style="display:none">'+
+      '<div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
+      '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-int-pj-rep-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pj-rep-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-rep-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-rep-telefono" style="'+inpStyle+'"></div>'+
+      '</div><div class="slbl" style="margin:.5rem 0 .35rem;font-size:11px">Empresa</div><div class="fg">'+
+      '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pj-empresa" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>NIT</label><input type="text" id="entrega-int-pj-nit" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-telefono" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('pj',{})+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-top:6px">El encargado revisará estos datos junto con el documento. Puede corregirlos en Registro antes de marcar la alta como revisada.</div>'+
+  '</div>';
+}
+
+function syncEntregaRespInteresadoUi(){
+  const tipo=String((document.getElementById('entrega-int-tipo')||{}).value||'natural');
+  const nat=document.getElementById('entrega-int-natural');
+  const jur=document.getElementById('entrega-int-juridica');
+  if(nat)nat.style.display=tipo==='juridica'?'none':'';
+  if(jur)jur.style.display=tipo==='juridica'?'':'none';
+  const est=!!((document.getElementById('entrega-int-est-com')||{}).checked);
+  const ec=document.getElementById('entrega-int-ec');
+  if(ec)ec.style.display=(tipo!=='juridica'&&est)?'':'none';
+}
+
+function _entregaIntVal(id){
+  return String((document.getElementById(id)||{}).value||'').trim();
+}
+function _entregaIntDir(prefix){
+  const o={};
+  ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+    o['_'+prefix+'_'+k]=_entregaIntVal('entrega-int-'+prefix+'-'+k);
+  });
+  return o;
+}
+
+function collectEntregaRespInteresado(){
+  const tipo=_entregaIntVal('entrega-int-tipo')||'natural';
+  const out={_tipo_persona:tipo,_est_com:false};
+  if(tipo==='juridica'){
+    Object.assign(out,{
+      _pj_rep_nombre:_entregaIntVal('entrega-int-pj-rep-nombre'),
+      _pj_rep_identificacion:_entregaIntVal('entrega-int-pj-rep-identificacion'),
+      _pj_rep_correo:_entregaIntVal('entrega-int-pj-rep-correo'),
+      _pj_rep_telefono:_entregaIntVal('entrega-int-pj-rep-telefono'),
+      _pj_empresa:_entregaIntVal('entrega-int-pj-empresa'),
+      _pj_nit:_entregaIntVal('entrega-int-pj-nit'),
+      _pj_correo:_entregaIntVal('entrega-int-pj-correo'),
+      _pj_telefono:_entregaIntVal('entrega-int-pj-telefono')
+    },_entregaIntDir('pj'));
+  }else{
+    Object.assign(out,{
+      _pn_nombre:_entregaIntVal('entrega-int-pn-nombre'),
+      _pn_identificacion:_entregaIntVal('entrega-int-pn-identificacion'),
+      _pn_correo:_entregaIntVal('entrega-int-pn-correo'),
+      _pn_telefono:_entregaIntVal('entrega-int-pn-telefono'),
+      _est_com:!!((document.getElementById('entrega-int-est-com')||{}).checked)
+    },_entregaIntDir('pn'));
+    if(out._est_com){
+      Object.assign(out,{
+        _ec_nombre:_entregaIntVal('entrega-int-ec-nombre'),
+        _ec_telefono:_entregaIntVal('entrega-int-ec-telefono'),
+        _ec_correo:_entregaIntVal('entrega-int-ec-correo')
+      },_entregaIntDir('ec'));
+    }
+  }
+  return out;
+}
+
+function applyEntregaRespInteresadoToExp(e,datos){
+  if(!e||!datos)return;
+  Object.keys(datos).forEach(function(k){e[k]=datos[k];});
+}
+
+function validateEntregaRespInteresado(datos){
+  if(!datos)return'Sin datos del interesado';
+  if(datos._tipo_persona==='juridica'){
+    if(!datos._pj_empresa)return'Indique el nombre / razón social del interesado';
+  }else if(!datos._pn_nombre){
+    return'Indique el nombre del interesado';
+  }
+  return'';
+}
+
 function tramitesEntregaRespOptsHtml(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfg=typeof cfgFor==='function'?cfgFor(depto):{};
@@ -116,7 +244,10 @@ function openEntregaResponsableModal(){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   if(tit)tit.textContent='Entregar documento · '+responsableActivo;
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  if(modal){
+    modal.classList.add('task-modal-wide');
+    modal.classList.add('enviar-modal-only');
+  }
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="syncEntregaRespModoUi()"> Expediente existente</label>'+
@@ -133,14 +264,15 @@ function openEntregaResponsableModal(){
       '</div>'+
     '</div>'+
     '<div id="entrega-resp-alta-box" style="display:none">'+
-      '<div class="fld" style="margin-bottom:8px"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
-        '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld" style="margin-bottom:8px"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
-        '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tramitesEntregaRespOptsHtml()+'</select></div>'+
-      '<div class="fld" style="margin-bottom:8px"><label>Interesado / nombre (opcional)</label>'+
-        '<input type="text" id="entrega-resp-interesado" placeholder="Nombre del interesado" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+      '<div class="fg" style="margin-bottom:4px">'+
+        '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
+          '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '<div class="fld"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
+          '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tramitesEntregaRespOptsHtml()+'</select></div>'+
+      '</div>'+
+      htmlEntregaRespInteresadoBox()+
     '</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
+    '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
           'oninput="filtrarActEntregaRespSug(this)" onfocus="filtrarActEntregaRespSug(this)" '+
@@ -178,6 +310,7 @@ function openEntregaResponsableModal(){
   ov.classList.add('on');
   window._taskModalCtx={mode:'entregaResponsable'};
   syncEntregaRespModoUi();
+  syncEntregaRespInteresadoUi();
   syncEntregaRespRegistroUi();
   setTimeout(function(){
     const a=document.getElementById('entrega-resp-actividad');
@@ -268,12 +401,13 @@ function syncEntregaRespRegistroUi(){
   const tipo=resolveActividadRegistroTipo(act);
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   if(hint){
     if(!act)hint.textContent='';
     else if(!actividadPredEntregaExiste(act))hint.innerHTML='<span style="color:var(--or)">Esta actividad no está en la lista predeterminada. Contacte al administrador para configurarla.</span>';
-    else if(tipo==='concepto')hint.textContent='Se diligenciará un concepto en Seguimiento / Registro.';
-    else if(tipo==='factura')hint.textContent='Se diligenciará una factura en Información contable.';
-    else if(tipo==='acto')hint.textContent='Se diligenciará un acto administrativo en Normatividad.';
+    else if(tipo==='concepto')hint.textContent='Apartado Registro: Seguimiento / conceptos técnicos.';
+    else if(tipo==='factura')hint.textContent='Apartado Registro: Información contable (Evaluación, TCAF, etc.).';
+    else if(tipo==='acto')hint.textContent='Apartado Registro: Normatividad legal / actos administrativos.';
     else if(tipo==='ninguno')hint.textContent='Solo actividad (sin datos de Registro asociados).';
     else hint.textContent='Sin mapeo a Registro — el administrador puede configurarlo en Actividades predeterminadas.';
   }
@@ -282,46 +416,92 @@ function syncEntregaRespRegistroUi(){
   box.style.display='';
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos de concepto (Registro)</div>'+
+    const coordBlock=typeof coordHtml==='function'
+      ?('<div class="fld" style="grid-column:1/-1;margin-top:6px"><label>Coordenadas (opcional)</label>'+coordHtml('entrega-reg-concepto-coord','')+'</div>')
+      :'';
+    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Seguimiento · Concepto técnico</div>'+
       '<div class="fg">'+
-      '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>Fecha</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
-      '<div class="fld" style="grid-column:1/-1"><label>Observaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:50px;width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></textarea></div>'+
-      '</div>';
+      '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha seguimiento</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
+      '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
+      '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
+      coordBlock+
+      '</div>'+
+      '<div id="entrega-reg-concepto-req" style="display:none;margin-top:10px;padding:8px;border-left:3px solid var(--or);background:var(--sf)">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--or);margin-bottom:6px">Requerimiento por incumplimiento</div><div class="fg">'+
+        '<div class="fld"><label>N° requerimiento</label><input type="text" id="entrega-reg-concepto-req-num" style="'+inp+'"></div>'+
+        '<div class="fld"><label>Fecha notificación</label><input type="date" id="entrega-reg-concepto-req-notif" style="'+inp+'"></div>'+
+        '<div class="fld"><label>Días para cumplir</label><input type="number" id="entrega-reg-concepto-req-dias" min="0" style="'+inp+'"></div>'+
+      '</div></div>';
   }else if(tipo==='factura'){
-    const tipos=(cfgAct.tiposFactura||[]).map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos de factura (Registro)</div>'+
+    const tipos=(cfgAct.tiposFactura||['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'])
+      .map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
+    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Información contable · Factura</div>'+
       '<div class="fg">'+
-      '<div class="fld"><label>Tipo</label><select id="entrega-reg-fac-tipo" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione —</option>'+tipos+'</select></div>'+
-      '<div class="fld"><label>Valor</label><input type="number" id="entrega-reg-fac-valor" step="any" min="0" placeholder="0" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>Referencia</label><input type="text" id="entrega-reg-fac-ref" placeholder="N° / ref." style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>Vencimiento</label><input type="date" id="entrega-reg-fac-venc" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+      '<div class="fld"><label>Tipo de factura <span style="color:var(--rd)">*</span></label><select id="entrega-reg-fac-tipo" style="'+inp+'"><option value="">— Seleccione (Evaluación, TCAF…) —</option>'+tipos+'</select></div>'+
+      '<div class="fld"><label>Valor (pesos)</label><input type="number" id="entrega-reg-fac-valor" step="any" min="0" placeholder="0" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Referencia / N°</label><input type="text" id="entrega-reg-fac-ref" placeholder="N° / ref." style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha vencimiento</label><input type="date" id="entrega-reg-fac-venc" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha pago (si ya pagó)</label><input type="date" id="entrega-reg-fac-pago" style="'+inp+'"></div>'+
       '</div>';
   }else if(tipo==='acto'){
     const actos=(cfgAct.tiposActoAdmin||[]).map(function(t){
       const n=t.nombre||t;
       return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';
     }).join('');
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos de acto / resolución (Registro)</div>'+
+    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Normatividad legal · Acto / resolución</div>'+
       '<div class="fg">'+
-      '<div class="fld"><label>Tipo de acto</label><select id="entrega-reg-acto-tipo" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione —</option>'+actos+'</select></div>'+
-      '<div class="fld"><label>N° acto</label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>Fecha</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-      '<div class="fld"><label>Vencimiento (si aplica)</label><input type="date" id="entrega-reg-acto-venc" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+      '<div class="fld"><label>Tipo de acto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-acto-tipo" onchange="syncEntregaRespActoVencUi()" style="'+inp+'"><option value="">— Seleccione —</option>'+actos+'</select></div>'+
+      '<div class="fld"><label>N° acto administrativo</label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha del acto</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
+      '<div class="fld" id="entrega-reg-acto-venc-wrap"><label>Fecha de vencimiento</label><input type="date" id="entrega-reg-acto-venc" style="'+inp+'"></div>'+
       '</div>';
+    setTimeout(syncEntregaRespActoVencUi,0);
+  }
+}
+function syncEntregaRespConceptoCumpleUi(){
+  const cumple=String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si');
+  const box=document.getElementById('entrega-reg-concepto-req');
+  if(box)box.style.display=cumple==='no'?'':'none';
+}
+function syncEntregaRespActoVencUi(){
+  const tipoNom=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
+  const wrap=document.getElementById('entrega-reg-acto-venc-wrap');
+  if(!wrap)return;
+  let show=true;
+  if(typeof getTipoActo==='function'&&tipoNom){
+    const t=getTipoActo(tipoNom);
+    show=!!(t&&t.tieneVencimiento);
+  }
+  wrap.style.display=show?'':'none';
+  if(!show){
+    const v=document.getElementById('entrega-reg-acto-venc');
+    if(v)v.value='';
   }
 }
 function collectEntregaRespRegistroPayload(actividad){
   const tipo=resolveActividadRegistroTipo(actividad);
   if(!tipo||tipo==='ninguno')return null;
   if(tipo==='concepto'){
+    const cumple=String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si');
+    const coordEl=document.getElementById('entrega-reg-concepto-coord');
+    if(coordEl&&typeof coordSync==='function'){
+      try{coordSync('entrega-reg-concepto-coord',null,true);}catch(err){}
+    }
+    const coordenadas=coordEl?String(coordEl.value||'').trim():'';
     return{tipo:'concepto',item:{
       fecha:String((document.getElementById('entrega-reg-concepto-fecha')||{}).value||(typeof hoy==='function'?hoy():'')),
       concepto:String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim(),
       observaciones:String((document.getElementById('entrega-reg-concepto-obs')||{}).value||'').trim(),
-      cumple:String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si'),
-      reqNum:'',reqNotif:'',reqDias:'',reqVence:'',reqCumplido:false,reqFechaCump:'',trasladoSan:false,expSan:''
+      cumple:cumple,
+      coordenadas:coordenadas,
+      reqNum:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-num')||{}).value||'').trim():'',
+      reqNotif:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-notif')||{}).value||''):'',
+      reqDias:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-dias')||{}).value||''):'',
+      reqVence:cumple==='no'&&typeof calcReqVence==='function'
+        ?calcReqVence((document.getElementById('entrega-reg-concepto-req-notif')||{}).value,(document.getElementById('entrega-reg-concepto-req-dias')||{}).value)
+        :'',
+      reqCumplido:false,reqFechaCump:'',trasladoSan:false,expSan:''
     }};
   }
   if(tipo==='factura'){
@@ -331,7 +511,8 @@ function collectEntregaRespRegistroPayload(actividad){
       valor:valorRaw,
       ref:String((document.getElementById('entrega-reg-fac-ref')||{}).value||'').trim(),
       venc:String((document.getElementById('entrega-reg-fac-venc')||{}).value||''),
-      pago:'',persVenc:'',coacFecha:'',acuerdoPago:false
+      pago:String((document.getElementById('entrega-reg-fac-pago')||{}).value||''),
+      persVenc:'',coacFecha:'',acuerdoPago:false
     }};
   }
   if(tipo==='acto'){
@@ -350,9 +531,10 @@ function appendRegistroDesdeEntrega(e,payload){
   const item=payload.item;
   if(payload.tipo==='concepto'){
     const arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
-    if(!item.concepto&&!item.observaciones)return false;
+    if(!item.concepto&&!item.observaciones&&!item.coordenadas)return false;
     arr.push(item);
     e._conceptos_seg=JSON.stringify(arr);
+    if(item.coordenadas)appendCoordEntregaAInfoTecnica(e,item.coordenadas);
     return true;
   }
   if(payload.tipo==='factura'){
@@ -372,6 +554,20 @@ function appendRegistroDesdeEntrega(e,payload){
     return true;
   }
   return false;
+}
+
+/** Guarda coordenadas de la entrega en información técnica (campo coordenadas del catálogo o g_coord_entrega). */
+function appendCoordEntregaAInfoTecnica(e,coordJson){
+  if(!e||!coordJson)return;
+  const cat=typeof getInfoTecCatalog==='function'?getInfoTecCatalog(e):[];
+  const def=(cat||[]).find(function(c){return c&&c.tipo==='coordenadas';});
+  const campoId=def?def.id:'coord_entrega';
+  const items=typeof infoTecnicaExpData==='function'?infoTecnicaExpData(e._info_tecnica_items):[];
+  const idx=items.findIndex(function(it){return it&&it.campoId===campoId;});
+  if(idx>=0)items[idx].valor=coordJson;
+  else items.push({campoId:campoId,valor:coordJson});
+  e._info_tecnica_items=JSON.stringify(items);
+  e['g_'+campoId]=coordJson;
 }
 
 function findTaskEntregaRespDedupe(e,actividad,responsable){
@@ -428,7 +624,7 @@ function crearStubExpedienteEntregaResp(opts){
   opts=opts||{};
   const expId=String(opts.expId||'').trim();
   const tid=String(opts.tramiteId||'').trim();
-  const interesado=String(opts.interesado||'').trim();
+  const interesadoDatos=opts.interesadoDatos||null;
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare');
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
   if(!expId){notif('Indique el número de expediente','err');return null;}
@@ -457,10 +653,11 @@ function crearStubExpedienteEntregaResp(opts){
     _alta_revisada_en:'',
     _alta_revisada_por:'',
     _tipo_persona:'natural',
-    _pn_nombre:interesado,
+    _pn_nombre:'',
     _pn_identificacion:'',
     _pn_correo:'',
     _pn_telefono:'',
+    _est_com:false,
     _facturas_extra:'[]',
     _actos_admin:'[]',
     _conceptos_seg:'[]',
@@ -473,6 +670,7 @@ function crearStubExpedienteEntregaResp(opts){
       nota:'Alta por responsable ('+(responsableActivo||'')+') al entregar primera actividad'
     }]
   };
+  if(interesadoDatos)applyEntregaRespInteresadoToExp(data,interesadoDatos);
   if(typeof syncFechasEstadoConEstado==='function')syncFechasEstadoConEstado(data);
   if(!Array.isArray(exps))exps=[];
   exps.push(data);
@@ -495,16 +693,26 @@ function ensureExpTaskEntregaResponsable(){
 
   let e=null;
   let createdStub=false;
+  let interesadoDatos=null;
   if(nuevo){
     const expNuevo=String((document.getElementById('entrega-resp-exp-nuevo')||{}).value||'').trim();
     const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
-    const interesado=String((document.getElementById('entrega-resp-interesado')||{}).value||'').trim();
+    interesadoDatos=collectEntregaRespInteresado();
+    const errInt=validateEntregaRespInteresado(interesadoDatos);
+    if(errInt){notif(errInt,'err');return null;}
     const existing=typeof getExpById==='function'?getExpById(expNuevo):null;
     if(existing){
       e=existing;
-      notif('El expediente ya existía — se vinculará la entrega','warn');
+      applyEntregaRespInteresadoToExp(e,interesadoDatos);
+      if(!e._alta_por_responsable){
+        e._alta_por_responsable=true;
+        e._pendiente_revision_alta=true;
+        e._alta_por=responsableActivo||'';
+        e._alta_fecha=typeof hoy==='function'?hoy():'';
+      }
+      notif('El expediente ya existía — se actualizarán datos del interesado y se vinculará la entrega','warn');
     }else{
-      e=crearStubExpedienteEntregaResp({expId:expNuevo,tramiteId:tid,interesado:interesado});
+      e=crearStubExpedienteEntregaResp({expId:expNuevo,tramiteId:tid,interesadoDatos:interesadoDatos});
       if(!e)return null;
       createdStub=true;
     }
@@ -533,7 +741,17 @@ function ensureExpTaskEntregaResponsable(){
   }
   t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
   const regPayload=collectEntregaRespRegistroPayload(actividad);
-  if(regPayload)appendRegistroDesdeEntrega(e,regPayload);
+  if(regPayload){
+    if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
+      notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
+      return null;
+    }
+    if(regPayload.tipo==='acto'&&!regPayload.item.tipo){
+      notif('Seleccione el tipo de acto / resolución','err');
+      return null;
+    }
+    appendRegistroDesdeEntrega(e,regPayload);
+  }
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
   if(createdTask&&typeof isFormExpVisible==='function'&&isFormExpVisible(e._exp)&&typeof syncTkRowsFromExp==='function'){
@@ -591,6 +809,9 @@ window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
 window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
 window.pickActEntregaResp=pickActEntregaResp;
 window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
+window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
+window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
+window.syncEntregaRespActoVencUi=syncEntregaRespActoVencUi;
 
 /** Expediente creado por responsable y aún pendiente de revisión/corrección del encargado. */
 function expPendienteRevisionAlta(e){
@@ -614,6 +835,34 @@ function expAltaResponsableBadgeHtml(e){
     return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Alta creada por responsable — pendiente de revisión del departamento">⏳ Alta por revisar</span>';
   return '<span class="bdg" style="background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;font-size:10px;margin-left:4px" title="Alta por responsable ya revisada'+(e._alta_revisada_por?' por '+e._alta_revisada_por:'')+'">✓ Alta revisada</span>';
 }
+function resumenAltaEntregaHtml(e){
+  if(!e)return'';
+  const bits=[];
+  const nom=typeof getNom==='function'?getNom(e):'';
+  if(nom)bits.push('<strong>Interesado:</strong> '+escAttr(nom));
+  if(e._tipo_persona==='juridica'&&e._pj_nit)bits.push('NIT '+escAttr(e._pj_nit));
+  else if(e._pn_identificacion)bits.push('ID '+escAttr(e._pn_identificacion));
+  if(e._pn_correo||e._pj_correo)bits.push(escAttr(e._pn_correo||e._pj_correo));
+  try{
+    const concepts=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
+    if(concepts.length){
+      const c=concepts[concepts.length-1];
+      bits.push('<strong>Concepto:</strong> '+(c.concepto?escAttr(c.concepto):'—')+(c.cumple==='no'?' · No cumple':''));
+    }
+    const facs=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
+    if(facs.length){
+      const f=facs[facs.length-1];
+      bits.push('<strong>Factura:</strong> '+escAttr(f.tipo||'—')+(f.ref?' · '+escAttr(f.ref):'')+(f.valor?' · $'+escAttr(String(f.valor)):''));
+    }
+    const actos=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
+    if(actos.length){
+      const a=actos[actos.length-1];
+      bits.push('<strong>Acto:</strong> '+escAttr(a.tipo||'—')+(a.numero?' · '+escAttr(a.numero):''));
+    }
+  }catch(err){}
+  if(!bits.length)return'';
+  return '<div style="margin-top:6px;font-size:11px;color:#9a3412">'+bits.join(' · ')+'</div>';
+}
 function renderAltaResponsableBannerHtml(e,opts){
   opts=opts||{};
   if(!e||!e._alta_por_responsable)return'';
@@ -632,13 +881,14 @@ function renderAltaResponsableBannerHtml(e,opts){
   if(can&&opts.expId){
     const tid=opts.taskId?String(opts.taskId):'';
     btns='<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px">'+
-      '<button type="button" class="btn bsm bp" onclick="abrirCorregirAltaDesdeRevision(\''+escAttr(opts.expId)+'\''+(tid?',\''+escAttr(tid)+'\'':'')+')">✏️ Corregir datos del expediente</button>'+
+      '<button type="button" class="btn bsm bp" onclick="abrirCorregirAltaDesdeRevision(\''+escAttr(opts.expId)+'\''+(tid?',\''+escAttr(tid)+'\'':'')+')">✏️ Revisar / editar datos de Registro</button>'+
       '<button type="button" class="btn bsm" onclick="marcarAltaExpedienteRevisada(\''+escAttr(opts.expId)+'\')">✓ Marcar alta revisada</button>'+
       '</div>';
   }
   return '<div class="alta-resp-banner" style="padding:8px 10px;margin-bottom:10px;border-radius:var(--r);background:#fff7ed;border:1px solid #fdba74;font-size:12px;color:#9a3412;line-height:1.45">'+
-    '<strong>⏳ Alta por responsable — pendiente de revisión</strong><br>'+
-    'Creado por <strong>'+por+'</strong>'+(fecha?' el '+fecha:'')+'. El encargado puede corregir interesado, control u otras secciones si algo quedó mal.'+
+    '<strong>⏳ Alta por responsable — revise datos de Registro y el documento</strong><br>'+
+    'Creado por <strong>'+por+'</strong>'+(fecha?' el '+fecha:'')+'. Verifique interesado, concepto/factura/acto y el soporte; puede editar los campos en Registro y luego aprobar el documento.'+
+    resumenAltaEntregaHtml(e)+
     btns+'</div>';
 }
 function marcarAltaExpedienteRevisada(expId,opts){

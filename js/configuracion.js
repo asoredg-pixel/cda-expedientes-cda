@@ -489,7 +489,7 @@ function actPredCardBody(){
       return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
     }).join('');
   };
-  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Al entregar desde Actividades, el tipo de Registro indica qué datos mínimos se diligencian. «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar.</div><ul class="cfl">'+
+  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Al entregar desde Actividades, el tipo de <strong>Registro</strong> define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar.</div><ul class="cfl">'+
     acts.map((v,i)=>{
       const tipo=cfg.actRegistroMap[v]||'';
       const firma=!!cfg.actFirmaMap[v];
