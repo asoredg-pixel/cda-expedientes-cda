@@ -200,18 +200,35 @@ function listActividadesPredEntregaResp(){
   return (cfgAct&&cfgAct.actividadesPred)||[];
 }
 
+function actividadPredEntregaExiste(nombre){
+  const nom=String(nombre||'').trim().toLowerCase();
+  if(!nom)return false;
+  return listActividadesPredEntregaResp().some(function(a){return String(a||'').trim().toLowerCase()===nom;});
+}
+
+function msgActividadPredNoExiste(){
+  return 'Esa actividad predeterminada no está configurada. Contacte al administrador para que la agregue en Configuración → Actividades predeterminadas.';
+}
+
 function filtrarActEntregaRespSug(inp){
   const portal=document.getElementById('entrega-resp-act-sug');
   if(!portal||!inp)return;
   const q=String(inp.value||'').trim().toLowerCase();
   const words=q.split(/\s+/).filter(Boolean);
-  const acts=listActividadesPredEntregaResp().filter(function(a){
+  const base=listActividadesPredEntregaResp();
+  if(!base.length){
+    portal.style.display='block';
+    portal.innerHTML='<div style="padding:8px 10px;font-size:12px;color:var(--or)">No hay actividades predeterminadas configuradas. Contacte al administrador.</div>';
+    syncEntregaRespRegistroUi();
+    return;
+  }
+  const acts=base.filter(function(a){
     const s=String(a||'').toLowerCase();
     return !words.length||words.every(function(w){return s.includes(w);});
   }).slice(0,20);
   if(!acts.length){
     portal.style.display=q?'block':'none';
-    portal.innerHTML=q?'<div style="padding:8px 10px;font-size:12px;color:var(--tx3)">Sin coincidencias — escriba otra palabra o revise Configuración → Actividades</div>':'';
+    portal.innerHTML=q?'<div style="padding:8px 10px;font-size:12px;color:var(--or)">No hay coincidencias. Si la actividad no existe en la lista, contacte al administrador para que la configure.</div>':'';
     syncEntregaRespRegistroUi();
     return;
   }
@@ -253,14 +270,15 @@ function syncEntregaRespRegistroUi(){
   const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
   if(hint){
     if(!act)hint.textContent='';
+    else if(!actividadPredEntregaExiste(act))hint.innerHTML='<span style="color:var(--or)">Esta actividad no está en la lista predeterminada. Contacte al administrador para configurarla.</span>';
     else if(tipo==='concepto')hint.textContent='Se diligenciará un concepto en Seguimiento / Registro.';
     else if(tipo==='factura')hint.textContent='Se diligenciará una factura en Información contable.';
     else if(tipo==='acto')hint.textContent='Se diligenciará un acto administrativo en Normatividad.';
     else if(tipo==='ninguno')hint.textContent='Solo actividad (sin datos de Registro asociados).';
-    else hint.textContent='Sin mapeo a Registro — puede configurar el tipo en Configuración → Actividades predeterminadas.';
+    else hint.textContent='Sin mapeo a Registro — el administrador puede configurarlo en Actividades predeterminadas.';
   }
   if(!box)return;
-  if(!tipo||tipo==='ninguno'){box.style.display='none';box.innerHTML='';return;}
+  if(!act||!actividadPredEntregaExiste(act)||!tipo||tipo==='ninguno'){box.style.display='none';box.innerHTML='';return;}
   box.style.display='';
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
@@ -469,6 +487,10 @@ function ensureExpTaskEntregaResponsable(){
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const detalle=String((document.getElementById('entrega-resp-detalle')||{}).value||'').trim();
   if(!actividad){notif('Indique la actividad predeterminada','err');return null;}
+  if(!actividadPredEntregaExiste(actividad)){
+    notif(msgActividadPredNoExiste(),'err');
+    return null;
+  }
   if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
 
   let e=null;
