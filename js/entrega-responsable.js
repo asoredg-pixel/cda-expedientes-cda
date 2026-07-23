@@ -22,18 +22,26 @@ function buscarExpedientesEntregaResp(q,lim){
   const ql=String(q||'').trim().toLowerCase();
   if(ql.length<1)return[];
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const filtro=String((document.getElementById('entrega-resp-ambito')||{}).value||'todos');
   const out=[];
   (exps||[]).forEach(function(e){
     if(!e||!e._exp)return;
-    if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))return;
-    if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))return;
+    const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+      ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+    if(filtro==='tramite'&&esPqrs)return;
+    if(filtro==='pqrsd'&&!esPqrs)return;
     const ed=String(e._depto||'').trim();
-    if(ed&&depto&&ed!==depto&&ed!=='guaviare')return;
+    const ofi=String(e._pqrs_oficina||'').trim();
+    if(!esPqrs){
+      if(ed&&depto&&ed!==depto&&ed!=='guaviare')return;
+    }
+    // PQRSD: visible para responsables (todas las oficinas / depto)
     const num=String(e._exp||'').trim();
     const nom=(typeof getNom==='function'?getNom(e):'').toLowerCase();
     const tramObj=typeof getTram==='function'?getTram(e._tramite,e):null;
     const tram=(tramObj&&tramObj.nombre?tramObj.nombre:'').toLowerCase();
-    if(!num.toLowerCase().includes(ql)&&!nom.includes(ql)&&!tram.includes(ql))return;
+    const ofiLbl=ofi?(typeof labelOficina==='function'?labelOficina(ofi):ofi).toLowerCase():'';
+    if(!num.toLowerCase().includes(ql)&&!nom.includes(ql)&&!tram.includes(ql)&&!ofiLbl.includes(ql))return;
     out.push(e);
   });
   return out.slice(0,lim||12);
@@ -52,9 +60,12 @@ function filtrarExpEntregaRespSug(inp){
     const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
     const tramNom=tram?tram.nombre:'Trámite';
     const nom=typeof getNom==='function'?getNom(e):'';
+    const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+      ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+    const tag=esPqrs?'<span style="color:#6d3fa8;font-weight:600">PQRSD</span> · ':'<span style="color:var(--bl)">Trámite</span> · ';
     return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();pickExpEntregaResp(\''+
       String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
-      '<strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tramNom)+' · '+escAttr(nom)+'</button>';
+      tag+'<strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tramNom)+' · '+escAttr(nom)+'</button>';
   }).join('');
   portal.style.display='block';
 }
@@ -76,11 +87,16 @@ function pickExpEntregaResp(expNum){
   if(hint){
     if(e){
       const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+      const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+        ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
       hint.innerHTML='Seleccionado: <strong>'+escAttr(e._exp)+'</strong> · '+
-        escAttr(tram?tram.nombre:'Trámite')+' · '+escAttr(typeof getNom==='function'?getNom(e):'')+
-        ' · '+escAttr(e._estado||'');
-    }else hint.textContent='Expediente no encontrado en la app — puede crearlo como alta nueva abajo.';
+        (esPqrs?'<span style="color:#6d3fa8">PQRSD</span>':'Trámite')+' · '+
+        escAttr(tram?tram.nombre:'')+' · '+escAttr(typeof getNom==='function'?getNom(e):'')+
+        ' · '+escAttr(e._estado||'')+
+        (esPqrs?'<br><span style="color:var(--tx3)">Los archivos irán a la carpeta PQRSD institucional (no a Expedientes).</span>':'');
+    }else hint.textContent='Expediente no encontrado en la app — puede crearlo como alta nueva abajo (solo trámites).';
   }
+  syncEntregaRespPqrsUi();
 }
 
 function syncEntregaRespModoUi(){
@@ -89,6 +105,49 @@ function syncEntregaRespModoUi(){
   const boxExist=document.getElementById('entrega-resp-exist-box');
   if(boxNuevo)boxNuevo.style.display=nuevo?'':'none';
   if(boxExist)boxExist.style.display=nuevo?'none':'';
+  if(nuevo){
+    const hint=document.getElementById('entrega-resp-exp-hint');
+    if(hint)hint.textContent='';
+  }
+  syncEntregaRespPqrsUi();
+}
+
+/** Muestra campos PQRSD (respuesta + Drive PQRSD) cuando se selecciona una PQRSD existente. */
+function syncEntregaRespPqrsUi(){
+  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  const e=!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
+  const esPqrs=!!(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+    ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))));
+  const box=document.getElementById('entrega-resp-pqrs-box');
+  const tramFiles=document.getElementById('entrega-resp-tramite-files');
+  const regBox=document.getElementById('entrega-resp-registro-box');
+  const driveHint=document.getElementById('entrega-resp-drive-hint');
+  if(tramFiles&&!tramFiles._tramiteFilesHtmlBackup)
+    tramFiles._tramiteFilesHtmlBackup=tramFiles.innerHTML;
+  if(box){
+    if(esPqrs&&typeof renderPqrsEntregaCamposHtml==='function'){
+      if(tramFiles){tramFiles.innerHTML='';tramFiles.style.display='none';}
+      box.innerHTML=renderPqrsEntregaCamposHtml(e);
+      box.style.display='';
+      if(regBox){regBox.style.display='none';regBox.innerHTML='';}
+      setTimeout(function(){
+        if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+      },40);
+    }else{
+      box.innerHTML='';
+      box.style.display='none';
+      if(tramFiles){
+        if(tramFiles._tramiteFilesHtmlBackup)tramFiles.innerHTML=tramFiles._tramiteFilesHtmlBackup;
+        tramFiles.style.display='';
+      }
+    }
+  }
+  if(driveHint){
+    driveHint.textContent=esPqrs
+      ?'Los archivos se suben a la carpeta PQRSD institucional (no a Expedientes / EXP-).'
+      :'Se sube al Drive institucional del expediente (carpeta EXP-…).';
+  }
 }
 
 function entregaRespMunOptsHtml(dep,sel){
@@ -250,13 +309,21 @@ function openEntregaResponsableModal(){
   }
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="syncEntregaRespModoUi()"> Expediente existente</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="syncEntregaRespModoUi()"> Expediente / PQRSD existente</label>'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-nuevo" onchange="syncEntregaRespModoUi()"> Crear expediente (1ª entrega)</label>'+
     '</div>'+
     '<div id="entrega-resp-exist-box">'+
-      '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente</label>'+
+      '<div class="fx" style="gap:10px;flex-wrap:wrap;margin-bottom:8px;align-items:center">'+
+        '<span style="font-size:11px;font-weight:600;color:var(--tx2)">Buscar en:</span>'+
+        '<select id="entrega-resp-ambito" onchange="filtrarExpEntregaRespSug(document.getElementById(\'entrega-resp-exp\'))" style="padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
+          '<option value="todos">Trámites y PQRSD</option>'+
+          '<option value="tramite">Solo trámites</option>'+
+          '<option value="pqrsd">Solo PQRSD</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente / PQRSD</label>'+
         '<div style="position:relative">'+
-          '<input type="text" id="entrega-resp-exp" placeholder="N° expediente o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+          '<input type="text" id="entrega-resp-exp" placeholder="N° expediente, PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
             'oninput="filtrarExpEntregaRespSug(this)" onfocus="filtrarExpEntregaRespSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'entrega-resp-exp-sug\');if(p)p.style.display=\'none\';},180)">'+
           '<div id="entrega-resp-exp-sug" class="entrega-resp-sug" style="display:none"></div>'+
         '</div>'+
@@ -264,6 +331,7 @@ function openEntregaResponsableModal(){
       '</div>'+
     '</div>'+
     '<div id="entrega-resp-alta-box" style="display:none">'+
+      '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Alta nueva solo para <strong>trámites</strong>. Las <strong>PQRSD</strong> las radica Secretaría; aquí solo se vinculan existentes (busque arriba).</div>'+
       '<div class="fg" style="margin-bottom:4px">'+
         '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
           '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -284,19 +352,22 @@ function openEntregaResponsableModal(){
     '<div id="entrega-resp-registro-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label>'+
       '<input type="text" id="entrega-resp-detalle" placeholder="Detalles de la actividad" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div id="entrega-resp-pqrs-box" style="display:none;margin-bottom:10px"></div>'+
+    '<div id="entrega-resp-tramite-files">'+
     '<div class="fld" style="margin-bottom:10px"><label>Documento principal</label>'+
       '<div class="sst-file-pick">'+
         '<button type="button" class="btn bsm bp" onclick="document.getElementById(\'enviar-adj-file\').click()">📎 Seleccionar archivo</button>'+
         '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-file-name\')">'+
         '<span id="entrega-resp-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span>'+
       '</div>'+
-      '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Se sube al Drive institucional del expediente.</div></div>'+
+      '<div id="entrega-resp-drive-hint" style="font-size:10px;color:var(--tx3);margin-top:4px">Se sube al Drive institucional del expediente (carpeta EXP-…).</div></div>'+
     '<div class="fld" style="margin-bottom:10px"><label>Anexos (opcionales)</label>'+
       '<div class="sst-file-pick">'+
         '<button type="button" class="btn bsm" onclick="document.getElementById(\'enviar-anexos-file\').click()">📎 Seleccionar anexos</button>'+
         '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-anexos-name\',true)">'+
         '<span id="entrega-resp-anexos-name" class="sst-file-pick-name">Sin anexos</span>'+
       '</div></div>'+
+    '</div>'+
     '<input type="hidden" id="enviar-requiere-link" value="0">'+
     '<input type="hidden" id="enviar-modo-nueva" value="0">'+
     '<input type="hidden" id="enviar-modo-traslado" value="0">'+
@@ -312,6 +383,7 @@ function openEntregaResponsableModal(){
   syncEntregaRespModoUi();
   syncEntregaRespInteresadoUi();
   syncEntregaRespRegistroUi();
+  syncEntregaRespPqrsUi();
   setTimeout(function(){
     const a=document.getElementById('entrega-resp-actividad');
     if(a){a.focus();filtrarActEntregaRespSug(a);}
@@ -398,6 +470,15 @@ function syncEntregaRespRegistroUi(){
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const box=document.getElementById('entrega-resp-registro-box');
   const hint=document.getElementById('entrega-resp-reg-hint');
+  // PQRSD: no mini-form de Registro (concepto/factura/acto) — solo sobre PQRSD existente
+  const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const eSel=!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
+  if(eSel&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eSel))||(typeof esTramitePqrs==='function'&&esTramitePqrs(eSel._tramite)))){
+    if(hint)hint.textContent='PQRSD existente: complete los datos de respuesta abajo. El archivo irá a la carpeta PQRSD.';
+    if(box){box.style.display='none';box.innerHTML='';}
+    return;
+  }
   const tipo=resolveActividadRegistroTipo(act);
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
@@ -629,7 +710,10 @@ function crearStubExpedienteEntregaResp(opts){
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
   if(!expId){notif('Indique el número de expediente','err');return null;}
   if(!tid){notif('Seleccione el tipo de trámite','err');return null;}
-  if(typeof esTramitePqrs==='function'&&esTramitePqrs(tid)){notif('PQRSD no se crea por esta vía','err');return null;}
+  if(typeof esTramitePqrs==='function'&&esTramitePqrs(tid)){
+    notif('Las PQRSD solo las radica Secretaría. Busque una PQRSD existente para entregar el documento.','err');
+    return null;
+  }
   if(typeof getExpById==='function'&&getExpById(expId)){notif('Ya existe un expediente con ese número — use modo «existente»','err');return null;}
   if(typeof expNumeroDuplicado==='function'&&expNumeroDuplicado(expId)){
     notif('Número de expediente duplicado','err');
@@ -718,20 +802,35 @@ function ensureExpTaskEntregaResponsable(){
     }
   }else{
     const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
-    if(!expNum){notif('Busque y seleccione el expediente','err');return null;}
+    if(!expNum){notif('Busque y seleccione el expediente o PQRSD','err');return null;}
     e=typeof getExpById==='function'?getExpById(expNum):null;
-    if(!e){notif('Expediente no encontrado. Use «Crear expediente» si es la primera entrega.','err');return null;}
-    if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite)){
-      notif('Use el flujo PQRSD para ese radicado','err');
-      return null;
-    }
+    if(!e){notif('No encontrado. Use «Crear expediente» si es un trámite nuevo (no PQRSD).','err');return null;}
+  }
+
+  const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  // PQRSD: la actividad debe ser «Atender PQRSD…» para entrar al flujo y carpetas PQRSD
+  let actFinal=actividad;
+  if(esPqrs){
+    if(!String(actFinal).startsWith('Atender PQRSD'))
+      actFinal='Atender PQRSD'+(actividad?' — '+actividad:'');
   }
 
   e.tasks=Array.isArray(e.tasks)?e.tasks:[];
-  let t=findTaskEntregaRespDedupe(e,actividad,responsableActivo);
+  let t=findTaskEntregaRespDedupe(e,actFinal,responsableActivo);
+  if(!t&&esPqrs){
+    // Reutilizar tarea Atender PQRSD abierta del mismo responsable
+    t=(e.tasks||[]).map(function(x){return typeof normalizeTask==='function'?normalizeTask(x):x;}).find(function(x){
+      if(!x||x.eliminada)return false;
+      if(typeof taskEsAtenderPqrs==='function'&&!taskEsAtenderPqrs(x,e))return false;
+      const est=typeof estadoTask==='function'?estadoTask(x):x.estado;
+      if(est==='Atendida')return false;
+      if(typeof taskUsuarioEsAsignado==='function')return taskUsuarioEsAsignado(x,responsableActivo);
+      return true;
+    })||null;
+  }
   let createdTask=false;
   if(!t){
-    t=buildTaskEntregaResponsable(actividad,detalle,responsableActivo);
+    t=buildTaskEntregaResponsable(actFinal,detalle,responsableActivo);
     e.tasks.push(t);
     createdTask=true;
   }else{
@@ -740,7 +839,7 @@ function ensureExpTaskEntregaResponsable(){
     if(typeof ensureAsignado==='function')ensureAsignado(t,responsableActivo);
   }
   t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
-  const regPayload=collectEntregaRespRegistroPayload(actividad);
+  const regPayload=(!esPqrs)?collectEntregaRespRegistroPayload(actividad):null;
   if(regPayload){
     if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
       notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
@@ -757,7 +856,7 @@ function ensureExpTaskEntregaResponsable(){
   if(createdTask&&typeof isFormExpVisible==='function'&&isFormExpVisible(e._exp)&&typeof syncTkRowsFromExp==='function'){
     try{syncTkRowsFromExp(e._exp,t.id);}catch(err){}
   }
-  return{e:e,t:t,expId:e._exp,taskId:t.id,createdStub:createdStub,createdTask:createdTask,registroTipo:regPayload?regPayload.tipo:''};
+  return{e:e,t:t,expId:e._exp,taskId:t.id,createdStub:createdStub,createdTask:createdTask,registroTipo:regPayload?regPayload.tipo:'',esPqrs:esPqrs};
 }
 
 function submitEntregaResponsable(){
@@ -765,13 +864,15 @@ function submitEntregaResponsable(){
   const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[]};
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length);
-  if(!hasAdj&&!cmt){
+  // En PQRSD el cuerpo/oficio también cuentan como contenido de entrega
+  const esPqrsUi=!!document.getElementById('pqrs-entrega-campos');
+  if(!hasAdj&&!cmt&&!esPqrsUi){
     notif('Adjunte documento, anexo, link Drive y/o escriba un comentario','err');
     return;
   }
   const pack=ensureExpTaskEntregaResponsable();
   if(!pack)return;
-  // Reutilizar el envío a verificación ya implementado (Drive + Por verificar)
+  // Reutilizar el envío a verificación ya implementado (Drive + Por verificar / flujo PQRSD)
   if(typeof submitEnviarSoporteVerificacion==='function'){
     window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true};
     submitEnviarSoporteVerificacion(pack.expId,pack.taskId);
@@ -803,6 +904,7 @@ window.submitEntregaResponsable=submitEntregaResponsable;
 window.filtrarExpEntregaRespSug=filtrarExpEntregaRespSug;
 window.pickExpEntregaResp=pickExpEntregaResp;
 window.syncEntregaRespModoUi=syncEntregaRespModoUi;
+window.syncEntregaRespPqrsUi=syncEntregaRespPqrsUi;
 window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
 window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
@@ -831,9 +933,9 @@ function puedeRevisarAltaExpediente(e){
 }
 function expAltaResponsableBadgeHtml(e){
   if(!e||!e._alta_por_responsable)return'';
-  if(expPendienteRevisionAlta(e))
-    return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Alta creada por responsable — pendiente de revisión del departamento">⏳ Alta por revisar</span>';
-  return '<span class="bdg" style="background:#ecfdf5;color:#047857;border:1px solid #6ee7b7;font-size:10px;margin-left:4px" title="Alta por responsable ya revisada'+(e._alta_revisada_por?' por '+e._alta_revisada_por:'')+'">✓ Alta revisada</span>';
+  // Solo mientras esté pendiente; al aprobar alta/documento desaparece del flujo
+  if(!expPendienteRevisionAlta(e))return'';
+  return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Alta creada por responsable — pendiente de revisión del departamento">⏳ Alta por revisar</span>';
 }
 function resumenAltaEntregaHtml(e){
   if(!e)return'';
@@ -867,15 +969,10 @@ function renderAltaResponsableBannerHtml(e,opts){
   opts=opts||{};
   if(!e||!e._alta_por_responsable)return'';
   const pend=expPendienteRevisionAlta(e);
+  // Tras aprobar alta o documento: no seguir mostrando el aviso en el flujo
+  if(!pend)return'';
   const por=escAttr(e._alta_por||'responsable');
   const fecha=escAttr(typeof fmtF==='function'?fmtF(e._alta_fecha||''):(e._alta_fecha||''));
-  if(!pend){
-    if(!opts.showDone)return'';
-    return '<div class="alta-resp-banner alta-resp-banner-ok" style="padding:8px 10px;margin-bottom:10px;border-radius:var(--r);background:#ecfdf5;border:1px solid #6ee7b7;font-size:12px;color:#047857;line-height:1.45">'+
-      '✓ Alta por responsable revisada'+(e._alta_revisada_por?' · '+escAttr(e._alta_revisada_por):'')+
-      (e._alta_revisada_en?' · '+escAttr(typeof fmtF==='function'?fmtF(e._alta_revisada_en):e._alta_revisada_en):'')+
-      '</div>';
-  }
   const can=puedeRevisarAltaExpediente(e);
   let btns='';
   if(can&&opts.expId){
@@ -945,6 +1042,14 @@ function maybeClearPendienteRevisionAltaOnSave(exp,opts){
   return true;
 }
 
+/** Quita el flag de alta al aprobar el documento o la creación (encargado / flujo firma). */
+function clearAltaResponsableAlAprobarDocumento(expId,opts){
+  opts=opts||{};
+  expId=String(expId||'').trim();
+  if(!expId)return false;
+  return marcarAltaExpedienteRevisada(expId,{silent:true,force:!!opts.force,por:opts.por});
+}
+
 window.expPendienteRevisionAlta=expPendienteRevisionAlta;
 window.puedeRevisarAltaExpediente=puedeRevisarAltaExpediente;
 window.expAltaResponsableBadgeHtml=expAltaResponsableBadgeHtml;
@@ -952,3 +1057,4 @@ window.renderAltaResponsableBannerHtml=renderAltaResponsableBannerHtml;
 window.marcarAltaExpedienteRevisada=marcarAltaExpedienteRevisada;
 window.abrirCorregirAltaDesdeRevision=abrirCorregirAltaDesdeRevision;
 window.maybeClearPendienteRevisionAltaOnSave=maybeClearPendienteRevisionAltaOnSave;
+window.clearAltaResponsableAlAprobarDocumento=clearAltaResponsableAlAprobarDocumento;

@@ -1020,12 +1020,20 @@ function getPqrsOficinaList(oficinaId,filtro){
       const ofiAct=oficinaId||getPqrsOficinaActiva();
       listF=listF.filter(e=>e._pqrs_oficina===ofiAct||(ofiAct==='guaviare'&&e._pqrs_oficina==='guaviare'));
     }
+    // Trámites en firma: misma paleta del Director / bandeja (carpetas Drive distintas, flujo similar)
+    if(typeof getTramiteFirmaRowsParaPaletaDirector==='function'){
+      const tramRows=getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[];
+      tramRows.forEach(function(r){listF.push(r);});
+    }
     listF=filterExpsPeriodo(listF,'pqrs-ofi');
     return listF.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
   if(filtro==='firmados'){
     if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))return[];
     let listFd=exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)).map(normalizePqrsOficinaFields);
+    if(typeof getTramiteFirmaRowsParaPaletaDirector==='function'){
+      (getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).forEach(function(r){listFd.push(r);});
+    }
     listFd=filterExpsPeriodo(listFd,'pqrs-ofi');
     return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
@@ -1044,6 +1052,21 @@ function getPqrsOficinaList(oficinaId,filtro){
 }
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
+  // Trámite en firma del Director (paleta unificada)
+  if(e&&e._tramite_firma_task&&e._taskId){
+    const tid=jsStr(e._taskId);
+    let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
+    const t=typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
+    const firmFis=t&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
+    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+    if(esDir&&!firmFis)
+      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')" title="Firmar">🖊</button> ';
+    if(esDir&&firmFis)
+      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+    if(firmFis&&!esDir)
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+id+'\',\''+tid+'\')" title="Pasar a por notificar">📬</button> ';
+    return h;
+  }
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
   const filtroOfi=String(window._pqrsOfiFiltro||'');
   const enPaletaPorFirmar=filtroOfi==='por_firmar'||fase===PQRS_WF.POR_FIRMAR;
@@ -1156,11 +1179,14 @@ function renderPqrsOficinaInbox(){
     const esDirMets=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const porFirmar=showPorFirmarCard
       ?(esDirMets
-        ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR&&!(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))).length
-        :listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length)
+        ?(exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR&&!(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))).length
+          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[]).length:0))
+        :listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR).length
+          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[]).length:0))
       :0;
     const firmados=esDirMets
-      ?exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)).length
+      ?(exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)).length
+        +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).length:0))
       :0;
     const paraFirma=showParaImprimirCard?listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length:0;
     const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length;
@@ -1200,9 +1226,15 @@ function renderPqrsOficinaInbox(){
   if(!sel||!list.some(e=>String(e._exp||'').trim()===sel))window._pqrsOfiSelExp=String(list[0]._exp||'').trim();
   tb.innerHTML=list.map(e=>{
     const asunto=e.f_f1||e._pqrs_detalle||'—';
-    const on=String(window._pqrsOfiSelExp||'').trim()===String(e._exp||'').trim();
-    const wfBadge=typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'';
-    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="openPqrsSidePanel(\''+escAttr(e._exp)+'\')"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+pqrsEstadoConsultaBadge(e)+' '+wfBadge+' '+pqrsMedioNotificacionFlagHtml(e,true)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+    const on=String(window._pqrsOfiSelExp||'').trim()===String(e._exp||'').trim()+(e._tramite_firma_task?('#'+e._taskId):'');
+    const wfBadge=e._tramite_firma_task
+      ?'<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e">🖊 Trámite · Por firmar</span>'
+      :(typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'');
+    const tipoLbl=e._tramite_firma_task?'Trámite':(e._tipo_solicitud||'PQRSD');
+    const clickFn=e._tramite_firma_task
+      ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
+      :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')');
+    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="'+clickFn+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(e._tramite_firma_task?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(e._tramite_firma_task?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
   renderPqrsOficinaDetallePanel();
 }

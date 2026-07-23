@@ -123,7 +123,7 @@ function renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t){
   const wf=getTaskFirmaWf(t);
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
-    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',canal:'correo'});
+    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true});
   }
   return '<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
@@ -157,7 +157,7 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e&&(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t))){
-    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'firma',id:'tramite-notif-por-sel',canal:'correo'});
+    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'firma',id:'tramite-notif-por-sel',todosResponsables:true});
   }
   return '<div class="task-cmt-form" style="padding:.65rem;border:1px solid #0d5c2e;border-radius:var(--r);background:#0d5c2e12;margin-bottom:10px">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#0d5c2e">🖊 Flujo de firma (trámite) · '+escAttr(ui.lbl||taskFirmaFase(t))+'</div>'+
@@ -176,28 +176,40 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId){
   if(sel)notifPor=String(sel.value||'').trim();
   if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
     notifPor=pqrsResolverNotificadorCorreo(e._depto||'guaviare','');
+  // Como PQRSD: NCA/encargado/atajo van directo a «Por firmar» (bandeja del Director)
+  const atajoDirecto=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+    ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    ||(typeof esCargoVital==='function'&&esCargoVital());
+  const faseDest=atajoDirecto
+    ?(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar')
+    :(typeof PQRS_WF!=='undefined'?PQRS_WF.PARA_FIRMA:'para_firma');
   if(typeof driveRenombrarSoporteActivoExp==='function'){
-    try{await driveRenombrarSoporteActivoExp(expId,taskId,'por_firma');}catch(err){console.warn('tramite firma rename:',err);}
+    try{await driveRenombrarSoporteActivoExp(expId,taskId,atajoDirecto?'por_firmar':'por_firma');}catch(err){console.warn('tramite firma rename:',err);}
   }
   const ok=mutateTask(expId,taskId,function(tk){
     tk.requiereFirma=true;
     const prev=getTaskFirmaWf(tk);
     tk.firmaWf=Object.assign({},prev,{
-      fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.PARA_FIRMA:'para_firma'),
+      fase:faseDest,
       notificar_por:notifPor||prev.notificar_por||'',
       notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
       canal:'correo',
       enviado_firma_en:new Date().toISOString(),
       enviado_firma_por:typeof taskComentarioAutor==='function'?taskComentarioAutor():''
     });
-    // No cerrar como Atendida: queda en flujo de firma
+    if(atajoDirecto){
+      tk.firmaWf.listo_firma={por:taskComentarioAutor(),en:new Date().toISOString(),atajo_digital:true};
+    }
     if(!Array.isArray(tk.historial))tk.historial=[];
-    tk.historial.push({tipo:'enviar_firma',fecha:hoy(),por:taskComentarioAutor(),nota:'Enviado a Por imprimir / firma del Director'});
+    tk.historial.push({tipo:'enviar_firma',fecha:hoy(),por:taskComentarioAutor(),nota:atajoDirecto?'Enviado a Por firmar (Director)':'Enviado a Por imprimir / firma del Director'});
   });
   if(ok){
-    notif('🖨 Actividad enviada a «Por imprimir» (firma Director)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    if(typeof clearAltaResponsableAlAprobarDocumento==='function')
+      clearAltaResponsableAlAprobarDocumento(expId,{force:true});
+    notif((atajoDirecto?'🖊 Actividad en «Por firmar» (Director)':'🖨 Actividad enviada a «Por imprimir» (firma Director)')+(notifPor?' · Notificará: '+notifPor:''),'ok');
     closeTaskModal();
     if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   }
 }
 
@@ -218,6 +230,7 @@ async function tramitePasarAPorFirmar(expId,taskId){
   notif('🖊 Pasó a «Por firmar» (Director)','ok');
   closeTaskModal();
   if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
 }
 
 function tramiteMarcarFirmadoFisico(expId,taskId){
@@ -229,6 +242,8 @@ function tramiteMarcarFirmadoFisico(expId,taskId){
     firma_director:{por:taskComentarioAutor(),en:new Date().toISOString(),modo:'fisico'}
   });
   notif('✓ Firmado físico registrado — pase a «Por notificar»','ok');
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
   openTaskCommentsModal(expId,taskId);
 }
 
@@ -378,6 +393,54 @@ function confirmarCierreTaskTramiteAware(expId,taskId){
   return false;
 }
 
+/** Filas sintéticas para la paleta PQRSD del Director (trámites en firma). */
+function getTramiteFirmaRowsParaPaletaDirector(modo){
+  modo=String(modo||'por_firmar');
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  const tasks=getTareasTramiteFirmaPorFase(function(t){
+    if(modo==='firmados')return taskFirmaEsFirmadoPendiente(t);
+    if(!taskFirmaEnPorFirmar(t))return false;
+    if(esDir&&taskFirmaEsFirmadoPendiente(t))return false;
+    return true;
+  });
+  return tasks.map(function(t){
+    const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+    const nom=e?(typeof getNom==='function'?getNom(e):''):(t.nombre||'');
+    return {
+      _exp:t.exp||t.codigo,
+      _tramite_firma_task:true,
+      _taskId:t.id,
+      _fecha:t.fechaReportada||t.vence||(e&&e._fecha)||'',
+      _tipo_solicitud:'Trámite',
+      f_f1:t.actividad||t.desc||'Documento para firma',
+      _pn_nombre:nom,
+      _qd_nombre:nom,
+      _depto:e?e._depto:(t.depto||''),
+      _estado:e?e._estado:'En trámite',
+      _tramite:e?e._tramite:'',
+      _pqrs_oficina:'ds_deguv'
+    };
+  });
+}
+
+/** Modal de firma del Director para trámites (misma UX que PQRSD). */
+function openTramiteDirectorFirmarModal(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=e?getTaskFromExp(e,taskId):null;
+  if(!e||!t){notif('Actividad no encontrada','err');return;}
+  if(!taskFirmaEnPorFirmar(t)){notif('Esta actividad no está en «Por firmar»','err');return;}
+  const esDirector=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  const atajo=typeof esCargoVital==='function'&&esCargoVital()||typeof esAdministrador==='function'&&esAdministrador()||typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+  if(!esDirector&&!atajo){notif('Solo el Director o VITAL/encargado pueden gestionar la firma','err');return;}
+  if(typeof openTaskCommentsModal==='function'){
+    openTaskCommentsModal(expId,taskId);
+    return;
+  }
+  tramiteMarcarFirmadoFisico(expId,taskId);
+}
+
 window.resolveActividadRequiereFirma=resolveActividadRequiereFirma;
 window.getTaskFirmaWf=getTaskFirmaWf;
 window.setTaskFirmaWf=setTaskFirmaWf;
@@ -389,6 +452,8 @@ window.taskFirmaEsFirmadoPendiente=taskFirmaEsFirmadoPendiente;
 window.taskFirmaEnPorNotificar=taskFirmaEnPorNotificar;
 window.taskFirmaEstadoUi=taskFirmaEstadoUi;
 window.getTareasTramiteFirmaPorFase=getTareasTramiteFirmaPorFase;
+window.getTramiteFirmaRowsParaPaletaDirector=getTramiteFirmaRowsParaPaletaDirector;
+window.openTramiteDirectorFirmarModal=openTramiteDirectorFirmarModal;
 window.taskRequiereFirmaEffective=taskRequiereFirmaEffective;
 window.renderTramiteFirmaVerifyExtrasHtml=renderTramiteFirmaVerifyExtrasHtml;
 window.tramiteEnviarAFirmaDesdeRevision=tramiteEnviarAFirmaDesdeRevision;

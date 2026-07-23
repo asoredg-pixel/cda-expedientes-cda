@@ -1194,6 +1194,10 @@ function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
 }
 
 async function driveEnsureExpedienteFolder(e) {
+  // Seguridad: PQRSD nunca debe crear carpetas EXP- en el árbol de expedientes
+  if (e && typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e)) {
+    throw new Error('PQRSD usa el árbol Drive de PQRSD, no la carpeta de expedientes (EXP-).');
+  }
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
   if (e._drive_folder_id) {
@@ -1220,7 +1224,8 @@ async function driveEnsureExpedienteFolder(e) {
 async function driveRenameInstitutional(fileId, newName) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;
-  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId), {
+  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+    '?supportsAllDrives=true', {
     method: 'PATCH',
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: newName })

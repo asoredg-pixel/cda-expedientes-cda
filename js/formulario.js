@@ -225,7 +225,9 @@ function renderFormulario(tid,ed,targetId){
   const terHtml=ter?('<div style="margin-top:.5rem">'+termsBdg(ter)+'</div>'+termsBar(ter)):'';
   const fechasEv=getFechasEstado(ev);
   const fechaEstadoVal=fechasEv[estadoActual]||fechasEv.Solicitud||ev._fecha||'';
-  const ctrlHtml=(typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(ev,{expId:ev._exp||'',showDone:true}):'')+
+  // Evitar banner duplicado: en panel/ventana de consulta ya se muestra una sola vez arriba (consulta.js)
+  const skipAltaBanner=panelMode;
+  const ctrlHtml=((!skipAltaBanner&&typeof renderAltaResponsableBannerHtml==='function')?renderAltaResponsableBannerHtml(ev,{expId:ev._exp||'',showDone:true}):'')+
     '<details class="form-section" id="sec-control"><summary class="form-section-hdr" style="background:var(--bll);border-bottom-color:var(--bl);color:var(--bld)">Control del trámite</summary><div class="form-section-body">'+
     fechasEstadoStoreHtml(ev)+
     '<input type="hidden" id="fld__fecha" value="'+(fechasEv.Solicitud||ev._fecha||'')+'">'+
