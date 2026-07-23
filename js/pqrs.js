@@ -1104,8 +1104,8 @@ function pqrsAccionesTablaHtml(e){
       h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
     if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+id+'\')" title="Pasar a por notificar">📬</button> ';
-    else if(!esDir&&!firmFis&&(typeof esCargoVital==='function'&&esCargoVital()||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())||(typeof esSecretaria==='function'&&esSecretaria())))
-      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ver / cargar firmado">⬆</button> ';
+    else if(!esDir&&!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
+      h+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ya firmado (sin PDF) / cargar / notificar">✓</button> ';
   }
   // Firmados (Director): solo icono informativo
   if(filtroOfi==='firmados'&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()){
