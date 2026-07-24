@@ -362,8 +362,7 @@ function renderListasCfg(){
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Modo mantenimiento','Congela la aplicación para ajustes: los funcionarios pueden entrar y consultar, pero no diligenciar ni adjuntar. Indique fecha y hora de restablecimiento.',mantenimientoCfgCardBody(),false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Recursos (enlaces y biblioteca)','Enlaces externos y repositorios Drive por ámbito: sistema, departamento u oficina.',typeof recursosCfgCardBody==='function'?recursosCfgCardBody():'',false);
-    html+=cfgSectionFold('Actividades predeterminadas','Crea opciones reutilizables para buscarlas al asignar actividades en el registro.',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
-      cfgSectionFold('Actividades sin expediente (predeterminadas)','Opciones base para actividades cortas: al crear o asignar, aparecen como sugerencias (igual que las de expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesCortasPred||[]):actCortasPredCardBody(),false)+
+    html+=cfgSectionFold('Actividades predeterminadas','Opciones reutilizables al asignar o entregar actividades (con o sin expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
       cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
       cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
       cfgSectionFold('Tipos de conducta — trámite Sancionatorio','Opciones del selector «Tipo de conducta / caso» en expedientes Sancionatorio.',ro?cfgCardReadonlyStrings(cfg.tiposSancionatorio||[]):tiposSancionatorioCardBody(),false);
@@ -489,7 +488,7 @@ function actPredCardBody(){
       return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
     }).join('');
   };
-  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Al entregar desde Actividades, el tipo de <strong>Registro</strong> define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar.</div><ul class="cfl">'+
+  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Sirve para entregas <strong>con expediente/PQRSD</strong> y <strong>sin expediente</strong>. El tipo de <strong>Registro</strong> (solo con expediente) define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar.</div><ul class="cfl">'+
     acts.map((v,i)=>{
       const tipo=cfg.actRegistroMap[v]||'';
       const firma=!!cfg.actFirmaMap[v];
@@ -506,26 +505,6 @@ function actPredCardBody(){
   '</ul><div class="cfadd"><input type="text" id="actpred-new" placeholder="Nueva actividad predeterminada..." onkeydown="if(event.key===\'Enter\')addActPred()"><button class="btn bsm bp" onclick="addActPred()">+</button></div></div>';
 }
 function actPredCardHtml(){return cfgSectionFold('Actividades predeterminadas','',actPredCardBody(),false);}
-function actCortasPredCardBody(){
-  const acts=cfg.actividadesCortasPred||[];
-  return '<div class="cfcard"><ul class="cfl">'+
-    acts.map((v,i)=>'<li class="cfi"><input type="text" value="'+v+'" onchange="editActCortasPred('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);width:100%"><div class="fx" style="gap:2px">'+
-      (i>0?'<button class="btn bsm bic" onclick="mvActCortasPred('+i+',-1)">▲</button>':'<span style="width:24px"></span>')+
-      (i<(acts.length-1)?'<button class="btn bsm bic" onclick="mvActCortasPred('+i+',1)">▼</button>':'<span style="width:24px"></span>')+
-      '<button class="btn bsm bic bd2" onclick="delActCortasPred('+i+')">✕</button>'+
-    '</div></li>').join('')+
-  '</ul><div class="cfadd"><input type="text" id="actcortas-new" placeholder="Nueva actividad predeterminada (sin expediente)..." onkeydown="if(event.key===\'Enter\')addActCortasPred()"><button class="btn bsm bp" onclick="addActCortasPred()">+</button></div></div>';
-}
-function addActCortasPred(){
-  if(!cfg.actividadesCortasPred)cfg.actividadesCortasPred=[];
-  const inp=document.getElementById('actcortas-new');const v=inp.value.trim();
-  if(!v){notif('Escribe una actividad','err');return;}
-  if(cfg.actividadesCortasPred.includes(v)){notif('Ya existe','err');return;}
-  cfg.actividadesCortasPred.push(v);inp.value='';saveLS();renderListasCfg();notif('Actividad agregada','ok');
-}
-function editActCortasPred(i,v){if(!cfg.actividadesCortasPred)return;cfg.actividadesCortasPred[i]=v.trim();saveLS();}
-function delActCortasPred(i){if(!cfg.actividadesCortasPred)return;cfg.actividadesCortasPred.splice(i,1);saveLS();renderListasCfg();notif('Eliminado','ok');}
-function mvActCortasPred(i,d){const a=cfg.actividadesCortasPred;if(!a)return;const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];saveLS();renderListasCfg();}
 function renderActsPredCfg(){
   const el=document.getElementById('cfg-acts-panel');if(el)el.innerHTML=actPredCardHtml();
 }

@@ -13,6 +13,20 @@ function cfgFor(deptoOrExp){
 function normalizeCfgObj(c){
   if(!c||typeof c!=='object')c=JSON.parse(JSON.stringify(DEF));
   ['gravedades','cargos','instructores','actividadesPred','actividadesCortasPred','etapasPred','tiposFactura','tiposActoAdmin','infoTecnica','tiposSancionatorio','tramites'].forEach(k=>{if(!c[k])c[k]=JSON.parse(JSON.stringify(DEF[k]||[]));});
+  // Migración: unificar lista «sin expediente» dentro de Actividades predeterminadas
+  if(Array.isArray(c.actividadesCortasPred)&&c.actividadesCortasPred.length){
+    if(!Array.isArray(c.actividadesPred))c.actividadesPred=[];
+    const seen=new Set(c.actividadesPred.map(function(a){return String(a||'').trim().toLowerCase();}));
+    c.actividadesCortasPred.forEach(function(a){
+      const v=String(a||'').trim();
+      if(!v)return;
+      const k=v.toLowerCase();
+      if(seen.has(k))return;
+      seen.add(k);
+      c.actividadesPred.push(v);
+    });
+    c.actividadesCortasPred=[];
+  }
   if(!c.tramites.some(t=>t.id==='t_sanc')&&!c.tramites.some(t=>(t.nombre||'').toLowerCase().trim()==='sancionatorio')){
     const sn=DEF.tramites.find(t=>t.id==='t_sanc');
     if(sn)c.tramites.unshift(JSON.parse(JSON.stringify(sn)));

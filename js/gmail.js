@@ -1210,8 +1210,9 @@ async function driveEnsureExpedienteFolder(e) {
   if (isNaN(ref.getTime())) ref = new Date();
   const anio = ref.getFullYear().toString();
   const expNum = String(e._exp || '').trim();
-  const nomSlug = _driveSlug(typeof getNom === 'function' ? getNom(e) : '', 30);
-  const carpNom = 'EXP-' + expNum.replace(/\s/g, '') + (nomSlug ? '-' + nomSlug : '');
+  const nomSlug = _driveSlug(typeof getNom === 'function' ? getNom(e) : (e._pn_nombre || ''), 30);
+  const esActLibre = !!(e._sin_expediente || /^ACT[-_]/i.test(expNum));
+  const carpNom = (esActLibre ? '' : 'EXP-') + expNum.replace(/\s/g, '') + (nomSlug ? '-' + nomSlug : '');
   let parent = DRIVE_ROOT_EXPEDIENTES_ID;
   parent = await _driveEnsureFolder(token, anio, parent);
   const folderId = await _driveEnsureFolder(token, carpNom, parent);

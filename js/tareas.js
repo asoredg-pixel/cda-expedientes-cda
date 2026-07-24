@@ -194,7 +194,6 @@ function filtrarActsPred(inp){
   if(!portal)return;
   const q=inp.value.trim().toLowerCase();
   const words=q.split(/\s+/).filter(Boolean);
-  const src=(inp.dataset&&inp.dataset.sugSrc)||'exp';
   let deptoId=getDeptoOperativo();
   const modalCtx=window._taskModalCtx;
   if(modalCtx&&modalCtx.mode==='crearActLibre')deptoId=deptoActivo;
@@ -213,7 +212,8 @@ function filtrarActsPred(inp){
     if(ex&&ex._depto)deptoId=ex._depto;
   }
   const cfgAct=getCfgActividadesPred(deptoId);
-  const baseList=src==='cortas'?(cfgAct.actividadesCortasPred||[]):(cfgAct.actividadesPred||[]);
+  // Una sola lista: «Actividades predeterminadas» (con o sin expediente)
+  const baseList=(cfgAct.actividadesPred||[]);
   const acts=baseList.filter(a=>{
     const s=String(a||'').toLowerCase();
     return !words.length||words.every(w=>s.includes(w));

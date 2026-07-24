@@ -4919,9 +4919,8 @@ function openEditarActTaskModal(expId,taskId){
   const names=getResponsablesCoEjPool(ref,t.id,t);
   rs.forEach(n=>{if(n&&!names.some(x=>agendaNorm(x)===agendaNorm(n)))names.push(n);});
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
-  const sugSrc=t.sinExpediente?'cortas':'exp';
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Edite la actividad asignada, cambie responsable(s), plazo o elimine la actividad.'+(t.sinExpediente?'':' Vinculada al expediente '+escAttr(ref)+'.')+'</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="'+sugSrc+'" value="'+escAttr(t.actividad||t.desc||'')+'" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" value="'+escAttr(t.actividad||t.desc||'')+'" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" value="'+escAttr(t.detalle||'')+'" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Co-ejecutores (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual"'+(t.entregaModo!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option><option value="unificada"'+(t.entregaModo==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option></select></div>'+
@@ -7282,8 +7281,24 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   const adj=collectEnviarAdjuntos();
   const reqEl=document.getElementById('enviar-requiere-link');
   const requiereLink=reqEl&&reqEl.value==='1';
-  const e=getExpById(expId);
-  const t=getTaskFromExp(e,taskId);
+  let e=getExpById(expId);
+  let t=e?getTaskFromExp(e,taskId):null;
+  if(!t&&typeof getActLibreById==='function')t=getActLibreById(taskId);
+  if(!t&&typeof getActLibreByCodigo==='function')t=getActLibreByCodigo(expId);
+  if(t&&t.sinExpediente){
+    expId=t.codigo||expId;
+    e=null;
+  }
+  // Proxy mínimo para Drive cuando es actividad sin expediente
+  const eDrive=e||(t&&t.sinExpediente?{
+    _exp:t.codigo||expId,
+    _fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
+    _depto:t.depto||'guaviare',
+    _sin_expediente:true,
+    _pn_nombre:'Sin expediente',
+    _drive_folder_id:t._drive_folder_id||'',
+    _drive_folder_link:t._drive_folder_link||''
+  }:null);
   // Flujo PQRSD: por tipo de expediente o por actividad «Atender PQRSD…»
   const esPqrsExp=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
   const esPqrs=esPqrsExp||!!(e&&t&&taskEsAtenderPqrs(t,e));
@@ -7296,7 +7311,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     if(!enviarTaskPorVerificar(expId,taskId,adj.links,cmt,requiereLink,driveArchivos||[]))return;
     if(esPqrs&&pq){
       if(!pq.adj.links.length){
-        const t2=getTaskFromExp(e,taskId);
+        const t2=getTaskFromExp(e,taskId)||t;
         const activo=getSoporteActivo(t2);
         if(activo&&(activo.url||activo.preview)&&!activo.local)pq.adj.links=[activo.url||activo.preview];
       }
@@ -7329,8 +7344,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   };
   const allUpload=[].concat(adj.files||[],adj.anexos||[]);
   const canUploadPqrs=esPqrs&&typeof driveUploadPqrsExpediente==='function';
-  const canUploadExp=!esPqrs&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(e)&&typeof driveUploadExpedienteActividad==='function';
-  if(allUpload.length&&e&&(canUploadPqrs||canUploadExp)){
+  const canUploadExp=!esPqrs&&eDrive&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eDrive)&&typeof driveUploadExpedienteActividad==='function';
+  if(allUpload.length&&(canUploadPqrs||canUploadExp)){
     (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
       if(!ok)return;
       const rep=responsableActivo||taskComentarioAutor();
@@ -7338,7 +7353,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       if(typeof sstCargaShow==='function'){
         sstCargaShow({
           title:total>1?'Cargando documentos':'Cargando documento',
-          message:esPqrs?'Subiendo a carpeta PQRSD institucional…':'Subiendo al Drive de expedientes…',
+          message:esPqrs?'Subiendo a carpeta PQRSD institucional…':(eDrive&&eDrive._sin_expediente?'Subiendo a carpeta de actividad (sin expediente)…':'Subiendo al Drive de expedientes…'),
           sub:total>1?('0 de '+total+' archivos'):'Preparando envío…',
           pct:0
         });
@@ -7359,16 +7374,15 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           if(typeof sstCargaProgress==='function'){
             sstCargaProgress(Math.round((i/total)*90), 'Subiendo «'+(f.nombre||'archivo')+'» ('+(i+1)+' de '+total+')…');
           }
-          // PQRSD → árbol PQRSD; trámites → EXP-… (nunca mezclar)
+          // PQRSD → árbol PQRSD; trámites / sin expediente → Drive expedientes (ACT- o EXP-)
           const up=esPqrs
             ?await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
                 label:f.esAnexo?('Anexo '+anexoSeq):'Respuesta',
                 uploadTarget:'respuesta',
                 driveName:undefined
               })
-            :await driveUploadExpedienteActividad(f.blob,pref,f.tipo,e,t,rep,'revision');
+            :await driveUploadExpedienteActividad(f.blob,pref,f.tipo,eDrive,t,rep,'revision');
           if(up){
-            // Normalizar campos comunes (PQRSD upload puede devolver nombres distintos)
             if(!up.driveFileId&&up.fileId)up.driveFileId=up.fileId;
             if(!up.driveFilename&&up.nombre)up.driveFilename=up.nombre;
             if(!up.driveEstado)up.driveEstado='revision';
@@ -7387,8 +7401,14 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             uploaded.push(up);
           }
         }
+        // Persistir carpeta Drive en actividad libre
+        if(t&&t.sinExpediente&&eDrive&&eDrive._drive_folder_id){
+          t._drive_folder_id=eDrive._drive_folder_id;
+          t._drive_folder_link=eDrive._drive_folder_link||'';
+        }
         if(typeof sstCargaProgress==='function')sstCargaProgress(95,'Registrando entrega…');
-        await persistExpedienteGranular(e,false);
+        if(e&&typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e,false);
+        else if(typeof persistExpLocal==='function')persistExpLocal();
         if(typeof sstCargaDone==='function')sstCargaDone({holdMs:220});
         runSubmit(uploaded);
       }catch(err){
@@ -7403,7 +7423,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   if(allUpload.length){
     notif(esPqrs
       ?'No se pudo subir a la carpeta PQRSD. Conecte Gmail/Drive e intente de nuevo.'
-      :'La subida automática al Drive solo aplica en expedientes de Guaviare. Use enlace manual o comentario.','warn');
+      :'La subida automática al Drive solo aplica en Guaviare. Use enlace manual o comentario.','warn');
     return;
   }
   runSubmit([]);
@@ -12505,7 +12525,7 @@ function openCrearActLibreModal(){
   const names=getContratistasAsignables(deptoActivo);
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(n===defResp||names.length===1?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Capacitación, puesto de control u otra tarea sin expediente. Puede asignar a varios co-ejecutores.</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="cortas" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual">Individual — cada uno entrega por aparte</option><option value="unificada">Unificada — con una entrega se cierra para todos</option></select></div>'+
@@ -15067,32 +15087,21 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
   if(soloCorreo){
     pqrsNotificadoresAutorizadosCorreo(ofi).forEach(add);
   }else{
-    add(enc);
-    if(typeof pqrsNombresVital==='function')pqrsNombresVital().forEach(add);
+    // Flujo NCA ↔ responsables Guaviare: no incluir encargados de DS/Admin/RN/OAP/Secretaría
     add(wf&&wf.entregado_por);
     add(wf&&wf.notificar_por);
     add(wf&&wf.notificar_por_propuesto);
     add(selected);
-    if(esPqrs){
+    if(typeof getResponsablesNcaDeguv==='function')(getResponsablesNcaDeguv()||[]).forEach(add);
+    // Si la PQRSD es de otra oficina, sumar responsables de esa oficina (no encargados DEGUV)
+    if(esPqrs&&ofi&&ofi!=='guaviare'&&ofi!=='ds_deguv'&&ofi!=='admin_deguv'&&ofi!=='rn_deguv'&&ofi!=='oap_deguv'&&ofi!=='secretaria'){
       if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
-      else if(typeof getResponsablesNcaDeguv==='function'&&ofi==='guaviare')(getResponsablesNcaDeguv()||[]).forEach(add);
-      else if(typeof getContratistasAsignables==='function')(getContratistasAsignables(ofi)||[]).forEach(add);
+    }
+    if(esPqrs){
       const t=(e.tasks||[]).find(x=>x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e));
       if(t&&typeof getTaskResponsables==='function')getTaskResponsables(t).forEach(add);
-    }else{
-      // Trámite: responsables autorizados + contratistas/instructores del departamento
-      const deptoTram=String((e&&e._depto)||ofi||(typeof getDeptoOperativo==='function'?getDeptoOperativo():'')||deptoActivo||'').trim();
-      (_usuariosCache||[]).forEach(function(u){
-        if(!u||u.activo===false||u.rol!=='responsables')return;
-        if(typeof usuarioEsResponsableDepto==='function'&&!usuarioEsResponsableDepto(u,deptoTram))return;
-        add(u.nombre);
-      });
-      if(typeof getContratistasAsignables==='function')(getContratistasAsignables(deptoTram)||[]).forEach(add);
-      if(typeof getInstructoresActivos==='function'){
-        (getInstructoresActivos(deptoTram)||[]).forEach(function(i){if(i&&i.nombre)add(i.nombre);});
-      }
-      // Incluir responsables ya asignados en tareas del expediente
-      (e&&e.tasks||[]).forEach(function(tk){
+    }else if(e){
+      (e.tasks||[]).forEach(function(tk){
         if(!tk||tk.eliminada)return;
         add(tk.responsable);
         (tk.responsables||[]).forEach(add);
@@ -15101,7 +15110,7 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
     }
   }
   const propuesto=String((wf&&(wf.notificar_por||wf.notificar_por_propuesto))||'').trim();
-  let cur=String(selected||propuesto||(wf&&wf.entregado_por)||enc||'').trim();
+  let cur=String(selected||propuesto||(wf&&wf.entregado_por)||'').trim();
   if(soloCorreo)cur=pqrsResolverNotificadorCorreo(ofi,cur);
   let optsHtml=soloCorreo
     ?'<option value="">— VITAL o Encargado (obligatorio para correo) —</option>'
@@ -15109,7 +15118,6 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
   [...names].sort((a,b)=>a.localeCompare(b,'es')).forEach(n=>{
     const esVitalUser=typeof pqrsNombresVital==='function'&&pqrsNombresVital().some(function(v){return agendaNorm(v)===agendaNorm(n);});
     const tags=[];
-    if(n===enc)tags.push('Encargado');
     if(n===(wf&&wf.entregado_por))tags.push('Proyectó');
     if(esVitalUser)tags.push('VITAL');
     if(propuesto&&agendaNorm(n)===agendaNorm(propuesto)&&modo!=='entrega')tags.push('sugerido');

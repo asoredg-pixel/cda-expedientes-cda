@@ -55,8 +55,8 @@ const DEF={
   gravedades:['Leve','Grave','Gravísima'],
   cargos:['Auxiliar administrativo','Profesional universitario','Técnico operativo','Secretaria','Conductor','Director','Subdirector','Asesor','Contratista'],
   instructores:[],
-  actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Proyectar acto administrativo','Notificar decisión'],
-  actividadesCortasPred:['Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
+  actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Proyectar acto administrativo','Notificar decisión','Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
+  actividadesCortasPred:[],
   etapasPred:['Radicación','Revisión documental','Evaluación técnica','Visita de campo','Concepto técnico','Acto administrativo','Notificación','Archivo'],
   tiposFactura:['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'],
   tiposActoAdmin:[
