@@ -1114,7 +1114,7 @@ function renderActLibreVincularHtml(expId,taskId){
   const tid=escAttr(taskId);
   return '<div id="act-libre-vinc-box" style="margin-bottom:10px;padding:10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:6px">🔗 Asociar a expediente / PQRSD</div>'+
-    '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">La entrega queda vinculada al radicado. Puede asociar a un <strong>expediente o PQRSD existente</strong>, o <strong>crear un expediente</strong> (las PQRSD solo las radica Secretaría).</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">La entrega queda vinculada al radicado. Los archivos en carpeta <strong>ACT-…</strong> se <strong>mueven</strong> a la carpeta Drive del expediente o PQRSD y la carpeta temporal se elimina. Puede asociar a un <strong>expediente o PQRSD existente</strong>, o <strong>crear un expediente</strong> (las PQRSD solo las radica Secretaría).</div>'+
     '<div class="fx" style="gap:12px;flex-wrap:wrap;margin-bottom:8px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-vinc-modo" id="act-libre-vinc-existente" checked onchange="syncActLibreVincularUi()"> Existente</label>'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-vinc-modo" id="act-libre-vinc-nuevo" onchange="syncActLibreVincularUi()"> Crear expediente</label>'+
@@ -1362,12 +1362,64 @@ function submitVincularActLibre(taskId){
 
   const pack=vincularActLibreAExpediente(taskId,e);
   if(!pack)return;
-  notif('Actividad vinculada a '+(pack.esPqrs?'PQRSD':'expediente')+' '+pack.expId,'ok');
-  if(typeof renderActividades==='function')renderActividades();
-  if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))
-    renderConsulta();
-  if(typeof openTaskCommentsModal==='function')
-    openTaskCommentsModal(pack.expId,pack.taskId);
+
+  const finUi=function(migMsg){
+    notif('Actividad vinculada a '+(pack.esPqrs?'PQRSD':'expediente')+' '+pack.expId+(migMsg?' · '+migMsg:''),'ok');
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))
+      renderConsulta();
+    if(typeof openTaskCommentsModal==='function')
+      openTaskCommentsModal(pack.expId,pack.taskId);
+  };
+
+  // Mover archivos ACT-… → carpeta del expediente/PQRSD y eliminar carpeta temporal
+  const hasDrive=!!(pack.t&&(pack.t._drive_folder_id||(pack.t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);})));
+  if(hasDrive&&typeof driveMigrateActLibreSoportesAlVincular==='function'){
+    (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(okG){
+      if(!okG){finUi('archivos quedan en carpeta ACT (sin Gmail)');return;}
+      if(typeof sstCargaShow==='function'){
+        sstCargaShow({
+          title:'Moviendo documentos',
+          message:pack.esPqrs?'Trasladando a carpeta PQRSD…':'Trasladando a carpeta del expediente…',
+          sub:'Se eliminará la carpeta temporal ACT si queda vacía',
+          pct:20
+        });
+      }
+      driveMigrateActLibreSoportesAlVincular(pack.t,pack.e).then(function(mig){
+        if(typeof sstCargaProgress==='function')sstCargaProgress(90,'Guardando…');
+        // Persistir task ya sin _drive_folder ACT + carpeta destino en expediente
+        const eLive=typeof getExpById==='function'?getExpById(pack.expId):pack.e;
+        if(eLive){
+          if(mig&&mig.destFolderId&&!pack.esPqrs){
+            eLive._drive_folder_id=eLive._drive_folder_id||mig.destFolderId;
+            eLive._drive_folder_link=eLive._drive_folder_link||mig.folderLink||'';
+          }
+          const tk=(eLive.tasks||[]).find(function(x){return x&&x.id===pack.taskId;});
+          if(tk){
+            if(mig&&(mig.deletedFolder||mig.moved)){
+              delete tk._drive_folder_id;
+              delete tk._drive_folder_link;
+            }
+            if(Array.isArray(pack.t.soportes))tk.soportes=pack.t.soportes;
+          }
+          if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(eLive,false);
+          else if(typeof persistExpLocal==='function')persistExpLocal();
+        }
+        if(typeof sstCargaDone==='function')sstCargaDone({holdMs:200});
+        let migMsg='';
+        if(mig&&mig.moved)migMsg=mig.moved+' archivo(s) movido(s)'+(mig.deletedFolder?' · carpeta ACT eliminada':'');
+        else if(mig&&mig.skipped)migMsg='sin archivos Drive que mover';
+        else migMsg='vínculo listo (revise Drive si no se movieron archivos)';
+        finUi(migMsg);
+      }).catch(function(err){
+        console.warn('migrate act libre drive:',err);
+        if(typeof sstCargaHide==='function')sstCargaHide();
+        finUi('vinculada; no se pudieron mover archivos Drive: '+String(err&&err.message||err).slice(0,60));
+      });
+    });
+    return;
+  }
+  finUi('');
 }
 
 window.renderActLibreVincularHtml=renderActLibreVincularHtml;

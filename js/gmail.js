@@ -1241,12 +1241,162 @@ async function driveRenameInstitutional(fileId, newName) {
 async function driveDeleteInstitutional(fileId) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;
-  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId), {
+  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+    '?supportsAllDrives=true', {
     method: 'DELETE',
     headers: { 'Authorization': 'Bearer ' + token }
   });
   return res.ok || res.status === 404;
 }
+
+/** Lista ids de archivos (no carpetas) dentro de una carpeta Drive. */
+async function driveListFolderFileIds(folderId) {
+  const token = _driveGetBestToken();
+  if (!token || !folderId) return [];
+  const q = "'" + folderId + "' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'";
+  let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name),nextPageToken&pageSize=100' + _DRIVE_API_QS;
+  const ids = [];
+  try {
+    while (url) {
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) break;
+      const data = await res.json();
+      (data.files || []).forEach(function(f) { if (f && f.id) ids.push(f.id); });
+      url = data.nextPageToken
+        ? (DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+          '&fields=files(id,name),nextPageToken&pageSize=100&pageToken=' + encodeURIComponent(data.nextPageToken) + _DRIVE_API_QS)
+        : null;
+    }
+  } catch (e) {
+    console.warn('driveListFolderFileIds:', e);
+  }
+  return ids;
+}
+
+/** Mueve un archivo a otra carpeta (addParents / removeParents). */
+async function driveMoveFileToFolder(fileId, newParentId, oldParentId) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId || !newParentId) return false;
+  let removeId = oldParentId || '';
+  if (!removeId) {
+    try {
+      const metaRes = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?fields=parents' + _DRIVE_API_QS, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        removeId = (meta.parents && meta.parents[0]) || '';
+      }
+    } catch (e) {}
+  }
+  let url = DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+    '?addParents=' + encodeURIComponent(newParentId) +
+    '&supportsAllDrives=true&fields=id,parents';
+  if (removeId && removeId !== newParentId)
+    url += '&removeParents=' + encodeURIComponent(removeId);
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: '{}'
+  });
+  if (!res.ok) {
+    console.warn('driveMoveFileToFolder:', fileId, res.status);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Resuelve carpeta destino al vincular actividad libre:
+ * - Trámite → carpeta EXP-…
+ * - PQRSD → subcarpeta Respuesta
+ */
+async function driveResolveDestFolderActLibreVinculo(e) {
+  if (!e) return null;
+  const esPqrs = typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e);
+  if (esPqrs) {
+    const tipo = typeof pqrsExpDriveTipoRadicacion === 'function' ? pqrsExpDriveTipoRadicacion(e) : 'pqrs';
+    const nom = typeof pqrsExpDriveNombreCarpeta === 'function' ? pqrsExpDriveNombreCarpeta(e) : (e._exp || '');
+    const fecha = typeof pqrsExpDriveFechaRef === 'function' ? pqrsExpDriveFechaRef(e) : (e._fecha || '');
+    const folders = await driveEnsurePqrsExpedienteFolders(tipo, e._exp, nom, fecha, e);
+    return {
+      folderId: folders.respuestaFolderId || folders.pqrsFolderId,
+      folderLink: folders.respuestaFolderLink || folders.pqrsFolderLink || '',
+      esPqrs: true
+    };
+  }
+  const folder = await driveEnsureExpedienteFolder(e);
+  return { folderId: folder.folderId, folderLink: folder.folderLink || '', esPqrs: false };
+}
+
+/**
+ * Tras vincular act. libre: mueve soportes de carpeta ACT-… a EXP-/PQRSD y elimina la ACT si queda vacía.
+ */
+async function driveMigrateActLibreSoportesAlVincular(task, e) {
+  if (!task || !e) return { moved: 0, deletedFolder: false, skipped: true };
+  const srcFolderId = String(task._drive_folder_id || '').trim();
+  const dest = await driveResolveDestFolderActLibreVinculo(e);
+  if (!dest || !dest.folderId) return { moved: 0, deletedFolder: false, skipped: true, reason: 'sin_destino' };
+  if (srcFolderId && srcFolderId === dest.folderId)
+    return { moved: 0, deletedFolder: false, destFolderId: dest.folderId, folderLink: dest.folderLink };
+
+  const idSet = new Set();
+  (task.soportes || []).forEach(function(s) {
+    const id = s && (s.driveFileId || s.fileId);
+    if (id) idSet.add(String(id));
+  });
+  if (srcFolderId) {
+    const listed = await driveListFolderFileIds(srcFolderId);
+    listed.forEach(function(id) { idSet.add(String(id)); });
+  }
+  if (!idSet.size && !srcFolderId)
+    return { moved: 0, deletedFolder: false, destFolderId: dest.folderId, folderLink: dest.folderLink };
+
+  let moved = 0;
+  const rep = (typeof taskComentarioAutor === 'function' ? taskComentarioAutor() : '') || task.responsable || '';
+  for (const fileId of idSet) {
+    const ok = await driveMoveFileToFolder(fileId, dest.folderId, srcFolderId || undefined);
+    if (!ok) continue;
+    moved++;
+    const sop = (task.soportes || []).find(function(s) {
+      return s && String(s.driveFileId || s.fileId || '') === fileId;
+    });
+    if (sop && !dest.esPqrs) {
+      try {
+        await driveRenameExpedienteSoporte(sop, sop.driveEstado || 'revision', e, task, rep || sop.autor);
+      } catch (err) {
+        console.warn('rename tras migrar act libre:', err);
+      }
+    }
+  }
+
+  let deletedFolder = false;
+  if (srcFolderId) {
+    const remaining = await driveListFolderFileIds(srcFolderId);
+    // También contar subcarpetas: si solo quedan carpetas vacías, intentar borrar igual
+    if (!remaining.length) {
+      deletedFolder = await driveDeleteInstitutional(srcFolderId);
+    }
+  }
+  if (deletedFolder || moved) {
+    delete task._drive_folder_id;
+    delete task._drive_folder_link;
+  }
+  return {
+    moved: moved,
+    deletedFolder: deletedFolder,
+    destFolderId: dest.folderId,
+    folderLink: dest.folderLink,
+    esPqrs: !!dest.esPqrs
+  };
+}
+
+window.driveMoveFileToFolder = driveMoveFileToFolder;
+window.driveListFolderFileIds = driveListFolderFileIds;
+window.driveMigrateActLibreSoportesAlVincular = driveMigrateActLibreSoportesAlVincular;
+window.driveResolveDestFolderActLibreVinculo = driveResolveDestFolderActLibreVinculo;
 
 async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable) {
   if (!soporte || !soporte.driveFileId || soporte.driveInstitutional === false) return false;
