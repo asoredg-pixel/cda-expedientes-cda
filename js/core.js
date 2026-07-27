@@ -8310,8 +8310,11 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
   let h=altaBanner+'<div class="task-cmt-form task-verify-bar task-chat-sep" style="padding:.65rem;border:1px solid var(--bl);border-radius:var(--r);background:var(--bll)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">✓ Cerrar actividad (verificación del departamento)</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">'+(taskEsMultiAsignada(t)&&t.entregaModo==='individual'?'Modo individual: al verificar se cierra la entrega pendiente del responsable que reportó. Los demás co-ejecutores siguen hasta completar su aporte.':'Modo unificado: al verificar se cierra la actividad para todos los co-ejecutores.')+
-    (t.sinExpediente&&pendVer?' · Puede trasladar esta actividad sin expediente desde el panel de responsables arriba.':'')+
+    (t.sinExpediente&&pendVer?' · Puede asociarla a un expediente/PQRSD existente o crear un expediente (abajo), o trasladar desde el panel de responsables.':'')+
     (autoResp?' · <strong>Autoasignada por el responsable</strong>: puede fijar plazo, añadir co-ejecutores o trasladar (panel de responsables arriba) como si la estuviera asignando.':'')+'</div>';
+  if(t.sinExpediente&&pendVer&&typeof renderActLibreVincularHtml==='function'){
+    h+=renderActLibreVincularHtml(expId,taskId);
+  }
   if(pendVer&&!t.sinExpediente){
     const plazoVal=t.plazoDias!=null&&t.plazoDias!==''?t.plazoDias:(t.vence&&typeof diffDias==='function'?diffDias(t.vence):'');
     h+='<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
@@ -8331,7 +8334,9 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>';
     if(pendVer){
-      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
+      if(!t.sinExpediente){
+        h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
+      }
       h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>';
     }
     h+='</div>';

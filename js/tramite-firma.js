@@ -364,15 +364,54 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
 async function notificarCiudadanoTrasVerificarTramite(expId,taskId){
   const e=getExpById(expId);
   if(!e)return;
-  const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
-  if(!correos.length)return;
   const t=getTaskFromExp(e,taskId);
-  const asunto='Documento aprobado — expediente '+(e._exp||'');
-  const cuerpo='Estimado(a),\n\nLe informamos que se aprobó el documento de la actividad «'+(t&&(t.actividad||t.desc)||'')+'» del expediente '+(e._exp||'')+'.\n\nPuede consultarlo en la consulta ciudadana.\n\nCordialmente.';
-  const html='<div style="font-family:sans-serif;font-size:14px;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>';
+  const actNom=String((t&&(t.actividad||t.desc))||'').trim();
+  const esConceptoSeg=/concepto\s+de\s+seguimiento/i.test(actNom);
+  let correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
+  // Ampliar: si no hay lista, intentar campos sueltos del expediente
+  if(!correos.length){
+    const extra=[e._pn_correo,e._pj_correo,e._pj_rep_correo,e._apo_correo,e._aut_correo,e._ec_correo,e._qd_correo];
+    const set=new Set();
+    extra.forEach(function(em){
+      const v=String(em||'').trim().toLowerCase();
+      if(v&&v.includes('@')&&(typeof emailValido!=='function'||emailValido(v)))set.add(v);
+    });
+    correos=Array.from(set);
+  }
+  if(!correos.length){
+    if(esConceptoSeg&&typeof notif==='function')
+      notif('Concepto de seguimiento aprobado, pero el expediente no tiene correos registrados para notificar','warn');
+    return;
+  }
+  const expLbl=e._exp||expId;
+  let asunto=esConceptoSeg
+    ?('Concepto de seguimiento aprobado — expediente '+expLbl)
+    :('Documento aprobado — expediente '+expLbl);
+  let cuerpo;
+  const sop=typeof getSoporteActivo==='function'?getSoporteActivo(t):null;
+  const linkDoc=(sop&&(sop.url||sop.preview||sop.driveLink))||'';
+  if(esConceptoSeg){
+    cuerpo='Estimado(a),\n\nLe informamos que el Concepto de seguimiento del expediente '+expLbl+' ha sido aprobado.\n\n';
+    if(linkDoc)cuerpo+='Puede consultar el documento en el siguiente enlace:\n'+linkDoc+'\n\n';
+    else cuerpo+='Puede consultarlo en la consulta ciudadana de la Corporación CDA.\n\n';
+    cuerpo+='Cordialmente.';
+  }else{
+    cuerpo='Estimado(a),\n\nLe informamos que se aprobó el documento de la actividad «'+actNom+'» del expediente '+expLbl+'.\n\nPuede consultarlo en la consulta ciudadana.\n\nCordialmente.';
+  }
+  const html='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>';
   try{
+    if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+      const okG=await sstSolicitarGmailParaAdjuntar();
+      if(!okG){
+        if(esConceptoSeg&&typeof notif==='function')
+          notif('Concepto aprobado; conecte Gmail para enviar el correo a los interesados','warn');
+        return;
+      }
+    }
     if(typeof pqrsEnviarCorreoCiudadano==='function')
       await pqrsEnviarCorreoCiudadano(correos,asunto,html,true,[],{});
+    if(esConceptoSeg&&typeof notif==='function')
+      notif('📬 Concepto de seguimiento notificado a '+correos.length+' correo(s)','ok');
   }catch(err){
     console.warn('notificarCiudadanoTrasVerificarTramite:',err);
     if(typeof notif==='function')notif('Actividad cerrada; no se pudo enviar correo: '+String(err.message||err).slice(0,80),'warn');

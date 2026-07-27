@@ -353,7 +353,7 @@ function openEntregaResponsableModal(){
       '</div>'+
       htmlEntregaRespInteresadoBox()+
     '</div>'+
-    '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Oficio de invitación, solicitud a entidad u otra actividad <strong>sin expediente</strong>. Quedará en Actividades para revisión del encargado.</div>'+
+    '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Misma vía que <strong>+ Actividad sin expediente</strong> del encargado: se crea la actividad, usted entrega y pasa a <strong>Por verificar</strong>. Si el encargado ya la asignó, ábrala desde Actividades y entregue allí.</div>'+
     '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
@@ -710,7 +710,7 @@ function buildTaskEntregaResponsable(actividad,detalle,responsable){
       tipo:'autoasignacion_responsable',
       fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
       por:responsable,
-      nota:'Actividad creada por el responsable al entregar documento'
+      nota:'Actividad sin expediente creada por el responsable al entregar (mismo flujo que asignación del encargado)'
     }],
     soportes:[],
     notasDoc:[],
@@ -811,8 +811,9 @@ function ensureExpTaskEntregaResponsable(){
     })):Object.assign(t,{depto:deptoLibre,codigo:cod,sinExpediente:true});
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
     actividadesLibres.push(t);
-    if(typeof persistExpLocal==='function')persistExpLocal();
-    else if(typeof saveLS==='function')saveLS();
+    // Misma persistencia que «+ Actividad sin expediente» del encargado
+    if(typeof saveLS==='function')saveLS();
+    else if(typeof persistExpLocal==='function')persistExpLocal();
     return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
   }
 
@@ -1098,3 +1099,274 @@ window.marcarAltaExpedienteRevisada=marcarAltaExpedienteRevisada;
 window.abrirCorregirAltaDesdeRevision=abrirCorregirAltaDesdeRevision;
 window.maybeClearPendienteRevisionAltaOnSave=maybeClearPendienteRevisionAltaOnSave;
 window.clearAltaResponsableAlAprobarDocumento=clearAltaResponsableAlAprobarDocumento;
+
+// =============================================================================
+// Vincular actividad sin expediente → expediente / PQRSD (revisión encargado)
+// =============================================================================
+
+function renderActLibreVincularHtml(expId,taskId){
+  const tid=escAttr(taskId);
+  return '<div id="act-libre-vinc-box" style="margin-bottom:10px;padding:10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:6px">🔗 Asociar a expediente / PQRSD</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">La entrega queda vinculada al radicado. Puede asociar a un <strong>expediente o PQRSD existente</strong>, o <strong>crear un expediente</strong> (las PQRSD solo las radica Secretaría).</div>'+
+    '<div class="fx" style="gap:12px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-vinc-modo" id="act-libre-vinc-existente" checked onchange="syncActLibreVincularUi()"> Existente</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-vinc-modo" id="act-libre-vinc-nuevo" onchange="syncActLibreVincularUi()"> Crear expediente</label>'+
+    '</div>'+
+    '<div id="act-libre-vinc-exist-box">'+
+      '<div class="fld" style="margin-bottom:6px"><label>Buscar expediente / PQRSD</label>'+
+        '<div style="position:relative">'+
+          '<input type="text" id="act-libre-vinc-exp" placeholder="N° expediente, PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+            'oninput="filtrarExpActLibreVincSug(this)" onfocus="filtrarExpActLibreVincSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'act-libre-vinc-sug\');if(p)p.style.display=\'none\';},180)">'+
+          '<div id="act-libre-vinc-sug" class="entrega-resp-sug" style="display:none"></div>'+
+        '</div>'+
+        '<div id="act-libre-vinc-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Busca en trámites y PQRSD.</div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="act-libre-vinc-nuevo-box" style="display:none">'+
+      '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Alta de <strong>trámite</strong> únicamente. Para PQRSD use «Existente» (radicada por Secretaría).</div>'+
+      '<div class="fg" style="margin-bottom:4px">'+
+        '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
+          '<input type="text" id="act-libre-vinc-exp-nuevo" placeholder="Número del expediente" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '<div class="fld"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
+          '<select id="act-libre-vinc-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tramitesEntregaRespOptsHtml()+'</select></div>'+
+      '</div>'+
+      htmlEntregaRespInteresadoBox()+
+    '</div>'+
+    '<div class="fx" style="gap:8px;margin-top:10px">'+
+      '<button type="button" class="btn bsm bp" onclick="submitVincularActLibre(\''+tid+'\')">🔗 Vincular actividad</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function syncActLibreVincularUi(){
+  const nuevo=!!((document.getElementById('act-libre-vinc-nuevo')||{}).checked);
+  const boxEx=document.getElementById('act-libre-vinc-exist-box');
+  const boxNu=document.getElementById('act-libre-vinc-nuevo-box');
+  if(boxEx)boxEx.style.display=nuevo?'none':'';
+  if(boxNu)boxNu.style.display=nuevo?'':'none';
+  if(nuevo&&typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();
+}
+
+function filtrarExpActLibreVincSug(inp){
+  const portal=document.getElementById('act-libre-vinc-sug');
+  if(!portal||!inp)return;
+  const list=typeof buscarExpedientesEntregaResp==='function'?buscarExpedientesEntregaResp(inp.value,12):[];
+  if(!list.length){portal.style.display='none';portal.innerHTML='';return;}
+  portal.innerHTML=list.map(function(e){
+    const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+    const tramNom=tram?tram.nombre:'Trámite';
+    const nom=typeof getNom==='function'?getNom(e):'';
+    const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+      ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+    const tag=esPqrs?'<span style="color:#6d3fa8;font-weight:600">PQRSD</span> · ':'<span style="color:var(--bl)">Trámite</span> · ';
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();pickExpActLibreVinc(\''+
+      String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
+      tag+'<strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tramNom)+' · '+escAttr(nom)+'</button>';
+  }).join('');
+  portal.style.display='block';
+}
+
+function pickExpActLibreVinc(expNum){
+  const inp=document.getElementById('act-libre-vinc-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('act-libre-vinc-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const hint=document.getElementById('act-libre-vinc-hint');
+  const e=typeof getExpById==='function'?getExpById(expNum):null;
+  if(hint){
+    if(e){
+      const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+      const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+        ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+      hint.innerHTML='Seleccionado: <strong>'+escAttr(e._exp)+'</strong> · '+
+        (esPqrs?'<span style="color:#6d3fa8">PQRSD</span>':'Trámite')+' · '+
+        escAttr(tram?tram.nombre:'')+' · '+escAttr(typeof getNom==='function'?getNom(e):'');
+    }else hint.textContent='No encontrado — cree un expediente abajo o verifique el número.';
+  }
+}
+
+function crearStubExpedienteDesdeRevisionLibre(opts){
+  opts=opts||{};
+  const expId=String(opts.expId||'').trim();
+  const tid=String(opts.tramiteId||'').trim();
+  const interesadoDatos=opts.interesadoDatos||null;
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare');
+  const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+  if(!expId){notif('Indique el número de expediente','err');return null;}
+  if(!tid){notif('Seleccione el tipo de trámite','err');return null;}
+  if(typeof esTramitePqrs==='function'&&esTramitePqrs(tid)){
+    notif('Las PQRSD solo las radica Secretaría. Asocie a una PQRSD existente.','err');
+    return null;
+  }
+  if(typeof getExpById==='function'&&getExpById(expId)){notif('Ya existe un expediente con ese número — use «Existente»','err');return null;}
+  if(typeof expNumeroDuplicado==='function'&&expNumeroDuplicado(expId)){
+    notif('Número de expediente duplicado','err');
+    return null;
+  }
+  const fe={Solicitud:hoyStr,'En trámite':hoyStr};
+  const data={
+    _depto:depto,
+    _tramite:tid,
+    _exp:expId,
+    _estado:'En trámite',
+    _fecha:hoyStr,
+    _fechas_estado:JSON.stringify(fe),
+    _usar_etapa:false,
+    _etapa:'',
+    _instructor:'',
+    _alta_por_responsable:false,
+    _pendiente_revision_alta:false,
+    _tipo_persona:'natural',
+    _pn_nombre:'',
+    _pn_identificacion:'',
+    _pn_correo:'',
+    _pn_telefono:'',
+    _est_com:false,
+    _facturas_extra:'[]',
+    _actos_admin:'[]',
+    _conceptos_seg:'[]',
+    _expedientes_asociados:'[]',
+    _info_tecnica_items:'[]',
+    tasks:[],
+    historial:[{
+      estado:'En trámite',
+      fecha:hoyStr,
+      nota:'Alta por encargado al vincular actividad sin expediente · '+(por||'')
+    }]
+  };
+  if(interesadoDatos&&typeof applyEntregaRespInteresadoToExp==='function')
+    applyEntregaRespInteresadoToExp(data,interesadoDatos);
+  if(typeof syncFechasEstadoConEstado==='function')syncFechasEstadoConEstado(data);
+  if(!Array.isArray(exps))exps=[];
+  exps.push(data);
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
+  else if(typeof persistExpLocal==='function')persistExpLocal();
+  if(typeof logAudit==='function')logAudit('Alta expediente al vincular act. libre ['+expId+']','expedientes',expId);
+  return data;
+}
+
+/** Mueve la actividad libre al expediente (conserva soportes, estado, historial). */
+function vincularActLibreAExpediente(taskId,e){
+  if(!e||!e._exp)return null;
+  const lib=typeof getActLibreById==='function'?getActLibreById(taskId):null;
+  if(!lib||lib.eliminada){notif('Actividad sin expediente no encontrada','err');return null;}
+  const codLibre=lib.codigo||'';
+  const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+    ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+  const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+
+  // Clonar tarea y limpiar flags de libre
+  let t=typeof normalizeTask==='function'?normalizeTask(Object.assign({},lib)):Object.assign({},lib);
+  t.sinExpediente=false;
+  t.codigoLibreOrigen=codLibre;
+  delete t.codigo;
+  delete t.depto; // el depto queda en el expediente
+  if(!Array.isArray(t.historial))t.historial=[];
+  t.historial.push({
+    tipo:'vinculo_expediente',
+    fecha:hoyStr,
+    por:por,
+    nota:'Vinculada a '+(esPqrs?'PQRSD':'expediente')+' '+e._exp+(codLibre?' (antes '+codLibre+')':'')
+  });
+
+  if(esPqrs){
+    const act=String(t.actividad||'').trim();
+    if(!act.startsWith('Atender PQRSD'))
+      t.actividad='Atender PQRSD'+(act?' — '+act:'');
+    t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
+  }
+
+  e.tasks=Array.isArray(e.tasks)?e.tasks:[];
+  // Evitar id duplicado
+  if(e.tasks.some(function(x){return x&&x.id===t.id;})){
+    t.id=(typeof genTaskId==='function'?genTaskId():('tk_'+Date.now()));
+  }
+  e.tasks.push(t);
+
+  // Si la PQRSD aún no está en revisión/firma/notif, pasar a revisión NCA (hay entrega pendiente)
+  if(esPqrs&&typeof setPqrsWorkflow==='function'&&typeof PQRS_WF!=='undefined'){
+    const est=typeof estadoTask==='function'?estadoTask(t):t.estado;
+    const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+    const avanzadas=[PQRS_WF.PARA_FIRMA,PQRS_WF.POR_FIRMAR,PQRS_WF.PENDIENTE_NOTIF,PQRS_WF.LISTA_ENVIO,PQRS_WF.REVISION_FINAL,PQRS_WF.CERRADA];
+    if(est==='Por verificar'&&avanzadas.indexOf(fase)<0){
+      const sop=typeof getSoporteActivo==='function'?getSoporteActivo(t):null;
+      const docs=[];
+      if(sop&&(sop.url||sop.preview||sop.driveLink)){
+        docs.push({
+          nombre:sop.nombre||sop.label||'Proyección de respuesta',
+          driveLink:sop.url||sop.driveLink||'',
+          previewLink:sop.preview||sop.url||'',
+          fileId:sop.driveFileId||sop.fileId||'',
+          tipo:'drive'
+        });
+      }
+      const patch={fase:PQRS_WF.PENDIENTE_REVISION,entregado_por:t.responsable||por};
+      if(docs.length)patch.documentos=docs;
+      setPqrsWorkflow(e,patch);
+    }
+  }
+
+  // Quitar de actividades libres
+  if(Array.isArray(actividadesLibres)){
+    const ix=actividadesLibres.findIndex(function(x){return x&&x.id===taskId;});
+    if(ix>=0)actividadesLibres.splice(ix,1);
+  }
+
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+  if(typeof saveLS==='function')saveLS();
+  else if(typeof persistExpLocal==='function')persistExpLocal();
+
+  if(typeof logAudit==='function')
+    logAudit('Actividad libre vinculada a '+e._exp+(codLibre?' ← '+codLibre:''),'actividades',e._exp);
+
+  return{e:e,t:t,expId:e._exp,taskId:t.id,esPqrs:esPqrs};
+}
+
+function submitVincularActLibre(taskId){
+  if(typeof puedeGestionarActividadesDepto==='function'&&!puedeGestionarActividadesDepto()){
+    notif('Solo el encargado del departamento puede vincular la actividad','err');
+    return;
+  }
+  taskId=String(taskId||'').trim();
+  if(!taskId){notif('Actividad no indicada','err');return;}
+  const lib=typeof getActLibreById==='function'?getActLibreById(taskId):null;
+  if(!lib){notif('Actividad sin expediente no encontrada','err');return;}
+
+  const nuevo=!!((document.getElementById('act-libre-vinc-nuevo')||{}).checked);
+  let e=null;
+  if(nuevo){
+    const expNuevo=String((document.getElementById('act-libre-vinc-exp-nuevo')||{}).value||'').trim();
+    const tid=String((document.getElementById('act-libre-vinc-tramite')||{}).value||'').trim();
+    const interesadoDatos=typeof collectEntregaRespInteresado==='function'?collectEntregaRespInteresado():null;
+    if(typeof validateEntregaRespInteresado==='function'){
+      const errInt=validateEntregaRespInteresado(interesadoDatos);
+      if(errInt){notif(errInt,'err');return;}
+    }
+    e=crearStubExpedienteDesdeRevisionLibre({expId:expNuevo,tramiteId:tid,interesadoDatos:interesadoDatos});
+    if(!e)return;
+  }else{
+    const expNum=String((document.getElementById('act-libre-vinc-exp')||{}).value||'').trim();
+    if(!expNum){notif('Busque y seleccione el expediente o PQRSD','err');return;}
+    e=typeof getExpById==='function'?getExpById(expNum):null;
+    if(!e){notif('No encontrado. Use «Crear expediente» si es un trámite nuevo (no PQRSD).','err');return;}
+  }
+
+  const pack=vincularActLibreAExpediente(taskId,e);
+  if(!pack)return;
+  notif('Actividad vinculada a '+(pack.esPqrs?'PQRSD':'expediente')+' '+pack.expId,'ok');
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))
+    renderConsulta();
+  if(typeof openTaskCommentsModal==='function')
+    openTaskCommentsModal(pack.expId,pack.taskId);
+}
+
+window.renderActLibreVincularHtml=renderActLibreVincularHtml;
+window.syncActLibreVincularUi=syncActLibreVincularUi;
+window.filtrarExpActLibreVincSug=filtrarExpActLibreVincSug;
+window.pickExpActLibreVinc=pickExpActLibreVinc;
+window.submitVincularActLibre=submitVincularActLibre;
+window.vincularActLibreAExpediente=vincularActLibreAExpediente;

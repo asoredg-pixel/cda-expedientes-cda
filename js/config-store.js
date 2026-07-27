@@ -53,6 +53,12 @@ function normalizeCfgObj(c){
   Object.keys(seeds).forEach(function(nom){
     if(c.actRegistroMap[nom]==null&&(c.actividadesPred||[]).indexOf(nom)>=0)c.actRegistroMap[nom]=seeds[nom];
   });
+  // «Concepto de seguimiento»: Registro → concepto; no exige firma Director (se notifica al aprobar)
+  (c.actividadesPred||[]).forEach(function(nom){
+    if(!/concepto\s+de\s+seguimiento/i.test(String(nom||'')))return;
+    if(c.actRegistroMap[nom]==null)c.actRegistroMap[nom]='concepto';
+    if(c.actFirmaMap[nom]==null)c.actFirmaMap[nom]=false;
+  });
   if((c.actividadesPred||[]).indexOf('Proyectar acto administrativo')>=0&&c.actFirmaMap['Proyectar acto administrativo']==null)
     c.actFirmaMap['Proyectar acto administrativo']=true;
   c.tramites.forEach(t=>{
