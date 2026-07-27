@@ -237,7 +237,7 @@ async function loadLS(){
     if(globalSnap.exists()){
       const g=globalSnap.data();
       if(Array.isArray(g.personas))personas=g.personas;
-      if(Array.isArray(g.actividadesLibres))actividadesLibres=g.actividadesLibres;
+      if(Array.isArray(g.actividadesLibres))actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
       // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
@@ -455,6 +455,7 @@ window.persistMantenimientoFirestore=persistMantenimientoFirestore;
 async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
+  _localSaving=true;
   try{
     const payload={
       personas:personas||[],
@@ -479,11 +480,18 @@ async function saveGlobalFirestore(){
       }));
     }
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
+    // Ya sincronizado: limpiar flags pendientes locales
+    (actividadesLibres||[]).forEach(function(t){
+      if(t&&t._pending_fs_sync){delete t._pending_fs_sync;delete t._pending_fs_at;}
+    });
+    if(window._pendingActLibreEntrega)window._pendingActLibreEntrega=null;
     return true;
   }catch(err){
     console.error('saveGlobalFirestore:',err);
     if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Global: '+(err&&err.message||'Error desconocido')};
     return false;
+  }finally{
+    setTimeout(function(){_localSaving=false;},1800);
   }
 }
 function persistExpLocal(){
@@ -883,6 +891,33 @@ function initRealtimeCfgSyncAll(){
 function suscribirCfgSync(deptoId){
   initRealtimeCfgSyncAll();
 }
+function mergeActividadesLibresFromRemote(remote){
+  const rem=Array.isArray(remote)?remote:[];
+  const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
+  const byId=new Map();
+  rem.forEach(function(t){
+    if(!t||!t.id)return;
+    byId.set(String(t.id),t);
+  });
+  // Conservar actividades locales aún no reflejadas en el snapshot (entrega en curso / race)
+  local.forEach(function(t){
+    if(!t||!t.id)return;
+    const id=String(t.id);
+    if(!byId.has(id)){
+      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable){
+        byId.set(id,t);
+      }
+      return;
+    }
+    if(t._pending_fs_sync)byId.set(id,t);
+  });
+  if(window._pendingActLibreEntrega&&window._pendingActLibreEntrega.t&&window._pendingActLibreEntrega.id){
+    const pid=String(window._pendingActLibreEntrega.id);
+    if(!byId.has(pid))byId.set(pid,window._pendingActLibreEntrega.t);
+  }
+  return Array.from(byId.values());
+}
+
 function initRealtimeGlobalSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsDoc)return;
@@ -912,7 +947,9 @@ function initRealtimeGlobalSync(){
         changed=true;
       }
     }
-    if(Array.isArray(g.actividadesLibres))actividadesLibres=g.actividadesLibres;
+    if(Array.isArray(g.actividadesLibres)){
+      actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+    }
     if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
     if(changed){
       try{_saveLSLocal();}catch(e){}

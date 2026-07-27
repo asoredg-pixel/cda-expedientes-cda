@@ -3559,8 +3559,34 @@ function normalizeActLibre(t){
   if(!t.codigo)t.codigo=genCodigoActLibre(t.depto);
   return t;
 }
-function getActLibreById(id){return (actividadesLibres||[]).find(t=>t.id===id);}
-function getActLibreByCodigo(cod){return (actividadesLibres||[]).find(t=>t.codigo===cod);}
+function getActLibreById(id){
+  const sid=String(id||'').trim();
+  if(!sid)return null;
+  let found=(actividadesLibres||[]).find(t=>String(t&&t.id||'').trim()===sid)||null;
+  // Recuperar si el sync remoto pisó una entrega recién creada
+  if(!found&&window._pendingActLibreEntrega&&String(window._pendingActLibreEntrega.id||'')===sid){
+    found=window._pendingActLibreEntrega.t||null;
+    if(found){
+      if(!Array.isArray(actividadesLibres))actividadesLibres=[];
+      if(!actividadesLibres.some(t=>String(t&&t.id||'')===sid))actividadesLibres.push(found);
+    }
+  }
+  return found;
+}
+function getActLibreByCodigo(cod){
+  const sc=String(cod||'').trim();
+  if(!sc)return null;
+  let found=(actividadesLibres||[]).find(t=>String(t&&t.codigo||'').trim()===sc)||null;
+  if(!found&&window._pendingActLibreEntrega&&String(window._pendingActLibreEntrega.codigo||'')===sc){
+    found=window._pendingActLibreEntrega.t||null;
+    if(found){
+      if(!Array.isArray(actividadesLibres))actividadesLibres=[];
+      const sid=String(found.id||'');
+      if(sid&&!actividadesLibres.some(t=>String(t&&t.id||'')===sid))actividadesLibres.push(found);
+    }
+  }
+  return found;
+}
 function getActividadesLibresDepto(deptoId){
   return (actividadesLibres||[]).map(normalizeActLibre).filter(t=>!t.eliminada&&t.depto===(deptoId||deptoActivo));
 }
@@ -8527,6 +8553,8 @@ function getTaskAny(expId,taskId){
 function mutateTask(expId,taskId,fn){
   const lib=taskId?getActLibreById(taskId):null;
   if(lib){
+    lib._pending_fs_sync=true;
+    lib._pending_fs_at=Date.now();
     fn(normalizeActLibre(lib));
     try{persistExpLocal();}
     catch(e){

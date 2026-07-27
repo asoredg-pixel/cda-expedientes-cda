@@ -810,10 +810,13 @@ function ensureExpTaskEntregaResponsable(){
       origen:'responsable'
     })):Object.assign(t,{depto:deptoLibre,codigo:cod,sinExpediente:true});
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
+    t._pending_fs_sync=true;
+    t._pending_fs_at=Date.now();
     actividadesLibres.push(t);
-    // Misma persistencia que «+ Actividad sin expediente» del encargado
-    if(typeof saveLS==='function')saveLS();
-    else if(typeof persistExpLocal==='function')persistExpLocal();
+    // Solo local aquí: el envío a verificación persistirá en Firestore.
+    // Evita que un snapshot remoto antiguo pise la actividad antes de subir el archivo.
+    if(typeof persistExpLocal==='function')persistExpLocal();
+    window._pendingActLibreEntrega={id:t.id,codigo:t.codigo,t:t};
     return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
   }
 
@@ -916,6 +919,9 @@ function submitEntregaResponsable(){
   // Reutilizar el envío a verificación ya implementado (Drive + Por verificar / flujo PQRSD)
   if(typeof submitEnviarSoporteVerificacion==='function'){
     window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente};
+    if(pack.sinExpediente&&pack.t){
+      window._pendingActLibreEntrega={id:pack.taskId,codigo:pack.expId,t:pack.t};
+    }
     submitEnviarSoporteVerificacion(pack.expId,pack.taskId);
     if(typeof setActFiltro==='function'){
       try{setActFiltro('porver');}catch(err){}
