@@ -3551,11 +3551,33 @@ function genCodigoActLibre(depto){
   const n=(actividadesLibres||[]).filter(a=>a.depto===depto&&!a.eliminada).length+1;
   return pref+'-'+String(n).padStart(4,'0');
 }
+/** Departamento real de una actividad libre (nunca el módulo «responsables»). */
+function resolveDeptoActLibre(hint){
+  const ok=function(id){
+    id=String(id||'').trim();
+    return id&&id!=='responsables'&&DEPTOS.some(d=>d.id===id)?id:'';
+  };
+  let d=ok(hint);
+  if(d)return d;
+  const u=window._usuarioActual;
+  d=ok(u&&u.deptoResponsable);
+  if(d)return d;
+  if(typeof getDeptoOperativo==='function')d=ok(getDeptoOperativo());
+  if(d)return d;
+  d=ok(typeof deptoCfg!=='undefined'?deptoCfg:'');
+  if(d)return d;
+  d=ok(typeof deptoActivo!=='undefined'?deptoActivo:'');
+  if(d)return d;
+  return 'guaviare';
+}
+function deptoEfectivoActLibre(t){
+  return resolveDeptoActLibre(t&&t.depto);
+}
 function normalizeActLibre(t){
   if(!t)return t;
   t=normalizeTask(t);
   t.sinExpediente=true;
-  if(!t.depto)t.depto=deptoActivo;
+  t.depto=resolveDeptoActLibre(t.depto);
   if(!t.codigo)t.codigo=genCodigoActLibre(t.depto);
   return t;
 }
@@ -3588,7 +3610,8 @@ function getActLibreByCodigo(cod){
   return found;
 }
 function getActividadesLibresDepto(deptoId){
-  return (actividadesLibres||[]).map(normalizeActLibre).filter(t=>!t.eliminada&&t.depto===(deptoId||deptoActivo));
+  const d=resolveDeptoActLibre(deptoId||deptoActivo);
+  return (actividadesLibres||[]).map(normalizeActLibre).filter(t=>!t.eliminada&&deptoEfectivoActLibre(t)===d);
 }
 function isActLibreRef(expId,taskId){
   if(taskId&&getActLibreById(taskId))return true;
@@ -3628,7 +3651,11 @@ function poblarSelResponsable(){
   if(lbl)lbl.textContent='Responsable:';
 }
 function onResponsableChange(){
-  if(esResponsableIdentidadFija()){fijarResponsableSesion();return;}
+  if(!puedeMostrarSelectorResponsable()){
+    if(esResponsableIdentidadFija())fijarResponsableSesion();
+    updateDeptoUI();
+    return;
+  }
   const sel=document.getElementById('sel-responsable');
   responsableActivo=sel?sel.value:'';
   try{localStorage.setItem('sst_responsable',responsableActivo||'');}catch(e){}
@@ -3644,7 +3671,12 @@ function onResponsableChange(){
   renderBandejaDepto();
 }
 function cambiarResponsable(){
-  if(esResponsableIdentidadFija()){notif('Su sesión está vinculada a su cuenta de Google','err');return;}
+  if(!puedeMostrarSelectorResponsable()){
+    if(esResponsableIdentidadFija())notif('Su sesión está vinculada a su cuenta de Google','err');
+    else notif('Solo el administrador puede cambiar de responsable','err');
+    if(esResponsableIdentidadFija())fijarResponsableSesion();
+    return;
+  }
   responsableActivo='';
   try{localStorage.setItem('sst_responsable','');}catch(e){}
   const sel=document.getElementById('sel-responsable');
@@ -5524,9 +5556,18 @@ function tituloRolFirestore(rolId){
   return rolId||'—';
 }
 function esResponsableIdentidadFija(){
-  if(!window._usuarioActual||esAdminFirestore())return false;
-  const r=window._usuarioActual.rol;
+  // Solo la cuenta administrador puede elegir/cambiar de responsable en el módulo.
+  if(typeof esAdminFirestore==='function'&&esAdminFirestore())return false;
+  if(!window._usuarioActual)return false;
+  const r=typeof normalizarRolLoginFirestore==='function'
+    ?normalizarRolLoginFirestore(window._usuarioActual.rol)
+    :String(window._usuarioActual.rol||'').trim();
   return r==='responsables'||r==='contratista';
+}
+/** Barra «Cambiar responsable»: exclusiva del administrador impersonando el módulo. */
+function puedeMostrarSelectorResponsable(){
+  return !!(typeof esAdminFirestore==='function'&&esAdminFirestore()
+    &&typeof esModoResponsable==='function'&&esModoResponsable());
 }
 function getResponsableLoginNombre(){
   const u=window._usuarioActual;
@@ -12049,18 +12090,19 @@ function updateDeptoUI(){
   }
   if(respBar){
     const respFijo=esResponsableIdentidadFija();
-    // Con sesión vinculada a la cuenta el nombre ya está en el header: ocultar la barra.
-    respBar.classList.toggle('on',resp&&!respFijo);
+    const showSelResp=puedeMostrarSelectorResponsable();
+    // Solo admin (impersonando módulo Responsables) ve el selector; el resto queda fijado a su cuenta.
+    respBar.classList.toggle('on',showSelResp);
     const selResp=document.getElementById('sel-responsable');
     const lblResp=document.getElementById('resp-global-label');
     const btnCambiarResp=respBar.querySelector('button[onclick="cambiarResponsable()"]');
     if(resp){
-      if(respFijo)fijarResponsableSesion();
+      if(respFijo||!showSelResp)fijarResponsableSesion();
       else poblarSelResponsable();
-      if(selResp)selResp.style.display=respFijo?'none':'';
-      if(btnCambiarResp)btnCambiarResp.style.display=respFijo?'none':'';
-      if(lblResp)lblResp.textContent=respFijo?'Conectado como:':'Responsable:';
-      if(respFijo){
+      if(selResp)selResp.style.display=showSelResp?'':'none';
+      if(btnCambiarResp)btnCambiarResp.style.display=showSelResp?'':'none';
+      if(lblResp)lblResp.textContent=showSelResp?'Responsable:':'Conectado como:';
+      if(!showSelResp){
         const hint=document.getElementById('resp-global-hint');
         if(hint)hint.textContent='';
       }
@@ -12668,13 +12710,13 @@ function submitCrearActLibre(){
   const entregaModo=(modoEl&&responsables.length>1)?modoEl.value:'individual';
   if(!String(act||'').trim()){notif('Indique el nombre de la actividad','err');return;}
   if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
-  const cod=genCodigoActLibre(deptoActivo);
+  const cod=genCodigoActLibre(resolveDeptoActLibre(deptoActivo));
   const asignados=responsables.map(n=>({nombre:n,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}));
   const t=normalizeActLibre({
     id:genTaskId(),actividad:act.trim(),detalle:String(det||'').trim(),
     desc:act.trim()+(String(det||'').trim()?' — '+String(det).trim():''),
     responsable:responsables[0],responsables:responsables,asignados:asignados,entregaModo:entregaModo,
-    depto:deptoActivo,codigo:cod,
+    depto:resolveDeptoActLibre(deptoActivo),codigo:cod,
     plazoDias:plazo,vence:plazo?calcVence(plazo):'',prioritaria:prior,
     comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'Actividad sin expediente creada'}],soportes:[],notasDoc:[]
   });
@@ -13379,8 +13421,15 @@ function renderActividades(){
     thead.innerHTML=deptView?base+'<th>Responsable</th><th>Vence</th><th>Cierre</th><th>Acciones</th>':base+'<th>Vence</th><th>Cierre</th><th>Acciones</th>';
   }
   if(!deptView&&!responsableActivo){
+    if(esResponsableIdentidadFija())fijarResponsableSesion();
+  }
+  if(!deptView&&!responsableActivo){
     if(tit)tit.textContent='Mis actividades asignadas';
-    if(sub)sub.textContent='Seleccione su nombre en la barra superior (o pulse «Cambiar responsable»).';
+    if(sub)sub.textContent=puedeMostrarSelectorResponsable()
+      ?'Seleccione su nombre en la barra superior (o pulse «Cambiar responsable»).'
+      :(esResponsableIdentidadFija()
+        ?'No se pudo identificar su nombre de responsable. Contacte al administrador.'
+        :'Inicie sesión con su correo autorizado para ver sus actividades.');
     if(mets)mets.innerHTML='';
     if(tb)tb.innerHTML='<tr><td colspan="8" class="emp">Sin responsable seleccionado.</td></tr>';
     if(btnExp)btnExp.style.display='none';

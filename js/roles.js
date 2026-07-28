@@ -441,7 +441,11 @@ function setMantenimientoEstadoLocal(data){
 }
 function getDeptoOperativo(){
   if(esJurisdiccional())return deptoCfg||'guaviare';
-  if(esModoResponsable())return deptoCfg||'guaviare';
+  if(esModoResponsable()){
+    const dr=window._usuarioActual&&String(window._usuarioActual.deptoResponsable||'').trim();
+    if(dr&&DEPTOS.some(d=>d.id===dr))return dr;
+    return deptoCfg||'guaviare';
+  }
   if(esSecretaria()||esModoOficinaDeguv()||esModoCiudadano())return 'guaviare';
   return deptoActivo;
 }

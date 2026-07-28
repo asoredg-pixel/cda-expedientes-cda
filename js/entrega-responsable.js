@@ -798,17 +798,19 @@ function ensureExpTaskEntregaResponsable(){
 
   // Sin expediente: actividad libre autoasignada al responsable
   if(libre){
-    const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare');
-    const deptoLibre=depto==='responsables'||!depto?'guaviare':depto;
-    const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoLibre):('ACT-'+Date.now());
+    const deptoLibre=typeof resolveDeptoActLibre==='function'
+      ?resolveDeptoActLibre()
+      :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
+    const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
+    const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
     let t=buildTaskEntregaResponsable(actividad,detalle,responsableActivo);
     t=typeof normalizeActLibre==='function'?normalizeActLibre(Object.assign(t,{
-      depto:deptoLibre,
+      depto:deptoOk,
       codigo:cod,
       sinExpediente:true,
       autoAsignadaPorResponsable:true,
       origen:'responsable'
-    })):Object.assign(t,{depto:deptoLibre,codigo:cod,sinExpediente:true});
+    })):Object.assign(t,{depto:deptoOk,codigo:cod,sinExpediente:true});
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
     t._pending_fs_sync=true;
     t._pending_fs_at=Date.now();

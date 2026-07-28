@@ -895,6 +895,16 @@ function mergeActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
+  const score=function(t){
+    if(!t)return 0;
+    let s=0;
+    if(t.fechaReportada||t.estado==='Por verificar')s+=4;
+    if((t.soportes||[]).length)s+=2;
+    if(t.fechaAtendida||t.estado==='Atendida')s+=3;
+    if(t._pending_fs_sync)s+=5;
+    if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
+    return s;
+  };
   rem.forEach(function(t){
     if(!t||!t.id)return;
     byId.set(String(t.id),t);
@@ -904,18 +914,25 @@ function mergeActividadesLibresFromRemote(remote){
     if(!t||!t.id)return;
     const id=String(t.id);
     if(!byId.has(id)){
-      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable){
+      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||(t.soportes||[]).length){
         byId.set(id,t);
       }
       return;
     }
-    if(t._pending_fs_sync)byId.set(id,t);
+    const remT=byId.get(id);
+    if(t._pending_fs_sync||score(t)>score(remT))byId.set(id,t);
   });
   if(window._pendingActLibreEntrega&&window._pendingActLibreEntrega.t&&window._pendingActLibreEntrega.id){
     const pid=String(window._pendingActLibreEntrega.id);
-    if(!byId.has(pid))byId.set(pid,window._pendingActLibreEntrega.t);
+    const pend=window._pendingActLibreEntrega.t;
+    if(!byId.has(pid)||score(pend)>=score(byId.get(pid)))byId.set(pid,pend);
   }
-  return Array.from(byId.values());
+  return Array.from(byId.values()).map(function(t){
+    if(typeof normalizeActLibre==='function'){
+      try{return normalizeActLibre(t);}catch(e){return t;}
+    }
+    return t;
+  });
 }
 
 function initRealtimeGlobalSync(){
@@ -949,8 +966,9 @@ function initRealtimeGlobalSync(){
     }
     if(Array.isArray(g.actividadesLibres)){
       actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+      changed=true;
     }
-    if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
+    if(Array.isArray(g.agendaEventos)){agendaEventos=g.agendaEventos;changed=true;}
     if(changed){
       try{_saveLSLocal();}catch(e){}
       refreshViewsAfterRemoteDataChange();
