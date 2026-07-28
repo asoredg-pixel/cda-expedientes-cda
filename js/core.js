@@ -5772,8 +5772,8 @@ function buildUsuariosCfgShell(){
   const deptoEnc=getDeptoGestionUsuariosAutorizados();
   const tituloTab=encDepto?'👥 Responsables autorizados':'👥 Usuarios autorizados';
   const ayuda=encDepto
-    ?('Registre responsables con acceso Google para <strong>'+escAttr(labelDepartamento(deptoEnc))+'</strong>. Puede agregar, editar y desactivar. Solo el administrador puede eliminar.')
-    :('El rol define el módulo (Secretaría, NCA, departamentos u oficinas). Para <strong>Responsables</strong> indique el departamento. Los encargados departamentales gestionan solo los responsables de su departamento.');
+    ?('Registre responsables con acceso Google para <strong>'+escAttr(labelDepartamento(deptoEnc))+'</strong>. Puede agregar, editar y desactivar. Solo el administrador puede eliminar. Al guardar activos se intenta compartir Drive (requiere Gmail de Secretaría conectado).')
+    :('El rol define el módulo (Secretaría, NCA, departamentos u oficinas). Para <strong>Responsables</strong> indique el departamento. Al guardar un usuario activo se intenta compartir automáticamente las carpetas raíz de Drive (requiere Gmail de Secretaría conectado).');
   const rolField=encDepto
     ?('<input type="hidden" id="usu-fs-rol" value="responsables">'+
       '<div class="fld"><label>Rol</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Responsables</div></div>'+
@@ -6121,6 +6121,8 @@ async function guardarUsuarioFirestore(){
   ocultarFormUsuarioFirestore();
   invalidateUsuariosCache();
   await refreshUsuariosAutorizadosUi();
+  if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
+  else await syncDriveRevokeTrasUsuarioAutorizado(email);
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
 }
@@ -6150,6 +6152,8 @@ async function toggleUsuarioFirestoreActivo(email,activo){
   notif(activo?'Usuario activado':'Usuario desactivado','ok');
   invalidateUsuariosCache();
   await refreshUsuariosAutorizadosUi();
+  if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{...(u||{}),email:email,activo:true});
+  else await syncDriveRevokeTrasUsuarioAutorizado(email);
   if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
 }
 async function eliminarUsuarioFirestore(email){
@@ -6171,6 +6175,7 @@ async function eliminarUsuarioFirestore(email){
       await persistUsuariosIndexGlobal();
       await aplicarSyncUsuariosAutorizados();
       notif('Usuario eliminado','ok');
+      await syncDriveRevokeTrasUsuarioAutorizado(email,{silent:false});
       await refreshUsuariosAutorizadosUi();
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
     }catch(err){console.error(err);notif('Error al eliminar usuario','err');}
@@ -7286,12 +7291,16 @@ function _pqrsEsErrorPermisoDrive(err){
 }
 function alertErrorDriveAdjunto(err){
   const raw=String((err&&err.message)||err||'').trim();
-  const esPerm=_pqrsEsErrorPermisoDrive(err)||/insufficient permissions|crear carpeta/i.test(raw);
+  const esPerm=_pqrsEsErrorPermisoDrive(err)||/insufficient permissions|crear carpeta|403|forbidden|no tiene acceso/i.test(raw);
+  if(esPerm&&typeof alertSinAccesoCarpetaRaizDrive==='function'){
+    alertSinAccesoCarpetaRaizDrive(raw);
+    return;
+  }
   if(typeof confirmPrecaucion==='function'){
     confirmPrecaucion({
-      title:esPerm?'Sin acceso a Drive':'Error al subir a Drive',
+      title:esPerm?'Sin acceso a carpeta raíz Drive':'Error al subir a Drive',
       message:esPerm
-        ?'No tiene acceso a Drive para cargar la respuesta. Contacte al administrador para que le otorguen permisos en la carpeta institucional, o pida al encargado de la oficina que adjunte el archivo.'
+        ?'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.'
         :'No se pudo subir el archivo al Drive institucional. Intente de nuevo o contacte al administrador.',
       detail:raw?raw.slice(0,180):'',
       confirmLabel:'Entendido',
@@ -7299,7 +7308,54 @@ function alertErrorDriveAdjunto(err){
       tone:'warn'
     },function(){});
   }else if(typeof notif==='function'){
-    notif(esPerm?'Sin acceso a Drive para cargar la respuesta. Contacte al administrador.':('No se pudo subir al Drive: '+raw),'err');
+    notif(esPerm?'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.':('No se pudo subir al Drive: '+raw),'err');
+  }
+}
+
+/** Tras guardar/activar usuario: intenta compartir carpetas raíz Drive como editor. */
+async function syncDriveEditorTrasUsuarioAutorizado(email,uLike,opts){
+  opts=opts||{};
+  email=String(email||'').trim().toLowerCase();
+  if(!email)return;
+  const u=uLike||(typeof getUsuarioAutorizadoByEmail==='function'?getUsuarioAutorizadoByEmail(email):null)||{email:email,activo:true,rol:'responsables'};
+  if(typeof driveUsuarioNecesitaEditorRaiz==='function'&&!driveUsuarioNecesitaEditorRaiz(u))return;
+  if(typeof driveGrantEditorRootsForEmail!=='function')return;
+  try{
+    const r=await driveGrantEditorRootsForEmail(email);
+    if(r&&r.ok){
+      if(!opts.silent&&typeof notif==='function')
+        notif('Drive: acceso editor en carpetas raíz otorgado a '+email,'ok');
+      return;
+    }
+    if(r&&r.reason==='sin_token_owner'){
+      if(!opts.silent&&typeof notif==='function')
+        notif('Usuario guardado. No se pudo compartir Drive automáticamente (conecte Gmail de Secretaría o hágalo a mano en la carpeta raíz).','warn');
+      return;
+    }
+    if(!opts.silent&&typeof notif==='function')
+      notif('Usuario guardado. Falló el permiso automático en Drive — el administrador debe compartir la carpeta raíz a mano.','warn');
+  }catch(err){
+    console.warn('syncDriveEditorTrasUsuarioAutorizado:',err);
+    if(!opts.silent&&typeof notif==='function')
+      notif('Usuario guardado. No se pudo sincronizar permisos Drive automáticamente.','warn');
+  }
+}
+
+async function syncDriveRevokeTrasUsuarioAutorizado(email,opts){
+  opts=opts||{};
+  email=String(email||'').trim().toLowerCase();
+  if(!email||typeof driveRevokeEditorRootsForEmail!=='function')return;
+  try{
+    const r=await driveRevokeEditorRootsForEmail(email);
+    if(r&&r.ok){
+      if(!opts.silent&&typeof notif==='function')
+        notif('Drive: permisos de carpeta raíz revocados para '+email,'ok');
+      return;
+    }
+    if(r&&r.reason==='sin_token_owner'&&!opts.silent&&typeof notif==='function')
+      notif('Usuario actualizado. Revogue a mano el acceso Drive en la carpeta raíz si aplica (conecte Gmail de Secretaría para automatizarlo).','warn');
+  }catch(err){
+    console.warn('syncDriveRevokeTrasUsuarioAutorizado:',err);
   }
 }
 function submitEnviarSoporteVerificacion(expId,taskId){

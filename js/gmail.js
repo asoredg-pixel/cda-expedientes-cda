@@ -1120,6 +1120,220 @@ const DRIVE_ROOT_CHAT_ID = (typeof CHAT_DRIVE_FOLDER_ID !== 'undefined' && CHAT_
 const DRIVE_ROOT_EXPEDIENTES_ID = '1A_UQZ-M22SA8xSKAwU20WtsvGghDYDzQ';
 // DRIVE_ROOT_RECURSOS_ID → constants.js (no redeclarar: rompe la carga de este script)
 
+/** Carpetas raíz institucionales a compartir como editor con usuarios autorizados. */
+function driveInstitutionalRootFolderIds() {
+  const ids = [];
+  if (typeof DRIVE_ROOT_EXPEDIENTES_ID !== 'undefined' && DRIVE_ROOT_EXPEDIENTES_ID) ids.push(DRIVE_ROOT_EXPEDIENTES_ID);
+  if (typeof DRIVE_ROOT_PQRSD_ID !== 'undefined' && DRIVE_ROOT_PQRSD_ID) ids.push(DRIVE_ROOT_PQRSD_ID);
+  if (typeof DRIVE_ROOT_CHAT_ID !== 'undefined' && DRIVE_ROOT_CHAT_ID) ids.push(DRIVE_ROOT_CHAT_ID);
+  if (typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' && DRIVE_ROOT_RECURSOS_ID) ids.push(DRIVE_ROOT_RECURSOS_ID);
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function driveUsuarioNecesitaEditorRaiz(u) {
+  if (!u) return false;
+  if (u.activo === false) return false;
+  const rol = String(u.rol || '').trim();
+  if (!rol || rol === 'ciudadano') return false;
+  return true;
+}
+
+async function driveListFolderPermissions(token, folderId) {
+  if (!token || !folderId) return [];
+  const url = DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+    '/permissions?supportsAllDrives=true&fields=permissions(id,emailAddress,role,type,displayName)&pageSize=100';
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!res.ok) {
+    const t = await res.text().catch(function() { return ''; });
+    throw new Error('Listar permisos Drive ' + res.status + ': ' + t.slice(0, 100));
+  }
+  const data = await res.json();
+  return data.permissions || [];
+}
+
+/** Otorga rol writer (editor) a un correo en una carpeta. Idempotente si ya existe. */
+async function driveGrantEditorOnFolder(token, folderId, email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!token || !folderId || !email) return { ok: false, reason: 'params' };
+  try {
+    const perms = await driveListFolderPermissions(token, folderId);
+    const existing = perms.find(function(p) {
+      return p && p.type === 'user' && String(p.emailAddress || '').toLowerCase() === email;
+    });
+    if (existing) {
+      if (existing.role === 'writer' || existing.role === 'organizer' || existing.role === 'fileOrganizer' || existing.role === 'owner') {
+        return { ok: true, already: true, permissionId: existing.id };
+      }
+      // Actualizar a writer
+      const up = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+        '/permissions/' + encodeURIComponent(existing.id) + '?supportsAllDrives=true', {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'writer' })
+      });
+      if (!up.ok) {
+        const t = await up.text().catch(function() { return ''; });
+        throw new Error('Actualizar permiso ' + up.status + ': ' + t.slice(0, 80));
+      }
+      return { ok: true, updated: true, permissionId: existing.id };
+    }
+    const cr = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+      '/permissions?supportsAllDrives=true&sendNotificationEmail=false', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'user', role: 'writer', emailAddress: email })
+    });
+    if (!cr.ok) {
+      const t = await cr.text().catch(function() { return ''; });
+      throw new Error('Crear permiso ' + cr.status + ': ' + t.slice(0, 100));
+    }
+    const created = await cr.json();
+    return { ok: true, created: true, permissionId: created.id };
+  } catch (err) {
+    console.warn('driveGrantEditorOnFolder:', folderId, email, err);
+    return { ok: false, reason: String(err && err.message || err) };
+  }
+}
+
+async function driveRevokeUserOnFolder(token, folderId, email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!token || !folderId || !email) return { ok: false, reason: 'params' };
+  try {
+    const perms = await driveListFolderPermissions(token, folderId);
+    const existing = perms.find(function(p) {
+      return p && p.type === 'user' && String(p.emailAddress || '').toLowerCase() === email
+        && p.role !== 'owner';
+    });
+    if (!existing) return { ok: true, already: true };
+    const del = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+      '/permissions/' + encodeURIComponent(existing.id) + '?supportsAllDrives=true', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!del.ok && del.status !== 404) {
+      const t = await del.text().catch(function() { return ''; });
+      throw new Error('Revocar permiso ' + del.status + ': ' + t.slice(0, 80));
+    }
+    return { ok: true, revoked: true };
+  } catch (err) {
+    console.warn('driveRevokeUserOnFolder:', folderId, email, err);
+    return { ok: false, reason: String(err && err.message || err) };
+  }
+}
+
+/**
+ * Token capaz de gestionar permisos de las carpetas raíz (cuenta dueña / Secretaría).
+ */
+function _driveGetOwnerManageToken() {
+  return _driveGetSecretariaToken() || '';
+}
+
+/**
+ * Otorga editor en carpetas raíz institucionales al correo autorizado.
+ * Requiere Gmail de Secretaría (dueña del Drive) conectado.
+ */
+async function driveGrantEditorRootsForEmail(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email) return { ok: false, reason: 'sin_email' };
+  const token = _driveGetOwnerManageToken();
+  if (!token) {
+    return {
+      ok: false,
+      reason: 'sin_token_owner',
+      msg: 'Conecte el Gmail de Secretaría (cuenta dueña del Drive) para compartir automáticamente, o hágalo a mano.'
+    };
+  }
+  const roots = driveInstitutionalRootFolderIds();
+  const results = [];
+  let okAll = true;
+  for (let i = 0; i < roots.length; i++) {
+    const r = await driveGrantEditorOnFolder(token, roots[i], email);
+    results.push({ folderId: roots[i], ...r });
+    if (!r.ok) okAll = false;
+  }
+  return { ok: okAll, results: results, email: email };
+}
+
+async function driveRevokeEditorRootsForEmail(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email) return { ok: false, reason: 'sin_email' };
+  const token = _driveGetOwnerManageToken();
+  if (!token) {
+    return {
+      ok: false,
+      reason: 'sin_token_owner',
+      msg: 'Conecte el Gmail de Secretaría para revocar permisos Drive, o revóquelos a mano en la carpeta.'
+    };
+  }
+  const roots = driveInstitutionalRootFolderIds();
+  const results = [];
+  let okAll = true;
+  for (let i = 0; i < roots.length; i++) {
+    const r = await driveRevokeUserOnFolder(token, roots[i], email);
+    results.push({ folderId: roots[i], ...r });
+    if (!r.ok) okAll = false;
+  }
+  return { ok: okAll, results: results, email: email };
+}
+
+/** Comprueba si el token actual puede leer/usar una carpeta raíz (editor o superior). */
+async function driveProbeRootFolderAccess(folderId) {
+  const token = _driveGetBestToken();
+  if (!token || !folderId) return { ok: false, reason: 'sin_token' };
+  try {
+    const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(folderId) +
+      '?fields=id,name,capabilities' + _DRIVE_API_QS, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (res.status === 403 || res.status === 404) {
+      return { ok: false, reason: 'sin_acceso', status: res.status };
+    }
+    if (!res.ok) {
+      return { ok: false, reason: 'error_' + res.status, status: res.status };
+    }
+    const data = await res.json();
+    const can = data && data.capabilities;
+    // Puede listar; para subir hace falta addChildren o similar
+    if (can && can.canAddChildren === false && can.canEdit === false) {
+      return { ok: false, reason: 'sin_editor', status: 200 };
+    }
+    return { ok: true, folderId: folderId };
+  } catch (err) {
+    return { ok: false, reason: String(err && err.message || err) };
+  }
+}
+
+async function driveProbeInstitutionalRootAccess() {
+  const expId = typeof DRIVE_ROOT_EXPEDIENTES_ID !== 'undefined' ? DRIVE_ROOT_EXPEDIENTES_ID : '';
+  if (!expId) return { ok: true, skipped: true };
+  return driveProbeRootFolderAccess(expId);
+}
+
+/**
+ * Mensaje emergente cuando el usuario conectó Gmail pero no tiene editor en carpeta raíz.
+ */
+function alertSinAccesoCarpetaRaizDrive(detail) {
+  const msg = 'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.';
+  if (typeof confirmPrecaucion === 'function') {
+    confirmPrecaucion({
+      title: 'Sin acceso a carpeta raíz Drive',
+      message: msg,
+      detail: detail ? String(detail).slice(0, 200) : 'El administrador debe compartir como editor las carpetas institucionales (Expedientes / PQRSD) con su correo Gmail.',
+      confirmLabel: 'Entendido',
+      hideCancel: true,
+      tone: 'warn'
+    }, function() {});
+  } else if (typeof notif === 'function') {
+    notif(msg, 'err');
+  }
+}
+
+window.driveGrantEditorRootsForEmail = driveGrantEditorRootsForEmail;
+window.driveRevokeEditorRootsForEmail = driveRevokeEditorRootsForEmail;
+window.driveProbeInstitutionalRootAccess = driveProbeInstitutionalRootAccess;
+window.alertSinAccesoCarpetaRaizDrive = alertSinAccesoCarpetaRaizDrive;
+window.driveUsuarioNecesitaEditorRaiz = driveUsuarioNecesitaEditorRaiz;
+
 // Nombres de carpeta mensual (índice = getMonth()).
 const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
 
@@ -3197,6 +3411,14 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
   }
   gmailOfiSetToken(tok, expiresInSec, email);
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
+  // Tras conectar: si no puede ver la carpeta raíz, avisar (opción B manual)
+  if (typeof driveProbeInstitutionalRootAccess === 'function' && typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado()) {
+    driveProbeInstitutionalRootAccess().then(function(probe) {
+      if (probe && probe.ok === false && (probe.reason === 'sin_acceso' || probe.reason === 'sin_editor' || probe.status === 403)) {
+        if (typeof alertSinAccesoCarpetaRaizDrive === 'function') alertSinAccesoCarpetaRaizDrive();
+      }
+    }).catch(function() {});
+  }
   return true;
 }
 function gmailOfiIsTokenValid() {
