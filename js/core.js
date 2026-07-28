@@ -6670,12 +6670,16 @@ function confirmPrecaucion(opts,onOk){
   const ico=document.getElementById('confirm-prec-icon-emoji');
   const box=ov?ov.querySelector('.confirm-prec-box'):null;
   if(!ov||!msg)return;
+  // Evitar que un toast de éxito previo cierre este diálogo a 1 s
+  if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
   window._confirmExitoMode=false;
+  window._confirmRadicacionLoading=false;
   opts=opts||{};
+  window._confirmRequireAck=!!opts.requireAck;
   if(box){
     box.className='confirm-prec-box'+(opts.tone?' tone-'+opts.tone:'');
   }
-  if(ico)ico.textContent='⚠️';
+  if(ico)ico.textContent=opts.tone==='warn'?'⚠️':'⚠️';
   if(cancel)cancel.style.display=opts.hideCancel?'none':'';
   const foot=box?box.querySelector('.confirm-prec-foot'):null;
   if(foot)foot.style.display='';
@@ -6696,6 +6700,7 @@ function confirmPrecaucion(opts,onOk){
       inp.value='';
     }
   }
+  if(typeof _sstCargaUiReset==='function')_sstCargaUiReset();
   if(btn)btn.textContent=opts.confirmLabel||'Sí, confirmar';
   window._confirmPrecOk=typeof onOk==='function'?onOk:null;
   window._confirmPrecHasPrompt=!!opts.prompt;
@@ -6721,6 +6726,7 @@ function closeConfirmPrecaucion(ok){
   if(ov)ov.classList.remove('on');
   if(inp){inp.style.display='none';inp.value='';}
   window._confirmPrecHasPrompt=false;
+  window._confirmRequireAck=false;
   if(ok&&window._confirmPrecOk){
     const fn=window._confirmPrecOk;
     window._confirmPrecOk=null;
@@ -7305,6 +7311,7 @@ function alertErrorDriveAdjunto(err){
       detail:raw?raw.slice(0,180):'',
       confirmLabel:'Entendido',
       hideCancel:true,
+      requireAck:true,
       tone:'warn'
     },function(){});
   }else if(typeof notif==='function'){
@@ -7328,11 +7335,29 @@ async function syncDriveEditorTrasUsuarioAutorizado(email,uLike,opts){
       return;
     }
     if(r&&r.reason==='sin_token_owner'){
-      if(!opts.silent&&typeof notif==='function')
+      if(!opts.silent&&typeof confirmPrecaucion==='function'){
+        confirmPrecaucion({
+          title:'Permiso Drive no automático',
+          message:'Usuario guardado. No se pudo compartir Drive automáticamente. Conecte Gmail de Secretaría o comparta la carpeta raíz a mano.',
+          confirmLabel:'Entendido',
+          hideCancel:true,
+          requireAck:true,
+          tone:'warn'
+        },function(){});
+      }else if(!opts.silent&&typeof notif==='function')
         notif('Usuario guardado. No se pudo compartir Drive automáticamente (conecte Gmail de Secretaría o hágalo a mano en la carpeta raíz).','warn');
       return;
     }
-    if(!opts.silent&&typeof notif==='function')
+    if(!opts.silent&&typeof confirmPrecaucion==='function'){
+      confirmPrecaucion({
+        title:'Permiso Drive no automático',
+        message:'Usuario guardado. Falló el permiso automático en Drive. El administrador debe compartir la carpeta raíz a mano.',
+        confirmLabel:'Entendido',
+        hideCancel:true,
+        requireAck:true,
+        tone:'warn'
+      },function(){});
+    }else if(!opts.silent&&typeof notif==='function')
       notif('Usuario guardado. Falló el permiso automático en Drive — el administrador debe compartir la carpeta raíz a mano.','warn');
   }catch(err){
     console.warn('syncDriveEditorTrasUsuarioAutorizado:',err);
@@ -11753,6 +11778,8 @@ function confirmExito(opts){
 }
 function closeConfirmDialog(ok){
   if(window._confirmRadicacionLoading)return;
+  // Mensajes que exigen «Entendido»: no cerrar al clic fuera del cuadro
+  if(!ok&&window._confirmRequireAck)return;
   if(window._confirmExitoMode){closeConfirmExito();return;}
   closeConfirmPrecaucion(ok);
 }

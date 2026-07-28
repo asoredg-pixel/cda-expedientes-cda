@@ -1321,6 +1321,7 @@ function alertSinAccesoCarpetaRaizDrive(detail) {
       detail: detail ? String(detail).slice(0, 200) : 'El administrador debe compartir como editor las carpetas institucionales (Expedientes / PQRSD) con su correo Gmail.',
       confirmLabel: 'Entendido',
       hideCancel: true,
+      requireAck: true,
       tone: 'warn'
     }, function() {});
   } else if (typeof notif === 'function') {
