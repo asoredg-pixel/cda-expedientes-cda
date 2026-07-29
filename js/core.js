@@ -8026,9 +8026,20 @@ function solicitarAjusteSoporte(expId,taskId,nota){
   return mutateTask(expId,taskId,t=>resetTaskPorCorregir(t,nota||''));
 }
 async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
-  const e=getExpById(expId);
-  const t=getTaskFromExp(e,taskId);
-  if(!e||!t||typeof driveRenameExpedienteSoporte!=='function')return false;
+  let t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){
+    const e0=getExpById(expId);
+    t=getTaskFromExp(e0,taskId);
+  }
+  if(!t||typeof driveRenameExpedienteSoporte!=='function')return false;
+  const esLibre=!!t.sinExpediente||(typeof isActLibreRef==='function'&&isActLibreRef(expId,taskId));
+  const e=esLibre
+    ?(typeof tramiteFirmaExpCtx==='function'?tramiteFirmaExpCtx(t,expId):{
+        _exp:t.codigo||expId,_depto:t.depto||'guaviare',_sin_expediente:true,
+        _drive_folder_id:t._drive_folder_id||'',_drive_folder_link:t._drive_folder_link||''
+      })
+    :getExpById(expId);
+  if(!e)return false;
   normalizeTask(t);
   const rep=getUltimoReportadoPor(t)||'';
   const list=(t.soportes||[]).filter(function(s){
@@ -8048,7 +8059,12 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
     const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'');
     if(ok)any=true;
   }
-  if(any)await persistExpedienteGranular(e,false);
+  if(any){
+    if(esLibre){
+      try{if(typeof saveGlobalFirestore==='function')await saveGlobalFirestore();}catch(err){console.warn('drive rename libre persist:',err);}
+      try{persistExpLocal();}catch(err){}
+    }else await persistExpedienteGranular(e,false);
+  }
   return any;
 }
 function devolverTaskAlResponsable(expId,taskId,nota){
@@ -8533,9 +8549,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>';
     if(pendVer){
-      if(!t.sinExpediente){
-        h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
-      }
+      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
       h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>';
     }
     h+='</div>';
@@ -15333,6 +15347,12 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
         (tk.responsables||[]).forEach(add);
         (tk.asignados||[]).forEach(function(a){add(a&&a.nombre);});
       });
+      // Actividad sin expediente: sumar encargado y responsables de la oficina
+      if(e._sin_expediente){
+        add(enc);
+        if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
+        if(typeof pqrsNombresVital==='function')(pqrsNombresVital()||[]).forEach(add);
+      }
     }
   }
   const propuesto=String((wf&&(wf.notificar_por||wf.notificar_por_propuesto))||'').trim();
