@@ -8685,7 +8685,17 @@ function mutateTask(expId,taskId,fn){
       return false;
     }
     updateSyncIndicator('syncing');
-    Promise.all([saveGlobalFirestore()]).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+    Promise.all([saveGlobalFirestore()]).then(function(r){
+      const ok=r.every(x=>x!==false);
+      updateSyncIndicator(ok?'synced':'error');
+      if(!ok&&typeof notif==='function'){
+        const err=window._lastFsSaveError;
+        notif('No se pudo sincronizar la actividad sin expediente'+(err&&err.msg?': '+err.msg:'. Verifique permisos o conexión.'),'err');
+      }
+    }).catch(function(){
+      updateSyncIndicator('error');
+      if(typeof notif==='function')notif('No se pudo sincronizar la actividad sin expediente','err');
+    });
     refreshTaskViews();
     return true;
   }

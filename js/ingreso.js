@@ -486,6 +486,12 @@ function ingresarComoRol(rolId,respNombre){
   if(typeof syncPendingExpedientesToFirestore==='function'){
     syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
   }
+  // Reintentar actividades sin expediente que quedaron solo en local (p. ej. rules antiguas)
+  if(typeof syncPendingActividadesLibresToFirestore==='function'){
+    setTimeout(function(){
+      syncPendingActividadesLibresToFirestore().catch(function(e){console.warn('syncActLibres al ingresar:',e);});
+    },1200);
+  }
   if(window._usuarioActual&&window._usuarioActual.email&&_sessionId){
     if(!String(_sessionId).startsWith('local_')){
       startSessionGuard(window._usuarioActual.email);

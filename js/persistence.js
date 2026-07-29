@@ -935,6 +935,28 @@ function mergeActividadesLibresFromRemote(remote){
   });
 }
 
+/** Sube a Firestore actividades libres locales que el encargado aún no ve (sync fallido / rules). */
+async function syncPendingActividadesLibresToFirestore(){
+  const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
+  const need=local.some(function(t){
+    if(!t||t.eliminada)return false;
+    return !!(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada);
+  });
+  if(!need)return false;
+  local.forEach(function(t){
+    if(!t||t.eliminada)return;
+    if(t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada){
+      t._pending_fs_sync=true;
+      t._pending_fs_at=t._pending_fs_at||Date.now();
+    }
+  });
+  if(typeof saveGlobalFirestore!=='function')return false;
+  const ok=await saveGlobalFirestore();
+  if(ok&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  return !!ok;
+}
+window.syncPendingActividadesLibresToFirestore=syncPendingActividadesLibresToFirestore;
+
 function initRealtimeGlobalSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsDoc)return;

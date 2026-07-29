@@ -148,8 +148,12 @@ service cloud.firestore {
     // Permisos sobre sistema/global
     // -------------------------------------------------------------------------
 
+    // Responsables también escriben aquí: actividadesLibres (entregas sin expediente),
+    // agenda y personas. Sin esto la entrega queda solo en localStorage del responsable
+    // y el encargado no la ve en «Por revisar».
     function puedeEscribirGlobal() {
       return isAdmin()
+        || isResponsable()
         || userRol() in [
           'guaviare', 'guainia', 'vaupes',
           'secretaria', 'oap_deguv', 'rn_deguv', 'admin_deguv', 'ds_deguv'
