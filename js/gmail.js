@@ -1310,23 +1310,16 @@ async function driveProbeInstitutionalRootAccess() {
 }
 
 /**
- * Mensaje emergente cuando el usuario conectó Gmail pero no tiene editor en carpeta raíz.
+ * Aviso al fallar una carga por falta de permisos Drive (solo en el momento de subir).
+ * No invocar al conectar Gmail.
  */
 function alertSinAccesoCarpetaRaizDrive(detail) {
-  const msg = 'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.';
-  if (typeof confirmPrecaucion === 'function') {
-    confirmPrecaucion({
-      title: 'Sin acceso a carpeta raíz Drive',
-      message: msg,
-      detail: detail ? String(detail).slice(0, 200) : 'El administrador debe compartir como editor las carpetas institucionales (Expedientes / PQRSD) con su correo Gmail.',
-      confirmLabel: 'Entendido',
-      hideCancel: true,
-      requireAck: true,
-      tone: 'warn'
-    }, function() {});
-  } else if (typeof notif === 'function') {
-    notif(msg, 'err');
+  if (typeof alertErrorDriveAdjunto === 'function') {
+    alertErrorDriveAdjunto(detail || { message: 'sin_acceso_drive' });
+    return;
   }
+  const msg = 'No se puede cargar el archivo: no tiene permisos de Drive. Contacte con el administrador.';
+  if (typeof notif === 'function') notif(msg, 'err');
 }
 
 window.driveGrantEditorRootsForEmail = driveGrantEditorRootsForEmail;
@@ -3412,14 +3405,7 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
   }
   gmailOfiSetToken(tok, expiresInSec, email);
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
-  // Tras conectar: si no puede ver la carpeta raíz, avisar (opción B manual)
-  if (typeof driveProbeInstitutionalRootAccess === 'function' && typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado()) {
-    driveProbeInstitutionalRootAccess().then(function(probe) {
-      if (probe && probe.ok === false && (probe.reason === 'sin_acceso' || probe.reason === 'sin_editor' || probe.status === 403)) {
-        if (typeof alertSinAccesoCarpetaRaizDrive === 'function') alertSinAccesoCarpetaRaizDrive();
-      }
-    }).catch(function() {});
-  }
+  // No avisar aquí por falta de carpeta raíz: el mensaje sale al intentar cargar un archivo.
   return true;
 }
 function gmailOfiIsTokenValid() {

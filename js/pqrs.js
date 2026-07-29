@@ -1911,8 +1911,8 @@ function openCiudadanoDocViewer(url,label,externalUrl){
   if(tit)tit.textContent=label||'Documento';
   if(ifr)ifr.src=previewUrl;
   if(foot){
-    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">Si la vista previa pide acceso, abra el documento en una pestaña nueva.</span>'+
-      (openUrl?'<button type="button" class="btn bsm bp" onclick="window.open(\''+escAttr(openUrl)+'\',\'_blank\',\'noopener\')">↗ Abrir documento directamente</button>':'');
+    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">Si la vista previa pide acceso, abra el documento en una ventana emergente.</span>'+
+      (openUrl?'<button type="button" class="btn bsm bp" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana emergente</button>':'');
   }
   if(ov)ov.classList.add('on');
 }

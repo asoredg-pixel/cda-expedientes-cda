@@ -1070,7 +1070,7 @@ function htmlPqrsDocumentoBtns(e){
   if(e._pqrs_solicitud_link){
     const p=parseDrivePreviewUrl(e._pqrs_solicitud_link);
     h+='<button type="button" class="btn bsm bp" onclick="openPqrsDocViewer(\''+escAttr(e._pqrs_solicitud_link)+'\',\'Solicitud PQRSD\')">📎 Ver documento</button>';
-    h+=' <button type="button" class="btn bsm" onclick="window.open(\''+escAttr(p.url||e._pqrs_solicitud_link)+'\',\'_blank\',\'noopener\')">↗ Abrir en pestaña</button>';
+    h+=' <button type="button" class="btn bsm" onclick="openDriveVentanaEmergente(\''+escAttr(p.url||e._pqrs_solicitud_link)+'\')">↗ Abrir en ventana</button>';
   }
   if(Array.isArray(e._pqrs_gmail_attachments)){
     e._pqrs_gmail_attachments.forEach(function(att){
@@ -2351,8 +2351,8 @@ function abrirVisorAdjunto(urlView,nombreArchivo){
   const driveView=String(urlView||'').replace(/\/preview(\?.*)?$/,'/view');
   const extraLink=isBlob
     ?'<a href="'+escAttr(String(urlView||''))+'" download="'+escAttr(nombreArchivo||'adjunto')+'" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">⬇ Descargar</a>'
-    :'<a href="'+escAttr(driveView)+'" target="_blank" rel="noopener" style="font-size:12px;color:var(--bl,#185fa5);white-space:nowrap;text-decoration:none;margin-right:8px">↗ Abrir en Drive</a>'+
-      '<a href="'+escAttr(driveView)+'" target="_blank" rel="noopener" style="font-size:12px;color:#1a7a4a;white-space:nowrap;text-decoration:none;margin-right:8px" title="En Drive puede seleccionar párrafos y dejar comentarios visibles para los responsables">💬 Comentar en Drive</a>';
+    :'<button type="button" class="btn bsm" style="font-size:12px;padding:2px 8px;margin-right:8px" onclick="openDriveVentanaEmergente(\''+escAttr(driveView)+'\')">↗ Abrir en ventana</button>'+
+      '<button type="button" class="btn bsm" style="font-size:12px;padding:2px 8px;margin-right:8px;color:#1a7a4a" onclick="openDriveVentanaEmergente(\''+escAttr(driveView)+'\')" title="En Drive puede seleccionar párrafos y dejar comentarios visibles para los responsables">💬 Comentar en Drive</button>';
   ov.innerHTML=
     '<div style="background:var(--sf,#fff);border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.45);display:flex;flex-direction:column;width:min(900px,96vw);height:min(720px,90vh);overflow:hidden">'+
     '<div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd,#e2e8f0);gap:8px">'+
@@ -3297,7 +3297,9 @@ function taskReporteBtnHtml(expId,taskId,yo){
   if(miEst==='Por verificar'||(est==='Por verificar'&&t.entregaModo==='unificada'&&taskUsuarioEsAsignado(t,usuario))){
     const a=usuario?getAsignado(t,usuario):null;
     const f=(a&&a.fechaReportada)||t.fechaReportada||'';
-    const tip='Enviada para verificación · '+fmtF(f)+cmtTip+' · Clic para reenviar';
+    const tip=taskPuedeCorregirSinRevision(t,usuario)
+      ?('Enviada · '+fmtF(f)+cmtTip+' · Aún no revisada: puede corregir la entrega')
+      :('Enviada para verificación · '+fmtF(f)+cmtTip);
     return '<button type="button" class="btn bsm bic act-reportada-on" title="'+escAttr(tip)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>'+
       '<span class="task-reportada-tag" title="'+escAttr(tip)+'">📤 '+fmtF(f)+'</span>';
   }
@@ -4228,7 +4230,7 @@ function renderComparePqrsDocBlock(titulo,previewUrl,openUrl,meta){
     h+=isImg
       ?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;'+imgMax+';object-fit:contain;display:block">')
       :('<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>');
-    if(openUrl&&openUrl!==previewUrl)h+='<div style="padding:4px 8px;font-size:11px;border-top:1px solid var(--bd)"><a href="'+escAttr(openUrl)+'" target="_blank" rel="noopener">↗ Abrir en pestaña</a></div>';
+    if(openUrl&&openUrl!==previewUrl)h+='<div style="padding:4px 8px;font-size:11px;border-top:1px solid var(--bd)"><button type="button" class="btn bsm" style="font-size:11px;padding:2px 8px" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana</button></div>';
   }else{
     h+='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin documento adjunto para comparar.</div>';
   }
@@ -4808,10 +4810,24 @@ function puedeReportarTask(t,usuario){
   if(!taskUsuarioEsAsignado(t,usuario))return false;
   if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
     const st=estadoTaskForAsignado(t,usuario);
-    return['En ejecución','Vencida','Por corregir'].includes(st);
+    // Por verificar: aún puede corregir mientras el encargado no revise
+    return['En ejecución','Vencida','Por verificar','Por corregir'].includes(st);
   }
   const est=estadoTask(t);
   return['En ejecución','Vencida','Por verificar','Por corregir'].includes(est)&&est!=='Atendida';
+}
+/** Entrega ya enviada y aún sin revisión del encargado (se puede autocorregir). */
+function taskPuedeCorregirSinRevision(t,usuario){
+  if(!t||t.eliminada)return false;
+  if(typeof esModoResponsable==='function'&&!esModoResponsable())return false;
+  usuario=usuario||responsableActivo;
+  if(!usuario||!taskUsuarioEsAsignado(t,usuario))return false;
+  if(estadoTask(t)==='Atendida')return false;
+  if(typeof getTaskRevisionDepto==='function'&&getTaskRevisionDepto(t))return false;
+  const est=taskEsMultiAsignada(t)&&t.entregaModo==='individual'
+    ?estadoTaskForAsignado(t,usuario)
+    :estadoTask(t);
+  return est==='Por verificar';
 }
 function puedeGestionarActividadesDepto(){return esVistaActividadesDepto()&&!esModoResponsable();}
 function puedeGestionarSolicitudActividad(expId,taskId){
@@ -5311,6 +5327,28 @@ function parseDrivePreviewUrl(url){
   if(/^https?:\/\//i.test(u))return{url:u,preview:u,valid:true,id:''};
   return{url:u,preview:'',valid:false,id:''};
 }
+/** Abre documento Drive/URL en ventana emergente (no pestaña). */
+function openDriveVentanaEmergente(url){
+  const raw=String(url||'').trim();
+  if(!raw){if(typeof notif==='function')notif('No hay enlace de documento','err');return false;}
+  const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):null;
+  const openUrl=String((p&&(p.url||p.preview))||raw).trim();
+  const w=Math.min(1280,Math.max(720,Math.floor((screen.availWidth||1200)*0.88)));
+  const h=Math.min(900,Math.max(560,Math.floor((screen.availHeight||800)*0.88)));
+  const left=Math.max(0,Math.floor(((screen.availWidth||w)-w)/2));
+  const top=Math.max(0,Math.floor(((screen.availHeight||h)-h)/2));
+  const features='popup=yes,width='+w+',height='+h+',left='+left+',top='+top+',menubar=no,toolbar=yes,location=yes,status=yes,resizable=yes,scrollbars=yes';
+  let win=null;
+  try{win=window.open(openUrl,'sst_drive_popup',features);}catch(e){win=null;}
+  if(win){
+    try{win.opener=null;}catch(e){}
+    try{win.focus();}catch(e){}
+    return true;
+  }
+  try{window.open(openUrl,'_blank','noopener,noreferrer');}catch(e2){}
+  return false;
+}
+window.openDriveVentanaEmergente=openDriveVentanaEmergente;
 function normalizeDriveUrlInput(url){
   let u=String(url||'').trim();
   if(!u)return'';
@@ -7019,6 +7057,8 @@ function resolveModoEnviar(t,modoHint){
   if(taskRecibidaPorTraslado(t))return 'reporteTrasladado';
   const est=estadoTask(t);
   if(est==='Por corregir')return 'nuevaEntrega';
+  // Antes de la revisión del encargado: permitir reemplazar/corregir la entrega
+  if(est==='Por verificar'&&typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))return 'nuevaEntrega';
   if((t.soportes||[]).length&&est!=='Por verificar')return 'nuevaEntrega';
   return 'reporte';
 }
@@ -7338,25 +7378,21 @@ function _pqrsEsErrorPermisoDrive(err){
 }
 function alertErrorDriveAdjunto(err){
   const raw=String((err&&err.message)||err||'').trim();
-  const esPerm=_pqrsEsErrorPermisoDrive(err)||/insufficient permissions|crear carpeta|403|forbidden|no tiene acceso/i.test(raw);
-  if(esPerm&&typeof alertSinAccesoCarpetaRaizDrive==='function'){
-    alertSinAccesoCarpetaRaizDrive(raw);
-    return;
-  }
-  if(typeof confirmPrecaucion==='function'){
+  const esPerm=_pqrsEsErrorPermisoDrive(err)||/insufficient permissions|crear carpeta|403|forbidden|no tiene acceso|sin_acceso_drive/i.test(raw);
+  const msg=esPerm
+    ?'No se puede cargar el archivo: no tiene permisos de Drive. Contacte con el administrador.'
+    :('No se pudo subir el archivo al Drive institucional. Intente de nuevo o contacte al administrador.');
+  // Solo notificación al fallar la carga (sin modal de «carpeta raíz»).
+  if(typeof notif==='function')notif(msg,'err');
+  else if(typeof confirmPrecaucion==='function'){
     confirmPrecaucion({
-      title:esPerm?'Sin acceso a carpeta raíz Drive':'Error al subir a Drive',
-      message:esPerm
-        ?'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.'
-        :'No se pudo subir el archivo al Drive institucional. Intente de nuevo o contacte al administrador.',
-      detail:raw?raw.slice(0,180):'',
+      title:esPerm?'Sin permisos de Drive':'Error al subir a Drive',
+      message:msg,
+      detail:raw&&!esPerm?raw.slice(0,180):'',
       confirmLabel:'Entendido',
       hideCancel:true,
-      requireAck:true,
       tone:'warn'
     },function(){});
-  }else if(typeof notif==='function'){
-    notif(esPerm?'No tiene acceso a carpeta raíz Drive. Favor contactar con el administrador para hacerlo a mano.':('No se pudo subir al Drive: '+raw),'err');
   }
 }
 
@@ -7578,10 +7614,11 @@ function submitEnviarSoporteVerificacion(expId,taskId){
 }
 function renderEnviarPanelHtml(expId,taskId,t,modo){
   const traslado=modo==='reporteTrasladado'||taskRecibidaPorTraslado(t);
-  const nuevaEntrega=modo==='nuevaEntrega'||estadoTask(t)==='Por corregir';
+  const nuevaEntrega=modo==='nuevaEntrega'||estadoTask(t)==='Por corregir'||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t));
   const finalizarEnc=modo==='finalizarEncargado';
   const eExp=getExpById(expId);
   const esPqrsEntrega=eExp&&taskEsAtenderPqrs(t,eExp);
+  const corrVoluntaria=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
   const soportes=t.soportes||[];
   const hasSop=soportes.length>0;
   const ultima=hasSop?soportes[soportes.length-1]:null;
@@ -7591,12 +7628,17 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   h+='<input type="hidden" id="enviar-modo-nueva" value="'+(nuevaEntrega?'1':'0')+'">';
   h+='<input type="hidden" id="enviar-modo-traslado" value="'+(traslado&&!nuevaEntrega?'1':'0')+'">';
   h+=renderEntregaHistorialHtml(t);
-  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+(finalizarEnc?'✓ Finalizar actividad (encargado del departamento)':nuevaEntrega?'📤 Nueva entrega':'📤 Entrega de actividad')+'</div>';
+  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+(finalizarEnc?'✓ Finalizar actividad (encargado del departamento)':corrVoluntaria?'📤 Corregir entrega (aún sin revisión)':nuevaEntrega?'📤 Nueva entrega':'📤 Entrega de actividad')+'</div>';
   if(sol){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
       'Tiene una solicitud de <strong>'+(sol.tipo==='traslado'?'traslado':'eliminación')+'</strong> pendiente en el chat — espere respuesta del departamento.</div>';
   }else if(finalizarEnc){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">Como encargado del departamento, al finalizar la actividad queda <strong>cerrada directamente</strong>. Puede adjuntar soporte opcional.</div>';
+  }else if(corrVoluntaria){
+    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
+      '<strong>Corrección voluntaria</strong> — el encargado aún no ha revisado. Puede reemplazar el documento o ajustar el comentario. Si ya lo revisaron, esta opción se desactiva.'+
+      (hasSop&&ultima?' Versión actual: v'+ultima.version+'.':'')+
+    '</div>';
   }else if(nuevaEntrega){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
       '<strong>Nueva entrega</strong> — el comentario es sobre <strong>esta entrega</strong> (no el chat de la actividad). Enlace de Drive y/o comentario; sin adjunto, comentario obligatorio.'+
@@ -7617,7 +7659,9 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   }
   if(esPqrsEntrega&&!sol)h+=renderPqrsEntregaCamposHtml(eExp);
   if(!sol){
-    const showDriveUp=eExp&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eExp);
+    const esLibreEnv=!!(t&&t.sinExpediente);
+    const showDriveUp=(eExp&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eExp))
+      ||(esLibreEnv&&typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(String(t.depto||'guaviare')));
     if(showDriveUp&&!esPqrsEntrega){
       h+='<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Subir archivo (Drive institucional — opcional)</label>'+
         '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px">'+
@@ -8036,7 +8080,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const hasSop=soportes.length>0;
   const est=estadoTask(t);
   const yoResp=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
-  const canAddSop=yoResp&&['En ejecución','Vencida','Por corregir'].includes(est);
+  const canAddSop=yoResp&&(
+    ['En ejecución','Vencida','Por corregir'].includes(est)
+    ||(est==='Por verificar'&&taskPuedeCorregirSinRevision(t))
+  );
   const activo=getSoporteActivo(t);
   const sel=soportes.find(s=>s.id===sopSelId)||activo;
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
@@ -8070,7 +8117,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
       const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección de respuesta':(sel.label||''));
       h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
         '<span><strong style="color:var(--tx2)">'+escAttr(tipoDoc||sel.label||'')+'</strong>'+(sel.driveFilename&&sel.driveFilename!==sel.label?' · '+escAttr(sel.driveFilename):'')+' · v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span>'+
-        '<a href="'+escAttr(sel.url||sel.preview)+'" target="_blank" rel="noopener" style="font-size:11px">'+(sel.local?'Abrir adjunto':'Abrir en Drive')+'</a></div>';
+        '<button type="button" class="btn bsm" style="font-size:11px;padding:2px 8px" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">'+(sel.local?'↗ Abrir adjunto':'↗ Abrir en ventana')+'</button></div>';
     }
   }else{
     const ent=getUltimaEntregaComentario(t);
@@ -8103,6 +8150,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
     h+='<div class="soporte-annot-toolbar doc-viewport-toolbar">'+
       '<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
+      (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir documento en ventana emergente (no pestaña)">↗ Ventana emergente</button>':'')+
       (canAnnot?'<button type="button" class="btn bsm" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">📍 Marcar en documento</button>':'')+
       (canAnnot?'<span style="font-size:11px;color:var(--tx3)">Seleccione cada documento arriba y agregue observaciones en todos los que requiera revisión</span>':'')+
       '</div>';
@@ -8133,9 +8181,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(showAsist)h+='<div id="task-view-asist" class="task-view-panel'+(defTab==='asist'?' on':'')+'">'+renderAsistenteRevisionPanel(expId,taskId,t)+'</div>';
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
   else if(canAddSop&&opts.hideEnviar&&!opts.hideEntrega){
+    const autoCorr=taskPuedeCorregirSinRevision(t);
     h+='<div style="margin-top:.65rem;padding:.55rem;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf2)">'+
-      '<div style="font-size:12px;color:var(--tx2);margin-bottom:6px">Corrigió el documento según las observaciones — registre una <strong>nueva entrega</strong>.</div>'+
-      '<button type="button" class="btn bsm bp" onclick="openEnviarSoporteModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\'nuevaEntrega\')">📤 Nueva entrega para verificación</button></div>';
+      '<div style="font-size:12px;color:var(--tx2);margin-bottom:6px">'+(autoCorr
+        ?'Si detectó un error en su entrega (aún <strong>sin revisión</strong> del encargado), puede corregirla y volver a enviar.'
+        :'Corrigió el documento según las observaciones — registre una <strong>nueva entrega</strong>.')+'</div>'+
+      '<button type="button" class="btn bsm bp" onclick="openEnviarSoporteModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\'nuevaEntrega\')">'+(autoCorr?'📤 Corregir entrega':'📤 Nueva entrega para verificación')+'</button></div>';
   }
   h+='</div>';
   return h;
@@ -15498,7 +15549,7 @@ function openPqrsDirectorFirmarModal(expId){
       '<iframe title="Vista del oficio" src="'+escAttr(urls.preview)+'"></iframe></div>'+
       '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
       '<a class="btn bsm" href="'+escAttr(urls.download||urls.view)+'" target="_blank" rel="noopener" style="background:#0f766e;color:#fff;border-color:#0f766e">⬇ Descargar</a>'+
-      (urls.view?'<a class="btn bsm" href="'+escAttr(urls.view)+'" target="_blank" rel="noopener">↗ Abrir en Drive</a>':'')+
+      (urls.view?'<button type="button" class="btn bsm" onclick="openDriveVentanaEmergente(\''+escAttr(urls.view)+'\')">↗ Abrir en ventana</button>':'')+
       '<span style="font-size:11px;color:var(--tx3)">'+(esAtajo?'Documento de referencia. Puede marcar firmado sin subir PDF.':'Lea el documento aquí. Luego cargue el PDF ya firmado.')+'</span>'+
       '</div></div>';
   }else{
