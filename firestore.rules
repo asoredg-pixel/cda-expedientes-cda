@@ -88,11 +88,11 @@ service cloud.firestore {
     }
 
     // Departamento efectivo de un responsable/contratista.
-    // Espeja usuarioEsResponsableDepto(): contratista sin depto → guaviare.
+    // Sin deptoResponsable (o valor inválido) → guaviare (NCA DEGUV).
     function deptoDelResponsable() {
-      return (userRol() == 'contratista'
-        && (getUserData().deptoResponsable == null
-            || getUserData().deptoResponsable == ''))
+      return (getUserData().deptoResponsable == null
+          || getUserData().deptoResponsable == ''
+          || getUserData().deptoResponsable == 'responsables')
         ? 'guaviare'
         : getUserData().deptoResponsable;
     }

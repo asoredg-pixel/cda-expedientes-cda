@@ -8061,7 +8061,10 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   }
   if(any){
     if(esLibre){
-      try{if(typeof saveGlobalFirestore==='function')await saveGlobalFirestore();}catch(err){console.warn('drive rename libre persist:',err);}
+      try{
+        if(typeof persistActividadesLibresFirestore==='function')await persistActividadesLibresFirestore();
+        else if(typeof saveGlobalFirestore==='function')await saveGlobalFirestore();
+      }catch(err){console.warn('drive rename libre persist:',err);}
       try{persistExpLocal();}catch(err){}
     }else await persistExpedienteGranular(e,false);
   }
@@ -8750,7 +8753,8 @@ function mutateTask(expId,taskId,fn){
       return false;
     }
     updateSyncIndicator('syncing');
-    Promise.all([saveGlobalFirestore()]).then(function(r){
+    const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:saveGlobalFirestore;
+    Promise.all([persistFn()]).then(function(r){
       const ok=r.every(x=>x!==false);
       updateSyncIndicator(ok?'synced':'error');
       if(!ok&&typeof notif==='function'){

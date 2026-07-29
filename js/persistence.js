@@ -263,6 +263,11 @@ async function loadLS(){
       if(result.status==='fulfilled'&&result.value.exists()){
         const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
+        if(Array.isArray(data.actividadesLibres)&&data.actividadesLibres.length){
+          actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
+            ?upsertActividadesLibresFromRemote(data.actividadesLibres)
+            :mergeActividadesLibresFromRemote(data.actividadesLibres);
+        }
       }else{
         if(result.status==='rejected')console.warn('Sin acceso al departamento (normal para rol restringido):',depto);
         cfgByDepto[depto]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));
@@ -452,6 +457,124 @@ async function persistMantenimientoFirestore(data){
   }
 }
 window.persistMantenimientoFirestore=persistMantenimientoFirestore;
+
+/** Libres de un departamento (para persistir en departamentos/{id}). */
+function actividadesLibresForDepto(deptoId){
+  const d=String(deptoId||'').trim()||'guaviare';
+  return (Array.isArray(actividadesLibres)?actividadesLibres:[]).filter(function(t){
+    if(!t||t.eliminada)return false;
+    const td=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre(t.depto):(t.depto||'guaviare');
+    return td===d;
+  });
+}
+
+/**
+ * Upsert sin borrar libres de otros departamentos (snapshot parcial depto).
+ * Conserva locales con _pending_fs_sync si el remoto es más pobre.
+ */
+function upsertActividadesLibresFromRemote(remote){
+  const rem=Array.isArray(remote)?remote:[];
+  const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
+  const byId=new Map();
+  const score=function(t){
+    if(!t)return 0;
+    let s=0;
+    if(t.fechaReportada||t.estado==='Por verificar')s+=4;
+    if((t.soportes||[]).length)s+=2;
+    if(t.fechaAtendida||t.estado==='Atendida')s+=3;
+    if(t._pending_fs_sync)s+=5;
+    if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
+    if(t.firmaWf&&t.firmaWf.fase)s+=2;
+    return s;
+  };
+  local.forEach(function(t){
+    if(t&&t.id)byId.set(String(t.id),t);
+  });
+  rem.forEach(function(t){
+    if(!t||!t.id)return;
+    const id=String(t.id);
+    const cur=byId.get(id);
+    if(!cur){byId.set(id,t);return;}
+    if(cur._pending_fs_sync&&score(cur)>=score(t))return;
+    if(score(t)>=score(cur))byId.set(id,t);
+  });
+  return Array.from(byId.values()).map(function(t){
+    if(typeof normalizeActLibre==='function'){
+      try{return normalizeActLibre(t);}catch(e){return t;}
+    }
+    return t;
+  });
+}
+
+/** Guarda libres del depto en departamentos/{deptoId} (permiso de responsable/encargado). */
+async function saveActividadesLibresDeptoFirestore(deptoId){
+  const db=window._db;
+  const d=String(deptoId||'').trim();
+  if(!db||!window._fsSetDoc||!d||d==='responsables')return false;
+  if(typeof DEPTOS_FIRESTORE!=='undefined'&&DEPTOS_FIRESTORE.indexOf(d)<0)return false;
+  try{
+    const list=actividadesLibresForDepto(d).map(function(t){
+      const copy=Object.assign({},t);
+      delete copy._pending_fs_sync;
+      delete copy._pending_fs_at;
+      return copy;
+    });
+    await window._fsSetDoc(window._fsDoc(db,'departamentos',d),{
+      actividadesLibres:list,
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    return true;
+  }catch(err){
+    console.error('saveActividadesLibresDeptoFirestore:',d,err);
+    if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Depto '+d+': '+(err&&err.message||'Error')};
+    return false;
+  }
+}
+
+/**
+ * Persiste actividadesLibres: primero por departamento (fiable para responsable→encargado),
+ * luego intenta sistema/global. OK si al menos un canal funciona.
+ */
+async function persistActividadesLibresFirestore(){
+  const db=window._db;
+  if(!db||!window._fsSetDoc)return false;
+  _localSaving=true;
+  window._lastFsSaveError=null;
+  const deptos=new Set();
+  (actividadesLibres||[]).forEach(function(t){
+    if(!t||t.eliminada)return;
+    const d=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre(t.depto):(t.depto||'guaviare');
+    if(d&&d!=='responsables')deptos.add(d);
+  });
+  if(!deptos.size)deptos.add(typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():'guaviare');
+  let deptoOk=false;
+  for(const d of deptos){
+    if(await saveActividadesLibresDeptoFirestore(d))deptoOk=true;
+  }
+  let globalOk=false;
+  try{
+    globalOk=!!(await saveGlobalFirestore());
+  }catch(err){
+    console.warn('persistActividadesLibresFirestore global:',err);
+  }
+  const ok=deptoOk||globalOk;
+  if(ok){
+    window._lastFsSaveError=null;
+    (actividadesLibres||[]).forEach(function(t){
+      if(t&&t._pending_fs_sync){delete t._pending_fs_sync;delete t._pending_fs_at;}
+    });
+    if(window._pendingActLibreEntrega)window._pendingActLibreEntrega=null;
+    try{persistExpLocal();}catch(e){}
+  }else if(!window._lastFsSaveError){
+    window._lastFsSaveError={code:'permission-denied',msg:'No se pudo guardar en departamento ni en global'};
+  }
+  setTimeout(function(){_localSaving=false;},1800);
+  return ok;
+}
+window.saveActividadesLibresDeptoFirestore=saveActividadesLibresDeptoFirestore;
+window.persistActividadesLibresFirestore=persistActividadesLibresFirestore;
+window.upsertActividadesLibresFromRemote=upsertActividadesLibresFromRemote;
+
 async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
@@ -870,9 +993,19 @@ function desuscribirCfgSync(){
 function onRemoteCfgSnapshot(deptoId,snap){
   if(_localSaving||!snap.exists())return;
   const data=snap.data();
-  if(!data||!data.cfg)return;
-  cfgByDepto[deptoId]=normalizeCfgObj(data.cfg);
-  if(deptoCfg===deptoId)setCfgPtr(deptoId);
+  let changed=false;
+  if(data&&data.cfg){
+    cfgByDepto[deptoId]=normalizeCfgObj(data.cfg);
+    if(deptoCfg===deptoId)setCfgPtr(deptoId);
+    changed=true;
+  }
+  if(data&&Array.isArray(data.actividadesLibres)){
+    actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
+      ?upsertActividadesLibresFromRemote(data.actividadesLibres)
+      :mergeActividadesLibresFromRemote(data.actividadesLibres);
+    changed=true;
+  }
+  if(!changed)return;
   try{_saveLSLocal();}catch(e){}
   refreshViewsAfterRemoteDataChange();
 }
@@ -945,13 +1078,14 @@ async function syncPendingActividadesLibresToFirestore(){
   if(!need)return false;
   local.forEach(function(t){
     if(!t||t.eliminada)return;
-    if(t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada){
+    if(t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||t._pending_fs_sync){
       t._pending_fs_sync=true;
       t._pending_fs_at=t._pending_fs_at||Date.now();
     }
   });
-  if(typeof saveGlobalFirestore!=='function')return false;
-  const ok=await saveGlobalFirestore();
+  const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:saveGlobalFirestore;
+  if(typeof persistFn!=='function')return false;
+  const ok=await persistFn();
   if(ok&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   return !!ok;
 }
