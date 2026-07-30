@@ -1050,19 +1050,35 @@ function getPqrsOficinaList(oficinaId,filtro){
   list=filterExpsPeriodo(list,'pqrs-ofi');
   return list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
 }
+/** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar». */
+function pqrsDirectorPorFirmarAccionesHtml(e){
+  const id=jsStr(e&&e._exp);
+  if(!id)return'';
+  if(e&&e._tramite_firma_task&&e._taskId){
+    const tid=jsStr(e._taskId);
+    return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver documento a firmar">👁</button> '+
+      '<button type="button" class="btn bsm act-ico" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'cargar\')" title="Cargar documento ya firmado">⬆</button> '+
+      '<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff;border-color:#15803d" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ya_firmado\')" title="Indicar que ya está firmado">✓</button> '+
+      '<button type="button" class="btn bsm act-ico bd2" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'devolver\')" title="Devolver documento">↩</button>';
+  }
+  return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ver\')" title="Ver documento a firmar">👁</button> '+
+    '<button type="button" class="btn bsm act-ico" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'cargar\')" title="Cargar documento ya firmado">⬆</button> '+
+    '<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff;border-color:#15803d" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ya_firmado\')" title="Indicar que ya está firmado">✓</button> '+
+    '<button type="button" class="btn bsm act-ico bd2" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'devolver\')" title="Devolver documento">↩</button>';
+}
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   // Trámite en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);
-    let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
     const t=typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
     const firmFis=t&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
-    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-    if(esDir&&!firmFis)
-      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')" title="Firmar">🖊</button> ';
+    if(esDir&&!firmFis)return pqrsDirectorPorFirmarAccionesHtml(e);
     if(esDir&&firmFis)
-      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+      return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver">👁</button> '+
+        '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+    let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
     if(firmFis&&!esDir)
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+id+'\',\''+tid+'\')" title="Pasar a por notificar">📬</button> ';
     return h;
@@ -1070,12 +1086,19 @@ function pqrsAccionesTablaHtml(e){
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
   const filtroOfi=String(window._pqrsOfiFiltro||'');
   const enPaletaPorFirmar=filtroOfi==='por_firmar'||fase===PQRS_WF.POR_FIRMAR;
+  // Director en «Por firmar»: solo Ver / Cargar firmado / Ya firmado / Devolver
+  if(fase===PQRS_WF.POR_FIRMAR&&esDir){
+    const wfDir=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    if(!(wfDir.firma_fisica&&wfDir.firma_fisica.en))return pqrsDirectorPorFirmarAccionesHtml(e);
+    return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ver\')" title="Ver">👁</button> '+
+      '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+  }
   let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">Ver</button> ';
   if(puedeTrasladarPqrsInicial(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openTrasladoPqrsInicialModal(\''+id+'\')">Trasladar</button> ';
   if(puedeMarcarPqrsPrioritariaDs(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();togglePqrsPrioritariaDs(\''+id+'\')">'+(e._pqrs_prioritaria?'Quitar ⚡':'⚡ Prioritaria')+'</button> ';
   if(puedeTrasladarPqrs(e))h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTrasladoPqrsInterOficinaModal(\''+id+'\')">Trasladar</button> ';
   // En «Por firmar» del Director no aplica Asignar
-  if(puedeAsignarPqrsOficina(e)&&!(enPaletaPorFirmar&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))
+  if(puedeAsignarPqrsOficina(e)&&!(enPaletaPorFirmar&&esDir))
     h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openAsignarPqrsOficinaModal(\''+id+'\')">Asignar</button> ';
   // NCA encargado revisión de responsable
   if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
@@ -1093,18 +1116,13 @@ function pqrsAccionesTablaHtml(e){
     }
     h+='<button type="button" class="btn bsm act-ico" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')" title="Pasar a firma">🖊</button> ';
   }
-  // Por firmar — Director firma; VITAL/NCA/oficina asignan notif. tras físico
+  // Por firmar — VITAL/NCA/oficina (no Director: ya cubierto arriba)
   if(fase===PQRS_WF.POR_FIRMAR){
     const wfF=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const firmFis=!!(wfF.firma_fisica&&wfF.firma_fisica.en);
-    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-    if(esDir&&!firmFis)
-      h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Firmar">🖊</button> ';
-    if(esDir&&firmFis)
-      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
     if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+id+'\')" title="Pasar a por notificar">📬</button> ';
-    else if(!esDir&&!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
+    else if(!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
       h+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ya firmado (sin PDF) / cargar / notificar">✓</button> ';
   }
   // Firmados (Director): solo icono informativo
@@ -1232,9 +1250,13 @@ function renderPqrsOficinaInbox(){
       :(typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'');
     const tipoLbl=e._tramite_firma_task?'Trámite':(e._tipo_solicitud||'PQRSD');
     const clickFn=e._tramite_firma_task
-      ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
-      :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')');
-    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="'+clickFn+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(e._tramite_firma_task?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(e._tramite_firma_task?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+      ?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()
+        ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\',\'ver\')')
+        :('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')'))
+      :(filtro==='por_firmar'&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()
+        ?('openPqrsDirectorFirmarModal(\''+escAttr(e._exp)+'\',\'ver\')')
+        :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')'));
+    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="'+clickFn+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(e._tramite_firma_task?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(e._tramite_firma_task?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
   renderPqrsOficinaDetallePanel();
 }

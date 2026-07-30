@@ -199,7 +199,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260730b';
+const SST_BUILD_ID = '20260730c';
 
 // Carpeta PQRSD institucional — matriz XLSX + Radicacion/año/mes/PQRSD-xxx (cdaguaviare1)
 // https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
