@@ -153,19 +153,18 @@ function renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t){
   if(taskEnFlujoFirmaTramite(t)){
     return renderTramiteFirmaGestionHtml(expId,taskId,t);
   }
+  // Libres: la decisión (imprimir / firma / cerrar) va en renderTaskVerifyBarHtml
+  if(t.sinExpediente)return'';
   const req=taskRequiereFirmaEffective(t,expId);
   const wf=getTaskFirmaWf(t);
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
     selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:e._depto});
   }
-  const hintLibre=t.sinExpediente
-    ?' — al aprobar pasa a Por imprimir → Por firmar → Por notificar (igual que trámite/PQRSD). Si no, se cierra la actividad.'
-    :' — al aprobar pasa a Por imprimir → Por firmar → Por notificar (como PQRSD). Si no, se cierra y se notifica al ciudadano.';
   return '<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
       '<input type="checkbox" id="task-rev-requiere-firma"'+(req?' checked':'')+' style="width:15px;height:15px;accent-color:var(--bl)"> '+
-      '<span><strong>Requiere firma del Director</strong>'+hintLibre+'</span>'+
+      '<span><strong>Requiere firma del Director</strong> — al aprobar pasa a Por imprimir → Por firmar → Por notificar (como PQRSD). Si no, se cierra y se notifica al ciudadano.</span>'+
     '</label>'+
     (selNotif?'<div style="margin-top:8px">'+selNotif+'</div>':'')+
     '</div>';
@@ -203,7 +202,8 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+btns+'</div></div>';
 }
 
-async function tramiteEnviarAFirmaDesdeRevision(expId,taskId){
+async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
+  opts=opts||{};
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
   const e=tramiteFirmaExpCtx(t,expId);
@@ -214,10 +214,16 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId){
   if(sel)notifPor=String(sel.value||'').trim();
   if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
     notifPor=pqrsResolverNotificadorCorreo((e&&e._depto)||t.depto||'guaviare','');
-  // Como PQRSD: NCA/encargado/atajo van directo a «Por firmar» (bandeja del Director)
-  const atajoDirecto=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
-    ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
-    ||(typeof esCargoVital==='function'&&esCargoVital());
+  // opts.modo: 'imprimir' | 'firma' | auto (como PQRSD)
+  const modo=String(opts.modo||opts.fase||'').trim().toLowerCase();
+  let atajoDirecto;
+  if(modo==='imprimir'||modo==='para_firma'||modo==='por_imprimir')atajoDirecto=false;
+  else if(modo==='firma'||modo==='por_firmar'||modo==='atajo')atajoDirecto=true;
+  else{
+    atajoDirecto=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+      ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+      ||(typeof esCargoVital==='function'&&esCargoVital());
+  }
   const faseDest=atajoDirecto
     ?(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar')
     :(typeof PQRS_WF!=='undefined'?PQRS_WF.PARA_FIRMA:'para_firma');
@@ -472,6 +478,8 @@ function confirmarCierreTaskTramiteAware(expId,taskId){
   const e=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return false;
   const chk=document.getElementById('task-rev-requiere-firma');
+  // Sin expediente: «Confirmar y cerrar» no fuerza firma (use botones Para imprimir / Para firma)
+  if(t&&t.sinExpediente&&!chk)return false;
   const quiereFirma=chk?!!chk.checked:taskRequiereFirmaEffective(t,expId);
   if(quiereFirma){
     tramiteEnviarAFirmaDesdeRevision(expId,taskId);
@@ -554,3 +562,11 @@ window.submitTramiteNotificar=submitTramiteNotificar;
 window.finalizarTramiteTrasPublicar=finalizarTramiteTrasPublicar;
 window.notificarCiudadanoTrasVerificarTramite=notificarCiudadanoTrasVerificarTramite;
 window.confirmarCierreTaskTramiteAware=confirmarCierreTaskTramiteAware;
+function tramiteLibreParaImprimir(expId,taskId){
+  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:'imprimir'});
+}
+function tramiteLibreParaFirma(expId,taskId){
+  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:'firma'});
+}
+window.tramiteLibreParaImprimir=tramiteLibreParaImprimir;
+window.tramiteLibreParaFirma=tramiteLibreParaFirma;
