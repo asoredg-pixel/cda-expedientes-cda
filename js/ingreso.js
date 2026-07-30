@@ -483,6 +483,15 @@ function ingresarComoRol(rolId,respNombre){
   renderChatBadge();
   installSessionPageLifecycle();
   initAppRealtimeSync();
+  // Releer expedientes YA autenticado (el bootstrap previo a login suele llegar vacío
+  // por rules de Firestore → bandeja Secretaría / Consulta / consecutivo en cero).
+  if(typeof reloadExpedientesTrasLogin==='function'){
+    reloadExpedientesTrasLogin().then(function(){
+      if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
+        try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
+      }
+    }).catch(function(e){console.warn('reloadExpedientesTrasLogin:',e);});
+  }
   if(typeof syncPendingExpedientesToFirestore==='function'){
     syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
   }

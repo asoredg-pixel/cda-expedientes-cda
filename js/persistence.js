@@ -276,9 +276,21 @@ async function loadLS(){
     expSnaps.forEach(deptoExps=>{exps=exps.concat(deptoExps);});
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
     mergePendingExpBackup();
-    clearLegacyExpsLocalStorage();
+    // loadLS() a menudo corre ANTES del login Google. Sin auth, listar
+    // departamentos/*/expedientes está denegado → llega vacío. No borrar el
+    // caché local en ese caso (si no, Secretaría/Consulta quedan en cero hasta
+    // que el listener realtime recupere, y a veces no lo hace a tiempo).
+    const authOk=!!(window._firebaseAuth&&window._firebaseAuth.currentUser);
+    if(exps&&exps.length){
+      clearLegacyExpsLocalStorage();
+    }else if(!authOk){
+      try{
+        const cached=lsLoadJson('sst_e');
+        if(Array.isArray(cached)&&cached.length)exps=cached;
+      }catch(e){}
+    }
     postLoadInit();
-    updateSyncIndicator('synced');
+    updateSyncIndicator((exps&&exps.length)?'synced':(authOk?'synced':'offline'));
     if(document.body.classList.contains('sesion-activa')&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
     if(document.body.classList.contains('sesion-activa'))syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
   }catch(err){
@@ -287,6 +299,51 @@ async function loadLS(){
     updateSyncIndicator('error');
   }
 }
+
+/**
+ * Tras login autenticado: vuelve a leer expedientes (ahora con permisos) y
+ * fusiona con la caché local. Evita bandeja/consulta/consecutivo en cero.
+ */
+async function reloadExpedientesTrasLogin(){
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsCollection)return false;
+  const authReady=typeof ensureFirestoreAuthReady==='function'
+    ?await ensureFirestoreAuthReady()
+    :{ok:!!(window._firebaseAuth&&window._firebaseAuth.currentUser)};
+  if(!authReady||!authReady.ok)return false;
+  try{
+    const snaps=await Promise.all(
+      (typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare']).map(function(depto){
+        return loadExpedientesDepto(depto);
+      })
+    );
+    const remote=[];
+    snaps.forEach(function(arr){if(Array.isArray(arr))arr.forEach(function(e){remote.push(e);});});
+    const byId=new Map();
+    (Array.isArray(exps)?exps:[]).forEach(function(e){
+      const id=String(e&&e._exp||'').trim();
+      if(id)byId.set(id,e);
+    });
+    remote.forEach(function(e){
+      const id=String(e&&e._exp||'').trim();
+      if(!id)return;
+      const local=byId.get(id);
+      if(local&&local._pending_fs_sync)return;
+      byId.set(id,e);
+    });
+    exps=Array.from(byId.values());
+    mergePendingExpBackup();
+    clearLegacyExpsLocalStorage();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    updateSyncIndicator('synced');
+    console.log('reloadExpedientesTrasLogin: '+exps.length+' expediente(s)');
+    return true;
+  }catch(err){
+    console.warn('reloadExpedientesTrasLogin:',err);
+    return false;
+  }
+}
+window.reloadExpedientesTrasLogin=reloadExpedientesTrasLogin;
 
 // ================================================================
 // FIRESTORE — expedientes en subcolección (Fase 1-2)

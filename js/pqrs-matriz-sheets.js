@@ -339,7 +339,11 @@ function pqrsMatrizMaxConsecutivoMes(aa, mm) {
   const maxRef = { v: 0 };
   if (typeof exps !== 'undefined' && Array.isArray(exps)) {
     exps.forEach(function(e) {
-      if (!e || (!e._es_pqrs && !e._radicado_secretaria)) return;
+      if (!e) return;
+      const esPqrs = e._es_pqrs || e._radicado_secretaria
+        || (typeof esTramitePqrs === 'function' && esTramitePqrs(e._tramite))
+        || (typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e));
+      if (!esPqrs) return;
       pqrsMatrizRegistrarRadicadoEnMax(e._exp, aa, mm, maxRef);
     });
   }

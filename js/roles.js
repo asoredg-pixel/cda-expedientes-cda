@@ -777,7 +777,11 @@ function getEncargadoOficina(oficinaId){
   return '';
 }
 function esPqrsSecretaria(e){
-  return !!(e&&esTramitePqrs(e._tramite));
+  if(!e)return false;
+  if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))return true;
+  // Respaldo: registros radicados por Secretaría aunque _tramite venga incompleto
+  if(e._es_pqrs||e._radicado_secretaria)return true;
+  return false;
 }
 function pqrsPendienteTraslado(e){
   return !!(e&&e._pqrs_pendiente_traslado);
