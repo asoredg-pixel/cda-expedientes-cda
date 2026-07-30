@@ -224,6 +224,46 @@ function _loadLSLocal(){
   initCfgByDepto();
   postLoadInit();
 }
+/** Generación de loadLS: ignora respuestas obsoletas (carrera bootstrap vs login). */
+let _loadLSGen=0;
+
+/** Departamentos cuyas expedientes puede listar el usuario autenticado. */
+function deptosExpedientesAccesibles(){
+  const all=(typeof DEPTOS_FIRESTORE!=='undefined'&&DEPTOS_FIRESTORE.length)?DEPTOS_FIRESTORE.slice():['guaviare'];
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if(!rol){
+    // Sin usuario aún: intentar todos (fallará por rules si no hay auth)
+    return all;
+  }
+  if(rol==='admin'||rol==='jurisdiccional')return all;
+  if(rol==='secretaria'||rol==='oap_deguv'||rol==='rn_deguv'||rol==='admin_deguv'||rol==='ds_deguv')return['guaviare'];
+  if(typeof DEPTOS!=='undefined'&&DEPTOS.some(function(d){return d.id===rol;}))return[rol];
+  if(rol==='responsables'||rol==='contratista'){
+    const dr=String((window._usuarioActual&&window._usuarioActual.deptoResponsable)||'').trim();
+    if(dr&&dr!=='responsables'&&all.indexOf(dr)>=0)return[dr];
+    return['guaviare'];
+  }
+  return['guaviare'];
+}
+window.deptosExpedientesAccesibles=deptosExpedientesAccesibles;
+
+function mergeRemoteExpsIntoCache(remote){
+  const byId=new Map();
+  (Array.isArray(exps)?exps:[]).forEach(function(e){
+    const id=String(e&&e._exp||'').trim();
+    if(id)byId.set(id,e);
+  });
+  (Array.isArray(remote)?remote:[]).forEach(function(e){
+    const id=String(e&&e._exp||'').trim();
+    if(!id)return;
+    const local=byId.get(id);
+    if(local&&local._pending_fs_sync)return;
+    byId.set(id,e);
+  });
+  exps=Array.from(byId.values());
+  return exps.length;
+}
+
 async function loadLS(){
   const db=window._db;
   if(!db||!window._fsGetDoc){
@@ -231,9 +271,12 @@ async function loadLS(){
     updateSyncIndicator('offline');
     return;
   }
+  const gen=++_loadLSGen;
+  const prevExps=(Array.isArray(exps)&&exps.length)?exps.slice():[];
   updateSyncIndicator('syncing');
   try{
     const globalSnap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+    if(gen!==_loadLSGen)return;
     if(globalSnap.exists()){
       const g=globalSnap.data();
       if(Array.isArray(g.personas))personas=g.personas;
@@ -252,14 +295,28 @@ async function loadLS(){
       if(typeof pqrsMatrizApplySheetIdFromGlobal==='function')pqrsMatrizApplySheetIdFromGlobal(g);
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
     }
+    const deptosCfg=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare'];
+    const deptosExp=deptosExpedientesAccesibles();
     const [deptoResults,expSnaps]=await Promise.all([
-      Promise.allSettled(DEPTOS_FIRESTORE.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
-      Promise.all(DEPTOS_FIRESTORE.map(depto=>loadExpedientesDepto(depto)))
+      Promise.allSettled(deptosCfg.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
+      Promise.all(deptosExp.map(depto=>loadExpedientesDepto(depto)))
     ]);
-    exps=[];
+    if(gen!==_loadLSGen)return;
+    const remote=[];
+    expSnaps.forEach(function(deptoExps){if(Array.isArray(deptoExps))deptoExps.forEach(function(e){remote.push(e);});});
+    const authOk=!!(window._firebaseAuth&&window._firebaseAuth.currentUser);
+    const sesionOn=document.body.classList.contains('sesion-activa');
+    // Carrera crítica: un loadLS anónimo/tardío NO debe vaciar exps ya hidratados
+    // tras login (el listener realtime no reenvía 'added' → Secretaría queda en cero).
+    if(!remote.length&&prevExps.length&&(sesionOn||authOk)){
+      console.warn('loadLS: remoto vacío con sesión/datos previos — no se borran',prevExps.length,'expediente(s)');
+      exps=prevExps;
+    }else{
+      exps=remote;
+    }
     cfgByDepto={};
     deptoResults.forEach((result,i)=>{
-      const depto=DEPTOS_FIRESTORE[i];
+      const depto=deptosCfg[i];
       if(result.status==='fulfilled'&&result.value.exists()){
         const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
@@ -273,14 +330,8 @@ async function loadLS(){
         cfgByDepto[depto]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));
       }
     });
-    expSnaps.forEach(deptoExps=>{exps=exps.concat(deptoExps);});
     DEPTOS.forEach(d=>{if(!cfgByDepto[d.id])cfgByDepto[d.id]=normalizeCfgObj(JSON.parse(JSON.stringify(DEF)));});
     mergePendingExpBackup();
-    // loadLS() a menudo corre ANTES del login Google. Sin auth, listar
-    // departamentos/*/expedientes está denegado → llega vacío. No borrar el
-    // caché local en ese caso (si no, Secretaría/Consulta quedan en cero hasta
-    // que el listener realtime recupere, y a veces no lo hace a tiempo).
-    const authOk=!!(window._firebaseAuth&&window._firebaseAuth.currentUser);
     if(exps&&exps.length){
       clearLegacyExpsLocalStorage();
     }else if(!authOk){
@@ -289,13 +340,20 @@ async function loadLS(){
         if(Array.isArray(cached)&&cached.length)exps=cached;
       }catch(e){}
     }
-    postLoadInit();
+    // En sesión activa no resetear deptoActivo/rol desde localStorage (pisa Secretaría).
+    if(!sesionOn)postLoadInit();
+    else{
+      try{sanitizeAllStoredData();}catch(e){}
+      try{limpiarLocksExpirados();}catch(e){}
+    }
     updateSyncIndicator((exps&&exps.length)?'synced':(authOk?'synced':'offline'));
-    if(document.body.classList.contains('sesion-activa')&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
-    if(document.body.classList.contains('sesion-activa'))syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
+    if(sesionOn&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+    if(sesionOn)syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
+    if(sesionOn&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   }catch(err){
+    if(gen!==_loadLSGen)return;
     console.error('Error cargando Firestore:',err);
-    _loadLSLocal();
+    if(!(Array.isArray(exps)&&exps.length))_loadLSLocal();
     updateSyncIndicator('error');
   }
 }
@@ -303,45 +361,41 @@ async function loadLS(){
 /**
  * Tras login autenticado: vuelve a leer expedientes (ahora con permisos) y
  * fusiona con la caché local. Evita bandeja/consulta/consecutivo en cero.
+ * Reintentos: el token/rules a veces no están listos en el primer intento
+ * (cuenta Secretaría vs admin que ya traía datos en memoria).
  */
 async function reloadExpedientesTrasLogin(){
   const db=window._db;
   if(!db||!window._fsGetDocs||!window._fsCollection)return false;
+  _loadLSGen++; // invalida loadLS en vuelo del bootstrap
   const authReady=typeof ensureFirestoreAuthReady==='function'
     ?await ensureFirestoreAuthReady()
     :{ok:!!(window._firebaseAuth&&window._firebaseAuth.currentUser)};
   if(!authReady||!authReady.ok)return false;
-  try{
-    const snaps=await Promise.all(
-      (typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare']).map(function(depto){
-        return loadExpedientesDepto(depto);
-      })
-    );
-    const remote=[];
-    snaps.forEach(function(arr){if(Array.isArray(arr))arr.forEach(function(e){remote.push(e);});});
-    const byId=new Map();
-    (Array.isArray(exps)?exps:[]).forEach(function(e){
-      const id=String(e&&e._exp||'').trim();
-      if(id)byId.set(id,e);
-    });
-    remote.forEach(function(e){
-      const id=String(e&&e._exp||'').trim();
-      if(!id)return;
-      const local=byId.get(id);
-      if(local&&local._pending_fs_sync)return;
-      byId.set(id,e);
-    });
-    exps=Array.from(byId.values());
-    mergePendingExpBackup();
-    clearLegacyExpsLocalStorage();
-    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-    updateSyncIndicator('synced');
-    console.log('reloadExpedientesTrasLogin: '+exps.length+' expediente(s)');
-    return true;
-  }catch(err){
-    console.warn('reloadExpedientesTrasLogin:',err);
-    return false;
+  const deptos=deptosExpedientesAccesibles();
+  let lastCount=0;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      if(attempt>0)await new Promise(function(r){setTimeout(r,400*attempt);});
+      const snaps=await Promise.all(deptos.map(function(depto){return loadExpedientesDepto(depto);}));
+      const remote=[];
+      snaps.forEach(function(arr){if(Array.isArray(arr))arr.forEach(function(e){remote.push(e);});});
+      lastCount=mergeRemoteExpsIntoCache(remote);
+      mergePendingExpBackup();
+      if(lastCount){
+        clearLegacyExpsLocalStorage();
+        if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+        updateSyncIndicator('synced');
+        console.log('reloadExpedientesTrasLogin: '+lastCount+' expediente(s) (intento '+(attempt+1)+', deptos='+deptos.join(',')+')');
+        return true;
+      }
+      console.warn('reloadExpedientesTrasLogin: 0 docs (intento '+(attempt+1)+')',deptos);
+    }catch(err){
+      console.warn('reloadExpedientesTrasLogin intento '+(attempt+1)+':',err);
+    }
   }
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  return lastCount>0;
 }
 window.reloadExpedientesTrasLogin=reloadExpedientesTrasLogin;
 
@@ -1232,17 +1286,41 @@ function applyExpedienteFirestoreChanges(changes){
   });
   return changed;
 }
+function hydrateExpsFromSnapshotDocs(snap){
+  if(!snap||!snap.docs||!snap.docs.length)return false;
+  let changed=false;
+  snap.docs.forEach(function(doc){
+    const exp=mergeExpFromFirestoreSnapshot(doc.data(),doc.id);
+    if(!exp)return;
+    const idx=(exps||[]).findIndex(function(e){return String(e._exp||'').trim()===exp._exp;});
+    if(idx>=0){
+      const local=exps[idx];
+      if(local&&local._pending_fs_sync)return;
+      exps[idx]=exp;
+    }else{
+      exps.push(exp);
+    }
+    changed=true;
+  });
+  return changed;
+}
 function initRealtimeSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   stopRealtimeExpSync();
   const unsubs=[];
-  DEPTOS_FIRESTORE.forEach(function(depto){
+  const deptos=deptosExpedientesAccesibles();
+  deptos.forEach(function(depto){
     const unsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
       // No bloquear por _localSaving: ese flag es de cfg/global y retrasaba
       // la aparición de PQRSD recién radicadas en Actividades/Consulta (~1–3 min).
-      const changes=snap.docChanges();
-      if(!applyExpedienteFirestoreChanges(changes))return;
+      let changed=applyExpedienteFirestoreChanges(snap.docChanges());
+      // Si la caché quedó vacía (p. ej. loadLS tardío la borró), rehidratar
+      // desde snap.docs — docChanges() no vuelve a emitir 'added' ya aplicados.
+      if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
+        if(hydrateExpsFromSnapshotDocs(snap))changed=true;
+      }
+      if(!changed)return;
       refreshViewsAfterRemoteDataChange();
     },function(err){console.warn('Error escuchando expedientes',depto,err);});
     unsubs.push(unsub);

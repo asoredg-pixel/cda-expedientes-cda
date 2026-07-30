@@ -483,12 +483,22 @@ function ingresarComoRol(rolId,respNombre){
   renderChatBadge();
   installSessionPageLifecycle();
   initAppRealtimeSync();
-  // Releer expedientes YA autenticado (el bootstrap previo a login suele llegar vacío
-  // por rules de Firestore → bandeja Secretaría / Consulta / consecutivo en cero).
+  // Releer expedientes YA autenticado. Admin→Secretaría ya trae exps en memoria;
+  // la cuenta Secretaría real depende de esta recarga (+ reintentos).
   if(typeof reloadExpedientesTrasLogin==='function'){
-    reloadExpedientesTrasLogin().then(function(){
+    reloadExpedientesTrasLogin().then(function(ok){
       if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
         try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
+      }
+      // Segundo pase por si el primer getDocs corrió con token aún frío
+      if(!ok||!(typeof exps!=='undefined'&&exps&&exps.length)){
+        setTimeout(function(){
+          reloadExpedientesTrasLogin().then(function(){
+            if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
+              try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
+            }
+          }).catch(function(){});
+        },1200);
       }
     }).catch(function(e){console.warn('reloadExpedientesTrasLogin:',e);});
   }
