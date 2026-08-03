@@ -14533,12 +14533,32 @@ function esSecDetalleProceso(sec){
 }
 function esSecInfoTecnica(sec){return String(sec||'').trim().toLowerCase()==='información técnica'||String(sec||'').trim().toLowerCase()==='informacion tecnica';}
 function getInfoTecCatalog(deptoOrExp){return cfgFor(deptoOrExp).infoTecnica||[];}
+/** true si el campo técnico aplica al trámite (vacío / «all» = todos). */
+function infoTecAplicaATramite(campo,tramId){
+  if(!campo)return false;
+  const scope=String(campo.tramitesScope||'all').toLowerCase();
+  if(scope!=='selected')return true;
+  const ids=Array.isArray(campo.tramitesIds)?campo.tramitesIds.map(String):[];
+  if(!ids.length)return true;
+  const tid=String(tramId||'').trim();
+  if(!tid)return true;
+  return ids.indexOf(tid)>=0;
+}
+function getInfoTecCatalogForTramite(deptoOrExp,tramId){
+  return getInfoTecCatalog(deptoOrExp).filter(function(c){return infoTecAplicaATramite(c,tramId);});
+}
+function resolveExpTramiteId(eOrTramId){
+  if(!eOrTramId)return'';
+  if(typeof eOrTramId==='object')return String(eOrTramId._tramite||'').trim();
+  return String(eOrTramId||'').trim();
+}
 function getInfoTecDef(campoId,deptoOrExp){return getInfoTecCatalog(deptoOrExp).find(c=>c.id===campoId);}
 function infoTecnicaExpData(v){try{return v?JSON.parse(v):[];}catch(e){return[];}}
 function migrarInfoTecExpediente(e){
   if(e._info_tecnica_items)return;
   const items=[];const seen=new Set();
-  getInfoTecCatalog(e).forEach(c=>{const v=e['g_'+c.id];if(v!==undefined&&v!==''&&v!==false&&!seen.has(c.id)){seen.add(c.id);items.push({campoId:c.id,valor:v});}});
+  const tramId=resolveExpTramiteId(e);
+  getInfoTecCatalogForTramite(e,tramId).forEach(c=>{const v=e['g_'+c.id];if(v!==undefined&&v!==''&&v!==false&&!seen.has(c.id)){seen.add(c.id);items.push({campoId:c.id,valor:v});}});
   Object.keys(e).forEach(k=>{
     if(!k.startsWith('g_'))return;
     const id=k.slice(2);
@@ -14571,11 +14591,14 @@ function infoTecRowSummaryText(def,valor){
   const vr=infoTecValorResumen(valor,def);
   return tit+(vr?' · '+vr:'');
 }
-function infoTecnicaExpRowHtml(item,i,depto){
-  const catalog=getInfoTecCatalog(depto);
+function infoTecnicaExpRowHtml(item,i,depto,tramId){
+  const catalog=getInfoTecCatalogForTramite(depto,tramId);
   const sel=item.campoId||'';
   const def=getInfoTecDef(sel,depto);
-  const opts='<option value="">— Seleccione campo —</option>'+catalog.map(c=>'<option value="'+c.id+'"'+(sel===c.id?' selected':'')+'>'+c.label+'</option>').join('');
+  // Si el valor ya existe pero el campo ya no aplica al trámite, mantenerlo visible en el select
+  let optsCatalog=catalog.slice();
+  if(sel&&!optsCatalog.some(function(c){return c.id===sel;})&&def)optsCatalog=optsCatalog.concat([def]);
+  const opts='<option value="">— Seleccione campo —</option>'+optsCatalog.map(c=>'<option value="'+c.id+'"'+(sel===c.id?' selected':'')+'>'+c.label+'</option>').join('');
   return '<details class="item-fold it-exp-row">'+
     foldSummary(infoTecRowSummaryText(def,item.valor))+
     '<div class="item-fold-body"><div class="fg">'+
@@ -14585,11 +14608,13 @@ function infoTecnicaExpRowHtml(item,i,depto){
 }
 function infoTecnicaExpHtml(ev){
   const depto=getDeptoOperativo();
+  const tramId=resolveExpTramiteId(ev)||(document.getElementById('fld__tramite')?document.getElementById('fld__tramite').value:'')||'';
   const items=infoTecnicaExpData(ev._info_tecnica_items);
+  const nCat=getInfoTecCatalogForTramite(depto,tramId).length;
   return '<details class="form-section"><summary class="form-section-hdr">Información técnica</summary><div class="form-section-body">'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Seleccione campos definidos en Configuración → Información técnica y registre su valor para este expediente.</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Campos de Configuración → Información técnica aplicables a este trámite'+(nCat?' ('+nCat+')':'')+'. Si un campo no aparece, revise su alcance en configuración.</div>'+
     '<input type="hidden" id="fld__info_tecnica_items" value=\''+escAttr(ev._info_tecnica_items||'[]')+'\'>'+
-    '<div id="info-tecnica-exp-list">'+items.map((it,i)=>infoTecnicaExpRowHtml(it,i,depto)).join('')+'</div>'+
+    '<div id="info-tecnica-exp-list">'+items.map((it,i)=>infoTecnicaExpRowHtml(it,i,depto,tramId)).join('')+'</div>'+
     '<button type="button" class="btn bsm" onclick="addInfoTecnicaExp()">+ Añadir información técnica</button>'+
     btnGuardarSeccion()+'</div></details>';
 }
@@ -14637,11 +14662,15 @@ function onInfoTecCampoChange(idx){
   const sum=row.querySelector('summary');if(sum)sum.textContent=infoTecRowSummaryText(def,'');
 }
 function addInfoTecnicaExp(){
-  const catalog=getInfoTecCatalog(getDeptoOperativo());
-  if(!catalog.length){notif('Cree campos en Configuración → Información técnica','err');return;}
+  const depto=getDeptoOperativo();
+  const tramId=resolveExpTramiteId(typeof editId!=='undefined'&&editId?getExpById(editId):null)
+    ||(document.getElementById('fld__tramite')?document.getElementById('fld__tramite').value:'')
+    ||(window._conPanelActive?resolveExpTramiteId(getExpById(window._conPanelActive)):'');
+  const catalog=getInfoTecCatalogForTramite(depto,tramId);
+  if(!catalog.length){notif('No hay campos técnicos para este trámite. Revise Configuración → Información técnica.','err');return;}
   const c=document.getElementById('info-tecnica-exp-list');
   const item={campoId:'',valor:''};
-  c.insertAdjacentHTML('beforeend',infoTecnicaExpRowHtml(item,c.children.length,getDeptoOperativo()));
+  c.insertAdjacentHTML('beforeend',infoTecnicaExpRowHtml(item,c.children.length,depto,tramId));
   syncInfoTecnicaExp();
 }
 function delInfoTecnicaExp(btn){
@@ -14662,10 +14691,14 @@ function renderInfoTecExpView(e){
 }
 function validarInfoTecnicaExp(deptoOrExp){
   syncInfoTecnicaExp();
+  const tramId=resolveExpTramiteId(deptoOrExp)
+    ||(document.getElementById('fld__tramite')?document.getElementById('fld__tramite').value:'');
   const items=infoTecnicaExpData(gv('fld__info_tecnica_items'));
-  for(const it of items){
-    const def=getInfoTecDef(it.campoId,deptoOrExp);
-    if(def&&def.requerido&&!String(it.valor||'').trim()){notif('Campo requerido: '+def.label,'err');return false;}
+  const reqs=getInfoTecCatalogForTramite(deptoOrExp,tramId).filter(function(c){return c&&c.requerido;});
+  for(let r=0;r<reqs.length;r++){
+    const def=reqs[r];
+    const it=items.find(function(x){return x&&x.campoId===def.id;});
+    if(!it||!String(it.valor==null?'':it.valor).trim()){notif('Campo requerido: '+def.label,'err');return false;}
   }
   return true;
 }

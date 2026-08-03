@@ -587,6 +587,20 @@ function renderNtEtapasPred(){
   box.innerHTML=etas.length?etas.map((e,i)=>'<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);padding:6px 8px"><input type="checkbox" class="nt-ep" value="'+e+'" data-ord="'+i+'"> '+e+'</label>').join(''):'<div style="font-size:12px;color:var(--tx3)">Sin etapas predeterminadas configuradas.</div>';
 }
 function infoTecCfgItemBody(c,i){
+  const scope=String(c.tramitesScope||'all')==='selected'?'selected':'all';
+  const ids=Array.isArray(c.tramitesIds)?c.tramitesIds.map(String):[];
+  const trams=(cfg.tramites||[]).filter(function(t){
+    return t&&t.id&&!(typeof esTramitePqrs==='function'&&esTramitePqrs(t.id));
+  });
+  const tramChecks=trams.length
+    ?trams.map(function(t){
+      const on=ids.indexOf(String(t.id))>=0;
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:4px 6px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+        '<input type="checkbox" '+(on?'checked':'')+' '+(scope==='all'?'disabled':'')+' onchange="toggleInfoTecTramite('+i+',\''+String(t.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\',this.checked)"> '+
+        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+(t.color||'#888')+';flex-shrink:0"></span> '+
+        escAttr(t.nombre||t.id)+'</label>';
+    }).join('')
+    :'<div style="font-size:12px;color:var(--tx3)">No hay trámites configurados en este departamento.</div>';
   return '<div class="fg" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.6rem">'+
     '<div class="fld"><label>Nombre</label><input type="text" value="'+(c.label||'')+'" onchange="editInfoTec('+i+',\'label\',this.value)"></div>'+
     '<div class="fld"><label>Tipo</label><select onchange="editInfoTec('+i+',\'tipo\',this.value);renderInfoTecCfg()">'+TIPO_KEYS.map(k=>'<option value="'+k+'"'+(c.tipo===k?' selected':'')+'>'+TIPOS[k].label+'</option>').join('')+'</select></div>'+
@@ -595,19 +609,72 @@ function infoTecCfgItemBody(c,i){
     '</div>'+
     (c.tipo==='seleccion'?'<div class="fld" style="margin-top:.4rem"><label>Opciones</label><input type="text" value="'+(c.opciones||'')+'" onchange="editInfoTec('+i+',\'opciones\',this.value)" placeholder="op1,op2,op3"></div>':'')+
     (c.tipo==='lista'?'<div class="fld" style="margin-top:.4rem"><label>Fuente lista</label><select onchange="editInfoTec('+i+',\'listaFuente\',this.value)">'+LISTA_FUENTES.map(f=>'<option value="'+f+'"'+(c.listaFuente===f?' selected':'')+'>'+f+'</option>').join('')+'</select></div>':'')+
+    '<div style="margin-top:.65rem;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+      '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:4px">Aplica a trámites</div>'+
+      '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Algunos datos técnicos solo corresponden a ciertos trámites. Elija todos o una selección.</div>'+
+      '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:8px">'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="radio" name="it-tram-scope-'+i+'" '+(scope==='all'?'checked':'')+' onchange="setInfoTecTramitesScope('+i+',\'all\')"> Todos los trámites</label>'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="radio" name="it-tram-scope-'+i+'" '+(scope==='selected'?'checked':'')+' onchange="setInfoTecTramitesScope('+i+',\'selected\')"> Solo trámites seleccionados</label>'+
+      '</div>'+
+      (scope==='selected'
+        ?('<div style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto">'+tramChecks+'</div>'+
+          (ids.length?'':'<div style="font-size:11px;color:var(--or);margin-top:6px">Seleccione al menos un trámite; mientras tanto el campo se trata como «todos» al capturar.</div>'))
+        :'<div style="font-size:11px;color:var(--tx3)">Disponible en cualquier trámite del departamento (excepto PQRSD).</div>')+
+    '</div>'+
     '<div class="ar" style="margin-top:.4rem"><button class="btn bsm bd2" onclick="delInfoTec('+i+')">Eliminar</button></div>';
+}
+function infoTecCfgScopeLabel(c){
+  const scope=String(c.tramitesScope||'all')==='selected'?'selected':'all';
+  if(scope!=='selected')return'Todos los trámites';
+  const ids=Array.isArray(c.tramitesIds)?c.tramitesIds.map(String):[];
+  if(!ids.length)return'Selección (ninguno aún)';
+  const names=(cfg.tramites||[]).filter(function(t){return t&&ids.indexOf(String(t.id))>=0;}).map(function(t){return t.nombre||t.id;});
+  if(names.length<=2)return names.join(', ')||(ids.length+' trámite(s)');
+  return names.slice(0,2).join(', ')+' +'+(names.length-2);
 }
 function renderInfoTecCfg(){
   if(!cfg.infoTecnica)cfg.infoTecnica=[];
   const ro=cfgEsSoloLectura();
-  const items=cfg.infoTecnica.length?cfg.infoTecnica.map((c,i)=>cfgSectionFold((c.label||'Campo '+(i+1))+' · '+(TIPOS[c.tipo]?TIPOS[c.tipo].label:c.tipo||'texto'),'',ro?('<div style="font-size:13px;padding:4px 0">'+escAttr(c.label)+' · '+(TIPOS[c.tipo]?TIPOS[c.tipo].label:c.tipo)+'</div>'):infoTecCfgItemBody(c,i),false)).join(''):'<div style="font-size:12px;color:var(--tx3);padding:.8rem;border:1px dashed var(--bd);border-radius:var(--r)">Sin campos técnicos.</div>';
+  const items=cfg.infoTecnica.length?cfg.infoTecnica.map((c,i)=>{
+    const tipoLbl=TIPOS[c.tipo]?TIPOS[c.tipo].label:c.tipo||'texto';
+    const scopeLbl=infoTecCfgScopeLabel(c);
+    const title=(c.label||'Campo '+(i+1))+' · '+tipoLbl+' · '+scopeLbl;
+    const roBody='<div style="font-size:13px;padding:4px 0">'+escAttr(c.label)+' · '+escAttr(tipoLbl)+'<div style="font-size:11px;color:var(--tx3);margin-top:4px">'+escAttr(scopeLbl)+'</div></div>';
+    return cfgSectionFold(title,'',ro?roBody:infoTecCfgItemBody(c,i),false);
+  }).join(''):'<div style="font-size:12px;color:var(--tx3);padding:.8rem;border:1px dashed var(--bd);border-radius:var(--r)">Sin campos técnicos.</div>';
   document.getElementById('cfg-info-tecnica-panel').innerHTML=(ro?cfgRestringidoBannerHtml():'')+'<div class="card"><div class="cft">Información técnica'+(ro?' <span style="font-size:11px;color:var(--tx3)">(solo lectura)</span>':'')+'</div>'+
-    '<div class="cfs">Campos reutilizables en expedientes (después de información contable).</div>'+
+    '<div class="cfs">Campos reutilizables en expedientes (después de información contable). Puede asociar cada campo a <strong>todos</strong> los trámites o solo a los que aplique.</div>'+
     '<div id="it-list" style="display:flex;flex-direction:column;gap:.5rem;max-width:720px">'+items+'</div>'+
     (ro?'':'<div class="ar" style="margin-top:.8rem"><button class="btn bp" onclick="addInfoTec()">+ Crear campo técnico</button></div>')+'</div>';
 }
-function addInfoTec(){if(guardCfgEditGeneral())return;if(!cfg.infoTecnica)cfg.infoTecnica=[];cfg.infoTecnica.push({id:'it'+Date.now(),label:'Nuevo campo técnico',tipo:'texto',placeholder:'',requerido:false});saveLS();renderInfoTecCfg();}
+function addInfoTec(){
+  if(guardCfgEditGeneral())return;
+  if(!cfg.infoTecnica)cfg.infoTecnica=[];
+  cfg.infoTecnica.push({id:'it'+Date.now(),label:'Nuevo campo técnico',tipo:'texto',placeholder:'',requerido:false,tramitesScope:'all',tramitesIds:[]});
+  saveLS();renderInfoTecCfg();
+}
 function editInfoTec(i,k,v){if(guardCfgEditGeneral())return;const c=cfg.infoTecnica&&cfg.infoTecnica[i];if(!c)return;c[k]=v;saveLS();}
+function setInfoTecTramitesScope(i,scope){
+  if(guardCfgEditGeneral())return;
+  const c=cfg.infoTecnica&&cfg.infoTecnica[i];if(!c)return;
+  scope=String(scope||'all')==='selected'?'selected':'all';
+  c.tramitesScope=scope;
+  if(!Array.isArray(c.tramitesIds))c.tramitesIds=[];
+  if(scope==='all')c.tramitesIds=[];
+  saveLS();renderInfoTecCfg();
+}
+function toggleInfoTecTramite(i,tramId,on){
+  if(guardCfgEditGeneral())return;
+  const c=cfg.infoTecnica&&cfg.infoTecnica[i];if(!c)return;
+  c.tramitesScope='selected';
+  if(!Array.isArray(c.tramitesIds))c.tramitesIds=[];
+  const id=String(tramId||'').trim();
+  if(!id)return;
+  const ix=c.tramitesIds.map(String).indexOf(id);
+  if(on&&ix<0)c.tramitesIds.push(id);
+  if(!on&&ix>=0)c.tramitesIds.splice(ix,1);
+  saveLS();
+}
 function delInfoTec(i){
   if(guardCfgEditGeneral())return;
   const c=cfg.infoTecnica&&cfg.infoTecnica[i];

@@ -660,7 +660,10 @@ function appendRegistroDesdeEntrega(e,payload){
 /** Guarda coordenadas de la entrega en información técnica (campo coordenadas del catálogo o g_coord_entrega). */
 function appendCoordEntregaAInfoTecnica(e,coordJson){
   if(!e||!coordJson)return;
-  const cat=typeof getInfoTecCatalog==='function'?getInfoTecCatalog(e):[];
+  const tramId=typeof resolveExpTramiteId==='function'?resolveExpTramiteId(e):(e._tramite||'');
+  const cat=typeof getInfoTecCatalogForTramite==='function'
+    ?getInfoTecCatalogForTramite(e,tramId)
+    :(typeof getInfoTecCatalog==='function'?getInfoTecCatalog(e):[]);
   const def=(cat||[]).find(function(c){return c&&c.tipo==='coordenadas';});
   const campoId=def?def.id:'coord_entrega';
   const items=typeof infoTecnicaExpData==='function'?infoTecnicaExpData(e._info_tecnica_items):[];
