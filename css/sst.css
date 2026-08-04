@@ -793,6 +793,7 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
 #pg-act .act-periodo-row .fld,#pg-act .act-periodo-row label{flex-shrink:0}
 .tab.tab-agenda-only{display:none!important}
 .tab.tab-agenda-only.tab-resp-on,.tab.tab-agenda-only.tab-enc-on{display:inline-flex!important}
+body.sesion-activa .tabsi .tab.tab-agenda-only.tab-sesion-on{display:inline-flex!important}
 .soporte-annot-wrap img.soporte-local-img{display:block;width:100%;height:100%;object-fit:contain;background:var(--sf2)}
 .enviar-adj-row{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
 .enviar-adj-row select,.enviar-adj-row input[type=url],.enviar-adj-row input[type=file]{flex:1;min-width:140px;font-size:12px;padding:6px;border:1px solid var(--bd);border-radius:var(--r)}

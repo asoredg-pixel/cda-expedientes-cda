@@ -1091,13 +1091,13 @@ function getTabsVisiblesSesion(){
   if(esJurisdiccional())return[C,Co];
   if(esSecretaria())return[G,S,P,C,Rec];
   if(esModoOficinaDeguv())return[G,P,C,Rec];
-  if(esModoResponsable()||esModoContratista())return[G,A,C,Rec];
+  if(esModoResponsable()||esModoContratista())return[G,A,Gnd,C,Rec];
   if(esAdministrador()){
     const sel=getSelDeptoVal();
     if(sel==='secretaria')return[G,S,P,C,Rec];
     if(esModuloOficina(sel))return[G,P,C,Rec];
     if(sel==='jurisdiccional')return[C,Co];
-    if(sel==='responsables')return[G,A,C,Rec];
+    if(sel==='responsables')return[G,A,Gnd,C,Rec];
     if(sel==='ciudadano')return[Ciu];
     if(sel==='admin')return[R,G,S,P,A,Gnd,C,Rec,Co,Cfg];
     if(DEPTOS.some(d=>d.id===sel))return deptTabs;
