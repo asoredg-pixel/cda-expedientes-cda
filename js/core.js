@@ -2749,9 +2749,14 @@ function getAgendaResponsableActivo(){
   if(esVistaActividadesDepto())return String(getEncargadoDepto(deptoActivo)||'').trim();
   return String(responsableActivo||getEncargadoDepto(deptoActivo)||'').trim();
 }
-function getAgendaEventoById(id){return (agendaEventos||[]).find(x=>x.id===id)||null;}
+function getAgendaEventoById(id){
+  const local=(agendaEventos||[]).find(x=>x.id===id);
+  if(local)return local;
+  return (window._agendaGcalEvents||[]).find(x=>x.id===id)||null;
+}
 function puedeEditarAgendaEvento(ev){
   ev=normalizeAgendaEvento(ev);
+  if(ev.tipo==='gcal')return false;
   const resp=getAgendaResponsableActivo();
   if(esModoResponsable()){
     const r=String(responsableActivo||'').trim();
@@ -2769,6 +2774,7 @@ function puedeEditarAgendaEvento(ev){
 }
 function puedeEliminarAgendaEvento(ev){
   ev=normalizeAgendaEvento(ev);
+  if(ev.tipo==='gcal')return false;
   if(esModoResponsable()){
     const r=String(responsableActivo||'').trim();
     if(!r||agendaNorm(ev.responsable)!==agendaNorm(r))return false;
@@ -2799,10 +2805,15 @@ function agendaFormHtml(ev,prefill){
   const detalle=ev.detalle!=null?ev.detalle:(prefill.detalle||'');
   const fecha=(ev.fecha||prefill.fecha||window._agendaDiaSel||hoy()).slice(0,10);
   const hora=ev.hora!=null?ev.hora:(prefill.hora||'');
+  const canGcal=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&!window._gmailCalendarDenied;
+  const gcalChk=(!ev.id&&canGcal)
+    ?('<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="agenda-f-gcal" checked> También crear en Google Calendar</label>')
+    :'';
   return '<div class="fld" style="margin-bottom:8px"><label>Título</label><input type="text" id="agenda-f-titulo" value="'+escAttr(titulo)+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><textarea id="agenda-f-detalle" style="width:100%;min-height:64px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif">'+escAttr(detalle)+'</textarea></div>'+
     '<div class="fg" style="margin-bottom:8px"><div class="fld"><label>Fecha</label><input type="date" id="agenda-f-fecha" value="'+escAttr(fecha)+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld"><label>Hora (opcional)</label><input type="time" id="agenda-f-hora" value="'+escAttr(hora)+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>';
+    '<div class="fld"><label>Hora (opcional)</label><input type="time" id="agenda-f-hora" value="'+escAttr(hora)+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
+    gcalChk;
 }
 function agendaMostrarDrawerCrear(prefill){
   prefill=prefill||{};
@@ -2840,17 +2851,21 @@ function agendaMostrarDrawerEvento(ev){
   window._agendaDrawerMode='view';
   const tit=document.getElementById('agenda-drawer-tit');
   const body=document.getElementById('agenda-drawer-body');
-  const tag=ev.tipo==='asignado'?'<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px">Asignado</span>':ev.tipo==='desde_actividad'?'<span class="bdg" style="background:var(--orl);color:var(--or);font-size:10px">Desde actividad</span>':'<span class="bdg" style="background:var(--bll);color:var(--bl);font-size:10px">Personal</span>';
-  const canEdit=puedeEditarAgendaEvento(ev);
-  const canDel=puedeEliminarAgendaEvento(ev);
+  let tag='<span class="bdg" style="background:var(--bll);color:var(--bl);font-size:10px">Personal</span>';
+  if(ev.tipo==='asignado')tag='<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px">Asignado</span>';
+  else if(ev.tipo==='desde_actividad')tag='<span class="bdg" style="background:var(--orl);color:var(--or);font-size:10px">Desde actividad</span>';
+  else if(ev.tipo==='gcal')tag='<span class="bdg" style="background:#e8f0fe;color:#1a73e8;font-size:10px">Gmail</span>';
+  const canEdit=ev.tipo!=='gcal'&&puedeEditarAgendaEvento(ev);
+  const canDel=ev.tipo!=='gcal'&&puedeEliminarAgendaEvento(ev);
   if(tit)tit.textContent=ev.titulo||'Evento';
   if(body)body.innerHTML=tag+
     '<div style="font-size:13px;font-weight:600;margin:.5rem 0">'+escAttr(ev.titulo)+'</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:6px">📅 '+fmtF(ev.fecha)+(ev.hora?' · 🕐 '+escAttr(ev.hora):'')+'</div>'+
     (ev.detalle?'<div style="font-size:12px;margin-bottom:8px;white-space:pre-wrap">'+escAttr(ev.detalle)+'</div>':'')+
-    (ev.creadoPor?'<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Creado por: '+escAttr(ev.creadoPor)+'</div>':'')+
+    (ev.creadoPor&&ev.tipo!=='gcal'?'<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Creado por: '+escAttr(ev.creadoPor)+'</div>':'')+
     (ev.taskRef&&ev.taskRef.taskId?'<button type="button" class="btn bsm" style="margin-bottom:8px" onclick="openTaskCommentsModal(\''+escAttr(ev.taskRef.expId||ev.taskRef.exp||'')+'\',\''+escAttr(ev.taskRef.taskId)+'\')">Ver actividad vinculada</button>':'')+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+    (ev.tipo==='gcal'&&ev.htmlLink?'<a class="btn bsm bp" href="'+escAttr(ev.htmlLink)+'" target="_blank" rel="noopener">Abrir en Google Calendar</a>':'')+
     (canEdit?'<button type="button" class="btn bsm bp" onclick="agendaMostrarDrawerEditar(getAgendaEventoById(\''+escAttr(ev.id)+'\'))">✏️ Editar</button>':'')+
     (canDel?'<button type="button" class="btn bsm bd2" onclick="agendaEliminarSel()">Eliminar</button>':'')+
     '</div>';
@@ -2947,6 +2962,23 @@ function crearAgendaEvento(data){
   saveLS();
   renderBandejaDepto();
   if(document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
+  const syncGcal=data.syncGcal!==false&&(data.syncGcal===true||(document.getElementById('agenda-f-gcal')&&document.getElementById('agenda-f-gcal').checked));
+  if(syncGcal&&(ev.tipo==='personal'||ev.tipo==='desde_actividad')&&typeof gmailCalendarCreateEvent==='function'&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
+    gmailCalendarCreateEvent(ev).then(function(gEv){
+      if(gEv&&gEv.htmlLink){
+        ev.gcalId=gEv.gcalId;
+        ev.gcalHtmlLink=gEv.htmlLink;
+        try{saveLS();}catch(e){}
+        notif('También creado en Google Calendar','ok');
+        window._agendaGcalCacheKey='';
+        if(document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
+      }
+    }).catch(function(err){
+      console.warn('GCal create:',err);
+      if(err&&err.code==='NO_CALENDAR_SCOPE')return;
+      notif('Evento SST guardado; no se pudo crear en Gmail Calendar','warn');
+    });
+  }
   return ev;
 }
 function crearAgendaEventosAsignados(data,nombres){
@@ -3027,8 +3059,8 @@ function renderAgendaSemanaGrid(eventos,mesRef,diaSel){
     h+='<div class="agenda-week-col'+(fs===todayStr?' today':'')+'">'+
       '<div class="agenda-week-col-hdr'+(fs===todayStr?' today':'')+'" onclick="agendaSelDia(\''+fs+'\')">'+hdrs[i]+'<br><span style="font-size:15px">'+d.getDate()+'</span></div>'+
       '<div class="agenda-week-col-body">'+dayEv.map(ev=>{
-        const dc=ev.tipo==='asignado'?' asig':ev.tipo==='desde_actividad'?' act':'';
-        return '<div class="agenda-cal-ev'+dc+'" style="margin-bottom:3px" onclick="agendaSelEvento(\''+escAttr(ev.id)+'\')">'+(ev.hora?escAttr(ev.hora)+' ':'')+escAttr(ev.titulo)+'</div>';
+        const dc=ev.tipo==='asignado'?' asig':ev.tipo==='desde_actividad'?' act':ev.tipo==='gcal'?' gcal':'';
+        return '<div class="agenda-cal-ev'+dc+'" style="margin-bottom:3px" onclick="agendaSelEvento(\''+escAttr(ev.id)+'\')">'+(ev.tipo==='gcal'?'✉ ':'')+(ev.hora?escAttr(ev.hora)+' ':'')+escAttr(ev.titulo)+'</div>';
       }).join('')+(dayEv.length?'':'<span style="color:var(--tx3);font-size:10px">—</span>')+'</div></div>';
   }
   return h+'</div>';
@@ -3040,10 +3072,10 @@ function renderAgendaDiaView(eventos,diaSel){
   let h='<div class="agenda-day-view"><div class="agenda-day-view-hdr">'+d.toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</div>';
   if(!list.length)h+='<div style="font-size:13px;color:var(--tx3);padding:1rem 0">Sin eventos. Pulse «+ Evento personal» para agendar.</div>';
   else h+=list.map(ev=>{
-    const dc=ev.tipo==='asignado'?'border-left:3px solid var(--pu)':ev.tipo==='desde_actividad'?'border-left:3px solid var(--or)':'border-left:3px solid var(--bl)';
+    const dc=ev.tipo==='asignado'?'border-left:3px solid var(--pu)':ev.tipo==='desde_actividad'?'border-left:3px solid var(--or)':ev.tipo==='gcal'?'border-left:3px solid #1a73e8':'border-left:3px solid var(--bl)';
     return '<div class="agenda-day-slot'+(ev.id===selEv?' sel':'')+'" style="'+dc+'" onclick="agendaSelEvento(\''+escAttr(ev.id)+'\')">'+
       '<div class="agenda-day-slot-time">'+(ev.hora||'—')+'</div>'+
-      '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+escAttr(ev.titulo)+'</div>'+
+      '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+(ev.tipo==='gcal'?'<span class="bdg" style="background:#e8f0fe;color:#1a73e8;font-size:9px;margin-right:4px">Gmail</span>':'')+escAttr(ev.titulo)+'</div>'+
       (ev.detalle?'<div style="font-size:12px;color:var(--tx2);margin-top:2px">'+escAttr(ev.detalle)+'</div>':'')+'</div></div>';
   }).join('');
   return h+'</div>';
@@ -3068,8 +3100,8 @@ function renderAgendaCalGrid(eventos,mesRef,diaSel){
     h+='<div class="'+cls+'" onclick="agendaSelDia(\''+fs+'\')">'+
       '<div class="agenda-day-num">'+d.getDate()+'</div>'+
       '<div class="agenda-day-events">'+dayEv.slice(0,4).map(ev=>{
-        const dc=ev.tipo==='asignado'?' asig':ev.tipo==='desde_actividad'?' act':'';
-        return '<div class="agenda-cal-ev'+dc+'" onclick="event.stopPropagation();agendaSelEvento(\''+escAttr(ev.id)+'\')" title="'+escAttr(ev.titulo)+'">'+escAttr(ev.titulo)+'</div>';
+        const dc=ev.tipo==='asignado'?' asig':ev.tipo==='desde_actividad'?' act':ev.tipo==='gcal'?' gcal':'';
+        return '<div class="agenda-cal-ev'+dc+'" onclick="event.stopPropagation();agendaSelEvento(\''+escAttr(ev.id)+'\')" title="'+escAttr(ev.titulo)+'">'+(ev.tipo==='gcal'?'✉ ':'')+escAttr(ev.titulo)+'</div>';
       }).join('')+(dayEv.length>4?'<div style="font-size:9px;color:var(--tx3)">+'+(dayEv.length-4)+' más</div>':'')+'</div></div>';
   }
   return h;
@@ -3081,6 +3113,7 @@ function renderAgendaListaHtml(eventos,diaSel){
   return list.map(ev=>{
     const horaLbl=ev.hora?('<span style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl);min-width:52px">'+escAttr(ev.hora)+'</span>'):('<span style="font-size:12px;color:var(--tx3);min-width:52px">—</span>');
     return '<div class="agenda-ev-row'+(ev.id===selEv?' sel':'')+'" onclick="agendaSelEvento(\''+escAttr(ev.id)+'\')">'+horaLbl+
+      (ev.tipo==='gcal'?'<span class="bdg" style="background:#e8f0fe;color:#1a73e8;font-size:9px;margin-right:4px">Gmail</span>':'')+
       '<span style="font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escAttr(ev.titulo)+'</span></div>';
   }).join('');
 }
@@ -3147,19 +3180,35 @@ function renderAgenda(){
   const tit=document.getElementById('agenda-titulo');
   const sub=document.getElementById('agenda-subtitulo');
   const btnAsig=document.getElementById('btn-agenda-asignar');
+  const banner=document.getElementById('agenda-gcal-banner');
   if(!resp){
     if(tit)tit.textContent='Mi agenda';
     if(sub)sub.textContent='Seleccione su nombre como responsable para ver su calendario.';
     if(document.getElementById('agenda-cal-grid'))document.getElementById('agenda-cal-grid').innerHTML='';
     if(document.getElementById('agenda-lista'))document.getElementById('agenda-lista').innerHTML='<div style="font-size:12px;color:var(--tx3);padding:8px">Sin responsable seleccionado.</div>';
+    if(banner)banner.innerHTML='';
     return;
   }
   if(tit)tit.textContent='Agenda · '+resp;
-  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para editar';
+  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para editar · Gmail Calendar se fusiona si hay permiso';
   if(btnAsig)btnAsig.style.display=esVistaActividadesDepto()?'inline-flex':'none';
+  if(banner){
+    const gmailOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+    const calOk=gmailOk&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&!window._gmailCalendarDenied;
+    if(gmailOk&&!calOk){
+      banner.innerHTML='<div style="font-size:12px;padding:8px 10px;margin-bottom:8px;border-radius:var(--r);background:#fff7ed;border:1px solid var(--or);color:var(--tx)">Conecte Gmail con permiso de <strong>Calendar</strong> para ver y crear eventos de su cuenta.'+
+        ' <button type="button" class="btn bsm bp" style="margin-left:6px" onclick="gmailReconnectForCalendar()">Conceder Calendar</button></div>';
+    }else if(!gmailOk){
+      banner.innerHTML='<div style="font-size:11px;padding:6px 10px;margin-bottom:8px;border-radius:var(--r);background:var(--sf2);border:1px solid var(--bd);color:var(--tx2)">Agenda interna SST activa. Conecte Gmail (con Calendar) para ver eventos de su correo.</div>';
+    }else{
+      banner.innerHTML='<div style="font-size:11px;padding:4px 0;margin-bottom:6px;color:var(--tx3)">Eventos Gmail (calendario primario) aparecen con etiqueta <span class="bdg" style="background:#e8f0fe;color:#1a73e8;font-size:9px">Gmail</span>.</div>';
+    }
+  }
   const mesRef=window._agendaMes||new Date();
   const diaSel=window._agendaDiaSel||hoy();
-  const eventos=getAgendaEventosResponsable(resp);
+  const sstEv=getAgendaEventosResponsable(resp);
+  const gcalEv=Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[];
+  const eventos=sstEv.concat(gcalEv);
   const vista=window._agendaVista||'mes';
   document.querySelectorAll('#agenda-view-tabs button').forEach((b,i)=>b.classList.toggle('on',['mes','semana','dia'][i]===vista));
   const lbl=document.getElementById('agenda-mes-label');
@@ -3199,6 +3248,76 @@ function renderAgenda(){
       gest.innerHTML='<details class="con-fold"><summary>Eventos asignados a responsables (editar)</summary><div class="item-fold-body">'+renderAgendaAsignadosGestHtml()+'</div></details>';
     }else gest.style.display='none';
   }
+  agendaFetchGcalForVista(mesRef,diaSel,vista);
+}
+function agendaVisibleRangeIso(mesRef,diaSel,vista){
+  vista=vista||'mes';
+  let start,end;
+  if(vista==='dia'){
+    start=new Date((diaSel||hoy())+'T00:00:00');
+    end=new Date((diaSel||hoy())+'T23:59:59');
+  }else if(vista==='semana'){
+    start=agendaSemanaInicio(mesRef,diaSel);
+    end=new Date(start);end.setDate(start.getDate()+7);end.setHours(0,0,0,0);
+  }else{
+    const y=mesRef.getFullYear(),mo=mesRef.getMonth();
+    const first=new Date(y,mo,1);
+    start=new Date(y,mo,1-(first.getDay()+6)%7);
+    end=new Date(start);end.setDate(start.getDate()+42);
+  }
+  return{min:start.toISOString(),max:end.toISOString(),key:start.toISOString().slice(0,10)+'_'+end.toISOString().slice(0,10)};
+}
+function agendaFetchGcalForVista(mesRef,diaSel,vista){
+  if(typeof gmailIsTokenValid!=='function'||!gmailIsTokenValid()){
+    window._agendaGcalEvents=[];
+    return;
+  }
+  if(typeof gmailHasCalendarScope!=='function'||!gmailHasCalendarScope()||window._gmailCalendarDenied){
+    window._agendaGcalEvents=[];
+    return;
+  }
+  if(typeof gmailCalendarListEvents!=='function')return;
+  const range=agendaVisibleRangeIso(mesRef,diaSel,vista);
+  if(window._agendaGcalCacheKey===range.key&&Array.isArray(window._agendaGcalEvents))return;
+  if(window._agendaGcalFetchKey===range.key)return;
+  window._agendaGcalFetchKey=range.key;
+  gmailCalendarListEvents(range.min,range.max).then(function(list){
+    window._agendaGcalCacheKey=range.key;
+    window._agendaGcalFetchKey='';
+    window._agendaGcalEvents=Array.isArray(list)?list:[];
+    // Re-pintar solo si sigue en agenda y mismo rango
+    const cur=agendaVisibleRangeIso(window._agendaMes||new Date(),window._agendaDiaSel||hoy(),window._agendaVista||'mes');
+    if(cur.key===range.key&&document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on')){
+      _renderAgendaPaintOnly();
+    }
+  }).catch(function(err){
+    window._agendaGcalFetchKey='';
+    console.warn('Agenda GCal:',err);
+    window._agendaGcalEvents=[];
+    const ban=document.getElementById('agenda-gcal-banner');
+    if(ban&&(err&&err.code==='NO_CALENDAR_SCOPE'||window._gmailCalendarDenied)){
+      ban.innerHTML='<div style="font-size:12px;padding:8px 10px;margin-bottom:8px;border-radius:var(--r);background:#fff7ed;border:1px solid var(--or);color:var(--tx)">Conecte Gmail con permiso de <strong>Calendar</strong> para ver eventos de su cuenta.'+
+        ' <button type="button" class="btn bsm bp" style="margin-left:6px" onclick="gmailReconnectForCalendar()">Conceder Calendar</button></div>';
+    }
+  });
+}
+/** Re-pinta grid/lista sin relanzar fetch (tras cargar GCal). */
+function _renderAgendaPaintOnly(){
+  const resp=getAgendaResponsableActivo();
+  if(!resp)return;
+  const mesRef=window._agendaMes||new Date();
+  const diaSel=window._agendaDiaSel||hoy();
+  const eventos=getAgendaEventosResponsable(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
+  const vista=window._agendaVista||'mes';
+  const wrap=document.getElementById('agenda-cal-wrap');
+  const grid=document.getElementById('agenda-cal-grid');
+  if(wrap&&grid){
+    if(vista==='mes'){grid.className='agenda-cal';grid.innerHTML=renderAgendaCalGrid(eventos,mesRef,diaSel);}
+    else if(vista==='semana'){grid.className='';grid.innerHTML=renderAgendaSemanaGrid(eventos,mesRef,diaSel);}
+    else{grid.className='';grid.innerHTML=renderAgendaDiaView(eventos,diaSel);}
+  }
+  const lista=document.getElementById('agenda-lista');
+  if(lista&&(vista==='mes'||vista==='semana'))lista.innerHTML=renderAgendaListaHtml(eventos,diaSel);
 }
 function openAgendaEventoModal(prefill){
   prefill=prefill||{};
@@ -5291,7 +5410,9 @@ function normalizeTask(t){
   if(!Array.isArray(t.notasDoc))t.notasDoc=[];
   t.soportes.forEach((s,i)=>{if(!s.id)s.id='sop_'+Date.now()+'_'+i;});
   migrateLegacyAsignados(t);
+  const enFirma=typeof taskFirmaWfActiva==='function'?taskFirmaWfActiva(t):!!(t.firmaWf&&String(t.firmaWf.fase||'').trim()&&String(t.firmaWf.fase).indexOf('cerrada')<0);
   if(t.fechaAtendida&&(t.estado==='Atendida'||t.estado==='Completada'||!t.estado))t.estado='Atendida';
+  else if(enFirma){/* flujo firma: no forzar «Por verificar» */}
   else if(t.fechaReportada&&!t.fechaAtendida)t.estado='Por verificar';
   else if(t.estado==='Por corregir'&&!t.fechaReportada&&!t.fechaAtendida)t.estado='Por corregir';
   else if(!t.estado)t.estado=estadoTaskRaw(t);
@@ -8250,6 +8371,8 @@ function estadoTaskRaw(t){
     if(t.vence&&t.vence<hoy()&&asig.some(a=>a.estado!=='atendido'))return'Vencida';
     return'En ejecución';
   }
+  const enFirma=typeof taskFirmaWfActiva==='function'?taskFirmaWfActiva(t):!!(t.firmaWf&&String(t.firmaWf.fase||'').trim()&&String(t.firmaWf.fase).indexOf('cerrada')<0);
+  if(enFirma)return'En ejecución';
   if(t.estado==='Por verificar'||(t.fechaReportada&&!t.fechaAtendida))return'Por verificar';
   if(t.fechaAtendida||t.estado==='Atendida'||t.estado==='Completada')return'Atendida';
   if(t.estado==='Por corregir'&&!t.fechaReportada&&!t.fechaAtendida)return'Por corregir';
@@ -8257,9 +8380,23 @@ function estadoTaskRaw(t){
   return'En ejecución';
 }
 function estadoTask(t){return estadoTaskRaw(normalizeTask(t));}
+/** true si la actividad está en flujo de firma (no cerrada) — no cuenta como Por verificar/revisar. */
+function taskFirmaWfActiva(t){
+  if(!t)return false;
+  if(typeof taskEnFlujoFirmaTramite==='function'){
+    try{if(taskEnFlujoFirmaTramite(t))return true;}catch(e){}
+  }
+  const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+  if(!f)return false;
+  if(f==='cerrada_atendida')return false;
+  if(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA)return false;
+  return true;
+}
+window.taskFirmaWfActiva=taskFirmaWfActiva;
 function taskPendienteVerificacion(t){
   t=normalizeTask(t);
   if(t.eliminada)return false;
+  if(taskFirmaWfActiva(t))return false;
   if(taskEsMultiAsignada(t))return (t.asignados||[]).some(a=>a.estado==='por_verificar');
   return!!t.fechaReportada&&!t.fechaAtendida;
 }
@@ -8573,7 +8710,8 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
         h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteLibreParaFirma(\''+eid+'\',\''+tid+'\')" title="Atajo a Por firmar (Director), sin impresión">🖊 Para firma</button>';
       if(!puedeImprimir&&!puedeAtajo)
         h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tid+'\')">🖊 Enviar a firma</button>';
-      h+='<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
+      h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>'+
+        '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
         '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>'+
         '</div></div>';
     }else{
@@ -8582,6 +8720,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
         '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>';
       if(pendVer){
         h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
+        h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>';
         h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>';
       }
       h+='</div>';
@@ -13503,6 +13642,7 @@ function filtrarActividadesPorEstado(list,filtro){
       }
     }
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
+    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
     return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
   });
@@ -13592,6 +13732,7 @@ function renderActividades(){
       }
     }
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
+    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
     return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
   }).length;

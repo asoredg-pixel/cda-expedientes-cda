@@ -582,22 +582,44 @@ function actividadesLibresForDepto(deptoId){
 /**
  * Upsert sin borrar libres de otros departamentos (snapshot parcial depto).
  * Conserva locales con _pending_fs_sync si el remoto es más pobre.
+ * Prioriza siempre la versión con firmaWf más avanzada.
  */
+function scoreActividadLibreMerge(t){
+  if(!t)return 0;
+  let s=0;
+  if(t.fechaReportada||t.estado==='Por verificar')s+=4;
+  if((t.soportes||[]).length)s+=2;
+  if(t.fechaAtendida||t.estado==='Atendida')s+=3;
+  if(t._pending_fs_sync)s+=5;
+  if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
+  const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+  if(f){
+    s+=20;
+    if(t.firmaWf.firma_fisica&&t.firmaWf.firma_fisica.en)s+=8;
+    if(/notif|lista_para_envio/i.test(f))s+=12;
+    else if(/por_firmar|firmar/i.test(f))s+=8;
+    else if(/para_firma|por_firma|vital/i.test(f))s+=5;
+    else if(/cerrada/i.test(f))s+=15;
+  }
+  if(t.requiereFirma)s+=1;
+  return s;
+}
+function pickMejorActLibre(a,b){
+  if(!a)return b;
+  if(!b)return a;
+  const sa=scoreActividadLibreMerge(a),sb=scoreActividadLibreMerge(b);
+  if(sa>sb)return a;
+  if(sb>sa)return b;
+  // Empate: conservar firmaWf si solo una lo tiene
+  const fa=!!(a.firmaWf&&a.firmaWf.fase),fb=!!(b.firmaWf&&b.firmaWf.fase);
+  if(fa&&!fb)return a;
+  if(fb&&!fa)return b;
+  return b;
+}
 function upsertActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
-  const score=function(t){
-    if(!t)return 0;
-    let s=0;
-    if(t.fechaReportada||t.estado==='Por verificar')s+=4;
-    if((t.soportes||[]).length)s+=2;
-    if(t.fechaAtendida||t.estado==='Atendida')s+=3;
-    if(t._pending_fs_sync)s+=5;
-    if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
-    if(t.firmaWf&&t.firmaWf.fase)s+=2;
-    return s;
-  };
   local.forEach(function(t){
     if(t&&t.id)byId.set(String(t.id),t);
   });
@@ -606,8 +628,11 @@ function upsertActividadesLibresFromRemote(remote){
     const id=String(t.id);
     const cur=byId.get(id);
     if(!cur){byId.set(id,t);return;}
-    if(cur._pending_fs_sync&&score(cur)>=score(t))return;
-    if(score(t)>=score(cur))byId.set(id,t);
+    if(cur._pending_fs_sync&&scoreActividadLibreMerge(cur)>=scoreActividadLibreMerge(t)){
+      // Remoto sin firmaWf: no pisar el flujo local
+      if(cur.firmaWf&&cur.firmaWf.fase&&!(t.firmaWf&&t.firmaWf.fase))return;
+    }
+    byId.set(id,pickMejorActLibre(cur,t));
   });
   return Array.from(byId.values()).map(function(t){
     if(typeof normalizeActLibre==='function'){
@@ -1139,7 +1164,7 @@ function mergeActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
-  const score=function(t){
+  const score=typeof scoreActividadLibreMerge==='function'?scoreActividadLibreMerge:function(t){
     if(!t)return 0;
     let s=0;
     if(t.fechaReportada||t.estado==='Por verificar')s+=4;
@@ -1147,6 +1172,7 @@ function mergeActividadesLibresFromRemote(remote){
     if(t.fechaAtendida||t.estado==='Atendida')s+=3;
     if(t._pending_fs_sync)s+=5;
     if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
+    if(t.firmaWf&&t.firmaWf.fase)s+=20;
     return s;
   };
   rem.forEach(function(t){
@@ -1158,18 +1184,20 @@ function mergeActividadesLibresFromRemote(remote){
     if(!t||!t.id)return;
     const id=String(t.id);
     if(!byId.has(id)){
-      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||(t.soportes||[]).length){
+      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||(t.soportes||[]).length||(t.firmaWf&&t.firmaWf.fase)){
         byId.set(id,t);
       }
       return;
     }
     const remT=byId.get(id);
-    if(t._pending_fs_sync||score(t)>score(remT))byId.set(id,t);
+    const best=typeof pickMejorActLibre==='function'?pickMejorActLibre(t,remT):(score(t)>score(remT)?t:remT);
+    byId.set(id,best);
   });
   if(window._pendingActLibreEntrega&&window._pendingActLibreEntrega.t&&window._pendingActLibreEntrega.id){
     const pid=String(window._pendingActLibreEntrega.id);
     const pend=window._pendingActLibreEntrega.t;
-    if(!byId.has(pid)||score(pend)>=score(byId.get(pid)))byId.set(pid,pend);
+    const cur=byId.get(pid);
+    byId.set(pid,typeof pickMejorActLibre==='function'?pickMejorActLibre(pend,cur):(pend||cur));
   }
   return Array.from(byId.values()).map(function(t){
     if(typeof normalizeActLibre==='function'){

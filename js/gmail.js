@@ -4,9 +4,9 @@
 // El access_token se guarda en sessionStorage y caduca en 1h.
 //
 // REQUISITO (configuración única en Google Cloud Console):
-//   1. Habilitar Gmail API, Google Drive API y Google Sheets API en el proyecto Firebase.
+//   1. Habilitar Gmail API, Google Drive API, Google Sheets API y Google Calendar API.
 //   2. Pantalla de consentimiento OAuth → agregar scopes:
-//      gmail.modify · gmail.send · drive.file · spreadsheets
+//      gmail.modify · gmail.send · drive.file · spreadsheets · calendar.events
 //   3. Agregar usuarios de prueba: cdaguaviare1@gmail.com + correo secretaria.
 //   4. Credencial OAuth web → Orígenes autorizados:
 //      https://asoredg-pixel.github.io
@@ -17,15 +17,19 @@
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
+const GMAIL_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/spreadsheets'
+  'https://www.googleapis.com/auth/spreadsheets',
+  GMAIL_CALENDAR_SCOPE
 ].join(' ');
 
 const GMAIL_TOKEN_KEY = 'sst_gmail_token';
 const GMAIL_TOKEN_EXP_KEY = 'sst_gmail_token_exp';
+const GMAIL_SCOPES_KEY = 'sst_gmail_scopes';
 
 function _gmailGetClientId() {
   return String(
@@ -121,12 +125,15 @@ let _sstGmailExpiryWarnShown = false;
 let _sstGmailDriveStatusInterval = null;
 const SST_GMAIL_DRIVE_WARN_MS = 60000;
 const SST_GMAIL_DRIVE_REFRESH_MS = 1200000;
-function gmailSetToken(tok, expiresInSec) {
+function gmailSetToken(tok, expiresInSec, scopesOpt) {
   try {
     if (tok) {
       sessionStorage.setItem(GMAIL_TOKEN_KEY, tok);
       const expMs = Date.now() + (expiresInSec || 3600) * 1000;
       sessionStorage.setItem(GMAIL_TOKEN_EXP_KEY, String(expMs));
+      if (scopesOpt) {
+        try { sessionStorage.setItem(GMAIL_SCOPES_KEY, String(scopesOpt)); } catch (eS) {}
+      }
       _sstGmailExpiryWarnShown = false;
       _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'sec');
@@ -134,12 +141,22 @@ function gmailSetToken(tok, expiresInSec) {
     } else {
       sessionStorage.removeItem(GMAIL_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_TOKEN_EXP_KEY);
+      try { sessionStorage.removeItem(GMAIL_SCOPES_KEY); } catch (eC) {}
       if (_gmailTokenWarnTimer) { clearTimeout(_gmailTokenWarnTimer); _gmailTokenWarnTimer = null; }
       if (_gmailTokenRefreshTimer) { clearTimeout(_gmailTokenRefreshTimer); _gmailTokenRefreshTimer = null; }
       _gmailClearExpiryTimer('sec');
     }
   } catch (e) {}
 }
+function gmailGetStoredScopes() {
+  try { return sessionStorage.getItem(GMAIL_SCOPES_KEY) || ''; } catch (e) { return ''; }
+}
+function gmailHasCalendarScope() {
+  const s = gmailGetStoredScopes();
+  return /calendar\.events|\/auth\/calendar(\s|$)/.test(s);
+}
+window.gmailHasCalendarScope = gmailHasCalendarScope;
+window.gmailGetStoredScopes = gmailGetStoredScopes;
 function _gmailScheduleTokenWarning(expMs) {
   if (_gmailTokenWarnTimer) clearTimeout(_gmailTokenWarnTimer);
   if (_gmailTokenRefreshTimer) clearTimeout(_gmailTokenRefreshTimer);
@@ -189,7 +206,7 @@ function _gmailTrySilentTokenRefresh() {
         _gmailSilentRefreshInFlight = false;
         if (response && response.access_token) {
           if (useSec) {
-            gmailSetToken(response.access_token, response.expires_in || 3600);
+            gmailSetToken(response.access_token, response.expires_in || 3600, GMAIL_SCOPES);
           } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
             _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in || 3600);
           } else if (typeof gmailOfiSetToken === 'function') {
@@ -472,7 +489,7 @@ function gmailIsTokenValid() {
 // ----------------------------------------------------------------
 function gmailConnect(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
-    gmailSetToken(tok, exp);
+    gmailSetToken(tok, exp, GMAIL_SCOPES);
     _gmailSecSignatureLoaded = false;
     gmailLoadSecSignature(true).catch(function(){});
     notif('Bandeja conectada correctamente.', 'ok');
@@ -483,13 +500,23 @@ function gmailConnect(callback) {
 }
 function gmailReconnectForMatriz(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
-    gmailSetToken(tok, exp);
+    gmailSetToken(tok, exp, GMAIL_SCOPES);
     notif('Gmail reconectado con permiso de Google Sheets.', 'ok');
+    if (typeof callback === 'function') callback();
+  }, 'consent');
+}
+function gmailReconnectForCalendar(callback) {
+  _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
+    gmailSetToken(tok, exp, GMAIL_SCOPES);
+    window._gmailCalendarDenied = false;
+    notif('Gmail reconectado con permiso de Google Calendar.', 'ok');
+    if (typeof renderAgenda === 'function') renderAgenda();
     if (typeof callback === 'function') callback();
   }, 'consent');
 }
 window.gmailConnect = gmailConnect;
 window.gmailReconnectForMatriz = gmailReconnectForMatriz;
+window.gmailReconnectForCalendar = gmailReconnectForCalendar;
 
 function gmailDisconnect() {
   gmailSetToken('');
@@ -533,6 +560,115 @@ async function gmailApiCall(method, url, body) {
   }
   return res.json();
 }
+
+// ----------------------------------------------------------------
+// Google Calendar (calendario primario de la cuenta Gmail conectada)
+// ----------------------------------------------------------------
+function _gcalMapEvent(ev) {
+  if (!ev || !ev.id) return null;
+  const start = ev.start || {};
+  const end = ev.end || {};
+  let fecha = '';
+  let hora = '';
+  if (start.date) {
+    fecha = String(start.date).slice(0, 10);
+  } else if (start.dateTime) {
+    const dt = String(start.dateTime);
+    fecha = dt.slice(0, 10);
+    const m = dt.match(/T(\d{2}:\d{2})/);
+    if (m) hora = m[1];
+  }
+  if (!fecha) return null;
+  return {
+    id: 'gcal_' + ev.id,
+    gcalId: ev.id,
+    htmlLink: ev.htmlLink || ('https://calendar.google.com/calendar/event?eid=' + encodeURIComponent(ev.id)),
+    titulo: String(ev.summary || '(Sin título)').trim(),
+    detalle: String(ev.description || '').trim(),
+    fecha: fecha,
+    hora: hora,
+    tipo: 'gcal',
+    allDay: !!start.date,
+    endFecha: end.date ? String(end.date).slice(0, 10) : (end.dateTime ? String(end.dateTime).slice(0, 10) : ''),
+    leido: true,
+    responsable: '',
+    depto: '',
+    creadoPor: 'Gmail'
+  };
+}
+async function gmailCalendarListEvents(timeMinIso, timeMaxIso) {
+  if (!gmailIsTokenValid()) throw new Error('Sin sesión Gmail');
+  if (!gmailHasCalendarScope()) {
+    const err = new Error('Sin permiso de Google Calendar');
+    err.code = 'NO_CALENDAR_SCOPE';
+    throw err;
+  }
+  const params = new URLSearchParams({
+    timeMin: timeMinIso,
+    timeMax: timeMaxIso,
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: '250'
+  });
+  const url = CALENDAR_API_BASE + '/calendars/primary/events?' + params.toString();
+  try {
+    const data = await gmailApiCall('GET', url);
+    window._gmailCalendarDenied = false;
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    return items.map(_gcalMapEvent).filter(Boolean);
+  } catch (err) {
+    const msg = String(err && err.message || err);
+    if (/403|insufficient|PERMISSION|calendar/i.test(msg)) {
+      window._gmailCalendarDenied = true;
+      try {
+        const s = gmailGetStoredScopes().replace(GMAIL_CALENDAR_SCOPE, '').replace(/\s+/g, ' ').trim();
+        sessionStorage.setItem(GMAIL_SCOPES_KEY, s);
+      } catch (eS) {}
+    }
+    throw err;
+  }
+}
+function _gcalBuildEventBody(data) {
+  data = data || {};
+  const titulo = String(data.titulo || data.summary || '').trim();
+  const detalle = String(data.detalle || data.description || '').trim();
+  const fecha = String(data.fecha || '').slice(0, 10);
+  const hora = String(data.hora || '').trim();
+  if (!titulo || !fecha) throw new Error('Título y fecha requeridos');
+  const body = { summary: titulo };
+  if (detalle) body.description = detalle;
+  if (hora && /^\d{2}:\d{2}/.test(hora)) {
+    const startDt = fecha + 'T' + hora.slice(0, 5) + ':00';
+    const [hh, mm] = hora.slice(0, 5).split(':').map(Number);
+    const endMin = (hh * 60 + mm + 60) % (24 * 60);
+    const endH = String(Math.floor(endMin / 60)).padStart(2, '0');
+    const endM = String(endMin % 60).padStart(2, '0');
+    const endDt = fecha + 'T' + endH + ':' + endM + ':00';
+    body.start = { dateTime: startDt, timeZone: 'America/Bogota' };
+    body.end = { dateTime: endDt, timeZone: 'America/Bogota' };
+  } else {
+    body.start = { date: fecha };
+    const d = new Date(fecha + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    body.end = { date: d.toISOString().slice(0, 10) };
+  }
+  return body;
+}
+async function gmailCalendarCreateEvent(data) {
+  if (!gmailIsTokenValid()) throw new Error('Sin sesión Gmail');
+  if (!gmailHasCalendarScope()) {
+    const err = new Error('Sin permiso de Google Calendar');
+    err.code = 'NO_CALENDAR_SCOPE';
+    throw err;
+  }
+  const body = _gcalBuildEventBody(data);
+  const url = CALENDAR_API_BASE + '/calendars/primary/events';
+  const created = await gmailApiCall('POST', url, body);
+  return _gcalMapEvent(created);
+}
+window.gmailCalendarListEvents = gmailCalendarListEvents;
+window.gmailCalendarCreateEvent = gmailCalendarCreateEvent;
+window._gcalMapEvent = _gcalMapEvent;
 
 async function _gmailApiBest(method, url, body) {
   if (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) {

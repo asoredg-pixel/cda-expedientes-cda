@@ -244,6 +244,8 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
     if(atajoDirecto){
       tk.firmaWf.listo_firma={por:taskComentarioAutor(),en:new Date().toISOString(),atajo_digital:true};
     }
+    // Evitar que normalizeTask vuelva a marcar «Por verificar»
+    if(tk.estado==='Por verificar')tk.estado='En ejecución';
     if(!Array.isArray(tk.historial))tk.historial=[];
     tk.historial.push({tipo:'enviar_firma',fecha:hoy(),por:taskComentarioAutor(),nota:atajoDirecto?'Enviado a Por firmar (Director)':'Enviado a Por imprimir / firma del Director'});
   });
@@ -252,6 +254,8 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
     notif((atajoDirecto?'🖊 Actividad en «Por firmar» (Director)':'🖨 Actividad enviada a «Por imprimir» (firma Director)')+(notifPor?' · Notificará: '+notifPor:''),'ok');
     closeTaskModal();
+    const filtroDest=atajoDirecto?'porfirmar':'parafirma';
+    try{if(typeof setActFiltro==='function')setActFiltro(filtroDest);}catch(e){}
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   }
@@ -805,3 +809,144 @@ function tramiteLibreParaFirma(expId,taskId){
 }
 window.tramiteLibreParaImprimir=tramiteLibreParaImprimir;
 window.tramiteLibreParaFirma=tramiteLibreParaFirma;
+
+/**
+ * Atajo desde Por revisar: documento ya firmado → subir PDF (opcional) → Por notificar.
+ * No pasa por Por imprimir / Por firmar.
+ */
+function openTramiteAtajoFirmadoModal(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  const e=tramiteFirmaExpCtx(t,expId);
+  if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){notif('Use el flujo PQRSD','err');return;}
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body)return;
+  if(tit)tit.textContent='Cargar firmado → Por notificar';
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  const eid=escAttr(refId),tid=escAttr(taskId);
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Pasadizo desde revisión: el documento <strong>ya está firmado</strong>. Suba el PDF firmado (recomendado) o confirme sin archivo; la actividad irá a <strong>Por notificar</strong>.</div>'+
+    '<div style="margin-bottom:12px;padding:10px;border:1px dashed #0f766e;border-radius:var(--r);background:#0f766e12">'+
+    '<input type="file" id="tramite-atajo-firmado-file" accept="application/pdf,.pdf" style="display:none" onchange="tramiteAtajoFirmadoOnPdf(this)">'+
+    '<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoPickPdf()">📎 Seleccionar PDF firmado</button>'+
+    '<div id="tramite-atajo-firmado-list" style="margin-top:8px"></div></div>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+    '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false)">⬆ Cargar y pasar a Por notificar</button>'+
+    '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',true)">✓ Ya firmado (sin PDF) → Por notificar</button>'+
+    '<button type="button" class="btn bsm" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,true)">📬 Cargar y notificar ahora</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+  window._tramiteAtajoFirmadoFile=null;
+  ov.classList.add('on');
+  window._taskModalCtx={expId:refId,taskId,mode:'tramiteAtajoFirmado'};
+}
+function tramiteAtajoFirmadoDesdeRevision(expId,taskId){
+  openTramiteAtajoFirmadoModal(expId,taskId);
+}
+function tramiteAtajoFirmadoPickPdf(){
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+    if(!ok)return;
+    const inp=document.getElementById('tramite-atajo-firmado-file');
+    if(inp)inp.click();
+  });
+}
+function tramiteAtajoFirmadoOnPdf(inp){
+  const f=inp&&inp.files&&inp.files[0];
+  window._tramiteAtajoFirmadoFile=f||null;
+  const box=document.getElementById('tramite-atajo-firmado-list');
+  if(!box)return;
+  if(!f){box.innerHTML='';return;}
+  box.innerHTML='<div class="fx" style="gap:6px;align-items:center;font-size:12px;padding:4px 6px;background:var(--sf2);border-radius:var(--r)">📎 '+escAttr(f.name)+
+    '<button type="button" class="btn bsm bd2" onclick="window._tramiteAtajoFirmadoFile=null;var i=document.getElementById(\'tramite-atajo-firmado-file\');if(i)i.value=\'\';document.getElementById(\'tramite-atajo-firmado-list\').innerHTML=\'\'">✕</button></div>';
+}
+async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  const e=tramiteFirmaExpCtx(t,expId);
+  if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){notif('Use el flujo PQRSD','err');return;}
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const file=window._tramiteAtajoFirmadoFile;
+  if(!sinPdf&&!file){notif('Seleccione el PDF firmado o use «Ya firmado (sin PDF)»','err');return;}
+  let notifPor='';
+  const sel=document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
+  if(sel)notifPor=String(sel.value||'').trim();
+  if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
+    notifPor=pqrsResolverNotificadorCorreo((e&&e._depto)||t.depto||'guaviare','');
+  const btn=document.getElementById('tramite-atajo-firmado-btn');
+  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  try{
+    let pdfLink='';
+    if(file&&typeof driveUploadInstitutional==='function'){
+      const nombreCarpeta=(e&&(e._pn_nombre||e._exp))||refId;
+      if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo documento…',sub:file.name||'PDF',pct:20});
+      const res=await driveUploadInstitutional(file,'por_notificar-'+file.name,'application/pdf','respuesta_aprobada',refId,nombreCarpeta,(e&&e._fecha)||'',{expediente:e||{_exp:refId},uploadTarget:'respuesta'});
+      pdfLink=res&&res.driveLink||'';
+    }
+    if(typeof driveRenombrarSoporteActivoExp==='function'){
+      try{await driveRenombrarSoporteActivoExp(refId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
+    }
+    const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+    let vence=inicio;
+    if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
+    else{
+      const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
+    }
+    const faseNotif=typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion';
+    const ok=mutateTask(refId,taskId,function(tk){
+      tk.requiereFirma=true;
+      const prev=getTaskFirmaWf(tk);
+      tk.firmaWf=Object.assign({},prev,{
+        fase:faseNotif,
+        notificar_por:notifPor||prev.notificar_por||'',
+        notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
+        canal:'correo',
+        firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
+        firma_director:{
+          por:taskComentarioAutor(),
+          en:new Date().toISOString(),
+          modo:pdfLink?'digital':'fisico',
+          pdfLink:pdfLink||'',
+          atajo_desde_revision:true
+        },
+        notif_inicio:inicio,
+        notif_vence:vence,
+        notif_plazo_dias:5,
+        enviado_firma_en:prev.enviado_firma_en||new Date().toISOString(),
+        enviado_firma_por:prev.enviado_firma_por||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')
+      });
+      if(tk.estado==='Por verificar')tk.estado='En ejecución';
+      if(!Array.isArray(tk.historial))tk.historial=[];
+      tk.historial.push({
+        tipo:'atajo_firmado_revision',
+        fecha:inicio,
+        por:taskComentarioAutor(),
+        nota:pdfLink
+          ?('Atajo: documento firmado cargado → Por notificar'+(pdfLink?' · '+pdfLink:''))
+          :'Atajo: ya firmado (sin PDF) → Por notificar'
+      });
+    });
+    if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
+    window._tramiteAtajoFirmadoFile=null;
+    if(!ok){notif('No se pudo actualizar la actividad','err');return;}
+    notif('📬 Documento firmado — quedó en «Por notificar»'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    try{if(typeof setActFiltro==='function')setActFiltro('pornotif');}catch(eF){}
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(abrirNotif){
+      openTramiteNotificarModal(refId,taskId);
+    }else{
+      closeTaskModal();
+    }
+  }catch(err){
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    notif('Error: '+String(err.message||err).slice(0,100),'err');
+    if(btn){btn.disabled=false;btn.textContent='⬆ Cargar y pasar a Por notificar';}
+  }
+}
+window.openTramiteAtajoFirmadoModal=openTramiteAtajoFirmadoModal;
+window.tramiteAtajoFirmadoDesdeRevision=tramiteAtajoFirmadoDesdeRevision;
+window.tramiteAtajoFirmadoPickPdf=tramiteAtajoFirmadoPickPdf;
+window.tramiteAtajoFirmadoOnPdf=tramiteAtajoFirmadoOnPdf;
+window.tramiteAtajoFirmadoConfirmar=tramiteAtajoFirmadoConfirmar;

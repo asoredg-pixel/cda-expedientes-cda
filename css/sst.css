@@ -403,6 +403,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .agenda-cal-ev{font-size:10px;padding:1px 4px;margin-top:2px;border-radius:3px;background:var(--bll);color:var(--bl);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;line-height:1.3}
 .agenda-cal-ev.asig{background:var(--pul);color:var(--pu)}
 .agenda-cal-ev.act{background:var(--orl);color:var(--or)}
+.agenda-cal-ev.gcal{background:#e8f0fe;color:#1a73e8}
 .agenda-ev-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:var(--r);cursor:pointer;border-bottom:1px solid var(--bd)}
 .agenda-ev-row:hover,.agenda-ev-row.sel{background:var(--bll)}
 .agenda-ev-row.sel{outline:2px solid var(--bl);outline-offset:-1px}
