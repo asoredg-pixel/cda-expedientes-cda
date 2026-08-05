@@ -489,8 +489,8 @@ function pqrsEstadoActividadUi(e){
     return{lbl:imp?'✓ Impreso · listo firma':'🖨 Por imprimir',bg:imp?'#dcfce7':'#1a7a4a22',fg:imp?'#15803d':'#1a7a4a'};
   if(f===PQRS_WF.POR_FIRMAR){
     const firmFis=!!(wf.firma_fisica&&wf.firma_fisica.en);
-    if(firmFis)return{lbl:'✓ Firmado · por asignar notif.'+(quienLbl?' · '+quienLbl:''),bg:'#dcfce7',fg:'#15803d'};
-    return{lbl:'🖊 Por firmar'+(quienLbl?' · notif: '+quienLbl:''),bg:'#0d5c2e22',fg:'#0d5c2e'};
+    if(firmFis)return{lbl:'Firmado',bg:'#dcfce7',fg:'#15803d'};
+    return{lbl:'Por firmar'+(quienLbl?' · notif: '+quienLbl:''),bg:'#0d5c2e22',fg:'#0d5c2e'};
   }
   if(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO){
     // Estado corto: sin notificador ni fecha (la fecha va en columna VENCE / paleta Vencidas)
@@ -532,16 +532,21 @@ function pqrsPuedeAtajoParaFirma(){
   if(typeof esSecretaria==='function'&&esSecretaria())return true;
   return false;
 }
-/** Firmado por el Director y aún no notificado/cerrado (paleta Firmados). */
-function pqrsEsFirmadoDirectorPendiente(e){
+/** Firmado (físico o PDF) pendiente de que VITAL/NCA/oficina asigne o notifique — paleta «Firmados». */
+function pqrsEsFirmadoPendienteGestion(e){
   if(!e||(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)))return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
-  if(wf.firma_fisica&&wf.firma_fisica.en&&f===PQRS_WF.POR_FIRMAR)return true;
-  if(wf.firma_director&&wf.firma_director.en
-    &&(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL||f===PQRS_WF.POR_FIRMAR))
-    return true;
-  return false;
+  return f===PQRS_WF.POR_FIRMAR&&!!(wf.firma_fisica&&wf.firma_fisica.en);
+}
+/** Alias histórico: mismo criterio operativo de la paleta Firmados. */
+function pqrsEsFirmadoDirectorPendiente(e){
+  return pqrsEsFirmadoPendienteGestion(e);
+}
+/** Quién ve la paleta Firmados (Director, VITAL, NCA, oficinas/encargados de gestión). */
+function pqrsPuedeVerPaletaFirmados(){
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return true;
+  return typeof pqrsEsRolGestionFirmaSinDirector==='function'&&pqrsEsRolGestionFirmaSinDirector();
 }
 function pqrsPuedeFirmarDirector(e){
   if(!e||!pqrsEnPorFirmar(e))return false;
@@ -12796,17 +12801,22 @@ function renderActividadesRowHtml(t){
       const quienN=String(wfRow.notificar_por||'').trim();
       const firmFis=!!(wfRow.firma_fisica&&wfRow.firma_fisica.en);
       const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-      acts+='<span class="bdg" style="background:'+(firmFis?'#dcfce7':'#0d5c2e22')+';color:'+(firmFis?'#15803d':'#0d5c2e')+';font-size:10px" title="'+(firmFis?'Firmado físico; pendiente asignar Por notificar':'Impreso; pendiente firma del Director')+(quienN?'. Notificará: '+quienN:'')+'">'+(firmFis?'✓ Firmado':'🖊')+'</span>';
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
-      if(firmFis&&esDir){
-        // Solo indicador: el Director no asigna «Por notificar»
-        acts+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default;pointer-events:none" title="Firmado — pendiente de notificación (NCA / VITAL / oficina)">📬</span>';
-      }else if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct))
-        acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();pqrsPasarFirmadoAPorNotificar(\''+eid+'\')" title="Pasar a por notificar">📬</button>';
-      else if(esDir)
+      if(firmFis){
+        // Paleta Firmados: VITAL/NCA gestionan el siguiente paso
+        if(esDir){
+          acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px" title="Firmado — pendiente de NCA / VITAL / oficina">✓ Firmado</span>';
+        }else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct)){
+          acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')" title="Gestionar firmado: asignar quién notifica, notificar o cargar documento notificado">📬</button>';
+        }else{
+          acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓ Firmado</span>';
+        }
+      }else if(esDir){
         acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')" title="Firmar">🖊</button>';
-      else if(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(expAct))
-        acts+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')" title="Ya firmado (sin PDF) / cargar / notificar">✓</button>';
+      }else if(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(expAct))
+        acts+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')" title="Ya firmado (sin PDF) / cargar">✓</button>';
+      else
+        acts+='<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e;font-size:10px" title="Pendiente firma del Director'+(quienN?'. Notificará: '+quienN:'')+'">🖊</span>';
     }
     if(faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO){
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
@@ -12859,20 +12869,21 @@ function updateActEstFilterForEnc(forEnc){
     optFirma.textContent='Por imprimir';
   }
   if(optPorFirmar)optPorFirmar.hidden=!puedeFirmarBan;
-  if(optFirmados)optFirmados.hidden=!isDir;
+  const puedeFirmados=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():isDir;
+  if(optFirmados)optFirmados.hidden=!puedeFirmados;
   if(optNotif)optNotif.hidden=!(!isDir&&(puedeFirmarBan||isResp));
   // Director sigue el seguimiento en «Firmados», no actúa en Por notificar
   if(isDir&&optNotif)optNotif.hidden=true;
   const order=deptView
     ?(puedeImprimir
-      ?['pend','venc','prior','porver','parafirma','porfirmar','pornotif','done','all']
-      :['pend','venc','prior','porver','porfirmar','pornotif','done','all'])
+      ?['pend','venc','prior','porver','parafirma','porfirmar','firmados','pornotif','done','all']
+      :['pend','venc','prior','porver','porfirmar','firmados','pornotif','done','all'])
     :(isVital
-      ?['pend','venc','prior','porver','porcorr','parafirma','porfirmar','pornotif','done','all']
+      ?['pend','venc','prior','porver','porcorr','parafirma','porfirmar','firmados','pornotif','done','all']
       :(isDir
         ?['pend','venc','prior','porfirmar','firmados','pornotif','done','all']
         :['pend','venc','prior','porver','porcorr','pornotif','done','all']));
-  if(isDir&&order.indexOf('firmados')<0){
+  if(puedeFirmados&&order.indexOf('firmados')<0){
     const i=order.indexOf('porfirmar');
     if(i>=0)order.splice(i+1,0,'firmados');
     else order.splice(order.length-2,0,'firmados');
@@ -13897,22 +13908,22 @@ function filtrarActividadesPorEstado(list,filtro){
     return mergeActividadLists(pqrs,tram);
   }
   if(filtro==='porfirmar'){
-    const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
       if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
-      if(esDir&&typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))return false;
+      // Firmados físicos/digitales van a la paleta «Firmados» (no aquí)
+      if(typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e))return false;
       return true;
     });
     const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
       if(typeof taskFirmaEnPorFirmar!=='function'||!taskFirmaEnPorFirmar(t))return false;
-      if(esDir&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
+      if(typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
       return true;
     }):[];
     return mergeActividadLists(pqrs,tram);
   }
   if(filtro==='firmados'){
     const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
-      return typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e);
+      return typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e);
     });
     const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
       return typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
@@ -14078,8 +14089,9 @@ function renderActividades(){
   }).length;
   const nPara=filtrarActividadesPorEstado([],'parafirma').length;
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   const nPorFirmar=filtrarActividadesPorEstado([],'porfirmar').length;
-  const nFirmados=esDirAct?filtrarActividadesPorEstado([],'firmados').length:0;
+  const nFirmados=puedeFirmadosMets?filtrarActividadesPorEstado([],'firmados').length:0;
   const nNotif=notifAll.length;
   const colSpan=deptView?9:8;
   const actPr=document.getElementById('act-periodo-resumen');
@@ -14088,8 +14100,10 @@ function renderActividades(){
     if(filtroAct==='pend')sub.textContent='Por ejecutar: bandeja de deuda (en término, vencidas, prioritarias, por corregir'+(isResp&&!isVital?' y por notificar':'')+'). También puede filtrar por cada estado.';
     else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
     else if(filtroAct==='parafirma')sub.textContent='Por imprimir: descargue, imprima y prepare el oficio para firma del Director.';
-    else if(filtroAct==='porfirmar')sub.textContent='Por firmar: pendiente del Director. Tras firma física, NCA / VITAL / oficina pasan a «Por notificar».';
-    else if(filtroAct==='firmados')sub.textContent='Firmados: oficios que usted ya firmó (físico o digital). El icono 📬 indica que están en proceso de notificación. Desaparecen al notificar.';
+    else if(filtroAct==='porfirmar')sub.textContent='Por firmar: pendiente de firma del Director. Al firmar (PDF o físico) pasa a «Firmados».';
+    else if(filtroAct==='firmados')sub.textContent=esDirAct
+      ?'Firmados: oficios que usted ya firmó. NCA / VITAL / oficina asignan quién notifica o notifican.'
+      :'Firmados: el Director ya firmó. Confirme quién notificará, notifique usted, o cargue el documento ya notificado para cerrar.';
     else if(filtroAct==='porver')sub.textContent=deptView?'Por revisar: entregas reportadas pendientes de evaluación.':'Por verificar: entregas enviadas al departamento.';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: se mantiene el plazo de vencimiento original.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
@@ -14108,7 +14122,7 @@ function renderActividades(){
   if(puedeFirmarMets){
     metsHtml+=actMetCard('porfirmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirmar+'</div><div class="l">Por firmar</div>');
   }
-  if(esDirAct){
+  if(puedeFirmadosMets){
     metsHtml+=actMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+nFirmados+'</div><div class="l">Firmados</div>');
   }
   if(!esDirAct){
@@ -16150,11 +16164,17 @@ function openPqrsDirectorFirmarModal(expId,mode){
   if(!e){notif('PQRSD no encontrada','err');return;}
   mode=String(mode||'').trim();
   const esDirector=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-  const esAtajo=!esDirector&&(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'?pqrsPuedeMarcarFirmadoSinCargar(e):pqrsEsRolGestionFirmaSinDirector());
+  const wfPre=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const firmFisPre=!!(wfPre.firma_fisica&&wfPre.firma_fisica.en);
+  const esAtajo=!esDirector&&(
+    (typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
+    ||(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
+    ||(typeof pqrsEsRolGestionFirmaSinDirector==='function'&&pqrsEsRolGestionFirmaSinDirector()&&pqrsEnPorFirmar(e))
+  );
   if(!pqrsPuedeFirmarDirector(e)&&!esAtajo&&!(esDirector&&mode==='ver')){
     notif('Solo el Director (DS DEGUV), VITAL o el encargado pueden gestionar esta firma','err');return;
   }
-  if(pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR){notif('Esta PQRSD no está en «Por firmar»','err');return;}
+  if(pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR){notif('Esta PQRSD no está en «Por firmar» / «Firmados»','err');return;}
   // Modos dedicados del Director
   if(esDirector&&(mode==='ver'||mode==='cargar'||mode==='ya_firmado'||mode==='devolver')){
     return openPqrsDirectorAccionModal(expId,mode);
@@ -16165,7 +16185,7 @@ function openPqrsDirectorFirmarModal(expId,mode){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Por firmar — '+expId;
+  if(tit)tit.textContent=(firmFisPre?'Firmados':'Por firmar')+' — '+expId;
   if(modal){modal.classList.add('task-modal-wide');modal.classList.add('task-modal-firma');}
   const ctx=_pqrsDirectorDocsFirmaCtx(e);
   const wf=ctx.wf;
@@ -16180,46 +16200,47 @@ function openPqrsDirectorFirmarModal(expId,mode){
   const anexosBlock=_pqrsDirectorAnexosBlockHtml(ctx.anexosFirma);
 
   const intro=esAtajo
-    ?('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Si el Director <strong>ya firmó en físico</strong>, registre «ya firmado» <strong>sin subir PDF</strong> y asigne la notificación o notifique usted.')
+    ?(firmFis
+      ?('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. El Director <strong>ya firmó</strong>. Elija quién notificará, notifique usted, o cargue el documento ya notificado para cerrar la actividad.')
+      :('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Si el Director <strong>ya firmó en físico</strong>, registre «ya firmado» <strong>sin subir PDF</strong> (pasará a Firmados).'))
     :('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Revise el documento y use las acciones de la bandeja (Ver / Cargar / Ya firmado / Devolver).');
 
   const bloqueVitalSinCargar=esAtajo
     ?(firmFis
       ?('<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4">'+
-        '<div style="font-size:12px;margin-bottom:8px">✓ <strong>Firmado físico</strong> registrado'+(wf.firma_fisica.por?' por '+escAttr(wf.firma_fisica.por):'')+'. Asigne quién notificará o notifique usted.</div>'+
+        '<div style="font-size:12px;margin-bottom:8px">✓ <strong>Firmado</strong> registrado'+(wf.firma_fisica.por?' por '+escAttr(wf.firma_fisica.por):'')+'. Siguiente paso:</div>'+
         _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por,{modo:'firma',canal:wf.canal})+
         '<div class="fx" style="gap:8px;margin-top:8px;flex-wrap:wrap">'+
-        '<button type="button" class="btn bsm bp" onclick="pqrsPasarFirmadoAPorNotificar(\''+escAttr(expId)+'\')">📬 Pasar a Por notificar</button>'+
+        '<button type="button" class="btn bsm bp" onclick="pqrsPasarFirmadoAPorNotificar(\''+escAttr(expId)+'\')">📬 Confirmar → Por notificar</button>'+
         '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="pqrsMarcarFirmadoSinCargarYNotificar(\''+escAttr(expId)+'\')">📬 Notificar ahora</button>'+
+        '<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="pqrsFirmadoCargarDocNotificado(\''+escAttr(expId)+'\')">⬆ Doc. ya notificado → Atendida</button>'+
         '</div></div>')
       :('<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4">'+
         '<div style="font-size:12px;font-weight:600;margin-bottom:4px;color:#15803d">✓ Ya firmado en físico (sin cargar PDF)</div>'+
-        '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Use esta opción cuando el Director firmó el papel y no es necesario subir el PDF firmado.</div>'+
-        _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por,{modo:'firma',canal:wf.canal})+
+        '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Registra la firma y deja el oficio en <strong>Firmados</strong> para el siguiente paso.</div>'+
         '<div class="fx" style="gap:8px;margin-top:8px;flex-wrap:wrap">'+
-        '<button type="button" class="btn bsm bp" style="background:#15803d;border-color:#15803d" onclick="pqrsMarcarFirmadoSinCargarYAsignar(\''+escAttr(expId)+'\')">✓ Ya firmado → Por notificar</button>'+
-        '<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="pqrsMarcarFirmadoSinCargarYNotificar(\''+escAttr(expId)+'\')">📬 Ya firmado y notificar ahora</button>'+
+        '<button type="button" class="btn bsm bp" style="background:#15803d;border-color:#15803d" onclick="pqrsMarcarFirmadoSoloAFirmados(\''+escAttr(expId)+'\')">✓ Ya firmado → Firmados</button>'+
         '</div></div>'))
     :'';
 
   body.innerHTML=
-    '<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">🖊 Firmar oficio — '+escAttr(expId)+'</div>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">'+(firmFis?'✓ Firmados — ':'🖊 Firmar oficio — ')+escAttr(expId)+'</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+intro+'</div>'+
     previewBlock+
     anexosBlock+
     _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
     bloqueVitalSinCargar+
-    (usaDrive
+    (usaDrive&&!firmFis
       ?'<div style="margin-bottom:12px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:#0d5c2e08">'+
-        '<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+(esAtajo?'Cargar PDF firmado (opcional)':'Cargar PDF firmado → Por notificar')+'</div>'+
+        '<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+(esAtajo?'Cargar PDF firmado (opcional) → Firmados':'Cargar PDF firmado → Firmados')+'</div>'+
         '<button type="button" class="btn bsm'+(esAtajo?'':' bp')+'" onclick="pqrsDirectorAddSignedPdf()">📎 Seleccionar PDF firmado</button>'+
         '<input type="file" id="director-pdf-file" accept=".pdf,application/pdf" style="display:none" onchange="pqrsDirectorOnSignedPdf(this)">'+
         '<div id="director-pdf-list" class="pqrs-compose-att-list" style="margin-top:6px"></div></div>'
-      :'<div class="fld" style="margin-bottom:10px"><label>Link Drive del PDF firmado</label><input type="url" id="director-pdf-link" placeholder="https://drive.google.com/…"></div>')+
+      :(!firmFis?'<div class="fld" style="margin-bottom:10px"><label>Link Drive del PDF firmado</label><input type="url" id="director-pdf-link" placeholder="https://drive.google.com/…"></div>':''))+
     '<div style="margin-bottom:12px;border-top:1px solid var(--bd);padding-top:10px">'+chatHtml+'</div>'+
     '<div class="pqrs-firma-actions">'+
-    '<button type="button" class="btn bsm'+(esAtajo?'':' bp')+'" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">⬆ Confirmar PDF firmado → Por notificar</button>'+
-    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    (!firmFis?'<button type="button" class="btn bsm'+(esAtajo?'':' bp')+'" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">⬆ Confirmar PDF firmado → Firmados</button>':'')+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
   window._directorSignedFile=null;
   window._pqrsNotifSoporteFile=null;
   ov.classList.add('on');
@@ -16253,7 +16274,7 @@ function openPqrsDirectorAccionModal(expId,mode){
   }else if(mode==='cargar'){
     titulo='⬆ Cargar documento firmado — '+expId;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Cargar PDF ya firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado para que NCA / VITAL / la oficina procedan a notificar. Usted no asigna quién notifica.</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado. Quedará en la paleta <strong>Firmados</strong> para que NCA / VITAL / la oficina asignen quién notifica o notifiquen. Usted no asigna quién notifica.</div>'+
       _pqrsDirectorPreviewBlockHtml(ctx.docFirma,ctx.urls,'Documento original de referencia.')+
       _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
       (usaDrive
@@ -16263,14 +16284,14 @@ function openPqrsDirectorAccionModal(expId,mode){
           '<div id="director-pdf-list" class="pqrs-compose-att-list" style="margin-top:6px"></div></div>'
         :'<div class="fld" style="margin-bottom:10px"><label>Link Drive del PDF firmado</label><input type="url" id="director-pdf-link" placeholder="https://drive.google.com/…"></div>')+
       '<div class="pqrs-firma-actions">'+
-      '<button type="button" class="btn bsm bp" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">⬆ Confirmar y pasar a notificar</button>'+
+      '<button type="button" class="btn bsm bp" id="director-firmar-btn" onclick="pqrsDirectorConfirmarFirmado(\''+escAttr(expId)+'\')">⬆ Confirmar → Firmados</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   }else if(mode==='ya_firmado'){
     titulo='✓ Ya firmado — '+expId;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Indicar que ya está firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Use esta opción cuando firmó el documento <strong>impreso</strong> (flujo VITAL/NCA u oficinas). No descarga ni vuelve a cargar el PDF. Usted <strong>no asigna</strong> quién notifica; solo puede verlo.</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Use esta opción cuando firmó el documento <strong>impreso</strong> (flujo VITAL/NCA u oficinas). No descarga ni vuelve a cargar el PDF. Usted <strong>no asigna</strong> quién notifica.</div>'+
       _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
-      '<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4;font-size:12px">Al confirmar, el oficio queda en su paleta <strong>Firmados</strong> y NCA / VITAL / la oficina pasan a «Por notificar».</div>'+
+      '<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4;font-size:12px">Al confirmar, el oficio queda en la paleta <strong>Firmados</strong> (suya y de NCA / VITAL / oficina) para el siguiente paso.</div>'+
       '<div class="pqrs-firma-actions">'+
       '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="pqrsDirectorMarcarFirmadoFisico(\''+escAttr(expId)+'\',{force:true})">✓ Confirmar ya firmado</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -16395,7 +16416,7 @@ async function pqrsDirectorMarcarFirmadoFisico(expId,opts){
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
-  notif('✓ Firmado físico registrado. Queda en su paleta «Firmados»; NCA / VITAL / oficina asignan la notificación','ok');
+  notif('✓ Firmado físico registrado. Queda en «Firmados» para NCA / VITAL / oficina','ok');
 }
 
 /** Registra firma física sin PDF (VITAL / encargado). No cambia de fase. */
@@ -16418,6 +16439,44 @@ function pqrsRegistrarFirmadoFisicoSinCargar(e,opts){
     por:por
   });
   return true;
+}
+
+/** VITAL / NCA: registrar firmado sin PDF y dejar en paleta Firmados (sin pasar aún a Por notificar). */
+async function pqrsMarcarFirmadoSoloAFirmados(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return false;
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e){notif('PQRSD no encontrada','err');return false;}
+  if(!pqrsPuedeMarcarFirmadoSinCargar(e)&&!pqrsEsRolGestionFirmaSinDirector()){
+    notif('Solo VITAL o el encargado pueden registrar firmado','err');return false;
+  }
+  pqrsRegistrarFirmadoFisicoSinCargar(e,{nota:'Registró oficio ya firmado → paleta Firmados'});
+  persistExpedienteGranular(e);
+  closeTaskModal();
+  renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
+  notif('✓ Quedó en «Firmados»','ok');
+  return true;
+}
+
+/** Desde Firmados: cargar soporte/documento ya notificado y cerrar como Atendida. */
+function pqrsFirmadoCargarDocNotificado(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
+  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  if(!pqrsPuedeAsignarPorNotificar(e)&&!pqrsEsRolGestionFirmaSinDirector()){
+    notif('No puede cerrar esta PQRSD desde Firmados','err');return;
+  }
+  // Pasa a Por notificar y abre el modal de notificación (carga oficio notificado / soporte y cierra)
+  confirmPrecaucion({
+    title:'Documento ya notificado',
+    message:'¿Registrar que el oficio ya fue notificado y cerrar la actividad como atendida?',
+    detail:'Se abrirá el formulario de notificación para cargar el soporte (PDF/imagen) y confirmar el cierre.',
+    confirmLabel:'Continuar'
+  },async function(){
+    const ok=await pqrsPasarFirmadoAPorNotificar(expId,{skipClose:true});
+    if(!ok)return;
+    await openPqrsNotificarOficioModal(expId);
+  });
 }
 
 /** VITAL / encargado: ya firmado sin PDF → «Por notificar». */
@@ -16538,40 +16597,29 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
       if(btnN){btnN.disabled=false;}
       return false;
     }
-    await _pqrsRenombrarDocsDriveWf(wf,'por_notificar');
-    let notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||wf.notificar_por||wf.notificar_por_propuesto||'').trim();
-    notifPor=pqrsAplicarReglaNotificadorCanal(e,wf.canal||'',notifPor);
-    const notifBase=hoy();
-    const notifVence=typeof addDiasHabilesCO==='function'?addDiasHabilesCO(notifBase,5):notifBase;
-    const patchFirma={
-      fase:PQRS_WF.PENDIENTE_NOTIF,
+    await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
+    const porDir=responsableActivo||'DS DEGUV';
+    // Queda en «Firmados» (POR_FIRMAR + firma_fisica) para que NCA / VITAL asignen o notifiquen
+    setPqrsWorkflow(e,{
+      fase:PQRS_WF.POR_FIRMAR,
       documentos:wf.documentos,
-      firma_director:{por:responsableActivo||'DS DEGUV',en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
-      firma_fisica:null,
-      notif_inicio:notifBase,
-      notif_vence:notifVence,
-      notif_plazo_dias:5
-    };
-    if(notifPor){
-      patchFirma.notificar_por=notifPor;
-      patchFirma.notificar_por_propuesto=notifPor;
-    }
-    setPqrsWorkflow(e,patchFirma);
-    pqrsSincronizarParticipacionPostAprobacion(e);
+      firma_director:{por:porDir,en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
+      firma_fisica:{por:porDir,en:new Date().toISOString(),modo:'digital',pdfLink:pdfLink,sin_pdf:false}
+    });
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → por notificar (vence '+fmtF(notifVence)+', 5 d.h.)'+(notifPor?' · Notificará: '+notifPor:''),oficina:'ds_deguv',por:responsableActivo||'DS'});
+    e._pqrs_historial.push({tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → paleta Firmados (pendiente NCA / VITAL / oficina)',oficina:'ds_deguv',por:porDir});
     persistExpedienteGranular(e);
     window._directorSignedFile=null;
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     if(skipClose){
-      if(btn){btn.disabled=false;btn.textContent='⬆ Confirmar PDF firmado → Por notificar';}
+      if(btn){btn.disabled=false;btn.textContent='⬆ Confirmar PDF firmado';}
       if(btnN){btnN.disabled=false;btnN.textContent='📬 Confirmar firmado y notificar ahora';}
       return true;
     }
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    notif('📬 Oficio firmado — por notificar · vence '+fmtF(notifVence)+' (5 días hábiles)','ok');
+    notif('✓ Oficio firmado cargado — queda en «Firmados» para NCA / VITAL','ok');
     return true;
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();
@@ -16595,7 +16643,10 @@ async function pqrsDirectorConfirmarFirmadoYNotificar(expId){
   }
   const ok=await pqrsDirectorConfirmarFirmado(expId,true);
   if(!ok)return;
-  await pqrsConfirmarNotificacionOficio(expId);
+  // Confirmar firmado deja el ítem en Firmados; pasar a Por notificar y abrir modal
+  const ok2=await pqrsPasarFirmadoAPorNotificar(expId,{skipClose:true});
+  if(!ok2)return;
+  await openPqrsNotificarOficioModal(expId);
 }
 
 function openPqrsNotificarOficioModal(expId){

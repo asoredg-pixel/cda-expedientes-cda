@@ -92,7 +92,7 @@ function taskFirmaEstadoUi(t){
   const quien=String(wf.notificar_por||'').trim();
   if(taskFirmaEnParaFirma(t))return{lbl:'Por imprimir',bg:'#1a7a4a22',fg:'#1a7a4a',sub:quien?'Notif.: '+quien:''};
   if(taskFirmaEnPorFirmar(t)){
-    if(taskFirmaEsFirmadoPendiente(t))return{lbl:'Firmados',bg:'#dcfce7',fg:'#15803d',sub:'Pendiente notificar'};
+    if(taskFirmaEsFirmadoPendiente(t))return{lbl:'Firmado',bg:'#dcfce7',fg:'#15803d',sub:''};
     return{lbl:'Por firmar',bg:'#0d5c2e22',fg:'#0d5c2e',sub:quien?'Notif.: '+quien:''};
   }
   if(taskFirmaEnPorNotificar(t))return{lbl:'Por notificar',bg:'#185FA522',fg:'#185FA5',sub:''};
@@ -499,7 +499,7 @@ function getTramiteFirmaRowsParaPaletaDirector(modo){
   const tasks=getTareasTramiteFirmaPorFase(function(t){
     if(modo==='firmados')return taskFirmaEsFirmadoPendiente(t);
     if(!taskFirmaEnPorFirmar(t))return false;
-    if(esDir&&taskFirmaEsFirmadoPendiente(t))return false;
+    if(taskFirmaEsFirmadoPendiente(t))return false;
     return true;
   });
   return tasks.map(function(t){
