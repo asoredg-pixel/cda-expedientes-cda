@@ -34,7 +34,7 @@ function renderConsolidadoResponsable(){
     '<div class="met"><div class="v">'+expsU+'</div><div class="l">Expedientes</div></div>'+
     '<div class="met"><div class="v">'+ejec+'</div><div class="l">Por ejecutar</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div></div>'+
-    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+porver+'</div><div class="l">Por verificar</div></div>'+
+    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+porver+'</div><div class="l">Por revisar</div></div>'+
     '<div class="met" style="border-left:3px solid var(--rd)"><div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div></div>';
   const cardActs=document.getElementById('tbl-acts')?document.getElementById('tbl-acts').closest('.card'):null;
@@ -82,7 +82,7 @@ function renderConsolidado(){
     '<div class="met"><div class="v">'+fin+'</div><div class="l">Archivados</div></div>'+
     '<div class="met"><div class="v">'+pend+'</div><div class="l">Actividades pendientes</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+porCorrTk+'</div><div class="l">Por corregir</div></div>'+
-    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+porVerTk+'</div><div class="l">Por verificar</div></div>'+
+    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+porVerTk+'</div><div class="l">Por revisar</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+mp+'</div><div class="l">Med. prev.</div></div>'+
     '<div class="met" style="border-left:3px solid var(--rd)"><div class="v" style="color:var(--rd)">'+sus+'</div><div class="l">Suspendidos</div></div>'+
     '<div class="met" style="border-left:3px solid var(--pu)"><div class="v" style="color:var(--pu)">'+san+'</div><div class="l">Sancionatorios</div></div>'+

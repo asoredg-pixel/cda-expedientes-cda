@@ -22,12 +22,12 @@
 <script src="js/roles.js?v=20260805f"></script>
 <script src="js/config-store.js?v=20260724b"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260805h"></script>
-<script src="js/formulario.js?v=20260723a"></script>
-<script src="js/tareas.js?v=20260724a"></script>
-<script src="js/guardar-exp.js?v=20260721d"></script>
-<script src="js/consolidado.js?v=20260702t"></script>
-<script src="js/configuracion.js?v=20260803a"></script>
+<script src="js/core.js?v=20260805i"></script>
+<script src="js/formulario.js?v=20260805i"></script>
+<script src="js/tareas.js?v=20260805i"></script>
+<script src="js/guardar-exp.js?v=20260805i"></script>
+<script src="js/consolidado.js?v=20260805i"></script>
+<script src="js/configuracion.js?v=20260805i"></script>
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
@@ -36,7 +36,7 @@
 <script src="js/gmail.js?v=20260805c"></script>
 <script src="js/pqrs.js?v=20260805h"></script>
 <script src="js/consulta.js?v=20260721a"></script>
-<script src="js/entrega-responsable.js?v=20260803a"></script>
+<script src="js/entrega-responsable.js?v=20260805i"></script>
 <script src="js/tramite-firma.js?v=20260805h"></script>
 <script src="js/recursos.js?v=20260702t"></script>
 <script src="js/ingreso.js?v=20260730b"></script>
@@ -450,7 +450,7 @@
         <option value="ejec">Con actividades en trámite</option>
         <option value="ate">Con actividades atendidas</option>
         <option value="venc">Con actividades vencidas</option>
-        <option value="porver">Con actividades por verificar</option>
+        <option value="porver">Con actividades por revisar</option>
         <option value="porcorr">Con actividades por corregir</option>
       </select>
       <select id="q-fl" onchange="renderConsulta()">
@@ -940,12 +940,11 @@
         <div class="fld"><label>Nombre *</label><input type="text" id="nt-nom" placeholder="Ej. Permiso de emisiones"></div>
         <div class="fld"><label>Descripción</label><input type="text" id="nt-desc" placeholder="Descripción breve"></div>
         <div class="fld"><label>Color</label>
-          <select id="nt-color">
-            <option value="#185FA5">Azul</option><option value="#1a7a4a">Verde</option>
-            <option value="#b87d0a">Ámbar</option><option value="#a32d2d">Rojo</option>
-            <option value="#6d3fa8">Morado</option><option value="#2196A8">Turquesa</option>
-            <option value="#D85A30">Naranja</option><option value="#639922">Lima</option>
-          </select>
+          <div style="display:flex;align-items:center;gap:10px;min-height:38px">
+            <span id="nt-color-prev" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--bd);background:#185FA5;flex-shrink:0" title="Color asignado"></span>
+            <span id="nt-color-hint" style="font-size:12px;color:var(--tx2);line-height:1.35">Se asigna automáticamente un color que no esté en uso por otro trámite</span>
+            <input type="hidden" id="nt-color" value="#185FA5">
+          </div>
         </div>
       </div>
       <div class="fg">

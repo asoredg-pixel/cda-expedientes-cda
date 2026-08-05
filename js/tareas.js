@@ -265,7 +265,7 @@ function syncTaskEstado(row){
   else if(fr)est='Por verificar';
   else if(vence&&vence<hoy())est='Vencida';
   if(estEl){
-    const lbl=est==='En ejecución'?'Por ejecutar':est;
+    const lbl=est==='En ejecución'?'Por ejecutar':est==='Por verificar'?'Por revisar':est;
     estEl.textContent=lbl;
     estEl.className='te-display '+(est==='Atendida'?'te-ate':est==='Por verificar'?'te-pv':est==='Vencida'?'te-venc':'te-ejec');
   }

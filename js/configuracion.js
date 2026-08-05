@@ -890,11 +890,46 @@ function addNtCampo(sec,tipoDef){
   c.appendChild(div);
 }
 function toggleNcOpts(sel){const opts=sel.closest('div').parentElement.querySelector('.nc-opts');if(opts)opts.style.display=(sel.value==='seleccion'||sel.value==='lista')?'':'none';}
+/** Paleta de colores de trámites (PAL) — evita repetir cuando hay disponibles. */
+function coloresTramitePaleta(){
+  return (typeof PAL!=='undefined'&&Array.isArray(PAL)&&PAL.length)
+    ?PAL.slice()
+    :['#185FA5','#1a7a4a','#b87d0a','#a32d2d','#6d3fa8','#2196A8','#D85A30','#639922','#D4537E','#888780'];
+}
+function coloresUsadosPorTramites(){
+  const used={};
+  ((typeof cfg!=='undefined'&&cfg&&cfg.tramites)||[]).forEach(function(t){
+    const c=String(t&&t.color||'').trim().toLowerCase();
+    if(c)used[c]=(used[c]||0)+1;
+  });
+  return used;
+}
+/** Elige un color libre; si todos están usados, el menos repetido. */
+function pickTramiteColorLibre(){
+  const pal=coloresTramitePaleta();
+  const used=coloresUsadosPorTramites();
+  for(let i=0;i<pal.length;i++){
+    if(!used[String(pal[i]).toLowerCase()])return pal[i];
+  }
+  let best=pal[0],bestN=Infinity;
+  pal.forEach(function(c){
+    const n=used[String(c).toLowerCase()]||0;
+    if(n<bestN){bestN=n;best=c;}
+  });
+  return best;
+}
+function syncNtColorAuto(){
+  const c=pickTramiteColorLibre();
+  const hid=document.getElementById('nt-color');
+  if(hid)hid.value=c;
+  const prev=document.getElementById('nt-color-prev');
+  if(prev)prev.style.background=c;
+}
 function crearTramite(){
   if(guardCfgEditGeneral())return;
   const nom=document.getElementById('nt-nom').value.trim();
   const desc=document.getElementById('nt-desc').value.trim();
-  const color=document.getElementById('nt-color').value;
+  const color=pickTramiteColorLibre();
   const plazo=Number(document.getElementById('nt-plazo').value)||60;
   const alerta=Number(document.getElementById('nt-alerta').value)||80;
   const unidad=document.getElementById('nt-unidad').value;
@@ -903,6 +938,7 @@ function crearTramite(){
   cfg.tramites.push({id:'t'+Date.now(),nombre:nom,desc,color,plazo,alerta,unidad,etapas:[],etapasSeg:[],campos});
   document.getElementById('nt-nom').value='';
   document.getElementById('nt-desc').value='';
+  const hid=document.getElementById('nt-color');if(hid)hid.value=color;
   saveLS();poblarTramSelect();auditCfgChange('Nuevo trámite: '+nom);notif('Trámite "'+nom+'" creado','ok');
   showCfgTab('tramites');
 }

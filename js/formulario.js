@@ -103,6 +103,7 @@ function showCfgTab(t){
   if(t==='tramites')renderTramsCfg();
   if(t==='personas')renderPersonasCfg();
   if(t==='auditoria')renderAuditLogCfg();
+  if(t==='nuevo'&&typeof syncNtColorAuto==='function')syncNtColorAuto();
 }
 function htmlApoderadoAutorizado(ev){
   const apo=!!ev._apoderado;

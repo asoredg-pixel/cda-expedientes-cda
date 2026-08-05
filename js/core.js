@@ -1443,6 +1443,103 @@ function validarNumeroOficioDisponible(oficio,excludeExpId){
   pqrsShowRespOficioError('Este N° de oficio ya fue usado ('+u.expId+').');
   return false;
 }
+/** Normaliza N° factura / concepto para unicidad. */
+function normContableRefNum(s){
+  return String(s||'').trim().toUpperCase().replace(/\s+/g,'');
+}
+/**
+ * Busca usos previos del N° de factura (referencia).
+ * @param {string} excludeExpId — expediente a ignorar (al editar el mismo)
+ * @param {number|null} excludeIndex — índice de factura a ignorar en ese expediente
+ */
+function buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex){
+  const needle=normContableRefNum(ref);
+  if(!needle)return[];
+  const excl=String(excludeExpId||'').trim();
+  const hits=[];
+  const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  lista.forEach(function(e){
+    if(!e)return;
+    const id=String(e._exp||'').trim();
+    let facs=[];
+    try{facs=typeof facturasData==='function'?facturasData(e._facturas_extra):(e._facturas_extra?JSON.parse(e._facturas_extra):[]);}catch(x){facs=[];}
+    if(!Array.isArray(facs))return;
+    facs.forEach(function(f,i){
+      if(!f)return;
+      if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      const r=normContableRefNum(f.ref);
+      if(r&&r===needle){
+        hits.push({
+          expId:id||'—',
+          contexto:'Factura',
+          detalle:(f.tipo||'Factura')+(f.ref?' · '+String(f.ref):'')
+        });
+      }
+    });
+  });
+  return hits;
+}
+function buscarUsosNumeroConcepto(concepto,excludeExpId,excludeIndex){
+  const needle=normContableRefNum(concepto);
+  if(!needle)return[];
+  const excl=String(excludeExpId||'').trim();
+  const hits=[];
+  const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  lista.forEach(function(e){
+    if(!e)return;
+    const id=String(e._exp||'').trim();
+    let arr=[];
+    try{arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):(e._conceptos_seg?JSON.parse(e._conceptos_seg):[]);}catch(x){arr=[];}
+    if(!Array.isArray(arr))return;
+    arr.forEach(function(c,i){
+      if(!c)return;
+      if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      const n=normContableRefNum(c.concepto);
+      if(n&&n===needle){
+        hits.push({
+          expId:id||'—',
+          contexto:'Concepto técnico',
+          detalle:'N° '+String(c.concepto||'')+(c.fecha?' · '+c.fecha:'')
+        });
+      }
+    });
+  });
+  return hits;
+}
+function _avisoNumeroContableDuplicado(kind,valor,usos){
+  if(!usos||!usos.length)return false;
+  const u=usos[0];
+  const mas=usos.length>1?' (+'+(usos.length-1)+' más)':'';
+  const detail='Usado en: '+u.expId+' ('+u.contexto+')'+(u.detalle?' — '+u.detalle:'')+mas;
+  const label=kind==='factura'?'N° de factura':'N° de concepto';
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:label+' no válido',
+      message:'El '+label.toLowerCase()+' «'+String(valor||'').trim()+'» ya fue ingresado en otro registro.',
+      detail:detail,
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else if(typeof notif==='function'){
+    notif(label+' ya usado: '+detail,'err');
+  }
+  return true;
+}
+/** false si el N° de factura (ref) ya existe. */
+function validarNumeroFacturaDisponible(ref,excludeExpId,excludeIndex){
+  if(!normContableRefNum(ref))return true;
+  const usos=buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex);
+  if(_avisoNumeroContableDuplicado('factura',ref,usos))return false;
+  return true;
+}
+/** false si el N° de concepto ya existe. */
+function validarNumeroConceptoDisponible(concepto,excludeExpId,excludeIndex){
+  if(!normContableRefNum(concepto))return true;
+  const usos=buscarUsosNumeroConcepto(concepto,excludeExpId,excludeIndex);
+  if(_avisoNumeroContableDuplicado('concepto',concepto,usos))return false;
+  return true;
+}
 /** Valida adjuntos según canal (oficio + soporte de notificación). */
 function pqrsValidateAdjuntosPorCanal(tipoResp,canal,opts){
   opts=opts||{};
@@ -5426,7 +5523,7 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
 }
 function estadoTaskLabelFor(est){
   if(est==='En ejecución')return'Por ejecutar';
-  if(est==='Por verificar')return(esModoResponsable()&&!esVistaActividadesDepto())?'Por verificar':'Por revisar';
+  if(est==='Por verificar')return'Por revisar';
   return est;
 }
 function normalizeTask(t){
@@ -9031,7 +9128,7 @@ function estadoTaskLabel(t){
     const ok=(t.asignados||[]).filter(a=>a.estado==='atendido').length;
     return'Parcial ('+ok+'/'+rs.length+' atendidos)';
   }
-  if(e==='Por verificar')return(esModoResponsable()&&!esVistaActividadesDepto())?'Por verificar':'Por revisar';
+  if(e==='Por verificar')return'Por revisar';
   return e;
 }
 /** Badge de estado (HTML). */
@@ -12862,7 +12959,7 @@ function updateActEstFilterForEnc(forEnc){
   const optFirmados=sel.querySelector('option[value="firmados"]');
   const optNotif=sel.querySelector('option[value="pornotif"]');
   if(optCorr)optCorr.hidden=deptView;
-  if(optVer){optVer.hidden=false;optVer.textContent=deptView?'Por revisar':'Por verificar';}
+  if(optVer){optVer.hidden=false;optVer.textContent='Por revisar';}
   if(optRev)optRev.hidden=true;
   if(optFirma){
     optFirma.hidden=!puedeImprimir;
@@ -14104,7 +14201,7 @@ function renderActividades(){
     else if(filtroAct==='firmados')sub.textContent=esDirAct
       ?'Firmados: oficios que usted ya firmó. NCA / VITAL / oficina asignan quién notifica o notifican.'
       :'Firmados: el Director ya firmó. Confirme quién notificará, notifique usted, o cargue el documento ya notificado para cerrar.';
-    else if(filtroAct==='porver')sub.textContent=deptView?'Por revisar: entregas reportadas pendientes de evaluación.':'Por verificar: entregas enviadas al departamento.';
+    else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: se mantiene el plazo de vencimiento original.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
@@ -14114,7 +14211,7 @@ function renderActividades(){
   let metsHtml=actMetCard('pend','','<div class="v">'+porEjec+'</div><div class="l">Por ejecutar</div>')+
     actMetCard('venc','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div>')+
     actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>')+
-    actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">'+(deptView?'Por revisar':'Por verificar')+'</div>');
+    actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>');
   if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>');
   if(puedeImprimirMets){
     metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">Por imprimir</div>');

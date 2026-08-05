@@ -353,7 +353,7 @@ function openEntregaResponsableModal(){
       '</div>'+
       htmlEntregaRespInteresadoBox()+
     '</div>'+
-    '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Misma vía que <strong>+ Actividad sin expediente</strong> del encargado: se crea la actividad, usted entrega y pasa a <strong>Por verificar</strong>. Si el encargado ya la asignó, ábrala desde Actividades y entregue allí.</div>'+
+    '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Misma vía que <strong>+ Actividad sin expediente</strong> del encargado: se crea la actividad, usted entrega y pasa a <strong>Por revisar</strong>. Si el encargado ya la asignó, ábrala desde Actividades y entregue allí.</div>'+
     '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
@@ -898,6 +898,12 @@ function ensureExpTaskEntregaResponsable(){
       notif('Seleccione el tipo de acto / resolución','err');
       return null;
     }
+    if(regPayload.tipo==='factura'&&regPayload.item.ref&&typeof validarNumeroFacturaDisponible==='function'){
+      if(!validarNumeroFacturaDisponible(regPayload.item.ref,null,null))return null;
+    }
+    if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
+      if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return null;
+    }
     appendRegistroDesdeEntrega(e,regPayload);
   }
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
@@ -984,10 +990,8 @@ function puedeRevisarAltaExpediente(e){
   return !(typeof esModoResponsable==='function'&&esModoResponsable());
 }
 function expAltaResponsableBadgeHtml(e){
-  if(!e||!e._alta_por_responsable)return'';
-  // Solo mientras esté pendiente; al aprobar alta/documento desaparece del flujo
-  if(!expPendienteRevisionAlta(e))return'';
-  return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Alta creada por responsable — pendiente de revisión del departamento">⏳ Alta por revisar</span>';
+  // Etiqueta «Alta por revisar» desactivada: no es necesaria en la UI
+  return'';
 }
 function resumenAltaEntregaHtml(e){
   if(!e)return'';

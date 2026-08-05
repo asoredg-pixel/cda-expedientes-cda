@@ -201,6 +201,42 @@ function guardarExpCore(stayOnForm){
     }
   }
   onContableChange();
+  // Unicidad N° factura / N° concepto (igual que N° oficio)
+  if(!stayOnForm){
+    const expExcl=editId||expId;
+    if(typeof syncFacturasExtra==='function')syncFacturasExtra();
+    if(typeof syncConceptosSeg==='function')syncConceptosSeg();
+    const facsChk=typeof facturasData==='function'?facturasData(gv('fld__facturas_extra')):[];
+    const seenFac={};
+    for(let i=0;i<facsChk.length;i++){
+      const ref=facsChk[i]&&facsChk[i].ref;
+      const key=typeof normContableRefNum==='function'?normContableRefNum(ref):String(ref||'').trim().toUpperCase();
+      if(!key)continue;
+      if(seenFac[key]){
+        if(typeof confirmPrecaucion==='function'){
+          confirmPrecaucion({title:'N° de factura no válido',message:'El N° de factura «'+String(ref).trim()+'» está repetido en este expediente.',confirmLabel:'Entendido',hideCancel:true,tone:'warn'},function(){});
+        }else notif('N° de factura repetido en el expediente','err');
+        return;
+      }
+      seenFac[key]=true;
+      if(typeof validarNumeroFacturaDisponible==='function'&&!validarNumeroFacturaDisponible(ref,expExcl,i))return;
+    }
+    const consChk=typeof conceptosSegData==='function'?conceptosSegData(gv('fld__conceptos_seg')):[];
+    const seenCon={};
+    for(let i=0;i<consChk.length;i++){
+      const con=consChk[i]&&consChk[i].concepto;
+      const key=typeof normContableRefNum==='function'?normContableRefNum(con):String(con||'').trim().toUpperCase();
+      if(!key)continue;
+      if(seenCon[key]){
+        if(typeof confirmPrecaucion==='function'){
+          confirmPrecaucion({title:'N° de concepto no válido',message:'El N° de concepto «'+String(con).trim()+'» está repetido en este expediente.',confirmLabel:'Entendido',hideCancel:true,tone:'warn'},function(){});
+        }else notif('N° de concepto repetido en el expediente','err');
+        return;
+      }
+      seenCon[key]=true;
+      if(typeof validarNumeroConceptoDisponible==='function'&&!validarNumeroConceptoDisponible(con,expExcl,i))return;
+    }
+  }
   if(!stayOnForm&&responsablePuedeEditarSec('campos')){
     for(const c of (t.campos||[])){
       if(esSecSolicitante(c.seccion)||esSecInfoTecnica(c.seccion))continue;
