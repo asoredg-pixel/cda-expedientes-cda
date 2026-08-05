@@ -404,8 +404,8 @@ function sstSolicitarGmailParaAdjuntar(opts) {
   });
 }
 function sstSolicitarDriveParaPqrs(expRef) {
-  const tieneCarp = typeof _drivePqrsExpTieneCarpetas === 'function' && _drivePqrsExpTieneCarpetas(expRef);
-  return sstSolicitarGmailParaAdjuntar({ requireSecretaria: !tieneCarp, force: true });
+  // NCA/oficina con token propio puede subir si tiene editor en Drive; no exigir Secretaría en línea
+  return sstSolicitarGmailParaAdjuntar({ requireSecretaria: false, force: true });
 }
 function renderSstGmailSesionBloqueo() {
   const ov = document.getElementById('gmail-sesion-overlay');
@@ -1468,7 +1468,7 @@ window.driveUsuarioNecesitaEditorRaiz = driveUsuarioNecesitaEditorRaiz;
 const DRIVE_MESES_ES = ['01-Enero','02-Febrero','03-Marzo','04-Abril','05-Mayo','06-Junio','07-Julio','08-Agosto','09-Septiembre','10-Octubre','11-Noviembre','12-Diciembre'];
 
 // Obtiene el mejor token disponible para subir al Drive institucional.
-// Prioridad: secretaria (cdaguaviare1) > token de oficina conectada.
+// Prioridad: secretaria (cdaguaviare1) > token de oficina conectada (NCA, VITAL, etc.).
 function _driveGetSecretariaToken() {
   const secTok = typeof gmailGetToken === 'function' ? gmailGetToken() : '';
   if (secTok && typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) return secTok;
@@ -1477,18 +1477,17 @@ function _driveGetSecretariaToken() {
 function _driveGetBestToken() {
   const secTok = _driveGetSecretariaToken();
   if (secTok) return secTok;
-  const ofiTok = gmailOfiGetToken ? gmailOfiGetToken() : '';
-  if (ofiTok && gmailOfiIsTokenValid && gmailOfiIsTokenValid()) return ofiTok;
+  const ofiTok = typeof gmailOfiGetToken === 'function' ? gmailOfiGetToken() : '';
+  if (ofiTok && typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid()) return ofiTok;
   return '';
 }
-// Token para subir a carpetas PQRSD ya creadas por Secretaría (oficinas con permiso editor).
+/**
+ * Token para subir a Drive institucional / carpetas compartidas.
+ * Cualquier cuenta conectada (Secretaría u oficina) con permiso de editor sirve;
+ * no exige que Secretaría esté en línea si NCA/oficina ya tiene token.
+ */
 function _driveGetPqrsUploadToken(expRef) {
-  const sec = _driveGetSecretariaToken();
-  if (sec) return sec;
-  if (expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id) {
-    return _driveGetBestToken();
-  }
-  return '';
+  return _driveGetBestToken();
 }
 function _drivePqrsExpTieneCarpetas(expRef) {
   return !!(expRef && expRef._pqrs_drive_solicitud_folder_id && expRef._pqrs_drive_respuesta_folder_id);
@@ -1951,9 +1950,9 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
     return result;
   }
 
-  const token = _driveGetSecretariaToken();
+  const token = _driveGetBestToken();
   if (!token) {
-    throw new Error('Para crear la carpeta PQRSD en Drive institucional conecte la bandeja Gmail de Secretaría (cdaguaviare1).');
+    throw new Error('Conecte su correo Gmail/Drive (oficina o Secretaría) con acceso a la carpeta para crear o usar carpetas PQRSD.');
   }
 
   if (expRef && expRef._pqrs_drive_folder_id) {
@@ -2145,9 +2144,9 @@ async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
 async function driveUploadInstitutional(blob, filename, mimeType, tipo, pqrsNum, nombreCarpeta, fechaRef, uploadOpts) {
   uploadOpts = uploadOpts || {};
   const expRef = uploadOpts.expediente || null;
-  const token = _driveGetPqrsUploadToken(expRef);
+  const token = _driveGetBestToken();
   if (!token) {
-    throw new Error('Sin token Gmail/Drive. Conecte la bandeja de Secretaría o su correo de oficina con acceso a la carpeta PQRSD.');
+    throw new Error('Sin token Gmail/Drive. Conecte su correo de oficina (o la bandeja de Secretaría) con acceso a la carpeta en Drive.');
   }
 
   let folderId = uploadOpts.folderId || '';

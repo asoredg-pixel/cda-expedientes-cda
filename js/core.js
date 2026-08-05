@@ -8683,7 +8683,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
         '<button type="button" class="btn bsm" onclick="aplicarPlazoRevisionTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">Aplicar plazo</button>'+
       '</div></div>';
   }
-  // Libres: selector de quién notificará (antes de la decisión)
+  // Selector notificador (libres); con expediente va en renderTramiteFirmaVerifyExtrasHtml
   if(esLibre&&pendVer&&typeof _pqrsOpcionesNotificadorHtml==='function'){
     const eStub=typeof tramiteFirmaExpCtx==='function'?tramiteFirmaExpCtx(t,expId):{_depto:t.depto||'guaviare',_sin_expediente:true,tasks:[t]};
     const wfLibre=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
@@ -8692,39 +8692,41 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
   if(typeof renderTramiteFirmaVerifyExtrasHtml==='function')
     h+=renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t);
   const enFirmaTram=typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t);
-  if(!enFirmaTram){
-    if(esLibre&&pendVer){
-      // Misma decisión que PQRSD: imprimir / firma / cerrar sin firma — sin exigir expediente
-      const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
-      const puedeImprimir=(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())||deptView;
-      const puedeAtajo=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())||deptView;
-      const eid=jsStr(expId),tid=jsStr(taskId);
-      h+='<div style="margin-bottom:10px;padding:10px;background:#0d5c2e12;border:1px solid #0d5c2e;border-radius:var(--r)">'+
-        '<div style="font-size:12px;font-weight:600;color:#0d5c2e;margin-bottom:4px">Decisión (sin expediente)</div>'+
-        '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Oficios simples (invitación, etc.) no requieren radicar ni asociar expediente. Elija el flujo de firma o cierre directo.</div>'+
-        '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
-        '<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">';
-      if(puedeImprimir)
-        h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff;border-color:#1a7a4a" onclick="tramiteLibreParaImprimir(\''+eid+'\',\''+tid+'\')" title="Cola Por imprimir → luego firma del Director">🖨 Para imprimir</button>';
-      if(puedeAtajo)
-        h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteLibreParaFirma(\''+eid+'\',\''+tid+'\')" title="Atajo a Por firmar (Director), sin impresión">🖊 Para firma</button>';
-      if(!puedeImprimir&&!puedeAtajo)
-        h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tid+'\')">🖊 Enviar a firma</button>';
-      h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>'+
-        '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
-        '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>'+
-        '</div></div>';
-    }else{
-      h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">'+
-        '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
-        '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>';
-      if(pendVer){
-        h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">🖊 Enviar a firma</button>';
-        h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>';
-        h+='<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">↩ Devolver</button>';
-      }
-      h+='</div>';
+  if(!enFirmaTram&&pendVer){
+    // Misma decisión para libres y trámites con expediente (Por revisar)
+    const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+    const puedeImprimir=(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())||deptView;
+    const puedeAtajo=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())||deptView;
+    const eid=jsStr(expId),tid=jsStr(taskId);
+    const tituloDec=esLibre?'Decisión (sin expediente)':'Decisión (trámite)';
+    const hintDec=esLibre
+      ?'Oficios simples (invitación, etc.) no requieren radicar ni asociar expediente. Elija el flujo de firma o cierre directo.'
+      :'Elija el flujo: imprimir → firma del Director, atajo a firma, cargar documento ya firmado (Por notificar), o cerrar sin firma.';
+    h+='<div style="margin-bottom:10px;padding:10px;background:#0d5c2e12;border:1px solid #0d5c2e;border-radius:var(--r)">'+
+      '<div style="font-size:12px;font-weight:600;color:#0d5c2e;margin-bottom:4px">'+tituloDec+'</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">'+hintDec+'</div>'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisión:</div>'+
+      '<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">';
+    if(puedeImprimir)
+      h+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff;border-color:#1a7a4a" onclick="tramiteLibreParaImprimir(\''+eid+'\',\''+tid+'\')" title="Cola Por imprimir → luego firma del Director">🖨 Para imprimir</button>';
+    if(puedeAtajo)
+      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteLibreParaFirma(\''+eid+'\',\''+tid+'\')" title="Atajo a Por firmar (Director), sin impresión">🖊 Para firma</button>';
+    if(!puedeImprimir&&!puedeAtajo)
+      h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tid+'\')">🖊 Enviar a firma</button>';
+    h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>'+
+      '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
+      '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>'+
+      '</div></div>';
+    if(!esLibre){
+      h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
+        '<label style="font-size:12px">Fecha cierre (si cierra sin firma) <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
+        '</div>';
     }
+  }else if(!enFirmaTram){
+    h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">'+
+      '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
+      '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>'+
+      '</div>';
   }
   // Vincular a expediente: opcional y al final (no bloquea imprimir/firma)
   if(esLibre&&pendVer&&typeof renderActLibreVincularHtml==='function'){

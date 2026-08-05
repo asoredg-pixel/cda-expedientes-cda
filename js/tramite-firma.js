@@ -703,14 +703,14 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
   const btn=document.getElementById('tramite-director-firmar-btn');
   if(btn){btn.disabled=true;btn.textContent='Procesando…';}
   try{
-    const e=tramiteFirmaExpCtx(t,expId);
-    const nombreCarpeta=(e&&(e._pn_nombre||e._exp))||expId;
-    if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo documento…',sub:file.name||'PDF',pct:20});
-    let pdfLink='';
-    if(typeof driveUploadInstitutional==='function'){
-      const res=await driveUploadInstitutional(file,'por_notificar-'+file.name,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,(e&&e._fecha)||'',{expediente:e||{_exp:expId},uploadTarget:'respuesta'});
-      pdfLink=res&&res.driveLink||'';
+    if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+      const okG=await sstSolicitarGmailParaAdjuntar();
+      if(!okG){if(btn){btn.disabled=false;btn.textContent='⬆ Confirmar y pasar a notificar';}return;}
     }
+    const e=tramiteFirmaExpCtx(t,expId);
+    if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo documento…',sub:file.name||'PDF',pct:20});
+    const up=await tramiteUploadPdfFirmado(file,t,e,expId);
+    const pdfLink=up&&(up.driveLink||up.previewLink)||'';
     if(typeof driveRenombrarSoporteActivoExp==='function'){
       try{await driveRenombrarSoporteActivoExp(expId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
     }
@@ -861,6 +861,33 @@ function tramiteAtajoFirmadoOnPdf(inp){
   box.innerHTML='<div class="fx" style="gap:6px;align-items:center;font-size:12px;padding:4px 6px;background:var(--sf2);border-radius:var(--r)">📎 '+escAttr(f.name)+
     '<button type="button" class="btn bsm bd2" onclick="window._tramiteAtajoFirmadoFile=null;var i=document.getElementById(\'tramite-atajo-firmado-file\');if(i)i.value=\'\';document.getElementById(\'tramite-atajo-firmado-list\').innerHTML=\'\'">✕</button></div>';
 }
+/**
+ * Sube PDF firmado usando el token de la cuenta conectada (oficina/NCA o Secretaría).
+ * Trámites → carpeta EXP-…; libres → carpeta ACT-…; no exige Secretaría en línea.
+ */
+async function tramiteUploadPdfFirmado(file,t,e,refId){
+  if(!file)return null;
+  const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+  const ctx=e||tramiteFirmaExpCtx(t,refId)||{_exp:refId,_sin_expediente:!!(t&&t.sinExpediente)};
+  if(typeof driveUploadExpedienteActividad==='function'){
+    return await driveUploadExpedienteActividad(file,file.name||'firmado.pdf','application/pdf',ctx,t,autor,'por_notificar');
+  }
+  const folderId=ctx._drive_folder_id||(t&&t._drive_folder_id)||'';
+  if(folderId&&typeof driveUploadInstitutional==='function'){
+    return await driveUploadInstitutional(
+      file,
+      'por_notificar-'+(file.name||'firmado.pdf'),
+      'application/pdf',
+      'respuesta_aprobada',
+      refId,
+      (ctx._pn_nombre||ctx._exp)||refId,
+      ctx._fecha||'',
+      {expediente:ctx,uploadTarget:'respuesta',folderId:folderId,folderLink:ctx._drive_folder_link||''}
+    );
+  }
+  throw new Error('No se pudo subir: conecte su Gmail/Drive de oficina (no requiere Secretaría) o use «Ya firmado (sin PDF)».');
+}
+
 async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
@@ -878,11 +905,38 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
   if(btn){btn.disabled=true;btn.textContent='Procesando…';}
   try{
     let pdfLink='';
-    if(file&&typeof driveUploadInstitutional==='function'){
-      const nombreCarpeta=(e&&(e._pn_nombre||e._exp))||refId;
+    if(file){
+      if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+        const okG=await sstSolicitarGmailParaAdjuntar();
+        if(!okG){
+          if(btn){btn.disabled=false;btn.textContent='⬆ Cargar y pasar a Por notificar';}
+          return;
+        }
+      }
       if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo documento…',sub:file.name||'PDF',pct:20});
-      const res=await driveUploadInstitutional(file,'por_notificar-'+file.name,'application/pdf','respuesta_aprobada',refId,nombreCarpeta,(e&&e._fecha)||'',{expediente:e||{_exp:refId},uploadTarget:'respuesta'});
-      pdfLink=res&&res.driveLink||'';
+      const res=await tramiteUploadPdfFirmado(file,t,e,refId);
+      pdfLink=res&&(res.driveLink||res.previewLink)||'';
+      // Registrar soporte en la actividad si hay fileId
+      if(res&&(res.fileId||res.driveFileId)){
+        mutateTask(refId,taskId,function(tk){
+          if(!Array.isArray(tk.soportes))tk.soportes=[];
+          tk.soportes.push({
+            id:'sop_'+Date.now(),
+            nombre:res.nombre||file.name||'firmado.pdf',
+            driveFileId:res.fileId||res.driveFileId,
+            driveLink:res.driveLink||'',
+            previewLink:res.previewLink||res.driveLink||'',
+            driveInstitutional:true,
+            driveEstado:'por_notificar',
+            por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+            en:new Date().toISOString()
+          });
+          if(res.folderId&&!tk._drive_folder_id){
+            tk._drive_folder_id=res.folderId;
+            tk._drive_folder_link=res.folderLink||'';
+          }
+        });
+      }
     }
     if(typeof driveRenombrarSoporteActivoExp==='function'){
       try{await driveRenombrarSoporteActivoExp(refId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
@@ -941,10 +995,11 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
     }
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();
-    notif('Error: '+String(err.message||err).slice(0,100),'err');
+    notif('Error: '+String(err.message||err).slice(0,120),'err');
     if(btn){btn.disabled=false;btn.textContent='⬆ Cargar y pasar a Por notificar';}
   }
 }
+window.tramiteUploadPdfFirmado=tramiteUploadPdfFirmado;
 window.openTramiteAtajoFirmadoModal=openTramiteAtajoFirmadoModal;
 window.tramiteAtajoFirmadoDesdeRevision=tramiteAtajoFirmadoDesdeRevision;
 window.tramiteAtajoFirmadoPickPdf=tramiteAtajoFirmadoPickPdf;
