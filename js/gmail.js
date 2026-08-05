@@ -348,11 +348,11 @@ function sstAbrirGmailDriveModal(opts) {
   const txt = ov.querySelector('.gmail-sesion-txt');
   const skipBtn = ov.querySelector('.gmail-sesion-btns .bs');
   if (opts.requireSecretaria) {
-    if (tit) tit.textContent = 'Conectar Drive institucional PQRSD';
-    if (txt) txt.innerHTML = 'Para guardar archivos en la carpeta oficial de la PQRSD debe autorizar la bandeja Gmail de <strong>Secretaría (cdaguaviare1)</strong> o tener su correo de oficina conectado con acceso editor a esa carpeta.';
+    if (tit) tit.textContent = 'Conectar Gmail / Drive';
+    if (txt) txt.innerHTML = 'Autorice <strong>su correo institucional</strong> (oficina, departamento o Secretaría). No hace falta que Secretaría esté conectada: si su cuenta tiene permiso de editor en la carpeta de Drive, podrá subir archivos.';
   } else if (opts.force) {
     if (tit) tit.textContent = 'Conectar Gmail / Drive';
-    if (txt) txt.innerHTML = 'Para <strong>adjuntar archivos</strong> o registrar la respuesta debe autorizar su correo institucional antes de continuar.';
+    if (txt) txt.innerHTML = 'Para <strong>adjuntar archivos</strong> autorice <strong>su correo institucional</strong>. Cualquier rol con acceso editor en Drive puede subir; no depende de que Secretaría esté en línea.';
   } else {
     if (tit) tit.textContent = 'Conectar Gmail / Drive';
     if (txt) txt.innerHTML = 'Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.';
@@ -370,36 +370,32 @@ function sstCerrarGmailAttachModal(success) {
     const skipBtn = ov.querySelector('.gmail-sesion-btns .bs');
     if (skipBtn) skipBtn.style.display = '';
   }
-  const reqSec = window._sstGmailAttachRequireSecretaria;
   window._sstGmailAttachForce = false;
   window._sstGmailAttachRequireSecretaria = false;
   if (window._sstGmailAttachCb) {
     const cb = window._sstGmailAttachCb;
     window._sstGmailAttachCb = null;
-    const ok = !!success && (!reqSec || sstSecretariaDriveActiva() || sstGmailSesionActiva());
-    cb(ok);
+    cb(!!success && sstGmailSesionActiva());
   }
 }
 function sstFinalizeGmailConnect() {
   renderSstGmailSesionBloqueo();
   if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
-  const reqSec = window._sstGmailAttachRequireSecretaria;
-  const ok = reqSec ? (sstSecretariaDriveActiva() || sstGmailSesionActiva()) : sstGmailSesionActiva();
-  if (ok) sstCerrarGmailAttachModal(true);
+  if (sstGmailSesionActiva()) sstCerrarGmailAttachModal(true);
 }
 function sstSolicitarGmailParaAdjuntar(opts) {
   opts = opts || {};
+  // Nunca exigir solo Secretaría: basta el token de la cuenta conectada (ofi / depto / sec)
+  if (opts.requireSecretaria) opts = Object.assign({}, opts, { requireSecretaria: false });
   if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) {
     return Promise.resolve(true);
   }
-  const active = opts.requireSecretaria
-    ? (sstSecretariaDriveActiva() || sstGmailSesionActiva())
-    : sstGmailSesionActiva();
+  const active = sstGmailSesionActiva();
   if (active) return Promise.resolve(true);
   return new Promise(function(resolve) {
     window._sstGmailAttachCb = resolve;
     window._sstGmailAttachForce = !!opts.force;
-    window._sstGmailAttachRequireSecretaria = !!opts.requireSecretaria;
+    window._sstGmailAttachRequireSecretaria = false;
     sstAbrirGmailDriveModal(opts);
   });
 }
@@ -433,11 +429,9 @@ function sstOnGmailTokenExpiradoForceLogout() {
   }
 }
 function sstConectarGmailObligatorio(doneCb) {
-  const reqSec = window._sstGmailAttachRequireSecretaria;
-  const needSec = reqSec && !sstSecretariaDriveActiva() && !sstGmailSesionActiva();
-  if (!sstRolRequiereGmailConectado() || (!needSec && sstGmailSesionActiva()) || (reqSec && sstSecretariaDriveActiva())) {
+  if (!sstRolRequiereGmailConectado() || sstGmailSesionActiva()) {
     sstFinalizeGmailConnect();
-    if (doneCb) doneCb(sstGmailSesionActiva() || sstSecretariaDriveActiva());
+    if (doneCb) doneCb(sstGmailSesionActiva());
     return;
   }
   const btn = document.getElementById('gmail-sesion-connect-btn');
@@ -445,9 +439,10 @@ function sstConectarGmailObligatorio(doneCb) {
   const finish = function() {
     if (btn) { btn.disabled = false; btn.textContent = 'Conectar Gmail / Drive'; }
     sstFinalizeGmailConnect();
-    if (doneCb) doneCb(sstGmailSesionActiva() || sstSecretariaDriveActiva());
+    if (doneCb) doneCb(sstGmailSesionActiva());
   };
-  if (reqSec || (typeof esSecretaria === 'function' && esSecretaria())) {
+  // Secretaría → bandeja principal; el resto (NCA, oficinas, departamentos, responsables) → correo de oficina
+  if (typeof esSecretaria === 'function' && esSecretaria()) {
     gmailConnect(finish);
     return;
   }

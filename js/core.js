@@ -2613,6 +2613,16 @@ function puedeEliminarTaskPqrs(expId,taskId){
   if(e&&t&&taskEsAtenderPqrs(t,e)&&!esSecretaria())return false;
   return true;
 }
+/** Encargado/depto en revisión: puede eliminar trámites y libres; PQRSD solo Secretaría. */
+function puedeEliminarActividadRevision(expId,taskId){
+  if(!puedeGestionarActividadesDepto())return false;
+  if(esModoResponsable()||esJurisdiccional()||esModoCiudadano())return false;
+  if(!puedeEliminarTaskPqrs(expId,taskId))return false;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t||t.eliminada)return false;
+  return true;
+}
+window.puedeEliminarActividadRevision=puedeEliminarActividadRevision;
 function syncPqrsFechaSolicitud(e,fechaSol){
   if(!e)return;
   const fs=String(fechaSol||'').trim();
@@ -5085,17 +5095,23 @@ function submitQuitarResponsableTask(expId,taskId,nombre){
 function eliminarActLibreConfirm(expId,taskId){eliminarActTaskConfirm(expId,taskId);}
 function eliminarActTaskConfirm(expId,taskId){
   const t=getTaskAny(expId,taskId);
-  if(!t||!puedeGestionarActividadesDepto())return;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  if(!puedeGestionarActividadesDepto()){notif('Solo el encargado del departamento puede eliminar actividades','err');return;}
   if(!puedeEliminarTaskPqrs(expId,taskId)){notif('Solo Secretaría DEGUV puede eliminar actividades de PQRSD','err');return;}
   const ref=t.sinExpediente?(t.codigo||expId):expId;
-  if(!confirm('¿Eliminar la actividad «'+(t.desc||t.actividad||ref)+'»? Esta acción no se puede deshacer.'))return;
-  if(eliminarTaskExp(ref,taskId,'Eliminada por encargado del departamento')){
-    clearTaskSolicitudPendiente(ref,taskId,'aprobada','Eliminada por encargado');
-    notif('Actividad eliminada','ok');
-    closeTaskModal();
-    renderActividades();
-    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
-  }
+  const lbl=t.desc||t.actividad||ref;
+  confirmEliminar({
+    message:'¿Eliminar la actividad «'+lbl+'»?',
+    detail:(t.sinExpediente?'Actividad sin expediente. ':'Expediente '+ref+'. ')+'Esta acción no se puede deshacer.'
+  },function(){
+    if(eliminarTaskExp(ref,taskId,'Eliminada por encargado del departamento')){
+      clearTaskSolicitudPendiente(ref,taskId,'aprobada','Eliminada por encargado');
+      notif('Actividad eliminada','ok');
+      closeTaskModal();
+      renderActividades();
+      if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+    }
+  });
 }
 function openEditarActLibreModal(expId,taskId){openEditarActTaskModal(expId,taskId);}
 function openEditarActTaskModal(expId,taskId){
@@ -5391,7 +5407,8 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
         pool.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('')+'</select>'+
         '<button type="button" class="btn bsm" onclick="submitTrasladoTaskModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Trasladar</button></div>';
     }
-    if(t.sinExpediente&&!pqrsNca)h+='<div style="margin-top:8px"><button type="button" class="btn bsm bd2" onclick="eliminarActLibreConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar actividad sin expediente</button></div>';
+    if(!pqrsNca&&typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId))
+      h+='<div style="margin-top:8px"><button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar actividad'+(t.sinExpediente?' sin expediente':'')+'</button></div>';
   }
   h+='</div>';
   return h;
@@ -8715,8 +8732,10 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       h+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tid+'\')">🖊 Enviar a firma</button>';
     h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>'+
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
-      '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>'+
-      '</div></div>';
+      '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>';
+    if(typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId))
+      h+='<button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')" title="Eliminar esta actividad (no aplica a PQRSD)">🗑 Eliminar actividad</button>';
+    h+='</div></div>';
     if(!esLibre){
       h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
         '<label style="font-size:12px">Fecha cierre (si cierra sin firma) <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
