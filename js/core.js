@@ -7480,6 +7480,151 @@ function taskChatBtnHtml(expId,taskId,t){
   const ref=escAttr(expId),tid=escAttr(taskId);
   return '<button type="button" class="btn bsm bic" title="Chat de la actividad — consultas, traslado o eliminación'+(nc?' · '+nc+' mensaje(s)':'')+'" onclick="openTaskCommentsChatOnly(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(nc>0?'<span class="cmt-dot">'+nc+'</span>':'')+'</button>';
 }
+/** Notas internas privadas por responsable (solo en este equipo; no se comparten en chat ni con otros). */
+function notasInternasAutor(){
+  if(esModoResponsable()&&responsableActivo)return String(responsableActivo).trim();
+  if(esVistaActividadesDepto()){
+    const enc=typeof getEncargadoDepto==='function'?getEncargadoDepto(deptoActivo):'';
+    return String(responsableActivo||enc||'').trim();
+  }
+  return String(responsableActivo||'').trim();
+}
+function notasInternasStoreKey(autor,expId,taskId){
+  const a=typeof agendaNorm==='function'?agendaNorm(autor):String(autor||'').toLowerCase().trim();
+  return a+'|'+String(expId||'').trim()+'|'+String(taskId||'').trim();
+}
+function loadNotasInternasStore(){
+  try{return JSON.parse(localStorage.getItem('sst_notas_internas')||'{}')||{};}
+  catch(e){return{};}
+}
+function saveNotasInternasStore(store){
+  try{localStorage.setItem('sst_notas_internas',JSON.stringify(store||{}));return true;}
+  catch(e){
+    if(typeof isQuotaExceededError==='function'&&isQuotaExceededError(e)&&typeof showStorageFullBanner==='function')showStorageFullBanner();
+    return false;
+  }
+}
+function getNotaInternaEntry(expId,taskId,autor){
+  autor=autor||notasInternasAutor();
+  if(!autor||!taskId)return null;
+  const store=loadNotasInternasStore();
+  const ent=store[notasInternasStoreKey(autor,expId,taskId)];
+  return ent&&typeof ent==='object'?ent:null;
+}
+function getNotaInternaTexto(expId,taskId,autor){
+  const ent=getNotaInternaEntry(expId,taskId,autor);
+  return ent&&ent.texto?String(ent.texto):'';
+}
+function setNotaInterna(expId,taskId,texto,meta){
+  const autor=notasInternasAutor();
+  if(!autor){if(typeof notif==='function')notif('Seleccione su identidad para guardar notas internas','err');return false;}
+  if(!taskId)return false;
+  const store=loadNotasInternasStore();
+  const key=notasInternasStoreKey(autor,expId,taskId);
+  const txt=String(texto||'').trim();
+  if(!txt){
+    delete store[key];
+  }else{
+    store[key]={
+      texto:txt,
+      autor:autor,
+      expId:String(expId||''),
+      taskId:String(taskId||''),
+      updatedAt:new Date().toISOString(),
+      actividad:(meta&&meta.actividad)||'',
+      tram:(meta&&meta.tram)||'',
+      nombre:(meta&&meta.nombre)||''
+    };
+  }
+  return saveNotasInternasStore(store);
+}
+function taskNotasInternasBtnHtml(expId,taskId){
+  const autor=notasInternasAutor();
+  if(!autor)return'';
+  const has=!!String(getNotaInternaTexto(expId,taskId,autor)||'').trim();
+  const exp=escAttr(expId),tid=escAttr(taskId);
+  return '<button type="button" class="btn bsm bic'+(has?' act-notas-on':'')+'" title="'+(has?'Notas internas (privadas) — tiene apuntes':'Notas internas privadas — solo usted las ve; salen al descargar en Consulta')+'" onclick="event.stopPropagation();openNotasInternasModal(\''+exp+'\',\''+tid+'\')">📝'+(has?'<span class="cmt-dot">·</span>':'')+'</button>';
+}
+function openNotasInternasModal(expId,taskId){
+  const autor=notasInternasAutor();
+  if(!autor){notif('Seleccione su nombre como responsable para usar notas internas','err');return;}
+  let t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  if(t.sinExpediente)expId=t.codigo||expId;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body)return;
+  const texto=getNotaInternaTexto(expId,t.id||taskId,autor);
+  const ent=getNotaInternaEntry(expId,t.id||taskId,autor);
+  if(tit)tit.textContent='📝 Notas internas · '+(t.codigo||expId);
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  body.innerHTML=
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Apuntes privados de <strong>'+escAttr(autor)+'</strong>. No se muestran a otros responsables ni en el chat; solo usted los ve y salen al <strong>Descargar</strong> en Consulta.</div>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
+    '<div class="fld"><label>Mis notas</label><textarea id="nota-interna-txt" rows="8" placeholder="Escriba aquí sus apuntes sobre esta actividad…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;resize:vertical">'+(texto?escTextarea(texto):'')+'</textarea></div>'+
+    (ent&&ent.updatedAt?'<div style="font-size:11px;color:var(--tx3);margin-top:6px">Última edición: '+escAttr(String(ent.updatedAt).replace('T',' ').slice(0,16))+'</div>':'')+
+    '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:12px">'+
+    '<button type="button" class="btn bsm bp" onclick="guardarNotaInternaModal(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Guardar</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>'+
+    '<button type="button" class="btn bsm bd2" style="margin-left:auto" onclick="borrarNotaInternaModal(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Borrar notas</button>'+
+    '</div>';
+  ov.classList.add('on');
+  window._taskModalCtx={expId:expId,taskId:t.id||taskId,notasInternas:true,actLibre:!!t.sinExpediente};
+  const ta=document.getElementById('nota-interna-txt');
+  if(ta)setTimeout(function(){ta.focus();},40);
+}
+function guardarNotaInternaModal(expId,taskId){
+  const ta=document.getElementById('nota-interna-txt');
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const ok=setNotaInterna(expId,taskId,ta?ta.value:'',{
+    actividad:(t&&(t.desc||t.actividad))||'',
+    tram:(t&&t.tram)||(e&&typeof getTram==='function'&&(getTram(e._tramite,e)||{}).nombre)||'',
+    nombre:(t&&t.nombre)||(e&&typeof getNom==='function'?getNom(e):'')||''
+  });
+  if(!ok){notif('No se pudieron guardar las notas','err');return;}
+  notif('Notas internas guardadas (solo usted)','ok');
+  closeTaskModal();
+  if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+}
+function borrarNotaInternaModal(expId,taskId){
+  if(!confirm('¿Borrar sus notas internas de esta actividad?'))return;
+  setNotaInterna(expId,taskId,'');
+  notif('Notas internas eliminadas','ok');
+  closeTaskModal();
+  if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+}
+function collectNotasInternasParaExport(expList){
+  const autor=notasInternasAutor();
+  if(!autor)return{hdr:[],rows:[]};
+  const store=loadNotasInternasStore();
+  const aNorm=typeof agendaNorm==='function'?agendaNorm(autor):String(autor).toLowerCase().trim();
+  const expSet=new Set((expList||[]).map(e=>String((e&&e._exp)||'').trim().toLowerCase()).filter(Boolean));
+  const hdr=['Expediente / Ref.','Trámite','Interesado','Actividad','Mis notas internas','Actualizado'];
+  const rows=[];
+  Object.keys(store).forEach(function(k){
+    const ent=store[k];
+    if(!ent||!ent.texto)return;
+    const parts=String(k).split('|');
+    if(parts.length<3)return;
+    if(parts[0]!==aNorm)return;
+    const expId=String(parts[1]||ent.expId||'').trim();
+    // Si hay listado de consulta: solo notas de esos expedientes
+    if(expSet.size&&expId&&!expSet.has(expId.toLowerCase()))return;
+    rows.push([
+      expId||ent.expId||'',
+      ent.tram||'',
+      ent.nombre||'',
+      ent.actividad||'',
+      String(ent.texto||''),
+      ent.updatedAt?String(ent.updatedAt).replace('T',' ').slice(0,16):''
+    ]);
+  });
+  rows.sort(function(a,b){return String(a[0]).localeCompare(String(b[0]));});
+  return{hdr,rows};
+}
 function renderEntregaHistorialHtml(t){
   const ent=(t.comentarios||[]).filter(c=>c.incluidoEnReporte&&String(c.texto||'').trim());
   const sops=(t.soportes||[]).length;
@@ -12607,6 +12752,7 @@ function renderActividadesRowHtml(t){
   }
   if(puedeGestionarSolicitudActividad(t.exp,t.id)&&sol)acts+='<button type="button" class="btn bsm" style="background:var(--orl);color:var(--or);font-weight:600" title="Atender solicitud del responsable" onclick="event.stopPropagation();openGestionSolicitudModal(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\')">'+(sol.tipo==='traslado'?'↔':'🗑')+'</button>';
   acts+=taskReporteBtnHtml(t.exp,t.id,yo);
+  acts+=taskNotasInternasBtnHtml(t.exp,t.id);
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)){
     if(!t.sinExpediente)acts+=actBtnLupaHtml(t.exp,t.id,'Ver expediente en '+uiEditorContenedorLbl());
     acts+=taskCoEjecutorBtnHtml(t.exp,t.id);
@@ -12971,9 +13117,25 @@ function buildExpedientesExportRows(list){
 function exportarExpedientesExcel(list,suffix){
   const pack=buildExpedientesExportRows(list);
   if(!pack)return;
-  exportarTablaExcel([{title:'Expedientes',hdr:pack.hdr,rows:pack.rows}],'sst-'+(suffix||'exp')+'-'+hoy());
+  const sheets=[{title:'Expedientes',hdr:pack.hdr,rows:pack.rows}];
+  if(suffix==='consulta'&&typeof collectNotasInternasParaExport==='function'){
+    const notas=collectNotasInternasParaExport(list||[]);
+    if(notas.rows&&notas.rows.length)sheets.push({title:'Mis notas internas',hdr:notas.hdr,rows:notas.rows});
+  }
+  exportarTablaExcel(sheets,'sst-'+(suffix||'exp')+'-'+hoy());
 }
-function exportarConsultaExcel(){exportarExpedientesExcel(window._conExportList||[],'consulta');}
+function exportarConsultaExcel(){
+  const list=window._conExportList||[];
+  const pack=buildExpedientesExportRows(list);
+  const sheets=[];
+  if(pack&&pack.rows&&pack.rows.length)sheets.push({title:'Expedientes',hdr:pack.hdr,rows:pack.rows});
+  if(typeof collectNotasInternasParaExport==='function'){
+    const notas=collectNotasInternasParaExport(list);
+    if(notas.rows&&notas.rows.length)sheets.push({title:'Mis notas internas',hdr:notas.hdr,rows:notas.rows});
+  }
+  if(!sheets.length){notif('Sin datos para exportar','err');return;}
+  exportarTablaExcel(sheets,'sst-consulta-'+hoy());
+}
 function exportarConsolidadoExcel(){exportarExpedientesExcel(window._consExportList||filterExpsPeriodo(expsAmbito(),'cons'),'consolidado');}
 function exportarExcelInforme(){
   syncCfgToStore();
@@ -13120,10 +13282,77 @@ function mergeActividadLists(base,extra){
   });
   return out;
 }
+/** En vista depto con filtro de responsable: solo ítems de ese responsable (asignado o notificar_por). */
+function actividadPerteneceARespFilter(t,respFilter){
+  if(!t)return false;
+  const rf=String(respFilter||'').trim();
+  if(!rf)return true;
+  if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,rf))return true;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(e,rf))return true;
+  if(e&&typeof getPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e)||{};
+    const np=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+    if(np&&typeof agendaNorm==='function'&&agendaNorm(np)===agendaNorm(rf))return true;
+  }
+  const fw=t.firmaWf||{};
+  const np2=String(fw.notificar_por||fw.notificar_por_propuesto||'').trim();
+  if(np2&&typeof agendaNorm==='function'&&agendaNorm(np2)===agendaNorm(rf))return true;
+  return false;
+}
+/**
+ * Criterio estricto para bandeja «Por notificar» con filtro de responsable:
+ * solo si esa persona es quien debe notificar, o (sin notificador) está asignada a la actividad.
+ * Evita que NCA/encargado vea notificaciones de otros al filtrar por su nombre.
+ */
+function actividadNotifEsDeResp(t,respFilter){
+  if(!t)return false;
+  const rf=String(respFilter||'').trim();
+  if(!rf)return true;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  let notifPor='';
+  if(e&&typeof getPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e)||{};
+    notifPor=String(wf.notificar_por||'').trim();
+  }
+  if(!notifPor&&t.firmaWf)notifPor=String(t.firmaWf.notificar_por||'').trim();
+  if(notifPor){
+    return typeof agendaNorm==='function'?agendaNorm(notifPor)===agendaNorm(rf):notifPor===rf;
+  }
+  return typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,rf);
+}
+function getActDeptRespFilterSafe(){
+  if(typeof getActDeptRespFilter==='function'){
+    const v=getActDeptRespFilter();
+    if(v!=null&&String(v).trim()&&String(v).trim()!=='__all__')return String(v).trim();
+    // getActDeptRespFilter ya resuelve vacío → encargado; null solo es «Todos»
+    if(v==null){
+      const sel=document.getElementById('act-dept-resp-sel');
+      if(sel&&sel.value==='__all__')return null;
+    }
+    if(v!=null)return String(v).trim()||null;
+  }
+  const sel=document.getElementById('act-dept-resp-sel');
+  if(sel){
+    const raw=String(sel.value||'').trim();
+    if(raw==='__all__')return null;
+    if(raw)return raw;
+  }
+  return typeof getEncargadoDepto==='function'?(getEncargadoDepto(deptoActivo)||null):null;
+}
 function getTareasNotifVisiblesAct(){
+  const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+  const respFilter=deptView?getActDeptRespFilterSafe():null;
   const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
     if(!pqrsEnFaseNotificacion(e))return false;
-    if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
+    if(deptView){
+      if(respFilter){
+        const tAt=(e.tasks||[]).find(x=>x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e));
+        if(!tAt)return false;
+        return actividadNotifEsDeResp(Object.assign({},tAt,{exp:e._exp,codigo:e._exp}),respFilter);
+      }
+      return true;
+    }
     if(typeof esCargoVital==='function'&&esCargoVital())return true;
     if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
     if(typeof esAdministrador==='function'&&esAdministrador())return true;
@@ -13132,7 +13361,9 @@ function getTareasNotifVisiblesAct(){
   const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
     return typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
   }):[];
-  return mergeActividadLists(pqrs,tram);
+  let list=mergeActividadLists(pqrs,tram);
+  if(deptView&&respFilter)list=list.filter(t=>actividadNotifEsDeResp(t,respFilter));
+  return list;
 }
 function setActFiltro(v){
   const sel=document.getElementById('f-act-est');
@@ -13763,7 +13994,7 @@ function renderActividades(){
     if(btnExp)btnExp.style.display='none';
     return;
   }
-  const respFilter=deptView?getActDeptRespFilter():null;
+  const respFilter=deptView?getActDeptRespFilterSafe():null;
   const enc=getEncargadoDepto(deptoActivo);
   const filterIsEnc=!!respFilter&&respFilter===enc;
   updateActEstFilterForEnc(filterIsEnc);
@@ -13779,6 +14010,17 @@ function renderActividades(){
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   list=filtrarActividadesPorEstado(list,filtroAct);
+  // Seguridad: con responsable seleccionado, «Por notificar» / merges de notif no deben colar ítems ajenos
+  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='venc'||filtroAct==='pend')){
+    if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
+    else list=(list||[]).filter(t=>{
+      const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      const enNotif=eN&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eN);
+      const tramNotif=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
+      if(enNotif||tramNotif)return actividadNotifEsDeResp(t,respFilter);
+      return actividadPerteneceARespFilter(t,respFilter);
+    });
+  }
   // Anti-fantasma: quitar filas que ya no existen o están eliminadas en la fuente de verdad
   list=(list||[]).filter(function(row){
     if(!row||row.eliminada)return false;

@@ -508,9 +508,10 @@ function esTareaDelEncargado(t,deptoId){
 function getActDeptRespFilter(){
   const sel=document.getElementById('act-dept-resp-sel');
   if(!sel||!esVistaActividadesDepto())return null;
-  const v=sel.value;
+  const v=String(sel.value||'').trim();
   if(v==='__all__')return null;
-  return v||getEncargadoDepto(deptoActivo)||null;
+  if(v)return v;
+  return getEncargadoDepto(deptoActivo)||null;
 }
 function ensureEncargadoActivo(){
   if(esModoResponsable()||esJurisdiccional())return;
