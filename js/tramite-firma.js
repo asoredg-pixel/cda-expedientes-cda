@@ -95,7 +95,7 @@ function taskFirmaEstadoUi(t){
     if(taskFirmaEsFirmadoPendiente(t))return{lbl:'Firmados',bg:'#dcfce7',fg:'#15803d',sub:'Pendiente notificar'};
     return{lbl:'Por firmar',bg:'#0d5c2e22',fg:'#0d5c2e',sub:quien?'Notif.: '+quien:''};
   }
-  if(taskFirmaEnPorNotificar(t))return{lbl:'Por notificar',bg:'#185FA522',fg:'#185FA5',sub:quien||''};
+  if(taskFirmaEnPorNotificar(t))return{lbl:'Por notificar',bg:'#185FA522',fg:'#185FA5',sub:''};
   if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))
     return{lbl:'Atendida',bg:'var(--gnl)',fg:'var(--gn)',sub:''};
   return null;

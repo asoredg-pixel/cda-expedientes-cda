@@ -493,14 +493,8 @@ function pqrsEstadoActividadUi(e){
     return{lbl:'🖊 Por firmar'+(quienLbl?' · notif: '+quienLbl:''),bg:'#0d5c2e22',fg:'#0d5c2e'};
   }
   if(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO){
-    const nv=pqrsNotifVence(e);
-    const venc=nv&&nv<hoy();
-    return{
-      lbl:(venc?'⚠ ':'📬 ')+'Por notificar'+(quienLbl?' · '+quienLbl:''),
-      sub:nv?('vence '+fmtF(nv)):'5 d.h.',
-      bg:venc?'var(--rdl)':'#185fa522',
-      fg:venc?'var(--rd)':'var(--bl)'
-    };
+    // Estado corto: sin notificador ni fecha (la fecha va en columna VENCE / paleta Vencidas)
+    return{lbl:'Por notificar',bg:'#185fa522',fg:'var(--bl)'};
   }
   if(f===PQRS_WF.REVISION_FINAL)return{lbl:'⏳ Revisión final notif.',bg:'#6d3fa822',fg:'#6d3fa8'};
   return null;
@@ -9035,7 +9029,7 @@ function estadoTaskLabel(t){
   if(e==='Por verificar')return(esModoResponsable()&&!esVistaActividadesDepto())?'Por verificar':'Por revisar';
   return e;
 }
-/** Badge de estado (HTML); «Por notificar» muestra vence en segunda línea. */
+/** Badge de estado (HTML). */
 function taskEstadoBadgeHtml(t){
   const est=estadoTask(t);
   const st=taskEstadoStyle(est,t);
@@ -9044,12 +9038,18 @@ function taskEstadoBadgeHtml(t){
   if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&typeof pqrsEstadoActividadUi==='function')
     ui=pqrsEstadoActividadUi(eExp);
   if(ui&&ui.lbl&&ui.sub){
-    return '<span class="bdg act-est-stack" style="background:'+st.bg+';color:'+st.fg+'"><span>'+escAttr(ui.lbl)+'</span><span class="act-est-sub">'+escAttr(ui.sub)+'</span></span>';
+    return '<span class="bdg act-est-stack" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'"><span>'+escAttr(ui.lbl)+'</span><span class="act-est-sub">'+escAttr(ui.sub)+'</span></span>';
+  }
+  if(ui&&ui.lbl){
+    return '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>';
   }
   if(typeof taskFirmaEstadoUi==='function'){
     const uiT=taskFirmaEstadoUi(t);
     if(uiT&&uiT.lbl&&uiT.sub){
       return '<span class="bdg act-est-stack" style="background:'+(uiT.bg||st.bg)+';color:'+(uiT.fg||st.fg)+'"><span>'+escAttr(uiT.lbl)+'</span><span class="act-est-sub">'+escAttr(uiT.sub)+'</span></span>';
+    }
+    if(uiT&&uiT.lbl){
+      return '<span class="bdg" style="background:'+(uiT.bg||st.bg)+';color:'+(uiT.fg||st.fg)+'">'+escAttr(uiT.lbl)+'</span>';
     }
   }
   const lbl=estadoTaskLabel(t);
