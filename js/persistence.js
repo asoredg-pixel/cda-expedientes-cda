@@ -587,6 +587,7 @@ function actividadesLibresForDepto(deptoId){
 function scoreActividadLibreMerge(t){
   if(!t)return 0;
   let s=0;
+  if(t.eliminada)s+=50; // nunca revivir eliminadas
   if(t.fechaReportada||t.estado==='Por verificar')s+=4;
   if((t.soportes||[]).length)s+=2;
   if(t.fechaAtendida||t.estado==='Atendida')s+=3;
@@ -607,6 +608,9 @@ function scoreActividadLibreMerge(t){
 function pickMejorActLibre(a,b){
   if(!a)return b;
   if(!b)return a;
+  // Preferir siempre eliminada=true (no revivir)
+  if(a.eliminada&&!b.eliminada)return a;
+  if(b.eliminada&&!a.eliminada)return b;
   const sa=scoreActividadLibreMerge(a),sb=scoreActividadLibreMerge(b);
   if(sa>sb)return a;
   if(sb>sa)return b;
