@@ -5110,6 +5110,9 @@ function eliminarActTaskConfirm(expId,taskId){
       closeTaskModal();
       renderActividades();
       if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+    }else{
+      notif('No se pudo eliminar la actividad (no encontrada en el expediente). Actualice la lista.','err');
+      if(typeof renderActividades==='function')renderActividades();
     }
   });
 }
@@ -5117,7 +5120,16 @@ function openEditarActLibreModal(expId,taskId){openEditarActTaskModal(expId,task
 function openEditarActTaskModal(expId,taskId){
   if(!puedeGestionarActividadesDepto()){notif('Solo el encargado del departamento puede editar actividades','err');return;}
   const t=normalizeTask(getTaskAny(expId,taskId));
-  if(!t||t.eliminada){notif('Actividad no encontrada','err');return;}
+  if(!t){
+    notif('Actividad no encontrada — se actualiza la lista','err');
+    if(typeof renderActividades==='function')renderActividades();
+    return;
+  }
+  if(t.eliminada){
+    notif('Esta actividad ya fue eliminada — se quita de la bandeja','warn');
+    if(typeof renderActividades==='function')renderActividades();
+    return;
+  }
   const ref=t.sinExpediente?(t.codigo||expId):expId;
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
@@ -8923,23 +8935,70 @@ function taskEstadoStyle(est,tOpt){
   return{bg:'var(--aml)',fg:'var(--am)'};
 }
 function getExpById(expId){return exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());}
+function taskIdsEqual(a,b){return String(a||'').trim()===String(b||'').trim();}
 function getTaskFromExp(e,taskId){
   if(!e||!taskId)return null;
-  return (e.tasks||[]).map(normalizeTask).find(t=>t.id===taskId)||null;
+  const sid=String(taskId||'').trim();
+  return (e.tasks||[]).map(normalizeTask).find(t=>taskIdsEqual(t.id,sid))||null;
 }
+/**
+ * Resuelve actividad por expediente+id.
+ * Prioriza la tarea del expediente (evita fantasmas por libres/códigos).
+ */
 function getTaskAny(expId,taskId){
-  if(taskId){
-    const lib=getActLibreById(taskId);
+  const sid=String(taskId||'').trim();
+  const eid=String(expId||'').trim();
+  if(eid&&sid){
+    const fromExp=getTaskFromExp(getExpById(eid),sid);
+    if(fromExp)return fromExp;
+  }
+  if(sid){
+    const lib=getActLibreById(sid);
     if(lib)return normalizeActLibre(lib);
   }
-  if(expId){
-    const lc=getActLibreByCodigo(expId);
-    if(lc)return normalizeActLibre(lc);
+  // Solo por código libre si no hay taskId (o no se halló por id)
+  if(eid){
+    const lc=getActLibreByCodigo(eid);
+    if(lc&&(!sid||taskIdsEqual(lc.id,sid)))return normalizeActLibre(lc);
   }
-  return getTaskFromExp(getExpById(expId),taskId);
+  return null;
+}
+/** true si la actividad existe en memoria y no está eliminada (anti-fila fantasma). */
+function taskExisteActiva(expId,taskId){
+  const t=getTaskAny(expId,taskId);
+  return!!(t&&!t.eliminada);
 }
 function mutateTask(expId,taskId,fn){
-  const lib=taskId?getActLibreById(taskId):null;
+  const sid=String(taskId||'').trim();
+  const eid=String(expId||'').trim();
+  // Expediente primero si hay ambos ids
+  const ePref=eid?getExpById(eid):null;
+  if(ePref&&sid){
+    ePref.tasks=(ePref.tasks||[]).map(normalizeTask);
+    const tExp=ePref.tasks.find(x=>taskIdsEqual(x.id,sid));
+    if(tExp){
+      fn(tExp);
+      tExp.estado=estadoTaskRaw(tExp);
+      tExp.desc=(tExp.actividad||'')+(tExp.detalle?' - '+tExp.detalle:'');
+      ePref._pending_fs_sync=true;
+      ePref._pending_fs_at=new Date().toISOString();
+      ePref.updatedAt=ePref._pending_fs_at;
+      if(ePref._exp&&ePref._depto)persistExpedienteGranular(ePref,false);
+      else{
+        try{persistExpLocal();}
+        catch(err){
+          if(isQuotaExceededError(err)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',err);}
+          else console.error('Error al guardar en localStorage:',err);
+          return false;
+        }
+        updateSyncIndicator('syncing');
+        Promise.all([saveGlobalFirestore()]).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
+      }
+      refreshTaskViews();
+      return true;
+    }
+  }
+  const lib=sid?getActLibreById(sid):null;
   if(lib){
     lib._pending_fs_sync=true;
     lib._pending_fs_at=Date.now();
@@ -8966,25 +9025,7 @@ function mutateTask(expId,taskId,fn){
     refreshTaskViews();
     return true;
   }
-  const e=getExpById(expId);if(!e)return false;
-  e.tasks=(e.tasks||[]).map(normalizeTask);
-  const t=e.tasks.find(x=>x.id===taskId);if(!t)return false;
-  fn(t);
-  t.estado=estadoTaskRaw(t);
-  t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
-  if(e._exp&&e._depto)persistExpedienteGranular(e,false);
-  else{
-    try{persistExpLocal();}
-    catch(err){
-      if(isQuotaExceededError(err)){showStorageFullBanner();console.error('QuotaExceededError: almacenamiento local lleno; los datos NO se guardaron.',err);}
-      else console.error('Error al guardar en localStorage:',err);
-      return false;
-    }
-    updateSyncIndicator('syncing');
-    Promise.all([saveGlobalFirestore()]).then(function(r){updateSyncIndicator(r.every(x=>x!==false)?'synced':'error');}).catch(function(){updateSyncIndicator('error');});
-  }
-  refreshTaskViews();
-  return true;
+  return false;
 }
 function refreshTaskViews(){
   updateVerifyBanner();
@@ -10168,9 +10209,14 @@ function eliminarTaskExp(expId,taskId,nota){
   if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'){
     drivePurgeTaskInstitutionalSoportes(t).catch(function(err){console.warn('purge drive task:',err);});
   }
-  return mutateTask(expId,taskId,t=>{
-    t.eliminada=true;
-    t.historial.push({tipo:'eliminacion',fecha:hoy(),por:taskComentarioAutor(),nota:nota||''});
+  return mutateTask(expId,taskId,function(tk){
+    tk.eliminada=true;
+    // Evitar que siga contando como Por revisar / firma tras soft-delete
+    if(tk.firmaWf&&typeof tk.firmaWf==='object'){
+      tk.firmaWf=Object.assign({},tk.firmaWf,{fase:'',cerrada_por_eliminacion:true});
+    }
+    if(!Array.isArray(tk.historial))tk.historial=[];
+    tk.historial.push({tipo:'eliminacion',fecha:hoy(),por:taskComentarioAutor(),nota:nota||''});
   });
 }
 function restaurarTaskExp(expId,taskId){
@@ -13654,18 +13700,22 @@ function filtrarActividadesPorEstado(list,filtro){
     return out;
   }
   if(filtro==='porver')return list.filter(t=>{
+    if(!t||t.eliminada)return false;
+    const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):t;
+    if(!live||live.eliminada)return false;
+    const src=live||t;
     // Devolución del Director / entrega NCA: fase PENDIENTE_REVISION o REVISION_FINAL cuenta como Por revisar
     if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
-      const ePv=getExpById(t.exp||t.codigo);
-      if(ePv&&taskEsAtenderPqrs(t,ePv)&&typeof pqrsWorkflowFase==='function'){
+      const ePv=getExpById(src.exp||src.codigo||t.exp||t.codigo);
+      if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
         const fPv=pqrsWorkflowFase(ePv);
         if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
       }
     }
-    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
-    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
-    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
-    return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
+    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
+    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
+    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
+    return getTaskSolicitudPendiente(src)||estadoTask(src)==='Por verificar';
   });
   if(filtro==='venc'){
     let out=(list||[]).filter(t=>taskActividadVencida(t));
@@ -13729,6 +13779,25 @@ function renderActividades(){
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   list=filtrarActividadesPorEstado(list,filtroAct);
+  // Anti-fantasma: quitar filas que ya no existen o están eliminadas en la fuente de verdad
+  list=(list||[]).filter(function(row){
+    if(!row||row.eliminada)return false;
+    const live=typeof getTaskAny==='function'?getTaskAny(row.exp||row.codigo,row.id):row;
+    if(!live||live.eliminada)return false;
+    // Rehidratar estado/firma desde la copia viva (evita Por revisar con firmaWf perdido en el spread)
+    if(live!==row){
+      row.eliminada=!!live.eliminada;
+      row.fechaReportada=live.fechaReportada;
+      row.fechaAtendida=live.fechaAtendida;
+      row.estado=live.estado;
+      row.firmaWf=live.firmaWf;
+      row.requiereFirma=live.requiereFirma;
+      row.soportes=live.soportes;
+    }
+    return true;
+  });
+  // Re-aplicar filtro porver tras rehidratar firmaWf
+  if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
   if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable].join(' ').toLowerCase().includes(q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):sortTasksByUrgency(list);
   window._actExportList=list;
@@ -13745,17 +13814,21 @@ function renderActividades(){
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
   const porrevisar=allTodos.filter(t=>{
+    if(!t||t.eliminada)return false;
+    const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):t;
+    if(!live||live.eliminada)return false;
+    const src=live;
     if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
-      const ePv=getExpById(t.exp||t.codigo);
-      if(ePv&&taskEsAtenderPqrs(t,ePv)&&typeof pqrsWorkflowFase==='function'){
+      const ePv=getExpById(src.exp||src.codigo);
+      if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
         const fPv=pqrsWorkflowFase(ePv);
         if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
       }
     }
-    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(t))return false;
-    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
-    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
-    return getTaskSolicitudPendiente(t)||estadoTask(t)==='Por verificar';
+    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
+    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
+    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
+    return getTaskSolicitudPendiente(src)||estadoTask(src)==='Por verificar';
   }).length;
   const done=all.filter(t=>{
     if(isResp&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo))return estadoTaskForAsignado(t,responsableActivo)==='Atendida';

@@ -787,9 +787,18 @@ function mergeExpIntoExpsCache(exp){
   const id=expedienteDocId(exp);
   if(!id)return;
   if(!Array.isArray(exps))exps=[];
+  const clean=Object.assign({},exp);
+  delete clean._pending_fs_sync;
+  delete clean._pending_fs_at;
   const idx=exps.findIndex(function(e){return expedienteDocId(e)===id;});
-  if(idx>=0)exps[idx]=exp;
-  else exps.push(exp);
+  if(idx>=0){
+    // Si el remoto llega incompleto, no perder eliminadas ya aplicadas en caché
+    const prev=exps[idx];
+    if(prev&&prev.tasks&&clean.tasks){
+      clean.tasks=mergeExpedienteTasksLocalRemote(prev.tasks,clean.tasks);
+    }
+    exps[idx]=clean;
+  }else exps.push(clean);
 }
 function mergePendingExpBackup(){
   const pending=_pendingExpBackupList();
@@ -1281,6 +1290,38 @@ function mergeExpFromFirestoreSnapshot(data,docId){
   if(!expId)return null;
   return{...data,_exp:expId,id:expId};
 }
+/** Fusiona tasks local/remoto: conserva eliminadas locales y firmaWf más avanzado. */
+function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
+  const byId=new Map();
+  const put=function(t){
+    if(!t||!t.id)return;
+    const id=String(t.id).trim();
+    if(!id)return;
+    const nt=typeof normalizeTask==='function'?normalizeTask(Object.assign({},t)):Object.assign({},t);
+    byId.set(id,nt);
+  };
+  (remoteTasks||[]).forEach(put);
+  (localTasks||[]).forEach(function(t){
+    if(!t||!t.id)return;
+    const id=String(t.id).trim();
+    const rem=byId.get(id);
+    if(!rem){put(t);return;}
+    if(t.eliminada&&!rem.eliminada){put(t);return;}
+    if(rem.eliminada&&!t.eliminada)return;
+    const lf=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+    const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();
+    if(lf&&!rf){
+      put(Object.assign({},rem,t,{firmaWf:t.firmaWf,requiereFirma:t.requiereFirma||rem.requiereFirma}));
+      return;
+    }
+    if(t._pending_fs_sync){put(t);return;}
+    // Empate: conservar el más reciente por historial / fechaReportada
+    const lh=(t.historial&&t.historial.length)||0;
+    const rh=(rem.historial&&rem.historial.length)||0;
+    if(lh>rh||(t.eliminada&&rem.eliminada))put(t);
+  });
+  return Array.from(byId.values());
+}
 function applyExpedienteFirestoreChanges(changes){
   if(!changes||!changes.length)return false;
   let changed=false;
@@ -1306,7 +1347,14 @@ function applyExpedienteFirestoreChanges(changes){
       const remoteTasks=(exp.tasks&&exp.tasks.length)||0;
       if(localAt&&remoteAt&&localAt>remoteAt&&localTasks>remoteTasks)return;
       if(local._pending_fs_sync&&localTasks>remoteTasks)return;
-      exps[idx]=exp;
+      // Fusionar tasks: no revivir eliminadas locales ni perder firmaWf
+      const merged=Object.assign({},exp);
+      merged.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
+      if(local._pending_fs_sync){
+        merged._pending_fs_sync=true;
+        merged._pending_fs_at=local._pending_fs_at||merged.updatedAt;
+      }
+      exps[idx]=merged;
     }else{
       exps.push(exp);
     }
@@ -1323,7 +1371,14 @@ function hydrateExpsFromSnapshotDocs(snap){
     const idx=(exps||[]).findIndex(function(e){return String(e._exp||'').trim()===exp._exp;});
     if(idx>=0){
       const local=exps[idx];
-      if(local&&local._pending_fs_sync)return;
+      if(local&&local._pending_fs_sync){
+        // Conservar eliminaciones / firma locales pendientes de sync
+        exp.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
+        exp._pending_fs_sync=true;
+        exp._pending_fs_at=local._pending_fs_at;
+      }else if(local&&local.tasks&&local.tasks.length){
+        exp.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
+      }
       exps[idx]=exp;
     }else{
       exps.push(exp);
