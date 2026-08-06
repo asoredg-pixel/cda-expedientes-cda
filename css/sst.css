@@ -345,8 +345,6 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .confirm-prec-foot{padding:.85rem 1.25rem;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--bd);background:var(--sf2)}
 .soporte-annot-wrap.annot-navigable .soporte-annot-overlay{pointer-events:none!important}
 .soporte-annot-wrap.annot-navigable .soporte-annot-overlay.marking{pointer-events:auto!important}
-.asist-pdf-upload{margin:8px 0;padding:8px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf)}
-.asist-pdf-hallazgo{padding:6px 8px;margin-bottom:6px;border-left:3px solid var(--or);background:var(--sf);font-size:12px;border-radius:0 var(--r) var(--r) 0}
 .task-modal{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);box-shadow:var(--shm);width:min(520px,96vw);max-height:85vh;display:flex;flex-direction:column}
 .task-modal.task-modal-wide{width:min(1100px,98vw)}
 .task-modal.task-modal-firma{width:min(1100px,98vw);max-height:94vh}
@@ -877,12 +875,6 @@ body.task-doc-viewport-expanded #task-modal-overlay{
 }
 body.compare-docs-expanded #task-modal-overlay .task-modal,
 body.task-doc-viewport-expanded #task-modal-overlay .task-modal{margin:0 auto}
-.asist-rev{padding:.65rem;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2);font-size:12px}
-.asist-rev-item{padding:5px 0;border-bottom:1px solid var(--bd)}
-.asist-rev-item:last-child{border-bottom:none}
-.asist-rev-warn{color:var(--or)}
-.asist-rev-ok{color:var(--gn)}
-.asist-rev-info{color:var(--tx2);font-size:11px;margin-bottom:8px;line-height:1.45}
 .enviar-modal-only .task-modal-body{padding:1rem 1.1rem}
 .soporte-preview{margin:.6rem 0}
 .soporte-preview iframe{width:100%;height:min(420px,50vh);border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}

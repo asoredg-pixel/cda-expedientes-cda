@@ -8270,171 +8270,6 @@ function renderCompareVerStack(t,e){
   const b=docs.find(x=>x.id===window._compareDocB)||docs[docs.length-1];
   stack.innerHTML=renderCompareDocSideHtml(a,'◀ Izquierda',t)+renderCompareDocSideHtml(b,'Derecha ▶',t);
 }
-function renderAsistenteRevisionPanel(expId,taskId,t){
-  const activo=getSoporteActivo(t);
-  return '<div class="asist-rev">'+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:6px">🤖 Asistente de revisión</div>'+
-    '<div class="asist-rev-info">Apoya al departamento con checklist del expediente y revisión del PDF descargado de Drive (sin enviar datos a internet).</div>'+
-    '<button type="button" class="btn bsm bp" style="margin-bottom:8px" onclick="ejecutarAsistenteRevision(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Analizar consistencia (datos)</button>'+
-    '<div class="asist-pdf-upload">'+
-      '<div style="font-size:11px;font-weight:600;margin-bottom:4px">Revisión del PDF (local)</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Descargue el documento desde Drive'+(activo?' (v'+activo.version+')':'')+' y adjúntelo aquí. El asistente leerá el texto por página.</div>'+
-      '<input type="file" id="asist-pdf-file" accept=".pdf,application/pdf" style="font-size:12px;width:100%;margin-bottom:6px">'+
-      '<button type="button" class="btn bsm bp" onclick="ejecutarAsistentePdfRevision(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Revisar PDF adjunto</button></div>'+
-    '<div id="asist-rev-result"></div></div>';
-}
-async function ensurePdfJsLoaded(){
-  if(window.pdfjsLib)return window.pdfjsLib;
-  await new Promise((resolve,reject)=>{
-    const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    s.onload=resolve;
-    s.onerror=()=>reject(new Error('No se pudo cargar PDF.js'));
-    document.head.appendChild(s);
-  });
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  return pdfjsLib;
-}
-function buildDatosCotejoPdf(e,t){
-  const datos=[];
-  const add=(label,val,peso)=>{
-    const s=String(val||'').trim();
-    if(!s||s.length<2)return;
-    datos.push({label,valor:s,norm:s.toLowerCase().replace(/\s+/g,' '),peso:peso||1});
-  };
-  add('Expediente',e._exp,2);
-  add('Interesado',getNom(e),2);
-  add('Resolución',e._resolucion,1);
-  add('Estado expediente',e._estado,1);
-  const tram=getTram(e._tramite,e);
-  if(tram)add('Trámite',tram.nombre,1);
-  migrarInfoTecExpediente(e);
-  infoTecnicaExpData(e._info_tecnica_items).forEach(it=>{
-    const def=getInfoTecDef(it.campoId,e);
-    add(def?def.label:it.campoId,it.valor,1);
-  });
-  if(tram)tram.campos.slice(0,12).forEach(c=>{
-    const v=e['f_'+c.id];
-    if(v!=null&&v!==''&&v!==false)add(c.label,fmtCampoVal(v,c),1);
-  });
-  return datos;
-}
-async function extraerTextoPdfPorPaginas(file){
-  const pdfjs=await ensurePdfJsLoaded();
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjs.getDocument({data:buf}).promise;
-  const pages=[];
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const content=await page.getTextContent();
-    const text=content.items.map(it=>it.str).join(' ').replace(/\s+/g,' ').trim();
-    pages.push({pagina:p,texto:text,textoNorm:text.toLowerCase()});
-  }
-  return pages;
-}
-function analizarPdfConDatosExp(pages,datos){
-  const hallazgos=[];
-  const patronesAlerta=[/\b(xxx+|pendiente|completar|t\.?\s*b\.?\s*d\.?|por\s+definir|\[\s*\]|_{3,})\b/i];
-  datos.forEach(d=>{
-    const found=pages.some(pg=>pg.textoNorm.includes(d.norm)||d.norm.split(' ').filter(w=>w.length>4).some(w=>pg.textoNorm.includes(w)));
-    if(!found&&d.peso>=2){
-      hallazgos.push({pagina:0,tipo:'warn',texto:'No se encontró «'+d.label+'»: '+d.valor+' — verifique que el documento lo incluya.'});
-    }
-  });
-  pages.forEach(pg=>{
-    patronesAlerta.forEach(rx=>{
-      if(rx.test(pg.texto))hallazgos.push({pagina:pg.pagina,tipo:'warn',texto:'Posible texto incompleto o placeholder en esta página.'});
-    });
-    datos.forEach(d=>{
-      if(d.peso<2||d.norm.length<8)return;
-      const palabras=d.norm.split(' ').filter(w=>w.length>4);
-      if(palabras.length>=2){
-        const alg=palabras.some(w=>pg.textoNorm.includes(w));
-        const todas=palabras.filter(w=>pg.textoNorm.includes(w)).length>=Math.ceil(palabras.length*0.6);
-        if(alg&&!todas&&pg.textoNorm.length>40){
-          hallazgos.push({pagina:pg.pagina,tipo:'info',texto:'Coincidencia parcial con «'+d.label+'» — revise si el dato «'+d.valor+'» está correcto.'});
-        }
-      }
-    });
-    if(pg.textoNorm.length<15&&pages.length>1){
-      hallazgos.push({pagina:pg.pagina,tipo:'info',texto:'Página con muy poco texto extraíble (puede ser imagen escaneada — revise visualmente).'});
-    }
-  });
-  const seen=new Set();
-  return hallazgos.filter(h=>{
-    const k=h.pagina+'|'+h.texto;
-    if(seen.has(k))return false;
-    seen.add(k);
-    return true;
-  });
-}
-async function ejecutarAsistentePdfRevision(expId,taskId){
-  const e=getExpById(expId),t=getTaskFromExp(e,taskId);
-  const box=document.getElementById('asist-rev-result');
-  const inp=document.getElementById('asist-pdf-file');
-  if(!e||!t||!box)return;
-  const file=inp&&inp.files&&inp.files[0];
-  if(!file){notif('Seleccione un archivo PDF descargado de Drive','err');return;}
-  if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf'){notif('El archivo debe ser PDF','err');return;}
-  box.innerHTML='<div class="asist-rev-item">Leyendo PDF ('+escAttr(file.name)+')…</div>';
-  try{
-    const pages=await extraerTextoPdfPorPaginas(file);
-    const datos=buildDatosCotejoPdf(e,t);
-    const hall=analizarPdfConDatosExp(pages,datos);
-    let html='<div class="asist-rev-item asist-rev-ok">✓ PDF analizado: '+pages.length+' página(s) · '+datos.length+' dato(s) del expediente para cotejar</div>';
-    if(!hall.length){
-      html+='<div class="asist-rev-item asist-rev-ok">Sin alertas automáticas — revise manualmente con los marcadores en el documento.</div>';
-    }else{
-      hall.forEach(h=>{
-        const pg=h.pagina?('Pág. '+h.pagina+' · '):'General · ';
-        html+='<div class="asist-pdf-hallazgo'+(h.tipo==='warn'?' asist-rev-warn':'')+'"><strong>'+pg+'</strong>'+escAttr(h.texto)+'</div>';
-      });
-    }
-    html+='<div class="asist-rev-item" style="color:var(--tx3);font-size:11px;margin-top:6px">La revisión es automática (texto del PDF). No sustituye la revisión humana ni detecta errores en documentos escaneados sin texto.</div>';
-    box.innerHTML=html;
-  }catch(err){
-    box.innerHTML='<div class="asist-rev-item asist-rev-warn">No se pudo leer el PDF. Descárguelo de Drive e intente de nuevo. '+(err&&err.message?escAttr(err.message):'')+'</div>';
-  }
-}
-function ejecutarAsistenteRevision(expId,taskId){
-  const e=getExpById(expId),t=getTaskFromExp(e,taskId);
-  const box=document.getElementById('asist-rev-result');
-  if(!e||!t||!box)return;
-  normalizeTask(t);
-  const items=[];
-  const add=(cls,txt)=>items.push('<div class="asist-rev-item '+cls+'">'+txt+'</div>');
-  add('','<strong>Expediente:</strong> '+escAttr(e._exp)+' · '+escAttr(getNom(e))+' · '+escAttr(e._estado||''));
-  const tram=getTram(e._tramite,e);
-  if(tram)add('','<strong>Trámite:</strong> '+escAttr(tram.nombre));
-  add('',(t.soportes||[]).length?'<strong>Versiones de soporte:</strong> '+(t.soportes||[]).length:'<span class="asist-rev-warn">⚠ Sin documentos de soporte adjuntos</span>');
-  const activo=getSoporteActivo(t);
-  const prev=(t.soportes||[]).length>1?(t.soportes||[]).filter(s=>s.id!==activo.id).pop():null;
-  if(activo&&prev&&activo.url===prev.url)add('asist-rev-warn','⚠ El enlace activo es <strong>igual</strong> al de la versión anterior (v'+prev.version+'). Verifique que subió el documento corregido.');
-  else if(activo&&prev)add('asist-rev-ok','✓ El enlace activo (v'+activo.version+') es distinto al anterior (v'+prev.version+').');
-  const obs=(t.notasDoc||[]).filter(n=>n.rol==='revisor');
-  if(obs.length)add('asist-rev-warn','⚠ '+obs.length+' observación(es) del departamento pendientes de revisar en el documento.');
-  else add('asist-rev-ok','✓ Sin observaciones marcadas pendientes en el documento.');
-  const notasPorVer=obs.filter(n=>{
-    const respDesp=(t.notasDoc||[]).some(r=>r.rol==='ejecutor'&&r.tipo==='respuesta'&&r.fecha>(n.fecha||''));
-    return !respDesp;
-  });
-  notasPorVer.slice(0,5).forEach((n,i)=>{
-    add('asist-rev-warn','Obs. '+(n.pin||i+1)+': '+escAttr((n.texto||'').slice(0,120))+(n.ref?' ('+escAttr(n.ref)+')':''));
-  });
-  const links=collectEnlacesExpediente(e);
-  if(links.length>1)add('','<strong>Trazabilidad:</strong> '+links.length+' enlace(s) registrados en expediente y actividades — use la pestaña Comparar o Enlaces.');
-  migrarInfoTecExpediente(e);
-  const itec=infoTecnicaExpData(e._info_tecnica_items).filter(it=>it.valor!=null&&it.valor!=='').slice(0,6);
-  if(itec.length){
-    add('','<strong>Datos técnicos a cotejar en el documento:</strong>');
-    itec.forEach(it=>{
-      const def=getInfoTecDef(it.campoId,e);
-      add('',escAttr((def?def.label:it.campoId)+': '+String(it.valor).slice(0,80)));
-    });
-  }
-  add('','<span style="color:var(--tx3)">Sugerencia: use la pestaña ⇅ Comparar versiones para verificar visualmente los cambios en el apartado señalado.</span>');
-  box.innerHTML=items.join('');
-}
 function resetTaskPorCorregir(t,nota,reportadoPor){
   // Conservar el plazo/vencimiento original al devolver
   const venceOrig=t.vence||'';
@@ -8550,7 +8385,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const showCompareDocs=canReviewSop&&docsCompare.length>=2;
   const showCompareVer=!canReviewSop&&soportes.length>=2;
   const showCompare=showCompareDocs||showCompareVer;
-  const showAsist=!esModoResponsable()&&!esJurisdiccional()&&!esLibre&&!(esVistaActividadesDepto()&&taskPendienteVerificacion(t));
   const showEnviar=canAddSop&&!opts.hideEnviar;
   let h='<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
   h+='<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px"><div style="font-size:12px;font-weight:600">📎 Soporte documental'+(soportes.length>1?' · '+soportes.length+' documento(s)':'')+'</div>';
@@ -8586,8 +8420,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     (prefer==='doc')||
     (prefer==='compare'&&showCompare)||
     (prefer==='exp')||
-    (prefer==='links')||
-    (prefer==='asist'&&showAsist)
+    (prefer==='links')
   );
   const defTab=canPrefer?prefer:(showPqrsCompare?'pqrscompare':(showCompareDocs&&!showPqrsCompare?'compare':'doc'));
   h+='<div class="task-view-tabs">'+
@@ -8596,7 +8429,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     (showCompare?'<button type="button" class="task-view-tab'+(defTab==='compare'?' on':'')+'" data-tab="compare" onclick="setTaskViewTab(\'compare\')">⇅ Comparar documentos</button>':'')+
     '<button type="button" class="task-view-tab'+(defTab==='exp'?' on':'')+'" data-tab="exp" onclick="setTaskViewTab(\'exp\')">📋 Expediente</button>'+
     '<button type="button" class="task-view-tab'+(defTab==='links'?' on':'')+'" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
-    (showAsist?'<button type="button" class="task-view-tab'+(defTab==='asist'?' on':'')+'" data-tab="asist" onclick="setTaskViewTab(\'asist\')">🤖 Asistente</button>':'')+
   '</div>';
   h+='<div id="task-view-pqrscompare" class="task-view-panel'+(defTab==='pqrscompare'?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
   h+='<div id="task-view-doc" class="task-view-panel'+(defTab==='doc'?' on':'')+'">';
@@ -8633,7 +8465,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   h+='<div id="task-view-compare" class="task-view-panel'+(defTab==='compare'?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
   h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>':renderTaskExpConsultaEmbed(e))+'</div>';
   h+='<div id="task-view-links" class="task-view-panel'+(defTab==='links'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
-  if(showAsist)h+='<div id="task-view-asist" class="task-view-panel'+(defTab==='asist'?' on':'')+'">'+renderAsistenteRevisionPanel(expId,taskId,t)+'</div>';
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
   else if(canAddSop&&opts.hideEnviar&&!opts.hideEntrega){
     const autoCorr=taskPuedeCorregirSinRevision(t);
