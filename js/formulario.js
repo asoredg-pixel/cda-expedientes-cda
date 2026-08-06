@@ -104,6 +104,22 @@ function showCfgTab(t){
   if(t==='personas')renderPersonasCfg();
   if(t==='auditoria')renderAuditLogCfg();
   if(t==='nuevo'&&typeof syncNtColorAuto==='function')syncNtColorAuto();
+  if(t==='papelera'){
+    if(typeof puedeUsarPapelera==='function'&&!puedeUsarPapelera()){
+      notif('Solo el encargado del departamento puede ver la papelera','err');
+      t='listas';
+      document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
+      document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
+      document.getElementById('cpg-listas').classList.add('on');
+      document.getElementById('ctab-listas').classList.add('on');
+      renderListasCfg();
+      return;
+    }
+    if(typeof renderPapeleraCfg==='function')renderPapeleraCfg();
+    if(typeof papeleraPurgeExpired==='function')papeleraPurgeExpired({silent:true}).then(function(){
+      if(typeof renderPapeleraCfg==='function')renderPapeleraCfg();
+    }).catch(function(){});
+  }
 }
 function htmlApoderadoAutorizado(ev){
   const apo=!!ev._apoderado;

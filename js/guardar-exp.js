@@ -471,28 +471,35 @@ function eliminarExp(expId){
   if(esUsuarioContratista()){notif('No puede eliminar expedientes','err');return;}
   if(esSoloLectura()){notif('En este modo no puede eliminar expedientes','err');return;}
   confirmPrecaucion({
-    title:'⚠️ Eliminar expediente',
-    message:'Esta acción eliminará el expediente del registro activo. ¿Está seguro de que desea continuar?',
+    title:'⚠️ Eliminar expediente → papelera',
+    message:'El expediente pasará a la papelera por hasta 90 días (Configuración → Papelera). Se renombrarán documentos en Drive; puede restaurarlo después. Indique el motivo:',
     detail:expId+(e?' · '+getNom(e):''),
-    confirmLabel:'Sí, eliminar expediente'
-  },async function(){
-    const esPqrsExp=e&&esPqrsSecretaria(e);
-    const expRef=e||{_exp:expId,_depto:(e&&e._depto)||'guaviare'};
-    const res=await persistExpedienteDelete(expRef);
-    if(!res||!res.ok){
-      const code=res&&res.error&&res.error.code;
-      let errMsg='No se pudo eliminar en Firebase. El registro reaparecerá al recargar.';
-      if(code==='permission-denied')errMsg='Sin permisos para eliminar en Firebase.';
-      else if(code==='unauthenticated')errMsg='Sesión expirada. Vuelva a ingresar.';
-      notif(errMsg,'err');
-      return;
+    prompt:'Motivo de anulación (obligatorio)',
+    promptPlaceholder:'Ej. Duplicado, radicado erróneo, anulado…',
+    confirmLabel:'Mover a papelera',
+    tone:'delete'
+  },async function(motivo){
+    motivo=String(motivo||'').trim();
+    if(!motivo){notif('Indique el motivo de anulación','err');return;}
+    if(typeof softDeleteExpediente==='function'){
+      const r=await softDeleteExpediente(expId,motivo);
+      if(!r||!r.ok){
+        if(r&&r.err==='pqrs')notif('Solo Secretaría o el administrador pueden eliminar PQRSD','err');
+        else notif('No se pudo mover el expediente a la papelera','err');
+        return;
+      }
+    }else{
+      const expRef=e||{_exp:expId,_depto:(e&&e._depto)||'guaviare'};
+      const res=await persistExpedienteDelete(expRef);
+      if(!res||!res.ok){notif('No se pudo eliminar en Firebase.','err');return;}
+      exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
+      if(e&&esPqrsSecretaria(e))logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
+      else logAudit('Eliminó expediente ['+expId+']','expedientes',expId);
     }
-    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
-    if(esPqrsExp)logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
-    else logAudit('Eliminó expediente ['+expId+']','expedientes',expId);
     if(editId===expId){editId=null;showTab('reg');}
     renderTabla();
-    notif('Expediente eliminado','ok');
+    if(typeof renderActividades==='function')renderActividades();
+    notif('Expediente movido a la papelera','ok');
   });
 }
 function verCon(expId){

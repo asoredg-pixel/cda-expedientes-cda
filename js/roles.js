@@ -164,7 +164,13 @@ function puedeEditarRegSecContratistaCfg(){return esAdminModoGlobal()||cfgPuedeE
 function esNcaDeguv(){return getRolEfectivo()==='guaviare'&&deptoActivo==='guaviare'&&!esJurisdiccional()&&!esModoResponsable()&&!esSecretaria()&&!esModoOficinaDeguv()&&!esModoCiudadano();}
 function esAdminGuaviare(){return esAdministrador();}
 function esAdminFull(){return esAdministrador();}
-function puedeRestaurarActividad(){return esAdministrador();}
+function puedeRestaurarActividad(){
+  // La restauración se hace solo desde Configuración → Papelera (encargado/admin)
+  return false;
+}
+function puedeUsarPapeleraDepto(){
+  return typeof puedeUsarPapelera==='function'?puedeUsarPapelera():(esAdministrador()||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()&&!esModoResponsable()));
+}
 function guardCfgEditGeneral(){
   if(cfgEsSoloLectura()){notif('En Configuración solo puede modificar responsables y personas/usuarios de su departamento','err');return true;}
   return false;
@@ -178,6 +184,11 @@ function updateCfgTabsDepto(){
   if(nuevoTab)nuevoTab.style.display=cfgEsSoloLectura()?'none':'';
   const listasTab=document.getElementById('ctab-listas');
   if(listasTab)listasTab.textContent=esCfgDeptoSoloResponsablesPersonas()&&!esAdminModoGlobal()?'Responsables y listas':'Configuración base';
+  const papTab=document.getElementById('ctab-papelera');
+  if(papTab){
+    const show=typeof puedeUsarPapelera==='function'?puedeUsarPapelera():puedeUsarPapeleraDepto();
+    papTab.style.display=show?'':'none';
+  }
 }
 function cfgRestringidoBannerHtml(){return'';}
 function esRolDepartamentalCfg(){const r=getRolEfectivo();return r==='guaviare'||r==='guainia'||r==='vaupes';}

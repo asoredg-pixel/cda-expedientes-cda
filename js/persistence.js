@@ -386,6 +386,7 @@ async function reloadExpedientesTrasLogin(){
         clearLegacyExpsLocalStorage();
         if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
         updateSyncIndicator('synced');
+        if(typeof papeleraSchedulePurge==='function')papeleraSchedulePurge();
         console.log('reloadExpedientesTrasLogin: '+lastCount+' expediente(s) (intento '+(attempt+1)+', deptos='+deptos.join(',')+')');
         return true;
       }

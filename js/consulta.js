@@ -1195,7 +1195,7 @@ function renderConsulta(){
   const basPqrs=esModoOficinaDeguv()||esSecretaria();
   // Oficinas: en Consulta ven todas las PQRSD radicadas (no solo las asignadas a su oficina)
   let baseList=esModoOficinaDeguv()
-    ?exps.filter(function(e){return esPqrsSecretaria(e);})
+    ?exps.filter(function(e){return esPqrsSecretaria(e)&&!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);})
     :expsAmbito();
   if(esModoOficinaDeguv()&&typeof esUsuarioContratista==='function'&&esUsuarioContratista()&&typeof expVisibleParaContratista==='function'){
     baseList=baseList.filter(expVisibleParaContratista);

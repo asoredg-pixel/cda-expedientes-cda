@@ -2552,31 +2552,45 @@ function eliminarPqrs(expId){
     notif('Solo el administrador (rol Secretaría) puede eliminar una PQRSD ya atendida','err');
     return;
   }
-  const msg=pqrsEstaCerrada(e)?'¿Eliminar esta PQRSD atendida del registro? (solo administrador)':'¿Eliminar esta PQRSD del registro?';
-  confirmPrecaucion({title:'Eliminar PQRSD',message:msg,detail:expId,confirmLabel:'Sí, eliminar'},async function(){
-    const expRef={...e,_exp:expId,_depto:e._depto||'guaviare'};
-    const res=await persistExpedienteDelete(expRef);
-    if(!res||!res.ok){
-      const code=res&&res.error&&res.error.code;
-      let errMsg='No se pudo eliminar en Firebase. El registro reaparecerá al recargar.';
-      if(code==='permission-denied')errMsg='Sin permisos para eliminar en Firebase. Verifique que su usuario tenga rol Secretaría activo.';
-      else if(code==='unauthenticated')errMsg='Sesión expirada. Cierre sesión y vuelva a ingresar.';
-      notif(errMsg,'err');
-      return;
+  const msg=pqrsEstaCerrada(e)
+    ?'¿Mover esta PQRSD atendida a la papelera? (90 días para restaurar)'
+    :'¿Mover esta PQRSD a la papelera? (90 días para restaurar)';
+  confirmPrecaucion({
+    title:'Eliminar PQRSD → papelera',
+    message:msg,
+    detail:expId,
+    prompt:'Motivo de anulación (obligatorio)',
+    promptPlaceholder:'Ej. Radicada por error, duplicada…',
+    confirmLabel:'Mover a papelera',
+    tone:'delete'
+  },async function(motivo){
+    motivo=String(motivo||'').trim();
+    if(!motivo){notif('Indique el motivo de anulación','err');return;}
+    if(typeof softDeleteExpediente==='function'){
+      const r=await softDeleteExpediente(expId,motivo);
+      if(!r||!r.ok){notif('No se pudo mover a la papelera','err');return;}
+    }else{
+      const expRef={...e,_exp:expId,_depto:e._depto||'guaviare'};
+      const res=await persistExpedienteDelete(expRef);
+      if(!res||!res.ok){notif('No se pudo eliminar en Firebase.','err');return;}
+      exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
+      logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     }
-    exps=exps.filter(x=>String(x._exp||'').trim()!==String(expId||'').trim());
-    logAudit('Eliminó PQRSD ['+expId+']','pqrsd',expId);
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
     cerrarPqrsSidePanel();
     renderSecretariaPqrs();
     renderPqrsOficinaInbox();
     renderTabla();
-    notif('PQRSD eliminada','ok');
+    notif('PQRSD movida a la papelera','ok');
   });
 }
 function getSecretariaPqrsAll(){
-  return exps.filter(esPqrsSecretaria).map(normalizePqrsOficinaFields).sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
+  return exps.filter(function(e){
+    if(!esPqrsSecretaria(e))return false;
+    if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return false;
+    return true;
+  }).map(normalizePqrsOficinaFields).sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
 }
 function openSecretariaPqrsDetalle(expId){
   openPqrsSidePanel(expId);
@@ -3919,6 +3933,7 @@ function getTareasResponsableActivo(){
   if(!responsableActivo)return [];
   const out=[];
   exps.forEach(e=>{
+    if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -3960,6 +3975,7 @@ function getTareasDeptActividades(respFilter){
   if(esVistaActividadesOficinaPqrs())return getTareasOficinaPqrsActividades(respFilter);
   const depto=deptoActivo;
   exps.filter(e=>(e._depto||'guaviare')===depto).forEach(e=>{
+    if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -5192,24 +5208,43 @@ function eliminarActLibreConfirm(expId,taskId){eliminarActTaskConfirm(expId,task
 function eliminarActTaskConfirm(expId,taskId){
   const t=getTaskAny(expId,taskId);
   if(!t){notif('Actividad no encontrada','err');return;}
-  if(!puedeGestionarActividadesDepto()){notif('Solo el encargado del departamento puede eliminar actividades','err');return;}
+  if(!puedeGestionarActividadesDepto()&&!esAdministrador()){notif('Solo el encargado del departamento puede eliminar actividades','err');return;}
   if(!puedeEliminarTaskPqrs(expId,taskId)){notif('Solo Secretaría DEGUV puede eliminar actividades de PQRSD','err');return;}
+  if(t.eliminada){notif('La actividad ya está en la papelera','warn');return;}
   const ref=t.sinExpediente?(t.codigo||expId):expId;
   const lbl=t.desc||t.actividad||ref;
-  confirmEliminar({
-    message:'¿Eliminar la actividad «'+lbl+'»?',
-    detail:(t.sinExpediente?'Actividad sin expediente. ':'Expediente '+ref+'. ')+'Esta acción no se puede deshacer.'
-  },function(){
-    if(eliminarTaskExp(ref,taskId,'Eliminada por encargado del departamento')){
-      clearTaskSolicitudPendiente(ref,taskId,'aprobada','Eliminada por encargado');
-      notif('Actividad eliminada','ok');
-      closeTaskModal();
-      renderActividades();
-      if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
-    }else{
-      notif('No se pudo eliminar la actividad (no encontrada en el expediente). Actualice la lista.','err');
-      if(typeof renderActividades==='function')renderActividades();
-    }
+  const estLbl=typeof estadoTaskLabel==='function'?estadoTaskLabel(t):(t.estado||'');
+  confirmPrecaucion({
+    title:'Eliminar actividad → papelera',
+    message:'La actividad «'+lbl+'» ('+estLbl+') pasará a la papelera por hasta 90 días. Puede restaurarla en Configuración → Papelera. Los documentos en Drive se renombrarán con prefijo ELIMINADO-. Indique el motivo de anulación:',
+    detail:(t.sinExpediente?'Actividad sin expediente. ':'Expediente '+ref+'. '),
+    prompt:'Motivo de anulación (obligatorio)',
+    promptPlaceholder:'Ej. Duplicada, error de asignación, anulada por instrucción…',
+    confirmLabel:'Mover a papelera',
+    tone:'delete'
+  },function(motivo){
+    motivo=String(motivo||'').trim();
+    if(!motivo){notif('Indique el motivo de anulación','err');return;}
+    const run=typeof softDeleteActividad==='function'
+      ?softDeleteActividad(ref,taskId,motivo)
+      :Promise.resolve(eliminarTaskExp(ref,taskId,motivo)?{ok:true}:{ok:false});
+    Promise.resolve(run).then(function(r){
+      if(r&&r.ok){
+        clearTaskSolicitudPendiente(ref,taskId,'aprobada','Eliminada por encargado');
+        notif('Actividad movida a la papelera','ok');
+        closeTaskModal();
+        renderActividades();
+        if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+      }else{
+        const err=r&&r.err;
+        if(err==='pqrs')notif('Solo Secretaría DEGUV puede eliminar actividades de PQRSD','err');
+        else notif('No se pudo eliminar la actividad','err');
+        if(typeof renderActividades==='function')renderActividades();
+      }
+    }).catch(function(err){
+      console.error('eliminarActTaskConfirm:',err);
+      notif('Error al eliminar la actividad','err');
+    });
   });
 }
 function openEditarActLibreModal(expId,taskId){openEditarActTaskModal(expId,taskId);}
@@ -5457,12 +5492,18 @@ function aprobarSolicitudEliminacion(expId,taskId){
   if(!sol||sol.tipo!=='eliminacion')return;
   const e=getExpById(expId);
   if(e&&t&&taskEsAtenderPqrs(t,e)){notif('Las solicitudes de eliminación PQRSD las revisa NCA; solo Secretaría puede eliminar','err');return;}
-  confirmEliminar({title:'Confirmar eliminación de actividad',message:'¿Confirma eliminar la actividad «'+(t.desc||t.actividad||'')+'»?',detail:sol.por?'Solicitado por: '+sol.por:'',confirmLabel:'Sí, eliminar actividad'},()=>{
-    if(eliminarTaskExp(expId,taskId,'Eliminación aprobada — solicitud de '+sol.por)){
-      clearTaskSolicitudPendiente(expId,taskId,'aprobada','Eliminación aprobada');
-      closeTaskModal();notif('Actividad eliminada','ok');renderActividades();renderBandejaDepto();
-      if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
-    }
+  const motivoSol=String(sol.nota||'').trim()||('Eliminación aprobada — solicitud de '+sol.por);
+  confirmEliminar({title:'Confirmar eliminación → papelera',message:'¿Mover a la papelera la actividad «'+(t.desc||t.actividad||'')+'»?',detail:sol.por?'Solicitado por: '+sol.por:'',confirmLabel:'Mover a papelera'},()=>{
+    const run=typeof softDeleteActividad==='function'
+      ?softDeleteActividad(expId,taskId,motivoSol)
+      :Promise.resolve(eliminarTaskExp(expId,taskId,motivoSol)?{ok:true}:{ok:false});
+    Promise.resolve(run).then(function(r){
+      if(r&&r.ok){
+        clearTaskSolicitudPendiente(expId,taskId,'aprobada','Eliminación aprobada');
+        closeTaskModal();notif('Actividad movida a la papelera','ok');renderActividades();renderBandejaDepto();
+        if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+      }
+    });
   });
 }
 function rechazarSolicitudTask(expId,taskId){
@@ -10450,25 +10491,28 @@ function renderTkAsigTags(data){
   }).join('');
 }
 function eliminarTaskExp(expId,taskId,nota){
-  const e=getExpById(expId);
-  let t=getTaskFromExp(e,taskId);
-  if(!t){t=getActLibreById(taskId)||getActLibreByCodigo(expId);}
-  if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'){
-    drivePurgeTaskInstitutionalSoportes(t).catch(function(err){console.warn('purge drive task:',err);});
-  }
+  // Soft-delete: NO borra Drive aquí (eso es eliminar definitivo / purga 3 meses).
+  // Preferir softDeleteActividad (async) cuando haya Drive que renombrar.
   return mutateTask(expId,taskId,function(tk){
     tk.eliminada=true;
-    // Evitar que siga contando como Por revisar / firma tras soft-delete
+    tk.eliminadaEn=tk.eliminadaEn||new Date().toISOString();
+    tk.eliminadaPor=tk.eliminadaPor||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'');
+    tk.eliminadaMotivo=nota||tk.eliminadaMotivo||'';
     if(tk.firmaWf&&typeof tk.firmaWf==='object'){
       tk.firmaWf=Object.assign({},tk.firmaWf,{fase:'',cerrada_por_eliminacion:true});
     }
     if(!Array.isArray(tk.historial))tk.historial=[];
-    tk.historial.push({tipo:'eliminacion',fecha:hoy(),por:taskComentarioAutor(),nota:nota||''});
+    tk.historial.push({tipo:'eliminacion',fecha:hoy(),por:taskComentarioAutor(),nota:nota||'',papelera:true});
   });
 }
 function restaurarTaskExp(expId,taskId){
+  if(typeof restaurarActividadPapelera==='function'){
+    restaurarActividadPapelera(expId,taskId);
+    return true;
+  }
   return mutateTask(expId,taskId,t=>{
     t.eliminada=false;
+    delete t.eliminadaEn;delete t.eliminadaPor;delete t.eliminadaMotivo;
     t.historial.push({tipo:'restauracion',fecha:hoy(),por:taskComentarioAutor()});
   });
 }
@@ -10843,6 +10887,8 @@ function expsAmbito(){
   else if(esSecretaria())list=exps.filter(esPqrsSecretaria);
   else if(esModoOficinaDeguv())list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===deptoActivo);
   else list=exps.filter(e=>(e._depto||'guaviare')===deptoActivo);
+  // Soft-delete / papelera: ocultar de registro y flujos activos
+  list=list.filter(function(e){return!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e&&e._eliminado);});
   if(esUsuarioContratista())list=list.filter(expVisibleParaContratista);
   return list;
 }
@@ -12850,6 +12896,8 @@ function renderActividadesRowHtml(t){
   const esPqrsNcaAct=expAct&&taskEsAtenderPqrs(t,expAct)&&esOficinaPqrsNca();
   if(puedeGestionarActividadesDepto()){
     if(!esPqrsNcaAct)acts+=actBtnEditHtml(t.exp,t.id,'Gestionar actividad: editar, trasladar responsable o eliminar');
+    if(!esPqrsNcaAct&&typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(t.exp,t.id))
+      acts+='<button type="button" class="btn bsm bic bd2" title="Eliminar actividad (papelera)" onclick="event.stopPropagation();eliminarActTaskConfirm(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\')">🗑</button>';
     if(!t.sinExpediente)acts+=actBtnLupaHtml(t.exp,t.id,esPqrsNcaAct?'Gestionar PQRSD: asignar, co-ejecutores y traslado':'Abrir expediente en '+uiEditorContenedorLbl());
   }
   if(puedeGestionarSolicitudActividad(t.exp,t.id)&&sol)acts+='<button type="button" class="btn bsm" style="background:var(--orl);color:var(--or);font-weight:600" title="Atender solicitud del responsable" onclick="event.stopPropagation();openGestionSolicitudModal(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\')">'+(sol.tipo==='traslado'?'↔':'🗑')+'</button>';

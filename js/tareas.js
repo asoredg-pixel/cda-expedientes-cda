@@ -119,21 +119,31 @@ function eliminarTaskFormRow(btn){
   const expId=editId||window._conPanelActive;
   if(expId&&!puedeEliminarTaskPqrs(expId,meta.id)){notif('Solo Secretaría DEGUV puede eliminar actividades de PQRSD','err');return;}
   confirmPrecaucion({
-    title:'⚠️ Eliminar actividad',
-    message:'La actividad quedará marcada como eliminada y seguirá visible en consulta con registro histórico. ¿Confirma que desea eliminarla?',
+    title:'⚠️ Eliminar actividad → papelera',
+    message:'La actividad pasará a la papelera (Configuración → Papelera) por hasta 90 días. Indique el motivo:',
     detail:act||'(sin título)',
-    confirmLabel:'Sí, eliminar actividad'
-  },function(){
-    const expId=editId||window._conPanelActive;
-    if(expId){
-      eliminarTaskExp(expId,meta.id,'');
-      if(puedeRestaurarActividad()){row.classList.add('tkr-deleted');row.style.display='';}
-      else row.style.display='none';
+    prompt:'Motivo de anulación (obligatorio)',
+    promptPlaceholder:'Ej. Duplicada, error…',
+    confirmLabel:'Mover a papelera',
+    tone:'delete'
+  },function(motivo){
+    motivo=String(motivo||'').trim();
+    if(!motivo){notif('Indique el motivo de anulación','err');return;}
+    const expId2=editId||window._conPanelActive;
+    const done=function(){
+      row.style.display='none';
       writeTaskMeta(row,{...readTaskMeta(row),eliminada:true});
-      const foot=row.querySelector('.tkr-foot');
-      if(foot&&puedeRestaurarActividad())foot.outerHTML=taskFormFootHtml({...readTaskMeta(row),eliminada:true});
+      notif('Actividad movida a la papelera','ok');
+    };
+    if(expId2&&typeof softDeleteActividad==='function'){
+      softDeleteActividad(expId2,meta.id,motivo).then(function(r){
+        if(r&&r.ok)done();
+        else notif('No se pudo eliminar','err');
+      });
+    }else if(expId2){
+      eliminarTaskExp(expId2,meta.id,motivo);
+      done();
     }else row.remove();
-    notif('Actividad eliminada','ok');
   });
 }
 function restaurarTaskFormRow(btn){

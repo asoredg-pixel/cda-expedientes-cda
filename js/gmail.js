@@ -1576,6 +1576,88 @@ async function driveRenameInstitutional(fileId, newName) {
   return true;
 }
 
+async function driveGetFileMeta(fileId) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId) return null;
+  try {
+    const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+      '?fields=id,name,mimeType,parents' + _DRIVE_API_QS, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('driveGetFileMeta:', e);
+    return null;
+  }
+}
+
+/** Lista archivos y carpetas (1 nivel) dentro de una carpeta. */
+async function driveListFolderChildren(folderId) {
+  const token = _driveGetBestToken();
+  if (!token || !folderId) return [];
+  const q = "'" + folderId + "' in parents and trashed=false";
+  let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name,mimeType),nextPageToken&pageSize=100' + _DRIVE_API_QS;
+  const out = [];
+  try {
+    while (url) {
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) break;
+      const data = await res.json();
+      (data.files || []).forEach(function(f) {
+        if (!f || !f.id) return;
+        out.push({
+          id: f.id,
+          name: f.name || '',
+          mimeType: f.mimeType || '',
+          esCarpeta: f.mimeType === 'application/vnd.google-apps.folder'
+        });
+      });
+      url = data.nextPageToken
+        ? (DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+          '&fields=files(id,name,mimeType),nextPageToken&pageSize=100&pageToken=' +
+          encodeURIComponent(data.nextPageToken) + _DRIVE_API_QS)
+        : null;
+    }
+  } catch (e) {
+    console.warn('driveListFolderChildren:', e);
+  }
+  return out;
+}
+
+/** Lista recursiva de archivos (no carpetas) bajo folderId. */
+async function driveListFolderAllRecursive(folderId, acc, depth) {
+  acc = acc || [];
+  depth = depth || 0;
+  if (!folderId || depth > 12) return acc;
+  const kids = await driveListFolderChildren(folderId);
+  for (let i = 0; i < kids.length; i++) {
+    const k = kids[i];
+    if (k.esCarpeta) await driveListFolderAllRecursive(k.id, acc, depth + 1);
+    else acc.push(k);
+  }
+  return acc;
+}
+
+/** Borra carpeta y todo su contenido (archivos + subcarpetas). */
+async function driveDeleteFolderRecursive(folderId, depth) {
+  depth = depth || 0;
+  if (!folderId || depth > 12) return false;
+  const kids = await driveListFolderChildren(folderId);
+  for (let i = 0; i < kids.length; i++) {
+    const k = kids[i];
+    if (k.esCarpeta) await driveDeleteFolderRecursive(k.id, depth + 1);
+    else await driveDeleteInstitutional(k.id).catch(function() {});
+  }
+  return driveDeleteInstitutional(folderId);
+}
+
+window.driveGetFileMeta = driveGetFileMeta;
+window.driveListFolderChildren = driveListFolderChildren;
+window.driveListFolderAllRecursive = driveListFolderAllRecursive;
+window.driveDeleteFolderRecursive = driveDeleteFolderRecursive;
+
 async function driveDeleteInstitutional(fileId) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;
