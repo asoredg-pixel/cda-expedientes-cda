@@ -2715,7 +2715,7 @@ function getResponsablesCoEjPool(expId,taskId,t){
   const ex=getExpById(expId);
   const depto=t.depto||(ex&&ex._depto)||deptoActivo;
   if(esModoOficinaDeguv())return getInstructoresOficina(deptoActivo).map(i=>i.nombre).filter(Boolean);
-  return getContratistasAsignables(depto);
+  return typeof getAsignablesActividad==='function'?getAsignablesActividad(depto):getContratistasAsignables(depto);
 }
 function puedeEliminarTaskPqrs(expId,taskId){
   const e=getExpById(expId);
@@ -2810,7 +2810,7 @@ function getDocsTramiteCiudadano(e){
 function instructoresOptsHtml(deptoId,selVal){
   const list=[];
   const push=n=>{n=String(n||'').trim();if(n&&!list.some(x=>agendaNorm(x)===agendaNorm(n)))list.push(n);};
-  getContratistasAsignables(deptoId).forEach(push);
+  (typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoId):getContratistasAsignables(deptoId)).forEach(push);
   // PQRSD: los responsables de NCA / oficinas DEGUV provienen de _usuariosCache
   // (rol 'responsables') y no de la lista de contratistas, por lo que hay que
   // incluirlos explícitamente para que aparezcan al asignar actividades de PQRSD.
@@ -3535,7 +3535,9 @@ function taskReporteBtnHtml(expId,taskId,yo){
   const cmtN=taskEntregaComentariosCount(t);
   const cmtTip=cmtN?(' · '+cmtN+' comentario(s) de entrega'):'';
   if(esEncOwn){
-    return '<button type="button" class="btn bsm bp" title="Finalizar actividad" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">✓</button>';
+    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return '';
+    if(est==='Atendida')return '';
+    return '<button type="button" class="btn bsm bp" title="Autoentrega (encargado): va a imprimir/firmar/notificar, sin Por revisar" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤</button>';
   }
   if(miEst==='Por verificar'||(est==='Por verificar'&&t.entregaModo==='unificada'&&taskUsuarioEsAsignado(t,usuario))){
     const a=usuario?getAsignado(t,usuario):null;
@@ -5051,8 +5053,15 @@ function taskAsignadoEstadoIcon(st){
 }
 function puedeReportarTask(t,usuario){
   usuario=usuario||responsableActivo;
-  if(!t||!usuario||t.eliminada||esTareaDelEncargado(t))return false;
-  if(!taskUsuarioEsAsignado(t,usuario))return false;
+  if(!t||t.eliminada)return false;
+  // Encargado autoasignado: puede autoentregar (no usa «Por verificar»)
+  if(esTareaDelEncargado(t)){
+    if(!(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())&&!(typeof esAdministrador==='function'&&esAdministrador()))return false;
+    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
+    const est=estadoTask(t);
+    return['En ejecución','Vencida','Por corregir','Parcial'].includes(est)&&est!=='Atendida';
+  }
+  if(!usuario||!taskUsuarioEsAsignado(t,usuario))return false;
   if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
     const st=estadoTaskForAsignado(t,usuario);
     // Por verificar: aún puede corregir mientras el encargado no revise
@@ -5274,11 +5283,12 @@ function openEditarActTaskModal(expId,taskId){
   const rs=getTaskResponsables(t);
   const names=getResponsablesCoEjPool(ref,t.id,t);
   rs.forEach(n=>{if(n&&!names.some(x=>agendaNorm(x)===agendaNorm(n)))names.push(n);});
-  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Edite la actividad asignada, cambie responsable(s), plazo o elimine la actividad.'+(t.sinExpediente?'':' Vinculada al expediente '+escAttr(ref)+'.')+'</div>'+
+  const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(depto)||'').trim():'';
+  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Edite la actividad, responsables (incluye al encargado), plazo o elimine.'+(t.sinExpediente?'':' Vinculada al expediente '+escAttr(ref)+'.')+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" value="'+escAttr(t.actividad||t.desc||'')+'" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" value="'+escAttr(t.detalle||'')+'" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Co-ejecutores (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Responsables / co-ejecutores</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual"'+(t.entregaModo!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option><option value="unificada"'+(t.entregaModo==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option></select></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(t.plazoDias||'')+'" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px"><input type="checkbox" id="act-libre-prior"'+(t.prioritaria?' checked':'')+'> ⚡ Actividad prioritaria</label>'+
@@ -7375,7 +7385,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   let t=getTaskAny(expId,taskId);
   if(t&&t.sinExpediente)expId=t.codigo;
   if(!t){notif('Actividad no encontrada','err');return false;}
-  if(esTareaDelEncargado(t)){notif('Las actividades del encargado se finalizan directamente — use el botón ✓ Finalizar','err');return false;}
+  if(esTareaDelEncargado(t)){notif('Use autoentrega del encargado (📤): no pasa por Por revisar','err');return false;}
   if((esModoResponsable()||esVistaActividadesDepto())&&!taskUsuarioEsAsignado(t,responsableActivo)){notif('Actividad no asignada a usted','err');return false;}
   if(!puedeReportarTask(t,responsableActivo)){notif('No puede reportar esta actividad en su estado actual','err');return false;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está verificada y cerrada','err');return false;}
@@ -8052,6 +8062,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   const traslado=modo==='reporteTrasladado'||taskRecibidaPorTraslado(t);
   const nuevaEntrega=modo==='nuevaEntrega'||estadoTask(t)==='Por corregir'||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t));
   const finalizarEnc=modo==='finalizarEncargado';
+  const autoEnc=modo==='autoentregaEncargado';
   const eExp=getExpById(expId);
   const esPqrsEntrega=eExp&&taskEsAtenderPqrs(t,eExp);
   const corrVoluntaria=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
@@ -8064,10 +8075,12 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   h+='<input type="hidden" id="enviar-modo-nueva" value="'+(nuevaEntrega?'1':'0')+'">';
   h+='<input type="hidden" id="enviar-modo-traslado" value="'+(traslado&&!nuevaEntrega?'1':'0')+'">';
   h+=renderEntregaHistorialHtml(t);
-  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+(finalizarEnc?'✓ Finalizar actividad (encargado del departamento)':corrVoluntaria?'📤 Corregir entrega (aún sin revisión)':nuevaEntrega?'📤 Nueva entrega':'📤 Entrega de actividad')+'</div>';
+  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+(autoEnc?'📤 Autoentrega (encargado)':finalizarEnc?'✓ Finalizar actividad (encargado del departamento)':corrVoluntaria?'📤 Corregir entrega (aún sin revisión)':nuevaEntrega?'📤 Nueva entrega':'📤 Entrega de actividad')+'</div>';
   if(sol){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
       'Tiene una solicitud de <strong>'+(sol.tipo==='traslado'?'traslado':'eliminación')+'</strong> pendiente en el chat — espere respuesta del departamento.</div>';
+  }else if(autoEnc){
+    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como encargado, usted se revisa a sí mismo: la entrega <strong>no pasa por «Por revisar»</strong>. Tras adjuntar el documento, elija el flujo: <strong>Por imprimir → Por firmar → Firmados → Por notificar</strong> (o cierre sin firma si no aplica).</div>';
   }else if(finalizarEnc){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">Como encargado del departamento, al finalizar la actividad queda <strong>cerrada directamente</strong>. Puede adjuntar soporte opcional.</div>';
   }else if(corrVoluntaria){
@@ -8108,7 +8121,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     // Los enlaces externos de Drive no aplican para entregas de PQRSD:
     // los archivos se cargan al Drive institucional y se adjuntan al enviar la respuesta.
     if(!esPqrsEntrega){
-      h+='<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">'+(finalizarEnc?'Soporte opcional (link Drive)':'Enlaces Google Drive externos (opcionales)')+'</div>'+
+      h+='<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">'+(finalizarEnc||autoEnc?'Soporte (link Drive)':'Enlaces Google Drive externos (opcionales)')+'</div>'+
         '<div id="enviar-adjuntos-rows"></div>'+
         '<div class="fx" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">'+
           '<button type="button" class="btn bsm" onclick="addEnviarAdjuntoRow()">+ Link Drive</button>'+
@@ -8117,9 +8130,20 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     }else{
       h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
     }
-    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>'+
-      '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="'+(finalizarEnc?'submitFinalizarEncargado':'submitEnviarSoporteVerificacion')+'(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+(finalizarEnc?'✓ Finalizar actividad':nuevaEntrega?'📤 Enviar nueva entrega':esPqrsEntrega?'📤 Enviar a revisión del encargado':'📤 Enviar para verificación')+'</button>'+
-      '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
+    if(autoEnc){
+      const eid=escAttr(expId),tid=escAttr(taskId);
+      h+='<div style="font-size:12px;font-weight:600;margin:4px 0 6px">Tras la entrega, el flujo será:</div>'+
+        '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+        '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff;border-color:#1a7a4a" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'imprimir\')">🖨 Entregar → Por imprimir</button>'+
+        '<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'firma\')">🖊 Entregar → Por firmar</button>'+
+        '<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'notificar\')">⬆ Entregar → Por notificar</button>'+
+        '<button type="button" class="btn bsm bp" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'cerrar\')">✓ Entregar y cerrar (sin firma)</button>'+
+        '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    }else{
+      h+='<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="'+(finalizarEnc?'submitFinalizarEncargado':'submitEnviarSoporteVerificacion')+'(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+(finalizarEnc?'✓ Finalizar actividad':nuevaEntrega?'📤 Enviar nueva entrega':esPqrsEntrega?'📤 Enviar a revisión del encargado':'📤 Enviar para verificación')+'</button>'+
+        '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    }
   }else{
     h+='<div class="fx" style="gap:8px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
   }
@@ -9809,7 +9833,7 @@ async function respMarcarPorVerificar(expId,taskId){
       openPqrsRespuestaModal(expId);
       return;
     }
-    openFinalizarEncargadoModal(expId,taskId);
+    openAutoentregaEncargadoModal(expId,taskId);
     return;
   }
   const modo=resolveModoEnviar(t,null);
@@ -9887,23 +9911,145 @@ function finalizarTaskEncargado(expId,taskId,linksOpt,comentarioOpt,archivosOpt,
   return ok;
 }
 function openFinalizarEncargadoModal(expId,taskId){
+  openAutoentregaEncargadoModal(expId,taskId);
+}
+function openAutoentregaEncargadoModal(expId,taskId){
   let t=getTaskAny(expId,taskId);
   if(t&&t.sinExpediente)expId=t.codigo;
   if(!t)return;
+  if(!esTareaDelEncargado(t)){notif('Solo aplica a actividades asignadas al encargado','err');return;}
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Finalizar actividad · '+(t.codigo||expId);
+  if(tit)tit.textContent='Autoentrega (encargado) · '+(t.codigo||expId);
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const est=estadoTask(t),st=taskEstadoStyle(est);
   body.innerHTML='<div style="margin-bottom:.75rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span></div>'+
     '<div style="font-size:13px;margin-bottom:.75rem">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
-    renderEnviarPanelHtml(expId,taskId,t,'finalizarEncargado');
+    renderEnviarPanelHtml(expId,taskId,t,'autoentregaEncargado');
   ov.classList.add('on');
-  window._taskModalCtx={expId,taskId,mode:'finalizarEnc',actLibre:!!t.sinExpediente};
+  window._taskModalCtx={expId,taskId,mode:'autoentregaEnc',actLibre:!!t.sinExpediente};
+  try{addEnviarAdjuntoRow();}catch(e){}
 }
+/**
+ * Guarda soportes de autoentrega del encargado sin pasar por «Por verificar».
+ * destino: 'imprimir' | 'firma' | 'notificar' | 'cerrar'
+ */
+function registrarSoportesAutoentregaEncargado(expId,taskId,linksOpt,comentarioOpt,archivosOpt){
+  const links=(Array.isArray(linksOpt)?linksOpt:[]).map(u=>String(u||'').trim()).filter(Boolean);
+  const archivos=Array.isArray(archivosOpt)?archivosOpt:(archivosOpt?[archivosOpt]:[]);
+  const cmt=String(comentarioOpt||'').trim();
+  const parsedLinks=[];
+  for(const link of links){
+    const parsed=parseDrivePreviewUrl(link);
+    if(!parsed.valid){notif('Enlace no válido: '+link.slice(0,60),'err');return false;}
+    parsedLinks.push(parsed);
+  }
+  return mutateTask(expId,taskId,function(t){
+    normalizeTask(t);
+    const loteId='lot_'+Date.now();
+    if(parsedLinks.length||archivos.some(function(a){return a&&a.data;}))t.soportes.forEach(function(s){s.activo=false;});
+    let linkNum=0,fileNum=0;
+    parsedLinks.forEach(function(parsed){
+      linkNum++;
+      t.soportes.push({
+        id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        url:parsed.url,preview:parsed.preview,label:'Link '+linkNum,
+        fecha:new Date().toISOString(),autor:taskComentarioAutor(),
+        version:t.soportes.length+1,activo:true,loteEntrega:loteId,local:false
+      });
+    });
+    archivos.forEach(function(archivoOpt){
+      if(!archivoOpt||!archivoOpt.data)return;
+      fileNum++;
+      const isPdf=archivoOpt.tipo==='application/pdf'||/\.pdf$/i.test(archivoOpt.nombre||'');
+      const isImg=archivoOpt.tipo&&archivoOpt.tipo.startsWith('image/');
+      const isVid=archivoOpt.tipo&&archivoOpt.tipo.startsWith('video/');
+      const canPreview=isPdf||isImg||isVid;
+      t.soportes.push({
+        id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        url:archivoOpt.data,preview:canPreview?archivoOpt.data:'',
+        label:archivoOpt.nombre||('Documento '+fileNum),
+        fecha:new Date().toISOString(),autor:taskComentarioAutor(),
+        version:t.soportes.length+1,activo:true,local:true,tipo:archivoOpt.tipo||'',loteEntrega:loteId
+      });
+    });
+    if(cmt){
+      t.comentarios.push({autor:taskComentarioAutor(),fecha:new Date().toISOString(),texto:cmt,rol:'ejecutor',incluidoEnReporte:true});
+    }
+    const hoyStr=hoy();
+    t.fechaReportada=hoyStr;
+    // No «Por verificar»: el encargado se auto-revisa
+    t.fechaAtendida='';
+    t.estado='En ejecución';
+    t.autoentregaEncargado=true;
+    if(!Array.isArray(t.historial))t.historial=[];
+    t.historial.push({tipo:'autoentrega_encargado',fecha:hoyStr,ts:Date.now(),por:taskComentarioAutor(),nota:cmt||'Autoentrega encargado — sin Por revisar'});
+  });
+}
+async function submitAutoentregaEncargado(expId,taskId,destino){
+  destino=String(destino||'imprimir').trim().toLowerCase();
+  let t=getTaskAny(expId,taskId);
+  if(t&&t.sinExpediente)expId=t.codigo;
+  if(!t||!esTareaDelEncargado(t)){notif('Solo el encargado puede autoentregar esta actividad','err');return;}
+  const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[]};
+  const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
+  const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length);
+  if(!hasAdj&&!cmt&&destino!=='cerrar'){
+    notif('Adjunte documento, link Drive y/o escriba un comentario','err');
+    return;
+  }
+  const run=async function(){
+    // Subida Drive si hay archivos (reutiliza flujo de envío cuando aplica)
+    if(typeof submitEnviarSoporteVerificacion==='function'&&adj.files&&adj.files.length&&typeof _driveExpedienteEsGuaviare==='function'){
+      // Los archivos locales se registran vía registrarSoportes; upload institucional ocurre en enviar si se usara ese path.
+      // Aquí priorizamos registro + firmaWf.
+    }
+    const ok=registrarSoportesAutoentregaEncargado(expId,taskId,adj.links,cmt,adj.files);
+    if(!ok)return;
+    if(destino==='cerrar'){
+      mutateTask(expId,taskId,function(tk){
+        tk.fechaAtendida=hoy();
+        tk.estado='Atendida';
+        tk.verificadoPor=taskComentarioAutor()+' · cierre sin firma (autoentrega encargado)';
+        if(!Array.isArray(tk.historial))tk.historial=[];
+        tk.historial.push({tipo:'cierre_encargado',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:'Cierre sin firma tras autoentrega'});
+      });
+      notif('Actividad cerrada sin firma','ok');
+      closeTaskModal();
+      if(typeof renderActividades==='function')renderActividades();
+      return;
+    }
+    if(destino==='notificar'){
+      if(typeof tramiteAtajoFirmadoDesdeRevision==='function'){
+        closeTaskModal();
+        // Pequeño delay para que el modal se cierre antes de abrir el de atajo
+        setTimeout(function(){tramiteAtajoFirmadoDesdeRevision(expId,taskId);},50);
+      }else if(typeof tramiteEnviarAFirmaDesdeRevision==='function'){
+        await tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:'firma'});
+      }
+      return;
+    }
+    if(typeof tramiteEnviarAFirmaDesdeRevision==='function'){
+      await tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:destino==='firma'?'firma':'imprimir'});
+    }else{
+      notif('Autoentrega registrada','ok');
+      closeTaskModal();
+      if(typeof renderActividades==='function')renderActividades();
+    }
+  };
+  if(adj.files&&adj.files.length){
+    (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
+      if(ok)run();
+    });
+    return;
+  }
+  await run();
+}
+window.openAutoentregaEncargadoModal=openAutoentregaEncargadoModal;
+window.submitAutoentregaEncargado=submitAutoentregaEncargado;
 function submitFinalizarEncargado(expId,taskId){
   const e=getExpById(expId);
   const t=getTaskFromExp(e,taskId);
@@ -10197,7 +10343,7 @@ function renderTkCoEjPanelHtml(data){
   const m=normalizeTask(data||{});
   const rs=getTaskResponsables(m);
   const primary=rs[0]||m.responsable||'';
-  const names=getContratistasAsignables(deptoId);
+  const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoId):getContratistasAsignables(deptoId);
   rs.forEach(n=>{if(n&&!names.some(x=>agendaNorm(x)===agendaNorm(n)))names.push(n);});
   const extras=names.filter(n=>!primary||agendaNorm(n)!==agendaNorm(primary));
   const checks=extras.length?extras.map(n=>{
@@ -13152,9 +13298,11 @@ function openCrearActLibreModal(){
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const respSel=document.getElementById('act-dept-resp-sel');
   const defResp=respSel&&respSel.value?respSel.value:responsableActivo;
-  const names=getContratistasAsignables(deptoActivo);
-  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(n===defResp||names.length===1?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Capacitación, puesto de control u otra tarea sin expediente. Puede asignar a varios co-ejecutores.</div>'+
+  const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoActivo):getContratistasAsignables(deptoActivo);
+  const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
+  const defCheck=defResp||encNom;
+  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(defCheck)||(!defCheck&&names.length===1)?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Capacitación, puesto de control u otra tarea sin expediente. Puede asignarse a usted (encargado) o a responsables; si se autoasigna, la entrega no pasa por «Por revisar» sino al flujo de imprimir/firmar/notificar.</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+

@@ -490,6 +490,17 @@ function getAllResponsables(){
 function instructorEsAsignableActividad(ins){
   return !!(ins&&ins.activo!==false&&String(ins.nombre||'').trim()&&ins.rol!=='encargado_oficina'&&ins.rol!=='encargado_depto');
 }
+/** Contratistas + encargado del depto (puede autoasignarse actividades). */
+function getAsignablesActividad(deptoId){
+  const d=deptoId||getDeptoOperativo();
+  const names=getContratistasAsignables(d).slice();
+  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(d)||'').trim():'';
+  if(enc){
+    const has=names.some(function(n){return typeof agendaNorm==='function'?agendaNorm(n)===agendaNorm(enc):n===enc;});
+    if(!has)names.unshift(enc);
+  }
+  return names;
+}
 function getContratistasAsignables(deptoId){
   return getInstructoresActivos(deptoId||getDeptoOperativo()).filter(instructorEsAsignableActividad).map(i=>i.nombre).filter(Boolean);
 }
@@ -509,12 +520,14 @@ function getResponsablesForTrasladoActividad(expId,taskId){
   const t=getTaskAny(expId,taskId);
   if(e&&t&&taskEsAtenderPqrs(t,e))return getResponsablesNcaDeguv();
   const depto=(t&&(t.depto||(e&&e._depto)))||deptoActivo;
-  return getContratistasAsignables(depto);
+  return typeof getAsignablesActividad==='function'?getAsignablesActividad(depto):getContratistasAsignables(depto);
 }
 function esTareaDelEncargado(t,deptoId){
-  if(!t||!t.responsable)return false;
+  if(!t)return false;
   const enc=getEncargadoDepto(deptoId||t.depto||deptoActivo);
-  return !!enc&&t.responsable===enc;
+  if(!enc)return false;
+  if(typeof taskUsuarioEsAsignado==='function')return taskUsuarioEsAsignado(t,enc);
+  return String(t.responsable||'')===enc;
 }
 function getActDeptRespFilter(){
   const sel=document.getElementById('act-dept-resp-sel');
