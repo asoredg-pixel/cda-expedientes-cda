@@ -801,6 +801,39 @@ function getEncargadoOficina(oficinaId){
   }
   return '';
 }
+/**
+ * Correo institucional autorizado de la oficina / NCA / Secretaría
+ * (el registrado en el encargado de ese módulo). Desde esa cuenta deben salir las respuestas PQRSD.
+ */
+function getCorreoAutorizadoOficina(ofiId){
+  ofiId=String(ofiId||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim();
+  if(!ofiId||ofiId==='responsables'||ofiId==='ds_deguv')return '';
+  const eg=typeof encargadosGlobal!=='undefined'
+    ?(typeof normalizeEncargadosGlobal==='function'?normalizeEncargadosGlobal(encargadosGlobal):encargadosGlobal)
+    :null;
+  if(!eg)return '';
+  if(ofiId==='secretaria'){
+    return String((eg.secretaria&&eg.secretaria.email)||'').trim().toLowerCase();
+  }
+  if(ofiId==='guaviare'){
+    const dep=(eg.departamentos&&eg.departamentos.guaviare)||{};
+    const ofi=(eg.oficinas&&eg.oficinas.guaviare)||{};
+    return String(dep.email||ofi.email||'').trim().toLowerCase();
+  }
+  const ofi=(eg.oficinas&&eg.oficinas[ofiId])||{};
+  if(ofi.email)return String(ofi.email).trim().toLowerCase();
+  // Respaldo: email del instructor encargado_oficina
+  const enc=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes(ofiId));
+  return String((enc&&enc.email)||'').trim().toLowerCase();
+}
+/** Oficina efectiva para envío de correo PQRSD (expediente o sesión). */
+function getOficinaParaEnvioCorreoPqrs(e){
+  if(e&&e._pqrs_oficina)return String(e._pqrs_oficina).trim();
+  if(typeof deptoActivo!=='undefined'&&deptoActivo&&deptoActivo!=='responsables'&&deptoActivo!=='ds_deguv'){
+    return String(deptoActivo).trim();
+  }
+  return 'guaviare';
+}
 function esPqrsSecretaria(e){
   if(!e)return false;
   if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))return true;

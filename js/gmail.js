@@ -3622,6 +3622,82 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
     }
   } catch(e) {}
 }
+function gmailOfiGetAccountEmail() {
+  try { return String(sessionStorage.getItem(GMAIL_OFI_ACCOUNT_KEY) || '').trim().toLowerCase(); } catch(e) { return ''; }
+}
+/**
+ * Cuenta Gmail actualmente usada para envíos de oficina / NCA / Secretaría.
+ */
+function gmailOfiCuentaConectadaParaEnvio() {
+  if (typeof _gmailOfiIsSecretaria === 'function' && _gmailOfiIsSecretaria()) {
+    const stored = gmailOfiGetAccountEmail();
+    if (stored) return stored;
+    return String((window._usuarioActual && window._usuarioActual.email) || '').trim().toLowerCase();
+  }
+  return gmailOfiGetAccountEmail();
+}
+/**
+ * Verifica que la cuenta conectada sea el correo autorizado de la oficina
+ * (encargado RN/OAP/Admin/Secretaría o encargado NCA).
+ */
+function gmailOfiVerificarCuentaOficina(ofiId) {
+  ofiId = String(ofiId || (typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+  if (ofiId === 'responsables' || ofiId === 'ds_deguv') ofiId = 'guaviare';
+  const esperado = typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiId) : '';
+  const conectado = gmailOfiCuentaConectadaParaEnvio();
+  if (!esperado) {
+    return { ok: !!(conectado || (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid())), esperado: '', conectado: conectado, oficina: ofiId, sinConfig: true };
+  }
+  return { ok: !!conectado && conectado === esperado, esperado: esperado, conectado: conectado, oficina: ofiId, sinConfig: false };
+}
+/**
+ * Obliga a usar el correo autorizado de la oficina antes de enviar al ciudadano.
+ * ofiId: oficina de la PQRSD (rn_deguv, oap_deguv, admin_deguv, secretaria, guaviare).
+ */
+async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
+  ofiId = String(ofiId || '').trim();
+  if (!ofiId || ofiId === 'responsables' || ofiId === 'ds_deguv') ofiId = 'guaviare';
+  const tokenOk = (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid())
+    || (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid())
+    || (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid());
+  if (!tokenOk) {
+    throw new Error('Conecte el correo de la oficina en la pestaña Correos.');
+  }
+  let conectado = gmailOfiCuentaConectadaParaEnvio();
+  if (!conectado) {
+    try {
+      const tok = (typeof _gmailOfiIsSecretaria === 'function' && _gmailOfiIsSecretaria())
+        ? (typeof gmailGetToken === 'function' ? gmailGetToken() : '')
+        : gmailOfiGetToken();
+      if (tok) {
+        conectado = await _gmailFetchProfileEmail(tok);
+        if (conectado) {
+          try { sessionStorage.setItem(GMAIL_OFI_ACCOUNT_KEY, conectado); } catch (eS) {}
+        }
+      }
+    } catch (err) {
+      console.warn('gmailOfiAsegurarCuentaOficinaParaEnvio profile:', err);
+    }
+  }
+  const esperado = typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiId) : '';
+  const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
+  if (!esperado) {
+    console.warn('Sin correo autorizado configurado para', ofiId, '— se usa la cuenta conectada', conectado);
+    return { ok: true, sinConfig: true, conectado: conectado, esperado: '', oficina: ofiId };
+  }
+  if (!conectado || conectado !== esperado) {
+    throw new Error(
+      'El correo al ciudadano debe salir de la cuenta autorizada de ' + lbl + ' (' + esperado + '). ' +
+      (conectado ? 'Ahora está conectado: ' + conectado + '. ' : '') +
+      'Desconecte y conecte esa cuenta en Correos.'
+    );
+  }
+  return { ok: true, sinConfig: false, conectado: conectado, esperado: esperado, oficina: ofiId };
+}
+window.gmailOfiGetAccountEmail = gmailOfiGetAccountEmail;
+window.gmailOfiVerificarCuentaOficina = gmailOfiVerificarCuentaOficina;
+window.gmailOfiAsegurarCuentaOficinaParaEnvio = gmailOfiAsegurarCuentaOficinaParaEnvio;
+
 async function _gmailFetchProfileEmail(token) {
   if (!token) return '';
   const res = await fetch(GMAIL_API_BASE + '/profile', {
@@ -3659,8 +3735,36 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     }
     return false;
   }
+  // Si la sesión es una oficina DEGUV / NCA / Secretaría, exigir el correo del encargado de ese módulo
+  let ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+  if (ofiId === 'responsables') {
+    // Responsable NCA / VITAL: el envío institucional es el del encargado NCA
+    ofiId = 'guaviare';
+  }
+  const ofisCorreo = { rn_deguv:1, oap_deguv:1, admin_deguv:1, secretaria:1, guaviare:1 };
+  if (ofisCorreo[ofiId] && typeof getCorreoAutorizadoOficina === 'function') {
+    const esperado = getCorreoAutorizadoOficina(ofiId);
+    if (esperado && email && email !== esperado) {
+      const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
+      if (typeof confirmPrecaucion === 'function') {
+        confirmPrecaucion({
+          title: '⛔ Correo de oficina incorrecto',
+          message: 'Para ' + lbl + ' debe conectar el correo autorizado del encargado.',
+          detail: 'Esperado: ' + esperado + '\nConectó: ' + email +
+            '\n\nLas respuestas PQRSD deben salir de la cuenta institucional de la oficina.',
+          confirmLabel: 'Entendido',
+          hideCancel: true,
+          tone: 'delete'
+        }, function() {});
+      } else {
+        notif('⛔ Conecte el correo autorizado de ' + lbl + ' (' + esperado + ').', 'err');
+      }
+      return false;
+    }
+  }
   gmailOfiSetToken(tok, expiresInSec, email);
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
+  if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
   // No avisar aquí por falta de carpeta raíz: el mensaje sale al intentar cargar un archivo.
   return true;
 }
@@ -3753,11 +3857,46 @@ function _updateGmailOfiBtn() {
     btn.textContent = '🔌 Desconectar';
     btn.onclick = gmailOfiDisconnect;
   } else {
-    btn.textContent = '📧 Conectar mi correo';
+    btn.textContent = '📧 Conectar correo de oficina';
     btn.onclick = gmailOfiConnect;
   }
   const rb = document.getElementById('gmail-ofi-refresh-btn');
   if (rb) rb.style.display = valid ? '' : 'none';
+  // Estado: cuenta conectada vs correo autorizado de la oficina
+  let st = document.getElementById('gmail-ofi-account-status');
+  if (!st) {
+    const right = document.querySelector('#pg-gmail-ofi .gm-topbar-right');
+    if (right) {
+      st = document.createElement('span');
+      st.id = 'gmail-ofi-account-status';
+      st.style.cssText = 'font-size:11px;color:var(--tx2);margin-right:8px;max-width:280px;';
+      right.insertBefore(st, right.firstChild);
+    }
+  }
+  if (st) {
+    const ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+    const ofiEff = (ofiId === 'responsables' || ofiId === 'ds_deguv') ? 'guaviare' : ofiId;
+    const esperado = typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiEff) : '';
+    const conectado = gmailOfiCuentaConectadaParaEnvio();
+    const lbl = typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff;
+    if (valid && conectado) {
+      const ok = !esperado || conectado === esperado;
+      st.style.color = ok ? 'var(--gn)' : 'var(--or)';
+      st.textContent = ok
+        ? ('✅ ' + conectado + (esperado ? ' · ' + lbl : ''))
+        : ('⚠️ ' + conectado + ' ≠ ' + esperado);
+      st.title = ok
+        ? ('Envíos PQRSD saldrán de ' + conectado)
+        : ('Debe conectar el correo autorizado de ' + lbl + ': ' + esperado);
+    } else if (esperado) {
+      st.style.color = 'var(--or)';
+      st.textContent = 'Conecte: ' + esperado;
+      st.title = 'Correo autorizado de ' + lbl;
+    } else {
+      st.textContent = '';
+      st.title = '';
+    }
+  }
 }
 
 // ---- API helper ----
@@ -5091,6 +5230,16 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
   if (!expId || !toList.length || !body) throw new Error('Datos incompletos para enviar');
   if (!_gmailOfiTokenValid() && !(typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())) {
     throw new Error('Conecte su correo Gmail');
+  }
+  // Debe salir del correo autorizado de la oficina (RN/OAP/Admin/Secretaría) o NCA
+  const ePqrs = (typeof exps !== 'undefined' ? exps : []).find(function(x) {
+    return String(x._exp || '').trim() === String(expId || '').trim();
+  });
+  const ofiEnvio = typeof getOficinaParaEnvioCorreoPqrs === 'function'
+    ? getOficinaParaEnvioCorreoPqrs(ePqrs)
+    : String((ePqrs && ePqrs._pqrs_oficina) || (typeof deptoActivo !== 'undefined' ? deptoActivo : 'guaviare') || 'guaviare');
+  if (typeof gmailOfiAsegurarCuentaOficinaParaEnvio === 'function') {
+    await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiEnvio);
   }
   if (!_gmailOfiSignature && !_gmailOfiSignatureHtml) {
     await _gmailOfiLoadSignature();

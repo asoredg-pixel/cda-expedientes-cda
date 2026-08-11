@@ -1327,7 +1327,7 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
     '<button type="button" class="btn bsm" onclick="pqrsComposeAddAttachment()">📎 Adjuntar archivo</button>'+
     '</div></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:6px" id="pqrs-compose-hint">Al enviar se registra la respuesta, el soporte PDF y la notificación en consulta ciudadana. Si hay varios correos asociados (empresa, representante, apoderado, autorizado), se incluyen arriba.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:6px" id="pqrs-compose-hint">Al enviar se registra la respuesta y la notificación. El mensaje sale del <strong>correo autorizado de la oficina</strong> (encargado registrado). Si hay varios correos asociados (empresa, representante, apoderado, autorizado), se incluyen arriba.</div>'+
     '</div>'))+
     '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px;display:none"><label style="font-weight:600;font-size:12px" id="pqrs-resp-cuerpo-label">Resumen de la respuesta</label>'+
     '<textarea id="pqrs-resp-cuerpo" placeholder="Resumen para trazabilidad…" style="min-height:200px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
@@ -15628,7 +15628,7 @@ async function ncaAprobarMensajeSimple(expId){
       const adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
         ?await pqrsPrepararAdjuntosNotificacionCorreo(wf.documentos||[])
         :[];
-      const sent=await pqrsEnviarCorreoCiudadano(correos,asunto,htmlResp,true,adjuntos);
+      const sent=await pqrsEnviarCorreoCiudadano(correos,asunto,htmlResp,true,adjuntos,{expediente:e,oficinaId:'guaviare'});
       setPqrsWorkflow(e,{
         fase:PQRS_WF.CERRADA,
         cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
@@ -16994,8 +16994,15 @@ function openPqrsNotificarOficioModal(expId){
     ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())
     ||(typeof esSecretaria==='function'&&esSecretaria());
   const esVitalNcaPlantilla=esEncargado||(typeof esCargoVital==='function'&&esCargoVital());
-  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
+  const tokOfi=(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid())
+    ||(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())
+    ||(typeof esSecretaria==='function'&&esSecretaria()&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid());
   const notifAsignado=String(wf.notificar_por||'').trim();
+  const ofiEnvio=typeof getOficinaParaEnvioCorreoPqrs==='function'?getOficinaParaEnvioCorreoPqrs(e):String(e._pqrs_oficina||deptoActivo||'guaviare');
+  const correoOfiEsp=typeof getCorreoAutorizadoOficina==='function'?getCorreoAutorizadoOficina(ofiEnvio):'';
+  const correoOfiCon=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
+  const correoOfiOk=!!(tokOfi&&correoOfiEsp&&correoOfiCon&&correoOfiCon===correoOfiEsp)||!!(tokOfi&&!correoOfiEsp);
+  const ofiLblEnv=typeof labelOficina==='function'?labelOficina(ofiEnvio):ofiEnvio;
   // Plantilla de oficio firmado al notificar (VITAL / NCA / oficinas) — no en entrega/Responder
   let cuerpoNotif=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
   if(esVitalNcaPlantilla){
@@ -17007,7 +17014,7 @@ function openPqrsNotificarOficioModal(expId){
   }
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📬 Notificar oficio firmado — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px"><strong>Importante:</strong> el correo al ciudadano sale del <strong>Gmail de la oficina</strong> conectado.'+(notifAsignado?' Encargado de notificar: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px"><strong>Importante:</strong> el correo al ciudadano sale del <strong>correo autorizado de '+escAttr(ofiLblEnv)+'</strong>'+(correoOfiEsp?' (<strong>'+escAttr(correoOfiEsp)+'</strong>)':'')+'.'+(notifAsignado?' Encargado de notificar: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+
     (typeof pqrsNotifVence==='function'&&pqrsNotifVence(e)?' <span style="color:'+(pqrsNotifVence(e)<hoy()?'var(--rd)':'var(--bl)')+'">Plazo notificar: <strong>'+fmtF(pqrsNotifVence(e))+'</strong> (5 días hábiles).</span>':'')+'</div>'+
     '<div style="margin-bottom:10px">'+docsHtml+'</div>'+
     '<div style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
@@ -17031,7 +17038,11 @@ function openPqrsNotificarOficioModal(expId){
     '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="pqrs-notif-bcc" value="'+escAttr(wf.email_bcc||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="pqrs-notif-asunto" value="Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+escAttr(expId)+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Mensaje'+(esVitalNcaPlantilla?' <span style="font-weight:400;color:var(--tx3)">(plantilla de oficio firmado)</span>':'')+'</label><textarea id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoNotif)+'</textarea></div>'+
-    '<div style="font-size:11px;color:'+(tokOfi?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+(tokOfi?'✅ Correo de oficina conectado — el envío saldrá de esa cuenta.':(esEncargado?'⚠️ Conecte el correo de la oficina en Correos para enviar.':'⚠️ Sin correo de oficina: al confirmar quedará pendiente de envío por el encargado.'))+'</div>'+
+    '<div style="font-size:11px;color:'+(correoOfiOk?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+(correoOfiOk
+      ?('✅ Correo de '+escAttr(ofiLblEnv)+' conectado'+(correoOfiCon?' ('+escAttr(correoOfiCon)+')':'')+' — el envío saldrá de esa cuenta.')
+      :(correoOfiEsp
+        ?('⚠️ Conecte el correo autorizado de '+escAttr(ofiLblEnv)+': <strong>'+escAttr(correoOfiEsp)+'</strong>'+(correoOfiCon?' (ahora: '+escAttr(correoOfiCon)+')':'')+'.')
+        :(esEncargado?'⚠️ Conecte el correo de la oficina en Correos para enviar.':'⚠️ Sin correo de oficina: al confirmar quedará pendiente de envío por el encargado.')))+'</div>'+
     (anexos.length?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">📎 Se adjuntarán al correo <strong>'+anexos.length+' anexo(s)</strong> junto con el oficio.</div>':'')+
     '</div>'+
     '<div id="pqrs-notif-otro-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'display:none':'')+'">'+
@@ -17097,13 +17108,20 @@ async function pqrsConfirmarNotificacionOficio(expId){
   let notifPorSel=String((document.getElementById('pqrs-notif-por-sel')||{}).value||wf.notificar_por||'').trim();
   notifPorSel=pqrsAplicarReglaNotificadorCanal(e,canal,notifPorSel);
   if(pqrsEsCanalCorreo(canal)&&!notifPorSel){
-    notif('Para notificar por correo debe designar a VITAL o al Encargado del departamento','err');
+    const ofiMsg=typeof pqrsOficinaNotificaSinVital==='function'&&pqrsOficinaNotificaSinVital(e._pqrs_oficina)
+      ?'al Encargado o responsable de la oficina'
+      :'a VITAL o al Encargado NCA';
+    notif('Para notificar por correo debe designar '+ofiMsg,'err');
     if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
     return;
   }
   if(notifPorSel)setPqrsWorkflow(e,{notificar_por:notifPorSel,notificar_por_propuesto:notifPorSel});
-  const esEncargado=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador();
-  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
+  const esEncargado=esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()
+    ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())
+    ||(typeof esSecretaria==='function'&&esSecretaria());
+  const tokOfi=(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid())
+    ||(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())
+    ||(typeof esSecretaria==='function'&&esSecretaria()&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid());
 
   // Oficio notificado (prioridad cuando no se cargó el PDF firmado)
   const fileOficio=window._pqrsNotifOficioFile||((document.getElementById('pqrs-notif-oficio-file')||{}).files||[])[0]||null;
@@ -17155,10 +17173,11 @@ async function pqrsConfirmarNotificacionOficio(expId){
           :[];
         if(btn)btn.textContent='Enviando correo…';
         const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+escAttr(cuerpo)+'</p>');
-        const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw});
+        const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
         const nAdj=adjuntos.length;
+        const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''): (e._pqrs_oficina||'oficina');
         if(typeof registrarNotificacionCiudadanoPqrs==='function'){
-          registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:'correo',enviado:true,a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),cuenta_emisora:(sent&&sent.cuenta)||'oficina',gmail_message_id:(sent&&sent.messageId)||'',por:por,histTipo:'notificacion_correo',histNota:'Oficio firmado notificado por correo (oficina NCA) a '+destinos.join(', ')+(nAdj?' · '+nAdj+' adjunto(s)':'')});
+          registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:'correo',enviado:true,a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),cuenta_emisora:(sent&&sent.cuenta)||'oficina',gmail_message_id:(sent&&sent.messageId)||'',por:por,histTipo:'notificacion_correo',histNota:'Oficio firmado notificado por correo ('+ofiLbl+') a '+destinos.join(', ')+(nAdj?' · '+nAdj+' adjunto(s)':'')});
         }
         await _pqrsRenombrarDocsDriveWf(getPqrsWorkflow(e),'atendido');
         setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
@@ -17177,11 +17196,11 @@ async function pqrsConfirmarNotificacionOficio(expId){
     // Sin token oficina o falló: lista para envío del encargado
     setPqrsWorkflow(e,{fase:PQRS_WF.LISTA_ENVIO,canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'notif_pendiente_encargado',fecha:hoy(),nota:'Borrador de notificación por correo listo — pendiente envío desde correo de oficina NCA',por:por});
+    e._pqrs_historial.push({tipo:'notif_pendiente_encargado',fecha:hoy(),nota:'Borrador de notificación por correo listo — pendiente envío desde correo autorizado de la oficina',por:por});
     persistExpedienteGranular(e);
     closeTaskModal();
     renderPqrsOficinaInbox();
-    notif(esEncargado?'Conecte el correo de la oficina NCA y use «Notificar» para enviar.':'📬 Preparado. El encargado enviará desde el correo de la oficina NCA.','ok');
+    notif(esEncargado?'Conecte el correo autorizado de la oficina y use «Notificar» para enviar.':'📬 Preparado. El encargado enviará desde el correo autorizado de la oficina.','ok');
     if(esEncargado)setTimeout(function(){abrirNotifPqrsExpId(expId);},300);
     return;
   }
@@ -17525,17 +17544,23 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos){
 }
 // Envía un correo a uno o varios destinatarios.
 // `to` puede ser string (un correo) o array de strings (varios).
-// Si preferOfi=true, SOLO usa el Gmail de oficina (encargado NCA); nunca el personal de VITAL.
-// attachments: File[] opcionales; opts: {cc,bcc}
+// Si preferOfi=true, SOLO usa el Gmail de oficina (encargado de esa oficina / NCA); nunca el personal.
+// attachments: File[] opcionales; opts: {cc,bcc,oficinaId,expediente}
 async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachments,opts){
   opts=opts||{};
   const files=Array.isArray(attachments)?attachments.filter(Boolean):[];
   const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
   const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
+  const ofiId=String(opts.oficinaId||(opts.expediente&&typeof getOficinaParaEnvioCorreoPqrs==='function'?getOficinaParaEnvioCorreoPqrs(opts.expediente):'')||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim();
+  if(preferOfi&&typeof gmailOfiAsegurarCuentaOficinaParaEnvio==='function'){
+    await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId==='responsables'||ofiId==='ds_deguv'?'guaviare':ofiId);
+  }
   const send=async(para)=>{
     let res=null,cuenta='';
     if(preferOfi){
-      if(!tokOfi)throw new Error('Conecte el correo de la oficina (encargado NCA). El aviso al ciudadano no puede salir del correo personal.');
+      if(!tokOfi&&!(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid())){
+        throw new Error('Conecte el correo autorizado de la oficina. El aviso al ciudadano no puede salir del correo personal.');
+      }
       if(files.length&&typeof gmailOfiSendHtmlWithAttachments==='function'){
         res=await gmailOfiSendHtmlWithAttachments(para,subject,htmlBody,files,{cc:opts.cc||'',bcc:opts.bcc||''});
       }else if(typeof gmailOfiSendMessage==='function'){
@@ -17543,18 +17568,23 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
       }else{
         throw new Error('Envío de oficina no disponible');
       }
-      cuenta='oficina';
+      const em=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
+      cuenta=em||'oficina';
     }else if(tokSec&&typeof gmailSendMessage==='function'){
       res=await gmailSendMessage(para,subject,htmlBody);cuenta='secretaria';
     }else if(tokOfi&&typeof gmailOfiSendMessage==='function'){
+      if(typeof gmailOfiAsegurarCuentaOficinaParaEnvio==='function'){
+        await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId==='responsables'||ofiId==='ds_deguv'?'guaviare':ofiId);
+      }
       if(files.length&&typeof gmailOfiSendHtmlWithAttachments==='function'){
         res=await gmailOfiSendHtmlWithAttachments(para,subject,htmlBody,files,{cc:opts.cc||'',bcc:opts.bcc||''});
       }else{
         res=await gmailOfiSendMessage(para,subject,htmlBody);
       }
-      cuenta='oficina';
+      const em2=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
+      cuenta=em2||'oficina';
     }else{
-      throw new Error('No hay token Gmail activo. Conecte su correo en la pestaña Correos.');
+      throw new Error('No hay token Gmail activo. Conecte el correo de la oficina en la pestaña Correos.');
     }
     return{messageId:(res&&(res.id||res.messageId))||'',cuenta,raw:res};
   };
@@ -17715,8 +17745,11 @@ function confirmarEnvioRespuestaEmailPqrs(e,ciudEmail,cuerpo,documentos){
   const docsHtml=documentos.length
     ?documentos.filter(d=>d.driveLink).map(d=>'<div style="font-size:11px;margin-top:3px">📎 <a href="'+escAttr(d.driveLink)+'" target="_blank" style="color:var(--bl)">'+escAttr(d.nombre||d.driveLink)+'</a></div>').join('')
     :'<div style="font-size:11px;color:var(--tx3)">Sin adjuntos</div>';
+  const ofiMail=typeof getOficinaParaEnvioCorreoPqrs==='function'?getOficinaParaEnvioCorreoPqrs(e):String(e._pqrs_oficina||'');
+  const correoEsp=typeof getCorreoAutorizadoOficina==='function'?getCorreoAutorizadoOficina(ofiMail):'';
+  const ofiLblM=typeof labelOficina==='function'?labelOficina(ofiMail):ofiMail;
   body.innerHTML=
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Se enviará el correo de respuesta al ciudadano usando la <strong>cuenta de Gmail de la oficina</strong> conectada (no el correo personal del responsable).</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Se enviará el correo de respuesta al ciudadano usando el <strong>correo autorizado de '+(ofiLblM||'la oficina')+'</strong>'+(correoEsp?' (<strong>'+escAttr(correoEsp)+'</strong>)':'')+' — no el correo personal del responsable.</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para (ciudadano)</label>'+
     '<input type="text" id="pqrs-mail-para" value="'+escAttr(paraDisplay)+'" placeholder="correo1@x.com, correo2@x.com">'+
     multiInfo+'</div>'+
@@ -17762,7 +17795,7 @@ async function enviarCorreoRespuestaPqrs(expId){
     const adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
       ?await pqrsPrepararAdjuntosNotificacionCorreo(docs)
       :[];
-    const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,bodyHtml,true,adjuntos,{cc:ccRaw,bcc:bccRaw});
+    const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,bodyHtml,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
     const wf=getPqrsWorkflow(e);
     await _pqrsRenombrarDocsDriveWf(wf,'atendido');
     setPqrsWorkflow(e,{
