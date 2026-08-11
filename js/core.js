@@ -1227,6 +1227,7 @@ function refreshPqrsDetalleViews(expId){
 async function openPqrsRespuestaModal(expId,opts){
   opts=opts||{};
   const fromGmail=!!opts.fromGmail;
+  const modoFirma=String(opts.modo||'')==='firma';
   let e=expId?exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim()):null;
   const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
   if(usaDriveInst&&typeof sstSolicitarDriveParaPqrs==='function'){
@@ -1246,7 +1247,7 @@ async function openPqrsRespuestaModal(expId,opts){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   const expLabel=expId||(e?e._exp:'');
-  if(tit)tit.textContent=(fromGmail?'Registrar respuesta por correo':'Registrar respuesta')+(expLabel?' · '+expLabel:'');
+  if(tit)tit.textContent=(modoFirma?'Enviar a firma del Director':(fromGmail?'Registrar respuesta por correo':'Registrar respuesta'))+(expLabel?' · '+expLabel:'');
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('task-modal-wide');}
   const wf=e?getPqrsWorkflow(e):{};
   const todosCorreos=e?pqrsCorreosCiudadano(e):[];
@@ -1265,6 +1266,9 @@ async function openPqrsRespuestaModal(expId,opts){
     gmailSubj=sh?String(sh.value||'').trim():'';
   }
   const medioRadLbl=e&&e._medio_notificacion?medioNotificacionLabel(e._medio_notificacion):'';
+  const puedeAtajo=typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
+  const tipOficioLbl=puedeAtajo?'📄 Oficio → firma Director':'📄 Oficio firmado';
+  const tipoInicial=modoFirma&&puedeAtajo?PQRS_WF_TIPO.OFICIO:(wf.tipo||PQRS_WF_TIPO.MENSAJE);
   const pqrsSelHtml=fromGmail?(
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">PQRSD a cerrar</label>'+
     '<input type="hidden" id="gmail-resp-pqrs-hid" value="'+escAttr(expLabel)+'">'+
@@ -1279,20 +1283,22 @@ async function openPqrsRespuestaModal(expId,opts){
   ):(
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+
-    (typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma()
-      ?'<strong>Oficio:</strong> cargue el documento y anexos y envíelo a <strong>firma del Director</strong> (la plantilla de correo aparece al notificar). <strong>Mensaje simple:</strong> atajo para enviar por correo y cerrar sin pasar por firma.'
+    (puedeAtajo
+      ?(modoFirma
+        ?'<strong>Enviar a firma:</strong> cargue el PDF del oficio (aún sin firma del Director) y anexos. Pasará a la bandeja <strong>Por firmar</strong> del Director. La notificación al ciudadano es después de firmar.'
+        :'<strong>Dos caminos:</strong> <em>Mensaje simple</em> = atajo si ya tiene el oficio firmado o responde por correo y cierra. <em>Oficio → firma Director</em> = el documento aún no está firmado; se envía al Director y luego se notifica.')
       :'Registre la respuesta definitiva al ciudadano. El expediente se marcará como <strong>Atendido</strong>.')+
     (medioRadLbl?' <span style="color:var(--tx3)">Medio de notificación en radicación: <strong>'+escAttr(medioRadLbl)+'</strong> (puede cambiarlo).</span>':'')+
     '</div>'
   );
-  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
+  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple / ya firmado')+mkTipo(PQRS_WF_TIPO.OFICIO,tipOficioLbl)+
     (fromGmail?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa / sin respuesta formal'));
   const cuerpoVal=(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'');
   const emailCiu=fromGmail?(ciudEmail||''):ciudEmail;
   body.innerHTML=pqrsSelHtml+
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:5px" id="pqrs-resp-tipo-btns">'+tipoBtns+
-    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(wf.tipo||PQRS_WF_TIPO.MENSAJE)+'"></div>'+
+    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoInicial)+'"></div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld" id="pqrs-resp-fecha-wrap"><label id="pqrs-resp-fecha-label">Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
     '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()" onblur="onPqrsRespOficioBlur()">'+
@@ -1365,8 +1371,8 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div>';
   window._pqrsComposeAttachments=[];
   window._gmailVinculoMsg=fromGmail?gmailMsg:null;
-  // Inicializar tipo sin forzar canal; luego aplicar canal por defecto de radicación
-  const tipoIni=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  // Inicializar tipo (modo firma fuerza oficio → Director); luego aplicar canal por defecto
+  const tipoIni=tipoInicial||wf.tipo||PQRS_WF_TIPO.MENSAJE;
   const hidTipo=document.getElementById('pqrs-resp-tipo');
   if(hidTipo)hidTipo.value=tipoIni;
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(b=>{b.classList.toggle('on',b.getAttribute('data-val')===tipoIni);});
@@ -1378,7 +1384,7 @@ async function openPqrsRespuestaModal(expId,opts){
   if(fromGmail)pqrsRespRefreshModalUiGmail();
   else pqrsRespRefreshModalUi();
   ov.classList.add('on');
-  window._taskModalCtx={mode:fromGmail?'gmailVincularPqrs':'pqrsRespuesta',expId:expLabel};
+  window._taskModalCtx={mode:fromGmail?'gmailVincularPqrs':'pqrsRespuesta',expId:expLabel,modoFirma:modoFirma};
 }
 function pqrsClearRespOficioError(){
   const el=document.getElementById('pqrs-resp-oficio-err');
@@ -1855,7 +1861,7 @@ function pqrsRespRefreshModalUi(){
     else adjLabel.textContent='Documentos adjuntos';
   }
   if(adjHint){
-    if(isOficio&&isCorreo)adjHint.textContent='Suba el PDF del oficio. Si hay anexos, márquelos abajo. La plantilla de correo se usa al notificar tras la firma del Director.';
+    if(isOficio&&isCorreo)adjHint.textContent='Suba el PDF del oficio SIN firma del Director. Anexos opcionales. La notificación al ciudadano es después de firmar (no ahora).';
     else if(isOficio&&puedeFirma)adjHint.textContent='Suba el PDF del oficio que firmará el Director. Si hay anexos, márquelos abajo.';
     else if(canal===PQRS_WF_CANAL.WHATSAPP)adjHint.textContent='Adjunte el oficio firmado y una imagen o PDF del soporte de envío por WhatsApp.';
     else if(canal===PQRS_WF_CANAL.AVISO)adjHint.textContent='Adjunte el oficio y el soporte de la notificación por aviso.';
@@ -1869,8 +1875,8 @@ function pqrsRespRefreshModalUi(){
       :'Fecha de la respuesta<span class="req-star">*</span>';
   }
   if(canalHint){
-    if(isOficio&&isCorreo)canalHint.textContent='El oficio irá a firma del Director. Al notificar por correo (después de firmar) se usa la plantilla y el Gmail de la oficina.';
-    else if(isMensaje&&isCorreo)canalHint.textContent='Atajo: envía por correo y cierra la PQRSD sin pasar por firma del Director. Puede adjuntar el oficio ya firmado.';
+    if(isOficio&&isCorreo)canalHint.textContent='El oficio aún no firmado irá a la bandeja del Director. Después de firmar, notifique (correo / personal / aviso / WhatsApp). No es notificación ahora.';
+    else if(isMensaje&&isCorreo)canalHint.textContent='Atajo: si ya tiene el oficio firmado (o es mensaje simple), envía por correo y cierra sin pasar por firma del Director.';
     else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)canalHint.textContent='Notificación presencial/física: cargue el oficio (si aplica) y cierre como atendida. Indique la fecha en que se notificó.';
     else if(canal===PQRS_WF_CANAL.WHATSAPP)canalHint.textContent='Notificación por WhatsApp: cargue el oficio y el soporte (imagen). Indique la fecha de notificación.';
     else if(canal===PQRS_WF_CANAL.AVISO)canalHint.textContent='Último medio: notificación por aviso. Cargue el oficio y el soporte. Indique la fecha de notificación.';
@@ -13077,6 +13083,14 @@ function renderActividadesRowHtml(t){
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
       acts+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+eid+'\')">✅ Aprobar notif.</button>';
+    // Por ejecutar (sin respuesta): Ver ya está vía lupa; Responder + Enviar a firma
+    if((faseWf===PQRS_WF.SIN_RESPUESTA||faseWf===PQRS_WF.RECHAZADA)&&typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(expAct)){
+      if(typeof puedeTrasladarPqrs==='function'&&puedeTrasladarPqrs(expAct))
+        acts+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTrasladoPqrsInterOficinaModal(\''+eid+'\')" title="Trasladar">Trasladar</button>';
+      acts+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+eid+'\')" title="Mensaje simple o oficio ya firmado">Responder</button>';
+      if(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+        acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+eid+'\',{modo:\'firma\'})" title="Enviar a firma del Director">🖊</button>';
+    }
   }
   const respCol=esVistaActividadesDepto()?('<td style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
   const rowStyle=[

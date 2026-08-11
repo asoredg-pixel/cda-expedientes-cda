@@ -1044,7 +1044,17 @@ function getPqrsOficinaList(oficinaId,filtro){
     return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
   let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId&&!pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
-  if(filtro==='pend')list=list.filter(e=>!pqrsEstaCerrada(e));
+  // «Por ejecutar»: solo pendientes de respuesta (sin mezclar Por firmar / Por notificar / revisión)
+  if(filtro==='pend'){
+    list=list.filter(function(e){
+      if(pqrsEstaCerrada(e))return false;
+      const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+      if(f===PQRS_WF.POR_FIRMAR||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO)return false;
+      if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)return false;
+      if(f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL)return false;
+      return f===PQRS_WF.SIN_RESPUESTA||f===PQRS_WF.RECHAZADA||!f;
+    });
+  }
   else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
   else if(filtro==='revision')list=list.filter(e=>{
@@ -1145,9 +1155,13 @@ function pqrsAccionesTablaHtml(e){
     else if(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador()))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+id+'\')" title="Notificar">📬</button> ';
   }
-  // Responder directo (offices + NCA encargado + secretary) — sin botón «Enviar correo» aparte (está dentro de Responder)
+  // Responder / Enviar a firma (oficinas RN·OAP·Admin·Secretaría y NCA)
   if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
-    if(puedeMarcarPqrsRespondida(e))h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">Responder</button> ';
+    if(puedeMarcarPqrsRespondida(e)){
+      h+='<button type="button" class="btn bsm bp" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')" title="Mensaje simple o respuesta con oficio ya firmado (notificar y cerrar)">Responder</button> ';
+      if(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+        h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\',{modo:\'firma\'})" title="Enviar oficio a firma del Director">🖊</button> ';
+    }
   }
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))h+=pqrsBtnEdit(e._exp,'Editar')+' ';
   if(esSecretaria()&&puedeEliminarPqrs(e))h+='<button type="button" class="btn bsm bd2" onclick="event.stopPropagation();eliminarPqrs(\''+id+'\')">Eliminar</button> ';
@@ -1197,8 +1211,8 @@ function renderPqrsOficinaInbox(){
   const pendTraslCount=getPqrsPendientesTrasladoList().length;
   const showPorTrasl=typeof puedeVerFiltroPorTrasladarOficina==='function'&&puedeVerFiltroPorTrasladarOficina();
   if(mets){
-    // Por ejecutar = todas sin respuesta (en término + vencidas); Vencidas = solo atrasadas
-    const porEjec=listAll.filter(e=>!pqrsEstaCerrada(e)).length;
+    // Por ejecutar = pendientes de respuesta (no incluye Por firmar / Por notificar)
+    const porEjec=getPqrsOficinaList(getPqrsOficinaActiva(),'pend').length;
     const vencidas=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
     const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
