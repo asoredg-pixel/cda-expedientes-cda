@@ -249,6 +249,8 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   }
   if (!recursosDriveConectado()) {
     h += '<span class="rec-drive-hint" style="font-size:12px;color:var(--tx2)">⚠️ Conecte correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para crear carpetas y subir archivos.</span>';
+  } else {
+    h += '<span class="rec-drive-hint" style="font-size:12px;color:var(--tx3)">Abra un repositorio para explorar carpetas y documentos.</span>';
   }
   h += '</div>';
 
@@ -301,6 +303,19 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
 function abrirRecursosRepo(repoId) {
   window._recursosRepoSel = repoId;
   window._recursosDrivePage = null;
+  const r = getRecursosRepoById(repoId);
+  const rootId = r ? (r.driveFolderId || parseDriveFolderId(r.driveFolderLink)) : '';
+  window._recExplorer = {
+    repoId: repoId,
+    rootId: rootId,
+    folderId: rootId,
+    path: [{ id: rootId, name: (r && r.titulo) || 'Repositorio' }],
+    view: (window._recExplorer && window._recExplorer.view) || 'details',
+    selection: [],
+    files: [],
+    lastClickedId: null,
+    dragIds: null
+  };
   renderRecursosPanel();
   if (!recursosDriveConectado()) {
     const el = document.getElementById('rec-repo-files');
@@ -315,11 +330,36 @@ function abrirRecursosRepo(repoId) {
 function cerrarRecursosRepo() {
   window._recursosRepoSel = null;
   window._recursosDrivePage = null;
+  window._recExplorer = null;
+  recExpHideContextMenu();
   renderRecursosPanel();
 }
 
 function getRecursosRepoById(id) {
   return (bibliotecaRepos || []).find(function(r) { return r.id === id; }) || null;
+}
+
+function recExpState() {
+  return window._recExplorer || null;
+}
+
+function recExpCanEdit() {
+  const st = recExpState();
+  const r = st ? getRecursosRepoById(st.repoId) : null;
+  if (!r) return false;
+  const s = getRepoScope(r);
+  return !!puedeEditarBiblioteca(s.scope, s.scopeId);
+}
+
+function recExpCanShare() {
+  const st = recExpState();
+  const r = st ? getRecursosRepoById(st.repoId) : null;
+  return !!(r && puedeCompartirRecursosItem(r));
+}
+
+function recExpCurrentFolderId() {
+  const st = recExpState();
+  return (st && st.folderId) || '';
 }
 
 function renderRecursosRepoDetalle(repoId) {
@@ -337,11 +377,10 @@ function renderRecursosRepoDetalle(repoId) {
   h += '</div>';
   if (r.descripcion) h += '<p style="font-size:13px;color:var(--tx2);margin:8px 0">' + escAttr(r.descripcion) + '</p>';
   if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
-  if (canEdit || canShare) {
+  if (canEdit || canShare || canDel) {
     h += '<div class="rec-toolbar" style="margin:10px 0">';
     if (canEdit) {
       h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">Editar datos</button>';
-      h += '<label class="btn bsm" style="cursor:pointer" onclick="return recursosPreUploadDrive(event)">📤 Subir archivo<input type="file" style="display:none" multiple onclick="return recursosPreUploadDrive(event)" onchange="subirRecursosRepoArchivos(event,\'' + escAttr(r.id) + '\')"></label>';
     }
     if (canShare) {
       h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">Compartir repositorio</button>';
@@ -355,13 +394,171 @@ function renderRecursosRepoDetalle(repoId) {
     h += renderRecursosRepoForm(r.id);
   }
   h += renderRecursosRepoVinculosBlock(r, canEdit);
+  h += '<div class="rec-exp-shell">';
+  h += '<div class="cft" style="margin:8px 0 6px">Explorador de archivos</div>';
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
+  h += '</div>';
+  h += '</div>';
+  return h;
+}
+
+function recExpFmtSize(n) {
+  const v = Number(n || 0);
+  if (!v) return '—';
+  if (v < 1024) return v + ' B';
+  if (v < 1048576) return (v / 1024).toFixed(1) + ' KB';
+  if (v < 1073741824) return (v / 1048576).toFixed(1) + ' MB';
+  return (v / 1073741824).toFixed(1) + ' GB';
+}
+
+function recExpFmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+  } catch (e) { return '—'; }
+}
+
+function recExpIsFolder(f) {
+  return !!(f && f.mimeType === 'application/vnd.google-apps.folder');
+}
+
+function recExpItemById(id) {
+  const st = recExpState();
+  if (!st) return null;
+  return (st.files || []).find(function(f) { return f && f.id === id; }) || null;
+}
+
+function recExpIcon(f) {
+  if (recExpIsFolder(f)) return '📁';
+  const n = String(f && f.name || '').toLowerCase();
+  const m = String(f && f.mimeType || '');
+  if (/pdf/.test(m) || /\.pdf$/.test(n)) return '📕';
+  if (/image|png|jpe?g|gif|webp/.test(m) || /\.(png|jpe?g|gif|webp)$/.test(n)) return '🖼️';
+  if (/sheet|excel|spreadsheet/.test(m) || /\.(xlsx?|csv)$/.test(n)) return '📊';
+  if (/word|document/.test(m) || /\.(docx?|odt)$/.test(n)) return '📝';
+  if (/zip|rar|7z|compress/.test(m) || /\.(zip|rar|7z)$/.test(n)) return '🗜️';
+  return '📄';
+}
+
+function recExpTypeLabel(f) {
+  if (recExpIsFolder(f)) return 'Carpeta de archivos';
+  const n = String(f && f.name || '');
+  const ext = n.indexOf('.') >= 0 ? n.split('.').pop().toUpperCase() : '';
+  if (ext) return 'Archivo ' + ext;
+  return f && f.mimeType ? String(f.mimeType).split('/').pop() : 'Archivo';
+}
+
+function renderRecExpToolbar(canEdit) {
+  const st = recExpState();
+  const view = (st && st.view) || 'details';
+  let h = '<div class="rec-exp-toolbar">';
+  h += '<div class="rec-exp-toolbar-left">';
+  if (canEdit) {
+    h += '<button type="button" class="btn bsm bp" onclick="recExpNuevaCarpeta()">📁 Nueva carpeta</button>';
+    h += '<label class="btn bsm" style="cursor:pointer">📤 Subir<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
+    h += '<button type="button" class="btn bsm bd2" onclick="recExpEliminarSeleccion()">🗑 Eliminar</button>';
+  }
+  h += '<button type="button" class="btn bsm" onclick="cargarRecursosRepoArchivos()">↻ Actualizar</button>';
+  h += '</div>';
+  h += '<div class="rec-exp-views" role="group" aria-label="Vista">';
+  h += '<button type="button" class="btn bsm' + (view === 'icons' ? ' bp' : '') + '" onclick="recExpSetView(\'icons\')" title="Iconos">▦</button>';
+  h += '<button type="button" class="btn bsm' + (view === 'list' ? ' bp' : '') + '" onclick="recExpSetView(\'list\')" title="Lista">☰</button>';
+  h += '<button type="button" class="btn bsm' + (view === 'details' ? ' bp' : '') + '" onclick="recExpSetView(\'details\')" title="Detalles">≣</button>';
+  h += '</div></div>';
+  return h;
+}
+
+function renderRecExpBreadcrumb() {
+  const st = recExpState();
+  if (!st || !(st.path || []).length) return '';
+  let h = '<nav class="rec-exp-crumb" aria-label="Ruta">';
+  (st.path || []).forEach(function(p, i) {
+    if (i) h += '<span class="rec-exp-crumb-sep">›</span>';
+    const isLast = i === st.path.length - 1;
+    if (isLast) h += '<span class="rec-exp-crumb-cur">' + escAttr(p.name || 'Carpeta') + '</span>';
+    else h += '<button type="button" class="rec-exp-crumb-btn" onclick="recExpNavigateToIndex(' + i + ')">' + escAttr(p.name || 'Carpeta') + '</button>';
+  });
+  h += '</nav>';
+  return h;
+}
+
+function renderRecExpItemsHtml(files, canEdit, canShare, repo) {
+  const st = recExpState();
+  const view = (st && st.view) || 'details';
+  const sel = new Set((st && st.selection) || []);
+  if (!(files || []).length) {
+    return '<div class="rec-exp-empty" data-rec-exp-pane="1">Carpeta vacía. ' +
+      (canEdit ? 'Arrastre archivos aquí o use «Subir» / «Nueva carpeta».' : '') + '</div>';
+  }
+  if (view === 'icons') {
+    let h = '<div class="rec-exp-icons" data-rec-exp-pane="1" tabindex="0">';
+    files.forEach(function(f) {
+      const isFolder = recExpIsFolder(f);
+      const on = sel.has(f.id);
+      h += '<div class="rec-exp-icon-item' + (on ? ' selected' : '') + '" draggable="' + (canEdit ? 'true' : 'false') + '" ' +
+        'data-file-id="' + escAttr(f.id) + '" data-is-folder="' + (isFolder ? '1' : '0') + '" ' +
+        'ondragstart="recExpDragStart(event)" ondragend="recExpDragEnd(event)" ' +
+        (isFolder ? 'ondragover="recExpDragOverFolder(event)" ondragleave="recExpDragLeaveFolder(event)" ondrop="recExpDropOnFolder(event)" ' : '') +
+        'onclick="recExpItemClick(event,\'' + escAttr(f.id) + '\')" ' +
+        'ondblclick="recExpItemDblClick(event,\'' + escAttr(f.id) + '\')" ' +
+        'oncontextmenu="recExpItemContextMenu(event,\'' + escAttr(f.id) + '\')">';
+      h += '<div class="rec-exp-icon-glyph">' + recExpIcon(f) + '</div>';
+      h += '<div class="rec-exp-icon-name" title="' + escAttr(f.name) + '">' + escAttr(f.name) + '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+  if (view === 'list') {
+    let h = '<div class="rec-exp-list" data-rec-exp-pane="1" tabindex="0">';
+    files.forEach(function(f) {
+      const isFolder = recExpIsFolder(f);
+      const on = sel.has(f.id);
+      h += '<div class="rec-exp-list-row' + (on ? ' selected' : '') + '" draggable="' + (canEdit ? 'true' : 'false') + '" ' +
+        'data-file-id="' + escAttr(f.id) + '" data-is-folder="' + (isFolder ? '1' : '0') + '" ' +
+        'ondragstart="recExpDragStart(event)" ondragend="recExpDragEnd(event)" ' +
+        (isFolder ? 'ondragover="recExpDragOverFolder(event)" ondragleave="recExpDragLeaveFolder(event)" ondrop="recExpDropOnFolder(event)" ' : '') +
+        'onclick="recExpItemClick(event,\'' + escAttr(f.id) + '\')" ' +
+        'ondblclick="recExpItemDblClick(event,\'' + escAttr(f.id) + '\')" ' +
+        'oncontextmenu="recExpItemContextMenu(event,\'' + escAttr(f.id) + '\')">';
+      h += '<span class="rec-exp-ico">' + recExpIcon(f) + '</span><span class="rec-exp-name">' + escAttr(f.name) + '</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+  // details
+  let h = '<div class="rec-exp-details" data-rec-exp-pane="1" tabindex="0">';
+  h += '<div class="rec-exp-details-head"><span>Nombre</span><span>Modificado</span><span>Tipo</span><span>Tamaño</span></div>';
+  files.forEach(function(f) {
+    const isFolder = recExpIsFolder(f);
+    const on = sel.has(f.id);
+    const archComp = (!isFolder && repo) ? (repo.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; }) : null;
+    const shareLbl = archComp ? labelRecursosCompartidoCon(archComp.compartidoCon) : '';
+    h += '<div class="rec-exp-details-row' + (on ? ' selected' : '') + '" draggable="' + (canEdit ? 'true' : 'false') + '" ' +
+      'data-file-id="' + escAttr(f.id) + '" data-is-folder="' + (isFolder ? '1' : '0') + '" ' +
+      'ondragstart="recExpDragStart(event)" ondragend="recExpDragEnd(event)" ' +
+      (isFolder ? 'ondragover="recExpDragOverFolder(event)" ondragleave="recExpDragLeaveFolder(event)" ondrop="recExpDropOnFolder(event)" ' : '') +
+      'onclick="recExpItemClick(event,\'' + escAttr(f.id) + '\')" ' +
+      'ondblclick="recExpItemDblClick(event,\'' + escAttr(f.id) + '\')" ' +
+      'oncontextmenu="recExpItemContextMenu(event,\'' + escAttr(f.id) + '\')">';
+    h += '<span class="rec-exp-col-name"><span class="rec-exp-ico">' + recExpIcon(f) + '</span> ' + escAttr(f.name);
+    if (shareLbl) h += ' <span class="rec-tag rec-tag-share" title="Compartido">↗ ' + escAttr(shareLbl) + '</span>';
+    h += '</span>';
+    h += '<span class="rec-exp-col-date">' + escAttr(recExpFmtDate(f.modifiedTime)) + '</span>';
+    h += '<span class="rec-exp-col-type">' + escAttr(recExpTypeLabel(f)) + '</span>';
+    h += '<span class="rec-exp-col-size">' + escAttr(isFolder ? '—' : recExpFmtSize(f.size)) + '</span>';
+    h += '</div>';
+  });
   h += '</div>';
   return h;
 }
 
 async function cargarRecursosRepoArchivos(pageToken) {
-  const repoId = window._recursosRepoSel;
+  const st = recExpState();
+  const repoId = (st && st.repoId) || window._recursosRepoSel;
   const r = getRecursosRepoById(repoId);
   const el = document.getElementById('rec-repo-files');
   if (!r || !el) return;
@@ -370,42 +567,56 @@ async function cargarRecursosRepoArchivos(pageToken) {
     return;
   }
   const s = getRepoScope(r);
+  const canEdit = puedeEditarBiblioteca(s.scope, s.scopeId);
   const canShare = puedeCompartirRecursosItem(r);
-  const folderId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
-  if (!folderId) {
+  const rootId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
+  if (!rootId) {
     el.innerHTML = '<div class="rec-empty">Sin carpeta Drive vinculada.</div>';
     return;
   }
+  if (!st || st.repoId !== repoId) {
+    window._recExplorer = {
+      repoId: repoId,
+      rootId: rootId,
+      folderId: rootId,
+      path: [{ id: rootId, name: r.titulo || 'Repositorio' }],
+      view: (window._recExplorer && window._recExplorer.view) || 'details',
+      selection: [],
+      files: [],
+      lastClickedId: null,
+      dragIds: null
+    };
+  } else {
+    st.rootId = rootId;
+    if (!st.folderId) st.folderId = rootId;
+    if (!(st.path || []).length) st.path = [{ id: rootId, name: r.titulo || 'Repositorio' }];
+  }
+  const cur = recExpState();
+  const folderId = cur.folderId || rootId;
   try {
-    const data = await driveListFolderContents(folderId, pageToken || '');
-    let h = '<div class="rec-files-list">';
-    (data.files || []).forEach(function(f) {
-      const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
-      const link = f.webViewLink || ('https://drive.google.com/' + (isFolder ? 'drive/folders/' : 'file/d/') + f.id + '/view');
-      const archComp = (r.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; });
-      const archShareLbl = archComp ? labelRecursosCompartidoCon(archComp.compartidoCon) : '';
-      h += '<div class="rec-file-row">';
-      h += '<span>' + (isFolder ? '📁' : '📄') + ' ' + escAttr(f.name);
-      if (archShareLbl) h += ' <span class="rec-tag rec-tag-share" title="Compartido">↗ ' + escAttr(archShareLbl) + '</span>';
-      h += '</span>';
-      h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a>';
-      if (!isFolder && canShare) {
-        h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'archivo\',\'' + escAttr(r.id) + '\',\'' + escAttr(f.id) + '\',\'' + escAttr(f.name) + '\')">Compartir</button>';
-      }
-      if (!isFolder && typeof parseDrivePreviewUrl === 'function') {
-        const prev = parseDrivePreviewUrl(link);
-        if (prev.preview) {
-          h += '<a class="btn bsm" href="' + escAttr(prev.preview) + '" target="_blank" rel="noopener">Vista previa</a>';
-        }
-      }
-      h += '</div>';
+    let files = [];
+    let token = pageToken || '';
+    do {
+      const data = await driveListFolderContents(folderId, token || '');
+      files = files.concat(data.files || []);
+      token = data.nextPageToken || '';
+    } while (token);
+    cur.files = files;
+    cur.selection = (cur.selection || []).filter(function(id) {
+      return files.some(function(f) { return f.id === id; });
     });
+    let h = '<div class="rec-exp" id="rec-exp-root" tabindex="0" ' +
+      'ondragover="recExpDragOverPane(event)" ondragleave="recExpDragLeavePane(event)" ondrop="recExpDropOnPane(event)" ' +
+      'onkeydown="recExpKeyDown(event)" onclick="recExpPaneClick(event)" oncontextmenu="recExpPaneContextMenu(event)">';
+    h += renderRecExpToolbar(canEdit);
+    h += renderRecExpBreadcrumb();
+    h += '<div class="rec-exp-body">' + renderRecExpItemsHtml(files, canEdit, canShare, r) + '</div>';
     h += '</div>';
-    if (data.nextPageToken) {
-      h += '<button type="button" class="btn bsm" style="margin-top:8px" onclick="cargarRecursosRepoArchivos(\'' + escAttr(data.nextPageToken) + '\')">Más archivos…</button>';
-    }
-    if (!(data.files || []).length) h = '<div class="rec-empty">Carpeta vacía.</div>';
     el.innerHTML = h;
+    setTimeout(function() {
+      const root = document.getElementById('rec-exp-root');
+      if (root) try { root.focus({ preventScroll: true }); } catch (e) {}
+    }, 30);
   } catch (err) {
     const msg = String(err.message || 'Error al listar Drive');
     if (msg.toLowerCase().includes('token') || msg.toLowerCase().includes('correo')) {
@@ -414,6 +625,512 @@ async function cargarRecursosRepoArchivos(pageToken) {
     el.innerHTML = '<div class="rec-info-banner warn">' + escAttr(msg) + '. <button type="button" class="btn bsm" onclick="recursosModalCorreoRequerido(\'usar la biblioteca Drive\')">Conectar correo</button></div>';
   }
 }
+
+function recExpSetView(view) {
+  const st = recExpState();
+  if (!st) return;
+  st.view = view === 'icons' || view === 'list' ? view : 'details';
+  cargarRecursosRepoArchivos();
+}
+
+function recExpNavigateToIndex(idx) {
+  const st = recExpState();
+  if (!st || idx < 0 || idx >= (st.path || []).length) return;
+  st.path = st.path.slice(0, idx + 1);
+  st.folderId = st.path[st.path.length - 1].id;
+  st.selection = [];
+  st.lastClickedId = null;
+  cargarRecursosRepoArchivos();
+}
+
+function recExpEnterFolder(fileId) {
+  const st = recExpState();
+  const f = recExpItemById(fileId);
+  if (!st || !f || !recExpIsFolder(f)) return;
+  if (st.path.some(function(p) { return p.id === f.id; })) return;
+  st.path.push({ id: f.id, name: f.name || 'Carpeta' });
+  st.folderId = f.id;
+  st.selection = [];
+  st.lastClickedId = null;
+  cargarRecursosRepoArchivos();
+}
+
+function recExpOpenFile(fileId) {
+  const f = recExpItemById(fileId);
+  if (!f) return;
+  if (recExpIsFolder(f)) { recExpEnterFolder(fileId); return; }
+  const link = f.webViewLink || ('https://drive.google.com/file/d/' + f.id + '/view');
+  if (typeof openDriveVentanaEmergente === 'function') openDriveVentanaEmergente(link);
+  else window.open(link, '_blank', 'noopener,noreferrer');
+}
+
+function recExpPreviewFile(fileId) {
+  const f = recExpItemById(fileId);
+  if (!f || recExpIsFolder(f)) return;
+  const link = f.webViewLink || ('https://drive.google.com/file/d/' + f.id + '/view');
+  if (typeof parseDrivePreviewUrl === 'function') {
+    const prev = parseDrivePreviewUrl(link);
+    if (prev && prev.preview) {
+      window.open(prev.preview, '_blank', 'noopener,noreferrer');
+      return;
+    }
+  }
+  recExpOpenFile(fileId);
+}
+
+function recExpItemClick(ev, fileId) {
+  ev.stopPropagation();
+  recExpHideContextMenu();
+  const st = recExpState();
+  if (!st) return;
+  const files = st.files || [];
+  const ids = files.map(function(f) { return f.id; });
+  if (ev.ctrlKey || ev.metaKey) {
+    const set = new Set(st.selection || []);
+    if (set.has(fileId)) set.delete(fileId); else set.add(fileId);
+    st.selection = Array.from(set);
+  } else if (ev.shiftKey && st.lastClickedId) {
+    const a = ids.indexOf(st.lastClickedId);
+    const b = ids.indexOf(fileId);
+    if (a >= 0 && b >= 0) {
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      st.selection = ids.slice(lo, hi + 1);
+    } else st.selection = [fileId];
+  } else {
+    st.selection = [fileId];
+  }
+  st.lastClickedId = fileId;
+  recExpRefreshSelectionUi();
+}
+
+function recExpItemDblClick(ev, fileId) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  recExpHideContextMenu();
+  const f = recExpItemById(fileId);
+  if (!f) return;
+  if (recExpIsFolder(f)) recExpEnterFolder(fileId);
+  else recExpOpenFile(fileId);
+}
+
+function recExpPaneClick(ev) {
+  if (ev.target && ev.target.closest && ev.target.closest('[data-file-id]')) return;
+  const st = recExpState();
+  if (!st) return;
+  st.selection = [];
+  recExpHideContextMenu();
+  recExpRefreshSelectionUi();
+}
+
+function recExpRefreshSelectionUi() {
+  const st = recExpState();
+  if (!st) return;
+  const sel = new Set(st.selection || []);
+  document.querySelectorAll('#rec-repo-files [data-file-id]').forEach(function(el) {
+    el.classList.toggle('selected', sel.has(el.getAttribute('data-file-id')));
+  });
+}
+
+function recExpKeyDown(ev) {
+  const st = recExpState();
+  if (!st) return;
+  const tag = (ev.target && ev.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+  const canEdit = recExpCanEdit();
+  if (ev.key === 'Backspace') {
+    ev.preventDefault();
+    if ((st.path || []).length > 1) recExpNavigateToIndex(st.path.length - 2);
+    return;
+  }
+  if (ev.key === 'Enter' && (st.selection || []).length === 1) {
+    ev.preventDefault();
+    const f = recExpItemById(st.selection[0]);
+    if (!f) return;
+    if (recExpIsFolder(f)) recExpEnterFolder(f.id);
+    else recExpOpenFile(f.id);
+    return;
+  }
+  if (ev.key === 'F2' && canEdit && (st.selection || []).length === 1) {
+    ev.preventDefault();
+    recExpRenombrar(st.selection[0]);
+    return;
+  }
+  if ((ev.key === 'Delete' || ev.key === 'Del') && canEdit && (st.selection || []).length) {
+    ev.preventDefault();
+    recExpEliminarSeleccion();
+  }
+}
+
+async function recExpNuevaCarpeta() {
+  if (!recExpCanEdit()) return;
+  if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear carpetas en el repositorio'); return; }
+  const nom = prompt('Nombre de la nueva carpeta:');
+  if (nom == null) return;
+  const name = String(nom).trim();
+  if (!name) { notif('Nombre inválido', 'err'); return; }
+  const folderId = recExpCurrentFolderId();
+  try {
+    const fn = typeof driveCreateFolder === 'function' ? driveCreateFolder : window.driveCreateFolder;
+    await fn(name, folderId);
+    notif('Carpeta creada', 'ok');
+    if (typeof logAudit === 'function') logAudit('Creó carpeta en biblioteca', 'recursos', null, name);
+    cargarRecursosRepoArchivos();
+  } catch (err) {
+    notif(err.message || 'No se pudo crear la carpeta', 'err');
+  }
+}
+
+async function recExpSubirDesdeInput(ev) {
+  const files = ev && ev.target && ev.target.files;
+  await recExpUploadFileList(files);
+  if (ev && ev.target) ev.target.value = '';
+}
+
+async function recExpUploadFileList(fileList, destFolderId) {
+  if (!recExpCanEdit()) return;
+  if (!recursosDriveConectado()) { recursosModalCorreoRequerido('adjuntar documentos al repositorio'); return; }
+  const files = fileList ? Array.from(fileList) : [];
+  if (!files.length) return;
+  const folderId = destFolderId || recExpCurrentFolderId();
+  if (!folderId) { notif('Sin carpeta Drive', 'err'); return; }
+  notif('Subiendo ' + files.length + ' archivo(s)…', 'info');
+  let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      await driveUploadBiblioteca(files[i], files[i].name, files[i].type || 'application/octet-stream', folderId);
+      ok++;
+    } catch (err) {
+      notif('Error: ' + (err.message || files[i].name), 'err');
+    }
+  }
+  if (ok) {
+    notif(ok + ' archivo(s) subido(s)', 'ok');
+    cargarRecursosRepoArchivos();
+  }
+}
+
+async function subirRecursosRepoArchivos(ev, repoId) {
+  const st = recExpState();
+  if (!st || st.repoId !== repoId) {
+    window._recursosRepoSel = repoId;
+  }
+  await recExpSubirDesdeInput(ev);
+}
+
+async function recExpRenombrar(fileId) {
+  if (!recExpCanEdit()) return;
+  const f = recExpItemById(fileId);
+  if (!f) return;
+  const nom = prompt('Nuevo nombre:', f.name || '');
+  if (nom == null) return;
+  const name = String(nom).trim();
+  if (!name || name === f.name) return;
+  try {
+    const fn = typeof driveRenameInstitutional === 'function' ? driveRenameInstitutional : window.driveRenameInstitutional;
+    const ok = await fn(fileId, name);
+    if (!ok) throw new Error('No se pudo renombrar');
+    notif('Renombrado', 'ok');
+    cargarRecursosRepoArchivos();
+  } catch (err) {
+    notif(err.message || 'Error al renombrar', 'err');
+  }
+}
+
+async function recExpEliminarSeleccion() {
+  if (!recExpCanEdit()) return;
+  const st = recExpState();
+  const ids = (st && st.selection) || [];
+  if (!ids.length) { notif('Seleccione uno o más elementos', 'err'); return; }
+  const items = ids.map(recExpItemById).filter(Boolean);
+  if (!items.length) return;
+  const msg = items.length === 1
+    ? ('¿Eliminar «' + (items[0].name || '') + '» de Drive? Esta acción no se puede deshacer fácilmente.')
+    : ('¿Eliminar ' + items.length + ' elementos de Drive?');
+  if (!confirm(msg)) return;
+  const delFn = typeof driveDeleteBibliotecaItem === 'function' ? driveDeleteBibliotecaItem : window.driveDeleteBibliotecaItem;
+  let ok = 0;
+  for (let i = 0; i < items.length; i++) {
+    try {
+      if (await delFn(items[i].id, recExpIsFolder(items[i]))) ok++;
+    } catch (err) {
+      notif('Error eliminando ' + (items[i].name || ''), 'err');
+    }
+  }
+  if (ok) {
+    notif(ok + ' eliminado(s)', 'ok');
+    st.selection = [];
+    cargarRecursosRepoArchivos();
+  }
+}
+
+function recExpHideContextMenu() {
+  const m = document.getElementById('rec-exp-ctx');
+  if (m) m.remove();
+}
+
+function recExpPaneContextMenu(ev) {
+  if (ev.target && ev.target.closest && ev.target.closest('[data-file-id]')) return;
+  ev.preventDefault();
+  const canEdit = recExpCanEdit();
+  if (!canEdit) return;
+  const st = recExpState();
+  if (st) st.selection = [];
+  recExpRefreshSelectionUi();
+  recExpHideContextMenu();
+  const menu = document.createElement('div');
+  menu.id = 'rec-exp-ctx';
+  menu.className = 'rec-exp-ctx';
+  menu.style.left = Math.min(ev.clientX, window.innerWidth - 220) + 'px';
+  menu.style.top = Math.min(ev.clientY, window.innerHeight - 160) + 'px';
+  const add = function(label, fn) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rec-exp-ctx-item';
+    b.textContent = label;
+    b.onclick = function() { recExpHideContextMenu(); fn(); };
+    menu.appendChild(b);
+  };
+  add('Nueva carpeta', function() { recExpNuevaCarpeta(); });
+  add('Subir archivos…', function() {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.multiple = true;
+    inp.onchange = function(e) { recExpSubirDesdeInput(e); };
+    inp.click();
+  });
+  add('Actualizar', function() { cargarRecursosRepoArchivos(); });
+  document.body.appendChild(menu);
+  const closer = function(e) {
+    if (e.type === 'keydown' && e.key !== 'Escape') return;
+    if (e.type === 'mousedown' && menu.contains(e.target)) return;
+    recExpHideContextMenu();
+    document.removeEventListener('mousedown', closer, true);
+    document.removeEventListener('keydown', closer, true);
+  };
+  setTimeout(function() {
+    document.addEventListener('mousedown', closer, true);
+    document.addEventListener('keydown', closer, true);
+  }, 0);
+}
+
+function recExpItemContextMenu(ev, fileId) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const st = recExpState();
+  if (!st) return;
+  if (!(st.selection || []).includes(fileId)) {
+    st.selection = [fileId];
+    st.lastClickedId = fileId;
+    recExpRefreshSelectionUi();
+  }
+  const f = recExpItemById(fileId);
+  if (!f) return;
+  const canEdit = recExpCanEdit();
+  const canShare = recExpCanShare();
+  const isFolder = recExpIsFolder(f);
+  recExpHideContextMenu();
+  const menu = document.createElement('div');
+  menu.id = 'rec-exp-ctx';
+  menu.className = 'rec-exp-ctx';
+  menu.style.left = Math.min(ev.clientX, window.innerWidth - 220) + 'px';
+  menu.style.top = Math.min(ev.clientY, window.innerHeight - 280) + 'px';
+  const add = function(label, fn, danger) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rec-exp-ctx-item' + (danger ? ' danger' : '');
+    b.textContent = label;
+    b.onclick = function() { recExpHideContextMenu(); fn(); };
+    menu.appendChild(b);
+  };
+  add(isFolder ? 'Abrir' : 'Abrir', function() {
+    if (isFolder) recExpEnterFolder(fileId); else recExpOpenFile(fileId);
+  });
+  if (!isFolder) {
+    add('Vista previa', function() { recExpPreviewFile(fileId); });
+    add('Abrir en Drive', function() {
+      const link = f.webViewLink || ('https://drive.google.com/file/d/' + f.id + '/view');
+      window.open(link, '_blank', 'noopener,noreferrer');
+    });
+  } else {
+    add('Abrir en Drive', function() {
+      window.open('https://drive.google.com/drive/folders/' + f.id, '_blank', 'noopener,noreferrer');
+    });
+  }
+  if (canEdit) {
+    add('Renombrar', function() { recExpRenombrar(fileId); });
+  }
+  if (!isFolder && canShare) {
+    add('Compartir…', function() {
+      const st2 = recExpState();
+      recursosAbrirCompartir('archivo', st2.repoId, fileId, f.name);
+    });
+  }
+  if (canEdit) {
+    const sep = document.createElement('div');
+    sep.className = 'rec-exp-ctx-sep';
+    menu.appendChild(sep);
+    add('Nueva carpeta aquí', function() { recExpNuevaCarpeta(); });
+    add('Subir aquí…', function() {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.multiple = true;
+      inp.onchange = function(e) { recExpSubirDesdeInput(e); };
+      inp.click();
+    });
+    add('Eliminar', function() { recExpEliminarSeleccion(); }, true);
+  }
+  document.body.appendChild(menu);
+  const closer = function(e) {
+    if (e.type === 'keydown' && e.key !== 'Escape') return;
+    if (e.type === 'mousedown' && menu.contains(e.target)) return;
+    recExpHideContextMenu();
+    document.removeEventListener('mousedown', closer, true);
+    document.removeEventListener('keydown', closer, true);
+  };
+  setTimeout(function() {
+    document.addEventListener('mousedown', closer, true);
+    document.addEventListener('keydown', closer, true);
+  }, 0);
+}
+
+function recExpDragStart(ev) {
+  if (!recExpCanEdit()) { ev.preventDefault(); return; }
+  const st = recExpState();
+  const id = ev.currentTarget && ev.currentTarget.getAttribute('data-file-id');
+  if (!st || !id) return;
+  let ids = (st.selection || []).slice();
+  if (ids.indexOf(id) < 0) ids = [id];
+  st.dragIds = ids;
+  st.selection = ids;
+  recExpRefreshSelectionUi();
+  try {
+    ev.dataTransfer.setData('application/x-rec-exp-ids', JSON.stringify(ids));
+    ev.dataTransfer.setData('text/plain', ids.join(','));
+    ev.dataTransfer.effectAllowed = 'move';
+  } catch (e) {}
+  ev.currentTarget.classList.add('dragging');
+}
+
+function recExpDragEnd(ev) {
+  const st = recExpState();
+  if (st) st.dragIds = null;
+  document.querySelectorAll('#rec-repo-files .drag-over').forEach(function(el) { el.classList.remove('drag-over'); });
+  document.querySelectorAll('#rec-repo-files .dragging').forEach(function(el) { el.classList.remove('dragging'); });
+  const root = document.getElementById('rec-exp-root');
+  if (root) root.classList.remove('ext-drag-over');
+}
+
+function recExpDragOverFolder(ev) {
+  if (!recExpCanEdit()) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {}
+  const row = ev.currentTarget;
+  if (row) row.classList.add('drag-over');
+}
+
+function recExpDragLeaveFolder(ev) {
+  const row = ev.currentTarget;
+  if (row) row.classList.remove('drag-over');
+}
+
+async function recExpDropOnFolder(ev) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const targetId = ev.currentTarget && ev.currentTarget.getAttribute('data-file-id');
+  if (ev.currentTarget) ev.currentTarget.classList.remove('drag-over');
+  if (!recExpCanEdit() || !targetId) return;
+
+  // External files from OS → upload into target folder
+  if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+    await recExpUploadFileList(ev.dataTransfer.files, targetId);
+    return;
+  }
+
+  const st = recExpState();
+  let ids = (st && st.dragIds) || [];
+  if (!ids.length && ev.dataTransfer) {
+    try {
+      const raw = ev.dataTransfer.getData('application/x-rec-exp-ids') || '[]';
+      ids = JSON.parse(raw);
+    } catch (e) { ids = []; }
+  }
+  ids = (ids || []).filter(function(id) { return id && id !== targetId; });
+  if (!ids.length) return;
+  // Prevent dropping folder into itself
+  if (ids.indexOf(targetId) >= 0) return;
+  await recExpMoveIdsToFolder(ids, targetId);
+}
+
+function recExpDragOverPane(ev) {
+  if (!recExpCanEdit()) return;
+  if (!(ev.dataTransfer && ev.dataTransfer.types)) return;
+  const types = Array.from(ev.dataTransfer.types || []);
+  if (types.indexOf('Files') >= 0 || types.indexOf('application/x-rec-exp-ids') >= 0) {
+    ev.preventDefault();
+    const root = document.getElementById('rec-exp-root');
+    if (root) root.classList.add('ext-drag-over');
+  }
+}
+
+function recExpDragLeavePane(ev) {
+  const root = document.getElementById('rec-exp-root');
+  if (!root) return;
+  if (ev.relatedTarget && root.contains(ev.relatedTarget)) return;
+  root.classList.remove('ext-drag-over');
+}
+
+async function recExpDropOnPane(ev) {
+  const root = document.getElementById('rec-exp-root');
+  if (root) root.classList.remove('ext-drag-over');
+  if (!recExpCanEdit()) return;
+  // If dropping on a folder row, folder handler already ran
+  if (ev.target && ev.target.closest && ev.target.closest('[data-is-folder="1"]')) return;
+  ev.preventDefault();
+  if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+    await recExpUploadFileList(ev.dataTransfer.files);
+  }
+}
+
+async function recExpMoveIdsToFolder(ids, destFolderId) {
+  if (!ids || !ids.length || !destFolderId) return;
+  const moveFn = typeof driveMoveFileToFolder === 'function' ? driveMoveFileToFolder : window.driveMoveFileToFolder;
+  const parentId = recExpCurrentFolderId();
+  let ok = 0;
+  for (let i = 0; i < ids.length; i++) {
+    try {
+      if (await moveFn(ids[i], destFolderId, parentId)) ok++;
+    } catch (err) {
+      console.warn('recExpMoveIdsToFolder:', err);
+    }
+  }
+  if (ok) {
+    notif(ok + ' elemento(s) movido(s)', 'ok');
+    const st = recExpState();
+    if (st) st.selection = [];
+    cargarRecursosRepoArchivos();
+  } else notif('No se pudo mover', 'err');
+}
+
+window.recExpSetView = recExpSetView;
+window.recExpNavigateToIndex = recExpNavigateToIndex;
+window.recExpItemClick = recExpItemClick;
+window.recExpItemDblClick = recExpItemDblClick;
+window.recExpItemContextMenu = recExpItemContextMenu;
+window.recExpNuevaCarpeta = recExpNuevaCarpeta;
+window.recExpSubirDesdeInput = recExpSubirDesdeInput;
+window.recExpEliminarSeleccion = recExpEliminarSeleccion;
+window.recExpKeyDown = recExpKeyDown;
+window.recExpPaneClick = recExpPaneClick;
+window.recExpPaneContextMenu = recExpPaneContextMenu;
+window.recExpDragStart = recExpDragStart;
+window.recExpDragEnd = recExpDragEnd;
+window.recExpDragOverFolder = recExpDragOverFolder;
+window.recExpDragLeaveFolder = recExpDragLeaveFolder;
+window.recExpDropOnFolder = recExpDropOnFolder;
+window.recExpDragOverPane = recExpDragOverPane;
+window.recExpDragLeavePane = recExpDragLeavePane;
+window.recExpDropOnPane = recExpDropOnPane;
 
 function recursosMostrarFormEnlace(editId) {
   window._recursosEnlaceForm = editId || '__new__';
@@ -702,36 +1419,6 @@ async function eliminarRecursosRepo(id) {
     renderRecursosPanel();
     if (typeof renderListasCfg === 'function') renderListasCfg();
   }
-}
-
-async function subirRecursosRepoArchivos(ev, repoId) {
-  if (!recursosDriveConectado()) {
-    recursosModalCorreoRequerido('adjuntar documentos al repositorio');
-    if (ev && ev.target) ev.target.value = '';
-    return;
-  }
-  const r = getRecursosRepoById(repoId);
-  const s = r ? getRepoScope(r) : {};
-  if (!r || !puedeEditarBiblioteca(s.scope, s.scopeId)) return;
-  const files = ev.target && ev.target.files;
-  if (!files || !files.length) return;
-  const folderId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
-  if (!folderId) { notif('Sin carpeta Drive', 'err'); return; }
-  notif('Subiendo ' + files.length + ' archivo(s)…', 'info');
-  let ok = 0;
-  for (let i = 0; i < files.length; i++) {
-    try {
-      await driveUploadBiblioteca(files[i], files[i].name, files[i].type || 'application/octet-stream', folderId);
-      ok++;
-    } catch (err) {
-      notif('Error: ' + (err.message || files[i].name), 'err');
-    }
-  }
-  if (ok) {
-    notif(ok + ' archivo(s) subido(s)', 'ok');
-    cargarRecursosRepoArchivos();
-  }
-  ev.target.value = '';
 }
 
 function recursosAbrirCompartir(tipo, id, fileId, fileName) {

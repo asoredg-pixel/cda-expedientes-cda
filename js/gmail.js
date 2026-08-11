@@ -2132,13 +2132,49 @@ async function driveListFolderContents(folderId, pageToken) {
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   const q = '"' + folderId + '" in parents and trashed=false';
   let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
-    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,iconLink)' +
-    '&orderBy=folder,name&pageSize=50';
+    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink)' +
+    '&orderBy=folder,name&pageSize=100' + (_DRIVE_API_QS || '');
   if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
   const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error && data.error.message || 'Error listando Drive');
   return data;
+}
+
+/** Crea una carpeta nueva bajo parentId (nombre exacto; no reutiliza otra existente con el mismo nombre). */
+async function driveCreateFolder(name, parentId) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  const nom = String(name || '').trim().slice(0, 120);
+  if (!nom) throw new Error('Nombre de carpeta vacío');
+  if (!parentId) throw new Error('Carpeta padre no definida');
+  const body = {
+    name: nom,
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: [parentId]
+  };
+  const cr = await fetch(DRIVE_API_BASE + '/files' + (_DRIVE_API_QS || '').replace('&', '?'), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const folder = await cr.json();
+  if (!cr.ok || !folder.id) {
+    const msg = folder && folder.error && folder.error.message ? folder.error.message : ('HTTP ' + cr.status);
+    throw new Error('No se pudo crear la carpeta: ' + msg);
+  }
+  return { folderId: folder.id, name: folder.name || nom, link: 'https://drive.google.com/drive/folders/' + folder.id };
+}
+
+/** Elimina archivo o carpeta (carpetas: borrado recursivo del contenido). */
+async function driveDeleteBibliotecaItem(fileId, isFolder) {
+  if (!fileId) return false;
+  if (isFolder) return !!(await driveDeleteFolderRecursive(fileId));
+  if (typeof driveDeleteInstitutional === 'function') {
+    const ok = await driveDeleteInstitutional(fileId);
+    if (ok) return true;
+  }
+  return !!(await driveDeleteFile(fileId));
 }
 
 // Crea o reutiliza carpeta de oficina bajo la raíz de Recursos (Guaviare).
@@ -2182,6 +2218,14 @@ if (typeof window !== 'undefined') {
   window.driveEnsureBibliotecaRepoFolder = driveEnsureBibliotecaRepoFolder;
   window.driveListFolderContents = driveListFolderContents;
   window.driveUploadBiblioteca = driveUploadBiblioteca;
+  window.driveCreateFolder = driveCreateFolder;
+  window.driveDeleteBibliotecaItem = driveDeleteBibliotecaItem;
+  window.driveRenameInstitutional = driveRenameInstitutional;
+  window.driveMoveFileToFolder = driveMoveFileToFolder;
+  window.driveDeleteFile = driveDeleteFile;
+  window.driveDeleteInstitutional = driveDeleteInstitutional;
+  window.driveDeleteFolderRecursive = driveDeleteFolderRecursive;
+  window.driveGetFileMeta = driveGetFileMeta;
 }
 
 // Sube archivo a carpeta de biblioteca.
