@@ -187,15 +187,109 @@ function htmlEntregaRespDir(prefix,ev){
     '<div class="fld"><label>Dirección</label><input type="text" id="entrega-int-'+prefix+'-direccion" value="'+escAttr(ev['_'+prefix+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
 }
 
-function htmlEntregaRespInteresadoBox(){
+function syncEntregaRespAltaFormPorTramite(){
+  const host=document.getElementById('entrega-resp-persona-host');
+  if(!host)return;
+  const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+  host.innerHTML=htmlEntregaRespInteresadoBox(tid);
+  syncEntregaRespInteresadoUi();
+  if(typeof syncEntregaRespInfractoresUi==='function')syncEntregaRespInfractoresUi();
+}
+
+function htmlEntregaRespApoAut(ev){
+  ev=ev||{};
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
-  return '<div style="margin-top:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (Registro)</div>'+
-    '<div class="fg">'+
-    '<div class="fld"><label>Tipo de persona</label><select id="entrega-int-tipo" onchange="syncEntregaRespInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>'+
+  return '<div style="margin-top:10px">'+
+    '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500"><input type="checkbox" id="entrega-int-apoderado" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--pu)"> Tiene apoderado <span style="font-weight:400;color:var(--tx2)">(abogado)</span></label>'+
+    '<div id="entrega-int-apo-box" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Apoderado</div><div class="fg">'+
+    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-apo-nombre" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-apo-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-apo-correo" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-apo-telefono" style="'+inpStyle+'"></div>'+
+    htmlEntregaRespDir('apo',ev)+
+    '</div></div>'+
+    '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500;margin-top:10px"><input type="checkbox" id="entrega-int-autorizado" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--bl)"> Tiene autorizado</label>'+
+    '<div id="entrega-int-aut-box" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Autorizado</div><div class="fg">'+
+    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-aut-nombre" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-aut-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-aut-correo" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-aut-telefono" style="'+inpStyle+'"></div>'+
+    htmlEntregaRespDir('aut',ev)+
+    '</div></div></div>';
+}
+
+function htmlEntregaRespInfractorCard(idx,pi){
+  pi=pi||{};
+  const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const tipo=pi._pi_tipo_persona||pi.tipo||'natural';
+  const pref='entrega-inf-'+idx;
+  const dirNat={}; const dirEmp={};
+  ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+    dirNat['_inf'+idx+'_'+k]=pi['_pi_'+k]||'';
+    dirEmp['_infemp'+idx+'_'+k]=pi['_pi_emp_'+k]||'';
+  });
+  return '<div class="entrega-inf-card" data-inf-idx="'+idx+'" style="margin-top:10px;padding:10px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div class="slbl" style="margin:0;font-size:11px">Presunto infractor '+(idx+1)+'</div>'+
+      (idx>0?'<button type="button" class="btn bsm bd2" onclick="entregaRespQuitarInfractor('+idx+')">Quitar</button>':'')+
     '</div>'+
-    '<div id="entrega-int-natural">'+
-      '<div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
+    '<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="'+pref+'-tipo" onchange="syncEntregaRespInfractorCard('+idx+')" style="'+inpStyle+'">'+
+      '<option value="natural"'+(tipo==='natural'?' selected':'')+'>Persona natural</option>'+
+      '<option value="juridica"'+(tipo==='juridica'?' selected':'')+'>Persona jurídica</option></select></div></div>'+
+    '<div id="'+pref+'-natural" style="'+(tipo==='juridica'?'display:none':'')+'"><div class="fg">'+
+      '<div class="fld"><label>Nombre</label><input type="text" id="'+pref+'-nombre" value="'+escAttr(pi._pi_nombre||pi.nombre||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="'+pref+'-identificacion" value="'+escAttr(pi._pi_identificacion||pi.identificacion||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="'+pref+'-correo" value="'+escAttr(pi._pi_correo||pi.correo||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="'+pref+'-telefono" value="'+escAttr(pi._pi_telefono||pi.telefono||'')+'" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('inf'+idx,dirNat)+
+    '</div></div>'+
+    '<div id="'+pref+'-juridica" style="'+(tipo==='juridica'?'':'display:none')+'">'+
+      '<div class="slbl" style="margin:.4rem 0;font-size:11px">Representante legal</div><div class="fg">'+
+      '<div class="fld"><label>Nombre representante</label><input type="text" id="'+pref+'-rep-nombre" value="'+escAttr(pi._pi_rep_nombre||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="'+pref+'-rep-identificacion" value="'+escAttr(pi._pi_rep_identificacion||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="'+pref+'-rep-correo" value="'+escAttr(pi._pi_rep_correo||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="'+pref+'-rep-telefono" value="'+escAttr(pi._pi_rep_telefono||'')+'" style="'+inpStyle+'"></div>'+
+      '</div><div class="slbl" style="margin:.4rem 0;font-size:11px">Empresa / entidad</div><div class="fg">'+
+      '<div class="fld"><label>Razón social</label><input type="text" id="'+pref+'-empresa" value="'+escAttr(pi._pi_empresa||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>NIT</label><input type="text" id="'+pref+'-nit" value="'+escAttr(pi._pi_nit||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo empresa</label><input type="email" id="'+pref+'-correo-emp" value="'+escAttr(pi._pi_correo_emp||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono empresa</label><input type="tel" id="'+pref+'-telefono-emp" value="'+escAttr(pi._pi_telefono_emp||'')+'" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('infemp'+idx,dirEmp)+
+    '</div></div></div>';
+}
+
+function htmlEntregaRespInteresadoBox(tramiteId){
+  const tid=String(tramiteId||(document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+  const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const cfgT=typeof cfgFor==='function'?cfgFor(depto):{};
+  const tiposSanc=cfgT.tiposSancionatorio||['Deforestación'];
+  const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  let h='<div style="margin-top:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+  h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos de Registro'+(tid?' · '+(typeof getTram==='function'&&getTram(tid)?escAttr(getTram(tid).nombre):escAttr(tid)):'')+'</div>';
+  if(!tid){
+    h+='<div style="font-size:12px;color:var(--tx3)">Seleccione el tipo de trámite para ver los campos a diligenciar (igual que en Registro).</div></div>';
+    return h;
+  }
+  if(esSanc){
+    h+='<div class="fld" style="margin-bottom:8px"><label>Tipo de conducta / caso</label><select id="entrega-int-tipo-sanc" style="'+inpStyle+'">'+
+      tiposSanc.map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('')+
+      '</select></div>';
+    h+='<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500;margin-bottom:8px"><input type="checkbox" id="entrega-int-qd-anonimo" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--pu)"> Actúa como anónimo</label>';
+    h+='<div id="entrega-int-qd-box"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Quejoso / denunciante</div><div class="fg">'+
+      '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-qd-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-qd-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-qd-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-qd-telefono" style="'+inpStyle+'"></div>'+
+      htmlEntregaRespDir('qd',{})+
+      '</div></div>';
+    h+='<div id="entrega-int-infractores-wrap"><div class="fx" style="justify-content:space-between;align-items:center;margin-top:8px">'+
+      '<div class="slbl" style="margin:0;font-size:11px">Presuntos infractores</div>'+
+      '<button type="button" class="btn bsm" onclick="entregaRespAddInfractor()">+ Infractor</button></div>'+
+      '<div id="entrega-int-infractores-list">'+htmlEntregaRespInfractorCard(0,{})+'</div></div>';
+  }else{
+    h+='<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="entrega-int-tipo" onchange="syncEntregaRespInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div></div>';
+    h+='<div id="entrega-int-natural"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
       '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pn-nombre" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pn-identificacion" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pn-correo" style="'+inpStyle+'"></div>'+
@@ -208,10 +302,8 @@ function htmlEntregaRespInteresadoBox(){
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-ec-telefono" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-ec-correo" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('ec',{})+
-      '</div></div>'+
-    '</div>'+
-    '<div id="entrega-int-juridica" style="display:none">'+
-      '<div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
+      '</div></div></div>';
+    h+='<div id="entrega-int-juridica" style="display:none"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
       '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-int-pj-rep-nombre" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pj-rep-identificacion" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-rep-correo" style="'+inpStyle+'"></div>'+
@@ -222,10 +314,52 @@ function htmlEntregaRespInteresadoBox(){
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('pj',{})+
-      '</div>'+
-    '</div>'+
-    '<div style="font-size:10px;color:var(--tx3);margin-top:6px">El encargado revisará estos datos junto con el documento. Puede corregirlos en Registro antes de marcar la alta como revisada.</div>'+
-  '</div>';
+      '</div></div>';
+  }
+  h+=htmlEntregaRespApoAut({});
+  h+='<div class="fld" style="margin-top:10px"><label>Medio de notificación</label>'+
+    '<select id="entrega-int-medio-notif" style="'+inpStyle+'">'+
+    '<option value="">— No indica —</option>'+
+    '<option value="correo">Correo</option>'+
+    '<option value="fisica">Física / presencial</option>'+
+    '<option value="whatsapp">WhatsApp</option>'+
+    '<option value="aviso">Aviso</option>'+
+    '<option value="otro">Otro</option></select></div>';
+  h+='<div style="font-size:10px;color:var(--tx3);margin-top:8px">El encargado revisará y podrá corregir estos datos en Registro antes de confirmar el expediente.</div></div>';
+  return h;
+}
+
+function syncEntregaRespInfractorCard(idx){
+  const pref='entrega-inf-'+idx;
+  const tipo=String((document.getElementById(pref+'-tipo')||{}).value||'natural');
+  const nat=document.getElementById(pref+'-natural');
+  const jur=document.getElementById(pref+'-juridica');
+  if(nat)nat.style.display=tipo==='juridica'?'none':'';
+  if(jur)jur.style.display=tipo==='juridica'?'':'none';
+}
+function syncEntregaRespInfractoresUi(){
+  document.querySelectorAll('.entrega-inf-card').forEach(function(card){
+    const idx=Number(card.getAttribute('data-inf-idx')||0);
+    syncEntregaRespInfractorCard(idx);
+  });
+}
+function entregaRespAddInfractor(){
+  const list=document.getElementById('entrega-int-infractores-list');
+  if(!list)return;
+  const n=list.querySelectorAll('.entrega-inf-card').length;
+  list.insertAdjacentHTML('beforeend',htmlEntregaRespInfractorCard(n,{}));
+  syncEntregaRespInfractorCard(n);
+}
+function entregaRespQuitarInfractor(idx){
+  const card=document.querySelector('.entrega-inf-card[data-inf-idx="'+idx+'"]');
+  if(card)card.remove();
+  // Reindex visually by rebuilding from collected data
+  const datos=collectEntregaRespInfractores();
+  const list=document.getElementById('entrega-int-infractores-list');
+  if(!list)return;
+  if(!datos.length)datos.push({});
+  list.innerHTML=datos.map(function(pi,i){return htmlEntregaRespInfractorCard(i,pi);}).join('');
+  syncEntregaRespInfractoresUi();
 }
 
 function syncEntregaRespInteresadoUi(){
@@ -237,6 +371,16 @@ function syncEntregaRespInteresadoUi(){
   const est=!!((document.getElementById('entrega-int-est-com')||{}).checked);
   const ec=document.getElementById('entrega-int-ec');
   if(ec)ec.style.display=(tipo!=='juridica'&&est)?'':'none';
+  const apo=!!((document.getElementById('entrega-int-apoderado')||{}).checked);
+  const apoBox=document.getElementById('entrega-int-apo-box');
+  if(apoBox)apoBox.style.display=apo?'':'none';
+  const aut=!!((document.getElementById('entrega-int-autorizado')||{}).checked);
+  const autBox=document.getElementById('entrega-int-aut-box');
+  if(autBox)autBox.style.display=aut?'':'none';
+  const anon=!!((document.getElementById('entrega-int-qd-anonimo')||{}).checked);
+  const qdBox=document.getElementById('entrega-int-qd-box');
+  if(qdBox)qdBox.style.display=anon?'none':'';
+  syncEntregaRespInfractoresUi();
 }
 
 function _entregaIntVal(id){
@@ -250,34 +394,118 @@ function _entregaIntDir(prefix){
   return o;
 }
 
+function collectEntregaRespInfractores(){
+  const cards=document.querySelectorAll('.entrega-inf-card');
+  const out=[];
+  cards.forEach(function(card){
+    const idx=Number(card.getAttribute('data-inf-idx')||0);
+    const pref='entrega-inf-'+idx;
+    const tipo=_entregaIntVal(pref+'-tipo')||'natural';
+    const row={_pi_tipo_persona:tipo};
+    if(tipo==='juridica'){
+      Object.assign(row,{
+        _pi_rep_nombre:_entregaIntVal(pref+'-rep-nombre'),
+        _pi_rep_identificacion:_entregaIntVal(pref+'-rep-identificacion'),
+        _pi_rep_correo:_entregaIntVal(pref+'-rep-correo'),
+        _pi_rep_telefono:_entregaIntVal(pref+'-rep-telefono'),
+        _pi_empresa:_entregaIntVal(pref+'-empresa'),
+        _pi_nit:_entregaIntVal(pref+'-nit'),
+        _pi_correo_emp:_entregaIntVal(pref+'-correo-emp'),
+        _pi_telefono_emp:_entregaIntVal(pref+'-telefono-emp')
+      },_entregaIntDir('infemp'+idx));
+      // map emp dir to _pi_emp_*
+      ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+        row['_pi_emp_'+k]=row['_infemp'+idx+'_'+k]||'';
+        delete row['_infemp'+idx+'_'+k];
+      });
+    }else{
+      Object.assign(row,{
+        _pi_nombre:_entregaIntVal(pref+'-nombre'),
+        _pi_identificacion:_entregaIntVal(pref+'-identificacion'),
+        _pi_correo:_entregaIntVal(pref+'-correo'),
+        _pi_telefono:_entregaIntVal(pref+'-telefono')
+      },_entregaIntDir('inf'+idx));
+      ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+        row['_pi_'+k]=row['_inf'+idx+'_'+k]||'';
+        delete row['_inf'+idx+'_'+k];
+      });
+    }
+    const has=tipo==='juridica'?(row._pi_empresa||row._pi_nit||row._pi_rep_nombre):(row._pi_nombre||row._pi_identificacion);
+    if(has||idx===0)out.push(row);
+  });
+  return out;
+}
+
 function collectEntregaRespInteresado(){
-  const tipo=_entregaIntVal('entrega-int-tipo')||'natural';
-  const out={_tipo_persona:tipo,_est_com:false};
-  if(tipo==='juridica'){
+  const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+  const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
+  const out={
+    _apoderado:!!((document.getElementById('entrega-int-apoderado')||{}).checked),
+    _autorizado:!!((document.getElementById('entrega-int-autorizado')||{}).checked),
+    _medio_notificacion:_entregaIntVal('entrega-int-medio-notif')||''
+  };
+  if(out._apoderado){
     Object.assign(out,{
-      _pj_rep_nombre:_entregaIntVal('entrega-int-pj-rep-nombre'),
-      _pj_rep_identificacion:_entregaIntVal('entrega-int-pj-rep-identificacion'),
-      _pj_rep_correo:_entregaIntVal('entrega-int-pj-rep-correo'),
-      _pj_rep_telefono:_entregaIntVal('entrega-int-pj-rep-telefono'),
-      _pj_empresa:_entregaIntVal('entrega-int-pj-empresa'),
-      _pj_nit:_entregaIntVal('entrega-int-pj-nit'),
-      _pj_correo:_entregaIntVal('entrega-int-pj-correo'),
-      _pj_telefono:_entregaIntVal('entrega-int-pj-telefono')
-    },_entregaIntDir('pj'));
-  }else{
+      _apo_nombre:_entregaIntVal('entrega-int-apo-nombre'),
+      _apo_identificacion:_entregaIntVal('entrega-int-apo-identificacion'),
+      _apo_correo:_entregaIntVal('entrega-int-apo-correo'),
+      _apo_telefono:_entregaIntVal('entrega-int-apo-telefono')
+    },_entregaIntDir('apo'));
+  }
+  if(out._autorizado){
     Object.assign(out,{
-      _pn_nombre:_entregaIntVal('entrega-int-pn-nombre'),
-      _pn_identificacion:_entregaIntVal('entrega-int-pn-identificacion'),
-      _pn_correo:_entregaIntVal('entrega-int-pn-correo'),
-      _pn_telefono:_entregaIntVal('entrega-int-pn-telefono'),
-      _est_com:!!((document.getElementById('entrega-int-est-com')||{}).checked)
-    },_entregaIntDir('pn'));
-    if(out._est_com){
+      _aut_nombre:_entregaIntVal('entrega-int-aut-nombre'),
+      _aut_identificacion:_entregaIntVal('entrega-int-aut-identificacion'),
+      _aut_correo:_entregaIntVal('entrega-int-aut-correo'),
+      _aut_telefono:_entregaIntVal('entrega-int-aut-telefono')
+    },_entregaIntDir('aut'));
+  }
+  if(esSanc){
+    out._tipo_sancionatorio=_entregaIntVal('entrega-int-tipo-sanc')||'';
+    out._qd_anonimo=!!((document.getElementById('entrega-int-qd-anonimo')||{}).checked);
+    if(!out._qd_anonimo){
       Object.assign(out,{
-        _ec_nombre:_entregaIntVal('entrega-int-ec-nombre'),
-        _ec_telefono:_entregaIntVal('entrega-int-ec-telefono'),
-        _ec_correo:_entregaIntVal('entrega-int-ec-correo')
-      },_entregaIntDir('ec'));
+        _qd_nombre:_entregaIntVal('entrega-int-qd-nombre'),
+        _qd_identificacion:_entregaIntVal('entrega-int-qd-identificacion'),
+        _qd_correo:_entregaIntVal('entrega-int-qd-correo'),
+        _qd_telefono:_entregaIntVal('entrega-int-qd-telefono')
+      },_entregaIntDir('qd'));
+    }
+    const infr=collectEntregaRespInfractores();
+    out._presuntos_infractores=JSON.stringify(infr);
+    if(infr[0])Object.assign(out,infr[0]);
+    out._tipo_persona='natural';
+    out._est_com=false;
+  }else{
+    const tipo=_entregaIntVal('entrega-int-tipo')||'natural';
+    out._tipo_persona=tipo;
+    out._est_com=false;
+    if(tipo==='juridica'){
+      Object.assign(out,{
+        _pj_rep_nombre:_entregaIntVal('entrega-int-pj-rep-nombre'),
+        _pj_rep_identificacion:_entregaIntVal('entrega-int-pj-rep-identificacion'),
+        _pj_rep_correo:_entregaIntVal('entrega-int-pj-rep-correo'),
+        _pj_rep_telefono:_entregaIntVal('entrega-int-pj-rep-telefono'),
+        _pj_empresa:_entregaIntVal('entrega-int-pj-empresa'),
+        _pj_nit:_entregaIntVal('entrega-int-pj-nit'),
+        _pj_correo:_entregaIntVal('entrega-int-pj-correo'),
+        _pj_telefono:_entregaIntVal('entrega-int-pj-telefono')
+      },_entregaIntDir('pj'));
+    }else{
+      Object.assign(out,{
+        _pn_nombre:_entregaIntVal('entrega-int-pn-nombre'),
+        _pn_identificacion:_entregaIntVal('entrega-int-pn-identificacion'),
+        _pn_correo:_entregaIntVal('entrega-int-pn-correo'),
+        _pn_telefono:_entregaIntVal('entrega-int-pn-telefono'),
+        _est_com:!!((document.getElementById('entrega-int-est-com')||{}).checked)
+      },_entregaIntDir('pn'));
+      if(out._est_com){
+        Object.assign(out,{
+          _ec_nombre:_entregaIntVal('entrega-int-ec-nombre'),
+          _ec_telefono:_entregaIntVal('entrega-int-ec-telefono'),
+          _ec_correo:_entregaIntVal('entrega-int-ec-correo')
+        },_entregaIntDir('ec'));
+      }
     }
   }
   return out;
@@ -290,6 +518,20 @@ function applyEntregaRespInteresadoToExp(e,datos){
 
 function validateEntregaRespInteresado(datos){
   if(!datos)return'Sin datos del interesado';
+  const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+  const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
+  if(esSanc){
+    if(!datos._qd_anonimo&&!datos._qd_nombre)return'Indique el nombre del quejoso / denunciante (o márquelo anónimo)';
+    try{
+      const arr=typeof datos._presuntos_infractores==='string'?JSON.parse(datos._presuntos_infractores||'[]'):(datos._presuntos_infractores||[]);
+      const first=arr[0]||{};
+      const ok=first._pi_tipo_persona==='juridica'?(first._pi_empresa||first._pi_rep_nombre):(first._pi_nombre);
+      if(!ok)return'Indique al menos un presunto infractor';
+    }catch(err){
+      if(!datos._pi_nombre&&!datos._pi_empresa)return'Indique al menos un presunto infractor';
+    }
+    return'';
+  }
   if(datos._tipo_persona==='juridica'){
     if(!datos._pj_empresa)return'Indique el nombre / razón social del interesado';
   }else if(!datos._pn_nombre){
@@ -344,14 +586,13 @@ function openEntregaResponsableModal(){
       '</div>'+
     '</div>'+
     '<div id="entrega-resp-alta-box" style="display:none">'+
-      '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Alta nueva solo para <strong>trámites</strong>. Las <strong>PQRSD</strong> las radica Secretaría; aquí solo se vinculan existentes (busque arriba). Para oficios sin radicado use <strong>Sin expediente</strong>.</div>'+
       '<div class="fg" style="margin-bottom:4px">'+
         '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
           '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
         '<div class="fld"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
-          '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tramitesEntregaRespOptsHtml()+'</select></div>'+
+          '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" onchange="syncEntregaRespAltaFormPorTramite()">'+tramitesEntregaRespOptsHtml()+'</select></div>'+
       '</div>'+
-      htmlEntregaRespInteresadoBox()+
+      '<div id="entrega-resp-persona-host">'+htmlEntregaRespInteresadoBox()+'</div>'+
     '</div>'+
     '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Misma vía que <strong>+ Actividad sin expediente</strong> del encargado: se crea la actividad, usted entrega y pasa a <strong>Por revisar</strong>. Si el encargado ya la asignó, ábrala desde Actividades y entregue allí.</div>'+
     '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
@@ -395,6 +636,7 @@ function openEntregaResponsableModal(){
   ov.classList.add('on');
   window._taskModalCtx={mode:'entregaResponsable'};
   syncEntregaRespModoUi();
+  syncEntregaRespAltaFormPorTramite();
   syncEntregaRespInteresadoUi();
   syncEntregaRespRegistroUi();
   syncEntregaRespPqrsUi();
@@ -970,6 +1212,10 @@ window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
 window.pickActEntregaResp=pickActEntregaResp;
 window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
 window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
+window.syncEntregaRespAltaFormPorTramite=syncEntregaRespAltaFormPorTramite;
+window.syncEntregaRespInfractorCard=syncEntregaRespInfractorCard;
+window.entregaRespAddInfractor=entregaRespAddInfractor;
+window.entregaRespQuitarInfractor=entregaRespQuitarInfractor;
 window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.syncEntregaRespActoVencUi=syncEntregaRespActoVencUi;
 

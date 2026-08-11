@@ -266,7 +266,6 @@ function renderFormulario(tid,ed,targetId){
   const tipoSol=ev._tipo_solicitud||'PQRS';
   const tipoSanc=ev._tipo_sancionatorio||((cfg.tiposSancionatorio||[])[0]||'Deforestación');
   const qdAnon=!!ev._qd_anonimo;
-  const piTipo=ev._pi_tipo_persona||'natural';
   const esQuejaDen=esPqrs&&(tipoSol==='Queja'||tipoSol==='Denuncia');
   const personaHtml='<details class="form-section" id="sec-persona"><summary class="form-section-hdr">Datos del interesado</summary><div class="form-section-body">'+
     '<div id="pqrs-tipo-box" style="'+(esPqrs?'':'display:none')+';margin-bottom:.7rem"><div class="fld"><label>Tipo de solicitud</label><select id="fld__tipo_solicitud" onchange="toggleCasoEspecialMode()">'+
@@ -318,28 +317,7 @@ function renderFormulario(tid,ed,targetId){
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__qd_telefono" value="'+(ev._qd_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('qd',ev)+
     '</div></div>'+
-    '<div class="slbl" style="margin-top:.8rem" id="bloque-infractor-tit">Presunto infractor'+(esQuejaDen?'':' (opcional)')+'</div>'+
-    '<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="fld__pi_tipo_persona" onchange="toggleInfractor()"><option value="natural"'+(piTipo==='natural'?' selected':'')+'>Persona natural</option><option value="juridica"'+(piTipo==='juridica'?' selected':'')+'>Persona jurídica</option></select></div></div>'+
-    '<div id="infractor-natural" style="'+(piTipo==='juridica'?'display:none':'')+'"><div class="fg">'+
-    '<div class="fld"><label>Nombre</label><input type="text" id="fld__pi_nombre" value="'+(ev._pi_nombre||'')+'"'+personSugAttrs('pi','nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__pi_identificacion" value="'+(ev._pi_identificacion||'')+'"'+personSugAttrs('pi','identificacion')+' placeholder="Buscar por identificación…"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="fld__pi_correo" value="'+(ev._pi_correo||'')+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__pi_telefono" value="'+(ev._pi_telefono||'')+'"'+numAttrs()+'></div>'+
-    dirHtml('pi',ev)+
-    '</div></div>'+
-    '<div id="infractor-juridica" style="'+(piTipo==='juridica'?'':'display:none')+'">'+
-    '<div class="slbl" style="margin:.4rem 0">Representante legal</div><div class="fg">'+
-    '<div class="fld"><label>Nombre representante</label><input type="text" id="fld__pi_rep_nombre" value="'+(ev._pi_rep_nombre||'')+'"'+personSugAttrs('pi','rep_nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__pi_rep_identificacion" value="'+(ev._pi_rep_identificacion||'')+'"'+personSugAttrs('pi','rep_identificacion')+' placeholder="Buscar por identificación…"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="fld__pi_rep_correo" value="'+(ev._pi_rep_correo||'')+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__pi_rep_telefono" value="'+(ev._pi_rep_telefono||'')+'"'+numAttrs()+'></div>'+
-    '</div><div class="slbl" style="margin:.4rem 0">Empresa / entidad</div><div class="fg">'+
-    '<div class="fld"><label>Nombre o razón social</label><input type="text" id="fld__pi_empresa" value="'+(ev._pi_empresa||'')+'"'+personSugAttrs('pi','empresa')+' placeholder="Buscar por razón social…"></div>'+
-    '<div class="fld"><label>NIT</label><input type="text" id="fld__pi_nit" value="'+(ev._pi_nit||'')+'"'+personSugAttrs('pi','nit')+' placeholder="Buscar por NIT…"></div>'+
-    '<div class="fld"><label>Correo empresa</label><input type="email" id="fld__pi_correo_emp" value="'+(ev._pi_correo_emp||'')+'"></div>'+
-    '<div class="fld"><label>Teléfono empresa</label><input type="tel" id="fld__pi_telefono_emp" value="'+(ev._pi_telefono_emp||'')+'"'+numAttrs()+'></div>'+
-    dirHtml('pi_emp',ev)+
-    '</div></div>'+
+    htmlInfractoresBlock(ev,{esSanc:esSanc,esQuejaDen:esQuejaDen})+
     '</div>'+
     htmlApoderadoAutorizado(ev)+
     btnGuardarSeccion()+
@@ -413,8 +391,11 @@ function toggleCasoEspecialMode(){
   const ls=document.getElementById('lbl-solicitante-pqrs');
   if(ls)ls.textContent=esQD||esS?'Quejoso / denunciante':'Peticionario / solicitante';
   const bit=document.getElementById('bloque-infractor-tit');
-  if(bit)bit.textContent='Presunto infractor'+(esQD?'':' (opcional)');
+  if(bit)bit.textContent=(esS?'Presuntos infractores':('Presunto infractor'+(esQD?'':' (opcional)')));
+  const addBtn=document.getElementById('btn-add-infractor');
+  if(addBtn)addBtn.style.display=esS?'':'none';
   if(es)toggleQuejaAnonimo();
+  toggleInfractor();
 }
 function togglePqrsMode(){toggleCasoEspecialMode();}
 function toggleQueja(){toggleCasoEspecialMode();}
@@ -423,13 +404,175 @@ function toggleQuejaAnonimo(){
   const qi=document.getElementById('queja-identificado');
   if(qi)qi.style.display=anon?'none':'';
 }
-function toggleInfractor(){
-  const v=gv('fld__pi_tipo_persona');
-  const pn=document.getElementById('infractor-natural');
-  const pj=document.getElementById('infractor-juridica');
+function parsePresuntosInfractores(ev){
+  ev=ev||{};
+  let arr=[];
+  try{
+    if(typeof ev._presuntos_infractores==='string'&&ev._presuntos_infractores.trim())
+      arr=JSON.parse(ev._presuntos_infractores);
+    else if(Array.isArray(ev._presuntos_infractores))arr=ev._presuntos_infractores.slice();
+  }catch(err){arr=[];}
+  if(!Array.isArray(arr))arr=[];
+  arr=arr.filter(function(x){return x&&typeof x==='object';});
+  if(!arr.length&&(ev._pi_nombre||ev._pi_empresa||ev._pi_identificacion||ev._pi_nit||ev._pi_rep_nombre||ev._pi_tipo_persona)){
+    const one={_pi_tipo_persona:ev._pi_tipo_persona||'natural'};
+    ['_pi_nombre','_pi_identificacion','_pi_correo','_pi_telefono','_pi_rep_nombre','_pi_rep_identificacion','_pi_rep_correo','_pi_rep_telefono','_pi_empresa','_pi_nit','_pi_correo_emp','_pi_telefono_emp'].forEach(function(k){one[k]=ev[k]||'';});
+    ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+      one['_pi_'+k]=ev['_pi_'+k]||'';
+      one['_pi_emp_'+k]=ev['_pi_emp_'+k]||'';
+    });
+    arr=[one];
+  }
+  if(!arr.length)arr=[{_pi_tipo_persona:'natural'}];
+  return arr;
+}
+function infractorFieldBase(idx){return idx===0?'pi':('pi'+idx);}
+function infractorEmpBase(idx){return idx===0?'pi_emp':('pi'+idx+'_emp');}
+function htmlInfractorCard(idx,pi){
+  pi=pi||{};
+  const tipo=pi._pi_tipo_persona||'natural';
+  const base=infractorFieldBase(idx);
+  const baseEmp=infractorEmpBase(idx);
+  const dirEv={};
+  ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+    dirEv['_'+base+'_'+k]=pi['_pi_'+k]||'';
+    dirEv['_'+baseEmp+'_'+k]=pi['_pi_emp_'+k]||'';
+  });
+  const sug=idx===0;
+  return '<div class="infractor-card" data-inf-idx="'+idx+'" style="margin-top:10px;padding:10px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div class="slbl" style="margin:0;font-size:11px">Presunto infractor '+(idx+1)+'</div>'+
+      (idx>0?'<button type="button" class="btn bsm bd2" onclick="quitarInfractorCard('+idx+')">Quitar</button>':'')+
+    '</div>'+
+    '<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="fld__'+base+'_tipo_persona" onchange="toggleInfractor('+idx+')"><option value="natural"'+(tipo==='natural'?' selected':'')+'>Persona natural</option><option value="juridica"'+(tipo==='juridica'?' selected':'')+'>Persona jurídica</option></select></div></div>'+
+    '<div id="infractor-natural-'+idx+'" style="'+(tipo==='juridica'?'display:none':'')+'"><div class="fg">'+
+    '<div class="fld"><label>Nombre</label><input type="text" id="fld__'+base+'_nombre" value="'+escAttr(pi._pi_nombre||'')+'"'+(sug?personSugAttrs('pi','nombre'):'')+' placeholder="Buscar por nombre…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_identificacion" value="'+escAttr(pi._pi_identificacion||'')+'"'+(sug?personSugAttrs('pi','identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="fld__'+base+'_correo" value="'+escAttr(pi._pi_correo||'')+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__'+base+'_telefono" value="'+escAttr(pi._pi_telefono||'')+'"'+numAttrs()+'></div>'+
+    dirHtml(base,dirEv)+
+    '</div></div>'+
+    '<div id="infractor-juridica-'+idx+'" style="'+(tipo==='juridica'?'':'display:none')+'">'+
+    '<div class="slbl" style="margin:.4rem 0">Representante legal</div><div class="fg">'+
+    '<div class="fld"><label>Nombre representante</label><input type="text" id="fld__'+base+'_rep_nombre" value="'+escAttr(pi._pi_rep_nombre||'')+'"'+(sug?personSugAttrs('pi','rep_nombre'):'')+' placeholder="Buscar por nombre…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_rep_identificacion" value="'+escAttr(pi._pi_rep_identificacion||'')+'"'+(sug?personSugAttrs('pi','rep_identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="fld__'+base+'_rep_correo" value="'+escAttr(pi._pi_rep_correo||'')+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__'+base+'_rep_telefono" value="'+escAttr(pi._pi_rep_telefono||'')+'"'+numAttrs()+'></div>'+
+    '</div><div class="slbl" style="margin:.4rem 0">Empresa / entidad</div><div class="fg">'+
+    '<div class="fld"><label>Nombre o razón social</label><input type="text" id="fld__'+base+'_empresa" value="'+escAttr(pi._pi_empresa||'')+'"'+(sug?personSugAttrs('pi','empresa'):'')+' placeholder="Buscar por razón social…"></div>'+
+    '<div class="fld"><label>NIT</label><input type="text" id="fld__'+base+'_nit" value="'+escAttr(pi._pi_nit||'')+'"'+(sug?personSugAttrs('pi','nit'):'')+' placeholder="Buscar por NIT…"></div>'+
+    '<div class="fld"><label>Correo empresa</label><input type="email" id="fld__'+base+'_correo_emp" value="'+escAttr(pi._pi_correo_emp||'')+'"></div>'+
+    '<div class="fld"><label>Teléfono empresa</label><input type="tel" id="fld__'+base+'_telefono_emp" value="'+escAttr(pi._pi_telefono_emp||'')+'"'+numAttrs()+'></div>'+
+    dirHtml(baseEmp,dirEv)+
+    '</div></div></div>';
+}
+function htmlInfractoresBlock(ev,opts){
+  opts=opts||{};
+  const arr=parsePresuntosInfractores(ev);
+  const showAdd=!!opts.esSanc;
+  const tit=showAdd?'Presuntos infractores':('Presunto infractor'+(opts.esQuejaDen?'':' (opcional)'));
+  return '<div id="bloque-infractores-wrap">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;margin-top:.8rem">'+
+    '<div class="slbl" style="margin:0" id="bloque-infractor-tit">'+tit+'</div>'+
+    '<button type="button" class="btn bsm" id="btn-add-infractor" onclick="addInfractorCard()" style="'+(showAdd?'':'display:none')+'">+ Infractor</button>'+
+    '</div>'+
+    '<div id="infractores-list">'+arr.map(function(pi,i){return htmlInfractorCard(i,pi);}).join('')+'</div></div>';
+}
+function collectPresuntosInfractores(){
+  const cards=document.querySelectorAll('#infractores-list .infractor-card');
+  if(!cards.length){
+    const tipo=gv('fld__pi_tipo_persona')||'natural';
+    const row={_pi_tipo_persona:tipo};
+    if(tipo==='juridica'){
+      Object.assign(row,{
+        _pi_rep_nombre:gv('fld__pi_rep_nombre'),_pi_rep_identificacion:gv('fld__pi_rep_identificacion'),
+        _pi_rep_correo:gv('fld__pi_rep_correo'),_pi_rep_telefono:gv('fld__pi_rep_telefono'),
+        _pi_empresa:gv('fld__pi_empresa'),_pi_nit:gv('fld__pi_nit'),
+        _pi_correo_emp:gv('fld__pi_correo_emp'),_pi_telefono_emp:gv('fld__pi_telefono_emp')
+      },getDir('pi_emp'));
+    }else{
+      Object.assign(row,{
+        _pi_nombre:gv('fld__pi_nombre'),_pi_identificacion:gv('fld__pi_identificacion'),
+        _pi_correo:gv('fld__pi_correo'),_pi_telefono:gv('fld__pi_telefono')
+      },getDir('pi'));
+    }
+    return [row];
+  }
+  const out=[];
+  cards.forEach(function(card){
+    const idx=Number(card.getAttribute('data-inf-idx')||0);
+    const base=infractorFieldBase(idx);
+    const baseEmp=infractorEmpBase(idx);
+    const tipo=gv('fld__'+base+'_tipo_persona')||'natural';
+    const row={_pi_tipo_persona:tipo};
+    if(tipo==='juridica'){
+      Object.assign(row,{
+        _pi_rep_nombre:gv('fld__'+base+'_rep_nombre'),_pi_rep_identificacion:gv('fld__'+base+'_rep_identificacion'),
+        _pi_rep_correo:gv('fld__'+base+'_rep_correo'),_pi_rep_telefono:gv('fld__'+base+'_rep_telefono'),
+        _pi_empresa:gv('fld__'+base+'_empresa'),_pi_nit:gv('fld__'+base+'_nit'),
+        _pi_correo_emp:gv('fld__'+base+'_correo_emp'),_pi_telefono_emp:gv('fld__'+base+'_telefono_emp')
+      },getDir(baseEmp));
+      ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+        row['_pi_emp_'+k]=row['_'+baseEmp+'_'+k]||'';
+        if(baseEmp!=='pi_emp')delete row['_'+baseEmp+'_'+k];
+      });
+    }else{
+      Object.assign(row,{
+        _pi_nombre:gv('fld__'+base+'_nombre'),_pi_identificacion:gv('fld__'+base+'_identificacion'),
+        _pi_correo:gv('fld__'+base+'_correo'),_pi_telefono:gv('fld__'+base+'_telefono')
+      },getDir(base));
+      ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+        row['_pi_'+k]=row['_'+base+'_'+k]||'';
+        if(base!=='pi')delete row['_'+base+'_'+k];
+      });
+    }
+    const has=tipo==='juridica'?(row._pi_empresa||row._pi_nit||row._pi_rep_nombre):(row._pi_nombre||row._pi_identificacion);
+    if(has||idx===0)out.push(row);
+  });
+  return out.length?out:[{_pi_tipo_persona:'natural'}];
+}
+function addInfractorCard(){
+  const list=document.getElementById('infractores-list');
+  if(!list)return;
+  const n=list.querySelectorAll('.infractor-card').length;
+  list.insertAdjacentHTML('beforeend',htmlInfractorCard(n,{}));
+  toggleInfractor(n);
+}
+function quitarInfractorCard(idx){
+  const card=document.querySelector('#infractores-list .infractor-card[data-inf-idx="'+idx+'"]');
+  if(card)card.remove();
+  const datos=collectPresuntosInfractores();
+  const list=document.getElementById('infractores-list');
+  if(!list)return;
+  if(!datos.length)datos.push({_pi_tipo_persona:'natural'});
+  list.innerHTML=datos.map(function(pi,i){return htmlInfractorCard(i,pi);}).join('');
+  toggleInfractor();
+}
+function toggleInfractor(idx){
+  if(idx==null||idx===''){
+    document.querySelectorAll('#infractores-list .infractor-card').forEach(function(c){
+      toggleInfractor(Number(c.getAttribute('data-inf-idx')||0));
+    });
+    // legacy ids
+    const v=gv('fld__pi_tipo_persona');
+    const pn=document.getElementById('infractor-natural');
+    const pj=document.getElementById('infractor-juridica');
+    if(pn)pn.style.display=v==='juridica'?'none':'';
+    if(pj)pj.style.display=v==='juridica'?'':'none';
+    return;
+  }
+  const base=infractorFieldBase(idx);
+  const v=gv('fld__'+base+'_tipo_persona');
+  const pn=document.getElementById('infractor-natural-'+idx);
+  const pj=document.getElementById('infractor-juridica-'+idx);
   if(pn)pn.style.display=v==='juridica'?'none':'';
   if(pj)pj.style.display=v==='juridica'?'':'none';
 }
+window.parsePresuntosInfractores=parsePresuntosInfractores;
+window.collectPresuntosInfractores=collectPresuntosInfractores;
+window.addInfractorCard=addInfractorCard;
+window.quitarInfractorCard=quitarInfractorCard;
+window.toggleInfractor=toggleInfractor;
 function updMun(prefix){
   const dep=gv('fld__'+prefix+'_dep')||nombreDeptoOperativo();
   const mun=document.getElementById('fld__'+prefix+'_mun');

@@ -12913,8 +12913,18 @@ function renderActividadesRowHtml(t){
       else
         acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();tramiteMarcarFirmadoFisico(\''+eidT+'\',\''+tidT+'\')" title="Firmar">🖊</button>';
     }
-    if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))
-      acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+eidT+'\',\''+tidT+'\')" title="Notificar">📬</button>';
+    if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+      if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
+        acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+eidT+'\',\''+tidT+'\')" title="Notificar">📬</button>';
+      else{
+        const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
+        const quienT=String(wfT.notificar_por||'').trim();
+        acts+='<span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">📬 '+(quienT?'Notifica: '+escAttr(quienT):'Por notificar')+'</span>';
+      }
+    }
+    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
+      &&(typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):(esNcaDeguv()||esAdministrador()||esVistaActividadesDepto())))
+      acts+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();tramiteAprobarRevisionFinalNotif(\''+eidT+'\',\''+tidT+'\')">✅ Aprobar notif.</button>';
   }
   // Acciones de flujo oficio firmado (imprimir / firma Director / notificar)
   if(expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)&&typeof pqrsWorkflowFase==='function'){
@@ -13390,9 +13400,10 @@ function esActividadPorEjecutar(t){
     return false;
   // Trámite en firma: no en «Por ejecutar»
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
+    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
       if(deptView||isVital)return false;
-      return true;
+      return typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):true;
     }
     return false;
   }
@@ -13500,7 +13511,13 @@ function getTareasNotifVisiblesAct(){
     return typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e);
   });
   const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
-    return typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
+    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
+    if(typeof taskFirmaEnPorNotificar!=='function'||!taskFirmaEnPorNotificar(t))return false;
+    if(deptView)return true;
+    if(typeof esCargoVital==='function'&&esCargoVital())return true;
+    if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+    if(typeof esAdministrador==='function'&&esAdministrador())return true;
+    return typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):true;
   }):[];
   let list=mergeActividadLists(pqrs,tram);
   if(deptView&&respFilter)list=list.filter(t=>actividadNotifEsDeResp(t,respFilter));
@@ -14084,6 +14101,8 @@ function filtrarActividadesPorEstado(list,filtro){
         if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
       }
     }
+    // Trámite: notificación reportada pendiente de aprobación del encargado
+    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src))return true;
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
     if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
@@ -14208,6 +14227,7 @@ function renderActividades(){
         if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
       }
     }
+    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src))return true;
     if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
     if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
@@ -14705,8 +14725,21 @@ function upsertPersonaCatalog(data){
     const aut=extraerAutorizadoDeExpediente(data);
     if(aut)mergePersonaEnCatalogo(aut,['autorizado'],expId,depto);
   }
-  const inf=extraerInfractorDeExpediente(data);
-  if(inf)mergePersonaEnCatalogo(inf,['infractor'],expId,depto);
+  let infrRows=[];
+  try{
+    if(typeof parsePresuntosInfractores==='function')infrRows=parsePresuntosInfractores(data);
+    else if(typeof data._presuntos_infractores==='string'&&data._presuntos_infractores.trim())infrRows=JSON.parse(data._presuntos_infractores);
+    else if(Array.isArray(data._presuntos_infractores))infrRows=data._presuntos_infractores;
+  }catch(err){infrRows=[];}
+  if(!infrRows.length){
+    const inf=extraerInfractorDeExpediente(data);
+    if(inf)mergePersonaEnCatalogo(inf,['infractor'],expId,depto);
+  }else{
+    infrRows.forEach(function(row){
+      const inf=extraerInfractorDeExpediente(Object.assign({},data,row||{}));
+      if(inf)mergePersonaEnCatalogo(inf,['infractor'],expId,depto);
+    });
+  }
 }
 function getRolesPersonaManual(){
   return Object.keys(PERSONA_ROLES).filter(r=>{

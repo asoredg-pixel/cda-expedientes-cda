@@ -287,8 +287,22 @@ function guardarExpCore(stayOnForm){
     _autorizado:document.getElementById('fld__autorizado')?document.getElementById('fld__autorizado').checked:false,
     _aut_nombre:gv('fld__aut_nombre'),_aut_identificacion:gv('fld__aut_identificacion'),_aut_correo:gv('fld__aut_correo'),_aut_telefono:gv('fld__aut_telefono'),...getDir('aut'),
     _medio_notificacion:gv('fld__medio_notificacion')||'',
-    tasks:mergeTasksForSave(getTasksSafe(prevT),prevT),...collectContable(),...collectActosAdmin(),...collectConceptosSeg(),...collectInfoTecnicaExp(),...camposVals
+    tasks:mergeTasksForSave(getTasksSafe(prevT),prevT),    ...collectContable(),...collectActosAdmin(),...collectConceptosSeg(),...collectInfoTecnicaExp(),...camposVals
   };
+  if(document.getElementById('infractores-list')&&typeof collectPresuntosInfractores==='function'){
+    let infrEarly=collectPresuntosInfractores();
+    if(!esTramiteSancionatorio(data._tramite))infrEarly=infrEarly.slice(0,1);
+    data._presuntos_infractores=JSON.stringify(infrEarly||[]);
+    const f0=(infrEarly&&infrEarly[0])||{};
+    if(f0._pi_tipo_persona){
+      data._pi_tipo_persona=f0._pi_tipo_persona||'natural';
+      ['_pi_nombre','_pi_identificacion','_pi_correo','_pi_telefono','_pi_rep_nombre','_pi_rep_identificacion','_pi_rep_correo','_pi_rep_telefono','_pi_empresa','_pi_nit','_pi_correo_emp','_pi_telefono_emp'].forEach(function(k){data[k]=f0[k]||'';});
+      ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+        data['_pi_'+k]=f0['_pi_'+k]||'';
+        data['_pi_emp_'+k]=f0['_pi_emp_'+k]||'';
+      });
+    }
+  }
   if(stayOnForm){
     const prevRec=exps.find(x=>x._exp===(editId||expId));
     if(prevRec){
@@ -317,17 +331,40 @@ function guardarExpCore(stayOnForm){
     if(data._qd_anonimo){
       data._qd_nombre='';data._qd_identificacion='';data._qd_correo='';data._qd_telefono='';limpiarDirData(data,'qd');
     }
-    if(data._pi_tipo_persona==='juridica'){
-      data._pi_nombre='';data._pi_identificacion='';data._pi_correo='';data._pi_telefono='';limpiarDirData(data,'pi');
-    }else{
-      data._pi_rep_nombre='';data._pi_rep_identificacion='';data._pi_rep_correo='';data._pi_rep_telefono='';
-      data._pi_empresa='';data._pi_nit='';data._pi_correo_emp='';data._pi_telefono_emp='';limpiarDirData(data,'pi_emp');
-    }
+    let infrArr=(typeof collectPresuntosInfractores==='function')?collectPresuntosInfractores():[];
+    if(!esTramiteSancionatorio(data._tramite))infrArr=infrArr.slice(0,1);
+    infrArr=(infrArr||[]).map(function(row){
+      row=Object.assign({},row);
+      if(row._pi_tipo_persona==='juridica'){
+        row._pi_nombre='';row._pi_identificacion='';row._pi_correo='';row._pi_telefono='';
+        ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){row['_pi_'+k]='';});
+      }else{
+        row._pi_rep_nombre='';row._pi_rep_identificacion='';row._pi_rep_correo='';row._pi_rep_telefono='';
+        row._pi_empresa='';row._pi_nit='';row._pi_correo_emp='';row._pi_telefono_emp='';
+        ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){row['_pi_emp_'+k]='';});
+      }
+      return row;
+    });
+    if(!infrArr.length)infrArr=[{_pi_tipo_persona:'natural'}];
+    data._presuntos_infractores=JSON.stringify(infrArr);
+    const first=infrArr[0]||{};
+    data._pi_tipo_persona=first._pi_tipo_persona||'natural';
+    data._pi_nombre=first._pi_nombre||'';data._pi_identificacion=first._pi_identificacion||'';
+    data._pi_correo=first._pi_correo||'';data._pi_telefono=first._pi_telefono||'';
+    data._pi_rep_nombre=first._pi_rep_nombre||'';data._pi_rep_identificacion=first._pi_rep_identificacion||'';
+    data._pi_rep_correo=first._pi_rep_correo||'';data._pi_rep_telefono=first._pi_rep_telefono||'';
+    data._pi_empresa=first._pi_empresa||'';data._pi_nit=first._pi_nit||'';
+    data._pi_correo_emp=first._pi_correo_emp||'';data._pi_telefono_emp=first._pi_telefono_emp||'';
+    ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+      data['_pi_'+k]=first['_pi_'+k]||'';
+      data['_pi_emp_'+k]=first['_pi_emp_'+k]||'';
+    });
   }else{
     data._qd_anonimo=false;data._qd_nombre='';data._qd_identificacion='';data._qd_correo='';data._qd_telefono='';limpiarDirData(data,'qd');
     data._pi_tipo_persona='natural';data._pi_nombre='';data._pi_identificacion='';data._pi_correo='';data._pi_telefono='';limpiarDirData(data,'pi');
     data._pi_rep_nombre='';data._pi_rep_identificacion='';data._pi_rep_correo='';data._pi_rep_telefono='';
     data._pi_empresa='';data._pi_nit='';data._pi_correo_emp='';data._pi_telefono_emp='';limpiarDirData(data,'pi_emp');
+    data._presuntos_infractores='[]';
     if(data._tipo_persona==='juridica'){
       data._pn_nombre='';data._pn_identificacion='';data._pn_correo='';data._pn_telefono='';limpiarDirData(data,'pn');
       data._est_com=false;data._ec_nombre='';data._ec_telefono='';data._ec_correo='';limpiarDirData(data,'ec');

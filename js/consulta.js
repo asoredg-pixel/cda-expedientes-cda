@@ -270,12 +270,28 @@ function renderQuejaView(e){
     if(e._qd_correo)h+='<div class="ic"><div class="k">Correo</div><div class="v">'+e._qd_correo+'</div></div>';
     if(e._qd_telefono)h+='<div class="ic"><div class="k">Teléfono</div><div class="v">'+e._qd_telefono+'</div></div>';
   }
-  const estInf=e._estado||'';
-  if(e._pi_tipo_persona==='juridica'){
-    h+='<div class="ic"><div class="k">Presunto infractor</div><div class="v">'+(e._pi_empresa||e._pi_rep_nombre||'-')+(e._pi_nit?' · NIT '+e._pi_nit:'')+'</div></div>';
-  }else if(e._pi_nombre){
-    h+='<div class="ic"><div class="k">Presunto infractor</div><div class="v">'+e._pi_nombre+(e._pi_identificacion?' · '+e._pi_identificacion:'')+'</div></div>';
+  let infrList=[];
+  try{
+    if(typeof parsePresuntosInfractores==='function')infrList=parsePresuntosInfractores(e);
+    else if(typeof e._presuntos_infractores==='string'&&e._presuntos_infractores.trim())infrList=JSON.parse(e._presuntos_infractores);
+    else if(Array.isArray(e._presuntos_infractores))infrList=e._presuntos_infractores;
+  }catch(err){infrList=[];}
+  if(!infrList.length){
+    if(e._pi_tipo_persona==='juridica'||e._pi_nombre||e._pi_empresa)infrList=[{
+      _pi_tipo_persona:e._pi_tipo_persona||'natural',_pi_nombre:e._pi_nombre,_pi_identificacion:e._pi_identificacion,
+      _pi_empresa:e._pi_empresa,_pi_nit:e._pi_nit,_pi_rep_nombre:e._pi_rep_nombre
+    }];
   }
+  infrList.forEach(function(pi,i){
+    if(!pi)return;
+    const lbl=infrList.length>1?('Presunto infractor '+(i+1)):'Presunto infractor';
+    if(pi._pi_tipo_persona==='juridica'){
+      if(!(pi._pi_empresa||pi._pi_rep_nombre||pi._pi_nit))return;
+      h+='<div class="ic"><div class="k">'+lbl+'</div><div class="v">'+(pi._pi_empresa||pi._pi_rep_nombre||'-')+(pi._pi_nit?' · NIT '+pi._pi_nit:'')+'</div></div>';
+    }else if(pi._pi_nombre){
+      h+='<div class="ic"><div class="k">'+lbl+'</div><div class="v">'+pi._pi_nombre+(pi._pi_identificacion?' · '+pi._pi_identificacion:'')+'</div></div>';
+    }
+  });
   if(e._apoderado&&e._apo_nombre)h+='<div class="ic"><div class="k">Apoderado</div><div class="v">'+e._apo_nombre+'</div></div>';
   if(e._autorizado&&(e._aut_nombre||e._aut_identificacion))h+='<div class="ic"><div class="k">Autorizado</div><div class="v">'+(e._aut_nombre||'-')+(e._aut_identificacion?' · '+e._aut_identificacion:'')+'</div></div>';
   return h+'</div></div>';

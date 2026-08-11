@@ -259,7 +259,7 @@ const DRIVE_INST_DEPTOS = new Set(['guaviare','secretaria','oap_deguv','rn_deguv
 const DRIVE_ROOT_RECURSOS_ID = '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
 
 // Claves que contienen JSON blobs (para sanitización XSS)
-const XSS_JSON_BLOB_KEYS=new Set(['_fechas_estado','_actos_admin','_conceptos_seg','_detalle_notas','_facturas_extra','_info_tecnica_items','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_workflow','_tasks']);
+const XSS_JSON_BLOB_KEYS=new Set(['_fechas_estado','_actos_admin','_conceptos_seg','_detalle_notas','_facturas_extra','_info_tecnica_items','_expedientes_asociados','_pqrs_historial','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_workflow','_tasks','_presuntos_infractores']);
 
 // Roles de personas en expedientes
 const PERSONA_ROLES={interesado:'Interesado',peticionario:'Quejoso / peticionario',apoderado:'Apoderado',autorizado:'Autorizado',infractor:'Presunto infractor'};
