@@ -3625,6 +3625,11 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
 function gmailOfiGetAccountEmail() {
   try { return String(sessionStorage.getItem(GMAIL_OFI_ACCOUNT_KEY) || '').trim().toLowerCase(); } catch(e) { return ''; }
 }
+/** Administrador (pruebas entre roles): puede conectar su propio correo autorizado. */
+function gmailOfiSesionEsAdmin() {
+  return (typeof esAdministrador === 'function' && esAdministrador())
+    || (typeof esAdminFirestore === 'function' && esAdminFirestore());
+}
 /**
  * Cuenta Gmail actualmente usada para envíos de oficina / NCA / Secretaría.
  */
@@ -3678,6 +3683,9 @@ async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
     } catch (err) {
       console.warn('gmailOfiAsegurarCuentaOficinaParaEnvio profile:', err);
     }
+  }
+  if (gmailOfiSesionEsAdmin()) {
+    return { ok: true, admin: true, conectado: conectado, esperado: '', oficina: ofiId };
   }
   const esperado = typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiId) : '';
   const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
@@ -3735,14 +3743,15 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     }
     return false;
   }
-  // Si la sesión es una oficina DEGUV / NCA / Secretaría, exigir el correo del encargado de ese módulo
+  // Si la sesión es una oficina DEGUV / NCA / Secretaría, exigir el correo del encargado de ese módulo.
+  // El administrador navega entre roles para pruebas: basta su correo de usuario autorizado.
   let ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
   if (ofiId === 'responsables') {
     // Responsable NCA / VITAL: el envío institucional es el del encargado NCA
     ofiId = 'guaviare';
   }
   const ofisCorreo = { rn_deguv:1, oap_deguv:1, admin_deguv:1, secretaria:1, guaviare:1 };
-  if (ofisCorreo[ofiId] && typeof getCorreoAutorizadoOficina === 'function') {
+  if (!gmailOfiSesionEsAdmin() && ofisCorreo[ofiId] && typeof getCorreoAutorizadoOficina === 'function') {
     const esperado = getCorreoAutorizadoOficina(ofiId);
     if (esperado && email && email !== esperado) {
       const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
@@ -3880,10 +3889,11 @@ function _updateGmailOfiBtn() {
     const conectado = gmailOfiCuentaConectadaParaEnvio();
     const lbl = typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff;
     if (valid && conectado) {
-      const ok = !esperado || conectado === esperado;
+      const adminOk = typeof gmailOfiSesionEsAdmin === 'function' && gmailOfiSesionEsAdmin();
+      const ok = adminOk || !esperado || conectado === esperado;
       st.style.color = ok ? 'var(--gn)' : 'var(--or)';
       st.textContent = ok
-        ? ('✅ ' + conectado + (esperado ? ' · ' + lbl : ''))
+        ? ('✅ ' + conectado + (adminOk ? ' · Admin' : (esperado ? ' · ' + lbl : '')))
         : ('⚠️ ' + conectado + ' ≠ ' + esperado);
       st.title = ok
         ? ('Envíos PQRSD saldrán de ' + conectado)
