@@ -5594,6 +5594,7 @@ function normalizeTask(t){
   else if(!t.estado)t.estado=estadoTaskRaw(t);
   else if((t.responsables||[]).length>1||(t.asignados||[]).length>1)syncTaskAggregateState(t);
   t.prioritaria=!!t.prioritaria;
+  if(!Array.isArray(t.bibliotecaRepoIds))t.bibliotecaRepoIds=[];
   return t;
 }
 function parseDrivePreviewUrl(url){
@@ -6857,7 +6858,7 @@ function collectEnlacesExpediente(e){
   actosAdminData(e._actos_admin).forEach((a,i)=>{
     ['documento','link','url','enlace','drive'].forEach(k=>{if(a[k])pushUrlsFromValor(add,'Acto administrativo',(a.tipo||'Acto')+' · '+(a.numero||('#'+(i+1))),a[k]);});
   });
-  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_pqrs_historial','_pqrs_workflow','_gmail_email_data','_pqrs_gmail_attachments','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_drive_folder_link','_pqrs_drive_folder_id','_pqrs_drive_solicitud_folder_id','_pqrs_drive_respuesta_folder_id','_pqrs_drive_path_label','_drive_folder_link','_drive_folder_id']);
+  const skipUnderscore=new Set(['_tasks','_fechas_estado','_info_tecnica_items','_detalle_notas','_actos_admin','_conceptos_seg','_facturas_extra','_expedientes_asociados','_biblioteca_repo_ids','_pqrs_historial','_pqrs_workflow','_gmail_email_data','_pqrs_gmail_attachments','_pqrs_respuesta_links','_pqrs_respuesta_soportes','_pqrs_drive_folder_link','_pqrs_drive_folder_id','_pqrs_drive_solicitud_folder_id','_pqrs_drive_respuesta_folder_id','_pqrs_drive_path_label','_drive_folder_link','_drive_folder_id']);
   Object.keys(e).forEach(k=>{
     if(!k.startsWith('_')||skipUnderscore.has(k))return;
     if(/folder[_ ]?id$/i.test(k)||/folder[_ ]?link$/i.test(k)||/path[_ ]?label$/i.test(k))return;
@@ -12134,6 +12135,10 @@ function getExpFlagsArray(e,sh){
   const sg=segFlags(e);
   if(sg.incumplio)flags.push('<span class="flag flag-incumple">⚠️'+(sh?'':' Incumplió req.')+'</span>');
   else if(sg.noCumple)flags.push('<span class="flag flag-ncumple">⚠️'+(sh?'':' No cumple')+'</span>');
+  if(typeof bibExpReposBadgeHtml==='function'){
+    const bib=bibExpReposBadgeHtml(e,sh);
+    if(bib)flags.push(bib);
+  }
   return flags;
 }
 function flagsHtmlCompact(e,sh){
@@ -12865,6 +12870,7 @@ function renderActividadesRowHtml(t){
   const cierreHtml=cierre;
   const refLbl=t.sinExpediente?('<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px;margin-right:4px">Actividad</span>'+escAttr(t.exp)):escAttr(t.exp);
   const priorBadge=t.prioritaria?'<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>':'';
+  const bibBadge=typeof bibTaskReposBadgeHtml==='function'?bibTaskReposBadgeHtml(t):'';
   const altaBadge=(expActPre&&typeof expAltaResponsableBadgeHtml==='function')?expAltaResponsableBadgeHtml(expActPre):'';
   const sol=getTaskSolicitudPendiente(t);
   const solBadge=sol?('<span class="solicitud-pill" title="'+(sol.tipo==='traslado'?'Traslado':'Eliminación')+' solicitada por '+escAttr(sol.por)+'">⚠ Solicitud</span>'):'';
@@ -12959,7 +12965,7 @@ function renderActividadesRowHtml(t){
     t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':'',
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
-  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
+  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td><td>'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+

@@ -929,8 +929,31 @@ function normalizeRecursosScopeItem(item){
 function normalizeRecursosEnlacesList(arr){
   return(Array.isArray(arr)?arr:[]).map(normalizeRecursosScopeItem);
 }
+function bibNormalizeVinculosList(arr){
+  return(Array.isArray(arr)?arr:[]).map(function(v){
+    if(!v||typeof v!=='object')return null;
+    const tipo=String(v.tipo||'').trim();
+    if(tipo!=='expediente'&&tipo!=='pqrsd'&&tipo!=='actividad')return null;
+    const id=String(v.id||'').trim();
+    if(!id)return null;
+    return{
+      tipo:tipo,
+      id:id,
+      taskId:String(v.taskId||'').trim(),
+      label:String(v.label||'').trim(),
+      depto:String(v.depto||'').trim(),
+      libre:!!v.libre,
+      addedAt:v.addedAt||'',
+      addedBy:String(v.addedBy||'').trim()
+    };
+  }).filter(Boolean);
+}
 function normalizeBibliotecaReposList(arr){
-  return(Array.isArray(arr)?arr:[]).map(normalizeRecursosScopeItem);
+  return(Array.isArray(arr)?arr:[]).map(function(item){
+    const n=normalizeRecursosScopeItem(item);
+    if(n&&typeof n==='object')n.vinculados=bibNormalizeVinculosList(n.vinculados);
+    return n;
+  });
 }
 function getOficinasAsignadasSesion(){
   const set=new Set();

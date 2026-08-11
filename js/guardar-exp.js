@@ -29,7 +29,8 @@ function mergeTasksForSave(formTasks,prevTasks){
       ultimaRevisionDepto:ft.ultimaRevisionDepto||p.ultimaRevisionDepto||null,
       requiereFirma:ft.requiereFirma!=null?ft.requiereFirma:p.requiereFirma,
       firmaWf:ft.firmaWf||p.firmaWf||null,
-      publicado:ft.publicado!=null?ft.publicado:p.publicado
+      publicado:ft.publicado!=null?ft.publicado:p.publicado,
+      bibliotecaRepoIds:(ft.bibliotecaRepoIds&&ft.bibliotecaRepoIds.length)?ft.bibliotecaRepoIds:(p.bibliotecaRepoIds||[])
     });
   });
   (prevTasks||[]).map(normalizeTask).forEach(p=>{
@@ -367,6 +368,7 @@ function guardarExpCore(stayOnForm){
     if(prev._pendiente_revision_alta!==undefined)data._pendiente_revision_alta=prev._pendiente_revision_alta;
     if(prev._alta_revisada_en)data._alta_revisada_en=prev._alta_revisada_en;
     if(prev._alta_revisada_por)data._alta_revisada_por=prev._alta_revisada_por;
+    if(prev._biblioteca_repo_ids!=null)data._biblioteca_repo_ids=prev._biblioteca_repo_ids;
     const prevEstado=prev._estado||'';
     exps[idx]={...data,historial:rebuildHistorial(data,prev.historial)};
     editId=expId;

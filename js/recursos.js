@@ -275,6 +275,8 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
       if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
       h += ' <strong>' + escAttr(r.titulo) + '</strong>';
       if (r.tematica) h += ' <span class="rec-tag">' + escAttr(r.tematica) + '</span>';
+      const nv = (r.vinculados || []).length;
+      if (nv) h += ' <span class="rec-tag rec-tag-vinc" title="Casos asociados">' + nv + ' asociado' + (nv === 1 ? '' : 's') + '</span>';
       if (r.descripcion) h += '<div style="font-size:12px;color:var(--tx2);margin-top:4px">' + escAttr(r.descripcion) + '</div>';
       h += '</div>';
       h += '<span style="font-size:12px;color:var(--tx3)">Ver →</span></div>';
@@ -352,6 +354,7 @@ function renderRecursosRepoDetalle(repoId) {
   if (window._recursosRepoForm === r.id) {
     h += renderRecursosRepoForm(r.id);
   }
+  h += renderRecursosRepoVinculosBlock(r, canEdit);
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
   h += '</div>';
   return h;
@@ -663,6 +666,7 @@ async function guardarRecursosRepo(editId) {
       activo: true, createdByAdmin: byAdmin,
       compartidoCon: [],
       archivosCompartidos: [],
+      vinculados: [],
       createdAt: new Date().toISOString(), createdBy: email,
       updatedAt: new Date().toISOString()
     });
@@ -685,9 +689,14 @@ async function eliminarRecursosRepo(id) {
     return;
   }
   if (!confirm('¿Eliminar este repositorio de la biblioteca? (La carpeta en Drive no se borra)')) return;
+  const vinc = bibNormalizeVinculosList(r.vinculados);
   bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
+  vinc.forEach(function(v) { bibRemoveRepoIdFromEntidad(v, id); });
   const ok = await saveRecursosFirestore();
   if (ok) {
+    for (let i = 0; i < vinc.length; i++) {
+      try { await bibPersistEntidadVinculo(vinc[i]); } catch (err) { console.warn('limpiar vínculo al eliminar repo:', err); }
+    }
     window._recursosRepoSel = null;
     notif('Repositorio eliminado', 'ok');
     renderRecursosPanel();
@@ -921,3 +930,422 @@ function recursosCfgEditarRepo(id) {
   window._recursosCfgEditId = id;
   if (typeof renderListasCfg === 'function') renderListasCfg();
 }
+
+// ── Asociación actividad / trámite / PQRSD ↔ repositorio Biblioteca ──────────
+
+function bibVinculoKey(v) {
+  if (!v) return '';
+  return [v.tipo || '', v.id || '', v.taskId || ''].join('|');
+}
+
+function bibGetRepoIdsFromExp(e) {
+  if (!e) return [];
+  const raw = e._biblioteca_repo_ids;
+  if (Array.isArray(raw)) return raw.map(function(x) { return String(x || '').trim(); }).filter(Boolean);
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const a = JSON.parse(raw);
+      return Array.isArray(a) ? a.map(function(x) { return String(x || '').trim(); }).filter(Boolean) : [];
+    } catch (err) { return []; }
+  }
+  return [];
+}
+
+function bibGetRepoIdsFromTask(t) {
+  if (!t) return [];
+  const raw = t.bibliotecaRepoIds;
+  if (Array.isArray(raw)) return raw.map(function(x) { return String(x || '').trim(); }).filter(Boolean);
+  return [];
+}
+
+function bibTipoLabel(tipo) {
+  if (tipo === 'pqrsd') return 'PQRSD';
+  if (tipo === 'actividad') return 'Actividad';
+  return 'Trámite';
+}
+
+function bibResolveTaskRef(v) {
+  if (!v || v.tipo !== 'actividad') return null;
+  if (v.libre || (typeof isActLibreRef === 'function' && isActLibreRef(v.id, v.taskId))) {
+    return (typeof getActLibreById === 'function' && getActLibreById(v.taskId))
+      || (typeof getActLibreByCodigo === 'function' && getActLibreByCodigo(v.id))
+      || null;
+  }
+  const e = typeof getExpById === 'function' ? getExpById(v.id) : null;
+  if (!e) return null;
+  return (e.tasks || []).find(function(x) { return x && String(x.id) === String(v.taskId); }) || null;
+}
+
+function bibAddRepoIdToEntidad(v, repoId) {
+  if (!v || !repoId) return false;
+  if (v.tipo === 'expediente' || v.tipo === 'pqrsd') {
+    const e = typeof getExpById === 'function' ? getExpById(v.id) : null;
+    if (!e) return false;
+    const ids = bibGetRepoIdsFromExp(e);
+    if (ids.indexOf(repoId) < 0) ids.push(repoId);
+    e._biblioteca_repo_ids = ids;
+    return true;
+  }
+  if (v.tipo === 'actividad') {
+    const t = bibResolveTaskRef(v);
+    if (!t) return false;
+    if (!Array.isArray(t.bibliotecaRepoIds)) t.bibliotecaRepoIds = [];
+    if (t.bibliotecaRepoIds.indexOf(repoId) < 0) t.bibliotecaRepoIds.push(repoId);
+    return true;
+  }
+  return false;
+}
+
+function bibRemoveRepoIdFromEntidad(v, repoId) {
+  if (!v || !repoId) return false;
+  if (v.tipo === 'expediente' || v.tipo === 'pqrsd') {
+    const e = typeof getExpById === 'function' ? getExpById(v.id) : null;
+    if (!e) return false;
+    e._biblioteca_repo_ids = bibGetRepoIdsFromExp(e).filter(function(id) { return id !== repoId; });
+    return true;
+  }
+  if (v.tipo === 'actividad') {
+    const t = bibResolveTaskRef(v);
+    if (!t) return false;
+    t.bibliotecaRepoIds = bibGetRepoIdsFromTask(t).filter(function(id) { return id !== repoId; });
+    return true;
+  }
+  return false;
+}
+
+async function bibPersistEntidadVinculo(v) {
+  if (!v) return false;
+  if (v.tipo === 'expediente' || v.tipo === 'pqrsd') {
+    const e = typeof getExpById === 'function' ? getExpById(v.id) : null;
+    if (!e) return false;
+    if (typeof persistExpedienteGranularAsync === 'function') return !!(await persistExpedienteGranularAsync(e, true));
+    if (typeof persistExpedienteGranular === 'function') { persistExpedienteGranular(e, true); return true; }
+    return false;
+  }
+  if (v.tipo === 'actividad') {
+    if (v.libre || (typeof isActLibreRef === 'function' && isActLibreRef(v.id, v.taskId))) {
+      if (typeof persistActividadesLibresFirestore === 'function') return !!(await persistActividadesLibresFirestore());
+      return false;
+    }
+    const e = typeof getExpById === 'function' ? getExpById(v.id) : null;
+    if (!e) return false;
+    if (typeof persistExpedienteGranularAsync === 'function') return !!(await persistExpedienteGranularAsync(e, true));
+    if (typeof persistExpedienteGranular === 'function') { persistExpedienteGranular(e, true); return true; }
+  }
+  return false;
+}
+
+function bibCandidatosAsociar(tipo, q) {
+  const ql = String(q || '').trim().toLowerCase();
+  const out = [];
+  const pushExp = function(e, tipoForce) {
+    if (!e || (typeof expEstaEnPapelera === 'function' && expEstaEnPapelera(e))) return;
+    const esPqrs = typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e);
+    const tip = tipoForce || (esPqrs ? 'pqrsd' : 'expediente');
+    if (tipo === 'expediente' && tip !== 'expediente') return;
+    if (tipo === 'pqrsd' && tip !== 'pqrsd') return;
+    const id = String(e._exp || '').trim();
+    if (!id) return;
+    const nom = typeof getNom === 'function' ? getNom(e) : '';
+    const hay = (id + ' ' + nom + ' ' + (e._tramite || '')).toLowerCase();
+    if (ql && hay.indexOf(ql) < 0) return;
+    out.push({
+      tipo: tip,
+      id: id,
+      taskId: '',
+      libre: false,
+      depto: e._depto || '',
+      label: id + ' · ' + (nom || tip)
+    });
+  };
+  const pushAct = function(t, expId, libre) {
+    if (!t || t.eliminada) return;
+    const tid = String(t.id || '').trim();
+    if (!tid) return;
+    const ref = libre ? String(t.codigo || t.id || '') : String(expId || '');
+    const act = String(t.actividad || t.desc || '').trim();
+    const hay = (ref + ' ' + act + ' ' + (t.responsable || '')).toLowerCase();
+    if (ql && hay.indexOf(ql) < 0) return;
+    out.push({
+      tipo: 'actividad',
+      id: ref,
+      taskId: tid,
+      libre: !!libre,
+      depto: t.depto || '',
+      label: (libre ? 'Libre · ' : '') + ref + ' · ' + (act || 'Actividad')
+    });
+  };
+
+  if (!tipo || tipo === 'expediente' || tipo === 'pqrsd') {
+    (exps || []).forEach(function(e) { pushExp(e); });
+  }
+  if (!tipo || tipo === 'actividad') {
+    (exps || []).forEach(function(e) {
+      if (!e || (typeof expEstaEnPapelera === 'function' && expEstaEnPapelera(e))) return;
+      (e.tasks || []).forEach(function(t) { pushAct(t, e._exp, false); });
+    });
+    (actividadesLibres || []).forEach(function(t) { pushAct(t, '', true); });
+  }
+  return out.slice(0, 40);
+}
+
+function renderRecursosRepoVinculosBlock(r, canEdit) {
+  const list = bibNormalizeVinculosList(r && r.vinculados);
+  let h = '<div class="rec-vinc-block">';
+  h += '<div class="cft" style="margin:14px 0 8px">Casos asociados <span style="font-weight:400;color:var(--tx3);font-size:12px">(' + list.length + ')</span></div>';
+  h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Vincule trámites, PQRSD o actividades que compartan el contexto de esta carpeta.</p>';
+
+  if (canEdit) {
+    h += '<div class="rec-vinc-form">';
+    h += '<select id="rec-bib-vinc-tipo" class="rec-inp" onchange="bibRefreshBusquedaVinculos()">';
+    h += '<option value="">Todos</option>';
+    h += '<option value="expediente">Trámite / expediente</option>';
+    h += '<option value="pqrsd">PQRSD</option>';
+    h += '<option value="actividad">Actividad</option>';
+    h += '</select>';
+    h += '<input type="search" id="rec-bib-vinc-q" class="rec-inp" placeholder="Buscar por N°, nombre o actividad…" oninput="bibRefreshBusquedaVinculos()">';
+    h += '</div>';
+    h += '<div id="rec-bib-vinc-results" class="rec-vinc-results"></div>';
+  }
+
+  if (!list.length) {
+    h += '<div class="rec-empty" style="padding:12px">Aún no hay casos asociados a esta carpeta.</div>';
+  } else {
+    h += '<div class="rec-vinc-list">';
+    list.forEach(function(v) {
+      h += '<div class="rec-vinc-row">';
+      h += '<div><span class="rec-badge">' + escAttr(bibTipoLabel(v.tipo)) + '</span> ';
+      h += '<strong>' + escAttr(v.label || v.id) + '</strong>';
+      if (v.depto) h += ' <span style="font-size:11px;color:var(--tx3)">· ' + escAttr(typeof labelDepartamento === 'function' ? labelDepartamento(v.depto) : v.depto) + '</span>';
+      h += '</div><div class="rec-vinc-acts">';
+      h += '<button type="button" class="btn bsm" onclick="bibAbrirVinculo(\'' + escAttr(v.tipo) + '\',\'' + escAttr(v.id) + '\',\'' + escAttr(v.taskId || '') + '\')">Abrir</button>';
+      if (canEdit) {
+        h += '<button type="button" class="btn bsm bd2" onclick="bibDesasociarDeRepo(\'' + escAttr(r.id) + '\',\'' + escAttr(v.tipo) + '\',\'' + escAttr(v.id) + '\',\'' + escAttr(v.taskId || '') + '\')">Quitar</button>';
+      }
+      h += '</div></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  setTimeout(function() { if (canEdit) bibRefreshBusquedaVinculos(); }, 0);
+  return h;
+}
+
+function bibRefreshBusquedaVinculos() {
+  const el = document.getElementById('rec-bib-vinc-results');
+  if (!el) return;
+  const tipoEl = document.getElementById('rec-bib-vinc-tipo');
+  const qEl = document.getElementById('rec-bib-vinc-q');
+  const tipo = tipoEl ? tipoEl.value : '';
+  const q = qEl ? qEl.value : '';
+  const repoId = window._recursosRepoSel;
+  const r = getRecursosRepoById(repoId);
+  const existing = new Set(bibNormalizeVinculosList(r && r.vinculados).map(bibVinculoKey));
+  if (!String(q || '').trim() || String(q).trim().length < 2) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:6px 0">Escriba al menos 2 caracteres para buscar.</div>';
+    return;
+  }
+  const cands = bibCandidatosAsociar(tipo, q).filter(function(c) { return !existing.has(bibVinculoKey(c)); });
+  if (!cands.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--tx3);padding:6px 0">Sin resultados.</div>';
+    return;
+  }
+  el.innerHTML = cands.map(function(c) {
+    return '<div class="rec-vinc-cand">' +
+      '<span><span class="rec-badge">' + escAttr(bibTipoLabel(c.tipo)) + '</span> ' + escAttr(c.label) + '</span>' +
+      '<button type="button" class="btn bsm bp" onclick="bibAsociarARepo(\'' + escAttr(repoId) + '\',\'' + escAttr(c.tipo) + '\',\'' + escAttr(c.id) + '\',\'' + escAttr(c.taskId || '') + '\',' + (c.libre ? 'true' : 'false') + ')">Asociar</button>' +
+      '</div>';
+  }).join('');
+}
+
+async function bibAsociarARepo(repoId, tipo, id, taskId, libre) {
+  const r = getRecursosRepoById(repoId);
+  if (!r) { notif('Repositorio no encontrado', 'err'); return; }
+  const s = getRepoScope(r);
+  if (!puedeEditarBiblioteca(s.scope, s.scopeId)) { notif('Sin permiso para asociar casos a esta carpeta', 'err'); return; }
+
+  let label = id;
+  let depto = '';
+  let isLibre = !!libre;
+  if (tipo === 'expediente' || tipo === 'pqrsd') {
+    const e = typeof getExpById === 'function' ? getExpById(id) : null;
+    if (!e) { notif('Expediente no encontrado', 'err'); return; }
+    if (typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e)) tipo = 'pqrsd';
+    else tipo = 'expediente';
+    label = id + ' · ' + (typeof getNom === 'function' ? getNom(e) : '');
+    depto = e._depto || '';
+  } else if (tipo === 'actividad') {
+    const vTmp = { tipo: 'actividad', id: id, taskId: taskId, libre: isLibre };
+    const t = bibResolveTaskRef(vTmp);
+    if (!t) { notif('Actividad no encontrada', 'err'); return; }
+    isLibre = !!(t.sinExpediente || isLibre || (typeof isActLibreRef === 'function' && isActLibreRef(id, taskId)));
+    label = (isLibre ? 'Libre · ' : '') + id + ' · ' + (t.actividad || t.desc || 'Actividad');
+    depto = t.depto || '';
+  } else {
+    notif('Tipo no válido', 'err');
+    return;
+  }
+
+  const vinc = {
+    tipo: tipo,
+    id: String(id || '').trim(),
+    taskId: String(taskId || '').trim(),
+    label: label,
+    depto: depto,
+    libre: isLibre,
+    addedAt: new Date().toISOString(),
+    addedBy: (typeof getAuthEmailNorm === 'function' ? getAuthEmailNorm() : '') || ''
+  };
+  if (!Array.isArray(r.vinculados)) r.vinculados = [];
+  if (r.vinculados.some(function(x) { return bibVinculoKey(x) === bibVinculoKey(vinc); })) {
+    notif('Ya está asociado a esta carpeta', 'err');
+    return;
+  }
+  r.vinculados.push(vinc);
+  bibAddRepoIdToEntidad(vinc, repoId);
+  r.updatedAt = new Date().toISOString();
+
+  const okRepo = await saveRecursosFirestore();
+  const okEnt = await bibPersistEntidadVinculo(vinc);
+  if (okRepo) {
+    notif(okEnt ? 'Asociado a la carpeta' : 'Asociado en carpeta (revise sync del caso)', okEnt ? 'ok' : 'warn');
+    if (typeof logAudit === 'function') logAudit('Asoció ' + bibTipoLabel(tipo) + ' a biblioteca', 'recursos', vinc.id, r.titulo);
+    renderRecursosPanel();
+  } else {
+    r.vinculados = r.vinculados.filter(function(x) { return bibVinculoKey(x) !== bibVinculoKey(vinc); });
+    bibRemoveRepoIdFromEntidad(vinc, repoId);
+    notif('No se pudo guardar la asociación', 'err');
+  }
+}
+
+async function bibDesasociarDeRepo(repoId, tipo, id, taskId) {
+  const r = getRecursosRepoById(repoId);
+  if (!r) return;
+  const s = getRepoScope(r);
+  if (!puedeEditarBiblioteca(s.scope, s.scopeId)) { notif('Sin permiso', 'err'); return; }
+  const key = [tipo, id, taskId || ''].join('|');
+  const found = bibNormalizeVinculosList(r.vinculados).find(function(v) { return bibVinculoKey(v) === key; });
+  if (!found) return;
+  if (!confirm('¿Quitar esta asociación de la carpeta?')) return;
+  r.vinculados = bibNormalizeVinculosList(r.vinculados).filter(function(v) { return bibVinculoKey(v) !== key; });
+  bibRemoveRepoIdFromEntidad(found, repoId);
+  r.updatedAt = new Date().toISOString();
+  const okRepo = await saveRecursosFirestore();
+  const okEnt = await bibPersistEntidadVinculo(found);
+  if (okRepo) {
+    notif(okEnt ? 'Asociación eliminada' : 'Quitado de la carpeta (revise sync del caso)', okEnt ? 'ok' : 'warn');
+    renderRecursosPanel();
+  } else notif('No se pudo guardar', 'err');
+}
+
+function bibAbrirVinculo(tipo, id, taskId) {
+  if (tipo === 'expediente' || tipo === 'pqrsd') {
+    if (typeof showTab === 'function') showTab('con');
+    if (typeof abrirConsultaExpPanel === 'function') abrirConsultaExpPanel(id, { allowSingle: true, edit: false });
+    return;
+  }
+  if (tipo === 'actividad') {
+    if (typeof isActLibreRef === 'function' && isActLibreRef(id, taskId)) {
+      if (typeof showTab === 'function') showTab('act');
+      if (typeof openEditarActTaskModal === 'function') openEditarActTaskModal(id, taskId);
+      else if (typeof openTaskCommentsModal === 'function') openTaskCommentsModal(id, taskId);
+      return;
+    }
+    if (typeof showTab === 'function') showTab('con');
+    if (typeof abrirConsultaExpPanelDesdeAct === 'function') abrirConsultaExpPanelDesdeAct(id, taskId);
+    else if (typeof abrirConsultaExpPanel === 'function') abrirConsultaExpPanel(id, { allowSingle: true, edit: false });
+  }
+}
+
+function abrirBibliotecaRepoDesdeExp(repoId) {
+  const id = String(repoId || '').trim();
+  if (!id) return;
+  window._recursosSubTab = 'biblioteca';
+  window._recursosRepoSel = id;
+  window._recursosDrivePage = null;
+  if (typeof showTab === 'function') showTab('rec');
+  if (typeof renderRecursosPanel === 'function') renderRecursosPanel();
+  setTimeout(function() {
+    if (typeof recursosDriveConectado === 'function' && recursosDriveConectado() && typeof cargarRecursosRepoArchivos === 'function') {
+      cargarRecursosRepoArchivos();
+    }
+  }, 80);
+}
+
+function bibExpReposBadgeHtml(e, sh) {
+  const ids = bibGetRepoIdsFromExp(e);
+  if (!ids.length) return '';
+  if (ids.length === 1) {
+    const r = getRecursosRepoById(ids[0]);
+    const tit = r && r.titulo ? r.titulo : 'Carpeta';
+    return '<button type="button" class="flag flag-bib" title="Abrir carpeta en Biblioteca" onclick="event.stopPropagation();abrirBibliotecaRepoDesdeExp(\'' + escAttr(ids[0]) + '\')">📁' + (sh ? '' : ' ' + escAttr(tit)) + '</button>';
+  }
+  return '<button type="button" class="flag flag-bib" title="Ver carpetas asociadas" onclick="event.stopPropagation();bibAbrirReposExpModal(\'' + escAttr(e._exp || '') + '\')">📁' + (sh ? '' : ' Carpetas') + ' · ' + ids.length + '</button>';
+}
+
+function bibTaskReposBadgeHtml(t) {
+  const ids = bibGetRepoIdsFromTask(t);
+  if (!ids.length) return '';
+  if (ids.length === 1) {
+    const r = getRecursosRepoById(ids[0]);
+    const tit = r && r.titulo ? r.titulo : 'Carpeta';
+    return '<button type="button" class="bdg flag-bib" style="margin-left:4px;font-size:10px" title="Abrir carpeta en Biblioteca" onclick="event.stopPropagation();abrirBibliotecaRepoDesdeExp(\'' + escAttr(ids[0]) + '\')">📁 ' + escAttr(tit) + '</button>';
+  }
+  return '<button type="button" class="bdg flag-bib" style="margin-left:4px;font-size:10px" title="Carpetas asociadas" onclick="event.stopPropagation();bibAbrirReposTaskModal(\'' + escAttr(t.exp || t.codigo || '') + '\',\'' + escAttr(t.id || '') + '\')">📁 ' + ids.length + '</button>';
+}
+
+function bibAbrirReposExpModal(expId) {
+  const e = typeof getExpById === 'function' ? getExpById(expId) : null;
+  if (!e) return;
+  const ids = bibGetRepoIdsFromExp(e);
+  const ov = document.getElementById('task-modal-overlay');
+  const tit = document.getElementById('task-modal-title');
+  const body = document.getElementById('task-modal-body');
+  if (!ov || !body) {
+    if (ids[0]) abrirBibliotecaRepoDesdeExp(ids[0]);
+    return;
+  }
+  if (tit) tit.textContent = 'Carpetas Biblioteca · ' + expId;
+  body.innerHTML = ids.map(function(id) {
+    const r = getRecursosRepoById(id);
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;gap:8px;align-items:center">' +
+      '<span><strong>' + escAttr(r && r.titulo || id) + '</strong></span>' +
+      '<button type="button" class="btn bsm bp" onclick="closeTaskModal();abrirBibliotecaRepoDesdeExp(\'' + escAttr(id) + '\')">Abrir</button></div>';
+  }).join('') + '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+  ov.classList.add('on');
+}
+
+function bibAbrirReposTaskModal(expRef, taskId) {
+  let t = null;
+  if (typeof isActLibreRef === 'function' && isActLibreRef(expRef, taskId)) {
+    t = (typeof getActLibreById === 'function' && getActLibreById(taskId)) || (typeof getActLibreByCodigo === 'function' && getActLibreByCodigo(expRef));
+  } else {
+    const e = typeof getExpById === 'function' ? getExpById(expRef) : null;
+    t = e && (e.tasks || []).find(function(x) { return x && String(x.id) === String(taskId); });
+  }
+  const ids = bibGetRepoIdsFromTask(t);
+  if (!ids.length) return;
+  if (ids.length === 1) { abrirBibliotecaRepoDesdeExp(ids[0]); return; }
+  const ov = document.getElementById('task-modal-overlay');
+  const tit = document.getElementById('task-modal-title');
+  const body = document.getElementById('task-modal-body');
+  if (!ov || !body) { abrirBibliotecaRepoDesdeExp(ids[0]); return; }
+  if (tit) tit.textContent = 'Carpetas Biblioteca · actividad';
+  body.innerHTML = ids.map(function(id) {
+    const r = getRecursosRepoById(id);
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;gap:8px;align-items:center">' +
+      '<span><strong>' + escAttr(r && r.titulo || id) + '</strong></span>' +
+      '<button type="button" class="btn bsm bp" onclick="closeTaskModal();abrirBibliotecaRepoDesdeExp(\'' + escAttr(id) + '\')">Abrir</button></div>';
+  }).join('') + '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+  ov.classList.add('on');
+}
+
+window.bibAsociarARepo = bibAsociarARepo;
+window.bibDesasociarDeRepo = bibDesasociarDeRepo;
+window.bibAbrirVinculo = bibAbrirVinculo;
+window.abrirBibliotecaRepoDesdeExp = abrirBibliotecaRepoDesdeExp;
+window.bibExpReposBadgeHtml = bibExpReposBadgeHtml;
+window.bibTaskReposBadgeHtml = bibTaskReposBadgeHtml;
+window.bibRefreshBusquedaVinculos = bibRefreshBusquedaVinculos;
+window.bibAbrirReposExpModal = bibAbrirReposExpModal;
+window.bibAbrirReposTaskModal = bibAbrirReposTaskModal;
