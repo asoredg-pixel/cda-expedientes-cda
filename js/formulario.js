@@ -393,7 +393,10 @@ function toggleCasoEspecialMode(){
   const bit=document.getElementById('bloque-infractor-tit');
   if(bit)bit.textContent=(esS?'Presuntos infractores':('Presunto infractor'+(esQD?'':' (opcional)')));
   const addBtn=document.getElementById('btn-add-infractor');
-  if(addBtn)addBtn.style.display=esS?'':'none';
+  if(addBtn){
+    addBtn.style.display=esS?'':'none';
+    if(esS)addBtn.removeAttribute('hidden');else addBtn.setAttribute('hidden','');
+  }
   if(es)toggleQuejaAnonimo();
   toggleInfractor();
 }
@@ -472,9 +475,9 @@ function htmlInfractoresBlock(ev,opts){
   const showAdd=!!opts.esSanc;
   const tit=showAdd?'Presuntos infractores':('Presunto infractor'+(opts.esQuejaDen?'':' (opcional)'));
   return '<div id="bloque-infractores-wrap">'+
-    '<div class="fx" style="justify-content:space-between;align-items:center;margin-top:.8rem">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;gap:8px;margin-top:.8rem;flex-wrap:wrap">'+
     '<div class="slbl" style="margin:0" id="bloque-infractor-tit">'+tit+'</div>'+
-    '<button type="button" class="btn bsm" id="btn-add-infractor" onclick="addInfractorCard()" style="'+(showAdd?'':'display:none')+'">+ Infractor</button>'+
+    '<button type="button" class="btn bsm bp" id="btn-add-infractor" onclick="addInfractorCard()" '+(showAdd?'':'hidden ')+'style="'+(showAdd?'':'display:none')+'">+ Añadir infractor</button>'+
     '</div>'+
     '<div id="infractores-list">'+arr.map(function(pi,i){return htmlInfractorCard(i,pi);}).join('')+'</div></div>';
 }

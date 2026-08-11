@@ -564,26 +564,99 @@ function pqrsEsRolGestionFirmaSinDirector(){
   return false;
 }
 /**
- * VITAL / encargado del depto: pueden registrar «ya firmado en físico» sin subir PDF
- * (p. ej. firma presencial del Director y notificación personal).
+ * Quién gestiona «ya firmado» / Firmados / pasar a notificar según oficina:
+ * - RN / OAP / Admin / Secretaría → solo esa oficina (nunca VITAL)
+ * - NCA → VITAL / NCA / encargado Guaviare
+ */
+function pqrsPuedeGestionarFirmadoExpediente(e){
+  if(!e||!pqrsEsRolGestionFirmaSinDirector())return false;
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
+  if(typeof esAdministrador==='function'&&esAdministrador())return true;
+  const ofi=String(e._pqrs_oficina||'guaviare').trim()||'guaviare';
+  if(typeof pqrsOficinaNotificaSinVital==='function'&&pqrsOficinaNotificaSinVital(ofi)){
+    if(typeof esCargoVital==='function'&&esCargoVital())return false;
+    if((typeof esNcaDeguv==='function'&&esNcaDeguv())||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()))return false;
+    if(typeof esSecretaria==='function'&&esSecretaria()&&ofi==='secretaria')return true;
+    return deptoActivo===ofi;
+  }
+  // Flujo NCA
+  if(typeof esCargoVital==='function'&&esCargoVital())return true;
+  if((typeof esNcaDeguv==='function'&&esNcaDeguv())||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()))return true;
+  if(deptoActivo==='guaviare')return true;
+  return false;
+}
+/**
+ * VITAL (solo NCA) / oficina / encargado: pueden registrar «ya firmado en físico» sin subir PDF
+ * (p. ej. firma presencial del Director y notificación personal / correo / aviso / WhatsApp).
  */
 function pqrsPuedeMarcarFirmadoSinCargar(e){
   if(!e||!pqrsEnPorFirmar(e))return false;
-  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
-  return pqrsEsRolGestionFirmaSinDirector();
+  return pqrsPuedeGestionarFirmadoExpediente(e);
 }
-/** VITAL / NCA / oficinas / encargado: pasar a «Por notificar» tras firmado físico. El Director no. */
+/** VITAL (solo NCA) / oficinas / encargado: pasar a «Por notificar» tras firmado físico. El Director no. */
 function pqrsPuedeAsignarPorNotificar(e){
   if(!e||!pqrsEnPorFirmar(e))return false;
-  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   if(!(wf.firma_fisica&&wf.firma_fisica.en))return false;
-  return pqrsEsRolGestionFirmaSinDirector();
+  return pqrsPuedeGestionarFirmadoExpediente(e);
 }
 function pqrsTieneFirmaFisicaPendiente(e){
   if(!e)return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   return !!(pqrsEnPorFirmar(e)&&wf.firma_fisica&&wf.firma_fisica.en);
+}
+/** Oficinas que notifican ellas mismas (RN, OAP, Admin, Secretaría). VITAL solo aplica a NCA. */
+function pqrsOficinaNotificaSinVital(ofi){
+  ofi=String(ofi||'').trim();
+  return ofi==='rn_deguv'||ofi==='oap_deguv'||ofi==='admin_deguv'||ofi==='secretaria';
+}
+/** PQRSD del flujo NCA (VITAL / encargado NCA notifican). */
+function pqrsEsFlujoNcaNotif(e){
+  const ofi=String((e&&e._pqrs_oficina)||'guaviare').trim()||'guaviare';
+  return !pqrsOficinaNotificaSinVital(ofi);
+}
+/** Notificador por defecto según oficina de la PQRSD. */
+function pqrsDefaultNotificadorOficina(ofi){
+  ofi=String(ofi||'guaviare').trim()||'guaviare';
+  if(pqrsOficinaNotificaSinVital(ofi)){
+    const enc=typeof getEncargadoOficina==='function'?String(getEncargadoOficina(ofi)||'').trim():'';
+    if(enc)return enc;
+    const resps=typeof getResponsablesOficinaPqrs==='function'?(getResponsablesOficinaPqrs(ofi)||[]):[];
+    if(resps.length&&String(resps[0]||'').trim())return String(resps[0]).trim();
+    return typeof labelOficina==='function'?String(labelOficina(ofi)||ofi):ofi;
+  }
+  const vital=(typeof pqrsNombresVital==='function'?pqrsNombresVital():[])[0];
+  if(vital)return vital;
+  const encNca=typeof getEncargadoOficina==='function'?String(getEncargadoOficina('guaviare')||'').trim():'';
+  if(encNca)return encNca;
+  if(typeof getEncargadoDepto==='function'){
+    const enc=String(getEncargadoDepto('guaviare')||'').trim();
+    if(enc)return enc;
+  }
+  return '';
+}
+/** ¿El nombre es un usuario VITAL? */
+function pqrsNombreEsVital(nombre){
+  const n=String(nombre||'').trim();
+  if(!n)return false;
+  return (typeof pqrsNombresVital==='function'?pqrsNombresVital():[]).some(function(v){
+    return typeof agendaNorm==='function'?agendaNorm(v)===agendaNorm(n):v===n;
+  });
+}
+/**
+ * Asegura notificador correcto: oficinas → su encargado (nunca VITAL);
+ * NCA → VITAL/encargado. Corrige si quedó VITAL en PQRSD de oficina.
+ */
+function pqrsAsegurarNotificadorSegunOficina(e,preferido){
+  if(!e)return String(preferido||'').trim();
+  const ofi=String(e._pqrs_oficina||'guaviare').trim()||'guaviare';
+  let prefer=String(preferido||'').trim();
+  if(pqrsOficinaNotificaSinVital(ofi)){
+    if(!prefer||pqrsNombreEsVital(prefer))prefer=pqrsDefaultNotificadorOficina(ofi);
+    return prefer;
+  }
+  if(!prefer)prefer=pqrsDefaultNotificadorOficina(ofi);
+  return prefer;
 }
 /** Nombres de usuarios con cargo VITAL. */
 function pqrsNombresVital(){
@@ -601,17 +674,29 @@ function pqrsNombresVital(){
   });
   return out;
 }
-/** Solo VITAL o Encargado de la oficina pueden notificar por correo. */
+/**
+ * Notificadores autorizados por correo según oficina:
+ * - NCA (guaviare): VITAL + Encargado NCA
+ * - RN / OAP / Admin / Secretaría: Encargado y responsables de esa oficina (sin VITAL)
+ */
 function pqrsNotificadoresAutorizadosCorreo(ofi){
   ofi=String(ofi||'guaviare').trim()||'guaviare';
   const names=[];
-  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(ofi)||'').trim():'';
-  if(enc)names.push(enc);
-  pqrsNombresVital().forEach(function(n){
-    if(!n)return;
-    if(names.some(function(x){return typeof agendaNorm==='function'?agendaNorm(x)===agendaNorm(n):x===n;}))return;
-    names.push(n);
-  });
+  const add=function(n){
+    const v=String(n||'').trim();
+    if(!v)return;
+    if(names.some(function(x){return typeof agendaNorm==='function'?agendaNorm(x)===agendaNorm(v):x===v;}))return;
+    names.push(v);
+  };
+  if(pqrsOficinaNotificaSinVital(ofi)){
+    add(typeof getEncargadoOficina==='function'?getEncargadoOficina(ofi):'');
+    if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
+    return names;
+  }
+  // Flujo NCA
+  add(typeof getEncargadoOficina==='function'?getEncargadoOficina('guaviare'):'');
+  add(typeof getEncargadoDepto==='function'?getEncargadoDepto('guaviare'):'');
+  pqrsNombresVital().forEach(add);
   return names;
 }
 function pqrsEsNotificadorAutorizadoCorreo(nombre,ofi){
@@ -621,10 +706,14 @@ function pqrsEsNotificadorAutorizadoCorreo(nombre,ofi){
     return typeof agendaNorm==='function'?agendaNorm(x)===agendaNorm(n):x===n;
   });
 }
-/** Si canal=correo: fuerza notificador a VITAL o Encargado (preferencia: el indicado si es válido → VITAL → Encargado). */
+/** Resuelve notificador para correo: oficinas → encargado; NCA → VITAL/encargado. */
 function pqrsResolverNotificadorCorreo(ofi,preferido){
+  ofi=String(ofi||'guaviare').trim()||'guaviare';
   const auth=pqrsNotificadoresAutorizadosCorreo(ofi);
   if(preferido&&pqrsEsNotificadorAutorizadoCorreo(preferido,ofi))return String(preferido).trim();
+  if(pqrsOficinaNotificaSinVital(ofi)){
+    return auth[0]||pqrsDefaultNotificadorOficina(ofi)||'';
+  }
   const vital=pqrsNombresVital()[0];
   if(vital)return vital;
   return auth[0]||'';
@@ -636,22 +725,32 @@ function pqrsAplicarReglaNotificadorCanal(e,canal,notificarPor){
   if(typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(canal)){
     return pqrsResolverNotificadorCorreo(ofi,prefer);
   }
-  return prefer;
+  // Otros canales: oficinas nunca dejan VITAL; NCA respeta preferencia o default
+  return pqrsAsegurarNotificadorSegunOficina(e,prefer);
 }
 function pqrsPuedeNotificarOficio(e){
   if(!e)return false;
   const f=pqrsWorkflowFase(e);
   if(f!==PQRS_WF.PENDIENTE_NOTIF&&f!==PQRS_WF.LISTA_ENVIO)return false;
   if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
-  if(esCargoVital()||esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())return true;
-  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&deptoActivo!=='ds_deguv')return true;
-  if(typeof esSecretaria==='function'&&esSecretaria())return true;
+  // VITAL solo notifica PQRSD del flujo NCA
+  if(typeof esCargoVital==='function'&&esCargoVital()){
+    return pqrsEsFlujoNcaNotif(e);
+  }
+  if(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())return true;
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&deptoActivo!=='ds_deguv'){
+    // Oficina solo notifica las de su propia oficina
+    return !e._pqrs_oficina||e._pqrs_oficina===deptoActivo;
+  }
+  if(typeof esSecretaria==='function'&&esSecretaria()){
+    return e._pqrs_oficina==='secretaria';
+  }
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   const notifPor=String(wf.notificar_por||'').trim();
   // Designado explícitamente como notificador
   if(esModoResponsable()&&responsableActivo&&notifPor){
     if(agendaNorm(notifPor)===agendaNorm(responsableActivo))return true;
-    if(/^vital$/i.test(notifPor)&&typeof esCargoVital==='function'&&esCargoVital())return true;
+    if(/^vital$/i.test(notifPor)&&typeof esCargoVital==='function'&&esCargoVital()&&pqrsEsFlujoNcaNotif(e))return true;
     // Si ya hay notificador designado, otros responsables no lo ven en «Por notificar»
     return false;
   }
@@ -2109,7 +2208,11 @@ async function submitPqrsRespuestaParaFirma(expId){
 
     const wf=getPqrsWorkflow(e);
     const docsFinal=documentos;
-    let notifPor=pqrsAplicarReglaNotificadorCanal(e,canal,wf.notificar_por||wf.notificar_por_propuesto||'');
+    // Oficinas: notificador = misma oficina (encargado / quien envía). VITAL solo en flujo NCA.
+    let notifPor=pqrsAplicarReglaNotificadorCanal(e,canal,wf.notificar_por||wf.notificar_por_propuesto||responsableActivo||'');
+    if(typeof pqrsAsegurarNotificadorSegunOficina==='function'){
+      notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor||responsableActivo||'');
+    }
     const por=responsableActivo||labelOficina(deptoActivo)||rolSesion||'';
     const correosCiud=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
     const patchWf={
@@ -12448,11 +12551,16 @@ function esTramitePqrs(tid){
   return n==='pqrsd'||n.includes('pqrsd')||n.includes('pqrs');
 }
 function esTramiteSancionatorio(tid){
+  if(!tid)return false;
   if(tid==='t_sanc')return true;
-  const t=getTram(tid);
-  if(!t)return false;
+  const t=typeof getTram==='function'?getTram(tid):null;
+  if(!t){
+    const n0=String(tid||'').toLowerCase().trim().replace(/\s+/g,'');
+    return n0==='sancionatorio'||n0.includes('sancionatorio');
+  }
   const n=(t.nombre||'').toLowerCase().trim().replace(/\s+/g,'');
-  return n==='sancionatorio';
+  const id=String(t.id||'').toLowerCase();
+  return id==='t_sanc'||n==='sancionatorio'||n.includes('sancionatorio');
 }
 function esModoCasoEspecial(ev){return !!(ev&&ev._tramite&&(esTramitePqrs(ev._tramite)||esTramiteSancionatorio(ev._tramite)));}
 function esModoPqrs(ev){return esModoCasoEspecial(ev);}
@@ -16049,21 +16157,27 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
   const ofi=String((esPqrs?(e&&e._pqrs_oficina):'')||(e&&e._depto)||opts.deptoId||deptoActivo||'guaviare').trim();
   const enc=typeof getEncargadoDepto==='function'?getEncargadoDepto(ofi):'';
   const canalEff=String(opts.canal||(wf&&wf.canal)||(document.getElementById('pqrs-resp-canal')||{}).value||(document.getElementById('pqrs-notif-canal')||{}).value||'').trim();
-  // Correo en PQRSD: solo VITAL/Encargado. En trámites (o canal no-correo) listar responsables del depto.
+  const ofiSinVital=typeof pqrsOficinaNotificaSinVital==='function'&&pqrsOficinaNotificaSinVital(ofi);
+  // Correo PQRSD: NCA → VITAL/Encargado; oficinas → encargados/responsables de esa oficina
   const soloCorreo=!!esPqrs&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(canalEff)&&!opts.todosResponsables;
   const names=new Set();
   const add=n=>{const v=String(n||'').trim();if(v)names.add(v);};
-  if(soloCorreo){
+  if(soloCorreo||(esPqrs&&ofiSinVital&&!opts.todosResponsables)){
     pqrsNotificadoresAutorizadosCorreo(ofi).forEach(add);
+    if(ofiSinVital){
+      add(wf&&wf.entregado_por);
+      add(selected);
+      if(typeof getEncargadoOficina==='function')add(getEncargadoOficina(ofi));
+      if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
+    }
   }else{
-    // Flujo NCA ↔ responsables Guaviare: no incluir encargados de DS/Admin/RN/OAP/Secretaría
+    // Flujo NCA ↔ responsables Guaviare
     add(wf&&wf.entregado_por);
     add(wf&&wf.notificar_por);
     add(wf&&wf.notificar_por_propuesto);
     add(selected);
     if(typeof getResponsablesNcaDeguv==='function')(getResponsablesNcaDeguv()||[]).forEach(add);
-    // Si la PQRSD es de otra oficina, sumar responsables de esa oficina (no encargados DEGUV)
-    if(esPqrs&&ofi&&ofi!=='guaviare'&&ofi!=='ds_deguv'&&ofi!=='admin_deguv'&&ofi!=='rn_deguv'&&ofi!=='oap_deguv'&&ofi!=='secretaria'){
+    if(esPqrs&&ofi&&ofi!=='guaviare'&&ofi!=='ds_deguv'&&!ofiSinVital){
       if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
     }
     if(esPqrs){
@@ -16076,7 +16190,6 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
         (tk.responsables||[]).forEach(add);
         (tk.asignados||[]).forEach(function(a){add(a&&a.nombre);});
       });
-      // Actividad sin expediente: sumar encargado y responsables de la oficina
       if(e._sin_expediente){
         add(enc);
         if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi)||[]).forEach(add);
@@ -16084,14 +16197,24 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
       }
     }
   }
+  // En oficinas autónomas nunca listar VITAL
+  if(ofiSinVital&&typeof pqrsNombresVital==='function'){
+    (pqrsNombresVital()||[]).forEach(function(v){names.delete(String(v||'').trim());});
+  }
   const propuesto=String((wf&&(wf.notificar_por||wf.notificar_por_propuesto))||'').trim();
   let cur=String(selected||propuesto||(wf&&wf.entregado_por)||'').trim();
-  if(soloCorreo)cur=pqrsResolverNotificadorCorreo(ofi,cur);
-  let optsHtml=soloCorreo
-    ?'<option value="">— VITAL o Encargado (obligatorio para correo) —</option>'
-    :'<option value="">— Seleccione quién notificará —</option>';
+  if(soloCorreo||(esPqrs&&ofiSinVital)){
+    cur=typeof pqrsAsegurarNotificadorSegunOficina==='function'
+      ?pqrsAsegurarNotificadorSegunOficina(e,cur)
+      :pqrsResolverNotificadorCorreo(ofi,cur);
+  }
+  let optsHtml=ofiSinVital
+    ?'<option value="">— Encargado o responsable de la oficina —</option>'
+    :(soloCorreo
+      ?'<option value="">— VITAL o Encargado (obligatorio para correo) —</option>'
+      :'<option value="">— Seleccione quién notificará —</option>');
   [...names].sort((a,b)=>a.localeCompare(b,'es')).forEach(n=>{
-    const esVitalUser=typeof pqrsNombresVital==='function'&&pqrsNombresVital().some(function(v){return agendaNorm(v)===agendaNorm(n);});
+    const esVitalUser=!ofiSinVital&&typeof pqrsNombresVital==='function'&&pqrsNombresVital().some(function(v){return agendaNorm(v)===agendaNorm(n);});
     const tags=[];
     if(n===(wf&&wf.entregado_por))tags.push('Proyectó');
     if(esVitalUser)tags.push('VITAL');
@@ -16101,27 +16224,31 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
   let label='Quién notificará al ciudadano';
   let sub='';
   let hint='Tras la firma del Director, esa persona verá la actividad en <strong>Por notificar</strong>.';
-  if(soloCorreo){
-    hint='<strong>Notificación por correo:</strong> solo puede notificar <strong>VITAL</strong> o el <strong>Encargado</strong>. El mensaje sale del correo de la oficina.';
+  if(ofiSinVital){
+    hint='<strong>Esta oficina notifica:</strong> correo, personal, aviso o WhatsApp. <strong>VITAL solo notifica PQRSD de NCA.</strong>';
+  }else if(soloCorreo){
+    hint='<strong>Notificación por correo (NCA):</strong> solo puede notificar <strong>VITAL</strong> o el <strong>Encargado</strong>.';
   }
   if(modo==='entrega'){
     label='¿Quién debería notificar al ciudadano?';
-    sub=' <span style="font-weight:400;color:var(--tx3)">(sugerencia — VITAL / encargado pueden cambiarla)</span>';
-    hint=soloCorreo?hint:'Solo aplica a oficio firmado. Quien quede designado verá la actividad en <strong>Por notificar</strong> cuando el Director ya haya firmado.';
+    sub=ofiSinVital
+      ?' <span style="font-weight:400;color:var(--tx3)">(sugerencia — la oficina puede cambiarla)</span>'
+      :' <span style="font-weight:400;color:var(--tx3)">(sugerencia — VITAL / encargado pueden cambiarla)</span>';
+    hint=ofiSinVital||soloCorreo?hint:'Solo aplica a oficio firmado. Quien quede designado verá la actividad en <strong>Por notificar</strong> cuando el Director ya haya firmado.';
   }else if(modo==='revision'){
     label='Quién notificará al ciudadano';
     sub=' <span style="font-weight:400;color:var(--tx3)">(después de la firma)</span>';
-    hint=soloCorreo?hint:(propuesto
+    hint=(ofiSinVital||soloCorreo)?hint:(propuesto
       ?('El responsable sugirió: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo. Solo se refleja en actividades del notificador cuando pase a <strong>Por notificar</strong>.')
       :'Opcional. Si no elige, VITAL / encargado lo definirán al pasar a firma.');
   }else if(modo==='firma'){
     label='Quién notificará al ciudadano';
     sub=' <span style="font-weight:400;color:var(--tx3)">(después de la firma del Director)</span>';
-    hint=soloCorreo?hint:(propuesto
+    hint=(ofiSinVital||soloCorreo)?hint:(propuesto
       ?('Selección previa: <strong>'+escAttr(propuesto)+'</strong>'+(wf&&wf.entregado_por?' (propuesta de '+escAttr(wf.entregado_por)+')':'')+'. Puede confirmarla o cambiarla.')
       :hint);
   }else if(modo==='director'){
-    hint=soloCorreo?hint:(propuesto
+    hint=(ofiSinVital||soloCorreo)?hint:(propuesto
       ?('Ya hay alguien asignado para notificar: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo antes de pasar a Por notificar.')
       :hint);
   }
@@ -16364,8 +16491,8 @@ function openPqrsDirectorFirmarModal(expId,mode){
 
   const intro=esAtajo
     ?(firmFis
-      ?('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. El Director <strong>ya firmó</strong>. Elija quién notificará, notifique usted, o cargue el documento ya notificado para cerrar la actividad.')
-      :('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Si el Director <strong>ya firmó en físico</strong>, registre «ya firmado» <strong>sin subir PDF</strong> (pasará a Firmados).'))
+      ?('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. El Director <strong>ya firmó</strong>. Elija quién notificará (su oficina), notifique por correo / personal / aviso / WhatsApp, o cargue el documento ya notificado para cerrar.')
+      :('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Si el Director <strong>ya firmó en físico</strong>, registre «ya firmado» <strong>sin subir PDF</strong> (pasará a Firmados). Luego adjunte y notifique desde su oficina.'))
     :('Oficio: <strong>'+escAttr(wf.oficio||'—')+'</strong>. Revise el documento y use las acciones de la bandeja (Ver / Cargar / Ya firmado / Devolver).');
 
   const bloqueVitalSinCargar=esAtajo
@@ -16437,7 +16564,7 @@ function openPqrsDirectorAccionModal(expId,mode){
   }else if(mode==='cargar'){
     titulo='⬆ Cargar documento firmado — '+expId;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Cargar PDF ya firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado. Quedará en la paleta <strong>Firmados</strong> para que NCA / VITAL / la oficina asignen quién notifica o notifiquen. Usted no asigna quién notifica.</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado. Quedará en la paleta <strong>Firmados</strong> para que la oficina (o VITAL en NCA) notifique. Usted no asigna quién notifica.</div>'+
       _pqrsDirectorPreviewBlockHtml(ctx.docFirma,ctx.urls,'Documento original de referencia.')+
       _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
       (usaDrive
@@ -16454,7 +16581,7 @@ function openPqrsDirectorAccionModal(expId,mode){
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Indicar que ya está firmado</div>'+
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Use esta opción cuando firmó el documento <strong>impreso</strong> (flujo VITAL/NCA u oficinas). No descarga ni vuelve a cargar el PDF. Usted <strong>no asigna</strong> quién notifica.</div>'+
       _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
-      '<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4;font-size:12px">Al confirmar, el oficio queda en la paleta <strong>Firmados</strong> (suya y de NCA / VITAL / oficina) para el siguiente paso.</div>'+
+      '<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4;font-size:12px">Al confirmar, el oficio queda en la paleta <strong>Firmados</strong> para que la oficina (RN/OAP/Admin/Secretaría) o VITAL (solo NCA) notifique.</div>'+
       '<div class="pqrs-firma-actions">'+
       '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="pqrsDirectorMarcarFirmadoFisico(\''+escAttr(expId)+'\',{force:true})">✓ Confirmar ya firmado</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -16569,17 +16696,27 @@ async function pqrsDirectorMarcarFirmadoFisico(expId,opts){
   const chk=document.getElementById('director-firma-fisica-chk');
   if(!opts.force&&chk&&!chk.checked){notif('Marque la casilla «Ya firmé el documento impreso»','err');return;}
   const por=responsableActivo||'DS DEGUV';
-  setPqrsWorkflow(e,{
+  const wf0=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  let notifPor=String(wf0.notificar_por||wf0.notificar_por_propuesto||'').trim();
+  if(typeof pqrsAsegurarNotificadorSegunOficina==='function'){
+    notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor);
+  }
+  const patchFirm={
     fase:PQRS_WF.POR_FIRMAR,
     firma_fisica:{por:por,en:new Date().toISOString(),modo:'fisico'}
-  });
+  };
+  if(notifPor){
+    patchFirm.notificar_por=notifPor;
+    patchFirm.notificar_por_propuesto=notifPor;
+  }
+  setPqrsWorkflow(e,patchFirm);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'firma_fisica_director',fecha:hoy(),nota:'Director marcó oficio firmado en físico — pendiente asignar «Por notificar»',oficina:'ds_deguv',por:por});
+  e._pqrs_historial.push({tipo:'firma_fisica_director',fecha:hoy(),nota:'Director marcó oficio firmado en físico — pendiente asignar «Por notificar»'+(notifPor?' · Notificará: '+notifPor:''),oficina:'ds_deguv',por:por});
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
-  notif('✓ Firmado físico registrado. Queda en «Firmados» para NCA / VITAL / oficina','ok');
+  notif('✓ Firmado físico registrado. Queda en «Firmados» para la oficina / NCA','ok');
 }
 
 /** Registra firma física sin PDF (VITAL / encargado). No cambia de fase. */
@@ -16610,7 +16747,7 @@ async function pqrsMarcarFirmadoSoloAFirmados(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return false;}
   if(!pqrsPuedeMarcarFirmadoSinCargar(e)&&!pqrsEsRolGestionFirmaSinDirector()){
-    notif('Solo VITAL o el encargado pueden registrar firmado','err');return false;
+    notif('No puede registrar firmado desde esta sesión','err');return false;
   }
   pqrsRegistrarFirmadoFisicoSinCargar(e,{nota:'Registró oficio ya firmado → paleta Firmados'});
   persistExpedienteGranular(e);
@@ -16648,7 +16785,7 @@ async function pqrsMarcarFirmadoSinCargarYAsignar(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return false;}
   if(!pqrsPuedeMarcarFirmadoSinCargar(e)&&!pqrsPuedeAsignarPorNotificar(e)){
-    notif('Solo VITAL o el encargado pueden registrar firmado sin cargar PDF','err');return false;
+    notif('No puede registrar firmado sin cargar PDF desde esta sesión','err');return false;
   }
   pqrsRegistrarFirmadoFisicoSinCargar(e);
   return pqrsPasarFirmadoAPorNotificar(expId);
@@ -16660,7 +16797,7 @@ async function pqrsMarcarFirmadoSinCargarYNotificar(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   if(!pqrsPuedeMarcarFirmadoSinCargar(e)&&!pqrsPuedeAsignarPorNotificar(e)){
-    notif('Solo VITAL o el encargado pueden notificar desde esta acción','err');return;
+    notif('No puede notificar desde esta acción','err');return;
   }
   const yo=String(responsableActivo||'').trim();
   const sel=document.getElementById('pqrs-notif-por-sel');
@@ -16762,15 +16899,24 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     }
     await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
     const porDir=responsableActivo||'DS DEGUV';
-    // Queda en «Firmados» (POR_FIRMAR + firma_fisica) para que NCA / VITAL asignen o notifiquen
-    setPqrsWorkflow(e,{
+    let notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+    if(typeof pqrsAsegurarNotificadorSegunOficina==='function'){
+      notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor);
+    }
+    // Queda en «Firmados» (POR_FIRMAR + firma_fisica) para que la oficina / NCA notifiquen
+    const patchDir={
       fase:PQRS_WF.POR_FIRMAR,
       documentos:wf.documentos,
       firma_director:{por:porDir,en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
       firma_fisica:{por:porDir,en:new Date().toISOString(),modo:'digital',pdfLink:pdfLink,sin_pdf:false}
-    });
+    };
+    if(notifPor){
+      patchDir.notificar_por=notifPor;
+      patchDir.notificar_por_propuesto=notifPor;
+    }
+    setPqrsWorkflow(e,patchDir);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → paleta Firmados (pendiente NCA / VITAL / oficina)',oficina:'ds_deguv',por:porDir});
+    e._pqrs_historial.push({tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → paleta Firmados (pendiente oficina / NCA)'+(notifPor?' · Notificará: '+notifPor:''),oficina:'ds_deguv',por:porDir});
     persistExpedienteGranular(e);
     window._directorSignedFile=null;
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
@@ -16782,7 +16928,7 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    notif('✓ Oficio firmado cargado — queda en «Firmados» para NCA / VITAL','ok');
+    notif('✓ Oficio firmado cargado — queda en «Firmados» para la oficina / NCA','ok');
     return true;
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();
@@ -16793,7 +16939,7 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
   }
 }
 
-/** VITAL / encargado: carga firmado y notifica en el mismo paso (si se seleccionó a sí misma). */
+/** Oficina / VITAL (NCA) / encargado: carga firmado y notifica en el mismo paso (si se seleccionó a sí misma). */
 async function pqrsDirectorConfirmarFirmadoYNotificar(expId){
   const sel=document.getElementById('pqrs-notif-por-sel');
   const yo=String(responsableActivo||'').trim();
@@ -16801,8 +16947,12 @@ async function pqrsDirectorConfirmarFirmadoYNotificar(expId){
   if(!yo||!quien||agendaNorm(yo)!==agendaNorm(quien)){
     notif('Seleccione su nombre como notificador para notificar ahora','err');return;
   }
-  if(!(typeof esCargoVital==='function'&&esCargoVital())&&!esNcaDeguv()&&!esOficinaPqrsNca()&&!esAdministrador()){
-    notif('Solo VITAL o el encargado pueden notificar al cargar el firmado','err');return;
+  const eChk=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!(typeof pqrsPuedeGestionarFirmadoExpediente==='function'&&eChk&&pqrsPuedeGestionarFirmadoExpediente(eChk))
+    &&!(typeof esCargoVital==='function'&&esCargoVital())&&!esNcaDeguv()&&!esOficinaPqrsNca()&&!esAdministrador()
+    &&!(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())
+    &&!(typeof esSecretaria==='function'&&esSecretaria())){
+    notif('Solo la oficina, VITAL (NCA) o el encargado pueden notificar al cargar el firmado','err');return;
   }
   const ok=await pqrsDirectorConfirmarFirmado(expId,true);
   if(!ok)return;

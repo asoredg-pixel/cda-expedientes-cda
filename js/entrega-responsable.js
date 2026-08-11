@@ -283,9 +283,9 @@ function htmlEntregaRespInteresadoBox(tramiteId){
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-qd-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('qd',{})+
       '</div></div>';
-    h+='<div id="entrega-int-infractores-wrap"><div class="fx" style="justify-content:space-between;align-items:center;margin-top:8px">'+
+    h+='<div id="entrega-int-infractores-wrap"><div class="fx" style="justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">'+
       '<div class="slbl" style="margin:0;font-size:11px">Presuntos infractores</div>'+
-      '<button type="button" class="btn bsm" onclick="entregaRespAddInfractor()">+ Infractor</button></div>'+
+      '<button type="button" class="btn bsm bp" onclick="entregaRespAddInfractor()">+ Añadir infractor</button></div>'+
       '<div id="entrega-int-infractores-list">'+htmlEntregaRespInfractorCard(0,{})+'</div></div>';
   }else{
     h+='<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="entrega-int-tipo" onchange="syncEntregaRespInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div></div>';
