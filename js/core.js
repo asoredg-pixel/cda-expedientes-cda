@@ -1256,18 +1256,15 @@ async function openPqrsRespuestaModal(expId,opts){
   const mkCan=(v,lbl,ico)=>'<button type="button" class="btn bsm canal-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespCanal(\''+jsStr(v)+'\')">'+ico+' '+escAttr(lbl)+'</button>';
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   const asuntoMail='Respuesta a su '+((e&&e._tipo_solicitud)||'solicitud PQRSD')+' — '+(expLabel||'');
-  const adjInfo=usaDriveInst
-    ?'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Los archivos se suben a la carpeta <em>Respuesta</em> de la PQRSD en Drive y quedan visibles en consulta ciudadana.</div>'
-    :'<div style="font-size:11px;color:var(--tx2);margin-top:4px">Pegue el link de Drive de su carpeta personal.</div>';
   let gmailSubj='';
   if(fromGmail&&gmailMsg&&gmailMsg.payload){
     const gh=(gmailMsg.payload.headers||[]);
     const sh=gh.find(h=>h.name==='Subject');
     gmailSubj=sh?String(sh.value||'').trim():'';
   }
-  const medioRadLbl=e&&e._medio_notificacion?medioNotificacionLabel(e._medio_notificacion):'';
   const puedeAtajo=typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
-  const tipOficioLbl=puedeAtajo?'📄 Oficio → firma Director':'📄 Oficio firmado';
+  // Responder → «Oficio firmado» (notificar). Botón 🖊 → modoFirma («Oficio para firma»).
+  const tipOficioLbl=modoFirma?'📄 Oficio para firma':'📄 Oficio firmado';
   const tipoInicial=modoFirma&&puedeAtajo?PQRS_WF_TIPO.OFICIO:(wf.tipo||PQRS_WF_TIPO.MENSAJE);
   const pqrsSelHtml=fromGmail?(
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">PQRSD a cerrar</label>'+
@@ -1281,18 +1278,10 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div></div>'+
     (gmailSubj?'<div style="font-size:11px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">📧 Correo vinculado: <strong>'+escAttr(gmailSubj.slice(0,100))+'</strong></div>':'')
   ):(
-    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+
-    (puedeAtajo
-      ?(modoFirma
-        ?'<strong>Enviar a firma:</strong> cargue el PDF del oficio (aún sin firma del Director) y anexos. Pasará a la bandeja <strong>Por firmar</strong> del Director. La notificación al ciudadano es después de firmar.'
-        :'<strong>Dos caminos:</strong> <em>Mensaje simple</em> = atajo si ya tiene el oficio firmado o responde por correo y cierra. <em>Oficio → firma Director</em> = el documento aún no está firmado; se envía al Director y luego se notifica.')
-      :'Registre la respuesta definitiva al ciudadano. El expediente se marcará como <strong>Atendido</strong>.')+
-    (medioRadLbl?' <span style="color:var(--tx3)">Medio de notificación en radicación: <strong>'+escAttr(medioRadLbl)+'</strong> (puede cambiarlo).</span>':'')+
-    '</div>'
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'
   );
-  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple / ya firmado')+mkTipo(PQRS_WF_TIPO.OFICIO,tipOficioLbl)+
-    (fromGmail?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa / sin respuesta formal'));
+  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+mkTipo(PQRS_WF_TIPO.OFICIO,tipOficioLbl)+
+    (fromGmail||modoFirma?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa'));
   const cuerpoVal=(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'');
   const emailCiu=fromGmail?(ciudEmail||''):ciudEmail;
   body.innerHTML=pqrsSelHtml+
@@ -1301,72 +1290,66 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoInicial)+'"></div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld" id="pqrs-resp-fecha-wrap"><label id="pqrs-resp-fecha-label">Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-resp-fecha" value="'+escAttr(wf.fecha_respuesta||(e&&e._pqrs_respuesta_fecha)||hoy())+'"></div>'+
-    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-resp-oficio-hint" style="font-weight:400;color:var(--tx3)"> (obligatorio si es oficio firmado)</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()" onblur="onPqrsRespOficioBlur()">'+
+    '<div class="fld" id="pqrs-resp-oficio-wrap"><label>N° de oficio <span id="pqrs-resp-oficio-req" class="req-star" style="display:none">*</span></label><input type="text" id="pqrs-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||(e&&e._pqrs_respuesta_oficio)||'')+'" oninput="onPqrsRespOficioInput();pqrsClearRespOficioError()" onblur="onPqrsRespOficioBlur()">'+
     '<div id="pqrs-resp-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>'+
     (fromGmail?('<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios</div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Para <span style="font-weight:400;color:var(--tx3)">(varios separados por coma)</span></label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="ciudadano@ejemplo.com, empresa@ejemplo.com"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="gmail-resp-pqrs-cc" value="" style="margin-top:4px" placeholder="copia@ejemplo.com"></div>'+
-    '<div class="fld"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="gmail-resp-pqrs-bcc" value="" style="margin-top:4px" placeholder="oculto@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para</label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="ciudadano@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="gmail-resp-pqrs-cc" value="" style="margin-top:4px"></div>'+
+    '<div class="fld"><label>Cco (opcional)</label><input type="text" id="gmail-resp-pqrs-bcc" value="" style="margin-top:4px"></div>'+
     '</div>'):'')+
-    '<div class="fld" id="pqrs-resp-canal-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Canal de notificación al ciudadano</label>'+
-    '<div style="font-size:11px;color:var(--tx3);margin-top:2px;margin-bottom:4px" id="pqrs-resp-canal-hint">Puede notificar por un medio distinto al registrado en la radicación.</div>'+
+    '<div class="fld" id="pqrs-resp-canal-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Canal de notificación</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:5px" id="pqrs-resp-canal-btns">'+
-    mkCan(PQRS_WF_CANAL.CORREO,'Correo electrónico','📧')+
-    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial / física','🤝')+
+    mkCan(PQRS_WF_CANAL.CORREO,'Correo','📧')+
+    mkCan(PQRS_WF_CANAL.PRESENCIAL,'Presencial','🤝')+
     mkCan(PQRS_WF_CANAL.WHATSAPP,'WhatsApp','💬')+
     (fromGmail?'':mkCan(PQRS_WF_CANAL.AVISO,'Por aviso','📌'))+
     '</div><input type="hidden" id="pqrs-resp-canal" value="'+escAttr(canalDef)+'"></div>'+
     (fromGmail?'':(
     '<div id="pqrs-resp-email-compose" class="pqrs-resp-compose-inline" style="display:none;margin-bottom:10px">'+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Redactar respuesta por correo</div>'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Correo</div>'+
     '<div class="pqrs-resp-compose-box">'+
-    '<div class="gm-compose-field"><label>Para <span style="font-weight:400;color:var(--tx3)">(varios correos separados por coma)</span></label><input type="text" id="pqrs-compose-to" placeholder="ciudadano@ejemplo.com, empresa@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
-    '<div class="gm-compose-field"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="pqrs-compose-cc" placeholder="copia@ejemplo.com" value=""></div>'+
-    '<div class="gm-compose-field"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="text" id="pqrs-compose-bcc" placeholder="oculto@ejemplo.com" value=""></div>'+
+    '<div class="gm-compose-field"><label>Para</label><input type="text" id="pqrs-compose-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
+    '<div class="gm-compose-field"><label>Cc (opcional)</label><input type="text" id="pqrs-compose-cc" value=""></div>'+
+    '<div class="gm-compose-field"><label>Cco (opcional)</label><input type="text" id="pqrs-compose-bcc" value=""></div>'+
     '<div class="gm-compose-field"><label>Asunto</label><input type="text" id="pqrs-compose-subject" value="'+escAttr(asuntoMail)+'"></div>'+
-    '<label style="font-size:12px;font-weight:600;display:block;margin:6px 0 4px">Resumen de la respuesta / mensaje</label>'+
-    '<textarea id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Escriba su mensaje al ciudadano…" style="min-height:200px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
+    '<label style="font-size:12px;font-weight:600;display:block;margin:6px 0 4px">Mensaje</label>'+
+    '<textarea id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Mensaje al ciudadano…" style="min-height:160px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
     '<div id="pqrs-compose-att-list" class="pqrs-compose-att-list"></div>'+
     '<div id="pqrs-compose-att-err" class="fld-err" style="display:none"></div>'+
     '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
     '<button type="button" class="btn bsm" onclick="pqrsComposeAddAttachment()">📎 Adjuntar archivo</button>'+
-    '</div></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:6px" id="pqrs-compose-hint">Al enviar se registra la respuesta y la notificación. El mensaje sale del <strong>correo autorizado de la oficina</strong> (encargado registrado). Si hay varios correos asociados (empresa, representante, apoderado, autorizado), se incluyen arriba.</div>'+
-    '</div>'))+
-    '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px;display:none"><label style="font-weight:600;font-size:12px" id="pqrs-resp-cuerpo-label">Resumen de la respuesta</label>'+
-    '<textarea id="pqrs-resp-cuerpo" placeholder="Resumen para trazabilidad…" style="min-height:200px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
-    '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px" id="pqrs-resp-adj-label">Documentos adjuntos</label>'+
-    '<div id="pqrs-resp-adj-hint" style="font-size:11px;color:var(--tx2);margin-top:2px"></div>'+adjInfo+
-    '<div id="pqrs-resp-adj-rows" style="margin-top:6px"></div>'+
+    '</div></div></div>'))+
+    '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px;display:none"><label style="font-weight:600;font-size:12px" id="pqrs-resp-cuerpo-label">Descripción</label>'+
+    '<textarea id="pqrs-resp-cuerpo" placeholder="" style="min-height:120px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
+    '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px" id="pqrs-resp-adj-label">Documento</label>'+
+    '<div id="pqrs-resp-adj-hint" style="display:none"></div>'+
+    '<div id="pqrs-resp-adj-rows" style="margin-top:4px"></div>'+
     '<div id="pqrs-resp-adj-err" class="fld-err" style="display:none"></div>'+
-    '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px">'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px">'+
     (usaDriveInst?'<button type="button" class="btn bsm" id="pqrs-resp-adj-btn" onclick="addPqrsRespAdjFile()">📎 Adjuntar archivo</button>':'')+
+    '<label id="pqrs-resp-anexos-wrap" class="fx" style="display:none;gap:6px;align-items:center;font-size:12px;cursor:pointer;margin:0">'+
+      '<input type="checkbox" id="pqrs-resp-tiene-anexos" onchange="pqrsRespToggleAnexos()">'+
+      '<span>Incluye anexos</span>'+
+    '</label>'+
     '</div>'+
-    '<div id="pqrs-resp-anexos-wrap" style="display:none;margin-top:10px;padding-top:8px;border-top:1px dashed var(--bd)">'+
-      '<label class="fx" style="gap:8px;align-items:flex-start;font-size:12px;cursor:pointer">'+
-        '<input type="checkbox" id="pqrs-resp-tiene-anexos" onchange="pqrsRespToggleAnexos()" style="margin-top:2px">'+
-        '<span><strong>Esta respuesta incluye anexos</strong><br><span style="font-size:10px;color:var(--tx2)">Los anexos van con el oficio a firma y se adjuntan al notificar por correo.</span></span>'+
-      '</label>'+
-      '<div id="pqrs-resp-anexos-box" style="display:none;margin-top:8px">'+
-        '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
-          '<button type="button" class="btn bsm bd2" onclick="pqrsRespAddAnexos()">📎 Adjuntar anexos</button>'+
-          '<span style="font-size:10px;color:var(--tx2)">Puede seleccionar varios archivos</span>'+
-        '</div>'+
-        '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
-        '<div id="pqrs-resp-anexos-list" style="margin-top:4px"></div>'+
+    '<div id="pqrs-resp-anexos-box" style="display:none;margin-top:6px">'+
+      '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
+        '<button type="button" class="btn bsm bd2" onclick="pqrsRespAddAnexos()">📎 Cargar anexos</button>'+
       '</div>'+
+      '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
+      '<div id="pqrs-resp-anexos-list" style="margin-top:4px"></div>'+
     '</div>'+
     '</div>'+
-    '<div class="fld" id="pqrs-resp-nota-wrap" style="margin-bottom:10px"><label>Notas internas <span style="font-weight:400;color:var(--tx3)">(solo funcionarios)</span></label>'+
-    '<textarea id="pqrs-resp-nota" placeholder="Notas para trazabilidad interna…" style="min-height:52px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:11px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr((e&&e._pqrs_notas_internas)||'')+'</textarea></div>'+
+    '<div class="fld" id="pqrs-resp-nota-wrap" style="margin-bottom:10px"><label>Notas internas</label>'+
+    '<textarea id="pqrs-resp-nota" placeholder="Opcional…" style="min-height:44px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:11px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr((e&&e._pqrs_notas_internas)||'')+'</textarea></div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
     (fromGmail?'':
     '<button type="button" class="btn bsm" id="pqrs-resp-firma-btn" style="display:none;background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="submitPqrsRespuestaParaFirma(\''+escAttr(expLabel)+'\')">🖊 Enviar a firma del Director</button>')+
     (fromGmail?'':
-    '<button type="button" class="btn bsm bp" id="pqrs-resp-email-send-btn" style="display:none" onclick="submitPqrsRespuestaPorCorreo(\''+escAttr(expLabel)+'\')">📤 Enviar correo y cerrar PQRSD</button>')+
-    '<button type="button" class="btn bsm bp" id="pqrs-resp-submit-btn" onclick="'+(fromGmail?'submitPqrsRespuestaGmailVinculo()':'submitPqrsRespuesta(\''+escAttr(expLabel)+'\')')+'">'+(fromGmail?'✅ Registrar como respuesta oficial':'✅ Confirmar y cerrar PQRSD')+'</button>'+
+    '<button type="button" class="btn bsm bp" id="pqrs-resp-email-send-btn" style="display:none" onclick="submitPqrsRespuestaPorCorreo(\''+escAttr(expLabel)+'\')">📤 Enviar correo y cerrar</button>')+
+    '<button type="button" class="btn bsm bp" id="pqrs-resp-submit-btn" onclick="'+(fromGmail?'submitPqrsRespuestaGmailVinculo()':'submitPqrsRespuesta(\''+escAttr(expLabel)+'\')')+'">'+(fromGmail?'✅ Registrar respuesta':'✅ Confirmar y cerrar')+'</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   window._pqrsComposeAttachments=[];
@@ -1785,6 +1768,7 @@ function pqrsRespRefreshModalUi(){
   const isMensaje=tipo===PQRS_WF_TIPO.MENSAJE;
   const isCorreo=pqrsEsCanalCorreo(canal);
   const isPersonal=pqrsEsCanalNotifPersonal(canal);
+  const modoFirmaCtx=!!(window._taskModalCtx&&window._taskModalCtx.modoFirma);
   // Mensaje simple solo por correo; si canal no es correo, pasar a oficio
   if(!isInfo&&isMensaje&&!isCorreo){
     const hid=document.getElementById('pqrs-resp-tipo');
@@ -1794,9 +1778,10 @@ function pqrsRespRefreshModalUi(){
     });
     return pqrsRespRefreshModalUi();
   }
-  // Compose/plantilla solo para mensaje + correo (atajo). Oficio: archivo + anexos → firma (como NCA).
+  // modoFirma (botón 🖊): oficio → Director. Responder + oficio: ya firmado → notificar.
   const useEmail=!isInfo&&isCorreo&&isMensaje;
-  const puedeFirma=isOficio&&!isInfo&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
+  const puedeFirma=modoFirmaCtx&&isOficio&&!isInfo&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma();
+  const oficioNotificar=isOficio&&!isInfo&&!modoFirmaCtx;
   const compose=document.getElementById('pqrs-resp-email-compose');
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
   const canalWrap=document.getElementById('pqrs-resp-canal-wrap');
@@ -1806,80 +1791,66 @@ function pqrsRespRefreshModalUi(){
   const submitBtn=document.getElementById('pqrs-resp-submit-btn');
   const firmaBtn=document.getElementById('pqrs-resp-firma-btn');
   const oficioReq=document.getElementById('pqrs-resp-oficio-req');
-  const oficioHint=document.getElementById('pqrs-resp-oficio-hint');
   const oficioWrap=document.getElementById('pqrs-resp-oficio-wrap');
   const fechaLbl=document.getElementById('pqrs-resp-fecha-label');
   const adjLabel=document.getElementById('pqrs-resp-adj-label');
   const adjHint=document.getElementById('pqrs-resp-adj-hint');
   const cuerpoLbl=document.getElementById('pqrs-resp-cuerpo-label');
-  const canalHint=document.getElementById('pqrs-resp-canal-hint');
 
-  if(canalWrap)canalWrap.style.display=isInfo?'none':'';
+  if(canalWrap)canalWrap.style.display=isInfo||modoFirmaCtx?'none':'';
   document.querySelectorAll('#pqrs-resp-canal-btns .canal-resp-btn').forEach(function(b){
-    b.style.display=isInfo?'none':'';
+    b.style.display=(isInfo||modoFirmaCtx)?'none':'';
     b.classList.toggle('on',b.getAttribute('data-val')===canal);
   });
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
     const v=b.getAttribute('data-val');
-    if(v===PQRS_WF_TIPO.MENSAJE)b.style.display=(!isInfo&&!isCorreo)?'none':'';
+    if(v===PQRS_WF_TIPO.MENSAJE)b.style.display=(!isInfo&&!isCorreo)||modoFirmaCtx?'none':'';
+    if(v===PQRS_WF_TIPO.INFORMATIVA&&modoFirmaCtx)b.style.display='none';
   });
 
-  if(compose)compose.style.display=useEmail?'':'none';
-  const showCuerpo=isInfo||(!useEmail&&!isInfo&&isOficio&&isPersonal&&!puedeFirma);
+  if(compose)compose.style.display=(useEmail||(oficioNotificar&&isCorreo))?'':'none';
+  const showCuerpo=isInfo||(!useEmail&&!isInfo&&oficioNotificar&&isPersonal);
   if(cuerpoWrap)cuerpoWrap.style.display=showCuerpo?'':'none';
   if(cuerpoLbl){
-    if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
-    else if(isPersonal)cuerpoLbl.textContent='Nota breve (opcional, para trazabilidad)';
-    else cuerpoLbl.textContent='Resumen de la respuesta';
+    if(isInfo)cuerpoLbl.innerHTML='Descripción <span class="req-star">*</span>';
+    else if(isPersonal)cuerpoLbl.textContent='Nota (opcional)';
+    else cuerpoLbl.textContent='Descripción';
   }
   const cuerpoTxt=document.getElementById('pqrs-resp-cuerpo');
   if(cuerpoTxt){
     if(isInfo){
-      cuerpoTxt.placeholder='Describa por qué es informativa y qué información se aporta. El ciudadano verá este texto al consultar.';
+      cuerpoTxt.placeholder='Descripción visible en consulta ciudadana…';
       if(_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
     }else if(isOficio&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value)){
       cuerpoTxt.value='';
     }else if(!cuerpoTxt.value){
-      cuerpoTxt.placeholder=isPersonal?'Nota breve…':'Resumen para trazabilidad…';
+      cuerpoTxt.placeholder=isPersonal?'Opcional…':'';
     }
   }
   const composeBody=document.getElementById('pqrs-compose-body');
   if(composeBody&&isOficio&&_pqrsEsPlantillaRespuesta(composeBody.value))composeBody.value='';
 
-  // Oficio: zona de documento + anexos (también con canal correo). Mensaje: adjuntos en compose.
+  // Oficio: documento + anexos. Mensaje: adjuntos en compose.
   if(adjWrap)adjWrap.style.display=(useEmail||isInfo)?'none':'';
-  if(anexosWrap)anexosWrap.style.display=isOficio&&!isInfo?'':'none';
+  if(anexosWrap)anexosWrap.style.display=isOficio&&!isInfo?'inline-flex':'none';
   if(!isOficio){
     const cb=document.getElementById('pqrs-resp-tiene-anexos');
     if(cb&&cb.checked){cb.checked=false;pqrsRespToggleAnexos();}
   }
   if(adjLabel){
-    if(isOficio&&(isCorreo||puedeFirma))adjLabel.textContent='Documento del oficio (obligatorio)';
-    else if(canal===PQRS_WF_CANAL.WHATSAPP)adjLabel.textContent='Oficio y soporte de notificación WhatsApp';
-    else if(canal===PQRS_WF_CANAL.AVISO)adjLabel.textContent='Oficio y soporte de notificación por aviso';
-    else if(isPersonal)adjLabel.textContent='Oficio / constancia de notificación presencial';
-    else adjLabel.textContent='Documentos adjuntos';
+    if(puedeFirma)adjLabel.textContent='Oficio para firma (PDF)';
+    else if(oficioNotificar)adjLabel.textContent='Oficio firmado (PDF)';
+    else if(canal===PQRS_WF_CANAL.WHATSAPP)adjLabel.textContent='Oficio y soporte WhatsApp';
+    else if(canal===PQRS_WF_CANAL.AVISO)adjLabel.textContent='Oficio y soporte por aviso';
+    else if(isPersonal)adjLabel.textContent='Oficio / constancia';
+    else adjLabel.textContent='Documento';
   }
-  if(adjHint){
-    if(isOficio&&isCorreo)adjHint.textContent='Suba el PDF del oficio SIN firma del Director. Anexos opcionales. La notificación al ciudadano es después de firmar (no ahora).';
-    else if(isOficio&&puedeFirma)adjHint.textContent='Suba el PDF del oficio que firmará el Director. Si hay anexos, márquelos abajo.';
-    else if(canal===PQRS_WF_CANAL.WHATSAPP)adjHint.textContent='Adjunte el oficio firmado y una imagen o PDF del soporte de envío por WhatsApp.';
-    else if(canal===PQRS_WF_CANAL.AVISO)adjHint.textContent='Adjunte el oficio y el soporte de la notificación por aviso.';
-    else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)adjHint.textContent='Adjunte el oficio firmado. Si hay constancia de notificación personal, inclúyala.';
-    else adjHint.textContent='';
-  }
+  if(adjHint){adjHint.style.display='none';adjHint.textContent='';}
 
   if(fechaLbl){
-    fechaLbl.innerHTML=isPersonal
+    fechaLbl.innerHTML=(isPersonal||(oficioNotificar&&!isCorreo))
       ?'Fecha de notificación<span class="req-star">*</span>'
       :'Fecha de la respuesta<span class="req-star">*</span>';
-  }
-  if(canalHint){
-    if(isOficio&&isCorreo)canalHint.textContent='El oficio aún no firmado irá a la bandeja del Director. Después de firmar, notifique (correo / personal / aviso / WhatsApp). No es notificación ahora.';
-    else if(isMensaje&&isCorreo)canalHint.textContent='Atajo: si ya tiene el oficio firmado (o es mensaje simple), envía por correo y cierra sin pasar por firma del Director.';
-    else if(canal===PQRS_WF_CANAL.PRESENCIAL||canal===PQRS_WF_CANAL.FISICA)canalHint.textContent='Notificación presencial/física: cargue el oficio (si aplica) y cierre como atendida. Indique la fecha en que se notificó.';
-    else if(canal===PQRS_WF_CANAL.WHATSAPP)canalHint.textContent='Notificación por WhatsApp: cargue el oficio y el soporte (imagen). Indique la fecha de notificación.';
-    else if(canal===PQRS_WF_CANAL.AVISO)canalHint.textContent='Último medio: notificación por aviso. Cargue el oficio y el soporte. Indique la fecha de notificación.';
   }
 
   if(firmaBtn){
@@ -1887,26 +1858,21 @@ function pqrsRespRefreshModalUi(){
     firmaBtn.textContent='🖊 Enviar a firma del Director';
   }
   if(emailBtn){
-    // Solo mensaje + correo (atajo sin firma)
-    emailBtn.style.display=useEmail?'':'none';
-    emailBtn.textContent='📤 Enviar correo y cerrar PQRSD';
+    emailBtn.style.display=(useEmail||(oficioNotificar&&isCorreo))?'':'none';
+    emailBtn.textContent='📤 Enviar correo y cerrar';
   }
   if(submitBtn){
-    // Oficio+correo con atajo firma: ocultar cierre directo (usar «Enviar a firma»)
-    // Mensaje+correo: ocultar (usar enviar correo)
-    const hideSubmit=useEmail||(puedeFirma&&isCorreo);
+    const hideSubmit=useEmail||(puedeFirma)||(oficioNotificar&&isCorreo);
     submitBtn.style.display=hideSubmit?'none':'';
     if(isInfo)submitBtn.textContent='ℹ️ Marcar informativa y cerrar';
-    else if(isPersonal)submitBtn.textContent='✅ Registrar notificación y cerrar PQRSD';
-    else if(puedeFirma&&!isCorreo)submitBtn.textContent='✅ Confirmar y cerrar PQRSD';
-    else submitBtn.textContent='✅ Confirmar y cerrar PQRSD';
+    else if(oficioNotificar||isPersonal)submitBtn.textContent='✅ Registrar notificación y cerrar';
+    else submitBtn.textContent='✅ Confirmar y cerrar';
   }
   if(oficioWrap)oficioWrap.style.display=isInfo?'none':(isMensaje?'none':'');
   if(oficioReq)oficioReq.style.display=isOficio?'':'none';
-  if(oficioHint)oficioHint.style.display=isOficio?'none':'';
 
   if(useEmail)pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.MENSAJE,false);
-  else if(isPersonal){
+  else if(isPersonal||oficioNotificar){
     const cuerpoEl=document.getElementById('pqrs-resp-cuerpo');
     if(cuerpoEl&&_pqrsEsPlantillaRespuesta(cuerpoEl.value))cuerpoEl.value='';
   }
@@ -2131,9 +2097,9 @@ async function submitPqrsRespuestaParaFirma(expId){
   const cuerpoTxt=String((document.getElementById('pqrs-resp-cuerpo')||{}).value||'').trim();
   const cuerpo=(!_pqrsEsPlantillaRespuesta(cuerpoTxt)?cuerpoTxt:'');
   const notaInterna=String((document.getElementById('pqrs-resp-nota')||{}).value||'').trim();
-  if(tipoResp!==PQRS_WF_TIPO.OFICIO){notif('Seleccione «Oficio firmado» para enviar a firma','err');return;}
+  if(tipoResp!==PQRS_WF_TIPO.OFICIO){notif('Seleccione «Oficio para firma»','err');return;}
   if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
-  if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:true,adjMsg:'Adjunte el PDF del oficio para firma del Director',skipDupCheck:false}))return;
+  if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:true,adjMsg:'Adjunte el PDF del oficio',skipDupCheck:false}))return;
 
   const adj=collectPqrsRespAdjuntos();
   const oficioFiles=(adj.files||[]).map(function(x){return x&&x.file;}).filter(Boolean);
@@ -2431,11 +2397,18 @@ async function submitPqrsRespuestaPorCorreo(expId){
   const toList=Array.from(toSet);
   const to=toList.join(', ');
   if(!fechaResp){notif('Indique la fecha de la respuesta','err');return;}
-  if(!pqrsValidateOficioRespuesta(tipoResp,{requireComposeAtt:tipoResp===PQRS_WF_TIPO.OFICIO}))return;
+  // Oficio firmado: PDF desde zona de documento; mensaje: adjuntos del compose
+  let atts=(window._pqrsComposeAttachments||[]).slice();
+  if(tipoResp===PQRS_WF_TIPO.OFICIO){
+    if(!pqrsValidateOficioRespuesta(tipoResp,{requireAdj:true,adjMsg:'Adjunte el PDF del oficio firmado'}))return;
+    const adj=collectPqrsRespAdjuntos();
+    (adj.files||[]).forEach(function(x){if(x&&x.file)atts.push(x.file);});
+    (adj.anexos||[]).forEach(function(f){if(f)atts.push(f);});
+  }else if(!pqrsValidateOficioRespuesta(tipoResp,{requireComposeAtt:false}))return;
   if(!toList.length){notif('Indique al menos un correo del ciudadano','err');return;}
   if(!body.trim()){notif('Escriba el mensaje de respuesta','err');return;}
-  const tokOk=(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())||(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid());
-  if(!tokOk){notif('Conecte su correo Gmail para enviar la respuesta','err');return;}
+  const tokOk=(typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())||(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  if(!tokOk){notif('Conecte el correo de la oficina para enviar','err');return;}
   // Sincronizar campo Para con la lista completa
   const toEl=document.getElementById('pqrs-compose-to');
   if(toEl)toEl.value=to;
@@ -2450,7 +2423,7 @@ async function submitPqrsRespuestaPorCorreo(expId){
       bcc:bccRaw,
       subject:subject,
       body:body,
-      attachments:window._pqrsComposeAttachments||[],
+      attachments:atts,
       tipo:tipoResp,
       oficio:oficioExt,
       fechaResp:fechaResp,
@@ -2463,7 +2436,7 @@ async function submitPqrsRespuestaPorCorreo(expId){
   }catch(err){
     notif('Error al enviar: '+String(err.message||err).slice(0,100),'err');
   }
-  if(btn){btn.disabled=false;btn.textContent='📤 Enviar correo y cerrar PQRSD';}
+  if(btn){btn.disabled=false;btn.textContent='📤 Enviar correo y cerrar';}
 }
 function htmlPqrsNotasInternasHtml(e){
   if(!e||!e._pqrs_notas_internas||typeof esModoCiudadano==='function'&&esModoCiudadano())return'';
