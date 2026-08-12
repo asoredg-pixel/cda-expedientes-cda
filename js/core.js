@@ -2753,12 +2753,28 @@ function pqrsEstadoDisplayBadge(e){
 function pqrsEstadoConsultaBadge(e){
   return pqrsEstadoDisplayBadge(e);
 }
+function resolveMetAccentHex(accent){
+  const a=String(accent||'').trim();
+  const map={
+    'var(--or)':'#b87d0a','var(--rd)':'#c0392b','var(--bl)':'#185FA5','var(--gn)':'#1a7a4a',
+    'var(--pu)':'#6d3fa8','#7c5cbf':'#7c5cbf','#1a7a4a':'#1a7a4a','#0d5c2e':'#0d5c2e',
+    '#15803d':'#15803d','#6d3fa8':'#6d3fa8'
+  };
+  if(map[a])return map[a];
+  if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(a))return a;
+  return '#185FA5';
+}
+function metOnCssVars(accent){
+  const hex=resolveMetAccentHex(accent);
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return '--met-accent-hex:'+hex+';--met-on-bg:rgba('+r+','+g+','+b+',0.14);--met-on-ring:rgba('+r+','+g+','+b+',0.38);';
+}
 function pqrsMetCard(filterVal,style,inner,accent){
   const cur=String(window._pqrsOfiFiltro||'pend');
   const on=cur===String(filterVal||'');
-  const acc=accent||'';
-  const st=(acc?'--met-accent:'+acc+';':'')+(style||'');
-  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="Clic para filtrar · paleta activa">'+inner+'</div>';
+  const acc=accent||'var(--bl)';
+  const st=metOnCssVars(acc)+(style||'');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="'+(on?'Paleta activa: ':'Filtrar: ')+String(filterVal||'')+'">'+inner+'</div>';
 }
 function setPqrsOfiFiltro(v){
   window._pqrsOfiFiltro=v||'pend';
@@ -14135,9 +14151,9 @@ function renderActGantt(list){
 function actMetCard(filterVal,style,inner,accent){
   const cur=document.getElementById('f-act-est')?document.getElementById('f-act-est').value:'pend';
   const on=String(cur||'pend')===String(filterVal||'');
-  const acc=accent||'';
-  const st=(acc?'--met-accent:'+acc+';':'')+(style||'');
-  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="Clic para filtrar · paleta activa">'+inner+'</div>';
+  const acc=accent||'var(--bl)';
+  const st=metOnCssVars(acc)+(style||'');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="'+(on?'Paleta activa':'Clic para filtrar')+'">'+inner+'</div>';
 }
 function getTareasPqrsPorFaseWorkflow(matchFn){
   const out=[];
@@ -14385,6 +14401,18 @@ function renderActividades(){
   }
   metsHtml+=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)');
   if(mets)mets.innerHTML=metsHtml;
+  const selEst=document.getElementById('f-act-est');
+  if(selEst){
+    const accentByFiltro={
+      pend:'var(--or)',venc:'var(--rd)',prior:'var(--rd)',porver:'var(--bl)',porcorr:'var(--or)',
+      parafirma:'#1a7a4a',porfirmar:'#0d5c2e',firmados:'#15803d',pornotif:'var(--bl)',done:'var(--gn)'
+    };
+    const acc=accentByFiltro[filtroAct]||'var(--or)';
+    const hex=resolveMetAccentHex(acc);
+    selEst.classList.add('act-filtro-on');
+    selEst.style.setProperty('--met-accent-hex',hex);
+    selEst.style.borderLeftColor=hex;
+  }
   const vistaToggle=document.getElementById('act-vista-toggle');
   const tableWrap=document.getElementById('act-table-wrap');
   const ganttWrap=document.getElementById('act-gantt-wrap');

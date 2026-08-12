@@ -288,16 +288,25 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .met-click{cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s}
 .met-click:hover{background:var(--sf2);transform:translateY(-1px)}
 .met.met-click.is-on{
-  background:color-mix(in srgb, var(--met-accent, var(--bl)) 16%, var(--sf));
-  border-color:var(--met-accent, var(--bl));
-  box-shadow:0 0 0 2px color-mix(in srgb, var(--met-accent, var(--bl)) 55%, transparent), 0 2px 10px rgba(0,0,0,.08);
+  border-width:2px!important;
+  border-style:solid!important;
+  border-color:var(--met-accent-hex, var(--bl))!important;
+  background:var(--met-on-bg, var(--sf2))!important;
+  box-shadow:0 0 0 3px var(--met-on-ring, rgba(24,95,165,.35)), 0 2px 10px rgba(0,0,0,.08)!important;
   transform:translateY(-1px);
   position:relative;
   z-index:1;
 }
-.met.met-click.is-on .l{font-weight:700;color:var(--tx)}
-@supports not (background:color-mix(in srgb, red 50%, white)){
-  .met.met-click.is-on{background:var(--sf2);outline:2px solid var(--met-accent, var(--bl));outline-offset:1px}
+.met.met-click.is-on .l{font-weight:700;color:var(--tx)!important}
+.met.met-click.is-on .v{font-weight:700}
+#pg-act #act-mets .met.met-click.is-on,
+#pqrs-ofi-mets .met.met-click.is-on,
+.pqrs-ofi-mets .met.met-click.is-on{
+  border-width:2px!important;
+}
+#f-act-est.act-filtro-on{
+  border-left:4px solid var(--met-accent-hex, var(--or));
+  font-weight:600;
 }
 .con-side-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:15000}
 .con-side-overlay.on{display:block}
