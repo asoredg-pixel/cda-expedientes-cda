@@ -9,6 +9,7 @@
 function showTab(t){
   // Recordar última pestaña elegida (evita saltos automáticos a Consulta)
   const wanted=t;
+  const prevTab=window._sstTabActual||'';
   if(typeof puedeVerTabSesion==='function'&&!puedeVerTabSesion(t)){
     const vis=getTabsVisiblesSesion();
     // Si se pide act y el responsable puede verla, respetar (no caer a Correos/Consulta)
@@ -56,7 +57,12 @@ function showTab(t){
       renderSecEmailPanel(_gmailCurrentMsg);
     }
   }
-  if(t==='pqrs-ofi'){initPeriodoFiltros('pqrs-ofi');renderPqrsOficinaInbox();}
+  if(t==='pqrs-ofi'){
+    if(prevTab!=='pqrs-ofi'&&!window._pqrsOfiFiltroSticky)window._pqrsOfiFiltro='pend';
+    window._pqrsOfiFiltroSticky=false;
+    initPeriodoFiltros('pqrs-ofi');
+    renderPqrsOficinaInbox();
+  }
   if(t==='gmail-ofi'){if(typeof gmailOfiInitPanel==='function')gmailOfiInitPanel();}
   if(t==='rec'){if(typeof recursosInitPanel==='function')recursosInitPanel();}
   if(t==='ciudadano'){
@@ -65,7 +71,15 @@ function showTab(t){
     if(inp&&!inp.value&&window._ciudadanoUltExp)inp.value=window._ciudadanoUltExp;
     if(inp&&String(inp.value||'').trim())buscarExpCiudadano();
   }
-  if(t==='act'){initPeriodoFiltros('act');renderActividades();}
+  if(t==='act'){
+    if(prevTab!=='act'&&!window._actFiltroSticky){
+      const sel=document.getElementById('f-act-est');
+      if(sel)sel.value='pend';
+    }
+    window._actFiltroSticky=false;
+    initPeriodoFiltros('act');
+    renderActividades();
+  }
   if(t==='agenda')renderAgenda();
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){initPeriodoFiltros('cons');renderConsolidado();}

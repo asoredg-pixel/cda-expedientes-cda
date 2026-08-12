@@ -285,8 +285,20 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .con-fold>summary:before{content:'▸';color:var(--tx3);flex-shrink:0}
 .con-fold[open]>summary:before{content:'▾'}
 .con-fold .item-fold-body{padding:.65rem .85rem .8rem;border-top:1px solid var(--bd);background:var(--sf2)}
-.met-click{cursor:pointer;transition:background .15s,transform .1s}
+.met-click{cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s,transform .1s}
 .met-click:hover{background:var(--sf2);transform:translateY(-1px)}
+.met.met-click.is-on{
+  background:color-mix(in srgb, var(--met-accent, var(--bl)) 16%, var(--sf));
+  border-color:var(--met-accent, var(--bl));
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--met-accent, var(--bl)) 55%, transparent), 0 2px 10px rgba(0,0,0,.08);
+  transform:translateY(-1px);
+  position:relative;
+  z-index:1;
+}
+.met.met-click.is-on .l{font-weight:700;color:var(--tx)}
+@supports not (background:color-mix(in srgb, red 50%, white)){
+  .met.met-click.is-on{background:var(--sf2);outline:2px solid var(--met-accent, var(--bl));outline-offset:1px}
+}
 .con-side-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:15000}
 .con-side-overlay.on{display:block}
 .con-side-panel{position:fixed;top:0;right:0;width:min(520px,96vw);height:100%;background:var(--sf);border-left:1px solid var(--bd);z-index:15001;transform:translateX(100%);transition:transform .25s ease;overflow:auto;padding:1rem;box-shadow:-4px 0 24px rgba(0,0,0,.12)}

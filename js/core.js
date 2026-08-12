@@ -2753,11 +2753,16 @@ function pqrsEstadoDisplayBadge(e){
 function pqrsEstadoConsultaBadge(e){
   return pqrsEstadoDisplayBadge(e);
 }
-function pqrsMetCard(filterVal,style,inner){
-  return '<div class="met met-click" style="'+style+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="Clic para filtrar">'+inner+'</div>';
+function pqrsMetCard(filterVal,style,inner,accent){
+  const cur=String(window._pqrsOfiFiltro||'pend');
+  const on=cur===String(filterVal||'');
+  const acc=accent||'';
+  const st=(acc?'--met-accent:'+acc+';':'')+(style||'');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="Clic para filtrar · paleta activa">'+inner+'</div>';
 }
 function setPqrsOfiFiltro(v){
-  window._pqrsOfiFiltro=v||'all';
+  window._pqrsOfiFiltro=v||'pend';
+  window._pqrsOfiFiltroSticky=true;
   renderPqrsOficinaInbox();
 }
 function getInstructoresCfg(deptoId){
@@ -13620,7 +13625,8 @@ function getTareasNotifVisiblesAct(){
 }
 function setActFiltro(v){
   const sel=document.getElementById('f-act-est');
-  if(sel)sel.value=v;
+  if(sel)sel.value=v||'pend';
+  window._actFiltroSticky=true;
   renderActividades();
 }
 window._actVista=window._actVista||'tabla';
@@ -14126,8 +14132,12 @@ function renderActGantt(list){
     '<div class="act-gantt-hdr-label">Trámite / expediente / actividad</div>'+
     '<div class="act-gantt-hdr-timeline act-gantt-hdr-note">Cada trámite usa su propia escala según su plazo de atención</div></div>'+rows+'</div>';
 }
-function actMetCard(filterVal,style,inner){
-  return '<div class="met met-click" style="'+style+'" onclick="setActFiltro(\''+filterVal+'\')" title="Clic para filtrar">'+inner+'</div>';
+function actMetCard(filterVal,style,inner,accent){
+  const cur=document.getElementById('f-act-est')?document.getElementById('f-act-est').value:'pend';
+  const on=String(cur||'pend')===String(filterVal||'');
+  const acc=accent||'';
+  const st=(acc?'--met-accent:'+acc+';':'')+(style||'');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="Clic para filtrar · paleta activa">'+inner+'</div>';
 }
 function getTareasPqrsPorFaseWorkflow(matchFn){
   const out=[];
@@ -14356,24 +14366,24 @@ function renderActividades(){
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
   const puedeFirmarMets=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
   // Orden de tarjetas según rol
-  let metsHtml=actMetCard('pend','','<div class="v">'+porEjec+'</div><div class="l">Por ejecutar</div>')+
-    actMetCard('venc','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div>')+
-    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>')+
-    actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>');
-  if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>');
+  let metsHtml=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)')+
+    actMetCard('venc','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div>','var(--rd)')+
+    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)')+
+    actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
+  if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedeImprimirMets){
-    metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">Por imprimir</div>');
+    metsHtml+=actMetCard('parafirma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+nPara+'</div><div class="l">Por imprimir</div>','#1a7a4a');
   }
   if(puedeFirmarMets){
-    metsHtml+=actMetCard('porfirmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirmar+'</div><div class="l">Por firmar</div>');
+    metsHtml+=actMetCard('porfirmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirmar+'</div><div class="l">Por firmar</div>','#0d5c2e');
   }
   if(puedeFirmadosMets){
-    metsHtml+=actMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+nFirmados+'</div><div class="l">Firmados</div>');
+    metsHtml+=actMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+nFirmados+'</div><div class="l">Firmados</div>','#15803d');
   }
   if(!esDirAct){
-    metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>');
+    metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>','var(--bl)');
   }
-  metsHtml+=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>');
+  metsHtml+=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)');
   if(mets)mets.innerHTML=metsHtml;
   const vistaToggle=document.getElementById('act-vista-toggle');
   const tableWrap=document.getElementById('act-table-wrap');

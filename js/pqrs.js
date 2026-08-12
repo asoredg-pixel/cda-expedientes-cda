@@ -1242,26 +1242,17 @@ function renderPqrsOficinaInbox(){
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
     }).length;
-    const onPend=filtro==='pend'?'outline:2px solid var(--or);':'';
-    const onAtras=filtro==='atras'?'outline:2px solid var(--rd);':'';
-    const onCerr=filtro==='cerr'?'outline:2px solid var(--gn);':'';
-    const onRev=filtro==='revision'?'outline:2px solid #6d3fa8;':'';
-    const onPorTrasl=filtro==='por_trasladar'?'outline:2px solid #7c5cbf;':'';
-    const onPorFirmar=filtro==='por_firmar'?'outline:2px solid #0d5c2e;':'';
-    const onFirmados=filtro==='firmados'?'outline:2px solid #15803d;':'';
-    const onParaFirma=filtro==='para_firma'?'outline:2px solid #1a7a4a;':'';
-    const onPorNotif=filtro==='por_notificar'?'outline:2px solid var(--bl);':'';
-    const cardPorTrasl=showPorTrasl?pqrsMetCard('por_trasladar',onPorTrasl+'border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>'):'';
+    const cardPorTrasl=showPorTrasl?pqrsMetCard('por_trasladar','border-left:3px solid #7c5cbf','<div class="v" style="color:#7c5cbf">'+pendTraslCount+'</div><div class="l">Por trasladar</div>','#7c5cbf'):'';
     mets.innerHTML=
       (showPorTrasl?cardPorTrasl:'')+
-      pqrsMetCard('pend',onPend+'border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>')+
-      pqrsMetCard('atras',onAtras+'border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+vencidas+'</div><div class="l">Vencidas</div>')+
-      (enRevision?pqrsMetCard('revision',onRev+'border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>'):'')+
-      (showParaImprimirCard&&paraFirma?pqrsMetCard('para_firma',onParaFirma+'border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>'):'')+
-      (showPorFirmarCard?pqrsMetCard('por_firmar',onPorFirmar+'border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>'):'')+
-      (showFirmadosCard?pqrsMetCard('firmados',onFirmados+'border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+firmados+'</div><div class="l">Firmados</div>'):'')+
-      (!esDirMets&&(porNotif||showPorFirmarCard)?pqrsMetCard('por_notificar',onPorNotif+'border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>'):'')+
-      pqrsMetCard('cerr',onCerr+'border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>');
+      pqrsMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)')+
+      pqrsMetCard('atras','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+vencidas+'</div><div class="l">Vencidas</div>','var(--rd)')+
+      (enRevision?pqrsMetCard('revision','border-left:3px solid #6d3fa8','<div class="v" style="color:#6d3fa8">'+enRevision+'</div><div class="l">Por revisar</div>','#6d3fa8'):'')+
+      (showParaImprimirCard&&paraFirma?pqrsMetCard('para_firma','border-left:3px solid #1a7a4a','<div class="v" style="color:#1a7a4a">'+paraFirma+'</div><div class="l">Por imprimir</div>','#1a7a4a'):'')+
+      (showPorFirmarCard?pqrsMetCard('por_firmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>','#0d5c2e'):'')+
+      (showFirmadosCard?pqrsMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+firmados+'</div><div class="l">Firmados</div>','#15803d'):'')+
+      (!esDirMets&&(porNotif||showPorFirmarCard)?pqrsMetCard('por_notificar','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>','var(--bl)'):'')+
+      pqrsMetCard('cerr','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>','var(--gn)');
   }
   if(!list.length){
     const vacioMsg=esPendTrasl?'No hay PQRSD pendientes de traslado en este filtro de fechas.':'No hay PQRSD en este filtro.';
