@@ -215,8 +215,9 @@ function purgeLegacyPlaceholderInstructores(c){
   return c.instructores.length!==antes;
 }
 function instructorEsVinculoReal(ins){
-  if(!ins||ins.activo===false)return false;
+  if(!ins)return false;
   if(esInstructorPlaceholderLegacy(ins))return false;
+  // Incluye inactivos: el encargado/admin debe verlos en Configuración para poder reactivarlos.
   if(String(ins.email||'').trim())return true;
   if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return true;
   return false;

@@ -3743,32 +3743,35 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     }
     return false;
   }
-  // Si la sesión es una oficina DEGUV / NCA / Secretaría, exigir el correo del encargado de ese módulo.
-  // El administrador navega entre roles para pruebas: basta su correo de usuario autorizado.
-  let ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
-  if (ofiId === 'responsables') {
-    // Responsable NCA / VITAL: el envío institucional es el del encargado NCA
-    ofiId = 'guaviare';
-  }
-  const ofisCorreo = { rn_deguv:1, oap_deguv:1, admin_deguv:1, secretaria:1, guaviare:1 };
-  if (!gmailOfiSesionEsAdmin() && ofisCorreo[ofiId] && typeof getCorreoAutorizadoOficina === 'function') {
-    const esperado = getCorreoAutorizadoOficina(ofiId);
-    if (esperado && email && email !== esperado) {
-      const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
-      if (typeof confirmPrecaucion === 'function') {
-        confirmPrecaucion({
-          title: '⛔ Correo de oficina incorrecto',
-          message: 'Para ' + lbl + ' debe conectar el correo autorizado del encargado.',
-          detail: 'Esperado: ' + esperado + '\nConectó: ' + email +
-            '\n\nLas respuestas PQRSD deben salir de la cuenta institucional de la oficina.',
-          confirmLabel: 'Entendido',
-          hideCancel: true,
-          tone: 'delete'
-        }, function() {});
-      } else {
-        notif('⛔ Conecte el correo autorizado de ' + lbl + ' (' + esperado + ').', 'err');
+  // Responsables / contratistas: basta con el correo de ingreso (ya validado arriba).
+  // No exigir el correo del encargado NCA/oficina — ese control aplica a encargados de módulo.
+  const esResp = (typeof esModoResponsable === 'function' && esModoResponsable())
+    || String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim() === 'responsables'
+    || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'responsables'
+    || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'contratista';
+  if (!esResp && !gmailOfiSesionEsAdmin()) {
+    let ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+    if (ofiId === 'responsables') ofiId = 'guaviare';
+    const ofisCorreo = { rn_deguv:1, oap_deguv:1, admin_deguv:1, secretaria:1, guaviare:1 };
+    if (ofisCorreo[ofiId] && typeof getCorreoAutorizadoOficina === 'function') {
+      const esperado = getCorreoAutorizadoOficina(ofiId);
+      if (esperado && email && email !== esperado) {
+        const lbl = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
+        if (typeof confirmPrecaucion === 'function') {
+          confirmPrecaucion({
+            title: '⛔ Correo de oficina incorrecto',
+            message: 'Para ' + lbl + ' debe conectar el correo autorizado del encargado.',
+            detail: 'Esperado: ' + esperado + '\nConectó: ' + email +
+              '\n\nLas respuestas PQRSD deben salir de la cuenta institucional de la oficina.',
+            confirmLabel: 'Entendido',
+            hideCancel: true,
+            tone: 'delete'
+          }, function() {});
+        } else {
+          notif('⛔ Conecte el correo autorizado de ' + lbl + ' (' + esperado + ').', 'err');
+        }
+        return false;
       }
-      return false;
     }
   }
   gmailOfiSetToken(tok, expiresInSec, email);
@@ -3884,24 +3887,29 @@ function _updateGmailOfiBtn() {
   }
   if (st) {
     const ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+    const esResp = (typeof esModoResponsable === 'function' && esModoResponsable())
+      || ofiId === 'responsables'
+      || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'responsables'
+      || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'contratista';
+    const usuarioEmail = String((window._usuarioActual && window._usuarioActual.email) || '').trim().toLowerCase();
     const ofiEff = (ofiId === 'responsables' || ofiId === 'ds_deguv') ? 'guaviare' : ofiId;
-    const esperado = typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiEff) : '';
+    const esperado = esResp ? usuarioEmail : (typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiEff) : '');
     const conectado = gmailOfiCuentaConectadaParaEnvio();
-    const lbl = typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff;
+    const lbl = esResp ? 'su cuenta' : (typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff);
     if (valid && conectado) {
       const adminOk = typeof gmailOfiSesionEsAdmin === 'function' && gmailOfiSesionEsAdmin();
-      const ok = adminOk || !esperado || conectado === esperado;
+      const ok = adminOk || esResp || !esperado || conectado === esperado;
       st.style.color = ok ? 'var(--gn)' : 'var(--or)';
       st.textContent = ok
-        ? ('✅ ' + conectado + (adminOk ? ' · Admin' : (esperado ? ' · ' + lbl : '')))
+        ? ('✅ ' + conectado + (adminOk ? ' · Admin' : (esResp ? ' · Responsable' : (esperado ? ' · ' + lbl : ''))))
         : ('⚠️ ' + conectado + ' ≠ ' + esperado);
       st.title = ok
-        ? ('Envíos PQRSD saldrán de ' + conectado)
+        ? (esResp ? ('Drive y correo con ' + conectado) : ('Envíos PQRSD saldrán de ' + conectado))
         : ('Debe conectar el correo autorizado de ' + lbl + ': ' + esperado);
     } else if (esperado) {
       st.style.color = 'var(--or)';
       st.textContent = 'Conecte: ' + esperado;
-      st.title = 'Correo autorizado de ' + lbl;
+      st.title = esResp ? 'Conecte el mismo correo con el que ingresó' : ('Correo autorizado de ' + lbl);
     } else {
       st.textContent = '';
       st.title = '';

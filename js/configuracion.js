@@ -207,7 +207,15 @@ function editInstructor(i,k,v){
     notif('Los encargados se configuran en «Encargados por módulo»','err');
     renderListasCfg();
     return;
-  }else if(k==='activo'){ins.activo=!!v;}
+  }else if(k==='activo'){
+    ins.activo=!!v;
+    const em=String(ins.email||'').trim().toLowerCase();
+    if(em&&ins.rol==='contratista'&&typeof setUsuarioFirestoreActivo==='function'){
+      const dep=deptoCfg||getDeptoOperativo()||'';
+      // Sincroniza el acceso real (usuarios/{email}.activo) para que no quede solo en cfg local.
+      void setUsuarioFirestoreActivo(em,!!v,{fromInstructor:true,silent:false,deptoResponsable:dep,nombre:ins.nombre||''});
+    }
+  }
   if(ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')syncInstructoresToEncargadosGlobal();
   saveLS();poblarSelResponsable();
   if(k==='activo'||k==='email'||esAdminModoGlobal())renderListasCfg();
