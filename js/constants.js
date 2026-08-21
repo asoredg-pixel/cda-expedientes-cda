@@ -44,6 +44,19 @@ const OFICINAS_DEGUV=[
   {id:'ds_deguv',nombre:'DS DEGUV',codigo:'DS',sinApoyo:true},
   {id:'secretaria',nombre:'Secretaría DEGUV',codigo:'SEC',sinApoyo:true}
 ];
+/** Oficinas remitentes para PQRSD internas (radicación Secretaría). */
+const PQRS_OFICINAS_REMITENTES_INTERNAS=[
+  'Dirección General',
+  'Secretaría General',
+  'Subdirección Normatización',
+  'Subdirección Recursos Naturales',
+  'Oficina Asesora de Planeación',
+  'Control Interno',
+  'Subdirección Administrativa y Financiera',
+  'Seccional Guainía',
+  'Seccional Vaupés',
+  'Contabilidad'
+];
 const MODULOS_ESPECIALES=['secretaria','ciudadano','jurisdiccional','responsables'].concat(OFICINAS_DEGUV.map(o=>o.id));
 const PQRS_EST_OFICINA={pendiente:'Pendiente',asignado:'Asignado',atendiendo:'En atención',cerrado:'Atendido'};
 const DEPTO_CHART_COLORS={guaviare:'#185FA5',guainia:'#1a7a4a',vaupes:'#6d3fa8'};
@@ -199,7 +212,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260821c';
+const SST_BUILD_ID = '20260821f';
 
 // Carpeta PQRSD institucional — matriz XLSX + Radicacion/año/mes/PQRSD-xxx (cdaguaviare1)
 // https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS

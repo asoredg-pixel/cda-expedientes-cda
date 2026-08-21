@@ -15,14 +15,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260821c"></script>
+<script src="js/constants.js?v=20260821f"></script>
 <script src="js/utils.js?v=20260714f"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260805d"></script>
 <script src="js/roles.js?v=20260821e"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260821e"></script>
+<script src="js/core.js?v=20260821f"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260806a"></script>
 <script src="js/guardar-exp.js?v=20260821a"></script>
@@ -34,7 +34,7 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260821d"></script>
-<script src="js/pqrs.js?v=20260812d"></script>
+<script src="js/pqrs.js?v=20260821f"></script>
 <script src="js/consulta.js?v=20260821a"></script>
 <script src="js/entrega-responsable.js?v=20260821a"></script>
 <script src="js/tramite-firma.js?v=20260812d"></script>
@@ -690,11 +690,19 @@
             <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo del mes" onclick="refrescarSugerenciaNumeroPqrsSec()">↻ Sugerir</button>
           </div>
         </div>
-        <div class="fld"><label>Fecha de solicitud (ciudadano)<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Cuándo el ciudadano presentó la solicitud (puede ser anterior a la radicación)"></div>
+        <div class="fld"><label>Fecha de solicitud<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Fecha en que se presentó la solicitud (puede ser anterior a la radicación)"></div>
         <div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="sec-fecha-termino" title="Si el oficio indica un plazo menor a 15 días, indique la fecha en que vence la PQRSD"></div>
         <div class="fld" id="sec-fecha-radic-wrap" style="display:none"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(solo administrador)</span></label><input type="date" id="sec-fecha" onchange="var _sx=document.getElementById('sec-exp');if(_sx&&!String(_sx.value||'').trim()&&typeof aplicarSugerenciaNumeroPqrsSec==='function')aplicarSugerenciaNumeroPqrsSec()"></div>
         <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="" selected>— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option><option value="Reunión">Reunión</option><option value="Audiencia">Audiencia</option></select></div>
         <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="" selected>— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-interna" onchange="toggleSecInterna()"> PQRSD interna <span style="font-weight:400;color:var(--tx3)">(solicitud entre dependencias de la entidad — no envía correo al ciudadano)</span></label>
+      <div id="sec-interna-block" style="display:none;margin-bottom:10px;padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
+        <div class="fld"><label>Oficina remitente<span class="req-star">*</span></label>
+          <select id="sec-oficina-remitente" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
+            <option value="">— Seleccione oficina remitente —</option>
+          </select>
+        </div>
       </div>
       <div class="fld" style="margin-bottom:10px" id="sec-medio-notif-wrap">
         <label>Medio de notificación</label>
@@ -702,6 +710,7 @@
         <input type="hidden" id="sec-medio-notif" value="">
         <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
       </div>
+      <div id="sec-solicitante-wrap">
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>Tipo de persona<span class="req-star">*</span></label><select id="sec-tipo-persona" required onchange="toggleSecPersona()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="" selected>— Seleccionar —</option><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div>
       </div>
@@ -738,6 +747,7 @@
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-anon-tel" placeholder="3001234567"></div>
         </div>
       </div>
+      </div><!-- /sec-solicitante-wrap -->
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
       <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
       <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>

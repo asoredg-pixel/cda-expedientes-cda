@@ -2603,10 +2603,10 @@ function htmlPqrsOficinaDetalleCore(e,opts){
   const chatHtml=opts.showChat!==false&&esSecretaria()?renderPqrsChatHtml(e):'';
   const plazoBar=opts.sidePanel?'':renderPqrsPlazoBarHtml(e);
   return '<div class="pqrs-det-hdr">'+escAttr(e._exp)+' · '+pqrsEstadoDisplayBadge(e)+' '+pqrsPrioritariaBadge(e)+' '+pqrsInformativaBadge(e)+'</div>'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+escAttr(e._tipo_solicitud||'PQRSD')+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+escAttr(e._tipo_solicitud||'PQRSD')+(e._pqrs_interna?' · <span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">Interna</span>':'')+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
     plazoBar+
     '<div class="pqrs-det-sec"><div class="pqrs-det-k">Asunto</div><div class="pqrs-det-v">'+escAttr(asunto)+'</div></div>'+
-    '<div class="pqrs-det-sec"><div class="pqrs-det-k">Interesado</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
+    '<div class="pqrs-det-sec"><div class="pqrs-det-k">'+(e._pqrs_interna?'Oficina remitente':'Interesado')+'</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
     (detalle?('<div class="pqrs-det-sec"><div class="pqrs-det-k">Detalle</div><div class="pqrs-det-v">'+escAttr(detalle)+'</div></div>'):'')+
     renderPqrsAsociadosPanelHtml(e)+
     (docHtml?('<div class="pqrs-det-sec"><div class="pqrs-det-k">Documento de la solicitud</div><div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+docHtml+'</div></div>'):'')+
@@ -12396,6 +12396,7 @@ function openConsExpModal(catKey,catLabel){
 }
 function getNom(e){
   if(esModoCasoEspecial(e)){
+    if(e._pqrs_interna)return e._pqrs_oficina_remitente||e._qd_nombre||e._pn_nombre||'PQRSD interna';
     if(e._qd_anonimo)return labelTipoCasoEspecial(e)+' anónimo';
     if(e._tipo_persona==='juridica'&&e._pj_empresa){
       const ofi=e._qd_nombre&&e._qd_nombre!==e._pj_empresa?' · radica: '+e._qd_nombre:'';
@@ -17558,6 +17559,8 @@ async function _pqrsSubirSoporteRespuesta(e,opts){
   }
 }
 function pqrsDebeNotificarRadicacionCorreo(e,opts){
+  // PQRSD interna: no se notifica al ciudadano (no hay solicitante externo).
+  if(e&&e._pqrs_interna)return false;
   // Enviar siempre que haya al menos un correo registrado, independientemente del
   // medio de recepción o del medio de notificación elegido.
   return pqrsCorreosCiudadano(e).length>0||!!pqrsCorreoCiudadano(e);
