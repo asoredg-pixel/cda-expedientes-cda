@@ -2635,20 +2635,27 @@ function eliminarPqrs(expId){
     notif('Solo el administrador (rol Secretaría) puede eliminar una PQRSD ya atendida','err');
     return;
   }
+  // Admin: elimina sin motivo. Secretaría: motivo obligatorio (con campo visible).
+  const pedirMotivo=!(typeof esAdministrador==='function'&&esAdministrador());
   const msg=pqrsEstaCerrada(e)
     ?'¿Mover esta PQRSD atendida a la papelera? (90 días para restaurar)'
     :'¿Mover esta PQRSD a la papelera? (90 días para restaurar)';
-  confirmPrecaucion({
+  const opts={
     title:'Eliminar PQRSD → papelera',
-    message:msg,
+    message:pedirMotivo?(msg+' Indique el motivo de anulación.'):msg,
     detail:expId,
-    prompt:'Motivo de anulación (obligatorio)',
-    promptPlaceholder:'Ej. Radicada por error, duplicada…',
     confirmLabel:'Mover a papelera',
     tone:'delete'
-  },async function(motivo){
+  };
+  if(pedirMotivo){
+    opts.prompt='Motivo de anulación (obligatorio)';
+    opts.promptPlaceholder='Ej. Radicada por error, duplicada…';
+    opts.requirePrompt=true;
+  }
+  confirmPrecaucion(opts,async function(motivo){
     motivo=String(motivo||'').trim();
-    if(!motivo){notif('Indique el motivo de anulación','err');return;}
+    if(pedirMotivo&&!motivo){notif('Indique el motivo de anulación','err');return;}
+    if(!motivo)motivo='Eliminación por administrador';
     if(typeof softDeleteExpediente==='function'){
       const r=await softDeleteExpediente(expId,motivo);
       if(!r||!r.ok){notif('No se pudo mover a la papelera','err');return;}
@@ -7178,9 +7185,11 @@ function confirmPrecaucion(opts,onOk){
   }
   if(inp){
     if(opts.prompt){
-      inp.style.display='';
+      // CSS base tiene display:none; hay que forzar block ('' vuelve al stylesheet)
+      inp.style.display='block';
       inp.placeholder=opts.promptPlaceholder||opts.prompt;
       inp.value=opts.promptValue||'';
+      setTimeout(function(){try{inp.focus();}catch(e){}},60);
     }else{
       inp.style.display='none';
       inp.value='';
@@ -7190,8 +7199,24 @@ function confirmPrecaucion(opts,onOk){
   if(btn)btn.textContent=opts.confirmLabel||'Sí, confirmar';
   window._confirmPrecOk=typeof onOk==='function'?onOk:null;
   window._confirmPrecHasPrompt=!!opts.prompt;
+  window._confirmPrecRequirePrompt=!!(opts.prompt&&opts.requirePrompt!==false);
   if(btn){
-    btn.onclick=function(){closeConfirmPrecaucion(true);};
+    btn.onclick=function(){
+      if(window._confirmPrecRequirePrompt&&window._confirmPrecHasPrompt){
+        const el=document.getElementById('confirm-prec-input');
+        const v=String((el||{}).value||'').trim();
+        if(!v){
+          // No usar notif(): comparte el mismo overlay y cierra este diálogo
+          if(el){
+            el.style.borderColor='var(--rd)';
+            el.focus();
+            el.placeholder='Escriba el motivo de anulación (obligatorio)';
+          }
+          return;
+        }
+      }
+      closeConfirmPrecaucion(true);
+    };
   }
   ov.classList.add('on');
 }
@@ -7212,6 +7237,7 @@ function closeConfirmPrecaucion(ok){
   if(ov)ov.classList.remove('on');
   if(inp){inp.style.display='none';inp.value='';}
   window._confirmPrecHasPrompt=false;
+  window._confirmPrecRequirePrompt=false;
   window._confirmRequireAck=false;
   if(ok&&window._confirmPrecOk){
     const fn=window._confirmPrecOk;
