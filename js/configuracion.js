@@ -731,7 +731,7 @@ function renderTramsCfg(){
         '<div class="fx" style="gap:8px">'+
           '<div style="width:11px;height:11px;border-radius:50%;background:'+t.color+';flex-shrink:0"></div>'+
           '<div class="trn">'+escAttr(t.nombre)+'</div>'+
-          '<span style="font-size:12px;color:var(--tx2)">'+campos.length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+'</span>'+
+          '<span style="font-size:12px;color:var(--tx2)">'+campos.length+' campos · Plazo: '+t.plazo+' '+(UNIDAD_LABEL[t.unidad]||'días')+((t.subclases||[]).length?' · '+(t.subclases||[]).length+' clase(s)':'')+'</span>'+
         '</div>'+
         '<div class="fx" style="gap:5px"><button class="btn bsm bd2" onclick="event.stopPropagation();delTram(\''+jsStr(t.id)+'\')">🗑 Eliminar</button><span>▼</span></div>'+
       '</div>'+
@@ -746,6 +746,7 @@ function renderTramsCfg(){
             '<div class="fld"><label>Alerta en % del plazo</label><input type="number" id="tram-alerta-'+t.id+'" value="'+t.alerta+'" min="1" max="100" style="border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif;background:var(--sf);width:100%"></div>'+
           '</div>'+
         '</div>'+
+        htmlTramSubclasesEditor(t)+
         // Campos
         '<div style="margin-top:.6rem"><div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.3rem">Campos del formulario</div>'+
         secHtml+
@@ -792,13 +793,17 @@ function guardarTramite(tid){
   t.plazo=plazo;
   t.unidad=unidad;
   t.alerta=alerta;
+  const lblEl=document.getElementById('tram-subclase-label-'+tid);
+  t.subclaseLabel=String((lblEl&&lblEl.value)||'Clase / tipo').trim()||'Clase / tipo';
+  t.subclases=readTramSubclasesFromUi(tid);
   saveLS();
   poblarTramSelect();
   window._tramOpenId=tid;
   renderTramsCfg();
   const el=document.getElementById('trb-'+tid);
   if(el)el.style.display='';
-  notif('Trámite «'+t.nombre+'» guardado — '+plazo+' '+(UNIDAD_LABEL[unidad]||'días')+', alerta al '+alerta+'%','ok');
+  const nSub=(t.subclases||[]).length;
+  notif('Trámite «'+t.nombre+'» guardado — '+plazo+' '+(UNIDAD_LABEL[unidad]||'días')+', alerta al '+alerta+'%'+(nSub?' · '+nSub+' clase(s)':''),'ok');
 }
 function addCampo(tid,sec){
   if(guardCfgEditGeneral())return;
@@ -925,6 +930,121 @@ function syncNtColorAuto(){
   const prev=document.getElementById('nt-color-prev');
   if(prev)prev.style.background=c;
 }
+function normalizeSubclasesList(arr){
+  if(!Array.isArray(arr))return[];
+  const out=[];
+  const seen=new Set();
+  arr.forEach(function(s){
+    const v=String(s||'').trim();
+    if(!v)return;
+    const k=v.toLowerCase();
+    if(seen.has(k))return;
+    seen.add(k);
+    out.push(v);
+  });
+  return out;
+}
+function getTramSubclases(t){
+  if(!t)return[];
+  return normalizeSubclasesList(t.subclases);
+}
+function getTramSubclaseLabel(t){
+  return String((t&&t.subclaseLabel)||'Clase / tipo').trim()||'Clase / tipo';
+}
+function ntReadSubclases(){
+  try{return normalizeSubclasesList(JSON.parse((document.getElementById('nt-subclases')||{}).value||'[]'));}
+  catch(e){return[];}
+}
+function ntWriteSubclases(list){
+  const arr=normalizeSubclasesList(list);
+  const hid=document.getElementById('nt-subclases');
+  if(hid)hid.value=JSON.stringify(arr);
+  const el=document.getElementById('nt-subclases-list');
+  if(!el)return;
+  if(!arr.length){
+    el.innerHTML='<span style="font-size:11px;color:var(--tx3)">Sin opciones aún. Agregue al menos una si el trámite tiene clases (Superficial, Persistente…).</span>';
+    return;
+  }
+  el.innerHTML=arr.map(function(s,i){
+    return '<span class="bdg" style="display:inline-flex;align-items:center;gap:4px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);padding:4px 8px">'+
+      escAttr(s)+
+      '<button type="button" class="btn bsm bic bd2" style="padding:0 4px;min-width:0;line-height:1.2" onclick="ntRemoveSubclase('+i+')" title="Quitar">✕</button></span>';
+  }).join('');
+}
+function ntAddSubclase(){
+  const inp=document.getElementById('nt-subclase-inp');
+  const v=String((inp&&inp.value)||'').trim();
+  if(!v){notif('Escriba el nombre de la clase / tipo','err');return;}
+  const list=ntReadSubclases();
+  if(list.some(function(x){return x.toLowerCase()===v.toLowerCase();})){notif('Esa opción ya está en la lista','err');return;}
+  list.push(v);
+  ntWriteSubclases(list);
+  if(inp){inp.value='';inp.focus();}
+}
+function ntRemoveSubclase(i){
+  const list=ntReadSubclases();
+  list.splice(i,1);
+  ntWriteSubclases(list);
+}
+function htmlTramSubclasesEditor(t){
+  const list=getTramSubclases(t);
+  const lbl=getTramSubclaseLabel(t);
+  let h='<div class="tr-section" style="margin-top:.8rem">';
+  h+='<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.4rem">🏷️ Clase / tipo / modo</div>';
+  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:.5rem">Subsecciones que el encargado elige al crear el expediente (ej. Superficial / Subterránea).</div>';
+  h+='<div class="fg">';
+  h+='<div class="fld"><label>Nombre del selector</label><input type="text" id="tram-subclase-label-'+escAttr(t.id)+'" value="'+escAttr(lbl)+'" placeholder="Clase / tipo" style="border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif;background:var(--sf);width:100%"></div>';
+  h+='<div class="fld" style="flex:2"><label>Agregar opción</label><div class="fx" style="gap:6px">';
+  h+='<input type="text" id="tram-subclase-inp-'+escAttr(t.id)+'" placeholder="Ej. Superficial" style="flex:1;border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif" onkeydown="if(event.key===\'Enter\'){event.preventDefault();tramAddSubclase(\''+jsStr(t.id)+'\');}">';
+  h+='<button type="button" class="btn bsm bp" onclick="tramAddSubclase(\''+jsStr(t.id)+'\')">+</button></div></div></div>';
+  h+='<div id="tram-subclases-list-'+escAttr(t.id)+'" class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px">';
+  if(!list.length)h+='<span style="font-size:11px;color:var(--tx3)">Sin clases configuradas (el selector no aparecerá en Registro).</span>';
+  else list.forEach(function(s,i){
+    h+='<span class="bdg" style="display:inline-flex;align-items:center;gap:4px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);padding:4px 8px">'+
+      escAttr(s)+
+      '<button type="button" class="btn bsm bic bd2" style="padding:0 4px;min-width:0;line-height:1.2" onclick="tramRemoveSubclase(\''+jsStr(t.id)+'\','+i+')" title="Quitar">✕</button></span>';
+  });
+  h+='</div><input type="hidden" id="tram-subclases-'+escAttr(t.id)+'" value=\''+escAttr(JSON.stringify(list))+'\'>';
+  h+='</div>';
+  return h;
+}
+function readTramSubclasesFromUi(tid){
+  try{return normalizeSubclasesList(JSON.parse((document.getElementById('tram-subclases-'+tid)||{}).value||'[]'));}
+  catch(e){return[];}
+}
+function writeTramSubclasesUi(tid,list){
+  const arr=normalizeSubclasesList(list);
+  const hid=document.getElementById('tram-subclases-'+tid);
+  if(hid)hid.value=JSON.stringify(arr);
+  const el=document.getElementById('tram-subclases-list-'+tid);
+  if(!el)return;
+  if(!arr.length){
+    el.innerHTML='<span style="font-size:11px;color:var(--tx3)">Sin clases configuradas (el selector no aparecerá en Registro).</span>';
+    return;
+  }
+  el.innerHTML=arr.map(function(s,i){
+    return '<span class="bdg" style="display:inline-flex;align-items:center;gap:4px;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);padding:4px 8px">'+
+      escAttr(s)+
+      '<button type="button" class="btn bsm bic bd2" style="padding:0 4px;min-width:0;line-height:1.2" onclick="tramRemoveSubclase(\''+jsStr(tid)+'\','+i+')" title="Quitar">✕</button></span>';
+  }).join('');
+}
+function tramAddSubclase(tid){
+  if(guardCfgEditGeneral())return;
+  const inp=document.getElementById('tram-subclase-inp-'+tid);
+  const v=String((inp&&inp.value)||'').trim();
+  if(!v){notif('Escriba el nombre de la clase / tipo','err');return;}
+  const list=readTramSubclasesFromUi(tid);
+  if(list.some(function(x){return x.toLowerCase()===v.toLowerCase();})){notif('Esa opción ya está en la lista','err');return;}
+  list.push(v);
+  writeTramSubclasesUi(tid,list);
+  if(inp){inp.value='';inp.focus();}
+}
+function tramRemoveSubclase(tid,i){
+  if(guardCfgEditGeneral())return;
+  const list=readTramSubclasesFromUi(tid);
+  list.splice(i,1);
+  writeTramSubclasesUi(tid,list);
+}
 function crearTramite(){
   if(guardCfgEditGeneral())return;
   const nom=document.getElementById('nt-nom').value.trim();
@@ -934,13 +1054,23 @@ function crearTramite(){
   const alerta=Number(document.getElementById('nt-alerta').value)||80;
   const unidad=document.getElementById('nt-unidad').value;
   if(!nom){notif('Escribe el nombre','err');return;}
+  const subclaseLabel=String((document.getElementById('nt-subclase-label')||{}).value||'Clase / tipo').trim()||'Clase / tipo';
+  const subclases=ntReadSubclases();
   const campos=[];
-  cfg.tramites.push({id:'t'+Date.now(),nombre:nom,desc,color,plazo,alerta,unidad,etapas:[],etapasSeg:[],campos});
+  cfg.tramites.push({id:'t'+Date.now(),nombre:nom,desc,color,plazo,alerta,unidad,etapas:[],etapasSeg:[],campos,subclases,subclaseLabel});
   document.getElementById('nt-nom').value='';
   document.getElementById('nt-desc').value='';
   const hid=document.getElementById('nt-color');if(hid)hid.value=color;
-  saveLS();poblarTramSelect();auditCfgChange('Nuevo trámite: '+nom);notif('Trámite "'+nom+'" creado','ok');
+  const lbl=document.getElementById('nt-subclase-label');if(lbl)lbl.value='Clase / tipo';
+  ntWriteSubclases([]);
+  saveLS();poblarTramSelect();auditCfgChange('Nuevo trámite: '+nom);notif('Trámite "'+nom+'" creado'+(subclases.length?' · '+subclases.length+' clase(s)':''),'ok');
   showCfgTab('tramites');
 }
+window.ntAddSubclase=ntAddSubclase;
+window.ntRemoveSubclase=ntRemoveSubclase;
+window.tramAddSubclase=tramAddSubclase;
+window.tramRemoveSubclase=tramRemoveSubclase;
+window.getTramSubclases=getTramSubclases;
+window.getTramSubclaseLabel=getTramSubclaseLabel;
 
 // ================================================================

@@ -187,6 +187,15 @@ function guardarExpCore(stayOnForm){
   const esPqrs=esTramitePqrs(tid);
   const esSanc=esTramiteSancionatorio(tid);
   const esCaso=esPqrs||esSanc;
+  const subclasesCfg=(typeof getTramSubclases==='function')?getTramSubclases(t):(Array.isArray(t.subclases)?t.subclases:[]);
+  if(!stayOnForm&&responsablePuedeEditarSec('control')&&subclasesCfg.length){
+    const sub=gv('fld__subclase');
+    if(!String(sub||'').trim()){
+      const lbl=(typeof getTramSubclaseLabel==='function')?getTramSubclaseLabel(t):(t.subclaseLabel||'Clase / tipo');
+      notif('Seleccione '+lbl,'err');
+      return;
+    }
+  }
   if(!stayOnForm){
     if(responsablePuedeEditarSec('persona')){
       if(!esCaso){
@@ -267,6 +276,7 @@ function guardarExpCore(stayOnForm){
     _es_pqrs:esCaso,_es_queja:esCaso,
     _tipo_solicitud:esPqrs?gv('fld__tipo_solicitud'):'',
     _tipo_sancionatorio:esSanc?gv('fld__tipo_sancionatorio'):'',
+    _subclase:gv('fld__subclase')||'',
     _usar_exp_asociados:document.getElementById('fld__usar_exp_asociados')?document.getElementById('fld__usar_exp_asociados').checked:false,
     _expedientes_asociados:gv('fld__expedientes_asociados')||'[]',
     _qd_anonimo:document.getElementById('fld__qd_anonimo')?document.getElementById('fld__qd_anonimo').checked:false,
@@ -376,6 +386,15 @@ function guardarExpCore(stayOnForm){
     if(!data._autorizado){data._aut_nombre='';data._aut_identificacion='';data._aut_correo='';data._aut_telefono='';limpiarDirData(data,'aut');}
     if(!esTramitePqrs(data._tramite))data._tipo_solicitud='';
     if(!esTramiteSancionatorio(data._tramite))data._tipo_sancionatorio='';
+    }
+  }
+  // Limpiar subclase si el trámite ya no tiene opciones configuradas
+  {
+    const tramLive=typeof getTram==='function'?getTram(data._tramite,data):t;
+    const subs=(typeof getTramSubclases==='function')?getTramSubclases(tramLive):(tramLive&&Array.isArray(tramLive.subclases)?tramLive.subclases:[]);
+    if(!subs.length)data._subclase='';
+    else if(data._subclase&&!subs.some(function(s){return String(s)===String(data._subclase);})){
+      // conserva valor legacy aunque se haya renombrado la lista
     }
   }
   if(!data._sancionatorio)data._exp_sancionatorio='';

@@ -117,7 +117,10 @@ function showCfgTab(t){
   if(t==='tramites')renderTramsCfg();
   if(t==='personas')renderPersonasCfg();
   if(t==='auditoria')renderAuditLogCfg();
-  if(t==='nuevo'&&typeof syncNtColorAuto==='function')syncNtColorAuto();
+  if(t==='nuevo'&&typeof syncNtColorAuto==='function'){
+    syncNtColorAuto();
+    if(typeof ntWriteSubclases==='function')ntWriteSubclases(typeof ntReadSubclases==='function'?ntReadSubclases():[]);
+  }
   if(t==='papelera'){
     if(typeof puedeUsarPapelera==='function'&&!puedeUsarPapelera()){
       notif('Solo el encargado del departamento puede ver la papelera','err');
@@ -134,6 +137,18 @@ function showCfgTab(t){
       if(typeof renderPapeleraCfg==='function')renderPapeleraCfg();
     }).catch(function(){});
   }
+}
+function htmlSubclaseTramiteField(tram,ev){
+  const list=(typeof getTramSubclases==='function')?getTramSubclases(tram):(tram&&Array.isArray(tram.subclases)?tram.subclases:[]);
+  if(!list.length)return'';
+  const lbl=(typeof getTramSubclaseLabel==='function')?getTramSubclaseLabel(tram):(tram.subclaseLabel||'Clase / tipo');
+  const cur=String((ev&&ev._subclase)||'').trim();
+  return '<div class="fld" style="margin-top:.65rem" id="fld-subclase-wrap"><label>'+escAttr(lbl)+'<span class="req-star">*</span></label>'+
+    '<select id="fld__subclase" style="width:100%">'+
+    '<option value="">— Seleccione —</option>'+
+    list.map(function(s){return '<option value="'+escAttr(s)+'"'+(cur===s?' selected':'')+'>'+escAttr(s)+'</option>';}).join('')+
+    '</select>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:4px">Subsección del tipo de trámite configurada en Configuración → Tipos de trámite.</div></div>';
 }
 function htmlApoderadoAutorizado(ev){
   const apo=!!ev._apoderado;
@@ -267,6 +282,7 @@ function renderFormulario(tid,ed,targetId){
     '<div class="fld"><label>Estado del trámite</label><select id="fld__estado" onchange="onEstadoChange()">'+estOpts+'</select></div>'+
     '<div class="fld"><label id="lbl-fecha-estado">Fecha del estado</label><input type="date" id="fld__fecha_estado" value="'+fechaEstadoVal+'" onchange="onFechaEstadoVisibleChange()"></div>'+
     '</div>'+
+    htmlSubclaseTramiteField(t,ev)+
     '<div style="font-size:11px;color:var(--tx2);margin-top:4px">La fecha de Solicitud es la radicación. Al cambiar de estado, registre la fecha en el calendario al lado.</div>'+terHtml+
     expedientesAsociadosHtml(ev)+
     '<input type="hidden" id="fld__expedientes_asociados" value=\''+escAttr(ev._expedientes_asociados||'[]')+'\'>'+

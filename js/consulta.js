@@ -970,7 +970,7 @@ function renderConSidePanel(){
   const tram=getTram(e._tramite,e);
   const primary=ids[0]||e._exp;
   if(tit)tit.textContent=ids.length>1?('Expedientes vinculados ('+ids.length+')'):e._exp;
-  if(sub)sub.textContent=getNom(e)+(tram?' · '+tram.nombre:'')+(window._conPanelEditMode?' · edición en '+uiEditorContenedorLbl():ids.length>1?' · Use las pestañas para cambiar':'');
+  if(sub)sub.textContent=getNom(e)+(tram?' · '+tram.nombre:'')+(e._subclase?' · '+e._subclase:'')+(window._conPanelEditMode?' · edición en '+uiEditorContenedorLbl():ids.length>1?' · Use las pestañas para cambiar':'');
   const tabs=ids.length>1?('<div class="con-panel-tabs">'+ids.map(id=>{
     const ex=exps.find(x=>String(x._exp||'').trim()===id);
     const isMain=id===primary;

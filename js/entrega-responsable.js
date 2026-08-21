@@ -271,6 +271,15 @@ function htmlEntregaRespInteresadoBox(tramiteId){
     h+='<div style="font-size:12px;color:var(--tx3)">Seleccione el tipo de trámite para ver los campos a diligenciar (igual que en Registro).</div></div>';
     return h;
   }
+  const tramObj=typeof getTram==='function'?getTram(tid):null;
+  const subclases=(typeof getTramSubclases==='function')?getTramSubclases(tramObj):(tramObj&&Array.isArray(tramObj.subclases)?tramObj.subclases:[]);
+  if(subclases.length){
+    const lbl=(typeof getTramSubclaseLabel==='function')?getTramSubclaseLabel(tramObj):(tramObj&&tramObj.subclaseLabel)||'Clase / tipo';
+    h+='<div class="fld" style="margin-bottom:8px"><label>'+escAttr(lbl)+' <span style="color:var(--rd)">*</span></label><select id="entrega-int-subclase" style="'+inpStyle+'">'+
+      '<option value="">— Seleccione —</option>'+
+      subclases.map(function(s){return '<option value="'+escAttr(s)+'">'+escAttr(s)+'</option>';}).join('')+
+      '</select></div>';
+  }
   if(esSanc){
     h+='<div class="fld" style="margin-bottom:8px"><label>Tipo de conducta / caso</label><select id="entrega-int-tipo-sanc" style="'+inpStyle+'">'+
       tiposSanc.map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('')+
@@ -442,7 +451,8 @@ function collectEntregaRespInteresado(){
   const out={
     _apoderado:!!((document.getElementById('entrega-int-apoderado')||{}).checked),
     _autorizado:!!((document.getElementById('entrega-int-autorizado')||{}).checked),
-    _medio_notificacion:_entregaIntVal('entrega-int-medio-notif')||''
+    _medio_notificacion:_entregaIntVal('entrega-int-medio-notif')||'',
+    _subclase:_entregaIntVal('entrega-int-subclase')||''
   };
   if(out._apoderado){
     Object.assign(out,{
@@ -520,6 +530,12 @@ function validateEntregaRespInteresado(datos){
   if(!datos)return'Sin datos del interesado';
   const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
   const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
+  const tramObj=typeof getTram==='function'?getTram(tid):null;
+  const subclases=(typeof getTramSubclases==='function')?getTramSubclases(tramObj):(tramObj&&Array.isArray(tramObj.subclases)?tramObj.subclases:[]);
+  if(subclases.length&&!String(datos._subclase||'').trim()){
+    const lbl=(typeof getTramSubclaseLabel==='function')?getTramSubclaseLabel(tramObj):(tramObj&&tramObj.subclaseLabel)||'Clase / tipo';
+    return'Seleccione '+lbl;
+  }
   if(esSanc){
     if(!datos._qd_anonimo&&!datos._qd_nombre)return'Indique el nombre del quejoso / denunciante (o márquelo anónimo)';
     try{

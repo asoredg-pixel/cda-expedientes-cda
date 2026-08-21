@@ -11127,7 +11127,10 @@ function badgeDepto(id){if((!esJurisdiccional()&&!esModoResponsable())||!id)retu
 // dias, fmtF, hoy, gv, onlyNums, numAttrs, emailValido, validarEmailCampo → js/utils.js
 function getTram(id,deptoOrExp){return (cfgFor(deptoOrExp).tramites||[]).find(t=>t.id===id);}
 function daysBdg(d){const cl=d<90?'dok':d<180?'dwn':'dal';return '<span class="bdg '+cl+'">'+d+'d</span>';}
-function badgeTram(tid,deptoOrExp){const t=getTram(tid,deptoOrExp);if(!t)return'';return '<span class="bdg" style="background:'+t.color+'22;color:'+t.color+'">'+t.nombre+'</span>';}
+function badgeTram(tid,deptoOrExp){const t=getTram(tid,deptoOrExp);if(!t)return'';
+  const sub=(deptoOrExp&&typeof deptoOrExp==='object'&&deptoOrExp._subclase)?String(deptoOrExp._subclase).trim():'';
+  return '<span class="bdg" style="background:'+t.color+'22;color:'+t.color+'">'+escAttr(t.nombre)+(sub?' · '+escAttr(sub):'')+'</span>';
+}
 function badgeEta(eta,tid,deptoOrExp){const t=getTram(tid,deptoOrExp);const col=t?t.color:'#888';return '<span class="bdg" style="background:'+col+'22;color:'+col+'">'+(eta||'-')+'</span>';}
 function badgeEst(s){return '<span class="bdg '+(EST_CL[s]||'b-sol')+'">'+(s||'Solicitud')+'</span>';}
 function isArchivadoEstado(s){return s==='Archivado'||s==='Archivado o anulado';}

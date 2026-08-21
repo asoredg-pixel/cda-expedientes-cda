@@ -31,6 +31,12 @@ function normalizeCfgObj(c){
     const sn=DEF.tramites.find(t=>t.id==='t_sanc');
     if(sn)c.tramites.unshift(JSON.parse(JSON.stringify(sn)));
   }
+  (c.tramites||[]).forEach(function(t){
+    if(!t||typeof t!=='object')return;
+    if(!Array.isArray(t.subclases))t.subclases=[];
+    else t.subclases=t.subclases.map(function(s){return String(s||'').trim();}).filter(Boolean);
+    if(!t.subclaseLabel)t.subclaseLabel='Clase / tipo';
+  });
   const priIds=['t_sanc'];
   c.tramites.sort((a,b)=>{
     const ia=priIds.indexOf(a.id),ib=priIds.indexOf(b.id);
