@@ -119,12 +119,13 @@ function getDeptoGestionUsuariosAutorizados(){
 function usuariosAutorizadosVisibles(){
   const d=getDeptoGestionUsuariosAutorizados();
   if(!d)return _usuariosCache.slice();
-  return _usuariosCache.filter(u=>u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+  // Incluye inactivos para que el encargado pueda volver a activarlos.
+  return _usuariosCache.filter(u=>u.rol==='responsables'&&usuarioEsResponsableDepto(u,d,{includeInactive:true}));
 }
 function usuarioEditablePorEncargado(u){
   const d=getDeptoGestionUsuariosAutorizados();
   if(!d)return true;
-  return !!(u&&u.rol==='responsables'&&usuarioEsResponsableDepto(u,d));
+  return !!(u&&u.rol==='responsables'&&usuarioEsResponsableDepto(u,d,{includeInactive:true}));
 }
 function esModoContratista(){return rolSesion==='contratista';}
 function esUsuarioContratista(){return !!(window._usuarioActual&&window._usuarioActual.rol==='contratista');}

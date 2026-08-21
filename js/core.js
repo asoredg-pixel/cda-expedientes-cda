@@ -6398,8 +6398,11 @@ function getDeptoResponsablesSelect(){
   if(DEPTOS.some(d=>d.id===r))return r;
   return deptoCfg||getDeptoOperativo();
 }
-function usuarioEsResponsableDepto(u,deptoId){
-  if(!u||u.activo===false)return false;
+function usuarioEsResponsableDepto(u,deptoId,opts){
+  opts=opts||{};
+  if(!u)return false;
+  // Por defecto excluye inactivos (asignaciones operativas). En gestión (listar/reactivar) use includeInactive:true.
+  if(u.activo===false&&!opts.includeInactive)return false;
   const rol=String(u.rol||'').trim();
   if(rol!=='responsables'&&rol!=='contratista')return false;
   const d=String(u.deptoResponsable||'').trim();
@@ -6413,13 +6416,16 @@ function usuariosAutorizadosSelectOptions(selectedEmail,emptyLabel,deptoId){
   const miEmail=String(window._usuarioActual&&window._usuarioActual.email||'').trim().toLowerCase();
   let h='<option value="">'+escAttr(emptyLabel||'— Seleccione responsable autorizado —')+'</option>';
   _usuariosCache.filter(u=>{
-    if(!usuarioEsResponsableDepto(u,deptoId))return false;
     const em=String(u.email||'').trim().toLowerCase();
+    // Incluir inactivos solo si ya están seleccionados (para no perder el vínculo al editar).
+    const allowInactive=!!(cur&&em===cur);
+    if(!usuarioEsResponsableDepto(u,deptoId,{includeInactive:allowInactive}))return false;
     if(miEmail&&em===miEmail&&em!==cur)return false;
     return true;
   }).forEach(u=>{
     const em=String(u.email||'').trim().toLowerCase();
-    h+='<option value="'+escAttr(em)+'"'+(cur===em?' selected':'')+'>'+escAttr((u.nombre||em)+' · '+em)+'</option>';
+    const inact=u.activo===false?' (Inactivo)':'';
+    h+='<option value="'+escAttr(em)+'"'+(cur===em?' selected':'')+'>'+escAttr((u.nombre||em)+' · '+em+inact)+'</option>';
   });
   return h;
 }
@@ -6460,7 +6466,7 @@ function instructorUsuarioAlertHtml(email,deptoId){
   const u=getUsuarioAutorizadoByEmail(email);
   if(email&&!u)return '<span style="font-size:11px;color:var(--or);font-weight:600">Solicite al administrador registrar este responsable en Usuarios autorizados</span>';
   if(u&&u.activo===false)return '<span style="font-size:11px;color:var(--rd);font-weight:600">⚠️ Usuario desactivado — sin acceso al sistema</span>';
-  if(u&&deptoId&&u.rol==='responsables'&&!usuarioEsResponsableDepto(u,deptoId))return '<span style="font-size:11px;color:var(--or);font-weight:600">Asignado a '+escAttr(labelDepartamento(u.deptoResponsable)||'otro departamento')+' — no corresponde a este departamento</span>';
+  if(u&&deptoId&&u.rol==='responsables'&&!usuarioEsResponsableDepto(u,deptoId,{includeInactive:true}))return '<span style="font-size:11px;color:var(--or);font-weight:600">Asignado a '+escAttr(labelDepartamento(u.deptoResponsable)||'otro departamento')+' — no corresponde a este departamento</span>';
   return '';
 }
 function abrirPanelUsuariosAutorizados(){
