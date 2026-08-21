@@ -266,6 +266,24 @@ function updateHeaderUsuario(){
   if(bar)bar.style.display='inline-flex';
   if(barMob)barMob.style.display='flex';
 }
+function alertUsuarioDesactivado(opts){
+  opts=opts||{};
+  const email=String(opts.email||'').trim();
+  const msg='Su usuario está desactivado y no puede ingresar al sistema. Contacte al administrador para solicitar la reactivación de su cuenta.';
+  const detail=email?('Cuenta: '+email):'';
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'Usuario desactivado',
+      message:msg,
+      detail:detail,
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else{
+    try{window.alert(msg+(detail?'\n'+detail:''));}catch(e){}
+  }
+}
 async function verificarUsuarioFirestore(fbUser){
   const email=String(fbUser&&fbUser.email||'').trim().toLowerCase();
   const uid=fbUser&&fbUser.uid||'';
@@ -295,6 +313,7 @@ async function verificarUsuarioFirestore(fbUser){
     if(data.activo===false){
       setLoginStatus('');
       setLoginAuthMsg('❌ Acceso denegado. Su cuenta está desactivada. Contacte al administrador.','err');
+      alertUsuarioDesactivado({email:email});
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
