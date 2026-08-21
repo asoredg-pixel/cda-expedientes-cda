@@ -19,15 +19,15 @@
 <script src="js/utils.js?v=20260714f"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260805d"></script>
-<script src="js/roles.js?v=20260821a"></script>
+<script src="js/roles.js?v=20260821b"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/core.js?v=20260821a"></script>
-<script src="js/formulario.js?v=20260821a"></script>
+<script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260806a"></script>
 <script src="js/guardar-exp.js?v=20260821a"></script>
 <script src="js/consolidado.js?v=20260805i"></script>
-<script src="js/configuracion.js?v=20260821a"></script>
+<script src="js/configuracion.js?v=20260821b"></script>
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260702t"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
@@ -925,7 +925,6 @@
     <button class="cfg-tab" onclick="showCfgTab('info-tecnica')" id="ctab-info-tecnica">Información técnica</button>
     <button class="cfg-tab" onclick="showCfgTab('tramites')" id="ctab-tramites">Tipos de trámite</button>
     <button class="cfg-tab" onclick="showCfgTab('personas')" id="ctab-personas">Personas / usuarios</button>
-    <button class="cfg-tab" onclick="showCfgTab('nuevo')" id="ctab-nuevo">+ Nuevo trámite</button>
     <button class="cfg-tab" onclick="showCfgTab('auditoria')" id="ctab-auditoria" style="display:none">Log de Auditoría</button>
     <button class="cfg-tab" onclick="showCfgTab('usuarios')" id="ctab-usuarios" style="display:none">👥 Usuarios autorizados</button>
     <button class="cfg-tab" onclick="showCfgTab('papelera')" id="ctab-papelera" style="display:none">🗑 Papelera</button>
@@ -933,53 +932,62 @@
   <div class="cfg-pg on" id="cpg-listas"><div class="cfgr" id="cfg-panels"></div></div>
   <div class="cfg-pg" id="cpg-personas"><div id="cfg-personas-panel"></div></div>
   <div class="cfg-pg" id="cpg-info-tecnica"><div id="cfg-info-tecnica-panel"></div></div>
-  <div class="cfg-pg" id="cpg-tramites"><div id="trams-list"></div></div>
-  <div class="cfg-pg" id="cpg-auditoria"><div id="cfg-auditoria-panel"></div></div>
-  <div class="cfg-pg" id="cpg-usuarios"><div id="cfg-usuarios-panel"></div></div>
-  <div class="cfg-pg" id="cpg-papelera"><div id="cfg-papelera-panel"></div></div>
-  <div class="cfg-pg" id="cpg-nuevo">
-    <div class="card">
-      <div style="font-size:14px;font-weight:600;margin-bottom:.8rem">Crear nuevo tipo de trámite</div>
-      <div class="fg">
-        <div class="fld"><label>Nombre *</label><input type="text" id="nt-nom" placeholder="Ej. Permiso de emisiones"></div>
-        <div class="fld"><label>Descripción</label><input type="text" id="nt-desc" placeholder="Descripción breve"></div>
-        <div class="fld"><label>Color</label>
-          <div style="display:flex;align-items:center;gap:10px;min-height:38px">
-            <span id="nt-color-prev" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--bd);background:#185FA5;flex-shrink:0" title="Color asignado"></span>
-            <span id="nt-color-hint" style="font-size:12px;color:var(--tx2);line-height:1.35">Se asigna automáticamente un color que no esté en uso por otro trámite</span>
-            <input type="hidden" id="nt-color" value="#185FA5">
-          </div>
+  <div class="cfg-pg" id="cpg-tramites">
+    <div id="tram-nuevo-wrap" class="card" style="margin-bottom:1rem">
+      <div class="fx" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer" onclick="toggleTramNuevoForm()">
+        <div>
+          <div style="font-size:14px;font-weight:600">+ Nuevo tipo de trámite</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px">Nombre, plazo, clases / modalidades y color automático</div>
         </div>
+        <button type="button" class="btn bsm bp" id="tram-nuevo-toggle-btn" onclick="event.stopPropagation();toggleTramNuevoForm()">Abrir formulario</button>
       </div>
-      <div class="fg">
-        <div class="fld"><label>Plazo de atención (días hábiles) *</label><input type="number" id="nt-plazo" placeholder="Ej. 60" min="1" value="60"></div>
-        <div class="fld"><label>Alerta vencimiento (% del plazo)</label><input type="number" id="nt-alerta" placeholder="Ej. 80" min="1" max="100" value="80">
-          <span style="font-size:11px;color:var(--tx2)">Muestra alerta cuando se ha usado este % del plazo</span>
-        </div>
-        <div class="fld"><label>Unidad del plazo</label>
-          <select id="nt-unidad"><option value="dias">Días calendario</option><option value="habiles">Días hábiles</option><option value="meses">Meses</option><option value="anos">Años</option></select>
-        </div>
-      </div>
-      <div style="margin-top:.85rem;padding-top:.75rem;border-top:1px solid var(--bd)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Clase / tipo / modo <span style="font-weight:400;color:var(--tx3)">(opcional)</span></div>
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:.55rem">Subsecciones del trámite (ej. Concesión: Superficial / Subterránea; Aprovechamiento forestal: Persistente, Aislado, Único, Doméstico). El encargado las elige al registrar el expediente.</div>
+      <div id="tram-nuevo-body" style="display:none;margin-top:.85rem;padding-top:.75rem;border-top:1px solid var(--bd)">
         <div class="fg">
-          <div class="fld"><label>Nombre del selector</label><input type="text" id="nt-subclase-label" value="Clase / tipo" placeholder="Ej. Clase, Tipo, Modalidad"></div>
-          <div class="fld" style="flex:2"><label>Agregar opción</label>
-            <div class="fx" style="gap:6px">
-              <input type="text" id="nt-subclase-inp" placeholder="Ej. Superficial" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();ntAddSubclase();}">
-              <button type="button" class="btn bsm bp" onclick="ntAddSubclase()">+</button>
+          <div class="fld"><label>Nombre *</label><input type="text" id="nt-nom" placeholder="Ej. Permiso de emisiones"></div>
+          <div class="fld"><label>Descripción</label><input type="text" id="nt-desc" placeholder="Descripción breve"></div>
+          <div class="fld"><label>Color</label>
+            <div style="display:flex;align-items:center;gap:10px;min-height:38px">
+              <span id="nt-color-prev" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--bd);background:#185FA5;flex-shrink:0" title="Color asignado"></span>
+              <span id="nt-color-hint" style="font-size:12px;color:var(--tx2);line-height:1.35">Se asigna automáticamente un color que no esté en uso por otro trámite</span>
+              <input type="hidden" id="nt-color" value="#185FA5">
             </div>
           </div>
         </div>
-        <div id="nt-subclases-list" class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px"></div>
-        <input type="hidden" id="nt-subclases" value="[]">
-      </div>
-      <div class="ar">
-        <button class="btn bp" onclick="crearTramite()">💾 Guardar tipo de trámite</button>
+        <div class="fg">
+          <div class="fld"><label>Plazo de atención (días hábiles) *</label><input type="number" id="nt-plazo" placeholder="Ej. 60" min="1" value="60"></div>
+          <div class="fld"><label>Alerta vencimiento (% del plazo)</label><input type="number" id="nt-alerta" placeholder="Ej. 80" min="1" max="100" value="80">
+            <span style="font-size:11px;color:var(--tx2)">Muestra alerta cuando se ha usado este % del plazo</span>
+          </div>
+          <div class="fld"><label>Unidad del plazo</label>
+            <select id="nt-unidad"><option value="dias">Días calendario</option><option value="habiles">Días hábiles</option><option value="meses">Meses</option><option value="anos">Años</option></select>
+          </div>
+        </div>
+        <div style="margin-top:.85rem;padding-top:.75rem;border-top:1px solid var(--bd)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Clase / tipo / modo <span style="font-weight:400;color:var(--tx3)">(opcional)</span></div>
+          <div style="font-size:11px;color:var(--tx2);margin-bottom:.55rem">Subsecciones del trámite (ej. Concesión: Superficial / Subterránea). El encargado las elige al registrar el expediente.</div>
+          <div class="fg">
+            <div class="fld"><label>Nombre del selector</label><input type="text" id="nt-subclase-label" value="Clase / tipo" placeholder="Ej. Clase, Tipo, Modalidad"></div>
+            <div class="fld" style="flex:2"><label>Agregar opción</label>
+              <div class="fx" style="gap:6px">
+                <input type="text" id="nt-subclase-inp" placeholder="Ej. Superficial" style="flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();ntAddSubclase();}">
+                <button type="button" class="btn bsm bp" onclick="ntAddSubclase()">+</button>
+              </div>
+            </div>
+          </div>
+          <div id="nt-subclases-list" class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px"></div>
+          <input type="hidden" id="nt-subclases" value="[]">
+        </div>
+        <div class="ar" style="margin-top:.75rem">
+          <button type="button" class="btn bsm" onclick="toggleTramNuevoForm(false)">Cancelar</button>
+          <button class="btn bp" onclick="crearTramite()">💾 Guardar tipo de trámite</button>
+        </div>
       </div>
     </div>
+    <div id="trams-list"></div>
   </div>
+  <div class="cfg-pg" id="cpg-auditoria"><div id="cfg-auditoria-panel"></div></div>
+  <div class="cfg-pg" id="cpg-usuarios"><div id="cfg-usuarios-panel"></div></div>
+  <div class="cfg-pg" id="cpg-papelera"><div id="cfg-papelera-panel"></div></div>
 </div>
 </main>
 <div id="act-sug-portal" class="act-sug-portal" role="listbox" onmousedown="event.preventDefault()"></div>

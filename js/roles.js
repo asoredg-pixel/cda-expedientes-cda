@@ -180,8 +180,8 @@ function updateCfgTabsDepto(){
     const tab=document.getElementById('ctab-'+id);
     if(tab)tab.style.display='';
   });
-  const nuevoTab=document.getElementById('ctab-nuevo');
-  if(nuevoTab)nuevoTab.style.display=cfgEsSoloLectura()?'none':'';
+  const nuevoWrap=document.getElementById('tram-nuevo-wrap');
+  if(nuevoWrap)nuevoWrap.style.display=cfgEsSoloLectura()?'none':'';
   const listasTab=document.getElementById('ctab-listas');
   if(listasTab)listasTab.textContent=esCfgDeptoSoloResponsablesPersonas()&&!esAdminModoGlobal()?'Responsables y listas':'Configuración base';
   const papTab=document.getElementById('ctab-papelera');

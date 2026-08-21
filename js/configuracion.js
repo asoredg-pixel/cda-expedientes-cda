@@ -930,6 +930,21 @@ function syncNtColorAuto(){
   const prev=document.getElementById('nt-color-prev');
   if(prev)prev.style.background=c;
 }
+function toggleTramNuevoForm(forceOpen){
+  const body=document.getElementById('tram-nuevo-body');
+  const btn=document.getElementById('tram-nuevo-toggle-btn');
+  if(!body)return;
+  const open=forceOpen===true?true:(forceOpen===false?false:body.style.display==='none');
+  body.style.display=open?'':'none';
+  if(btn)btn.textContent=open?'Cerrar formulario':'Abrir formulario';
+  if(open){
+    if(typeof syncNtColorAuto==='function')syncNtColorAuto();
+    if(typeof ntWriteSubclases==='function')ntWriteSubclases(typeof ntReadSubclases==='function'?ntReadSubclases():[]);
+    const nom=document.getElementById('nt-nom');
+    if(nom)setTimeout(function(){nom.focus();},40);
+  }
+}
+window.toggleTramNuevoForm=toggleTramNuevoForm;
 function normalizeSubclasesList(arr){
   if(!Array.isArray(arr))return[];
   const out=[];
@@ -1064,6 +1079,7 @@ function crearTramite(){
   const lbl=document.getElementById('nt-subclase-label');if(lbl)lbl.value='Clase / tipo';
   ntWriteSubclases([]);
   saveLS();poblarTramSelect();auditCfgChange('Nuevo trámite: '+nom);notif('Trámite "'+nom+'" creado'+(subclases.length?' · '+subclases.length+' clase(s)':''),'ok');
+  if(typeof toggleTramNuevoForm==='function')toggleTramNuevoForm(false);
   showCfgTab('tramites');
 }
 window.ntAddSubclase=ntAddSubclase;

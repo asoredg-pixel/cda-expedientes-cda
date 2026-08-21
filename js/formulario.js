@@ -102,11 +102,19 @@ function showTab(t){
 function showCfgTab(t){
   if(t==='auditoria'&&!esAdministrador()){notif('Solo administrador','err');t='listas';}
   if(t==='usuarios'&&!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');t='listas';}
-  if(t==='nuevo'&&cfgEsSoloLectura()){notif('No puede crear trámites en este departamento','err');t='listas';}
+  if(t==='nuevo'){
+    if(cfgEsSoloLectura()){notif('No puede crear trámites en este departamento','err');t='listas';}
+    else{
+      t='tramites';
+      window._openTramNuevoForm=true;
+    }
+  }
   document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
-  document.getElementById('cpg-'+t).classList.add('on');
-  document.getElementById('ctab-'+t).classList.add('on');
+  const pg=document.getElementById('cpg-'+t);
+  const tab=document.getElementById('ctab-'+t);
+  if(pg)pg.classList.add('on');
+  if(tab)tab.classList.add('on');
   if(t==='usuarios'){
     prepararVistaAdminUsuariosAutorizados();
     renderUsuariosCfg(true);
@@ -114,13 +122,17 @@ function showCfgTab(t){
   }
   if(t==='listas')renderListasCfg();
   if(t==='info-tecnica')renderInfoTecCfg();
-  if(t==='tramites')renderTramsCfg();
+  if(t==='tramites'){
+    renderTramsCfg();
+    if(typeof syncNtColorAuto==='function')syncNtColorAuto();
+    if(typeof ntWriteSubclases==='function')ntWriteSubclases(typeof ntReadSubclases==='function'?ntReadSubclases():[]);
+    if(window._openTramNuevoForm){
+      window._openTramNuevoForm=false;
+      if(typeof toggleTramNuevoForm==='function')toggleTramNuevoForm(true);
+    }
+  }
   if(t==='personas')renderPersonasCfg();
   if(t==='auditoria')renderAuditLogCfg();
-  if(t==='nuevo'&&typeof syncNtColorAuto==='function'){
-    syncNtColorAuto();
-    if(typeof ntWriteSubclases==='function')ntWriteSubclases(typeof ntReadSubclases==='function'?ntReadSubclases():[]);
-  }
   if(t==='papelera'){
     if(typeof puedeUsarPapelera==='function'&&!puedeUsarPapelera()){
       notif('Solo el encargado del departamento puede ver la papelera','err');
