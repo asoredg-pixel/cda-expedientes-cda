@@ -736,6 +736,14 @@ function renderTramsCfg(){
         '<div class="fx" style="gap:5px"><button class="btn bsm bd2" onclick="event.stopPropagation();delTram(\''+jsStr(t.id)+'\')">🗑 Eliminar</button><span>▼</span></div>'+
       '</div>'+
       '<div id="trb-'+t.id+'" class="trbody" style="display:none">'+
+        '<div class="tr-section" style="margin-top:.8rem">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.4rem">Identificación</div>'+
+          '<div style="font-size:11px;color:var(--tx2);margin-bottom:.5rem">Puede corregir el nombre; los expedientes ya creados siguen vinculados por el id interno del tipo.</div>'+
+          '<div class="fg">'+
+            '<div class="fld"><label>Nombre *</label><input type="text" id="tram-nombre-'+t.id+'" value="'+escAttr(t.nombre||'')+'" placeholder="Nombre del tipo de trámite" style="border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif;background:var(--sf);width:100%"></div>'+
+            '<div class="fld"><label>Descripción</label><input type="text" id="tram-desc-'+t.id+'" value="'+escAttr(t.desc||'')+'" placeholder="Descripción breve" style="border:1px solid var(--bd);border-radius:var(--r);padding:6px 9px;font-size:13px;font-family:\'DM Sans\',sans-serif;background:var(--sf);width:100%"></div>'+
+          '</div>'+
+        '</div>'+
         // Términos
         '<div class="tr-section" style="margin-top:.8rem">'+
           '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:.4rem">⏱ Términos de atención</div>'+
@@ -757,7 +765,7 @@ function renderTramsCfg(){
         '</div></div>'+
         '<div class="tram-save-bar">'+
           '<button type="button" class="btn bp" onclick="event.stopPropagation();guardarTramite(\''+jsStr(t.id)+'\')">💾 Guardar trámite</button>'+
-          '<span style="font-size:11px;color:var(--tx3)">Términos y campos se guardan al pulsar este botón.</span>'+
+          '<span style="font-size:11px;color:var(--tx3)">Nombre, términos y campos se guardan al pulsar este botón.</span>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -782,6 +790,15 @@ function guardarTramite(tid){
   if(guardCfgEditGeneral())return;
   const t=getTram2(tid);
   if(!t)return;
+  const nomEl=document.getElementById('tram-nombre-'+tid);
+  const descEl=document.getElementById('tram-desc-'+tid);
+  const nom=String((nomEl&&nomEl.value)||'').trim();
+  const desc=String((descEl&&descEl.value)||'').trim();
+  if(!nom){notif('Indique el nombre del tipo de trámite','err');return;}
+  const dup=(cfg.tramites||[]).some(function(x){
+    return x&&x.id!==tid&&String(x.nombre||'').trim().toLowerCase()===nom.toLowerCase();
+  });
+  if(dup){notif('Ya existe otro tipo de trámite con ese nombre','err');return;}
   const plazoEl=document.getElementById('tram-plazo-'+tid);
   const unidadEl=document.getElementById('tram-unidad-'+tid);
   const alertaEl=document.getElementById('tram-alerta-'+tid);
@@ -790,6 +807,9 @@ function guardarTramite(tid){
   const alerta=Number(alertaEl&&alertaEl.value);
   if(!plazo||plazo<1){notif('Indique un plazo de atención válido (mínimo 1)','err');return;}
   if(!alerta||alerta<1||alerta>100){notif('La alerta debe estar entre 1 y 100 %','err');return;}
+  const prevNom=t.nombre;
+  t.nombre=nom;
+  t.desc=desc;
   t.plazo=plazo;
   t.unidad=unidad;
   t.alerta=alerta;
@@ -803,6 +823,7 @@ function guardarTramite(tid){
   const el=document.getElementById('trb-'+tid);
   if(el)el.style.display='';
   const nSub=(t.subclases||[]).length;
+  if(prevNom!==nom)auditCfgChange('Renombró trámite: «'+prevNom+'» → «'+nom+'»');
   notif('Trámite «'+t.nombre+'» guardado — '+plazo+' '+(UNIDAD_LABEL[unidad]||'días')+', alerta al '+alerta+'%'+(nSub?' · '+nSub+' clase(s)':''),'ok');
 }
 function addCampo(tid,sec){
