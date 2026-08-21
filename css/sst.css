@@ -1460,10 +1460,14 @@ body.sesion-activa .tabsi .tab.tab-resp-reg-off{display:none!important}
 .rec-vinc-acts{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
 .flag-bib{background:color-mix(in srgb,var(--bl) 10%,var(--sf));color:var(--bl);border:1px solid color-mix(in srgb,var(--bl) 28%,var(--bd));cursor:pointer;font:inherit}
 .flag-bib:hover{filter:brightness(.97)}
-/* Modal Guardar en biblioteca (desde PQRSD / actividades) — por encima de task-modal (99999) */
+/* Modal Guardar en biblioteca / visor documento — por encima de task-modal (99999) */
 .bib-guardar-overlay,
 html.ui-editor-modal-mode .bib-guardar-overlay.task-modal-overlay,
-html.ui-editor-modal-mode #bib-guardar-overlay{
+html.ui-editor-modal-mode #bib-guardar-overlay,
+#ciudadano-doc-overlay,
+html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
+#adj-viewer-ov,
+#rec-share-overlay.task-modal-overlay.on{
   z-index:100050!important;
 }
 .bib-guardar-modal{width:min(920px,96vw)!important;max-height:min(92vh,820px);display:flex;flex-direction:column}

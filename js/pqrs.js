@@ -2086,13 +2086,21 @@ function openCiudadanoDocViewer(url,label,externalUrl){
     foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">Si la vista previa pide acceso, abra el documento en una ventana emergente.</span>'+
       (openUrl?'<button type="button" class="btn bsm bp" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana emergente</button>':'');
   }
-  if(ov)ov.classList.add('on');
+  if(ov){
+    if(typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(ov);
+    ov.classList.add('on');
+    ov.setAttribute('aria-hidden','false');
+  }
 }
 function closeCiudadanoDocViewer(){
   const ov=document.getElementById('ciudadano-doc-overlay');
   const ifr=document.getElementById('ciudadano-doc-iframe');
   const foot=document.getElementById('ciudadano-doc-foot');
-  if(ov)ov.classList.remove('on');
+  if(ov){
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden','true');
+    if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
+  }
   if(ifr)ifr.src='';
   if(foot)foot.innerHTML='';
 }

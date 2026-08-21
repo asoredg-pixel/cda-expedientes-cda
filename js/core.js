@@ -7,10 +7,29 @@
 //             config-store.js (runtime).
 // Cargar despues de config-store.js y antes de los modulos de dominio.
 // =============================================================================
+/** z-index del modal de tarea/respuesta PQRSD (abrirPqrsModalPrep). */
+const SST_Z_TASK_MODAL=99999;
+/** Overlays abiertos encima (visor documento, biblioteca, confirmaciones anidadas). */
+const SST_Z_ABOVE_TASK_MODAL=100050;
+
+/** Trae un overlay al frente del body, por encima del task-modal elevado. */
+function elevateOverlayAboveModals(ov,z){
+  if(!ov)return;
+  const zVal=z!=null?z:SST_Z_ABOVE_TASK_MODAL;
+  ov.style.zIndex=String(zVal);
+  try{document.body.appendChild(ov);}catch(e){}
+}
+function resetOverlayElevation(ov){
+  if(ov)ov.style.zIndex='';
+}
+function taskModalEstaAbierto(){
+  const ov=document.getElementById('task-modal-overlay');
+  return !!(ov&&ov.classList.contains('on'));
+}
 function abrirPqrsModalPrep(){
   window._pqrsModalOpen=true;
   const ov=document.getElementById('task-modal-overlay');
-  if(ov){ov.style.zIndex='99999';document.body.appendChild(ov);}
+  if(ov){elevateOverlayAboveModals(ov,SST_Z_TASK_MODAL);}
   const pp=document.getElementById('pqrs-side-panel');
   const po=document.getElementById('pqrs-side-overlay');
   if(pp)pp.style.pointerEvents='none';
@@ -19,7 +38,7 @@ function abrirPqrsModalPrep(){
 function cerrarPqrsModalPrep(){
   window._pqrsModalOpen=false;
   const ov=document.getElementById('task-modal-overlay');
-  if(ov)ov.style.zIndex='';
+  resetOverlayElevation(ov);
   const pp=document.getElementById('pqrs-side-panel');
   const po=document.getElementById('pqrs-side-overlay');
   if(pp)pp.style.pointerEvents='';
@@ -2525,10 +2544,11 @@ function abrirVisorAdjunto(urlView,nombreArchivo){
   if(!ov){
     ov=document.createElement('div');
     ov.id='adj-viewer-ov';
-    ov.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
-    ov.onclick=function(ev){if(ev.target===ov)ov.remove();};
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center';
+    ov.onclick=function(ev){if(ev.target===ov){resetOverlayElevation(ov);ov.remove();}};
     document.body.appendChild(ov);
   }
+  elevateOverlayAboveModals(ov);
   const isBlob=String(urlView||'').startsWith('blob:');
   const previewUrl=isBlob?String(urlView||''):String(urlView||'').replace(/\/view(\?.*)?$/,'/preview');
   const driveView=String(urlView||'').replace(/\/preview(\?.*)?$/,'/view');
@@ -2541,7 +2561,7 @@ function abrirVisorAdjunto(urlView,nombreArchivo){
     '<div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd,#e2e8f0);gap:8px">'+
     '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">'+escAttr(nombreArchivo||'Adjunto')+'</span>'+
     extraLink+
-    '<button type="button" onclick="document.getElementById(\'adj-viewer-ov\').remove()" style="background:none;border:none;cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;color:var(--tx2,#666)" title="Cerrar">✕</button>'+
+    '<button type="button" onclick="(function(){var o=document.getElementById(\'adj-viewer-ov\');if(o){if(typeof resetOverlayElevation===\'function\')resetOverlayElevation(o);o.remove();}})()" style="background:none;border:none;cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;color:var(--tx2,#666)" title="Cerrar">✕</button>'+
     '</div>'+
     (isBlob?'':'<div style="padding:6px 14px;font-size:11px;color:var(--tx2);background:#f8fafc;border-bottom:1px solid var(--bd,#e2e8f0)">La vista previa no permite comentarios. Use <strong>Comentar en Drive</strong> para seleccionar texto y dejar anotaciones que verán los responsables con acceso al archivo.</div>')+
     '<iframe src="'+escAttr(previewUrl)+'" style="flex:1;width:100%;border:none" allowfullscreen></iframe>'+
@@ -7293,6 +7313,10 @@ function confirmPrecaucion(opts,onOk){
       closeConfirmPrecaucion(true);
     };
   }
+  // Si hay task-modal / respuesta PQRSD abierta, el confirm debe quedar encima
+  if(typeof elevateOverlayAboveModals==='function'&&(taskModalEstaAbierto()||window._pqrsModalOpen||(document.getElementById('bib-guardar-overlay')&&document.getElementById('bib-guardar-overlay').classList.contains('on')))){
+    elevateOverlayAboveModals(ov);
+  }
   ov.classList.add('on');
 }
 function confirmEliminar(opts,fn){
@@ -7309,7 +7333,10 @@ function closeConfirmPrecaucion(ok){
   const inp=document.getElementById('confirm-prec-input');
   const hadPrompt=!!window._confirmPrecHasPrompt;
   const promptVal=inp&&hadPrompt?inp.value:'';
-  if(ov)ov.classList.remove('on');
+  if(ov){
+    ov.classList.remove('on');
+    if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
+  }
   if(inp){inp.style.display='none';inp.value='';}
   window._confirmPrecHasPrompt=false;
   window._confirmPrecRequirePrompt=false;
@@ -12641,7 +12668,10 @@ function closeConfirmExito(){
   const ico=document.getElementById('confirm-prec-icon-emoji');
   const foot=ov?ov.querySelector('.confirm-prec-foot'):null;
   const box=ov?ov.querySelector('.confirm-prec-box'):null;
-  if(ov)ov.classList.remove('on');
+  if(ov){
+    ov.classList.remove('on');
+    if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
+  }
   window._confirmExitoMode=false;
   window._confirmRadicacionLoading=false;
   _sstCargaUiReset();
