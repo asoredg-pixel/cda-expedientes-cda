@@ -2132,7 +2132,11 @@ async function bibCreateRepoQuick(titulo, tematica, descripcion) {
 
 function closeBibGuardarModal() {
   const ov = document.getElementById('bib-guardar-overlay');
-  if (ov) ov.classList.remove('on');
+  if (ov) {
+    ov.classList.remove('on');
+    ov.style.zIndex = '';
+    ov.setAttribute('aria-hidden', 'true');
+  }
   window._bibGuardarCtx = null;
 }
 
@@ -2159,7 +2163,13 @@ function openBibGuardarModal(opts) {
   const ov = document.getElementById('bib-guardar-overlay');
   const tit = document.getElementById('bib-guardar-title');
   if (tit) tit.textContent = 'Guardar en biblioteca · ' + (opts.label || id);
-  if (ov) ov.classList.add('on');
+  if (ov) {
+    // Por encima de Registrar respuesta / task-modal (que usa z-index 99999)
+    ov.style.zIndex = '100050';
+    document.body.appendChild(ov);
+    ov.classList.add('on');
+    ov.setAttribute('aria-hidden', 'false');
+  }
   bibGuardarRenderModal();
 }
 
