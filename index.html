@@ -10,19 +10,19 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260812c">
+<link rel="stylesheet" href="css/sst.css?v=20260812d">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260811j"></script>
+<script src="js/constants.js?v=20260812d"></script>
 <script src="js/utils.js?v=20260714f"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260805d"></script>
 <script src="js/roles.js?v=20260811g"></script>
 <script src="js/config-store.js?v=20260724b"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260812c"></script>
+<script src="js/core.js?v=20260812d"></script>
 <script src="js/formulario.js?v=20260812a"></script>
 <script src="js/tareas.js?v=20260806a"></script>
 <script src="js/guardar-exp.js?v=20260811d"></script>
@@ -34,10 +34,10 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260811j"></script>
-<script src="js/pqrs.js?v=20260812c"></script>
+<script src="js/pqrs.js?v=20260812d"></script>
 <script src="js/consulta.js?v=20260811d"></script>
 <script src="js/entrega-responsable.js?v=20260811f"></script>
-<script src="js/tramite-firma.js?v=20260811c"></script>
+<script src="js/tramite-firma.js?v=20260812d"></script>
 <script src="js/papelera.js?v=20260806b"></script>
 <script src="js/recursos.js?v=20260812c"></script>
 <script src="js/ingreso.js?v=20260730b"></script>
@@ -780,6 +780,7 @@
   <div class="card" style="border-left:4px solid var(--bl)">
     <div class="fx" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.8rem">
       <div class="slbl" style="margin:0" id="pqrs-ofi-titulo">PQRSD</div>
+      <button type="button" class="btn bsm bp" id="btn-entrega-ofi-firma" style="display:none" onclick="openEntregaOficinaFirmaModal()" title="Oficio u otro documento que no es PQRSD — enviar a firma del Director">🖊 Documento para firma</button>
     </div>
     <div class="sb periodo-filtro act-periodo-row" style="margin-bottom:10px">
       <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="pqrs-ofi-preset" onchange="onPresetPeriodo('pqrs-ofi')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>

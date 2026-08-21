@@ -1021,9 +1021,15 @@ function getPqrsOficinaList(oficinaId,filtro){
       const ofiAct=oficinaId||getPqrsOficinaActiva();
       listF=listF.filter(e=>e._pqrs_oficina===ofiAct||(ofiAct==='guaviare'&&e._pqrs_oficina==='guaviare'));
     }
-    // Trámites en firma: misma paleta del Director / bandeja (carpetas Drive distintas, flujo similar)
+    // Trámites / oficios oficina en firma: misma paleta (filtrados por oficina)
     if(typeof getTramiteFirmaRowsParaPaletaDirector==='function'){
-      const tramRows=getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[];
+      let tramRows=getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[];
+      if(typeof filterTramiteFirmaRowsPorOficina==='function')
+        tramRows=filterTramiteFirmaRowsPorOficina(tramRows,oficinaId||getPqrsOficinaActiva(),esDir);
+      else if(!esDir){
+        const ofiAct=oficinaId||getPqrsOficinaActiva();
+        tramRows=tramRows.filter(function(r){return String(r._pqrs_oficina||'')===ofiAct;});
+      }
       tramRows.forEach(function(r){listF.push(r);});
     }
     listF=filterExpsPeriodo(listF,'pqrs-ofi');
@@ -1038,7 +1044,14 @@ function getPqrsOficinaList(oficinaId,filtro){
       listFd=listFd.filter(e=>e._pqrs_oficina===ofiAct||(ofiAct==='guaviare'&&e._pqrs_oficina==='guaviare'));
     }
     if(typeof getTramiteFirmaRowsParaPaletaDirector==='function'){
-      (getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).forEach(function(r){listFd.push(r);});
+      let tramFd=getTramiteFirmaRowsParaPaletaDirector('firmados')||[];
+      if(typeof filterTramiteFirmaRowsPorOficina==='function')
+        tramFd=filterTramiteFirmaRowsPorOficina(tramFd,oficinaId||getPqrsOficinaActiva(),esDir);
+      else if(!esDir){
+        const ofiAct=oficinaId||getPqrsOficinaActiva();
+        tramFd=tramFd.filter(function(r){return String(r._pqrs_oficina||'')===ofiAct;});
+      }
+      tramFd.forEach(function(r){listFd.push(r);});
     }
     listFd=filterExpsPeriodo(listFd,'pqrs-ofi');
     return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
@@ -1062,7 +1075,20 @@ function getPqrsOficinaList(oficinaId,filtro){
     return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
   });
   else if(filtro==='para_firma')list=list.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e));
-  else if(filtro==='por_notificar')list=list.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;});
+  else if(filtro==='por_notificar'){
+    list=list.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;});
+    if(typeof getTramiteFirmaRowsParaPaletaDirector==='function'){
+      const esDirN=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+      let tramN=getTramiteFirmaRowsParaPaletaDirector('por_notificar')||[];
+      if(typeof filterTramiteFirmaRowsPorOficina==='function')
+        tramN=filterTramiteFirmaRowsPorOficina(tramN,oficinaId||getPqrsOficinaActiva(),esDirN);
+      else if(!esDirN){
+        const ofiAct=oficinaId||getPqrsOficinaActiva();
+        tramN=tramN.filter(function(r){return String(r._pqrs_oficina||'')===ofiAct;});
+      }
+      tramN.forEach(function(r){list.push(r);});
+    }
+  }
   list=filterExpsPeriodo(list,'pqrs-ofi');
   return list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
 }
@@ -1085,18 +1111,29 @@ function pqrsDirectorPorFirmarAccionesHtml(e){
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-  // Trámite en firma del Director (paleta unificada)
+  // Trámite / oficio oficina en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);
     const t=typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
     const firmFis=t&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
-    if(esDir&&!firmFis)return pqrsDirectorPorFirmarAccionesHtml(e);
+    const enNotif=t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
+    const ofiDueña=t&&typeof tramitePuedeGestionarComoOficina==='function'&&tramitePuedeGestionarComoOficina(t);
+    if(esDir&&!firmFis&&!enNotif)return pqrsDirectorPorFirmarAccionesHtml(e);
     if(esDir&&firmFis)
       return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver">👁</button> '+
         '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+    if(esDir&&enNotif)
+      return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver">👁</button> '+
+        '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="En notificación">📬</span> ';
     let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
-    if(firmFis&&!esDir)
+    if(enNotif&&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+id+'\',\''+tid+'\')" title="Notificar">📬</button> ';
+    else if(firmFis&&!esDir)
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+id+'\',\''+tid+'\')" title="Pasar a por notificar">📬</button> ';
+    else if(!firmFis&&ofiDueña){
+      h+='<button type="button" class="btn bsm act-ico" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'cargar\')" title="Cargar firmado / pasar a notificar">⬆</button> ';
+      h+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff;border-color:#15803d" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ya_firmado\')" title="Ya firmado">✓</button> ';
+    }
     return h;
   }
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
@@ -1194,6 +1231,11 @@ function renderPqrsOficinaInbox(){
     if(esPendTrasl)tit.textContent='PQRSD — Pendientes por trasladar';
     else if(ofi)tit.textContent='PQRSD — '+ofi.nombre;
   }
+  const btnOfiFirma=document.getElementById('btn-entrega-ofi-firma');
+  if(btnOfiFirma){
+    const showOfiFirma=typeof puedeEntregarOficinaParaFirma==='function'&&puedeEntregarOficinaParaFirma()&&!esPendTrasl;
+    btnOfiFirma.style.display=showOfiFirma?'':'none';
+  }
   if(ban){
     if(esPendTrasl){
       ban.style.display='';
@@ -1222,22 +1264,39 @@ function renderPqrsOficinaInbox(){
     const esFirmadoFn=function(e){
       return typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e));
     };
+    const ofiActMets=getPqrsOficinaActiva();
+    const tramPorFirmarRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
+      ?(typeof filterTramiteFirmaRowsPorOficina==='function'
+        ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[],ofiActMets,esDirMets)
+        :(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[]).filter(function(r){return esDirMets||String(r._pqrs_oficina||'')===ofiActMets;}))
+      :[]);
+    const tramFirmadosRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
+      ?(typeof filterTramiteFirmaRowsPorOficina==='function'
+        ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('firmados')||[],ofiActMets,esDirMets)
+        :(getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).filter(function(r){return esDirMets||String(r._pqrs_oficina||'')===ofiActMets;}))
+      :[]);
+    const tramPorNotifRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
+      ?(typeof filterTramiteFirmaRowsPorOficina==='function'
+        ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('por_notificar')||[],ofiActMets,esDirMets)
+        :(getTramiteFirmaRowsParaPaletaDirector('por_notificar')||[]).filter(function(r){return esDirMets||String(r._pqrs_oficina||'')===ofiActMets;}))
+      :[]);
     const porFirmar=showPorFirmarCard
       ?(esDirMets
         ?(exps.filter(e=>esPqrsSecretaria(e)&&typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR&&!esFirmadoFn(e)).length
-          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[]).length:0))
+          +tramPorFirmarRows.length)
         :listAll.filter(e=>typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.POR_FIRMAR&&!esFirmadoFn(e)).length
-          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[]).length:0))
+          +tramPorFirmarRows.length)
       :0;
     const firmados=showFirmadosCard
       ?(esDirMets
         ?(exps.filter(e=>esPqrsSecretaria(e)&&esFirmadoFn(e)).length
-          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).length:0))
+          +tramFirmadosRows.length)
         :listAll.filter(e=>esFirmadoFn(e)).length
-          +(typeof getTramiteFirmaRowsParaPaletaDirector==='function'?(getTramiteFirmaRowsParaPaletaDirector('firmados')||[]).length:0))
+          +tramFirmadosRows.length)
       :0;
     const paraFirma=showParaImprimirCard?listAll.filter(e=>typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e)).length:0;
-    const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length;
+    const porNotif=listAll.filter(e=>{const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';return f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;}).length
+      +(!esDirMets?tramPorNotifRows.length:0);
     const enRevision=listAll.filter(e=>{
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
@@ -1267,9 +1326,18 @@ function renderPqrsOficinaInbox(){
     const asunto=e.f_f1||e._pqrs_detalle||'—';
     const on=String(window._pqrsOfiSelExp||'').trim()===String(e._exp||'').trim()+(e._tramite_firma_task?('#'+e._taskId):'');
     const wfBadge=e._tramite_firma_task
-      ?'<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e">🖊 Trámite · Por firmar</span>'
+      ?(function(){
+        const t=typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
+        if(t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))
+          return'<span class="bdg" style="background:#185FA522;color:#185FA5">📬 '+(e._oficina_firma?'Oficio':'Trámite')+' · Por notificar</span>';
+        if(t&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))
+          return'<span class="bdg" style="background:#dcfce7;color:#15803d">✓ '+(e._oficina_firma?'Oficio':'Trámite')+' · Firmado</span>';
+        return'<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e">🖊 '+(e._oficina_firma?'Oficio':'Trámite')+' · Por firmar</span>';
+      })()
       :(typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'');
-    const tipoLbl=e._tramite_firma_task?'Trámite':(e._tipo_solicitud||'PQRSD');
+    const tipoLbl=e._tramite_firma_task
+      ?((e._oficina_firma||e._tipo_solicitud==='Oficio oficina')?'Oficio':'Trámite')
+      :(e._tipo_solicitud||'PQRSD');
     const clickFn=e._tramite_firma_task
       ?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()
         ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\',\'ver\')')
