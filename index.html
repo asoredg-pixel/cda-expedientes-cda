@@ -10,7 +10,7 @@
 <title>Sistema de Seguimiento — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260812b">
+<link rel="stylesheet" href="css/sst.css?v=20260812c">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260811g"></script>
 <script src="js/config-store.js?v=20260724b"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260812b"></script>
+<script src="js/core.js?v=20260812c"></script>
 <script src="js/formulario.js?v=20260812a"></script>
 <script src="js/tareas.js?v=20260806a"></script>
 <script src="js/guardar-exp.js?v=20260811d"></script>
@@ -34,12 +34,12 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260811j"></script>
-<script src="js/pqrs.js?v=20260812a"></script>
+<script src="js/pqrs.js?v=20260812c"></script>
 <script src="js/consulta.js?v=20260811d"></script>
 <script src="js/entrega-responsable.js?v=20260811f"></script>
 <script src="js/tramite-firma.js?v=20260811c"></script>
 <script src="js/papelera.js?v=20260806b"></script>
-<script src="js/recursos.js?v=20260811b"></script>
+<script src="js/recursos.js?v=20260812c"></script>
 <script src="js/ingreso.js?v=20260730b"></script>
 </head>
 <body>
@@ -1017,6 +1017,13 @@
       <button type="button" class="btn bsm" onclick="recursosCerrarCompartir()">Cancelar</button>
       <button type="button" class="btn bsm bp" onclick="recursosGuardarCompartir()">Guardar</button>
     </div>
+  </div>
+</div>
+<div id="bib-guardar-overlay" class="task-modal-overlay bib-guardar-overlay" onclick="if(event.target===this)closeBibGuardarModal()" aria-hidden="true">
+  <div class="task-modal bib-guardar-modal" onclick="event.stopPropagation()">
+    <div class="task-modal-hdr"><span id="bib-guardar-title">Guardar en biblioteca</span><button type="button" class="btn bsm" onclick="closeBibGuardarModal()">✕</button></div>
+    <div class="task-modal-body" id="bib-guardar-body"></div>
+    <div class="bib-guardar-foot" id="bib-guardar-foot"></div>
   </div>
 </div>
 <div id="ciudadano-doc-overlay" class="task-modal-overlay" onclick="if(event.target===this)closeCiudadanoDocViewer()">

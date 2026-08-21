@@ -2027,6 +2027,373 @@ function bibAbrirReposTaskModal(expRef, taskId) {
   ov.classList.add('on');
 }
 
+// ── Guardar en biblioteca (desde PQRSD / trámite / actividad) ─────────────────
+
+function reposBibliotecaAsociables() {
+  return reposBibliotecaVisibles().filter(function(r) {
+    if (r.activo === false) return false;
+    const s = getRepoScope(r);
+    return typeof puedeEditarBiblioteca === 'function' && puedeEditarBiblioteca(s.scope, s.scopeId);
+  });
+}
+
+function bibGuardarEnBibliotecaBtnHtml(opts) {
+  opts = opts || {};
+  const tipo = escAttr(opts.tipo || 'expediente');
+  const id = escAttr(opts.id || '');
+  const taskId = escAttr(opts.taskId || '');
+  const libre = opts.libre ? 'true' : 'false';
+  const label = escAttr(opts.label || id);
+  return '<button type="button" class="btn bsm" onclick="openBibGuardarModal({tipo:\'' + tipo + '\',id:\'' + id + '\',taskId:\'' + taskId + '\',libre:' + libre + ',label:\'' + label + '\'})">📁 Guardar en biblioteca</button>';
+}
+
+function bibGuardarEnBibliotecaBarHtml(expId, taskId, t) {
+  if (!t) return '';
+  const ref = t.sinExpediente ? (t.codigo || expId) : expId;
+  const ids = bibGetRepoIdsFromTask(t);
+  const linked = ids.length ? ' · ' + ids.length + ' tema(s)' : '';
+  let h = '<div style="margin-bottom:8px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">';
+  h += '<span style="font-size:12px"><strong>📚 Biblioteca</strong><span style="color:var(--tx3)">' + linked + '</span></span><div class="fx" style="gap:6px;flex-wrap:wrap">';
+  h += bibGuardarEnBibliotecaBtnHtml({ tipo: 'actividad', id: ref, taskId: taskId, libre: !!t.sinExpediente, label: (t.actividad || t.desc || 'Actividad') });
+  if (ids.length) h += '<button type="button" class="btn bsm" onclick="bibAbrirReposTaskModal(\'' + escAttr(ref) + '\',\'' + escAttr(taskId) + '\')">Ver temas</button>';
+  h += '</div></div>';
+  return h;
+}
+
+function bibGuardarLinkedExpHtml(e) {
+  if (!e) return '';
+  const ids = bibGetRepoIdsFromExp(e);
+  if (!ids.length) return '';
+  const names = ids.map(function(id) {
+    const r = getRecursosRepoById(id);
+    return r && r.titulo ? r.titulo : id;
+  }).join(', ');
+  return '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf2);border-radius:var(--r)">Ya en biblioteca: <strong>' + escAttr(names) + '</strong></div>';
+}
+
+function bibCollectAdjuntosPqrs() {
+  const files = [];
+  document.querySelectorAll('#pqrs-resp-adj-rows input[type=file]').forEach(function(inp) {
+    if (inp.files) for (let i = 0; i < inp.files.length; i++) if (inp.files[i]) files.push(inp.files[i]);
+  });
+  const anex = document.getElementById('pqrs-resp-anexos-file');
+  if (anex && anex.files) for (let i = 0; i < anex.files.length; i++) if (anex.files[i]) files.push(anex.files[i]);
+  (window._pqrsComposeAttachments || []).forEach(function(a) {
+    if (a && a.file) files.push(a.file);
+  });
+  return files;
+}
+
+async function bibCreateRepoQuick(titulo, tematica, descripcion) {
+  const auto = typeof getRecursosScopeAutoSesion === 'function' ? getRecursosScopeAutoSesion() : { scope: 'departamento', scopeId: deptoActivo || 'guaviare' };
+  const scope = auto.scope;
+  const scopeId = auto.scopeId;
+  if (!puedeEditarBiblioteca(scope, scopeId)) throw new Error('Sin permiso para crear temas en biblioteca');
+  let driveFolderId = '';
+  let driveFolderLink = '';
+  if (!recursosDriveConectado()) {
+    recursosModalCorreoRequerido('crear carpetas en Drive');
+    throw new Error('Correo no conectado');
+  }
+  const driveFn = typeof driveEnsureBibliotecaRepoFolder === 'function' ? driveEnsureBibliotecaRepoFolder : window.driveEnsureBibliotecaRepoFolder;
+  if (!driveFn) throw new Error('Módulo Drive no disponible');
+  const created = await driveFn(scope, scopeId, titulo);
+  driveFolderId = created.folderId;
+  driveFolderLink = created.link;
+  const email = typeof getAuthEmailNorm === 'function' ? getAuthEmailNorm() : '';
+  const byAdmin = typeof esAdministrador === 'function' && esAdministrador();
+  const repo = {
+    id: 'repo' + Date.now(),
+    titulo: titulo,
+    tematica: tematica || '',
+    descripcion: descripcion || '',
+    scope: scope,
+    scopeId: scopeId,
+    oficinaId: scope === 'oficina' ? scopeId : '',
+    driveFolderId: driveFolderId,
+    driveFolderLink: driveFolderLink,
+    activo: true,
+    createdByAdmin: byAdmin,
+    compartidoCon: [],
+    archivosCompartidos: [],
+    vinculados: [],
+    createdAt: new Date().toISOString(),
+    createdBy: email,
+    updatedAt: new Date().toISOString()
+  };
+  bibliotecaRepos.push(repo);
+  const ok = await saveRecursosFirestore();
+  if (!ok) {
+    bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== repo.id; });
+    throw new Error('No se pudo guardar el tema');
+  }
+  return repo;
+}
+
+function closeBibGuardarModal() {
+  const ov = document.getElementById('bib-guardar-overlay');
+  if (ov) ov.classList.remove('on');
+  window._bibGuardarCtx = null;
+}
+
+function openBibGuardarModal(opts) {
+  opts = opts || {};
+  const tipo = String(opts.tipo || 'expediente').trim();
+  const id = String(opts.id || '').trim();
+  const taskId = String(opts.taskId || '').trim();
+  if (!id && tipo !== 'actividad') { notif('Sin referencia para guardar', 'err'); return; }
+  if (tipo === 'actividad' && !taskId) { notif('Actividad no identificada', 'err'); return; }
+  window._bibGuardarCtx = {
+    tipo: tipo,
+    id: id,
+    taskId: taskId,
+    libre: !!opts.libre,
+    label: opts.label || id,
+    repoId: '',
+    folderId: '',
+    path: [],
+    subirAdjuntos: false,
+    showNuevo: false,
+    onDone: typeof opts.onDone === 'function' ? opts.onDone : null
+  };
+  const ov = document.getElementById('bib-guardar-overlay');
+  const tit = document.getElementById('bib-guardar-title');
+  if (tit) tit.textContent = 'Guardar en biblioteca · ' + (opts.label || id);
+  if (ov) ov.classList.add('on');
+  bibGuardarRenderModal();
+}
+
+function bibGuardarRenderModal() {
+  const ctx = window._bibGuardarCtx;
+  const body = document.getElementById('bib-guardar-body');
+  const foot = document.getElementById('bib-guardar-foot');
+  if (!ctx || !body) return;
+  const repos = reposBibliotecaAsociables();
+  const qEl = document.getElementById('bib-guardar-q');
+  const q = qEl ? String(qEl.value || '').trim().toLowerCase() : '';
+  let linkedHtml = '';
+  if (ctx.tipo === 'actividad') {
+    const t = bibResolveTaskRef({ tipo: 'actividad', id: ctx.id, taskId: ctx.taskId, libre: ctx.libre });
+    if (t && bibGetRepoIdsFromTask(t).length) linkedHtml = '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Temas actuales: ' + bibGetRepoIdsFromTask(t).map(function(rid) {
+      const r = getRecursosRepoById(rid);
+      return escAttr(r && r.titulo || rid);
+    }).join(', ') + '</div>';
+  } else {
+    const e = typeof getExpById === 'function' ? getExpById(ctx.id) : null;
+    linkedHtml = bibGuardarLinkedExpHtml(e);
+  }
+  const adjFiles = ctx.tipo === 'pqrsd' ? bibCollectAdjuntosPqrs() : [];
+  const filtrados = repos.filter(function(r) {
+    if (!q) return true;
+    const hay = ((r.titulo || '') + ' ' + (r.tematica || '') + ' ' + (r.descripcion || '')).toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+  let h = '<p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Organice este asunto en un <strong>tema</strong> de Biblioteca. Elija carpeta existente o cree una nueva; puede guardar dentro de subcarpetas.</p>';
+  h += linkedHtml;
+  h += '<div class="bib-guardar-grid">';
+  h += '<div class="bib-guardar-col"><div class="bib-guardar-col-hdr">Temas / carpetas</div><div class="bib-guardar-col-body">';
+  h += '<input type="search" id="bib-guardar-q" class="rec-inp" placeholder="Buscar tema…" value="' + escAttr(q) + '" style="width:100%;margin-bottom:8px" oninput="bibGuardarRenderModal()">';
+  if (!filtrados.length) {
+    h += '<div class="rec-empty" style="padding:12px">No hay temas disponibles. Cree uno nuevo abajo.</div>';
+  } else {
+    filtrados.forEach(function(r) {
+      const on = ctx.repoId === r.id;
+      h += '<div class="bib-guardar-repo' + (on ? ' on' : '') + '" onclick="bibGuardarSelectRepo(\'' + escAttr(r.id) + '\')">';
+      h += '<div><strong>' + escAttr(r.titulo || 'Sin título') + '</strong>';
+      if (r.tematica) h += '<div style="font-size:11px;color:var(--tx3)">' + escAttr(r.tematica) + '</div>';
+      h += '</div><span style="font-size:10px;color:var(--tx3)">' + ((r.vinculados || []).length) + ' casos</span></div>';
+    });
+  }
+  h += '</div></div>';
+  h += '<div class="bib-guardar-col"><div class="bib-guardar-col-hdr">Ubicación en Drive</div>';
+  h += '<div id="bib-guardar-folders-wrap">' + bibGuardarFoldersHtml() + '</div></div>';
+  h += '</div>';
+  if (ctx.showNuevo) {
+    h += '<div class="bib-guardar-nuevo" id="bib-guardar-nuevo-box">';
+    h += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">Crear tema nuevo</div>';
+    h += '<div class="fg"><div class="fld"><label>Título del tema</label><input type="text" id="bib-guardar-nuevo-titulo" class="rec-inp" placeholder="Ej. Quejas ambientales 2026"></div>';
+    h += '<div class="fld"><label>Temática (opcional)</label><input type="text" id="bib-guardar-nuevo-tematica" class="rec-inp" placeholder="Ej. Deforestación"></div></div>';
+    h += '<div class="fx" style="gap:6px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="bibGuardarCrearTema()">Crear y seleccionar</button>';
+    h += '<button type="button" class="btn bsm" onclick="bibGuardarToggleNuevo(false)">Cancelar</button></div></div>';
+  } else {
+    h += '<div style="margin-top:10px"><button type="button" class="btn bsm" onclick="bibGuardarToggleNuevo(true)">+ Crear tema nuevo</button></div>';
+  }
+  if (adjFiles.length) {
+    h += '<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;cursor:pointer"><input type="checkbox" id="bib-guardar-subir-adj"' + (ctx.subirAdjuntos ? ' checked' : '') + ' onchange="bibGuardarToggleSubirAdj()"> Subir ' + adjFiles.length + ' archivo(s) adjunto(s) a la carpeta seleccionada</label>';
+  }
+  body.innerHTML = h;
+  if (foot) {
+    foot.innerHTML = '<button type="button" class="btn bsm" onclick="closeBibGuardarModal()">Cancelar</button>' +
+      (ctx.repoId ? '<button type="button" class="btn bsm" onclick="bibGuardarAbrirRepo()">Abrir en Biblioteca</button>' : '') +
+      '<button type="button" class="btn bsm bp" onclick="bibGuardarConfirmar()" ' + (ctx.repoId ? '' : 'disabled') + '>Guardar aquí</button>';
+  }
+}
+
+function bibGuardarFoldersHtml() {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx || !ctx.repoId) {
+    return '<div class="bib-guardar-col-body" style="padding:12px;color:var(--tx3);font-size:12px">Seleccione un tema a la izquierda.</div>';
+  }
+  const r = getRecursosRepoById(ctx.repoId);
+  if (!r) return '<div class="rec-empty">Tema no encontrado</div>';
+  const rootId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
+  if (!rootId) return '<div class="rec-empty">Sin carpeta Drive vinculada</div>';
+  if (!(ctx.path || []).length) {
+    ctx.path = [{ id: rootId, name: r.titulo || 'Tema' }];
+    ctx.folderId = rootId;
+  }
+  let h = '<div class="bib-guardar-crumb">';
+  (ctx.path || []).forEach(function(p, i) {
+    if (i > 0) h += '<span class="bib-guardar-crumb-sep">›</span>';
+    h += '<button type="button" onclick="bibGuardarNavCrumb(' + i + ')">' + escAttr(p.name) + '</button>';
+  });
+  h += '</div><div class="bib-guardar-col-body" id="bib-guardar-folder-list">';
+  h += '<div style="font-size:11px;color:var(--tx3);padding:6px 8px">Cargando subcarpetas…</div></div>';
+  h += '<div style="padding:8px;border-top:1px solid var(--bd)"><button type="button" class="btn bsm" onclick="bibGuardarNuevaSubcarpeta()">+ Nueva subcarpeta</button></div>';
+  setTimeout(function() { bibGuardarLoadFolders(); }, 0);
+  return h;
+}
+
+async function bibGuardarLoadFolders() {
+  const ctx = window._bibGuardarCtx;
+  const el = document.getElementById('bib-guardar-folder-list');
+  if (!ctx || !el || !ctx.folderId) return;
+  if (!recursosDriveConectado()) {
+    el.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--tx3)">Conecte correo en Correos para ver subcarpetas.</div>';
+    return;
+  }
+  try {
+    let files = [];
+    let token = '';
+    do {
+      const data = await driveListFolderContents(ctx.folderId, token || '');
+      files = files.concat(data.files || []);
+      token = data.nextPageToken || '';
+    } while (token);
+    ctx._folderFiles = files;
+    const folders = files.filter(function(f) { return f.mimeType === 'application/vnd.google-apps.folder'; });
+    if (!folders.length) {
+      el.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--tx3)">Sin subcarpetas — se guardará en esta ubicación.</div>';
+      return;
+    }
+    el.innerHTML = folders.map(function(f) {
+      return '<div class="bib-guardar-folder" ondblclick="bibGuardarEnterFolder(\'' + escAttr(f.id) + '\',\'' + escAttr(f.name) + '\')" onclick="bibGuardarEnterFolder(\'' + escAttr(f.id) + '\',\'' + escAttr(f.name) + '\')">' +
+        '<span>📁</span><span>' + escAttr(f.name) + '</span></div>';
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--rd)">' + escAttr(err.message || 'Error listando carpetas') + '</div>';
+  }
+}
+
+function bibGuardarSelectRepo(repoId) {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx) return;
+  ctx.repoId = repoId;
+  ctx.path = [];
+  ctx.folderId = '';
+  bibGuardarRenderModal();
+}
+
+function bibGuardarEnterFolder(folderId, name) {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx) return;
+  ctx.folderId = folderId;
+  const path = ctx.path || [];
+  const idx = path.findIndex(function(p) { return p.id === folderId; });
+  if (idx >= 0) ctx.path = path.slice(0, idx + 1);
+  else ctx.path = path.concat([{ id: folderId, name: name || 'Carpeta' }]);
+  bibGuardarRenderModal();
+}
+
+function bibGuardarNavCrumb(idx) {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx || !ctx.path || !ctx.path.length) return;
+  ctx.path = ctx.path.slice(0, idx + 1);
+  ctx.folderId = ctx.path[ctx.path.length - 1].id;
+  bibGuardarRenderModal();
+}
+
+function bibGuardarToggleNuevo(show) {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx) return;
+  ctx.showNuevo = !!show;
+  bibGuardarRenderModal();
+}
+
+function bibGuardarToggleSubirAdj() {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx) return;
+  const cb = document.getElementById('bib-guardar-subir-adj');
+  ctx.subirAdjuntos = !!(cb && cb.checked);
+}
+
+async function bibGuardarCrearTema() {
+  const titulo = String((document.getElementById('bib-guardar-nuevo-titulo') || {}).value || '').trim();
+  const tematica = String((document.getElementById('bib-guardar-nuevo-tematica') || {}).value || '').trim();
+  if (!titulo) { notif('Indique el título del tema', 'err'); return; }
+  try {
+    const repo = await bibCreateRepoQuick(titulo, tematica, '');
+    notif('Tema creado: ' + titulo, 'ok');
+    const ctx = window._bibGuardarCtx;
+    if (ctx) {
+      ctx.showNuevo = false;
+      ctx.repoId = repo.id;
+      ctx.path = [];
+      ctx.folderId = '';
+      bibGuardarRenderModal();
+    }
+  } catch (err) {
+    if (err && err.message && err.message !== 'Correo no conectado') notif(err.message, 'err');
+  }
+}
+
+async function bibGuardarNuevaSubcarpeta() {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx || !ctx.folderId) return;
+  if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear subcarpetas'); return; }
+  const name = prompt('Nombre de la subcarpeta:');
+  if (!name || !String(name).trim()) return;
+  try {
+    await driveCreateFolder(String(name).trim(), ctx.folderId);
+    notif('Subcarpeta creada', 'ok');
+    bibGuardarLoadFolders();
+  } catch (err) {
+    notif(err.message || 'Error creando subcarpeta', 'err');
+  }
+}
+
+function bibGuardarAbrirRepo() {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx || !ctx.repoId) return;
+  closeBibGuardarModal();
+  abrirBibliotecaRepoDesdeExp(ctx.repoId);
+}
+
+async function bibGuardarConfirmar() {
+  const ctx = window._bibGuardarCtx;
+  if (!ctx || !ctx.repoId) { notif('Seleccione un tema', 'err'); return; }
+  const tipo = ctx.tipo === 'pqrsd' ? 'pqrsd' : (ctx.tipo === 'actividad' ? 'actividad' : 'expediente');
+  await bibAsociarARepo(ctx.repoId, tipo, ctx.id, ctx.taskId || '', ctx.libre);
+  if (ctx.subirAdjuntos && ctx.tipo === 'pqrsd' && ctx.folderId) {
+    const files = bibCollectAdjuntosPqrs();
+    const uploadFn = typeof driveUploadBiblioteca === 'function' ? driveUploadBiblioteca : window.driveUploadBiblioteca;
+    if (uploadFn && files.length) {
+      let ok = 0;
+      for (let i = 0; i < files.length; i++) {
+        try {
+          await uploadFn(files[i], files[i].name, files[i].type || 'application/octet-stream', ctx.folderId);
+          ok++;
+        } catch (err) { console.warn('bib upload', err); }
+      }
+      if (ok) notif(ok + ' archivo(s) subidos a la carpeta', 'ok');
+    }
+  }
+  if (ctx.onDone) try { ctx.onDone(ctx.repoId); } catch (err) { console.warn(err); }
+  closeBibGuardarModal();
+  if (typeof renderActividades === 'function' && document.getElementById('pg-act') && document.getElementById('pg-act').classList.contains('on')) renderActividades();
+  if (typeof renderConsulta === 'function' && document.getElementById('pg-con') && document.getElementById('pg-con').classList.contains('on')) renderConsulta();
+}
+
 window.bibAsociarARepo = bibAsociarARepo;
 window.bibDesasociarDeRepo = bibDesasociarDeRepo;
 window.bibAbrirVinculo = bibAbrirVinculo;
@@ -2036,3 +2403,17 @@ window.bibTaskReposBadgeHtml = bibTaskReposBadgeHtml;
 window.bibRefreshBusquedaVinculos = bibRefreshBusquedaVinculos;
 window.bibAbrirReposExpModal = bibAbrirReposExpModal;
 window.bibAbrirReposTaskModal = bibAbrirReposTaskModal;
+window.openBibGuardarModal = openBibGuardarModal;
+window.closeBibGuardarModal = closeBibGuardarModal;
+window.bibGuardarEnBibliotecaBtnHtml = bibGuardarEnBibliotecaBtnHtml;
+window.bibGuardarEnBibliotecaBarHtml = bibGuardarEnBibliotecaBarHtml;
+window.bibGuardarSelectRepo = bibGuardarSelectRepo;
+window.bibGuardarEnterFolder = bibGuardarEnterFolder;
+window.bibGuardarNavCrumb = bibGuardarNavCrumb;
+window.bibGuardarToggleNuevo = bibGuardarToggleNuevo;
+window.bibGuardarCrearTema = bibGuardarCrearTema;
+window.bibGuardarNuevaSubcarpeta = bibGuardarNuevaSubcarpeta;
+window.bibGuardarConfirmar = bibGuardarConfirmar;
+window.bibGuardarAbrirRepo = bibGuardarAbrirRepo;
+window.bibGuardarRenderModal = bibGuardarRenderModal;
+window.bibGuardarToggleSubirAdj = bibGuardarToggleSubirAdj;

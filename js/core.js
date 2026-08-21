@@ -1350,6 +1350,7 @@ async function openPqrsRespuestaModal(expId,opts){
     (fromGmail?'':
     '<button type="button" class="btn bsm bp" id="pqrs-resp-email-send-btn" style="display:none" onclick="submitPqrsRespuestaPorCorreo(\''+escAttr(expLabel)+'\')">📤 Enviar correo y cerrar</button>')+
     '<button type="button" class="btn bsm bp" id="pqrs-resp-submit-btn" onclick="'+(fromGmail?'submitPqrsRespuestaGmailVinculo()':'submitPqrsRespuesta(\''+escAttr(expLabel)+'\')')+'">'+(fromGmail?'✅ Registrar respuesta':'✅ Confirmar y cerrar')+'</button>'+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?bibGuardarEnBibliotecaBtnHtml({tipo:'pqrsd',id:expLabel,label:(e&&(e.f_f1||e._pqrs_detalle))||expLabel}):'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   window._pqrsComposeAttachments=[];
@@ -5396,6 +5397,7 @@ function openEditarActTaskModal(expId,taskId){
     '<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(t.plazoDias||'')+'" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px"><input type="checkbox" id="act-libre-prior"'+(t.prioritaria?' checked':'')+'> ⚡ Actividad prioritaria</label>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="submitEditarActTask(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">Guardar cambios</button>'+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?bibGuardarEnBibliotecaBtnHtml({tipo:'actividad',id:ref,taskId:t.id,libre:!!t.sinExpediente,label:(t.actividad||t.desc||'Actividad')}):'')+
     (puedeEliminarTaskPqrs(ref,t.id)?('<button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑 Eliminar</button>'):'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
@@ -10658,10 +10660,11 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional())
     ||(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)&&!esModoResponsable()&&!esJurisdiccional());
   const verifyBar=(!chatOnly&&!soloGestion&&showVerifyBar)?renderTaskVerifyBarHtml(expId,taskId,t):'';
+  const bibBar=(!chatOnly&&!soloGestion&&typeof bibGuardarEnBibliotecaBarHtml==='function')?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   body.innerHTML='<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>'+
     (soloGestion?('<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Añada o retire co-ejecutores y defina el modo de entrega.</div>'):'')+
-    pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
+    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
   ov.classList.add('on');
   if(!chatOnly&&!soloGestion){
     window._compareDocA=null;

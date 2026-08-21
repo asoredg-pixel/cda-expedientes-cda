@@ -1460,6 +1460,25 @@ body.sesion-activa .tabsi .tab.tab-resp-reg-off{display:none!important}
 .rec-vinc-acts{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
 .flag-bib{background:color-mix(in srgb,var(--bl) 10%,var(--sf));color:var(--bl);border:1px solid color-mix(in srgb,var(--bl) 28%,var(--bd));cursor:pointer;font:inherit}
 .flag-bib:hover{filter:brightness(.97)}
+/* Modal Guardar en biblioteca (desde PQRSD / actividades) */
+.bib-guardar-overlay{z-index:27000!important}
+.bib-guardar-modal{width:min(920px,96vw)!important;max-height:min(92vh,820px);display:flex;flex-direction:column}
+.bib-guardar-modal .task-modal-body{overflow:auto;flex:1;min-height:0}
+.bib-guardar-foot{padding:0 1rem 1rem;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;border-top:1px solid var(--bd);padding-top:12px;margin-top:0}
+.bib-guardar-grid{display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,1.4fr);gap:12px;min-height:320px}
+@media(max-width:720px){.bib-guardar-grid{grid-template-columns:1fr}}
+.bib-guardar-col{border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);display:flex;flex-direction:column;min-height:280px;overflow:hidden}
+.bib-guardar-col-hdr{padding:8px 10px;font-size:12px;font-weight:600;border-bottom:1px solid var(--bd);background:var(--sf2)}
+.bib-guardar-col-body{flex:1;overflow:auto;padding:6px}
+.bib-guardar-repo{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:var(--r);margin-bottom:6px;cursor:pointer;font-size:12px;background:var(--sf)}
+.bib-guardar-repo:hover{background:var(--sf2)}
+.bib-guardar-repo.on{border-color:var(--bl);background:color-mix(in srgb,var(--bl) 12%,var(--sf));box-shadow:0 0 0 1px var(--bl)}
+.bib-guardar-folder{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r);cursor:pointer;font-size:12px}
+.bib-guardar-folder:hover{background:color-mix(in srgb,var(--bl) 8%,transparent)}
+.bib-guardar-crumb{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;font-size:11px;border-bottom:1px solid var(--bd);background:var(--sf2)}
+.bib-guardar-crumb button{border:0;background:transparent;color:var(--bl);cursor:pointer;font:inherit;padding:2px 4px;border-radius:4px}
+.bib-guardar-crumb button:hover{text-decoration:underline}
+.bib-guardar-nuevo{margin-top:10px;padding:10px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf2)}
 /* Explorador Biblioteca (tipo Windows) */
 .rec-exp-shell{margin-top:8px;border-top:1px solid var(--bd);padding-top:10px}
 .rec-exp{outline:none;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);min-height:320px;display:flex;flex-direction:column}

@@ -1691,6 +1691,7 @@ function openAsignarPqrsOficinaModal(expId){
     (e._pqrs_solicitud_archivo?'<div style="font-size:12px;margin-bottom:8px;color:var(--tx2)">📄 Referencia: '+escAttr(e._pqrs_solicitud_archivo)+'</div>':'')+
     '<div class="fx" style="gap:8px" id="pqrs-asig-footer">'+
     (necesitaCorreo&&!tokOk?'':('<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'))+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?bibGuardarEnBibliotecaBtnHtml({tipo:'pqrsd',id:expId,label:expId}):'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'asignarPqrsOfi',expId};
