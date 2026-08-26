@@ -3837,7 +3837,7 @@ function openAgendaDesdeActividad(expId,taskId){
   if(sub)sub.textContent=resp;
   if(body)body.innerHTML=renderMiDiaPanelHtml();
   if(overlay)overlay.classList.add('on');
-  if(panel){panel.classList.add('on','side-panel-left');}
+  if(panel)panel.classList.add('on');
 }
 function getAgendaPlanesDelDia(resp,fecha){
   const nNorm=agendaNorm(resp);
@@ -4105,7 +4105,7 @@ function cerrarActAgendaPanel(){
   const ov=document.getElementById('act-agenda-overlay');
   const panel=document.getElementById('act-agenda-panel');
   if(ov)ov.classList.remove('on');
-  if(panel)panel.classList.remove('on','side-panel-left');
+  if(panel)panel.classList.remove('on');
   window._agendaPrefillTask=null;
   window._actAgendaResp=null;
   window._actAgendaSelEvId=null;

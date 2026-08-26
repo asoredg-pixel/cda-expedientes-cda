@@ -477,15 +477,6 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .acuerdo-cuota-row.mora{border-color:var(--rd);background:var(--rdl)}
 .con-side-panel{width:min(580px,96vw)}
 #act-agenda-panel{width:min(380px,96vw)}
-#act-agenda-panel.side-panel-left,
-#act-agenda-panel.con-side-panel.side-panel-left{
-  left:0;right:auto;
-  border-left:none;border-right:1px solid var(--bd);
-  transform:translateX(-100%);
-  box-shadow:4px 0 24px rgba(0,0,0,.12)!important;
-  border-radius:0 16px 16px 0!important
-}
-#act-agenda-panel.side-panel-left.on{transform:translateX(0)}
 #act-agenda-body{padding:4px 2px 12px;overflow:auto}
 .act-agenda-btn{position:relative}
 .act-agenda-check{
