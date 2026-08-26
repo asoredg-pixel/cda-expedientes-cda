@@ -3254,27 +3254,17 @@ function agendaEliminarSel(){
   agendaCerrarDrawer();
 }
 function genAgendaId(){return 'ag_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);}
-/** Intents personales para organizar el día (estilo Google Tasks). */
-var AGENDA_INTENTS=[
-  {id:'ejecutar',label:'Ejecutar',hint:'Voy a hacerla'},
-  {id:'corregir',label:'Corregir',hint:'Necesita corrección'},
-  {id:'notificar',label:'Notificar',hint:'Avisar / comunicar'},
-  {id:'revisar',label:'Revisar',hint:'Pendiente de revisión'},
-  {id:'despues',label:'Después',hint:'La dejo para más tarde'}
-];
-function getAgendaIntentMeta(id){
-  const k=String(id||'').trim()||'ejecutar';
-  return AGENDA_INTENTS.find(x=>x.id===k)||AGENDA_INTENTS[0];
-}
+/** Campos libres de organización personal (sin categorías fijas de acción). */
 function normalizeAgendaEvento(ev){
   if(!ev)return ev;
   if(!ev.id)ev.id=genAgendaId();
   if(!ev.fecha)ev.fecha=hoy();
   if(!ev.tipo)ev.tipo='personal';
   if(ev.leido==null)ev.leido=ev.tipo==='asignado'?false:true;
-  if(!ev.intent||!AGENDA_INTENTS.some(x=>x.id===ev.intent))ev.intent='ejecutar';
   if(ev.orden==null||isNaN(+ev.orden))ev.orden=0;
   else ev.orden=+ev.orden;
+  if(ev.criterio==null)ev.criterio='';
+  if(ev.notas==null)ev.notas='';
   return ev;
 }
 function getTaskRefEstado(expId,taskId){
@@ -3305,7 +3295,6 @@ function marcarAgendaLeido(id){
   if(ev){ev.leido=true;saveLS();renderBandejaDepto();}
 }
 function crearAgendaEvento(data){
-  const intentMeta=getAgendaIntentMeta(data.intent);
   const ev=normalizeAgendaEvento({
     id:genAgendaId(),
     titulo:String(data.titulo||'').trim(),
@@ -3317,7 +3306,8 @@ function crearAgendaEvento(data){
     creadoPor:data.creadoPor||getAgendaResponsableActivo()||taskComentarioAutor(),
     tipo:data.tipo||'personal',
     taskRef:data.taskRef||null,
-    intent:intentMeta.id,
+    criterio:String(data.criterio||'').trim(),
+    notas:String(data.notas||'').trim(),
     orden:data.orden!=null?+data.orden:Date.now(),
     leido:data.tipo==='asignado'?false:true,
     creado:new Date().toISOString()
@@ -3517,7 +3507,8 @@ function actualizarAgendaEvento(id,data){
     fecha:data.fecha||ev.fecha,
     hora:String(data.hora!=null?data.hora:ev.hora||'').trim()
   };
-  if(data.intent!=null)upd.intent=getAgendaIntentMeta(data.intent).id;
+  if(data.criterio!=null)upd.criterio=String(data.criterio||'').trim();
+  if(data.notas!=null)upd.notas=String(data.notas||'').trim();
   if(data.orden!=null&&!isNaN(+data.orden))upd.orden=+data.orden;
   if(!upd.titulo){notif('Indique título','err');return false;}
   if(data.aplicarBatch&&ev.batch){
@@ -3756,12 +3747,10 @@ function taskAgendaBtnHtml(expId,taskId){
   const ag=taskAgendaResumen(expId,taskId);
   const exp=escAttr(expId),tid=escAttr(taskId);
   if(ag){
-    const intentLbl=getAgendaIntentMeta(ag.intent).label;
-    const tip='En mi día · '+fmtF(ag.fecha)+(ag.hora?' · '+ag.hora:'')+' · '+intentLbl+' · Clic para organizar';
-    return '<button type="button" class="btn bsm bic act-agendada-on" title="'+escAttr(tip)+'" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📆</button>'+
-      '<span class="task-agendada-tag" title="'+escAttr(tip)+'">📅 '+fmtF(ag.fecha)+'</span>';
+    const tip='En mi día · clic para organizar';
+    return '<button type="button" class="btn bsm bic act-agenda-btn act-agendada-on" title="'+escAttr(tip)+'" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>📅</button>';
   }
-  return '<button type="button" class="btn bsm bic" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
+  return '<button type="button" class="btn bsm bic act-agenda-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
 }
 function taskEntregaComentariosCount(t){
   if(!t)return 0;
@@ -3812,13 +3801,14 @@ function openAgendaDesdeActividad(expId,taskId){
   if(t.sinExpediente)expId=t.codigo;
   const resp=getAgendaResponsableActivo()||t.responsable;
   if(!resp){notif('Seleccione responsable','err');return;}
-  const fecha=t.vence&&t.vence>=hoy()?t.vence:hoy();
+  const fechaBase=t.vence&&t.vence>=hoy()?t.vence:hoy();
   const prefill={
     titulo:t.desc||t.actividad||'Actividad',
     detalle:(t.exp?'Ref. '+t.exp:'')+(t.vence?' · Vence '+fmtF(t.vence):''),
-    fecha:fecha,
+    fecha:fechaBase,
     responsable:resp,
-    taskRef:{expId,taskId}
+    taskRef:{expId,taskId},
+    vence:t.vence||''
   };
   window._agendaPrefillTask=prefill.taskRef;
   window._actAgendaPrefillBase=prefill;
@@ -3826,20 +3816,17 @@ function openAgendaDesdeActividad(expId,taskId){
   window._actAgendaTaskId=taskId;
   window._actAgendaDrawerMode='create';
   window._actAgendaSelEvId=null;
-  window._actAgendaMes=new Date(fecha+'T12:00:00');
   window._actAgendaDiaSel=hoy();
   window._actAgendaResp=resp;
-  window._actAgendaIntent='ejecutar';
   window._actAgendaOtroPlan=null;
+  window._actAgendaNotasOpen=window._actAgendaNotasOpen||{};
   const existentes=getAgendaEventosForTask(expId,taskId);
   const planHoy=existentes.find(e=>(e.fecha||'').slice(0,10)===hoy());
   if(planHoy){
     window._actAgendaSelEvId=planHoy.id;
     window._actAgendaDrawerMode='edit';
-    window._actAgendaIntent=getAgendaIntentMeta(planHoy.intent).id;
   }else{
-    const otro=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
-    window._actAgendaOtroPlan=otro;
+    window._actAgendaOtroPlan=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
   }
   const panel=document.getElementById('act-agenda-panel');
   const overlay=document.getElementById('act-agenda-overlay');
@@ -3847,10 +3834,10 @@ function openAgendaDesdeActividad(expId,taskId){
   const tit=document.getElementById('act-agenda-tit');
   const sub=document.getElementById('act-agenda-sub');
   if(tit)tit.textContent='Mi día';
-  if(sub)sub.textContent=resp+' · organiza qué harás con cada actividad';
+  if(sub)sub.textContent=resp;
   if(body)body.innerHTML=renderMiDiaPanelHtml();
   if(overlay)overlay.classList.add('on');
-  if(panel)panel.classList.add('on');
+  if(panel){panel.classList.add('on','side-panel-left');}
 }
 function getAgendaPlanesDelDia(resp,fecha){
   const nNorm=agendaNorm(resp);
@@ -3860,11 +3847,8 @@ function getAgendaPlanesDelDia(resp,fecha){
     if((ev.fecha||'').slice(0,10)!==f)return false;
     return agendaEventoVisible(ev);
   }).sort((a,b)=>{
-    const ia=AGENDA_INTENTS.findIndex(x=>x.id===a.intent);
-    const ib=AGENDA_INTENTS.findIndex(x=>x.id===b.intent);
-    if(ia!==ib)return ia-ib;
     if(a.orden!==b.orden)return a.orden-b.orden;
-    return (a.hora||'').localeCompare(b.hora||'');
+    return (a.titulo||'').localeCompare(b.titulo||'','es');
   });
 }
 function getActAgendaPlanVinculado(){
@@ -3872,8 +3856,7 @@ function getActAgendaPlanVinculado(){
   const taskId=window._actAgendaTaskId;
   if(!expId||!taskId)return null;
   const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
-  const evs=getAgendaEventosForTask(expId,taskId);
-  return evs.find(e=>(e.fecha||'').slice(0,10)===dia)||null;
+  return getAgendaEventosForTask(expId,taskId).find(e=>(e.fecha||'').slice(0,10)===dia)||null;
 }
 function actAgendaShiftDia(delta){
   const base=window._actAgendaDiaSel||hoy();
@@ -3888,40 +3871,31 @@ function actAgendaSetDia(f){
   if(plan){
     window._actAgendaSelEvId=plan.id;
     window._actAgendaDrawerMode='edit';
-    window._actAgendaIntent=getAgendaIntentMeta(plan.intent).id;
   }else{
     window._actAgendaSelEvId=null;
     window._actAgendaDrawerMode='create';
   }
   refreshMiDiaPanel();
 }
-function actAgendaSetIntentChip(intent){
-  window._actAgendaIntent=getAgendaIntentMeta(intent).id;
-  const chips=document.querySelectorAll('.mi-dia-intent-chip');
-  chips.forEach(c=>{
-    c.classList.toggle('on',c.getAttribute('data-intent')===window._actAgendaIntent);
-  });
-}
-function actAgendaProgramar(intentOpt){
+function actAgendaProgramar(){
   const resp=window._actAgendaResp||getAgendaResponsableActivo();
   if(!resp){notif('Seleccione responsable','err');return;}
   const prefill=window._actAgendaPrefillBase||{};
-  const fechaEl=document.getElementById('mi-dia-fecha');
-  const horaEl=document.getElementById('mi-dia-hora');
-  const fecha=(fechaEl&&fechaEl.value)||window._actAgendaDiaSel||hoy();
-  const hora=(horaEl&&horaEl.value)||'';
-  const intent=getAgendaIntentMeta(intentOpt||window._actAgendaIntent||'ejecutar').id;
-  window._actAgendaIntent=intent;
-  window._actAgendaDiaSel=fecha.slice(0,10);
+  const fecha=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const criterioEl=document.getElementById('mi-dia-focus-criterio');
+  const notasEl=document.getElementById('mi-dia-focus-notas');
+  const criterio=criterioEl?String(criterioEl.value||'').trim():'';
+  const notas=notasEl?String(notasEl.value||'').trim():'';
   let plan=getActAgendaPlanVinculado();
   if(!plan&&window._actAgendaSelEvId)plan=getAgendaEventoById(window._actAgendaSelEvId);
   if(!plan&&window._actAgendaOtroPlan)plan=getAgendaEventoById(window._actAgendaOtroPlan.id)||window._actAgendaOtroPlan;
   const payload={
     titulo:prefill.titulo||'Actividad',
     detalle:prefill.detalle||'',
-    fecha:fecha.slice(0,10),
-    hora:hora,
-    intent:intent,
+    fecha:fecha,
+    hora:'',
+    criterio:criterio,
+    notas:notas,
     orden:plan&&plan.orden!=null?plan.orden:Date.now()
   };
   if(plan&&puedeEditarAgendaEvento(plan)){
@@ -3929,7 +3903,7 @@ function actAgendaProgramar(intentOpt){
       window._actAgendaSelEvId=plan.id;
       window._actAgendaDrawerMode='edit';
       window._actAgendaOtroPlan=null;
-      notif('Actualizado en mi día · '+getAgendaIntentMeta(intent).label,'ok');
+      notif('Actualizado en mi día','ok');
       refreshMiDiaPanel();
       refreshVistasTrasAgendar();
     }
@@ -3947,24 +3921,42 @@ function actAgendaProgramar(intentOpt){
     window._actAgendaSelEvId=ev.id;
     window._actAgendaDrawerMode='edit';
     window._actAgendaOtroPlan=null;
-    notif('En mi día · '+getAgendaIntentMeta(intent).label,'ok');
+    notif('Agregada a mi día','ok');
     refreshMiDiaPanel();
     refreshVistasTrasAgendar();
   }
 }
-function actAgendaCambiarIntent(id,intent){
+function actAgendaGuardarItemCampos(id,opts){
+  opts=opts||{};
   const ev=getAgendaEventoById(id);
-  if(!ev||!puedeEditarAgendaEvento(ev)){notif('No puede editar este ítem','err');return;}
-  actualizarAgendaEvento(id,{titulo:ev.titulo,detalle:ev.detalle,fecha:ev.fecha,hora:ev.hora,intent:intent});
-  if(window._actAgendaSelEvId===id)window._actAgendaIntent=getAgendaIntentMeta(intent).id;
-  refreshMiDiaPanel();
-  refreshVistasTrasAgendar();
+  if(!ev||!puedeEditarAgendaEvento(ev))return;
+  const criterioEl=document.getElementById('mi-dia-criterio-'+id);
+  const notasEl=document.getElementById('mi-dia-notas-'+id);
+  const criterio=criterioEl?String(criterioEl.value||'').trim():(ev.criterio||'');
+  const notas=notasEl?String(notasEl.value||'').trim():(ev.notas||'');
+  if(criterio===(ev.criterio||'')&&notas===(ev.notas||''))return;
+  Object.assign(ev,{criterio:criterio,notas:notas});
+  saveLS();
+  if(opts.notify)notif('Guardado','ok');
+  if(document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
+}
+function actAgendaToggleNotas(id){
+  if(!window._actAgendaNotasOpen)window._actAgendaNotasOpen={};
+  window._actAgendaNotasOpen[id]=!window._actAgendaNotasOpen[id];
+  const box=document.getElementById('mi-dia-notas-wrap-'+id);
+  const btn=document.getElementById('mi-dia-notas-btn-'+id);
+  if(box)box.style.display=window._actAgendaNotasOpen[id]?'block':'none';
+  if(btn)btn.classList.toggle('on',!!window._actAgendaNotasOpen[id]);
+  if(window._actAgendaNotasOpen[id]){
+    const ta=document.getElementById('mi-dia-notas-'+id);
+    if(ta)setTimeout(function(){ta.focus();},40);
+  }
 }
 function actAgendaMoverOrden(id,dir){
   const ev=getAgendaEventoById(id);
   if(!ev||!puedeEditarAgendaEvento(ev))return;
   const dia=(ev.fecha||hoy()).slice(0,10);
-  const list=getAgendaPlanesDelDia(ev.responsable,dia).filter(e=>e.intent===ev.intent);
+  const list=getAgendaPlanesDelDia(ev.responsable,dia);
   const idx=list.findIndex(e=>e.id===id);
   if(idx<0)return;
   const swap=list[idx+(dir<0?-1:1)];
@@ -3996,34 +3988,29 @@ function actAgendaQuitarPlan(id){
 }
 function renderMiDiaFocusHtml(){
   const prefill=window._actAgendaPrefillBase||{};
-  const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
-  const plan=getActAgendaPlanVinculado()||(window._actAgendaSelEvId?getAgendaEventoById(window._actAgendaSelEvId):null);
-  const intentAct=plan?getAgendaIntentMeta(plan.intent).id:(window._actAgendaIntent||'ejecutar');
-  window._actAgendaIntent=intentAct;
-  const hora=plan&&plan.hora!=null?plan.hora:'';
-  const chips=AGENDA_INTENTS.map(it=>{
-    const on=it.id===intentAct?' on':'';
-    return '<button type="button" class="mi-dia-intent-chip'+on+'" data-intent="'+it.id+'" title="'+escAttr(it.hint)+'" onclick="actAgendaSetIntentChip(\''+it.id+'\');actAgendaProgramar(\''+it.id+'\')">'+escAttr(it.label)+'</button>';
-  }).join('');
+  const plan=getActAgendaPlanVinculado();
+  const otro=(!plan&&window._actAgendaOtroPlan)?window._actAgendaOtroPlan:null;
+  const criterio=plan?String(plan.criterio||''):'';
+  const notas=plan?String(plan.notas||''):'';
   let estado;
   if(plan){
-    estado='<div class="mi-dia-focus-status">En mi día · <strong>'+escAttr(getAgendaIntentMeta(plan.intent).label)+'</strong> · '+fmtF(plan.fecha)+(plan.hora?' · '+escAttr(plan.hora):'')+'</div>';
-  }else if(window._actAgendaOtroPlan){
-    const o=window._actAgendaOtroPlan;
-    estado='<div class="mi-dia-focus-status muted">Programada el '+fmtF(o.fecha)+' · '+escAttr(getAgendaIntentMeta(o.intent).label)+'. Puedes reorganizarla para este día.</div>';
+    estado='<div class="mi-dia-focus-status">En la lista de este día</div>';
+  }else if(otro){
+    estado='<div class="mi-dia-focus-status muted">Ya está en mi día ('+fmtF(otro.fecha)+'). Puedes moverla a este día.</div>';
   }else{
-    estado='<div class="mi-dia-focus-status muted">Aún no está en este día. Elige qué harás con ella.</div>';
+    estado='<div class="mi-dia-focus-status muted">Agrégala a tu lista y escribe qué harás con ella.</div>';
   }
   return '<section class="mi-dia-focus">'+
-    '<div class="mi-dia-focus-kicker">Esta actividad</div>'+
+    '<div class="mi-dia-focus-kicker">Actividad</div>'+
     '<div class="mi-dia-focus-tit">'+escAttr(prefill.titulo||'Actividad')+'</div>'+
     (prefill.detalle?'<div class="mi-dia-focus-det">'+escAttr(prefill.detalle)+'</div>':'')+
     estado+
-    '<div class="mi-dia-intent-row">'+chips+'</div>'+
+    '<label class="mi-dia-fld mi-dia-fld-full"><span>Qué pienso hacer</span>'+
+    '<input type="text" id="mi-dia-focus-criterio" placeholder="Ej. priorizar, dejar pendiente, notificar mañana…" value="'+escAttr(criterio)+'"></label>'+
+    '<label class="mi-dia-fld mi-dia-fld-full"><span>Notas personales</span>'+
+    '<textarea id="mi-dia-focus-notas" rows="2" placeholder="Notas solo para ti…">'+escAttr(notas)+'</textarea></label>'+
     '<div class="mi-dia-schedule">'+
-    '<label class="mi-dia-fld"><span>Día</span><input type="date" id="mi-dia-fecha" value="'+escAttr(dia)+'" onchange="actAgendaSetDia(this.value)"></label>'+
-    '<label class="mi-dia-fld"><span>Hora</span><input type="time" id="mi-dia-hora" value="'+escAttr(hora)+'"></label>'+
-    '<button type="button" class="btn bsm bp" onclick="actAgendaProgramar()">Programar</button>'+
+    '<button type="button" class="btn bsm bp" onclick="actAgendaProgramar()">'+(plan?'Guardar':'Agregar a mi día')+'</button>'+
     (plan&&puedeEliminarAgendaEvento(plan)?'<button type="button" class="btn bsm" onclick="actAgendaQuitarPlan(\''+escAttr(plan.id)+'\')">Quitar</button>':'')+
     '</div></section>';
 }
@@ -4032,35 +4019,38 @@ function renderMiDiaListaHtml(){
   const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
   const planes=getAgendaPlanesDelDia(resp,dia);
   const esHoy=dia===hoy();
+  const openMap=window._actAgendaNotasOpen||{};
   let h='<section class="mi-dia-board">'+
-    '<div class="mi-dia-board-hdr"><span>'+(esHoy?'Para hoy':'Para el día')+'</span><span class="mi-dia-board-count">'+planes.length+'</span></div>';
+    '<div class="mi-dia-board-hdr"><span>'+(esHoy?'Para hoy':'Lista del día')+'</span><span class="mi-dia-board-count">'+planes.length+'</span></div>';
   if(!planes.length){
-    h+='<div class="mi-dia-empty">Nada programado este día. Usa las opciones de arriba para organizar esta actividad.</div></section>';
+    h+='<div class="mi-dia-empty">Sin actividades en este día. Agrégalas y ordénalas como quieras.</div></section>';
     return h;
   }
-  AGENDA_INTENTS.forEach(it=>{
-    const items=planes.filter(p=>p.intent===it.id);
-    if(!items.length)return;
-    h+='<div class="mi-dia-bucket" data-intent="'+it.id+'">'+
-      '<div class="mi-dia-bucket-tit">'+escAttr(it.label)+'<span>'+items.length+'</span></div>';
-    items.forEach((ev,i)=>{
-      const focus=ev.taskRef&&ev.taskRef.taskId===window._actAgendaTaskId&&String(ev.taskRef.expId||ev.taskRef.exp||'')===String(window._actAgendaExpId||'');
-      const canEd=puedeEditarAgendaEvento(ev);
-      const intentOpts=AGENDA_INTENTS.map(x=>'<option value="'+x.id+'"'+(x.id===ev.intent?' selected':'')+'>'+escAttr(x.label)+'</option>').join('');
-      h+='<div class="mi-dia-item'+(focus?' focus':'')+'" data-id="'+escAttr(ev.id)+'">'+
-        '<div class="mi-dia-item-main">'+
-        '<div class="mi-dia-item-tit">'+(ev.hora?'<span class="mi-dia-item-hora">'+escAttr(ev.hora)+'</span> ':'')+escAttr(ev.titulo)+'</div>'+
-        (ev.detalle?'<div class="mi-dia-item-det">'+escAttr(ev.detalle)+'</div>':'')+
-        '</div>'+
-        (canEd?('<div class="mi-dia-item-actions">'+
-          '<select class="mi-dia-item-intent" title="Prioridad / intención" onchange="actAgendaCambiarIntent(\''+escAttr(ev.id)+'\',this.value)">'+intentOpts+'</select>'+
-          '<button type="button" class="btn bsm bic" title="Subir" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
-          '<button type="button" class="btn bsm bic" title="Bajar" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i===items.length-1?' disabled':'')+'>↓</button>'+
-          (puedeEliminarAgendaEvento(ev)?'<button type="button" class="btn bsm bic bd2" title="Quitar" onclick="actAgendaQuitarPlan(\''+escAttr(ev.id)+'\')">✕</button>':'')+
-          '</div>'):'')+
-        '</div>';
-    });
-    h+='</div>';
+  planes.forEach((ev,i)=>{
+    const focus=ev.taskRef&&ev.taskRef.taskId===window._actAgendaTaskId&&String(ev.taskRef.expId||ev.taskRef.exp||'')===String(window._actAgendaExpId||'');
+    const canEd=puedeEditarAgendaEvento(ev);
+    const notasOpen=!!openMap[ev.id];
+    const hasNotas=!!String(ev.notas||'').trim();
+    h+='<div class="mi-dia-item'+(focus?' focus':'')+'" data-id="'+escAttr(ev.id)+'">'+
+      '<div class="mi-dia-item-top">'+
+      '<div class="mi-dia-item-main">'+
+      '<div class="mi-dia-item-tit">'+escAttr(ev.titulo)+'</div>'+
+      (ev.detalle?'<div class="mi-dia-item-det">'+escAttr(ev.detalle)+'</div>':'')+
+      '</div>'+
+      (canEd?('<div class="mi-dia-item-actions">'+
+        '<button type="button" class="btn bsm bic'+(notasOpen||hasNotas?' on':'')+'" id="mi-dia-notas-btn-'+escAttr(ev.id)+'" title="Notas" onclick="actAgendaToggleNotas(\''+escAttr(ev.id)+'\')">📝</button>'+
+        '<button type="button" class="btn bsm bic" title="Subir" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
+        '<button type="button" class="btn bsm bic" title="Bajar" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i===planes.length-1?' disabled':'')+'>↓</button>'+
+        (puedeEliminarAgendaEvento(ev)?'<button type="button" class="btn bsm bic bd2" title="Quitar" onclick="actAgendaQuitarPlan(\''+escAttr(ev.id)+'\')">✕</button>':'')+
+        '</div>'):'')+
+      '</div>'+
+      (canEd?('<label class="mi-dia-fld mi-dia-fld-full"><span>Qué pienso hacer</span>'+
+        '<input type="text" id="mi-dia-criterio-'+escAttr(ev.id)+'" value="'+escAttr(ev.criterio||'')+'" placeholder="Tu criterio…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')"></label>'+
+        '<div class="mi-dia-notas-wrap" id="mi-dia-notas-wrap-'+escAttr(ev.id)+'" style="display:'+(notasOpen?'block':'none')+'">'+
+        '<label class="mi-dia-fld mi-dia-fld-full"><span>Notas personales</span>'+
+        '<textarea id="mi-dia-notas-'+escAttr(ev.id)+'" rows="3" placeholder="Notas solo para ti…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')">'+escAttr(ev.notas||'')+'</textarea></label>'+
+        '</div>'):(String(ev.criterio||'').trim()?'<div class="mi-dia-item-criterio">'+escAttr(ev.criterio)+'</div>':''))+
+      '</div>';
   });
   h+='</section>';
   return h;
@@ -4077,7 +4067,6 @@ function renderMiDiaPanelHtml(){
     '</div>'+
     renderMiDiaFocusHtml()+
     renderMiDiaListaHtml()+
-    '<div class="mi-dia-foot"><button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">Cerrar</button></div>'+
     '</div>';
 }
 function refreshMiDiaPanel(){
@@ -4086,7 +4075,6 @@ function refreshMiDiaPanel(){
   if(!body||!panel||!panel.classList.contains('on'))return;
   body.innerHTML=renderMiDiaPanelHtml();
 }
-/** Compat: antiguas rutas del panel de agenda apuntan al nuevo Mi día. */
 function renderActAgendaPanelHtml(){return renderMiDiaPanelHtml();}
 function actAgendaRefreshForm(){refreshMiDiaPanel();}
 function refreshActAgendaPanelCal(){refreshMiDiaPanel();}
@@ -4097,7 +4085,6 @@ function actAgendaSelEvento(id){
   window._actAgendaSelEvId=id;
   window._actAgendaDrawerMode='edit';
   window._actAgendaDiaSel=(ev.fecha||'').slice(0,10);
-  window._actAgendaIntent=getAgendaIntentMeta(ev.intent).id;
   if(ev.taskRef&&ev.taskRef.taskId){
     window._actAgendaExpId=ev.taskRef.expId||ev.taskRef.exp||window._actAgendaExpId;
     window._actAgendaTaskId=ev.taskRef.taskId;
@@ -4107,25 +4094,24 @@ function actAgendaSelEvento(id){
 function actAgendaNuevoEvento(){
   window._actAgendaSelEvId=null;
   window._actAgendaDrawerMode='create';
-  window._actAgendaIntent='ejecutar';
   refreshMiDiaPanel();
 }
 function actAgendaEliminar(id){
   actAgendaQuitarPlan(id||window._actAgendaSelEvId);
 }
-function actAgendaNav(d){actAgendaShiftDia(d>0?30:-30);}
+function actAgendaNav(d){actAgendaShiftDia(d>0?1:-1);}
 function actAgendaSelDia(f){actAgendaSetDia(f);}
 function cerrarActAgendaPanel(){
   const ov=document.getElementById('act-agenda-overlay');
   const panel=document.getElementById('act-agenda-panel');
   if(ov)ov.classList.remove('on');
-  if(panel)panel.classList.remove('on');
+  if(panel)panel.classList.remove('on','side-panel-left');
   window._agendaPrefillTask=null;
   window._actAgendaResp=null;
   window._actAgendaSelEvId=null;
   window._actAgendaDrawerMode=null;
   window._actAgendaPrefillBase=null;
-  window._actAgendaIntent=null;
+  window._actAgendaOtroPlan=null;
 }
 function actAgendaGuardarForm(){
   actAgendaProgramar();
