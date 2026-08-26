@@ -13419,11 +13419,10 @@ function renderActRowToolbarHtml(t,expAct){
   const est=estadoTask(t);
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
   const sol=getTaskSolicitudPendiente(t);
-  const esPqrsNcaAct=expAct&&taskEsAtenderPqrs(t,expAct)&&esOficinaPqrsNca();
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
   let acts='<span class="sst-act-toolbar">';
-  // ✏️ solo encargados de departamento (nunca responsables)
-  if(puedeGestionarActividadesDepto()&&!esPqrsNcaAct){
+  // ✏️ encargados (incl. PQRSD); nunca responsables
+  if(puedeGestionarActividadesDepto()){
     if(t.sinExpediente)
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
     else
