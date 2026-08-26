@@ -598,7 +598,7 @@ function openEntregaResponsableModal(){
             'oninput="filtrarExpEntregaRespSug(this)" onfocus="filtrarExpEntregaRespSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'entrega-resp-exp-sug\');if(p)p.style.display=\'none\';},180)">'+
           '<div id="entrega-resp-exp-sug" class="entrega-resp-sug" style="display:none"></div>'+
         '</div>'+
-        '<div id="entrega-resp-exp-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Busca en trámites y PQRSD.</div>'+
+        '<div id="entrega-resp-exp-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div>'+
       '</div>'+
     '</div>'+
     '<div id="entrega-resp-alta-box" style="display:none">'+
@@ -610,7 +610,7 @@ function openEntregaResponsableModal(){
       '</div>'+
       '<div id="entrega-resp-persona-host">'+htmlEntregaRespInteresadoBox()+'</div>'+
     '</div>'+
-    '<div id="entrega-resp-libre-hint" style="display:none;font-size:11px;color:var(--tx3);margin-bottom:8px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Misma vía que <strong>+ Actividad sin expediente</strong> del encargado: se crea la actividad, usted entrega y pasa a <strong>Por revisar</strong>. Si el encargado ya la asignó, ábrala desde Actividades y entregue allí.</div>'+
+    '<div id="entrega-resp-libre-hint" style="display:none"></div>'+
     '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
@@ -631,7 +631,7 @@ function openEntregaResponsableModal(){
         '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-file-name\')">'+
         '<span id="entrega-resp-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span>'+
       '</div>'+
-      '<div id="entrega-resp-drive-hint" style="font-size:10px;color:var(--tx3);margin-top:4px">Se sube al Drive institucional del expediente (carpeta EXP-…).</div></div>'+
+      '<div id="entrega-resp-drive-hint" style="font-size:10px;color:var(--tx3);margin-top:4px"></div></div>'+
     '<div class="fld" style="margin-bottom:10px"><label>Anexos (opcionales)</label>'+
       '<div class="sst-file-pick">'+
         '<button type="button" class="btn bsm" onclick="document.getElementById(\'enviar-anexos-file\').click()">📎 Seleccionar anexos</button>'+
@@ -1397,7 +1397,7 @@ function renderActLibreVincularHtml(expId,taskId){
             'oninput="filtrarExpActLibreVincSug(this)" onfocus="filtrarExpActLibreVincSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'act-libre-vinc-sug\');if(p)p.style.display=\'none\';},180)">'+
           '<div id="act-libre-vinc-sug" class="entrega-resp-sug" style="display:none"></div>'+
         '</div>'+
-        '<div id="act-libre-vinc-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Busca en trámites y PQRSD.</div>'+
+        '<div id="act-libre-vinc-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div>'+
       '</div>'+
     '</div>'+
     '<div id="act-libre-vinc-nuevo-box" style="display:none">'+
