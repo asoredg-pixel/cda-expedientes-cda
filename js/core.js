@@ -3254,12 +3254,27 @@ function agendaEliminarSel(){
   agendaCerrarDrawer();
 }
 function genAgendaId(){return 'ag_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);}
+/** Intents personales para organizar el día (estilo Google Tasks). */
+var AGENDA_INTENTS=[
+  {id:'ejecutar',label:'Ejecutar',hint:'Voy a hacerla'},
+  {id:'corregir',label:'Corregir',hint:'Necesita corrección'},
+  {id:'notificar',label:'Notificar',hint:'Avisar / comunicar'},
+  {id:'revisar',label:'Revisar',hint:'Pendiente de revisión'},
+  {id:'despues',label:'Después',hint:'La dejo para más tarde'}
+];
+function getAgendaIntentMeta(id){
+  const k=String(id||'').trim()||'ejecutar';
+  return AGENDA_INTENTS.find(x=>x.id===k)||AGENDA_INTENTS[0];
+}
 function normalizeAgendaEvento(ev){
   if(!ev)return ev;
   if(!ev.id)ev.id=genAgendaId();
   if(!ev.fecha)ev.fecha=hoy();
   if(!ev.tipo)ev.tipo='personal';
   if(ev.leido==null)ev.leido=ev.tipo==='asignado'?false:true;
+  if(!ev.intent||!AGENDA_INTENTS.some(x=>x.id===ev.intent))ev.intent='ejecutar';
+  if(ev.orden==null||isNaN(+ev.orden))ev.orden=0;
+  else ev.orden=+ev.orden;
   return ev;
 }
 function getTaskRefEstado(expId,taskId){
@@ -3290,6 +3305,7 @@ function marcarAgendaLeido(id){
   if(ev){ev.leido=true;saveLS();renderBandejaDepto();}
 }
 function crearAgendaEvento(data){
+  const intentMeta=getAgendaIntentMeta(data.intent);
   const ev=normalizeAgendaEvento({
     id:genAgendaId(),
     titulo:String(data.titulo||'').trim(),
@@ -3301,6 +3317,8 @@ function crearAgendaEvento(data){
     creadoPor:data.creadoPor||getAgendaResponsableActivo()||taskComentarioAutor(),
     tipo:data.tipo||'personal',
     taskRef:data.taskRef||null,
+    intent:intentMeta.id,
+    orden:data.orden!=null?+data.orden:Date.now(),
     leido:data.tipo==='asignado'?false:true,
     creado:new Date().toISOString()
   });
@@ -3494,11 +3512,13 @@ function actualizarAgendaEvento(id,data){
   if(!ev){notif('Evento no encontrado','err');return false;}
   if(!puedeEditarAgendaEvento(ev)){notif('No puede editar este evento','err');return false;}
   const upd={
-    titulo:String(data.titulo||'').trim(),
-    detalle:String(data.detalle||'').trim(),
+    titulo:String(data.titulo!=null?data.titulo:ev.titulo||'').trim(),
+    detalle:String(data.detalle!=null?data.detalle:ev.detalle||'').trim(),
     fecha:data.fecha||ev.fecha,
-    hora:String(data.hora||'').trim()
+    hora:String(data.hora!=null?data.hora:ev.hora||'').trim()
   };
+  if(data.intent!=null)upd.intent=getAgendaIntentMeta(data.intent).id;
+  if(data.orden!=null&&!isNaN(+data.orden))upd.orden=+data.orden;
   if(!upd.titulo){notif('Indique título','err');return false;}
   if(data.aplicarBatch&&ev.batch){
     (agendaEventos||[]).forEach(e=>{if(e.batch===ev.batch)Object.assign(e,upd);});
@@ -3736,11 +3756,12 @@ function taskAgendaBtnHtml(expId,taskId){
   const ag=taskAgendaResumen(expId,taskId);
   const exp=escAttr(expId),tid=escAttr(taskId);
   if(ag){
-    const tip='Agendado · '+fmtF(ag.fecha)+(ag.hora?' · '+ag.hora:'')+' · Clic para revisar o agendar otra fecha';
+    const intentLbl=getAgendaIntentMeta(ag.intent).label;
+    const tip='En mi día · '+fmtF(ag.fecha)+(ag.hora?' · '+ag.hora:'')+' · '+intentLbl+' · Clic para organizar';
     return '<button type="button" class="btn bsm bic act-agendada-on" title="'+escAttr(tip)+'" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📆</button>'+
       '<span class="task-agendada-tag" title="'+escAttr(tip)+'">📅 '+fmtF(ag.fecha)+'</span>';
   }
-  return '<button type="button" class="btn bsm bic" title="Agendar en calendario" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
+  return '<button type="button" class="btn bsm bic" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
 }
 function taskEntregaComentariosCount(t){
   if(!t)return 0;
@@ -3806,70 +3827,269 @@ function openAgendaDesdeActividad(expId,taskId){
   window._actAgendaDrawerMode='create';
   window._actAgendaSelEvId=null;
   window._actAgendaMes=new Date(fecha+'T12:00:00');
-  window._actAgendaDiaSel=fecha;
+  window._actAgendaDiaSel=hoy();
   window._actAgendaResp=resp;
+  window._actAgendaIntent='ejecutar';
+  window._actAgendaOtroPlan=null;
+  const existentes=getAgendaEventosForTask(expId,taskId);
+  const planHoy=existentes.find(e=>(e.fecha||'').slice(0,10)===hoy());
+  if(planHoy){
+    window._actAgendaSelEvId=planHoy.id;
+    window._actAgendaDrawerMode='edit';
+    window._actAgendaIntent=getAgendaIntentMeta(planHoy.intent).id;
+  }else{
+    const otro=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
+    window._actAgendaOtroPlan=otro;
+  }
   const panel=document.getElementById('act-agenda-panel');
   const overlay=document.getElementById('act-agenda-overlay');
   const body=document.getElementById('act-agenda-body');
+  const tit=document.getElementById('act-agenda-tit');
   const sub=document.getElementById('act-agenda-sub');
-  if(sub)sub.textContent=(t.exp||expId)+' · '+(t.desc||t.actividad||'Actividad');
-  if(body)body.innerHTML=renderActAgendaPanelHtml(prefill,resp,expId,taskId);
+  if(tit)tit.textContent='Mi día';
+  if(sub)sub.textContent=resp+' · organiza qué harás con cada actividad';
+  if(body)body.innerHTML=renderMiDiaPanelHtml();
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
-  refreshActAgendaPanelCal();
-  setTimeout(function(){
-    const inp=document.getElementById('agenda-f-titulo');if(inp)inp.focus();
-    const fd=document.getElementById('agenda-f-fecha');
-    if(fd&&!fd._actAgendaBound){
-      fd._actAgendaBound=true;
-      fd.addEventListener('change',function(){if(document.getElementById('act-agenda-panel')&&document.getElementById('act-agenda-panel').classList.contains('on'))actAgendaSelDia(this.value);});
-    }
-  },80);
 }
-function renderActAgendaFormInner(){
-  const resp=window._actAgendaResp||getAgendaResponsableActivo();
-  const mode=window._actAgendaDrawerMode||'create';
-  const selId=window._actAgendaSelEvId;
-  const ev=selId?getAgendaEventoById(selId):null;
-  const prefill=ev?{titulo:ev.titulo,detalle:ev.detalle,fecha:ev.fecha,hora:ev.hora}:(window._actAgendaPrefillBase||{});
+function getAgendaPlanesDelDia(resp,fecha){
+  const nNorm=agendaNorm(resp);
+  const f=(fecha||hoy()).slice(0,10);
+  return (agendaEventos||[]).map(normalizeAgendaEvento).filter(ev=>{
+    if(agendaNorm(ev.responsable)!==nNorm)return false;
+    if((ev.fecha||'').slice(0,10)!==f)return false;
+    return agendaEventoVisible(ev);
+  }).sort((a,b)=>{
+    const ia=AGENDA_INTENTS.findIndex(x=>x.id===a.intent);
+    const ib=AGENDA_INTENTS.findIndex(x=>x.id===b.intent);
+    if(ia!==ib)return ia-ib;
+    if(a.orden!==b.orden)return a.orden-b.orden;
+    return (a.hora||'').localeCompare(b.hora||'');
+  });
+}
+function getActAgendaPlanVinculado(){
   const expId=window._actAgendaExpId;
   const taskId=window._actAgendaTaskId;
-  const existentes=expId&&taskId?getAgendaEventosForTask(expId,taskId):[];
-  let aviso='';
-  if(mode==='edit'&&ev){
-    aviso='<div style="padding:8px 10px;margin-bottom:10px;border-radius:var(--r);background:var(--bll);border:1px solid #b8d2eb;font-size:12px;color:var(--bl)">✏️ Editando: <strong>'+escAttr(ev.titulo)+'</strong> · '+fmtF(ev.fecha)+'</div>';
-  }else if(existentes.length){
-    aviso='<div style="padding:8px 10px;margin-bottom:10px;border-radius:var(--r);background:var(--gnl);border:1px solid #b8dfb8;font-size:12px;color:var(--gn)">✓ '+existentes.length+' agendamiento(s) vinculado(s) a esta actividad.</div>';
+  if(!expId||!taskId)return null;
+  const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const evs=getAgendaEventosForTask(expId,taskId);
+  return evs.find(e=>(e.fecha||'').slice(0,10)===dia)||null;
+}
+function actAgendaShiftDia(delta){
+  const base=window._actAgendaDiaSel||hoy();
+  const d=new Date(base+'T12:00:00');
+  d.setDate(d.getDate()+(delta||0));
+  actAgendaSetDia(d.toISOString().slice(0,10));
+}
+function actAgendaSetDia(f){
+  if(!f)return;
+  window._actAgendaDiaSel=f.slice(0,10);
+  const plan=getActAgendaPlanVinculado();
+  if(plan){
+    window._actAgendaSelEvId=plan.id;
+    window._actAgendaDrawerMode='edit';
+    window._actAgendaIntent=getAgendaIntentMeta(plan.intent).id;
+  }else{
+    window._actAgendaSelEvId=null;
+    window._actAgendaDrawerMode='create';
   }
-  const linkedList=existentes.length?('<div style="margin-bottom:10px;font-size:12px"><div style="font-weight:600;margin-bottom:4px;color:var(--tx2)">Agendamientos de esta actividad</div>'+
-    existentes.map(e=>{
-      const on=e.id===selId;
-      const canEd=puedeEditarAgendaEvento(e);
-      const canDel=puedeEliminarAgendaEvento(e);
-      return '<div class="fx" style="gap:6px;align-items:center;margin-bottom:4px;padding:4px 6px;border-radius:var(--r);background:'+(on?'var(--bll)':'#eef4fb')+'">'+
-        '<span style="flex:1;font-size:12px">'+fmtF(e.fecha)+(e.hora?' · '+escAttr(e.hora):'')+' · '+escAttr(e.titulo)+'</span>'+
-        (canEd?'<button type="button" class="btn bsm bic" onclick="actAgendaSelEvento(\''+escAttr(e.id)+'\')" title="Editar">✏️</button>':'')+
-        (canDel?'<button type="button" class="btn bsm bic bd2" onclick="actAgendaEliminar(\''+escAttr(e.id)+'\')" title="Eliminar">🗑</button>':'')+
+  refreshMiDiaPanel();
+}
+function actAgendaSetIntentChip(intent){
+  window._actAgendaIntent=getAgendaIntentMeta(intent).id;
+  const chips=document.querySelectorAll('.mi-dia-intent-chip');
+  chips.forEach(c=>{
+    c.classList.toggle('on',c.getAttribute('data-intent')===window._actAgendaIntent);
+  });
+}
+function actAgendaProgramar(intentOpt){
+  const resp=window._actAgendaResp||getAgendaResponsableActivo();
+  if(!resp){notif('Seleccione responsable','err');return;}
+  const prefill=window._actAgendaPrefillBase||{};
+  const fechaEl=document.getElementById('mi-dia-fecha');
+  const horaEl=document.getElementById('mi-dia-hora');
+  const fecha=(fechaEl&&fechaEl.value)||window._actAgendaDiaSel||hoy();
+  const hora=(horaEl&&horaEl.value)||'';
+  const intent=getAgendaIntentMeta(intentOpt||window._actAgendaIntent||'ejecutar').id;
+  window._actAgendaIntent=intent;
+  window._actAgendaDiaSel=fecha.slice(0,10);
+  let plan=getActAgendaPlanVinculado();
+  if(!plan&&window._actAgendaSelEvId)plan=getAgendaEventoById(window._actAgendaSelEvId);
+  if(!plan&&window._actAgendaOtroPlan)plan=getAgendaEventoById(window._actAgendaOtroPlan.id)||window._actAgendaOtroPlan;
+  const payload={
+    titulo:prefill.titulo||'Actividad',
+    detalle:prefill.detalle||'',
+    fecha:fecha.slice(0,10),
+    hora:hora,
+    intent:intent,
+    orden:plan&&plan.orden!=null?plan.orden:Date.now()
+  };
+  if(plan&&puedeEditarAgendaEvento(plan)){
+    if(actualizarAgendaEvento(plan.id,payload)){
+      window._actAgendaSelEvId=plan.id;
+      window._actAgendaDrawerMode='edit';
+      window._actAgendaOtroPlan=null;
+      notif('Actualizado en mi día · '+getAgendaIntentMeta(intent).label,'ok');
+      refreshMiDiaPanel();
+      refreshVistasTrasAgendar();
+    }
+    return;
+  }
+  const ev=crearAgendaEvento({
+    ...payload,
+    responsable:resp,
+    tipo:'desde_actividad',
+    taskRef:window._agendaPrefillTask||prefill.taskRef||null,
+    depto:esModoResponsable()?'responsables':deptoActivo,
+    syncGcal:false
+  });
+  if(ev){
+    window._actAgendaSelEvId=ev.id;
+    window._actAgendaDrawerMode='edit';
+    window._actAgendaOtroPlan=null;
+    notif('En mi día · '+getAgendaIntentMeta(intent).label,'ok');
+    refreshMiDiaPanel();
+    refreshVistasTrasAgendar();
+  }
+}
+function actAgendaCambiarIntent(id,intent){
+  const ev=getAgendaEventoById(id);
+  if(!ev||!puedeEditarAgendaEvento(ev)){notif('No puede editar este ítem','err');return;}
+  actualizarAgendaEvento(id,{titulo:ev.titulo,detalle:ev.detalle,fecha:ev.fecha,hora:ev.hora,intent:intent});
+  if(window._actAgendaSelEvId===id)window._actAgendaIntent=getAgendaIntentMeta(intent).id;
+  refreshMiDiaPanel();
+  refreshVistasTrasAgendar();
+}
+function actAgendaMoverOrden(id,dir){
+  const ev=getAgendaEventoById(id);
+  if(!ev||!puedeEditarAgendaEvento(ev))return;
+  const dia=(ev.fecha||hoy()).slice(0,10);
+  const list=getAgendaPlanesDelDia(ev.responsable,dia).filter(e=>e.intent===ev.intent);
+  const idx=list.findIndex(e=>e.id===id);
+  if(idx<0)return;
+  const swap=list[idx+(dir<0?-1:1)];
+  if(!swap)return;
+  const oA=ev.orden,oB=swap.orden;
+  ev.orden=oB;swap.orden=oA;
+  if(ev.orden===swap.orden){ev.orden=idx;swap.orden=idx+(dir<0?-1:1);}
+  saveLS();
+  refreshMiDiaPanel();
+}
+function actAgendaQuitarPlan(id){
+  id=id||window._actAgendaSelEvId;
+  if(!id)return;
+  const ev=getAgendaEventoById(id);
+  if(ev&&!puedeEliminarAgendaEvento(ev)){notif('No puede quitar este ítem','err');return;}
+  confirmEliminar({message:'¿Quitar de mi día?',detail:ev?('«'+ev.titulo+'»'):''},()=>{
+    agendaEventos=(agendaEventos||[]).filter(x=>x.id!==id);
+    saveLS();
+    if(document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
+    renderBandejaDepto();
+    if(window._actAgendaSelEvId===id){
+      window._actAgendaSelEvId=null;
+      window._actAgendaDrawerMode='create';
+    }
+    notif('Quitado de mi día','ok');
+    refreshMiDiaPanel();
+    refreshVistasTrasAgendar();
+  });
+}
+function renderMiDiaFocusHtml(){
+  const prefill=window._actAgendaPrefillBase||{};
+  const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const plan=getActAgendaPlanVinculado()||(window._actAgendaSelEvId?getAgendaEventoById(window._actAgendaSelEvId):null);
+  const intentAct=plan?getAgendaIntentMeta(plan.intent).id:(window._actAgendaIntent||'ejecutar');
+  window._actAgendaIntent=intentAct;
+  const hora=plan&&plan.hora!=null?plan.hora:'';
+  const chips=AGENDA_INTENTS.map(it=>{
+    const on=it.id===intentAct?' on':'';
+    return '<button type="button" class="mi-dia-intent-chip'+on+'" data-intent="'+it.id+'" title="'+escAttr(it.hint)+'" onclick="actAgendaSetIntentChip(\''+it.id+'\');actAgendaProgramar(\''+it.id+'\')">'+escAttr(it.label)+'</button>';
+  }).join('');
+  let estado;
+  if(plan){
+    estado='<div class="mi-dia-focus-status">En mi día · <strong>'+escAttr(getAgendaIntentMeta(plan.intent).label)+'</strong> · '+fmtF(plan.fecha)+(plan.hora?' · '+escAttr(plan.hora):'')+'</div>';
+  }else if(window._actAgendaOtroPlan){
+    const o=window._actAgendaOtroPlan;
+    estado='<div class="mi-dia-focus-status muted">Programada el '+fmtF(o.fecha)+' · '+escAttr(getAgendaIntentMeta(o.intent).label)+'. Puedes reorganizarla para este día.</div>';
+  }else{
+    estado='<div class="mi-dia-focus-status muted">Aún no está en este día. Elige qué harás con ella.</div>';
+  }
+  return '<section class="mi-dia-focus">'+
+    '<div class="mi-dia-focus-kicker">Esta actividad</div>'+
+    '<div class="mi-dia-focus-tit">'+escAttr(prefill.titulo||'Actividad')+'</div>'+
+    (prefill.detalle?'<div class="mi-dia-focus-det">'+escAttr(prefill.detalle)+'</div>':'')+
+    estado+
+    '<div class="mi-dia-intent-row">'+chips+'</div>'+
+    '<div class="mi-dia-schedule">'+
+    '<label class="mi-dia-fld"><span>Día</span><input type="date" id="mi-dia-fecha" value="'+escAttr(dia)+'" onchange="actAgendaSetDia(this.value)"></label>'+
+    '<label class="mi-dia-fld"><span>Hora</span><input type="time" id="mi-dia-hora" value="'+escAttr(hora)+'"></label>'+
+    '<button type="button" class="btn bsm bp" onclick="actAgendaProgramar()">Programar</button>'+
+    (plan&&puedeEliminarAgendaEvento(plan)?'<button type="button" class="btn bsm" onclick="actAgendaQuitarPlan(\''+escAttr(plan.id)+'\')">Quitar</button>':'')+
+    '</div></section>';
+}
+function renderMiDiaListaHtml(){
+  const resp=window._actAgendaResp||getAgendaResponsableActivo();
+  const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const planes=getAgendaPlanesDelDia(resp,dia);
+  const esHoy=dia===hoy();
+  let h='<section class="mi-dia-board">'+
+    '<div class="mi-dia-board-hdr"><span>'+(esHoy?'Para hoy':'Para el día')+'</span><span class="mi-dia-board-count">'+planes.length+'</span></div>';
+  if(!planes.length){
+    h+='<div class="mi-dia-empty">Nada programado este día. Usa las opciones de arriba para organizar esta actividad.</div></section>';
+    return h;
+  }
+  AGENDA_INTENTS.forEach(it=>{
+    const items=planes.filter(p=>p.intent===it.id);
+    if(!items.length)return;
+    h+='<div class="mi-dia-bucket" data-intent="'+it.id+'">'+
+      '<div class="mi-dia-bucket-tit">'+escAttr(it.label)+'<span>'+items.length+'</span></div>';
+    items.forEach((ev,i)=>{
+      const focus=ev.taskRef&&ev.taskRef.taskId===window._actAgendaTaskId&&String(ev.taskRef.expId||ev.taskRef.exp||'')===String(window._actAgendaExpId||'');
+      const canEd=puedeEditarAgendaEvento(ev);
+      const intentOpts=AGENDA_INTENTS.map(x=>'<option value="'+x.id+'"'+(x.id===ev.intent?' selected':'')+'>'+escAttr(x.label)+'</option>').join('');
+      h+='<div class="mi-dia-item'+(focus?' focus':'')+'" data-id="'+escAttr(ev.id)+'">'+
+        '<div class="mi-dia-item-main">'+
+        '<div class="mi-dia-item-tit">'+(ev.hora?'<span class="mi-dia-item-hora">'+escAttr(ev.hora)+'</span> ':'')+escAttr(ev.titulo)+'</div>'+
+        (ev.detalle?'<div class="mi-dia-item-det">'+escAttr(ev.detalle)+'</div>':'')+
+        '</div>'+
+        (canEd?('<div class="mi-dia-item-actions">'+
+          '<select class="mi-dia-item-intent" title="Prioridad / intención" onchange="actAgendaCambiarIntent(\''+escAttr(ev.id)+'\',this.value)">'+intentOpts+'</select>'+
+          '<button type="button" class="btn bsm bic" title="Subir" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
+          '<button type="button" class="btn bsm bic" title="Bajar" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i===items.length-1?' disabled':'')+'>↓</button>'+
+          (puedeEliminarAgendaEvento(ev)?'<button type="button" class="btn bsm bic bd2" title="Quitar" onclick="actAgendaQuitarPlan(\''+escAttr(ev.id)+'\')">✕</button>':'')+
+          '</div>'):'')+
         '</div>';
-    }).join('')+'</div>'):'';
-  const canDelSel=ev&&puedeEliminarAgendaEvento(ev);
-  const btns=mode==='edit'?
-    '<button type="button" class="btn bsm bp" onclick="actAgendaGuardarForm()">Guardar cambios</button>'+
-    (canDelSel?'<button type="button" class="btn bsm bd2" onclick="actAgendaEliminar()">Eliminar</button>':'')+
-    '<button type="button" class="btn bsm" onclick="actAgendaNuevoEvento()">+ Nuevo</button>'+
-    '<button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">Cerrar</button>':
-    '<button type="button" class="btn bsm bp" onclick="actAgendaGuardarForm()">Guardar en agenda</button>'+
-    (existentes.length?'<button type="button" class="btn bsm" onclick="actAgendaNuevoEvento()">Limpiar</button>':'')+
-    '<button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">Cancelar</button>';
-  return aviso+linkedList+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Para: <strong>'+escAttr(resp)+'</strong></div>'+
-    agendaFormHtml(ev,prefill)+
-    '<div class="fx" style="gap:8px;margin-top:12px;flex-wrap:wrap">'+btns+'</div>';
+    });
+    h+='</div>';
+  });
+  h+='</section>';
+  return h;
 }
-function actAgendaRefreshForm(){
-  const wrap=document.querySelector('.act-agenda-form-wrap');
-  if(wrap)wrap.innerHTML=renderActAgendaFormInner();
+function renderMiDiaPanelHtml(){
+  const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const esHoy=dia===hoy();
+  return '<div class="mi-dia-layout">'+
+    '<div class="mi-dia-nav">'+
+    '<button type="button" class="btn bsm bic" onclick="actAgendaShiftDia(-1)" title="Día anterior">◀</button>'+
+    '<button type="button" class="btn bsm'+(esHoy?' bp':'')+'" onclick="actAgendaSetDia(hoy())">Hoy</button>'+
+    '<strong class="mi-dia-nav-lbl">'+fmtF(dia)+'</strong>'+
+    '<button type="button" class="btn bsm bic" onclick="actAgendaShiftDia(1)" title="Día siguiente">▶</button>'+
+    '</div>'+
+    renderMiDiaFocusHtml()+
+    renderMiDiaListaHtml()+
+    '<div class="mi-dia-foot"><button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">Cerrar</button></div>'+
+    '</div>';
 }
+function refreshMiDiaPanel(){
+  const body=document.getElementById('act-agenda-body');
+  const panel=document.getElementById('act-agenda-panel');
+  if(!body||!panel||!panel.classList.contains('on'))return;
+  body.innerHTML=renderMiDiaPanelHtml();
+}
+/** Compat: antiguas rutas del panel de agenda apuntan al nuevo Mi día. */
+function renderActAgendaPanelHtml(){return renderMiDiaPanelHtml();}
+function actAgendaRefreshForm(){refreshMiDiaPanel();}
+function refreshActAgendaPanelCal(){refreshMiDiaPanel();}
 function actAgendaSelEvento(id){
   const ev=getAgendaEventoById(id);
   if(!ev)return;
@@ -3877,112 +4097,24 @@ function actAgendaSelEvento(id){
   window._actAgendaSelEvId=id;
   window._actAgendaDrawerMode='edit';
   window._actAgendaDiaSel=(ev.fecha||'').slice(0,10);
-  actAgendaRefreshForm();
-  refreshActAgendaPanelCal();
+  window._actAgendaIntent=getAgendaIntentMeta(ev.intent).id;
+  if(ev.taskRef&&ev.taskRef.taskId){
+    window._actAgendaExpId=ev.taskRef.expId||ev.taskRef.exp||window._actAgendaExpId;
+    window._actAgendaTaskId=ev.taskRef.taskId;
+  }
+  refreshMiDiaPanel();
 }
 function actAgendaNuevoEvento(){
   window._actAgendaSelEvId=null;
   window._actAgendaDrawerMode='create';
-  actAgendaRefreshForm();
-  refreshActAgendaPanelCal();
+  window._actAgendaIntent='ejecutar';
+  refreshMiDiaPanel();
 }
 function actAgendaEliminar(id){
-  id=id||window._actAgendaSelEvId;
-  if(!id)return;
-  const ev=getAgendaEventoById(id);
-  if(ev&&!puedeEliminarAgendaEvento(ev)){notif('No puede eliminar este evento','err');return;}
-  confirmEliminar({message:'¿Eliminar este evento de la agenda?',detail:ev?('«'+ev.titulo+'»'):''},()=>{
-    agendaEventos=(agendaEventos||[]).filter(x=>x.id!==id);
-    saveLS();
-    if(document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
-    renderBandejaDepto();
-    notif('Evento eliminado','ok');
-    if(window._actAgendaSelEvId===id){
-      window._actAgendaSelEvId=null;
-      window._actAgendaDrawerMode='create';
-    }
-    actAgendaRefreshForm();
-    refreshActAgendaPanelCal();
-    refreshVistasTrasAgendar();
-  });
+  actAgendaQuitarPlan(id||window._actAgendaSelEvId);
 }
-function renderActAgendaPanelHtml(prefill,resp,expId,taskId){
-  return '<div class="act-agenda-layout">'+
-    '<div class="act-agenda-cal-wrap">'+
-    '<div style="font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:6px">Calendario · eventos agendados</div>'+
-    '<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px">'+
-    '<button type="button" class="btn bsm bic" onclick="actAgendaNav(-1)" title="Mes anterior">◀</button>'+
-    '<strong id="act-agenda-mes-label" style="font-size:13px;flex:1;text-align:center"></strong>'+
-    '<button type="button" class="btn bsm bic" onclick="actAgendaNav(1)" title="Mes siguiente">▶</button></div>'+
-    '<div id="act-agenda-cal-grid" class="agenda-cal"></div>'+
-    '<div id="act-agenda-dia-tit" style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px"></div>'+
-    '<div id="act-agenda-dia-list" class="act-agenda-dia-list"></div></div>'+
-    '<div class="act-agenda-form-wrap">'+renderActAgendaFormInner()+'</div></div>';
-}
-function actAgendaNav(d){
-  const m=window._actAgendaMes||new Date();
-  m.setMonth(m.getMonth()+d);
-  window._actAgendaMes=m;
-  refreshActAgendaPanelCal();
-}
-function actAgendaSelDia(f){
-  if(!f)return;
-  window._actAgendaDiaSel=f;
-  const fd=document.getElementById('agenda-f-fecha');
-  if(fd)fd.value=f;
-  refreshActAgendaPanelCal();
-}
-function renderActAgendaCalGrid(eventos,mesRef,diaSel){
-  const y=mesRef.getFullYear(),mo=mesRef.getMonth();
-  const first=new Date(y,mo,1);
-  const start=new Date(y,mo,1-(first.getDay()+6)%7);
-  const hdrs=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
-  let h=hdrs.map(x=>'<div class="agenda-cal-hdr">'+x+'</div>').join('');
-  const todayStr=hoy();
-  for(let i=0;i<42;i++){
-    const d=new Date(start);d.setDate(start.getDate()+i);
-    const fs=d.toISOString().slice(0,10);
-    const inMonth=d.getMonth()===mo;
-    const dayEv=eventos.filter(ev=>(ev.fecha||'').slice(0,10)===fs);
-    const cls='agenda-day'+(inMonth?'':' other')+(fs===todayStr?' today':'')+(fs===diaSel?' sel':'');
-    h+='<div class="'+cls+'" onclick="actAgendaSelDia(\''+fs+'\')">'+
-      '<div class="agenda-day-num">'+d.getDate()+'</div>'+
-      '<div class="agenda-day-events">'+dayEv.slice(0,3).map(ev=>{
-        const dc=ev.tipo==='asignado'?' asig':ev.tipo==='desde_actividad'?' act':'';
-        return '<div class="agenda-cal-ev'+dc+'" onclick="event.stopPropagation();actAgendaSelEvento(\''+escAttr(ev.id)+'\')" title="'+escAttr(ev.titulo)+(ev.hora?' · '+escAttr(ev.hora):'')+'">'+escAttr(ev.titulo)+'</div>';
-      }).join('')+(dayEv.length>3?'<div style="font-size:9px;color:var(--tx3)">+'+(dayEv.length-3)+' más</div>':'')+'</div></div>';
-  }
-  return h;
-}
-function refreshActAgendaPanelCal(){
-  const grid=document.getElementById('act-agenda-cal-grid');
-  const lbl=document.getElementById('act-agenda-mes-label');
-  const list=document.getElementById('act-agenda-dia-list');
-  const lt=document.getElementById('act-agenda-dia-tit');
-  if(!grid)return;
-  const resp=window._actAgendaResp||getAgendaResponsableActivo();
-  const mesRef=window._actAgendaMes||new Date();
-  const diaSel=window._actAgendaDiaSel||hoy();
-  const eventos=resp?getAgendaEventosResponsable(resp):[];
-  if(lbl)lbl.textContent=agendaMesLabel(mesRef);
-  grid.innerHTML=renderActAgendaCalGrid(eventos,mesRef,diaSel);
-  const dayEv=eventos.filter(ev=>(ev.fecha||'').slice(0,10)===diaSel).sort((a,b)=>(a.hora||'99:99').localeCompare(b.hora||'99:99'));
-  if(lt)lt.textContent='Eventos · '+fmtF(diaSel)+(dayEv.length?' ('+dayEv.length+')':'');
-  if(list){
-    if(!dayEv.length)list.innerHTML='<div style="font-size:11px;color:var(--tx3);padding:4px 0">Sin eventos este día.</div>';
-    else list.innerHTML=dayEv.map(ev=>{
-      const horaLbl=ev.hora?escAttr(ev.hora):'—';
-      const dc=ev.tipo==='asignado'?'border-left:3px solid var(--pu)':ev.tipo==='desde_actividad'?'border-left:3px solid var(--or)':'border-left:3px solid var(--bl)';
-      const on=ev.id===(window._actAgendaSelEvId||'');
-      const canDel=puedeEliminarAgendaEvento(ev);
-      return '<div class="act-agenda-dia-row'+(on?' on':'')+'" style="display:flex;gap:8px;align-items:flex-start;padding:6px 4px;border-bottom:1px solid var(--bd);font-size:12px;'+dc+'" onclick="actAgendaSelEvento(\''+escAttr(ev.id)+'\')">'+
-        '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--bl);min-width:44px">'+horaLbl+'</span>'+
-        '<span style="flex:1"><strong>'+escAttr(ev.titulo)+'</strong>'+(ev.detalle?'<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+escAttr(ev.detalle)+'</div>':'')+'</span>'+
-        (canDel?'<button type="button" class="btn bsm bic bd2" onclick="event.stopPropagation();actAgendaEliminar(\''+escAttr(ev.id)+'\')" title="Eliminar">🗑</button>':'')+
-        '</div>';
-    }).join('');
-  }
-}
+function actAgendaNav(d){actAgendaShiftDia(d>0?30:-30);}
+function actAgendaSelDia(f){actAgendaSetDia(f);}
 function cerrarActAgendaPanel(){
   const ov=document.getElementById('act-agenda-overlay');
   const panel=document.getElementById('act-agenda-panel');
@@ -3993,32 +4125,10 @@ function cerrarActAgendaPanel(){
   window._actAgendaSelEvId=null;
   window._actAgendaDrawerMode=null;
   window._actAgendaPrefillBase=null;
+  window._actAgendaIntent=null;
 }
 function actAgendaGuardarForm(){
-  const f=agendaLeerForm();
-  const resp=getAgendaResponsableActivo();
-  if(!resp){notif('Seleccione responsable','err');return;}
-  const mode=window._actAgendaDrawerMode;
-  if(mode==='edit'&&window._actAgendaSelEvId){
-    if(actualizarAgendaEvento(window._actAgendaSelEvId,{...f})){
-      notif('Evento actualizado','ok');
-      window._actAgendaDiaSel=(f.fecha||'').slice(0,10);
-      actAgendaRefreshForm();
-      refreshActAgendaPanelCal();
-      refreshVistasTrasAgendar();
-    }
-    return;
-  }
-  const ev=crearAgendaEvento({...f,responsable:resp,tipo:'desde_actividad',taskRef:window._agendaPrefillTask||null,depto:esModoResponsable()?'responsables':deptoActivo});
-  if(ev){
-    window._actAgendaSelEvId=ev.id;
-    window._actAgendaDrawerMode='edit';
-    window._actAgendaDiaSel=(f.fecha||'').slice(0,10);
-    notif('Actividad agendada en calendario','ok');
-    actAgendaRefreshForm();
-    refreshActAgendaPanelCal();
-    refreshVistasTrasAgendar();
-  }
+  actAgendaProgramar();
 }
 function genCodigoActLibre(depto){
   const pref={guaviare:'ACT-GV',guainia:'ACT-GN',vaupes:'ACT-VP'}[depto]||'ACT';
