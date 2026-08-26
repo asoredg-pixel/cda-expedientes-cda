@@ -3117,6 +3117,7 @@ function toggleSstNavExpand(){
   nav.classList.toggle('expanded',exp);
   try{localStorage.setItem('sstNavExpanded',exp?'1':'0');}catch(e){}
   updateSstNavExpandIcon(exp);
+  syncActAgendaPanelLeftOffset();
 }
 function initSstNav(){
   const nav=document.getElementById('sst-nav');
@@ -3125,6 +3126,7 @@ function initSstNav(){
   try{exp=localStorage.getItem('sstNavExpanded')==='1';}catch(e){}
   nav.classList.toggle('expanded',exp);
   updateSstNavExpandIcon(exp);
+  syncActAgendaPanelLeftOffset();
 }
 function refreshActAgendaPanelTools(){
   const btn=document.getElementById('btn-tasks-asignar-resp');
@@ -3155,6 +3157,7 @@ function openMiDiaDesdeNav(opts){
   }
   window._actAgendaResp=resp;
   window._actAgendaNotasOpen=window._actAgendaNotasOpen||{};
+  window._actAgendaPanelSide='left';
   setNavTasksActive(true);
   actAgendaAbrirPanelUi();
 }
@@ -3197,6 +3200,20 @@ function puedeEliminarAgendaEvento(ev){
   }
   return puedeEditarAgendaEvento(ev);
 }
+function agendaUiPrefix(){return window._agendaRenderTarget==='modal'?'agenda-cal-modal-':'agenda-';}
+function agendaEl(id){return document.getElementById(agendaUiPrefix()+id);}
+function agendaIsModalOpen(){const ov=document.getElementById('agenda-cal-overlay');return !!(ov&&ov.classList.contains('on'));}
+function agendaShouldPaint(){if(window._agendaRenderTarget==='modal')return agendaIsModalOpen();const pg=document.getElementById('pg-agenda');return !!(pg&&pg.classList.contains('on'));}
+function agendaDrawerEls(){if(window._agendaRenderTarget==='modal'){return{tit:document.getElementById('agenda-cal-modal-drawer-tit'),body:document.getElementById('agenda-cal-modal-drawer-body'),wrap:document.getElementById('agenda-cal-modal-drawer')};}return{tit:document.getElementById('agenda-drawer-tit'),body:document.getElementById('agenda-drawer-body'),wrap:document.getElementById('agenda-drawer')};}
+function syncActAgendaPanelLeftOffset(){const nav=document.getElementById('sst-nav');const panel=document.getElementById('act-agenda-panel');if(!nav||!panel||!panel.classList.contains('act-agenda-left'))return;panel.style.left=(nav.offsetWidth||56)+'px';}
+function applyActAgendaPanelSide(side){const panel=document.getElementById('act-agenda-panel');if(!panel)return;panel.classList.remove('act-agenda-left','act-agenda-right');panel.classList.add(side==='left'?'act-agenda-left':'act-agenda-right');if(side==='left')syncActAgendaPanelLeftOffset();else panel.style.left='';}
+function openAgendaCalModal(){if(!puedeVerTabAgenda()){notif('Tasks está disponible en modo Responsables o como encargado del departamento','err');return;}const resp=getAgendaResponsableActivo();if(!resp){notif(esModoResponsable()?'Seleccione su nombre como responsable':'Seleccione encargado del departamento','err');return;}window._agendaRenderTarget='modal';if(!window._agendaMes)window._agendaMes=new Date();if(!window._agendaDiaSel)window._agendaDiaSel=hoy();if(!window._agendaVista||window._agendaVista==='dia')window._agendaVista='mes';const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.add('on');agendaCerrarDrawer();renderAgenda();}
+function cerrarAgendaCalModal(){const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.remove('on');window._agendaRenderTarget='page';agendaCerrarDrawer();}
+function renderPrintTaskSection(title,items){let h='<h3 style="margin:14px 0 6px;font-size:14px">'+escAttr(title)+'</h3>';if(!items.length)return h+'<p style="color:#666;font-size:12px;margin:0 0 8px">Sin ítems</p>';h+='<ul style="margin:0 0 10px 18px;padding:0">';items.forEach(ev=>{h+='<li style="margin-bottom:5px;font-size:13px;line-height:1.35"><strong>'+escAttr(ev.titulo||'')+'</strong>';if(ev.fecha)h+=' · '+fmtF(ev.fecha);if(ev.notas)h+='<br><span style="color:#555;font-size:11px">'+escAttr(ev.notas)+'</span>';h+='</li>';});return h+'</ul>';}
+function buildMiDiaTasksPrintSection(resp){return '<h2 style="margin:18px 0 8px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px">Mis tareas</h2>'+renderPrintTaskSection('Para hoy',getAgendaPlanesDelDia(resp,hoy()))+renderPrintTaskSection('Próximos',getAgendaPlanesProximos(resp))+renderPrintTaskSection('Vencidos',getAgendaPlanesVencidos(resp));}
+function buildAgendaPrintHtml(resp){const mesRef=window._agendaMes||new Date();const diaSel=window._agendaDiaSel||hoy();const eventos=getAgendaEventosResponsable(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);const now=new Date().toLocaleString('es-CO');const css='body{font-family:Arial,sans-serif;padding:20px;color:#111}h1{font-size:20px;margin:0 0 4px}h2{font-size:16px}.agenda-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px}.agenda-week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.agenda-week-col{border:1px solid #ddd;padding:4px;min-height:80px}.agenda-cal-ev{font-size:10px;padding:1px 3px;margin-top:2px;background:#deeaf8;border-radius:2px}';return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Agenda · '+escAttr(resp)+'</title><style>'+css+'</style></head><body><h1>Agenda · '+escAttr(resp)+'</h1><p style="color:#666;font-size:12px;margin:0 0 16px">Impreso '+escAttr(now)+'</p>'+buildMiDiaTasksPrintSection(resp)+'<h2 style="margin:18px 0 8px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px">Calendario · '+escAttr(agendaMesLabel(mesRef))+'</h2><div>'+renderAgendaCalGrid(eventos,mesRef,diaSel)+'</div><h2 style="margin:18px 0 8px;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:4px">Semana</h2><div>'+renderAgendaSemanaGrid(eventos,mesRef,diaSel)+'</div></body></html>';}
+function imprimirAgendaPanorama(){const resp=getAgendaResponsableActivo();if(!resp){notif('Seleccione responsable','err');return;}const html=buildAgendaPrintHtml(resp);const w=window.open('','_blank');if(!w){notif('Permita ventanas emergentes para imprimir','err');return;}w.document.write(html);w.document.close();w.focus();setTimeout(function(){try{w.print();}catch(e){}},500);}
+function imprimirMiAgendaCompleta(){imprimirAgendaPanorama();}
 function agendaSelEvento(id){
   window._agendaSelEvId=id;
   const ev=getAgendaEventoById(id);
@@ -3207,10 +3224,10 @@ function agendaSelEvento(id){
 function agendaCerrarDrawer(){
   window._agendaSelEvId=null;
   window._agendaDrawerMode=null;
-  const body=document.getElementById('agenda-drawer-body');
-  const tit=document.getElementById('agenda-drawer-tit');
-  if(tit)tit.textContent='Evento';
-  if(body)body.innerHTML='<div style="font-size:12px;color:var(--tx3)">Seleccione un evento del calendario o pulse «+ Evento personal».</div>';
+  const dr=agendaDrawerEls();
+  if(dr.tit)dr.tit.textContent='Evento';
+  const hint=window._agendaRenderTarget==='modal'?'Seleccione un evento del calendario.':'Seleccione un evento del calendario o pulse «+ Evento personal».';
+  if(dr.body)dr.body.innerHTML='<div style="font-size:12px;color:var(--tx3)">'+hint+'</div>';
   renderAgenda();
 }
 function agendaFormHtml(ev,prefill){
@@ -3237,8 +3254,9 @@ function agendaMostrarDrawerCrear(prefill){
   window._agendaDrawerMode='create';
   window._agendaSelEvId=null;
   window._agendaPrefillTask=prefill.taskRef||null;
-  const tit=document.getElementById('agenda-drawer-tit');
-  const body=document.getElementById('agenda-drawer-body');
+  const dr=agendaDrawerEls();
+  const tit=dr.tit;
+  const body=dr.body;
   if(tit)tit.textContent='Nuevo evento';
   if(body)body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Para: <strong>'+escAttr(resp)+'</strong></div>'+
     agendaFormHtml(null,prefill)+
@@ -3250,8 +3268,9 @@ function agendaMostrarDrawerEditar(ev){
   if(!puedeEditarAgendaEvento(ev)){notif('No puede editar este evento','err');return;}
   window._agendaDrawerMode='edit';
   window._agendaSelEvId=ev.id;
-  const tit=document.getElementById('agenda-drawer-tit');
-  const body=document.getElementById('agenda-drawer-body');
+  const dr=agendaDrawerEls();
+  const tit=dr.tit;
+  const body=dr.body;
   const batchChk=ev.tipo==='asignado'&&ev.batch?'<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="agenda-f-batch" checked> Aplicar a todos los responsables del envío</label>':'';
   if(tit)tit.textContent='Editar evento';
   if(body)body.innerHTML=(ev.tipo==='asignado'?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Responsable: '+escAttr(ev.responsable)+'</div>':'')+
@@ -3264,8 +3283,9 @@ function agendaMostrarDrawerEvento(ev){
   ev=normalizeAgendaEvento(ev);
   window._agendaSelEvId=ev.id;
   window._agendaDrawerMode='view';
-  const tit=document.getElementById('agenda-drawer-tit');
-  const body=document.getElementById('agenda-drawer-body');
+  const dr=agendaDrawerEls();
+  const tit=dr.tit;
+  const body=dr.body;
   let tag='<span class="bdg" style="background:var(--bll);color:var(--bl);font-size:10px">Personal</span>';
   if(ev.tipo==='asignado')tag='<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px">Asignado</span>';
   else if(ev.tipo==='desde_actividad')tag='<span class="bdg" style="background:var(--orl);color:var(--or);font-size:10px">Desde actividad</span>';
@@ -3436,9 +3456,12 @@ function agendaMesDelta(d){
 }
 function agendaNav(d){agendaMesDelta(d);}
 function agendaSetVista(v){
-  window._agendaVista=v||'mes';
-  const vs=['mes','semana','dia'];
-  document.querySelectorAll('#agenda-view-tabs button').forEach((b,i)=>b.classList.toggle('on',vs[i]===window._agendaVista));
+  v=v||'mes';
+  if(window._agendaRenderTarget==='modal'&&v==='dia')v='mes';
+  window._agendaVista=v;
+  const pfx=agendaUiPrefix();
+  const vs=window._agendaRenderTarget==='modal'?['mes','semana']:['mes','semana','dia'];
+  document.querySelectorAll('#'+pfx+'view-tabs button').forEach((b,i)=>b.classList.toggle('on',vs[i]===window._agendaVista));
   renderAgenda();
 }
 function agendaSemanaInicio(mesRef,diaSel){
@@ -3603,22 +3626,23 @@ function eliminarAgendaEvento(id){
 }
 function renderAgenda(){
   if(!puedeVerTabAgenda())return;
+  if(!agendaShouldPaint())return;
   const resp=getAgendaResponsableActivo();
-  const tit=document.getElementById('agenda-titulo');
-  const sub=document.getElementById('agenda-subtitulo');
+  const tit=agendaEl('titulo');
+  const sub=agendaEl('subtitulo');
   const btnAsig=document.getElementById('btn-agenda-asignar');
-  const banner=document.getElementById('agenda-gcal-banner');
+  const banner=agendaEl('gcal-banner');
   if(!resp){
     if(tit)tit.textContent='Mi agenda';
     if(sub)sub.textContent='Seleccione su nombre como responsable para ver su calendario.';
-    if(document.getElementById('agenda-cal-grid'))document.getElementById('agenda-cal-grid').innerHTML='';
-    if(document.getElementById('agenda-lista'))document.getElementById('agenda-lista').innerHTML='<div style="font-size:12px;color:var(--tx3);padding:8px">Sin responsable seleccionado.</div>';
+    if(agendaEl('cal-grid'))agendaEl('cal-grid').innerHTML='';
+    if(agendaEl('lista'))agendaEl('lista').innerHTML='<div style="font-size:12px;color:var(--tx3);padding:8px">Sin responsable seleccionado.</div>';
     if(banner)banner.innerHTML='';
     return;
   }
-  if(tit)tit.textContent='Agenda · '+resp;
-  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para editar · Gmail Calendar se fusiona si hay permiso';
-  if(btnAsig)btnAsig.style.display=puedeAsignarEventoAgendaResponsables()?'inline-flex':'none';
+  if(tit)tit.textContent=(window._agendaRenderTarget==='modal'?'Calendario':'Agenda')+' · '+resp;
+  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para ver detalle · Gmail Calendar se fusiona si hay permiso';
+  if(btnAsig)btnAsig.style.display=(window._agendaRenderTarget!=='modal'&&puedeAsignarEventoAgendaResponsables())?'inline-flex':'none';
   if(banner){
     const gmailOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
     const calOk=gmailOk&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&!window._gmailCalendarDenied;
@@ -3637,11 +3661,12 @@ function renderAgenda(){
   const gcalEv=Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[];
   const eventos=sstEv.concat(gcalEv);
   const vista=window._agendaVista||'mes';
-  document.querySelectorAll('#agenda-view-tabs button').forEach((b,i)=>b.classList.toggle('on',['mes','semana','dia'][i]===vista));
-  const lbl=document.getElementById('agenda-mes-label');
+  const pfx=agendaUiPrefix();
+  document.querySelectorAll('#'+pfx+'view-tabs button').forEach((b,i)=>{const vs=window._agendaRenderTarget==='modal'?['mes','semana']:['mes','semana','dia'];b.classList.toggle('on',vs[i]===vista);});
+  const lbl=agendaEl('mes-label');
   if(lbl)lbl.textContent=agendaPeriodoLabel();
-  const wrap=document.getElementById('agenda-cal-wrap');
-  const grid=document.getElementById('agenda-cal-grid');
+  const wrap=agendaEl('cal-wrap');
+  const grid=agendaEl('cal-grid');
   if(wrap&&grid){
     if(vista==='mes'){
       wrap.style.display='';
@@ -3657,8 +3682,8 @@ function renderAgenda(){
       grid.innerHTML=renderAgendaDiaView(eventos,diaSel);
     }
   }
-  const lt=document.getElementById('agenda-lista-titulo');
-  const lista=document.getElementById('agenda-lista');
+  const lt=agendaEl('lista-titulo');
+  const lista=agendaEl('lista');
   const showBottom=vista==='mes'||vista==='semana';
   if(lt){
     lt.style.display=showBottom?'':'none';
@@ -3669,7 +3694,7 @@ function renderAgenda(){
     if(showBottom)lista.innerHTML=renderAgendaListaHtml(eventos,diaSel);
   }
   const gest=document.getElementById('agenda-asig-gest');
-  if(gest){
+  if(gest&&window._agendaRenderTarget!=='modal'){
     if(esVistaActividadesDepto()){
       gest.style.display='';
       gest.innerHTML='<details class="con-fold"><summary>Eventos asignados a responsables (editar)</summary><div class="item-fold-body">'+renderAgendaAsignadosGestHtml()+'</div></details>';
@@ -3714,14 +3739,14 @@ function agendaFetchGcalForVista(mesRef,diaSel,vista){
     window._agendaGcalEvents=Array.isArray(list)?list:[];
     // Re-pintar solo si sigue en agenda y mismo rango
     const cur=agendaVisibleRangeIso(window._agendaMes||new Date(),window._agendaDiaSel||hoy(),window._agendaVista||'mes');
-    if(cur.key===range.key&&document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on')){
+    if(cur.key===range.key&&agendaShouldPaint()){
       _renderAgendaPaintOnly();
     }
   }).catch(function(err){
     window._agendaGcalFetchKey='';
     console.warn('Agenda GCal:',err);
     window._agendaGcalEvents=[];
-    const ban=document.getElementById('agenda-gcal-banner');
+    const ban=agendaEl('gcal-banner');
     if(ban&&(err&&err.code==='NO_CALENDAR_SCOPE'||window._gmailCalendarDenied)){
       ban.innerHTML='<div style="font-size:12px;padding:8px 10px;margin-bottom:8px;border-radius:var(--r);background:#fff7ed;border:1px solid var(--or);color:var(--tx)">Conecte Gmail con permiso de <strong>Calendar</strong> para ver eventos de su cuenta.'+
         ' <button type="button" class="btn bsm bp" style="margin-left:6px" onclick="gmailReconnectForCalendar()">Conceder Calendar</button></div>';
@@ -3736,14 +3761,14 @@ function _renderAgendaPaintOnly(){
   const diaSel=window._agendaDiaSel||hoy();
   const eventos=getAgendaEventosResponsable(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
   const vista=window._agendaVista||'mes';
-  const wrap=document.getElementById('agenda-cal-wrap');
-  const grid=document.getElementById('agenda-cal-grid');
+  const wrap=agendaEl('cal-wrap');
+  const grid=agendaEl('cal-grid');
   if(wrap&&grid){
     if(vista==='mes'){grid.className='agenda-cal';grid.innerHTML=renderAgendaCalGrid(eventos,mesRef,diaSel);}
     else if(vista==='semana'){grid.className='';grid.innerHTML=renderAgendaSemanaGrid(eventos,mesRef,diaSel);}
     else{grid.className='';grid.innerHTML=renderAgendaDiaView(eventos,diaSel);}
   }
-  const lista=document.getElementById('agenda-lista');
+  const lista=agendaEl('lista');
   if(lista&&(vista==='mes'||vista==='semana'))lista.innerHTML=renderAgendaListaHtml(eventos,diaSel);
 }
 function openAgendaEventoModal(prefill){
@@ -3899,6 +3924,7 @@ function openAgendaDesdeActividad(expId,taskId){
   }else{
     window._actAgendaOtroPlan=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
   }
+  window._actAgendaPanelSide='right';
   actAgendaAbrirPanelUi();
 }
 function actAgendaAbrirPanelUi(){
@@ -3911,6 +3937,7 @@ function actAgendaAbrirPanelUi(){
   if(sub)sub.textContent='Mi día';
   if(body)body.innerHTML=renderMiDiaPanelHtml();
   refreshActAgendaPanelTools();
+  applyActAgendaPanelSide(window._actAgendaPanelSide||'right');
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
   setNavTasksActive(true);
@@ -4304,7 +4331,8 @@ function cerrarActAgendaPanel(){
   const ov=document.getElementById('act-agenda-overlay');
   const panel=document.getElementById('act-agenda-panel');
   if(ov)ov.classList.remove('on');
-  if(panel)panel.classList.remove('on');
+  if(panel){panel.classList.remove('on');panel.classList.remove('act-agenda-left','act-agenda-right');panel.style.left='';}
+  window._actAgendaPanelSide=null;
   window._agendaPrefillTask=null;
   window._actAgendaResp=null;
   window._actAgendaSelEvId=null;
