@@ -3090,6 +3090,67 @@ function puedeVerTabActividades(){
 function puedeVerTabAgenda(){
   return esModoResponsable()||esVistaActividadesDepto();
 }
+/** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés), no oficinas RN/OAP/DS/Admin. */
+function puedeAsignarEventoAgendaResponsables(){
+  if(!esVistaActividadesDepto()||esModoResponsable())return false;
+  if(['oap_deguv','rn_deguv','admin_deguv','ds_deguv'].includes(deptoActivo))return false;
+  if(typeof esVistaActividadesOficinaPqrs==='function'&&esVistaActividadesOficinaPqrs())return false;
+  return DEPTOS.some(d=>d.id===deptoActivo);
+}
+function setNavTasksActive(on){
+  const t=document.getElementById('nav-tasks');
+  if(t)t.classList.toggle('on',!!on);
+}
+function toggleSstNavExpand(){
+  const nav=document.getElementById('sst-nav');
+  if(!nav)return;
+  const exp=!nav.classList.contains('expanded');
+  nav.classList.toggle('expanded',exp);
+  try{localStorage.setItem('sstNavExpanded',exp?'1':'0');}catch(e){}
+  const btn=document.getElementById('sst-nav-expand');
+  if(btn)btn.title=exp?'Contraer menú':'Expandir menú';
+}
+function initSstNav(){
+  const nav=document.getElementById('sst-nav');
+  if(!nav)return;
+  let exp=false;
+  try{exp=localStorage.getItem('sstNavExpanded')==='1';}catch(e){}
+  nav.classList.toggle('expanded',exp);
+  const btn=document.getElementById('sst-nav-expand');
+  if(btn)btn.title=exp?'Contraer menú':'Expandir menú';
+}
+function refreshActAgendaPanelTools(){
+  const btn=document.getElementById('btn-tasks-asignar-resp');
+  if(btn)btn.style.display=puedeAsignarEventoAgendaResponsables()?'inline-flex':'none';
+}
+function openMiDiaDesdeNav(opts){
+  opts=opts||{};
+  if(!puedeVerTabAgenda()){
+    notif('Tasks está disponible en modo Responsables o como encargado del departamento','err');
+    return;
+  }
+  const resp=getAgendaResponsableActivo();
+  if(!resp){
+    notif(esModoResponsable()?'Seleccione su nombre como responsable':'Seleccione encargado del departamento','err');
+    return;
+  }
+  if(!opts.keepContext){
+    window._agendaPrefillTask=null;
+    window._actAgendaPrefillBase=null;
+    window._actAgendaExpId=null;
+    window._actAgendaTaskId=null;
+    window._actAgendaSelEvId=null;
+    window._actAgendaDrawerMode=null;
+    window._actAgendaOtroPlan=null;
+    window._actAgendaPersonalAdd=false;
+    window._actAgendaActAdd=false;
+    window._actAgendaDiaSel=hoy();
+  }
+  window._actAgendaResp=resp;
+  window._actAgendaNotasOpen=window._actAgendaNotasOpen||{};
+  setNavTasksActive(true);
+  actAgendaAbrirPanelUi();
+}
 // agendaNorm → js/utils.js
 function getAgendaResponsableActivo(){
   if(esModoResponsable())return String(responsableActivo||'').trim();
@@ -3550,7 +3611,7 @@ function renderAgenda(){
   }
   if(tit)tit.textContent='Agenda · '+resp;
   if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para editar · Gmail Calendar se fusiona si hay permiso';
-  if(btnAsig)btnAsig.style.display=esVistaActividadesDepto()?'inline-flex':'none';
+  if(btnAsig)btnAsig.style.display=puedeAsignarEventoAgendaResponsables()?'inline-flex':'none';
   if(banner){
     const gmailOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
     const calOk=gmailOk&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&!window._gmailCalendarDenied;
@@ -3686,7 +3747,7 @@ function submitAgendaEventoPersonal(){
   agendaGuardarForm();
 }
 function openAgendaAsignarModal(){
-  if(!esVistaActividadesDepto()){notif('Solo el encargado del departamento puede asignar eventos','err');return;}
+  if(!puedeAsignarEventoAgendaResponsables()){notif('Solo el encargado del departamento regional puede asignar eventos a responsables','err');return;}
   const names=getContratistasAsignables(deptoActivo);
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
@@ -3842,8 +3903,10 @@ function actAgendaAbrirPanelUi(){
   if(tit)tit.textContent='Tasks';
   if(sub)sub.textContent='Mi día';
   if(body)body.innerHTML=renderMiDiaPanelHtml();
+  refreshActAgendaPanelTools();
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
+  setNavTasksActive(true);
 }
 function getAgendaPlanesActivos(resp){
   const nNorm=agendaNorm(resp);
@@ -4213,7 +4276,7 @@ function actAgendaSelEvento(id){
   window._actAgendaDrawerMode='edit';
   window._actAgendaDiaSel=(ev.fecha||'').slice(0,10);
   if(!window._actAgendaNotasOpen)window._actAgendaNotasOpen={};
-  if(notas)window._actAgendaNotasOpen[id]=true;
+  if(String(ev.notas||'').trim())window._actAgendaNotasOpen[id]=true;
   if(ev.taskRef&&ev.taskRef.taskId){
     window._actAgendaExpId=ev.taskRef.expId||ev.taskRef.exp||window._actAgendaExpId;
     window._actAgendaTaskId=ev.taskRef.taskId;
@@ -4245,6 +4308,7 @@ function cerrarActAgendaPanel(){
   window._actAgendaActAdd=false;
   window._actAgendaExpId=null;
   window._actAgendaTaskId=null;
+  setNavTasksActive(false);
 }
 function actAgendaGuardarForm(){
   actAgendaProgramar();
@@ -10504,13 +10568,12 @@ function irDesdeBandeja(idx){
   if(esModoResponsable()){
     if(it.tipo==='agenda'||it.tipo==='agenda_recordatorio'){
       marcarAgendaLeido(it.agendaId);
-      window._agendaDiaSel=(it.fecha||'').slice(0,10)||hoy();
-      window._agendaSelEvId=it.agendaId;
-      window._agendaVista=window._agendaVista||'mes';
-      showTab('agenda');
-      renderAgenda();
-      const ev=getAgendaEventoById(it.agendaId);
-      if(ev)agendaMostrarDrawerEvento(ev);
+      window._actAgendaDiaSel=(it.fecha||'').slice(0,10)||hoy();
+      window._actAgendaSelEvId=it.agendaId;
+      window._actAgendaResp=getAgendaResponsableActivo();
+      if(!window._actAgendaNotasOpen)window._actAgendaNotasOpen={};
+      window._actAgendaNotasOpen[it.agendaId]=true;
+      openMiDiaDesdeNav({keepContext:true});
       renderBandejaDepto();
       return;
     }
@@ -13520,6 +13583,7 @@ function updateDeptoUI(){
   const hideRegResp=resp&&!responsablePuedeVerRegistro();
   if(tabReg){tabReg.classList.toggle('tab-resp-reg-off',hideRegResp);}
   if(typeof aplicarVisibilidadTabsSesion==='function')aplicarVisibilidadTabsSesion();
+  if(typeof initSstNav==='function')initSstNav();
   document.querySelectorAll('.hacts-juris-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||resp||sec||ciudadano||ofi));
   document.querySelectorAll('.hacts-nuevo-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||(resp&&(!responsableActivo||!responsablePuedeEditarSec('control')))||sec||ciudadano||ofi));
   const optPqrsRec=document.getElementById('f-act-opt-pqrsrec');

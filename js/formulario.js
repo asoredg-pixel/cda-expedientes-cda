@@ -32,8 +32,7 @@ function showTab(t){
   // secretary can switch between sec and gmail-ofi freely
   if(esSecretaria()&&t==='gmail-ofi')t='gmail-ofi';
   if(t==='act'&&!puedeVerTabActividades()){notif('Seleccione su nombre como encargado del departamento para ver actividades','err');t=esModoOficinaDeguv()?'pqrs-ofi':(esSecretaria()?'sec':'con');}
-  if(t==='agenda'&&!puedeVerTabAgenda()){notif('La agenda está disponible en modo Responsables o como encargado del departamento','err');t=esModoResponsable()?'act':'con';}
-  if(t==='agenda'&&esModoResponsable()&&!responsableActivo){notif('Seleccione su nombre como responsable para ver su agenda','err');t='act';}
+  if(t==='agenda'){if(typeof openMiDiaDesdeNav==='function')openMiDiaDesdeNav();return;}
   // No empujar a Consulta si el responsable ya está (o pidió) Actividades
   if(esModoResponsable()&&wanted==='act'&&puedeVerTabActividades())t='act';
   if(t!=='cfg'){/* cfg sync global durante toda la sesión */}
@@ -45,7 +44,8 @@ function showTab(t){
     pgTarget=document.getElementById('pg-'+t);
   }
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
-  document.querySelectorAll('.tab').forEach(b=>{b.classList.remove('on');b.classList.remove('tab-selected');});
+  document.querySelectorAll('.sst-nav-items .tab, .tabsi .tab').forEach(b=>{if(b.id!=='nav-tasks'){b.classList.remove('on');b.classList.remove('tab-selected');}});
+  if(typeof setNavTasksActive==='function')setNavTasksActive(false);
   if(pgTarget)pgTarget.classList.add('on');
   const tabBtn=document.getElementById('tab-'+t);
   if(tabBtn){tabBtn.classList.add('on');tabBtn.classList.add('tab-selected');}
@@ -80,7 +80,6 @@ function showTab(t){
     initPeriodoFiltros('act');
     renderActividades();
   }
-  if(t==='agenda')renderAgenda();
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){initPeriodoFiltros('cons');renderConsolidado();}
   if(t==='cfg'){
