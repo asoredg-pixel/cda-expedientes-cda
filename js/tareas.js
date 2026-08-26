@@ -73,7 +73,11 @@ function toggleTrasladoTaskSel(btn){
   if(!lista.length){notif('No hay otros responsables configurados','err');return;}
   const show=sel.style.display==='none'||!sel.style.display;
   if(!show){sel.style.display='none';sel.value='';return;}
-  sel.innerHTML='<option value="">— Seleccione responsable —</option>'+lista.map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('');
+  const deptoLbl=(typeof getDeptoOperativo==='function'?getDeptoOperativo():'')||'guaviare';
+  sel.innerHTML='<option value="">— Seleccione responsable —</option>'+lista.map(n=>{
+    const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,deptoLbl):n;
+    return '<option value="'+escAttr(n)+'">'+escAttr(lbl)+'</option>';
+  }).join('');
   sel.style.display='';
   sel.focus();
 }

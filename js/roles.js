@@ -58,8 +58,8 @@ function contratistaEsAsignablePqrsGuaviare(ins){
 }
 function getAsignablesPqrsOficina(oficinaId){
   oficinaId=oficinaId||getPqrsOficinaActiva();
-  if(oficinaId==='guaviare')return getResponsablesNcaDeguv();
-  return getContratistasOficinaPqrs(oficinaId);
+  if(oficinaId==='guaviare')return includeEncargadoEnLista(getResponsablesNcaDeguv(),'guaviare');
+  return includeEncargadoEnLista(getContratistasOficinaPqrs(oficinaId),oficinaId);
 }
 function oficinaPuedeAsignarPqrs(oficinaId){
   return getAsignablesPqrsOficina(oficinaId).length>0;
@@ -495,13 +495,39 @@ function instructorEsAsignableActividad(ins){
 /** Contratistas + encargado del depto (puede autoasignarse actividades). */
 function getAsignablesActividad(deptoId){
   const d=deptoId||getDeptoOperativo();
-  const names=getContratistasAsignables(d).slice();
-  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(d)||'').trim():'';
-  if(enc){
-    const has=names.some(function(n){return typeof agendaNorm==='function'?agendaNorm(n)===agendaNorm(enc):n===enc;});
-    if(!has)names.unshift(enc);
-  }
-  return names;
+  return includeEncargadoEnLista(getContratistasAsignables(d),d);
+}
+/** Asegura que el encargado del depto/oficina figure entre los asignables (puede atender él mismo). */
+function includeEncargadoEnLista(names,deptoId){
+  const list=(names||[]).slice();
+  const d=deptoId||getDeptoOperativo()||deptoActivo||'guaviare';
+  let enc='';
+  if(typeof esModuloOficina==='function'&&esModuloOficina(d)&&typeof getEncargadoOficina==='function')
+    enc=String(getEncargadoOficina(d)||'').trim();
+  if(!enc&&typeof getEncargadoDepto==='function')
+    enc=String(getEncargadoDepto(d)||'').trim();
+  // NCA / Guaviare: encargado unificado
+  if(!enc&&(d==='guaviare'||d==='nca')&&typeof getEncargadoDepto==='function')
+    enc=String(getEncargadoDepto('guaviare')||'').trim();
+  if(!enc)return list;
+  const has=list.some(function(n){
+    return typeof agendaNorm==='function'?agendaNorm(n)===agendaNorm(enc):String(n)===enc;
+  });
+  if(!has)list.unshift(enc);
+  return list;
+}
+/** Etiqueta en selects: marca al encargado. */
+function labelAsignableConRol(nombre,deptoId){
+  const n=String(nombre||'').trim();
+  if(!n)return'';
+  const d=deptoId||getDeptoOperativo()||'guaviare';
+  let enc='';
+  if(typeof esModuloOficina==='function'&&esModuloOficina(d)&&typeof getEncargadoOficina==='function')
+    enc=String(getEncargadoOficina(d)||'').trim();
+  if(!enc&&typeof getEncargadoDepto==='function')enc=String(getEncargadoDepto(d==='guaviare'||d==='nca'?'guaviare':d)||'').trim();
+  if(enc&&(typeof agendaNorm==='function'?agendaNorm(n)===agendaNorm(enc):n===enc))
+    return n+' (encargado)';
+  return n;
 }
 function getContratistasAsignables(deptoId){
   return getInstructoresActivos(deptoId||getDeptoOperativo()).filter(instructorEsAsignableActividad).map(i=>i.nombre).filter(Boolean);
@@ -520,9 +546,10 @@ function getContratistasAsignablesTodos(){
 function getResponsablesForTrasladoActividad(expId,taskId){
   const e=getExpById(expId);
   const t=getTaskAny(expId,taskId);
-  if(e&&t&&taskEsAtenderPqrs(t,e))return getResponsablesNcaDeguv();
+  if(e&&t&&taskEsAtenderPqrs(t,e))
+    return includeEncargadoEnLista(getResponsablesNcaDeguv(),'guaviare');
   const depto=(t&&(t.depto||(e&&e._depto)))||deptoActivo;
-  return typeof getAsignablesActividad==='function'?getAsignablesActividad(depto):getContratistasAsignables(depto);
+  return typeof getAsignablesActividad==='function'?getAsignablesActividad(depto):includeEncargadoEnLista(getContratistasAsignables(depto),depto);
 }
 function esTareaDelEncargado(t,deptoId){
   if(!t)return false;

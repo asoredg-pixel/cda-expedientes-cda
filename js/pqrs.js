@@ -1785,7 +1785,10 @@ function openAsignarPqrsOficinaModal(expId){
   const existTk=(e.tasks||[]).find(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
   if(existTk){getTaskResponsables(existTk).forEach(n=>{if(n&&!yaAsig.some(x=>agendaNorm(x)===agendaNorm(n)))yaAsig.push(n);});}
   const respChecks=responsables.length
-    ?responsables.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"></label>').join('')
+    ?responsables.map(n=>{
+      const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
+      return '<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"></label>';
+    }).join('')
     :'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
   const necesitaCorreo=_pqrsNecesitaCorreoParaAsignar(e);
@@ -1795,7 +1798,7 @@ function openAsignarPqrsOficinaModal(expId){
   body.innerHTML=bannerCorreo+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(labelOficina(oficina))+'</strong></div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Responsable(s) que atenderá(n)<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">— marque uno o varios (co-ejecutores)</span></label>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Responsable(s) que atenderá(n)<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">— incl. encargado; marque uno o varios</span></label>'+
     '<div id="pqrs-asig-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="pqrs-asig-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label>'+
     '<select id="pqrs-asig-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+

@@ -2934,10 +2934,14 @@ function getResponsablesNcaDeguv(){
 }
 function getResponsablesCoEjPool(expId,taskId,t){
   const e=getExpById(expId);
-  if(e&&t&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca())return getResponsablesNcaDeguv();
+  if(e&&t&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca())
+    return typeof includeEncargadoEnLista==='function'?includeEncargadoEnLista(getResponsablesNcaDeguv(),'guaviare'):getResponsablesNcaDeguv();
   const ex=getExpById(expId);
   const depto=t.depto||(ex&&ex._depto)||deptoActivo;
-  if(esModoOficinaDeguv())return getInstructoresOficina(deptoActivo).map(i=>i.nombre).filter(Boolean);
+  if(esModoOficinaDeguv()){
+    const ofiNames=getInstructoresOficina(deptoActivo).map(i=>i.nombre).filter(Boolean);
+    return typeof includeEncargadoEnLista==='function'?includeEncargadoEnLista(ofiNames,deptoActivo):ofiNames;
+  }
   return typeof getAsignablesActividad==='function'?getAsignablesActividad(depto):getContratistasAsignables(depto);
 }
 function puedeEliminarTaskPqrs(expId,taskId){
@@ -5694,7 +5698,10 @@ function openSolicitarTrasladoModal(expId,taskId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Solicitar traslado · '+(t.desc||t.actividad||ref);
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  const opts=getResponsablesForTrasladoActividad(ref,taskId).filter(n=>n&&!getTaskResponsables(t).some(r=>agendaNorm(r)===agendaNorm(n))).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('');
+  const opts=getResponsablesForTrasladoActividad(ref,taskId).filter(n=>n&&!getTaskResponsables(t).some(r=>agendaNorm(r)===agendaNorm(n))).map(n=>{
+    const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,(t&&t.depto)||'guaviare'):n;
+    return '<option value="'+escAttr(n)+'">'+escAttr(lbl)+'</option>';
+  }).join('');
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">NCA DEGUV recibirá una notificación en la campanita 🔔 para revisar el traslado.</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Trasladar a (sugerido)</label><select id="sol-traslado-dest" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione responsable —</option>'+opts+'</select></div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Motivo (opcional)</label><textarea id="sol-traslado-nota" placeholder="Indique el motivo del traslado…" style="width:100%;min-height:64px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
@@ -5754,7 +5761,11 @@ function openGestionSolicitudModal(expId,taskId){
   if(tit)tit.textContent=(sol.tipo==='traslado'?'Solicitud de traslado':'Solicitud de eliminación')+' · '+(t.desc||t.actividad||ref);
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const poolResp=getResponsablesForTrasladoActividad(ref,taskId);
-  const opts=poolResp.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'"'+(sol.destino&&agendaNorm(n)===agendaNorm(sol.destino)?' selected':'')+'>'+escAttr(n)+'</option>').join('');
+  const deptoPool=(t&&t.depto)||(e&&e._depto)||deptoActivo||'guaviare';
+  const opts=poolResp.filter(n=>n).map(n=>{
+    const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,esPqrsSol?'guaviare':deptoPool):n;
+    return '<option value="'+escAttr(n)+'"'+(sol.destino&&agendaNorm(n)===agendaNorm(sol.destino)?' selected':'')+'>'+escAttr(lbl)+'</option>';
+  }).join('');
   let h='<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
     '<strong>'+escAttr(sol.por)+'</strong> solicita '+(sol.tipo==='traslado'?'trasladar la actividad'+(sol.destino?' a <strong>'+escAttr(sol.destino)+'</strong>':''):'eliminar la actividad')+
@@ -5764,7 +5775,7 @@ function openGestionSolicitudModal(expId,taskId){
       '<div class="fld" style="margin-bottom:10px"><label>Comentario para Secretaría</label><textarea id="gest-sol-secre-nota" placeholder="Indique a Secretaría qué debe hacer (eliminar, corregir datos, etc.)…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>';
   }
   if(sol.tipo==='traslado'){
-    h+='<div class="fld" style="margin-bottom:10px"><label>Trasladar a</label><select id="gest-sol-traslado-dest" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione —</option>'+opts+'</select></div>';
+    h+='<div class="fld" style="margin-bottom:10px"><label>Trasladar a <span style="font-weight:400;color:var(--tx3)">(incluye al encargado)</span></label><select id="gest-sol-traslado-dest" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione —</option>'+opts+'</select></div>';
   }
   h+='<div class="fx" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
     (sol.tipo==='traslado'?'<button type="button" class="btn bsm bp" onclick="aprobarSolicitudTraslado(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">✓ Aprobar traslado</button>':
@@ -5868,7 +5879,9 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
   });
   if(canEdit){
     const pool=getResponsablesCoEjPool(expId,taskId,t);
-    const optsAdd=pool.filter(n=>n&&!rs.some(r=>agendaNorm(r)===agendaNorm(n))).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('');
+    const deptoLbl=(t&&t.depto)||deptoActivo||'guaviare';
+    const optLbl=function(n){return typeof labelAsignableConRol==='function'?labelAsignableConRol(n,pqrsNca?'guaviare':deptoLbl):n;};
+    const optsAdd=pool.filter(n=>n&&!rs.some(r=>agendaNorm(r)===agendaNorm(n))).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(optLbl(n))+'</option>').join('');
     h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
       '<select id="task-asig-add-sel" style="min-width:160px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px" onchange="toggleTaskAsigModo()"><option value="">+ Añadir co-ejecutor</option>'+optsAdd+'</select>'+
       '<button type="button" class="btn bsm" onclick="submitAnadirResponsableTask(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Añadir</button>'+
@@ -5879,12 +5892,11 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
       '<option value="individual"'+(t.entregaModo!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
       '<option value="unificada"'+(t.entregaModo==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
       '</select></div>';
-    if(!pqrsNca){
-      h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
-        '<select id="task-asig-traslado-sel" style="min-width:160px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><option value="">↔ Trasladar / reemplazar</option>'+
-        pool.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>').join('')+'</select>'+
-        '<button type="button" class="btn bsm" onclick="submitTrasladoTaskModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Trasladar</button></div>';
-    }
+    // Traslado / reasignar: incluye al encargado (puede atenderla él)
+    h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">'+
+      '<select id="task-asig-traslado-sel" style="min-width:160px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><option value="">↔ Trasladar / reasignar</option>'+
+      pool.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(optLbl(n))+'</option>').join('')+'</select>'+
+      '<button type="button" class="btn bsm" onclick="submitTrasladoTaskModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Trasladar</button></div>';
     if(!pqrsNca&&typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId))
       h+='<div style="margin-top:8px"><button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar actividad'+(t.sinExpediente?' sin expediente':'')+'</button></div>';
   }
