@@ -4072,6 +4072,7 @@ function actAgendaAbrirPanelUi(){
   if(body)body.innerHTML=renderMiDiaPanelHtml();
   refreshActAgendaPanelTools();
   applyActAgendaPanelSide(window._actAgendaPanelSide||'right');
+  if(panel)panel.classList.remove('act-agenda-closing');
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
   setNavTasksActive(true);
@@ -4477,11 +4478,17 @@ function cerrarActAgendaPanel(){
   window._actAgendaExpId=null;
   window._actAgendaTaskId=null;
   setNavTasksActive(false);
+  const btnAsig=document.getElementById('btn-tasks-asignar-resp');
+  if(btnAsig)btnAsig.style.display='none';
   if(!panel)return;
   if(panel.classList.contains('on')){
+    panel.classList.add('act-agenda-closing');
     const cleanup=function(){
-      panel.classList.remove('act-agenda-left','act-agenda-right');
+      panel.style.transition='none';
+      panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right');
       panel.style.left='';
+      void panel.offsetWidth;
+      panel.style.transition='';
     };
     const onEnd=function(e){
       if(e.target!==panel||e.propertyName!=='transform')return;
@@ -4493,9 +4500,9 @@ function cerrarActAgendaPanel(){
     setTimeout(function(){
       panel.removeEventListener('transitionend',onEnd);
       if(!panel.classList.contains('on'))cleanup();
-    },280);
+    },300);
   }else{
-    panel.classList.remove('act-agenda-left','act-agenda-right');
+    panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right');
     panel.style.left='';
   }
 }
