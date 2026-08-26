@@ -4002,7 +4002,7 @@ function taskReporteBtnHtml(expId,taskId,yo){
   if(esEncOwn){
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return '';
     if(est==='Atendida')return '';
-    return '<button type="button" class="btn bsm bp" title="Autoentrega (encargado): va a imprimir/firmar/notificar, sin Por revisar" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤</button>';
+    return '<button type="button" class="btn bsm bic act-ico" title="Autoentrega (encargado): va a imprimir/firmar/notificar, sin Por revisar" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤</button>';
   }
   if(miEst==='Por verificar'||(est==='Por verificar'&&t.entregaModo==='unificada'&&taskUsuarioEsAsignado(t,usuario))){
     const a=usuario?getAsignado(t,usuario):null;
@@ -4010,13 +4010,13 @@ function taskReporteBtnHtml(expId,taskId,yo){
     const tip=taskPuedeCorregirSinRevision(t,usuario)
       ?('Enviada · '+fmtF(f)+cmtTip+' · Aún no revisada: puede corregir la entrega')
       :('Enviada para verificación · '+fmtF(f)+cmtTip);
-    return '<button type="button" class="btn bsm bic act-reportada-on" title="'+escAttr(tip)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>'+
+    return '<button type="button" class="btn bsm bic act-ico act-reportada-on" title="'+escAttr(tip)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>'+
       '<span class="task-reportada-tag" title="'+escAttr(tip)+'">📤 '+fmtF(f)+'</span>';
   }
   if(miEst==='Atendida')return '';
   if(!puedeReportarTask(t,usuario))return '';
   const title=(miEst==='Por corregir'?'Entrega — nueva corrección':'Entrega de actividad')+cmtTip;
-  return '<button type="button" class="btn bsm bp" title="'+escAttr(title)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>';
+  return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(title)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>';
 }
 function refreshVistasTrasAgendar(){
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
