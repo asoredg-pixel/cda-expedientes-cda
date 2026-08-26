@@ -220,6 +220,7 @@ function sstRunAction(action,el){
       case'openConsultaArchivosModal':openConsultaArchivosModal(exp);break;
       case'openEditarActTaskModal':openEditarActTaskModal(exp,task);break;
       case'abrirConsultaExpPanelDesdeAct':abrirConsultaExpPanelDesdeAct(exp,task);break;
+      case'openTaskCommentsModal':openTaskCommentsModal(exp,task);break;
       case'abrirConsultaExpAsociado':abrirConsultaExpAsociado(exp);break;
       case'conPanelSelExp':conPanelSelExp(exp);break;
       case'conPanelActivarEdicion':conPanelActivarEdicion(exp);break;
@@ -13394,12 +13395,12 @@ function renderActRowToolbarHtml(t,expAct){
   const esPqrsNcaAct=expAct&&taskEsAtenderPqrs(t,expAct)&&esOficinaPqrsNca();
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
   let acts='<span class="sst-act-toolbar">';
-  // ✏️ = siempre la misma ventana que Registro (panel expediente en edición)
-  if(t.sinExpediente){
-    if(puedeGestionarActividadesDepto()&&!esPqrsNcaAct)
+  // ✏️ solo encargados de departamento (nunca responsables)
+  if(puedeGestionarActividadesDepto()&&!esPqrsNcaAct){
+    if(t.sinExpediente)
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
-  }else if(!esSoloLectura()||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))){
-    acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
+    else
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
   // 🔍 Revisar: solo tras entrega (por verificar / revisión), no en «por ejecutar»
   const pendienteRev=taskPendienteVerificacion(t)
@@ -14547,7 +14548,10 @@ function renderActGantt(list){
         const width=Math.max(1.5,right-left);
         const cls=ganttEstadoBarClass(t);
         const tip=estadoTaskLabel(t)+' · Inicio '+fmtF(ini)+' · Vence '+fmtF(t.vence)+(t.fechaAtendida?' · Cierre '+fmtF(t.fechaAtendida):'');
-        const actSstAction=t.sinExpediente?'abrirPanelActLibre':'editarExpDesdeAct';
+        const canEditGantt=typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto();
+        const actSstAction=canEditGantt
+          ?(t.sinExpediente?'abrirPanelActLibre':'editarExpDesdeAct')
+          :(t.sinExpediente?'openTaskCommentsModal':'abrirConsultaExpPanelDesdeAct');
         const actSstAttrs=' data-sst-action="'+actSstAction+'" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'"';
         rows+='<div class="act-gantt-row">'+
           '<div class="act-gantt-label"'+actSstAttrs+' title="'+escAttr(tip)+'" style="padding-left:34px;cursor:pointer">'+

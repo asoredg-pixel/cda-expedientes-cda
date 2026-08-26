@@ -523,8 +523,16 @@ function editarExp(expId){
   window._conPanelPqrsNcaEdit=!!(e&&esPqrsSecretaria(e)&&esOficinaPqrsNca()&&!esVistaActividadesDepto());
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:true});
 }
-/** ✏️ desde Actividades (u otras vistas): misma ventana que Registro. */
+/** ✏️ desde Actividades: misma ventana que Registro. Solo encargados. */
 function editarExpDesdeAct(expId,taskId){
+  if(typeof esModoResponsable==='function'&&esModoResponsable()){
+    notif('Solo el encargado del departamento puede editar','err');
+    return;
+  }
+  if(typeof puedeGestionarActividadesDepto==='function'&&!puedeGestionarActividadesDepto()&&typeof puedeEditarExpPanel==='function'&&!puedeEditarExpPanel()){
+    notif('No tiene permiso para editar','err');
+    return;
+  }
   window._conPanelTaskId=String(taskId||'').trim()||null;
   window._conPanelOpenArchivos=false;
   editarExp(expId);
