@@ -2695,20 +2695,21 @@ function htmlPqrsOficinaDetalleCore(e,opts){
   const detalle=e._pqrs_detalle||e._detalle_general||'';
   const docHtml=htmlPqrsDocumentoBtns(e);
   const cerrada=pqrsEstaCerrada(e);
-  const btnResp=(!cerrada&&puedeMarcarPqrsRespondida(e))?' <button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Responder</button>':'';
-  const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?(' '+pqrsAsocAccionesHtml(e).join(' ')):'';
-  const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ Informativa</button>':'';
-  const btnAsig=(!cerrada&&puedeAsignarPqrsOficina(e))?' <button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar</button>':'';
-  const btnTrasInicial=(puedeTrasladarPqrsInicial(e)&&!cerrada)?' <button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a oficina</button>':'';
-  const btnTras=(puedeTrasladarPqrs(e)&&!cerrada)?' <button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar</button>':'';
-  const btnPriorDs=(puedeMarcarPqrsPrioritariaDs(e)&&!cerrada)?' <button type="button" class="btn bsm" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">'+(e._pqrs_prioritaria?'Quitar prioritaria':'⚡ Prioritaria')+'</button>':'';
-  const btnEdit=(opts.showEdit&&puedeEditarPqrsSecretaria(e))?' '+pqrsBtnEdit(e._exp,'✏ Editar'):'';
-  const btnDel=(opts.showDelete&&puedeEliminarPqrs(e))?' <button type="button" class="btn bsm bd2" onclick="eliminarPqrs(\''+escAttr(e._exp)+'\')">🗑 Eliminar</button>':'';
+  const btnResp=(!cerrada&&puedeMarcarPqrsRespondida(e))?' <button type="button" class="btn bsm bic act-ico bp" title="Responder" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓</button>':'';
+  const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?' <button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+escAttr(e._exp)+'\')">🔗</button>':'';
+  const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm bic act-ico" title="Informativa" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ️</button>':'';
+  const btnAsig=(!cerrada&&puedeAsignarPqrsOficina(e))?' <button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>':'';
+  const btnTras=( (puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e))&&!cerrada)?' <button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>':'';
+  const btnPriorDs=(puedeMarcarPqrsPrioritariaDs(e)&&!cerrada)?' <button type="button" class="btn bsm bic act-ico" title="'+(e._pqrs_prioritaria?'Quitar prioritaria':'Prioritaria')+'" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">⚡</button>':'';
+  const btnEdit=(opts.showEdit&&puedeEditarPqrsSecretaria(e))?' <button type="button" class="btn bsm bic act-ico" title="Editar" onclick="openEditPqrsSecretariaModal(\''+escAttr(e._exp)+'\')">✏️</button>':'';
+  const btnDel=(opts.showDelete&&puedeEliminarPqrs(e))?' <button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarPqrs(\''+escAttr(e._exp)+'\')">🗑️</button>':'';
+  const btnBib=(typeof openBibGuardarModal==='function')?' <button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'expediente\',id:\''+escAttr(e._exp)+'\',taskId:\'\',libre:false,label:\''+escAttr(e._exp)+'\'})">📚</button>':'';
   const chatHtml=opts.showChat!==false&&esSecretaria()?renderPqrsChatHtml(e):'';
   const plazoBar=opts.sidePanel?'':renderPqrsPlazoBarHtml(e);
   return '<div class="pqrs-det-hdr">'+escAttr(e._exp)+' · '+pqrsEstadoDisplayBadge(e)+' '+pqrsPrioritariaBadge(e)+' '+pqrsInformativaBadge(e)+'</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+escAttr(e._tipo_solicitud||'PQRSD')+(e._pqrs_interna?' · <span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">Interna</span>':'')+' · Radicado '+fmtF(e._fecha)+(e._pqrs_oficina?' · '+escAttr(labelOficina(e._pqrs_oficina)):'')+pqrsMedioNotificacionFlagHtml(e,true)+'</div>'+
     plazoBar+
+    '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+btnResp+btnAsoc+btnInf+btnAsig+btnTras+btnPriorDs+btnBib+btnEdit+btnDel+'</div>'+
     '<div class="pqrs-det-sec"><div class="pqrs-det-k">Asunto</div><div class="pqrs-det-v">'+escAttr(asunto)+'</div></div>'+
     '<div class="pqrs-det-sec"><div class="pqrs-det-k">'+(e._pqrs_interna?'Oficina remitente':'Interesado')+'</div>'+htmlPqrsOficinaInteresado(e)+'</div>'+
     (detalle?('<div class="pqrs-det-sec"><div class="pqrs-det-k">Detalle</div><div class="pqrs-det-v">'+escAttr(detalle)+'</div></div>'):'')+
@@ -2717,8 +2718,7 @@ function htmlPqrsOficinaDetalleCore(e,opts){
     renderPqrsTrazabilidadHtml(e)+
     htmlPqrsRespuestaRegistrada(e)+
     htmlPqrsNotasInternasHtml(e)+chatHtml+
-    htmlPqrsCorreoOrigenHtml(e)+
-    '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:14px">'+btnResp+btnAsoc+btnInf+btnAsig+btnTrasInicial+btnTras+btnPriorDs+btnEdit+btnDel+'</div>';
+    htmlPqrsCorreoOrigenHtml(e);
 }
 function togglePqrsPrioritariaDs(expId){
   expId=String(expId||'').trim();
@@ -4830,15 +4830,15 @@ function renderConPanelPqrsExtras(e){
   if(doc)h+=doc;
   h+=renderPqrsAsociadosPanelHtml(e);
   const acc=[];
-  if(puedeGestionarPqrsAsociacion(e))pqrsAsocAccionesHtml(e).forEach(function(b){acc.push(b);});
-  if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ Marcar informativa</button>');
-  if(puedeAsignarPqrsOficina(e))acc.push('<button type="button" class="btn bsm" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤 Asignar responsable</button>');
-  if(puedeTrasladarPqrsInicial(e))acc.push('<button type="button" class="btn bsm bp" onclick="openTrasladoPqrsInicialModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a oficina</button>');
-  if(puedeTrasladarPqrs(e))acc.push('<button type="button" class="btn bsm" onclick="openTrasladoPqrsInterOficinaModal(\''+escAttr(e._exp)+'\')">↪ Trasladar a otra oficina</button>');
-  if(puedeMarcarPqrsPrioritariaDs(e))acc.push('<button type="button" class="btn bsm" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">'+(e._pqrs_prioritaria?'Quitar prioritaria':'⚡ Prioritaria')+'</button>');
-  if(puedeMarcarPqrsRespondida(e))acc.push('<button type="button" class="btn bsm bp" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓ Indicar respuesta</button>');
-  if(esSecretaria()&&puedeEditarPqrsSecretaria(e))acc.push(pqrsBtnEdit(e._exp,'✏ Editar PQRSD'));
-  if(acc.length)h+='<div class="fx" style="gap:6px;flex-wrap:wrap;margin:.65rem 0">'+acc.join(' ')+'</div>';
+  if(puedeGestionarPqrsAsociacion(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')">🔗</button>');
+  if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Informativa" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ️</button>');
+  if(puedeAsignarPqrsOficina(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>');
+  if(puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>');
+  if(puedeMarcarPqrsPrioritariaDs(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="'+(e._pqrs_prioritaria?'Quitar prioritaria':'Prioritaria')+'" onclick="togglePqrsPrioritariaDs(\''+escAttr(e._exp)+'\')">⚡</button>');
+  if(puedeMarcarPqrsRespondida(e))acc.push('<button type="button" class="btn bsm bic act-ico bp" title="Responder" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓</button>');
+  if(typeof openBibGuardarModal==='function')acc.push('<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'expediente\',id:\''+escAttr(e._exp)+'\',taskId:\'\',libre:false,label:\''+escAttr(e._exp)+'\'})">📚</button>');
+  if(esSecretaria()&&puedeEditarPqrsSecretaria(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Editar PQRSD" onclick="openEditPqrsSecretariaModal(\''+escAttr(e._exp)+'\')">✏️</button>');
+  if(acc.length)h+='<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin:.65rem 0">'+acc.join('')+'</div>';
   h+=renderPqrsTrazabilidadHtml(e);
   if(pqrsEstaCerrada(e))h+=htmlPqrsRespuestaRegistrada(e);
   h+=htmlPqrsCorreoOrigenHtml(e);
@@ -5358,7 +5358,11 @@ function renderConPanelTaskBarHtml(expId){
   if(!t||t.eliminada)return '';
   const ref=expId;
   const sol=getTaskSolicitudPendiente(t);
-  if(!sol)return '<div class="con-panel-task-bar" style="padding:.55rem .75rem"><div style="font-size:12px;color:var(--tx2)">📋 Editando actividad: <strong>'+escAttr(String(t.desc||t.actividad||'').substring(0,90))+'</strong> — use la sección Actividades asignadas abajo.</div></div>';
+  if(!sol)return '<div class="con-panel-task-bar" style="padding:.55rem .75rem;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+
+    '<div style="font-size:12px;color:var(--tx2);flex:1">📋 Actividad: <strong>'+escAttr(String(t.desc||t.actividad||'').substring(0,90))+'</strong></div>'+
+    '<button type="button" class="btn bsm bic act-ico" title="Gestionar actividad" onclick="openEditarActTaskModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">✏️</button>'+
+    '<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="openTaskCommentsModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔍</button>'+
+    '</div>';
   return '<div class="con-panel-task-bar">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px">⚠ Solicitud pendiente · '+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
     '<button type="button" class="btn bsm" style="background:var(--orl);color:var(--or);font-weight:600" onclick="openGestionSolicitudModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">'+(sol.tipo==='traslado'?'↔ Atender traslado':'🗑 Atender eliminación')+'</button></div>';
@@ -5498,6 +5502,12 @@ function openEditarActTaskModal(expId,taskId){
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(depto)||'').trim():'';
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   body.innerHTML=(t.sinExpediente?'':'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Expediente '+escAttr(ref)+'</div>')+
+    '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
+    (!t.sinExpediente?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();abrirConsultaExpPanelDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
+    '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🔄</button>'+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(t.id)+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
+    (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,t.id)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑️</button>':'')+
+    '</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" value="'+escAttr(t.actividad||t.desc||'')+'" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" value="'+escAttr(t.detalle||'')+'" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables / co-ejecutores</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
@@ -5505,8 +5515,6 @@ function openEditarActTaskModal(expId,taskId){
     '<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(t.plazoDias||'')+'" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px"><input type="checkbox" id="act-libre-prior"'+(t.prioritaria?' checked':'')+'> ⚡ Actividad prioritaria</label>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="submitEditarActTask(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">Guardar cambios</button>'+
-    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?bibGuardarEnBibliotecaBtnHtml({tipo:'actividad',id:ref,taskId:t.id,libre:!!t.sinExpediente,label:(t.actividad||t.desc||'Actividad')}):'')+
-    (puedeEliminarTaskPqrs(ref,t.id)?('<button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑 Eliminar</button>'):'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'editarActTask',expId:ref,taskId:t.id,sinExpediente:!!t.sinExpediente};
@@ -10954,9 +10962,10 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
     const docsWide=e?collectDocsComparables(e,taskId,t):[];
-    const uniWide=chatOnly&&chatUnificado;
-    modal.classList.toggle('task-modal-wide',uniWide||(!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2)));
-    modal.classList.toggle('enviar-modal-only',(chatOnly&&!chatUnificado)||soloGestion);
+    const uniWide=false;
+    modal.classList.toggle('task-modal-wide',!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2));
+    modal.classList.toggle('enviar-modal-only',chatOnly||soloGestion);
+    modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
   }
   const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true});
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
@@ -11034,6 +11043,7 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-wide');
       modal.classList.remove('task-modal-firma');
       modal.classList.remove('enviar-modal-only');
+      modal.classList.remove('task-modal-chat');
       modal.classList.remove('task-modal-compare-expand');
       modal.classList.remove('task-modal-viewport-expand');
     }
@@ -13286,51 +13296,29 @@ function renderActRowToolbarHtml(t,expAct){
   const sol=getTaskSolicitudPendiente(t);
   const esPqrsNcaAct=expAct&&taskEsAtenderPqrs(t,expAct)&&esOficinaPqrsNca();
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
-  const canDel=!esPqrsNcaAct&&typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(t.exp,t.id);
-  const canEditDept=puedeGestionarActividadesDepto()&&!esPqrsNcaAct;
-  const canInf=esPqrs&&typeof puedeMarcarPqrsInformativa==='function'&&puedeMarcarPqrsInformativa(expAct);
-  const canTrasPqrs=esPqrs&&(
-    (typeof puedeTrasladarPqrsInicial==='function'&&puedeTrasladarPqrsInicial(expAct))||
-    (typeof puedeTrasladarPqrs==='function'&&puedeTrasladarPqrs(expAct))||
-    (typeof puedeAsignarPqrsOficina==='function'&&puedeAsignarPqrsOficina(expAct))
-  );
-  const canAsoc=esPqrs&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(expAct);
-  const faseWf=esPqrs&&typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(expAct):'';
-  const canResp=esPqrs&&(faseWf===PQRS_WF.SIN_RESPUESTA||faseWf===PQRS_WF.RECHAZADA)&&typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(expAct);
+  let acts='<span class="sst-act-toolbar">';
+  // ✏️ abre ventana de edición (registro / gestionar) — no menú desplegable
+  if(puedeGestionarActividadesDepto()&&!esPqrsNcaAct){
+    if(t.sinExpediente)
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();openEditarActTaskModal(\''+eid+'\',\''+tid+'\')">✏️</button>';
+    else
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente / registro" onclick="event.stopPropagation();abrirConsultaExpPanelDesdeAct(\''+eid+'\',\''+tid+'\')">✏️</button>';
+  }else if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)&&!t.sinExpediente){
+    acts+='<button type="button" class="btn bsm bic act-ico" title="Ver expediente" onclick="event.stopPropagation();abrirConsultaExpPanelDesdeAct(\''+eid+'\',\''+tid+'\')">✏️</button>';
+  }else if(esPqrs&&esPqrsNcaAct){
+    acts+='<button type="button" class="btn bsm bic act-ico" title="Ver / gestionar PQRSD" onclick="event.stopPropagation();abrirConsultaExpPanelDesdeAct(\''+eid+'\',\''+tid+'\')">✏️</button>';
+  }
+  // 🔍 abre ventana de revisión
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&(
     taskPendienteVerificacion(t)||(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))
   )&&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
-  const editItems=[];
-  if(canEditDept)editItems.push({label:'✏️ Editar',onclick:'openEditarActTaskModal(\''+eid+'\',\''+tid+'\')'});
-  if(canAsoc)editItems.push({label:'🔗 Asociar',onclick:'SST.openAsociarUnificadoModal(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  if(canInf)editItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  if(canTrasPqrs)editItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  else if(canEditDept)editItems.push({label:'🔄 Trasladar',onclick:'openTrasladarActividadSmart(\''+eid+'\',\''+tid+'\')'});
-  if(typeof bibGuardarEnBibliotecaBtnHtml==='function'&&(canEditDept||puedeGestionarActividadesDepto()))
-    editItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'actividad\',id:\''+eid+'\',taskId:\''+tid+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'Actividad').slice(0,60))+'\')}'});
-  if(canDel)editItems.push({label:'🗑️ Eliminar',onclick:'eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')',danger:true});
-  const revItems=[];
-  if(!t.sinExpediente)
-    revItems.push({label:'🔍 Ver',onclick:'abrirConsultaExpPanelDesdeAct(\''+eid+'\',\''+tid+'\')'});
-  revItems.push({label:'📋 Revisar',onclick:'openTaskCommentsModal(\''+eid+'\',\''+tid+'\')'});
-  if(canResp){
-    revItems.push({label:'Responder',onclick:'openPqrsRespuestaModal(\''+jsStr(expAct._exp||t.exp)+'\')'});
-    if(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
-      revItems.push({label:'🖊 Enviar a firma',onclick:'openPqrsRespuestaModal(\''+jsStr(expAct._exp||t.exp)+'\',{modo:\'firma\'})'});
+  const showRev=puedeGestionarActividadesDepto()||canRevisarDept||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))||(esPqrs&&!esModoResponsable());
+  if(showRev){
+    if(esPqrs&&typeof openPqrsSidePanel==='function'&&!canRevisarDept&&!taskPendienteVerificacion(t))
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar PQRSD" onclick="event.stopPropagation();openPqrsSidePanel(\''+jsStr(expAct._exp||t.exp)+'\')">🔍</button>';
+    else
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar actividad" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
   }
-  if(canTrasPqrs)revItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  else if(canEditDept)revItems.push({label:'🔄 Trasladar',onclick:'openTrasladarActividadSmart(\''+eid+'\',\''+tid+'\')'});
-  if(canInf)revItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  if(esPqrs&&typeof puedeAsignarPqrsOficina==='function'&&puedeAsignarPqrsOficina(expAct))
-    revItems.push({label:'👤 Asignar',onclick:'openAsignarPqrsOficinaModal(\''+jsStr(expAct._exp||t.exp)+'\')'});
-  if(typeof bibGuardarEnBibliotecaBtnHtml==='function'&&(canEditDept||puedeGestionarActividadesDepto()))
-    revItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'actividad\',id:\''+eid+'\',taskId:\''+tid+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'Actividad').slice(0,60))+'\')}'});
-  if(canDel)revItems.push({label:'🗑️ Eliminar',onclick:'eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')',danger:true});
-  if(canRevisarDept&&!revItems.some(function(x){return x.label==='📋 Revisar';}))
-    revItems.unshift({label:'📋 Revisar entrega',onclick:'openTaskCommentsModal(\''+eid+'\',\''+tid+'\')'});
-  let acts='<span class="sst-act-toolbar">';
-  acts+=sstActPopoverHtml('✏️','Editar',editItems);
-  acts+=sstActPopoverHtml('🔍','Revisar',revItems);
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   if(showChat)acts+=taskChatBtnHtml(t.exp,t.id,t);
   acts+='</span>';
@@ -13342,7 +13330,6 @@ function renderActRowToolbarHtml(t,expAct){
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);
-  // Fase: firma trámite
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const eidT=eid,tidT=tid;
     if(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())
@@ -13366,9 +13353,9 @@ function renderActRowToolbarHtml(t,expAct){
       &&(typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):(esNcaDeguv()||esAdministrador()||esVistaActividadesDepto())))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();tramiteAprobarRevisionFinalNotif(\''+eidT+'\',\''+tidT+'\')" title="Aprobar notificación">✅</button>';
   }
-  // Fase: PQRSD firma / notificar (iconos de fase fuera de los 3 hubs)
   if(esPqrs&&typeof pqrsWorkflowFase==='function'){
     const peid=jsStr(expAct._exp||t.exp);
+    const faseWf=pqrsWorkflowFase(expAct);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
     if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
@@ -13402,9 +13389,14 @@ function renderActRowToolbarHtml(t,expAct){
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+peid+'\')" title="Aprobar notificación">✅</button>';
+    if((faseWf===PQRS_WF.SIN_RESPUESTA||faseWf===PQRS_WF.RECHAZADA)&&typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(expAct)){
+      if(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+        acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+peid+'\',{modo:\'firma\'})" title="Enviar a firma">🖊</button>';
+    }
   }
   return acts;
 }
+
 function renderActividadesRowHtml(t){
   const expActPre=typeof getExpById==='function'?getExpById(t.exp):null;
   if(expActPre&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expActPre)){

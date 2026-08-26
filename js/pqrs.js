@@ -1207,49 +1207,20 @@ function pqrsAccionesTablaHtml(e){
       '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
   }
   let h='<span class="sst-act-toolbar">';
-  const editItems=[],revItems=[];
-  revItems.push({label:'🔍 Ver',onclick:'openPqrsSidePanel(\''+id+'\')'});
-  if(puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e)||puedeAsignarPqrsOficina(e))
-    editItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+id+'\')'});
-  if(puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e)||puedeAsignarPqrsOficina(e))
-    revItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+id+'\')'});
-  if(puedeMarcarPqrsPrioritariaDs(e))
-    editItems.push({label:e._pqrs_prioritaria?'Quitar ⚡':'⚡ Prioritaria',onclick:'togglePqrsPrioritariaDs(\''+id+'\')'});
-  if(puedeAsignarPqrsOficina(e)&&!(enPaletaPorFirmar&&esDir))
-    revItems.push({label:'👤 Asignar',onclick:'openAsignarPqrsOficinaModal(\''+id+'\')'});
-  if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
-    revItems.push({label:'⏳ Revisar',onclick:'openNcaRevisionModal(\''+id+'\')'});
-  if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
-    revItems.push({label:'✅ Aprobar notificación',onclick:'ncaAprobarRevisionFinalNotif(\''+id+'\')'});
-  if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA){
-    if(puedeMarcarPqrsRespondida(e)){
-      revItems.push({label:'Responder',onclick:'openPqrsRespuestaModal(\''+id+'\')'});
-      if(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
-        revItems.push({label:'🖊 Enviar a firma',onclick:'openPqrsRespuestaModal(\''+id+'\',{modo:\'firma\'})'});
-    }
-  }
-  if(typeof puedeMarcarPqrsInformativa==='function'&&puedeMarcarPqrsInformativa(e)){
-    editItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+id+'\')'});
-    revItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+id+'\')'});
-  }
-  if(typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e))
-    editItems.push({label:'🔗 Asociar',onclick:'SST.openAsociarUnificadoModal(\''+id+'\')'});
-  if(typeof bibGuardarEnBibliotecaBtnHtml==='function'){
-    editItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'expediente\',id:\''+id+'\',taskId:\'\',libre:false,label:\''+id+'\'})'});
-    revItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'expediente\',id:\''+id+'\',taskId:\'\',libre:false,label:\''+id+'\'})'});
-  }
+  // ✏️ / 🔍 abren paneles completos (no menús)
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))
-    editItems.push({label:'✏️ Editar',onclick:'openEditPqrsSecretariaModal(\''+id+'\')'});
-  if(esSecretaria()&&puedeEliminarPqrs(e))
-    editItems.push({label:'🗑️ Eliminar',onclick:'eliminarPqrs(\''+id+'\')',danger:true});
-  if(typeof sstActPopoverHtml==='function'){
-    h+=sstActPopoverHtml('✏️','Editar',editItems);
-    h+=sstActPopoverHtml('🔍','Revisar',revItems);
-  }else{
-    h+='<button type="button" class="btn bsm" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">Ver</button> ';
-  }
+    h+='<button type="button" class="btn bsm bic act-ico" title="Editar PQRSD" onclick="event.stopPropagation();openEditPqrsSecretariaModal(\''+id+'\')">✏️</button> ';
+  else
+    h+='<button type="button" class="btn bsm bic act-ico" title="Ver / editar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">✏️</button> ';
+  h+='<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🔍</button> ';
+  if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
+    h+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')" title="Revisar entrega">⏳</button> ';
+  if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
+    h+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+id+'\')" title="Aprobar notificación">✅</button> ';
+  if((fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA)&&puedeMarcarPqrsRespondida(e)&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
+    h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\',{modo:\'firma\'})" title="Enviar a firma">🖊</button> ';
   h+='</span> ';
-  // Iconos de fase (fuera de los 3 hubs)
+  // Iconos de fase
   if((fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION)&&(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e))){
     const wfB=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const docsImp=((wfB.documentos)||[]).filter(d=>d&&(d.driveLink||d.previewLink));

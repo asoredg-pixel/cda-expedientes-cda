@@ -981,37 +981,20 @@ function renderConSidePanel(){
   const lockBanner=window._conPanelLockMsg?('<div style="padding:10px 12px;margin-bottom:10px;border-radius:var(--r);background:var(--aml);border:1px solid #e8c97a;font-size:12px;color:#7a5500;line-height:1.45">'+escAttr(window._conPanelLockMsg)+'</div>'):'';
   const altaBanner=typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(e,{expId:e._exp,showDone:true}):'';
   const pqrsToolbarBtns=!window._conPanelEditMode&&esPqrsSecretaria(e)?(
-    (function(){
-      const editItems=[],revItems=[];
-      if(puedeGestionarPqrsAsociacion(e))editItems.push({label:'🔗 Asociar',onclick:'SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')'});
-      if(puedeMarcarPqrsInformativa(e)){
-        editItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')'});
-        revItems.push({label:'ℹ️ Informativa',onclick:'SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')'});
-      }
-      if(puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e)||puedeAsignarPqrsOficina(e)){
-        editItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+jsStr(e._exp)+'\')'});
-        revItems.push({label:'🔄 Trasladar',onclick:'openTrasladarPqrsSmart(\''+jsStr(e._exp)+'\')'});
-      }
-      if(puedeAsignarPqrsOficina(e))revItems.push({label:'👤 Asignar',onclick:'openAsignarPqrsOficinaModal(\''+jsStr(e._exp)+'\')'});
-      if(puedeMarcarPqrsRespondida(e))revItems.push({label:'Responder',onclick:'openPqrsRespuestaModal(\''+jsStr(e._exp)+'\')'});
-      if(typeof bibGuardarEnBibliotecaBtnHtml==='function'){
-        editItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'expediente\',id:\''+jsStr(e._exp)+'\',taskId:\'\',libre:false,label:\''+jsStr(e._exp)+'\'})'});
-        revItems.push({label:'📚 Biblioteca',onclick:'openBibGuardarModal({tipo:\'expediente\',id:\''+jsStr(e._exp)+'\',taskId:\'\',libre:false,label:\''+jsStr(e._exp)+'\'})'});
-      }
-      return '<span class="sst-act-toolbar">'+
-        (typeof sstActPopoverHtml==='function'?sstActPopoverHtml('✏️','Editar',editItems):'')+
-        (typeof sstActPopoverHtml==='function'?sstActPopoverHtml('🔍','Revisar',revItems):'')+
-        '</span>';
-    })()
+    pqrsAsocToolbarBtnHtml(e)+
+    (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm bic act-ico" title="Informativa" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ️</button>':'')+
+    (puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e)||puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>':'')+
+    (puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>':'')+
+    (puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bic act-ico bp" title="Responder" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓</button>':'')
   ):'';
-  const archToolbarBtn=window._conPanelEditMode?'':expBtnArchHtml(e._exp,{cls:'bp',title:'Documentos Drive'});
-  const editToggleBtn=!window._conPanelEditMode&&canEdit&&!window._conPanelPqrsNcaEdit&&!lockedByOther?'<button type="button" class="btn bsm bp bic act-ico" data-sst-action="conPanelActivarEdicion" data-sst-exp="'+escAttr(e._exp)+'" title="Editar">✏️</button>':'';
+  const archToolbarBtn=window._conPanelEditMode?'':expBtnArchHtml(e._exp,{cls:'bp',title:'Documentos y enlaces Drive del expediente'});
+  const editToggleBtn=!window._conPanelEditMode&&canEdit&&!window._conPanelPqrsNcaEdit&&!lockedByOther?'<button type="button" class="btn bsm bp" data-sst-action="conPanelActivarEdicion" data-sst-exp="'+escAttr(e._exp)+'" title="Editar registro">✏️ Editar</button>':'';
   const toolbar='<div class="con-panel-toolbar">'+
     badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+flagsHtmlCompact(e)+' '+pqrsPrioritariaBadge(e)+' '+pqrsInformativaBadge(e)+
     (typeof expAltaResponsableBadgeHtml==='function'?expAltaResponsableBadgeHtml(e):'')+' '+
     pqrsToolbarBtns+
     archToolbarBtn+
-    '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar"><span class="export-ico">⬇</span></button>'+
+    '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar expediente (.json)"><span class="export-ico">⬇</span></button>'+
     editToggleBtn+
     '</div>';
   if(panel)panel.classList.toggle('con-panel-editing',!!window._conPanelEditMode);
