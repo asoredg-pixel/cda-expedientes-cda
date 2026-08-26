@@ -1936,7 +1936,8 @@ function bibAbrirVinculo(tipo, id, taskId) {
   if (tipo === 'actividad') {
     if (typeof isActLibreRef === 'function' && isActLibreRef(id, taskId)) {
       if (typeof showTab === 'function') showTab('act');
-      if (typeof openEditarActTaskModal === 'function') openEditarActTaskModal(id, taskId);
+      if (typeof abrirPanelActLibre === 'function') abrirPanelActLibre(id, taskId);
+      else if (typeof openEditarActTaskModal === 'function') openEditarActTaskModal(id, taskId);
       else if (typeof openTaskCommentsModal === 'function') openTaskCommentsModal(id, taskId);
       return;
     }

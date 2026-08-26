@@ -908,6 +908,7 @@ function cerrarConsultaPanel(){
   window._conPanelExps=null;
   window._conPanelActive=null;
   window._conPanelTaskId=null;
+  window._conPanelActLibre=null;
   window._conPanelPqrsNcaEdit=false;
   window._conPanelDesdeConsulta=false;
   restoreCfgDeptoUsuario();
@@ -955,6 +956,10 @@ function renderConPanelExpContent(e,opts){
     actBlock;
 }
 function renderConSidePanel(){
+  if(window._conPanelActLibre&&typeof renderConSidePanelActLibre==='function'){
+    renderConSidePanelActLibre();
+    return;
+  }
   const active=window._conPanelActive;
   const ids=window._conPanelExps||[];
   const e=exps.find(x=>String(x._exp||'').trim()===String(active||'').trim());
