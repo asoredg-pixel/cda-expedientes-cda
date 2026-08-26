@@ -76,7 +76,12 @@ function actBtnEditHtml(expId,taskId,title){
   const exp=String(expId||'').trim();
   const task=String(taskId||'').trim();
   if(!exp||!task)return'';
-  return '<button type="button" class="btn bsm bic" data-sst-action="openEditarActTaskModal" data-sst-exp="'+escAttr(exp)+'" data-sst-task="'+escAttr(task)+'" title="'+escAttr(title||'Gestionar actividad')+'">✏️</button>';
+  // Con expediente: mismo ✏️ que Registro. Sin expediente: modal de actividad libre.
+  const t=typeof getTaskAny==='function'?getTaskAny(exp,task):null;
+  const libre=t?!!t.sinExpediente:(typeof isActLibreRef==='function'&&isActLibreRef(exp,task));
+  if(libre)
+    return '<button type="button" class="btn bsm bic" data-sst-action="openEditarActTaskModal" data-sst-exp="'+escAttr(exp)+'" data-sst-task="'+escAttr(task)+'" title="'+escAttr(title||'Gestionar actividad')+'">✏️</button>';
+  return '<button type="button" class="btn bsm bic" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(exp)+'" data-sst-task="'+escAttr(task)+'" title="'+escAttr(title||'Editar expediente')+'">✏️</button>';
 }
 function actBtnLupaHtml(expId,taskId,title){
   const exp=String(expId||'').trim();
@@ -210,6 +215,7 @@ function sstRunAction(action,el){
   try{
     switch(action){
       case'editarExp':editarExp(exp);break;
+      case'editarExpDesdeAct':editarExpDesdeAct(exp,task);break;
       case'openConsultaArchivosModal':openConsultaArchivosModal(exp);break;
       case'openEditarActTaskModal':openEditarActTaskModal(exp,task);break;
       case'abrirConsultaExpPanelDesdeAct':abrirConsultaExpPanelDesdeAct(exp,task);break;
@@ -5360,7 +5366,10 @@ function renderConPanelTaskBarHtml(expId){
   const sol=getTaskSolicitudPendiente(t);
   if(!sol)return '<div class="con-panel-task-bar" style="padding:.55rem .75rem;display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+
     '<div style="font-size:12px;color:var(--tx2);flex:1">📋 Actividad: <strong>'+escAttr(String(t.desc||t.actividad||'').substring(0,90))+'</strong></div>'+
-    '<button type="button" class="btn bsm bic act-ico" title="Gestionar actividad" onclick="openEditarActTaskModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">✏️</button>'+
+    '<button type="button" class="btn bsm bic act-ico" title="Datos de la actividad" onclick="openEditarActTaskModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\',{forceActMeta:true})">📝</button>'+
+    '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔄</button>'+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(taskId)+'\',libre:false,label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
+    (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,taskId)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar actividad" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🗑️</button>':'')+
     '<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="openTaskCommentsModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔍</button>'+
     '</div>';
   return '<div class="con-panel-task-bar">'+
@@ -5473,7 +5482,8 @@ function eliminarActTaskConfirm(expId,taskId){
   });
 }
 function openEditarActLibreModal(expId,taskId){openEditarActTaskModal(expId,taskId);}
-function openEditarActTaskModal(expId,taskId){
+function openEditarActTaskModal(expId,taskId,opts){
+  opts=opts||{};
   if(!puedeGestionarActividadesDepto()){notif('Solo el encargado del departamento puede editar actividades','err');return;}
   const t=normalizeTask(getTaskAny(expId,taskId));
   if(!t){
@@ -5486,13 +5496,20 @@ function openEditarActTaskModal(expId,taskId){
     if(typeof renderActividades==='function')renderActividades();
     return;
   }
+  // ✏️ unificado: con expediente siempre la misma ventana que Registro (imagen completa).
+  // forceActMeta=true solo desde la barra del panel (📝 datos de actividad).
+  if(!t.sinExpediente&&!opts.forceActMeta){
+    if(typeof editarExpDesdeAct==='function')editarExpDesdeAct(expId,taskId);
+    else if(typeof editarExp==='function')editarExp(expId);
+    return;
+  }
   const ref=t.sinExpediente?(t.codigo||expId):expId;
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Gestionar actividad · '+(t.sinExpediente?(t.codigo||ref):ref+' · '+(t.actividad||t.desc||'').slice(0,40));
+  if(tit)tit.textContent=(opts.forceActMeta?'Datos de la actividad':'Gestionar actividad')+' · '+(t.sinExpediente?(t.codigo||ref):ref+' · '+(t.actividad||t.desc||'').slice(0,40));
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const ex=getExpById(ref);
   const depto=t.depto||(ex&&ex._depto)||deptoActivo;
@@ -5503,7 +5520,7 @@ function openEditarActTaskModal(expId,taskId){
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   body.innerHTML=(t.sinExpediente?'':'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Expediente '+escAttr(ref)+'</div>')+
     '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
-    (!t.sinExpediente?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();abrirConsultaExpPanelDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
+    (!t.sinExpediente&&!opts.forceActMeta?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();editarExpDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
     '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🔄</button>'+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(t.id)+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
     (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,t.id)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑️</button>':'')+
@@ -13297,13 +13314,12 @@ function renderActRowToolbarHtml(t,expAct){
   const esPqrsNcaAct=expAct&&taskEsAtenderPqrs(t,expAct)&&esOficinaPqrsNca();
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
   let acts='<span class="sst-act-toolbar">';
-  // ✏️ = misma acción/visualización que Registro (editarExp → panel registro)
+  // ✏️ = siempre la misma ventana que Registro (panel expediente en edición)
   if(t.sinExpediente){
     if(puedeGestionarActividadesDepto()&&!esPqrsNcaAct)
-      acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();openEditarActTaskModal(\''+eid+'\',\''+tid+'\')">✏️</button>';
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Gestionar actividad" onclick="event.stopPropagation();openEditarActTaskModal(\''+eid+'\',\''+tid+'\')">✏️</button>';
   }else if(!esSoloLectura()||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))){
-    // Misma API que la columna Acciones de Registro
-    acts+=expBtnEditHtml(t.exp,{title:'Editar expediente',cls:'bic act-ico'});
+    acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
   // 🔍 Revisar: solo tras entrega (por verificar / revisión), no en «por ejecutar»
   const pendienteRev=taskPendienteVerificacion(t)
@@ -14451,7 +14467,7 @@ function renderActGantt(list){
         const width=Math.max(1.5,right-left);
         const cls=ganttEstadoBarClass(t);
         const tip=estadoTaskLabel(t)+' · Inicio '+fmtF(ini)+' · Vence '+fmtF(t.vence)+(t.fechaAtendida?' · Cierre '+fmtF(t.fechaAtendida):'');
-        const actSstAction=t.sinExpediente?'openEditarActTaskModal':'abrirConsultaExpPanelDesdeAct';
+        const actSstAction=t.sinExpediente?'openEditarActTaskModal':'editarExpDesdeAct';
         const actSstAttrs=' data-sst-action="'+actSstAction+'" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'"';
         rows+='<div class="act-gantt-row">'+
           '<div class="act-gantt-label"'+actSstAttrs+' title="'+escAttr(tip)+'" style="padding-left:34px;cursor:pointer">'+

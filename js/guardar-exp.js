@@ -523,6 +523,12 @@ function editarExp(expId){
   window._conPanelPqrsNcaEdit=!!(e&&esPqrsSecretaria(e)&&esOficinaPqrsNca()&&!esVistaActividadesDepto());
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:true});
 }
+/** ✏️ desde Actividades (u otras vistas): misma ventana que Registro. */
+function editarExpDesdeAct(expId,taskId){
+  window._conPanelTaskId=String(taskId||'').trim()||null;
+  window._conPanelOpenArchivos=false;
+  editarExp(expId);
+}
 function eliminarExp(expId){
   const e=exps.find(x=>x._exp===expId);
   if(e&&esPqrsSecretaria(e)&&!esSecretaria()&&!esAdministrador()){notif('Solo Secretaría o el administrador pueden eliminar PQRSD','err');return;}
