@@ -1916,19 +1916,26 @@ body:not(.sesion-activa) .sst-shell{display:block}
   box-shadow:none!important;
 }
 .sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-ok .sst-drive-ico{
-  filter:drop-shadow(0 0 5px rgba(52,211,153,.85)) drop-shadow(0 0 10px rgba(22,163,74,.45));
+  filter:drop-shadow(0 0 6px rgba(52,211,153,.95)) drop-shadow(0 0 14px rgba(22,163,74,.55)) drop-shadow(0 0 22px rgba(52,211,153,.3));
 }
 .sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-warn .sst-drive-ico{
-  filter:drop-shadow(0 0 4px rgba(251,191,36,.7));
+  filter:drop-shadow(0 0 6px rgba(251,191,36,.9)) drop-shadow(0 0 14px rgba(234,179,8,.55)) drop-shadow(0 0 20px rgba(251,191,36,.35));
 }
 .sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-expired .sst-drive-ico{
-  opacity:.55;filter:grayscale(.35) drop-shadow(0 0 3px rgba(248,113,113,.35));
+  opacity:1;
+  filter:drop-shadow(0 0 6px rgba(248,113,113,.9)) drop-shadow(0 0 14px rgba(220,38,38,.55)) drop-shadow(0 0 20px rgba(248,113,113,.35));
 }
 .sst-nav.expanded .sst-drive-ico{font-size:1.15rem;margin-right:2px}
 .sst-nav.expanded .sst-drive-status-btn.sst-drive-ok .sst-drive-ico{
-  filter:drop-shadow(0 0 4px rgba(52,211,153,.65));
+  filter:drop-shadow(0 0 5px rgba(52,211,153,.85)) drop-shadow(0 0 12px rgba(22,163,74,.45));
 }
-.sst-nav.expanded .sst-drive-status-btn.sst-drive-expired .sst-drive-ico{opacity:.55;filter:grayscale(.3)}
+.sst-nav.expanded .sst-drive-status-btn.sst-drive-warn .sst-drive-ico{
+  filter:drop-shadow(0 0 5px rgba(251,191,36,.85)) drop-shadow(0 0 12px rgba(234,179,8,.45));
+}
+.sst-nav.expanded .sst-drive-status-btn.sst-drive-expired .sst-drive-ico{
+  opacity:1;
+  filter:drop-shadow(0 0 5px rgba(248,113,113,.85)) drop-shadow(0 0 12px rgba(220,38,38,.45));
+}
 body.sesion-activa nav.tabs{display:none!important}
 
 /* Contenido a ancho completo con nav vertical */

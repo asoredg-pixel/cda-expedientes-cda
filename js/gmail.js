@@ -74,18 +74,34 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
       _gmailOAuthDone();
       if (response.error) {
         console.error('Gmail OAuth error:', response);
+        if (window._sstGmailReconnectPendingCb) {
+          const failCb = window._sstGmailReconnectPendingCb;
+          window._sstGmailReconnectPendingCb = null;
+          failCb(false);
+        }
         notif('Error al conectar: ' + (response.error_description || response.error), 'err');
         return;
       }
       if (!response.access_token) {
+        if (window._sstGmailReconnectPendingCb) {
+          const failCb = window._sstGmailReconnectPendingCb;
+          window._sstGmailReconnectPendingCb = null;
+          failCb(false);
+        }
         notif('Google no devolvió un token. Intente de nuevo.', 'err');
         return;
       }
+      if (window._sstGmailReconnectPendingCb) window._sstGmailReconnectPendingCb = null;
       onToken(response.access_token, response.expires_in);
     },
     error_callback: function(err) {
       console.error('Gmail OAuth error_callback:', err);
       _gmailOAuthDone();
+      if (window._sstGmailReconnectPendingCb) {
+        const failCb = window._sstGmailReconnectPendingCb;
+        window._sstGmailReconnectPendingCb = null;
+        failCb(false);
+      }
       notif('No se completó la conexión. Permita ventanas emergentes e intente de nuevo.', 'err');
     }
   });
@@ -123,7 +139,7 @@ let _gmailOfiTokenExpiryTimer = null;
 let _sstGmailAutoConnectScheduled = false;
 let _sstGmailExpiryWarnShown = false;
 let _sstGmailDriveStatusInterval = null;
-const SST_GMAIL_DRIVE_WARN_MS = 60000;
+const SST_GMAIL_DRIVE_WARN_MS = 300000;
 const SST_GMAIL_DRIVE_REFRESH_MS = 1200000;
 function gmailSetToken(tok, expiresInSec, scopesOpt) {
   try {
@@ -170,33 +186,69 @@ function _gmailScheduleTokenWarning(expMs) {
   const warnAt = expMs - Date.now() - SST_GMAIL_DRIVE_WARN_MS;
   if (warnAt > 0) {
     _gmailTokenWarnTimer = setTimeout(function() {
-      if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) return;
-      if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
-      if (_sstGmailExpiryWarnShown) return;
-      _sstGmailExpiryWarnShown = true;
-      if (typeof confirmPrecaucion === 'function') {
-        confirmPrecaucion({
-          title: 'Conexión Drive por expirar',
-          message: 'En 1 minuto caducará la conexión Gmail/Drive. Después podrá seguir navegando, pero deberá reconectar para adjuntar archivos o radicar con anexos.',
-          confirmLabel: 'Entendido',
-          tone: 'warn',
-          hideCancel: true
-        }, function() {});
-      }
+      _gmailTokenWarnTimer = null;
+      sstTriggerDriveExpiryWarn();
     }, warnAt);
+  } else if (expMs > Date.now()) {
+    sstTriggerDriveExpiryWarn();
   }
 }
-let _gmailSilentRefreshInFlight = false;
-function _gmailTrySilentTokenRefresh() {
-  // No interferir si hay una conexión manual en curso
-  if (_gmailConnecting) return;
-  if (_gmailSilentRefreshInFlight) return;
+function sstTriggerDriveExpiryWarn() {
+  if (typeof sstRolRequiereGmailConectado === 'function' && !sstRolRequiereGmailConectado()) return;
   if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) return;
+  if (_sstGmailExpiryWarnShown) return;
+  _sstGmailExpiryWarnShown = true;
+  sstShowDriveExpiryWarnModal();
+}
+function sstShowDriveExpiryWarnModal() {
+  if (typeof confirmPrecaucion !== 'function') return;
+  confirmPrecaucion({
+    title: 'Conexión Drive por expirar',
+    message: 'La sesión Gmail/Drive se desconectará en 5 minutos. Reconecte ahora para mantener 60 minutos de acceso a archivos.',
+    detail: 'Después podrá seguir navegando, pero deberá reconectar para adjuntar archivos o radicar con anexos.',
+    confirmLabel: 'Reconectar',
+    tone: 'warn'
+  }, function() {
+    sstGmailIntentarReconectarDrive(function(ok) {
+      if (ok) {
+        _sstGmailExpiryWarnShown = false;
+        if (typeof notif === 'function') notif('Conexión Drive renovada (~60 min).', 'ok');
+        return;
+      }
+      sstShowDriveReconectarFallidoModal();
+    });
+  });
+  const cancel = document.getElementById('confirm-prec-cancel');
+  if (cancel) {
+    cancel.style.display = '';
+    cancel.textContent = 'Entendido';
+  }
+}
+function sstShowDriveReconectarFallidoModal() {
+  if (typeof confirmPrecaucion !== 'function') return;
+  confirmPrecaucion({
+    title: 'No se pudo reconectar',
+    message: 'Google no permitió renovar la sesión en este momento (política de seguridad, cookies o ventana emergente bloqueada).',
+    detail: 'Cuando expire, use el icono Drive del menú para conectar de nuevo.',
+    confirmLabel: 'Entendido',
+    hideCancel: true,
+    tone: 'warn'
+  }, function() {});
+}
+function sstGmailDriveRenovadaOk() {
+  const rem = sstGmailDriveExpiryMs() - Date.now();
+  return rem > 50 * 60000;
+}
+function sstGmailTrySilentReconnect(doneCb) {
+  if (_gmailConnecting) { if (doneCb) doneCb(false); return; }
+  if (_gmailSilentRefreshInFlight) { if (doneCb) doneCb(false); return; }
+  if (typeof sstGmailSesionActiva === 'function' && !sstGmailSesionActiva()) {
+    if (doneCb) doneCb(false); return;
+  }
   const clientId = _gmailGetClientId();
-  if (!clientId || !_gmailGisReady()) return;
+  if (!clientId || !_gmailGisReady()) { if (doneCb) doneCb(false); return; }
   const useSec = typeof esSecretaria === 'function' && esSecretaria();
   const scope = useSec ? GMAIL_SCOPES : GMAIL_OFI_SCOPES;
-  // Usar initTokenClient directamente para NO bloquear la UI ni mostrar notificaciones
   try {
     _gmailSilentRefreshInFlight = true;
     const silentClient = window.google.accounts.oauth2.initTokenClient({
@@ -207,31 +259,72 @@ function _gmailTrySilentTokenRefresh() {
         if (response && response.access_token) {
           if (useSec) {
             gmailSetToken(response.access_token, response.expires_in || 3600, GMAIL_SCOPES);
-          } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
-            _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in || 3600);
-          } else if (typeof gmailOfiSetToken === 'function') {
-            gmailOfiSetToken(response.access_token, response.expires_in || 3600);
+            if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+            if (doneCb) doneCb(sstGmailDriveRenovadaOk());
+            return;
           }
-          // Indicador se actualiza dentro de gmailSetToken / gmailOfiSetToken,
-          // pero lo forzamos también por si acaso
+          if (typeof _gmailOfiValidarYGuardarToken === 'function') {
+            _gmailOfiValidarYGuardarToken(response.access_token, response.expires_in || 3600).then(function(ok) {
+              if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+              if (doneCb) doneCb(!!ok && sstGmailDriveRenovadaOk());
+            });
+            return;
+          }
+          if (typeof gmailOfiSetToken === 'function') gmailOfiSetToken(response.access_token, response.expires_in || 3600);
           if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
-          console.log('Gmail: token renovado silenciosamente (' + (response.expires_in || 3600) + 's)');
+          if (doneCb) doneCb(sstGmailDriveRenovadaOk());
+          return;
         }
-        // Si falla (response.error), simplemente no renovamos — el token expirará normalmente
-        // y el temporizador de expiración lo manejará. Sin notificación al usuario.
+        if (doneCb) doneCb(false);
       },
-      error_callback: function(err) {
+      error_callback: function() {
         _gmailSilentRefreshInFlight = false;
-        // Fallo silencioso esperado (sin sesión Google, cookies bloqueadas, etc.)
-        console.log('Gmail: renovación silenciosa no disponible (' + (err && err.type || 'desconocido') + ')');
+        if (doneCb) doneCb(false);
       }
     });
-    // prompt: '' → sin diálogo, intento totalmente silencioso
     silentClient.requestAccessToken({ prompt: '' });
   } catch (err) {
     _gmailSilentRefreshInFlight = false;
-    console.warn('Gmail silent refresh error:', err);
+    if (doneCb) doneCb(false);
   }
+}
+function sstGmailReconectarDriveInteractivo(doneCb) {
+  const useSec = typeof esSecretaria === 'function' && esSecretaria();
+  const scope = useSec ? GMAIL_SCOPES : GMAIL_OFI_SCOPES;
+  window._sstGmailReconnectPendingCb = function(ok) {
+    window._sstGmailReconnectPendingCb = null;
+    if (doneCb) doneCb(!!ok);
+  };
+  _gmailStartOAuth(scope, async function(tok, exp) {
+    let ok = false;
+    if (useSec) {
+      gmailSetToken(tok, exp, GMAIL_SCOPES);
+      ok = true;
+    } else if (typeof _gmailOfiValidarYGuardarToken === 'function') {
+      ok = await _gmailOfiValidarYGuardarToken(tok, exp);
+    } else if (typeof gmailOfiSetToken === 'function') {
+      gmailOfiSetToken(tok, exp);
+      ok = true;
+    }
+    if (ok && typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
+    if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
+    if (doneCb) doneCb(!!ok && sstGmailDriveRenovadaOk());
+  }, 'select_account');
+}
+function sstGmailIntentarReconectarDrive(doneCb) {
+  sstGmailTrySilentReconnect(function(silentOk) {
+    if (silentOk) { if (doneCb) doneCb(true); return; }
+    sstGmailReconectarDriveInteractivo(function(interOk) {
+      if (doneCb) doneCb(!!interOk && sstGmailDriveRenovadaOk());
+    });
+  });
+}
+let _gmailSilentRefreshInFlight = false;
+function _gmailTrySilentTokenRefresh() {
+  if (_gmailConnecting) return;
+  sstGmailTrySilentReconnect(function(ok) {
+    if (ok) console.log('Gmail: token renovado silenciosamente');
+  });
 }
 function _gmailClearExpiryTimer(which) {
   if (which === 'ofi') {
@@ -318,6 +411,7 @@ function sstRenderGmailDriveStatusBtn() {
   btn.title = 'Drive conectado · ' + txt + ' restantes';
   if (rem <= 300000) btn.classList.add('sst-drive-warn');
   else btn.classList.add('sst-drive-ok');
+  if (rem > 0 && rem <= SST_GMAIL_DRIVE_WARN_MS) sstTriggerDriveExpiryWarn();
 }
 function sstStartGmailDriveStatusTick() {
   if (_sstGmailDriveStatusInterval) return;
