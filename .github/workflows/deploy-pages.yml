@@ -13,7 +13,6 @@ permissions:
   pages: write
   id-token: write
 
-# Un solo deploy a la vez. No cancelar el que ya corre (evita deploys a medias).
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -49,8 +48,6 @@ jobs:
         with:
           path: _site
 
-      # Un solo deploy-pages por run (varios reintentos en el mismo job
-      # provocan fallos raros / "No jobs were run" en el correo).
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4
