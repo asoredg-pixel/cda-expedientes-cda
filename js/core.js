@@ -9297,15 +9297,24 @@ function renderNcaDecisionFormHtml(expId,e,wf){
 function renderTaskVerifyBarHtml(expId,taskId,t){
   const e=getExpById(expId);
   const sol=getTaskSolicitudPendiente(t);
-  // Solicitud de traslado/eliminación: no mostrar firma ni cierre de revisión
+  // Solicitud de traslado/eliminación: no mostrar firma; sí atender + editar
   if(sol&&typeof puedeGestionarSolicitudActividad==='function'&&puedeGestionarSolicitudActividad(expId,taskId)){
     const ref=t.sinExpediente?(t.codigo||expId):expId;
     const tipoLbl=sol.tipo==='traslado'?'traslado':'eliminación';
+    const eid=jsStr(ref),tid=jsStr(taskId);
+    let editBtn='';
+    if(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()){
+      if(t.sinExpediente)
+        editBtn='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
+      else
+        editBtn='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" onclick="editarExpDesdeAct(\''+eid+'\',\''+tid+'\')">✏️</button>';
+    }
     return '<div class="task-cmt-form task-verify-bar task-chat-sep" style="padding:.65rem;border:1px solid var(--or);border-radius:var(--r);background:var(--orl)">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--or)">📩 Solicitud de '+escAttr(tipoLbl)+'</div>'+
       '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px"><strong>'+escAttr(sol.por||'')+'</strong> solicita '+(sol.tipo==='traslado'?'trasladar':'eliminar')+' esta actividad'+(sol.destino?' → <strong>'+escAttr(sol.destino)+'</strong>':'')+(sol.nota?'. Motivo: '+escAttr(sol.nota):'')+'.</div>'+
-      '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-      '<button type="button" class="btn bsm bp" style="background:var(--or);border-color:var(--or)" onclick="openGestionSolicitudModal(\''+jsStr(ref)+'\',\''+jsStr(taskId)+'\')">'+(sol.tipo==='traslado'?'↔ Atender traslado':'🗑 Atender eliminación')+'</button>'+
+      '<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">'+
+      editBtn+
+      '<button type="button" class="btn bsm bp" style="background:var(--or);border-color:var(--or)" onclick="openGestionSolicitudModal(\''+eid+'\',\''+tid+'\')">'+(sol.tipo==='traslado'?'↔ Atender traslado':'🗑 Atender eliminación')+'</button>'+
       '</div></div>';
   }
   const esPqrs=taskEsAtenderPqrs(t,e);
