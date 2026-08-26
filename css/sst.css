@@ -1418,7 +1418,7 @@ body.sesion-activa #pg-login{display:none!important}
 #login-auth-panel{display:flex;flex-direction:column;align-items:center;width:100%}
 .login-sub-func{text-align:center}
 .login-status{text-align:center;font-size:14px;color:var(--tx2);padding:1.5rem 1rem;margin:1rem 0}
-.hdr-user-bar{display:inline-flex;align-items:center;gap:10px;font-size:12px;color:var(--tx2);margin-right:4px;flex-wrap:wrap}
+.hdr-user-bar{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--tx2);margin-right:4px;flex-wrap:nowrap}
 .hdr-user-bar strong{color:var(--tx);font-weight:600}
 .encargados-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:12px}
 .encargado-slot{border:1px solid var(--bd);border-radius:var(--r);padding:10px;background:var(--sf2)}
@@ -1822,11 +1822,13 @@ body.sesion-activa .sst-nav.expanded{width:196px}
 body:not(.sesion-activa) .sst-nav{display:none!important}
 body:not(.sesion-activa) .sst-shell{display:block}
 .sst-nav-expand{
-  border:0;background:transparent;color:#5a5850;
-  width:100%;padding:10px 0;cursor:pointer;font-size:18px;line-height:1;
-  flex-shrink:0;touch-action:manipulation;
+  display:flex;align-items:center;justify-content:center;
+  border:0;background:transparent;color:#9aa0a6;
+  width:100%;padding:8px 0;cursor:pointer;font-size:20px;line-height:1;
+  flex-shrink:0;touch-action:manipulation;border-radius:4px;
 }
 .sst-nav-expand:hover{background:rgba(22,56,40,.08);color:#163828}
+.sst-nav-expand-ico{display:inline-block;line-height:1;font-weight:400}
 .sst-nav-items{
   display:flex;flex-direction:column;flex:1;min-height:0;
   overflow-y:auto;overflow-x:hidden;gap:2px;padding:4px 6px;
@@ -1856,22 +1858,36 @@ body:not(.sesion-activa) .sst-shell{display:block}
   padding:8px 6px;border-top:1px solid rgba(0,0,0,.08);position:relative;flex-shrink:0;
 }
 .sst-nav.expanded .sst-nav-tools{align-items:stretch}
-.sst-nav-tools .inbox-btn{
-  width:40px;height:40px;border-radius:10px!important;
-  background:rgba(22,56,40,.08)!important;border:1px solid rgba(0,0,0,.08)!important;
-  color:#163828!important;font-size:1.15rem;
-}
-.sst-nav-tools .inbox-btn:hover{background:rgba(22,56,40,.14)!important}
 .sst-nav-tools .sst-drive-status-btn{
   width:100%;justify-content:flex-start;padding:6px 8px;border-radius:10px;
   background:rgba(22,56,40,.06);border:1px solid rgba(0,0,0,.08);color:#163828;
-  font-size:11px;
+  font-size:11px;margin-right:0;
 }
-.sst-nav-tools .inbox-panel{
-  left:calc(100% + 8px);right:auto;top:auto;bottom:0;
-  width:min(380px,calc(100vw - 80px));
+.sst-nav-tools .sst-drive-gicon{flex-shrink:0;display:none}
+.sst-nav:not(.expanded) .sst-drive-status-label,
+.sst-nav:not(.expanded) .sst-drive-status-dot{display:none!important}
+.sst-nav:not(.expanded) .sst-drive-status-btn{
+  width:40px;height:40px;padding:0!important;margin:0 auto;
+  justify-content:center!important;align-items:center!important;
+  border-radius:10px!important;background:transparent!important;border:0!important;
+  box-shadow:none!important;
 }
+.sst-nav:not(.expanded) .sst-drive-gicon{display:block!important;color:#34a853}
+.sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-warn .sst-drive-gicon{color:#d97706}
+.sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-expired .sst-drive-gicon{
+  color:#dc2626;opacity:.5;filter:grayscale(.25);
+}
+.sst-nav.expanded .sst-drive-gicon{display:none!important}
 body.sesion-activa nav.tabs{display:none!important}
+
+/* Contenido a ancho completo con nav vertical */
+body.sesion-activa .main{max-width:none;margin:0;width:100%;padding:1rem 1.15rem 2rem}
+body.sesion-activa .hdri{max-width:none;margin:0;width:100%}
+body.sesion-activa .app-inner{max-width:none;margin:0;width:100%}
+body.sesion-activa .resp-global-bar .app-inner{padding:0 1.15rem}
+body.sesion-activa #pg-rec .app-inner,
+body.sesion-activa #recursos-panel-root{max-width:none;width:100%}
+body.sesion-activa .rec-wrap{padding:.5rem 0 1.5rem}
 
 /* ─── HEADER — Dark forest gradient ─── */
 .hdr{
@@ -1890,10 +1906,18 @@ body.sesion-activa nav.tabs{display:none!important}
 /* User label — clearly white */
 .hdr-user-bar{color:rgba(255,255,255,.85)!important}
 .hdr-user-bar strong{color:#fff!important}
-#hdr-user-label{color:rgba(255,255,255,.85)!important;font-size:12px}
+#hdr-user-label{color:rgba(255,255,255,.85)!important;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(340px,36vw);line-height:1.3}
+.hdr-inbox-wrap{position:relative;display:inline-flex;align-items:center;flex-shrink:0}
+.hdr-inbox-wrap .inbox-btn{
+  width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.22)!important;
+  border-radius:9px!important;color:rgba(255,255,255,.92)!important;font-size:1.05rem;line-height:1;
+}
+.hdr-inbox-wrap .inbox-btn:hover{background:rgba(255,255,255,.2)!important;color:#fff!important;border-color:rgba(255,255,255,.35)!important}
+.hdr-inbox-wrap .inbox-panel{right:0;left:auto;top:calc(100% + 8px);width:min(380px,calc(100vw - 24px))}
 body.sesion-activa .hacts>.hdr-user-bar.hdr-user-bar{
-  display:inline-flex!important;align-items:center;gap:8px;flex-wrap:wrap;
-  max-width:min(320px,42vw);
+  display:inline-flex!important;flex-direction:row!important;align-items:center!important;
+  flex-wrap:nowrap!important;gap:8px;max-width:none;flex-shrink:1;min-width:0;
 }
 body.sesion-activa .hdr-logout-btn{
   white-space:nowrap;flex-shrink:0;
@@ -2037,7 +2061,17 @@ body:not(.sesion-activa) #pg-login{
     grid-template-columns:none;gap:6px;align-items:center;
   }
   body.sesion-activa .hacts>.hdr-user-bar.hdr-user-bar{
-    display:none!important;
+    display:inline-flex!important;flex-wrap:nowrap!important;
+    max-width:min(100%,52vw);gap:6px;
+  }
+  body.sesion-activa #hdr-user-label{max-width:min(160px,28vw);font-size:11px}
+  body.sesion-activa .hdr-logout-btn{font-size:11px;padding:5px 8px!important}
+  body.sesion-activa .hdr-inbox-wrap .inbox-btn{width:34px;height:34px;font-size:1rem}
+  body.sesion-activa .hdr-inbox-wrap .inbox-panel{
+    position:fixed!important;left:8px!important;right:8px!important;
+    top:auto!important;bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;
+    width:auto!important;max-width:none!important;
+    max-height:min(52vh,420px);border-radius:16px!important;
   }
   body.sesion-activa .hdr-more-panel .hdr-user-bar-mobile{
     display:flex!important;flex-direction:column;align-items:stretch;gap:6px;
@@ -2084,12 +2118,6 @@ body:not(.sesion-activa) #pg-login{
   body.sesion-activa .sst-nav.expanded{width:min(196px,72vw)}
   body.sesion-activa .sst-nav .tab{padding:8px 6px!important;min-width:0;max-width:none}
   body.sesion-activa .sst-nav .tab .tab-ico{font-size:1.22rem}
-  body.sesion-activa .sst-nav-tools .inbox-panel{
-    position:fixed!important;left:8px!important;right:8px!important;
-    bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;
-    top:auto!important;width:auto!important;max-width:none!important;
-    max-height:min(52vh,420px);border-radius:16px!important;
-  }
   body.sesion-activa .main{padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))!important}
   body.sesion-activa .chat-fab{
     bottom:calc(16px + env(safe-area-inset-bottom,0px))!important;

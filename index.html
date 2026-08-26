@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260826s">
+<link rel="stylesheet" href="css/sst.css?v=20260826t">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260826s"></script>
+<script src="js/core.js?v=20260826t"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260826f"></script>
@@ -33,7 +33,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260821d"></script>
+<script src="js/gmail.js?v=20260826t"></script>
 <script src="js/pqrs.js?v=20260826j"></script>
 <script src="js/consulta.js?v=20260826e"></script>
 <script src="js/entrega-responsable.js?v=20260826a"></script>
@@ -71,36 +71,26 @@
 </div>
 <div class="sst-shell" id="sst-shell">
 <aside class="sst-nav" id="sst-nav" aria-label="Navegación principal">
-  <button type="button" class="sst-nav-expand" id="sst-nav-expand" onclick="toggleSstNavExpand()" title="Expandir menú">☰</button>
+  <button type="button" class="sst-nav-expand" id="sst-nav-expand" onclick="toggleSstNavExpand()" title="Expandir menú" aria-label="Expandir menú"><span class="sst-nav-expand-ico" id="sst-nav-expand-ico" aria-hidden="true">›</span></button>
   <div class="sst-nav-items tabsi">
     <button class="tab on" onclick="showTab('reg')" id="tab-reg"><span class="tab-ico" aria-hidden="true">📋</span><span class="tab-lbl">Registro</span></button>
     <button class="tab tab-gmail-ofi-only" onclick="showTab('gmail-ofi')" id="tab-gmail-ofi"><span class="tab-ico" aria-hidden="true">📧</span><span class="tab-lbl">Correos</span></button>
     <button class="tab tab-modulo-only tab-sec-only" onclick="showTab('sec')" id="tab-sec"><span class="tab-ico" aria-hidden="true">📥</span><span class="tab-lbl">Radicación</span></button>
     <button class="tab tab-modulo-only tab-ofi-only" onclick="showTab('pqrs-ofi')" id="tab-pqrs-ofi"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">PQRSD</span></button>
     <button class="tab tab-resp-only" onclick="showTab('act')" id="tab-act"><span class="tab-ico" aria-hidden="true">📌</span><span class="tab-lbl">Actividades</span></button>
-    <button type="button" class="tab tab-tasks-only" id="nav-tasks" onclick="openMiDiaDesdeNav()"><span class="tab-ico" aria-hidden="true">✓</span><span class="tab-lbl">Tasks</span></button>
+    <button type="button" class="tab tab-tasks-only" id="nav-tasks" onclick="openMiDiaDesdeNav()"><span class="tab-ico" aria-hidden="true">📅</span><span class="tab-lbl">Tasks</span></button>
     <button class="tab" onclick="showTab('con')" id="tab-con"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
     <button class="tab tab-rec-only" onclick="showTab('rec')" id="tab-rec"><span class="tab-ico" aria-hidden="true">📚</span><span class="tab-lbl">Recursos</span></button>
     <button class="tab tab-modulo-only tab-ciu-only" onclick="showTab('ciudadano')" id="tab-ciudadano"><span class="tab-ico" aria-hidden="true">🔍</span><span class="tab-lbl">Consulta</span></button>
     <button class="tab" onclick="showTab('cons')" id="tab-cons"><span class="tab-ico" aria-hidden="true">📊</span><span class="tab-lbl">Consolidado</span></button>
     <button class="tab" onclick="showTab('cfg')" id="tab-cfg"><span class="tab-ico" aria-hidden="true">⚙️</span><span class="tab-lbl">Config</span></button>
   </div>
-  <div class="sst-nav-tools tabs-right" id="depto-inbox-wrap" style="display:none">
+  <div class="sst-nav-tools" id="sst-nav-tools">
     <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">
+      <svg class="sst-drive-gicon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.71 3.5L1.15 15l3.43 5.5h6.84L7.71 3.5zm8.58 0L12.73 15h6.84L22.85 9 16.29 3.5zM12.73 15l-3.57 5.5h11.14L22.85 15H12.73z"/></svg>
       <span class="sst-drive-status-dot" aria-hidden="true"></span>
       <span class="sst-drive-status-label" id="sst-drive-status-label">Drive</span>
     </button>
-    <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja — chat de actividades y solicitudes de traslado o eliminación">
-      🔔<span class="inbox-badge" id="depto-inbox-badge"></span>
-    </button>
-    <div class="inbox-panel" id="depto-inbox-panel" onclick="event.stopPropagation()">
-      <div class="inbox-panel-hdr">Bandeja de actividades</div>
-      <div class="inbox-panel-tabs" id="depto-inbox-tabs">
-        <button type="button" class="inbox-tab on" id="inbox-tab-pending" onclick="setBandejaVista('pending')" title="Por leer">📩 <span class="inbox-tab-cnt" id="inbox-pending-count">0</span></button>
-        <button type="button" class="inbox-tab" id="inbox-tab-read" onclick="setBandejaVista('read')" title="Leídos">📭</button>
-      </div>
-      <div id="depto-inbox-list"></div>
-    </div>
   </div>
 </aside>
 <div class="sst-app-body">
@@ -137,6 +127,19 @@
       </select>
       <div id="hdr-user-bar" class="hdr-user-bar" style="display:none">
         <span id="hdr-user-label"></span>
+        <div class="hdr-inbox-wrap tabs-right" id="depto-inbox-wrap" style="display:none">
+          <button type="button" class="inbox-btn" id="depto-inbox-btn" onclick="toggleBandejaDepto(event)" title="Bandeja — chat de actividades y solicitudes de traslado o eliminación">
+            🔔<span class="inbox-badge" id="depto-inbox-badge"></span>
+          </button>
+          <div class="inbox-panel" id="depto-inbox-panel" onclick="event.stopPropagation()">
+            <div class="inbox-panel-hdr">Bandeja de actividades</div>
+            <div class="inbox-panel-tabs" id="depto-inbox-tabs">
+              <button type="button" class="inbox-tab on" id="inbox-tab-pending" onclick="setBandejaVista('pending')" title="Por leer">📩 <span class="inbox-tab-cnt" id="inbox-pending-count">0</span></button>
+              <button type="button" class="inbox-tab" id="inbox-tab-read" onclick="setBandejaVista('read')" title="Leídos">📭</button>
+            </div>
+            <div id="depto-inbox-list"></div>
+          </div>
+        </div>
         <button type="button" class="btn bsm hdr-logout-btn" onclick="SST.cerrarSesionGoogle()">Cerrar sesión</button>
       </div>
       <details class="hdr-more-menu">

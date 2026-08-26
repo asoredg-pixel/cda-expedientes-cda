@@ -3101,14 +3101,22 @@ function setNavTasksActive(on){
   const t=document.getElementById('nav-tasks');
   if(t)t.classList.toggle('on',!!on);
 }
+function updateSstNavExpandIcon(exp){
+  const ico=document.getElementById('sst-nav-expand-ico');
+  const btn=document.getElementById('sst-nav-expand');
+  if(ico)ico.textContent=exp?'‹':'›';
+  if(btn){
+    btn.title=exp?'Contraer menú':'Expandir menú';
+    btn.setAttribute('aria-label',btn.title);
+  }
+}
 function toggleSstNavExpand(){
   const nav=document.getElementById('sst-nav');
   if(!nav)return;
   const exp=!nav.classList.contains('expanded');
   nav.classList.toggle('expanded',exp);
   try{localStorage.setItem('sstNavExpanded',exp?'1':'0');}catch(e){}
-  const btn=document.getElementById('sst-nav-expand');
-  if(btn)btn.title=exp?'Contraer menú':'Expandir menú';
+  updateSstNavExpandIcon(exp);
 }
 function initSstNav(){
   const nav=document.getElementById('sst-nav');
@@ -3116,8 +3124,7 @@ function initSstNav(){
   let exp=false;
   try{exp=localStorage.getItem('sstNavExpanded')==='1';}catch(e){}
   nav.classList.toggle('expanded',exp);
-  const btn=document.getElementById('sst-nav-expand');
-  if(btn)btn.title=exp?'Contraer menú':'Expandir menú';
+  updateSstNavExpandIcon(exp);
 }
 function refreshActAgendaPanelTools(){
   const btn=document.getElementById('btn-tasks-asignar-resp');

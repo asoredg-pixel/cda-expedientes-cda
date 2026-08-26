@@ -307,12 +307,12 @@ function sstRenderGmailDriveStatusBtn() {
   if (!connected || rem <= 0) {
     btn.classList.add('sst-drive-expired');
     if (label) label.textContent = 'Drive · Conectar';
-    btn.title = 'Conecte Gmail/Drive para adjuntar archivos al expediente';
+    btn.title = 'Drive desconectado — clic para conectar Gmail/Drive';
     return;
   }
   const txt = sstFormatDriveCountdown(rem);
   if (label) label.textContent = 'Drive · ' + txt;
-  btn.title = 'Conexión Drive activa · ' + txt + ' restantes';
+  btn.title = 'Drive conectado · ' + txt + ' restantes';
   if (rem <= 300000) btn.classList.add('sst-drive-warn');
   else btn.classList.add('sst-drive-ok');
 }
