@@ -3821,6 +3821,7 @@ function openAgendaDesdeActividad(expId,taskId){
   window._actAgendaResp=resp;
   window._actAgendaOtroPlan=null;
   window._actAgendaExpand=window._actAgendaExpand||{};
+  window._actAgendaPersonalAdd=false;
   const existentes=getAgendaEventosForTask(expId,taskId);
   const planHoy=existentes.find(e=>(e.fecha||'').slice(0,10)===hoy());
   if(planHoy){
@@ -3830,6 +3831,9 @@ function openAgendaDesdeActividad(expId,taskId){
   }else{
     window._actAgendaOtroPlan=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
   }
+  actAgendaAbrirPanelUi();
+}
+function actAgendaAbrirPanelUi(){
   const panel=document.getElementById('act-agenda-panel');
   const overlay=document.getElementById('act-agenda-overlay');
   const body=document.getElementById('act-agenda-body');
@@ -3841,18 +3845,34 @@ function openAgendaDesdeActividad(expId,taskId){
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
 }
-function getAgendaPlanesDelDia(resp,fecha){
+function getAgendaPlanesActivos(resp){
   const nNorm=agendaNorm(resp);
-  const f=(fecha||hoy()).slice(0,10);
   return (agendaEventos||[]).map(normalizeAgendaEvento).filter(ev=>{
     if(agendaNorm(ev.responsable)!==nNorm)return false;
-    if((ev.fecha||'').slice(0,10)!==f)return false;
     if(ev.hecho)return false;
+    if(ev.tipo==='asignado')return false;
     return agendaEventoVisible(ev);
-  }).sort((a,b)=>{
-    if(a.orden!==b.orden)return a.orden-b.orden;
-    return (a.titulo||'').localeCompare(b.titulo||'','es');
   });
+}
+function getAgendaPlanesDelDia(resp,fecha){
+  const f=(fecha||hoy()).slice(0,10);
+  return getAgendaPlanesActivos(resp).filter(ev=>(ev.fecha||'').slice(0,10)===f).sort(actAgendaSortPlanes);
+}
+function getAgendaPlanesProximos(resp){
+  const h=hoy();
+  return getAgendaPlanesActivos(resp).filter(ev=>(ev.fecha||'').slice(0,10)>h).sort((a,b)=>{
+    const da=(a.fecha||'').localeCompare(b.fecha||'');
+    if(da)return da;
+    return actAgendaSortPlanes(a,b);
+  });
+}
+function getAgendaPlanesVencidos(resp){
+  const h=hoy();
+  return getAgendaPlanesActivos(resp).filter(ev=>(ev.fecha||'').slice(0,10)<h).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+}
+function actAgendaSortPlanes(a,b){
+  if(a.orden!==b.orden)return a.orden-b.orden;
+  return (a.titulo||'').localeCompare(b.titulo||'','es');
 }
 function getActAgendaPlanVinculado(){
   const expId=window._actAgendaExpId;
@@ -3880,10 +3900,49 @@ function actAgendaSetDia(f){
   }
   refreshMiDiaPanel();
 }
+function actAgendaTogglePersonalAdd(on){
+  window._actAgendaPersonalAdd=on==null?!window._actAgendaPersonalAdd:!!on;
+  refreshMiDiaPanel();
+  if(window._actAgendaPersonalAdd){
+    setTimeout(function(){
+      const inp=document.getElementById('gt-personal-titulo');
+      if(inp)inp.focus();
+    },50);
+  }
+}
+function actAgendaCrearPersonal(){
+  const resp=window._actAgendaResp||getAgendaResponsableActivo();
+  if(!resp){notif('Seleccione responsable','err');return;}
+  const inp=document.getElementById('gt-personal-titulo');
+  const titulo=inp?String(inp.value||'').trim():'';
+  if(!titulo){notif('Escriba la tarea personal','err');return;}
+  const fecha=(window._actAgendaDiaSel||hoy()).slice(0,10);
+  const ev=crearAgendaEvento({
+    titulo:titulo,
+    detalle:'',
+    fecha:fecha,
+    hora:'',
+    criterio:'',
+    notas:'',
+    responsable:resp,
+    tipo:'personal',
+    taskRef:null,
+    orden:Date.now(),
+    depto:esModoResponsable()?'responsables':deptoActivo,
+    syncGcal:false
+  });
+  if(ev){
+    window._actAgendaPersonalAdd=false;
+    if(!window._actAgendaExpand)window._actAgendaExpand={};
+    window._actAgendaExpand[ev.id]=true;
+    refreshMiDiaPanel();
+  }
+}
 function actAgendaProgramar(){
   const resp=window._actAgendaResp||getAgendaResponsableActivo();
   if(!resp){notif('Seleccione responsable','err');return;}
   const prefill=window._actAgendaPrefillBase||{};
+  if(!prefill.taskRef&&!window._actAgendaExpId)return;
   const fecha=(window._actAgendaDiaSel||hoy()).slice(0,10);
   let plan=getActAgendaPlanVinculado();
   if(!plan&&window._actAgendaSelEvId)plan=getAgendaEventoById(window._actAgendaSelEvId);
@@ -3928,6 +3987,24 @@ function actAgendaProgramar(){
     refreshVistasTrasAgendar();
   }
 }
+function actAgendaReagendar(id,fecha){
+  id=String(id||'').trim();
+  fecha=String(fecha||'').slice(0,10);
+  if(!id||!fecha)return;
+  const ev=getAgendaEventoById(id);
+  if(!ev||!puedeEditarAgendaEvento(ev))return;
+  if(actualizarAgendaEvento(id,{
+    titulo:ev.titulo,detalle:ev.detalle,fecha:fecha,hora:ev.hora||'',
+    criterio:ev.criterio||'',notas:ev.notas||'',orden:Date.now()
+  })){
+    window._actAgendaDiaSel=fecha;
+    if(!window._actAgendaExpand)window._actAgendaExpand={};
+    window._actAgendaExpand[id]=true;
+    notif('Reagendado · '+fmtF(fecha),'ok');
+    refreshMiDiaPanel();
+    refreshVistasTrasAgendar();
+  }
+}
 function actAgendaGuardarItemCampos(id){
   const ev=getAgendaEventoById(id);
   if(!ev||!puedeEditarAgendaEvento(ev))return;
@@ -3941,7 +4018,7 @@ function actAgendaGuardarItemCampos(id){
   if(document.getElementById('pg-agenda')&&document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
 }
 function actAgendaToggleExpand(id,ev){
-  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.gt-task-actions,button,input,textarea,a'))return;
+  if(ev&&ev.target&&ev.target.closest&&ev.target.closest('.gt-task-actions,.gt-reschedule,button,input,textarea,a,label'))return;
   if(!window._actAgendaExpand)window._actAgendaExpand={};
   window._actAgendaExpand[id]=!window._actAgendaExpand[id];
   refreshMiDiaPanel();
@@ -3991,61 +4068,104 @@ function actAgendaQuitarPlan(id){
     refreshVistasTrasAgendar();
   });
 }
-function renderMiDiaAddRowHtml(){
+function renderMiDiaAddRowsHtml(){
+  let h='';
   const prefill=window._actAgendaPrefillBase||{};
+  const hasAct=!!(window._actAgendaExpId&&window._actAgendaTaskId);
   const plan=getActAgendaPlanVinculado();
-  if(plan)return '';
-  const otro=window._actAgendaOtroPlan;
-  const hint=otro?('Mover aquí · '+escAttr(prefill.titulo||'Actividad')):('Agregar · '+escAttr(prefill.titulo||'Actividad'));
-  return '<button type="button" class="gt-add" onclick="actAgendaProgramar()">'+
-    '<span class="gt-add-ico" aria-hidden="true">+</span>'+
-    '<span class="gt-add-txt">'+hint+'</span>'+
-    '</button>';
+  if(hasAct&&!plan){
+    const otro=window._actAgendaOtroPlan;
+    const hint=otro?('Mover aquí · '+escAttr(prefill.titulo||'Actividad')):('Agregar · '+escAttr(prefill.titulo||'Actividad'));
+    h+='<button type="button" class="gt-add" onclick="actAgendaProgramar()">'+
+      '<span class="gt-add-ico" aria-hidden="true">+</span><span class="gt-add-txt">'+hint+'</span></button>';
+  }
+  if(!window._actAgendaPersonalAdd){
+    h+='<button type="button" class="gt-add gt-add-soft" onclick="actAgendaTogglePersonalAdd(true)">'+
+      '<span class="gt-add-ico gt-add-ico-soft" aria-hidden="true">+</span><span class="gt-add-txt">Agregar tarea personal</span></button>';
+  }else{
+    h+='<div class="gt-personal-form">'+
+      '<input type="text" id="gt-personal-titulo" class="gt-input gt-personal-inp" placeholder="Escriba su tarea personal…" onkeydown="if(event.key===\'Enter\')actAgendaCrearPersonal()">'+
+      '<div class="gt-personal-actions">'+
+      '<button type="button" class="gt-link" onclick="actAgendaCrearPersonal()">Agregar</button>'+
+      '<button type="button" class="gt-link muted" onclick="actAgendaTogglePersonalAdd(false)">Cancelar</button>'+
+      '</div></div>';
+  }
+  return h;
+}
+function renderMiDiaTaskItemHtml(ev,i,opts){
+  opts=opts||{};
+  const listLen=opts.listLen!=null?opts.listLen:1;
+  const focus=ev.taskRef&&ev.taskRef.taskId===window._actAgendaTaskId&&String(ev.taskRef.expId||ev.taskRef.exp||'')===String(window._actAgendaExpId||'');
+  const canEd=puedeEditarAgendaEvento(ev);
+  const expand=window._actAgendaExpand||{};
+  const open=!!expand[ev.id]||focus;
+  const criterio=String(ev.criterio||'').trim();
+  const notas=String(ev.notas||'').trim();
+  const meta=[];
+  if(opts.showDate&&ev.fecha)meta.push('<span class="gt-task-date">'+fmtF(ev.fecha)+'</span>');
+  if(criterio)meta.push(escAttr(criterio));
+  if(ev.detalle&&!opts.showDate)meta.push(escAttr(ev.detalle));
+  if(ev.tipo==='personal'&&!opts.showDate)meta.push('Personal');
+  let h='<div class="gt-task'+(open?' open':'')+(focus?' focus':'')+(opts.overdue?' overdue':'')+'" data-id="'+escAttr(ev.id)+'">'+
+    '<div class="gt-task-row" onclick="actAgendaToggleExpand(\''+escAttr(ev.id)+'\',event)">'+
+    (canEd?'<button type="button" class="gt-check" title="Completar" onclick="event.stopPropagation();actAgendaMarcarHecho(\''+escAttr(ev.id)+'\')"></button>':'<span class="gt-check disabled"></span>')+
+    '<div class="gt-task-body">'+
+    '<div class="gt-task-tit">'+escAttr(ev.titulo)+'</div>'+
+    ((!open&&meta.length)?'<div class="gt-task-meta">'+meta.join(' · ')+'</div>':'')+
+    '</div>'+
+    (canEd?('<div class="gt-task-actions">'+
+      (opts.allowReorder?(
+        '<button type="button" class="gt-ico" title="Subir" onclick="event.stopPropagation();actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
+        '<button type="button" class="gt-ico" title="Bajar" onclick="event.stopPropagation();actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i>=listLen-1?' disabled':'')+'>↓</button>'
+      ):'')+
+      '<button type="button" class="gt-ico gt-ico-del" title="Quitar" onclick="event.stopPropagation();actAgendaQuitarPlan(\''+escAttr(ev.id)+'\')">✕</button>'+
+      '</div>'):'')+
+    '</div>';
+  if(open&&canEd){
+    h+='<div class="gt-task-detail">'+
+      '<input type="text" class="gt-input" id="mi-dia-criterio-'+escAttr(ev.id)+'" value="'+escAttr(ev.criterio||'')+'" placeholder="Qué pienso hacer…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')">'+
+      '<textarea class="gt-input gt-notes" id="mi-dia-notas-'+escAttr(ev.id)+'" rows="3" placeholder="Añadir detalles…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')">'+escAttr(ev.notas||'')+'</textarea>';
+    if(opts.allowReschedule){
+      const sug=opts.overdue?hoy():((ev.fecha||'').slice(0,10)>hoy()?(ev.fecha||'').slice(0,10):hoy());
+      h+='<label class="gt-reschedule" onclick="event.stopPropagation()">'+
+        '<span>Reagendar</span>'+
+        '<input type="date" value="'+escAttr(sug)+'" onchange="actAgendaReagendar(\''+escAttr(ev.id)+'\',this.value)">'+
+        (opts.overdue?('<button type="button" class="gt-link" onclick="actAgendaReagendar(\''+escAttr(ev.id)+'\',hoy())">Para hoy</button>'):'')+
+        '</label>';
+    }
+    h+='</div>';
+  }else if(open&&notas){
+    h+='<div class="gt-task-detail"><div class="gt-notes-ro">'+escAttr(notas)+'</div></div>';
+  }
+  h+='</div>';
+  return h;
+}
+function renderMiDiaSectionHtml(title,planes,opts){
+  opts=opts||{};
+  let h='<div class="gt-sec-hdr'+(opts.overdue?' overdue':'')+(opts.proximos?' proximos':'')+'">'+escAttr(title)+'</div>';
+  if(!planes.length){
+    h+='<div class="gt-empty">'+(opts.empty||'Sin tareas')+'</div>';
+    return h;
+  }
+  planes.forEach((ev,i)=>{
+    h+=renderMiDiaTaskItemHtml(ev,i,{...opts,listLen:planes.length});
+  });
+  return h;
 }
 function renderMiDiaListaHtml(){
   const resp=window._actAgendaResp||getAgendaResponsableActivo();
   const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
-  const planes=getAgendaPlanesDelDia(resp,dia);
   const esHoy=dia===hoy();
-  const expand=window._actAgendaExpand||{};
-  let h='<div class="gt-sec-hdr">'+(esHoy?'Para hoy':'Lista')+'</div>';
-  if(!planes.length){
-    h+='<div class="gt-empty">No hay tareas en este día</div>';
-    return h;
+  if(esHoy){
+    const hoyList=getAgendaPlanesDelDia(resp,dia);
+    const proximos=getAgendaPlanesProximos(resp);
+    const vencidos=getAgendaPlanesVencidos(resp);
+    return renderMiDiaSectionHtml('Para hoy',hoyList,{allowReorder:true,empty:'Nada para hoy'})+
+      renderMiDiaSectionHtml('Próximos',proximos,{showDate:true,allowReschedule:true,proximos:true,empty:'Sin tareas próximas'})+
+      renderMiDiaSectionHtml('Ups… vencidos',vencidos,{showDate:true,allowReschedule:true,overdue:true,empty:'Nada vencido por tu agenda'});
   }
-  planes.forEach((ev,i)=>{
-    const focus=ev.taskRef&&ev.taskRef.taskId===window._actAgendaTaskId&&String(ev.taskRef.expId||ev.taskRef.exp||'')===String(window._actAgendaExpId||'');
-    const canEd=puedeEditarAgendaEvento(ev);
-    const open=!!expand[ev.id]||focus;
-    const criterio=String(ev.criterio||'').trim();
-    const notas=String(ev.notas||'').trim();
-    const meta=[];
-    if(criterio)meta.push(escAttr(criterio));
-    if(ev.detalle)meta.push(escAttr(ev.detalle));
-    h+='<div class="gt-task'+(open?' open':'')+(focus?' focus':'')+'" data-id="'+escAttr(ev.id)+'">'+
-      '<div class="gt-task-row" onclick="actAgendaToggleExpand(\''+escAttr(ev.id)+'\',event)">'+
-      (canEd?'<button type="button" class="gt-check" title="Completar" onclick="event.stopPropagation();actAgendaMarcarHecho(\''+escAttr(ev.id)+'\')"></button>':'<span class="gt-check disabled"></span>')+
-      '<div class="gt-task-body">'+
-      '<div class="gt-task-tit">'+escAttr(ev.titulo)+'</div>'+
-      ((!open&&meta.length)?'<div class="gt-task-meta">'+meta.slice(0,2).join(' · ')+'</div>':'')+
-      '</div>'+
-      (canEd?('<div class="gt-task-actions">'+
-        '<button type="button" class="gt-ico" title="Subir" onclick="event.stopPropagation();actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
-        '<button type="button" class="gt-ico" title="Bajar" onclick="event.stopPropagation();actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i===planes.length-1?' disabled':'')+'>↓</button>'+
-        '<button type="button" class="gt-ico gt-ico-del" title="Quitar" onclick="event.stopPropagation();actAgendaQuitarPlan(\''+escAttr(ev.id)+'\')">✕</button>'+
-        '</div>'):'')+
-      '</div>';
-    if(open&&canEd){
-      h+='<div class="gt-task-detail">'+
-        '<input type="text" class="gt-input" id="mi-dia-criterio-'+escAttr(ev.id)+'" value="'+escAttr(ev.criterio||'')+'" placeholder="Qué pienso hacer…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')">'+
-        '<textarea class="gt-input gt-notes" id="mi-dia-notas-'+escAttr(ev.id)+'" rows="3" placeholder="Añadir detalles…" onchange="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')" onblur="actAgendaGuardarItemCampos(\''+escAttr(ev.id)+'\')">'+escAttr(ev.notas||'')+'</textarea>'+
-        '</div>';
-    }else if(open&&notas){
-      h+='<div class="gt-task-detail"><div class="gt-notes-ro">'+escAttr(notas)+'</div></div>';
-    }
-    h+='</div>';
-  });
-  return h;
+  const planes=getAgendaPlanesDelDia(resp,dia);
+  return renderMiDiaSectionHtml('Lista · '+fmtF(dia),planes,{allowReorder:true,empty:'No hay tareas en este día'});
 }
 function renderMiDiaPanelHtml(){
   const dia=(window._actAgendaDiaSel||hoy()).slice(0,10);
@@ -4057,7 +4177,7 @@ function renderMiDiaPanelHtml(){
     '<span class="gt-date">'+fmtF(dia)+'</span>'+
     '<button type="button" class="gt-nav" onclick="actAgendaShiftDia(1)" title="Día siguiente">›</button>'+
     '</div>'+
-    renderMiDiaAddRowHtml()+
+    renderMiDiaAddRowsHtml()+
     '<div class="gt-list">'+renderMiDiaListaHtml()+'</div>'+
     '</div>';
 }
@@ -4106,6 +4226,9 @@ function cerrarActAgendaPanel(){
   window._actAgendaDrawerMode=null;
   window._actAgendaPrefillBase=null;
   window._actAgendaOtroPlan=null;
+  window._actAgendaPersonalAdd=false;
+  window._actAgendaExpId=null;
+  window._actAgendaTaskId=null;
 }
 function actAgendaGuardarForm(){
   actAgendaProgramar();
