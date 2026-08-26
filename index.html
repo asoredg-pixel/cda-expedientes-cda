@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260826u">
+<link rel="stylesheet" href="css/sst.css?v=20260826w">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260826u"></script>
+<script src="js/core.js?v=20260826w"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260826f"></script>
@@ -33,7 +33,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260826t"></script>
+<script src="js/gmail.js?v=20260826w"></script>
 <script src="js/pqrs.js?v=20260826j"></script>
 <script src="js/consulta.js?v=20260826e"></script>
 <script src="js/entrega-responsable.js?v=20260826a"></script>
@@ -87,7 +87,7 @@
   </div>
   <div class="sst-nav-tools" id="sst-nav-tools">
     <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">
-      <svg class="sst-drive-gicon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M7.71 3.5L1.15 15l3.43 5.5h6.84L7.71 3.5zm8.58 0L12.73 15h6.84L22.85 9 16.29 3.5zM12.73 15l-3.57 5.5h11.14L22.85 15H12.73z"/></svg>
+      <span class="sst-drive-ico" id="sst-drive-ico" aria-hidden="true">⛓️‍💥</span>
       <span class="sst-drive-status-dot" aria-hidden="true"></span>
       <span class="sst-drive-status-label" id="sst-drive-status-label">Drive</span>
     </button>

@@ -296,6 +296,7 @@ function sstFormatDriveCountdown(ms) {
 function sstRenderGmailDriveStatusBtn() {
   const btn = document.getElementById('sst-drive-status-btn');
   const label = document.getElementById('sst-drive-status-label');
+  const ico = document.getElementById('sst-drive-ico');
   if (!btn) return;
   const show = typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado();
   btn.style.display = show ? '' : 'none';
@@ -306,11 +307,13 @@ function sstRenderGmailDriveStatusBtn() {
   const rem = expMs - Date.now();
   if (!connected || rem <= 0) {
     btn.classList.add('sst-drive-expired');
+    if (ico) ico.textContent = '⛓️‍💥';
     if (label) label.textContent = 'Drive · Conectar';
     btn.title = 'Drive desconectado — clic para conectar Gmail/Drive';
     return;
   }
   const txt = sstFormatDriveCountdown(rem);
+  if (ico) ico.textContent = '🔗';
   if (label) label.textContent = 'Drive · ' + txt;
   btn.title = 'Drive conectado · ' + txt + ' restantes';
   if (rem <= 300000) btn.classList.add('sst-drive-warn');
