@@ -222,6 +222,7 @@ function taskRequiereFirmaEffective(t,expId){
 /** Checkbox + botones de firma en la barra de verificación de trámite. */
 function renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t){
   if(!t)return'';
+  if(typeof getTaskSolicitudPendiente==='function'&&getTaskSolicitudPendiente(t))return'';
   const e=tramiteFirmaExpCtx(t,expId);
   if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))return'';
   if(taskEnFlujoFirmaTramite(t)){

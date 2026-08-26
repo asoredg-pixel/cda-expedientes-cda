@@ -9296,6 +9296,18 @@ function renderNcaDecisionFormHtml(expId,e,wf){
 }
 function renderTaskVerifyBarHtml(expId,taskId,t){
   const e=getExpById(expId);
+  const sol=getTaskSolicitudPendiente(t);
+  // Solicitud de traslado/eliminación: no mostrar firma ni cierre de revisión
+  if(sol&&typeof puedeGestionarSolicitudActividad==='function'&&puedeGestionarSolicitudActividad(expId,taskId)){
+    const ref=t.sinExpediente?(t.codigo||expId):expId;
+    const tipoLbl=sol.tipo==='traslado'?'traslado':'eliminación';
+    return '<div class="task-cmt-form task-verify-bar task-chat-sep" style="padding:.65rem;border:1px solid var(--or);border-radius:var(--r);background:var(--orl)">'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--or)">📩 Solicitud de '+escAttr(tipoLbl)+'</div>'+
+      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px"><strong>'+escAttr(sol.por||'')+'</strong> solicita '+(sol.tipo==='traslado'?'trasladar':'eliminar')+' esta actividad'+(sol.destino?' → <strong>'+escAttr(sol.destino)+'</strong>':'')+(sol.nota?'. Motivo: '+escAttr(sol.nota):'')+'.</div>'+
+      '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+      '<button type="button" class="btn bsm bp" style="background:var(--or);border-color:var(--or)" onclick="openGestionSolicitudModal(\''+jsStr(ref)+'\',\''+jsStr(taskId)+'\')">'+(sol.tipo==='traslado'?'↔ Atender traslado':'🗑 Atender eliminación')+'</button>'+
+      '</div></div>';
+  }
   const esPqrs=taskEsAtenderPqrs(t,e);
   const pendVer=taskPendienteVerificacion(t);
   // PQRSD: la actividad no se cierra como trámite; se avanza el flujo (revisión → firma → notificar)
@@ -9392,6 +9404,12 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
   if(typeof renderTramiteFirmaVerifyExtrasHtml==='function')
     h+=renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t);
   const enFirmaTram=typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t);
+  const solPend=getTaskSolicitudPendiente(t);
+  // Con solicitud de traslado/eliminación no aplica imprimir/firma
+  if(solPend){
+    h+='</div>';
+    return h;
+  }
   if(!enFirmaTram&&pendVer){
     // Misma decisión para libres y trámites con expediente (Por revisar)
     const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
@@ -13422,7 +13440,8 @@ function renderActRowToolbarHtml(t,expAct){
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);
-  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
+  // Firma / notificar solo si NO hay solicitud de traslado o eliminación pendiente
+  if(!sol&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const eidT=eid,tidT=tid;
     if(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())
       acts+='<button type="button" class="btn bsm act-ico" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();tramitePasarAPorFirmar(\''+eidT+'\',\''+tidT+'\')" title="Pasar a firma">🖨</button>';
@@ -13445,7 +13464,7 @@ function renderActRowToolbarHtml(t,expAct){
       &&(typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):(esNcaDeguv()||esAdministrador()||esVistaActividadesDepto())))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();tramiteAprobarRevisionFinalNotif(\''+eidT+'\',\''+tidT+'\')" title="Aprobar notificación">✅</button>';
   }
-  if(esPqrs&&typeof pqrsWorkflowFase==='function'){
+  if(!sol&&esPqrs&&typeof pqrsWorkflowFase==='function'){
     const peid=jsStr(expAct._exp||t.exp);
     const faseWf=pqrsWorkflowFase(expAct);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
