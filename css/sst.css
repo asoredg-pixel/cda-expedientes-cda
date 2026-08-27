@@ -393,6 +393,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .pqrs-ofi-mets .met.met-click.is-on{
   border-width:2px!important;
 }
+#pg-act #act-table-wrap .act-col-tram{display:none}
 #f-act-est.act-filtro-on{
   border-left:4px solid var(--met-accent-hex, var(--or));
   font-weight:600;

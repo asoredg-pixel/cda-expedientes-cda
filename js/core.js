@@ -14419,7 +14419,7 @@ function renderActRowToolbarHtml(t,expAct){
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&pendienteRev
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
-    acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Ver entrega y solicitud PQRSD':'Revisar entrega')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">'+(esPqrsRev?'🔍':'🧐')+'</button>';
+    acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Revisar respuesta enviada':'Revisar entrega')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
       acts+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
@@ -14547,6 +14547,7 @@ function renderActividadesRowHtml(t){
   const rowCls=esCrit?'prioritaria-crit':(t.prioritaria?'prioritaria':'');
   return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td>'+
+    '<td class="act-col-tram">'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
     '<td style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
@@ -14603,13 +14604,13 @@ function exportarActividadesExcel(){
   const list=window._actExportList||[];
   if(!list.length){notif('Sin actividades para exportar en este filtro','err');return;}
   const deptView=esVistaActividadesDepto();
-  const hdr=['Estado','Ref.','Interesado','Actividad'];
+  const hdr=['Estado','Ref.','Trámite','Interesado','Actividad'];
   if(deptView)hdr.push('Responsable');
   if(deptView)hdr.push('Resultado revisión');
   hdr.push('Vence','Cierre / reporte');
   const rows=list.map(t=>{
     const rev=deptView?getTaskRevisionDepto(t):null;
-    const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.nombre||'',t.desc||t.actividad||''];
+    const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.tram||'',t.nombre||'',t.desc||t.actividad||''];
     if(deptView)r.push(taskResponsablesLabel(t,false));
     if(deptView)r.push(rev?(rev.tipo==='aprobada'?'Aprobada':'Enviada a corregir'):'');
     r.push(fmtF(t.vence),estadoTask(t)==='Atendida'?fmtF(t.fechaAtendida):t.fechaReportada?fmtF(t.fechaReportada):'');
@@ -15798,7 +15799,7 @@ function renderActividades(){
   const btnExp=document.getElementById('btn-export-act');
   const thead=document.querySelector('#pg-act table thead tr');
   if(thead){
-    const base='<th>Estado</th><th>Ref.</th><th>Interesado</th><th>Actividad</th>';
+    const base='<th>Estado</th><th>Ref.</th><th class="act-col-tram">Trámite</th><th>Interesado</th><th>Actividad</th>';
     thead.innerHTML=deptView?base+'<th>Responsable</th><th>Vence</th><th>Cierre</th><th>Acciones</th>':base+'<th>Vence</th><th>Cierre</th><th>Acciones</th>';
   }
   if(!deptView&&!responsableActivo){
@@ -15812,7 +15813,7 @@ function renderActividades(){
         ?'No se pudo identificar su nombre de responsable. Contacte al administrador.'
         :'Inicie sesión con su correo autorizado para ver sus actividades.');
     if(mets)mets.innerHTML='';
-    if(tb)tb.innerHTML='<tr><td colspan="7" class="emp">Sin responsable seleccionado.</td></tr>';
+    if(tb)tb.innerHTML='<tr><td colspan="8" class="emp">Sin responsable seleccionado.</td></tr>';
     if(btnExp)btnExp.style.display='none';
     return;
   }
@@ -15893,7 +15894,7 @@ function renderActividades(){
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   const nPorFirma=filtrarActividadesPorEstado([],'porfirma').length;
   const nNotif=notifAll.length;
-  const colSpan=deptView?8:7;
+  const colSpan=deptView?9:8;
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
