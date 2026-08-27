@@ -476,7 +476,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .acuerdo-cuota-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px;padding:6px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)}
 .acuerdo-cuota-row.mora{border-color:var(--rd);background:var(--rdl)}
 .con-side-panel{width:min(580px,96vw)}
-/* Dock único: Tasks + calendario se animan juntos (una sola “imagen”) */
+/* Dock: Tasks (+ calendario opcional con flecha) */
 .act-agenda-dock{
   position:fixed;top:0;height:100%;z-index:15004;
   display:flex;align-items:stretch;
@@ -490,13 +490,13 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .act-agenda-dock.on{visibility:visible;pointer-events:auto;transform:translateX(0)}
 .act-agenda-dock.act-agenda-closing{pointer-events:none!important}
 .act-agenda-dock.act-agenda-dock-left{
-  left:56px;right:0;width:auto;
+  left:56px;right:auto;width:368px;max-width:calc(100vw - 56px);
   transform:translateX(-102%);
 }
 .act-agenda-dock.act-agenda-dock-left.on{transform:translateX(0)}
 .act-agenda-dock.act-agenda-closing.act-agenda-dock-left{transform:translateX(-102%)!important}
-.act-agenda-dock.act-agenda-dock-left.act-agenda-dock-tasks-only{
-  right:auto;width:340px;max-width:96vw;
+.act-agenda-dock.act-agenda-dock-left.act-agenda-dock-with-cal{
+  right:0;width:auto;max-width:none;
 }
 .act-agenda-dock.act-agenda-dock-right{
   left:auto;right:0;width:340px;max-width:96vw;
@@ -507,39 +507,72 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .act-agenda-dock:not(.act-agenda-dock-left):not(.act-agenda-dock-right){
   left:-9999px;transform:none;visibility:hidden;pointer-events:none;
 }
-/* Tasks: columna fija dentro del dock (sin animación propia) */
-#act-agenda-panel.act-agenda-panel-inner,
-#act-agenda-panel{
-  position:relative!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;
-  width:340px!important;max-width:340px!important;min-width:280px;
-  height:100%!important;max-height:none!important;
-  flex:0 0 340px;padding:.75rem .85rem;border-radius:0!important;
-  transform:none!important;transition:none!important;
-  visibility:visible!important;pointer-events:auto!important;
-  overflow:auto;box-shadow:none!important;
-  border-left:none!important;border-right:1px solid var(--bd)!important;
-  background:var(--sf);
+/* Tasks: columna fija visible (sin heredar .con-side-panel fixed) */
+#act-agenda-panel,
+.act-agenda-panel-inner{
+  position:relative!important;
+  inset:auto!important;
+  flex:0 0 340px;
+  width:340px!important;
+  max-width:340px!important;
+  min-width:340px;
+  height:100%!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:.75rem .85rem;
+  box-sizing:border-box;
+  display:flex!important;
+  flex-direction:column;
+  background:var(--sf)!important;
+  color:var(--tx)!important;
+  opacity:1!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+  transform:none!important;
+  transition:none!important;
+  overflow:hidden;
+  border:0!important;
+  border-right:1px solid var(--bd)!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  z-index:2;
 }
+#act-agenda-panel .act-agenda-panel-hdr,
+#act-agenda-panel .con-side-panel-hdr{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+  margin-bottom:.35rem;padding-bottom:.45rem;border-bottom:0;flex-shrink:0;
+}
+#act-agenda-panel .act-agenda-panel-hdr .btn.bsm:not(.bpu),
 #act-agenda-panel .con-side-panel-hdr .btn.bsm:not(.bpu){border:0;background:transparent;font-size:16px;color:var(--tx3);padding:4px 6px}
 #act-agenda-panel #btn-tasks-asignar-resp{background:linear-gradient(135deg,#5b21b6,#7c3aed)!important;color:#fff!important;font-size:11px!important;padding:4px 10px!important;border-radius:8px!important}
-#act-agenda-panel .con-side-panel-hdr{margin-bottom:.35rem;padding-bottom:.45rem;border-bottom:0}
 #act-agenda-panel #act-agenda-tit{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3)!important}
-#act-agenda-panel #act-agenda-sub{font-size:16px;font-weight:500;color:var(--tx);margin-top:2px}
+#act-agenda-panel #act-agenda-sub{font-size:16px;font-weight:500;color:var(--tx)!important;margin-top:2px}
 #act-agenda-overlay.on{background:rgba(0,0,0,.12)}
-#act-agenda-body{padding:0;overflow:auto}
-/* Calendario: ocupa todo el resto hasta el borde derecho */
+#act-agenda-body{flex:1 1 auto;min-height:0;overflow:auto;padding:0;color:var(--tx)}
+/* Flecha expandir/contraer calendario (estilo menú vertical) */
+.act-agenda-cal-toggle{
+  flex:0 0 28px;width:28px;align-self:stretch;
+  display:none;align-items:center;justify-content:center;
+  border:0;border-left:1px solid rgba(0,0,0,.08);border-right:1px solid rgba(0,0,0,.08);
+  background:#f3f1eb;color:#9aa0a6;cursor:pointer;
+  font-size:18px;line-height:1;padding:0;z-index:3;
+  font-family:inherit;touch-action:manipulation;
+}
+.act-agenda-dock.act-agenda-dock-left .act-agenda-cal-toggle{display:flex}
+.act-agenda-cal-toggle:hover{background:rgba(22,56,40,.08);color:#163828}
+.act-agenda-cal-toggle-ico{display:inline-block;line-height:1;font-weight:400}
+.act-agenda-dock.act-agenda-dock-with-cal .act-agenda-cal-toggle{background:var(--sf2)}
+/* Calendario: resto del ancho al expandir */
 .act-agenda-cal-panel{
-  position:relative!important;top:auto;left:auto;right:auto;
+  position:relative!important;inset:auto!important;
   flex:1 1 auto;min-width:0;width:auto!important;height:100%;
   background:var(--sf);z-index:auto;padding:.75rem 1rem;overflow:auto;
-  border-left:none;border-right:none;
-  box-shadow:none;
+  border:0;box-shadow:none;
   transform:none!important;transition:none!important;
-  visibility:visible;pointer-events:auto;
+  visibility:visible;pointer-events:auto;color:var(--tx);
 }
 .act-agenda-cal-panel[hidden]{display:none!important}
 .act-agenda-cal-pane-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
-/* Evita capas sueltas (p.ej. botón Hoy) durante el slide del dock */
 .act-agenda-dock .btn.bp,
 .act-agenda-dock .btn{
   filter:none!important;
@@ -548,8 +581,9 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   backdrop-filter:none!important;
 }
 @media(max-width:900px){
-  .act-agenda-dock.act-agenda-dock-left{left:0!important;right:0;flex-direction:column}
-  #act-agenda-panel{flex:0 0 auto!important;width:100%!important;max-width:100%!important;height:42vh!important}
+  .act-agenda-dock.act-agenda-dock-left{left:0!important;width:min(100vw,400px)}
+  .act-agenda-dock.act-agenda-dock-left.act-agenda-dock-with-cal{right:0;width:auto;flex-direction:column}
+  #act-agenda-panel,.act-agenda-panel-inner{flex:0 0 auto!important;width:100%!important;max-width:100%!important;min-width:0;height:42vh!important}
   .act-agenda-cal-panel{flex:1 1 auto;min-height:0}
 }
 .act-agenda-btn{position:relative}
@@ -2107,8 +2141,10 @@ tr:last-child td{border-bottom:none!important}
 
 /* ─── SIDE PANELS & MODALS ─── */
 .con-side-panel{border-radius:20px 0 0 20px!important;box-shadow:-8px 0 40px rgba(0,0,0,.15)!important}
-#act-agenda-panel.con-side-panel{border-radius:0!important;box-shadow:none!important}
-#act-agenda-panel .con-side-panel-hdr{border-radius:0!important}
+#act-agenda-panel.con-side-panel,
+#act-agenda-panel.act-agenda-panel-inner{border-radius:0!important;box-shadow:none!important}
+#act-agenda-panel .con-side-panel-hdr,
+#act-agenda-panel .act-agenda-panel-hdr{border-radius:0!important}
 .con-side-panel-hdr{border-radius:20px 0 0 0!important}
 
 /* ─── AGENDA & ACTIVITY ELEMENTS ─── */

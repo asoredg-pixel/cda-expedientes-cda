@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260827f">
+<link rel="stylesheet" href="css/sst.css?v=20260827g">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260827f"></script>
+<script src="js/core.js?v=20260827g"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260826f"></script>
@@ -498,49 +498,52 @@
 </div>
 <div id="act-agenda-overlay" class="con-side-overlay" style="z-index:15003" onclick="cerrarActAgendaPanel()"></div>
 <div id="act-agenda-dock" class="act-agenda-dock" onclick="event.stopPropagation()" aria-hidden="true">
-<div id="act-agenda-panel" class="con-side-panel act-agenda-panel-inner">
-  <div class="con-side-panel-hdr">
-    <div><div class="slbl" style="margin:0" id="act-agenda-tit">Tasks</div><div id="act-agenda-sub" style="font-size:16px;color:var(--tx);margin-top:2px;font-weight:500">Mi día</div></div>
-    <div class="fx" style="gap:6px;align-items:center">
-      <button type="button" class="btn bsm" id="btn-tasks-calendario" onclick="openAgendaCalModal()" title="Vista calendario ampliada" style="display:none">🗓</button>
-      <button type="button" class="btn bsm" onclick="imprimirMiAgendaCompleta()" title="Imprimir tareas y calendario">🖨</button>
-      <button type="button" class="btn bsm bpu" id="btn-tasks-asignar-resp" style="display:none" onclick="openAgendaAsignarModal()" title="Evento para responsables del departamento">+ Responsables</button>
-      <button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">✕</button>
+  <div id="act-agenda-panel" class="act-agenda-panel-inner">
+    <div class="con-side-panel-hdr act-agenda-panel-hdr">
+      <div><div class="slbl" style="margin:0" id="act-agenda-tit">Tasks</div><div id="act-agenda-sub" style="font-size:16px;color:var(--tx);margin-top:2px;font-weight:500">Mi día</div></div>
+      <div class="fx" style="gap:6px;align-items:center">
+        <button type="button" class="btn bsm" id="btn-tasks-calendario" onclick="openAgendaCalModal()" title="Vista calendario ampliada" style="display:none">🗓</button>
+        <button type="button" class="btn bsm" onclick="imprimirMiAgendaCompleta()" title="Imprimir tareas y calendario">🖨</button>
+        <button type="button" class="btn bsm bpu" id="btn-tasks-asignar-resp" style="display:none" onclick="openAgendaAsignarModal()" title="Evento para responsables del departamento">+ Responsables</button>
+        <button type="button" class="btn bsm" onclick="cerrarActAgendaPanel()">✕</button>
+      </div>
+    </div>
+    <div id="act-agenda-body"></div>
+  </div>
+  <button type="button" class="act-agenda-cal-toggle" id="act-agenda-cal-toggle" onclick="toggleActAgendaCalDock()" title="Expandir calendario" aria-label="Expandir calendario" style="display:none">
+    <span class="act-agenda-cal-toggle-ico" id="act-agenda-cal-toggle-ico" aria-hidden="true">›</span>
+  </button>
+  <div id="act-agenda-cal-panel" class="act-agenda-cal-panel" hidden aria-label="Calendario">
+    <div class="act-agenda-cal-pane-hdr">
+      <div>
+        <strong id="act-agenda-dock-titulo" style="font-size:13px">Calendario</strong>
+        <span id="act-agenda-dock-subtitulo" style="font-size:11px;color:var(--tx3);margin-left:6px"></span>
+      </div>
+    </div>
+    <div id="act-agenda-dock-gcal-banner"></div>
+    <div class="agenda-nav" style="margin-bottom:6px">
+      <div class="agenda-view-tabs" id="act-agenda-dock-view-tabs">
+        <button type="button" class="on" onclick="agendaSetVista('mes')">Mes</button>
+        <button type="button" onclick="agendaSetVista('semana')">Semana</button>
+      </div>
+      <button type="button" class="btn bsm" onclick="agendaNav(-1)">◀</button>
+      <strong id="act-agenda-dock-mes-label" style="font-size:12px;min-width:120px;text-align:center;flex:1"></strong>
+      <button type="button" class="btn bsm" onclick="agendaNav(1)">▶</button>
+      <button type="button" class="btn bsm bp" onclick="agendaIrHoy()">Hoy</button>
+    </div>
+    <div id="act-agenda-dock-cal-wrap">
+      <div id="act-agenda-dock-cal-grid" class="agenda-cal"></div>
+    </div>
+    <div class="slbl" id="act-agenda-dock-lista-titulo" style="margin-top:.5rem">Eventos del día</div>
+    <div id="act-agenda-dock-lista" class="agenda-list"></div>
+    <div id="act-agenda-dock-drawer" class="agenda-drawer" style="display:none;margin-top:8px">
+      <div class="agenda-drawer-hdr">
+        <strong id="act-agenda-dock-drawer-tit" style="font-size:13px">Evento</strong>
+        <button type="button" class="btn bsm bic" onclick="agendaCerrarDrawer()" title="Cerrar">✕</button>
+      </div>
+      <div id="act-agenda-dock-drawer-body"></div>
     </div>
   </div>
-  <div id="act-agenda-body"></div>
-</div>
-<div id="act-agenda-cal-panel" class="act-agenda-cal-panel" hidden aria-label="Calendario">
-  <div class="act-agenda-cal-pane-hdr">
-    <div>
-      <strong id="act-agenda-dock-titulo" style="font-size:13px">Calendario</strong>
-      <span id="act-agenda-dock-subtitulo" style="font-size:11px;color:var(--tx3);margin-left:6px"></span>
-    </div>
-  </div>
-  <div id="act-agenda-dock-gcal-banner"></div>
-  <div class="agenda-nav" style="margin-bottom:6px">
-    <div class="agenda-view-tabs" id="act-agenda-dock-view-tabs">
-      <button type="button" class="on" onclick="agendaSetVista('mes')">Mes</button>
-      <button type="button" onclick="agendaSetVista('semana')">Semana</button>
-    </div>
-    <button type="button" class="btn bsm" onclick="agendaNav(-1)">◀</button>
-    <strong id="act-agenda-dock-mes-label" style="font-size:12px;min-width:120px;text-align:center;flex:1"></strong>
-    <button type="button" class="btn bsm" onclick="agendaNav(1)">▶</button>
-    <button type="button" class="btn bsm bp" onclick="agendaIrHoy()">Hoy</button>
-  </div>
-  <div id="act-agenda-dock-cal-wrap">
-    <div id="act-agenda-dock-cal-grid" class="agenda-cal"></div>
-  </div>
-  <div class="slbl" id="act-agenda-dock-lista-titulo" style="margin-top:.5rem">Eventos del día</div>
-  <div id="act-agenda-dock-lista" class="agenda-list"></div>
-  <div id="act-agenda-dock-drawer" class="agenda-drawer" style="display:none;margin-top:8px">
-    <div class="agenda-drawer-hdr">
-      <strong id="act-agenda-dock-drawer-tit" style="font-size:13px">Evento</strong>
-      <button type="button" class="btn bsm bic" onclick="agendaCerrarDrawer()" title="Cerrar">✕</button>
-    </div>
-    <div id="act-agenda-dock-drawer-body"></div>
-  </div>
-</div>
 </div>
 
 <div id="agenda-cal-overlay" class="task-modal-overlay agenda-cal-overlay" style="z-index:15010" onclick="if(event.target===this)cerrarAgendaCalModal()">

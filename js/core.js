@@ -3222,7 +3222,7 @@ function openMiDiaDesdeNav(opts){
   window._actAgendaResp=resp;
   window._actAgendaNotasOpen=window._actAgendaNotasOpen||{};
   window._actAgendaPanelSide='left';
-  window._actAgendaShowCal=true;
+  window._actAgendaShowCal=false;
   setNavTasksActive(true);
   actAgendaAbrirPanelUi();
 }
@@ -3297,43 +3297,61 @@ function syncActAgendaPanelLeftOffset(){
   const navW=nav?(nav.offsetWidth||56):56;
   if(dock&&dock.classList.contains('act-agenda-dock-left'))dock.style.left=navW+'px';
 }
-function applyActAgendaDockSide(side,showCal){
+function updateActAgendaCalToggleUi(show){
+  show=!!(show!=null?show:window._actAgendaShowCal);
+  const ico=document.getElementById('act-agenda-cal-toggle-ico');
+  const btn=document.getElementById('act-agenda-cal-toggle');
+  if(ico)ico.textContent=show?'‹':'›';
+  if(btn){
+    btn.title=show?'Contraer calendario':'Expandir calendario';
+    btn.setAttribute('aria-label',btn.title);
+    btn.classList.toggle('on',show);
+  }
+}
+function applyActAgendaDockSide(side,showCal,opts){
+  opts=opts||{};
   const dock=document.getElementById('act-agenda-dock');
+  const toggle=document.getElementById('act-agenda-cal-toggle');
   if(!dock)return;
-  dock.classList.remove('act-agenda-dock-left','act-agenda-dock-right','act-agenda-dock-tasks-only','on','act-agenda-closing');
+  const wasOn=opts.keepOn&&dock.classList.contains('on');
+  dock.classList.remove('act-agenda-dock-left','act-agenda-dock-right','act-agenda-dock-tasks-only','act-agenda-dock-with-cal','act-agenda-closing');
+  if(!opts.keepOn)dock.classList.remove('on');
   dock.style.width='';
   dock.style.right='';
   dock.style.left='';
   if(side==='left'){
     dock.classList.add('act-agenda-dock-left');
-    if(!showCal){
-      dock.classList.add('act-agenda-dock-tasks-only');
-      dock.style.width='340px';
-      dock.style.right='auto';
-    }else{
+    if(showCal){
+      dock.classList.add('act-agenda-dock-with-cal');
       dock.style.right='0';
+    }else{
+      dock.style.right='auto';
     }
     syncActAgendaPanelLeftOffset();
+    if(toggle)toggle.style.display='';
   }else{
     dock.classList.add('act-agenda-dock-right');
     dock.style.right='0';
     dock.style.width='340px';
+    if(toggle)toggle.style.display='none';
   }
+  if(wasOn)dock.classList.add('on');
+  updateActAgendaCalToggleUi(!!showCal&&side==='left');
 }
 function syncActAgendaCalPane(show){
   const cal=document.getElementById('act-agenda-cal-panel');
   const dock=document.getElementById('act-agenda-dock');
   const btnCal=document.getElementById('btn-tasks-calendario');
   const on=!!show;
-  if(btnCal)btnCal.style.display=on?'none':'';
+  if(btnCal)btnCal.style.display='none';
   if(cal)cal.hidden=!on;
   if(dock&&dock.classList.contains('act-agenda-dock-left')){
-    dock.classList.toggle('act-agenda-dock-tasks-only',!on);
+    dock.classList.toggle('act-agenda-dock-with-cal',on);
     if(on){
       dock.style.width='';
       dock.style.right='0';
     }else{
-      dock.style.width='340px';
+      dock.style.width='';
       dock.style.right='auto';
     }
   }
@@ -3347,6 +3365,16 @@ function syncActAgendaCalPane(show){
   }else if(window._agendaRenderTarget==='dock'){
     window._agendaRenderTarget='page';
   }
+  updateActAgendaCalToggleUi(on);
+}
+function toggleActAgendaCalDock(){
+  const dock=document.getElementById('act-agenda-dock');
+  if(!dock||!dock.classList.contains('on')||!dock.classList.contains('act-agenda-dock-left'))return;
+  const show=!window._actAgendaShowCal;
+  window._actAgendaShowCal=show;
+  try{localStorage.setItem('sstTasksCalOpen',show?'1':'0');}catch(e){}
+  syncActAgendaCalPane(show);
+  applyActAgendaDockSide('left',show,{keepOn:true});
 }
 function applyActAgendaPanelSide(side){
   applyActAgendaDockSide(side,!!window._actAgendaShowCal&&side==='left');
@@ -4226,7 +4254,6 @@ function actAgendaAbrirPanelUi(){
     setNavTasksActive(true);
     return;
   }
-  // Una sola animación del dock (Tasks+cal juntos)
   dock.style.transition='none';
   applyActAgendaDockSide(side,showCal);
   dock.setAttribute('aria-hidden','true');
@@ -4237,6 +4264,7 @@ function actAgendaAbrirPanelUi(){
       dock.classList.remove('act-agenda-closing');
       dock.classList.add('on');
       dock.setAttribute('aria-hidden','false');
+      updateActAgendaCalToggleUi(showCal);
       setNavTasksActive(true);
     });
   });
@@ -4649,7 +4677,7 @@ function cerrarActAgendaPanel(){
   if(!dock)return;
   const cleanup=function(){
     dock.style.transition='none';
-    dock.classList.remove('act-agenda-closing','act-agenda-dock-left','act-agenda-dock-right','act-agenda-dock-tasks-only','on');
+    dock.classList.remove('act-agenda-closing','act-agenda-dock-left','act-agenda-dock-right','act-agenda-dock-tasks-only','act-agenda-dock-with-cal','on');
     dock.style.left='';
     dock.style.right='';
     dock.style.width='';
@@ -4660,7 +4688,8 @@ function cerrarActAgendaPanel(){
       cal.classList.remove('on','act-agenda-closing');
     }
     const btnCal=document.getElementById('btn-tasks-calendario');
-    if(btnCal)btnCal.style.display='';
+    if(btnCal)btnCal.style.display='none';
+    updateActAgendaCalToggleUi(false);
     void dock.offsetWidth;
     dock.style.transition='';
   };
