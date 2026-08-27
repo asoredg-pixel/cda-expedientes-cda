@@ -6081,7 +6081,7 @@ function renderConPanelTaskBarHtml(expId){
     '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔄</button>'+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(taskId)+'\',libre:false,label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
     (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,taskId)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar actividad" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🗑️</button>':'')+
-    '<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="openTaskCommentsModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔍</button>'+
+    '<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="openTaskCommentsModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🧐</button>'+
     '</div>';
   return '<div class="con-panel-task-bar">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px">⚠ Solicitud pendiente · '+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
@@ -14148,14 +14148,14 @@ function renderActRowToolbarHtml(t,expAct){
     else
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
-  // 🔍 Revisar: solo tras entrega (por verificar / revisión), no en «por ejecutar»
+  // 🧐 Revisar: solo tras entrega (por verificar / revisión), no en «por ejecutar»
   const pendienteRev=taskPendienteVerificacion(t)
     ||(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))
     ||est==='Por verificar';
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&pendienteRev
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
-    acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
+    acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
   }
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   if(showChat)acts+=taskChatBtnHtml(t.exp,t.id,t);

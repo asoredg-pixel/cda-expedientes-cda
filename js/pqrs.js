@@ -1212,7 +1212,7 @@ function pqrsAccionesTablaHtml(e){
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar PQRSD" onclick="event.stopPropagation();openEditPqrsSecretariaModal(\''+id+'\')">✏️</button> ';
   else
     h+='<button type="button" class="btn bsm bic act-ico" title="Ver / editar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">✏️</button> ';
-  h+='<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🔍</button> ';
+  h+='<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🧐</button> ';
   if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
     h+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')" title="Revisar entrega">⏳</button> ';
   if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
