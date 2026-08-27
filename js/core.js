@@ -702,7 +702,8 @@ function pqrsEstadoActividadUi(e){
   const imp=!!(wf.impreso&&wf.impreso.en);
   if(f===PQRS_WF.PENDIENTE_REVISION){
     const devDir=!!(wf.devolucion_director&&wf.devolucion_director.motivo);
-    return{lbl:devDir?'↩ Devuelto Director · Por revisar':'⏳ Por revisar NCA',bg:'#6d3fa822',fg:'#6d3fa8'};
+    if(devDir)return{lbl:'↩ Devuelto Director · Por revisar',bg:'var(--orl)',fg:'var(--or)'};
+    return null;
   }
   if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)
     return{lbl:imp?'✓ Impreso · listo firma':'🖨 Por imprimir',bg:imp?'#dcfce7':'#1a7a4a22',fg:imp?'#15803d':'#1a7a4a'};
@@ -9725,19 +9726,21 @@ function puedeEliminarEntregaActividad(expId,taskId){
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
   if(typeof getTaskRevisionDepto==='function'&&getTaskRevisionDepto(t))return false;
-  const est=estadoTask(t);
-  const pend=est==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t));
-  if(!pend)return false;
   const e=typeof getExpById==='function'?getExpById(expId):null;
-  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+  const esPqrsRev=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
+  const est=estadoTask(t);
+  const pend=est==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))||esPqrsRev;
+  if(!pend)return false;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&!esPqrsRev){
     const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
     if(f&&f!==PQRS_WF.PENDIENTE_REVISION&&f!==PQRS_WF.SIN_RESPUESTA&&f!==PQRS_WF.RECHAZADA){
-      // Solo mientras la entrega está en revisión / por verificar
       if(!(typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)))return false;
     }
   }
   if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
-  if(!(typeof esModoResponsable==='function'&&esModoResponsable()))return true; // encargado / depto
+  if(!(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
+  if(esPqrsRev&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
   return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
 function eliminarEntregaActividadConfirm(expId,taskId){
@@ -9818,13 +9821,14 @@ async function eliminarEntregaActividad(expId,taskId){
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
   if(wfDocsCleared&&e&&typeof setPqrsWorkflow==='function'){
-    const wf=getPqrsWorkflow(e);
     setPqrsWorkflow(e,{
+      fase:PQRS_WF.SIN_RESPUESTA,
       documentos:[],
       cuerpo:'',
       entregado_por:'',
       revision_nca:null,
-      fecha_respuesta:''
+      fecha_respuesta:'',
+      devolucion_director:null
     });
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({tipo:'eliminar_entrega',fecha:hoy(),nota:'Entrega eliminada — pendiente nueva entrega',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
@@ -14381,14 +14385,17 @@ function renderActRowToolbarHtml(t,expAct){
     ?(taskEsMultiAsignada(t)&&t.entregaModo==='individual'?estadoTaskForAsignado(t,responsableActivo):est)
     :est;
   const enPorRevisarResp=esRespAsignado&&(
-    miEst==='Por verificar'
+    (typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))
+    ||miEst==='Por verificar'
     ||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t,responsableActivo))
   );
+  const esPqrsAtender=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
+  const esPqrsRev=esPqrsAtender&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct);
   // Responsable en «Por revisar»: 🔍 ver entrega, 🗑 eliminar entrega (vuelve a Por ejecutar), chat/notas
   if(enPorRevisarResp){
     let actsR='<span class="sst-act-toolbar">';
-    actsR+='<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
+    actsR+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Ver entrega y solicitud PQRSD':'Ver entrega enviada')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
       actsR+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
@@ -14412,7 +14419,7 @@ function renderActRowToolbarHtml(t,expAct){
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&pendienteRev
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
-    acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
+    acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Ver entrega y solicitud PQRSD':'Revisar entrega')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">'+(esPqrsRev?'🔍':'🧐')+'</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
       acts+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
@@ -14539,7 +14546,7 @@ function renderActividadesRowHtml(t){
   ].filter(Boolean).join(';');
   const rowCls=esCrit?'prioritaria-crit':(t.prioritaria?'prioritaria':'');
   return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
-    '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td><td>'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
+    '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
     '<td style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
@@ -14596,13 +14603,13 @@ function exportarActividadesExcel(){
   const list=window._actExportList||[];
   if(!list.length){notif('Sin actividades para exportar en este filtro','err');return;}
   const deptView=esVistaActividadesDepto();
-  const hdr=['Estado','Ref.','Trámite','Interesado','Actividad'];
+  const hdr=['Estado','Ref.','Interesado','Actividad'];
   if(deptView)hdr.push('Responsable');
   if(deptView)hdr.push('Resultado revisión');
   hdr.push('Vence','Cierre / reporte');
   const rows=list.map(t=>{
     const rev=deptView?getTaskRevisionDepto(t):null;
-    const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.tram||'',t.nombre||'',t.desc||t.actividad||''];
+    const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.nombre||'',t.desc||t.actividad||''];
     if(deptView)r.push(taskResponsablesLabel(t,false));
     if(deptView)r.push(rev?(rev.tipo==='aprobada'?'Aprobada':'Enviada a corregir'):'');
     r.push(fmtF(t.vence),estadoTask(t)==='Atendida'?fmtF(t.fechaAtendida):t.fechaReportada?fmtF(t.fechaReportada):'');
@@ -15791,7 +15798,7 @@ function renderActividades(){
   const btnExp=document.getElementById('btn-export-act');
   const thead=document.querySelector('#pg-act table thead tr');
   if(thead){
-    const base='<th>Estado</th><th>Ref.</th><th>Trámite</th><th>Interesado</th><th>Actividad</th>';
+    const base='<th>Estado</th><th>Ref.</th><th>Interesado</th><th>Actividad</th>';
     thead.innerHTML=deptView?base+'<th>Responsable</th><th>Vence</th><th>Cierre</th><th>Acciones</th>':base+'<th>Vence</th><th>Cierre</th><th>Acciones</th>';
   }
   if(!deptView&&!responsableActivo){
@@ -15805,7 +15812,7 @@ function renderActividades(){
         ?'No se pudo identificar su nombre de responsable. Contacte al administrador.'
         :'Inicie sesión con su correo autorizado para ver sus actividades.');
     if(mets)mets.innerHTML='';
-    if(tb)tb.innerHTML='<tr><td colspan="8" class="emp">Sin responsable seleccionado.</td></tr>';
+    if(tb)tb.innerHTML='<tr><td colspan="7" class="emp">Sin responsable seleccionado.</td></tr>';
     if(btnExp)btnExp.style.display='none';
     return;
   }
@@ -15886,7 +15893,7 @@ function renderActividades(){
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   const nPorFirma=filtrarActividadesPorEstado([],'porfirma').length;
   const nNotif=notifAll.length;
-  const colSpan=deptView?9:8;
+  const colSpan=deptView?8:7;
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
