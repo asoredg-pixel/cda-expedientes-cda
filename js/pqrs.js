@@ -1787,7 +1787,7 @@ function openAsignarPqrsOficinaModal(expId){
   const respChecks=responsables.length
     ?responsables.map(n=>{
       const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
-      return '<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"></label>';
+      return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
     }).join('')
     :'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';

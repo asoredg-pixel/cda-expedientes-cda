@@ -6189,7 +6189,7 @@ function buildEditarActTaskFormHtml(t,ref,opts){
   const names=getResponsablesCoEjPool(ref,t.id,t);
   rs.forEach(n=>{if(n&&!names.some(x=>agendaNorm(x)===agendaNorm(n)))names.push(n);});
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(depto)||'').trim():'';
-  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
+  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   const showAbrirReg=!t.sinExpediente&&!opts.forceActMeta&&!opts.inSidePanel;
   const icoBar='<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
     (showAbrirReg?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();editarExpDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
@@ -11608,7 +11608,7 @@ function renderTkCoEjPanelHtml(data){
   const extras=names.filter(n=>!primary||agendaNorm(n)!==agendaNorm(primary));
   const checks=extras.length?extras.map(n=>{
     const checked=rs.some(r=>agendaNorm(r)===agendaNorm(n));
-    return '<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+'</span><input type="checkbox" class="tk-coej-cb" value="'+escAttr(n)+'"'+(checked?' checked':'')+' onchange="syncTkCoEjPanelFromCheckboxes(this)"></label>';
+    return '<label class="act-libre-resp-row"><input type="checkbox" class="tk-coej-cb" value="'+escAttr(n)+'"'+(checked?' checked':'')+' onchange="syncTkCoEjPanelFromCheckboxes(this)"><span class="act-libre-resp-nom">'+escAttr(n)+'</span></label>';
   }).join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay otros responsables configurados.</div>';
   const multi=rs.length>1;
   return '<div class="tk-coej-panel" style="display:none">'+
@@ -14602,7 +14602,7 @@ function openCrearActLibreModal(){
   const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoActivo):getContratistasAsignables(deptoActivo);
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
   const defCheck=defResp||encNom;
-  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(defCheck)||(!defCheck&&names.length===1)?' checked':'')+' onchange="toggleActLibreModo()"></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
+  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(defCheck)||(!defCheck&&names.length===1)?' checked':'')+' onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Capacitación, puesto de control u otra tarea sin expediente. Puede asignarse a usted (encargado) o a responsables; si se autoasigna, la entrega no pasa por «Por revisar» sino al flujo de imprimir/firmar/notificar.</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -14619,57 +14619,52 @@ function openCrearActLibreModal(){
 }
 function actLibrePlazoFieldsHtml(t){
   const vence=t&&t.vence?String(t.vence).slice(0,10):'';
-  const plazo=t&&t.plazoDias!=null&&t.plazoDias!==''?t.plazoDias:'';
-  const modoFecha=!!(t&&vence);
+  let plazo=t&&t.plazoDias!=null&&t.plazoDias!==''?String(t.plazoDias):'';
+  if(!plazo&&vence&&typeof diffDias==='function')plazo=String(Math.max(0,Number(diffDias(vence))||0));
+  const venceShow=vence||(plazo&&typeof calcVence==='function'?calcVence(plazo):'');
   return '<div class="fld" style="margin-bottom:8px"><label>Plazo</label>'+
-    '<div class="fx" style="gap:12px;flex-wrap:wrap;margin-bottom:6px">'+
-    '<label style="font-size:12px;display:inline-flex;align-items:center;gap:5px"><input type="radio" name="act-libre-plazo-modo" value="dias"'+(modoFecha?'':' checked')+' onchange="syncActLibrePlazoModo()"> Días</label>'+
-    '<label style="font-size:12px;display:inline-flex;align-items:center;gap:5px"><input type="radio" name="act-libre-plazo-modo" value="fecha"'+(modoFecha?' checked':'')+' onchange="syncActLibrePlazoModo()"> Fecha de vencimiento</label>'+
+    '<div class="act-libre-plazo-grid">'+
+    '<div><span class="act-libre-plazo-lbl">Días</span>'+
+    '<input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(plazo)+'" placeholder="Ej. 15" oninput="syncActLibreVenceFromDias()"></div>'+
+    '<div><span class="act-libre-plazo-lbl">Fecha de vencimiento</span>'+
+    '<input type="date" id="act-libre-vence" value="'+escAttr(venceShow)+'" onchange="syncActLibreDiasFromVence()"></div>'+
     '</div>'+
-    '<input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(plazo)+'" placeholder="Ej. 15" oninput="syncActLibreVenceFromDias()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'+(modoFecha?';display:none':'')+'">'+
-    '<input type="date" id="act-libre-vence" value="'+escAttr(vence)+'" onchange="syncActLibreDiasFromVence()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'+(modoFecha?'':';display:none')+'">'+
-    '<div id="act-libre-plazo-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div></div>';
+    '<div id="act-libre-plazo-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Igual que en Registro: si indica días se calcula la fecha, y si elige fecha se calculan los días.</div></div>';
 }
 function syncActLibrePlazoModo(){
-  const modo=(document.querySelector('input[name="act-libre-plazo-modo"]:checked')||{}).value||'dias';
-  const diasEl=document.getElementById('act-libre-plazo');
-  const fechaEl=document.getElementById('act-libre-vence');
+  /* Compat: ya no hay radios; ambos campos se muestran siempre. */
   const hint=document.getElementById('act-libre-plazo-hint');
-  if(diasEl)diasEl.style.display=modo==='dias'?'':'none';
-  if(fechaEl)fechaEl.style.display=modo==='fecha'?'':'none';
-  if(modo==='dias'){
-    if(hint)hint.textContent='El vencimiento se calcula desde hoy.';
-    syncActLibreVenceFromDias();
-  }else{
-    if(hint)hint.textContent='Indique la fecha exacta de vencimiento.';
-    syncActLibreDiasFromVence();
-  }
+  if(hint)hint.textContent='Igual que en Registro: si indica días se calcula la fecha, y si elige fecha se calculan los días.';
 }
 function syncActLibreVenceFromDias(){
   const diasEl=document.getElementById('act-libre-plazo');
   const fechaEl=document.getElementById('act-libre-vence');
   if(!diasEl||!fechaEl)return;
   const n=Number(diasEl.value);
-  if(!isNaN(n)&&diasEl.value!=='')fechaEl.value=typeof calcVence==='function'?calcVence(n):'';
+  if(diasEl.value===''||isNaN(n)){fechaEl.value='';return;}
+  fechaEl.value=typeof calcVence==='function'?calcVence(n):'';
 }
 function syncActLibreDiasFromVence(){
   const diasEl=document.getElementById('act-libre-plazo');
   const fechaEl=document.getElementById('act-libre-vence');
-  if(!diasEl||!fechaEl||!fechaEl.value)return;
-  const d=typeof diasEntre==='function'?diasEntre(hoy(),fechaEl.value):0;
-  diasEl.value=String(Math.max(0,d));
+  if(!diasEl||!fechaEl)return;
+  if(!fechaEl.value){diasEl.value='';return;}
+  const d=typeof diffDias==='function'?diffDias(fechaEl.value):(typeof diasEntre==='function'?diasEntre(hoy(),fechaEl.value):0);
+  diasEl.value=String(Math.max(0,Number(d)||0));
 }
 function readActLibrePlazoVence(){
-  const modo=(document.querySelector('input[name="act-libre-plazo-modo"]:checked')||{}).value||'dias';
-  if(modo==='fecha'){
-    const v=String((document.getElementById('act-libre-vence')||{}).value||'').trim();
-    if(!v)return{ok:false,err:'Indique la fecha de vencimiento'};
-    const dias=typeof diasEntre==='function'?Math.max(0,diasEntre(hoy(),v)):0;
-    return{ok:true,vence:v,plazo:String(dias||1)};
+  const plazoRaw=String((document.getElementById('act-libre-plazo')||{}).value||'').trim();
+  let vence=String((document.getElementById('act-libre-vence')||{}).value||'').trim();
+  let plazo=plazoRaw;
+  if(vence&&(plazo===''||isNaN(Number(plazo)))){
+    const d=typeof diffDias==='function'?diffDias(vence):diasEntre(hoy(),vence);
+    plazo=String(Math.max(0,Number(d)||0));
   }
-  const plazo=String((document.getElementById('act-libre-plazo')||{}).value||'').trim();
-  if(plazo!==''&&(isNaN(Number(plazo))||Number(plazo)<1))return{ok:false,err:'El plazo en días debe ser un número válido'};
-  return{ok:true,vence:plazo?calcVence(plazo):'',plazo:plazo};
+  if(plazo!==''&&(isNaN(Number(plazo))||Number(plazo)<0))return{ok:false,err:'El plazo en días debe ser un número válido'};
+  if(plazo!==''&&!vence&&typeof calcVence==='function')vence=calcVence(plazo);
+  if(!vence&&plazo==='')return{ok:true,vence:'',plazo:''};
+  if(!vence)return{ok:false,err:'Indique días o fecha de vencimiento'};
+  return{ok:true,vence:vence,plazo:plazo||String(Math.max(0,Number(diffDias(vence))||0)||1)};
 }
 window.syncActLibrePlazoModo=syncActLibrePlazoModo;
 window.syncActLibreVenceFromDias=syncActLibreVenceFromDias;

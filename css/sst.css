@@ -674,7 +674,23 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .tk-coej-modo-wrap{margin-top:6px}
 .task-asig-panel{border:1px solid var(--bd);border-radius:var(--r);padding:10px;margin-bottom:10px;background:var(--sf2)}
 .task-asig-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px dashed var(--bd);font-size:12px}
-.act-libre-resp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;border-bottom:1px solid var(--bd);font-size:12px;cursor:pointer;user-select:none}
+.act-libre-resp-row{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 10px;border-bottom:1px solid var(--bd);
+  font-size:12px;cursor:pointer;user-select:none;margin:0;
+}
+.act-libre-resp-row:last-child{border-bottom:none}
+.act-libre-resp-row:hover{background:var(--sf2)}
+.act-libre-resp-nom{flex:1;min-width:0;text-align:left;font-weight:500;color:var(--tx);line-height:1.35;word-break:break-word}
+.act-libre-resp-cb{
+  width:16px;height:16px;min-width:16px;margin:2px 0 0;flex-shrink:0;
+  accent-color:var(--bl);cursor:pointer;
+}
+.act-libre-resps-box{max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)}
+.act-libre-plazo-grid{display:grid;grid-template-columns:minmax(100px,1fr) minmax(140px,1.4fr);gap:10px;align-items:end}
+@media(max-width:480px){.act-libre-plazo-grid{grid-template-columns:1fr}}
+.act-libre-plazo-grid .act-libre-plazo-lbl{display:block;font-size:11px;color:var(--tx3);margin-bottom:4px;font-weight:500}
+.act-libre-plazo-grid input{width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box}
 .con-panel-task-bar{margin:.65rem 0;padding:.75rem;background:linear-gradient(135deg,var(--bll),var(--sf2));border:1px solid var(--bl);border-radius:var(--rl)}
 .solicitud-pill{font-size:10px;padding:2px 7px;border-radius:10px;background:var(--orl);color:var(--or);font-weight:600;white-space:nowrap}
 .act-vista-toggle{display:flex;gap:4px;margin-left:auto}
@@ -742,11 +758,6 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .act-gantt-tram-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .act-gantt-leg{display:flex;align-items:center;gap:4px}
 .act-gantt-leg i{display:inline-block;width:12px;height:10px;border-radius:2px}
-.act-libre-resp-row:last-child{border-bottom:none}
-.act-libre-resp-row:hover{background:var(--sf2)}
-.act-libre-resp-nom{flex:1;text-align:left;font-weight:500;color:var(--tx)}
-.act-libre-resp-cb{width:16px;height:16px;flex-shrink:0;accent-color:var(--bl);cursor:pointer}
-.act-libre-resps-box{max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)}
 .flags-inline{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:100%}
 .con-act-fold>summary.slbl{cursor:pointer;user-select:none}
 .con-act-fold,.con-act-fold>summary,.con-act-fold .item-fold-body{background:var(--sf);border-color:var(--bd)}
