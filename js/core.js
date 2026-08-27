@@ -6255,7 +6255,7 @@ function buildEditarActTaskFormHtml(t,ref,opts){
     '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🔄</button>'+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(t.id)+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
     (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,t.id)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑️</button>':'')+
-    (opts.inSidePanel?'<button type="button" class="btn bsm bic act-ico" title="Chat" onclick="openTaskChatUnificado(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">💬</button>':'')+
+    (opts.inSidePanel?'<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat" onclick="openTaskCommentsChatOnly(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">'+chatWaIconHtml(15)+'</button>':'')+
     '</div>';
   const cancelFn=opts.inSidePanel?'cerrarConsultaPanel()':'closeTaskModal()';
   return (t.sinExpediente?'':'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Expediente '+escAttr(ref)+'</div>')+
@@ -8823,23 +8823,16 @@ function taskChatComentariosCount(t){
   if(!t)return 0;
   return (t.comentarios||[]).filter(c=>!c.incluidoEnReporte).length;
 }
+function actIcoBadgeHtml(n,tipo){
+  const num=Number(n)||0;
+  if(num<=0)return'';
+  const cls=tipo==='yellow'?'act-ico-badge act-ico-badge-yel':'act-ico-badge act-ico-badge-blu';
+  return '<span class="'+cls+'" aria-hidden="true">'+num+'</span>';
+}
 function taskChatBtnHtml(expId,taskId,t){
   const nc=taskChatComentariosCount(t);
-  const hasNota=!!(notasInternasAutor()&&String(getNotaInternaTexto(expId,taskId)||'').trim());
   const ref=escAttr(expId),tid=escAttr(taskId);
-  return '<button type="button" class="btn bsm bic act-ico" title="Chat y notas internas'+(nc?' · '+nc+' msg':'')+(hasNota?' · notas':'')+'" onclick="event.stopPropagation();openTaskChatUnificado(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(nc>0||hasNota?'<span class="cmt-dot">'+(nc||'·')+'</span>':'')+'</button>';
-}
-/** Menú ⋯: solicitar traslado / eliminación (fuera del chat). */
-function taskSolicitudMenuHtml(expId,taskId,t){
-  t=t||getTaskAny(expId,taskId);
-  if(!t||!esModoResponsable()||!responsableActivo||!taskUsuarioEsAsignado(t,responsableActivo))return'';
-  if(getTaskSolicitudPendiente(t)||estadoTask(t)==='Atendida')return'';
-  const ref=escAttr(t.sinExpediente?(t.codigo||expId):expId);
-  const tid=escAttr(taskId);
-  return sstActPopoverHtml('⋯','Más acciones',[
-    {label:'↔ Solicitar traslado',onclick:"openSolicitarTrasladoModal('"+ref+"','"+tid+"')"},
-    {label:'🗑 Solicitar eliminación',onclick:"openSolicitarEliminacionModal('"+ref+"','"+tid+"')",danger:true}
-  ]);
+  return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat de actividad'+(nc?' · '+nc+' mensaje'+(nc>1?'s':''):'')+'" onclick="event.stopPropagation();openTaskCommentsChatOnly(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+actIcoBadgeHtml(nc,'blue')+'</button>';
 }
 /** Notas internas privadas por responsable (solo en este equipo; no se comparten en chat ni con otros). */
 function notasInternasAutor(){
@@ -8902,9 +8895,10 @@ function setNotaInterna(expId,taskId,texto,meta){
 function taskNotasInternasBtnHtml(expId,taskId){
   const autor=notasInternasAutor();
   if(!autor)return'';
-  const has=!!String(getNotaInternaTexto(expId,taskId,autor)||'').trim();
+  const list=typeof getNotasInternasList==='function'?getNotasInternasList(expId,taskId,autor):[];
+  const nn=list.length;
   const exp=escAttr(expId),tid=escAttr(taskId);
-  return '<button type="button" class="btn bsm bic'+(has?' act-notas-on':'')+'" title="'+(has?'Notas internas (privadas) — tiene apuntes':'Notas internas privadas — solo usted las ve; salen al descargar en Consulta')+'" onclick="event.stopPropagation();openNotasInternasModal(\''+exp+'\',\''+tid+'\')">📝'+(has?'<span class="cmt-dot">·</span>':'')+'</button>';
+  return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="'+(nn?'Notas internas ('+nn+')':'Notas internas privadas — solo usted las ve')+'" onclick="event.stopPropagation();openNotasInternasModal(\''+exp+'\',\''+tid+'\')">📝'+actIcoBadgeHtml(nn,'yellow')+'</button>';
 }
 function openNotasInternasModal(expId,taskId){
   const autor=notasInternasAutor();
@@ -8917,23 +8911,20 @@ function openNotasInternasModal(expId,taskId){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  const texto=getNotaInternaTexto(expId,t.id||taskId,autor);
-  const ent=getNotaInternaEntry(expId,t.id||taskId,autor);
-  if(tit)tit.textContent='📝 Notas internas · '+(t.codigo||expId);
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  const list=getNotasInternasList(expId,t.id||taskId,autor);
+  const cards=list.map(function(n){return taskKeepNoteCardHtml(n,expId,t.id||taskId);}).join('');
+  if(tit)tit.textContent='Notas internas · '+(t.codigo||expId);
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');modal.classList.add('task-modal-notas');}
   body.innerHTML=
-    '<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
-    '<div class="fld"><label>Mis notas</label><textarea id="nota-interna-txt" rows="8" placeholder="Nota…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;resize:vertical">'+(texto?escTextarea(texto):'')+'</textarea></div>'+
-    (ent&&ent.updatedAt?'<div style="font-size:11px;color:var(--tx3);margin-top:6px">'+escAttr(String(ent.updatedAt).replace('T',' ').slice(0,16))+'</div>':'')+
-    '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:12px">'+
-    '<button type="button" class="btn bsm bp" onclick="guardarNotaInternaModal(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Guardar</button>'+
-    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>'+
-    '<button type="button" class="btn bsm bd2" style="margin-left:auto" onclick="borrarNotaInternaModal(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Borrar</button>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
+    '<div class="task-keep-standalone">'+
+    taskKeepComposeHtml(expId,t.id||taskId)+
+    '<div class="task-keep-list task-chat-uni-scroll" id="task-notas-list">'+cards+'</div>'+
+    '<div class="task-keep-foot"><button type="button" class="task-keep-save" onclick="guardarNotasInternasUnificado(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Guardar</button></div>'+
     '</div>';
   ov.classList.add('on');
   window._taskModalCtx={expId:expId,taskId:t.id||taskId,notasInternas:true,actLibre:!!t.sinExpediente};
-  const ta=document.getElementById('nota-interna-txt');
-  if(ta)setTimeout(function(){ta.focus();},40);
+  setTimeout(function(){if(typeof taskKeepInitTextareas==='function')taskKeepInitTextareas(document.getElementById('task-modal-body'));},40);
 }
 function guardarNotaInternaModal(expId,taskId){
   const ta=document.getElementById('nota-interna-txt');
@@ -11973,12 +11964,12 @@ function restaurarTaskExp(expId,taskId){
   });
 }
 function openTaskCommentsChatOnly(expId,taskId){
-  openTaskCommentsModal(expId,taskId,{chatOnly:true,chatUnificado:true});
+  openTaskCommentsModal(expId,taskId,{chatOnly:true});
 }
 function openTaskCommentsModal(expId,taskId,opts){
   opts=typeof opts==='object'&&opts?opts:{};
   const chatOnly=!!opts.chatOnly;
-  const chatUnificado=!!opts.chatUnificado||chatOnly;
+  const chatUnificado=!!opts.chatUnificado;
   const soloGestion=!!opts.gestionAsignados;
   let e=getExpById(expId),t=getTaskFromExp(e,taskId);
   if(!t){
@@ -12100,6 +12091,7 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-firma');
       modal.classList.remove('enviar-modal-only');
       modal.classList.remove('task-modal-chat');
+      modal.classList.remove('task-modal-notas');
       modal.classList.remove('task-modal-compare-expand');
       modal.classList.remove('task-modal-viewport-expand');
     }
@@ -12165,7 +12157,7 @@ function renderTaskConsultaItem(e,t,qs){
   const del=t.eliminada?' opacity:.65;text-decoration:line-through':'';
   const coBtn=ciu?'':taskCoEjecutorBtnHtml(expId,t.id);
   const respLbl=ciu?'':taskEsMultiAsignada(t)?taskResponsablesLabel(t,false):(t.responsable||'');
-  const cmtBtn=ciu?'':'<button type="button" class="btn bsm bic" title="Chat de la actividad'+(ncChat?' ('+ncChat+' mensajes)':'')+'" onclick="openTaskCommentsChatOnly(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\')">'+chatWaIconHtml(15)+(ncChat>0?'<span class="cmt-dot">'+ncChat+'</span>':'')+'</button>';
+  const cmtBtn=ciu?'':taskChatBtnHtml(expId,t.id,t);
   const sopBtn=(!ciu&&ns)?'<button type="button" class="btn bsm bic" title="'+ns+' documento(s)" onclick="openTaskCommentsModal(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\')">📎</button>':'';
   const agBtn=ciu?'':taskAgendaBtnHtml(expId,t.id);
   return '<div class="tkv" style="'+del+'">'+
@@ -14398,10 +14390,10 @@ function renderActRowToolbarHtml(t,expAct){
     let actsR='<span class="sst-act-toolbar">';
     actsR+='<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
-      actsR+='<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
+      actsR+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
     actsR+=taskChatBtnHtml(t.exp,t.id,t);
-    actsR+=taskSolicitudMenuHtml(t.exp,t.id,t);
+    actsR+=taskNotasInternasBtnHtml(t.exp,t.id);
     actsR+='</span>';
     return actsR;
   }
@@ -14422,18 +14414,20 @@ function renderActRowToolbarHtml(t,expAct){
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
     acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
-      acts+='<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
+      acts+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
   }
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
-  if(showChat)acts+=taskChatBtnHtml(t.exp,t.id,t);
+  if(showChat){
+    acts+=taskChatBtnHtml(t.exp,t.id,t);
+    acts+=taskNotasInternasBtnHtml(t.exp,t.id);
+  }
   acts+='</span>';
   if(puedeGestionarSolicitudActividad(t.exp,t.id)&&sol)
     acts+='<button type="button" class="btn bsm" style="background:var(--orl);color:var(--or);font-weight:600" title="Atender solicitud" onclick="event.stopPropagation();openGestionSolicitudModal(\''+eid+'\',\''+tid+'\')">'+(sol.tipo==='traslado'?'↔':'🗑')+'</button>';
   acts+=taskReporteBtnHtml(t.exp,t.id,yo);
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)){
     acts+=taskCoEjecutorBtnHtml(t.exp,t.id);
-    acts+=taskSolicitudMenuHtml(t.exp,t.id,t);
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);

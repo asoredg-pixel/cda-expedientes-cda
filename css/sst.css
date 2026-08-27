@@ -189,7 +189,8 @@ a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
   border:none;background:transparent;color:var(--bl);font:inherit;font-size:12px;font-weight:600;
   cursor:pointer;padding:4px 8px;border-radius:4px;
 }
-.task-keep-save:hover{background:var(--bll)}
+.task-keep-standalone .task-chat-uni-scroll{max-height:280px}
+.task-modal.task-modal-notas{width:min(400px,96vw)}
 @media(max-width:700px){
   .task-chat-uni-tabs{display:flex}
   .task-chat-uni-grid{grid-template-columns:1fr}
@@ -640,6 +641,16 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   .act-agenda-cal-panel{flex:1 1 auto;min-height:0}
 }
 .act-agenda-btn{position:relative}
+.act-ico-btn{position:relative}
+.act-ico-badge{
+  position:absolute;top:-4px;right:-4px;z-index:1;
+  min-width:14px;height:14px;padding:0 3px;border-radius:8px;
+  color:#fff;font-size:9px;line-height:14px;
+  text-align:center;font-weight:800;pointer-events:none;
+  box-shadow:0 0 0 1.5px var(--sf);
+}
+.act-ico-badge-blu{background:var(--bl,#185fa5)}
+.act-ico-badge-yel{background:#eab308;color:#422006}
 .act-agenda-check{
   position:absolute;top:-4px;left:-4px;z-index:1;
   width:13px;height:13px;border-radius:50%;
