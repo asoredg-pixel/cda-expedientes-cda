@@ -608,6 +608,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   text-align:center;font-weight:800;pointer-events:none;
   box-shadow:0 0 0 1.5px var(--sf)
 }
+.act-impreso-btn{position:relative}
+.btn.act-impreso-on{background:var(--gnl);color:var(--gn);border:1px solid #a8d4a8;font-weight:700}
 .gt-layout{display:flex;flex-direction:column;gap:2px;min-height:0}
 .gt-list-name{display:flex;align-items:center;gap:4px;padding:2px 0 10px;border-bottom:1px solid var(--bd);margin-bottom:4px}
 .gt-nav{border:0;background:transparent;color:var(--tx3);font-size:18px;line-height:1;padding:2px 6px;cursor:pointer;border-radius:4px}
