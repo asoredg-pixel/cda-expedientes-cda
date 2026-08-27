@@ -3295,13 +3295,18 @@ function syncActAgendaPanelLeftOffset(){
   const nav=document.getElementById('sst-nav');
   const dock=document.getElementById('act-agenda-dock');
   const navW=nav?(nav.offsetWidth||56):56;
-  if(dock&&dock.classList.contains('act-agenda-dock-left'))dock.style.left=navW+'px';
+  if(!dock)return;
+  if(dock.classList.contains('act-agenda-dock-left'))dock.style.left=navW+'px';
+  else if(dock.classList.contains('act-agenda-dock-right')&&dock.classList.contains('act-agenda-dock-with-cal'))dock.style.left=navW+'px';
 }
 function updateActAgendaCalToggleUi(show){
   show=!!(show!=null?show:window._actAgendaShowCal);
+  const dock=document.getElementById('act-agenda-dock');
+  const fromRight=!!(dock&&dock.classList.contains('act-agenda-dock-right'));
   const ico=document.getElementById('act-agenda-cal-toggle-ico');
   const btn=document.getElementById('act-agenda-cal-toggle');
-  if(ico)ico.textContent=show?'‹':'›';
+  // Izquierda: › expandir / ‹ contraer · Derecha (espejo): ‹ expandir / › contraer
+  if(ico)ico.textContent=fromRight?(show?'›':'‹'):(show?'‹':'›');
   if(btn){
     btn.title=show?'Contraer calendario':'Expandir calendario';
     btn.setAttribute('aria-label',btn.title);
@@ -3328,15 +3333,19 @@ function applyActAgendaDockSide(side,showCal,opts){
       dock.style.right='auto';
     }
     syncActAgendaPanelLeftOffset();
-    if(toggle)toggle.style.display='';
   }else{
     dock.classList.add('act-agenda-dock-right');
     dock.style.right='0';
-    dock.style.width='340px';
-    if(toggle)toggle.style.display='none';
+    if(showCal){
+      dock.classList.add('act-agenda-dock-with-cal');
+      syncActAgendaPanelLeftOffset();
+    }else{
+      dock.style.left='auto';
+    }
   }
+  if(toggle)toggle.style.display='';
   if(wasOn)dock.classList.add('on');
-  updateActAgendaCalToggleUi(!!showCal&&side==='left');
+  updateActAgendaCalToggleUi(!!showCal);
 }
 function syncActAgendaCalPane(show){
   const cal=document.getElementById('act-agenda-cal-panel');
@@ -3345,14 +3354,16 @@ function syncActAgendaCalPane(show){
   const on=!!show;
   if(btnCal)btnCal.style.display='none';
   if(cal)cal.hidden=!on;
-  if(dock&&dock.classList.contains('act-agenda-dock-left')){
+  if(dock&&(dock.classList.contains('act-agenda-dock-left')||dock.classList.contains('act-agenda-dock-right'))){
     dock.classList.toggle('act-agenda-dock-with-cal',on);
-    if(on){
-      dock.style.width='';
+    if(dock.classList.contains('act-agenda-dock-left')){
+      if(on){dock.style.width='';dock.style.right='0';}
+      else{dock.style.width='';dock.style.right='auto';}
+      syncActAgendaPanelLeftOffset();
+    }else if(dock.classList.contains('act-agenda-dock-right')){
       dock.style.right='0';
-    }else{
-      dock.style.width='';
-      dock.style.right='auto';
+      if(on){dock.style.width='';syncActAgendaPanelLeftOffset();}
+      else{dock.style.width='';dock.style.left='auto';}
     }
   }
   if(on){
@@ -3369,15 +3380,18 @@ function syncActAgendaCalPane(show){
 }
 function toggleActAgendaCalDock(){
   const dock=document.getElementById('act-agenda-dock');
-  if(!dock||!dock.classList.contains('on')||!dock.classList.contains('act-agenda-dock-left'))return;
+  if(!dock||!dock.classList.contains('on'))return;
+  const side=dock.classList.contains('act-agenda-dock-right')?'right'
+    :(dock.classList.contains('act-agenda-dock-left')?'left':null);
+  if(!side)return;
   const show=!window._actAgendaShowCal;
   window._actAgendaShowCal=show;
   try{localStorage.setItem('sstTasksCalOpen',show?'1':'0');}catch(e){}
   syncActAgendaCalPane(show);
-  applyActAgendaDockSide('left',show,{keepOn:true});
+  applyActAgendaDockSide(side,show,{keepOn:true});
 }
 function applyActAgendaPanelSide(side){
-  applyActAgendaDockSide(side,!!window._actAgendaShowCal&&side==='left');
+  applyActAgendaDockSide(side,!!window._actAgendaShowCal);
 }
 function openAgendaCalModal(){if(!puedeVerTabAgenda()){notif('Tasks está disponible en modo Responsables o como encargado del departamento','err');return;}const resp=getAgendaResponsableActivo();if(!resp){notif(esModoResponsable()?'Seleccione su nombre como responsable':'Seleccione encargado del departamento','err');return;}window._agendaRenderTarget='modal';if(!window._agendaMes)window._agendaMes=new Date();if(!window._agendaDiaSel)window._agendaDiaSel=hoy();if(!window._agendaVista||window._agendaVista==='dia')window._agendaVista='mes';const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.add('on');agendaCerrarDrawer();renderAgenda();}
 function cerrarAgendaCalModal(){const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.remove('on');window._agendaRenderTarget='page';agendaCerrarDrawer();}
@@ -4243,7 +4257,7 @@ function actAgendaAbrirPanelUi(){
   const tit=document.getElementById('act-agenda-tit');
   const sub=document.getElementById('act-agenda-sub');
   const side=window._actAgendaPanelSide||'right';
-  const showCal=!!window._actAgendaShowCal&&side==='left';
+  const showCal=!!window._actAgendaShowCal;
   if(tit)tit.textContent='Tasks';
   if(sub)sub.textContent='Mi día';
   if(body)body.innerHTML=renderMiDiaPanelHtml();
