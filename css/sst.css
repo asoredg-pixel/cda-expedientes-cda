@@ -476,29 +476,50 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .acuerdo-cuota-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px;padding:6px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)}
 .acuerdo-cuota-row.mora{border-color:var(--rd);background:var(--rdl)}
 .con-side-panel{width:min(580px,96vw)}
+/* Dock único: Tasks + calendario se animan juntos (una sola “imagen”) */
+.act-agenda-dock{
+  position:fixed;top:0;height:100%;z-index:15004;
+  display:flex;align-items:stretch;
+  visibility:hidden;pointer-events:none;
+  overflow:hidden;
+  transform:translateX(-102%);
+  transition:transform .3s cubic-bezier(.22,1,.36,1);
+  box-shadow:4px 0 24px rgba(0,0,0,.12);
+  background:var(--sf);
+}
+.act-agenda-dock.on{visibility:visible;pointer-events:auto;transform:translateX(0)}
+.act-agenda-dock.act-agenda-closing{pointer-events:none!important}
+.act-agenda-dock.act-agenda-dock-left{
+  left:56px;right:0;width:auto;
+  transform:translateX(-102%);
+}
+.act-agenda-dock.act-agenda-dock-left.on{transform:translateX(0)}
+.act-agenda-dock.act-agenda-closing.act-agenda-dock-left{transform:translateX(-102%)!important}
+.act-agenda-dock.act-agenda-dock-left.act-agenda-dock-tasks-only{
+  right:auto;width:340px;max-width:96vw;
+}
+.act-agenda-dock.act-agenda-dock-right{
+  left:auto;right:0;width:340px;max-width:96vw;
+  transform:translateX(102%);
+}
+.act-agenda-dock.act-agenda-dock-right.on{transform:translateX(0)}
+.act-agenda-dock.act-agenda-closing.act-agenda-dock-right{transform:translateX(102%)!important}
+.act-agenda-dock:not(.act-agenda-dock-left):not(.act-agenda-dock-right){
+  left:-9999px;transform:none;visibility:hidden;pointer-events:none;
+}
+/* Tasks: columna fija dentro del dock (sin animación propia) */
+#act-agenda-panel.act-agenda-panel-inner,
 #act-agenda-panel{
-  width:340px!important;max-width:min(340px,96vw)!important;min-width:280px;
-  padding:.75rem .85rem;border-radius:0!important;
-  box-shadow:2px 0 16px rgba(0,0,0,.1)!important;
-  right:auto!important;left:auto;overflow:auto;
-  transition:transform .28s cubic-bezier(.22,1,.36,1);
-}
-#act-agenda-panel:not(.act-agenda-left):not(.act-agenda-right){
-  left:-9999px!important;transform:translateX(-100%)!important;pointer-events:none!important;visibility:hidden;
-}
-#act-agenda-panel.act-agenda-left,#act-agenda-panel.act-agenda-right{visibility:visible}
-#act-agenda-panel.act-agenda-closing{pointer-events:none!important}
-#act-agenda-panel.act-agenda-left{
-  right:auto!important;left:56px;
+  position:relative!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;
+  width:340px!important;max-width:340px!important;min-width:280px;
+  height:100%!important;max-height:none!important;
+  flex:0 0 340px;padding:.75rem .85rem;border-radius:0!important;
+  transform:none!important;transition:none!important;
+  visibility:visible!important;pointer-events:auto!important;
+  overflow:auto;box-shadow:none!important;
   border-left:none!important;border-right:1px solid var(--bd)!important;
-  transform:translateX(-110%)!important;
-  box-shadow:2px 0 16px rgba(0,0,0,.1)!important;
+  background:var(--sf);
 }
-#act-agenda-panel.act-agenda-left.on{transform:translateX(0)!important}
-#act-agenda-panel.act-agenda-closing.act-agenda-left{transform:translateX(-110%)!important}
-#act-agenda-panel.act-agenda-right{left:auto!important;right:0!important;transform:translateX(110%)!important;box-shadow:-2px 0 16px rgba(0,0,0,.1)!important}
-#act-agenda-panel.act-agenda-right.on{transform:translateX(0)!important}
-#act-agenda-panel.act-agenda-closing.act-agenda-right{transform:translateX(110%)!important}
 #act-agenda-panel .con-side-panel-hdr .btn.bsm:not(.bpu){border:0;background:transparent;font-size:16px;color:var(--tx3);padding:4px 6px}
 #act-agenda-panel #btn-tasks-asignar-resp{background:linear-gradient(135deg,#5b21b6,#7c3aed)!important;color:#fff!important;font-size:11px!important;padding:4px 10px!important;border-radius:8px!important}
 #act-agenda-panel .con-side-panel-hdr{margin-bottom:.35rem;padding-bottom:.45rem;border-bottom:0}
@@ -506,22 +527,30 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 #act-agenda-panel #act-agenda-sub{font-size:16px;font-weight:500;color:var(--tx);margin-top:2px}
 #act-agenda-overlay.on{background:rgba(0,0,0,.12)}
 #act-agenda-body{padding:0;overflow:auto}
-/* Calendario: ventana hermana al lado de Tasks (ancho de Tasks intacto) */
+/* Calendario: ocupa todo el resto hasta el borde derecho */
 .act-agenda-cal-panel{
-  position:fixed;top:0;height:100%;width:min(520px,calc(100vw - 420px));
-  background:var(--sf);z-index:15004;padding:.75rem .9rem;overflow:auto;
-  border-left:1px solid rgba(0,0,0,.12);
-  border-right:1px solid var(--bd);
-  box-shadow:6px 0 20px rgba(0,0,0,.08);
-  transform:translateX(-110%);transition:transform .28s cubic-bezier(.22,1,.36,1);
-  visibility:hidden;pointer-events:none;
+  position:relative!important;top:auto;left:auto;right:auto;
+  flex:1 1 auto;min-width:0;width:auto!important;height:100%;
+  background:var(--sf);z-index:auto;padding:.75rem 1rem;overflow:auto;
+  border-left:none;border-right:none;
+  box-shadow:none;
+  transform:none!important;transition:none!important;
+  visibility:visible;pointer-events:auto;
 }
 .act-agenda-cal-panel[hidden]{display:none!important}
-.act-agenda-cal-panel.on{transform:translateX(0);visibility:visible;pointer-events:auto}
-.act-agenda-cal-panel.act-agenda-closing{transform:translateX(-110%)!important;pointer-events:none!important}
 .act-agenda-cal-pane-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+/* Evita capas sueltas (p.ej. botón Hoy) durante el slide del dock */
+.act-agenda-dock .btn.bp,
+.act-agenda-dock .btn{
+  filter:none!important;
+  transform:none!important;
+  will-change:auto!important;
+  backdrop-filter:none!important;
+}
 @media(max-width:900px){
-  .act-agenda-cal-panel{width:min(100vw,96vw);left:0!important;z-index:15005}
+  .act-agenda-dock.act-agenda-dock-left{left:0!important;right:0;flex-direction:column}
+  #act-agenda-panel{flex:0 0 auto!important;width:100%!important;max-width:100%!important;height:42vh!important}
+  .act-agenda-cal-panel{flex:1 1 auto;min-height:0}
 }
 .act-agenda-btn{position:relative}
 .act-agenda-check{
@@ -757,39 +786,37 @@ html.ui-editor-modal-mode #pqrs-side-overlay{z-index:19990;background:rgba(0,0,0
 html.ui-editor-modal-mode #con-side-panel{z-index:19991}
 html.ui-editor-modal-mode #pqrs-side-panel{z-index:19992!important}
 html.ui-editor-modal-mode #cons-chart-panel{z-index:19991}
-/* Mi día / Tasks: panel lateral (izq desde menú, der desde actividades) */
+/* Mi día / Tasks: dock lateral (izq desde menú, der desde actividades) */
 html.ui-editor-modal-mode #act-agenda-overlay{z-index:19990;background:rgba(0,0,0,.18)}
-html.ui-editor-modal-mode #act-agenda-panel.act-agenda-left{
-  top:0!important;left:56px!important;right:auto!important;bottom:auto!important;
-  width:min(340px,96vw)!important;max-width:96vw!important;
-  height:100%!important;max-height:none!important;
-  transform:translateX(-100%)!important;
-  border-radius:0!important;border-right:1px solid var(--bd)!important;border-left:none!important;
-  box-shadow:2px 0 16px rgba(0,0,0,.1)!important;
-  opacity:1!important;pointer-events:none;
-  transition:transform .22s ease!important;
+html.ui-editor-modal-mode #act-agenda-dock{
+  z-index:19993!important;
 }
-html.ui-editor-modal-mode #act-agenda-panel.act-agenda-left.on{
+html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-left{
+  top:0!important;left:56px!important;right:0!important;bottom:auto!important;
+  height:100%!important;max-height:none!important;
+  transform:translateX(-102%)!important;
+  border-radius:0!important;
+  opacity:1!important;pointer-events:none;
+  transition:transform .28s cubic-bezier(.22,1,.36,1)!important;
+}
+html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-left.on{
   transform:translateX(0)!important;
   opacity:1!important;pointer-events:auto!important;
 }
-html.ui-editor-modal-mode #act-agenda-panel.act-agenda-right,
-html.ui-editor-modal-mode #act-agenda-panel:not(.act-agenda-left){
+html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-right{
   top:0!important;left:auto!important;right:0!important;bottom:auto!important;
-  width:min(340px,96vw)!important;max-width:96vw!important;
+  width:340px!important;max-width:96vw!important;
   height:100%!important;max-height:none!important;
-  transform:translateX(100%)!important;
-  border-radius:0!important;border-left:1px solid var(--bd)!important;
-  box-shadow:-2px 0 16px rgba(0,0,0,.1)!important;
+  transform:translateX(102%)!important;
+  border-radius:0!important;
   opacity:1!important;pointer-events:none;
-  transition:transform .22s ease!important;
+  transition:transform .28s cubic-bezier(.22,1,.36,1)!important;
 }
-html.ui-editor-modal-mode #act-agenda-panel.act-agenda-right.on,
-html.ui-editor-modal-mode #act-agenda-panel:not(.act-agenda-left).on{
+html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-right.on{
   transform:translateX(0)!important;
   opacity:1!important;pointer-events:auto!important;
 }
-html.ui-editor-modal-mode #act-agenda-panel{z-index:19993}
+html.ui-editor-modal-mode #act-agenda-panel{z-index:auto}
 html.ui-editor-modal-mode .act-sug-portal{z-index:20050!important}
 html.ui-editor-modal-mode .task-modal-overlay,
 html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
@@ -2080,8 +2107,7 @@ tr:last-child td{border-bottom:none!important}
 
 /* ─── SIDE PANELS & MODALS ─── */
 .con-side-panel{border-radius:20px 0 0 20px!important;box-shadow:-8px 0 40px rgba(0,0,0,.15)!important}
-#act-agenda-panel.con-side-panel{border-radius:0!important;box-shadow:2px 0 16px rgba(0,0,0,.1)!important}
-#act-agenda-panel.act-agenda-right.con-side-panel{box-shadow:-2px 0 16px rgba(0,0,0,.1)!important}
+#act-agenda-panel.con-side-panel{border-radius:0!important;box-shadow:none!important}
 #act-agenda-panel .con-side-panel-hdr{border-radius:0!important}
 .con-side-panel-hdr{border-radius:20px 0 0 0!important}
 

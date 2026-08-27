@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260827e">
+<link rel="stylesheet" href="css/sst.css?v=20260827f">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260827e"></script>
+<script src="js/core.js?v=20260827f"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260826f"></script>
@@ -497,7 +497,8 @@
   <div id="con-side-body"></div>
 </div>
 <div id="act-agenda-overlay" class="con-side-overlay" style="z-index:15003" onclick="cerrarActAgendaPanel()"></div>
-<div id="act-agenda-panel" class="con-side-panel" style="z-index:15004" onclick="event.stopPropagation()">
+<div id="act-agenda-dock" class="act-agenda-dock" onclick="event.stopPropagation()" aria-hidden="true">
+<div id="act-agenda-panel" class="con-side-panel act-agenda-panel-inner">
   <div class="con-side-panel-hdr">
     <div><div class="slbl" style="margin:0" id="act-agenda-tit">Tasks</div><div id="act-agenda-sub" style="font-size:16px;color:var(--tx);margin-top:2px;font-weight:500">Mi día</div></div>
     <div class="fx" style="gap:6px;align-items:center">
@@ -509,7 +510,7 @@
   </div>
   <div id="act-agenda-body"></div>
 </div>
-<div id="act-agenda-cal-panel" class="act-agenda-cal-panel" style="z-index:15004" onclick="event.stopPropagation()" hidden aria-label="Calendario">
+<div id="act-agenda-cal-panel" class="act-agenda-cal-panel" hidden aria-label="Calendario">
   <div class="act-agenda-cal-pane-hdr">
     <div>
       <strong id="act-agenda-dock-titulo" style="font-size:13px">Calendario</strong>
@@ -539,6 +540,7 @@
     </div>
     <div id="act-agenda-dock-drawer-body"></div>
   </div>
+</div>
 </div>
 
 <div id="agenda-cal-overlay" class="task-modal-overlay agenda-cal-overlay" style="z-index:15010" onclick="if(event.target===this)cerrarAgendaCalModal()">
