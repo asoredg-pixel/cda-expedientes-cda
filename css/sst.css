@@ -101,7 +101,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-
 .fld{display:flex;flex-direction:column;gap:3px}
 .fld label{font-size:12px;font-weight:500;color:var(--tx2)}
 .fld input,.fld select,.fld textarea{padding:7px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;background:var(--sf);color:var(--tx);transition:border-color .15s,box-shadow .15s;width:100%}
+.fld input[type=checkbox],.fld input[type=radio]{width:auto;min-width:16px;padding:0;border:0;box-shadow:none;accent-color:var(--bl)}
 .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+.fld input[type=checkbox]:focus,.fld input[type=radio]:focus{box-shadow:none}
 .fld textarea{resize:vertical;min-height:58px}
 .req-star{color:var(--rd);font-size:11px;margin-left:2px}
 a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
@@ -678,13 +680,22 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   display:flex;align-items:flex-start;gap:10px;
   padding:8px 10px;border-bottom:1px solid var(--bd);
   font-size:12px;cursor:pointer;user-select:none;margin:0;
+  width:100%;box-sizing:border-box;
 }
 .act-libre-resp-row:last-child{border-bottom:none}
 .act-libre-resp-row:hover{background:var(--sf2)}
-.act-libre-resp-nom{flex:1;min-width:0;text-align:left;font-weight:500;color:var(--tx);line-height:1.35;word-break:break-word}
-.act-libre-resp-cb{
-  width:16px;height:16px;min-width:16px;margin:2px 0 0;flex-shrink:0;
-  accent-color:var(--bl);cursor:pointer;
+.act-libre-resp-nom{
+  flex:1 1 auto;min-width:0;text-align:left;font-weight:500;
+  color:var(--tx)!important;line-height:1.35;word-break:break-word;
+  display:block;font-size:12px;
+}
+.act-libre-resp-cb,
+.fld .act-libre-resp-cb,
+.fld .pqrs-asig-resp-cb,
+.fld .tk-coej-cb{
+  width:16px!important;height:16px!important;min-width:16px!important;max-width:16px!important;
+  margin:2px 0 0!important;flex:0 0 16px;padding:0!important;border:0!important;
+  accent-color:var(--bl);cursor:pointer;box-shadow:none!important;
 }
 .act-libre-resps-box{max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)}
 .act-libre-plazo-grid{display:grid;grid-template-columns:minmax(100px,1fr) minmax(140px,1.4fr);gap:10px;align-items:end}
