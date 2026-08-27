@@ -462,21 +462,37 @@ function tramitePasarAPorNotificar(expId,taskId){
   const wf=getTaskFirmaWf(t);
   if(!(wf.firma_fisica&&wf.firma_fisica.en)){notif('Marque primero como firmado','err');return;}
   const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-  let vence=inicio;
-  if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
-  else{
-    const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
+  const canal=String(wf.canal||'correo').trim();
+  const notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  const esCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  const sinPlazo=esCorreo&&(
+    !notifPor
+    ||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))
+    ||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor))
+  );
+  let vence='';
+  if(!sinPlazo){
+    if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
+    else if(typeof addDiasHabilesCO==='function')vence=addDiasHabilesCO(inicio,5);
+    else{
+      const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
+    }
   }
-  setTaskFirmaWf(expId,taskId,{
+  const patch={
     fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion'),
     notif_inicio:inicio,
     notif_vence:vence,
-    notif_plazo_dias:5
-  });
+    notif_plazo_dias:sinPlazo?0:5,
+    notif_sin_plazo:!!sinPlazo
+  };
+  // Correo VITAL/encargado: no autoasignar
+  if(notifPor&&!sinPlazo)patch.notificar_por=notifPor;
+  else if(notifPor&&sinPlazo)patch.notificar_por_propuesto=notifPor;
+  setTaskFirmaWf(expId,taskId,patch);
   if(typeof mutateTask==='function'){
     mutateTask(expId,taskId,function(tk){tramiteSincronizarParticipacionPostAprobacionFirma(tk);});
   }
-  notif('📬 Quedó en «Por notificar»','ok');
+  notif(sinPlazo?'📬 Por notificar (correo · sin plazo de 5 días)':'📬 Quedó en «Por notificar»','ok');
   closeTaskModal();
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
@@ -533,7 +549,8 @@ function openTramiteNotificarModal(expId,taskId){
   if(tit)tit.textContent='Por notificar · '+(t.sinExpediente?(t.codigo||refId):((e&&e._exp)||expId));
   if(modal){modal.classList.add('task-modal-wide');modal.classList.remove('enviar-modal-only');}
   const notifAsignado=String(wf.notificar_por||'').trim();
-  const plazo=wf.notif_vence?('<span style="color:'+(wf.notif_vence<(typeof hoy==='function'?hoy():'')?'var(--rd)':'var(--bl)')+'">Plazo: <strong>'+(typeof fmtF==='function'?fmtF(wf.notif_vence):wf.notif_vence)+'</strong> (5 días hábiles).</span>'):'';
+  const sinPlazo=!!wf.notif_sin_plazo||(puedeCorreo&&(!wf.notif_vence||!notifAsignado));
+  const plazo=(!sinPlazo&&wf.notif_vence)?('<span style="color:'+(wf.notif_vence<(typeof hoy==='function'?hoy():'')?'var(--rd)':'var(--bl)')+'">Plazo: <strong>'+(typeof fmtF==='function'?fmtF(wf.notif_vence):wf.notif_vence)+'</strong> (5 días hábiles).</span>'):(sinPlazo&&puedeCorreo?'<span style="color:var(--tx2)">Correo VITAL/encargado: sin plazo de 5 días ni autoasignación.</span>':'');
   const dest=correos.join(', ');
   const asuntoDef=t.sinExpediente
     ?('Documento aprobado — '+(t.actividad||t.desc||t.codigo||'actividad'))
@@ -1180,20 +1197,25 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
       try{await driveRenombrarSoporteActivoExp(expId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-    let vence=inicio;
-    if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
+    const wfPrev=getTaskFirmaWf(t);
+    const canal=String(wfPrev.canal||'correo').trim();
+    const esCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+    const sinPlazo=esCorreo; // Director firma → correo VITAL/encargado: sin plazo 5 días
+    let vence='';
+    if(!sinPlazo&&typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
     setTaskFirmaWf(expId,taskId,{
       fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion'),
       firma_director:{por:taskComentarioAutor(),en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
       firma_fisica:null,
       notif_inicio:inicio,
       notif_vence:vence,
-      notif_plazo_dias:5
+      notif_plazo_dias:sinPlazo?0:5,
+      notif_sin_plazo:!!sinPlazo
     });
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteDirectorSignedFile=null;
     closeTaskModal();
-    notif('📬 Documento firmado — quedó en «Por notificar»','ok');
+    notif(sinPlazo?'📬 Documento firmado — Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»','ok');
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
   }catch(err){
@@ -1409,10 +1431,14 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
       try{await driveRenombrarSoporteActivoExp(refId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-    let vence=inicio;
-    if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
-    else{
-      const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
+    const esCorreo=true; // atajo desde revisión usa canal correo
+    const sinPlazo=esCorreo&&(!notifPor||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor)));
+    let vence='';
+    if(!sinPlazo){
+      if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
+      else{
+        const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
+      }
     }
     const faseNotif=typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion';
     const ok=mutateTask(refId,taskId,function(tk){
@@ -1420,7 +1446,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
       const prev=getTaskFirmaWf(tk);
       tk.firmaWf=Object.assign({},prev,{
         fase:faseNotif,
-        notificar_por:notifPor||prev.notificar_por||'',
+        notificar_por:sinPlazo?'':(notifPor||prev.notificar_por||''),
         notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
         canal:'correo',
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
@@ -1433,7 +1459,8 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
         },
         notif_inicio:inicio,
         notif_vence:vence,
-        notif_plazo_dias:5,
+        notif_plazo_dias:sinPlazo?0:5,
+        notif_sin_plazo:!!sinPlazo,
         enviado_firma_en:prev.enviado_firma_en||new Date().toISOString(),
         enviado_firma_por:prev.enviado_firma_por||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')
       });
@@ -1447,12 +1474,14 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif){
           ?('Atajo: documento firmado cargado → Por notificar'+(pdfLink?' · '+pdfLink:''))
           :'Atajo: ya firmado (sin PDF) → Por notificar'
       });
+      if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+        tramiteSincronizarParticipacionPostAprobacionFirma(tk);
     });
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteAtajoFirmadoFile=null;
     if(!ok){notif('No se pudo actualizar la actividad','err');return;}
-    notif('📬 Documento firmado — quedó en «Por notificar»'+(notifPor?' · Notificará: '+notifPor:''),'ok');
-    try{if(typeof setActFiltro==='function')setActFiltro('pornotif');}catch(eF){}
+    notif((sinPlazo?'📬 Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),'ok');
+    try{if(typeof setActFiltro==='function')setActFiltro(sinPlazo?'porfirma':'pornotif');}catch(eF){}
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
     if(abrirNotif){

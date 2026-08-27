@@ -549,15 +549,49 @@ function pqrsEnFaseNotificacion(e){
 function pqrsAsegurarPlazoNotificacion(e,desdeFecha){
   if(!e)return '';
   const wf=getPqrsWorkflow(e);
+  if(wf.notif_sin_plazo)return '';
   if(wf.notif_vence)return wf.notif_vence;
+  // Fase C: correo por VITAL/encargado — sin reloj de 5 días ni autoasignación
+  if(typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e)){
+    setPqrsWorkflow(e,{notif_inicio:String(desdeFecha||hoy()).slice(0,10),notif_vence:'',notif_plazo_dias:0,notif_sin_plazo:true});
+    return '';
+  }
   const base=String(desdeFecha||hoy()).slice(0,10);
   const vence=typeof addDiasHabilesCO==='function'?addDiasHabilesCO(base,5):base;
-  setPqrsWorkflow(e,{notif_inicio:base,notif_vence:vence,notif_plazo_dias:5});
+  setPqrsWorkflow(e,{notif_inicio:base,notif_vence:vence,notif_plazo_dias:5,notif_sin_plazo:false});
   return vence;
 }
+/** Canal correo + notificador VITAL/encargado (o sin designar): sin plazo 5 días. */
+function pqrsNotifEsCorreoSinPlazo(e,canalOpt,notifPorOpt){
+  if(!e)return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  if(wf.notif_sin_plazo)return true;
+  const canal=String(canalOpt!=null?canalOpt:(wf.canal||'')).trim();
+  const esCorreo=(typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(canal))
+    ||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  if(!esCorreo)return false;
+  const notifPor=String(notifPorOpt!=null?notifPorOpt:(wf.notificar_por||wf.notificar_por_propuesto||'')).trim();
+  if(!notifPor)return true; // VITAL/encargado notifican sin autoasignarse
+  if(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor))return true;
+  const ofi=String(e._pqrs_oficina||'guaviare').trim()||'guaviare';
+  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(ofi==='secretaria'?'guaviare':ofi)||'').trim():'';
+  if(enc&&typeof agendaNorm==='function'&&agendaNorm(enc)===agendaNorm(notifPor))return true;
+  // Cargo VITAL en el nombre / etiqueta
+  if(/^vital$/i.test(notifPor))return true;
+  return false;
+}
+function pqrsNombreEsVital(nombre){
+  const n=String(nombre||'').trim();
+  if(!n)return false;
+  if(/^vital$/i.test(n))return true;
+  const list=typeof pqrsNombresVital==='function'?pqrsNombresVital():[];
+  return (list||[]).some(function(v){return typeof agendaNorm==='function'?agendaNorm(v)===agendaNorm(n):v===n;});
+}
+window.pqrsNotifEsCorreoSinPlazo=pqrsNotifEsCorreoSinPlazo;
 function pqrsNotifVence(e){
   if(!e||!pqrsEnFaseNotificacion(e))return'';
   const wf=getPqrsWorkflow(e);
+  if(wf.notif_sin_plazo)return'';
   if(wf.notif_vence)return String(wf.notif_vence).slice(0,10);
   const base=String((wf.firma_director&&wf.firma_director.en)||wf.notif_inicio||hoy()).slice(0,10);
   return typeof addDiasHabilesCO==='function'?addDiasHabilesCO(base,5):String(base);
@@ -8576,9 +8610,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     const esPqrsEntregaAct=!!(eCtx&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eCtx));
     if(parsedLinks.length||hasLocalFile||hasNewInstitutional){
       t.soportes.forEach(s=>{s.activo=false;});
-      // En trámites normales se reemplaza el soporte institucional; en PQRSD se conservan versiones (por corregir)
-      if(hasNewInstitutional&&!esPqrsEntregaAct){
-        t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId);
+      // Reemplazo: trámites siempre; PQRSD solo en reentrega (antes de revisión) para no duplicar
+      if(hasNewInstitutional&&(!esPqrsEntregaAct||esNuevaEntrega)){
+        const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
+        if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
+        drop.forEach(function(s){
+          const fid=String(s.driveFileId||s.fileId||'').trim();
+          if(fid)window._soportesDriveABorrar.push(fid);
+        });
+        t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId&&!s.fileId);
       }
     }
     let linkNum=0,fileNum=0;
@@ -8679,6 +8719,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     syncTaskAggregateState(t);
   });
   if(ok){
+    const toDel=(window._soportesDriveABorrar||[]).slice();
+    window._soportesDriveABorrar=[];
+    if(toDel.length&&typeof driveDeleteInstitutional==='function'){
+      (async function(){
+        for(let i=0;i<toDel.length;i++){
+          try{await driveDeleteInstitutional(toDel[i]);}catch(err){console.warn('borrar soporte previo:',err);}
+        }
+      })();
+    }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
     const fAct=document.getElementById('f-act-est');
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&fAct&&['pend','prior','porcorr'].includes(fAct.value))setActFiltro('porver');
@@ -14183,6 +14232,26 @@ function renderActRowToolbarHtml(t,expAct){
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
   const sol=getTaskSolicitudPendiente(t);
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
+  const esRespAsignado=esModoResponsable()&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo);
+  const miEst=esRespAsignado
+    ?(taskEsMultiAsignada(t)&&t.entregaModo==='individual'?estadoTaskForAsignado(t,responsableActivo):est)
+    :est;
+  const enPorRevisarResp=esRespAsignado&&(
+    miEst==='Por verificar'
+    ||est==='Por verificar'
+    ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t,responsableActivo))
+  );
+  // Responsable en «Por revisar»: solo 🔍 ver entrega, 📤 reentrega (si aún no revisaron), chat/notas
+  if(enPorRevisarResp){
+    let actsR='<span class="sst-act-toolbar">';
+    actsR+='<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
+    actsR+=taskChatBtnHtml(t.exp,t.id,t);
+    actsR+='</span>';
+    if(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t,responsableActivo)){
+      actsR+='<button type="button" class="btn bsm bic act-ico" title="Nueva entrega: reemplaza documentos de la entrega anterior (el encargado aún no ha revisado)" onclick="event.stopPropagation();respMarcarPorVerificar(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">📤</button>';
+    }
+    return actsR;
+  }
   let acts='<span class="sst-act-toolbar">';
   // ✏️ encargados (incl. PQRSD); nunca responsables
   if(puedeGestionarActividadesDepto()){
@@ -14197,7 +14266,7 @@ function renderActRowToolbarHtml(t,expAct){
     ||est==='Por verificar';
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&pendienteRev
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
-  if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
+  if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
     acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
   }
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
@@ -14787,10 +14856,12 @@ function esActividadPorEjecutar(t){
   // Imprimir / firmar / revisión final: tarjetas propias (VITAL / depto)
   if(esPqrs&&(fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION||fase===PQRS_WF.POR_FIRMAR||fase===PQRS_WF.REVISION_FINAL))
     return false;
-  // Trámite en firma: no en «Por ejecutar», salvo «por notificar» (plazo 5 días hábiles)
+  // Trámite en firma: no en «Por ejecutar», salvo «por notificar» con plazo 5 días (asignado)
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+      const wfN=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+      if(wfN.notif_sin_plazo||!wfN.notif_vence)return false; // Fase C: correo VITAL/encargado sin deuda de 5 días
       if(deptView||isVital)return true;
       if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
       if(typeof esAdministrador==='function'&&esAdministrador())return true;
@@ -14798,8 +14869,11 @@ function esActividadPorEjecutar(t){
     }
     return false;
   }
-  // Notificar PQRSD: actividad normal (5 días); también en «Por ejecutar» según plazo
+  // Notificar PQRSD: solo con plazo de 5 días (asignado); correo VITAL/encargado no entra a Por ejecutar
   if(esPqrs&&(fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)){
+    if(typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(eExp))return false;
+    const wfP=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(eExp):{};
+    if(wfP.notif_sin_plazo||!wfP.notif_vence)return false;
     if(deptView||isVital)return true;
     if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
     if(typeof esAdministrador==='function'&&esAdministrador())return true;
@@ -14915,6 +14989,20 @@ function getTareasNotifVisiblesAct(){
   let list=mergeActividadLists(pqrs,tram);
   if(deptView&&respFilter)list=list.filter(t=>actividadNotifEsDeResp(t,respFilter));
   return list;
+}
+/** Solo notificaciones con plazo 5 días (asignado). Correo VITAL/encargado sin plazo no es deuda de Por ejecutar. */
+function getTareasNotifConPlazoDeuda(){
+  return (getTareasNotifVisiblesAct()||[]).filter(function(t){
+    if(!t)return false;
+    const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){
+      if(typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e))return false;
+      const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+      return!!(wf.notif_vence&&!wf.notif_sin_plazo);
+    }
+    const fw=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+    return!!(fw.notif_vence&&!fw.notif_sin_plazo);
+  });
 }
 function setActFiltro(v){
   if(v==='parafirma'||v==='porimprimir'||v==='porfirmar'||v==='firmados')v='porfirma';
@@ -15452,6 +15540,30 @@ function getTareasPqrsPorFaseWorkflow(matchFn){
   });
   return out;
 }
+function actividadCuentaComoPorRevisar(t){
+  if(!t||t.eliminada)return false;
+  const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):t;
+  if(!live||live.eliminada)return false;
+  const src=live;
+  if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
+    const ePv=getExpById(src.exp||src.codigo||t.exp||t.codigo);
+    if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
+      const fPv=pqrsWorkflowFase(ePv);
+      if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
+    }
+  }
+  if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src))return true;
+  if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
+  if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
+  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
+  if(typeof getTaskSolicitudPendiente==='function'&&getTaskSolicitudPendiente(src))return true;
+  if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(src))return true;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+    &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(src,responsableActivo)
+    &&typeof estadoTaskForAsignado==='function'&&estadoTaskForAsignado(src,responsableActivo)==='Por verificar')
+    return true;
+  return estadoTask(src)==='Por verificar';
+}
 function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='porfirma'){
     return mergeActividadLists(
@@ -15495,30 +15607,11 @@ function filtrarActividadesPorEstado(list,filtro){
   }
   if(filtro==='pend'){
     let out=(list||[]).filter(t=>esActividadPorEjecutar(t));
-    // Por notificar también forma parte de la deuda de «Por ejecutar» (plazo 5 días)
-    out=mergeActividadLists(out,getTareasNotifVisiblesAct());
+    // Por notificar con plazo 5 días (asignado) también es deuda de «Por ejecutar»
+    out=mergeActividadLists(out,typeof getTareasNotifConPlazoDeuda==='function'?getTareasNotifConPlazoDeuda():[]);
     return out;
   }
-  if(filtro==='porver')return list.filter(t=>{
-    if(!t||t.eliminada)return false;
-    const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):t;
-    if(!live||live.eliminada)return false;
-    const src=live||t;
-    // Devolución del Director / entrega NCA: fase PENDIENTE_REVISION o REVISION_FINAL cuenta como Por revisar
-    if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
-      const ePv=getExpById(src.exp||src.codigo||t.exp||t.codigo);
-      if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
-        const fPv=pqrsWorkflowFase(ePv);
-        if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
-      }
-    }
-    // Trámite: notificación reportada pendiente de aprobación del encargado
-    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src))return true;
-    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
-    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
-    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
-    return getTaskSolicitudPendiente(src)||estadoTask(src)==='Por verificar';
-  });
+  if(filtro==='porver')return (list||[]).filter(actividadCuentaComoPorRevisar);
   if(filtro==='venc'){
     let out=(list||[]).filter(t=>taskActividadVencida(t));
     if(esModoResponsable()||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())){
@@ -15623,33 +15716,17 @@ function renderActividades(){
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
-  const allTodos=deptView?getTareasDeptActividades(null):allBase;
   const all=allBase;
   const isVital=typeof esCargoVital==='function'&&esCargoVital();
   const isResp=!deptView&&esModoResponsable();
   const notifAll=getTareasNotifVisiblesAct();
-  const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),notifAll);
+  const notifDeuda=typeof getTareasNotifConPlazoDeuda==='function'?getTareasNotifConPlazoDeuda():notifAll;
+  const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),notifDeuda);
   const porEjec=deudaBase.length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
-  const porrevisar=allTodos.filter(t=>{
-    if(!t||t.eliminada)return false;
-    const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):t;
-    if(!live||live.eliminada)return false;
-    const src=live;
-    if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
-      const ePv=getExpById(src.exp||src.codigo);
-      if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
-        const fPv=pqrsWorkflowFase(ePv);
-        if(fPv===PQRS_WF.PENDIENTE_REVISION||fPv===PQRS_WF.REVISION_FINAL)return true;
-      }
-    }
-    if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src))return true;
-    if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
-    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
-    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
-    return getTaskSolicitudPendiente(src)||estadoTask(src)==='Por verificar';
-  }).length;
+  const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(null):getTareasResponsableActivo(),'act');
+  const porrevisar=filtrarActividadesPorEstado(porverBase,'porver').length;
   const done=all.filter(t=>{
     if(isResp&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo))return estadoTaskForAsignado(t,responsableActivo)==='Atendida';
     return estadoTask(t)==='Atendida';
@@ -15664,7 +15741,7 @@ function renderActividades(){
   if(sub){
     if(filtroAct==='pend')sub.textContent='';
     else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
-    else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
+    else if(filtroAct==='pornotif')sub.textContent='Por notificar: con plazo de 5 días hábiles si hay notificador asignado. Correo por VITAL/encargado: sin autoasignación ni plazo de 5 días.';
     else if(filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados')
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
@@ -18150,7 +18227,8 @@ async function pqrsPasarFirmadoAPorNotificar(expId,opts){
   let notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||wf.notificar_por||wf.notificar_por_propuesto||'').trim();
   notifPor=pqrsAplicarReglaNotificadorCanal(e,wf.canal||'',notifPor);
   const notifBase=hoy();
-  const notifVence=typeof addDiasHabilesCO==='function'?addDiasHabilesCO(notifBase,5):notifBase;
+  const sinPlazo=typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e,wf.canal||'',notifPor);
+  const notifVence=sinPlazo?'':(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(notifBase,5):notifBase);
   const por=responsableActivo||rolSesion||'';
   try{await _pqrsRenombrarDocsDriveWf(wf,'por_notificar');}catch(err){console.warn('pqrsPasarFirmadoAPorNotificar rename:',err);}
   const patch={
@@ -18160,22 +18238,27 @@ async function pqrsPasarFirmadoAPorNotificar(expId,opts){
     firma_fisica:null,
     notif_inicio:notifBase,
     notif_vence:notifVence,
-    notif_plazo_dias:5
+    notif_plazo_dias:sinPlazo?0:5,
+    notif_sin_plazo:!!sinPlazo
   };
-  if(notifPor){
+  // Correo VITAL/encargado: no autoasignar notificador (pueden notificar en el acto)
+  if(notifPor&&!sinPlazo){
     patch.notificar_por=notifPor;
     patch.notificar_por_propuesto=notifPor;
+  }else if(notifPor&&sinPlazo){
+    patch.notificar_por_propuesto=notifPor;
+    // no forzar notificar_por
   }
   setPqrsWorkflow(e,patch);
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'asignado_por_notificar',fecha:hoy(),nota:'Asignado a «Por notificar» tras firma física'+(firm.sin_pdf?' (sin PDF firmado)':'')+' (vence '+fmtF(notifVence)+')'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:por});
+  e._pqrs_historial.push({tipo:'asignado_por_notificar',fecha:hoy(),nota:(sinPlazo?'Por notificar (correo VITAL/encargado · sin plazo 5 días)':'Asignado a «Por notificar» tras firma física')+(firm.sin_pdf?' (sin PDF firmado)':'')+(notifVence?' (vence '+fmtF(notifVence)+')':'')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:por});
   persistExpedienteGranular(e);
   if(!opts.skipClose){
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    notif('📬 Pasó a «Por notificar» · vence '+fmtF(notifVence),'ok');
+    notif(sinPlazo?'📬 Por notificar (correo · sin plazo de 5 días)':'📬 Pasó a «Por notificar» · vence '+fmtF(notifVence),'ok');
   }
   return true;
 }
