@@ -6455,7 +6455,7 @@ function openSolicitarTrasladoModal(expId,taskId){
     const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,(t&&t.depto)||'guaviare'):n;
     return '<option value="'+escAttr(n)+'">'+escAttr(lbl)+'</option>';
   }).join('');
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">NCA DEGUV recibirá una notificación en la campanita 🔔 para revisar el traslado.</div>'+
+  body.innerHTML=
     '<div class="fld" style="margin-bottom:8px"><label>Trasladar a (sugerido)</label><select id="sol-traslado-dest" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione responsable —</option>'+opts+'</select></div>'+
     '<div class="fld" style="margin-bottom:12px"><label>Motivo (opcional)</label><textarea id="sol-traslado-nota" placeholder="Indique el motivo del traslado…" style="width:100%;min-height:64px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitSolicitarTraslado(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">Enviar solicitud</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -6484,7 +6484,7 @@ function openSolicitarEliminacionModal(expId,taskId){
   if(!ov||!body)return;
   if(tit)tit.textContent='Solicitar eliminación · '+(t.desc||t.actividad||ref);
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">NCA DEGUV recibirá una notificación en la campanita 🔔 para revisar la solicitud. Solo Secretaría puede eliminar PQRSD.</div>'+
+  body.innerHTML=
     '<div class="fld" style="margin-bottom:12px"><label>Motivo</label><textarea id="sol-elim-nota" placeholder="Indique por qué solicita eliminar esta actividad…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bd2" onclick="submitSolicitarEliminacion(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">Enviar solicitud</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
@@ -8829,6 +8829,18 @@ function taskChatBtnHtml(expId,taskId,t){
   const ref=escAttr(expId),tid=escAttr(taskId);
   return '<button type="button" class="btn bsm bic act-ico" title="Chat y notas internas'+(nc?' · '+nc+' msg':'')+(hasNota?' · notas':'')+'" onclick="event.stopPropagation();openTaskChatUnificado(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(nc>0||hasNota?'<span class="cmt-dot">'+(nc||'·')+'</span>':'')+'</button>';
 }
+/** Menú ⋯: solicitar traslado / eliminación (fuera del chat). */
+function taskSolicitudMenuHtml(expId,taskId,t){
+  t=t||getTaskAny(expId,taskId);
+  if(!t||!esModoResponsable()||!responsableActivo||!taskUsuarioEsAsignado(t,responsableActivo))return'';
+  if(getTaskSolicitudPendiente(t)||estadoTask(t)==='Atendida')return'';
+  const ref=escAttr(t.sinExpediente?(t.codigo||expId):expId);
+  const tid=escAttr(taskId);
+  return sstActPopoverHtml('⋯','Más acciones',[
+    {label:'↔ Solicitar traslado',onclick:"openSolicitarTrasladoModal('"+ref+"','"+tid+"')"},
+    {label:'🗑 Solicitar eliminación',onclick:"openSolicitarEliminacionModal('"+ref+"','"+tid+"')",danger:true}
+  ]);
+}
 /** Notas internas privadas por responsable (solo en este equipo; no se comparten en chat ni con otros). */
 function notasInternasAutor(){
   if(esModoResponsable()&&responsableActivo)return String(responsableActivo).trim();
@@ -9024,21 +9036,38 @@ function saveNotasInternasList(expId,taskId,notas,meta){
   }
   return saveNotasInternasStore(store);
 }
+function taskKeepNoteCardHtml(n,expId,taskId){
+  return '<div class="task-keep-note" data-nota-id="'+escAttr(n.id)+'">'+
+    '<button type="button" class="task-keep-del" title="Eliminar nota" onclick="eliminarNotaInternaItem(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(n.id)+'\')">✕</button>'+
+    '<textarea class="task-keep-ta nota-interna-item" data-nota-id="'+escAttr(n.id)+'" placeholder="Nota…" rows="1">'+(n.texto?escTextarea(n.texto):'')+'</textarea></div>';
+}
+function taskKeepComposeHtml(expId,taskId){
+  return '<div class="task-keep-compose" role="button" tabindex="0" title="Añadir nota" onclick="añadirNotaInternaItem(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+
+    '<span class="task-keep-compose-icon">+</span><span class="task-keep-compose-ph">Crear una nota…</span></div>';
+}
+function taskKeepTaGrow(ta){
+  if(!ta)return;
+  ta.style.height='auto';
+  ta.style.height=Math.max(20,ta.scrollHeight)+'px';
+}
+function taskKeepInitTextareas(root){
+  (root||document).querySelectorAll('.task-keep-ta').forEach(function(ta){
+    taskKeepTaGrow(ta);
+    if(ta._keepGrow)return;
+    ta._keepGrow=true;
+    ta.addEventListener('input',function(){taskKeepTaGrow(ta);});
+  });
+}
 function renderTaskNotasInternasPaneHtml(expId,taskId,t){
   const autor=notasInternasAutor();
-  if(!autor)return'<div class="task-chat-uni-pane" data-pane="notas"><h4>📝 Notas internas</h4><div style="font-size:12px;color:var(--tx3)">Seleccione su identidad para usar notas.</div></div>';
+  if(!autor)return'<div class="task-chat-uni-pane task-keep-pane" data-pane="notas"><h4>📝 Notas internas</h4><div style="font-size:12px;color:var(--tx3)">Seleccione su identidad para usar notas.</div></div>';
   const list=getNotasInternasList(expId,taskId,autor);
-  let cards=list.map(function(n,i){
-    return '<div class="task-nota-card" data-nota-id="'+escAttr(n.id)+'">'+
-      '<textarea class="nota-interna-item" data-nota-id="'+escAttr(n.id)+'" placeholder="Nota…">'+(n.texto?escTextarea(n.texto):'')+'</textarea>'+
-      '<div class="fx" style="gap:4px;margin-top:4px;justify-content:flex-end">'+
-      '<button type="button" class="btn bsm bd2" onclick="eliminarNotaInternaItem(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(n.id)+'\')">🗑</button></div></div>';
-  }).join('');
-  if(!cards)cards='';
-  return '<div class="task-chat-uni-pane'+(list.length?'':'')+'" data-pane="notas" id="task-notas-pane">'+
-    '<h4>📝 Notas internas <button type="button" class="btn bsm bic" style="margin-left:6px" title="Añadir nota" onclick="añadirNotaInternaItem(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">+</button></h4>'+
-    '<div class="task-chat-uni-scroll" id="task-notas-list">'+cards+'</div>'+
-    '<button type="button" class="btn bsm bp" onclick="guardarNotasInternasUnificado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Guardar notas</button>'+
+  const cards=list.map(function(n){return taskKeepNoteCardHtml(n,expId,taskId);}).join('');
+  return '<div class="task-chat-uni-pane task-keep-pane" data-pane="notas" id="task-notas-pane">'+
+    '<h4>📝 Notas internas</h4>'+
+    taskKeepComposeHtml(expId,taskId)+
+    '<div class="task-keep-list task-chat-uni-scroll" id="task-notas-list">'+cards+'</div>'+
+    '<div class="task-keep-foot"><button type="button" class="task-keep-save" onclick="guardarNotasInternasUnificado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Guardar</button></div>'+
     '</div>';
 }
 function añadirNotaInternaItem(expId,taskId){
@@ -9046,18 +9075,16 @@ function añadirNotaInternaItem(expId,taskId){
   if(!list)return;
   const id='n'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
   const div=document.createElement('div');
-  div.className='task-nota-card';
-  div.setAttribute('data-nota-id',id);
-  div.innerHTML='<textarea class="nota-interna-item" data-nota-id="'+escAttr(id)+'" placeholder="Nota…"></textarea>'+
-    '<div class="fx" style="gap:4px;margin-top:4px;justify-content:flex-end">'+
-    '<button type="button" class="btn bsm bd2" onclick="eliminarNotaInternaItem(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(id)+'\')">🗑</button></div>';
-  list.appendChild(div);
-  const ta=div.querySelector('textarea');
-  if(ta)ta.focus();
+  div.innerHTML=taskKeepNoteCardHtml({id:id,texto:''},expId,taskId);
+  const card=div.firstElementChild;
+  if(!card)return;
+  list.insertBefore(card,list.firstChild);
+  const ta=card.querySelector('textarea');
+  if(ta){taskKeepInitTextareas(card);ta.focus();}
 }
 function eliminarNotaInternaItem(expId,taskId,notaId){
   const escId=(typeof CSS!=='undefined'&&CSS.escape)?CSS.escape(String(notaId)) : String(notaId).replace(/\\/g,'\\\\').replace(/"/g,'\\"');
-  const card=document.querySelector('.task-nota-card[data-nota-id="'+escId+'"]');
+  const card=document.querySelector('.task-keep-note[data-nota-id="'+escId+'"]')||document.querySelector('.task-nota-card[data-nota-id="'+escId+'"]');
   if(card)card.remove();
   guardarNotasInternasUnificado(expId,taskId);
 }
@@ -9093,8 +9120,6 @@ function renderTaskChatPanelHtml(expId,taskId,t){
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
   const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
   const sol=getTaskSolicitudPendiente(t);
-  const est=estadoTask(t);
-  const ref=t.sinExpediente?(t.codigo||expId):expId;
   let form='';
   if(canWriteDept){
     form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
@@ -9103,10 +9128,6 @@ function renderTaskChatPanelHtml(expId,taskId,t){
   }else if(canWriteResp){
     form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
       '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Enviar</button>';
-    if(!sol&&est!=='Atendida'){
-      form+='<button type="button" class="btn bsm" onclick="openSolicitarTrasladoModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">↔ Traslado</button>'+
-        '<button type="button" class="btn bsm bd2" onclick="openSolicitarEliminacionModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar</button>';
-    }
     if(sol)form+='<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>';
     form+='</div></div>';
   }
@@ -9120,16 +9141,11 @@ function renderTaskChatUnificadoHtml(expId,taskId,t){
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
   const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
   const sol=getTaskSolicitudPendiente(t);
-  const est=estadoTask(t);
-  const ref=t.sinExpediente?(t.codigo||expId):expId;
   let form='';
   if(canWriteDept||canWriteResp){
     form='<div class="task-cmt-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
       '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Enviar</button>';
-    if(canWriteResp&&!sol&&est!=='Atendida'){
-      form+='<button type="button" class="btn bsm" onclick="openSolicitarTrasladoModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">↔ Traslado</button>'+
-        '<button type="button" class="btn bsm bd2" onclick="openSolicitarEliminacionModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar</button>';
-    }
+    if(sol)form+='<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>';
     form+='</div></div>';
   }
   const chatPane='<div class="task-chat-uni-pane on" data-pane="act" id="task-chat-act-pane">'+
@@ -12053,7 +12069,13 @@ function openTaskCommentsModal(expId,taskId,opts){
   }else{
     window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,chatOnly:chatOnly||soloGestion,gestionAsignados:!!soloGestion};
   }
-  if(opts.focusChat||chatOnly)setTimeout(()=>{const el=document.getElementById('task-chat-sep');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});const inp=document.getElementById('task-cmt-input');if(inp)inp.focus();},120);
+  if(opts.focusChat||chatOnly)setTimeout(function(){
+    const el=document.getElementById('task-chat-sep');
+    if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'start'});
+    const inp=document.getElementById('task-cmt-input');
+    if(inp)inp.focus();
+    if(chatUnificado&&typeof taskKeepInitTextareas==='function')taskKeepInitTextareas(document.getElementById('task-modal-body'));
+  },120);
 }
 function devolverTaskConComentario(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
@@ -14379,6 +14401,7 @@ function renderActRowToolbarHtml(t,expAct){
       actsR+='<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
     actsR+=taskChatBtnHtml(t.exp,t.id,t);
+    actsR+=taskSolicitudMenuHtml(t.exp,t.id,t);
     actsR+='</span>';
     return actsR;
   }
@@ -14410,6 +14433,7 @@ function renderActRowToolbarHtml(t,expAct){
   acts+=taskReporteBtnHtml(t.exp,t.id,yo);
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)){
     acts+=taskCoEjecutorBtnHtml(t.exp,t.id);
+    acts+=taskSolicitudMenuHtml(t.exp,t.id,t);
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);
