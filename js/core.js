@@ -618,17 +618,15 @@ function taskEsPrioridadCriticaVencimiento(t){
   return taskDiasDesdeVencimiento(t)>=TASK_URG_CRITICA_DIAS;
 }
 function taskUrgencyBandPorEjecutar(t){
+  // Orden: 1 prioritaria ⚡ · 2 urgente 🔥 · 3 vencidas · 4 en término
+  // «Por corregir» no tiene banda propia: se ubica según el plazo vigente.
+  if(!t||t.eliminada)return 9;
   const est=estadoTask(t);
-  if(taskEsPrioridadCriticaVencimiento(t))return 0;
-  if(!!t.prioritaria&&est!=='Atendida')return 1;
-  if(est==='Por corregir')return 2;
-  if(taskActividadVencida(t))return 3;
-  const v=taskVenceEfectivo(t);
-  if(v){
-    const d=diffDias(v);
-    if(d>=0&&d<=7)return 4;
-  }
-  return 5;
+  if(est==='Atendida')return 9;
+  if(!!t.prioritaria)return 0;
+  if(taskEsPrioridadCriticaVencimiento(t))return 1;
+  if(taskActividadVencida(t))return 2;
+  return 3;
 }
 function sortTasksPorEjecutar(tasks){
   return [...tasks].sort(function(a,b){
@@ -640,12 +638,13 @@ function sortTasksPorEjecutar(tasks){
   });
 }
 function taskPrioridadBadgeHtml(t){
+  let h='';
+  if(t&&t.prioritaria)h+='<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>';
   if(taskEsPrioridadCriticaVencimiento(t)){
     const dias=taskDiasDesdeVencimiento(t);
-    return '<span class="bdg bdg-prior-crit" style="margin-left:4px" title="Vencida '+dias+' días sin entrega">🔥 Urgente</span>';
+    h+='<span class="bdg bdg-prior-crit" style="margin-left:4px" title="Vencida '+dias+' días sin entrega">🔥 Urgente</span>';
   }
-  if(t.prioritaria)return '<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>';
-  return '';
+  return h;
 }
 /** Si el notificador designado es el usuario actual (vista responsable), no repetir su nombre en el badge. */
 function pqrsNotifQuienLabelUi(quien){
@@ -14150,18 +14149,18 @@ function updateActEstFilterForEnc(forEnc){
   const puedeFirmados=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():isDir;
   if(optFirmados)optFirmados.hidden=!puedeFirmados;
   if(optNotif)optNotif.hidden=!(!isDir&&(puedeFirmarBan||isResp));
-  if(optVenc)optVenc.hidden=true;
+  if(optVenc){optVenc.hidden=false;optVenc.textContent='Vencidas';}
   // Director sigue el seguimiento en «Firmados», no actúa en Por notificar
   if(isDir&&optNotif)optNotif.hidden=true;
   const order=deptView
     ?(puedeImprimir
-      ?['pend','prior','porver','parafirma','porfirmar','firmados','pornotif','done','all']
-      :['pend','prior','porver','porfirmar','firmados','pornotif','done','all'])
+      ?['pend','prior','venc','porver','parafirma','porfirmar','firmados','pornotif','done','all']
+      :['pend','prior','venc','porver','porfirmar','firmados','pornotif','done','all'])
     :(isVital
-      ?['pend','prior','porver','porcorr','parafirma','porfirmar','firmados','pornotif','done','all']
+      ?['pend','prior','venc','porver','porcorr','parafirma','porfirmar','firmados','pornotif','done','all']
       :(isDir
-        ?['pend','prior','porfirmar','firmados','pornotif','done','all']
-        :['pend','prior','porver','porcorr','pornotif','done','all']));
+        ?['pend','prior','venc','porfirmar','firmados','pornotif','done','all']
+        :['pend','prior','venc','porver','porcorr','pornotif','done','all']));
   if(puedeFirmados&&order.indexOf('firmados')<0){
     const i=order.indexOf('porfirmar');
     if(i>=0)order.splice(i+1,0,'firmados');
@@ -14177,7 +14176,6 @@ function updateActEstFilterForEnc(forEnc){
     if(o)sel.appendChild(o);
   });
   if(forEnc&&cv==='porcorr')sel.value='pend';
-  else if(cv==='venc')sel.value='pend';
   else if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
 }
 function exportarActividadesExcel(){
@@ -15180,7 +15178,9 @@ function renderActGantt(list){
 }
 function actMetCard(filterVal,style,inner,accent){
   const cur=document.getElementById('f-act-est')?document.getElementById('f-act-est').value:'pend';
-  const on=String(cur||'pend')===String(filterVal||'');
+  // «Vencidas» del selector es un recorte de «Por ejecutar»: resalta esa paleta
+  const on=String(cur||'pend')===String(filterVal||'')
+    ||(filterVal==='pend'&&cur==='venc');
   const acc=accent||'var(--bl)';
   const st=metOnCssVars(acc)+(style||'');
   return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="'+(on?'Paleta activa':'Clic para filtrar')+'">'+inner+'</div>';
@@ -15322,7 +15322,7 @@ function renderActividades(){
   list=filterTasksPeriodo(list,'act');
   list=filtrarActividadesPorEstado(list,filtroAct);
   // Seguridad: con responsable seleccionado, «Por notificar» / merges de notif no deben colar ítems ajenos
-  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='pend')){
+  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='venc'||filtroAct==='pend')){
     if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
     else list=(list||[]).filter(t=>{
       const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
@@ -15353,7 +15353,7 @@ function renderActividades(){
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
   if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable].join(' ').toLowerCase().includes(q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
-    (filtroAct==='pend'?sortTasksPorEjecutar(list):sortTasksByUrgency(list));
+    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):sortTasksByUrgency(list));
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
@@ -15398,7 +15398,8 @@ function renderActividades(){
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
-    if(filtroAct==='pend')sub.textContent='Por ejecutar: orden — 🔥 urgente (15+ días vencida sin entrega), ⚡ prioritaria, vencidas, por vencer y en término'+(isResp&&!isVital?' (incl. por notificar)':'')+'.';
+    if(filtroAct==='pend')sub.textContent='Por ejecutar: orden — ⚡ prioritaria, 🔥 urgente (15+ días sin entrega), vencidas y en término. «Por corregir» también aparece aquí según el plazo.'+(isResp&&!isVital?' Incluye por notificar.':'');
+    else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
     else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
     else if(filtroAct==='parafirma')sub.textContent='Por imprimir: descargue, imprima y prepare el oficio para firma del Director.';
     else if(filtroAct==='porfirmar')sub.textContent='Por firmar: pendiente de firma del Director. Al firmar (PDF o físico) pasa a «Firmados».';
@@ -15406,14 +15407,14 @@ function renderActividades(){
       ?'Firmados: oficios que usted ya firmó. NCA / VITAL / oficina asignan quién notifica o notifican.'
       :'Firmados: el Director ya firmó. Confirme quién notificará, notifique usted, o cargue el documento ya notificado para cerrar.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
-    else if(filtroAct==='porcorr')sub.textContent='Por corregir: se mantiene el plazo de vencimiento original.';
+    else if(filtroAct==='porcorr')sub.textContent='Por corregir: también aparecen en «Por ejecutar» según estén en término o vencidas.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
   const puedeFirmarMets=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
   // Orden de tarjetas según rol
   let metsHtml=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)')+
-    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias / 🔥</div>','var(--rd)')+
+    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)')+
     actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
   if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedeImprimirMets){
