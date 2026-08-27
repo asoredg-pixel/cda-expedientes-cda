@@ -9710,6 +9710,135 @@ function devolverTaskAlResponsable(expId,taskId,nota){
   }
   return false;
 }
+
+/** Quién puede borrar la entrega (vuelve a Por ejecutar como si no hubiera entregado). */
+function puedeEliminarEntregaActividad(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t||t.eliminada)return false;
+  if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
+  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
+  if(typeof getTaskRevisionDepto==='function'&&getTaskRevisionDepto(t))return false;
+  const est=estadoTask(t);
+  const pend=est==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t));
+  if(!pend)return false;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+    const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+    if(f&&f!==PQRS_WF.PENDIENTE_REVISION&&f!==PQRS_WF.SIN_RESPUESTA&&f!==PQRS_WF.RECHAZADA){
+      // Solo mientras la entrega está en revisión / por verificar
+      if(!(typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)))return false;
+    }
+  }
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  if(!(typeof esModoResponsable==='function'&&esModoResponsable()))return true; // encargado / depto
+  return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
+}
+function eliminarEntregaActividadConfirm(expId,taskId){
+  if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return;}
+  const t=getTaskAny(expId,taskId);
+  const lbl=(t&&(t.desc||t.actividad))||'actividad';
+  const fn=function(){eliminarEntregaActividad(expId,taskId);};
+  if(typeof confirmEliminar==='function'){
+    confirmEliminar({
+      title:'Eliminar entrega',
+      message:'¿Eliminar la entrega de «'+lbl+'»?',
+      detail:'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
+      confirmLabel:'Sí, eliminar entrega'
+    },fn);
+    return;
+  }
+  if(confirm('¿Eliminar esta entrega? La actividad volverá a Por ejecutar y se borrarán los documentos de Drive.'))fn();
+}
+async function eliminarEntregaActividad(expId,taskId){
+  if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return false;}
+  let t=getTaskAny(expId,taskId);
+  if(!t){notif('Actividad no encontrada','err');return false;}
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const e=t.sinExpediente?null:getExpById(refId);
+  const fileIds=[];
+  const pushFid=function(id){
+    const fid=String(id||'').trim();
+    if(fid&&fileIds.indexOf(fid)<0)fileIds.push(fid);
+  };
+  (t.soportes||[]).forEach(function(s){
+    if(!s)return;
+    pushFid(s.driveFileId||s.fileId);
+  });
+  let wfDocsCleared=false;
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e);
+    (wf.documentos||[]).forEach(function(d){
+      if(!d)return;
+      pushFid(d.fileId||d.driveFileId);
+    });
+    wfDocsCleared=true;
+  }
+  const ok=mutateTask(refId,taskId,function(tk){
+    normalizeTask(tk);
+    migrateLegacyAsignados(tk);
+    tk.soportes=[];
+    tk.notasDoc=[];
+    tk.fechaReportada='';
+    tk.fechaAtendida='';
+    tk.verificadoPor='';
+    tk.ultimaRevisionDepto=null;
+    tk._pqrs_proyeccion_atendida=false;
+    tk._firma_proyeccion_atendida=false;
+    // Quitar comentarios incluidos solo en la entrega (no el chat)
+    tk.comentarios=(tk.comentarios||[]).filter(function(c){return c&&!c.incluidoEnReporte;});
+    (tk.asignados||[]).forEach(function(a){
+      if(!a)return;
+      if(a.estado==='por_verificar'||a.estado==='por_corregir'||a.fechaReportada){
+        a.fechaReportada='';
+        a.fechaAtendida='';
+        a.estado='pendiente';
+      }
+    });
+    tk.estado='En ejecución';
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+    // Si sync dejó algo raro, forzar ejecución sin reporte
+    if(tk.fechaReportada)tk.fechaReportada='';
+    if(tk.fechaAtendida)tk.fechaAtendida='';
+    if(tk.estado==='Por verificar'||tk.estado==='Por corregir'||tk.estado==='Atendida')tk.estado='En ejecución';
+    if(!Array.isArray(tk.historial))tk.historial=[];
+    tk.historial.push({
+      tipo:'eliminar_entrega',
+      fecha:hoy(),
+      ts:Date.now(),
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||''),
+      nota:'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos de la entrega)'
+    });
+  });
+  if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
+  if(wfDocsCleared&&e&&typeof setPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e);
+    setPqrsWorkflow(e,{
+      documentos:[],
+      cuerpo:'',
+      entregado_por:'',
+      revision_nca:null,
+      fecha_respuesta:''
+    });
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({tipo:'eliminar_entrega',fecha:hoy(),nota:'Entrega eliminada — pendiente nueva entrega',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
+    try{persistExpedienteGranular(e);}catch(err){console.warn('eliminarEntrega pqrs:',err);}
+  }
+  if(fileIds.length&&typeof driveDeleteInstitutional==='function'){
+    for(let i=0;i<fileIds.length;i++){
+      try{await driveDeleteInstitutional(fileIds[i]);}catch(err){console.warn('eliminarEntrega drive:',err);}
+    }
+  }
+  notif('🗑 Entrega eliminada — la actividad vuelve a Por ejecutar','ok');
+  closeTaskModal();
+  try{if(typeof setActFiltro==='function')setActFiltro('pend');}catch(err){}
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  return true;
+}
+window.puedeEliminarEntregaActividad=puedeEliminarEntregaActividad;
+window.eliminarEntregaActividadConfirm=eliminarEntregaActividadConfirm;
+window.eliminarEntregaActividad=eliminarEntregaActividad;
 function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   opts=opts||{};
   normalizeTask(t);
@@ -11885,15 +12014,22 @@ function openTaskCommentsModal(expId,taskId,opts){
   const canEditAsigEffective=canEditAsig||(canReviewSop&&!!t.sinExpediente)||(soloGestion&&canWriteDept);
   const pqrsNcaAsig=e&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca();
   const asigPanel=(!chatOnly&&(canEditAsigEffective||soloGestion||taskEsMultiAsignada(t)))?renderTaskAsignadosPanelHtml(expId,taskId,t,canEditAsigEffective,{pqrsNca:pqrsNcaAsig}):'';
-  const chatSep=soloGestion?'':(chatOnly&&chatUnificado?renderTaskChatUnificadoHtml(expId,taskId,t):renderTaskChatPanelHtml(expId,taskId,t));
+  const chatSep=soloGestion?'':(chatOnly?(chatUnificado?renderTaskChatUnificadoHtml(expId,taskId,t):renderTaskChatPanelHtml(expId,taskId,t)):'');
+  // Chat/notas solo vía icono 💬 (chatOnly). En revisión 🔍/🧐 no se repiten.
   const showVerifyBar=canDeptVerificarCierre(t)
     ||(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional())
     ||(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)&&!esModoResponsable()&&!esJurisdiccional());
   const verifyBar=(!chatOnly&&!soloGestion&&showVerifyBar)?renderTaskVerifyBarHtml(expId,taskId,t):'';
   const bibBar=(!chatOnly&&!soloGestion&&typeof bibGuardarEnBibliotecaBarHtml==='function')?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'';
+  const elimEntregaBar=(!chatOnly&&!soloGestion&&typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId))
+    ?('<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--bd)">'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Si la entrega no aplica o fue un error, puede eliminarla. La actividad vuelve a <strong>Por ejecutar</strong> (en término / vencida / urgente / prioritaria según su estado) como si no se hubiera entregado, y se borran los documentos de Drive de esta entrega.</div>'+
+      '<button type="button" class="btn bsm bd2" onclick="eliminarEntregaActividadConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar entrega</button>'+
+      '</div>')
+    :'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   body.innerHTML='<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>'+
-    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
+    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar+elimEntregaBar;
   ov.classList.add('on');
   if(!chatOnly&&!soloGestion){
     window._compareDocA=null;
