@@ -4550,7 +4550,7 @@ function renderMiDiaTaskItemHtml(ev,i,opts){
     (meta.length?'<div class="gt-task-meta">'+meta.join(' · ')+'</div>':'')+
     '</div>'+
     (canEd?('<div class="gt-task-actions">'+
-      '<button type="button" class="gt-chevron'+(notasOpen?' on':'')+(notas?' has-notes':'')+'" id="mi-dia-notas-btn-'+escAttr(ev.id)+'" title="Detalles" onclick="actAgendaToggleNotas(\''+escAttr(ev.id)+'\')">›</button>'+
+      '<button type="button" class="gt-chevron'+(notasOpen?' on':'')+(notas?' has-notes':'')+'" id="mi-dia-notas-btn-'+escAttr(ev.id)+'" title="'+(notasOpen?'Ocultar detalles':'Ver detalles')+'" onclick="actAgendaToggleNotas(\''+escAttr(ev.id)+'\')">'+(notasOpen?'▲':'▼')+'</button>'+
       (opts.allowReorder?(
         '<button type="button" class="gt-ico" title="Subir" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',-1)"'+(i===0?' disabled':'')+'>↑</button>'+
         '<button type="button" class="gt-ico" title="Bajar" onclick="actAgendaMoverOrden(\''+escAttr(ev.id)+'\',1)"'+(i>=listLen-1?' disabled':'')+'>↓</button>'
@@ -15604,7 +15604,7 @@ function renderActividades(){
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
-    if(filtroAct==='pend')sub.textContent='Por ejecutar: ⚡ prioritaria, 🔥 urgente, vencidas y en término. Incluye por corregir y por notificar (plazo 5 días) según el vencimiento.';
+    if(filtroAct==='pend')sub.textContent='';
     else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
     else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
     else if(filtroAct==='parafirma')sub.textContent='Por imprimir: descargue, imprima y prepare el oficio para firma del Director.';

@@ -639,8 +639,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .gt-task-meta{font-size:11px;color:var(--tx3);margin-top:1px;line-height:1.2}
 .gt-task-actions{display:flex;gap:1px;align-items:center;flex-shrink:0;opacity:.55}
 .gt-task-row:hover .gt-task-actions,.gt-task.notes-open .gt-task-actions{opacity:1}
-.gt-chevron{border:0;background:transparent;color:var(--tx3);width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:14px;line-height:1;transform:rotate(0deg);transition:transform .15s}
-.gt-chevron.on{transform:rotate(90deg);color:var(--bl)}
+.gt-chevron{border:0;background:transparent;color:var(--tx3);width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:11px;line-height:1;padding:0;transition:color .15s}
+.gt-chevron.on{color:var(--bl)}
 .gt-chevron.has-notes{color:var(--bl)}
 .gt-ico{border:0;background:transparent;color:var(--tx3);width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:11px;line-height:1}
 .gt-ico:hover{background:var(--sf2);color:var(--tx)}
