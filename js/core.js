@@ -12021,15 +12021,9 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)&&!esModoResponsable()&&!esJurisdiccional());
   const verifyBar=(!chatOnly&&!soloGestion&&showVerifyBar)?renderTaskVerifyBarHtml(expId,taskId,t):'';
   const bibBar=(!chatOnly&&!soloGestion&&typeof bibGuardarEnBibliotecaBarHtml==='function')?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'';
-  const elimEntregaBar=(!chatOnly&&!soloGestion&&typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId))
-    ?('<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--bd)">'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Si la entrega no aplica o fue un error, puede eliminarla. La actividad vuelve a <strong>Por ejecutar</strong> (en término / vencida / urgente / prioritaria según su estado) como si no se hubiera entregado, y se borran los documentos de Drive de esta entrega.</div>'+
-      '<button type="button" class="btn bsm bd2" onclick="eliminarEntregaActividadConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar entrega</button>'+
-      '</div>')
-    :'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   body.innerHTML='<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>'+
-    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar+elimEntregaBar;
+    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
   ov.classList.add('on');
   if(!chatOnly&&!soloGestion){
     window._compareDocA=null;
@@ -14377,15 +14371,15 @@ function renderActRowToolbarHtml(t,expAct){
     ||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t,responsableActivo))
   );
-  // Responsable en «Por revisar»: solo 🔍 ver entrega, 📤 reentrega (si aún no revisaron), chat/notas
+  // Responsable en «Por revisar»: 🔍 ver entrega, 🗑 eliminar entrega (vuelve a Por ejecutar), chat/notas
   if(enPorRevisarResp){
     let actsR='<span class="sst-act-toolbar">';
     actsR+='<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🔍</button>';
+    if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
+      actsR+='<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
+    }
     actsR+=taskChatBtnHtml(t.exp,t.id,t);
     actsR+='</span>';
-    if(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t,responsableActivo)){
-      actsR+='<button type="button" class="btn bsm bic act-ico" title="Nueva entrega: reemplaza documentos de la entrega anterior (el encargado aún no ha revisado)" onclick="event.stopPropagation();respMarcarPorVerificar(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">📤</button>';
-    }
     return actsR;
   }
   let acts='<span class="sst-act-toolbar">';
@@ -14404,6 +14398,9 @@ function renderActRowToolbarHtml(t,expAct){
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
     acts+='<button type="button" class="btn bsm bic act-ico" title="Revisar entrega" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
+    if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
+      acts+='<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
+    }
   }
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   if(showChat)acts+=taskChatBtnHtml(t.exp,t.id,t);
