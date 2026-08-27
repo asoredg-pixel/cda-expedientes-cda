@@ -1210,6 +1210,8 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-plazo-fill.warn{background:var(--am)}
 .pqrs-plazo-fill.over{background:var(--rd)}
 .bdg-prior{background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:600}
+.bdg-prior-crit{background:#ffedd5;color:#c2410c;border:1px solid #fdba74;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:600}
+#tbl-act tr.prioritaria-crit{background:linear-gradient(90deg,rgba(234,88,12,.07),transparent);border-left:3px solid #ea580c}
 .sec-form-card-wrap{position:relative}
 .sec-form-lock{display:none;position:absolute;inset:0;z-index:8;background:rgba(255,255,255,.94);border-radius:var(--rl);flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:28px 24px;text-align:center;box-shadow:inset 0 0 0 1px var(--bd)}
 .sec-form-lock.on{display:flex}

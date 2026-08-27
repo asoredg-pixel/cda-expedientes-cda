@@ -586,6 +586,67 @@ function taskActividadVencida(t){
   const v=taskVenceEfectivo(t);
   return!!(v&&v<hoy());
 }
+const TASK_URG_CRITICA_DIAS=15;
+function taskTieneAlgunaEntrega(t){
+  if(!t)return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+    &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
+    const a=typeof getAsignado==='function'?getAsignado(t,responsableActivo):null;
+    if(a&&String(a.fechaReportada||'').trim())return true;
+    return (t.historial||[]).some(function(h){
+      return h&&h.tipo==='reenvio_verificacion'&&h.reportadoPor
+        &&typeof agendaNorm==='function'&&agendaNorm(h.reportadoPor)===agendaNorm(responsableActivo);
+    });
+  }
+  if(String(t.fechaReportada||'').trim())return true;
+  if((t.asignados||[]).some(function(a){return a&&String(a.fechaReportada||'').trim();}))return true;
+  if((t.historial||[]).some(function(h){
+    return h&&(h.tipo==='reenvio_verificacion'||h.tipo==='reporte'||h.tipo==='envio_verificacion');
+  }))return true;
+  return false;
+}
+function taskDiasDesdeVencimiento(t){
+  const v=taskVenceEfectivo(t);
+  if(!v||v>=hoy())return 0;
+  return -diffDias(v);
+}
+function taskEsPrioridadCriticaVencimiento(t){
+  if(!t||t.eliminada)return false;
+  if(estadoTask(t)==='Atendida')return false;
+  if(!taskActividadVencida(t))return false;
+  if(taskTieneAlgunaEntrega(t))return false;
+  return taskDiasDesdeVencimiento(t)>=TASK_URG_CRITICA_DIAS;
+}
+function taskUrgencyBandPorEjecutar(t){
+  const est=estadoTask(t);
+  if(taskEsPrioridadCriticaVencimiento(t))return 0;
+  if(!!t.prioritaria&&est!=='Atendida')return 1;
+  if(est==='Por corregir')return 2;
+  if(taskActividadVencida(t))return 3;
+  const v=taskVenceEfectivo(t);
+  if(v){
+    const d=diffDias(v);
+    if(d>=0&&d<=7)return 4;
+  }
+  return 5;
+}
+function sortTasksPorEjecutar(tasks){
+  return [...tasks].sort(function(a,b){
+    const ba=taskUrgencyBandPorEjecutar(a),bb=taskUrgencyBandPorEjecutar(b);
+    if(ba!==bb)return ba-bb;
+    const va=taskVenceEfectivo(a)||'9999',vb=taskVenceEfectivo(b)||'9999';
+    if(va!==vb)return va.localeCompare(vb);
+    return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
+  });
+}
+function taskPrioridadBadgeHtml(t){
+  if(taskEsPrioridadCriticaVencimiento(t)){
+    const dias=taskDiasDesdeVencimiento(t);
+    return '<span class="bdg bdg-prior-crit" style="margin-left:4px" title="Vencida '+dias+' días sin entrega">🔥 Urgente</span>';
+  }
+  if(t.prioritaria)return '<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>';
+  return '';
+}
 /** Si el notificador designado es el usuario actual (vista responsable), no repetir su nombre en el badge. */
 function pqrsNotifQuienLabelUi(quien){
   const q=String(quien||'').trim();
@@ -8451,7 +8512,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   if(ok){
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
     const fAct=document.getElementById('f-act-est');
-    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&fAct&&['pend','venc','prior','porcorr'].includes(fAct.value))setActFiltro('porver');
+    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&fAct&&['pend','prior','porcorr'].includes(fAct.value))setActFiltro('porver');
   }
   return ok;
 }
@@ -14039,7 +14100,7 @@ function renderActividadesRowHtml(t){
   const cierre=est==='Atendida'?fmtF(t.fechaAtendida):esEncOwn&&est!=='Atendida'?'—':est==='Por verificar'?('Reportada '+fmtF(t.fechaReportada)):est==='Por corregir'?'Devuelta — corregir':'—';
   const cierreHtml=cierre;
   const refLbl=t.sinExpediente?('<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px;margin-right:4px">Actividad</span>'+escAttr(t.exp)):escAttr(t.exp);
-  const priorBadge=t.prioritaria?'<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>':'';
+  const priorBadge=taskPrioridadBadgeHtml(t);
   const bibBadge=typeof bibTaskReposBadgeHtml==='function'?bibTaskReposBadgeHtml(t):'';
   const altaBadge=(expActPre&&typeof expAltaResponsableBadgeHtml==='function')?expAltaResponsableBadgeHtml(expActPre):'';
   const sol=getTaskSolicitudPendiente(t);
@@ -14047,11 +14108,13 @@ function renderActividadesRowHtml(t){
   const expAct=getExpById(t.exp);
   const acts=renderActRowToolbarHtml(t,expAct);
   const respCol=esVistaActividadesDepto()?('<td style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
+  const esCrit=taskEsPrioridadCriticaVencimiento(t);
   const rowStyle=[
-    t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':'',
+    esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
-  return '<tr'+(t.prioritaria?' class="prioritaria"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
+  const rowCls=esCrit?'prioritaria-crit':(t.prioritaria?'prioritaria':'');
+  return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td><td>'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
@@ -14075,6 +14138,7 @@ function updateActEstFilterForEnc(forEnc){
   const optPorFirmar=sel.querySelector('option[value="porfirmar"]');
   const optFirmados=sel.querySelector('option[value="firmados"]');
   const optNotif=sel.querySelector('option[value="pornotif"]');
+  const optVenc=sel.querySelector('option[value="venc"]');
   if(optCorr)optCorr.hidden=deptView;
   if(optVer){optVer.hidden=false;optVer.textContent='Por revisar';}
   if(optRev)optRev.hidden=true;
@@ -14086,17 +14150,18 @@ function updateActEstFilterForEnc(forEnc){
   const puedeFirmados=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():isDir;
   if(optFirmados)optFirmados.hidden=!puedeFirmados;
   if(optNotif)optNotif.hidden=!(!isDir&&(puedeFirmarBan||isResp));
+  if(optVenc)optVenc.hidden=true;
   // Director sigue el seguimiento en «Firmados», no actúa en Por notificar
   if(isDir&&optNotif)optNotif.hidden=true;
   const order=deptView
     ?(puedeImprimir
-      ?['pend','venc','prior','porver','parafirma','porfirmar','firmados','pornotif','done','all']
-      :['pend','venc','prior','porver','porfirmar','firmados','pornotif','done','all'])
+      ?['pend','prior','porver','parafirma','porfirmar','firmados','pornotif','done','all']
+      :['pend','prior','porver','porfirmar','firmados','pornotif','done','all'])
     :(isVital
-      ?['pend','venc','prior','porver','porcorr','parafirma','porfirmar','firmados','pornotif','done','all']
+      ?['pend','prior','porver','porcorr','parafirma','porfirmar','firmados','pornotif','done','all']
       :(isDir
-        ?['pend','venc','prior','porfirmar','firmados','pornotif','done','all']
-        :['pend','venc','prior','porver','porcorr','pornotif','done','all']));
+        ?['pend','prior','porfirmar','firmados','pornotif','done','all']
+        :['pend','prior','porver','porcorr','pornotif','done','all']));
   if(puedeFirmados&&order.indexOf('firmados')<0){
     const i=order.indexOf('porfirmar');
     if(i>=0)order.splice(i+1,0,'firmados');
@@ -14112,6 +14177,7 @@ function updateActEstFilterForEnc(forEnc){
     if(o)sel.appendChild(o);
   });
   if(forEnc&&cv==='porcorr')sel.value='pend';
+  else if(cv==='venc')sel.value='pend';
   else if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
 }
 function exportarActividadesExcel(){
@@ -14440,6 +14506,7 @@ function conActCoEjSummaryHtml(tasks){
   return co?(' <span title="'+co+' actividad(es) con co-ejecutores" style="font-size:11px;margin-left:4px">👥 '+co+'</span>'):'';
 }
 function esActividadPrioritariaPendiente(t){
+  if(taskEsPrioridadCriticaVencimiento(t))return true;
   if(!t||t.eliminada||!t.prioritaria)return false;
   const est=estadoTask(t);
   if(est==='Atendida'||est==='Eliminada'||est==='Por verificar')return false;
@@ -15255,7 +15322,7 @@ function renderActividades(){
   list=filterTasksPeriodo(list,'act');
   list=filtrarActividadesPorEstado(list,filtroAct);
   // Seguridad: con responsable seleccionado, «Por notificar» / merges de notif no deben colar ítems ajenos
-  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='venc'||filtroAct==='pend')){
+  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='pend')){
     if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
     else list=(list||[]).filter(t=>{
       const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
@@ -15285,7 +15352,8 @@ function renderActividades(){
   // Re-aplicar filtro porver tras rehidratar firmaWf
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
   if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable].join(' ').toLowerCase().includes(q));
-  list=filtroAct==='revisados'?sortTasksRevisadas(list):sortTasksByUrgency(list);
+  list=filtroAct==='revisados'?sortTasksRevisadas(list):
+    (filtroAct==='pend'?sortTasksPorEjecutar(list):sortTasksByUrgency(list));
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
@@ -15296,7 +15364,6 @@ function renderActividades(){
   const notifAll=getTareasNotifVisiblesAct();
   const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),(isResp&&!isVital)?notifAll:[]);
   const porEjec=deudaBase.length;
-  const venc=mergeActividadLists(all.filter(t=>taskActividadVencida(t)),notifAll.filter(t=>taskActividadVencida(t))).length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
   const porrevisar=allTodos.filter(t=>{
@@ -15331,7 +15398,7 @@ function renderActividades(){
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
-    if(filtroAct==='pend')sub.textContent='Por ejecutar: bandeja de deuda (en término, vencidas, prioritarias, por corregir'+(isResp&&!isVital?' y por notificar':'')+'). También puede filtrar por cada estado.';
+    if(filtroAct==='pend')sub.textContent='Por ejecutar: orden — 🔥 urgente (15+ días vencida sin entrega), ⚡ prioritaria, vencidas, por vencer y en término'+(isResp&&!isVital?' (incl. por notificar)':'')+'.';
     else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
     else if(filtroAct==='parafirma')sub.textContent='Por imprimir: descargue, imprima y prepare el oficio para firma del Director.';
     else if(filtroAct==='porfirmar')sub.textContent='Por firmar: pendiente de firma del Director. Al firmar (PDF o físico) pasa a «Firmados».';
@@ -15346,8 +15413,7 @@ function renderActividades(){
   const puedeFirmarMets=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
   // Orden de tarjetas según rol
   let metsHtml=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)')+
-    actMetCard('venc','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+venc+'</div><div class="l">Vencidas</div>','var(--rd)')+
-    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)')+
+    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias / 🔥</div>','var(--rd)')+
     actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
   if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedeImprimirMets){
