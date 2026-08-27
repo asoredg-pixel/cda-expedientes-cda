@@ -576,6 +576,10 @@ function taskVenceEfectivo(t){
     const nv=pqrsNotifVence(e);
     if(nv)return nv;
   }
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+    const wf=t.firmaWf||{};
+    if(wf.notif_vence)return String(wf.notif_vence).slice(0,10);
+  }
   return String(t.vence||'').slice(0,10);
 }
 function taskActividadVencida(t){
@@ -3218,6 +3222,7 @@ function openMiDiaDesdeNav(opts){
   window._actAgendaResp=resp;
   window._actAgendaNotasOpen=window._actAgendaNotasOpen||{};
   window._actAgendaPanelSide='left';
+  window._actAgendaShowCal=true;
   setNavTasksActive(true);
   actAgendaAbrirPanelUi();
 }
@@ -3260,13 +3265,54 @@ function puedeEliminarAgendaEvento(ev){
   }
   return puedeEditarAgendaEvento(ev);
 }
-function agendaUiPrefix(){return window._agendaRenderTarget==='modal'?'agenda-cal-modal-':'agenda-';}
+function agendaUiPrefix(){
+  if(window._agendaRenderTarget==='modal')return'agenda-cal-modal-';
+  if(window._agendaRenderTarget==='dock')return'act-agenda-dock-';
+  return'agenda-';
+}
 function agendaEl(id){return document.getElementById(agendaUiPrefix()+id);}
 function agendaIsModalOpen(){const ov=document.getElementById('agenda-cal-overlay');return !!(ov&&ov.classList.contains('on'));}
-function agendaShouldPaint(){if(window._agendaRenderTarget==='modal')return agendaIsModalOpen();const pg=document.getElementById('pg-agenda');return !!(pg&&pg.classList.contains('on'));}
-function agendaDrawerEls(){if(window._agendaRenderTarget==='modal'){return{tit:document.getElementById('agenda-cal-modal-drawer-tit'),body:document.getElementById('agenda-cal-modal-drawer-body'),wrap:document.getElementById('agenda-cal-modal-drawer')};}return{tit:document.getElementById('agenda-drawer-tit'),body:document.getElementById('agenda-drawer-body'),wrap:document.getElementById('agenda-drawer')};}
+function agendaIsDockOpen(){
+  const panel=document.getElementById('act-agenda-panel');
+  const pane=document.getElementById('act-agenda-cal-pane');
+  return !!(panel&&panel.classList.contains('on')&&pane&&!pane.hidden);
+}
+function agendaShouldPaint(){
+  if(window._agendaRenderTarget==='modal')return agendaIsModalOpen();
+  if(window._agendaRenderTarget==='dock')return agendaIsDockOpen();
+  const pg=document.getElementById('pg-agenda');
+  return !!(pg&&pg.classList.contains('on'));
+}
+function agendaDrawerEls(){
+  if(window._agendaRenderTarget==='modal'){
+    return{tit:document.getElementById('agenda-cal-modal-drawer-tit'),body:document.getElementById('agenda-cal-modal-drawer-body'),wrap:document.getElementById('agenda-cal-modal-drawer')};
+  }
+  if(window._agendaRenderTarget==='dock'){
+    return{tit:document.getElementById('act-agenda-dock-drawer-tit'),body:document.getElementById('act-agenda-dock-drawer-body'),wrap:document.getElementById('act-agenda-dock-drawer')};
+  }
+  return{tit:document.getElementById('agenda-drawer-tit'),body:document.getElementById('agenda-drawer-body'),wrap:document.getElementById('agenda-drawer')};
+}
 function syncActAgendaPanelLeftOffset(){const nav=document.getElementById('sst-nav');const panel=document.getElementById('act-agenda-panel');if(!nav||!panel||!panel.classList.contains('act-agenda-left'))return;panel.style.left=(nav.offsetWidth||56)+'px';}
 function applyActAgendaPanelSide(side){const panel=document.getElementById('act-agenda-panel');if(!panel)return;panel.classList.remove('act-agenda-left','act-agenda-right');panel.classList.add(side==='left'?'act-agenda-left':'act-agenda-right');if(side==='left')syncActAgendaPanelLeftOffset();else panel.style.left='';}
+function syncActAgendaCalPane(show){
+  const panel=document.getElementById('act-agenda-panel');
+  const pane=document.getElementById('act-agenda-cal-pane');
+  const btnCal=document.getElementById('btn-tasks-calendario');
+  const on=!!show;
+  if(panel)panel.classList.toggle('act-agenda-with-cal',on);
+  if(pane)pane.hidden=!on;
+  if(btnCal)btnCal.style.display=on?'none':'';
+  if(on){
+    window._agendaRenderTarget='dock';
+    if(!window._agendaMes)window._agendaMes=new Date();
+    if(!window._agendaDiaSel)window._agendaDiaSel=hoy();
+    if(!window._agendaVista||window._agendaVista==='dia')window._agendaVista='mes';
+    agendaCerrarDrawer();
+    if(typeof renderAgenda==='function')renderAgenda();
+  }else if(window._agendaRenderTarget==='dock'){
+    window._agendaRenderTarget='page';
+  }
+}
 function openAgendaCalModal(){if(!puedeVerTabAgenda()){notif('Tasks está disponible en modo Responsables o como encargado del departamento','err');return;}const resp=getAgendaResponsableActivo();if(!resp){notif(esModoResponsable()?'Seleccione su nombre como responsable':'Seleccione encargado del departamento','err');return;}window._agendaRenderTarget='modal';if(!window._agendaMes)window._agendaMes=new Date();if(!window._agendaDiaSel)window._agendaDiaSel=hoy();if(!window._agendaVista||window._agendaVista==='dia')window._agendaVista='mes';const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.add('on');agendaCerrarDrawer();renderAgenda();}
 function cerrarAgendaCalModal(){const ov=document.getElementById('agenda-cal-overlay');if(ov)ov.classList.remove('on');window._agendaRenderTarget='page';agendaCerrarDrawer();}
 function getAgendaPrintCss(){
@@ -3651,10 +3697,10 @@ function agendaMesDelta(d){
 function agendaNav(d){agendaMesDelta(d);}
 function agendaSetVista(v){
   v=v||'mes';
-  if(window._agendaRenderTarget==='modal'&&v==='dia')v='mes';
+  if((window._agendaRenderTarget==='modal'||window._agendaRenderTarget==='dock')&&v==='dia')v='mes';
   window._agendaVista=v;
   const pfx=agendaUiPrefix();
-  const vs=window._agendaRenderTarget==='modal'?['mes','semana']:['mes','semana','dia'];
+  const vs=(window._agendaRenderTarget==='modal'||window._agendaRenderTarget==='dock')?['mes','semana']:['mes','semana','dia'];
   document.querySelectorAll('#'+pfx+'view-tabs button').forEach((b,i)=>b.classList.toggle('on',vs[i]===window._agendaVista));
   renderAgenda();
 }
@@ -3834,9 +3880,9 @@ function renderAgenda(){
     if(banner)banner.innerHTML='';
     return;
   }
-  if(tit)tit.textContent=(window._agendaRenderTarget==='modal'?'Calendario':'Agenda')+' · '+resp;
-  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual')+' · clic en evento para ver detalle · Gmail Calendar se fusiona si hay permiso';
-  if(btnAsig)btnAsig.style.display=(window._agendaRenderTarget!=='modal'&&puedeAsignarEventoAgendaResponsables())?'inline-flex':'none';
+  if(tit)tit.textContent=(window._agendaRenderTarget==='modal'||window._agendaRenderTarget==='dock'?'Calendario':'Agenda')+' · '+resp;
+  if(sub)sub.textContent='Vista '+({mes:'mensual',semana:'semanal',dia:'diaria'}[window._agendaVista||'mes']||'mensual');
+  if(btnAsig)btnAsig.style.display=(window._agendaRenderTarget!=='modal'&&window._agendaRenderTarget!=='dock'&&puedeAsignarEventoAgendaResponsables())?'inline-flex':'none';
   if(banner){
     const gmailOk=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
     const calOk=gmailOk&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&!window._gmailCalendarDenied;
@@ -3856,7 +3902,7 @@ function renderAgenda(){
   const eventos=sstEv.concat(gcalEv);
   const vista=window._agendaVista||'mes';
   const pfx=agendaUiPrefix();
-  document.querySelectorAll('#'+pfx+'view-tabs button').forEach((b,i)=>{const vs=window._agendaRenderTarget==='modal'?['mes','semana']:['mes','semana','dia'];b.classList.toggle('on',vs[i]===vista);});
+  document.querySelectorAll('#'+pfx+'view-tabs button').forEach((b,i)=>{const vs=(window._agendaRenderTarget==='modal'||window._agendaRenderTarget==='dock')?['mes','semana']:['mes','semana','dia'];b.classList.toggle('on',vs[i]===vista);});
   const lbl=agendaEl('mes-label');
   if(lbl)lbl.textContent=agendaPeriodoLabel();
   const wrap=agendaEl('cal-wrap');
@@ -3888,7 +3934,7 @@ function renderAgenda(){
     if(showBottom)lista.innerHTML=renderAgendaListaHtml(eventos,diaSel);
   }
   const gest=document.getElementById('agenda-asig-gest');
-  if(gest&&window._agendaRenderTarget!=='modal'){
+  if(gest&&window._agendaRenderTarget!=='modal'&&window._agendaRenderTarget!=='dock'){
     if(esVistaActividadesDepto()){
       gest.style.display='';
       gest.innerHTML='<details class="con-fold"><summary>Eventos asignados a responsables (editar)</summary><div class="item-fold-body">'+renderAgendaAsignadosGestHtml()+'</div></details>';
@@ -4119,6 +4165,7 @@ function openAgendaDesdeActividad(expId,taskId){
     window._actAgendaOtroPlan=existentes.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))[0]||null;
   }
   window._actAgendaPanelSide='right';
+  window._actAgendaShowCal=false;
   actAgendaAbrirPanelUi();
 }
 function actAgendaAbrirPanelUi(){
@@ -4128,13 +4175,16 @@ function actAgendaAbrirPanelUi(){
   const tit=document.getElementById('act-agenda-tit');
   const sub=document.getElementById('act-agenda-sub');
   if(tit)tit.textContent='Tasks';
-  if(sub)sub.textContent='Mi día';
+  if(sub)sub.textContent=window._actAgendaShowCal?'Mi día · Calendario':'Mi día';
   if(body)body.innerHTML=renderMiDiaPanelHtml();
   refreshActAgendaPanelTools();
   applyActAgendaPanelSide(window._actAgendaPanelSide||'right');
   if(panel)panel.classList.remove('act-agenda-closing');
+  // Forzar reflow para que la animación L→R (left) / R→L (right) arranque desde el off-screen
+  if(panel){void panel.offsetWidth;}
   if(overlay)overlay.classList.add('on');
   if(panel)panel.classList.add('on');
+  syncActAgendaCalPane(!!window._actAgendaShowCal&&window._actAgendaPanelSide==='left');
   setNavTasksActive(true);
 }
 function getAgendaPlanesActivos(resp){
@@ -4527,6 +4577,7 @@ function cerrarActAgendaPanel(){
   const panel=document.getElementById('act-agenda-panel');
   if(ov)ov.classList.remove('on');
   window._actAgendaPanelSide=null;
+  window._actAgendaShowCal=false;
   window._agendaPrefillTask=null;
   window._actAgendaResp=null;
   window._actAgendaSelEvId=null;
@@ -4540,13 +4591,15 @@ function cerrarActAgendaPanel(){
   setNavTasksActive(false);
   const btnAsig=document.getElementById('btn-tasks-asignar-resp');
   if(btnAsig)btnAsig.style.display='none';
+  if(window._agendaRenderTarget==='dock')window._agendaRenderTarget='page';
   if(!panel)return;
   if(panel.classList.contains('on')){
     panel.classList.add('act-agenda-closing');
     const cleanup=function(){
       panel.style.transition='none';
-      panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right');
+      panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right','act-agenda-with-cal');
       panel.style.left='';
+      syncActAgendaCalPane(false);
       void panel.offsetWidth;
       panel.style.transition='';
     };
@@ -4562,8 +4615,9 @@ function cerrarActAgendaPanel(){
       if(!panel.classList.contains('on'))cleanup();
     },300);
   }else{
-    panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right');
+    panel.classList.remove('act-agenda-closing','act-agenda-left','act-agenda-right','act-agenda-with-cal');
     panel.style.left='';
+    syncActAgendaCalPane(false);
   }
 }
 function actAgendaGuardarForm(){
@@ -6063,7 +6117,7 @@ function buildEditarActTaskFormHtml(t,ref,opts){
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" value="'+escAttr(t.detalle||'')+'" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables / co-ejecutores</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual"'+(t.entregaModo!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option><option value="unificada"'+(t.entregaModo==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option></select></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(t.plazoDias||'')+'" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    (t.sinExpediente?actLibrePlazoFieldsHtml(t):('<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(t.plazoDias||'')+'" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'))+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px"><input type="checkbox" id="act-libre-prior"'+(t.prioritaria?' checked':'')+'> ⚡ Actividad prioritaria</label>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="submitEditarActTask(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">Guardar cambios</button>'+
     '<button type="button" class="btn bsm" onclick="'+cancelFn+'">Cancelar</button></div>';
@@ -6130,6 +6184,7 @@ function renderConSidePanelActLibre(){
     :'<div style="margin-top:1rem;font-size:12px;color:var(--tx3)">Sin eventos de trazabilidad aún</div>';
   body.innerHTML=tabs+toolbar+formWrap+hist;
   if(typeof toggleActLibreModo==='function')toggleActLibreModo();
+  if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
 }
 function openEditarActTaskModal(expId,taskId,opts){
   opts=opts||{};
@@ -6168,6 +6223,7 @@ function openEditarActTaskModal(expId,taskId,opts){
   ov.classList.add('on');
   window._taskModalCtx={mode:'editarActTask',expId:ref,taskId:t.id,sinExpediente:!!t.sinExpediente};
   toggleActLibreModo();
+  if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
 }
 function submitEditarActLibre(expId,taskId){submitEditarActTask(expId,taskId);}
 function submitEditarActTask(expId,taskId){
@@ -6175,7 +6231,8 @@ function submitEditarActTask(expId,taskId){
   const act=(document.getElementById('act-libre-nombre')||{}).value;
   const det=(document.getElementById('act-libre-detalle')||{}).value;
   const responsables=[...document.querySelectorAll('.act-libre-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
-  const plazo=(document.getElementById('act-libre-plazo')||{}).value;
+  const plazoMeta=readActLibrePlazoVence();
+  if(!plazoMeta.ok){notif(plazoMeta.err||'Revise el plazo','err');return;}
   const prior=!!((document.getElementById('act-libre-prior')||{}).checked);
   const modoEl=document.getElementById('act-libre-modo');
   const entregaModo=(modoEl&&responsables.length>1)?modoEl.value:'individual';
@@ -6212,8 +6269,8 @@ function submitEditarActTask(expId,taskId){
     t.actividad=act.trim();
     t.detalle=String(det||'').trim();
     t.desc=t.actividad+(t.detalle?' — '+t.detalle:'');
-    t.plazoDias=plazo;
-    if(plazo)t.vence=calcVence(plazo);
+    t.plazoDias=plazoMeta.plazo;
+    t.vence=plazoMeta.vence||'';
     t.prioritaria=prior;
     t.historial.push({tipo:'edicion',fecha:hoy(),por:taskComentarioAutor(),nota:'Actividad editada por encargado'});
     syncTaskAggregateState(t);
@@ -14463,14 +14520,72 @@ function openCrearActLibreModal(){
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual">Individual — cada uno entrega por aparte</option><option value="unificada">Unificada — con una entrega se cierra para todos</option></select></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Plazo (días)</label><input type="number" id="act-libre-plazo" min="1" step="1" placeholder="Ej. 15" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    actLibrePlazoFieldsHtml(null)+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-prior"> ⚡ Actividad prioritaria</label>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitCrearActLibre()">Crear actividad</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'crearActLibre'};
   toggleActLibreModo();
+  if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
   setTimeout(()=>{const inp=document.getElementById('act-libre-nombre');if(inp)inp.focus();},80);
 }
+function actLibrePlazoFieldsHtml(t){
+  const vence=t&&t.vence?String(t.vence).slice(0,10):'';
+  const plazo=t&&t.plazoDias!=null&&t.plazoDias!==''?t.plazoDias:'';
+  const modoFecha=!!(t&&vence);
+  return '<div class="fld" style="margin-bottom:8px"><label>Plazo</label>'+
+    '<div class="fx" style="gap:12px;flex-wrap:wrap;margin-bottom:6px">'+
+    '<label style="font-size:12px;display:inline-flex;align-items:center;gap:5px"><input type="radio" name="act-libre-plazo-modo" value="dias"'+(modoFecha?'':' checked')+' onchange="syncActLibrePlazoModo()"> Días</label>'+
+    '<label style="font-size:12px;display:inline-flex;align-items:center;gap:5px"><input type="radio" name="act-libre-plazo-modo" value="fecha"'+(modoFecha?' checked':'')+' onchange="syncActLibrePlazoModo()"> Fecha de vencimiento</label>'+
+    '</div>'+
+    '<input type="number" id="act-libre-plazo" min="1" step="1" value="'+escAttr(plazo)+'" placeholder="Ej. 15" oninput="syncActLibreVenceFromDias()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'+(modoFecha?';display:none':'')+'">'+
+    '<input type="date" id="act-libre-vence" value="'+escAttr(vence)+'" onchange="syncActLibreDiasFromVence()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'+(modoFecha?'':';display:none')+'">'+
+    '<div id="act-libre-plazo-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div></div>';
+}
+function syncActLibrePlazoModo(){
+  const modo=(document.querySelector('input[name="act-libre-plazo-modo"]:checked')||{}).value||'dias';
+  const diasEl=document.getElementById('act-libre-plazo');
+  const fechaEl=document.getElementById('act-libre-vence');
+  const hint=document.getElementById('act-libre-plazo-hint');
+  if(diasEl)diasEl.style.display=modo==='dias'?'':'none';
+  if(fechaEl)fechaEl.style.display=modo==='fecha'?'':'none';
+  if(modo==='dias'){
+    if(hint)hint.textContent='El vencimiento se calcula desde hoy.';
+    syncActLibreVenceFromDias();
+  }else{
+    if(hint)hint.textContent='Indique la fecha exacta de vencimiento.';
+    syncActLibreDiasFromVence();
+  }
+}
+function syncActLibreVenceFromDias(){
+  const diasEl=document.getElementById('act-libre-plazo');
+  const fechaEl=document.getElementById('act-libre-vence');
+  if(!diasEl||!fechaEl)return;
+  const n=Number(diasEl.value);
+  if(!isNaN(n)&&diasEl.value!=='')fechaEl.value=typeof calcVence==='function'?calcVence(n):'';
+}
+function syncActLibreDiasFromVence(){
+  const diasEl=document.getElementById('act-libre-plazo');
+  const fechaEl=document.getElementById('act-libre-vence');
+  if(!diasEl||!fechaEl||!fechaEl.value)return;
+  const d=typeof diasEntre==='function'?diasEntre(hoy(),fechaEl.value):0;
+  diasEl.value=String(Math.max(0,d));
+}
+function readActLibrePlazoVence(){
+  const modo=(document.querySelector('input[name="act-libre-plazo-modo"]:checked')||{}).value||'dias';
+  if(modo==='fecha'){
+    const v=String((document.getElementById('act-libre-vence')||{}).value||'').trim();
+    if(!v)return{ok:false,err:'Indique la fecha de vencimiento'};
+    const dias=typeof diasEntre==='function'?Math.max(0,diasEntre(hoy(),v)):0;
+    return{ok:true,vence:v,plazo:String(dias||1)};
+  }
+  const plazo=String((document.getElementById('act-libre-plazo')||{}).value||'').trim();
+  if(plazo!==''&&(isNaN(Number(plazo))||Number(plazo)<1))return{ok:false,err:'El plazo en días debe ser un número válido'};
+  return{ok:true,vence:plazo?calcVence(plazo):'',plazo:plazo};
+}
+window.syncActLibrePlazoModo=syncActLibrePlazoModo;
+window.syncActLibreVenceFromDias=syncActLibreVenceFromDias;
+window.syncActLibreDiasFromVence=syncActLibreDiasFromVence;
 function toggleActLibreModo(){
   const n=document.querySelectorAll('.act-libre-resp-cb:checked').length;
   const w=document.getElementById('act-libre-modo-wrap');
@@ -14480,7 +14595,8 @@ function submitCrearActLibre(){
   const act=(document.getElementById('act-libre-nombre')||{}).value;
   const det=(document.getElementById('act-libre-detalle')||{}).value;
   const responsables=[...document.querySelectorAll('.act-libre-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
-  const plazo=(document.getElementById('act-libre-plazo')||{}).value;
+  const plazoMeta=readActLibrePlazoVence();
+  if(!plazoMeta.ok){notif(plazoMeta.err||'Revise el plazo','err');return;}
   const prior=!!((document.getElementById('act-libre-prior')||{}).checked);
   const modoEl=document.getElementById('act-libre-modo');
   const entregaModo=(modoEl&&responsables.length>1)?modoEl.value:'individual';
@@ -14493,7 +14609,7 @@ function submitCrearActLibre(){
     desc:act.trim()+(String(det||'').trim()?' — '+String(det).trim():''),
     responsable:responsables[0],responsables:responsables,asignados:asignados,entregaModo:entregaModo,
     depto:resolveDeptoActLibre(deptoActivo),codigo:cod,
-    plazoDias:plazo,vence:plazo?calcVence(plazo):'',prioritaria:prior,
+    plazoDias:plazoMeta.plazo,vence:plazoMeta.vence||'',prioritaria:prior,
     comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'Actividad sin expediente creada'}],soportes:[],notasDoc:[]
   });
   actividadesLibres.push(t);
@@ -14539,18 +14655,22 @@ function esActividadPorEjecutar(t){
   // Imprimir / firmar / revisión final: tarjetas propias (VITAL / depto)
   if(esPqrs&&(fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION||fase===PQRS_WF.POR_FIRMAR||fase===PQRS_WF.REVISION_FINAL))
     return false;
-  // Trámite en firma: no en «Por ejecutar»
+  // Trámite en firma: no en «Por ejecutar», salvo «por notificar» (plazo 5 días hábiles)
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
-      if(deptView||isVital)return false;
+      if(deptView||isVital)return true;
+      if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+      if(typeof esAdministrador==='function'&&esAdministrador())return true;
       return typeof tramitePuedeNotificar==='function'?tramitePuedeNotificar(t):true;
     }
     return false;
   }
-  // Notificar: responsables lo ven en «por ejecutar»; VITAL/depto en su tarjeta
+  // Notificar PQRSD: actividad normal (5 días); también en «Por ejecutar» según plazo
   if(esPqrs&&(fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)){
-    if(deptView||isVital)return false;
+    if(deptView||isVital)return true;
+    if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+    if(typeof esAdministrador==='function'&&esAdministrador())return true;
     return typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eExp);
   }
   // Revisión NCA (incl. devolución Director): va a «Por revisar», no a «Por ejecutar»
@@ -15233,10 +15353,8 @@ function filtrarActividadesPorEstado(list,filtro){
   }
   if(filtro==='pend'){
     let out=(list||[]).filter(t=>esActividadPorEjecutar(t));
-    // Responsables: sumar PQRSD «por notificar» a su cargo aunque no sean el asignado original
-    if(esModoResponsable()&&!(typeof esCargoVital==='function'&&esCargoVital())&&!(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())){
-      out=mergeActividadLists(out,getTareasNotifVisiblesAct());
-    }
+    // Por notificar también forma parte de la deuda de «Por ejecutar» (plazo 5 días)
+    out=mergeActividadLists(out,getTareasNotifVisiblesAct());
     return out;
   }
   if(filtro==='porver')return list.filter(t=>{
@@ -15362,7 +15480,7 @@ function renderActividades(){
   const isVital=typeof esCargoVital==='function'&&esCargoVital();
   const isResp=!deptView&&esModoResponsable();
   const notifAll=getTareasNotifVisiblesAct();
-  const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),(isResp&&!isVital)?notifAll:[]);
+  const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),notifAll);
   const porEjec=deudaBase.length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
@@ -15398,7 +15516,7 @@ function renderActividades(){
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
-    if(filtroAct==='pend')sub.textContent='Por ejecutar: orden — ⚡ prioritaria, 🔥 urgente (15+ días sin entrega), vencidas y en término. «Por corregir» también aparece aquí según el plazo.'+(isResp&&!isVital?' Incluye por notificar.':'');
+    if(filtroAct==='pend')sub.textContent='Por ejecutar: ⚡ prioritaria, 🔥 urgente, vencidas y en término. Incluye por corregir y por notificar (plazo 5 días) según el vencimiento.';
     else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
     else if(filtroAct==='pornotif')sub.textContent='Por notificar: plazo de 5 días hábiles (festivos Colombia). Notifique o deje listo para el correo de oficina.';
     else if(filtroAct==='parafirma')sub.textContent='Por imprimir: descargue, imprima y prepare el oficio para firma del Director.';

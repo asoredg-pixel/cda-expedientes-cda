@@ -476,7 +476,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .acuerdo-cuota-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px;padding:6px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)}
 .acuerdo-cuota-row.mora{border-color:var(--rd);background:var(--rdl)}
 .con-side-panel{width:min(580px,96vw)}
-#act-agenda-panel{width:min(340px,96vw);padding:.75rem .85rem;border-radius:0!important;box-shadow:-2px 0 16px rgba(0,0,0,.1)!important;right:auto!important;transition:transform .25s ease,opacity .15s ease}
+#act-agenda-panel{width:min(340px,96vw);padding:.75rem .85rem;border-radius:0!important;box-shadow:-2px 0 16px rgba(0,0,0,.1)!important;right:auto!important;transition:transform .25s ease,opacity .15s ease;display:flex;flex-direction:column}
+#act-agenda-panel.act-agenda-with-cal{width:min(920px,96vw)!important}
 #act-agenda-panel.con-side-panel.on{transform:none}
 #act-agenda-panel:not(.act-agenda-left):not(.act-agenda-right){
   left:-9999px!important;transform:translateX(-100%)!important;pointer-events:none!important;visibility:hidden;opacity:0;
@@ -501,11 +502,28 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 #act-agenda-panel.act-agenda-right.on{transform:translateX(0)!important}
 #act-agenda-panel .con-side-panel-hdr .btn.bsm:not(.bpu){border:0;background:transparent;font-size:16px;color:var(--tx3);padding:4px 6px}
 #act-agenda-panel #btn-tasks-asignar-resp{background:linear-gradient(135deg,#5b21b6,#7c3aed)!important;color:#fff!important;font-size:11px!important;padding:4px 10px!important;border-radius:8px!important}
-#act-agenda-panel .con-side-panel-hdr{margin-bottom:.35rem;padding-bottom:.45rem;border-bottom:0}
+#act-agenda-panel .con-side-panel-hdr{margin-bottom:.35rem;padding-bottom:.45rem;border-bottom:0;flex-shrink:0}
 #act-agenda-panel #act-agenda-tit{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3)!important}
 #act-agenda-panel #act-agenda-sub{font-size:16px;font-weight:500;color:var(--tx);margin-top:2px}
 #act-agenda-overlay.on{background:rgba(0,0,0,.12)}
+.act-agenda-main{display:flex;flex:1;min-height:0;gap:0;overflow:hidden}
+.act-agenda-tasks{flex:0 0 auto;width:100%;max-width:100%;padding:0;overflow:auto;min-width:0}
+#act-agenda-panel.act-agenda-with-cal .act-agenda-tasks{width:min(340px,42%);border-right:1px solid var(--bd);padding-right:10px}
+.act-agenda-cal-pane{
+  flex:1;min-width:0;overflow:auto;padding:0 0 0 12px;display:flex;flex-direction:column;
+}
+.act-agenda-cal-pane[hidden]{display:none!important}
+.act-agenda-cal-pane-hdr{display:flex;align-items:baseline;flex-wrap:wrap;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--bd)}
 #act-agenda-body{padding:0;overflow:auto}
+@media(max-width:820px){
+  #act-agenda-panel.act-agenda-with-cal{width:min(100vw,96vw)!important}
+  #act-agenda-panel.act-agenda-with-cal .act-agenda-main{flex-direction:column}
+  #act-agenda-panel.act-agenda-with-cal .act-agenda-tasks{
+    width:100%;max-width:none;border-right:0;border-bottom:1px solid var(--bd);
+    padding-right:0;padding-bottom:10px;max-height:42vh;
+  }
+  .act-agenda-cal-pane{padding-left:0;padding-top:10px}
+}
 .act-agenda-btn{position:relative}
 .act-agenda-check{
   position:absolute;top:-4px;left:-4px;z-index:1;
