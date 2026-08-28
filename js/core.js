@@ -92,17 +92,17 @@ function reviewPanelPrepOpen(){
 function reviewPanelElevateConSide(){
   const co=document.getElementById('con-side-overlay');
   const cp=document.getElementById('con-side-panel');
-  const tov=document.getElementById('task-modal-overlay');
   elevateOverlayAboveModals(co,100058);
   elevateOverlayAboveModals(cp,100059);
-  if(tov)tov.classList.add('review-has-side');
 }
 function reviewPanelResetConSide(){
   resetOverlayElevation(document.getElementById('con-side-overlay'));
   resetOverlayElevation(document.getElementById('con-side-panel'));
-  const tov=document.getElementById('task-modal-overlay');
-  if(tov)tov.classList.remove('review-has-side');
   window._reviewKeepOpen=false;
+}
+function reviewElevateTaskModal(){
+  const ov=document.getElementById('task-modal-overlay');
+  if(ov)elevateOverlayAboveModals(ov,100070);
 }
 function openEditarDesdeRevision(ref,taskId){
   ref=String(ref||'').trim();
@@ -269,6 +269,10 @@ function openTrasladarPqrsSmart(expId){
   window._taskModalCtx={mode:'pqrsTrasladoSmart',expId:expId};
 }
 function openTrasladarActividadSmart(expId,taskId){
+  if(taskModalIsReviewOpen()&&pushTaskModalLayer('trasladar')){
+    openTaskCommentsModal(expId,taskId,{gestionAsignados:true,keepStack:true});
+    return;
+  }
   if(typeof openTaskCommentsModal==='function')
     openTaskCommentsModal(expId,taskId,{gestionAsignados:true});
   else if(typeof openEditarActTaskModal==='function')
@@ -5049,6 +5053,7 @@ function openTaskArchivosFromAct(ref,taskId){
   if(typeof openConsultaArchivos==='function')openConsultaArchivos(ref,taskId,{forceModal:true,libre:libre});
   else if(typeof openConsultaArchivosModal==='function'&&!libre)openConsultaArchivosModal(ref);
   else notif('Módulo de archivos no disponible','err');
+  if(taskModalIsReviewOpen()&&typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
 function openAsociarActividadModal(ref,taskId){
   ref=String(ref||'').trim();
@@ -7083,7 +7088,7 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
       '<select id="task-asig-traslado-sel" style="min-width:160px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><option value="">↔ Trasladar / reasignar</option>'+
       pool.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(optLbl(n))+'</option>').join('')+'</select>'+
       '<button type="button" class="btn bsm" onclick="submitTrasladoTaskModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Trasladar</button></div>';
-    if(typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(expId,taskId))
+    if(typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(expId,taskId)&&!opts.hideDelete)
       h+='<div style="margin-top:8px"><button type="button" class="btn bsm bic act-ico" title="Eliminar entrega o actividad" onclick="eliminarActOEntregaOpciones(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑️ Eliminar entrega o actividad</button></div>';
   }
   h+='</div>';
@@ -12113,6 +12118,13 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
       (t.asignados||[]).forEach(a=>{
         if(a.estado==='por_verificar'||a.estado==='por_corregir'){a.fechaReportada='';a.estado='pendiente';}
       });
+      if((t.soportes||[]).length){
+        t.reporteTrasladado=true;
+        const ref=getSoporteActivo(t)||t.soportes[t.soportes.length-1];
+        if(ref)t.soportes.forEach(s=>{s.activo=!!(s.id&&ref.id&&s.id===ref.id);});
+        if(!t.historial.some(h=>h.tipo==='traslado_entrega_ref'&&h.fecha===hoy()))
+          t.historial.push({tipo:'traslado_entrega_ref',fecha:hoy(),por:taskComentarioAutor(),nota:'Se conserva la entrega anterior con observaciones para referencia del nuevo responsable.'});
+      }
     }
     syncTaskAggregateState(t);
   });
@@ -12206,8 +12218,13 @@ function submitTrasladoTaskModal(expId,taskId){
     if(e&&t&&taskEsAtenderPqrs(t,e)&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
       pqrsTryReenvioCorreoNuevosResponsables(expId,[v],{silent:false});
     }
-    notif('Actividad trasladada a '+v,'ok');
-    openTaskCommentsModal(expId,taskId);
+    notif('Actividad trasladada a '+v+'. El nuevo responsable verá la entrega anterior y podrá reportar una nueva.','ok');
+    const hadReview=(window._taskModalStack||[]).length>0;
+    window._taskModalStack=[];
+    closeTaskModal();
+    if(hadReview)closeTaskModal();
+    renderActividades();
+    renderBandejaDepto();
   }
 }
 function openTaskAsignadosFoot(btn){
@@ -12439,7 +12456,7 @@ function openTaskCommentsChatOnly(expId,taskId){
 }
 function openTaskCommentsModal(expId,taskId,opts){
   opts=typeof opts==='object'&&opts?opts:{};
-  window._taskModalStack=[];
+  if(!opts.keepStack)window._taskModalStack=[];
   const chatOnly=!!opts.chatOnly;
   const chatUnificado=!!opts.chatUnificado;
   const soloGestion=!!opts.gestionAsignados;
@@ -12493,7 +12510,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const canEditAsig=canWriteDept;
   const canEditAsigEffective=canEditAsig||(canReviewSop&&!!t.sinExpediente)||(soloGestion&&canWriteDept);
   const pqrsNcaAsig=e&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca();
-  const asigPanel=(!chatOnly&&!isReviewDelivery&&(canEditAsigEffective||soloGestion||taskEsMultiAsignada(t)))?renderTaskAsignadosPanelHtml(expId,taskId,t,canEditAsigEffective,{pqrsNca:pqrsNcaAsig}):'';
+  const asigPanel=(!chatOnly&&!isReviewDelivery&&(canEditAsigEffective||soloGestion||taskEsMultiAsignada(t)))?renderTaskAsignadosPanelHtml(expId,taskId,t,canEditAsigEffective,{pqrsNca:pqrsNcaAsig,hideDelete:!!soloGestion}):'';
   const chatSep=soloGestion?'':(chatOnly?(chatUnificado?renderTaskChatUnificadoHtml(expId,taskId,t):renderTaskChatPanelHtml(expId,taskId,t)):'');
   // Chat/notas solo vía icono 💬 (chatOnly). En revisión 🔍/🧐 no se repiten.
   const showVerifyBar=canDeptVerificarCierre(t)
