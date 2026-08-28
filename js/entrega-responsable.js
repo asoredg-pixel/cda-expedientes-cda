@@ -188,28 +188,6 @@ function htmlEntregaRespDir(prefix,ev){
     '<div class="fld"><label>Dirección</label><input type="text" id="entrega-int-'+prefix+'-direccion" value="'+escAttr(ev['_'+prefix+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
 }
 
-function htmlEntregaLibreDir(slot,ev){
-  ev=ev||{};
-  const depFijo=typeof nombreDeptoOperativo==='function'?nombreDeptoOperativo():'Guaviare';
-  const mun=ev['_'+slot+'_mun']||'';
-  const idp='entrega-libre-int-'+slot;
-  return '<input type="hidden" id="'+idp+'-dep" value="'+escAttr(depFijo)+'">'+
-    '<div class="fld"><label>Municipio</label><select id="'+idp+'-mun" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+entregaRespMunOptsHtml(depFijo,mun)+'</select></div>'+
-    '<div class="fld"><label>Vereda</label><input type="text" id="'+idp+'-vereda" value="'+escAttr(ev['_'+slot+'_vereda']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld"><label>Predio</label><input type="text" id="'+idp+'-predio" value="'+escAttr(ev['_'+slot+'_predio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld"><label>Barrio</label><input type="text" id="'+idp+'-barrio" value="'+escAttr(ev['_'+slot+'_barrio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld"><label>Dirección</label><input type="text" id="'+idp+'-direccion" value="'+escAttr(ev['_'+slot+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
-}
-
-function _entregaLibreIntDir(slot){
-  const o={};
-  const idp='entrega-libre-int-'+slot;
-  ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
-    o['_'+slot+'_'+k]=_entregaLibreIntVal(idp+'-'+k);
-  });
-  return o;
-}
-
 function syncEntregaRespAltaFormPorTramite(){
   const host=document.getElementById('entrega-resp-persona-host');
   if(!host)return;
@@ -358,55 +336,18 @@ function htmlEntregaRespInteresadoBox(tramiteId){
 
 function htmlEntregaLibreInteresadoBox(){
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
-  let h='<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
-  h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>';
-  h+='<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="entrega-libre-int-tipo" onchange="syncEntregaLibreInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div></div>';
-  h+='<div id="entrega-libre-int-natural"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
-    '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-pn-nombre" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-libre-int-pn-identificacion" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pn-correo" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pn-telefono" style="'+inpStyle+'"></div>'+
-    htmlEntregaLibreDir('pn',{})+
-    '</div>'+
-    '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;margin-top:8px"><input type="checkbox" id="entrega-libre-int-est-com" onchange="syncEntregaLibreInteresadoUi()" style="width:15px;height:15px;accent-color:var(--bl)"> Tiene establecimiento comercial</label>'+
-    '<div id="entrega-libre-int-ec" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Establecimiento comercial</div><div class="fg">'+
-    '<div class="fld"><label>Nombre del negocio</label><input type="text" id="entrega-libre-int-ec-nombre" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-ec-telefono" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-ec-correo" style="'+inpStyle+'"></div>'+
-    htmlEntregaLibreDir('ec',{})+
-    '</div></div></div>';
-  h+='<div id="entrega-libre-int-juridica" style="display:none"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
-    '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-libre-int-pj-rep-nombre" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-libre-int-pj-rep-identificacion" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pj-rep-correo" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pj-rep-telefono" style="'+inpStyle+'"></div>'+
-    '</div><div class="slbl" style="margin:.5rem 0 .35rem;font-size:11px">Empresa</div><div class="fg">'+
-    '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-pj-empresa" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>NIT</label><input type="text" id="entrega-libre-int-pj-nit" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pj-correo" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pj-telefono" style="'+inpStyle+'"></div>'+
-    htmlEntregaLibreDir('pj',{})+
+  return '<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>'+
+    '<div class="fg">'+
+      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono" style="'+inpStyle+'"></div>'+
+      '<div class="fld" style="grid-column:1/-1"><label>Entidad / empresa que representa <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="entrega-libre-int-entidad" placeholder="Opcional" style="'+inpStyle+'"></div>'+
     '</div></div>';
-  h+='<div class="fld" style="margin-top:10px"><label>Medio de notificación</label>'+
-    '<select id="entrega-libre-int-medio-notif" style="'+inpStyle+'">'+
-    '<option value="">— No indica —</option>'+
-    '<option value="correo">Correo</option>'+
-    '<option value="fisica">Física / presencial</option>'+
-    '<option value="whatsapp">WhatsApp</option>'+
-    '<option value="aviso">Aviso</option>'+
-    '<option value="otro">Otro</option></select></div>';
-  h+='</div>';
-  return h;
 }
 
 function syncEntregaLibreInteresadoUi(){
-  const tipo=String((document.getElementById('entrega-libre-int-tipo')||{}).value||'natural');
-  const nat=document.getElementById('entrega-libre-int-natural');
-  const jur=document.getElementById('entrega-libre-int-juridica');
-  const ec=document.getElementById('entrega-libre-int-ec');
-  if(nat)nat.style.display=tipo==='juridica'?'none':'';
-  if(jur)jur.style.display=tipo==='juridica'?'':'none';
-  if(ec)ec.style.display=(tipo!=='juridica'&&(document.getElementById('entrega-libre-int-est-com')||{}).checked)?'':'none';
+  /* Formulario simplificado — sin toggles */
 }
 
 function _entregaLibreIntVal(id){
@@ -415,54 +356,32 @@ function _entregaLibreIntVal(id){
 }
 
 function collectEntregaLibreInteresado(){
-  const out={
-    _tipo_persona:_entregaLibreIntVal('entrega-libre-int-tipo')||'natural',
-    _medio_notificacion:_entregaLibreIntVal('entrega-libre-int-medio-notif')||'',
-    _est_com:!!((document.getElementById('entrega-libre-int-est-com')||{}).checked)
+  const nombre=_entregaLibreIntVal('entrega-libre-int-nombre');
+  const correo=_entregaLibreIntVal('entrega-libre-int-correo');
+  const telefono=_entregaLibreIntVal('entrega-libre-int-telefono');
+  const entidad=_entregaLibreIntVal('entrega-libre-int-entidad');
+  return{
+    _tipo_persona:'natural',
+    _pn_nombre:nombre,
+    _pn_correo:correo,
+    _pn_telefono:telefono,
+    _entidad_representa:entidad,
+    _pj_empresa:entidad
   };
-  if(out._tipo_persona==='juridica'){
-    Object.assign(out,{
-      _pj_rep_nombre:_entregaLibreIntVal('entrega-libre-int-pj-rep-nombre'),
-      _pj_rep_identificacion:_entregaLibreIntVal('entrega-libre-int-pj-rep-identificacion'),
-      _pj_rep_correo:_entregaLibreIntVal('entrega-libre-int-pj-rep-correo'),
-      _pj_rep_telefono:_entregaLibreIntVal('entrega-libre-int-pj-rep-telefono'),
-      _pj_empresa:_entregaLibreIntVal('entrega-libre-int-pj-empresa'),
-      _pj_nit:_entregaLibreIntVal('entrega-libre-int-pj-nit'),
-      _pj_correo:_entregaLibreIntVal('entrega-libre-int-pj-correo'),
-      _pj_telefono:_entregaLibreIntVal('entrega-libre-int-pj-telefono')
-    },_entregaLibreIntDir('pj'));
-  }else{
-    Object.assign(out,{
-      _pn_nombre:_entregaLibreIntVal('entrega-libre-int-pn-nombre'),
-      _pn_identificacion:_entregaLibreIntVal('entrega-libre-int-pn-identificacion'),
-      _pn_correo:_entregaLibreIntVal('entrega-libre-int-pn-correo'),
-      _pn_telefono:_entregaLibreIntVal('entrega-libre-int-pn-telefono')
-    },_entregaLibreIntDir('pn'));
-    if(out._est_com){
-      Object.assign(out,{
-        _ec_nombre:_entregaLibreIntVal('entrega-libre-int-ec-nombre'),
-        _ec_telefono:_entregaLibreIntVal('entrega-libre-int-ec-telefono'),
-        _ec_correo:_entregaLibreIntVal('entrega-libre-int-ec-correo')
-      },_entregaLibreIntDir('ec'));
-    }
-  }
-  return out;
 }
 
 function validateEntregaLibreInteresado(datos){
   if(!datos)return'Indique los datos del interesado';
-  if(datos._tipo_persona==='juridica'){
-    if(!datos._pj_empresa)return'Indique el nombre / razón social del interesado';
-  }else if(!datos._pn_nombre){
-    return'Indique el nombre del interesado';
-  }
+  if(!datos._pn_nombre)return'Indique el nombre del interesado';
   return'';
 }
 
 function applyEntregaLibreInteresadoToTask(t,datos){
   if(!t||!datos)return;
   Object.keys(datos).forEach(function(k){t[k]=datos[k];});
-  t.interesadoNombre=datos._tipo_persona==='juridica'?(datos._pj_empresa||datos._pj_rep_nombre||''):(datos._pn_nombre||'');
+  const nom=String(datos._pn_nombre||'').trim();
+  const ent=String(datos._entidad_representa||'').trim();
+  t.interesadoNombre=ent?(nom+' · '+ent):nom;
 }
 
 function resolveActividadRequiereOficio(nombreAct,deptoId){
