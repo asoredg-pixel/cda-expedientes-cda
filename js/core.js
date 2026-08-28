@@ -856,14 +856,6 @@ function pqrsDefaultNotificadorOficina(ofi){
   }
   return '';
 }
-/** ¿El nombre es un usuario VITAL? */
-function pqrsNombreEsVital(nombre){
-  const n=String(nombre||'').trim();
-  if(!n)return false;
-  return (typeof pqrsNombresVital==='function'?pqrsNombresVital():[]).some(function(v){
-    return typeof agendaNorm==='function'?agendaNorm(v)===agendaNorm(n):v===n;
-  });
-}
 /**
  * Asegura notificador correcto: oficinas → su encargado (nunca VITAL);
  * NCA → VITAL/encargado. Corrige si quedó VITAL en PQRSD de oficina.
@@ -15740,7 +15732,7 @@ function renderActGantt(list){
         const canEditGantt=typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto();
         const actSstAction=canEditGantt
           ?(t.sinExpediente?'abrirPanelActLibre':'editarExpDesdeAct')
-          :'abrirConsultaRefDesdeActividad');
+          :'abrirConsultaRefDesdeActividad';
         const actSstAttrs=' data-sst-action="'+actSstAction+'" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'"';
         rows+='<div class="act-gantt-row">'+
           '<div class="act-gantt-label"'+actSstAttrs+' title="'+escAttr(tip)+'" style="padding-left:34px;cursor:pointer">'+
