@@ -6126,7 +6126,7 @@ function renderConPanelTaskBarHtml(expId){
     '<button type="button" class="btn bsm bic act-ico" title="Datos de la actividad" onclick="openEditarActTaskModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\',{forceActMeta:true})">📝</button>'+
     '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔄</button>'+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(taskId)+'\',libre:false,label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
-    (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,taskId)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar actividad" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🗑️</button>':'')+
+    actEliminarActOEntregaBtnHtml(ref,taskId)+
     '<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="openTaskCommentsModal(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🧐</button>'+
     '</div>';
   return '<div class="con-panel-task-bar">'+
@@ -6239,6 +6239,43 @@ function eliminarActTaskConfirm(expId,taskId){
     });
   });
 }
+function puedeMostrarBtnEliminarActOEntrega(expId,taskId){
+  if(!puedeGestionarActividadesDepto()||esModoResponsable()||esJurisdiccional())return false;
+  const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
+  const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
+  return !!(pe||pa);
+}
+function actEliminarActOEntregaBtnHtml(expId,taskId){
+  if(!puedeMostrarBtnEliminarActOEntrega(expId,taskId))return '';
+  return '<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega o actividad" onclick="eliminarActOEntregaOpciones(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑️</button>';
+}
+function eliminarActOEntregaOpciones(expId,taskId){
+  const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
+  const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
+  if(!pe&&!pa){notif('No puede eliminar en este estado','err');return;}
+  if(pe&&!pa){eliminarEntregaActividadConfirm(expId,taskId);return;}
+  if(!pe&&pa){eliminarActTaskConfirm(expId,taskId);return;}
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body){eliminarEntregaActividadConfirm(expId,taskId);return;}
+  if(tit)tit.textContent='Eliminar';
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  body.innerHTML=
+    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.</div>'+
+    '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal();eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal();eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
+    '</div>';
+  ov.classList.add('on');
+  window._taskModalCtx={mode:'elimActOEntrega',expId:expId,taskId:taskId};
+}
+window.puedeMostrarBtnEliminarActOEntrega=puedeMostrarBtnEliminarActOEntrega;
+window.eliminarActOEntregaOpciones=eliminarActOEntregaOpciones;
 function openEditarActLibreModal(expId,taskId){openEditarActTaskModal(expId,taskId);}
 /** Formulario de datos de actividad (libre o meta) — reutilizado en panel lateral y modal. */
 function buildEditarActTaskFormHtml(t,ref,opts){
@@ -6255,7 +6292,7 @@ function buildEditarActTaskFormHtml(t,ref,opts){
     (showAbrirReg?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();editarExpDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
     '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🔄</button>'+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(t.id)+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
-    (typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(ref,t.id)?'<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarActTaskConfirm(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🗑️</button>':'')+
+    actEliminarActOEntregaBtnHtml(ref,t.id)+
     (opts.inSidePanel?'<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat" onclick="openTaskCommentsChatOnly(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">'+chatWaIconHtml(15)+'</button>':'')+
     '</div>';
   const cancelFn=opts.inSidePanel?'cerrarConsultaPanel()':'closeTaskModal()';
@@ -6651,8 +6688,8 @@ function renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,opts){
       '<select id="task-asig-traslado-sel" style="min-width:160px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"><option value="">↔ Trasladar / reasignar</option>'+
       pool.filter(n=>n).map(n=>'<option value="'+escAttr(n)+'">'+escAttr(optLbl(n))+'</option>').join('')+'</select>'+
       '<button type="button" class="btn bsm" onclick="submitTrasladoTaskModal(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Trasladar</button></div>';
-    if(!pqrsNca&&typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId))
-      h+='<div style="margin-top:8px"><button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑 Eliminar actividad'+(t.sinExpediente?' sin expediente':'')+'</button></div>';
+    if(typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(expId,taskId))
+      h+='<div style="margin-top:8px"><button type="button" class="btn bsm bic act-ico" title="Eliminar entrega o actividad" onclick="eliminarActOEntregaOpciones(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑️ Eliminar entrega o actividad</button></div>';
   }
   h+='</div>';
   return h;
@@ -8937,14 +8974,12 @@ function guardarNotaInternaModal(expId,taskId){
     nombre:(t&&t.nombre)||(e&&typeof getNom==='function'?getNom(e):'')||''
   });
   if(!ok){notif('No se pudieron guardar las notas','err');return;}
-  notif('Notas internas guardadas (solo usted)','ok');
   closeTaskModal();
   if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
 }
 function borrarNotaInternaModal(expId,taskId){
   if(!confirm('¿Borrar sus notas internas de esta actividad?'))return;
   setNotaInterna(expId,taskId,'');
-  notif('Notas internas eliminadas','ok');
   closeTaskModal();
   if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
 }
@@ -9093,7 +9128,6 @@ function guardarNotasInternasUnificado(expId,taskId){
     nombre:(t&&t.nombre)||(e&&typeof getNom==='function'?getNom(e):'')||''
   });
   if(!ok){notif('No se pudieron guardar las notas','err');return;}
-  notif('Notas guardadas','ok');
   if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
 }
 function setTaskChatUniTab(tab){
@@ -10358,8 +10392,6 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     h+='<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')" title="Ya tiene documento firmado: pasa a Por notificar">⬆ Cargar firmado → Por notificar</button>'+
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
       '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>';
-    if(typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId))
-      h+='<button type="button" class="btn bsm bd2" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')" title="Eliminar esta actividad (no aplica a PQRSD)">🗑 Eliminar actividad</button>';
     h+='</div></div>';
     if(!esLibre){
       h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
@@ -14420,9 +14452,6 @@ function renderActRowToolbarHtml(t,expAct){
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
   if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
     acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Revisar respuesta enviada':'Revisar entrega')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
-    if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
-      acts+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
-    }
   }
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   if(showChat){
