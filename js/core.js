@@ -5060,6 +5060,17 @@ function taskActividadIconBarHtml(ref,taskId,t){
   if(!t)return'';
   return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true})+'</div>';
 }
+function taskActividadIconRailHtml(ref,taskId,t){
+  if(!t)return'';
+  const inner=taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true});
+  return '<nav class="task-review-rail-nav" aria-label="Acciones de revisión">'+inner.replace(/class="btn bsm bic act-ico/g,'class="btn bsm bic act-ico task-review-rail-btn')+'</nav>';
+}
+function taskReviewObsToggleHtml(open){
+  open=!!open;
+  return '<button type="button" class="task-review-obs-toggle" id="soporte-obs-toggle" onclick="toggleSoporteObsPanel()" title="'+(open?'Ocultar observaciones':'Observaciones del documento')+'" aria-expanded="'+(open?'true':'false')+'">'+
+    '<span class="soporte-obs-toggle-ico">'+(open?'▲':'▼')+'</span>'+
+    '<span class="task-review-obs-lbl">Obs.</span></button>';
+}
 function openTaskArchivosFromAct(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
@@ -8626,11 +8637,24 @@ function soporteObsPanelIsOpen(){
   return !!window._soporteObsOpen;
 }
 function syncSoporteObsPanelUi(){
+  const review=document.querySelector('.task-modal.task-modal-review');
+  const stage=document.getElementById('task-review-doc-stage');
   const wrap=document.getElementById('soporte-split-wrap');
   const btn=document.getElementById('soporte-obs-toggle');
   const col=document.getElementById('soporte-sidebar-col');
-  if(!wrap)return;
   const open=!!window._soporteObsOpen;
+  if(review&&stage){
+    stage.classList.toggle('task-review-obs-open',open);
+    if(col)col.setAttribute('aria-hidden',open?'false':'true');
+    if(btn){
+      btn.title=open?'Ocultar observaciones':'Observaciones del documento';
+      btn.setAttribute('aria-expanded',open?'true':'false');
+      const ico=btn.querySelector('.soporte-obs-toggle-ico');
+      if(ico)ico.textContent=open?'▲':'▼';
+    }
+    return;
+  }
+  if(!wrap)return;
   wrap.classList.toggle('soporte-split-obs-open',open);
   if(col)col.setAttribute('aria-hidden',open?'false':'true');
   if(btn){
@@ -10400,7 +10424,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const ent=getUltimaEntregaComentario(t);
     if(ent)h+=renderEntregaComentarioBoxHtml(ent,{pendiente:true});
   }
-  if(hasSop){
+  if(hasSop&&!isReview){
     h+='<div class="soporte-doc-tabs">'+soportes.map((s,i)=>{
       const on=sel&&s.id===sel.id;
       const lbl=soporteTabLabel(s,i,soportes);
@@ -10409,17 +10433,11 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     if(sel){
       const esAnx=!!(sel.es_anexo||sel.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(sel.label||'')));
       const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección de respuesta':(sel.label||''));
-      if(isReview){
-        h+='<div class="task-review-doc-meta"><span class="task-review-doc-meta-tit">'+escAttr(tipoDoc||sel.label||'Documento')+'</span>'+
-          (sel.driveFilename&&sel.driveFilename!==sel.label?'<span class="task-review-doc-meta-sub">'+escAttr(sel.driveFilename)+'</span>':'')+
-          '<span class="task-review-doc-meta-sub">v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span></div>';
-      }else{
       h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
         '<span><strong style="color:var(--tx2)">'+escAttr(tipoDoc||sel.label||'')+'</strong>'+(sel.driveFilename&&sel.driveFilename!==sel.label?' · '+escAttr(sel.driveFilename):'')+' · v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span>'+
         '<button type="button" class="btn bsm" style="font-size:11px;padding:2px 8px" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">'+(sel.local?'↗ Abrir adjunto':'↗ Abrir en ventana')+'</button></div>';
-      }
     }
-  }else{
+  }else if(!hasSop){
     const ent=getUltimaEntregaComentario(t);
     if(!ent||!taskPendienteVerificacion(t)){
       h+='<div style="font-size:12px;color:var(--tx3);margin-bottom:6px">Sin enlace de soporte adjunto.</div>';
@@ -10434,6 +10452,34 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     (prefer==='links')
   );
   const defTab=canPrefer?prefer:(showPqrsCompare?'pqrscompare':(showCompareDocs&&!showPqrsCompare?'compare':'doc'));
+  if(isReview){
+    h+='<div class="task-review-doc-bar">'+
+      '<div class="task-view-tabs task-review-view-tabs">'+
+        (showPqrsCompare?'<button type="button" class="task-view-tab'+(defTab==='pqrscompare'?' on':'')+'" data-tab="pqrscompare" onclick="setTaskViewTab(\'pqrscompare\')">⇅ Sol./Resp.</button>':'')+
+        '<button type="button" class="task-view-tab'+(defTab==='doc'?' on':'')+'" data-tab="doc" onclick="setTaskViewTab(\'doc\')">📄 Documento</button>'+
+        (showCompare?'<button type="button" class="task-view-tab'+(defTab==='compare'?' on':'')+'" data-tab="compare" onclick="setTaskViewTab(\'compare\')">⇅ Comparar</button>':'')+
+        '<button type="button" class="task-view-tab'+(defTab==='exp'?' on':'')+'" data-tab="exp" onclick="setTaskViewTab(\'exp\')">📋 Expediente</button>'+
+        '<button type="button" class="task-view-tab'+(defTab==='links'?' on':'')+'" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
+      '</div>';
+    if(hasSop&&sel){
+      const esAnx=!!(sel.es_anexo||sel.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(sel.label||'')));
+      const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección':(sel.label||'Documento'));
+      h+='<div class="task-review-doc-bar-sub">'+
+        (soportes.length>1?('<div class="soporte-doc-tabs task-review-doc-tabs">'+soportes.map((s,i)=>{
+          const on=sel&&s.id===sel.id;
+          const lbl=soporteTabLabel(s,i,soportes);
+          return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
+        }).join('')+'</div>'):'')+
+        '<div class="task-review-doc-meta"><span class="task-review-doc-meta-tit">'+escAttr(tipoDoc)+'</span>'+
+        (sel.driveFilename&&sel.driveFilename!==sel.label?'<span class="task-review-doc-meta-sub">'+escAttr(sel.driveFilename)+'</span>':'')+
+        '<span class="task-review-doc-meta-sub">v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span></div>'+
+        '<div class="task-review-doc-tools">'+
+        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
+        (canAnnot?'<button type="button" class="btn bsm bsm-ico" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">📍</button>':'')+
+        '</div></div>';
+    }
+    h+='</div>';
+  }else{
   h+='<div class="task-view-tabs">'+
     (showPqrsCompare?'<button type="button" class="task-view-tab'+(defTab==='pqrscompare'?' on':'')+'" data-tab="pqrscompare" onclick="setTaskViewTab(\'pqrscompare\')">⇅ Solicitud / Respuesta</button>':'')+
     '<button type="button" class="task-view-tab'+(defTab==='doc'?' on':'')+'" data-tab="doc" onclick="setTaskViewTab(\'doc\')">📄 Documento</button>'+
@@ -10441,15 +10487,38 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     '<button type="button" class="task-view-tab'+(defTab==='exp'?' on':'')+'" data-tab="exp" onclick="setTaskViewTab(\'exp\')">📋 Expediente</button>'+
     '<button type="button" class="task-view-tab'+(defTab==='links'?' on':'')+'" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
   '</div>';
+  }
   h+='<div id="task-view-pqrscompare" class="task-view-panel'+(defTab==='pqrscompare'?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
   h+='<div id="task-view-doc" class="task-view-panel'+(defTab==='doc'?' on':'')+'">';
   if(sel&&soporteTieneVista(sel)){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
-    h+='<div class="soporte-annot-toolbar doc-viewport-toolbar'+(isReview?' doc-viewport-toolbar-review':'')+'">'+
-      (!isReview?'<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>':'')+
-      (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm'+(isReview?' bsm-ico':'')+'" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">'+(isReview?'↗':'↗ Ventana emergente')+'</button>':'')+
-      (canAnnot?'<button type="button" class="btn bsm'+(isReview?' bsm-ico':'')+'" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">'+(isReview?'📍':'📍 Marcar en documento')+'</button>':'')+
+    if(isReview){
+      const obsOpen=typeof soporteObsPanelIsOpen==='function'?soporteObsPanelIsOpen():false;
+      h+='<div class="task-review-doc-stage'+(obsOpen?' task-review-obs-open':'')+'" id="task-review-doc-stage">'+
+        '<div class="task-review-viewer-shell">'+
+          (showDeptAnnotUi?'<div class="soporte-pagina-filter task-review-pag-filter"><label>Pág. <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas</option></select></label></div>':'')+
+          '<div class="soporte-split task-review-split" id="soporte-split-wrap">'+
+            '<div class="soporte-doc-col">'+
+              '<div class="soporte-annot-wrap annot-navigable" id="soporte-annot-wrap" data-exp="'+escAttr(expId)+'" data-task="'+escAttr(taskId)+'" data-sop="'+escAttr(sel.id)+'">'+
+                renderSoporteEmbedHtml(sel)+
+                '<div class="soporte-annot-overlay" id="soporte-annot-overlay"></div>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+        '<div class="task-review-obs-drawer soporte-sidebar-col" id="soporte-sidebar-col" aria-hidden="'+(obsOpen?'false':'true')+'">'+
+          '<div class="soporte-sidebar-hdr"><span>Observaciones del documento</span>'+
+          '<button type="button" class="soporte-sidebar-close" onclick="toggleSoporteObsPanel(false)" title="Cerrar">✕</button></div>'+
+          (canAnnot?renderAnnotPinFormHtml():'')+
+          '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sel.id,canAnnot)+'</div>'+
+        '</div>'+
+      '</div>';
+    }else{
+    h+='<div class="soporte-annot-toolbar doc-viewport-toolbar">'+
+      '<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
+      (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir documento en ventana emergente (no pestaña)">↗ Ventana emergente</button>':'')+
+      (canAnnot?'<button type="button" class="btn bsm" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">📍 Marcar en documento</button>':'')+
       '</div>';
     if(showDeptAnnotUi){
       h+='<div class="soporte-pagina-filter"><label>Marcadores: <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas las páginas</option></select></label></div>';
@@ -10473,6 +10542,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sel.id,canAnnot)+'</div>'+
       '</div>'+
     '</div>';
+    }
   }else{
     h+='<div style="font-size:12px;color:var(--tx3);padding:8px">Adjunte un enlace Drive o un archivo PDF/imagen para visualizar el documento.</div>';
   }
@@ -12577,18 +12647,24 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)&&!esModoResponsable()&&!esJurisdiccional());
   const verifyBar=(!chatOnly&&!soloGestion&&showVerifyBar)?renderTaskVerifyBarHtml(expId,taskId,t):'';
   const refAct=t.sinExpediente?(t.codigo||expId):expId;
-  const bibBar=(!chatOnly&&!soloGestion)?(
-    isReviewDelivery?taskActividadIconBarHtml(refAct,taskId,t):
+  const bibBar=(!chatOnly&&!soloGestion&&!isReviewDelivery)?(
     (typeof bibGuardarEnBibliotecaBarHtml==='function'?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'')
   ):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
   if(isReviewDelivery){
+    const railNav=taskActividadIconRailHtml(refAct,taskId,t);
+    const obsToggle=hasSop?taskReviewObsToggleHtml(false):'';
     body.innerHTML=statusRow+
       '<div class="task-review-layout">'+
-        '<div class="task-review-top">'+bibBar+'</div>'+
-        '<div class="task-review-main">'+sopPanel+'</div>'+
-        (verifyBar?'<div class="task-review-decision">'+verifyBar+'</div>':'')+
+        '<aside class="task-review-rail" aria-label="Acciones">'+
+          railNav+
+          (obsToggle?'<div class="task-review-rail-foot">'+obsToggle+'</div>':'')+
+        '</aside>'+
+        '<div class="task-review-workspace">'+
+          '<div class="task-review-main">'+sopPanel+'</div>'+
+          (verifyBar?'<details class="task-review-decision"><summary>Decisión y cierre</summary><div class="task-review-decision-body">'+verifyBar+'</div></details>':'')+
+        '</div>'+
       '</div>';
   }else{
     body.innerHTML=statusRow+bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
