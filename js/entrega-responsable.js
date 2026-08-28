@@ -336,13 +336,15 @@ function htmlEntregaRespInteresadoBox(tramiteId){
 
 function htmlEntregaLibreInteresadoBox(){
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const sugNom=typeof personSugAttrs==='function'?personSugAttrs('libre','nombre'):'';
+  const sugEnt=typeof personSugAttrs==='function'?personSugAttrs('libre','empresa'):'';
   return '<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>'+
     '<div class="fg">'+
-      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-nombre" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-nombre"'+sugNom+' placeholder="Buscar por nombre…" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono" style="'+inpStyle+'"></div>'+
-      '<div class="fld" style="grid-column:1/-1"><label>Entidad / empresa que representa <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="entrega-libre-int-entidad" placeholder="Opcional" style="'+inpStyle+'"></div>'+
+      '<div class="fld" style="grid-column:1/-1"><label>Entidad / empresa que representa <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="entrega-libre-int-entidad"'+sugEnt+' placeholder="Buscar por razón social…" style="'+inpStyle+'"></div>'+
     '</div></div>';
 }
 
@@ -1260,6 +1262,7 @@ function ensureExpTaskEntregaResponsable(){
     })):Object.assign(t,{depto:deptoOk,codigo:cod,sinExpediente:true});
     applyEntregaLibreInteresadoToTask(t,interesadoDatos);
     applyEntregaRespOficioToTask(t,actividad);
+    if(typeof upsertPersonaEntregaLibre==='function')upsertPersonaEntregaLibre(interesadoDatos,cod,deptoOk);
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
     t._pending_fs_sync=true;
     t._pending_fs_at=Date.now();

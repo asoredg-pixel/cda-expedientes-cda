@@ -16253,7 +16253,7 @@ function personaTieneDatosNatural(p){
   return !!(p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre||p.pj_rep_nombre||p.pi_rep_nombre||p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pi_identificacion||p.pj_rep_identificacion||p.pi_rep_identificacion);
 }
 function personaAptaParaTarget(p,target,field){
-  if(['apo','aut','pn','qd'].includes(target)){
+  if(['apo','aut','pn','qd','libre'].includes(target)){
     if(field==='empresa'||field==='nit'||field==='rep_nombre'||field==='rep_identificacion')return false;
     if(personaTieneDatosEmpresa(p)&&!personaTieneDatosNatural(p))return false;
   }
@@ -16322,7 +16322,7 @@ function matchPersonaCampo(p,target,field,ql){
     if(!qn)return false;
     return idsEmpresaBusqueda(p).some(id=>(id||'').replace(/\D/g,'').includes(qn));
   }
-  if(field==='empresa')return (p.pj_empresa||p.pi_empresa||'').toLowerCase().includes(ql);
+  if(field==='empresa')return (p.pj_empresa||p.pi_empresa||p._entidad_representa||'').toLowerCase().includes(ql);
   return false;
 }
 function personaEtiquetaSug(p,field){
@@ -16544,6 +16544,13 @@ function aplicarPersonaCatalog(p,target){
     setv('sec-pn-telefono',p.pn_telefono||p.qd_telefono||'');
     return;
   }
+  if(target==='libre'){
+    setv('entrega-libre-int-nombre',personaNombreNatural(p)||p.pn_nombre||'');
+    setv('entrega-libre-int-correo',personaCorreoNatural(p));
+    setv('entrega-libre-int-telefono',personaTelefonoNatural(p));
+    setv('entrega-libre-int-entidad',p.pj_empresa||p.pi_empresa||p._entidad_representa||'');
+    return;
+  }
   if(target==='sec-pj'){
     const tp=document.getElementById('sec-tipo-persona');if(tp){tp.value='juridica';toggleSecPersona();}
     if(personSugField==='empresa'||personSugField==='nit'){
@@ -16633,6 +16640,20 @@ function upsertPersonaCatalog(data){
       if(inf)mergePersonaEnCatalogo(inf,['infractor'],expId,depto);
     });
   }
+}
+function upsertPersonaEntregaLibre(datos,actCodigo,depto){
+  if(!datos||!String(datos._pn_nombre||'').trim())return;
+  const snap={
+    tipo_persona:'natural',
+    origen:'interesado',
+    pn_nombre:String(datos._pn_nombre||'').trim(),
+    pn_correo:String(datos._pn_correo||'').trim(),
+    pn_telefono:String(datos._pn_telefono||'').trim(),
+    pj_empresa:String(datos._entidad_representa||datos._pj_empresa||'').trim(),
+    _entidad_representa:String(datos._entidad_representa||'').trim()
+  };
+  mergePersonaEnCatalogo(snap,['interesado'],actCodigo||null,depto||null);
+  if(typeof saveLS==='function')saveLS();
 }
 function getRolesPersonaManual(){
   return Object.keys(PERSONA_ROLES).filter(r=>{
