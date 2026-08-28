@@ -16253,7 +16253,12 @@ function personaTieneDatosNatural(p){
   return !!(p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre||p.pj_rep_nombre||p.pi_rep_nombre||p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pi_identificacion||p.pj_rep_identificacion||p.pi_rep_identificacion);
 }
 function personaAptaParaTarget(p,target,field){
-  if(['apo','aut','pn','qd','libre'].includes(target)){
+  if(target==='libre'){
+    if(field==='empresa')return !!(p.pj_empresa||p.pi_empresa||p._entidad_representa);
+    if(field==='nombre')return !!(personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre);
+    return true;
+  }
+  if(['apo','aut','pn','qd'].includes(target)){
     if(field==='empresa'||field==='nit'||field==='rep_nombre'||field==='rep_identificacion')return false;
     if(personaTieneDatosEmpresa(p)&&!personaTieneDatosNatural(p))return false;
   }

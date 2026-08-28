@@ -334,17 +334,60 @@ function htmlEntregaRespInteresadoBox(tramiteId){
   return h;
 }
 
+function _personSugLibrePortalId(field){
+  return field==='empresa'?'entrega-libre-int-entidad-sug':'entrega-libre-int-nombre-sug';
+}
+
+function hidePersonasSugLibre(field){
+  if(field){
+    const portal=document.getElementById(_personSugLibrePortalId(field));
+    if(portal){portal.style.display='none';portal.innerHTML='';}
+    return;
+  }
+  hidePersonasSugLibre('nombre');
+  hidePersonasSugLibre('empresa');
+}
+
+function filtrarPersonasSugLibre(inp,field){
+  const portal=document.getElementById(_personSugLibrePortalId(field));
+  if(!portal||!inp)return;
+  const q=String(inp.value||'').trim();
+  const list=typeof buscarPersonas==='function'?buscarPersonas(q,'libre',field||'nombre',12):[];
+  window._personSugLibreList=list;
+  if(!list.length){
+    portal.style.display='none';
+    portal.innerHTML='';
+    return;
+  }
+  portal.innerHTML=list.map(function(p,i){
+    const lbl=typeof personaEtiquetaSug==='function'?personaEtiquetaSug(p,field||'nombre'):(typeof personaDisplayNombre==='function'?personaDisplayNombre(p):'');
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();pickPersonaEntregaLibre('+i+')"><strong>'+escAttr(lbl)+'</strong></button>';
+  }).join('');
+  portal.style.display='block';
+}
+
+function pickPersonaEntregaLibre(idx){
+  const p=(window._personSugLibreList||[])[idx];
+  if(!p||typeof aplicarPersonaCatalog!=='function')return;
+  aplicarPersonaCatalog(p,'libre');
+  hidePersonasSugLibre();
+}
+
 function htmlEntregaLibreInteresadoBox(){
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
-  const sugNom=typeof personSugAttrs==='function'?personSugAttrs('libre','nombre'):'';
-  const sugEnt=typeof personSugAttrs==='function'?personSugAttrs('libre','empresa'):'';
+  const sugNom=' oninput="filtrarPersonasSugLibre(this,\'nombre\')" onfocus="filtrarPersonasSugLibre(this,\'nombre\')" onblur="setTimeout(function(){hidePersonasSugLibre(\'nombre\');},180)"';
+  const sugEnt=' oninput="filtrarPersonasSugLibre(this,\'empresa\')" onfocus="filtrarPersonasSugLibre(this,\'empresa\')" onblur="setTimeout(function(){hidePersonasSugLibre(\'empresa\');},180)"';
   return '<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>'+
     '<div class="fg">'+
-      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-nombre"'+sugNom+' placeholder="Buscar por nombre…" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><div style="position:relative">'+
+        '<input type="text" id="entrega-libre-int-nombre"'+sugNom+' placeholder="Buscar por nombre…" style="'+inpStyle+'">'+
+        '<div id="entrega-libre-int-nombre-sug" class="entrega-resp-sug" style="display:none"></div></div></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono" style="'+inpStyle+'"></div>'+
-      '<div class="fld" style="grid-column:1/-1"><label>Entidad / empresa que representa <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><input type="text" id="entrega-libre-int-entidad"'+sugEnt+' placeholder="Buscar por razón social…" style="'+inpStyle+'"></div>'+
+      '<div class="fld" style="grid-column:1/-1"><label>Entidad / empresa que representa <span style="font-weight:400;color:var(--tx3)">(si aplica)</span></label><div style="position:relative">'+
+        '<input type="text" id="entrega-libre-int-entidad"'+sugEnt+' placeholder="Buscar por razón social…" style="'+inpStyle+'">'+
+        '<div id="entrega-libre-int-entidad-sug" class="entrega-resp-sug" style="display:none"></div></div></div>'+
     '</div></div>';
 }
 
@@ -1422,6 +1465,9 @@ window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
 window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
 window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
 window.pickActEntregaResp=pickActEntregaResp;
+window.filtrarPersonasSugLibre=filtrarPersonasSugLibre;
+window.pickPersonaEntregaLibre=pickPersonaEntregaLibre;
+window.hidePersonasSugLibre=hidePersonasSugLibre;
 window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
 window.entregaRespFileCtxKey=entregaRespFileCtxKey;
 window.entregaRespFileUploadCtx=entregaRespFileUploadCtx;
