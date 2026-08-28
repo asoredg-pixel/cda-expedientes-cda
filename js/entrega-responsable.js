@@ -917,8 +917,14 @@ function openEntregaResponsableModal(){
     sstFileRenderList('entrega-resp-anexos-list',entregaRespFileCtxKey());
   }
   setTimeout(function(){
-    const a=document.getElementById('entrega-resp-actividad');
-    if(a){a.focus();filtrarActEntregaRespSug(a);}
+    const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+    const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+    const exp=document.getElementById('entrega-resp-exp');
+    const nom=document.getElementById('entrega-libre-int-nombre');
+    if(!libre&&!nuevo&&exp)exp.focus();
+    else if(libre&&nom)nom.focus();
+    const actSug=document.getElementById('entrega-resp-act-sug');
+    if(actSug){actSug.style.display='none';actSug.innerHTML='';}
   },80);
 }
 
@@ -952,6 +958,12 @@ function filtrarActEntregaRespSug(inp){
   if(!portal||!inp)return;
   const q=String(inp.value||'').trim().toLowerCase();
   const words=q.split(/\s+/).filter(Boolean);
+  if(!words.length){
+    portal.style.display='none';
+    portal.innerHTML='';
+    syncEntregaRespRegistroUi();
+    return;
+  }
   const base=listActividadesPredEntregaResp();
   if(!base.length){
     portal.style.display='block';
