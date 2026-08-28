@@ -579,18 +579,43 @@ function collectArchivosConsultaCompleto(e,taskIdFilter,opts){
   raws.forEach(addRaw);
   return items.sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));});
 }
-function conArchivosListHtml(items,previewFn){
+function conArchivoItemBtnHtml(it,idx,previewFn,firstOn){
   previewFn=previewFn||'renderConsultaArchivoPreview';
+  const icon=it.local?(String(it.mime||'').includes('pdf')?'📄':String(it.mime||'').startsWith('image/')?'🖼':'📎'):'🔗';
+  const tit=it.descDoc||it.label||'Archivo';
+  const sub=[it.tipoDoc||it.taskDesc||'Documento',fmtF((it.fecha||'').slice(0,10)),it.version?'v'+it.version:''].filter(Boolean).join(' · ');
+  return '<button type="button" class="con-arch-item'+(firstOn?' on':'')+'" onclick="'+previewFn+'('+idx+')">'+
+    '<span style="font-size:18px;flex-shrink:0">'+icon+'</span>'+
+    '<span style="flex:1;min-width:0"><strong style="display:block;font-size:13px">'+escAttr(tit)+'</strong>'+
+    '<span style="font-size:11px;color:var(--tx3);display:block;margin-top:2px">'+escAttr(sub)+'</span></span></button>';
+}
+function conArchivosListHtml(items,previewFn,mainExp){
+  previewFn=previewFn||'renderConsultaArchivoPreview';
+  mainExp=String(mainExp||'').trim();
   if(!items.length)return '<div style="font-size:12px;color:var(--tx3);padding:8px 0">Sin enlaces Drive ni adjuntos registrados en este expediente.</div>';
-  return items.map((it,i)=>{
-    const icon=it.local?(String(it.mime||'').includes('pdf')?'📄':String(it.mime||'').startsWith('image/')?'🖼':'📎'):'🔗';
-    const tit=it.descDoc||it.label||'Archivo';
-    const sub=[it.tipoDoc||it.taskDesc||'Documento',fmtF((it.fecha||'').slice(0,10)),it.version?'v'+it.version:''].filter(Boolean).join(' · ');
-    return '<button type="button" class="con-arch-item'+(i===0?' on':'')+'" onclick="'+previewFn+'('+i+')">'+
-      '<span style="font-size:18px;flex-shrink:0">'+icon+'</span>'+
-      '<span style="flex:1;min-width:0"><strong style="display:block;font-size:13px">'+escAttr(tit)+'</strong>'+
-      '<span style="font-size:11px;color:var(--tx3);display:block;margin-top:2px">'+escAttr(sub)+'</span></span></button>';
-  }).join('');
+  const mainItems=[],asocMap=new Map();
+  items.forEach(function(it,i){
+    it._archIdx=i;
+    if(it.asocDe){
+      const key=String(it.exp||it.asocDe||'').trim()||'vinculado';
+      if(!asocMap.has(key))asocMap.set(key,[]);
+      asocMap.get(key).push(it);
+    }else mainItems.push(it);
+  });
+  let html='',first=true;
+  if(mainItems.length){
+    const mainLbl=mainExp?('📂 Este registro · '+mainExp):'📂 Documentos del registro principal';
+    html+='<div class="con-arch-grp"><div class="con-arch-grp-hd">'+escAttr(mainLbl)+'</div>'+
+      mainItems.map(function(it){const h=conArchivoItemBtnHtml(it,it._archIdx,previewFn,first);first=false;return h;}).join('')+'</div>';
+  }
+  asocMap.forEach(function(grpItems,key){
+    const sample=grpItems[0]||{};
+    const tagRaw=String(sample.tipoDoc||'Vinculado').split('·')[0].trim();
+    const tag=tagRaw||'Vinculado';
+    html+='<div class="con-arch-grp con-arch-grp-asoc"><div class="con-arch-grp-hd">📎 '+escAttr(tag)+' · '+escAttr(key)+'</div>'+
+      grpItems.map(function(it){const h=conArchivoItemBtnHtml(it,it._archIdx,previewFn,first);first=false;return h;}).join('')+'</div>';
+  });
+  return html;
 }
 function renderConsultaArchivoPreview(idx,opts){
   opts=opts||{};
@@ -632,7 +657,7 @@ function renderConPanelDocumentosBlock(e,taskIdFilter,open){
   const items=collectArchivosConsultaCompleto(e,taskIdFilter||null,{incluirAsociados:incluirAsoc});
   window._conArchItems=items;
   window._conArchPanelExp=e._exp;
-  const list=conArchivosListHtml(items,'renderConPanelArchivoPreview');
+  const list=conArchivosListHtml(items,'renderConPanelArchivoPreview',e._exp);
   const canGestionar=window._conPanelEditMode&&puedeGestionarDocsTramite();
   const tramDocs=docsTramiteData(e._docs_tramite);
   const driveFolderHtml=e._drive_folder_link?('<div style="margin-bottom:8px"><a href="'+escAttr(e._drive_folder_link)+'" target="_blank" rel="noopener" class="btn bsm">📁 Carpeta Drive del expediente</a></div>'):'';
@@ -847,23 +872,31 @@ function openConsultaArchivos(expId,taskId,opts){
   const id=String(expId||'').trim();
   if(!id){notif('Indique el número de expediente','err');return;}
   const e=getExpById(id);
-  if(!e){notif('Expediente «'+id+'» no encontrado','err');return;}
+  const actLibre=!e&&(opts.libre||typeof isActLibreRef==='function'&&isActLibreRef(id,taskId));
+  if(!e&&!actLibre){notif('Expediente «'+id+'» no encontrado','err');return;}
   const panel=document.getElementById('con-side-panel');
   const panelOpen=!opts.forceModal&&panel&&panel.classList.contains('on')&&String(window._conPanelActive||'').trim()===id;
   if(panelOpen&&e){
-    refreshConPanelDocumentos(id,null,true);
+    refreshConPanelDocumentos(id,taskId||null,true);
     scrollConPanelDocumentos();
     initConPanelArchivosPreview(taskId||null);
     return;
   }
   let items=[];
-  if(e)items=collectArchivosConsultaCompleto(e,null,{incluirAsociados:getExpAsociadosAll(e).length>0});
+  if(e)items=collectArchivosConsultaCompleto(e,taskId||null,{incluirAsociados:getExpAsociadosAll(e).length>0});
   else{
     const act=getActLibreByCodigo(id)||getActLibreById(taskId);
     if(act){
+      const cod=act.codigo||id;
       items=collectArchivosActLibre(act).map(it=>{
         const p=parseDrivePreviewUrl(it.url);
-        return {...it,preview:it.local?(it.url||it.preview):(p.preview||p.url||it.url),openUrl:it.local?(it.url||it.preview):(p.url||it.url||it.preview)};
+        return {
+          ...it,exp:cod,asocDe:'',
+          tipoDoc:'Actividad sin expediente · '+cod,
+          descDoc:it.label||it.descDoc||'Documento',
+          preview:it.local?(it.url||it.preview):(p.preview||p.url||it.url),
+          openUrl:it.local?(it.url||it.preview):(p.url||it.url||it.preview)
+        };
       });
     }
   }
@@ -883,9 +916,9 @@ function openConsultaArchivos(expId,taskId,opts){
     body.innerHTML='<div style="font-size:13px;color:var(--tx2);margin-bottom:12px">No hay enlaces Drive ni adjuntos registrados'+(taskId?' en esta actividad':' en este expediente')+'.</div>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>';
   }else{
-    const list=conArchivosListHtml(items,'renderConsultaArchivoPreview');
+    const list=conArchivosListHtml(items,'renderConsultaArchivoPreview',id);
     const hasAsocMdl=e&&getExpAsociadosAll(e).length>0;
-    body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento — enlaces Drive del expediente, actividades y PQRSD.'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye PQRSD y expedientes vinculados.</span>':'')+'</div>'+
+    body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento. Los archivos se agrupan por registro: el principal y los vinculados (PQRSD o expediente asociado).'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye documentos de registros asociados.</span>':'')+'</div>'+
       '<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-arch-preview-wrap"></div></div>'+
       '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
     const selIdx=taskId?Math.max(0,(items||[]).findIndex(it=>it.taskId===taskId)):0;
@@ -987,18 +1020,19 @@ function renderConSidePanel(){
   const lockBanner=window._conPanelLockMsg?('<div style="padding:10px 12px;margin-bottom:10px;border-radius:var(--r);background:var(--aml);border:1px solid #e8c97a;font-size:12px;color:#7a5500;line-height:1.45">'+escAttr(window._conPanelLockMsg)+'</div>'):'';
   const altaBanner=typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(e,{expId:e._exp,showDone:true}):'';
   const pqrsToolbarBtns=!window._conPanelEditMode&&esPqrsSecretaria(e)?(
-    pqrsAsocToolbarBtnHtml(e)+
     (puedeMarcarPqrsInformativa(e)?'<button type="button" class="btn bsm bic act-ico" title="Informativa" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ️</button>':'')+
     (puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e)||puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>':'')+
     (puedeAsignarPqrsOficina(e)?'<button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>':'')+
     (puedeMarcarPqrsRespondida(e)?'<button type="button" class="btn bsm bic act-ico bp" title="Responder" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓</button>':'')
   ):'';
-  const archToolbarBtn=window._conPanelEditMode?'':expBtnArchHtml(e._exp,{cls:'bp',title:'Documentos y enlaces Drive del expediente'});
-  const editToggleBtn=!window._conPanelEditMode&&canEdit&&!window._conPanelPqrsNcaEdit&&!lockedByOther?'<button type="button" class="btn bsm bp" data-sst-action="conPanelActivarEdicion" data-sst-exp="'+escAttr(e._exp)+'" title="Editar registro">✏️ Editar</button>':'';
+  const archToolbarBtn=window._conPanelEditMode?'':expBtnArchHtml(e._exp,{cls:'bp bic act-ico',label:'📁',title:'Documentos y enlaces Drive del expediente'});
+  const asocPanelBtn=(!window._conPanelEditMode&&(canEdit||puedeGestionarPqrsAsociacion(e)))||window._conPanelEditMode&&canEdit?'<button type="button" class="btn bsm bic act-ico" title="Asociar expediente o PQRSD" onclick="conPanelAsociarExp()">🖇️</button>':'';
+  const editToggleBtn=!window._conPanelEditMode&&canEdit&&!window._conPanelPqrsNcaEdit&&!lockedByOther?'<button type="button" class="btn bsm bic act-ico bp" data-sst-action="conPanelActivarEdicion" data-sst-exp="'+escAttr(e._exp)+'" title="Editar registro">✏️</button>':'';
   const toolbar='<div class="con-panel-toolbar">'+
     badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+flagsHtmlCompact(e)+' '+pqrsPrioritariaBadge(e)+' '+pqrsInformativaBadge(e)+
     (typeof expAltaResponsableBadgeHtml==='function'?expAltaResponsableBadgeHtml(e):'')+' '+
     pqrsToolbarBtns+
+    asocPanelBtn+
     archToolbarBtn+
     '<button type="button" class="btn bsm bic btn-export-exp" onclick="exportarExpediente(\''+escAttr(e._exp)+'\')" title="Exportar expediente (.json)"><span class="export-ico">⬇</span></button>'+
     editToggleBtn+
@@ -1020,6 +1054,38 @@ function renderConSidePanel(){
   }
   body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+(esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'')+renderConPanelExpContent(e,{foldOpen:!!(esOficinaPqrsNca()&&esPqrsSecretaria(e))});
   if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
+}
+function conPanelFocusExpAsoc(){
+  const cb=document.getElementById('fld__usar_exp_asociados');
+  const box=document.getElementById('exp-asoc-box');
+  if(cb&&!cb.checked){cb.checked=true;if(typeof toggleExpAsociados==='function')toggleExpAsociados();}
+  const wrap=document.getElementById('con-side-form-wrap');
+  if(wrap){
+    wrap.querySelectorAll('details.form-section').forEach(function(d){
+      if(box&&d.contains(box))d.open=true;
+    });
+  }
+  if(box)box.scrollIntoView({behavior:'smooth',block:'nearest'});
+  else if(typeof addExpAsoc==='function')addExpAsoc();
+}
+function conPanelAsociarExp(){
+  const expId=String(window._conPanelActive||'').trim();
+  const e=getExpById(expId);
+  if(!e){notif('Expediente no encontrado','err');return;}
+  if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+    SST.openAsociarUnificadoModal(expId);
+    return;
+  }
+  if(!window._conPanelEditMode&&typeof conPanelActivarEdicion==='function'){
+    if(typeof resolverEdicionConBloqueo==='function'&&!resolverEdicionConBloqueo(expId,true)){
+      if(window._conPanelLockMsg)notif(window._conPanelLockMsg,'err');
+      return;
+    }
+    conPanelActivarEdicion(expId);
+    setTimeout(conPanelFocusExpAsoc,180);
+    return;
+  }
+  conPanelFocusExpAsoc();
 }
 function conPanelVerSoloLectura(){
   liberarExpLock(window._conPanelActive);

@@ -1856,7 +1856,7 @@ function bibRefreshBusquedaVinculos() {
   el.innerHTML = cands.map(function(c) {
     return '<div class="rec-vinc-cand">' +
       '<span><span class="rec-badge">' + escAttr(bibTipoLabel(c.tipo)) + '</span> ' + escAttr(c.label) + '</span>' +
-      '<button type="button" class="btn bsm bp" onclick="bibAsociarARepo(\'' + escAttr(repoId) + '\',\'' + escAttr(c.tipo) + '\',\'' + escAttr(c.id) + '\',\'' + escAttr(c.taskId || '') + '\',' + (c.libre ? 'true' : 'false') + ')">Asociar</button>' +
+      '<button type="button" class="btn bsm bp" onclick="bibAsociarARepo(\'' + escAttr(repoId) + '\',\'' + escAttr(c.tipo) + '\',\'' + escAttr(c.id) + '\',\'' + escAttr(c.taskId || '') + '\',' + (c.libre ? 'true' : 'false') + ')">🖇️ Asociar</button>' +
       '</div>';
   }).join('');
 }

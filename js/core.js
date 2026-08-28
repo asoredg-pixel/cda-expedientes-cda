@@ -122,7 +122,7 @@ function sstEnsureActPopCloser(){
   },true);
 }
 sstEnsureActPopCloser();
-/** Un solo 🔗: elige expediente o PQRSD y abre el buscador. */
+/** Un solo 🖇️: elige expediente o PQRSD y abre el buscador. */
 function openAsociarUnificadoModal(expId){
   expId=String(expId||'').trim();
   const e=getExpById(expId);
@@ -135,12 +135,12 @@ function openAsociarUnificadoModal(expId){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body){cerrarPqrsModalPrep();return;}
-  if(tit)tit.textContent='🔗 Asociar · '+expId;
+  if(tit)tit.textContent='🖇️ Asociar · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   body.innerHTML=
     '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
-    '<button type="button" class="btn bsm bp" onclick="closeTaskModal();SST.openAsociarVinculoPqrsModal(\''+jsStr(expId)+'\',\'tramite\')">🔗 Expediente</button>'+
-    '<button type="button" class="btn bsm bp" onclick="closeTaskModal();SST.openAsociarVinculoPqrsModal(\''+jsStr(expId)+'\',\'pqrs\')">🔗 PQRSD</button>'+
+    '<button type="button" class="btn bsm bp" onclick="closeTaskModal();SST.openAsociarVinculoPqrsModal(\''+jsStr(expId)+'\',\'tramite\')">🖇️ Expediente</button>'+
+    '<button type="button" class="btn bsm bp" onclick="closeTaskModal();SST.openAsociarVinculoPqrsModal(\''+jsStr(expId)+'\',\'pqrs\')">🖇️ PQRSD</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsAsocPick',expId:expId};
@@ -1308,11 +1308,11 @@ function pqrsAsocBtnHtml(e){
 function pqrsAsocAccionesHtml(e){
   if(!puedeGestionarPqrsAsociacion(e))return[];
   const id=jsStr(e._exp);
-  return ['<button type="button" class="btn bsm" data-sst-action="openAsociarUnificadoModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openAsociarUnificadoModal(\''+id+'\')">🔗 Asociar</button>'];
+  return ['<button type="button" class="btn bsm" data-sst-action="openAsociarUnificadoModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openAsociarUnificadoModal(\''+id+'\')">🖇️ Asociar</button>'];
 }
 function pqrsAsocToolbarBtnHtml(e){
   if(!puedeGestionarPqrsAsociacion(e))return'';
-  return '<button type="button" class="btn bsm bic act-ico" title="Asociar expediente o PQRSD" onclick="SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')">🔗</button>';
+  return '<button type="button" class="btn bsm bic act-ico" title="Asociar expediente o PQRSD" onclick="SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')">🖇️</button>';
 }
 function puedeMarcarPqrsInformativa(e){
   if(!e||!esPqrsSecretaria(e)||pqrsEstaCerrada(e)||e._pqrs_informativa)return false;
@@ -2852,7 +2852,7 @@ function htmlPqrsOficinaDetalleCore(e,opts){
   const docHtml=htmlPqrsDocumentoBtns(e);
   const cerrada=pqrsEstaCerrada(e);
   const btnResp=(!cerrada&&puedeMarcarPqrsRespondida(e))?' <button type="button" class="btn bsm bic act-ico bp" title="Responder" onclick="openPqrsRespuestaModal(\''+escAttr(e._exp)+'\')">✓</button>':'';
-  const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?' <button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+escAttr(e._exp)+'\')">🔗</button>':'';
+  const btnAsoc=(!cerrada&&puedeGestionarPqrsAsociacion(e))?' <button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+escAttr(e._exp)+'\')">🖇️</button>':'';
   const btnInf=(!cerrada&&puedeMarcarPqrsInformativa(e))?' <button type="button" class="btn bsm bic act-ico" title="Informativa" onclick="SST.openMarcarPqrsInformativaModal(\''+escAttr(e._exp)+'\')">ℹ️</button>':'';
   const btnAsig=(!cerrada&&puedeAsignarPqrsOficina(e))?' <button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>':'';
   const btnTras=( (puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e))&&!cerrada)?' <button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>':'';
@@ -4915,14 +4915,76 @@ function enrichActividadListRow(row,live){
   }
   return row;
 }
-function taskActividadIconBarHtml(ref,taskId,t){
+function taskActividadToolbarInnerHtml(ref,taskId,t,opts){
+  opts=opts||{};
   if(!t)return'';
   const libre=!!t.sinExpediente;
-  return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
-    '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔄</button>'+
-    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(taskId)+'\',libre:'+(libre?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
-    actEliminarActOEntregaBtnHtml(ref,taskId)+
-    '</div>';
+  const refJs=jsStr(ref),tidJs=jsStr(taskId);
+  const r=escAttr(ref),tid=escAttr(taskId);
+  let h='';
+  if(opts.showEdit!==false){
+    if(libre)
+      h+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="'+(opts.editOnclick||('abrirPanelActLibre(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
+    else
+      h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" onclick="'+(opts.editOnclick||('editarExpDesdeAct(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
+  }
+  h+='<button type="button" class="btn bsm bic act-ico" title="Archivos del expediente o actividad" onclick="openTaskArchivosFromAct(\''+refJs+'\',\''+tidJs+'\')">📁</button>';
+  if(libre)
+    h+='<button type="button" class="btn bsm bic act-ico" title="Asociar a expediente o PQRSD" onclick="openAsociarActividadModal(\''+refJs+'\',\''+tidJs+'\')">🖇️</button>';
+  else{
+    const ex=getExpById(ref);
+    if(ex&&(typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(ex)||typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()))
+      h+='<button type="button" class="btn bsm bic act-ico" title="Asociar expediente o PQRSD" onclick="openAsociarActividadModal(\''+refJs+'\',\''+tidJs+'\')">🖇️</button>';
+  }
+  h+='<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+r+'\',\''+tid+'\')">🔄</button>';
+  if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
+    h+='<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+r+'\',taskId:\''+tid+'\',libre:'+(libre?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>';
+  h+=actEliminarActOEntregaBtnHtml(ref,taskId);
+  if(opts.inSidePanel)
+    h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat" onclick="openTaskCommentsChatOnly(\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+'</button>';
+  return h;
+}
+function taskActividadIconBarHtml(ref,taskId,t){
+  if(!t)return'';
+  return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true})+'</div>';
+}
+function openTaskArchivosFromAct(ref,taskId){
+  ref=String(ref||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
+  const libre=t?!!t.sinExpediente:(typeof isActLibreRef==='function'&&isActLibreRef(ref,taskId));
+  if(typeof openConsultaArchivos==='function')openConsultaArchivos(ref,taskId,{forceModal:true,libre:libre});
+  else if(typeof openConsultaArchivosModal==='function'&&!libre)openConsultaArchivosModal(ref);
+  else notif('Módulo de archivos no disponible','err');
+}
+function openAsociarActividadModal(ref,taskId){
+  ref=String(ref||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
+  if(t&&!t.sinExpediente){
+    const expId=t.exp||ref;
+    const e=getExpById(expId);
+    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+      if(typeof SST!=='undefined'&&typeof SST.openAsociarUnificadoModal==='function')SST.openAsociarUnificadoModal(expId);
+      else if(typeof openAsociarUnificadoModal==='function')openAsociarUnificadoModal(expId);
+      return;
+    }
+    if(typeof editarExpDesdeAct==='function')editarExpDesdeAct(expId,taskId);
+    setTimeout(function(){if(typeof conPanelFocusExpAsoc==='function')conPanelFocusExpAsoc();},280);
+    return;
+  }
+  const cod=t?(t.codigo||ref):ref;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body){notif('No se pudo abrir el formulario de asociación','err');return;}
+  if(tit)tit.textContent='🖇️ Asociar · '+(cod||'actividad');
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  body.innerHTML=(typeof renderActLibreVincularHtml==='function'?renderActLibreVincularHtml(cod,taskId):'<div style="font-size:12px;color:var(--tx2)">Formulario no disponible.</div>')+
+    '<div style="margin-top:10px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+  ov.classList.add('on');
+  window._taskModalCtx={mode:'actLibreVinc',expId:cod,taskId:taskId};
 }
 function getActLibreById(id){
   const sid=String(id||'').trim();
@@ -5745,7 +5807,7 @@ function renderConPanelPqrsExtras(e){
   if(doc)h+=doc;
   h+=renderPqrsAsociadosPanelHtml(e);
   const acc=[];
-  if(puedeGestionarPqrsAsociacion(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')">🔗</button>');
+  if(puedeGestionarPqrsAsociacion(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Asociar" onclick="SST.openAsociarUnificadoModal(\''+jsStr(e._exp)+'\')">🖇️</button>');
   if(puedeMarcarPqrsInformativa(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Informativa" data-sst-action="openMarcarPqrsInformativaModal" data-sst-exp="'+escAttr(e._exp)+'" onclick="event.stopPropagation();SST.openMarcarPqrsInformativaModal(\''+jsStr(e._exp)+'\')">ℹ️</button>');
   if(puedeAsignarPqrsOficina(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Asignar" onclick="openAsignarPqrsOficinaModal(\''+escAttr(e._exp)+'\')">👤</button>');
   if(puedeTrasladarPqrsInicial(e)||puedeTrasladarPqrs(e))acc.push('<button type="button" class="btn bsm bic act-ico" title="Trasladar" onclick="openTrasladarPqrsSmart(\''+escAttr(e._exp)+'\')">🔄</button>');
@@ -6472,13 +6534,8 @@ function buildEditarActTaskFormHtml(t,ref,opts){
   rs.forEach(n=>{if(n&&!names.some(x=>agendaNorm(x)===agendaNorm(n)))names.push(n);});
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(depto)||'').trim():'';
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(rs.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
-  const showAbrirReg=!t.sinExpediente&&!opts.forceActMeta&&!opts.inSidePanel;
   const icoBar='<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
-    (showAbrirReg?'<button type="button" class="btn bsm bic act-ico" title="Abrir registro" onclick="closeTaskModal();editarExpDesdeAct(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
-    '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">🔄</button>'+
-    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(t.id)+'\',libre:'+(t.sinExpediente?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
-    actEliminarActOEntregaBtnHtml(ref,t.id)+
-    (opts.inSidePanel?'<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat" onclick="openTaskCommentsChatOnly(\''+escAttr(ref)+'\',\''+escAttr(t.id)+'\')">'+chatWaIconHtml(15)+'</button>':'')+
+    taskActividadToolbarInnerHtml(ref,t.id,t,{showEdit:!opts.inSidePanel,inSidePanel:!!opts.inSidePanel})+
     '</div>';
   const cancelFn=opts.inSidePanel?'cerrarConsultaPanel()':'closeTaskModal()';
   return (t.sinExpediente?'':'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Expediente '+escAttr(ref)+'</div>')+
@@ -10686,7 +10743,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
   // Vincular a expediente: opcional y al final (no bloquea imprimir/firma)
   if(esLibre&&pendVer&&typeof renderActLibreVincularHtml==='function'){
     h+='<details style="margin-top:10px;padding:8px 10px;background:var(--sf);border:1px dashed var(--bd);border-radius:var(--r)">'+
-      '<summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--tx2)">🔗 Asociar expediente / PQRSD</summary>'+
+      '<summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--tx2)">🖇️ Asociar expediente / PQRSD</summary>'+
       renderActLibreVincularHtml(expId,taskId)+
       '</details>';
   }
@@ -17134,7 +17191,7 @@ function expedientesAsociadosHtml(ev){
   const ownerDepto=ev._depto||getDeptoOperativo();
   const ayuda=expAsocAyudaHtml(ownerDepto);
   return '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;font-weight:500;margin-top:.6rem"><input type="checkbox" id="fld__usar_exp_asociados" onchange="toggleExpAsociados()"'+(usar?' checked':'')+' style="width:15px;height:15px;accent-color:var(--bl)"> Tiene expedientes asociados</label>'+
-    '<div id="exp-asoc-box" style="margin-top:.5rem;'+(usar?'':'display:none')+'">'+(ayuda?('<div style="font-size:11px;color:var(--tx2);margin-bottom:.4rem">'+ayuda+'</div>'):'')+'<div id="exp-asoc-list">'+rows+'</div><button type="button" class="btn bsm" onclick="addExpAsoc()">+ Añadir expediente asociado</button></div>';
+    '<div id="exp-asoc-box" style="margin-top:.5rem;'+(usar?'':'display:none')+'">'+(ayuda?('<div style="font-size:11px;color:var(--tx2);margin-bottom:.4rem">'+ayuda+'</div>'):'')+'<div id="exp-asoc-list">'+rows+'</div><button type="button" class="btn bsm" onclick="addExpAsoc()">🖇️ Añadir expediente asociado</button></div>';
 }
 function syncExpAsociados(){
   const cur=gv('fld__exp')||'';

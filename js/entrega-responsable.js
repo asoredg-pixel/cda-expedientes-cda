@@ -1771,7 +1771,7 @@ window.clearAltaResponsableAlAprobarDocumento=clearAltaResponsableAlAprobarDocum
 function renderActLibreVincularHtml(expId,taskId){
   const tid=escAttr(taskId);
   return '<div id="act-libre-vinc-box" style="margin-bottom:10px;padding:10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
-    '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:6px">🔗 Asociar a expediente / PQRSD</div>'+
+    '<div style="font-size:12px;font-weight:600;color:var(--bl);margin-bottom:6px">🖇️ Asociar a expediente / PQRSD</div>'+
     '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">La entrega queda vinculada al radicado. Los archivos en carpeta <strong>ACT-…</strong> se <strong>mueven</strong> a la carpeta Drive del expediente o PQRSD y la carpeta temporal se elimina. Puede asociar a un <strong>expediente o PQRSD existente</strong>, o <strong>crear un expediente</strong> (las PQRSD solo las radica Secretaría).</div>'+
     '<div class="fx" style="gap:12px;flex-wrap:wrap;margin-bottom:8px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-vinc-modo" id="act-libre-vinc-existente" checked onchange="syncActLibreVincularUi()"> Existente</label>'+
@@ -1798,7 +1798,7 @@ function renderActLibreVincularHtml(expId,taskId){
       htmlEntregaRespInteresadoBox()+
     '</div>'+
     '<div class="fx" style="gap:8px;margin-top:10px">'+
-      '<button type="button" class="btn bsm bp" onclick="submitVincularActLibre(\''+tid+'\')">🔗 Vincular actividad</button>'+
+      '<button type="button" class="btn bsm bp" onclick="submitVincularActLibre(\''+tid+'\')">🖇️ Vincular actividad</button>'+
     '</div>'+
   '</div>';
 }
