@@ -5169,6 +5169,7 @@ function renderPqrsEntregaCamposHtml(e){
   return h;
 }
 function pqrsEntregaAddAttachment(){
+  if(typeof sstFilePickMainBtn==='function'){sstFilePickMainBtn();return;}
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
     if(!ok)return;
     const inp=document.getElementById('enviar-adj-file');
@@ -5178,6 +5179,10 @@ function pqrsEntregaAddAttachment(){
 function pqrsEntregaOnFileChange(inp){
   const err=document.getElementById('pqrs-entrega-adj-err');
   if(err){err.style.display='none';err.textContent='';}
+  if(typeof sstFileOnMainPick==='function'&&typeof entregaRespFileUploadCtx==='function'){
+    sstFileOnMainPick(inp,{ctxKey:typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp',listId:'pqrs-entrega-att-list',getUploadCtx:entregaRespFileUploadCtx});
+    return;
+  }
   const box=document.getElementById('pqrs-entrega-att-list');
   if(!box)return;
   const f=inp&&inp.files&&inp.files[0];
@@ -5187,6 +5192,18 @@ function pqrsEntregaOnFileChange(inp){
     '<button type="button" class="btn bsm bd2" onclick="pqrsEntregaClearAttachment()">✕</button></div>';
 }
 function pqrsEntregaClearAttachment(){
+  if(typeof sstFileRemove==='function'){
+    const ctx=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
+    const ctxData=window._sstFileStaging&&window._sstFileStaging[ctx];
+    if(ctxData&&ctxData.main)sstFileRemove(ctx,ctxData.main.id,'pqrs-entrega-att-list');
+    else{
+      const inp=document.getElementById('enviar-adj-file');
+      if(inp)inp.value='';
+      const box=document.getElementById('pqrs-entrega-att-list');
+      if(box)box.innerHTML='';
+    }
+    return;
+  }
   const inp=document.getElementById('enviar-adj-file');
   if(inp)inp.value='';
   const box=document.getElementById('pqrs-entrega-att-list');
@@ -5201,6 +5218,10 @@ function pqrsEntregaToggleAnexos(){
   if(!on)pqrsEntregaClearAnexos();
 }
 function pqrsEntregaOnAnexosChange(inp){
+  if(typeof sstFileOnAnexosPick==='function'&&typeof entregaRespFileUploadCtx==='function'){
+    sstFileOnAnexosPick(inp,{ctxKey:typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp',listId:'pqrs-entrega-anexos-list',getUploadCtx:entregaRespFileUploadCtx});
+    return;
+  }
   const box=document.getElementById('pqrs-entrega-anexos-list');
   if(!box)return;
   const files=inp&&inp.files?Array.from(inp.files):[];
@@ -5213,10 +5234,23 @@ function pqrsEntregaOnAnexosChange(inp){
   }).join('');
 }
 function pqrsEntregaClearAnexos(){
-  const inp=document.getElementById('enviar-anexos-file');
-  if(inp)inp.value='';
-  const box=document.getElementById('pqrs-entrega-anexos-list');
-  if(box)box.innerHTML='';
+  if(typeof sstFileRemove==='function'){
+    const ctx=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
+    const data=window._sstFileStaging&&window._sstFileStaging[ctx];
+    if(data&&data.anexos&&data.anexos.length){
+      data.anexos.slice().forEach(function(it){sstFileRemove(ctx,it.id,'pqrs-entrega-anexos-list');});
+    }else{
+      const inp=document.getElementById('enviar-anexos-file');
+      if(inp)inp.value='';
+      const box=document.getElementById('pqrs-entrega-anexos-list');
+      if(box)box.innerHTML='';
+    }
+  }else{
+    const inp=document.getElementById('enviar-anexos-file');
+    if(inp)inp.value='';
+    const box=document.getElementById('pqrs-entrega-anexos-list');
+    if(box)box.innerHTML='';
+  }
   const cb=document.getElementById('pqrs-entrega-tiene-anexos');
   if(cb&&!cb.checked){
     const wrap=document.getElementById('pqrs-entrega-anexos-box');
@@ -6130,6 +6164,26 @@ function renderConPanelTaskBarHtml(expId){
 }
 function getCfgActividadesPred(deptoId){
   return cfgFor(deptoId||getDeptoOperativo());
+}
+/** Plazo predeterminado de una actividad (admin). {dias, unidad:'dias'|'habiles'} o null. */
+function getActPredPlazoMeta(nombreAct,deptoId){
+  const nom=String(nombreAct||'').trim();
+  if(!nom)return null;
+  const cfg=getCfgActividadesPred(deptoId);
+  const map=(cfg&&cfg.actPlazoMap)||{};
+  const umap=(cfg&&cfg.actPlazoUnidadMap)||{};
+  const dias=map[nom];
+  if(dias===''||dias===null||dias===undefined)return null;
+  const n=Number(dias);
+  if(isNaN(n)||n<=0)return null;
+  const unidad=String(umap[nom]||'habiles').toLowerCase()==='dias'?'dias':'habiles';
+  return{dias:n,unidad:unidad};
+}
+/** Plazo para tarea creada por entrega del responsable (5 días hábiles de gestión). */
+function getPlazoEntregaResponsable(){
+  const dias=typeof RESP_ENTREGA_PLAZO_DIAS!=='undefined'?RESP_ENTREGA_PLAZO_DIAS:5;
+  const unidad=typeof RESP_ENTREGA_PLAZO_UNIDAD!=='undefined'?RESP_ENTREGA_PLAZO_UNIDAD:'habiles';
+  return{dias:dias,unidad:unidad,vence:typeof calcVenceConUnidad==='function'?calcVenceConUnidad(hoy(),dias,unidad):''};
 }
 function taskCoEjecutorResumen(t){
   const rs=getTaskResponsables(t);
@@ -8841,6 +8895,16 @@ function collectEnviarAdjuntos(){
   const links=[];
   const files=[];
   const anexos=[];
+  const preUploaded=[];
+  if(typeof sstFileCollect==='function'&&(document.getElementById('entrega-resp-file-list')||document.getElementById('pqrs-entrega-att-list'))){
+    const staged=sstFileCollect(typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp');
+    if(staged){
+      (staged.files||[]).forEach(function(f){files.push(f);});
+      (staged.anexos||[]).forEach(function(f){anexos.push(f);});
+      (staged.preUploaded||[]).forEach(function(u){preUploaded.push(u);});
+      if(files.length||anexos.length||preUploaded.length)return{links,files,anexos,preUploaded};
+    }
+  }
   if(wrap){
     wrap.querySelectorAll('.enviar-adj-row').forEach(row=>{
       const v=(row.querySelector('.enviar-adj-link')||{}).value;
@@ -9389,8 +9453,13 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     closeTaskModal();
   };
   const allUpload=[].concat(adj.files||[],adj.anexos||[]);
+  const preUploaded=adj.preUploaded||[];
   const canUploadPqrs=esPqrs&&typeof driveUploadPqrsExpediente==='function';
   const canUploadExp=!esPqrs&&eDrive&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eDrive)&&typeof driveUploadExpedienteActividad==='function';
+  if(!allUpload.length&&preUploaded.length){
+    runSubmit(preUploaded);
+    return;
+  }
   if(allUpload.length&&(canUploadPqrs||canUploadExp)){
     (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
       if(!ok)return;
@@ -9456,7 +9525,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         if(e&&typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e,false);
         else if(typeof persistExpLocal==='function')persistExpLocal();
         if(typeof sstCargaDone==='function')sstCargaDone({holdMs:220});
-        runSubmit(uploaded);
+        runSubmit(uploaded.concat(preUploaded));
       }catch(err){
         console.warn('submitEnviarSoporteVerificacion drive:',err);
         if(typeof sstCargaHide==='function')sstCargaHide();

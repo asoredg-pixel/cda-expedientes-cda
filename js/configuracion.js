@@ -491,18 +491,29 @@ function actPredCardBody(){
   const acts=cfg.actividadesPred||[];
   if(!cfg.actRegistroMap||typeof cfg.actRegistroMap!=='object')cfg.actRegistroMap={};
   if(!cfg.actFirmaMap||typeof cfg.actFirmaMap!=='object')cfg.actFirmaMap={};
+  if(!cfg.actPlazoMap||typeof cfg.actPlazoMap!=='object')cfg.actPlazoMap={};
+  if(!cfg.actPlazoUnidadMap||typeof cfg.actPlazoUnidadMap!=='object')cfg.actPlazoUnidadMap={};
   const tipoOpts=function(sel){
     return [['','— Registro —'],['concepto','Concepto'],['factura','Factura'],['acto','Acto / resolución'],['ninguno','Solo actividad']].map(function(o){
       return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
     }).join('');
   };
-  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Sirve para entregas <strong>con expediente/PQRSD</strong> y <strong>sin expediente</strong>. El tipo de <strong>Registro</strong> (solo con expediente) define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar.</div><ul class="cfl">'+
+  const unidadOpts=function(sel){
+    return [['habiles','Días hábiles'],['dias','Días calendario']].map(function(o){
+      return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
+    }).join('');
+  };
+  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Sirve para entregas <strong>con expediente/PQRSD</strong> y <strong>sin expediente</strong>. El tipo de <strong>Registro</strong> (solo con expediente) define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar. <strong>Plazo</strong>: días por defecto al asignar la actividad (el encargado puede ajustarlos).</div><ul class="cfl">'+
     acts.map((v,i)=>{
       const tipo=cfg.actRegistroMap[v]||'';
       const firma=!!cfg.actFirmaMap[v];
+      const plazo=cfg.actPlazoMap[v]!=null?cfg.actPlazoMap[v]:'';
+      const plazoU=cfg.actPlazoUnidadMap[v]||'habiles';
       return '<li class="cfi" style="flex-wrap:wrap;align-items:flex-start">'+
       '<input type="text" value="'+escAttr(v)+'" onchange="editActPred('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);flex:1;min-width:140px">'+
       '<select onchange="editActPredRegistroTipo('+i+',this.value)" title="Destino en menú Registro" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;max-width:150px">'+tipoOpts(tipo)+'</select>'+
+      '<input type="number" min="0" step="1" value="'+escAttr(plazo)+'" placeholder="Plazo" title="Días por defecto" onchange="editActPredPlazo('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;width:64px">'+
+      '<select onchange="editActPredPlazoUnidad('+i+',this.value)" title="Tipo de días" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;max-width:120px">'+unidadOpts(plazoU)+'</select>'+
       '<label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap" title="Requiere firma del Director"><input type="checkbox" '+(firma?'checked ':'')+'onchange="editActPredRequiereFirma('+i+',this.checked)"> Firma</label>'+
       '<div class="fx" style="gap:2px">'+
       (i>0?'<button class="btn bsm bic" onclick="mvActPred('+i+',-1)">▲</button>':'<span style="width:24px"></span>')+
@@ -530,6 +541,8 @@ function editActPred(i,v){
   cfg.actividadesPred[i]=nv;
   if(!cfg.actRegistroMap)cfg.actRegistroMap={};
   if(!cfg.actFirmaMap)cfg.actFirmaMap={};
+  if(!cfg.actPlazoMap)cfg.actPlazoMap={};
+  if(!cfg.actPlazoUnidadMap)cfg.actPlazoUnidadMap={};
   if(prev&&prev!==nv&&cfg.actRegistroMap[prev]!=null){
     cfg.actRegistroMap[nv]=cfg.actRegistroMap[prev];
     delete cfg.actRegistroMap[prev];
@@ -537,6 +550,14 @@ function editActPred(i,v){
   if(prev&&prev!==nv&&cfg.actFirmaMap[prev]!=null){
     cfg.actFirmaMap[nv]=cfg.actFirmaMap[prev];
     delete cfg.actFirmaMap[prev];
+  }
+  if(prev&&prev!==nv&&cfg.actPlazoMap[prev]!=null){
+    cfg.actPlazoMap[nv]=cfg.actPlazoMap[prev];
+    delete cfg.actPlazoMap[prev];
+  }
+  if(prev&&prev!==nv&&cfg.actPlazoUnidadMap[prev]!=null){
+    cfg.actPlazoUnidadMap[nv]=cfg.actPlazoUnidadMap[prev];
+    delete cfg.actPlazoUnidadMap[prev];
   }
   saveLS();
 }
@@ -556,12 +577,31 @@ function editActPredRequiereFirma(i,on){
   else delete cfg.actFirmaMap[nom];
   saveLS();
 }
+function editActPredPlazo(i,val){
+  if(!cfg.actividadesPred||!cfg.actividadesPred[i])return;
+  if(!cfg.actPlazoMap)cfg.actPlazoMap={};
+  const nom=cfg.actividadesPred[i];
+  const n=Number(val);
+  if(val===''||val===null||isNaN(n)||n<=0)delete cfg.actPlazoMap[nom];
+  else cfg.actPlazoMap[nom]=n;
+  saveLS();
+}
+function editActPredPlazoUnidad(i,val){
+  if(!cfg.actividadesPred||!cfg.actividadesPred[i])return;
+  if(!cfg.actPlazoUnidadMap)cfg.actPlazoUnidadMap={};
+  const nom=cfg.actividadesPred[i];
+  if(!val||val==='habiles')delete cfg.actPlazoUnidadMap[nom];
+  else cfg.actPlazoUnidadMap[nom]=val;
+  saveLS();
+}
 function delActPred(i){
   if(!cfg.actividadesPred)return;
   const nom=cfg.actividadesPred[i];
   cfg.actividadesPred.splice(i,1);
   if(cfg.actRegistroMap&&nom)delete cfg.actRegistroMap[nom];
   if(cfg.actFirmaMap&&nom)delete cfg.actFirmaMap[nom];
+  if(cfg.actPlazoMap&&nom)delete cfg.actPlazoMap[nom];
+  if(cfg.actPlazoUnidadMap&&nom)delete cfg.actPlazoUnidadMap[nom];
   saveLS();renderListasCfg();notif('Eliminado','ok');
 }
 function mvActPred(i,d){const a=cfg.actividadesPred;if(!a)return;const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];saveLS();renderListasCfg();}

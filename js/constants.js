@@ -62,6 +62,10 @@ const PQRS_EST_OFICINA={pendiente:'Pendiente',asignado:'Asignado',atendiendo:'En
 const DEPTO_CHART_COLORS={guaviare:'#185FA5',guainia:'#1a7a4a',vaupes:'#6d3fa8'};
 
 // ================================================================
+// Plazo por defecto para entregas del responsable (revisión administrativa)
+const RESP_ENTREGA_PLAZO_DIAS=5;
+const RESP_ENTREGA_PLAZO_UNIDAD='habiles';
+
 // DEFAULT CONFIG
 // ================================================================
 const DEF={
@@ -69,6 +73,8 @@ const DEF={
   cargos:['Auxiliar administrativo','Profesional universitario','Técnico operativo','Secretaria','Conductor','Director','Subdirector','Asesor','Contratista'],
   instructores:[],
   actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Proyectar acto administrativo','Notificar decisión','Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
+  actPlazoMap:{},
+  actPlazoUnidadMap:{},
   actividadesCortasPred:[],
   etapasPred:['Radicación','Revisión documental','Evaluación técnica','Visita de campo','Concepto técnico','Acto administrativo','Notificación','Archivo'],
   tiposFactura:['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'],

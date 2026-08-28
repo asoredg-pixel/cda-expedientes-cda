@@ -50,6 +50,8 @@ function normalizeCfgObj(c){
   purgeLegacyPlaceholderInstructores(c);
   if(!c.actRegistroMap||typeof c.actRegistroMap!=='object')c.actRegistroMap={};
   if(!c.actFirmaMap||typeof c.actFirmaMap!=='object')c.actFirmaMap={};
+  if(!c.actPlazoMap||typeof c.actPlazoMap!=='object')c.actPlazoMap={};
+  if(!c.actPlazoUnidadMap||typeof c.actPlazoUnidadMap!=='object')c.actPlazoUnidadMap={};
   // Semillas por defecto (solo si la actividad existe y aún no tiene mapeo)
   const seeds={
     'Elaborar concepto técnico':'concepto',

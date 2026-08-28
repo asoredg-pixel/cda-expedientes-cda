@@ -199,6 +199,19 @@ a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
 }
 .sst-file-pick{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
 .sst-file-pick-name{font-size:12px;color:var(--tx2)}
+.sst-file-slot-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.sst-file-empty{font-size:12px;color:var(--tx3)}
+.sst-file-chip{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);font-size:12px}
+.sst-file-chip.is-err{border-color:var(--rd);background:var(--rdl)}
+.sst-file-chip-name{flex:1;min-width:120px;border:0;background:transparent;padding:0;text-align:left;font:inherit;color:var(--tx);cursor:default}
+.sst-file-chip-name.can-preview{cursor:pointer;color:var(--bl);text-decoration:underline;text-underline-offset:2px}
+.sst-file-chip-del{border:0;background:transparent;cursor:pointer;padding:2px 4px;font-size:14px;line-height:1;opacity:.75}
+.sst-file-chip-del:hover{opacity:1}
+.sst-file-prog{flex:1 1 100%;height:6px;background:var(--bd);border-radius:99px;overflow:hidden}
+.sst-file-prog-fill{height:100%;background:linear-gradient(90deg,var(--bl),#4a9fd4);transition:width .2s ease}
+.sst-file-prog-txt,.sst-file-ok,.sst-file-local,.sst-file-err{flex:1 1 100%;font-size:10px;color:var(--tx3)}
+.sst-file-err{color:var(--rd)}
+.sst-file-ok{color:var(--gn)}
 .mant-banner{display:none;position:sticky;top:0;z-index:240;background:#7c2d12;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.2)}
 body.modo-mantenimiento .mant-banner{display:block}
 body.modo-mantenimiento .mant-banner strong{font-weight:700}

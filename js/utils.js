@@ -66,6 +66,16 @@ function addDiasHabilesCO(desde,n){
   }
   return _isoDateLocal(d);
 }
+/** Calcula fecha de vencimiento según unidad (días calendario o hábiles CO). */
+function calcVenceConUnidad(desde,dias,unidad){
+  const n=Number(dias);
+  if(dias===''||dias===null||dias===undefined||isNaN(n))return'';
+  const base=String(desde||hoy()).slice(0,10);
+  if(String(unidad||'').toLowerCase()==='habiles')return addDiasHabilesCO(base,n);
+  const d=new Date(base+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().split('T')[0];
+}
 
 // ── DOM / Inputs ──────────────────────────────────────────────────────────────
 function gv(id){const e=document.getElementById(id);return e?e.value.trim():'';}

@@ -93,11 +93,21 @@ function pickExpEntregaResp(expNum){
     }else hint.textContent='Expediente no encontrado en la app — puede crearlo como alta nueva abajo (solo trámites).';
   }
   syncEntregaRespPqrsUi();
+  if(typeof entregaRespRetryFileUpload==='function')entregaRespRetryFileUpload();
 }
 
 function syncEntregaRespModoUi(){
   const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  if(libre){
+    const deptoLibre=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
+    const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
+    window._entregaLibreCodigoPreview=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
+  }else window._entregaLibreCodigoPreview='';
+  if(typeof sstFileTryUpload==='function'){
+    sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-file-list',entregaRespFileUploadCtx);
+    sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-anexos-list',entregaRespFileUploadCtx);
+  }
   const boxNuevo=document.getElementById('entrega-resp-alta-box');
   const boxExist=document.getElementById('entrega-resp-exist-box');
   const libreHint=document.getElementById('entrega-resp-libre-hint');
@@ -570,6 +580,54 @@ function tramitesEntregaRespOptsHtml(){
   }).join('');
 }
 
+function entregaRespFileCtxKey(){return'entrega-resp';}
+function entregaRespFileUploadCtx(){return typeof resolveEntregaUploadContext==='function'?resolveEntregaUploadContext():null;}
+function resolveEntregaUploadContext(){
+  const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim()||'Entrega';
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const stubTask={id:'_staging_',actividad:actividad,detalle:''};
+  if(libre){
+    const cod=String(window._entregaLibreCodigoPreview||'').trim();
+    if(!cod)return null;
+    const depto=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
+    const deptoOk=(depto&&depto!=='responsables')?depto:'guaviare';
+    const eDrive={
+      _exp:cod,_fecha:typeof hoy==='function'?hoy():'',_depto:deptoOk,_sin_expediente:true,
+      _pn_nombre:'Sin expediente',_drive_folder_id:'',_drive_folder_link:''
+    };
+  const t=Object.assign({},stubTask,{sinExpediente:true,codigo:cod,depto:deptoOk});
+    return{esPqrs:false,esLibre:true,expId:cod,e:null,eDrive:eDrive,t:t};
+  }
+  if(nuevo){
+    const expId=String((document.getElementById('entrega-resp-exp-nuevo')||{}).value||'').trim();
+    const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+    if(!expId||!tid)return null;
+    let e=typeof getExpById==='function'?getExpById(expId):null;
+    if(!e)e={_exp:expId,_tramite:tid,_depto:typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'),_fecha:typeof hoy==='function'?hoy():''};
+    return{esPqrs:false,expId:expId,e:e,eDrive:e,t:stubTask};
+  }
+  const expId=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  if(!expId)return null;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(!e)return null;
+  const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  return{esPqrs:!!esPqrs,expId:expId,e:e,eDrive:e,t:stubTask};
+}
+function entregaRespOnMainFileChange(inp){
+  if(typeof sstFileOnMainPick!=='function'){syncEntregaRespFileLabel(inp,'entrega-resp-file-name');return;}
+  sstFileOnMainPick(inp,{ctxKey:entregaRespFileCtxKey(),listId:'entrega-resp-file-list',getUploadCtx:entregaRespFileUploadCtx});
+}
+function entregaRespOnAnexosFileChange(inp){
+  if(typeof sstFileOnAnexosPick!=='function'){syncEntregaRespFileLabel(inp,'entrega-resp-anexos-name',true);return;}
+  sstFileOnAnexosPick(inp,{ctxKey:entregaRespFileCtxKey(),listId:'entrega-resp-anexos-list',getUploadCtx:entregaRespFileUploadCtx});
+}
+function entregaRespRetryFileUpload(){
+  if(typeof sstFileTryUpload!=='function')return;
+  sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-file-list',entregaRespFileUploadCtx);
+  sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-anexos-list',entregaRespFileUploadCtx);
+}
+
 function openEntregaResponsableModal(){
   if(!puedeEntregarComoResponsable()){
     notif('Seleccione su nombre como responsable para entregar un documento','err');
@@ -627,18 +685,18 @@ function openEntregaResponsableModal(){
     '<div id="entrega-resp-tramite-files">'+
     '<div class="fld" style="margin-bottom:10px"><label>Documento principal</label>'+
       '<div class="sst-file-pick">'+
-        '<button type="button" class="btn bsm bp" onclick="document.getElementById(\'enviar-adj-file\').click()">📎 Seleccionar archivo</button>'+
-        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-file-name\')">'+
-        '<span id="entrega-resp-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span>'+
+        '<button type="button" class="btn bsm bp" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
+        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
       '</div>'+
+      '<div id="entrega-resp-file-list" class="sst-file-slot-list"></div>'+
       '<div id="entrega-resp-drive-hint" style="font-size:10px;color:var(--tx3);margin-top:4px"></div></div>'+
     '<div class="fld" style="margin-bottom:10px"><label>Anexos (opcionales)</label>'+
       '<div class="sst-file-pick">'+
-        '<button type="button" class="btn bsm" onclick="document.getElementById(\'enviar-anexos-file\').click()">📎 Seleccionar anexos</button>'+
-        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="syncEntregaRespFileLabel(this,\'entrega-resp-anexos-name\',true)">'+
-        '<span id="entrega-resp-anexos-name" class="sst-file-pick-name">Sin anexos</span>'+
-      '</div></div>'+
-    '</div>'+
+        '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">📎 Seleccionar anexos</button>'+
+        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
+      '</div>'+
+      '<div id="entrega-resp-anexos-list" class="sst-file-slot-list"></div>'+
+    '</div></div>'+
     '<input type="hidden" id="enviar-requiere-link" value="0">'+
     '<input type="hidden" id="enviar-modo-nueva" value="0">'+
     '<input type="hidden" id="enviar-modo-traslado" value="0">'+
@@ -651,11 +709,16 @@ function openEntregaResponsableModal(){
     '</div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'entregaResponsable'};
+  if(typeof sstFileStagingReset==='function')sstFileStagingReset(entregaRespFileCtxKey());
   syncEntregaRespModoUi();
   syncEntregaRespAltaFormPorTramite();
   syncEntregaRespInteresadoUi();
   syncEntregaRespRegistroUi();
   syncEntregaRespPqrsUi();
+  if(typeof sstFileRenderList==='function'){
+    sstFileRenderList('entrega-resp-file-list',entregaRespFileCtxKey());
+    sstFileRenderList('entrega-resp-anexos-list',entregaRespFileCtxKey());
+  }
   setTimeout(function(){
     const a=document.getElementById('entrega-resp-actividad');
     if(a){a.focus();filtrarActEntregaRespSug(a);}
@@ -950,6 +1013,7 @@ function findTaskEntregaRespDedupe(e,actividad,responsable){
 
 function buildTaskEntregaResponsable(actividad,detalle,responsable){
   const id=typeof genTaskId==='function'?genTaskId():('tk_'+Date.now());
+  const plazoMeta=typeof getPlazoEntregaResponsable==='function'?getPlazoEntregaResponsable():{dias:5,unidad:'habiles',vence:''};
   const t={
     id:id,
     actividad:String(actividad||'').trim(),
@@ -959,8 +1023,9 @@ function buildTaskEntregaResponsable(actividad,detalle,responsable){
     responsables:[responsable],
     asignados:[{nombre:responsable,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}],
     entregaModo:'individual',
-    plazoDias:'',
-    vence:'',
+    plazoDias:String(plazoMeta.dias||''),
+    plazoUnidad:plazoMeta.unidad||'habiles',
+    vence:plazoMeta.vence||'',
     fechaAtendida:'',
     fechaReportada:'',
     estado:'En ejecución',
@@ -1174,9 +1239,9 @@ function ensureExpTaskEntregaResponsable(){
 
 function submitEntregaResponsable(){
   if(!puedeEntregarComoResponsable()){notif('No puede entregar en esta sesión','err');return;}
-  const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[]};
+  const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
-  const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length);
+  const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length)||(adj.preUploaded&&adj.preUploaded.length);
   // En PQRSD el cuerpo/oficio también cuentan como contenido de entrega
   const esPqrsUi=!!document.getElementById('pqrs-entrega-campos');
   if(!hasAdj&&!cmt&&!esPqrsUi){
@@ -1227,6 +1292,12 @@ window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
 window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
 window.pickActEntregaResp=pickActEntregaResp;
 window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
+window.entregaRespFileCtxKey=entregaRespFileCtxKey;
+window.entregaRespFileUploadCtx=entregaRespFileUploadCtx;
+window.resolveEntregaUploadContext=resolveEntregaUploadContext;
+window.entregaRespOnMainFileChange=entregaRespOnMainFileChange;
+window.entregaRespOnAnexosFileChange=entregaRespOnAnexosFileChange;
+window.entregaRespRetryFileUpload=entregaRespRetryFileUpload;
 window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
 window.syncEntregaRespAltaFormPorTramite=syncEntregaRespAltaFormPorTramite;
 window.syncEntregaRespInfractorCard=syncEntregaRespInfractorCard;

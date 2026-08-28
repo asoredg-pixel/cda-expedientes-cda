@@ -238,8 +238,23 @@ function filtrarActsPred(inp){
 function pickActPred(btn,val){
   if(actSugInput)actSugInput.value=val;
   hideActSugPortal();
+  if(actSugInput){
+    const row=actSugInput.closest('.tkr-wrap')||actSugInput.closest('.tkr');
+    if(row&&typeof syncActPredPlazoToRow==='function')syncActPredPlazoToRow(row,val);
+  }
   if(window._taskModalCtx&&window._taskModalCtx.mode==='entregaResponsable'&&typeof syncEntregaRespRegistroUi==='function')
     syncEntregaRespRegistroUi();
+}
+function syncActPredPlazoToRow(row,actName){
+  if(!row||typeof getActPredPlazoMeta!=='function')return;
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const meta=getActPredPlazoMeta(actName,depto);
+  if(!meta)return;
+  const tp=row.querySelector('.tp');
+  const tv=row.querySelector('.tv');
+  if(tp)tp.value=meta.dias;
+  if(tv)tv.value=typeof calcVenceConUnidad==='function'?calcVenceConUnidad(hoy(),meta.dias,meta.unidad):(typeof calcVence==='function'?calcVence(meta.dias):'');
+  if(typeof syncTaskEstado==='function')syncTaskEstado(row);
 }
 function hideActsPred(inp){hideActSugPortal();}
 function hideActSugPortal(){
