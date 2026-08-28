@@ -824,9 +824,66 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review #task-view-compare,
 .task-modal.task-modal-review #task-view-links,
 .task-modal.task-modal-review #task-view-pqrscompare{
-  overflow:auto;
+  overflow:hidden;
   flex:1;
   min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+/* Expediente: scroll en todo el panel hasta el fondo */
+.task-modal.task-modal-review #task-view-exp .task-exp-panel-full,
+.task-modal.task-modal-review #task-view-exp .exp-consulta-embed{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  height:auto;
+  overflow:auto;
+}
+/* Enlaces: lista hasta el fondo */
+.task-modal.task-modal-review #task-view-links .exp-enlaces-list{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow:auto;
+}
+/* Comparar / PQRSD: visores lado a lado a altura completa */
+.task-modal.task-modal-review #task-view-compare .compare-ver-sel,
+.task-modal.task-modal-review #task-view-pqrscompare > :not(.compare-pqrs-stack){
+  flex-shrink:0;
+}
+.task-modal.task-modal-review #task-view-compare .compare-ver-stack,
+.task-modal.task-modal-review #task-view-pqrscompare .compare-pqrs-stack{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow:hidden;
+  align-items:stretch;
+}
+.task-modal.task-modal-review .compare-ver-block{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  height:100%;
+}
+.task-modal.task-modal-review .compare-ver-block .lbl{
+  flex-shrink:0;
+}
+.task-modal.task-modal-review .compare-ver-block iframe{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  max-height:none;
+}
+.task-modal.task-modal-review .compare-ver-block img{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none!important;
+  width:100%;
+  object-fit:contain;
+}
+.task-modal.task-modal-review .compare-ver-obs{
+  flex-shrink:0;
+  max-height:min(18vh,120px);
 }
 .soporte-annot-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .soporte-annot-notice{font-size:10px;color:var(--tx3);padding:6px 8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:6px;line-height:1.45}
