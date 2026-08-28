@@ -978,7 +978,9 @@ html.ui-editor-modal-mode #act-agenda-panel{z-index:auto}
 html.ui-editor-modal-mode .act-sug-portal{z-index:20050!important}
 html.ui-editor-modal-mode .task-modal-overlay,
 html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
+html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:100080!important}
 .task-modal-overlay.con-arch-modal-on{z-index:26000!important}
+.task-modal-overlay.review-stack-modal-on{z-index:100080!important}
 .con-panel-archivos-wrap{margin-bottom:.75rem}
 .con-panel-archivos-wrap .con-arch-split{min-height:min(360px,42vh)}
 .con-panel-archivos-wrap .con-arch-preview-col .con-arch-embed iframe,.con-panel-archivos-wrap .con-arch-preview-col .con-arch-embed img,.con-panel-archivos-wrap .con-arch-preview-col .con-arch-embed video{min-height:min(280px,38vh)}

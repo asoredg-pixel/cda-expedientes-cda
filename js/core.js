@@ -81,6 +81,8 @@ function popTaskModalLayer(){
         initSoporteAnnotViewer(ctx.expId,ctx.taskId,selSop,typeof canDeptMarcarEnSoporte==='function'?canDeptMarcarEnSoporte(t,sop):false);
     },80);
   }
+  const asocOpen=document.getElementById('review-asoc-panel')&&document.getElementById('review-asoc-panel').classList.contains('on');
+  if(asocOpen&&typeof reviewResetTaskModalElevation==='function')reviewResetTaskModalElevation();
   return true;
 }
 function taskModalCloseBtnLabel(){
@@ -102,7 +104,21 @@ function reviewPanelResetConSide(){
 }
 function reviewElevateTaskModal(){
   const ov=document.getElementById('task-modal-overlay');
-  if(ov)elevateOverlayAboveModals(ov,100070);
+  if(!ov)return;
+  ov.classList.remove('con-arch-modal-on');
+  ov.classList.add('review-stack-modal-on');
+  elevateOverlayAboveModals(ov,100080);
+}
+function reviewStackEnsureTaskModalFront(){
+  if(typeof reviewElevateTaskModal!=='function')return;
+  reviewElevateTaskModal();
+  requestAnimationFrame(function(){reviewElevateTaskModal();});
+}
+function reviewResetTaskModalElevation(){
+  const ov=document.getElementById('task-modal-overlay');
+  if(!ov)return;
+  ov.classList.remove('review-stack-modal-on');
+  if(!ov.classList.contains('con-arch-modal-on'))ov.style.zIndex='';
 }
 function openEditarDesdeRevision(ref,taskId){
   ref=String(ref||'').trim();
@@ -5053,7 +5069,8 @@ function openTaskArchivosFromAct(ref,taskId){
   if(typeof openConsultaArchivos==='function')openConsultaArchivos(ref,taskId,{forceModal:true,libre:libre});
   else if(typeof openConsultaArchivosModal==='function'&&!libre)openConsultaArchivosModal(ref);
   else notif('Módulo de archivos no disponible','err');
-  if(taskModalIsReviewOpen()&&typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
+  if(taskModalIsReviewOpen()&&typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
+  else if(taskModalIsReviewOpen()&&typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
 function openAsociarActividadModal(ref,taskId){
   ref=String(ref||'').trim();
@@ -12580,6 +12597,7 @@ function closeTaskModal(){
     ov.classList.remove('on');
     ov.style.zIndex='';
     ov.classList.remove('con-arch-modal-on');
+    ov.classList.remove('review-stack-modal-on');
     const modal=ov.querySelector('.task-modal');
     if(modal){
       modal.classList.remove('task-modal-wide');

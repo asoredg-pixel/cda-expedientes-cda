@@ -857,8 +857,19 @@ function scrollConPanelDocumentos(){
   wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
   initConPanelArchivosPreview(window._conPanelTaskId||null);
 }
+function reviewAsocStackActive(){
+  return !!(document.getElementById('review-asoc-panel')&&document.getElementById('review-asoc-panel').classList.contains('on'));
+}
 function taskModalZIndexApply(ov){
   if(!ov)return;
+  if(reviewAsocStackActive()&&typeof reviewElevateTaskModal==='function'){
+    reviewElevateTaskModal();
+    return;
+  }
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&window._taskModalStack&&window._taskModalStack.length&&typeof reviewElevateTaskModal==='function'){
+    reviewElevateTaskModal();
+    return;
+  }
   ov.classList.add('con-arch-modal-on');
   ov.style.zIndex='26000';
 }
@@ -926,6 +937,10 @@ function openConsultaArchivos(expId,taskId,opts){
   }
   ov.classList.add('on');
   window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{mode:'archivos',panelExp:id});
+  if(reviewAsocStackActive()||(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&window._taskModalStack&&window._taskModalStack.length)){
+    if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
+    else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
+  }
 }
 function matchActLibre(t,q){
   if(!q)return true;
@@ -1091,8 +1106,8 @@ function reviewAsocVerArchivos(expId,taskId,libre){
   if(!expId)return;
   if(typeof pushTaskModalLayer==='function')pushTaskModalLayer('archivos');
   if(typeof openConsultaArchivos==='function')openConsultaArchivos(expId,taskId||null,{forceModal:true,libre:!!libre});
-  if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
-  else if(typeof taskModalZIndexApply==='function')taskModalZIndexApply(document.getElementById('task-modal-overlay'));
+  if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
+  else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
 function renderReviewAsocConsultaPreview(expId,taskId,tipo){
   tipo=tipo||'exp';
@@ -1139,7 +1154,8 @@ function reviewAsocVerConsulta(expId,taskId,tipo){
   body.innerHTML=renderReviewAsocConsultaPreview(expId,taskId,tipo||'exp')+
     '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+((typeof taskModalCloseBtnLabel==='function')?taskModalCloseBtnLabel():'Cerrar')+'</button></div>';
   ov.classList.add('on');
-  if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
+  if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
+  else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
 function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   sourceExpId=String(sourceExpId||'').trim();
