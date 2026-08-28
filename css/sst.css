@@ -409,6 +409,9 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .con-arch-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:12px}
 .con-exp-link{cursor:pointer;border:0;font-family:inherit}
 .con-exp-link:hover{opacity:.85;text-decoration:underline}
+.act-ref-btn{display:inline-flex;align-items:center;gap:0;padding:0;margin:0;border:0;background:transparent;font-family:'DM Mono',monospace;font-size:12px;color:var(--bl);cursor:pointer;text-align:left;max-width:100%}
+.act-ref-btn:hover .act-ref-link{text-decoration:underline;opacity:.85}
+.act-ref-btn .act-ref-link{color:inherit}
 .verify-banner.on{display:block}
 .task-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20000;align-items:center;justify-content:center;padding:1rem}
 .task-modal-overlay.on{display:flex}

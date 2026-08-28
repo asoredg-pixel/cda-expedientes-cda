@@ -909,6 +909,7 @@ function cerrarConsultaPanel(){
   window._conPanelActive=null;
   window._conPanelTaskId=null;
   window._conPanelActLibre=null;
+  window._conPanelActLibreReadOnly=false;
   window._conPanelPqrsNcaEdit=false;
   window._conPanelDesdeConsulta=false;
   restoreCfgDeptoUsuario();

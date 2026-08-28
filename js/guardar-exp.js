@@ -134,6 +134,26 @@ function abrirConsultaExpPanelDesdeAct(expId,taskId){
   const edit=!esModoResponsable()&&(editDept||(esPqrsNcaAct?puedeEditarExpPanel():false)||(!pqrsRead&&esVistaActividadesDepto()&&puedeEditarExpPanel()));
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:!!edit});
 }
+/** Desde columna Ref. en Actividades: vista consulta (solo lectura), sin cambiar de módulo. */
+function abrirConsultaRefDesdeActividad(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=taskId&&typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(t&&t.sinExpediente){
+    if(typeof abrirConsultaActLibreDesdeAct==='function')abrirConsultaActLibreDesdeAct(expId,taskId);
+    else notif('No se pudo abrir la actividad','err');
+    return;
+  }
+  if(!expId){notif('Referencia no disponible','err');return;}
+  window._conPanelTaskId=taskId||null;
+  window._conPanelOpenArchivos=false;
+  window._conPanelActLibre=null;
+  window._conPanelActLibreReadOnly=false;
+  const e=exps.find(x=>String(x._exp||'').trim()===expId);
+  if(!e){notif('Expediente «'+expId+'» no encontrado','err');return;}
+  window._conPanelPqrsNcaEdit=false;
+  abrirConsultaExpPanel(expId,{allowSingle:true,edit:false,desdeActividades:true});
+}
 function guardarExp(stayOnForm){
   try{guardarExpCore(stayOnForm);}
   catch(err){
