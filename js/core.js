@@ -26,6 +26,98 @@ function taskModalEstaAbierto(){
   const ov=document.getElementById('task-modal-overlay');
   return !!(ov&&ov.classList.contains('on'));
 }
+function taskModalIsReviewOpen(){
+  const ctx=window._taskModalCtx||{};
+  return !!ctx.isReviewDelivery;
+}
+function pushTaskModalLayer(tag){
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body||!ov.classList.contains('on'))return false;
+  if(!Array.isArray(window._taskModalStack))window._taskModalStack=[];
+  window._taskModalStack.push({
+    tag:tag||'',
+    title:tit?tit.textContent:'',
+    bodyHtml:body.innerHTML,
+    ctx:Object.assign({},window._taskModalCtx||{}),
+    modalClasses:modal?Array.from(modal.classList):[],
+    ovClasses:Array.from(ov.classList),
+    sopSel:window._taskSopSel,
+    conArchItems:Array.isArray(window._conArchItems)?window._conArchItems.slice():null
+  });
+  return true;
+}
+function popTaskModalLayer(){
+  const stack=window._taskModalStack||[];
+  if(!stack.length)return false;
+  const layer=stack.pop();
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(tit)tit.textContent=layer.title||'';
+  if(body)body.innerHTML=layer.bodyHtml||'';
+  if(modal){
+    modal.className='task-modal';
+    (layer.modalClasses||[]).forEach(function(c){if(c)modal.classList.add(c);});
+  }
+  if(ov){
+    ov.className='task-modal-overlay';
+    (layer.ovClasses||[]).forEach(function(c){if(c)ov.classList.add(c);});
+    ov.classList.add('on');
+  }
+  window._taskModalCtx=layer.ctx||null;
+  window._taskSopSel=layer.sopSel;
+  window._conArchItems=layer.conArchItems||null;
+  const ctx=layer.ctx||{};
+  if(ctx.isReviewDelivery&&ctx.expId&&ctx.taskId){
+    setTimeout(function(){
+      const selSop=window._taskSopSel;
+      const t=typeof getTaskAny==='function'?getTaskAny(ctx.expId,ctx.taskId):null;
+      const sop=selSop&&t?(t.soportes||[]).find(function(s){return s.id===selSop;}):null;
+      if(selSop&&typeof initSoporteAnnotViewer==='function'&&t)
+        initSoporteAnnotViewer(ctx.expId,ctx.taskId,selSop,typeof canDeptMarcarEnSoporte==='function'?canDeptMarcarEnSoporte(t,sop):false);
+    },80);
+  }
+  return true;
+}
+function taskModalCloseBtnLabel(){
+  return (window._taskModalStack||[]).length?'← Volver a revisión':'Cerrar';
+}
+function reviewPanelPrepOpen(){
+  window._reviewKeepOpen=true;
+}
+function reviewPanelElevateConSide(){
+  const co=document.getElementById('con-side-overlay');
+  const cp=document.getElementById('con-side-panel');
+  const tov=document.getElementById('task-modal-overlay');
+  elevateOverlayAboveModals(co,100058);
+  elevateOverlayAboveModals(cp,100059);
+  if(tov)tov.classList.add('review-has-side');
+}
+function reviewPanelResetConSide(){
+  resetOverlayElevation(document.getElementById('con-side-overlay'));
+  resetOverlayElevation(document.getElementById('con-side-panel'));
+  const tov=document.getElementById('task-modal-overlay');
+  if(tov)tov.classList.remove('review-has-side');
+  window._reviewKeepOpen=false;
+}
+function openEditarDesdeRevision(ref,taskId){
+  ref=String(ref||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
+  const fromReview=taskModalIsReviewOpen();
+  if(fromReview)reviewPanelPrepOpen();
+  if(t&&t.sinExpediente){
+    if(typeof abrirPanelActLibre==='function')abrirPanelActLibre(ref,taskId);
+    else notif('No se pudo abrir la edición','err');
+  }else if(typeof editarExpDesdeAct==='function'){
+    editarExpDesdeAct(ref,taskId);
+  }
+  if(fromReview)setTimeout(reviewPanelElevateConSide,60);
+}
 function abrirPqrsModalPrep(){
   window._pqrsModalOpen=true;
   const ov=document.getElementById('task-modal-overlay');
@@ -4924,9 +5016,9 @@ function taskActividadToolbarInnerHtml(ref,taskId,t,opts){
   let h='';
   if(opts.showEdit!==false){
     if(libre)
-      h+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="'+(opts.editOnclick||('abrirPanelActLibre(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
+      h+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="'+(opts.editOnclick||('openEditarDesdeRevision(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
     else
-      h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" onclick="'+(opts.editOnclick||('editarExpDesdeAct(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
+      h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" onclick="'+(opts.editOnclick||('openEditarDesdeRevision(\''+refJs+'\',\''+tidJs+'\')'))+'">✏️</button>';
   }
   h+='<button type="button" class="btn bsm bic act-ico" title="Archivos del expediente o actividad" onclick="openTaskArchivosFromAct(\''+refJs+'\',\''+tidJs+'\')">📁</button>';
   if(libre)
@@ -4953,6 +5045,7 @@ function openTaskArchivosFromAct(ref,taskId){
   taskId=String(taskId||'').trim();
   const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
   const libre=t?!!t.sinExpediente:(typeof isActLibreRef==='function'&&isActLibreRef(ref,taskId));
+  if(taskModalIsReviewOpen())pushTaskModalLayer('archivos');
   if(typeof openConsultaArchivos==='function')openConsultaArchivos(ref,taskId,{forceModal:true,libre:libre});
   else if(typeof openConsultaArchivosModal==='function'&&!libre)openConsultaArchivosModal(ref);
   else notif('Módulo de archivos no disponible','err');
@@ -4961,6 +5054,10 @@ function openAsociarActividadModal(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
   const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
+  if(taskModalIsReviewOpen()&&typeof openReviewAsocPickPanel==='function'){
+    openReviewAsocPickPanel({ref:ref,taskId:taskId,task:t});
+    return;
+  }
   if(t&&!t.sinExpediente){
     const expId=t.exp||ref;
     const e=getExpById(expId);
@@ -6605,7 +6702,8 @@ function abrirPanelActLibre(expId,taskId){
   window._conPanelEditMode=true;
   window._conPanelPqrsNcaEdit=false;
   window._conPanelOpenArchivos=false;
-  if(typeof closeTaskModal==='function')closeTaskModal();
+  if(typeof closeTaskModal==='function'&&!taskModalIsReviewOpen())closeTaskModal();
+  else if(taskModalIsReviewOpen())reviewPanelPrepOpen();
   const ov=document.getElementById('con-side-overlay');
   const panel=document.getElementById('con-side-panel');
   if(!panel){notif('No se pudo abrir la ventana','err');return;}
@@ -6616,6 +6714,7 @@ function abrirPanelActLibre(expId,taskId){
   requestAnimationFrame(function(){
     try{panel.scrollTop=0;panel.scrollIntoView({block:'nearest',behavior:'smooth'});}catch(e){}
   });
+  if(taskModalIsReviewOpen())reviewPanelElevateConSide();
 }
 function renderConSidePanelActLibre(){
   const ctx=window._conPanelActLibre;
@@ -12340,6 +12439,7 @@ function openTaskCommentsChatOnly(expId,taskId){
 }
 function openTaskCommentsModal(expId,taskId,opts){
   opts=typeof opts==='object'&&opts?opts:{};
+  window._taskModalStack=[];
   const chatOnly=!!opts.chatOnly;
   const chatUnificado=!!opts.chatUnificado;
   const soloGestion=!!opts.gestionAsignados;
@@ -12416,7 +12516,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const activo=getSoporteActivo(t);
     const prevSel=window._taskSopSel;
     const validPrev=prevSel&&soportes.some(s=>s.id===prevSel);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery};
     if(validPrev)window._taskSopSel=prevSel;
     else window._taskSopSel=getDefaultSoporteSel(t)||(activo||{}).id||'';
     window._soportePaginaActual=1;
@@ -12455,6 +12555,7 @@ function devolverSoporteTask(expId,taskId){
   devolverTaskAlResponsable(expId,taskId,'Devuelta desde revisión del documento');
 }
 function closeTaskModal(){
+  if(popTaskModalLayer())return;
   const ctx=window._taskModalCtx||{};
   const formRow=ctx.formRowEl;
   const ov=document.getElementById('task-modal-overlay');
@@ -12479,6 +12580,9 @@ function closeTaskModal(){
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');
   if(!panelArchOpen)window._conArchItems=null;
+  window._taskModalStack=[];
+  if(typeof cerrarReviewAsocPanel==='function')cerrarReviewAsocPanel();
+  if(window._reviewKeepOpen&&typeof reviewPanelResetConSide==='function')reviewPanelResetConSide();
   window._taskModalCtx=null;
   window._gmailVinculoMsg=null;
   window._taskSopSel=null;

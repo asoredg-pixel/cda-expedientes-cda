@@ -914,20 +914,203 @@ function openConsultaArchivos(expId,taskId,opts){
   window._conArchItems=items;
   if(!items.length){
     body.innerHTML='<div style="font-size:13px;color:var(--tx2);margin-bottom:12px">No hay enlaces Drive ni adjuntos registrados'+(taskId?' en esta actividad':' en este expediente')+'.</div>'+
-      '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button>';
+      '<button type="button" class="btn bsm" onclick="closeTaskModal()">'+taskModalCloseBtnLabel()+'</button>';
   }else{
     const list=conArchivosListHtml(items,'renderConsultaArchivoPreview',id);
     const hasAsocMdl=e&&getExpAsociadosAll(e).length>0;
     body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento. Los archivos se agrupan por registro: el principal y los vinculados (PQRSD o expediente asociado).'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye documentos de registros asociados.</span>':'')+'</div>'+
       '<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-arch-preview-wrap"></div></div>'+
-      '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+      '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+taskModalCloseBtnLabel()+'</button></div>';
     const selIdx=taskId?Math.max(0,(items||[]).findIndex(it=>it.taskId===taskId)):0;
     renderConsultaArchivoPreview(selIdx>=0?selIdx:0);
   }
   ov.classList.add('on');
-  window._taskModalCtx={mode:'archivos',panelExp:id};
+  window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{mode:'archivos',panelExp:id});
+}
+function collectReviewAsocCandidatos(q,ctx){
+  ctx=ctx||{};
+  const source=String(ctx.sourceExp||ctx.sourceCod||'').trim();
+  let baseList=typeof expsAmbito==='function'?expsAmbito():(exps||[]);
+  baseList=baseList.filter(function(e){return!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);});
+  if(ctx.mode==='pqrs-pick'){
+    if(ctx.pqrsModo==='tramite')baseList=baseList.filter(function(e){return!(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));});
+    else baseList=baseList.filter(function(e){return typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);});
+  }
+  if(source)baseList=baseList.filter(function(e){return!expAsocMatchNum(e._exp,source);});
+  if(q)baseList=baseList.filter(function(e){return matchS(e,q);});
+  return baseList.slice(0,80);
+}
+function reviewAsocPickCardHtml(e,idx){
+  const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+  const esP=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  const det=e.f_f1||e._pqrs_detalle||e._detalle_general||'';
+  const q=(window._reviewAsocCtx||{}).q||'';
+  return '<div class="review-asoc-card">'+
+    '<div class="review-asoc-card-hd"><strong style="font-family:\'DM Mono\',monospace">'+hl(e._exp,q)+'</strong> '+(esP?'<span class="bdg" style="font-size:10px">PQRSD</span>':'')+'</div>'+
+    '<div class="review-asoc-card-nom">'+hl(typeof getNom==='function'?getNom(e):'',q)+'</div>'+
+    '<div class="review-asoc-card-meta">'+(tram?escAttr(tram.nombre):'')+(e._depto?' · '+escAttr(typeof labelDepto==='function'?labelDepto(e._depto):e._depto):'')+'</div>'+
+    (det?'<div class="review-asoc-card-det">'+hl(String(det).slice(0,180),q)+'</div>':'')+
+    '<div class="fx" style="gap:6px;margin-top:8px;flex-wrap:wrap">'+
+    '<button type="button" class="btn bsm" onclick="reviewAsocVerArchivos(\''+jsStr(e._exp)+'\')">📁 Archivos</button>'+
+    '<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPick(\''+jsStr(e._exp)+'\')">🖇️ Asociar</button>'+
+    '</div></div>';
+}
+function renderReviewAsocPickPanel(){
+  const body=document.getElementById('review-asoc-body');
+  if(!body)return;
+  const ctx=window._reviewAsocCtx||{};
+  const q=String(ctx.q||'').trim();
+  let modoTabs='';
+  if(ctx.mode==='pqrs-pick'&&ctx.allowTramite){
+    const m=ctx.pqrsModo||'pqrs';
+    modoTabs='<div class="fx" style="gap:6px;margin-bottom:10px;flex-wrap:wrap">'+
+      '<button type="button" class="btn bsm'+(m!=='tramite'?' bp':'')+'" onclick="setReviewAsocPqrsModo(\'pqrs\')">PQRSD</button>'+
+      '<button type="button" class="btn bsm'+(m==='tramite'?' bp':'')+'" onclick="setReviewAsocPqrsModo(\'tramite\')">Expediente</button></div>';
+  }
+  const list=collectReviewAsocCandidatos(q,ctx);
+  const hint=ctx.mode==='act-libre'
+    ?'Busque por número, nombre, correo del radicado, asunto o palabras del trámite.'
+    :'Busque por número, interesado, asunto, correo de radicación u otros datos registrados.';
+  body.innerHTML=
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
+    modoTabs+
+    '<div class="fld" style="margin-bottom:10px"><input type="text" id="review-asoc-q" value="'+escAttr(q)+'" placeholder="Nombre, N° expediente, correo, asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="onReviewAsocSearchInput(this)"></div>'+
+    '<div id="review-asoc-list" class="review-asoc-list">'+
+    (list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>')+
+    '</div>';
+}
+function onReviewAsocSearchInput(inp){
+  const ctx=window._reviewAsocCtx||{};
+  ctx.q=String((inp&&inp.value)||'').trim();
+  window._reviewAsocCtx=ctx;
+  const listEl=document.getElementById('review-asoc-list');
+  if(!listEl)return;
+  const list=collectReviewAsocCandidatos(ctx.q,ctx);
+  listEl.innerHTML=list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>';
+}
+function setReviewAsocPqrsModo(modo){
+  const ctx=window._reviewAsocCtx||{};
+  ctx.pqrsModo=modo==='tramite'?'tramite':'pqrs';
+  window._reviewAsocCtx=ctx;
+  renderReviewAsocPickPanel();
+}
+function openReviewAsocPickPanel(opts){
+  opts=opts||{};
+  const t=opts.task||null;
+  const ref=String(opts.ref||'').trim();
+  const taskId=String(opts.taskId||'').trim();
+  let ctx={q:'',ref:ref,taskId:taskId};
+  if(t&&t.sinExpediente){
+    ctx.mode='act-libre';
+    ctx.sourceCod=t.codigo||ref;
+    ctx.taskId=t.id||taskId;
+  }else{
+    const expId=t?(t.exp||ref):ref;
+    const e=typeof getExpById==='function'?getExpById(expId):null;
+    ctx.sourceExp=expId;
+    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+      ctx.mode='pqrs-pick';
+      ctx.pqrsModo='pqrs';
+      ctx.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+    }else{
+      ctx.mode='exp-asoc';
+    }
+  }
+  window._reviewAsocCtx=ctx;
+  if(typeof reviewPanelPrepOpen==='function')reviewPanelPrepOpen();
+  const ov=document.getElementById('review-asoc-overlay');
+  const panel=document.getElementById('review-asoc-panel');
+  const tit=document.getElementById('review-asoc-tit');
+  const taskOv=document.getElementById('task-modal-overlay');
+  if(!ov||!panel){notif('No se pudo abrir el buscador de asociación','err');return;}
+  if(tit)tit.textContent='🖇️ Buscar registro para asociar';
+  renderReviewAsocPickPanel();
+  ov.classList.add('on');
+  panel.classList.add('on');
+  if(taskOv)taskOv.classList.add('review-has-side');
+  if(typeof elevateOverlayAboveModals==='function'){
+    elevateOverlayAboveModals(ov,100058);
+    elevateOverlayAboveModals(panel,100059);
+  }
+  setTimeout(function(){const inp=document.getElementById('review-asoc-q');if(inp)inp.focus();},120);
+}
+function cerrarReviewAsocPanel(){
+  const ov=document.getElementById('review-asoc-overlay');
+  const panel=document.getElementById('review-asoc-panel');
+  const taskOv=document.getElementById('task-modal-overlay');
+  if(ov)ov.classList.remove('on');
+  if(panel)panel.classList.remove('on');
+  if(typeof resetOverlayElevation==='function'){
+    resetOverlayElevation(ov);
+    resetOverlayElevation(panel);
+  }
+  if(taskOv)taskOv.classList.remove('review-has-side');
+  window._reviewAsocCtx=null;
+}
+function reviewAsocVerArchivos(expId){
+  expId=String(expId||'').trim();
+  if(!expId)return;
+  if(typeof pushTaskModalLayer==='function')pushTaskModalLayer('archivos');
+  if(typeof openConsultaArchivos==='function')openConsultaArchivos(expId,null,{forceModal:true});
+}
+function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
+  sourceExpId=String(sourceExpId||'').trim();
+  targetExpNum=String(targetExpNum||'').trim();
+  const e=typeof getExpById==='function'?getExpById(sourceExpId):null;
+  if(!e||!targetExpNum){notif('Datos incompletos para asociar','err');return false;}
+  if(expAsocMatchNum(targetExpNum,sourceExpId)){notif('No puede asociar el registro consigo mismo','err');return false;}
+  const target=typeof findExpByNumPlain==='function'?findExpByNumPlain(targetExpNum):null;
+  if(!target){notif('No se encontró «'+targetExpNum+'»','err');return false;}
+  if(typeof expAsocVinculoPermitido==='function'&&!expAsocVinculoPermitido(target,e)){notif('No puede vincular con ese registro','err');return false;}
+  const previos=typeof getExpAsociadosDirectos==='function'?getExpAsociadosDirectos(e):[];
+  if(previos.some(function(n){return expAsocMatchNum(n,target._exp);})){notif('Este vínculo ya está registrado','ok');return true;}
+  const nuevos=previos.concat([target._exp]);
+  e._usar_exp_asociados=true;
+  e._expedientes_asociados=JSON.stringify(nuevos);
+  if(typeof aplicarAsociadosBidireccional==='function')aplicarAsociadosBidireccional(sourceExpId,nuevos,previos);
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+  if(target&&target._exp!==e._exp&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(target,false);
+  notif('Vinculado a '+target._exp,'ok');
+  return true;
+}
+function confirmReviewAsocPick(targetExpId){
+  targetExpId=String(targetExpId||'').trim();
+  const ctx=window._reviewAsocCtx||{};
+  if(!targetExpId){notif('Seleccione un registro','err');return;}
+  let ok=false;
+  if(ctx.mode==='act-libre'){
+    const tid=String(ctx.taskId||'').trim();
+    const target=typeof getExpById==='function'?getExpById(targetExpId):null;
+    if(!target){notif('Registro no encontrado','err');return;}
+    if(typeof vincularActLibreAExpediente==='function'){
+      const pack=vincularActLibreAExpediente(tid,target);
+      ok=!!pack;
+      if(ok){
+        notif('Actividad vinculada a '+targetExpId,'ok');
+        cerrarReviewAsocPanel();
+        if(typeof renderActividades==='function')renderActividades();
+        if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(targetExpId,pack.taskId||tid);
+      }
+    }
+    return;
+  }
+  if(ctx.mode==='pqrs-pick'){
+    const modo=ctx.pqrsModo==='tramite'?'tramite':'pqrs';
+    ok=typeof asociarVinculoAPqrs==='function'&&asociarVinculoAPqrs(ctx.sourceExp,targetExpId,modo);
+  }else{
+    ok=asociarExpedienteDesdeRevision(ctx.sourceExp,targetExpId);
+  }
+  if(ok){
+    cerrarReviewAsocPanel();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+    const parent=window._taskModalCtx||{};
+    if(parent.isReviewDelivery&&parent.expId&&parent.taskId&&typeof openTaskCommentsModal==='function')
+      openTaskCommentsModal(parent.expId,parent.taskId);
+  }
 }
 function cerrarConsultaPanel(){
+  const keepReview=!!window._reviewKeepOpen;
   liberarExpLock(window._conPanelActive);
   detenerRenovacionExpLock();
   window._conPanelLockMsg=null;
@@ -946,6 +1129,10 @@ function cerrarConsultaPanel(){
   window._conPanelPqrsNcaEdit=false;
   window._conPanelDesdeConsulta=false;
   restoreCfgDeptoUsuario();
+  if(keepReview){
+    reviewPanelResetConSide();
+    return;
+  }
 }
 function getConPanelExpGroup(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());

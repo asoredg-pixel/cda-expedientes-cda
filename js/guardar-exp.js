@@ -553,9 +553,12 @@ function editarExpDesdeAct(expId,taskId){
     notif('No tiene permiso para editar','err');
     return;
   }
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof reviewPanelPrepOpen==='function')reviewPanelPrepOpen();
   window._conPanelTaskId=String(taskId||'').trim()||null;
   window._conPanelOpenArchivos=false;
   editarExp(expId);
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof reviewPanelElevateConSide==='function')
+    setTimeout(reviewPanelElevateConSide,80);
 }
 function eliminarExp(expId){
   const e=exps.find(x=>x._exp===expId);

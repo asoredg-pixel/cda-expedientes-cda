@@ -994,6 +994,21 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 .con-arch-grp:last-child{margin-bottom:0}
 .con-arch-grp-hd{font-size:11px;font-weight:700;color:var(--tx2);padding:6px 8px 4px;border-bottom:1px solid var(--bd);background:var(--sf);position:sticky;top:0;z-index:1}
 .con-arch-grp-asoc .con-arch-grp-hd{color:var(--or);background:var(--orl)}
+.task-modal-overlay.review-has-side{align-items:stretch;justify-content:flex-start;padding:0}
+.task-modal-overlay.review-has-side .task-modal{margin:0 auto 0 0;border-radius:0 var(--rl) var(--rl) 0;max-height:100vh;height:100vh;width:min(52vw,720px);max-width:52vw}
+.review-asoc-overlay{z-index:100058}
+.review-asoc-panel{z-index:100059;width:min(480px,48vw)!important;transform:translateX(100%)}
+.review-asoc-panel.on{transform:translateX(0)}
+.review-asoc-list{max-height:calc(100vh - 220px);overflow:auto}
+.review-asoc-card{padding:10px 12px;margin-bottom:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}
+.review-asoc-card-hd{font-size:13px;margin-bottom:4px}
+.review-asoc-card-nom{font-size:13px;font-weight:600;margin-bottom:2px}
+.review-asoc-card-meta{font-size:11px;color:var(--tx3);margin-bottom:4px}
+.review-asoc-card-det{font-size:11px;color:var(--tx2);line-height:1.4}
+@media(max-width:900px){
+  .task-modal-overlay.review-has-side .task-modal{width:100%;max-width:100%;max-height:55vh;height:auto;border-radius:0}
+  .review-asoc-panel{width:100%!important;max-width:100vw;height:45vh;top:auto;bottom:0;border-radius:20px 20px 0 0}
+}
 @media(max-width:720px){.con-arch-split{grid-template-columns:1fr}}
 .con-export-exp-wrap{display:flex;justify-content:flex-end;align-items:center;margin-top:.65rem;padding-top:.5rem;border-top:1px solid var(--bd)}
 .btn-export-exp{display:inline-flex;align-items:center;justify-content:center;padding:5px 8px;min-height:auto;line-height:1}
