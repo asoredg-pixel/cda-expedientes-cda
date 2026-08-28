@@ -8604,24 +8604,49 @@ function previewEnlaceExp(previewUrl){
 }
 function renderTaskExpConsultaEmbed(e){
   if(!e)return'';
+  if(typeof migrarInfoTecExpediente==='function')migrarInfoTecExpediente(e);
   const tram=getTram(e._tramite,e);
-  let h='<div class="exp-consulta-embed">';
-  h+='<div style="margin-bottom:.5rem"><span class="bdg">'+escAttr(e._exp)+'</span> '+badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+'</div>';
-  h+='<div style="font-weight:600;margin-bottom:4px">'+escAttr(getNom(e))+'</div>';
-  h+=renderInteresadoView(e);
-  h+=renderDetalleConsultaView(e);
-  h+=renderInfoTecConsultaView(e);
-  h+=renderContableView(e);
-  if(tram){
-    const campos=tram.campos.filter(c=>{const v=e['f_'+c.id];return v!=null&&v!==''&&v!==false;}).slice(0,8);
-    if(campos.length){
-      h+='<details class="con-fold"><summary>Datos del trámite</summary><div class="item-fold-body"><div class="ig">';
-      campos.forEach(c=>{h+='<div class="ic"><div class="k">'+c.label+'</div><div class="v">'+escAttr(fmtCampoVal(e['f_'+c.id],c))+'</div></div>';});
-      h+='</div></div></details>';
-    }
+  let h='<div class="exp-consulta-embed task-exp-panel-full">';
+  h+='<div class="con-panel-toolbar" style="margin-bottom:10px">'+
+    badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+' '+
+    (typeof flagsHtmlCompact==='function'?flagsHtmlCompact(e):'')+
+    (typeof pqrsPrioritariaBadge==='function'?(' '+pqrsPrioritariaBadge(e)):'')+
+    (typeof pqrsInformativaBadge==='function'?(' '+pqrsInformativaBadge(e)):'')+
+    '</div>';
+  h+='<div style="font-size:14px;font-weight:600;margin-bottom:4px;font-family:\'DM Mono\',monospace">'+escAttr(e._exp)+'</div>';
+  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(getNom(e))+'</div>';
+  if(tram)h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(tram.nombre)+(e._subclase?' · '+escAttr(e._subclase):'')+'</div>';
+  if(typeof renderConsultaResumenExp==='function')h+=renderConsultaResumenExp(e,tram,'');
+  if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof renderConPanelPqrsExtras==='function')h+=renderConPanelPqrsExtras(e);
+  if(typeof renderConPanelExpContent==='function')h+=renderConPanelExpContent(e,{foldOpen:true});
+  else{
+    h+=renderInteresadoView(e)+renderDetalleConsultaView(e)+renderInfoTecConsultaView(e)+renderContableView(e);
   }
   h+='</div>';
   return h;
+}
+function soporteObsPanelIsOpen(){
+  return !!window._soporteObsOpen;
+}
+function syncSoporteObsPanelUi(){
+  const wrap=document.getElementById('soporte-split-wrap');
+  const btn=document.getElementById('soporte-obs-toggle');
+  const col=document.getElementById('soporte-sidebar-col');
+  if(!wrap)return;
+  const open=!!window._soporteObsOpen;
+  wrap.classList.toggle('soporte-split-obs-open',open);
+  if(col)col.setAttribute('aria-hidden',open?'false':'true');
+  if(btn){
+    btn.title=open?'Ocultar observaciones':'Observaciones del documento';
+    btn.setAttribute('aria-expanded',open?'true':'false');
+    const ico=btn.querySelector('.soporte-obs-toggle-ico');
+    if(ico)ico.textContent=open?'▶':'◀';
+  }
+}
+function toggleSoporteObsPanel(force){
+  if(typeof force==='boolean')window._soporteObsOpen=force;
+  else window._soporteObsOpen=!window._soporteObsOpen;
+  syncSoporteObsPanelUi();
 }
 function setTaskViewTab(tab){
   window._taskViewTabPreferido=tab;
@@ -8646,6 +8671,7 @@ function selectTaskSoporte(expId,taskId,sopId){
   window._annotSelId=null;
   window._pendingAnnot=null;
   window._annotMarking=false;
+  window._soporteObsOpen=false;
   const curTab=document.querySelector('.task-view-tab.on');
   if(curTab&&curTab.dataset.tab)window._taskViewTabPreferido=curTab.dataset.tab;
   openTaskCommentsModal(expId,taskId);
@@ -8903,6 +8929,7 @@ function initSoporteAnnotViewer(expId,taskId,soporteId,canAnnot){
   if(wrap)wrap.classList.add('annot-navigable');
   hidePinSidebarForm();
   releaseAnnotMarkingMode();
+  if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
 }
 function toggleModoMarcarAnnot(){
   window._annotMarking=!window._annotMarking;
@@ -10018,8 +10045,7 @@ function renderCompareVersionesPanel(t,e,taskId){
     const lab=String(d.label||d.titulo||'Documento');
     return '<option value="'+escAttr(d.id)+'">'+escAttr(lab)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
   }).join('');
-  let h='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Seleccione dos documentos para verlos lado a lado (proyección vs anexos, versiones anteriores). Use <strong>Ampliar</strong> para leer a casi pantalla completa.</div>';
-  h+='<div class="compare-ver-sel">'+
+  let h='<div class="compare-ver-sel">'+
     '<div class="fld compare-ver-fld"><label for="compare-ver-a">Documento izquierdo</label><select id="compare-ver-a" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
     '<div class="fld compare-ver-fld"><label for="compare-ver-b">Documento derecho</label><select id="compare-ver-b" class="compare-ver-select" onchange="onCompareVerChange()">'+opts+'</select></div>'+
     '<button type="button" class="btn bsm" onclick="setCompareUltimasDos()">Últimos dos</button>'+
@@ -10369,7 +10395,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   let h='<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
   h+='<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px"><div style="font-size:12px;font-weight:600">📎 Soporte documental'+(soportes.length>1?' · '+soportes.length+' documento(s)':'')+'</div>';
   if(esLibre)h+='<span style="font-size:11px;color:var(--tx3)">'+escAttr(t.codigo||expId)+' · actividad sin expediente</span>';
-  else h+='<button type="button" class="btn bsm" onclick="verConDesdeTaskModal(\''+escAttr(expId)+'\')">🔍 Consultar expediente</button>';
   h+='</div>';
   if(taskPendienteVerificacion(t)){
     const ent=getUltimaEntregaComentario(t);
@@ -10423,15 +10448,21 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     if(showDeptAnnotUi){
       h+='<div class="soporte-pagina-filter"><label>Marcadores: <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas las páginas</option></select></label></div>';
     }
-    h+='<div class="soporte-split">'+
-      '<div>'+
+    const obsOpen=typeof soporteObsPanelIsOpen==='function'?soporteObsPanelIsOpen():false;
+    h+='<div class="soporte-split'+(obsOpen?' soporte-split-obs-open':'')+'" id="soporte-split-wrap">'+
+      '<div class="soporte-doc-col">'+
         '<div class="soporte-annot-wrap annot-navigable" id="soporte-annot-wrap" data-exp="'+escAttr(expId)+'" data-task="'+escAttr(taskId)+'" data-sop="'+escAttr(sel.id)+'">'+
           renderSoporteEmbedHtml(sel)+
           '<div class="soporte-annot-overlay" id="soporte-annot-overlay"></div>'+
         '</div>'+
+        '<button type="button" class="soporte-obs-toggle" id="soporte-obs-toggle" onclick="toggleSoporteObsPanel()" title="Observaciones del documento" aria-expanded="'+(obsOpen?'true':'false')+'">'+
+          '<span class="soporte-obs-toggle-ico">'+(obsOpen?'▶':'◀')+'</span></button>'+
       '</div>'+
-      '<div class="soporte-sidebar-col">'+
-        '<div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--tx2)">Observaciones del documento</div>'+
+      '<div class="soporte-sidebar-col" id="soporte-sidebar-col" aria-hidden="'+(obsOpen?'false':'true')+'">'+
+        '<div class="soporte-sidebar-hdr">'+
+          '<span>Observaciones del documento</span>'+
+          '<button type="button" class="soporte-sidebar-close" onclick="toggleSoporteObsPanel(false)" title="Cerrar observaciones" aria-label="Cerrar observaciones">✕</button>'+
+        '</div>'+
         (canAnnot?renderAnnotPinFormHtml():'')+
         '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sel.id,canAnnot)+'</div>'+
       '</div>'+
@@ -10441,7 +10472,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   }
   h+='</div>';
   h+='<div id="task-view-compare" class="task-view-panel'+(defTab==='compare'?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
-  h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>':renderTaskExpConsultaEmbed(e))+'</div>';
+  h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+
+    (esLibre
+      ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id):('<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>'))+'</div>')
+      :renderTaskExpConsultaEmbed(e))+'</div>';
   h+='<div id="task-view-links" class="task-view-panel'+(defTab==='links'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
   else if(canAddSop&&opts.hideEnviar&&!opts.hideEntrega){
