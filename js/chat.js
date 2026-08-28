@@ -1292,6 +1292,10 @@ function chatUploadOverlayHide(){
   const act=document.getElementById('chat-upload-action-btn');
   if(foot)foot.style.display='none';
   if(spin)spin.style.display='';
+  const prog=document.getElementById('chat-upload-prog');
+  const progTxt=document.getElementById('chat-upload-prog-txt');
+  if(prog)prog.style.display='none';
+  if(progTxt)progTxt.style.display='none';
   if(det){det.style.display='none';det.textContent='';}
   if(btn)btn.textContent='Cerrar';
   if(act){act.style.display='none';act.onclick=null;}
@@ -1334,6 +1338,19 @@ function chatModalAlert(opts){
   ov.classList.add('on');
   ov.setAttribute('aria-hidden','false');
 }
+function chatUploadOverlayProgress(pct,label){
+  const spin=document.getElementById('chat-upload-spinner');
+  const prog=document.getElementById('chat-upload-prog');
+  const fill=document.getElementById('chat-upload-prog-fill');
+  const progTxt=document.getElementById('chat-upload-prog-txt');
+  if(spin)spin.style.display='none';
+  if(prog)prog.style.display='';
+  if(fill)fill.style.width=Math.max(4,Math.min(100,pct||0))+'%';
+  if(progTxt){
+    progTxt.style.display='';
+    progTxt.textContent=label||(pct!=null?(pct+'% · Subiendo a Drive…'):'Subiendo a Drive…');
+  }
+}
 function chatUploadOverlayShow(fileName){
   chatUploadOverlayHide();
   const ov=document.getElementById('chat-upload-overlay');
@@ -1350,6 +1367,10 @@ function chatUploadOverlayShow(fileName){
   if(msg)msg.textContent='Cargando «'+(fileName||'archivo')+'» al Drive institucional para enviarlo en el chat…';
   if(foot)foot.style.display='none';
   if(spin)spin.style.display='';
+  const prog=document.getElementById('chat-upload-prog');
+  const progTxt=document.getElementById('chat-upload-prog-txt');
+  if(prog)prog.style.display='none';
+  if(progTxt)progTxt.style.display='none';
   ov.classList.add('on');
   ov.setAttribute('aria-hidden','false');
 }
@@ -1462,10 +1483,13 @@ async function chatEnviarArchivo(fileArg){
   _chatFileUploading=true;
   try{
     chatUploadOverlayShow(file.name);
+    chatUploadOverlayProgress(12,'Preparando «'+(file.name||'archivo')+'»…');
     const route=chatPickSendRoute(me,contactKey);
     window._chatConvActiva=route.convId;
     const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+    chatUploadOverlayProgress(35,'Subiendo a Drive…');
     const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
+    chatUploadOverlayProgress(92,'Registrando mensaje…');
     const msg={
       id:msgId,
       convId:route.convId,

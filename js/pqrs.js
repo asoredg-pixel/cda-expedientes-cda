@@ -137,6 +137,7 @@ function poblarSecOficinaSelect(){
   sel.innerHTML='<option value="">— Seleccione oficina —</option>'+OFICINAS_DEGUV.map(o=>'<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>').join('');
   poblarSecOficinaRemitenteSelect();
   updateSecFechaRadicVisibility();
+  if(typeof secAnexoInitUi==='function')secAnexoInitUi();
   if(typeof resetSecRadicacionFormulario==='function'&&secFormularioPristine())resetSecRadicacionFormulario();
   else if(typeof initSecMedioNotificacion==='function')initSecMedioNotificacion(true);
   renderSecGmailBloqueoRadicacion();
@@ -209,6 +210,21 @@ function toggleSecAnonimo(){
   toggleSecPersona();
 }
 // ─── Gestión dinámica de anexos (radicación) ───────────────────────────────
+function secAnexoInitUi(){
+  const wrap=document.getElementById('sec-anexo-pick-wrap');
+  if(!wrap||wrap.dataset.inited)return;
+  wrap.dataset.inited='1';
+  const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
+  wrap.innerHTML=typeof sstFilePickBlock==='function'
+    ?sstFilePickBlock({inputId:'sec-anexo-file',listId:'sec-anexo-list',ctxKey:ctxKey,multi:true,label:'Agregar archivo',accept:'.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip',btnClass:'btn bsm'})
+    :('<button type="button" class="btn bsm" onclick="secAnexoAdd()">📎 Agregar archivo</button>');
+  if(typeof sstFileInitPick==='function')sstFileInitPick('sec-anexo-file');
+}
+function secAnexoCollectFiles(){
+  const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
+  if(typeof sstFileCollectRawFiles==='function')return sstFileCollectRawFiles(ctxKey);
+  return Array.isArray(window._secAnexoFiles)?window._secAnexoFiles.slice():[];
+}
 if(typeof window!=='undefined'&&!window._secAnexoFiles)window._secAnexoFiles=[];
 function secAnexoAdd(){
   (typeof sstSolicitarDriveParaPqrs==='function'?sstSolicitarDriveParaPqrs(null):(typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar({requireSecretaria:true,force:true}):Promise.resolve(true))).then(function(ok){
@@ -265,7 +281,8 @@ function limpiarFormSecretaria(){
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
   const interna=document.getElementById('sec-interna');if(interna)interna.checked=false;
   const rem=document.getElementById('sec-oficina-remitente');if(rem)rem.value='';
-  window._secAnexoFiles=[];secAnexoRenderList();
+  if(typeof sstFileStagingReset==='function')sstFileStagingReset(typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos');
+  window._secAnexoFiles=[];if(typeof secAnexoRenderList==='function')secAnexoRenderList();
   resetSecRadicacionFormulario();
   toggleSecInterna();
   toggleSecAnonimo();
@@ -423,7 +440,7 @@ async function guardarPqrsSecretaria(modo){
     }
   }
   const gmailMsgId=window._gmailPendingMsgId||'';
-  const anexoFiles=Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[];
+  const anexoFiles=typeof secAnexoCollectFiles==='function'?secAnexoCollectFiles():(Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[]);
   let reenvioOficinaOk=false;
   let reenvioDsOk=false;
   // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────

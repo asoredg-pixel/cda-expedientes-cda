@@ -122,6 +122,15 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (it.blobUrl) try { URL.revokeObjectURL(it.blobUrl); } catch (e) {}
   if (hit.slot === 'main') ctx.main = null;
   else if (hit.idx >= 0) ctx.anexos.splice(hit.idx, 1);
+  if (window._sstFilePickRegistry) {
+    Object.keys(window._sstFilePickRegistry).forEach(function (inpId) {
+      const r = window._sstFilePickRegistry[inpId];
+      if (r && r.ctxKey === ctxKey) {
+        const inp = document.getElementById(inpId);
+        if (inp) inp.value = '';
+      }
+    });
+  }
   const inpMain = document.getElementById('enviar-adj-file');
   const inpAnex = document.getElementById('enviar-anexos-file');
   if (hit.slot === 'main' && inpMain) inpMain.value = '';
@@ -137,6 +146,19 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
   const rep = (typeof responsableActivo !== 'undefined' && responsableActivo)
     || (typeof taskComentarioAutor === 'function' ? taskComentarioAutor() : '');
   if (onPct) onPct(8);
+  if (uploadCtx.biblioteca && typeof driveUploadBiblioteca === 'function') {
+    if (onPct) onPct(12);
+    const up = await driveUploadBiblioteca(f, nombre, tipo, uploadCtx.folderId);
+    if (onPct) onPct(100);
+    return {
+      driveFileId: up.fileId || '',
+      fileId: up.fileId || '',
+      driveLink: up.driveLink || '',
+      previewLink: up.previewLink || up.driveLink || '',
+      driveFilename: up.nombre || nombre,
+      nombre: up.nombre || nombre
+    };
+  }
   if (uploadCtx.esPqrs && typeof driveUploadPqrsExpediente === 'function') {
     const up = await driveUploadPqrsExpediente(f, nombre, tipo, uploadCtx.e, {
       label: it.esAnexo ? 'Anexo' : 'Respuesta',
@@ -166,6 +188,7 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
     ? await sstSolicitarGmailParaAdjuntar()
     : true;
   if (!okAuth) return;
+  let bibliotecaUploaded = false;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (!it || it.state === 'uploaded' || !it.blob) continue;
@@ -185,6 +208,7 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
         it.state = 'uploaded';
         it.pct = 100;
         it.uploaded = up;
+        if (uploadCtx.biblioteca) bibliotecaUploaded = true;
       }
     } catch (err) {
       it.state = 'error';
@@ -192,6 +216,9 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
       if (typeof notif === 'function') notif('No se pudo subir «' + it.nombre + '»', 'err');
     }
     sstFileRenderList(listId, ctxKey);
+  }
+  if (bibliotecaUploaded && typeof cargarRecursosRepoArchivos === 'function') {
+    cargarRecursosRepoArchivos();
   }
 }
 
@@ -295,6 +322,155 @@ function sstFilePickAnexosBtn(opts) {
   ).then(function (ok) { if (ok) run(); });
 }
 
+window._sstFilePickRegistry = window._sstFilePickRegistry || {};
+
+/** HTML reutilizable: botón + input oculto + lista con barra / preview / eliminar. */
+function sstFilePickBlock(opts) {
+  opts = opts || {};
+  const inputId = opts.inputId || ('sst-file-inp-' + Date.now());
+  const listId = opts.listId || (inputId + '-list');
+  const ctxKey = opts.ctxKey || inputId;
+  const multi = !!opts.multi;
+  const accept = opts.accept || '.pdf,.doc,.docx,image/*,video/*';
+  const label = opts.label || (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
+  const btnCls = opts.btnClass || (multi ? 'btn bsm' : 'btn bsm bp');
+  sstFileRegisterPick(inputId, { ctxKey: ctxKey, listId: listId, multi: multi, getUploadCtx: opts.getUploadCtx || null });
+  return '<div class="sst-file-pick">' +
+    '<button type="button" class="' + btnCls + '" onclick="sstFilePickByInputId(\'' + jsStr(inputId) + '\')">📎 ' + escAttr(label) + '</button>' +
+    '<input type="file" id="' + escAttr(inputId) + '"' + (multi ? ' multiple' : '') + ' accept="' + escAttr(accept) + '" style="display:none" onchange="sstFileOnPickByInputId(this)">' +
+    '</div>' +
+    '<div id="' + escAttr(listId) + '" class="sst-file-slot-list"></div>';
+}
+
+function sstFileRegisterPick(inputId, opts) {
+  window._sstFilePickRegistry[inputId] = opts || {};
+}
+
+function sstFileInitPick(inputId) {
+  const reg = window._sstFilePickRegistry[inputId];
+  if (!reg) return;
+  sstFileRenderList(reg.listId, reg.ctxKey);
+}
+
+function sstFilePickByInputId(inputId) {
+  (typeof sstSolicitarGmailParaAdjuntar === 'function' ? sstSolicitarGmailParaAdjuntar() : Promise.resolve(true))
+    .then(function (ok) {
+      if (!ok) return;
+      const inp = document.getElementById(inputId);
+      if (inp) inp.click();
+    });
+}
+
+function sstFileOnPickByInputId(inp) {
+  const reg = inp && inp.id && window._sstFilePickRegistry[inp.id];
+  if (!reg) return;
+  const opts = { ctxKey: reg.ctxKey, listId: reg.listId, getUploadCtx: reg.getUploadCtx };
+  if (reg.multi) sstFileOnAnexosPick(inp, opts);
+  else sstFileOnMainPick(inp, opts);
+}
+
+function sstFileGetMainItem(ctxKey) {
+  const ctx = window._sstFileStaging && window._sstFileStaging[ctxKey];
+  return ctx && ctx.main ? ctx.main : null;
+}
+
+function sstFileGetMainBlob(ctxKey) {
+  const it = sstFileGetMainItem(ctxKey);
+  return it && it.blob ? it.blob : null;
+}
+
+function sstFileHasMain(ctxKey) {
+  return !!sstFileGetMainItem(ctxKey);
+}
+
+function sstFileEnviarCtxKey(expId, taskId) {
+  return 'enviar-soporte:' + String(expId || '').trim() + ':' + String(taskId || '').trim();
+}
+
+function sstFileUploadCtxForExpTask(expId, taskId) {
+  return function () {
+    expId = String(expId || '').trim();
+    taskId = String(taskId || '').trim();
+    let e = typeof getExpById === 'function' ? getExpById(expId) : null;
+    let t = e && taskId && typeof getTaskFromExp === 'function' ? getTaskFromExp(e, taskId) : null;
+    if (!t && typeof getActLibreById === 'function') t = getActLibreById(taskId);
+    if (!t && typeof getActLibreByCodigo === 'function') t = getActLibreByCodigo(expId);
+    if (t && t.sinExpediente) {
+      const cod = t.codigo || expId;
+      const depto = t.depto || (typeof getDeptoOperativo === 'function' ? getDeptoOperativo() : 'guaviare');
+      return {
+        esPqrs: false,
+        expId: cod,
+        e: null,
+        eDrive: {
+          _exp: cod,
+          _fecha: typeof hoy === 'function' ? hoy() : '',
+          _depto: depto,
+          _sin_expediente: true,
+          _pn_nombre: 'Sin expediente',
+          _drive_folder_id: t._drive_folder_id || '',
+          _drive_folder_link: t._drive_folder_link || ''
+        },
+        t: t
+      };
+    }
+    if (!e) return null;
+    const esPqrs = typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e);
+    if (!t) t = { id: taskId || '_staging_', actividad: 'Entrega' };
+    return { esPqrs: !!esPqrs, expId: e._exp, e: e, eDrive: e, t: t };
+  };
+}
+
+function sstFileUploadCtxForPqrsExp(expId) {
+  expId = String(expId || '').trim();
+  return function () {
+    const e = typeof getExpById === 'function' ? getExpById(expId) : null;
+    if (!e) return null;
+    const t = { id: '_staging_', actividad: 'Notificación PQRSD' };
+    return { esPqrs: true, expId: expId, e: e, eDrive: e, t: t };
+  };
+}
+
+function sstFileUploadCtxForBiblioteca(getFolderId) {
+  return function () {
+    const folderId = typeof getFolderId === 'function' ? getFolderId() : '';
+    if (!folderId) return null;
+    return { biblioteca: true, folderId: folderId };
+  };
+}
+
+function sstFileCollectRawFiles(ctxKey) {
+  const col = typeof sstFileCollect === 'function' ? sstFileCollect(ctxKey) : { files: [], anexos: [] };
+  const out = [];
+  (col.files || []).forEach(function (r) { if (r && r.blob) out.push(r.blob); });
+  (col.anexos || []).forEach(function (r) { if (r && r.blob) out.push(r.blob); });
+  return out;
+}
+
+function sstFileCtxKeySecRadicacion() {
+  return 'sec-radicacion-anexos';
+}
+
+function sstFileCtxKeyPqrsRespAdj(expId) {
+  return 'pqrs-resp-adj:' + String(expId || '').trim();
+}
+
+function sstFileCtxKeyPqrsRespAnexos(expId) {
+  return 'pqrs-resp-anexos:' + String(expId || '').trim();
+}
+
+function sstFileCtxKeyDirectorPdf(expId) {
+  return 'director-pdf:' + String(expId || '').trim();
+}
+
+function sstFileCtxKeyTramiteDirectorPdf(refId, taskId) {
+  return 'tramite-director-pdf:' + String(refId || '').trim() + ':' + String(taskId || '').trim();
+}
+
+function sstFileCtxKeyTramiteAtajoFirmado(refId, taskId) {
+  return 'tramite-atajo-firmado:' + String(refId || '').trim() + ':' + String(taskId || '').trim();
+}
+
 window.sstFileStagingReset = sstFileStagingReset;
 window.sstFileOnMainPick = sstFileOnMainPick;
 window.sstFileOnAnexosPick = sstFileOnAnexosPick;
@@ -305,3 +481,22 @@ window.sstFileCollect = sstFileCollect;
 window.sstFileTryUpload = sstFileTryUpload;
 window.sstFilePickMainBtn = sstFilePickMainBtn;
 window.sstFilePickAnexosBtn = sstFilePickAnexosBtn;
+window.sstFilePickBlock = sstFilePickBlock;
+window.sstFileRegisterPick = sstFileRegisterPick;
+window.sstFileInitPick = sstFileInitPick;
+window.sstFilePickByInputId = sstFilePickByInputId;
+window.sstFileOnPickByInputId = sstFileOnPickByInputId;
+window.sstFileGetMainItem = sstFileGetMainItem;
+window.sstFileGetMainBlob = sstFileGetMainBlob;
+window.sstFileHasMain = sstFileHasMain;
+window.sstFileEnviarCtxKey = sstFileEnviarCtxKey;
+window.sstFileUploadCtxForExpTask = sstFileUploadCtxForExpTask;
+window.sstFileUploadCtxForPqrsExp = sstFileUploadCtxForPqrsExp;
+window.sstFileUploadCtxForBiblioteca = sstFileUploadCtxForBiblioteca;
+window.sstFileCollectRawFiles = sstFileCollectRawFiles;
+window.sstFileCtxKeySecRadicacion = sstFileCtxKeySecRadicacion;
+window.sstFileCtxKeyPqrsRespAdj = sstFileCtxKeyPqrsRespAdj;
+window.sstFileCtxKeyPqrsRespAnexos = sstFileCtxKeyPqrsRespAnexos;
+window.sstFileCtxKeyDirectorPdf = sstFileCtxKeyDirectorPdf;
+window.sstFileCtxKeyTramiteDirectorPdf = sstFileCtxKeyTramiteDirectorPdf;
+window.sstFileCtxKeyTramiteAtajoFirmado = sstFileCtxKeyTramiteAtajoFirmado;

@@ -457,7 +457,21 @@ function renderRecExpToolbar(canEdit) {
   h += '<div class="rec-exp-toolbar-left">';
   if (canEdit) {
     h += '<button type="button" class="btn bsm bp" onclick="recExpNuevaCarpeta()">📁 Nueva carpeta</button>';
-    h += '<label class="btn bsm" style="cursor:pointer">📤 Subir<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
+    if (typeof sstFilePickBlock === 'function') {
+      h += sstFilePickBlock({
+        inputId: 'rec-exp-upload-inp',
+        listId: 'rec-exp-upload-list',
+        ctxKey: 'rec-exp-upload',
+        multi: true,
+        label: 'Subir',
+        btnClass: 'btn bsm',
+        getUploadCtx: typeof sstFileUploadCtxForBiblioteca === 'function'
+          ? sstFileUploadCtxForBiblioteca(function () { return recExpCurrentFolderId(); })
+          : null
+      });
+    } else {
+      h += '<label class="btn bsm" style="cursor:pointer">📤 Subir<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
+    }
     h += '<button type="button" class="btn bsm bd2" onclick="recExpEliminarSeleccion()">🗑 Eliminar</button>';
   }
   h += '<button type="button" class="btn bsm" onclick="cargarRecursosRepoArchivos()">↻ Actualizar</button>';

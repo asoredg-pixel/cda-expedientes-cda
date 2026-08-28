@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260828c">
+<link rel="stylesheet" href="css/sst.css?v=20260828e">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,25 +22,25 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260828c"></script>
+<script src="js/core.js?v=20260828e"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260828a"></script>
 <script src="js/consolidado.js?v=20260805i"></script>
 <script src="js/configuracion.js?v=20260821d"></script>
 <script src="js/export.js?v=20260702t"></script>
-<script src="js/chat.js?v=20260702t"></script>
+<script src="js/chat.js?v=20260828e"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260826x"></script>
-<script src="js/sst-file-upload.js?v=20260828c"></script>
-<script src="js/pqrs.js?v=20260827l"></script>
+<script src="js/sst-file-upload.js?v=20260828e"></script>
+<script src="js/pqrs.js?v=20260828e"></script>
 <script src="js/consulta.js?v=20260828a"></script>
 <script src="js/entrega-responsable.js?v=20260828c"></script>
-<script src="js/tramite-firma.js?v=20260827n"></script>
+<script src="js/tramite-firma.js?v=20260828e"></script>
 <script src="js/papelera.js?v=20260806b"></script>
-<script src="js/recursos.js?v=20260821g"></script>
+<script src="js/recursos.js?v=20260828e"></script>
 <script src="js/ingreso.js?v=20260821e"></script>
 </head>
 <body>
@@ -629,6 +629,8 @@
       <div class="chat-upload-body">
         <p id="chat-upload-msg">Cargando al Drive institucional…</p>
         <div id="chat-upload-spinner" class="chat-upload-spinner" aria-hidden="false"></div>
+        <div id="chat-upload-prog" class="sst-file-prog" style="display:none;margin-top:10px"><div id="chat-upload-prog-fill" class="sst-file-prog-fill" style="width:8%"></div></div>
+        <div id="chat-upload-prog-txt" class="sst-file-prog-txt" style="display:none;text-align:center;margin-top:4px"></div>
         <div id="chat-upload-detail" class="chat-upload-detail" style="display:none"></div>
       </div>
       <div id="chat-upload-foot" class="chat-upload-foot" style="display:none">
@@ -844,8 +846,7 @@
       </div>
       <div class="fld" style="margin-bottom:10px">
         <label>Solicitud digital — anexos (opcional)</label>
-        <div id="sec-anexo-list" style="margin-top:6px"></div>
-        <button type="button" class="btn bsm" style="margin-top:6px" onclick="secAnexoAdd()">📎 Agregar archivo</button>
+        <div id="sec-anexo-pick-wrap" style="margin-top:6px"></div>
         <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos también se suben. Use <strong>Agregar archivo</strong> para añadir varios.</span>
       </div>
       <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
