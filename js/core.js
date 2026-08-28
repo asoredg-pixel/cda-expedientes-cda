@@ -16235,12 +16235,51 @@ function personaRolesLabel(p){
   return roles.length?roles.join(', '):'—';
 }
 function personaExpedientesLabel(p){
-  const ex=(p.expedientes||[]).filter(x=>x&&x.exp);
-  if(!ex.length)return'—';
-  return ex.map(x=>{
-    const rs=(x.roles||[]).map(r=>PERSONA_ROLES[r]||r).filter(Boolean).join(', ');
-    return x.exp+(rs?' ('+rs+')':'')+(x.depto?' · '+labelDepto(x.depto):'');
-  }).join('; ');
+  const nums=personaExpedientesNums(p);
+  return nums.length?nums.join('; '):'—';
+}
+function personaExpedientesNums(p){
+  return (p.expedientes||[]).filter(x=>x&&x.exp).map(x=>String(x.exp).trim()).filter(Boolean);
+}
+function personaCfgNombrePrincipal(p){
+  p=normalizePersonaRecord(p);
+  if(p.pj_empresa||p.pi_empresa)return p.pj_empresa||p.pi_empresa;
+  return personaNombreNatural(p)||personaDisplayNombre(p);
+}
+function personaCfgNombreSecundario(p){
+  p=normalizePersonaRecord(p);
+  const emp=String(p.pj_empresa||p.pi_empresa||'').trim();
+  const rep=String(p.pj_rep_nombre||p.pi_rep_nombre||'').trim();
+  if(rep)return rep;
+  const nat=String(personaNombreNatural(p)||'').trim();
+  if(emp&&nat&&nat.toLowerCase()!==emp.toLowerCase())return nat;
+  return'';
+}
+function personaCfgNombreCellHtml(p){
+  const main=personaCfgNombrePrincipal(p);
+  const sub=personaCfgNombreSecundario(p);
+  return escAttr(main)+(sub?'<div style="font-size:11px;color:var(--tx2);font-weight:400">Rep: '+escAttr(sub)+'</div>':'');
+}
+function personaExpedientesCellHtml(p,rowKey){
+  const nums=personaExpedientesNums(p);
+  if(!nums.length)return'—';
+  const maxShow=2;
+  const visible=nums.slice(0,maxShow);
+  const hidden=nums.length-maxShow;
+  let html='<span class="per-exp-list">'+visible.map(n=>'<span class="per-exp-tag">'+escAttr(n)+'</span>').join('')+'</span>';
+  if(hidden>0){
+    const popId='per-exp-pop-'+String(rowKey||p.id||Math.random()).replace(/\W/g,'');
+    html+=' <button type="button" class="btn bsm per-exp-mas" onclick="event.stopPropagation();togglePersonaExpPopover(\''+popId+'\')" title="Ver todos">+'+hidden+'</button>'+
+      '<div id="'+popId+'" class="per-exp-pop" style="display:none">'+nums.map(n=>'<div>'+escAttr(n)+'</div>').join('')+'</div>';
+  }
+  return '<div class="per-exp-cell">'+html+'</div>';
+}
+function togglePersonaExpPopover(id){
+  const pop=document.getElementById(id);
+  if(!pop)return;
+  const open=pop.style.display==='block';
+  document.querySelectorAll('.per-exp-pop').forEach(function(el){el.style.display='none';});
+  pop.style.display=open?'none':'block';
 }
 function personaEtiqueta(p){
   p=normalizePersonaRecord(p);
@@ -16687,6 +16726,7 @@ function upsertPersonaEntregaLibre(datos,actCodigo,depto){
     qd_correo:correo,
     qd_telefono:telefono,
     pj_empresa:entidad,
+    pj_rep_nombre:entidad?nombre:'',
     _entidad_representa:entidad
   };
   const personaId=String(datos._persona_catalog_id||'').trim();
@@ -16844,13 +16884,13 @@ function renderPersonasTablaOnly(){
   const tbody=document.getElementById('per-tabla-body');if(!tbody)return;
   const lista=getPersonasCfgLista();
   tbody.innerHTML=lista.length?lista.map(p=>{
-    const esJur=p.tipo_persona==='juridica'||!!(p.pj_empresa||p.pj_nit);
+    const esJur=p.tipo_persona==='juridica'||p.pi_tipo_persona==='juridica';
     return '<tr>'+
     '<td style="font-size:11px">'+(esJur?'Jurídica':'Natural')+'</td>'+
     '<td style="font-size:11px;max-width:120px">'+personaRolesLabel(p)+'</td>'+
-    '<td style="font-weight:600">'+personaDisplayNombre(p)+(esJur&&p.pj_rep_nombre?'<div style="font-size:11px;color:var(--tx2);font-weight:400">Rep: '+p.pj_rep_nombre+'</div>':'')+'</td>'+
-    '<td>'+personaDisplayIdentificacion(p)+(esJur&&p.pj_rep_identificacion?'<div style="font-size:11px;color:var(--tx2)">Rep: '+p.pj_rep_identificacion+'</div>':'')+'</td>'+
-    '<td style="font-size:11px;max-width:180px">'+personaExpedientesLabel(p)+'</td>'+
+    '<td style="font-weight:600">'+personaCfgNombreCellHtml(p)+'</td>'+
+    '<td>'+personaDisplayIdentificacion(p)+(esJur&&p.pj_rep_identificacion?'<div style="font-size:11px;color:var(--tx2)">Rep: '+escAttr(p.pj_rep_identificacion)+'</div>':'')+'</td>'+
+    '<td style="font-size:11px;max-width:180px">'+personaExpedientesCellHtml(p,p.id)+'</td>'+
     '<td style="font-size:12px">'+(p.pj_correo||p.pn_correo||p.qd_correo||'')+'</td>'+
     '<td>'+(cfgPuedeEditarPersonas()?('<div class="fx" style="gap:4px"><button type="button" class="btn bsm bic" onclick="editarPersonaCatalog(\''+p.id+'\')">✏️</button><button type="button" class="btn bsm bic bd2" onclick="eliminarPersonaCatalog(\''+p.id+'\')">✕</button></div>'):'')+'</td>'+
   '</tr>';}).join(''):'<tr><td colspan="7" class="emp">Sin personas en el catálogo.</td></tr>';

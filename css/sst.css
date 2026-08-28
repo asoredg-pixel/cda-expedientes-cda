@@ -383,6 +383,12 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .cfgr{display:flex;flex-direction:column;gap:.8rem;max-width:720px}
 #cfg-panels .cfg-fold{margin-bottom:0}
 #cfg-panels .cfg-fold .form-section-body .cfcard{border:0;box-shadow:none;padding:0;background:transparent}
+.per-exp-cell{position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.per-exp-list{display:inline-flex;flex-wrap:wrap;gap:4px}
+.per-exp-tag{display:inline-block;padding:1px 6px;border-radius:4px;background:var(--sf2);border:1px solid var(--bd);font-family:'DM Mono',monospace;font-size:11px;line-height:1.4}
+.per-exp-mas{min-width:28px;padding:1px 6px!important;font-size:11px!important;line-height:1.3}
+.per-exp-pop{position:absolute;left:0;top:100%;z-index:60;margin-top:2px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:6px 8px;font-size:11px;box-shadow:var(--shm);max-width:240px;max-height:160px;overflow:auto}
+.per-exp-pop div{padding:2px 0;font-family:'DM Mono',monospace}
 .cfg-panels-compact{display:flex;flex-direction:column;gap:.8rem;max-width:100%}
 .cfl-vertical .cfi{flex-direction:column;align-items:stretch;gap:6px}
 .cfl-vertical .cfi>input[type=text]{width:100%}
