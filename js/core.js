@@ -12607,6 +12607,7 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-notas');
       modal.classList.remove('task-modal-compare-expand');
       modal.classList.remove('task-modal-viewport-expand');
+      modal.classList.remove('review-asoc-consulta-modal');
     }
   }
   document.body.classList.remove('compare-docs-expanded');

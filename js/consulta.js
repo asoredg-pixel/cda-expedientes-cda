@@ -986,6 +986,7 @@ function reviewAsocPickCardHtml(item){
   if(item.tipo==='act'){
     const t=item.t;
     const nom=typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(t):(t.interesadoNombre||t.desc||t.actividad||'');
+    const puedeAsocAct=ctx.mode!=='act-libre'&&(ctx.mode==='exp-asoc'||ctx.mode==='pqrs-pick');
     return '<div class="review-asoc-card review-asoc-card-act">'+
       '<div class="review-asoc-card-hd"><strong style="font-family:\'DM Mono\',monospace">'+hl(t.codigo||'',q)+'</strong> <span class="bdg" style="font-size:10px">Actividad</span></div>'+
       '<div class="review-asoc-card-nom">'+hl(t.actividad||t.desc||'',q)+'</div>'+
@@ -993,7 +994,8 @@ function reviewAsocPickCardHtml(item){
       '<div class="fx" style="gap:6px;margin-top:8px;flex-wrap:wrap">'+
       '<button type="button" class="btn bsm" onclick="reviewAsocVerConsulta(\''+jsStr(t.codigo||'')+'\',\''+jsStr(t.id||'')+'\',\'act\')">🔍 Consultar</button>'+
       '<button type="button" class="btn bsm" onclick="reviewAsocVerArchivos(\''+jsStr(t.codigo||'')+'\',\''+jsStr(t.id||'')+'\',true)">📁 Archivos</button>'+
-      (ctx.mode==='act-libre'?'<span style="font-size:11px;color:var(--tx3)">Vincule con expediente o PQRSD</span>':'')+
+      (puedeAsocAct?'<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPickAct(\''+jsStr(t.id||'')+'\')">🖇️ Asociar</button>':'')+
+      (ctx.mode==='act-libre'&&!puedeAsocAct?'<span style="font-size:11px;color:var(--tx3)">Vincule con expediente o PQRSD</span>':'')+
       '</div></div>';
   }
   const e=item.e;
@@ -1109,35 +1111,62 @@ function reviewAsocVerArchivos(expId,taskId,libre){
   if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
   else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
+function renderReviewAsocActConsultaFull(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=(typeof getActLibreByCodigo==='function'?getActLibreByCodigo(expId):null)||(typeof getActLibreById==='function'?getActLibreById(taskId):null);
+  if(!t)return '<div style="font-size:12px;color:var(--tx3)">Actividad no encontrada</div>';
+  const tN=typeof normalizeActLibre==='function'?normalizeActLibre(t):t;
+  const est=typeof estadoTask==='function'?estadoTask(tN):'';
+  const lbl=typeof estadoTaskLabel==='function'?estadoTaskLabel(tN):est;
+  const st=typeof taskEstadoStyle==='function'?taskEstadoStyle(est,tN):{bg:'var(--sf2)',fg:'var(--tx)'};
+  const depto=tN.depto||(typeof deptoActivo!=='undefined'?deptoActivo:'');
+  const ref=tN.codigo||expId;
+  const vence=typeof taskVenceEfectivo==='function'?(taskVenceEfectivo(tN)||tN.vence):tN.vence;
+  const ini=typeof taskFechaInicio==='function'?taskFechaInicio(tN):'';
+  const toolbar='<div class="con-panel-toolbar" style="margin-bottom:10px">'+
+    '<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span> '+
+    '<span class="bdg" style="background:var(--pul);color:var(--pu)">Actividad</span> '+
+    (typeof badgeDepto==='function'?badgeDepto(depto):'')+
+    (tN.prioritaria?' <span class="bdg bdg-prior">⚡ Prioritaria</span>':'')+
+    '</div>';
+  const detalle='<div class="con-panel-form-wrap" style="margin-bottom:10px">'+
+    '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(ref)+'</div>'+
+    '<div class="slbl" style="margin-bottom:6px">'+escAttr(tN.actividad||tN.desc||'Actividad')+'</div>'+
+    (tN.desc&&tN.desc!==tN.actividad?'<div style="font-size:13px;margin:0 0 10px;line-height:1.55;color:var(--tx2)">'+escAttr(tN.desc)+'</div>':'')+
+    (tN.detalle?'<div style="font-size:13px;margin:0 0 10px;line-height:1.55;color:var(--tx2)">'+escAttr(tN.detalle)+'</div>':'')+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;font-size:12px">'+
+    '<div><div style="color:var(--tx3);font-size:11px;margin-bottom:2px">Responsables</div><div>'+escAttr(typeof taskResponsablesLabel==='function'?taskResponsablesLabel(tN,true):(tN.responsable||'—'))+'</div></div>'+
+    '<div><div style="color:var(--tx3);font-size:11px;margin-bottom:2px">Inicio</div><div>'+(typeof fmtF==='function'?fmtF(ini):escAttr(ini))+'</div></div>'+
+    '<div><div style="color:var(--tx3);font-size:11px;margin-bottom:2px">Vence</div><div style="color:'+(typeof taskActividadVencida==='function'&&taskActividadVencida(tN)?'var(--rd)':'inherit')+'">'+(typeof fmtF==='function'?fmtF(vence):escAttr(vence))+'</div></div>'+
+    (tN.fechaReportada?'<div><div style="color:var(--tx3);font-size:11px;margin-bottom:2px">Reportada</div><div>'+(typeof fmtF==='function'?fmtF(tN.fechaReportada):'')+'</div></div>':'')+
+    (tN.fechaAtendida?'<div><div style="color:var(--tx3);font-size:11px;margin-bottom:2px">Cierre</div><div>'+(typeof fmtF==='function'?fmtF(tN.fechaAtendida):'')+'</div></div>':'')+
+    '</div></div>';
+  const hist=(tN.historial||[]).length
+    ?('<details class="con-fold" open><summary>Trazabilidad</summary><div class="item-fold-body" style="font-size:12px;color:var(--tx2);line-height:1.55">'+(typeof renderTaskHistorialHtml==='function'?renderTaskHistorialHtml(tN):'')+'</div></details>')
+    :'<div style="font-size:12px;color:var(--tx3)">Sin eventos de trazabilidad aún</div>';
+  return toolbar+detalle+hist;
+}
 function renderReviewAsocConsultaPreview(expId,taskId,tipo){
   tipo=tipo||'exp';
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
-  if(tipo==='act'){
-    const t=(typeof getActLibreByCodigo==='function'?getActLibreByCodigo(expId):null)||(typeof getActLibreById==='function'?getActLibreById(taskId):null);
-    if(!t)return '<div style="font-size:12px;color:var(--tx3)">Actividad no encontrada</div>';
-    const tN=typeof normalizeActLibre==='function'?normalizeActLibre(t):t;
-    const est=typeof estadoTask==='function'?estadoTask(tN):'';
-    const nom=typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(tN):'';
-    return '<div style="margin-bottom:10px"><span class="bdg">'+escAttr(typeof estadoTaskLabel==='function'?estadoTaskLabel(tN):est)+'</span> <span style="font-family:\'DM Mono\',monospace;font-size:12px">'+escAttr(tN.codigo||expId)+'</span></div>'+
-      '<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(tN.actividad||tN.desc||'Actividad')+'</div>'+
-      (nom?'<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+escAttr(nom)+'</div>':'')+
-      (tN.detalle?'<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+escAttr(tN.detalle)+'</div>':'')+
-      '<div style="font-size:11px;color:var(--tx3)">Vence: '+escAttr(typeof fmtF==='function'?fmtF(tN.vence):'')+'</div>';
-  }
+  if(tipo==='act')return renderReviewAsocActConsultaFull(expId,taskId);
   const e=typeof getExpById==='function'?getExpById(expId):null;
   if(!e)return '<div style="font-size:12px;color:var(--tx3)">Registro no encontrado</div>';
+  if(typeof migrarInfoTecExpediente==='function')migrarInfoTecExpediente(e);
   const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
-  let body=typeof renderInteresadoConsultaBody==='function'?renderInteresadoConsultaBody(e):'';
-  const acts=(e.tasks||[]).filter(function(t){return t&&!t.eliminada;}).map(function(t){
-    return typeof renderTaskConsultaItem==='function'?renderTaskConsultaItem(e,t,''):'';
-  }).join('')||'<div style="font-size:12px;color:var(--tx3)">Sin actividades</div>';
-  return '<div style="margin-bottom:8px">'+badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+'</div>'+
+  const hdr='<div class="con-panel-toolbar" style="margin-bottom:10px">'+
+    badgeEst(e._estado)+' '+badgeTram(e._tramite,e)+badgeDepto(e._depto)+' '+
+    (typeof flagsHtmlCompact==='function'?flagsHtmlCompact(e):'')+
+    (typeof pqrsPrioritariaBadge==='function'?(' '+pqrsPrioritariaBadge(e)):'')+
+    (typeof pqrsInformativaBadge==='function'?(' '+pqrsInformativaBadge(e)):'')+
+    '</div>'+
     '<div style="font-size:14px;font-weight:600;margin-bottom:4px;font-family:\'DM Mono\',monospace">'+escAttr(e._exp)+'</div>'+
-    '<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+escAttr(typeof getNom==='function'?getNom(e):'')+'</div>'+
-    (tram?'<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+escAttr(tram.nombre)+'</div>':'')+
-    '<details class="con-fold" open><summary>Interesado</summary><div class="item-fold-body">'+body+'</div></details>'+
-    '<details class="con-fold"><summary>Actividades ('+(e.tasks||[]).filter(t=>!t.eliminada).length+')</summary><div class="item-fold-body">'+acts+'</div></details>';
+    '<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(typeof getNom==='function'?getNom(e):'')+'</div>'+
+    (tram?'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(tram.nombre)+(e._subclase?' · '+escAttr(e._subclase):'')+'</div>':'')+
+    (typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof renderConPanelPqrsExtras==='function'?renderConPanelPqrsExtras(e):'');
+  return '<div class="review-asoc-consulta-full">'+hdr+renderConPanelExpContent(e,{foldOpen:true})+'</div>';
 }
 function reviewAsocVerConsulta(expId,taskId,tipo){
   expId=String(expId||'').trim();
@@ -1150,8 +1179,8 @@ function reviewAsocVerConsulta(expId,taskId,tipo){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   if(tit)tit.textContent='🔍 Consulta · '+expId;
-  if(modal){modal.classList.add('task-modal-wide');modal.classList.add('enviar-modal-only');}
-  body.innerHTML=renderReviewAsocConsultaPreview(expId,taskId,tipo||'exp')+
+  if(modal){modal.classList.add('task-modal-wide');modal.classList.add('enviar-modal-only');modal.classList.add('review-asoc-consulta-modal');}
+  body.innerHTML='<div class="review-asoc-consulta-body">'+renderReviewAsocConsultaPreview(expId,taskId,tipo||'exp')+'</div>'+
     '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+((typeof taskModalCloseBtnLabel==='function')?taskModalCloseBtnLabel():'Cerrar')+'</button></div>';
   ov.classList.add('on');
   if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
@@ -1176,6 +1205,29 @@ function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   if(target&&target._exp!==e._exp&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(target,false);
   notif('Vinculado a '+target._exp,'ok');
   return true;
+}
+function confirmReviewAsocPickAct(actTaskId){
+  actTaskId=String(actTaskId||'').trim();
+  const ctx=window._reviewAsocCtx||{};
+  if(!actTaskId){notif('Actividad no válida','err');return;}
+  const sourceExp=String(ctx.sourceExp||'').trim();
+  if(!sourceExp){notif('Registro origen no definido','err');return;}
+  const target=typeof getExpById==='function'?getExpById(sourceExp):null;
+  if(!target){notif('Registro origen no encontrado','err');return;}
+  let ok=false;
+  if(typeof vincularActLibreAExpediente==='function'){
+    const pack=vincularActLibreAExpediente(actTaskId,target);
+    ok=!!pack;
+    if(ok)notif('Actividad vinculada a '+sourceExp,'ok');
+  }
+  if(ok){
+    cerrarReviewAsocPanel();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+    const parent=window._taskModalCtx||{};
+    if(parent.isReviewDelivery&&parent.expId&&parent.taskId&&typeof openTaskCommentsModal==='function')
+      openTaskCommentsModal(parent.expId,parent.taskId);
+  }
 }
 function confirmReviewAsocPick(targetExpId){
   targetExpId=String(targetExpId||'').trim();

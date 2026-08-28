@@ -1006,6 +1006,9 @@ html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:1000
 .review-asoc-card-nom{font-size:13px;font-weight:600;margin-bottom:2px}
 .review-asoc-card-meta{font-size:11px;color:var(--tx3);margin-bottom:4px}
 .review-asoc-card-det{font-size:11px;color:var(--tx2);line-height:1.4}
+.review-asoc-consulta-body{max-height:min(72vh,680px);overflow:auto;padding-right:4px}
+.task-modal.review-asoc-consulta-modal{max-height:92vh}
+.review-asoc-consulta-full .con-fold{margin-bottom:8px}
 @media(max-width:900px){
   .review-asoc-panel{width:100%!important;max-width:100vw;height:45vh;top:auto;bottom:0;border-radius:20px 20px 0 0}
 }
