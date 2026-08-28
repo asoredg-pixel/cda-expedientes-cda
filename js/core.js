@@ -4842,7 +4842,23 @@ function normalizeActLibre(t){
   t.sinExpediente=true;
   t.depto=resolveDeptoActLibre(t.depto);
   if(!t.codigo)t.codigo=genCodigoActLibre(t.depto);
+  const lbl=actLibreInteresadoLabel(t);
+  if(lbl)t.interesadoNombre=lbl;
   return t;
+}
+function actLibreInteresadoLabel(t){
+  if(!t)return'';
+  const saved=String(t.interesadoNombre||'').trim();
+  if(saved&&!/^\(?sin expediente\)?$/i.test(saved))return saved;
+  const nom=String(t._pn_nombre||'').trim();
+  if(!nom||/^\(?sin expediente\)?$/i.test(nom))return'';
+  const ent=String(t._entidad_representa||t._pj_empresa||'').trim();
+  return ent?(nom+' · '+ent):nom;
+}
+function actLibreActividadListRow(t){
+  const cod=String(t.codigo||'').trim();
+  const interesado=actLibreInteresadoLabel(t);
+  return {...t,exp:cod,nombre:interesado||'—',tram:'',sinExpediente:true};
 }
 function getActLibreById(id){
   const sid=String(id||'').trim();
@@ -4970,7 +4986,7 @@ function getTareasResponsableActivo(){
   (actividadesLibres||[]).forEach(t=>{
     t=normalizeActLibre(t);
     if(t.eliminada||!taskUsuarioEsAsignado(t,responsableActivo))return;
-    out.push({...t,exp:t.codigo,nombre:'(Sin expediente)',tram:'Actividad',sinExpediente:true});
+    out.push(actLibreActividadListRow(t));
   });
   return out;
 }
@@ -5006,7 +5022,7 @@ function getTareasDeptActividades(respFilter){
   });
   getActividadesLibresDepto(depto).forEach(t=>{
     if(respFilter&&!taskUsuarioEsAsignado(t,respFilter))return;
-    list.push({...t,exp:t.codigo,nombre:'(Sin expediente)',tram:'Actividad',sinExpediente:true});
+    list.push(actLibreActividadListRow(t));
   });
   return list;
 }
@@ -14741,9 +14757,8 @@ function actRefCellHtml(t){
   const expId=String(t.exp||'').trim();
   const taskId=String(t.id||'').trim();
   const tit=t.sinExpediente?'Ver actividad':(t.esPqrs?'Ver PQRSD en consulta':'Ver expediente en consulta');
-  const inner=t.sinExpediente
-    ?('<span class="bdg" style="background:var(--pul);color:var(--pu);font-size:10px;margin-right:4px">Actividad</span><span class="act-ref-link">'+escAttr(t.exp)+'</span>')
-    :('<span class="act-ref-link">'+escAttr(t.exp)+'</span>');
+  const refTxt=t.sinExpediente?String(t.codigo||t.exp||'').trim():String(t.exp||'').trim();
+  const inner='<span class="act-ref-link">'+escAttr(refTxt)+'</span>';
   return '<button type="button" class="act-ref-btn" data-sst-action="abrirConsultaRefDesdeActividad" data-sst-exp="'+escAttr(expId)+'" data-sst-task="'+escAttr(taskId)+'" title="'+escAttr(tit)+'">'+inner+'</button>';
 }
 
@@ -16107,7 +16122,7 @@ function renderActividades(){
   });
   // Re-aplicar filtro porver tras rehidratar firmaWf
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
-  if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable].join(' ').toLowerCase().includes(q));
+  if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable,t.interesadoNombre,t._pn_nombre,t._entidad_representa,t._pj_empresa].join(' ').toLowerCase().includes(q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
     (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):sortTasksByUrgency(list));
   window._actExportList=list;
