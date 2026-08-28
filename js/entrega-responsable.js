@@ -130,7 +130,10 @@ function syncEntregaRespModoUi(){
     }
     const regHint=document.getElementById('entrega-resp-reg-hint');
     if(regHint)regHint.textContent='';
+    if(typeof syncEntregaRespLibreUi==='function')syncEntregaRespLibreUi();
   }else{
+    const libreBox=document.getElementById('entrega-resp-libre-box');
+    if(libreBox)libreBox.style.display='none';
     syncEntregaRespPqrsUi();
     if(typeof syncEntregaRespRegistroUi==='function')syncEntregaRespRegistroUi();
   }
@@ -183,6 +186,28 @@ function htmlEntregaRespDir(prefix,ev){
     '<div class="fld"><label>Predio</label><input type="text" id="entrega-int-'+prefix+'-predio" value="'+escAttr(ev['_'+prefix+'_predio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld"><label>Barrio</label><input type="text" id="entrega-int-'+prefix+'-barrio" value="'+escAttr(ev['_'+prefix+'_barrio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld"><label>Dirección</label><input type="text" id="entrega-int-'+prefix+'-direccion" value="'+escAttr(ev['_'+prefix+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
+}
+
+function htmlEntregaLibreDir(slot,ev){
+  ev=ev||{};
+  const depFijo=typeof nombreDeptoOperativo==='function'?nombreDeptoOperativo():'Guaviare';
+  const mun=ev['_'+slot+'_mun']||'';
+  const idp='entrega-libre-int-'+slot;
+  return '<input type="hidden" id="'+idp+'-dep" value="'+escAttr(depFijo)+'">'+
+    '<div class="fld"><label>Municipio</label><select id="'+idp+'-mun" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+entregaRespMunOptsHtml(depFijo,mun)+'</select></div>'+
+    '<div class="fld"><label>Vereda</label><input type="text" id="'+idp+'-vereda" value="'+escAttr(ev['_'+slot+'_vereda']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Predio</label><input type="text" id="'+idp+'-predio" value="'+escAttr(ev['_'+slot+'_predio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Barrio</label><input type="text" id="'+idp+'-barrio" value="'+escAttr(ev['_'+slot+'_barrio']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld"><label>Dirección</label><input type="text" id="'+idp+'-direccion" value="'+escAttr(ev['_'+slot+'_direccion']||'')+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"></div>';
+}
+
+function _entregaLibreIntDir(slot){
+  const o={};
+  const idp='entrega-libre-int-'+slot;
+  ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
+    o['_'+slot+'_'+k]=_entregaLibreIntVal(idp+'-'+k);
+  });
+  return o;
 }
 
 function syncEntregaRespAltaFormPorTramite(){
@@ -329,6 +354,186 @@ function htmlEntregaRespInteresadoBox(tramiteId){
     '<option value="otro">Otro</option></select></div>';
   h+='<div style="font-size:10px;color:var(--tx3);margin-top:8px">El encargado revisará y podrá corregir estos datos en Registro antes de confirmar el expediente.</div></div>';
   return h;
+}
+
+function htmlEntregaLibreInteresadoBox(){
+  const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  let h='<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+  h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>';
+  h+='<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="entrega-libre-int-tipo" onchange="syncEntregaLibreInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div></div>';
+  h+='<div id="entrega-libre-int-natural"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
+    '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-pn-nombre" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-libre-int-pn-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pn-correo" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pn-telefono" style="'+inpStyle+'"></div>'+
+    htmlEntregaLibreDir('pn',{})+
+    '</div>'+
+    '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;margin-top:8px"><input type="checkbox" id="entrega-libre-int-est-com" onchange="syncEntregaLibreInteresadoUi()" style="width:15px;height:15px;accent-color:var(--bl)"> Tiene establecimiento comercial</label>'+
+    '<div id="entrega-libre-int-ec" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Establecimiento comercial</div><div class="fg">'+
+    '<div class="fld"><label>Nombre del negocio</label><input type="text" id="entrega-libre-int-ec-nombre" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-ec-telefono" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-ec-correo" style="'+inpStyle+'"></div>'+
+    htmlEntregaLibreDir('ec',{})+
+    '</div></div></div>';
+  h+='<div id="entrega-libre-int-juridica" style="display:none"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
+    '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-libre-int-pj-rep-nombre" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-libre-int-pj-rep-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pj-rep-correo" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pj-rep-telefono" style="'+inpStyle+'"></div>'+
+    '</div><div class="slbl" style="margin:.5rem 0 .35rem;font-size:11px">Empresa</div><div class="fg">'+
+    '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-libre-int-pj-empresa" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>NIT</label><input type="text" id="entrega-libre-int-pj-nit" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-pj-correo" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-pj-telefono" style="'+inpStyle+'"></div>'+
+    htmlEntregaLibreDir('pj',{})+
+    '</div></div>';
+  h+='<div class="fld" style="margin-top:10px"><label>Medio de notificación</label>'+
+    '<select id="entrega-libre-int-medio-notif" style="'+inpStyle+'">'+
+    '<option value="">— No indica —</option>'+
+    '<option value="correo">Correo</option>'+
+    '<option value="fisica">Física / presencial</option>'+
+    '<option value="whatsapp">WhatsApp</option>'+
+    '<option value="aviso">Aviso</option>'+
+    '<option value="otro">Otro</option></select></div>';
+  h+='</div>';
+  return h;
+}
+
+function syncEntregaLibreInteresadoUi(){
+  const tipo=String((document.getElementById('entrega-libre-int-tipo')||{}).value||'natural');
+  const nat=document.getElementById('entrega-libre-int-natural');
+  const jur=document.getElementById('entrega-libre-int-juridica');
+  const ec=document.getElementById('entrega-libre-int-ec');
+  if(nat)nat.style.display=tipo==='juridica'?'none':'';
+  if(jur)jur.style.display=tipo==='juridica'?'':'none';
+  if(ec)ec.style.display=(tipo!=='juridica'&&(document.getElementById('entrega-libre-int-est-com')||{}).checked)?'':'none';
+}
+
+function _entregaLibreIntVal(id){
+  const el=document.getElementById(id);
+  return el?String(el.value||'').trim():'';
+}
+
+function collectEntregaLibreInteresado(){
+  const out={
+    _tipo_persona:_entregaLibreIntVal('entrega-libre-int-tipo')||'natural',
+    _medio_notificacion:_entregaLibreIntVal('entrega-libre-int-medio-notif')||'',
+    _est_com:!!((document.getElementById('entrega-libre-int-est-com')||{}).checked)
+  };
+  if(out._tipo_persona==='juridica'){
+    Object.assign(out,{
+      _pj_rep_nombre:_entregaLibreIntVal('entrega-libre-int-pj-rep-nombre'),
+      _pj_rep_identificacion:_entregaLibreIntVal('entrega-libre-int-pj-rep-identificacion'),
+      _pj_rep_correo:_entregaLibreIntVal('entrega-libre-int-pj-rep-correo'),
+      _pj_rep_telefono:_entregaLibreIntVal('entrega-libre-int-pj-rep-telefono'),
+      _pj_empresa:_entregaLibreIntVal('entrega-libre-int-pj-empresa'),
+      _pj_nit:_entregaLibreIntVal('entrega-libre-int-pj-nit'),
+      _pj_correo:_entregaLibreIntVal('entrega-libre-int-pj-correo'),
+      _pj_telefono:_entregaLibreIntVal('entrega-libre-int-pj-telefono')
+    },_entregaLibreIntDir('pj'));
+  }else{
+    Object.assign(out,{
+      _pn_nombre:_entregaLibreIntVal('entrega-libre-int-pn-nombre'),
+      _pn_identificacion:_entregaLibreIntVal('entrega-libre-int-pn-identificacion'),
+      _pn_correo:_entregaLibreIntVal('entrega-libre-int-pn-correo'),
+      _pn_telefono:_entregaLibreIntVal('entrega-libre-int-pn-telefono')
+    },_entregaLibreIntDir('pn'));
+    if(out._est_com){
+      Object.assign(out,{
+        _ec_nombre:_entregaLibreIntVal('entrega-libre-int-ec-nombre'),
+        _ec_telefono:_entregaLibreIntVal('entrega-libre-int-ec-telefono'),
+        _ec_correo:_entregaLibreIntVal('entrega-libre-int-ec-correo')
+      },_entregaLibreIntDir('ec'));
+    }
+  }
+  return out;
+}
+
+function validateEntregaLibreInteresado(datos){
+  if(!datos)return'Indique los datos del interesado';
+  if(datos._tipo_persona==='juridica'){
+    if(!datos._pj_empresa)return'Indique el nombre / razón social del interesado';
+  }else if(!datos._pn_nombre){
+    return'Indique el nombre del interesado';
+  }
+  return'';
+}
+
+function applyEntregaLibreInteresadoToTask(t,datos){
+  if(!t||!datos)return;
+  Object.keys(datos).forEach(function(k){t[k]=datos[k];});
+  t.interesadoNombre=datos._tipo_persona==='juridica'?(datos._pj_empresa||datos._pj_rep_nombre||''):(datos._pn_nombre||'');
+}
+
+function resolveActividadRequiereOficio(nombreAct,deptoId){
+  const nom=String(nombreAct||'').trim();
+  if(!nom)return false;
+  const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(deptoId):(typeof cfgFor==='function'?cfgFor(deptoId):null);
+  return !!(cfgAct&&cfgAct.actOficioMap&&cfgAct.actOficioMap[nom]);
+}
+
+function entregaRespClearOficioError(){
+  const err=document.getElementById('entrega-resp-oficio-err');
+  if(err){err.style.display='none';err.textContent='';}
+}
+
+function entregaRespOnOficioBlur(){
+  const oficio=String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim();
+  if(!oficio||oficio.length<3)return;
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const excl=libre?(window._entregaLibreCodigoPreview||''):String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  if(typeof validarNumeroOficioDisponible==='function')validarNumeroOficioDisponible(oficio,excl);
+}
+
+function validateEntregaRespOficioRequerido(actividad,excludeId){
+  if(!resolveActividadRequiereOficio(actividad))return true;
+  const pqrsOfi=document.getElementById('pqrs-entrega-resp-oficio');
+  const oficio=pqrsOfi
+    ?String(pqrsOfi.value||'').trim()
+    :String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim();
+  if(!oficio){
+    notif('Indique el N° de oficio','err');
+    const el=document.getElementById('entrega-resp-oficio');
+    if(el&&!pqrsOfi)el.focus();
+    return false;
+  }
+  if(typeof validarNumeroOficioDisponible==='function'){
+    return validarNumeroOficioDisponible(oficio,excludeId);
+  }
+  return true;
+}
+
+function applyEntregaRespOficioToTask(t,actividad){
+  if(!t||!resolveActividadRequiereOficio(actividad))return;
+  const pqrsOfi=document.getElementById('pqrs-entrega-resp-oficio');
+  const oficio=pqrsOfi
+    ?String(pqrsOfi.value||'').trim()
+    :String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim();
+  if(oficio){
+    t.oficio=oficio;
+    t.nro_oficio=oficio;
+    t._oficio=oficio;
+  }
+}
+
+function syncEntregaRespOficioUi(){
+  const wrap=document.getElementById('entrega-resp-oficio-wrap');
+  if(!wrap)return;
+  const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const esPqrs=!!document.getElementById('pqrs-entrega-resp-oficio');
+  const show=resolveActividadRequiereOficio(act)&&!esPqrs;
+  wrap.style.display=show?'':'none';
+  const req=document.getElementById('entrega-resp-oficio-req');
+  if(req)req.style.display=show?'':'none';
+}
+
+function syncEntregaRespLibreUi(){
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const box=document.getElementById('entrega-resp-libre-box');
+  if(box)box.style.display=libre?'':'none';
+  if(libre&&typeof syncEntregaLibreInteresadoUi==='function')syncEntregaLibreInteresadoUi();
+  syncEntregaRespOficioUi();
 }
 
 function syncEntregaRespInfractorCard(idx){
@@ -651,6 +856,7 @@ function openEntregaResponsableModal(){
       '<div id="entrega-resp-persona-host">'+htmlEntregaRespInteresadoBox()+'</div>'+
     '</div>'+
     '<div id="entrega-resp-libre-hint" style="display:none"></div>'+
+    '<div id="entrega-resp-libre-box" style="display:none;margin-bottom:10px">'+htmlEntregaLibreInteresadoBox()+'</div>'+
     '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
@@ -660,6 +866,11 @@ function openEntregaResponsableModal(){
         '<div id="entrega-resp-act-sug" class="entrega-resp-sug" style="display:none"></div>'+
       '</div>'+
       '<div id="entrega-resp-reg-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div></div>'+
+    '<div id="entrega-resp-oficio-wrap" style="display:none;margin-bottom:10px">'+
+      '<div class="fld"><label>N° de oficio <span id="entrega-resp-oficio-req" style="color:var(--rd)">*</span></label>'+
+        '<input type="text" id="entrega-resp-oficio" placeholder="Ej. DSGV-E261485" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="entregaRespClearOficioError()" onblur="entregaRespOnOficioBlur()">'+
+        '<div id="entrega-resp-oficio-err" style="display:none;font-size:11px;color:var(--rd);margin-top:4px"></div>'+
+      '</div></div>'+
     '<div id="entrega-resp-registro-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></div>'+
     '<div id="entrega-resp-pqrs-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-tramite-files">'+
@@ -696,6 +907,7 @@ function openEntregaResponsableModal(){
   syncEntregaRespAltaFormPorTramite();
   syncEntregaRespInteresadoUi();
   syncEntregaRespRegistroUi();
+  syncEntregaRespLibreUi();
   syncEntregaRespPqrsUi();
   if(typeof sstFileRenderList==='function'){
     sstFileRenderList('entrega-resp-file-list',entregaRespFileCtxKey());
@@ -760,6 +972,7 @@ function filtrarActEntregaRespSug(inp){
   }).join('');
   portal.style.display='block';
   syncEntregaRespRegistroUi();
+  syncEntregaRespLibreUi();
 }
 
 function pickActEntregaResp(val){
@@ -768,6 +981,7 @@ function pickActEntregaResp(val){
   const portal=document.getElementById('entrega-resp-act-sug');
   if(portal){portal.style.display='none';portal.innerHTML='';}
   syncEntregaRespRegistroUi();
+  syncEntregaRespLibreUi();
 }
 
 /** Tipo de Registro asociado a la actividad (concepto | factura | acto | ninguno | ''). */
@@ -791,6 +1005,7 @@ function syncEntregaRespRegistroUi(){
   if(libre){
     if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
+    syncEntregaRespOficioUi();
     return;
   }
   // PQRSD: no mini-form de Registro (concepto/factura/acto) — solo sobre PQRSD existente
@@ -815,6 +1030,7 @@ function syncEntregaRespRegistroUi(){
     else if(tipo==='ninguno')hint.textContent='Solo actividad (sin datos de Registro asociados).';
     else hint.textContent='Sin mapeo a Registro — el administrador puede configurarlo en Actividades predeterminadas.';
   }
+  syncEntregaRespOficioUi();
   if(!box)return;
   if(!act||!actividadPredEntregaExiste(act)||!tipo||tipo==='ninguno'){box.style.display='none';box.innerHTML='';return;}
   box.style.display='';
@@ -1106,11 +1322,15 @@ function ensureExpTaskEntregaResponsable(){
 
   // Sin expediente: actividad libre autoasignada al responsable
   if(libre){
+    const interesadoDatos=collectEntregaLibreInteresado();
+    const errInt=validateEntregaLibreInteresado(interesadoDatos);
+    if(errInt){notif(errInt,'err');return null;}
     const deptoLibre=typeof resolveDeptoActLibre==='function'
       ?resolveDeptoActLibre()
       :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
     const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
     const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
+    if(!validateEntregaRespOficioRequerido(actividad,cod))return null;
     let t=buildTaskEntregaResponsable(actividad,detalle,responsableActivo);
     t=typeof normalizeActLibre==='function'?normalizeActLibre(Object.assign(t,{
       depto:deptoOk,
@@ -1119,6 +1339,8 @@ function ensureExpTaskEntregaResponsable(){
       autoAsignadaPorResponsable:true,
       origen:'responsable'
     })):Object.assign(t,{depto:deptoOk,codigo:cod,sinExpediente:true});
+    applyEntregaLibreInteresadoToTask(t,interesadoDatos);
+    applyEntregaRespOficioToTask(t,actividad);
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
     t._pending_fs_sync=true;
     t._pending_fs_at=Date.now();
@@ -1193,6 +1415,8 @@ function ensureExpTaskEntregaResponsable(){
     if(typeof ensureAsignado==='function')ensureAsignado(t,responsableActivo);
   }
   t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
+  if(!validateEntregaRespOficioRequerido(actividad,e._exp))return null;
+  applyEntregaRespOficioToTask(t,actividad);
   const regPayload=(!esPqrs)?collectEntregaRespRegistroPayload(actividad):null;
   if(regPayload){
     if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
@@ -1208,6 +1432,9 @@ function ensureExpTaskEntregaResponsable(){
     }
     if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
       if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return null;
+    }
+    if(regPayload.tipo==='acto'&&regPayload.item.numero&&typeof validarNumeroOficioDisponible==='function'){
+      if(!validarNumeroOficioDisponible(regPayload.item.numero,e._exp))return null;
     }
     appendRegistroDesdeEntrega(e,regPayload);
   }
@@ -1282,6 +1509,12 @@ window.entregaRespOnAnexosFileChange=entregaRespOnAnexosFileChange;
 window.entregaRespRetryFileUpload=entregaRespRetryFileUpload;
 window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
 window.syncEntregaRespAltaFormPorTramite=syncEntregaRespAltaFormPorTramite;
+window.syncEntregaRespLibreUi=syncEntregaRespLibreUi;
+window.syncEntregaLibreInteresadoUi=syncEntregaLibreInteresadoUi;
+window.syncEntregaRespOficioUi=syncEntregaRespOficioUi;
+window.resolveActividadRequiereOficio=resolveActividadRequiereOficio;
+window.entregaRespOnOficioBlur=entregaRespOnOficioBlur;
+window.entregaRespClearOficioError=entregaRespClearOficioError;
 window.syncEntregaRespInfractorCard=syncEntregaRespInfractorCard;
 window.entregaRespAddInfractor=entregaRespAddInfractor;
 window.entregaRespQuitarInfractor=entregaRespQuitarInfractor;
