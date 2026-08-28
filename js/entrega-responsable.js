@@ -118,12 +118,6 @@ function syncEntregaRespModoUi(){
   if(nuevo||libre){
     if(hint)hint.textContent='';
   }
-  const driveHint=document.getElementById('entrega-resp-drive-hint');
-  if(driveHint){
-    if(libre)driveHint.textContent='Sin expediente: el archivo se guarda en carpeta ACT-… del Drive institucional.';
-    else if(!document.getElementById('pqrs-entrega-campos'))
-      driveHint.textContent='Se sube al Drive institucional del expediente (carpeta EXP-…).';
-  }
   if(libre){
     const regBox=document.getElementById('entrega-resp-registro-box');
     if(regBox){regBox.style.display='none';regBox.innerHTML='';}
@@ -152,7 +146,6 @@ function syncEntregaRespPqrsUi(){
   const box=document.getElementById('entrega-resp-pqrs-box');
   const tramFiles=document.getElementById('entrega-resp-tramite-files');
   const regBox=document.getElementById('entrega-resp-registro-box');
-  const driveHint=document.getElementById('entrega-resp-drive-hint');
   if(tramFiles&&!tramFiles._tramiteFilesHtmlBackup)
     tramFiles._tramiteFilesHtmlBackup=tramFiles.innerHTML;
   if(box){
@@ -172,11 +165,6 @@ function syncEntregaRespPqrsUi(){
         tramFiles.style.display='';
       }
     }
-  }
-  if(driveHint){
-    driveHint.textContent=esPqrs
-      ?'Los archivos se suben a la carpeta PQRSD institucional (no a Expedientes / EXP-).'
-      :'Se sube al Drive institucional del expediente (carpeta EXP-…).';
   }
 }
 
@@ -683,18 +671,17 @@ function openEntregaResponsableModal(){
       '<input type="text" id="entrega-resp-detalle" placeholder="Detalles de la actividad" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div id="entrega-resp-pqrs-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-tramite-files">'+
-    '<div class="fld" style="margin-bottom:10px"><label>Documento principal</label>'+
-      '<div class="sst-file-pick">'+
+    '<div class="fld" style="margin-bottom:10px">'+
+      '<div class="sst-file-pick-row">'+
         '<button type="button" class="btn bsm bp" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
-        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
-      '</div>'+
-      '<div id="entrega-resp-file-list" class="sst-file-slot-list"></div>'+
-      '<div id="entrega-resp-drive-hint" style="font-size:10px;color:var(--tx3);margin-top:4px"></div></div>'+
-    '<div class="fld" style="margin-bottom:10px"><label>Anexos (opcionales)</label>'+
-      '<div class="sst-file-pick">'+
         '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">📎 Seleccionar anexos</button>'+
+        '<button type="button" class="btn bsm bic act-ico" onclick="sstFilePickAnexosBtn()" title="Agregar más anexos">+</button>'+
+        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
         '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
       '</div>'+
+      '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
+      '<div id="entrega-resp-file-list" class="sst-file-slot-list"></div>'+
+      '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Anexos</div>'+
       '<div id="entrega-resp-anexos-list" class="sst-file-slot-list"></div>'+
     '</div></div>'+
     '<input type="hidden" id="enviar-requiere-link" value="0">'+
@@ -710,6 +697,10 @@ function openEntregaResponsableModal(){
   ov.classList.add('on');
   window._taskModalCtx={mode:'entregaResponsable'};
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(entregaRespFileCtxKey());
+  if(typeof sstFileRegisterList==='function'){
+    sstFileRegisterList('entrega-resp-file-list',entregaRespFileCtxKey(),'main');
+    sstFileRegisterList('entrega-resp-anexos-list',entregaRespFileCtxKey(),'anexos');
+  }
   syncEntregaRespModoUi();
   syncEntregaRespAltaFormPorTramite();
   syncEntregaRespInteresadoUi();

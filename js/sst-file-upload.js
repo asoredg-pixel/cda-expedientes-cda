@@ -3,6 +3,29 @@
 // =============================================================================
 
 window._sstFileStaging = window._sstFileStaging || {};
+window._sstFileListMeta = window._sstFileListMeta || {};
+
+function sstFileRegisterList(listId, ctxKey, slot) {
+  if (!listId) return;
+  window._sstFileListMeta[listId] = { ctxKey: ctxKey, slot: slot || 'all' };
+}
+
+function sstFileListSlot(listId) {
+  const meta = listId && window._sstFileListMeta[listId];
+  return meta && meta.slot ? meta.slot : 'all';
+}
+
+function sstFileRefreshCtxLists(ctxKey, alsoListId) {
+  const seen = {};
+  Object.keys(window._sstFileListMeta || {}).forEach(function (listId) {
+    const m = window._sstFileListMeta[listId];
+    if (m && m.ctxKey === ctxKey) {
+      sstFileRenderList(listId, ctxKey);
+      seen[listId] = true;
+    }
+  });
+  if (alsoListId && !seen[alsoListId]) sstFileRenderList(alsoListId, ctxKey);
+}
 
 function sstFileStagingCtx(key) {
   key = String(key || 'default').trim() || 'default';
@@ -50,36 +73,45 @@ function sstFileListEl(listId) {
   return listId ? document.getElementById(listId) : null;
 }
 
+function sstFileRenderItemRow(it, ctxKey, listId) {
+  const st = it.state || 'local';
+  const canPreview = !!(it.blobUrl || it.previewLink || it.driveLink);
+  let statusHtml = '';
+  if (st === 'uploading') {
+    statusHtml = '<div class="sst-file-row-prog">' +
+      '<div class="sst-file-prog"><div class="sst-file-prog-fill" style="width:' + Math.max(4, it.pct || 0) + '%"></div></div>' +
+      '<span class="sst-file-row-prog-txt">' + escAttr(it.pct != null ? (it.pct + '%') : '…') + '</span></div>';
+  } else if (st === 'error') {
+    statusHtml = '<span class="sst-file-row-err" title="' + escAttr(it.error || 'Error al subir') + '">Error</span>';
+  } else if (st === 'uploaded') {
+    statusHtml = '<span class="sst-file-row-ok" title="En Drive">✓</span>';
+  } else {
+    statusHtml = '<span class="sst-file-row-local" title="Se subirá al confirmar">…</span>';
+  }
+  const previewBtn = canPreview
+    ? '<button type="button" class="btn bsm bic act-ico" onclick="sstFilePreview(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\')" title="Ver documento">🔍</button>'
+    : '';
+  const delBtn = '<button type="button" class="btn bsm bic act-ico bd2" onclick="sstFileRemove(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\',\'' + jsStr(listId) + '\')" title="Quitar archivo">🗑</button>';
+  return '<div class="sst-file-row' + (st === 'error' ? ' is-err' : '') + (st === 'uploading' ? ' is-uploading' : '') + '" data-sst-file-id="' + escAttr(it.id) + '">' +
+    '<span class="sst-file-row-name" title="' + escAttr(it.nombre) + '">📎 ' + escAttr(it.nombre) + '</span>' +
+    statusHtml +
+    '<div class="sst-file-row-actions">' + previewBtn + delBtn + '</div>' +
+    '</div>';
+}
+
 function sstFileRenderList(listId, ctxKey) {
   const el = sstFileListEl(listId);
   if (!el) return;
   const ctx = sstFileStagingCtx(ctxKey);
+  const slot = sstFileListSlot(listId);
   const items = [];
-  if (ctx.main) items.push(ctx.main);
-  (ctx.anexos || []).forEach(function (a) { items.push(a); });
+  if (slot === 'main' || slot === 'all') { if (ctx.main) items.push(ctx.main); }
+  if (slot === 'anexos' || slot === 'all') { (ctx.anexos || []).forEach(function (a) { items.push(a); }); }
   if (!items.length) {
-    el.innerHTML = '<div class="sst-file-empty">Sin archivo seleccionado</div>';
+    el.innerHTML = '';
     return;
   }
-  el.innerHTML = items.map(function (it) {
-    const st = it.state || 'local';
-    const canPreview = !!(it.blobUrl || it.previewLink || it.driveLink);
-    const prog = (st === 'uploading')
-      ? ('<div class="sst-file-prog"><div class="sst-file-prog-fill" style="width:' + Math.max(4, it.pct || 0) + '%"></div></div>' +
-        '<div class="sst-file-prog-txt">' + escAttr(it.pct != null ? (it.pct + '%') : '…') + ' · Subiendo a Drive…</div>')
-      : (st === 'error'
-        ? ('<div class="sst-file-err">' + escAttr(it.error || 'Error al subir') + '</div>')
-        : (st === 'uploaded'
-          ? '<div class="sst-file-ok">✓ En Drive</div>'
-          : '<div class="sst-file-local">Se subirá al confirmar</div>'));
-    return '<div class="sst-file-chip' + (st === 'error' ? ' is-err' : '') + '" data-sst-file-id="' + escAttr(it.id) + '">' +
-      '<button type="button" class="sst-file-chip-name' + (canPreview ? ' can-preview' : '') + '" ' +
-      (canPreview ? ('onclick="sstFilePreview(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\')" title="Ver documento"') : '') + '>' +
-      '📎 ' + escAttr(it.nombre) + '</button>' +
-      prog +
-      '<button type="button" class="sst-file-chip-del" onclick="sstFileRemove(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\',\'' + jsStr(listId) + '\')" title="Quitar archivo">🗑️</button>' +
-      '</div>';
-  }).join('');
+  el.innerHTML = items.map(function (it) { return sstFileRenderItemRow(it, ctxKey, listId); }).join('');
 }
 
 function sstFileFindItem(ctx, itemId) {
@@ -135,7 +167,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   const inpAnex = document.getElementById('enviar-anexos-file');
   if (hit.slot === 'main' && inpMain) inpMain.value = '';
   if (hit.slot === 'anexos' && inpAnex) inpAnex.value = '';
-  sstFileRenderList(listId, ctxKey);
+  sstFileRefreshCtxLists(ctxKey, listId);
 }
 
 async function sstFileUploadItem(it, uploadCtx, onPct) {
@@ -194,11 +226,11 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
     if (!it || it.state === 'uploaded' || !it.blob) continue;
     it.state = 'uploading';
     it.pct = 0;
-    sstFileRenderList(listId, ctxKey);
+    sstFileRefreshCtxLists(ctxKey, listId);
     try {
       const up = await sstFileUploadItem(it, uploadCtx, function (p) {
         it.pct = p;
-        sstFileRenderList(listId, ctxKey);
+        sstFileRefreshCtxLists(ctxKey, listId);
       });
       if (up) {
         it.driveFileId = up.driveFileId || up.fileId || '';
@@ -215,7 +247,7 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
       it.error = (err && err.message) ? err.message : 'Error al subir';
       if (typeof notif === 'function') notif('No se pudo subir «' + it.nombre + '»', 'err');
     }
-    sstFileRenderList(listId, ctxKey);
+    sstFileRefreshCtxLists(ctxKey, listId);
   }
   if (bibliotecaUploaded && typeof cargarRecursosRepoArchivos === 'function') {
     cargarRecursosRepoArchivos();
@@ -226,6 +258,7 @@ function sstFileOnMainPick(inputEl, opts) {
   opts = opts || {};
   const ctxKey = opts.ctxKey || 'entrega';
   const listId = opts.listId || 'entrega-resp-file-list';
+  if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, 'main');
   const f = inputEl && inputEl.files && inputEl.files[0];
   const ctx = sstFileStagingCtx(ctxKey);
   if (ctx.main) {
@@ -237,7 +270,7 @@ function sstFileOnMainPick(inputEl, opts) {
   }
   if (!f) {
     ctx.main = null;
-    sstFileRenderList(listId, ctxKey);
+    sstFileRefreshCtxLists(ctxKey, listId);
     return;
   }
   if (typeof archivoPermitidoEnviar === 'function' && !archivoPermitidoEnviar(f)) {
@@ -246,7 +279,7 @@ function sstFileOnMainPick(inputEl, opts) {
     return;
   }
   ctx.main = sstFileNewItem(f, { esAnexo: false });
-  sstFileRenderList(listId, ctxKey);
+  sstFileRefreshCtxLists(ctxKey, listId);
   if (typeof opts.getUploadCtx === 'function') {
     sstFileTryUpload(ctxKey, listId, opts.getUploadCtx);
   }
@@ -256,20 +289,25 @@ function sstFileOnAnexosPick(inputEl, opts) {
   opts = opts || {};
   const ctxKey = opts.ctxKey || 'entrega';
   const listId = opts.listId || 'entrega-resp-anexos-list';
+  if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, 'anexos');
   const files = inputEl && inputEl.files ? Array.from(inputEl.files) : [];
   const ctx = sstFileStagingCtx(ctxKey);
-  (ctx.anexos || []).forEach(function (old) {
-    if (old && old.driveFileId && typeof driveDeleteInstitutional === 'function') {
-      driveDeleteInstitutional(old.driveFileId).catch(function () {});
-    }
-    if (old && old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}
-  });
-  ctx.anexos = [];
+  if (!ctx.anexos) ctx.anexos = [];
+  if (opts.replace) {
+    (ctx.anexos || []).forEach(function (old) {
+      if (old && old.driveFileId && typeof driveDeleteInstitutional === 'function') {
+        driveDeleteInstitutional(old.driveFileId).catch(function () {});
+      }
+      if (old && old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}
+    });
+    ctx.anexos = [];
+  }
   files.forEach(function (f) {
     if (typeof archivoPermitidoEnviar === 'function' && !archivoPermitidoEnviar(f)) return;
     ctx.anexos.push(sstFileNewItem(f, { esAnexo: true }));
   });
-  sstFileRenderList(listId, ctxKey);
+  if (inputEl) inputEl.value = '';
+  sstFileRefreshCtxLists(ctxKey, listId);
   if (files.length && typeof opts.getUploadCtx === 'function') {
     sstFileTryUpload(ctxKey, listId, opts.getUploadCtx);
   }
@@ -335,6 +373,7 @@ function sstFilePickBlock(opts) {
   const label = opts.label || (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
   const btnCls = opts.btnClass || (multi ? 'btn bsm' : 'btn bsm bp');
   sstFileRegisterPick(inputId, { ctxKey: ctxKey, listId: listId, multi: multi, getUploadCtx: opts.getUploadCtx || null });
+  if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, multi ? 'anexos' : 'main');
   return '<div class="sst-file-pick">' +
     '<button type="button" class="' + btnCls + '" onclick="sstFilePickByInputId(\'' + jsStr(inputId) + '\')">📎 ' + escAttr(label) + '</button>' +
     '<input type="file" id="' + escAttr(inputId) + '"' + (multi ? ' multiple' : '') + ' accept="' + escAttr(accept) + '" style="display:none" onchange="sstFileOnPickByInputId(this)">' +
@@ -471,6 +510,8 @@ function sstFileCtxKeyTramiteAtajoFirmado(refId, taskId) {
   return 'tramite-atajo-firmado:' + String(refId || '').trim() + ':' + String(taskId || '').trim();
 }
 
+window.sstFileRegisterList = sstFileRegisterList;
+window.sstFileRefreshCtxLists = sstFileRefreshCtxLists;
 window.sstFileStagingReset = sstFileStagingReset;
 window.sstFileOnMainPick = sstFileOnMainPick;
 window.sstFileOnAnexosPick = sstFileOnAnexosPick;
