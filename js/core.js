@@ -8613,9 +8613,6 @@ function renderTaskExpConsultaEmbed(e){
     (typeof pqrsPrioritariaBadge==='function'?(' '+pqrsPrioritariaBadge(e)):'')+
     (typeof pqrsInformativaBadge==='function'?(' '+pqrsInformativaBadge(e)):'')+
     '</div>';
-  h+='<div style="font-size:14px;font-weight:600;margin-bottom:4px;font-family:\'DM Mono\',monospace">'+escAttr(e._exp)+'</div>';
-  h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(getNom(e))+'</div>';
-  if(tram)h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(tram.nombre)+(e._subclase?' · '+escAttr(e._subclase):'')+'</div>';
   if(typeof renderConsultaResumenExp==='function')h+=renderConsultaResumenExp(e,tram,'');
   if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof renderConPanelPqrsExtras==='function')h+=renderConPanelPqrsExtras(e);
   if(typeof renderConPanelExpContent==='function')h+=renderConPanelExpContent(e,{foldOpen:true});
@@ -10369,6 +10366,7 @@ window.eliminarEntregaActividadConfirm=eliminarEntregaActividadConfirm;
 window.eliminarEntregaActividad=eliminarEntregaActividad;
 function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   opts=opts||{};
+  const isReview=!!opts.isReview;
   normalizeTask(t);
   const esLibre=!!t.sinExpediente||isActLibreRef(expId,taskId);
   const e=esLibre?null:getExpById(expId);
@@ -10392,10 +10390,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const showCompareVer=!canReviewSop&&soportes.length>=2;
   const showCompare=showCompareDocs||showCompareVer;
   const showEnviar=canAddSop&&!opts.hideEnviar;
-  let h='<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
+  let h=isReview?'<div class="task-soporte-panel task-soporte-panel-review">':'<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
+  if(!isReview){
   h+='<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px"><div style="font-size:12px;font-weight:600">📎 Soporte documental'+(soportes.length>1?' · '+soportes.length+' documento(s)':'')+'</div>';
   if(esLibre)h+='<span style="font-size:11px;color:var(--tx3)">'+escAttr(t.codigo||expId)+' · actividad sin expediente</span>';
   h+='</div>';
+  }
   if(taskPendienteVerificacion(t)){
     const ent=getUltimaEntregaComentario(t);
     if(ent)h+=renderEntregaComentarioBoxHtml(ent,{pendiente:true});
@@ -10409,9 +10409,15 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     if(sel){
       const esAnx=!!(sel.es_anexo||sel.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(sel.label||'')));
       const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección de respuesta':(sel.label||''));
+      if(isReview){
+        h+='<div class="task-review-doc-meta"><span class="task-review-doc-meta-tit">'+escAttr(tipoDoc||sel.label||'Documento')+'</span>'+
+          (sel.driveFilename&&sel.driveFilename!==sel.label?'<span class="task-review-doc-meta-sub">'+escAttr(sel.driveFilename)+'</span>':'')+
+          '<span class="task-review-doc-meta-sub">v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span></div>';
+      }else{
       h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
         '<span><strong style="color:var(--tx2)">'+escAttr(tipoDoc||sel.label||'')+'</strong>'+(sel.driveFilename&&sel.driveFilename!==sel.label?' · '+escAttr(sel.driveFilename):'')+' · v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span>'+
         '<button type="button" class="btn bsm" style="font-size:11px;padding:2px 8px" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">'+(sel.local?'↗ Abrir adjunto':'↗ Abrir en ventana')+'</button></div>';
+      }
     }
   }else{
     const ent=getUltimaEntregaComentario(t);
@@ -10440,10 +10446,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(sel&&soporteTieneVista(sel)){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
-    h+='<div class="soporte-annot-toolbar doc-viewport-toolbar">'+
-      '<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
-      (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir documento en ventana emergente (no pestaña)">↗ Ventana emergente</button>':'')+
-      (canAnnot?'<button type="button" class="btn bsm" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">📍 Marcar en documento</button>':'')+
+    h+='<div class="soporte-annot-toolbar doc-viewport-toolbar'+(isReview?' doc-viewport-toolbar-review':'')+'">'+
+      (!isReview?'<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>':'')+
+      (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm'+(isReview?' bsm-ico':'')+'" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">'+(isReview?'↗':'↗ Ventana emergente')+'</button>':'')+
+      (canAnnot?'<button type="button" class="btn bsm'+(isReview?' bsm-ico':'')+'" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()">'+(isReview?'📍':'📍 Marcar en documento')+'</button>':'')+
       '</div>';
     if(showDeptAnnotUi){
       h+='<div class="soporte-pagina-filter"><label>Marcadores: <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas las páginas</option></select></label></div>';
@@ -10474,7 +10480,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   h+='<div id="task-view-compare" class="task-view-panel'+(defTab==='compare'?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
   h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+
     (esLibre
-      ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id):('<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente — '+escAttr(t.codigo||expId)+'</div>'))+'</div>')
+      ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id,{compact:true}):('<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente</div>'))+'</div>')
       :renderTaskExpConsultaEmbed(e))+'</div>';
   h+='<div id="task-view-links" class="task-view-panel'+(defTab==='links'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
@@ -12544,12 +12550,13 @@ function openTaskCommentsModal(expId,taskId,opts){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
     const docsWide=e?collectDocsComparables(e,taskId,t):[];
     const uniWide=false;
-    modal.classList.toggle('task-modal-wide',!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2));
+    modal.classList.toggle('task-modal-wide',!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2||isReviewDelivery));
+    modal.classList.toggle('task-modal-review',!!isReviewDelivery);
     modal.classList.toggle('enviar-modal-only',chatOnly||soloGestion);
     modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
   }
-  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true});
-  const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
+  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery});
+  const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
     '<div style="margin-bottom:10px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px">PQRSD — solicitud y respuesta</div>'+
@@ -12574,9 +12581,19 @@ function openTaskCommentsModal(expId,taskId,opts){
     (typeof bibGuardarEnBibliotecaBarHtml==='function'?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'')
   ):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
-  body.innerHTML='<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>'+
-    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
+  const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
+  body.innerHTML=statusRow+
+    (isReviewDelivery?'<div class="task-review-hdr-compact">':'')+
+    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar+
+    (isReviewDelivery?'</div>':'');
   ov.classList.add('on');
+  if(isReviewDelivery){
+    document.body.classList.add('task-review-doc-mode');
+    window._soporteObsOpen=false;
+    window._taskViewTabPreferido='doc';
+  }else{
+    document.body.classList.remove('task-review-doc-mode');
+  }
   if(!chatOnly&&!soloGestion){
     window._compareDocA=null;
     window._compareDocB=null;
@@ -12594,7 +12611,12 @@ function openTaskCommentsModal(expId,taskId,opts){
     const canAnnot=canDeptMarcarEnSoporte(t,selObj);
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
-    if(preferTab){
+    if(isReviewDelivery){
+      setTimeout(function(){
+        setTaskViewTab('doc');
+        if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
+      },90);
+    }else if(preferTab){
       setTimeout(function(){setTaskViewTab(preferTab);},100);
     }else if(e&&taskEsAtenderPqrs(t,e)&&!esModoResponsable()&&taskPendienteVerificacion(t)){
       setTimeout(()=>initPqrsSolRespCompareTab(),100);
@@ -12642,10 +12664,12 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-compare-expand');
       modal.classList.remove('task-modal-viewport-expand');
       modal.classList.remove('review-asoc-consulta-modal');
+      modal.classList.remove('task-modal-review');
     }
   }
   document.body.classList.remove('compare-docs-expanded');
   document.body.classList.remove('task-doc-viewport-expanded');
+  document.body.classList.remove('task-review-doc-mode');
   window._taskViewTabPreferido=null;
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');

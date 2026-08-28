@@ -525,6 +525,127 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .soporte-split.soporte-split-obs-open .soporte-obs-toggle{right:-1px;border-right:1px solid var(--bd);border-left:0;border-radius:0 var(--r) var(--r) 0;box-shadow:2px 0 8px rgba(0,0,0,.06)}
 .task-exp-panel-full{max-height:min(68vh,640px);overflow:auto;padding-right:4px}
 .task-exp-panel-full .con-fold{margin-bottom:8px}
+/* Revisar entrega: visor amplio estilo Drive */
+body.task-review-doc-mode #task-modal-overlay{
+  padding:.25rem .35rem;
+  align-items:stretch;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-review{
+  width:min(98vw,1320px)!important;
+  max-width:98vw;
+  max-height:96vh;
+  height:min(96vh,920px);
+}
+.task-modal.task-modal-review .task-modal-body{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  padding:.4rem .6rem .5rem;
+  min-height:0;
+}
+.task-modal.task-modal-review .task-review-hdr-compact{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-soporte-panel-review{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  margin:0;
+  padding:0;
+  border:0;
+}
+.task-modal.task-modal-review .sst-act-toolbar{
+  margin-bottom:4px!important;
+  flex-shrink:0;
+}
+.task-modal.task-modal-review .task-view-tabs{
+  flex-shrink:0;
+  margin-bottom:2px;
+  padding-bottom:2px;
+}
+.task-modal.task-modal-review .task-view-panel.on{
+  flex:1;
+  min-height:0;
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-doc-meta{
+  flex-shrink:0;
+  font-size:11px;
+  color:var(--tx3);
+  margin-bottom:4px;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:baseline;
+}
+.task-modal.task-modal-review .task-review-doc-meta-tit{
+  font-weight:600;
+  color:var(--tx2);
+}
+.task-modal.task-modal-review .task-review-doc-meta-sub{color:var(--tx3)}
+.task-modal.task-modal-review .soporte-doc-tabs{
+  flex-shrink:0;
+  margin-bottom:4px;
+}
+.task-modal.task-modal-review .doc-viewport-toolbar-review{
+  flex-shrink:0;
+  margin-bottom:2px;
+  gap:4px;
+}
+.task-modal.task-modal-review .doc-viewport-toolbar-review .btn.bsm-ico{
+  min-width:32px;
+  padding:4px 8px;
+  font-size:14px;
+}
+.task-modal.task-modal-review .soporte-pagina-filter{
+  flex-shrink:0;
+  margin-bottom:2px;
+  font-size:10px;
+}
+.task-modal.task-modal-review .soporte-split{
+  flex:1;
+  min-height:0;
+  margin:.15rem 0 0;
+}
+.task-modal.task-modal-review .soporte-doc-col{
+  flex:1;
+  min-height:0;
+  max-width:none;
+  margin:0;
+  width:100%;
+}
+.task-modal.task-modal-review .soporte-annot-wrap{
+  flex:1;
+  min-height:min(74vh,760px);
+  height:auto;
+}
+.task-modal.task-modal-review .soporte-split.soporte-split-obs-open{
+  grid-template-columns:minmax(0,1fr) minmax(220px,300px);
+}
+.task-modal.task-modal-review .soporte-sidebar-col{
+  max-height:none;
+  height:auto;
+  align-self:stretch;
+}
+.task-modal.task-modal-review .soporte-sidebar-col .soporte-annot-sidebar{
+  max-height:none;
+  flex:1;
+}
+.task-modal.task-modal-review #task-view-exp .task-exp-panel-full,
+.task-modal.task-modal-review #task-view-compare,
+.task-modal.task-modal-review #task-view-links,
+.task-modal.task-modal-review #task-view-pqrscompare{
+  overflow:auto;
+}
 .soporte-annot-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .soporte-annot-notice{font-size:10px;color:var(--tx3);padding:6px 8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:6px;line-height:1.45}
 .soporte-pagina-filter{font-size:11px;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}

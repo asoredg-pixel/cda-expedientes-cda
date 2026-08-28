@@ -1111,9 +1111,11 @@ function reviewAsocVerArchivos(expId,taskId,libre){
   if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
   else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
-function renderReviewAsocActConsultaFull(expId,taskId){
+function renderReviewAsocActConsultaFull(expId,taskId,opts){
+  opts=opts&&typeof opts==='object'?opts:{};
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
+  const compact=!!opts.compact;
   const t=(typeof getActLibreByCodigo==='function'?getActLibreByCodigo(expId):null)||(typeof getActLibreById==='function'?getActLibreById(taskId):null);
   if(!t)return '<div style="font-size:12px;color:var(--tx3)">Actividad no encontrada</div>';
   const tN=typeof normalizeActLibre==='function'?normalizeActLibre(t):t;
@@ -1131,7 +1133,7 @@ function renderReviewAsocActConsultaFull(expId,taskId){
     (tN.prioritaria?' <span class="bdg bdg-prior">⚡ Prioritaria</span>':'')+
     '</div>';
   const detalle='<div class="con-panel-form-wrap" style="margin-bottom:10px">'+
-    '<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(ref)+'</div>'+
+    (compact?'':'<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:600;margin-bottom:6px">'+escAttr(ref)+'</div>')+
     '<div class="slbl" style="margin-bottom:6px">'+escAttr(tN.actividad||tN.desc||'Actividad')+'</div>'+
     (tN.desc&&tN.desc!==tN.actividad?'<div style="font-size:13px;margin:0 0 10px;line-height:1.55;color:var(--tx2)">'+escAttr(tN.desc)+'</div>':'')+
     (tN.detalle?'<div style="font-size:13px;margin:0 0 10px;line-height:1.55;color:var(--tx2)">'+escAttr(tN.detalle)+'</div>':'')+
