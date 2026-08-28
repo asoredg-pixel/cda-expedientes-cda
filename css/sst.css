@@ -544,12 +544,34 @@ body.task-review-doc-mode #task-modal-overlay{
   padding:.4rem .6rem .5rem;
   min-height:0;
 }
-.task-modal.task-modal-review .task-review-hdr-compact{
+.task-modal.task-modal-review .task-review-layout{
   flex:1;
   min-height:0;
   display:flex;
   flex-direction:column;
   overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-top{
+  flex-shrink:0;
+}
+.task-modal.task-modal-review .task-review-main{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-decision{
+  flex:0 0 auto;
+  max-height:min(34vh,300px);
+  overflow:auto;
+  border-top:1px solid var(--bd);
+  margin-top:4px;
+  padding-top:6px;
+  background:var(--sf);
+}
+.task-modal.task-modal-review .task-review-decision .task-verify-bar{
+  margin:0;
 }
 .task-modal.task-modal-review .task-soporte-panel-review{
   flex:1;
@@ -570,12 +592,15 @@ body.task-review-doc-mode #task-modal-overlay{
   margin-bottom:2px;
   padding-bottom:2px;
 }
-.task-modal.task-modal-review .task-view-panel.on{
+.task-modal.task-modal-review .task-view-panel{
+  display:none!important;
   flex:1;
   min-height:0;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-view-panel.on{
   display:flex!important;
   flex-direction:column;
-  overflow:hidden;
 }
 .task-modal.task-modal-review .task-review-doc-meta{
   flex-shrink:0;
@@ -612,8 +637,8 @@ body.task-review-doc-mode #task-modal-overlay{
   font-size:10px;
 }
 .task-modal.task-modal-review .soporte-split{
-  flex:1;
-  min-height:0;
+  flex:1 1 auto;
+  min-height:min(52vh,620px);
   margin:.15rem 0 0;
 }
 .task-modal.task-modal-review .soporte-doc-col{
@@ -622,10 +647,12 @@ body.task-review-doc-mode #task-modal-overlay{
   max-width:none;
   margin:0;
   width:100%;
+  display:flex;
+  flex-direction:column;
 }
 .task-modal.task-modal-review .soporte-annot-wrap{
-  flex:1;
-  min-height:min(74vh,760px);
+  flex:1 1 auto;
+  min-height:min(48vh,560px);
   height:auto;
 }
 .task-modal.task-modal-review .soporte-split.soporte-split-obs-open{

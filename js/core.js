@@ -10396,7 +10396,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(esLibre)h+='<span style="font-size:11px;color:var(--tx3)">'+escAttr(t.codigo||expId)+' · actividad sin expediente</span>';
   h+='</div>';
   }
-  if(taskPendienteVerificacion(t)){
+  if(taskPendienteVerificacion(t)&&!isReview){
     const ent=getUltimaEntregaComentario(t);
     if(ent)h+=renderEntregaComentarioBoxHtml(ent,{pendiente:true});
   }
@@ -12546,6 +12546,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const pendVer=taskPendienteVerificacion(t);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&pendVer;
   const isReviewDelivery=canReviewSop&&!chatOnly&&!soloGestion;
+  if(isReviewDelivery)window._taskViewTabPreferido='doc';
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
     const docsWide=e?collectDocsComparables(e,taskId,t):[];
@@ -12582,15 +12583,20 @@ function openTaskCommentsModal(expId,taskId,opts){
   ):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
-  body.innerHTML=statusRow+
-    (isReviewDelivery?'<div class="task-review-hdr-compact">':'')+
-    bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar+
-    (isReviewDelivery?'</div>':'');
+  if(isReviewDelivery){
+    body.innerHTML=statusRow+
+      '<div class="task-review-layout">'+
+        '<div class="task-review-top">'+bibBar+'</div>'+
+        '<div class="task-review-main">'+sopPanel+'</div>'+
+        (verifyBar?'<div class="task-review-decision">'+verifyBar+'</div>':'')+
+      '</div>';
+  }else{
+    body.innerHTML=statusRow+bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
+  }
   ov.classList.add('on');
   if(isReviewDelivery){
     document.body.classList.add('task-review-doc-mode');
     window._soporteObsOpen=false;
-    window._taskViewTabPreferido='doc';
   }else{
     document.body.classList.remove('task-review-doc-mode');
   }
