@@ -4846,6 +4846,32 @@ function normalizeActLibre(t){
   if(lbl)t.interesadoNombre=lbl;
   return t;
 }
+function actInteresadoDisplayParts(t){
+  if(!t)return{main:'—',sub:''};
+  const emp=String(t._pj_empresa||'').trim();
+  const rep=String(t._pj_rep_nombre||'').trim();
+  const nomNat=String(t._pn_nombre||'').trim();
+  if(emp&&rep)return{main:rep,sub:emp};
+  if(emp&&nomNat)return{main:nomNat,sub:emp};
+  if(rep&&!emp)return{main:rep,sub:''};
+  const nom=String(t.nombre||t.interesadoNombre||'').trim();
+  if(!nom||nom==='—')return{main:'—',sub:''};
+  const sep=' · ';
+  if(nom.includes(sep)){
+    const i=nom.lastIndexOf(sep);
+    const a=nom.slice(0,i).trim();
+    const b=nom.slice(i+sep.length).trim();
+    if(t.sinExpediente||(emp&&rep))return{main:b||nom,sub:a};
+    if(nomNat&&a===nomNat)return{main:a,sub:b};
+  }
+  return{main:nom,sub:''};
+}
+function actInteresadoCellHtml(t){
+  const p=actInteresadoDisplayParts(t);
+  return '<div style="font-weight:600;line-height:1.35;max-width:220px">'+escAttr(p.main)+
+    (p.sub?'<div style="font-size:11px;font-weight:400;color:var(--tx2);margin-top:2px;line-height:1.3">'+escAttr(p.sub)+'</div>':'')+
+    '</div>';
+}
 function actLibreInteresadoLabel(t){
   if(!t)return'';
   const saved=String(t.interesadoNombre||'').trim();
@@ -14844,7 +14870,7 @@ function renderActividadesRowHtml(t){
   return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
     '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td>'+
     '<td class="act-col-tram">'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
-    '<td style="font-weight:600">'+escAttr(t.nombre)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
+    '<td>'+actInteresadoCellHtml(t)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
     '<td style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
     '<td style="font-size:12px">'+cierreHtml+'</td>'+
