@@ -129,7 +129,7 @@ function syncEntregaRespModoUi(){
       tramFiles.style.display='';
     }
     const regHint=document.getElementById('entrega-resp-reg-hint');
-    if(regHint)regHint.textContent='Sin expediente: elija una actividad predeterminada (misma lista de Configuración).';
+    if(regHint)regHint.textContent='';
   }else{
     syncEntregaRespPqrsUi();
     if(typeof syncEntregaRespRegistroUi==='function')syncEntregaRespRegistroUi();
@@ -260,8 +260,6 @@ function htmlEntregaRespInteresadoBox(tramiteId){
   const tid=String(tramiteId||(document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
   const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
-  const cfgT=typeof cfgFor==='function'?cfgFor(depto):{};
-  const tiposSanc=cfgT.tiposSancionatorio||['Deforestación'];
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   let h='<div style="margin-top:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos de Registro'+(tid?' · '+(typeof getTram==='function'&&getTram(tid)?escAttr(getTram(tid).nombre):escAttr(tid)):'')+'</div>';
@@ -279,9 +277,6 @@ function htmlEntregaRespInteresadoBox(tramiteId){
       '</select></div>';
   }
   if(esSanc){
-    h+='<div class="fld" style="margin-bottom:8px"><label>Tipo de conducta / caso</label><select id="entrega-int-tipo-sanc" style="'+inpStyle+'">'+
-      tiposSanc.map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('')+
-      '</select></div>';
     h+='<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500;margin-bottom:8px"><input type="checkbox" id="entrega-int-qd-anonimo" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--pu)"> Actúa como anónimo</label>';
     h+='<div id="entrega-int-qd-box"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Quejoso / denunciante</div><div class="fg">'+
       '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-qd-nombre" style="'+inpStyle+'"></div>'+
@@ -469,7 +464,6 @@ function collectEntregaRespInteresado(){
     },_entregaIntDir('aut'));
   }
   if(esSanc){
-    out._tipo_sancionatorio=_entregaIntVal('entrega-int-tipo-sanc')||'';
     out._qd_anonimo=!!((document.getElementById('entrega-int-qd-anonimo')||{}).checked);
     if(!out._qd_anonimo){
       Object.assign(out,{
@@ -667,15 +661,12 @@ function openEntregaResponsableModal(){
       '</div>'+
       '<div id="entrega-resp-reg-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div></div>'+
     '<div id="entrega-resp-registro-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label>'+
-      '<input type="text" id="entrega-resp-detalle" placeholder="Detalles de la actividad" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div id="entrega-resp-pqrs-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-tramite-files">'+
     '<div class="fld" style="margin-bottom:10px">'+
       '<div class="sst-file-pick-row">'+
-        '<button type="button" class="btn bsm bp" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
-        '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">📎 Seleccionar anexos</button>'+
-        '<button type="button" class="btn bsm bic act-ico" onclick="sstFilePickAnexosBtn()" title="Agregar más anexos">+</button>'+
+        '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
+        '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
         '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
         '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
       '</div>'+
@@ -798,7 +789,7 @@ function syncEntregaRespRegistroUi(){
   const hint=document.getElementById('entrega-resp-reg-hint');
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   if(libre){
-    if(hint)hint.textContent='Sin expediente: no aplica Registro (concepto/factura/acto).';
+    if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
     return;
   }
@@ -1105,7 +1096,7 @@ function ensureExpTaskEntregaResponsable(){
   const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
-  const detalle=String((document.getElementById('entrega-resp-detalle')||{}).value||'').trim();
+  const detalle='';
   if(!actividad){notif('Indique la actividad predeterminada','err');return null;}
   if(!actividadPredEntregaExiste(actividad)){
     notif(msgActividadPredNoExiste(),'err');

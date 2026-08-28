@@ -372,8 +372,7 @@ function renderListasCfg(){
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Recursos (enlaces y biblioteca)','Enlaces externos y repositorios Drive por ámbito: sistema, departamento u oficina.',typeof recursosCfgCardBody==='function'?recursosCfgCardBody():'',false);
     html+=cfgSectionFold('Actividades predeterminadas','Opciones reutilizables al asignar o entregar actividades (con o sin expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
       cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
-      cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
-      cfgSectionFold('Tipos de conducta — trámite Sancionatorio','Opciones del selector «Tipo de conducta / caso» en expedientes Sancionatorio.',ro?cfgCardReadonlyStrings(cfg.tiposSancionatorio||[]):tiposSancionatorioCardBody(),false);
+      cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false);
     el.innerHTML=html;
     restoreCfgFoldState(open);
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
@@ -434,16 +433,6 @@ async function guardarModoMantenimientoCfg(activar){
   }
 }
 window.guardarModoMantenimientoCfg=guardarModoMantenimientoCfg;
-function tiposSancionatorioCardBody(){
-  const tipos=cfg.tiposSancionatorio||[];
-  return '<div class="cfcard"><ul class="cfl cfl-vertical">'+
-    tipos.map((v,i)=>'<li class="cfi"><span>'+v+'</span><div class="fx" style="gap:2px">'+
-      (i>0?'<button class="btn bsm bic" onclick="mvItem(\'tiposSancionatorio\','+i+',-1)">▲</button>':'<span style="width:24px"></span>')+
-      (i<(tipos.length-1)?'<button class="btn bsm bic" onclick="mvItem(\'tiposSancionatorio\','+i+',1)">▼</button>':'<span style="width:24px"></span>')+
-      '<button class="btn bsm bic bd2" onclick="delItem(\'tiposSancionatorio\','+i+')">✕</button>'+
-    '</div></li>').join('')+
-  '</ul><div class="cfadd"><input type="text" id="cfi-tiposSancionatorio" placeholder="Ej. Foco deforestación" onkeydown="if(event.key===\'Enter\')addItem(\'tiposSancionatorio\')"><button class="btn bsm bp" onclick="addItem(\'tiposSancionatorio\')">+</button></div></div>';
-}
 function tipoActoAdminCardBody(){
   const tipos=cfg.tiposActoAdmin||[];
   return '<div class="cfcard"><ul class="cfl cfl-vertical">'+
@@ -452,7 +441,6 @@ function tipoActoAdminCardBody(){
     '<div class="fx" style="justify-content:flex-end"><button class="btn bsm bic bd2" onclick="delTipoActo('+i+')">✕</button></div></li>').join('')+
   '</ul><div class="cfadd"><input type="text" id="tipoacto-new" placeholder="Nuevo tipo de acto..." onkeydown="if(event.key===\'Enter\')addTipoActo()"><button class="btn bsm bp" onclick="addTipoActo()">+</button></div></div>';
 }
-function tiposSancionatorioCardHtml(){return cfgSectionFold('Tipos de conducta — trámite Sancionatorio','',tiposSancionatorioCardBody(),false);}
 function tipoActoAdminCardHtml(){return cfgSectionFold('Tipos de actos administrativos','',tipoActoAdminCardBody(),false);}
 function addTipoActo(){
   if(guardCfgEditGeneral())return;
