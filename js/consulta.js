@@ -920,6 +920,8 @@ function openConsultaArchivos(expId,taskId,opts){
   if(modal){
     modal.classList.toggle('task-modal-wide',items.length>0);
     modal.classList.add('enviar-modal-only');
+    modal.classList.toggle('task-modal-archivos',items.length>0);
+    modal.classList.remove('task-modal-review');
   }
   taskModalZIndexApply(ov);
   window._conArchItems=items;
@@ -929,9 +931,9 @@ function openConsultaArchivos(expId,taskId,opts){
   }else{
     const list=conArchivosListHtml(items,'renderConsultaArchivoPreview',id);
     const hasAsocMdl=e&&getExpAsociadosAll(e).length>0;
-    body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Seleccione un documento. Los archivos se agrupan por registro: el principal y los vinculados (PQRSD o expediente asociado).'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye documentos de registros asociados.</span>':'')+'</div>'+
+    body.innerHTML='<div class="con-arch-modal-hint">Seleccione un documento. Los archivos se agrupan por registro: el principal y los vinculados (PQRSD o expediente asociado).'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye documentos de registros asociados.</span>':'')+'</div>'+
       '<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-arch-preview-wrap"></div></div>'+
-      '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+taskModalCloseBtnLabel()+'</button></div>';
+      '<div class="con-arch-modal-foot"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+taskModalCloseBtnLabel()+'</button></div>';
     const selIdx=taskId?Math.max(0,(items||[]).findIndex(it=>it.taskId===taskId)):0;
     renderConsultaArchivoPreview(selIdx>=0?selIdx:0);
   }
@@ -1394,11 +1396,29 @@ function renderConSidePanel(){
     body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+pqrsExtras+'<div id="con-side-form-wrap" class="con-panel-form-wrap"></div>';
     renderFormulario(e._tramite,e,'con-side-form-wrap');
     if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
-    setTimeout(function(){conPanelColapsarTodasSecciones();},80);
+    setTimeout(function(){
+      conPanelColapsarTodasSecciones();
+      if(window._conPanelFocusActividades){
+        conPanelFocusActividadesAsignadas();
+        window._conPanelFocusActividades=false;
+      }
+    },80);
     return;
   }
   body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+(esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'')+renderConPanelExpContent(e,{foldOpen:!!(esOficinaPqrsNca()&&esPqrsSecretaria(e))});
   if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
+}
+function conPanelFocusActividadesAsignadas(){
+  const wrap=document.getElementById('con-side-form-wrap');
+  if(!wrap)return;
+  let actSec=null;
+  wrap.querySelectorAll('details.form-section').forEach(function(d){
+    const s=d.querySelector('summary');
+    const isAct=!!(s&&/Actividades asignadas/i.test(s.textContent||''));
+    d.open=isAct;
+    if(isAct)actSec=d;
+  });
+  if(actSec)actSec.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function conPanelFocusExpAsoc(){
   const cb=document.getElementById('fld__usar_exp_asociados');
