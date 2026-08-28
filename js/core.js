@@ -4850,10 +4850,15 @@ function actLibreInteresadoLabel(t){
   if(!t)return'';
   const saved=String(t.interesadoNombre||'').trim();
   if(saved&&!/^\(?sin expediente\)?$/i.test(saved))return saved;
+  if(t._tipo_persona==='juridica'||String(t._pj_empresa||'').trim()){
+    const emp=String(t._pj_empresa||'').trim();
+    const rep=String(t._pj_rep_nombre||'').trim();
+    if(emp&&rep)return emp+' · '+rep;
+    return emp||rep;
+  }
   const nom=String(t._pn_nombre||'').trim();
   if(!nom||/^\(?sin expediente\)?$/i.test(nom))return'';
-  const ent=String(t._entidad_representa||t._pj_empresa||'').trim();
-  return ent?(nom+' · '+ent):nom;
+  return nom;
 }
 function actLibreActividadListRow(t){
   const cod=String(t.codigo||'').trim();
@@ -16307,6 +16312,15 @@ function personaTieneDatosNatural(p){
   return !!(p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre||p.pj_rep_nombre||p.pi_rep_nombre||p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pi_identificacion||p.pj_rep_identificacion||p.pi_rep_identificacion);
 }
 function personaAptaParaTarget(p,target,field){
+  if(target==='libre-nat'){
+    if(field==='nombre')return !!(personaNombreNatural(p)||p.pn_nombre||p.qd_nombre);
+    return true;
+  }
+  if(target==='libre-jur'){
+    if(field==='empresa')return personaTieneDatosEmpresa(p);
+    if(field==='rep_nombre')return !!(personaNombreNatural(p)||p.pn_nombre||p.qd_nombre);
+    return true;
+  }
   if(target==='libre'){
     if(field==='empresa')return !!(p.pj_empresa||p.pi_empresa||p._entidad_representa);
     if(field==='nombre')return !!(personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre);
@@ -16400,9 +16414,10 @@ function personaEtiquetaSugLibre(p,field){
   if(field==='empresa'){
     return p.pj_empresa||p.pi_empresa||p._entidad_representa||'—';
   }
+  if(field==='rep_nombre'){
+    return personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||'—';
+  }
   const nom=personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||'';
-  const emp=p.pj_empresa||p.pi_empresa||p._entidad_representa||'';
-  if(emp)return nom?(nom+' · '+emp):emp;
   return nom||personaDisplayNombre(p);
 }
 function buscarPersonas(q,target,field,lim){
@@ -16613,6 +16628,25 @@ function aplicarPersonaCatalog(p,target){
     setv('sec-pn-telefono',p.pn_telefono||p.qd_telefono||'');
     return;
   }
+  if(target==='libre-nat'){
+    setv('entrega-libre-int-nombre',personaNombreNatural(p)||p.pn_nombre||'');
+    setv('entrega-libre-int-correo',personaCorreoNatural(p));
+    setv('entrega-libre-int-telefono',personaTelefonoNatural(p));
+    if(typeof setEntregaLibreIntTipo==='function')setEntregaLibreIntTipo('natural');
+    return;
+  }
+  if(target==='libre-jur-emp'){
+    if(typeof setEntregaLibreIntTipo==='function')setEntregaLibreIntTipo('juridica');
+    setv('entrega-libre-int-empresa',p.pj_empresa||p.pi_empresa||'');
+    setv('entrega-libre-int-nit',p.pj_nit||p.pi_nit||'');
+    setv('entrega-libre-int-correo-j',p.pj_correo||p.pi_correo_emp||'');
+    setv('entrega-libre-int-telefono-j',p.pj_telefono||p.pi_telefono_emp||'');
+    return;
+  }
+  if(target==='libre-jur-rep'){
+    setv('entrega-libre-int-dirigido',personaNombreNatural(p)||p.pn_nombre||'');
+    return;
+  }
   if(target==='libre'){
     setv('entrega-libre-int-nombre',personaNombreNatural(p)||p.pn_nombre||'');
     setv('entrega-libre-int-correo',personaCorreoNatural(p));
@@ -16711,11 +16745,48 @@ function upsertPersonaCatalog(data){
   }
 }
 function upsertPersonaEntregaLibre(datos,actCodigo,depto){
-  if(!datos||!String(datos._pn_nombre||'').trim())return;
+  if(!datos)return;
+  const personaId=String(datos._persona_catalog_id||'').trim();
+  const tipo=datos._tipo_persona==='juridica'?'juridica':'natural';
+  if(tipo==='juridica'){
+    const empresa=String(datos._pj_empresa||'').trim();
+    const rep=String(datos._pj_rep_nombre||'').trim();
+    if(!empresa||!rep)return;
+    const snap={
+      tipo_persona:'juridica',
+      origen:'interesado',
+      pj_empresa:empresa,
+      pj_nit:String(datos._pj_nit||'').trim(),
+      pj_correo:String(datos._pj_correo||'').trim(),
+      pj_telefono:String(datos._pj_telefono||'').trim(),
+      pj_rep_nombre:rep
+    };
+    if(personaId){
+      const idx=personas.findIndex(x=>x.id===personaId);
+      if(idx>=0){
+        const cur=normalizePersonaRecord(personas[idx]);
+        if(!cur.roles.includes('interesado'))cur.roles.push('interesado');
+        personas[idx]=normalizePersonaRecord({
+          ...cur,...snap,
+          id:cur.id,
+          roles:cur.roles,
+          expedientes:addExpedienteAsoc(cur.expedientes,actCodigo||null,depto||null,['interesado']),
+          actualizado:hoy()
+        });
+        if(typeof saveLS==='function')saveLS();
+        upsertPersonaEntregaLibreDestinatario(rep,actCodigo,depto);
+        return;
+      }
+    }
+    mergePersonaEnCatalogo(snap,['interesado'],actCodigo||null,depto||null);
+    upsertPersonaEntregaLibreDestinatario(rep,actCodigo,depto);
+    if(typeof saveLS==='function')saveLS();
+    return;
+  }
   const nombre=String(datos._pn_nombre||'').trim();
+  if(!nombre)return;
   const correo=String(datos._pn_correo||'').trim();
   const telefono=String(datos._pn_telefono||'').trim();
-  const entidad=String(datos._entidad_representa||datos._pj_empresa||'').trim();
   const snap={
     tipo_persona:'natural',
     origen:'interesado',
@@ -16724,12 +16795,8 @@ function upsertPersonaEntregaLibre(datos,actCodigo,depto){
     pn_telefono:telefono,
     qd_nombre:nombre,
     qd_correo:correo,
-    qd_telefono:telefono,
-    pj_empresa:entidad,
-    pj_rep_nombre:entidad?nombre:'',
-    _entidad_representa:entidad
+    qd_telefono:telefono
   };
-  const personaId=String(datos._persona_catalog_id||'').trim();
   if(personaId){
     const idx=personas.findIndex(x=>x.id===personaId);
     if(idx>=0){
@@ -16739,6 +16806,9 @@ function upsertPersonaEntregaLibre(datos,actCodigo,depto){
         ...cur,...snap,
         id:cur.id,
         roles:cur.roles,
+        pj_empresa:'',
+        pj_rep_nombre:'',
+        _entidad_representa:'',
         expedientes:addExpedienteAsoc(cur.expedientes,actCodigo||null,depto||null,['interesado']),
         actualizado:hoy()
       });
@@ -16748,6 +16818,16 @@ function upsertPersonaEntregaLibre(datos,actCodigo,depto){
   }
   mergePersonaEnCatalogo(snap,['interesado'],actCodigo||null,depto||null);
   if(typeof saveLS==='function')saveLS();
+}
+function upsertPersonaEntregaLibreDestinatario(nombre,actCodigo,depto){
+  const nom=String(nombre||'').trim();
+  if(!nom)return;
+  mergePersonaEnCatalogo({
+    tipo_persona:'natural',
+    origen:'interesado',
+    pn_nombre:nom,
+    qd_nombre:nom
+  },['interesado'],actCodigo||null,depto||null);
 }
 function getRolesPersonaManual(){
   return Object.keys(PERSONA_ROLES).filter(r=>{
