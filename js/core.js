@@ -4865,6 +4865,39 @@ function actLibreActividadListRow(t){
   const interesado=actLibreInteresadoLabel(t);
   return {...t,exp:cod,nombre:interesado||'—',tram:'',sinExpediente:true};
 }
+function enrichActividadListRow(row,live){
+  if(!row||!live)return row;
+  const t=normalizeTask(live);
+  if(t.sinExpediente){
+    const meta=actLibreActividadListRow(normalizeActLibre(Object.assign({},row,t)));
+    row.exp=meta.exp;
+    row.nombre=meta.nombre;
+    row.tram=meta.tram;
+    row.sinExpediente=true;
+    row.codigo=t.codigo||row.codigo;
+    row.interesadoNombre=t.interesadoNombre||meta.nombre;
+    return row;
+  }
+  const e=typeof getExpById==='function'?getExpById(t.exp||row.exp):null;
+  if(e){
+    row.exp=e._exp||row.exp;
+    row.nombre=typeof getNom==='function'?getNom(e):row.nombre;
+    const tramObj=typeof getTram==='function'?getTram(e._tramite,e):null;
+    row.tram=tramObj?tramObj.nombre:(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite)?'PQRSD':'');
+    row.esPqrs=typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite);
+    row.depto=e._depto||row.depto;
+  }
+  return row;
+}
+function taskActividadIconBarHtml(ref,taskId,t){
+  if(!t)return'';
+  const libre=!!t.sinExpediente;
+  return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
+    '<button type="button" class="btn bsm bic act-ico" title="Trasladar responsable" onclick="openTrasladarActividadSmart(\''+escAttr(ref)+'\',\''+escAttr(taskId)+'\')">🔄</button>'+
+    (typeof bibGuardarEnBibliotecaBtnHtml==='function'?'<button type="button" class="btn bsm bic act-ico" title="Biblioteca" onclick="openBibGuardarModal({tipo:\'actividad\',id:\''+escAttr(ref)+'\',taskId:\''+escAttr(taskId)+'\',libre:'+(libre?'true':'false')+',label:\''+jsStr((t.actividad||t.desc||'').slice(0,40))+'\'})">📚</button>':'')+
+    actEliminarActOEntregaBtnHtml(ref,taskId)+
+    '</div>';
+}
 function getActLibreById(id){
   const sid=String(id||'').trim();
   if(!sid)return null;
@@ -12255,6 +12288,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const hasSop=(t.soportes||[]).length>0;
   const pendVer=taskPendienteVerificacion(t);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&pendVer;
+  const isReviewDelivery=canReviewSop&&!chatOnly&&!soloGestion;
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
     const docsWide=e?collectDocsComparables(e,taskId,t):[];
@@ -12276,14 +12310,18 @@ function openTaskCommentsModal(expId,taskId,opts){
   const canEditAsig=canWriteDept;
   const canEditAsigEffective=canEditAsig||(canReviewSop&&!!t.sinExpediente)||(soloGestion&&canWriteDept);
   const pqrsNcaAsig=e&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca();
-  const asigPanel=(!chatOnly&&(canEditAsigEffective||soloGestion||taskEsMultiAsignada(t)))?renderTaskAsignadosPanelHtml(expId,taskId,t,canEditAsigEffective,{pqrsNca:pqrsNcaAsig}):'';
+  const asigPanel=(!chatOnly&&!isReviewDelivery&&(canEditAsigEffective||soloGestion||taskEsMultiAsignada(t)))?renderTaskAsignadosPanelHtml(expId,taskId,t,canEditAsigEffective,{pqrsNca:pqrsNcaAsig}):'';
   const chatSep=soloGestion?'':(chatOnly?(chatUnificado?renderTaskChatUnificadoHtml(expId,taskId,t):renderTaskChatPanelHtml(expId,taskId,t)):'');
   // Chat/notas solo vía icono 💬 (chatOnly). En revisión 🔍/🧐 no se repiten.
   const showVerifyBar=canDeptVerificarCierre(t)
     ||(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional())
     ||(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)&&!esModoResponsable()&&!esJurisdiccional());
   const verifyBar=(!chatOnly&&!soloGestion&&showVerifyBar)?renderTaskVerifyBarHtml(expId,taskId,t):'';
-  const bibBar=(!chatOnly&&!soloGestion&&typeof bibGuardarEnBibliotecaBarHtml==='function')?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'';
+  const refAct=t.sinExpediente?(t.codigo||expId):expId;
+  const bibBar=(!chatOnly&&!soloGestion)?(
+    isReviewDelivery?taskActividadIconBarHtml(refAct,taskId,t):
+    (typeof bibGuardarEnBibliotecaBarHtml==='function'?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'')
+  ):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   body.innerHTML='<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>'+
     bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
@@ -16122,6 +16160,7 @@ function renderActividades(){
       row.firmaWf=live.firmaWf;
       row.requiereFirma=live.requiereFirma;
       row.soportes=live.soportes;
+      enrichActividadListRow(row,live);
     }
     return true;
   });
