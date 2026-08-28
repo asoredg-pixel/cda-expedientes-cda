@@ -16341,6 +16341,16 @@ function personaEtiquetaSug(p,field){
   if(field==='empresa')return rolTxt+(p.pj_empresa||p.pi_empresa||'');
   return rolTxt+personaDisplayNombre(p);
 }
+function personaEtiquetaSugLibre(p,field){
+  p=normalizePersonaRecord(p);
+  if(field==='empresa'){
+    return p.pj_empresa||p.pi_empresa||p._entidad_representa||'—';
+  }
+  const nom=personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||'';
+  const emp=p.pj_empresa||p.pi_empresa||p._entidad_representa||'';
+  if(emp)return nom?(nom+' · '+emp):emp;
+  return nom||personaDisplayNombre(p);
+}
 function buscarPersonas(q,target,field,lim){
   const ql=(q||'').trim().toLowerCase();
   const minLen=(field==='identificacion'||field==='nit'||field==='rep_identificacion')?1:2;
@@ -16648,15 +16658,39 @@ function upsertPersonaCatalog(data){
 }
 function upsertPersonaEntregaLibre(datos,actCodigo,depto){
   if(!datos||!String(datos._pn_nombre||'').trim())return;
+  const nombre=String(datos._pn_nombre||'').trim();
+  const correo=String(datos._pn_correo||'').trim();
+  const telefono=String(datos._pn_telefono||'').trim();
+  const entidad=String(datos._entidad_representa||datos._pj_empresa||'').trim();
   const snap={
     tipo_persona:'natural',
     origen:'interesado',
-    pn_nombre:String(datos._pn_nombre||'').trim(),
-    pn_correo:String(datos._pn_correo||'').trim(),
-    pn_telefono:String(datos._pn_telefono||'').trim(),
-    pj_empresa:String(datos._entidad_representa||datos._pj_empresa||'').trim(),
-    _entidad_representa:String(datos._entidad_representa||'').trim()
+    pn_nombre:nombre,
+    pn_correo:correo,
+    pn_telefono:telefono,
+    qd_nombre:nombre,
+    qd_correo:correo,
+    qd_telefono:telefono,
+    pj_empresa:entidad,
+    _entidad_representa:entidad
   };
+  const personaId=String(datos._persona_catalog_id||'').trim();
+  if(personaId){
+    const idx=personas.findIndex(x=>x.id===personaId);
+    if(idx>=0){
+      const cur=normalizePersonaRecord(personas[idx]);
+      if(!cur.roles.includes('interesado'))cur.roles.push('interesado');
+      personas[idx]=normalizePersonaRecord({
+        ...cur,...snap,
+        id:cur.id,
+        roles:cur.roles,
+        expedientes:addExpedienteAsoc(cur.expedientes,actCodigo||null,depto||null,['interesado']),
+        actualizado:hoy()
+      });
+      if(typeof saveLS==='function')saveLS();
+      return;
+    }
+  }
   mergePersonaEnCatalogo(snap,['interesado'],actCodigo||null,depto||null);
   if(typeof saveLS==='function')saveLS();
 }

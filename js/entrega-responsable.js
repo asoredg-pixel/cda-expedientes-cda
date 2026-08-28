@@ -348,6 +348,40 @@ function hidePersonasSugLibre(field){
   hidePersonasSugLibre('empresa');
 }
 
+function setEntregaLibrePersonaRef(p){
+  const id=p&&p.id?String(p.id):'';
+  window._entregaLibrePersonaId=id;
+  const hid=document.getElementById('entrega-libre-int-persona-id');
+  if(hid)hid.value=id;
+}
+
+function onEntregaLibreNombreInput(inp){
+  filtrarPersonasSugLibre(inp,'nombre');
+  const refId=window._entregaLibrePersonaId||_entregaLibreIntVal('entrega-libre-int-persona-id');
+  if(!refId||typeof personas==='undefined'||!Array.isArray(personas))return;
+  const p=personas.find(function(x){return x.id===refId;});
+  if(!p){setEntregaLibrePersonaRef(null);return;}
+  const typed=String(inp.value||'').trim().toLowerCase();
+  const orig=String(typeof personaNombreNatural==='function'?personaNombreNatural(p):(p.pn_nombre||'')).trim().toLowerCase();
+  if(typed&&orig&&typed!==orig)setEntregaLibrePersonaRef(null);
+}
+
+function onEntregaLibreNombreBlur(){
+  hidePersonasSugLibre('nombre');
+  const inp=document.getElementById('entrega-libre-int-nombre');
+  if(!inp||typeof buscarPersonas!=='function'||typeof aplicarPersonaCatalog!=='function')return;
+  const q=String(inp.value||'').trim();
+  if(q.length<2)return;
+  const ql=q.toLowerCase();
+  const list=buscarPersonas(q,'libre','nombre',12);
+  const exact=list.filter(function(p){
+    return String(typeof personaNombreNatural==='function'?personaNombreNatural(p):(p.pn_nombre||'')).trim().toLowerCase()===ql;
+  });
+  if(exact.length!==1)return;
+  aplicarPersonaCatalog(exact[0],'libre');
+  setEntregaLibrePersonaRef(exact[0]);
+}
+
 function filtrarPersonasSugLibre(inp,field){
   const portal=document.getElementById(_personSugLibrePortalId(field));
   if(!portal||!inp)return;
@@ -360,7 +394,7 @@ function filtrarPersonasSugLibre(inp,field){
     return;
   }
   portal.innerHTML=list.map(function(p,i){
-    const lbl=typeof personaEtiquetaSug==='function'?personaEtiquetaSug(p,field||'nombre'):(typeof personaDisplayNombre==='function'?personaDisplayNombre(p):'');
+    const lbl=typeof personaEtiquetaSugLibre==='function'?personaEtiquetaSugLibre(p,field||'nombre'):(typeof personaNombreNatural==='function'?personaNombreNatural(p):(p.pn_nombre||''));
     return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();pickPersonaEntregaLibre('+i+')"><strong>'+escAttr(lbl)+'</strong></button>';
   }).join('');
   portal.style.display='block';
@@ -370,14 +404,16 @@ function pickPersonaEntregaLibre(idx){
   const p=(window._personSugLibreList||[])[idx];
   if(!p||typeof aplicarPersonaCatalog!=='function')return;
   aplicarPersonaCatalog(p,'libre');
+  setEntregaLibrePersonaRef(p);
   hidePersonasSugLibre();
 }
 
 function htmlEntregaLibreInteresadoBox(){
   const inpStyle='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
-  const sugNom=' oninput="filtrarPersonasSugLibre(this,\'nombre\')" onfocus="filtrarPersonasSugLibre(this,\'nombre\')" onblur="setTimeout(function(){hidePersonasSugLibre(\'nombre\');},180)"';
+  const sugNom=' oninput="onEntregaLibreNombreInput(this)" onfocus="filtrarPersonasSugLibre(this,\'nombre\')" onblur="setTimeout(function(){onEntregaLibreNombreBlur();},180)"';
   const sugEnt=' oninput="filtrarPersonasSugLibre(this,\'empresa\')" onfocus="filtrarPersonasSugLibre(this,\'empresa\')" onblur="setTimeout(function(){hidePersonasSugLibre(\'empresa\');},180)"';
   return '<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+    '<input type="hidden" id="entrega-libre-int-persona-id" value="">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>'+
     '<div class="fg">'+
       '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><div style="position:relative">'+
@@ -405,13 +441,15 @@ function collectEntregaLibreInteresado(){
   const correo=_entregaLibreIntVal('entrega-libre-int-correo');
   const telefono=_entregaLibreIntVal('entrega-libre-int-telefono');
   const entidad=_entregaLibreIntVal('entrega-libre-int-entidad');
+  const personaId=_entregaLibreIntVal('entrega-libre-int-persona-id')||window._entregaLibrePersonaId||'';
   return{
     _tipo_persona:'natural',
     _pn_nombre:nombre,
     _pn_correo:correo,
     _pn_telefono:telefono,
     _entidad_representa:entidad,
-    _pj_empresa:entidad
+    _pj_empresa:entidad,
+    _persona_catalog_id:personaId
   };
 }
 
@@ -790,6 +828,7 @@ function openEntregaResponsableModal(){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   if(tit)tit.textContent='Entregar documento · '+responsableActivo;
+  window._entregaLibrePersonaId='';
   if(modal){
     modal.classList.add('task-modal-wide');
     modal.classList.add('enviar-modal-only');
@@ -1468,6 +1507,9 @@ window.pickActEntregaResp=pickActEntregaResp;
 window.filtrarPersonasSugLibre=filtrarPersonasSugLibre;
 window.pickPersonaEntregaLibre=pickPersonaEntregaLibre;
 window.hidePersonasSugLibre=hidePersonasSugLibre;
+window.setEntregaLibrePersonaRef=setEntregaLibrePersonaRef;
+window.onEntregaLibreNombreInput=onEntregaLibreNombreInput;
+window.onEntregaLibreNombreBlur=onEntregaLibreNombreBlur;
 window.syncEntregaRespFileLabel=syncEntregaRespFileLabel;
 window.entregaRespFileCtxKey=entregaRespFileCtxKey;
 window.entregaRespFileUploadCtx=entregaRespFileUploadCtx;
