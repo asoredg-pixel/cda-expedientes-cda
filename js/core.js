@@ -5080,6 +5080,7 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t){
   if(!libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="actividades" title="Actividades asignadas — añadir actividad" onclick="taskReviewToggleSidePanel(\'actividades\',\''+r+'\',\''+tid+'\')">📌</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="archivos" title="Archivos del expediente o actividad" onclick="taskReviewToggleSidePanel(\'archivos\',\''+r+'\',\''+tid+'\')">📁</button>';
+  h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar a expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
   else{
@@ -5133,7 +5134,110 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',marcar:'Marcar en documento',chat:'Chat y observaciones'};
+}
+function taskReviewChatRailBtnHtml(ref,taskId,t){
+  const nc=taskChatComentariosCount(t);
+  const sel=t?getSoporteActivo(t):null;
+  const no=(t&&t.notasDoc||[]).filter(function(n){return!sel||!n.soporteId||n.soporteId===sel.id;}).length;
+  const badge=Math.max(nc,no);
+  const r=escAttr(ref),tid=escAttr(taskId);
+  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" data-side="chat" title="Chat y observaciones del documento" onclick="taskReviewToggleSidePanel(\'chat\',\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(badge?actIcoBadgeHtml(badge,'blue'):'')+'</button>';
+}
+function buildTaskReviewCompareSelectOpts(t,e,taskId){
+  const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
+  if(docs.length<2)return {docs:docs,opts:'',empty:true};
+  const activo=t?getSoporteActivo(t):null;
+  const curId=activo?'sop_'+activo.id:'';
+  const others=docs.filter(function(d){return d.id!==curId;});
+  const pick=others.length?others[others.length-1]:docs[docs.length-1];
+  if(!window._taskReviewCompareDoc||!docs.some(function(d){return d.id===window._taskReviewCompareDoc;}))
+    window._taskReviewCompareDoc=pick.id;
+  const groups=[
+    {lbl:'Entrega y anexos',test:function(d){return d.origen==='Entrega';}},
+    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&d.soporteId&&activo&&d.soporteId!==activo.id;}},
+    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
+    {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''));}}
+  ];
+  const used=new Set();
+  let opts='';
+  groups.forEach(function(g){
+    const items=docs.filter(function(d){return d.id!==curId&&g.test(d)&&!used.has(d.id);});
+    if(!items.length)return;
+    opts+='<optgroup label="'+escAttr(g.lbl)+'">';
+    items.forEach(function(d){
+      used.add(d.id);
+      opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+    });
+    opts+='</optgroup>';
+  });
+  docs.filter(function(d){return d.id!==curId&&!used.has(d.id);}).forEach(function(d){
+    opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+  });
+  return {docs:docs,opts:opts,empty:false};
+}
+function renderTaskReviewCompareBarHtml(t,e,taskId){
+  const built=buildTaskReviewCompareSelectOpts(t,e,taskId);
+  if(built.empty)return '<div style="font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
+  return '<div class="task-review-compare-bar-inner">'+
+    '<span class="task-review-compare-bar-lbl">⇅ Comparar con</span>'+
+    '<select id="task-review-compare-sel" class="compare-ver-select task-review-compare-bar-sel" onchange="onTaskReviewCompareChange()">'+built.opts+'</select>'+
+    '<span class="task-review-compare-bar-hint">Documento de entrega a la izquierda</span></div>';
+}
+function renderTaskReviewObsSideHtml(expId,taskId,t,withMarcarBtn){
+  const sel=t?getSoporteActivo(t):null;
+  const sid=sel?sel.id:'';
+  const notas=notasDocForSoporte(t,sid);
+  const canAnnot=canDeptMarcarEnSoporte(t,sel);
+  let h='<div class="task-review-obs-side">';
+  if(withMarcarBtn&&canAnnot)
+    h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="toggleModoMarcarAnnot()">📍 Clic en documento para marcar</button></div>';
+  h+=(canAnnot?renderAnnotPinFormHtml():'')+
+    '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
+  if(canAnnot)h+=renderAnnotSidebarFooter(expId,taskId,canAnnot);
+  return h+'</div>';
+}
+function initTaskReviewObsSide(expId,taskId,t){
+  const sel=t?getSoporteActivo(t):null;
+  const sid=sel?sel.id:'';
+  const notas=notasDocForSoporte(t,sid);
+  const canAnnot=canDeptMarcarEnSoporte(t,sel);
+  populateSoportePaginaFilter(notas);
+  renderAnnotPinsOnOverlay(notas,window._annotSelId||null);
+  const side=document.getElementById('soporte-annot-sidebar');
+  if(side)side.innerHTML=renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+(canAnnot?renderAnnotSidebarFooter(expId,taskId,canAnnot):'');
+}
+function renderTaskReviewChatSideHtml(expId,taskId,t){
+  const sel=t?getSoporteActivo(t):null;
+  const sid=sel?sel.id:'';
+  const notas=notasDocForSoporte(t,sid);
+  const canAnnot=canDeptMarcarEnSoporte(t,sel);
+  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  let h='<div class="task-review-chat-side">';
+  if(canReviewSop||notas.length){
+    h+='<section class="task-review-chat-obs-sect"><div class="task-review-side-sect-hdr">📌 Observaciones del documento</div>';
+    if(canAnnot)
+      h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="taskReviewToggleMarcarSidePanel(\''+eid+'\',\''+tid+'\')">📍 Marcar en documento</button></div>';
+    h+=(canAnnot?renderAnnotPinFormHtml():'')+
+      '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
+    if(canAnnot)h+=renderAnnotSidebarFooter(expId,taskId,canAnnot);
+    h+='</section>';
+  }
+  h+='<section class="task-review-chat-act-sect">'+renderTaskChatPanelHtml(expId,taskId,t)+'</section></div>';
+  return h;
+}
+function taskReviewToggleMarcarSidePanel(expId,taskId){
+  if(window._taskReviewSideMode==='marcar'){
+    releaseAnnotMarkingMode();
+    taskReviewCloseSidePanel();
+    return;
+  }
+  if(window._taskReviewSideMode==='chat')taskReviewOpenSidePanel('marcar',expId,taskId);
+  else taskReviewToggleSidePanel('marcar',expId,taskId);
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const sel=t?getSoporteActivo(t):null;
+  if(t&&canDeptMarcarEnSoporte(t,sel)&&!window._annotMarking)toggleModoMarcarAnnot();
 }
 function renderTaskReviewEditSideHtml(expId,taskId,t){
   if(t&&t.sinExpediente){
@@ -5212,6 +5316,12 @@ function taskReviewSyncRailSide(mode){
   });
   const cmp=document.getElementById('btn-review-compare');
   if(cmp)cmp.classList.toggle('on',mode==='compare');
+  const marBtn=document.getElementById('btn-modo-marcar');
+  if(marBtn)marBtn.classList.toggle('on',mode==='marcar'||!!window._annotMarking);
+}
+function taskReviewHideCompareBar(){
+  const bar=document.getElementById('task-review-compare-bar');
+  if(bar){bar.classList.remove('on');bar.innerHTML='';bar.setAttribute('aria-hidden','true');}
 }
 function taskReviewCloseSidePanel(){
   window._taskReviewSideMode='doc';
@@ -5219,6 +5329,10 @@ function taskReviewCloseSidePanel(){
   const panel=document.getElementById('task-review-side-panel');
   if(split)split.classList.remove('task-review-side-open');
   if(panel)panel.setAttribute('aria-hidden','true');
+  taskReviewHideCompareBar();
+  if(window._annotMarking)releaseAnnotMarkingMode();
+  const marBtn=document.getElementById('btn-modo-marcar');
+  if(marBtn){marBtn.classList.remove('on');marBtn.textContent='📍';marBtn.title='Marcar en documento';}
   taskReviewSyncRailSide('doc');
 }
 function taskReviewOpenSidePanel(mode,expId,taskId){
@@ -5250,8 +5364,20 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML=typeof renderTaskReviewArchivosSideHtml==='function'?renderTaskReviewArchivosSideHtml(expId,taskId,t,e):'<div style="padding:8px;font-size:12px;color:var(--tx3)">Archivos no disponibles</div>';
     if(typeof initTaskReviewArchivosSide==='function')setTimeout(function(){initTaskReviewArchivosSide(taskId);},40);
   }else if(mode==='compare'){
-    body.innerHTML=renderTaskReviewCompareSideHtml(t,e,taskId);
+    const cmpBar=document.getElementById('task-review-compare-bar');
+    if(cmpBar){
+      cmpBar.innerHTML=renderTaskReviewCompareBarHtml(t,e,taskId);
+      cmpBar.classList.add('on');
+      cmpBar.setAttribute('aria-hidden','false');
+    }
+    body.innerHTML='<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
     setTimeout(function(){renderTaskReviewComparePreview();},40);
+  }else if(mode==='marcar'){
+    body.innerHTML=renderTaskReviewObsSideHtml(expId,taskId,t,true);
+    setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
+  }else if(mode==='chat'){
+    body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
   }else if(mode==='edit'){
     body.innerHTML=renderTaskReviewEditSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewEditSide(expId,taskId,t,false);},40);
@@ -5279,40 +5405,9 @@ function taskReviewToggleSidePanel(mode,expId,taskId){
   else taskReviewOpenSidePanel(mode,expId,taskId);
 }
 function renderTaskReviewCompareSideHtml(t,e,taskId){
-  const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
-  if(docs.length<2)return '<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
-  const activo=t?getSoporteActivo(t):null;
-  const curId=activo?'sop_'+activo.id:'';
-  const others=docs.filter(function(d){return d.id!==curId;});
-  const pick=others.length?others[others.length-1]:docs[docs.length-1];
-  if(!window._taskReviewCompareDoc||!docs.some(function(d){return d.id===window._taskReviewCompareDoc;}))
-    window._taskReviewCompareDoc=pick.id;
-  const groups=[
-    {lbl:'Entrega y anexos',test:function(d){return d.origen==='Entrega';}},
-    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&d.soporteId&&activo&&d.soporteId!==activo.id;}},
-    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
-    {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''));}}
-  ];
-  const used=new Set();
-  let opts='';
-  groups.forEach(function(g){
-    const items=docs.filter(function(d){return d.id!==curId&&g.test(d)&&!used.has(d.id);});
-    if(!items.length)return;
-    opts+='<optgroup label="'+escAttr(g.lbl)+'">';
-    items.forEach(function(d){
-      used.add(d.id);
-      opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
-    });
-    opts+='</optgroup>';
-  });
-  docs.filter(function(d){return d.id!==curId&&!used.has(d.id);}).forEach(function(d){
-    opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
-  });
-  return '<div class="task-review-compare-side">'+
-    '<div class="task-review-compare-hint">El documento de la entrega queda a la izquierda. Elija otro documento para verlo aquí.</div>'+
-    '<div class="compare-ver-sel task-review-compare-sel"><label for="task-review-compare-sel">Comparar con</label>'+
-    '<select id="task-review-compare-sel" class="compare-ver-select" onchange="onTaskReviewCompareChange()">'+opts+'</select></div>'+
-    '<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block"></div></div>';
+  const built=buildTaskReviewCompareSelectOpts(t,e,taskId);
+  if(built.empty)return '<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
+  return '<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
 }
 function onTaskReviewCompareChange(){
   const sel=document.getElementById('task-review-compare-sel');
@@ -5339,6 +5434,7 @@ function renderTaskReviewComparePreview(){
   }
   wrap.innerHTML='<div class="lbl">'+escAttr(doc.label)+(doc.meta?' · '+escAttr(doc.meta):'')+'</div>'+vista;
 }
+window.taskReviewToggleMarcarSidePanel=taskReviewToggleMarcarSidePanel;
 window.taskReviewOpenSidePanel=taskReviewOpenSidePanel;
 window.taskReviewToggleSidePanel=taskReviewToggleSidePanel;
 window.taskReviewCloseSidePanel=taskReviewCloseSidePanel;
@@ -7499,20 +7595,22 @@ function openDriveVentanaEmergente(url){
   const raw=String(url||'').trim();
   if(!raw){if(typeof notif==='function')notif('No hay enlace de documento','err');return false;}
   const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):null;
-  const openUrl=String((p&&(p.url||p.preview))||raw).trim();
+  let openUrl=String((p&&(p.url||p.preview))||raw).trim();
+  if(p&&p.id&&/drive\.google\.com/i.test(openUrl))
+    openUrl='https://drive.google.com/file/d/'+p.id+'/view';
   const w=Math.min(1280,Math.max(720,Math.floor((screen.availWidth||1200)*0.88)));
   const h=Math.min(900,Math.max(560,Math.floor((screen.availHeight||800)*0.88)));
   const left=Math.max(0,Math.floor(((screen.availWidth||w)-w)/2));
   const top=Math.max(0,Math.floor(((screen.availHeight||h)-h)/2));
-  const features='popup=yes,width='+w+',height='+h+',left='+left+',top='+top+',menubar=no,toolbar=yes,location=yes,status=yes,resizable=yes,scrollbars=yes';
+  const features='popup=yes,toolbar=yes,location=yes,status=yes,resizable=yes,scrollbars=yes,width='+w+',height='+h+',left='+left+',top='+top;
   let win=null;
-  try{win=window.open(openUrl,'sst_drive_popup',features);}catch(e){win=null;}
-  if(win){
+  try{win=window.open(openUrl,'sst_drive_popup_'+Date.now(),features);}catch(e){win=null;}
+  if(win&&!win.closed){
     try{win.opener=null;}catch(e){}
     try{win.focus();}catch(e){}
     return true;
   }
-  try{window.open(openUrl,'_blank','noopener,noreferrer');}catch(e2){}
+  if(typeof notif==='function')notif('Permita ventanas emergentes en el navegador para abrir en Drive','warn');
   return false;
 }
 window.openDriveVentanaEmergente=openDriveVentanaEmergente;
@@ -9158,7 +9256,9 @@ function releaseAnnotMarkingMode(){
   if(ov)ov.classList.remove('marking');
   if(wrap)wrap.classList.add('annot-navigable');
   const btn=document.getElementById('btn-modo-marcar');
-  if(btn){btn.classList.remove('on');btn.textContent='📍 Marcar en documento';}
+  const btnSide=document.getElementById('btn-modo-marcar-side');
+  if(btn){btn.classList.remove('on');btn.textContent='📍';}
+  if(btnSide){btnSide.classList.remove('on');btnSide.textContent='📍 Clic en documento para marcar';}
 }
 function renderAnnotSidebarFooter(expId,taskId,canAnnot){
   if(!canAnnot)return'';
@@ -9302,19 +9402,30 @@ function initSoporteAnnotViewer(expId,taskId,soporteId,canAnnot){
   if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
 }
 function toggleModoMarcarAnnot(){
+  const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
+  if(inReview){
+    const ctx=window._taskModalCtx||{};
+    if(window._taskReviewSideMode!=='marcar'&&window._taskReviewSideMode!=='chat'){
+      taskReviewToggleMarcarSidePanel(ctx.expId||'',ctx.taskId||'');
+      return;
+    }
+  }
   window._annotMarking=!window._annotMarking;
   const ov=document.getElementById('soporte-annot-overlay');
   const wrap=document.getElementById('soporte-annot-wrap');
   const btn=document.getElementById('btn-modo-marcar');
+  const btnSide=document.getElementById('btn-modo-marcar-side');
   if(wrap){
     if(window._annotMarking)wrap.classList.remove('annot-navigable');
     else wrap.classList.add('annot-navigable');
   }
   if(ov)ov.classList.toggle('marking',!!window._annotMarking);
-  if(btn){
-    btn.classList.toggle('on',!!window._annotMarking);
-    btn.textContent=window._annotMarking?'📍 Clic en documento… (cancelar)':'📍 Marcar en documento';
-  }
+  [btn,btnSide].forEach(function(b){
+    if(!b)return;
+    b.classList.toggle('on',!!window._annotMarking);
+    if(b===btn)b.textContent=window._annotMarking?'📍 Clic en documento…':'📍';
+    else b.textContent=window._annotMarking?'📍 Clic en documento… (cancelar)':'📍 Clic en documento para marcar';
+  });
   if(!window._annotMarking)cancelPendingAnnotPin();
 }
 function onAnnotOverlayClick(ev){
@@ -10817,12 +10928,13 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         (sel.driveFilename&&sel.driveFilename!==sel.label?'<span class="task-review-doc-meta-sub">'+escAttr(sel.driveFilename)+'</span>':'')+
         '<span class="task-review-doc-meta-sub">v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span></div>'+
         '<div class="task-review-doc-tools">'+
-        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
-        (canAnnot?'<button type="button" class="btn bsm bsm-ico" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()" title="Marcar en documento">📍</button>':'')+
+        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente (no pestaña)">↗</button>':'')+
+        (canAnnot?'<button type="button" class="btn bsm bsm-ico" id="btn-modo-marcar" onclick="taskReviewToggleMarcarSidePanel(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Marcar en documento">📍</button>':'')+
         (showCompareBtn?'<button type="button" class="btn bsm bsm-ico" id="btn-review-compare" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Comparar documentos">⇅</button>':'')+
         '</div></div>';
     }
     h+='</div>';
+    h+='<div id="task-review-compare-bar" class="task-review-compare-bar" aria-hidden="true"></div>';
     h+='<div class="task-review-split-view" id="task-review-split-view">';
     h+='<div class="task-review-doc-col-main">';
   }else{
@@ -10840,8 +10952,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
     if(isReview){
-      const obsOpen=typeof soporteObsPanelIsOpen==='function'?soporteObsPanelIsOpen():false;
-      h+='<div class="task-review-doc-stage'+(obsOpen?' task-review-obs-open':'')+'" id="task-review-doc-stage">'+
+      h+='<div class="task-review-doc-stage" id="task-review-doc-stage">'+
         '<div class="task-review-viewer-shell">'+
           (showDeptAnnotUi?'<div class="soporte-pagina-filter task-review-pag-filter"><label>Pág. <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas</option></select></label></div>':'')+
           '<div class="soporte-split task-review-split" id="soporte-split-wrap">'+
@@ -10852,12 +10963,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
               '</div>'+
             '</div>'+
           '</div>'+
-        '</div>'+
-        '<div class="task-review-obs-drawer soporte-sidebar-col" id="soporte-sidebar-col" aria-hidden="'+(obsOpen?'false':'true')+'">'+
-          '<div class="soporte-sidebar-hdr"><span>Observaciones del documento</span>'+
-          '<button type="button" class="soporte-sidebar-close" onclick="toggleSoporteObsPanel(false)" title="Cerrar">✕</button></div>'+
-          (canAnnot?renderAnnotPinFormHtml():'')+
-          '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sel.id,canAnnot)+'</div>'+
         '</div>'+
       '</div>';
       h+='</div>';
@@ -12941,6 +13046,10 @@ function restaurarTaskExp(expId,taskId){
   });
 }
 function openTaskCommentsChatOnly(expId,taskId){
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewToggleSidePanel==='function'){
+    taskReviewToggleSidePanel('chat',expId,taskId);
+    return;
+  }
   openTaskCommentsModal(expId,taskId,{chatOnly:true});
 }
 function openTaskCommentsModal(expId,taskId,opts){
@@ -13017,17 +13126,13 @@ function openTaskCommentsModal(expId,taskId,opts){
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
   if(isReviewDelivery){
     const railNav=taskReviewFullRailHtml(refAct,taskId,t);
-    const obsToggle=hasSop?taskReviewObsToggleHtml(false):'';
     body.innerHTML=statusRow+
       '<div class="task-review-layout">'+
         '<div class="task-review-workspace">'+
           '<div class="task-review-main">'+sopPanel+'</div>'+
           (verifyBar?'<details class="task-review-decision"><summary>Decisión y cierre</summary><div class="task-review-decision-body">'+verifyBar+'</div></details>':'')+
         '</div>'+
-        '<aside class="task-review-rail" aria-label="Acciones">'+
-          railNav+
-          (obsToggle?'<div class="task-review-rail-foot">'+obsToggle+'</div>':'')+
-        '</aside>'+
+        '<aside class="task-review-rail" aria-label="Acciones">'+railNav+'</aside>'+
       '</div>';
   }else{
     body.innerHTML=statusRow+bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
