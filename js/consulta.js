@@ -873,6 +873,45 @@ function taskModalZIndexApply(ov){
   ov.classList.add('con-arch-modal-on');
   ov.style.zIndex='26000';
 }
+function renderTaskReviewArchivosSideHtml(expId,taskId,t,e){
+  const libre=t&&t.sinExpediente;
+  let items=[];
+  if(e)items=collectArchivosConsultaCompleto(e,taskId||null,{incluirAsociados:getExpAsociadosAll(e).length>0});
+  else if(t&&libre){
+    items=collectArchivosActLibre(t).map(function(it){
+      const p=parseDrivePreviewUrl(it.url);
+      const cod=t.codigo||expId;
+      return Object.assign({},it,{
+        exp:cod,asocDe:'',
+        tipoDoc:'Actividad sin expediente · '+cod,
+        descDoc:it.label||it.descDoc||'Documento',
+        preview:it.local?(it.url||it.preview):(p.preview||p.url||it.url),
+        openUrl:it.local?(it.url||it.preview):(p.url||it.url||it.preview)
+      });
+    });
+  }
+  window._conArchItems=items;
+  window._conArchPanelExp=expId;
+  if(!items.length)return '<div style="font-size:12px;color:var(--tx3);padding:10px">No hay enlaces Drive ni adjuntos registrados.</div>';
+  const list=conArchivosListHtml(items,'renderTaskReviewArchivoPreview',expId);
+  const hasAsoc=e&&getExpAsociadosAll(e).length>0;
+  return '<div class="task-review-archivos-side">'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Seleccione un documento. Los archivos se agrupan por registro'+(hasAsoc?' (incluye asociados)':'')+'.</div>'+
+    '<div class="con-arch-split task-review-arch-split"><div class="con-arch-list-col">'+list+'</div>'+
+    '<div class="con-arch-preview-col" id="task-review-arch-preview"></div></div></div>';
+}
+function renderTaskReviewArchivoPreview(idx){
+  renderConsultaArchivoPreview(idx,{previewId:'task-review-arch-preview',listSel:'.task-review-arch-split .con-arch-list-col'});
+}
+function initTaskReviewArchivosSide(taskId){
+  if(!(window._conArchItems||[]).length)return;
+  let idx=0;
+  if(taskId){
+    const i=(window._conArchItems||[]).findIndex(function(it){return it.taskId===taskId;});
+    if(i>=0)idx=i;
+  }
+  renderTaskReviewArchivoPreview(idx);
+}
 function openConsultaArchivosModal(expId){
   expId=String(expId||'').trim();
   if(!expId){notif('Indique el número de expediente','err');return;}

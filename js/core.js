@@ -45,7 +45,8 @@ function pushTaskModalLayer(tag){
     modalClasses:modal?Array.from(modal.classList):[],
     ovClasses:Array.from(ov.classList),
     sopSel:window._taskSopSel,
-    conArchItems:Array.isArray(window._conArchItems)?window._conArchItems.slice():null
+    conArchItems:Array.isArray(window._conArchItems)?window._conArchItems.slice():null,
+    reviewSideMode:window._taskReviewSideMode||'doc'
   });
   return true;
 }
@@ -71,6 +72,7 @@ function popTaskModalLayer(){
   window._taskModalCtx=layer.ctx||null;
   window._taskSopSel=layer.sopSel;
   window._conArchItems=layer.conArchItems||null;
+  window._taskReviewSideMode=layer.reviewSideMode||'doc';
   const ctx=layer.ctx||{};
   if(ctx.isReviewDelivery&&ctx.expId&&ctx.taskId){
     setTimeout(function(){
@@ -79,6 +81,9 @@ function popTaskModalLayer(){
       const sop=selSop&&t?(t.soportes||[]).find(function(s){return s.id===selSop;}):null;
       if(selSop&&typeof initSoporteAnnotViewer==='function'&&t)
         initSoporteAnnotViewer(ctx.expId,ctx.taskId,selSop,typeof canDeptMarcarEnSoporte==='function'?canDeptMarcarEnSoporte(t,sop):false);
+      const mode=window._taskReviewSideMode;
+      if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
+        taskReviewOpenSidePanel(mode,ctx.expId,ctx.taskId);
     },80);
   }
   const asocOpen=document.getElementById('review-asoc-panel')&&document.getElementById('review-asoc-panel').classList.contains('on');
@@ -5042,7 +5047,7 @@ function taskActividadToolbarInnerHtml(ref,taskId,t,opts){
   }
   if(!libre&&opts.showActPin!==false)
     h+='<button type="button" class="btn bsm bic act-ico" title="Actividades asignadas — añadir actividad" onclick="openActividadesAsignadasDesdeRevision(\''+refJs+'\',\''+tidJs+'\')">📌</button>';
-  h+='<button type="button" class="btn bsm bic act-ico" title="Archivos del expediente o actividad" onclick="openTaskArchivosFromAct(\''+refJs+'\',\''+tidJs+'\')">📁</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-side" data-side="archivos" title="Archivos del expediente o actividad" onclick="openTaskArchivosFromAct(\''+refJs+'\',\''+tidJs+'\')">📁</button>';
   if(libre)
     h+='<button type="button" class="btn bsm bic act-ico" title="Asociar a expediente o PQRSD" onclick="openAsociarActividadModal(\''+refJs+'\',\''+tidJs+'\')">🖇️</button>';
   else{
@@ -5090,15 +5095,10 @@ function taskReviewViewOpts(expId,taskId,t){
   return {e,showPqrsCompare,showCompare,defTab};
 }
 function taskReviewViewRailHtml(expId,taskId,t){
-  const o=taskReviewViewOpts(expId,taskId,t);
+  const side=String(window._taskReviewSideMode||'doc');
   let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Vistas del documento">';
-  if(o.showPqrsCompare)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-view'+(o.defTab==='pqrscompare'?' on':'')+'" data-tab="pqrscompare" title="Solicitud / Respuesta" onclick="setTaskViewTab(\'pqrscompare\')">⇅</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-view'+(o.defTab==='doc'?' on':'')+'" data-tab="doc" title="Documento" onclick="setTaskViewTab(\'doc\')">📄</button>';
-  if(o.showCompare)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-view'+(o.defTab==='compare'?' on':'')+'" data-tab="compare" title="Comparar" onclick="setTaskViewTab(\'compare\')">⇅</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-view'+(o.defTab==='exp'?' on':'')+'" data-tab="exp" title="Expediente" onclick="setTaskViewTab(\'exp\')">📋</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-view'+(o.defTab==='links'?' on':'')+'" data-tab="links" title="Enlaces" onclick="setTaskViewTab(\'links\')">🔗</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documento" onclick="taskReviewOpenSidePanel(\'doc\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">📄</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">📋</button>';
   return h+'</nav>';
 }
 function taskReviewFullRailHtml(ref,taskId,t){
@@ -5106,6 +5106,127 @@ function taskReviewFullRailHtml(ref,taskId,t){
     '<div class="task-review-rail-sep" aria-hidden="true"></div>'+
     taskActividadIconRailHtml(ref,taskId,t);
 }
+function taskReviewSideTitles(){
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar'};
+}
+function taskReviewSyncRailSide(mode){
+  mode=mode||'doc';
+  document.querySelectorAll('.task-review-rail-btn[data-side]').forEach(function(b){
+    b.classList.toggle('on',b.dataset.side===mode);
+  });
+  const cmp=document.getElementById('btn-review-compare');
+  if(cmp)cmp.classList.toggle('on',mode==='compare');
+}
+function taskReviewCloseSidePanel(){
+  window._taskReviewSideMode='doc';
+  const split=document.getElementById('task-review-split-view');
+  const panel=document.getElementById('task-review-side-panel');
+  if(split)split.classList.remove('task-review-side-open');
+  if(panel)panel.setAttribute('aria-hidden','true');
+  taskReviewSyncRailSide('doc');
+}
+function taskReviewOpenSidePanel(mode,expId,taskId){
+  mode=String(mode||'doc').trim()||'doc';
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  if(mode==='doc'){taskReviewCloseSidePanel();return;}
+  window._taskReviewSideMode=mode;
+  const split=document.getElementById('task-review-split-view');
+  const panel=document.getElementById('task-review-side-panel');
+  const body=document.getElementById('task-review-side-body');
+  const tit=document.getElementById('task-review-side-title');
+  if(!split||!panel||!body)return;
+  split.classList.add('task-review-side-open');
+  panel.setAttribute('aria-hidden','false');
+  if(tit)tit.textContent=(taskReviewSideTitles()[mode]||mode);
+  taskReviewSyncRailSide(mode);
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(mode==='exp'){
+    const esLibre=!!(t&&t.sinExpediente);
+    body.innerHTML=esLibre
+      ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id,{compact:true}):'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente</div>')+'</div>')
+      :renderTaskExpConsultaEmbed(e);
+    setTimeout(function(){
+      body.querySelectorAll('details.con-fold').forEach(function(d){d.open=false;});
+    },0);
+  }else if(mode==='archivos'){
+    body.innerHTML=typeof renderTaskReviewArchivosSideHtml==='function'?renderTaskReviewArchivosSideHtml(expId,taskId,t,e):'<div style="padding:8px;font-size:12px;color:var(--tx3)">Archivos no disponibles</div>';
+    if(typeof initTaskReviewArchivosSide==='function')setTimeout(function(){initTaskReviewArchivosSide(taskId);},40);
+  }else if(mode==='compare'){
+    body.innerHTML=renderTaskReviewCompareSideHtml(t,e,taskId);
+    setTimeout(function(){renderTaskReviewComparePreview();},40);
+  }
+}
+function taskReviewToggleSidePanel(mode,expId,taskId){
+  if(window._taskReviewSideMode===mode)taskReviewCloseSidePanel();
+  else taskReviewOpenSidePanel(mode,expId,taskId);
+}
+function renderTaskReviewCompareSideHtml(t,e,taskId){
+  const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
+  if(docs.length<2)return '<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
+  const activo=t?getSoporteActivo(t):null;
+  const curId=activo?'sop_'+activo.id:'';
+  const others=docs.filter(function(d){return d.id!==curId;});
+  const pick=others.length?others[others.length-1]:docs[docs.length-1];
+  if(!window._taskReviewCompareDoc||!docs.some(function(d){return d.id===window._taskReviewCompareDoc;}))
+    window._taskReviewCompareDoc=pick.id;
+  const groups=[
+    {lbl:'Entrega y anexos',test:function(d){return d.origen==='Entrega';}},
+    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&d.soporteId&&activo&&d.soporteId!==activo.id;}},
+    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
+    {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''));}}
+  ];
+  const used=new Set();
+  let opts='';
+  groups.forEach(function(g){
+    const items=docs.filter(function(d){return d.id!==curId&&g.test(d)&&!used.has(d.id);});
+    if(!items.length)return;
+    opts+='<optgroup label="'+escAttr(g.lbl)+'">';
+    items.forEach(function(d){
+      used.add(d.id);
+      opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+    });
+    opts+='</optgroup>';
+  });
+  docs.filter(function(d){return d.id!==curId&&!used.has(d.id);}).forEach(function(d){
+    opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+  });
+  return '<div class="task-review-compare-side">'+
+    '<div class="task-review-compare-hint">El documento de la entrega queda a la izquierda. Elija otro documento para verlo aquí.</div>'+
+    '<div class="compare-ver-sel task-review-compare-sel"><label for="task-review-compare-sel">Comparar con</label>'+
+    '<select id="task-review-compare-sel" class="compare-ver-select" onchange="onTaskReviewCompareChange()">'+opts+'</select></div>'+
+    '<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block"></div></div>';
+}
+function onTaskReviewCompareChange(){
+  const sel=document.getElementById('task-review-compare-sel');
+  if(sel)window._taskReviewCompareDoc=sel.value;
+  renderTaskReviewComparePreview();
+}
+function renderTaskReviewComparePreview(){
+  const wrap=document.getElementById('task-review-compare-preview');
+  if(!wrap)return;
+  const ctx=window._taskModalCtx||{};
+  const e=typeof getExpById==='function'?getExpById(ctx.expId):null;
+  const t=typeof getTaskAny==='function'?getTaskAny(ctx.expId,ctx.taskId):null;
+  const docs=collectDocsComparables(e,ctx.taskId,t,{incluirAsociados:true});
+  const doc=docs.find(function(d){return d.id===window._taskReviewCompareDoc;})||docs[docs.length-1];
+  if(!doc){wrap.innerHTML='<div style="padding:8px;font-size:12px;color:var(--tx3)">Sin documento</div>';return;}
+  const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
+  let vista='';
+  if(soporteTieneVista(sopLike)){
+    vista=soporteEsImagen(sopLike)
+      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
+      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+  }else{
+    vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
+  }
+  wrap.innerHTML='<div class="lbl">'+escAttr(doc.label)+(doc.meta?' · '+escAttr(doc.meta):'')+'</div>'+vista;
+}
+window.taskReviewOpenSidePanel=taskReviewOpenSidePanel;
+window.taskReviewToggleSidePanel=taskReviewToggleSidePanel;
+window.taskReviewCloseSidePanel=taskReviewCloseSidePanel;
+window.onTaskReviewCompareChange=onTaskReviewCompareChange;
 function openActividadesAsignadasDesdeRevision(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
@@ -5138,6 +5259,11 @@ function taskReviewObsToggleHtml(open){
 function openTaskArchivosFromAct(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
+  if(taskModalIsReviewOpen()){
+    const ctx=window._taskModalCtx||{};
+    taskReviewToggleSidePanel('archivos',ctx.expId||ref,ctx.taskId||taskId);
+    return;
+  }
   const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
   const libre=t?!!t.sinExpediente:(typeof isActLibreRef==='function'&&isActLibreRef(ref,taskId));
   if(taskModalIsReviewOpen())pushTaskModalLayer('archivos');
@@ -6701,6 +6827,7 @@ function eliminarActOEntregaOpciones(expId,taskId){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body){eliminarEntregaActividadConfirm(expId,taskId);return;}
+  if(taskModalIsReviewOpen())pushTaskModalLayer('eliminar');
   if(tit)tit.textContent='Eliminar';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const eid=escAttr(expId),tid=escAttr(taskId);
@@ -6708,12 +6835,12 @@ function eliminarActOEntregaOpciones(expId,taskId){
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.</div>'+
     '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
-    '<button type="button" class="btn bsm" onclick="closeTaskModal();eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
-    '<button type="button" class="btn bsm" onclick="closeTaskModal();eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
+    '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
+    '<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   ov.classList.add('on');
-  window._taskModalCtx={mode:'elimActOEntrega',expId:expId,taskId:taskId};
+  window._taskModalCtx={mode:'elimActOEntrega',expId:expId,taskId:taskId,isReviewDelivery:!!taskModalIsReviewOpen()};
 }
 window.puedeMostrarBtnEliminarActOEntrega=puedeMostrarBtnEliminarActOEntrega;
 window.eliminarActOEntregaOpciones=eliminarActOEntregaOpciones;
@@ -8569,7 +8696,8 @@ function collectEnlacesExpediente(e){
   });
   return links.filter(function(l){return l&&l.url&&!(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(l.url));});
 }
-function collectDocsComparables(e,taskId,tDirect){
+function collectDocsComparables(e,taskId,tDirect,opts){
+  opts=opts||{};
   const docs=[],seen=new Set();
   const add=(d)=>{
     const k=String(d.id||'').trim();
@@ -8590,34 +8718,58 @@ function collectDocsComparables(e,taskId,tDirect){
       sortKey:(fecha||'0000')+'_'+id
     });
   };
-  const t=tDirect||(e&&taskId?getTaskFromExp(e,taskId):null);
-  if(e){
-    if(esPqrsSecretaria(e)&&e._pqrs_solicitud_link)pushUrl('pqrs_sol','PQRSD','Solicitud PQRSD',e._pqrs_solicitud_link,e._fecha_solicitud||e._fecha);
-    // Documentos del workflow (incluye versiones «por corregir» + entrega actual)
-    if(esPqrsSecretaria(e)&&typeof getPqrsWorkflow==='function'){
-      const wf=getPqrsWorkflow(e);
-      const wfDocs=wf.documentos||[];
-      wfDocs.forEach(function(d,i){
+  const pushExpDocs=function(exp,origenPrefix){
+    if(!exp)return;
+    const pref=origenPrefix?origenPrefix+' · ':'';
+    if(esPqrsSecretaria(exp)&&exp._pqrs_solicitud_link)pushUrl('pqrs_sol_'+exp._exp,pref+'PQRSD','Solicitud PQRSD',exp._pqrs_solicitud_link,exp._fecha_solicitud||exp._fecha);
+    if(esPqrsSecretaria(exp)&&typeof getPqrsWorkflow==='function'){
+      const wf=getPqrsWorkflow(exp);
+      (wf.documentos||[]).forEach(function(d,i){
         if(!d)return;
         const url=d.driveLink||d.previewLink||d.url||'';
         if(!url)return;
-        const lbl=_pqrsEtiquetaDocWf(d,wfDocs);
+        const lbl=_pqrsEtiquetaDocWf(d,wf.documentos||[]);
         const esAn=_pqrsDocEsAnexoRespuesta(d);
-        pushUrl('wf_doc_'+i,'PQRSD',(esAn?'📎 ':'📄 ')+lbl,url,d.entregado_en||wf.fecha_respuesta||e._pqrs_respuesta_fecha,d.driveEstado||'');
+        pushUrl('wf_'+exp._exp+'_'+i,pref+'PQRSD',(esAn?'📎 ':'📄 ')+lbl,url,d.entregado_en||wf.fecha_respuesta||exp._pqrs_respuesta_fecha,d.driveEstado||'');
       });
     }
-    const tieneSoportesResp=Array.isArray(e._pqrs_respuesta_soportes)&&e._pqrs_respuesta_soportes.length>0;
-    if(esPqrsSecretaria(e)&&tieneSoportesResp){
-      (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>pushUrl('pqrs_rsp_'+i,'PQRSD',s.label||('Respuesta '+(i+1)),s.url||s.preview,e._pqrs_respuesta_fecha));
-    }else{
-      if(esPqrsSecretaria(e)&&e._pqrs_respuesta_link)pushUrl('pqrs_resp','PQRSD','Respuesta PQRSD',e._pqrs_respuesta_link,e._pqrs_respuesta_fecha);
-      (e._pqrs_respuesta_links||[]).forEach((u,i)=>pushUrl('pqrs_rl_'+i,'PQRSD','Respuesta PQRSD '+(i+1),u,e._pqrs_respuesta_fecha));
+    if(typeof docsTramiteData==='function'){
+      docsTramiteData(exp._docs_tramite).forEach(function(d,i){
+        if(!d||!d.url)return;
+        pushUrl('tram_'+exp._exp+'_'+i,pref+'Trámite',d.label||'Documento trámite',d.url,d.fecha||'');
+      });
     }
-    collectEnlacesExpediente(e).forEach((l,i)=>{
-      if(l.tipo==='Actividad'&&l.taskId===taskId)return;
+    collectEnlacesExpediente(exp).forEach(function(l,i){
+      if(l.tipo==='Actividad'&&exp._exp===e._exp&&l.taskId===taskId)return;
       const lbl=(l.tipo||'Documento')+': '+(l.ref||'Enlace')+(l.version?' v'+l.version:'');
       const extra=[l.taskId===taskId?'esta actividad':(l.responsable||''),l.activo?'activa':''].filter(Boolean).join(' · ');
-      pushUrl('lnk_'+i,l.tipo||'Expediente',lbl,l.url,l.fecha,extra);
+      pushUrl('lnk_'+exp._exp+'_'+i,pref+(l.tipo||'Expediente'),lbl,l.url,l.fecha,extra);
+    });
+    (exp.tasks||[]).forEach(function(tk){
+      if(!tk||tk.eliminada)return;
+      (tk.soportes||[]).forEach(function(s){
+        const url=s.url||s.preview||'';
+        if(!url&&!s.local)return;
+        const lab='Act. '+(tk.actividad||tk.desc||'').slice(0,30)+' v'+(s.version||'?');
+        add({
+          id:'asoc_sop_'+exp._exp+'_'+s.id,origen:pref+'Actividad',soporteId:s.id,
+          label:lab,titulo:lab,
+          meta:fmtF((s.fecha||'').slice(0,10)),
+          preview:s.preview||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
+          sortKey:(s.fecha||'0000')+'_asoc_'+String(s.version||0).padStart(5,'0')
+        });
+      });
+    });
+  };
+  const t=tDirect||(e&&taskId?getTaskFromExp(e,taskId):null);
+  if(e)pushExpDocs(e,'');
+  if(e&&opts.incluirAsociados!==false){
+    getExpAsociadosAll(e).forEach(function(num){
+      if(expAsocMatchNum(num,e._exp))return;
+      const asoc=findExpByNumPlain(num);
+      if(!asoc)return;
+      const tag=expAsocEsRegistroPqrs(asoc)?'PQRSD asociada':'Exp. asociado';
+      pushExpDocs(asoc,tag);
     });
   }
   if(t){
@@ -10482,10 +10634,11 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const esPqrsSolResp=e&&taskEsAtenderPqrs(t,e);
   const canComparePqrs=esPqrsSolResp&&canReviewSop;
   const showPqrsCompare=canComparePqrs&&(e._pqrs_solicitud_link||e._pqrs_solicitud_archivo||getPqrsRespuestaDocPreview(e,t));
-  const docsCompare=(!esLibre&&e)?collectDocsComparables(e,taskId,t):collectDocsComparables(null,null,t);
+  const docsCompare=(!esLibre&&e)?collectDocsComparables(e,taskId,t,{incluirAsociados:true}):collectDocsComparables(null,null,t,{incluirAsociados:true});
   const showCompareDocs=canReviewSop&&docsCompare.length>=2;
   const showCompareVer=!canReviewSop&&soportes.length>=2;
   const showCompare=showCompareDocs||showCompareVer;
+  const showCompareBtn=isReview&&(canReviewSop?docsCompare.length>=2:soportes.length>=2);
   const showEnviar=canAddSop&&!opts.hideEnviar;
   let h=isReview?'<div class="task-soporte-panel task-soporte-panel-review">':'<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
   if(!isReview){
@@ -10542,9 +10695,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         '<div class="task-review-doc-tools">'+
         (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
         (canAnnot?'<button type="button" class="btn bsm bsm-ico" id="btn-modo-marcar" onclick="toggleModoMarcarAnnot()" title="Marcar en documento">📍</button>':'')+
+        (showCompareBtn?'<button type="button" class="btn bsm bsm-ico" id="btn-review-compare" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Comparar documentos">⇅</button>':'')+
         '</div></div>';
     }
     h+='</div>';
+    h+='<div class="task-review-split-view" id="task-review-split-view">';
+    h+='<div class="task-review-doc-col-main">';
   }else{
   h+='<div class="task-view-tabs">'+
     (showPqrsCompare?'<button type="button" class="task-view-tab'+(defTab==='pqrscompare'?' on':'')+'" data-tab="pqrscompare" onclick="setTaskViewTab(\'pqrscompare\')">⇅ Solicitud / Respuesta</button>':'')+
@@ -10554,8 +10710,8 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     '<button type="button" class="task-view-tab'+(defTab==='links'?' on':'')+'" data-tab="links" onclick="setTaskViewTab(\'links\')">🔗 Enlaces</button>'+
   '</div>';
   }
-  h+='<div id="task-view-pqrscompare" class="task-view-panel'+(defTab==='pqrscompare'?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
-  h+='<div id="task-view-doc" class="task-view-panel'+(defTab==='doc'?' on':'')+'">';
+  if(!isReview)h+='<div id="task-view-pqrscompare" class="task-view-panel'+(defTab==='pqrscompare'?' on':'')+'">'+renderPqrsSolRespCompareShell(e,t)+'</div>';
+  h+='<div id="task-view-doc" class="task-view-panel'+((!isReview&&defTab==='doc')||isReview?' on':'')+'">';
   if(sel&&soporteTieneVista(sel)){
     const notas=notasDocForSoporte(t,sel.id);
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
@@ -10580,6 +10736,13 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sel.id,canAnnot)+'</div>'+
         '</div>'+
       '</div>';
+      h+='</div>';
+      h+='</div>';
+      h+='<div class="task-review-side-panel" id="task-review-side-panel" aria-hidden="true">'+
+        '<div class="task-review-side-hdr"><span id="task-review-side-title">Panel</span>'+
+        '<button type="button" class="soporte-sidebar-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel">✕</button></div>'+
+        '<div class="task-review-side-body" id="task-review-side-body"></div>'+
+      '</div></div>';
     }else{
     h+='<div class="soporte-annot-toolbar doc-viewport-toolbar">'+
       '<button type="button" class="btn bsm bp" id="task-doc-expand-btn" onclick="toggleTaskViewportExpand()">⛶ Ampliar</button>'+
@@ -10611,14 +10774,23 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     }
   }else{
     h+='<div style="font-size:12px;color:var(--tx3);padding:8px">Adjunte un enlace Drive o un archivo PDF/imagen para visualizar el documento.</div>';
+    if(isReview){
+      h+='</div></div>';
+      h+='<div class="task-review-side-panel" id="task-review-side-panel" aria-hidden="true">'+
+        '<div class="task-review-side-hdr"><span id="task-review-side-title">Panel</span>'+
+        '<button type="button" class="soporte-sidebar-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel">✕</button></div>'+
+        '<div class="task-review-side-body" id="task-review-side-body"></div></div></div>';
+    }
   }
-  h+='</div>';
+  if(!isReview)h+='</div>';
+  if(!isReview){
   h+='<div id="task-view-compare" class="task-view-panel'+(defTab==='compare'?' on':'')+'">'+renderCompareVersionesPanel(t,e,taskId)+'</div>';
   h+='<div id="task-view-exp" class="task-view-panel'+(defTab==='exp'?' on':'')+'">'+
     (esLibre
       ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id,{compact:true}):('<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente</div>'))+'</div>')
       :renderTaskExpConsultaEmbed(e))+'</div>';
   h+='<div id="task-view-links" class="task-view-panel'+(defTab==='links'?' on':'')+'">'+(esLibre?'<div style="font-size:12px;color:var(--tx3);padding:8px">Sin enlaces de expediente.</div>':renderExpEnlacesPanel(e,taskId))+'</div>';
+  }
   if(showEnviar)h+=renderEnviarPanelHtml(expId,taskId,t,'nuevaEntrega');
   else if(canAddSop&&opts.hideEnviar&&!opts.hideEntrega){
     const autoCorr=taskPuedeCorregirSinRevision(t);
@@ -12724,14 +12896,14 @@ function openTaskCommentsModal(expId,taskId,opts){
     const obsToggle=hasSop?taskReviewObsToggleHtml(false):'';
     body.innerHTML=statusRow+
       '<div class="task-review-layout">'+
-        '<aside class="task-review-rail" aria-label="Acciones">'+
-          railNav+
-          (obsToggle?'<div class="task-review-rail-foot">'+obsToggle+'</div>':'')+
-        '</aside>'+
         '<div class="task-review-workspace">'+
           '<div class="task-review-main">'+sopPanel+'</div>'+
           (verifyBar?'<details class="task-review-decision"><summary>Decisión y cierre</summary><div class="task-review-decision-body">'+verifyBar+'</div></details>':'')+
         '</div>'+
+        '<aside class="task-review-rail" aria-label="Acciones">'+
+          railNav+
+          (obsToggle?'<div class="task-review-rail-foot">'+obsToggle+'</div>':'')+
+        '</aside>'+
       '</div>';
   }else{
     body.innerHTML=statusRow+bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
@@ -12740,6 +12912,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(isReviewDelivery){
     document.body.classList.add('task-review-doc-mode');
     window._soporteObsOpen=false;
+    if(!opts.keepStack)window._taskReviewSideMode='doc';
   }else{
     document.body.classList.remove('task-review-doc-mode');
   }
@@ -12761,8 +12934,11 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
+      window._taskReviewSideMode=window._taskReviewSideMode||'doc';
       setTimeout(function(){
-        setTaskViewTab('doc');
+        const mode=window._taskReviewSideMode;
+        if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
+          taskReviewOpenSidePanel(mode,expId,taskId);
         if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
       },90);
     }else if(preferTab){
@@ -12820,6 +12996,7 @@ function closeTaskModal(){
   document.body.classList.remove('task-doc-viewport-expanded');
   document.body.classList.remove('task-review-doc-mode');
   window._taskViewTabPreferido=null;
+  window._taskReviewSideMode='doc';
   cerrarPqrsModalPrep();
   const panelArchOpen=document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&document.getElementById('con-panel-archivos-wrap');
   if(!panelArchOpen)window._conArchItems=null;
