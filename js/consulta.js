@@ -896,12 +896,25 @@ function renderTaskReviewArchivosSideHtml(expId,taskId,t,e){
   const list=conArchivosListHtml(items,'renderTaskReviewArchivoPreview',expId);
   const hasAsoc=e&&getExpAsociadosAll(e).length>0;
   return '<div class="task-review-archivos-side">'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Seleccione un documento. Los archivos se agrupan por registro'+(hasAsoc?' (incluye asociados)':'')+'.</div>'+
-    '<div class="con-arch-split task-review-arch-split"><div class="con-arch-list-col">'+list+'</div>'+
-    '<div class="con-arch-preview-col" id="task-review-arch-preview"></div></div></div>';
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Seleccione un documento para abrirlo en Drive'+(hasAsoc?' (incluye asociados)':'')+'.</div>'+
+    '<div class="task-review-arch-list-only con-arch-list-col">'+list+'</div>'+
+    '<div id="task-review-arch-action" class="task-review-arch-action"></div></div>';
 }
 function renderTaskReviewArchivoPreview(idx){
-  renderConsultaArchivoPreview(idx,{previewId:'task-review-arch-preview',listSel:'.task-review-arch-split .con-arch-list-col'});
+  const items=window._conArchItems||[];
+  const it=items[idx];
+  const listCol=document.querySelector('.task-review-arch-list-only');
+  if(listCol)listCol.querySelectorAll('.con-arch-item').forEach(function(el,i){el.classList.toggle('on',i===idx);});
+  const wrap=document.getElementById('task-review-arch-action');
+  if(!wrap)return;
+  if(!it){wrap.innerHTML='';return;}
+  const url=String(it.openUrl||it.url||it.preview||'').trim();
+  const sub=[it.tipoDoc||it.taskDesc||'',fmtF((it.fecha||'').slice(0,10)),it.version?'v'+it.version:''].filter(Boolean).join(' · ');
+  wrap.innerHTML='<div class="task-review-arch-action-inner">'+
+    '<div class="task-review-arch-action-name"><strong>'+escAttr(it.descDoc||it.label||'Documento')+'</strong>'+
+    (sub?'<div class="task-review-arch-action-sub">'+escAttr(sub)+'</div>':'')+'</div>'+
+    (url?'<a class="btn bsm bp" href="'+escAttr(url)+'" target="_blank" rel="noopener">↗ Abrir en Drive</a>':'<span style="font-size:11px;color:var(--tx3)">Sin enlace disponible</span>')+
+    '</div>';
 }
 function initTaskReviewArchivosSide(taskId){
   if(!(window._conArchItems||[]).length)return;

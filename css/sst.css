@@ -744,6 +744,89 @@ body.task-review-doc-mode #task-modal-overlay{
   color:var(--tx3);
   flex-shrink:0;
 }
+.task-modal.task-modal-review .task-review-compare-inline-sel{
+  display:none;
+  flex:1 1 120px;
+  min-width:min(200px,38vw);
+  max-width:min(420px,48vw);
+  padding:4px 6px;
+  border:1px solid var(--bd);
+  border-radius:var(--r);
+  font-size:11px;
+  height:30px;
+}
+.task-modal.task-modal-review .task-review-compare-inline-sel.on{
+  display:block;
+}
+.task-modal.task-modal-review .task-review-doc-tools{
+  flex:1 1 auto;
+  min-width:0;
+  justify-content:flex-end;
+}
+.task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-hdr{
+  padding:2px 6px;
+  border-bottom:0;
+  min-height:0;
+  justify-content:flex-end;
+}
+.task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-body{
+  padding:0;
+}
+.task-modal.task-modal-review .task-review-archivos-side{
+  display:flex;
+  flex-direction:column;
+  flex:1 1 0;
+  min-height:0;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-arch-list-only{
+  flex:1 1 0;
+  min-height:0;
+  overflow:auto;
+}
+.task-modal.task-modal-review .task-review-arch-action{
+  flex-shrink:0;
+  border-top:1px solid var(--bd);
+  padding:8px 4px 4px;
+  background:var(--sf2);
+}
+.task-modal.task-modal-review .task-review-arch-action-inner{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.task-modal.task-modal-review .task-review-arch-action-name{
+  flex:1 1 160px;
+  min-width:0;
+  font-size:12px;
+}
+.task-modal.task-modal-review .task-review-arch-action-sub{
+  font-size:11px;
+  color:var(--tx3);
+  margin-top:2px;
+}
+.soporte-annot-item-hd{
+  display:flex;
+  align-items:flex-start;
+  gap:6px;
+  cursor:pointer;
+}
+.task-annot-del{
+  flex-shrink:0;
+  border:0;
+  background:transparent;
+  color:var(--tx3);
+  cursor:pointer;
+  font-size:12px;
+  padding:2px 4px;
+  border-radius:var(--r);
+  line-height:1;
+}
+.task-annot-del:hover{
+  color:var(--rd);
+  background:var(--rdl);
+}
 .task-modal.task-modal-review .task-review-compare-preview{
   flex:1 1 0;
   min-height:0;

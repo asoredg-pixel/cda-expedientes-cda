@@ -5080,6 +5080,8 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t){
   if(!libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="actividades" title="Actividades asignadas — añadir actividad" onclick="taskReviewToggleSidePanel(\'actividades\',\''+r+'\',\''+tid+'\')">📌</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="archivos" title="Archivos del expediente o actividad" onclick="taskReviewToggleSidePanel(\'archivos\',\''+r+'\',\''+tid+'\')">📁</button>';
+  if(canDeptMarcarEnSoporte(t,getSoporteActivo(t)))
+    h+=taskReviewMarcarRailBtnHtml(ref,taskId,t);
   h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar a expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
@@ -5136,6 +5138,12 @@ function taskReviewFullRailHtml(ref,taskId,t){
 function taskReviewSideTitles(){
   return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',marcar:'Marcar en documento',chat:'Chat y observaciones'};
 }
+function taskReviewMarcarRailBtnHtml(ref,taskId,t){
+  const sel=t?getSoporteActivo(t):null;
+  const no=(t&&t.notasDoc||[]).filter(function(n){return!sel||!n.soporteId||n.soporteId===sel.id;}).length;
+  const r=escAttr(ref),tid=escAttr(taskId);
+  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" data-side="marcar" title="Marcar observaciones en documento" onclick="taskReviewToggleSidePanel(\'marcar\',\''+r+'\',\''+tid+'\')">📍'+(no?actIcoBadgeHtml(no,'yellow'):'')+'</button>';
+}
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
   const sel=t?getSoporteActivo(t):null;
@@ -5176,13 +5184,24 @@ function buildTaskReviewCompareSelectOpts(t,e,taskId){
   });
   return {docs:docs,opts:opts,empty:false};
 }
-function renderTaskReviewCompareBarHtml(t,e,taskId){
+function renderTaskReviewCompareSelectHtml(t,e,taskId){
   const built=buildTaskReviewCompareSelectOpts(t,e,taskId);
-  if(built.empty)return '<div style="font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
-  return '<div class="task-review-compare-bar-inner">'+
-    '<span class="task-review-compare-bar-lbl">⇅ Comparar con</span>'+
-    '<select id="task-review-compare-sel" class="compare-ver-select task-review-compare-bar-sel" onchange="onTaskReviewCompareChange()">'+built.opts+'</select>'+
-    '<span class="task-review-compare-bar-hint">Documento de entrega a la izquierda</span></div>';
+  if(built.empty)return '';
+  return built.opts;
+}
+function taskReviewSyncCompareSelect(t,e,taskId,show){
+  const sel=document.getElementById('task-review-compare-sel');
+  if(!sel)return;
+  if(show){
+    const opts=renderTaskReviewCompareSelectHtml(t,e,taskId);
+    if(opts){sel.innerHTML=opts;sel.classList.add('on');sel.setAttribute('aria-hidden','false');}
+  }else{
+    sel.classList.remove('on');
+    sel.setAttribute('aria-hidden','true');
+  }
+}
+function renderTaskReviewCompareBarHtml(t,e,taskId){
+  return '';
 }
 function renderTaskReviewObsSideHtml(expId,taskId,t,withMarcarBtn){
   const sel=t?getSoporteActivo(t):null;
@@ -5218,7 +5237,7 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   if(canReviewSop||notas.length){
     h+='<section class="task-review-chat-obs-sect"><div class="task-review-side-sect-hdr">📌 Observaciones del documento</div>';
     if(canAnnot)
-      h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="taskReviewToggleMarcarSidePanel(\''+eid+'\',\''+tid+'\')">📍 Marcar en documento</button></div>';
+      h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="taskReviewToggleSidePanel(\'marcar\',\''+eid+'\',\''+tid+'\')">📍 Marcar en documento</button></div>';
     h+=(canAnnot?renderAnnotPinFormHtml():'')+
       '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
     if(canAnnot)h+=renderAnnotSidebarFooter(expId,taskId,canAnnot);
@@ -5316,12 +5335,15 @@ function taskReviewSyncRailSide(mode){
   });
   const cmp=document.getElementById('btn-review-compare');
   if(cmp)cmp.classList.toggle('on',mode==='compare');
-  const marBtn=document.getElementById('btn-modo-marcar');
-  if(marBtn)marBtn.classList.toggle('on',mode==='marcar'||!!window._annotMarking);
 }
 function taskReviewHideCompareBar(){
-  const bar=document.getElementById('task-review-compare-bar');
-  if(bar){bar.classList.remove('on');bar.innerHTML='';bar.setAttribute('aria-hidden','true');}
+  taskReviewSyncCompareSelect(null,null,null,false);
+}
+function taskReviewSetSidePanelLean(lean){
+  const panel=document.getElementById('task-review-side-panel');
+  const tit=document.getElementById('task-review-side-title');
+  if(panel)panel.classList.toggle('task-review-side-lean',!!lean);
+  if(tit)tit.style.display=lean?'none':'';
 }
 function taskReviewCloseSidePanel(){
   window._taskReviewSideMode='doc';
@@ -5330,9 +5352,8 @@ function taskReviewCloseSidePanel(){
   if(split)split.classList.remove('task-review-side-open');
   if(panel)panel.setAttribute('aria-hidden','true');
   taskReviewHideCompareBar();
+  taskReviewSetSidePanelLean(false);
   if(window._annotMarking)releaseAnnotMarkingMode();
-  const marBtn=document.getElementById('btn-modo-marcar');
-  if(marBtn){marBtn.classList.remove('on');marBtn.textContent='📍';marBtn.title='Marcar en documento';}
   taskReviewSyncRailSide('doc');
 }
 function taskReviewOpenSidePanel(mode,expId,taskId){
@@ -5352,6 +5373,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   taskReviewSyncRailSide(mode);
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e=typeof getExpById==='function'?getExpById(expId):null;
+  taskReviewSetSidePanelLean(mode==='compare');
   if(mode==='exp'){
     const esLibre=!!(t&&t.sinExpediente);
     body.innerHTML='<div class="task-review-side-scroll">'+(esLibre
@@ -5364,17 +5386,16 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML=typeof renderTaskReviewArchivosSideHtml==='function'?renderTaskReviewArchivosSideHtml(expId,taskId,t,e):'<div style="padding:8px;font-size:12px;color:var(--tx3)">Archivos no disponibles</div>';
     if(typeof initTaskReviewArchivosSide==='function')setTimeout(function(){initTaskReviewArchivosSide(taskId);},40);
   }else if(mode==='compare'){
-    const cmpBar=document.getElementById('task-review-compare-bar');
-    if(cmpBar){
-      cmpBar.innerHTML=renderTaskReviewCompareBarHtml(t,e,taskId);
-      cmpBar.classList.add('on');
-      cmpBar.setAttribute('aria-hidden','false');
-    }
+    taskReviewSyncCompareSelect(t,e,taskId,true);
     body.innerHTML='<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
     setTimeout(function(){renderTaskReviewComparePreview();},40);
   }else if(mode==='marcar'){
     body.innerHTML=renderTaskReviewObsSideHtml(expId,taskId,t,true);
-    setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
+    setTimeout(function(){
+      initTaskReviewObsSide(expId,taskId,t);
+      const sel=t?getSoporteActivo(t):null;
+      if(t&&canDeptMarcarEnSoporte(t,sel)&&!window._annotMarking)toggleModoMarcarAnnot();
+    },30);
   }else if(mode==='chat'){
     body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
@@ -5432,8 +5453,32 @@ function renderTaskReviewComparePreview(){
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
   }
-  wrap.innerHTML='<div class="lbl">'+escAttr(doc.label)+(doc.meta?' · '+escAttr(doc.meta):'')+'</div>'+vista;
+  wrap.innerHTML=vista;
 }
+function puedeEliminarNotaDoc(n,canAnnot){
+  if(!n||!canAnnot)return false;
+  if(esModoResponsable()||esJurisdiccional())return false;
+  return true;
+}
+function eliminarNotaDoc(expId,taskId,notaId,soporteId){
+  notaId=String(notaId||'').trim();
+  if(!notaId)return;
+  if(!confirm('¿Eliminar esta observación del documento?'))return;
+  const ok=mutateTask(expId,taskId,function(t){
+    const antes=(t.notasDoc||[]).length;
+    t.notasDoc=(t.notasDoc||[]).filter(function(n){return n.id!==notaId;});
+    return t.notasDoc.length<antes;
+  });
+  if(!ok){notif('No se pudo eliminar la observación','err');return;}
+  notif('Observación eliminada','ok');
+  window._annotSelId=null;
+  if(typeof refreshAnnotAfterPinSave==='function')refreshAnnotAfterPinSave(expId,taskId,soporteId||'');
+  else if(typeof initTaskReviewObsSide==='function'){
+    const t=getTaskAny(expId,taskId);
+    initTaskReviewObsSide(expId,taskId,t);
+  }
+}
+window.eliminarNotaDoc=eliminarNotaDoc;
 window.taskReviewToggleMarcarSidePanel=taskReviewToggleMarcarSidePanel;
 window.taskReviewOpenSidePanel=taskReviewOpenSidePanel;
 window.taskReviewToggleSidePanel=taskReviewToggleSidePanel;
@@ -8822,12 +8867,17 @@ function renderAnnotSidebarHtml(notas,expId,taskId,selId,canAnnot){
     const rnd=n.rondaRevision?(' · Ronda '+n.rondaRevision):'';
     const cls='soporte-annot-item'+(n.rol==='revisor'?' revisor':'')+(window._annotSelId===n.id?' on':'');
     const pinLbl=typeof pin==='number'||String(pin).match(/^\d+$/)?pin:'·';
-    return '<div class="'+cls+'" data-nota-id="'+escAttr(n.id)+'" onclick="'+(n.x!=null?'selectAnnotPin(\''+escAttr(n.id)+'\')':'')+'">'+
+    const canDel=puedeEliminarNotaDoc(n,canAnnot);
+    return '<div class="'+cls+'" data-nota-id="'+escAttr(n.id)+'">'+
+      '<div class="soporte-annot-item-hd" onclick="'+(n.x!=null?'selectAnnotPin(\''+escAttr(n.id)+'\')':'')+'">'+
       (n.x!=null?'<span class="pin-n">'+pinLbl+'</span>':'<span class="pin-n" style="background:var(--pu)">💬</span>')+
+      '<div style="flex:1;min-width:0">'+
       '<div style="font-size:10px;color:var(--tx3);margin-bottom:2px">'+escAttr(n.autor||'')+' · '+fmtF((n.fecha||'').slice(0,10))+(loc?(' · '+loc):'')+pag+rnd+'</div>'+
       escAttr(n.texto||'')+
       (n.ref?'<div style="font-size:10px;color:var(--tx3);margin-top:2px">'+escAttr(n.ref)+'</div>':'')+
-    '</div>';
+      '</div>'+
+      (canDel?'<button type="button" class="task-annot-del" title="Eliminar observación" onclick="event.stopPropagation();eliminarNotaDoc(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(n.id)+'\',\''+escAttr(selId)+'\')">✕</button>':'')+
+      '</div></div>';
   }).join('');
 }
 function pushUrlsFromValor(add,tipo,ref,val,extra){
@@ -10916,25 +10966,19 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(isReview){
     h+='<div class="task-review-doc-bar">';
     if(hasSop&&sel){
-      const esAnx=!!(sel.es_anexo||sel.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(sel.label||'')));
-      const tipoDoc=esAnx?('Anexo '+(sel.anexo_n||'')):(sel.es_proyeccion||/^proyecci/i.test(String(sel.label||''))?'Proyección':(sel.label||'Documento'));
       h+='<div class="task-review-doc-bar-sub">'+
         (soportes.length>1?('<div class="soporte-doc-tabs task-review-doc-tabs">'+soportes.map((s,i)=>{
           const on=sel&&s.id===sel.id;
           const lbl=soporteTabLabel(s,i,soportes);
           return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
-        '<div class="task-review-doc-meta"><span class="task-review-doc-meta-tit">'+escAttr(tipoDoc)+'</span>'+
-        (sel.driveFilename&&sel.driveFilename!==sel.label?'<span class="task-review-doc-meta-sub">'+escAttr(sel.driveFilename)+'</span>':'')+
-        '<span class="task-review-doc-meta-sub">v'+sel.version+' · '+fmtF((sel.fecha||'').slice(0,10))+'</span></div>'+
         '<div class="task-review-doc-tools">'+
-        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente (no pestaña)">↗</button>':'')+
-        (canAnnot?'<button type="button" class="btn bsm bsm-ico" id="btn-modo-marcar" onclick="taskReviewToggleMarcarSidePanel(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Marcar en documento">📍</button>':'')+
+        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
+        (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+
         (showCompareBtn?'<button type="button" class="btn bsm bsm-ico" id="btn-review-compare" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Comparar documentos">⇅</button>':'')+
         '</div></div>';
     }
     h+='</div>';
-    h+='<div id="task-review-compare-bar" class="task-review-compare-bar" aria-hidden="true"></div>';
     h+='<div class="task-review-split-view" id="task-review-split-view">';
     h+='<div class="task-review-doc-col-main">';
   }else{
@@ -10954,7 +10998,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     if(isReview){
       h+='<div class="task-review-doc-stage" id="task-review-doc-stage">'+
         '<div class="task-review-viewer-shell">'+
-          (showDeptAnnotUi?'<div class="soporte-pagina-filter task-review-pag-filter"><label>Pág. <select id="soporte-pagina-filter" onchange="setSoportePaginaFiltro(this.value)"><option value="all">Todas</option></select></label></div>':'')+
           '<div class="soporte-split task-review-split" id="soporte-split-wrap">'+
             '<div class="soporte-doc-col">'+
               '<div class="soporte-annot-wrap annot-navigable" id="soporte-annot-wrap" data-exp="'+escAttr(expId)+'" data-task="'+escAttr(taskId)+'" data-sop="'+escAttr(sel.id)+'">'+
@@ -10969,7 +11012,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
       h+='</div>';
       h+='<div class="task-review-side-panel" id="task-review-side-panel" aria-hidden="true">'+
         '<div class="task-review-side-hdr"><span id="task-review-side-title">Panel</span>'+
-        '<button type="button" class="soporte-sidebar-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel">✕</button></div>'+
+        '<button type="button" class="task-review-side-close soporte-sidebar-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel">✕</button></div>'+
         '<div class="task-review-side-body" id="task-review-side-body"></div>'+
       '</div></div>';
     }else{
