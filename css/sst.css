@@ -581,12 +581,13 @@ body.task-review-doc-mode #task-modal-overlay{
   padding-left:0;
 }
 .task-modal.task-modal-review .task-review-split-view{
-  flex:1 1 auto;
+  flex:1 1 0;
   min-height:0;
   display:flex;
   flex-direction:row;
   gap:0;
   overflow:hidden;
+  align-items:stretch;
 }
 .task-modal.task-modal-review .task-review-doc-col-main{
   flex:1 1 auto;
@@ -607,6 +608,7 @@ body.task-review-doc-mode #task-modal-overlay{
   display:none;
   flex-direction:column;
   min-height:0;
+  align-self:stretch;
   border-left:1px solid var(--bd);
   background:var(--sf);
   overflow:hidden;
@@ -627,10 +629,52 @@ body.task-review-doc-mode #task-modal-overlay{
   color:var(--tx2);
 }
 .task-modal.task-modal-review .task-review-side-body{
-  flex:1 1 auto;
+  flex:1 1 0;
   min-height:0;
   overflow:auto;
   padding:6px 8px;
+  display:flex;
+  flex-direction:column;
+}
+.task-modal.task-modal-review .task-review-side-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
+.task-modal.task-modal-review .task-review-side-body .task-exp-panel-full,
+.task-modal.task-modal-review .task-review-side-body .exp-consulta-embed{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none!important;
+  height:auto;
+  overflow:visible;
+}
+.task-modal.task-modal-review .task-review-asoc-body{
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+  min-height:0;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-side-body .review-asoc-list{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none!important;
+  overflow:auto;
+}
+.task-modal.task-modal-review .task-review-edit-wrap,
+.task-modal.task-modal-review .task-review-form-wrap{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
+.task-modal.task-modal-review .task-review-bib-wrap{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+}
+.task-modal.task-modal-review .task-review-bib-wrap .bib-guardar-grid{
+  min-height:0;
 }
 .task-modal.task-modal-review .task-review-arch-split{
   flex:1 1 auto;

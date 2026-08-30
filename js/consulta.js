@@ -1055,9 +1055,11 @@ function reviewAsocPickCardHtml(item){
     (puedeAsoc?'<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPick(\''+jsStr(e._exp)+'\')">🖇️ Asociar</button>':'')+
     '</div></div>';
 }
-function renderReviewAsocPickPanel(){
-  const body=document.getElementById('review-asoc-body');
+function renderReviewAsocPickPanel(panelId){
+  const id=panelId||window._reviewAsocPanelId||'review-asoc-body';
+  const body=document.getElementById(id);
   if(!body)return;
+  window._reviewAsocPanelId=id;
   const ctx=window._reviewAsocCtx||{};
   const q=String(ctx.q||'').trim();
   let modoTabs='';
@@ -1117,6 +1119,7 @@ function openReviewAsocPickPanel(opts){
     }
   }
   window._reviewAsocCtx=ctx;
+  window._reviewAsocPanelId='review-asoc-body';
   if(typeof reviewPanelPrepOpen==='function')reviewPanelPrepOpen();
   const ov=document.getElementById('review-asoc-overlay');
   const panel=document.getElementById('review-asoc-panel');
@@ -1447,8 +1450,8 @@ function renderConSidePanel(){
   body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+(esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'')+renderConPanelExpContent(e,{foldOpen:!!(esOficinaPqrsNca()&&esPqrsSecretaria(e))});
   if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
 }
-function conPanelFocusActividadesAsignadas(){
-  const wrap=document.getElementById('con-side-form-wrap');
+function conPanelFocusActividadesAsignadasIn(rootSel){
+  const wrap=document.querySelector(rootSel||'#con-side-form-wrap');
   if(!wrap)return;
   let actSec=null;
   wrap.querySelectorAll('details.form-section').forEach(function(d){
@@ -1458,6 +1461,9 @@ function conPanelFocusActividadesAsignadas(){
     if(isAct)actSec=d;
   });
   if(actSec)actSec.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function conPanelFocusActividadesAsignadas(){
+  conPanelFocusActividadesAsignadasIn('#con-side-form-wrap');
 }
 function conPanelFocusExpAsoc(){
   const cb=document.getElementById('fld__usar_exp_asociados');

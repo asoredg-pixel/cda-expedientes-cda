@@ -128,6 +128,10 @@ function reviewResetTaskModalElevation(){
 function openEditarDesdeRevision(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
+  if(taskModalIsReviewOpen()){
+    taskReviewToggleSidePanel('edit',ref,taskId);
+    return;
+  }
   const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
   const fromReview=taskModalIsReviewOpen();
   if(fromReview)reviewPanelPrepOpen();
@@ -290,8 +294,8 @@ function openTrasladarPqrsSmart(expId){
   window._taskModalCtx={mode:'pqrsTrasladoSmart',expId:expId};
 }
 function openTrasladarActividadSmart(expId,taskId){
-  if(taskModalIsReviewOpen()&&pushTaskModalLayer('trasladar')){
-    openTaskCommentsModal(expId,taskId,{gestionAsignados:true,keepStack:true});
+  if(taskModalIsReviewOpen()){
+    taskReviewToggleSidePanel('trasladar',expId,taskId);
     return;
   }
   if(typeof openTaskCommentsModal==='function')
@@ -5067,10 +5071,32 @@ function taskActividadIconBarHtml(ref,taskId,t){
   if(!t)return'';
   return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true})+'</div>';
 }
+function taskActividadToolbarReviewRailHtml(ref,taskId,t){
+  if(!t)return'';
+  const libre=!!t.sinExpediente;
+  const r=escAttr(ref),tid=escAttr(taskId);
+  let h='';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
+  if(!libre)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="actividades" title="Actividades asignadas — añadir actividad" onclick="taskReviewToggleSidePanel(\'actividades\',\''+r+'\',\''+tid+'\')">📌</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="archivos" title="Archivos del expediente o actividad" onclick="taskReviewToggleSidePanel(\'archivos\',\''+r+'\',\''+tid+'\')">📁</button>';
+  if(libre)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar a expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
+  else{
+    const ex=getExpById(ref);
+    if(ex&&(typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(ex)||typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()))
+      h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
+  }
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="trasladar" title="Trasladar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
+  if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
+  if(typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(ref,taskId))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="eliminar" title="Eliminar entrega o actividad" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
+  return h;
+}
 function taskActividadIconRailHtml(ref,taskId,t){
   if(!t)return'';
-  const inner=taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true});
-  return '<nav class="task-review-rail-nav" aria-label="Acciones de revisión">'+inner.replace(/class="btn bsm bic act-ico/g,'class="btn bsm bic act-ico task-review-rail-btn')+'</nav>';
+  return '<nav class="task-review-rail-nav" aria-label="Acciones de revisión">'+taskActividadToolbarReviewRailHtml(ref,taskId,t)+'</nav>';
 }
 function taskReviewViewOpts(expId,taskId,t){
   const e=typeof getExpById==='function'?getExpById(expId):null;
@@ -5107,7 +5133,77 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar'};
+}
+function renderTaskReviewEditSideHtml(expId,taskId,t){
+  if(t&&t.sinExpediente){
+    return '<div class="task-review-side-form">'+buildEditarActTaskFormHtml(t,expId,{showEdit:false,inSidePanel:true}).replace(/cerrarConsultaPanel\(\)/g,'taskReviewCloseSidePanel()')+'</div>';
+  }
+  return '<div class="task-review-edit-wrap"><div id="task-review-form-wrap" class="con-panel-form-wrap task-review-form-wrap"></div></div>';
+}
+function initTaskReviewEditSide(expId,taskId,t,focusActividades){
+  if(t&&t.sinExpediente){
+    if(typeof toggleActLibreModo==='function')toggleActLibreModo();
+    return;
+  }
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(!e){notif('Expediente no encontrado','err');return;}
+  if(typeof resolverEdicionConBloqueo==='function'&&!resolverEdicionConBloqueo(expId,true)){
+    notif(window._conPanelLockMsg||'No puede editar este expediente','err');
+    return;
+  }
+  if(typeof editId!=='undefined')editId=expId;
+  if(typeof syncCfgToStore==='function')syncCfgToStore();
+  if(typeof setCfgPtr==='function')setCfgPtr(e._depto||getDeptoOperativo());
+  if(typeof renderFormulario==='function')renderFormulario(e._tramite,e,'task-review-form-wrap');
+  setTimeout(function(){
+    const wrap=document.getElementById('task-review-form-wrap');
+    if(wrap)wrap.querySelectorAll('details.form-section').forEach(function(d){d.open=false;});
+    if(focusActividades&&typeof conPanelFocusActividadesAsignadasIn==='function')conPanelFocusActividadesAsignadasIn('#task-review-form-wrap');
+  },100);
+}
+function renderTaskReviewEliminarSideHtml(expId,taskId){
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  return '<div class="task-review-side-form">'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.</div>'+
+    '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
+    '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
+    '<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
+    '</div></div>';
+}
+function initTaskReviewAsocSide(ref,taskId,t){
+  const opts={ref:ref,taskId:taskId,task:t};
+  let ctx={q:'',ref:ref,taskId:taskId};
+  if(t&&t.sinExpediente){
+    ctx.mode='act-libre';
+    ctx.sourceCod=t.codigo||ref;
+    ctx.taskId=t.id||taskId;
+  }else{
+    const expId=t?(t.exp||ref):ref;
+    const e=typeof getExpById==='function'?getExpById(expId):null;
+    ctx.sourceExp=expId;
+    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+      ctx.mode='pqrs-pick';
+      ctx.pqrsModo='pqrs';
+      ctx.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+    }else ctx.mode='exp-asoc';
+  }
+  window._reviewAsocCtx=ctx;
+  window._reviewAsocPanelId='task-review-asoc-body';
+  if(typeof renderReviewAsocPickPanel==='function')renderReviewAsocPickPanel('task-review-asoc-body');
+  setTimeout(function(){const inp=document.getElementById('review-asoc-q');if(inp)inp.focus();},80);
+}
+function initTaskReviewBibSide(ref,taskId,t){
+  if(!window._bibGuardarCtx||window._bibGuardarCtx.id!==ref||String(window._bibGuardarCtx.taskId||'')!==String(taskId||'')){
+    const libre=!!(t&&t.sinExpediente);
+    window._bibGuardarCtx={
+      tipo:'actividad',id:ref,taskId:taskId,libre:libre,
+      label:(t&&(t.actividad||t.desc)||ref).slice(0,40),
+      repoId:'',folderId:'',path:[],subirAdjuntos:false,showNuevo:false,onDone:null
+    };
+  }
+  if(typeof bibGuardarRenderInto==='function')bibGuardarRenderInto('task-review-bib-wrap');
 }
 function taskReviewSyncRailSide(mode){
   mode=mode||'doc';
@@ -5144,9 +5240,9 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   if(mode==='exp'){
     const esLibre=!!(t&&t.sinExpediente);
-    body.innerHTML=esLibre
+    body.innerHTML='<div class="task-review-side-scroll">'+(esLibre
       ?('<div class="task-exp-panel-full">'+(typeof renderReviewAsocActConsultaFull==='function'?renderReviewAsocActConsultaFull(t.codigo||expId,t.id,{compact:true}):'<div style="font-size:12px;color:var(--tx3);padding:8px">Actividad sin expediente</div>')+'</div>')
-      :renderTaskExpConsultaEmbed(e);
+      :renderTaskExpConsultaEmbed(e))+'</div>';
     setTimeout(function(){
       body.querySelectorAll('details.con-fold').forEach(function(d){d.open=false;});
     },0);
@@ -5156,7 +5252,27 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   }else if(mode==='compare'){
     body.innerHTML=renderTaskReviewCompareSideHtml(t,e,taskId);
     setTimeout(function(){renderTaskReviewComparePreview();},40);
+  }else if(mode==='edit'){
+    body.innerHTML=renderTaskReviewEditSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewEditSide(expId,taskId,t,false);},40);
+  }else if(mode==='actividades'){
+    body.innerHTML=renderTaskReviewEditSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewEditSide(expId,taskId,t,true);},40);
+  }else if(mode==='asociar'){
+    body.innerHTML='<div id="task-review-asoc-body" class="task-review-asoc-body review-asoc-body"></div>';
+    initTaskReviewAsocSide(refFromCtx(expId,taskId,t),taskId,t);
+  }else if(mode==='trasladar'){
+    const canEdit=!esModoResponsable()&&!esJurisdiccional();
+    body.innerHTML='<div class="task-review-side-scroll">'+renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,{hideDelete:true})+'</div>';
+  }else if(mode==='biblioteca'){
+    body.innerHTML='<div id="task-review-bib-wrap" class="task-review-bib-wrap"></div>';
+    initTaskReviewBibSide(expId,taskId,t);
+  }else if(mode==='eliminar'){
+    body.innerHTML=renderTaskReviewEliminarSideHtml(expId,taskId);
   }
+}
+function refFromCtx(expId,taskId,t){
+  return t&&t.sinExpediente?(t.codigo||expId):expId;
 }
 function taskReviewToggleSidePanel(mode,expId,taskId){
   if(window._taskReviewSideMode===mode)taskReviewCloseSidePanel();
@@ -5239,6 +5355,10 @@ function openActividadesAsignadasDesdeRevision(ref,taskId){
     notif('Solo el encargado puede añadir actividades','err');
     return;
   }
+  if(taskModalIsReviewOpen()){
+    taskReviewToggleSidePanel('actividades',ref,taskId);
+    return;
+  }
   const fromReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   if(fromReview&&typeof reviewPanelPrepOpen==='function')reviewPanelPrepOpen();
   window._conPanelFocusActividades=true;
@@ -5277,8 +5397,8 @@ function openAsociarActividadModal(ref,taskId){
   ref=String(ref||'').trim();
   taskId=String(taskId||'').trim();
   const t=typeof getTaskAny==='function'?getTaskAny(ref,taskId):null;
-  if(taskModalIsReviewOpen()&&typeof openReviewAsocPickPanel==='function'){
-    openReviewAsocPickPanel({ref:ref,taskId:taskId,task:t});
+  if(taskModalIsReviewOpen()){
+    taskReviewToggleSidePanel('asociar',ref,taskId);
     return;
   }
   if(t&&!t.sinExpediente){
@@ -6822,6 +6942,10 @@ function eliminarActOEntregaOpciones(expId,taskId){
   if(!pe&&!pa){notif('No puede eliminar en este estado','err');return;}
   if(pe&&!pa){eliminarEntregaActividadConfirm(expId,taskId);return;}
   if(!pe&&pa){eliminarActTaskConfirm(expId,taskId);return;}
+  if(taskModalIsReviewOpen()){
+    taskReviewToggleSidePanel('eliminar',expId,taskId);
+    return;
+  }
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
@@ -6858,7 +6982,7 @@ function buildEditarActTaskFormHtml(t,ref,opts){
   const icoBar='<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+
     taskActividadToolbarInnerHtml(ref,t.id,t,{showEdit:!opts.inSidePanel,inSidePanel:!!opts.inSidePanel})+
     '</div>';
-  const cancelFn=opts.inSidePanel?'cerrarConsultaPanel()':'closeTaskModal()';
+  const cancelFn=opts.inSidePanel?'taskReviewCloseSidePanel()':'closeTaskModal()';
   return (t.sinExpediente?'':'<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Expediente '+escAttr(ref)+'</div>')+
     icoBar+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" value="'+escAttr(t.actividad||t.desc||'')+'" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+

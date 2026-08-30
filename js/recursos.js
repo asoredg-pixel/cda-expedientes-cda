@@ -2165,6 +2165,27 @@ function openBibGuardarModal(opts) {
   const taskId = String(opts.taskId || '').trim();
   if (!id && tipo !== 'actividad') { notif('Sin referencia para guardar', 'err'); return; }
   if (tipo === 'actividad' && !taskId) { notif('Actividad no identificada', 'err'); return; }
+  if (typeof taskModalIsReviewOpen === 'function' && taskModalIsReviewOpen() && typeof taskReviewToggleSidePanel === 'function') {
+    window._bibGuardarCtx = {
+      tipo: tipo,
+      id: id,
+      taskId: taskId,
+      libre: !!opts.libre,
+      label: opts.label || id,
+      repoId: '',
+      folderId: '',
+      path: [],
+      subirAdjuntos: false,
+      showNuevo: false,
+      onDone: typeof opts.onDone === 'function' ? opts.onDone : null
+    };
+    window._bibGuardarRenderTarget = '';
+    window._bibGuardarRenderInline = false;
+    taskReviewToggleSidePanel('biblioteca', id, taskId);
+    return;
+  }
+  window._bibGuardarRenderTarget = '';
+  window._bibGuardarRenderInline = false;
   window._bibGuardarCtx = {
     tipo: tipo,
     id: id,
@@ -2194,10 +2215,18 @@ function openBibGuardarModal(opts) {
   bibGuardarRenderModal();
 }
 
+function bibGuardarRenderInto(containerId) {
+  window._bibGuardarRenderTarget = containerId || 'task-review-bib-wrap';
+  window._bibGuardarRenderInline = true;
+  bibGuardarRenderModal();
+}
+
 function bibGuardarRenderModal() {
   const ctx = window._bibGuardarCtx;
-  const body = document.getElementById('bib-guardar-body');
-  const foot = document.getElementById('bib-guardar-foot');
+  const inline = !!window._bibGuardarRenderInline;
+  const bodyId = window._bibGuardarRenderTarget || 'bib-guardar-body';
+  const body = document.getElementById(bodyId);
+  const foot = inline ? null : document.getElementById('bib-guardar-foot');
   if (!ctx || !body) return;
   const repos = reposBibliotecaAsociables();
   const qEl = document.getElementById('bib-guardar-q');
@@ -2257,6 +2286,10 @@ function bibGuardarRenderModal() {
     foot.innerHTML = '<button type="button" class="btn bsm" onclick="closeBibGuardarModal()">Cancelar</button>' +
       (ctx.repoId ? '<button type="button" class="btn bsm" onclick="bibGuardarAbrirRepo()">Abrir en Biblioteca</button>' : '') +
       '<button type="button" class="btn bsm bp" onclick="bibGuardarConfirmar()" ' + (ctx.repoId ? '' : 'disabled') + '>Guardar aquí</button>';
+  } else if (inline) {
+    body.innerHTML += '<div class="fx bib-guardar-inline-foot" style="gap:6px;margin-top:12px;flex-wrap:wrap;position:sticky;bottom:0;background:var(--sf);padding-top:8px;border-top:1px solid var(--bd)">' +
+      (ctx.repoId ? '<button type="button" class="btn bsm" onclick="bibGuardarAbrirRepo()">Abrir en Biblioteca</button>' : '') +
+      '<button type="button" class="btn bsm bp" onclick="bibGuardarConfirmar()" ' + (ctx.repoId ? '' : 'disabled') + '>Guardar aquí</button></div>';
   }
 }
 
@@ -2447,4 +2480,5 @@ window.bibGuardarNuevaSubcarpeta = bibGuardarNuevaSubcarpeta;
 window.bibGuardarConfirmar = bibGuardarConfirmar;
 window.bibGuardarAbrirRepo = bibGuardarAbrirRepo;
 window.bibGuardarRenderModal = bibGuardarRenderModal;
+window.bibGuardarRenderInto = bibGuardarRenderInto;
 window.bibGuardarToggleSubirAdj = bibGuardarToggleSubirAdj;
