@@ -746,9 +746,9 @@ body.task-review-doc-mode #task-modal-overlay{
 }
 .task-modal.task-modal-review .task-review-compare-inline-sel{
   display:none;
-  flex:1 1 120px;
-  min-width:min(200px,38vw);
-  max-width:min(420px,48vw);
+  flex:0 1 auto;
+  min-width:min(160px,32vw);
+  max-width:min(360px,44vw);
   padding:4px 6px;
   border:1px solid var(--bd);
   border-radius:var(--r);
@@ -761,7 +761,16 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-doc-tools{
   flex:1 1 auto;
   min-width:0;
-  justify-content:flex-end;
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+.task-modal.task-modal-review .task-review-doc-tools-spacer{
+  flex:1 1 auto;
+  min-width:8px;
+}
+.task-modal.task-modal-review .task-review-doc-close{
+  flex-shrink:0;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-hdr{
   padding:2px 6px;
@@ -1060,11 +1069,10 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-doc-tabs{
   margin:0;
 }
-.task-modal.task-modal-review .task-review-doc-tools{
-  margin-left:auto;
-  display:flex;
-  gap:4px;
-  flex-shrink:0;
+.task-modal.task-modal-review .task-review-doc-bar-sub .task-review-doc-tools{
+  margin-left:0;
+  flex:1 1 100%;
+  min-width:min(280px,100%);
 }
 .task-modal.task-modal-review .task-view-tabs{
   flex-shrink:0;

@@ -913,7 +913,7 @@ function renderTaskReviewArchivoPreview(idx){
   wrap.innerHTML='<div class="task-review-arch-action-inner">'+
     '<div class="task-review-arch-action-name"><strong>'+escAttr(it.descDoc||it.label||'Documento')+'</strong>'+
     (sub?'<div class="task-review-arch-action-sub">'+escAttr(sub)+'</div>':'')+'</div>'+
-    (url?'<a class="btn bsm bp" href="'+escAttr(url)+'" target="_blank" rel="noopener">↗ Abrir en Drive</a>':'<span style="font-size:11px;color:var(--tx3)">Sin enlace disponible</span>')+
+    (url?'<button type="button" class="btn bsm bp" onclick="openDriveVentanaEmergente(\''+escAttr(url)+'\')">↗ Abrir en Drive</button>':'<span style="font-size:11px;color:var(--tx3)">Sin enlace disponible</span>')+
     '</div>';
 }
 function initTaskReviewArchivosSide(taskId){

@@ -5080,8 +5080,6 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t){
   if(!libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="actividades" title="Actividades asignadas — añadir actividad" onclick="taskReviewToggleSidePanel(\'actividades\',\''+r+'\',\''+tid+'\')">📌</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="archivos" title="Archivos del expediente o actividad" onclick="taskReviewToggleSidePanel(\'archivos\',\''+r+'\',\''+tid+'\')">📁</button>';
-  if(canDeptMarcarEnSoporte(t,getSoporteActivo(t)))
-    h+=taskReviewMarcarRailBtnHtml(ref,taskId,t);
   h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(libre)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar a expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
@@ -5136,13 +5134,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',marcar:'Marcar en documento',chat:'Chat y observaciones'};
-}
-function taskReviewMarcarRailBtnHtml(ref,taskId,t){
-  const sel=t?getSoporteActivo(t):null;
-  const no=(t&&t.notasDoc||[]).filter(function(n){return!sel||!n.soporteId||n.soporteId===sel.id;}).length;
-  const r=escAttr(ref),tid=escAttr(taskId);
-  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" data-side="marcar" title="Marcar observaciones en documento" onclick="taskReviewToggleSidePanel(\'marcar\',\''+r+'\',\''+tid+'\')">📍'+(no?actIcoBadgeHtml(no,'yellow'):'')+'</button>';
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -5151,6 +5143,9 @@ function taskReviewChatRailBtnHtml(ref,taskId,t){
   const badge=Math.max(nc,no);
   const r=escAttr(ref),tid=escAttr(taskId);
   return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" data-side="chat" title="Chat y observaciones del documento" onclick="taskReviewToggleSidePanel(\'chat\',\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(badge?actIcoBadgeHtml(badge,'blue'):'')+'</button>';
+}
+function taskReviewRespVerRailHtml(ref,taskId,t){
+  return taskReviewChatRailBtnHtml(ref,taskId,t);
 }
 function buildTaskReviewCompareSelectOpts(t,e,taskId){
   const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
@@ -5232,12 +5227,13 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const notas=notasDocForSoporte(t,sid);
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
+  const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
   const eid=escAttr(expId),tid=escAttr(taskId);
   let h='<div class="task-review-chat-side">';
-  if(canReviewSop||notas.length){
+  if(canReviewSop||notas.length||isRespView){
     h+='<section class="task-review-chat-obs-sect"><div class="task-review-side-sect-hdr">📌 Observaciones del documento</div>';
     if(canAnnot)
-      h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="taskReviewToggleSidePanel(\'marcar\',\''+eid+'\',\''+tid+'\')">📍 Marcar en documento</button></div>';
+      h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="toggleModoMarcarAnnot()">📍 Clic en documento para marcar</button></div>';
     h+=(canAnnot?renderAnnotPinFormHtml():'')+
       '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
     if(canAnnot)h+=renderAnnotSidebarFooter(expId,taskId,canAnnot);
@@ -5245,18 +5241,6 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   }
   h+='<section class="task-review-chat-act-sect">'+renderTaskChatPanelHtml(expId,taskId,t)+'</section></div>';
   return h;
-}
-function taskReviewToggleMarcarSidePanel(expId,taskId){
-  if(window._taskReviewSideMode==='marcar'){
-    releaseAnnotMarkingMode();
-    taskReviewCloseSidePanel();
-    return;
-  }
-  if(window._taskReviewSideMode==='chat')taskReviewOpenSidePanel('marcar',expId,taskId);
-  else taskReviewToggleSidePanel('marcar',expId,taskId);
-  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-  const sel=t?getSoporteActivo(t):null;
-  if(t&&canDeptMarcarEnSoporte(t,sel)&&!window._annotMarking)toggleModoMarcarAnnot();
 }
 function renderTaskReviewEditSideHtml(expId,taskId,t){
   if(t&&t.sinExpediente){
@@ -5345,6 +5329,15 @@ function taskReviewSetSidePanelLean(lean){
   if(panel)panel.classList.toggle('task-review-side-lean',!!lean);
   if(tit)tit.style.display=lean?'none':'';
 }
+function taskReviewSyncDocBarClose(show){
+  const btn=document.getElementById('btn-review-side-close');
+  if(btn){
+    btn.style.display=show?'':'none';
+    btn.setAttribute('aria-hidden',show?'false':'true');
+  }
+  const hdr=document.querySelector('#task-review-side-panel .task-review-side-hdr');
+  if(hdr)hdr.style.display=show?'none':'';
+}
 function taskReviewCloseSidePanel(){
   window._taskReviewSideMode='doc';
   const split=document.getElementById('task-review-split-view');
@@ -5353,6 +5346,7 @@ function taskReviewCloseSidePanel(){
   if(panel)panel.setAttribute('aria-hidden','true');
   taskReviewHideCompareBar();
   taskReviewSetSidePanelLean(false);
+  taskReviewSyncDocBarClose(false);
   if(window._annotMarking)releaseAnnotMarkingMode();
   taskReviewSyncRailSide('doc');
 }
@@ -5369,10 +5363,13 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   if(!split||!panel||!body)return;
   split.classList.add('task-review-side-open');
   panel.setAttribute('aria-hidden','false');
+  taskReviewSyncDocBarClose(true);
   if(tit)tit.textContent=(taskReviewSideTitles()[mode]||mode);
   taskReviewSyncRailSide(mode);
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(mode==='compare')taskReviewSyncCompareSelect(t,e,taskId,true);
+  else taskReviewSyncCompareSelect(null,null,null,false);
   taskReviewSetSidePanelLean(mode==='compare');
   if(mode==='exp'){
     const esLibre=!!(t&&t.sinExpediente);
@@ -5386,16 +5383,8 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML=typeof renderTaskReviewArchivosSideHtml==='function'?renderTaskReviewArchivosSideHtml(expId,taskId,t,e):'<div style="padding:8px;font-size:12px;color:var(--tx3)">Archivos no disponibles</div>';
     if(typeof initTaskReviewArchivosSide==='function')setTimeout(function(){initTaskReviewArchivosSide(taskId);},40);
   }else if(mode==='compare'){
-    taskReviewSyncCompareSelect(t,e,taskId,true);
     body.innerHTML='<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
     setTimeout(function(){renderTaskReviewComparePreview();},40);
-  }else if(mode==='marcar'){
-    body.innerHTML=renderTaskReviewObsSideHtml(expId,taskId,t,true);
-    setTimeout(function(){
-      initTaskReviewObsSide(expId,taskId,t);
-      const sel=t?getSoporteActivo(t):null;
-      if(t&&canDeptMarcarEnSoporte(t,sel)&&!window._annotMarking)toggleModoMarcarAnnot();
-    },30);
   }else if(mode==='chat'){
     body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
@@ -5463,7 +5452,6 @@ function puedeEliminarNotaDoc(n,canAnnot){
 function eliminarNotaDoc(expId,taskId,notaId,soporteId){
   notaId=String(notaId||'').trim();
   if(!notaId)return;
-  if(!confirm('¿Eliminar esta observación del documento?'))return;
   const ok=mutateTask(expId,taskId,function(t){
     const antes=(t.notasDoc||[]).length;
     t.notasDoc=(t.notasDoc||[]).filter(function(n){return n.id!==notaId;});
@@ -5479,7 +5467,22 @@ function eliminarNotaDoc(expId,taskId,notaId,soporteId){
   }
 }
 window.eliminarNotaDoc=eliminarNotaDoc;
-window.taskReviewToggleMarcarSidePanel=taskReviewToggleMarcarSidePanel;
+function actBtnVerDocumentoRespHtml(expId,taskId,t,expAct){
+  if(!esModoResponsable()||!taskUsuarioEsAsignado(t,responsableActivo))return'';
+  const est=estadoTask(t);
+  const miEst=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
+  const tieneDoc=(t.soportes||[]).length>0;
+  const esPqrs=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
+  const porCorr=miEst==='Por corregir'||est==='Por corregir';
+  const porEj=['En ejecución','Vencida','Parcial'].includes(miEst)&&!['Atendida','Por verificar'].includes(est);
+  if(!porCorr&&!(porEj&&(tieneDoc||esPqrs)))return'';
+  const tip=porCorr?'Ver documento devuelto y observaciones del departamento':(esPqrs?'Ver PQRSD y documento de la actividad':'Ver documento y actividad');
+  return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(tip)+'" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🔍</button>';
+}
+function openTaskVerDocumentoResp(expId,taskId){
+  openTaskCommentsModal(expId,taskId,{verDocumento:true});
+}
+window.openTaskVerDocumentoResp=openTaskVerDocumentoResp;
 window.taskReviewOpenSidePanel=taskReviewOpenSidePanel;
 window.taskReviewToggleSidePanel=taskReviewToggleSidePanel;
 window.taskReviewCloseSidePanel=taskReviewCloseSidePanel;
@@ -9455,9 +9458,8 @@ function toggleModoMarcarAnnot(){
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   if(inReview){
     const ctx=window._taskModalCtx||{};
-    if(window._taskReviewSideMode!=='marcar'&&window._taskReviewSideMode!=='chat'){
-      taskReviewToggleMarcarSidePanel(ctx.expId||'',ctx.taskId||'');
-      return;
+    if(window._taskReviewSideMode!=='chat'&&typeof taskReviewOpenSidePanel==='function'){
+      taskReviewOpenSidePanel('chat',ctx.expId||'',ctx.taskId||'');
     }
   }
   window._annotMarking=!window._annotMarking;
@@ -10973,8 +10975,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
         '<div class="task-review-doc-tools">'+
-        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
         (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+
+        '<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
+        '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'+
+        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
         (showCompareBtn?'<button type="button" class="btn bsm bsm-ico" id="btn-review-compare" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Comparar documentos">⇅</button>':'')+
         '</div></div>';
     }
@@ -13128,8 +13132,10 @@ function openTaskCommentsModal(expId,taskId,opts){
   const est=estadoTask(t),st=taskEstadoStyle(est);
   const hasSop=(t.soportes||[]).length>0;
   const pendVer=taskPendienteVerificacion(t);
+  const verDocumento=!!opts.verDocumento;
+  const isRespVerDoc=verDocumento&&esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&pendVer;
-  const isReviewDelivery=canReviewSop&&!chatOnly&&!soloGestion;
+  const isReviewDelivery=(canReviewSop||isRespVerDoc)&&!chatOnly&&!soloGestion;
   if(isReviewDelivery)window._taskViewTabPreferido='doc';
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
@@ -13168,11 +13174,13 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
   if(isReviewDelivery){
-    const railNav=taskReviewFullRailHtml(refAct,taskId,t);
+    const railNav=isRespVerDoc?taskReviewRespVerRailHtml(refAct,taskId,t):taskReviewFullRailHtml(refAct,taskId,t);
+    const pqrsRespBanner=(isRespVerDoc&&e&&taskEsAtenderPqrs(t,e))?pqrsDocBanner:'';
+    if(tit)tit.textContent=(isRespVerDoc?'Documento y observaciones':'Revisión')+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout">'+
         '<div class="task-review-workspace">'+
-          '<div class="task-review-main">'+sopPanel+'</div>'+
+          '<div class="task-review-main">'+pqrsRespBanner+sopPanel+'</div>'+
           (verifyBar?'<details class="task-review-decision"><summary>Decisión y cierre</summary><div class="task-review-decision-body">'+verifyBar+'</div></details>':'')+
         '</div>'+
         '<aside class="task-review-rail" aria-label="Acciones">'+railNav+'</aside>'+
@@ -13209,7 +13217,8 @@ function openTaskCommentsModal(expId,taskId,opts){
       window._taskReviewSideMode=window._taskReviewSideMode||'doc';
       setTimeout(function(){
         const mode=window._taskReviewSideMode;
-        if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
+        if(isRespVerDoc)taskReviewOpenSidePanel('chat',expId,taskId);
+        else if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
           taskReviewOpenSidePanel(mode,expId,taskId);
         if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
       },90);
@@ -15606,6 +15615,8 @@ function renderActRowToolbarHtml(t,expAct){
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);
+  if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))
+    acts+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);
   // Firma / notificar solo si NO hay solicitud de traslado o eliminación pendiente
   if(!sol&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const eidT=eid,tidT=tid;
