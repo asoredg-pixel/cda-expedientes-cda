@@ -5257,7 +5257,8 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
   const eid=escAttr(expId),tid=escAttr(taskId);
   const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
-  let h='<div class="task-review-chat-side'+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
+  let h='<div class="task-review-chat-side'+(isRespView?' task-review-chat-side-resp':'')+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
+  if(isRespView)h+='<div class="task-review-chat-scroll-stack">';
   if(canReviewSop||notas.length||isRespView){
     h+='<section class="task-review-chat-obs-sect'+(st.obs?' collapsed':'')+'">'+
       '<button type="button" class="task-review-side-sect-hdr task-review-sect-toggle-btn" onclick="toggleTaskReviewChatSect(\'obs\')">'+
@@ -5270,9 +5271,18 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   }
   h+='<section class="task-review-chat-act-sect'+(st.chat?' collapsed':'')+'">'+
     '<button type="button" class="task-review-side-sect-hdr task-review-sect-toggle-btn" onclick="toggleTaskReviewChatSect(\'chat\')">'+
-    '<span>'+chatWaIconHtml(16)+' Chat</span><span class="task-review-sect-ico" aria-hidden="true">'+(st.chat?'▸':'▾')+'</span></button>'+
-    renderTaskChatPanelHtml(expId,taskId,t,{hideTitle:true,compactComposer:!!isRespView})+
-    '</section>';
+    '<span>'+chatWaIconHtml(16)+' Chat</span><span class="task-review-sect-ico" aria-hidden="true">'+(st.chat?'▸':'▾')+'</span></button>';
+  if(isRespView){
+    h+='<div class="task-chat-msgs-wrap">'+renderTaskChatMessagesHtml(expId,taskId,t)+'</div>';
+  }else{
+    h+=renderTaskChatPanelHtml(expId,taskId,t,{hideTitle:true});
+  }
+  h+='</section>';
+  if(isRespView){
+    h+='</div>';
+    const composer=renderTaskChatComposerHtml(expId,taskId,t,{compact:true});
+    if(composer)h+='<div class="task-review-chat-compose-foot" id="task-chat-compose-foot">'+composer+'</div>';
+  }
   if(canReviewSop)
     h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
   h+='</div>';
@@ -5305,10 +5315,6 @@ function toggleTaskReviewChatSect(which){
   const st=taskReviewChatSectState();
   if(which==='obs')st.obs=!st.obs;
   else if(which==='chat')st.chat=!st.chat;
-  if(st.obs&&st.chat){
-    if(which==='obs')st.chat=false;
-    else st.obs=false;
-  }
   window._taskReviewSectCollapsed=st;
   applyTaskReviewChatSects();
 }
@@ -10294,34 +10300,47 @@ function setTaskChatUniTab(tab){
 function openTaskChatUnificado(expId,taskId){
   openTaskCommentsModal(expId,taskId,{chatOnly:true,chatUnificado:true});
 }
+function renderTaskChatListHtml(t){
+  t=normalizeTask(t||{});
+  const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
+  return chatAct.length?chatAct.map(c=>'<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+escAttr(c.texto||'')+'</div>').join(''):'';
+}
+function renderTaskChatMessagesHtml(expId,taskId,t){
+  return '<div class="task-chat-sep" id="task-chat-sep"><div class="task-chat-uni-scroll">'+renderTaskChatListHtml(t)+'</div></div>';
+}
+function renderTaskChatComposerHtml(expId,taskId,t,opts){
+  opts=opts||{};
+  t=normalizeTask(t||{});
+  const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
+  const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
+  if(!canWriteDept&&!canWriteResp)return'';
+  const sol=getTaskSolicitudPendiente(t);
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  if(opts.compact){
+    return '<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
+      '<div class="task-cmt-wa-field">'+
+      '<input type="text" id="task-cmt-input" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}">'+
+      '<button type="button" class="task-cmt-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
+      '</div>'+
+      (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
+      '</div>';
+  }
+  return '<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
+    '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">Enviar</button>'+
+    (sol?'<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>':'')+
+    '</div></div>';
+}
 function renderTaskChatPanelHtml(expId,taskId,t,opts){
   opts=opts||{};
   t=normalizeTask(t||{});
-  const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
-  const lista=chatAct.length?chatAct.map(c=>'<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+escAttr(c.texto||'')+'</div>').join(''):'';
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
   const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
-  const sol=getTaskSolicitudPendiente(t);
-  const eid=escAttr(expId),tid=escAttr(taskId);
   let form='';
   if(canWriteDept||canWriteResp){
-    if(opts.compactComposer){
-      form='<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
-        '<div class="task-cmt-wa-field">'+
-        '<input type="text" id="task-cmt-input" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}">'+
-        '<button type="button" class="btn bsm bp task-cmt-send-ico" title="Enviar" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
-        '</div>'+
-        (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
-        '</div>';
-    }else{
-      form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
-        '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">Enviar</button>'+
-        (sol?'<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>':'')+
-        '</div></div>';
-    }
+    form=renderTaskChatComposerHtml(expId,taskId,t,{compact:!!opts.compactComposer});
   }
   return '<div class="task-chat-sep" id="task-chat-sep">'+(opts.hideTitle?'':'<div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat</div>')+
-    '<div class="task-chat-uni-scroll">'+lista+'</div>'+form+'</div>';
+    '<div class="task-chat-uni-scroll">'+renderTaskChatListHtml(t)+'</div>'+form+'</div>';
 }
 function renderTaskChatUnificadoHtml(expId,taskId,t){
   t=normalizeTask(t||{});
