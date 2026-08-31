@@ -10,22 +10,22 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260831t">
+<link rel="stylesheet" href="css/sst.css?v=20260831u">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
 <script src="js/constants.js?v=20260821f"></script>
-<script src="js/utils.js?v=20260714f"></script>
+<script src="js/utils.js?v=20260831u"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260805d"></script>
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260831t"></script>
-<script src="js/formulario.js?v=20260821b"></script>
+<script src="js/core.js?v=20260831u"></script>
+<script src="js/formulario.js?v=20260831u"></script>
 <script src="js/tareas.js?v=20260826j"></script>
-<script src="js/guardar-exp.js?v=20260828b"></script>
+<script src="js/guardar-exp.js?v=20260831u"></script>
 <script src="js/consolidado.js?v=20260805i"></script>
 <script src="js/configuracion.js?v=20260828h"></script>
 <script src="js/export.js?v=20260702t"></script>
@@ -35,9 +35,9 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260826x"></script>
 <script src="js/sst-file-upload.js?v=20260828f"></script>
-<script src="js/pqrs.js?v=20260831r"></script>
-<script src="js/consulta.js?v=20260831p"></script>
-<script src="js/entrega-responsable.js?v=20260831t"></script>
+<script src="js/pqrs.js?v=20260831u"></script>
+<script src="js/consulta.js?v=20260831u"></script>
+<script src="js/entrega-responsable.js?v=20260831u"></script>
 <script src="js/tramite-firma.js?v=20260831f"></script>
 <script src="js/papelera.js?v=20260806b"></script>
 <script src="js/recursos.js?v=20260830h"></script>
@@ -817,7 +817,7 @@
       <div id="sec-pn-block" style="display:none">
         <div class="fg" style="margin-bottom:10px">
           <div class="fld"><label>Nombre del solicitante<span class="req-star">*</span></label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" oninput="onIdentMilesInput(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Correo</label><input type="email" id="sec-pn-correo"></div>
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pn-telefono"></div>
         </div>
@@ -826,7 +826,14 @@
         <div class="fg" style="margin-bottom:10px">
           <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Entidad / empresa</div>
           <div class="fld"><label>Razón social / entidad<span class="req-star">*</span></label><input type="text" id="sec-pj-empresa" placeholder="Ej. Alcaldía Municipal…" oninput="filtrarPersonasSug(this,'sec-pj','empresa')" onfocus="filtrarPersonasSug(this,'sec-pj','empresa')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>NIT</label><input type="text" id="sec-pj-nit" placeholder="Buscar por NIT…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>NIT</label>
+            <div class="nit-dv-row">
+              <input type="text" id="sec-pj-nit-base" class="nit-base-input" placeholder="Buscar por NIT…" inputmode="numeric" autocomplete="off" oninput="onNitBaseDvInput('sec-pj-nit');filtrarPersonasSug(this,'sec-pj','nit')" onfocus="filtrarPersonasSug(this,'sec-pj','nit')" onblur="setTimeout(()=>hidePersonSug(),180)">
+              <span class="nit-dv-sep" aria-hidden="true">-</span>
+              <input type="text" id="sec-pj-nit-dv" class="nit-dv-input" placeholder="DV" maxlength="1" inputmode="numeric" autocomplete="off" oninput="onNitBaseDvInput('sec-pj-nit')">
+            </div>
+            <input type="hidden" id="sec-pj-nit" value="">
+          </div>
           <div class="fld"><label>Correo entidad</label><input type="email" id="sec-pj-correo"></div>
           <div class="fld"><label>Teléfono entidad</label><input type="tel" id="sec-pj-telefono"></div>
         </div>
@@ -834,7 +841,7 @@
           <div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Persona que radica / oficia en nombre de la entidad</div>
           <div style="grid-column:1/-1;font-size:11px;color:var(--tx2);margin-bottom:4px">Quien presenta el oficio o diligencia la solicitud (puede ser distinto al representante legal).</div>
           <div class="fld"><label>Nombre<span class="req-star">*</span></label><input type="text" id="sec-pj-ofi-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-ofi','nombre')" onfocus="filtrarPersonasSug(this,'sec-ofi','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>Identificación</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
+          <div class="fld"><label>Identificación</label><input type="text" id="sec-pj-ofi-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" oninput="onIdentMilesInput(this);filtrarPersonasSug(this,'sec-ofi','identificacion')" onfocus="filtrarPersonasSug(this,'sec-ofi','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Correo</label><input type="email" id="sec-pj-ofi-correo"></div>
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
         </div>

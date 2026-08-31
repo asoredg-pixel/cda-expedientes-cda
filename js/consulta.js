@@ -73,9 +73,16 @@ function matchS(e,q){
   const ql=q.toLowerCase().trim();
   if(!ql)return true;
   if(String(e._exp||'').toLowerCase().trim()===ql)return true;
+  const qDigits=typeof digitsOnly==='function'?digitsOnly(ql):ql.replace(/\D/g,'');
   if(Object.values(e).some(v=>{
     if(v==null||typeof v==='object')return false;
-    return String(v).toLowerCase().includes(ql);
+    const s=String(v).toLowerCase();
+    if(s.includes(ql))return true;
+    if(qDigits.length>=3){
+      const vd=typeof digitsOnly==='function'?digitsOnly(s):s.replace(/\D/g,'');
+      if(vd&&vd.includes(qDigits))return true;
+    }
+    return false;
   }))return true;
   if(e._usar_exp_asociados&&expedientesAsociadosData(e._expedientes_asociados).some(n=>String(n||'').toLowerCase().includes(ql)))return true;
   // Cuerpo / asunto del correo de radicación (PQRSD por correo)
@@ -266,7 +273,7 @@ function renderQuejaView(e){
   if(e._qd_anonimo)h+='<div class="ic"><div class="k">Quejoso</div><div class="v">Anónimo</div></div>';
   else{
     h+='<div class="ic"><div class="k">Quejoso</div><div class="v">'+(e._qd_nombre||'-')+'</div></div>';
-    if(e._qd_identificacion)h+='<div class="ic"><div class="k">Identificación</div><div class="v">'+e._qd_identificacion+'</div></div>';
+    if(e._qd_identificacion)h+='<div class="ic"><div class="k">Identificación</div><div class="v">'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(e._qd_identificacion):e._qd_identificacion)+'</div></div>';
     if(e._qd_correo)h+='<div class="ic"><div class="k">Correo</div><div class="v">'+e._qd_correo+'</div></div>';
     if(e._qd_telefono)h+='<div class="ic"><div class="k">Teléfono</div><div class="v">'+e._qd_telefono+'</div></div>';
   }
@@ -287,7 +294,8 @@ function renderQuejaView(e){
     const lbl=infrList.length>1?('Presunto infractor '+(i+1)):'Presunto infractor';
     if(pi._pi_tipo_persona==='juridica'){
       if(!(pi._pi_empresa||pi._pi_rep_nombre||pi._pi_nit))return;
-      h+='<div class="ic"><div class="k">'+lbl+'</div><div class="v">'+(pi._pi_empresa||pi._pi_rep_nombre||'-')+(pi._pi_nit?' · NIT '+pi._pi_nit:'')+'</div></div>';
+      h+='<div class="ic"><div class="k">'+lbl+'</div><div class="v">'+(pi._pi_empresa||pi._pi_rep_nombre||'-')+(pi._pi_nit?' · NIT '+escAttr(typeof formatNitDisplay==='function'?formatNitDisplay(pi._pi_nit):pi._pi_nit):'')+'</div></div>';
+
     }else if(pi._pi_nombre){
       h+='<div class="ic"><div class="k">'+lbl+'</div><div class="v">'+pi._pi_nombre+(pi._pi_identificacion?' · '+pi._pi_identificacion:'')+'</div></div>';
     }

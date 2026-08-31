@@ -168,7 +168,7 @@ function htmlApoderadoAutorizado(ev){
     '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" id="fld__apoderado" onchange="toggleApoderado()"'+(apo?' checked':'')+' style="width:15px;height:15px;accent-color:var(--pu)"> Tiene apoderado <span style="font-weight:400;color:var(--tx2)">(abogado)</span></label>'+
     '<div id="apoderado-box" style="margin-top:.5rem;'+(apo?'':'display:none')+'"><div class="slbl" style="margin-bottom:.5rem">Apoderado</div><div class="fg">'+
     '<div class="fld"><label>Nombre del apoderado</label><input type="text" id="fld__apo_nombre" value="'+(ev._apo_nombre||'')+'"'+personSugAttrs('apo','nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__apo_identificacion" value="'+(ev._apo_identificacion||'')+'"'+personSugAttrs('apo','identificacion')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__apo_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(ev._apo_identificacion||''):(ev._apo_identificacion||''))+'"'+personSugAttrs('apo','identificacion')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__apo_correo" value="'+(ev._apo_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__apo_telefono" value="'+(ev._apo_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('apo',ev)+
@@ -176,7 +176,7 @@ function htmlApoderadoAutorizado(ev){
     '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;font-weight:500;margin-top:.8rem"><input type="checkbox" id="fld__autorizado" onchange="toggleAutorizado()"'+(aut?' checked':'')+' style="width:15px;height:15px;accent-color:var(--bl)"> Tiene autorizado <span style="font-weight:400;color:var(--tx2)">(persona natural)</span></label>'+
     '<div id="autorizado-box" style="margin-top:.5rem;'+(aut?'':'display:none')+'"><div class="slbl" style="margin-bottom:.5rem">Autorizado</div><div class="fg">'+
     '<div class="fld"><label>Nombre</label><input type="text" id="fld__aut_nombre" value="'+(ev._aut_nombre||'')+'"'+personSugAttrs('aut','nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__aut_identificacion" value="'+(ev._aut_identificacion||'')+'"'+personSugAttrs('aut','identificacion')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__aut_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(ev._aut_identificacion||''):(ev._aut_identificacion||''))+'"'+personSugAttrs('aut','identificacion')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__aut_correo" value="'+(ev._aut_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__aut_telefono" value="'+(ev._aut_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('aut',ev)+
@@ -322,7 +322,7 @@ function renderFormulario(tid,ed,targetId){
     '<div id="persona-natural" style="'+(tipoPersona==='juridica'?'display:none':'')+'">'+
     '<div class="slbl" style="margin:.5rem 0">Persona natural</div><div class="fg">'+
     '<div class="fld"><label>Nombre</label><input type="text" id="fld__pn_nombre" value="'+(ev._pn_nombre||'')+'"'+personSugAttrs('pn','nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__pn_identificacion" value="'+(ev._pn_identificacion||'')+'"'+personSugAttrs('pn','identificacion')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__pn_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(ev._pn_identificacion||''):(ev._pn_identificacion||''))+'"'+personSugAttrs('pn','identificacion')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__pn_correo" value="'+(ev._pn_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__pn_telefono" value="'+(ev._pn_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('pn',ev)+
@@ -337,12 +337,12 @@ function renderFormulario(tid,ed,targetId){
     '<div id="persona-juridica" style="'+(tipoPersona==='juridica'?'':'display:none')+'">'+
     '<div class="slbl" style="margin:.5rem 0">Representante legal</div><div class="fg">'+
     '<div class="fld"><label>Nombre representante legal</label><input type="text" id="fld__pj_rep_nombre" value="'+(ev._pj_rep_nombre||'')+'"'+personSugAttrs('pj','rep_nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación representante</label><input type="text" id="fld__pj_rep_identificacion" value="'+(ev._pj_rep_identificacion||'')+'"'+personSugAttrs('pj','rep_identificacion')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación representante</label><input type="text" id="fld__pj_rep_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(ev._pj_rep_identificacion||''):(ev._pj_rep_identificacion||''))+'"'+personSugAttrs('pj','rep_identificacion')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__pj_rep_correo" value="'+(ev._pj_rep_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__pj_rep_telefono" value="'+(ev._pj_rep_telefono||'')+'"'+numAttrs()+'></div>'+
     '</div><div class="slbl" style="margin:.5rem 0">Empresa</div><div class="fg">'+
     '<div class="fld"><label>Nombre de la empresa</label><input type="text" id="fld__pj_empresa" value="'+(ev._pj_empresa||'')+'"'+personSugAttrs('pj','empresa')+' placeholder="Buscar por razón social…"></div>'+
-    '<div class="fld"><label>NIT</label><input type="text" id="fld__pj_nit" value="'+(ev._pj_nit||'')+'"'+personSugAttrs('pj','nit')+' placeholder="Buscar por NIT…"></div>'+
+    '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('fld__pj_nit',{value:ev._pj_nit||'',sugTarget:'pj',placeholder:'Buscar por NIT…'}):('<input type="text" id="fld__pj_nit" value="'+(ev._pj_nit||'')+'"'+personSugAttrs('pj','nit')+' placeholder="Buscar por NIT…">'))+'</div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__pj_correo" value="'+(ev._pj_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__pj_telefono" value="'+(ev._pj_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('pj',ev)+
@@ -353,7 +353,7 @@ function renderFormulario(tid,ed,targetId){
     '<div id="queja-identificado" style="'+(qdAnon?'display:none':'')+'">'+
     '<div class="slbl" id="lbl-solicitante-pqrs">'+(esQuejaDen?'Quejoso / denunciante':'Peticionario / solicitante')+'</div><div class="fg">'+
     '<div class="fld"><label id="lbl-qd-nombre">Nombre</label><input type="text" id="fld__qd_nombre" value="'+(ev._qd_nombre||'')+'"'+personSugAttrs('qd','nombre')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__qd_identificacion" value="'+(ev._qd_identificacion||'')+'"'+personSugAttrs('qd','identificacion')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__qd_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(ev._qd_identificacion||''):(ev._qd_identificacion||''))+'"'+personSugAttrs('qd','identificacion')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__qd_correo" value="'+(ev._qd_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__qd_telefono" value="'+(ev._qd_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml('qd',ev)+
@@ -485,7 +485,7 @@ function htmlInfractorCard(idx,pi){
     '<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="fld__'+base+'_tipo_persona" onchange="toggleInfractor('+idx+')"><option value="natural"'+(tipo==='natural'?' selected':'')+'>Persona natural</option><option value="juridica"'+(tipo==='juridica'?' selected':'')+'>Persona jurídica</option></select></div></div>'+
     '<div id="infractor-natural-'+idx+'" style="'+(tipo==='juridica'?'display:none':'')+'"><div class="fg">'+
     '<div class="fld"><label>Nombre</label><input type="text" id="fld__'+base+'_nombre" value="'+escAttr(pi._pi_nombre||'')+'"'+(sug?personSugAttrs('pi','nombre'):'')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_identificacion" value="'+escAttr(pi._pi_identificacion||'')+'"'+(sug?personSugAttrs('pi','identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(pi._pi_identificacion||''):(pi._pi_identificacion||''))+'"'+(sug?personSugAttrs('pi','identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__'+base+'_correo" value="'+escAttr(pi._pi_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__'+base+'_telefono" value="'+escAttr(pi._pi_telefono||'')+'"'+numAttrs()+'></div>'+
     dirHtml(base,dirEv)+
@@ -493,12 +493,12 @@ function htmlInfractorCard(idx,pi){
     '<div id="infractor-juridica-'+idx+'" style="'+(tipo==='juridica'?'':'display:none')+'">'+
     '<div class="slbl" style="margin:.4rem 0">Representante legal</div><div class="fg">'+
     '<div class="fld"><label>Nombre representante</label><input type="text" id="fld__'+base+'_rep_nombre" value="'+escAttr(pi._pi_rep_nombre||'')+'"'+(sug?personSugAttrs('pi','rep_nombre'):'')+' placeholder="Buscar por nombre…"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_rep_identificacion" value="'+escAttr(pi._pi_rep_identificacion||'')+'"'+(sug?personSugAttrs('pi','rep_identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="fld__'+base+'_rep_identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(pi._pi_rep_identificacion||''):(pi._pi_rep_identificacion||''))+'"'+(sug?personSugAttrs('pi','rep_identificacion'):'')+' placeholder="Buscar por identificación…"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="fld__'+base+'_rep_correo" value="'+escAttr(pi._pi_rep_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="fld__'+base+'_rep_telefono" value="'+escAttr(pi._pi_rep_telefono||'')+'"'+numAttrs()+'></div>'+
     '</div><div class="slbl" style="margin:.4rem 0">Empresa / entidad</div><div class="fg">'+
     '<div class="fld"><label>Nombre o razón social</label><input type="text" id="fld__'+base+'_empresa" value="'+escAttr(pi._pi_empresa||'')+'"'+(sug?personSugAttrs('pi','empresa'):'')+' placeholder="Buscar por razón social…"></div>'+
-    '<div class="fld"><label>NIT</label><input type="text" id="fld__'+base+'_nit" value="'+escAttr(pi._pi_nit||'')+'"'+(sug?personSugAttrs('pi','nit'):'')+' placeholder="Buscar por NIT…"></div>'+
+    '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('fld__'+base+'_nit',{value:pi._pi_nit||'',sugTarget:sug?'pi':'',placeholder:'Buscar por NIT…'}):('<input type="text" id="fld__'+base+'_nit" value="'+escAttr(pi._pi_nit||'')+'"'+(sug?personSugAttrs('pi','nit'):'')+' placeholder="Buscar por NIT…">'))+'</div>'+
     '<div class="fld"><label>Correo empresa</label><input type="email" id="fld__'+base+'_correo_emp" value="'+escAttr(pi._pi_correo_emp||'')+'"></div>'+
     '<div class="fld"><label>Teléfono empresa</label><input type="tel" id="fld__'+base+'_telefono_emp" value="'+escAttr(pi._pi_telefono_emp||'')+'"'+numAttrs()+'></div>'+
     dirHtml(baseEmp,dirEv)+
@@ -523,14 +523,14 @@ function collectPresuntosInfractores(){
     const row={_pi_tipo_persona:tipo};
     if(tipo==='juridica'){
       Object.assign(row,{
-        _pi_rep_nombre:gv('fld__pi_rep_nombre'),_pi_rep_identificacion:gv('fld__pi_rep_identificacion'),
+        _pi_rep_nombre:gv('fld__pi_rep_nombre'),_pi_rep_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(gv('fld__pi_rep_identificacion')):gv('fld__pi_rep_identificacion'),
         _pi_rep_correo:gv('fld__pi_rep_correo'),_pi_rep_telefono:gv('fld__pi_rep_telefono'),
-        _pi_empresa:gv('fld__pi_empresa'),_pi_nit:gv('fld__pi_nit'),
+        _pi_empresa:gv('fld__pi_empresa'),_pi_nit:typeof formatNitDisplay==='function'?formatNitDisplay(gv('fld__pi_nit')):gv('fld__pi_nit'),
         _pi_correo_emp:gv('fld__pi_correo_emp'),_pi_telefono_emp:gv('fld__pi_telefono_emp')
       },getDir('pi_emp'));
     }else{
       Object.assign(row,{
-        _pi_nombre:gv('fld__pi_nombre'),_pi_identificacion:gv('fld__pi_identificacion'),
+        _pi_nombre:gv('fld__pi_nombre'),_pi_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(gv('fld__pi_identificacion')):gv('fld__pi_identificacion'),
         _pi_correo:gv('fld__pi_correo'),_pi_telefono:gv('fld__pi_telefono')
       },getDir('pi'));
     }
@@ -545,9 +545,9 @@ function collectPresuntosInfractores(){
     const row={_pi_tipo_persona:tipo};
     if(tipo==='juridica'){
       Object.assign(row,{
-        _pi_rep_nombre:gv('fld__'+base+'_rep_nombre'),_pi_rep_identificacion:gv('fld__'+base+'_rep_identificacion'),
+        _pi_rep_nombre:gv('fld__'+base+'_rep_nombre'),_pi_rep_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(gv('fld__'+base+'_rep_identificacion')):gv('fld__'+base+'_rep_identificacion'),
         _pi_rep_correo:gv('fld__'+base+'_rep_correo'),_pi_rep_telefono:gv('fld__'+base+'_rep_telefono'),
-        _pi_empresa:gv('fld__'+base+'_empresa'),_pi_nit:gv('fld__'+base+'_nit'),
+        _pi_empresa:gv('fld__'+base+'_empresa'),_pi_nit:typeof formatNitDisplay==='function'?formatNitDisplay(gv('fld__'+base+'_nit')):gv('fld__'+base+'_nit'),
         _pi_correo_emp:gv('fld__'+base+'_correo_emp'),_pi_telefono_emp:gv('fld__'+base+'_telefono_emp')
       },getDir(baseEmp));
       ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){
@@ -556,7 +556,7 @@ function collectPresuntosInfractores(){
       });
     }else{
       Object.assign(row,{
-        _pi_nombre:gv('fld__'+base+'_nombre'),_pi_identificacion:gv('fld__'+base+'_identificacion'),
+        _pi_nombre:gv('fld__'+base+'_nombre'),_pi_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(gv('fld__'+base+'_identificacion')):gv('fld__'+base+'_identificacion'),
         _pi_correo:gv('fld__'+base+'_correo'),_pi_telefono:gv('fld__'+base+'_telefono')
       },getDir(base));
       ['dep','mun','vereda','predio','barrio','direccion'].forEach(function(k){

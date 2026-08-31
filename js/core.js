@@ -14209,14 +14209,16 @@ function renderTaskConsultaItem(e,t,qs){
 }
 function renderInteresadoConsultaBody(e){
   let h='<div class="ig">';
+  const fmtId=typeof formatIdentDisplay==='function'?formatIdentDisplay:function(v){return v;};
+  const fmtNit=typeof formatNitDisplay==='function'?formatNitDisplay:function(v){return v;};
   if(e._tipo_persona==='juridica'){
-    h+=icRow('Empresa',e._pj_empresa)+icRow('NIT',e._pj_nit)+icRow('Representante legal',e._pj_rep_nombre)+icRow('Id. representante',e._pj_rep_identificacion)+icRow('Correo',e._pj_rep_correo||e._pj_correo)+icRow('Teléfono',e._pj_rep_telefono||e._pj_telefono)+icRow('Ubicación',fmtDirExp('pj',e));
+    h+=icRow('Empresa',e._pj_empresa)+icRow('NIT',fmtNit(e._pj_nit))+icRow('Representante legal',e._pj_rep_nombre)+icRow('Id. representante',fmtId(e._pj_rep_identificacion))+icRow('Correo',e._pj_rep_correo||e._pj_correo)+icRow('Teléfono',e._pj_rep_telefono||e._pj_telefono)+icRow('Ubicación',fmtDirExp('pj',e));
   }else{
-    h+=icRow('Nombre',e._pn_nombre)+icRow('Identificación',e._pn_identificacion)+icRow('Correo',e._pn_correo)+icRow('Teléfono',e._pn_telefono)+icRow('Ubicación',fmtDirExp('pn',e));
+    h+=icRow('Nombre',e._pn_nombre)+icRow('Identificación',fmtId(e._pn_identificacion))+icRow('Correo',e._pn_correo)+icRow('Teléfono',e._pn_telefono)+icRow('Ubicación',fmtDirExp('pn',e));
     if(e._est_com)h+=icRow('Establecimiento comercial',e._ec_nombre)+icRow('Tel. establecimiento',e._ec_telefono)+icRow('Correo establecimiento',e._ec_correo)+icRow('Dir. establecimiento',fmtDirExp('ec',e));
   }
-  if(e._apoderado&&e._apo_nombre)h+=icRow('Apoderado',e._apo_nombre+(e._apo_identificacion?' · '+e._apo_identificacion:'')+(e._apo_correo?' · '+e._apo_correo:''));
-  if(e._autorizado&&(e._aut_nombre||e._aut_identificacion))h+=icRow('Autorizado',(e._aut_nombre||'')+(e._aut_identificacion?' · '+e._aut_identificacion:''));
+  if(e._apoderado&&e._apo_nombre)h+=icRow('Apoderado',e._apo_nombre+(e._apo_identificacion?' · '+fmtId(e._apo_identificacion):'')+(e._apo_correo?' · '+e._apo_correo:''));
+  if(e._autorizado&&(e._aut_nombre||e._aut_identificacion))h+=icRow('Autorizado',(e._aut_nombre||'')+(e._aut_identificacion?' · '+fmtId(e._aut_identificacion):''));
   if(e._medio_notificacion){
     const ml=medioNotificacionLabel(e._medio_notificacion);
     if(ml)h+=icRow('Medio de notificación',ml);
@@ -18063,13 +18065,14 @@ function normalizePersonaRecord(p){
 }
 function personaIdentityKey(p){
   if(!p)return'';
+  const dig=typeof digitsOnly==='function'?digitsOnly:function(s){return String(s||'').replace(/\D/g,'');};
   if(p.tipo_persona==='juridica'||p.pi_tipo_persona==='juridica'){
-    const nit=(p.pj_nit||p.pi_nit||'').trim().toLowerCase();
+    const nit=dig(p.pj_nit||p.pi_nit||'');
     if(nit)return 'j:'+nit;
     const emp=(p.pj_empresa||p.pi_empresa||'').trim().toLowerCase();
     if(emp)return 'jnom:'+emp;
   }
-  const id=(p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pi_identificacion||'').trim().toLowerCase();
+  const id=dig(p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pi_identificacion||'');
   if(id)return 'n:'+id;
   const nom=(p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre||p.pj_empresa||p.pi_empresa||'').trim().toLowerCase();
   return nom?'nom:'+nom:'';
@@ -18245,14 +18248,30 @@ function matchPersonaCampo(p,target,field,ql){
 }
 function personaEtiquetaSug(p,field){
   p=normalizePersonaRecord(p);
-  const rolTxt=personaRolesLabel(p)+': ';
-  if(field==='identificacion'||field==='nit'){
-    return rolTxt+(personaDisplayIdentificacion(p)||'—')+' · '+personaDisplayNombre(p);
+  if(field==='identificacion'||field==='rep_identificacion'){
+    const idRaw=field==='rep_identificacion'?personaIdNatural(p):personaDisplayIdentificacion(p);
+    const id=typeof formatIdentDisplay==='function'?formatIdentDisplay(idRaw):(idRaw||'');
+    const nom=field==='rep_identificacion'?(personaNombreNatural(p)||personaDisplayNombre(p)):personaDisplayNombre(p);
+    return (id||'—')+(nom?' · '+nom:'');
   }
-  if(field==='rep_nombre')return rolTxt+personaNombreNatural(p)+(personaIdNatural(p)?' · '+personaIdNatural(p):'');
-  if(field==='rep_identificacion')return rolTxt+personaIdNatural(p)+(personaNombreNatural(p)?' · '+personaNombreNatural(p):'');
-  if(field==='empresa')return rolTxt+(p.pj_empresa||p.pi_empresa||'');
-  return rolTxt+personaDisplayNombre(p);
+  if(field==='nit'){
+    const nitRaw=p.pj_nit||p.pi_nit||personaDisplayIdentificacion(p)||'';
+    const nit=typeof formatNitDisplay==='function'?formatNitDisplay(nitRaw):(nitRaw||'');
+    return (nit||'—')+' · '+personaDisplayNombre(p);
+  }
+  if(field==='rep_nombre'){
+    const nom=personaNombreNatural(p)||'—';
+    const idRaw=personaIdNatural(p);
+    const id=idRaw&&typeof formatIdentDisplay==='function'?formatIdentDisplay(idRaw):idRaw;
+    return nom+(id?' · '+id:'');
+  }
+  if(field==='empresa'){
+    const emp=p.pj_empresa||p.pi_empresa||'';
+    const nitRaw=p.pj_nit||p.pi_nit||'';
+    const nit=nitRaw&&typeof formatNitDisplay==='function'?formatNitDisplay(nitRaw):nitRaw;
+    return (emp||'—')+(nit?' · '+nit:'');
+  }
+  return personaDisplayNombre(p);
 }
 function personaEtiquetaSugLibre(p,field){
   p=normalizePersonaRecord(p);
@@ -18350,9 +18369,12 @@ function extraerAutorizadoDeExpediente(data){
   return o;
 }
 function personSugAttrs(target,field){
-  const isNum=field==='identificacion'||field==='nit'||field==='rep_identificacion';
-  const onInp=isNum?'onlyNums(this);filtrarPersonasSug(this,\''+target+'\',\''+field+'\')':'filtrarPersonasSug(this,\''+target+'\',\''+field+'\')';
-  return ' oninput="'+onInp+'" onfocus="filtrarPersonasSug(this,\''+target+'\',\''+field+'\')" onblur="setTimeout(()=>hidePersonSug(),180)"'+(isNum?' inputmode="numeric" pattern="[0-9]*"':'');
+  const isId=field==='identificacion'||field==='rep_identificacion';
+  const isNit=field==='nit';
+  let onInp='filtrarPersonasSug(this,\''+target+'\',\''+field+'\')';
+  if(isId)onInp='onIdentMilesInput(this);'+onInp;
+  else if(isNit)onInp='onIdentMilesInput(this);'+onInp;
+  return ' oninput="'+onInp+'" onfocus="filtrarPersonasSug(this,\''+target+'\',\''+field+'\')" onblur="setTimeout(()=>hidePersonSug(),180)"'+(isId||isNit?' inputmode="numeric"':'');
 }
 function positionPersonSugPortal(inp){
   const portal=document.getElementById('person-sug-portal');if(!portal||!inp)return;
@@ -18644,7 +18666,20 @@ function aplicarPersonaCatalog(p,target){
   setv('fld__pn_correo',p.pn_correo||'');setv('fld__pn_telefono',p.pn_telefono||'');
   ['dep','mun','vereda','predio','barrio','direccion'].forEach(k=>setv('fld__pn_'+k,p['_pn_'+k]||''));
 }
-function setv(id,val){const el=document.getElementById(id);if(el)el.value=val||'';}
+function setv(id,val){
+  const v=val==null?'':String(val);
+  if(document.getElementById(id+'-base')&&typeof syncNitUiFromValue==='function'){
+    syncNitUiFromValue(id,v);
+    return;
+  }
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(/(^|[_-])(identificacion|rep_identificacion)$/i.test(id)||id.indexOf('identificacion')>=0){
+    el.value=v&&typeof formatIdentDisplay==='function'?formatIdentDisplay(v):v;
+    return;
+  }
+  el.value=v;
+}
 function extraerPersonaDeExpediente(data){
   if(esModoCasoEspecial(data)){
     if(data._qd_anonimo||!(data._qd_nombre||data._qd_identificacion))return null;

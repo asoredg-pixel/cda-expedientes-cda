@@ -84,6 +84,95 @@ function numAttrs(){return ' inputmode="numeric" pattern="[0-9]*" oninput="onlyN
 function emailValido(v){return !v||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
 function validarEmailCampo(id,label){const v=gv(id);if(!emailValido(v)){notif(label+' incorrecto','err');const el=document.getElementById(id);if(el)el.focus();return false;}return true;}
 
+/** Solo dígitos (para comparar / buscar NIT e identificación). */
+function digitsOnly(s){return String(s||'').replace(/\D/g,'');}
+/** Separador de miles con punto (estilo CO): 901218674 → 901.218.674 */
+function formatMilesDigits(digits){
+  const d=digitsOnly(digits);
+  if(!d)return'';
+  return d.replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+}
+/** Identificación persona natural con miles. */
+function formatIdentDisplay(val){return formatMilesDigits(val);}
+/** Partes de NIT: base + dígito de verificación (acepta 901.218.674-1). */
+function parseNitParts(val){
+  const raw=String(val||'').trim();
+  if(!raw)return{base:'',dv:''};
+  const m=raw.match(/^([\d.\s]+)\s*[-–]\s*(\d)\s*$/);
+  if(m)return{base:digitsOnly(m[1]),dv:m[2]};
+  return{base:digitsOnly(raw),dv:''};
+}
+/** NIT completo para guardar/mostrar: 901.218.674-1 */
+function formatNitDisplay(val){
+  const p=parseNitParts(val);
+  if(!p.base)return'';
+  const miles=formatMilesDigits(p.base);
+  return p.dv?miles+'-'+p.dv:miles;
+}
+function composeNitFromParts(base,dv){
+  return formatNitDisplay((digitsOnly(base)||'')+(digitsOnly(dv).slice(0,1)?'-'+digitsOnly(dv).slice(0,1):''));
+}
+function onIdentMilesInput(inp){
+  if(!inp)return;
+  inp.value=formatMilesDigits(inp.value);
+}
+/** Sincroniza recuadros NIT + DV y el campo oculto con el valor completo. */
+function syncNitUiFromValue(mainId,val){
+  const formatted=formatNitDisplay(val);
+  const parts=parseNitParts(val);
+  const main=document.getElementById(mainId);
+  const base=document.getElementById(mainId+'-base');
+  const dv=document.getElementById(mainId+'-dv');
+  if(main)main.value=formatted;
+  if(base)base.value=formatMilesDigits(parts.base);
+  if(dv)dv.value=parts.dv||'';
+}
+function onNitBaseDvInput(mainId){
+  const baseEl=document.getElementById(mainId+'-base');
+  const dvEl=document.getElementById(mainId+'-dv');
+  if(baseEl)baseEl.value=formatMilesDigits(baseEl.value);
+  if(dvEl)dvEl.value=digitsOnly(dvEl.value).slice(0,1);
+  const composed=composeNitFromParts(baseEl?baseEl.value:'',dvEl?dvEl.value:'');
+  const main=document.getElementById(mainId);
+  if(main)main.value=composed;
+}
+/** HTML: NIT (miles) - DV (placeholder se oculta al escribir). Campo oculto = valor completo. */
+function htmlNitConDvField(mainId,opts){
+  opts=opts||{};
+  const val=opts.value||'';
+  const parts=parseNitParts(val);
+  const composed=formatNitDisplay(val);
+  let styleRaw=String(opts.style||'').replace(/width\s*:\s*[^;]+;?/gi,'').trim();
+  if(styleRaw&&!/;\s*$/.test(styleRaw))styleRaw+=';';
+  const style=styleRaw?(' style="'+styleRaw.replace(/"/g,'&quot;')+'"'):'';
+  const ph=escAttr(opts.placeholder||'NIT');
+  let baseEvents='oninput="onNitBaseDvInput(\''+jsStr(mainId)+'\')"';
+  if(opts.sugTarget){
+    baseEvents='oninput="onNitBaseDvInput(\''+jsStr(mainId)+'\');filtrarPersonasSug(this,\''+jsStr(opts.sugTarget)+'\',\'nit\')" onfocus="filtrarPersonasSug(this,\''+jsStr(opts.sugTarget)+'\',\'nit\')" onblur="setTimeout(()=>hidePersonSug(),180)"';
+  }
+  return '<div class="nit-dv-row">'+
+    '<input type="text" id="'+escAttr(mainId)+'-base" class="nit-base-input" value="'+escAttr(formatMilesDigits(parts.base))+'" placeholder="'+ph+'" inputmode="numeric" autocomplete="off" '+baseEvents+style+'>'+
+    '<span class="nit-dv-sep" aria-hidden="true">-</span>'+
+    '<input type="text" id="'+escAttr(mainId)+'-dv" class="nit-dv-input" value="'+escAttr(parts.dv||'')+'" placeholder="DV" maxlength="1" inputmode="numeric" autocomplete="off" oninput="onNitBaseDvInput(\''+jsStr(mainId)+'\')"'+style+'>'+
+    '</div>'+
+    '<input type="hidden" id="'+escAttr(mainId)+'" value="'+escAttr(composed)+'">';
+}
+/** Deshabilita/limpia campo (incluye pares NIT-base/DV). */
+function setUiFieldDisabled(id,disabled,clear){
+  const el=document.getElementById(id);
+  if(el){el.disabled=!!disabled;if(clear)el.value='';}
+  const base=document.getElementById(id+'-base');
+  const dv=document.getElementById(id+'-dv');
+  if(base){base.disabled=!!disabled;if(clear)base.value='';}
+  if(dv){dv.disabled=!!disabled;if(clear)dv.value='';}
+  if(clear&&(base||dv)&&el)el.value='';
+}
+function clearUiField(id){
+  const el=document.getElementById(id);
+  if(el)el.value='';
+  if(document.getElementById(id+'-base'))syncNitUiFromValue(id,'');
+}
+
 // ── Normalización de cadenas ──────────────────────────────────────────────────
 function agendaNorm(s){return String(s||'').trim().toLowerCase();}
 function jsStr(v){return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n').replace(/\r/g,'');}

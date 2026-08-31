@@ -104,6 +104,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);font-
 .fld input[type=checkbox],.fld input[type=radio]{width:auto;min-width:16px;padding:0;border:0;box-shadow:none;accent-color:var(--bl)}
 .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
 .fld input[type=checkbox]:focus,.fld input[type=radio]:focus{box-shadow:none}
+.nit-dv-row{display:flex;align-items:center;gap:8px;width:100%}
+.nit-dv-row .nit-base-input{flex:1;min-width:0;width:auto}
+.nit-dv-sep{flex-shrink:0;color:var(--tx2);font-weight:600;font-size:14px;line-height:1;user-select:none}
+.nit-dv-row .nit-dv-input{width:3.25rem;flex-shrink:0;text-align:center;padding-left:6px;padding-right:6px}
 .fld textarea{resize:vertical;min-height:58px}
 .req-star{color:var(--rd);font-size:11px;margin-left:2px}
 a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}

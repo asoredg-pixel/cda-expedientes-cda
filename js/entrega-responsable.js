@@ -282,7 +282,7 @@ function htmlEntregaRespPqrsAltaBox(){
       '<div id="er-pqrs-pj-block" style="display:none">'+
         '<div class="fg" style="margin-bottom:8px">'+
           '<div class="fld"><label>Razón social / entidad <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-empresa" placeholder="Buscar por razón social…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pj','empresa'):'')+'></div>'+
-          '<div class="fld"><label>NIT</label><input type="text" id="er-pqrs-pj-nit" placeholder="Buscar por NIT…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pj','nit'):'')+'></div>'+
+          '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('er-pqrs-pj-nit',{sugTarget:'er-pqrs-pj',placeholder:'Buscar por NIT…',style:'width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'}):'<input type="text" id="er-pqrs-pj-nit" placeholder="Buscar por NIT…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">')+'</div>'+
           '<div class="fld"><label>Correo entidad</label><input type="email" id="er-pqrs-pj-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono entidad</label><input type="tel" id="er-pqrs-pj-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Quien radica (nombre) <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-ofi-nombre" placeholder="Buscar por nombre…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-ofi','nombre'):'')+'></div>'+
@@ -362,7 +362,8 @@ function toggleErPqrsAnonimo(){
     ['er-pqrs-pn-nombre','er-pqrs-pn-identificacion','er-pqrs-pn-correo','er-pqrs-pn-telefono',
      'er-pqrs-pj-empresa','er-pqrs-pj-nit','er-pqrs-pj-correo','er-pqrs-pj-telefono',
      'er-pqrs-pj-ofi-nombre','er-pqrs-pj-ofi-identificacion','er-pqrs-pj-ofi-correo','er-pqrs-pj-ofi-telefono'].forEach(function(id){
-      const el=document.getElementById(id);if(el)el.value='';
+      if(typeof clearUiField==='function')clearUiField(id);
+      else{const el=document.getElementById(id);if(el)el.value='';}
     });
   }else{
     const ac=document.getElementById('er-pqrs-anon-correo');if(ac)ac.value='';
@@ -554,7 +555,7 @@ function htmlEntregaRespInfractorCard(idx,pi){
       '<div class="fld"><label>Teléfono</label><input type="tel" id="'+pref+'-rep-telefono" value="'+escAttr(pi._pi_rep_telefono||'')+'" style="'+inpStyle+'"></div>'+
       '</div><div class="slbl" style="margin:.4rem 0;font-size:11px">Empresa / entidad</div><div class="fg">'+
       '<div class="fld"><label>Razón social</label><input type="text" id="'+pref+'-empresa" value="'+escAttr(pi._pi_empresa||'')+'" style="'+inpStyle+'"></div>'+
-      '<div class="fld"><label>NIT</label><input type="text" id="'+pref+'-nit" value="'+escAttr(pi._pi_nit||'')+'" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField(pref+'-nit',{value:pi._pi_nit||'',placeholder:'NIT',style:inpStyle}):'<input type="text" id="'+pref+'-nit" value="'+escAttr(pi._pi_nit||'')+'" style="'+inpStyle+'">')+'</div>'+
       '<div class="fld"><label>Correo empresa</label><input type="email" id="'+pref+'-correo-emp" value="'+escAttr(pi._pi_correo_emp||'')+'" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono empresa</label><input type="tel" id="'+pref+'-telefono-emp" value="'+escAttr(pi._pi_telefono_emp||'')+'" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('infemp'+idx,dirEmp)+
@@ -617,7 +618,7 @@ function htmlEntregaRespInteresadoBox(tramiteId){
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-rep-telefono" style="'+inpStyle+'"></div>'+
       '</div><div class="slbl" style="margin:.5rem 0 .35rem;font-size:11px">Empresa</div><div class="fg">'+
       '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pj-empresa" placeholder="Buscar por razón social…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','empresa'):'')+'></div>'+
-      '<div class="fld"><label>NIT</label><input type="text" id="entrega-int-pj-nit" placeholder="Buscar por NIT…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','nit'):'')+'></div>'+
+      '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('entrega-int-pj-nit',{sugTarget:'er-pj',placeholder:'Buscar por NIT…',style:inpStyle}):'<input type="text" id="entrega-int-pj-nit" placeholder="Buscar por NIT…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','nit'):'')+'>')+'</div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('pj',{})+
@@ -776,7 +777,7 @@ function htmlEntregaLibreInteresadoBox(){
         '<div class="fld" style="grid-column:1/-1"><label>Razón social <span style="color:var(--rd)">*</span></label><div style="position:relative">'+
           '<input type="text" id="entrega-libre-int-empresa"'+sugEmp+' placeholder="Buscar entidad…" style="'+inpStyle+'">'+
           '<div id="entrega-libre-int-empresa-sug" class="entrega-resp-sug" style="display:none"></div></div></div>'+
-        '<div class="fld"><label>NIT</label><input type="text" id="entrega-libre-int-nit" style="'+inpStyle+'"></div>'+
+        '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('entrega-libre-int-nit',{style:inpStyle,placeholder:'NIT'}):'<input type="text" id="entrega-libre-int-nit" style="'+inpStyle+'">')+'</div>'+
         '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo-j" style="'+inpStyle+'"></div>'+
         '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono-j" style="'+inpStyle+'"></div>'+
       '</div>'+
@@ -804,7 +805,7 @@ function collectEntregaLibreInteresado(){
     return{
       _tipo_persona:'juridica',
       _pj_empresa:empresa,
-      _pj_nit:nit,
+      _pj_nit:typeof formatNitDisplay==='function'?formatNitDisplay(nit):nit,
       _pj_correo:correo,
       _pj_telefono:telefono,
       _pj_rep_nombre:dirigido,
@@ -1071,18 +1072,18 @@ function collectEntregaRespInteresado(){
     if(tipo==='juridica'){
       Object.assign(out,{
         _pj_rep_nombre:_entregaIntVal('entrega-int-pj-rep-nombre'),
-        _pj_rep_identificacion:_entregaIntVal('entrega-int-pj-rep-identificacion'),
+        _pj_rep_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(_entregaIntVal('entrega-int-pj-rep-identificacion')):_entregaIntVal('entrega-int-pj-rep-identificacion'),
         _pj_rep_correo:_entregaIntVal('entrega-int-pj-rep-correo'),
         _pj_rep_telefono:_entregaIntVal('entrega-int-pj-rep-telefono'),
         _pj_empresa:_entregaIntVal('entrega-int-pj-empresa'),
-        _pj_nit:_entregaIntVal('entrega-int-pj-nit'),
+        _pj_nit:typeof formatNitDisplay==='function'?formatNitDisplay(_entregaIntVal('entrega-int-pj-nit')):_entregaIntVal('entrega-int-pj-nit'),
         _pj_correo:_entregaIntVal('entrega-int-pj-correo'),
         _pj_telefono:_entregaIntVal('entrega-int-pj-telefono')
       },_entregaIntDir('pj'));
     }else{
       Object.assign(out,{
         _pn_nombre:_entregaIntVal('entrega-int-pn-nombre'),
-        _pn_identificacion:_entregaIntVal('entrega-int-pn-identificacion'),
+        _pn_identificacion:typeof formatIdentDisplay==='function'?formatIdentDisplay(_entregaIntVal('entrega-int-pn-identificacion')):_entregaIntVal('entrega-int-pn-identificacion'),
         _pn_correo:_entregaIntVal('entrega-int-pn-correo'),
         _pn_telefono:_entregaIntVal('entrega-int-pn-telefono'),
         _est_com:!!((document.getElementById('entrega-int-est-com')||{}).checked)
@@ -1743,11 +1744,11 @@ function crearStubPqrsEntregaResp(datos){
   }else if(tipoPersona==='juridica'){
     pjFields._tipo_persona='juridica';
     pjFields._pj_empresa=datos.pj&&datos.pj.empresa||'';
-    pjFields._pj_nit=datos.pj&&datos.pj.nit||'';
+    pjFields._pj_nit=typeof formatNitDisplay==='function'?formatNitDisplay(datos.pj&&datos.pj.nit||''):(datos.pj&&datos.pj.nit||'');
     pjFields._pj_correo=datos.pj&&datos.pj.correo||'';
     pjFields._pj_telefono=datos.pj&&datos.pj.tel||'';
     pjFields._qd_nombre=datos.pj&&datos.pj.ofiNombre||'';
-    pjFields._qd_identificacion=datos.pj&&datos.pj.ofiIdent||'';
+    pjFields._qd_identificacion=typeof formatIdentDisplay==='function'?formatIdentDisplay(datos.pj&&datos.pj.ofiIdent||''):(datos.pj&&datos.pj.ofiIdent||'');
     pjFields._qd_correo=datos.pj&&datos.pj.ofiCorreo||'';
     pjFields._qd_telefono=datos.pj&&datos.pj.ofiTel||'';
     nombre=pjFields._pj_empresa||pjFields._qd_nombre;
@@ -1756,7 +1757,7 @@ function crearStubPqrsEntregaResp(datos){
     tel=pjFields._pj_telefono||pjFields._qd_telefono;
   }else{
     nombre=datos.pn&&datos.pn.nombre||'';
-    ident=datos.pn&&datos.pn.ident||'';
+    ident=typeof formatIdentDisplay==='function'?formatIdentDisplay(datos.pn&&datos.pn.ident||''):(datos.pn&&datos.pn.ident||'');
     correo=datos.pn&&datos.pn.correo||'';
     tel=datos.pn&&datos.pn.tel||'';
   }
@@ -2145,8 +2146,8 @@ function resumenAltaEntregaHtml(e){
   const bits=[];
   const nom=typeof getNom==='function'?getNom(e):'';
   if(nom)bits.push('<strong>Interesado:</strong> '+escAttr(nom));
-  if(e._tipo_persona==='juridica'&&e._pj_nit)bits.push('NIT '+escAttr(e._pj_nit));
-  else if(e._pn_identificacion)bits.push('ID '+escAttr(e._pn_identificacion));
+  if(e._tipo_persona==='juridica'&&e._pj_nit)bits.push('NIT '+escAttr(typeof formatNitDisplay==='function'?formatNitDisplay(e._pj_nit):e._pj_nit));
+  else if(e._pn_identificacion)bits.push('ID '+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(e._pn_identificacion):e._pn_identificacion));
   if(e._pn_correo||e._pj_correo)bits.push(escAttr(e._pn_correo||e._pj_correo));
   try{
     const concepts=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];

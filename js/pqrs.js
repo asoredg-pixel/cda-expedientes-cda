@@ -172,7 +172,8 @@ function toggleSecInterna(){
     poblarSecOficinaRemitenteSelect();
     // Limpia datos de ciudadano al pasar a interna
     ['sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono','sec-anon-correo','sec-anon-tel'].forEach(function(id){
-      const el=document.getElementById(id);if(el)el.value='';
+      if(typeof clearUiField==='function')clearUiField(id);
+      else{const el=document.getElementById(id);if(el)el.value='';}
     });
     const tp=document.getElementById('sec-tipo-persona');if(tp)tp.value='';
     const mn=document.getElementById('sec-medio-notif');if(mn)mn.value='';
@@ -192,8 +193,11 @@ function toggleSecAnonimo(){
   const anon=!!(document.getElementById('sec-anonimo')&&document.getElementById('sec-anonimo').checked);
   const tp=document.getElementById('sec-tipo-persona');
   ['sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(el){el.disabled=anon;if(anon)el.value='';}
+    if(typeof setUiFieldDisabled==='function')setUiFieldDisabled(id,anon,anon);
+    else{
+      const el=document.getElementById(id);
+      if(el){el.disabled=anon;if(anon)el.value='';}
+    }
   });
   if(tp){
     tp.disabled=anon;
@@ -276,7 +280,10 @@ function limpiarFormSecretaria(){
   if(typeof cerrarSplitView==='function')cerrarSplitView();
   // Compatibilidad con ref-card legacy
   const refCard=document.getElementById('gmail-ref-card');if(refCard)refCard.style.display='none';
-  ['sec-exp','sec-asunto','sec-detalle','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono','sec-anon-correo','sec-anon-tel'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['sec-exp','sec-asunto','sec-detalle','sec-fecha-termino','sec-fecha-solicitud','sec-pn-nombre','sec-pn-identificacion','sec-pn-correo','sec-pn-telefono','sec-pj-empresa','sec-pj-nit','sec-pj-correo','sec-pj-telefono','sec-pj-ofi-nombre','sec-pj-ofi-identificacion','sec-pj-ofi-correo','sec-pj-ofi-telefono','sec-anon-correo','sec-anon-tel'].forEach(id=>{
+    if(typeof clearUiField==='function')clearUiField(id);
+    else{const el=document.getElementById(id);if(el)el.value='';}
+  });
   const anon=document.getElementById('sec-anonimo');if(anon)anon.checked=false;
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
   const interna=document.getElementById('sec-interna');if(interna)interna.checked=false;
@@ -360,11 +367,12 @@ async function guardarPqrsSecretaria(modo){
     if(tipoPersonaRaw==='juridica'){
       pjFields._tipo_persona='juridica';
       pjFields._pj_empresa=String((document.getElementById('sec-pj-empresa')||{}).value||'').trim();
-      pjFields._pj_nit=String((document.getElementById('sec-pj-nit')||{}).value||'').trim();
+      pjFields._pj_nit=typeof formatNitDisplay==='function'?formatNitDisplay((document.getElementById('sec-pj-nit')||{}).value||''):String((document.getElementById('sec-pj-nit')||{}).value||'').trim();
       pjFields._pj_correo=String((document.getElementById('sec-pj-correo')||{}).value||'').trim();
       pjFields._pj_telefono=String((document.getElementById('sec-pj-telefono')||{}).value||'').trim();
       const ofiNom=String((document.getElementById('sec-pj-ofi-nombre')||{}).value||'').trim();
-      const ofiId=String((document.getElementById('sec-pj-ofi-identificacion')||{}).value||'').trim();
+      const ofiIdRaw=String((document.getElementById('sec-pj-ofi-identificacion')||{}).value||'').trim();
+      const ofiId=typeof formatIdentDisplay==='function'?formatIdentDisplay(ofiIdRaw):ofiIdRaw;
       const ofiCorreo=String((document.getElementById('sec-pj-ofi-correo')||{}).value||'').trim();
       const ofiTel=String((document.getElementById('sec-pj-ofi-telefono')||{}).value||'').trim();
       pjFields._qd_nombre=ofiNom;
@@ -377,7 +385,7 @@ async function guardarPqrsSecretaria(modo){
       tel=pjFields._pj_telefono||ofiTel;
     }else if(tipoPersonaRaw==='natural'){
       nombre=String((document.getElementById('sec-pn-nombre')||{}).value||'').trim();
-      ident=String((document.getElementById('sec-pn-identificacion')||{}).value||'').trim();
+      ident=typeof formatIdentDisplay==='function'?formatIdentDisplay((document.getElementById('sec-pn-identificacion')||{}).value||''):String((document.getElementById('sec-pn-identificacion')||{}).value||'').trim();
       correo=String((document.getElementById('sec-pn-correo')||{}).value||'').trim();
       tel=String((document.getElementById('sec-pn-telefono')||{}).value||'').trim();
     }
@@ -946,7 +954,7 @@ function htmlPqrsOficinaInteresado(e){
   if(e._qd_anonimo)return '<div class="pqrs-det-v">Solicitud anónima</div>';
   if(e._tipo_persona==='juridica'){
     let h='<div class="pqrs-det-v"><strong>'+escAttr(e._pj_empresa||'Entidad jurídica')+'</strong>';
-    if(e._pj_nit)h+='<br>NIT: '+escAttr(e._pj_nit);
+    if(e._pj_nit)h+='<br>NIT: '+escAttr(typeof formatNitDisplay==='function'?formatNitDisplay(e._pj_nit):e._pj_nit);
     if(e._pj_correo)h+='<br>Correo entidad: '+escAttr(e._pj_correo);
     if(e._pj_telefono)h+='<br>Tel. entidad: '+escAttr(e._pj_telefono);
     h+='</div>';
@@ -1582,20 +1590,20 @@ function openEditPqrsSecretariaModal(expId){
     '<div id="pqrs-edit-pn-block"'+(anon||tp!=='natural'?' style="display:none"':'')+'>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Nombre</label><input type="text" id="pqrs-edit-pn-nombre" value="'+escAttr(e._pn_nombre||e._qd_nombre||'')+'"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="pqrs-edit-pn-identificacion" value="'+escAttr(e._pn_identificacion||e._qd_identificacion||'')+'"></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="pqrs-edit-pn-identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(e._pn_identificacion||e._qd_identificacion||''):(e._pn_identificacion||e._qd_identificacion||''))+'" inputmode="numeric" oninput="onIdentMilesInput(this)"></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="pqrs-edit-pn-correo" value="'+escAttr(e._pn_correo||e._qd_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="pqrs-edit-pn-telefono" value="'+escAttr(e._pn_telefono||e._qd_telefono||'')+'"></div>'+
     '</div></div>'+
     '<div id="pqrs-edit-pj-block"'+(anon||tp!=='juridica'?' style="display:none"':'')+'>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Razón social / entidad</label><input type="text" id="pqrs-edit-pj-empresa" value="'+escAttr(e._pj_empresa||'')+'"></div>'+
-    '<div class="fld"><label>NIT</label><input type="text" id="pqrs-edit-pj-nit" value="'+escAttr(e._pj_nit||'')+'"></div>'+
+    '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('pqrs-edit-pj-nit',{value:e._pj_nit||'',placeholder:'NIT'}):('<input type="text" id="pqrs-edit-pj-nit" value="'+escAttr(e._pj_nit||'')+'">'))+'</div>'+
     '<div class="fld"><label>Correo entidad</label><input type="email" id="pqrs-edit-pj-correo" value="'+escAttr(e._pj_correo||'')+'"></div>'+
     '<div class="fld"><label>Teléfono entidad</label><input type="tel" id="pqrs-edit-pj-telefono" value="'+escAttr(e._pj_telefono||'')+'"></div>'+
     '</div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Oficial / quien radica (nombre)</label><input type="text" id="pqrs-edit-pj-ofi-nombre" value="'+escAttr(e._qd_nombre&&e._qd_nombre!==e._pj_empresa?e._qd_nombre:'')+'"></div>'+
-    '<div class="fld"><label>Identificación oficial</label><input type="text" id="pqrs-edit-pj-ofi-identificacion" value="'+escAttr(e._qd_identificacion&&e._qd_identificacion!==e._pj_nit?e._qd_identificacion:'')+'"></div>'+
+    '<div class="fld"><label>Identificación oficial</label><input type="text" id="pqrs-edit-pj-ofi-identificacion" value="'+escAttr(typeof formatIdentDisplay==='function'?formatIdentDisplay(e._qd_identificacion&&e._qd_identificacion!==e._pj_nit?e._qd_identificacion:''):(e._qd_identificacion&&e._qd_identificacion!==e._pj_nit?e._qd_identificacion:''))+'" inputmode="numeric" oninput="onIdentMilesInput(this)"></div>'+
     '<div class="fld"><label>Correo oficial</label><input type="email" id="pqrs-edit-pj-ofi-correo" value="'+escAttr(e._qd_correo&&e._qd_correo!==e._pj_correo?e._qd_correo:'')+'"></div>'+
     '<div class="fld"><label>Teléfono oficial</label><input type="tel" id="pqrs-edit-pj-ofi-telefono" value="'+escAttr(e._qd_telefono&&e._qd_telefono!==e._pj_telefono?e._qd_telefono:'')+'"></div>'+
     '</div></div>'+
@@ -1659,17 +1667,17 @@ async function submitEditPqrsSecretaria(expId){
     e._qd_telefono=anonTel;
   }else if(tipoPersona==='juridica'){
     e._pj_empresa=String((document.getElementById('pqrs-edit-pj-empresa')||{}).value||'').trim();
-    e._pj_nit=String((document.getElementById('pqrs-edit-pj-nit')||{}).value||'').trim();
+    e._pj_nit=typeof formatNitDisplay==='function'?formatNitDisplay((document.getElementById('pqrs-edit-pj-nit')||{}).value||''):String((document.getElementById('pqrs-edit-pj-nit')||{}).value||'').trim();
     e._pj_correo=String((document.getElementById('pqrs-edit-pj-correo')||{}).value||'').trim();
     e._pj_telefono=String((document.getElementById('pqrs-edit-pj-telefono')||{}).value||'').trim();
     e._qd_nombre=String((document.getElementById('pqrs-edit-pj-ofi-nombre')||{}).value||'').trim();
-    e._qd_identificacion=String((document.getElementById('pqrs-edit-pj-ofi-identificacion')||{}).value||'').trim();
+    e._qd_identificacion=typeof formatIdentDisplay==='function'?formatIdentDisplay((document.getElementById('pqrs-edit-pj-ofi-identificacion')||{}).value||''):String((document.getElementById('pqrs-edit-pj-ofi-identificacion')||{}).value||'').trim();
     e._qd_correo=String((document.getElementById('pqrs-edit-pj-ofi-correo')||{}).value||'').trim();
     e._qd_telefono=String((document.getElementById('pqrs-edit-pj-ofi-telefono')||{}).value||'').trim();
     e._pn_nombre='';e._pn_identificacion='';e._pn_correo='';e._pn_telefono='';
   }else{
     e._pn_nombre=String((document.getElementById('pqrs-edit-pn-nombre')||{}).value||'').trim();
-    e._pn_identificacion=String((document.getElementById('pqrs-edit-pn-identificacion')||{}).value||'').trim();
+    e._pn_identificacion=typeof formatIdentDisplay==='function'?formatIdentDisplay((document.getElementById('pqrs-edit-pn-identificacion')||{}).value||''):String((document.getElementById('pqrs-edit-pn-identificacion')||{}).value||'').trim();
     e._pn_correo=String((document.getElementById('pqrs-edit-pn-correo')||{}).value||'').trim();
     e._pn_telefono=String((document.getElementById('pqrs-edit-pn-telefono')||{}).value||'').trim();
     e._qd_nombre=e._pn_nombre;e._qd_identificacion=e._pn_identificacion;e._qd_correo=e._pn_correo;e._qd_telefono=e._pn_telefono;
