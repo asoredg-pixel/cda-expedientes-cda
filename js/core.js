@@ -5184,10 +5184,11 @@ function compareDocShortLabel(d){
 function buildCompareGroupedOptsHtml(docs,selectedId){
   if(!docs.length)return'';
   const groups=[
-    {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo;}},
-    {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo;}},
-    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo;}},
-    {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo;}},
+    {lbl:'Versiones por corregir',test:function(d){return d.origen==='Entrega'&&d.porCorregir;}},
+    {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
     {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Anexos · expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===true&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!d.esAnexo;}},
@@ -5217,6 +5218,8 @@ function initTaskReviewCompareDefaults(t,e,taskId,docs){
   const ult=getSoportesUltimaEntrega(t);
   const firstAnx=ult.find(soporteEsAnexoEntrega);
   let defB=firstAnx?('sop_'+firstAnx.id):'';
+  const porCorr=docs.find(function(d){return d.porCorregir&&!d.esAnexo;});
+  if(porCorr)defB=porCorr.id;
   if(!defB||defB===defA){
     const other=docs.find(function(d){return d.id!==defA;});
     defB=other?other.id:'';
@@ -5382,14 +5385,31 @@ function renderTaskReviewEntregaSideHtml(expId,taskId,t){
   const modo=resolveModoEnviar(t,null);
   return '<div class="task-review-side-scroll task-review-entrega-side">'+renderEnviarPanelHtml(expId,taskId,t,modo)+'</div>';
 }
-function initTaskReviewEntregaSide(expId,taskId,t){
+function initEnviarArchivosPick(expId,taskId){
   if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
     sstFileStagingReset(sstFileEnviarCtxKey(expId,taskId));
-    if(typeof sstFileInitPick==='function'){
-      sstFileInitPick('enviar-adj-file');
-      sstFileInitPick('enviar-anexos-file');
-    }
   }
+  const envCtx=typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):('enviar-soporte:'+expId+':'+taskId);
+  const getCtx=typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(expId,taskId):null;
+  if(typeof sstFileRegisterPick==='function'){
+    sstFileRegisterPick('enviar-adj-file',{ctxKey:envCtx,listId:'enviar-adj-file-list',multi:false,getUploadCtx:getCtx});
+    sstFileRegisterPick('enviar-anexos-file',{ctxKey:envCtx,listId:'enviar-anexos-list',multi:true,getUploadCtx:getCtx});
+  }
+  if(typeof sstFileRegisterList==='function'){
+    sstFileRegisterList('enviar-adj-file-list',envCtx,'main');
+    sstFileRegisterList('enviar-anexos-list',envCtx,'anexos');
+  }
+  if(typeof sstFileInitPick==='function'){
+    sstFileInitPick('enviar-adj-file');
+    sstFileInitPick('enviar-anexos-file');
+  }
+  if(typeof sstFileRenderList==='function'){
+    sstFileRenderList('enviar-adj-file-list',envCtx);
+    sstFileRenderList('enviar-anexos-list',envCtx);
+  }
+}
+function initTaskReviewEntregaSide(expId,taskId,t){
+  initEnviarArchivosPick(expId,taskId);
   const e=typeof getExpById==='function'?getExpById(expId):null;
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
     setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
@@ -8947,6 +8967,13 @@ function getSoporteActivo(t){
   if(activos.length)return activos[activos.length-1];
   return(t.soportes||[]).length?(t.soportes||[])[t.soportes.length-1]:null;
 }
+function soporteEsPorCorregir(s){
+  if(!s)return false;
+  if(s.version_historial===true)return true;
+  const est=String(s.driveEstado||'').toLowerCase();
+  if(est==='acorregir'||est==='corregir')return true;
+  return /por corregir/i.test(String(s.label||''));
+}
 function soporteEsAnexoEntrega(s){
   if(!s)return false;
   if(s.es_anexo===true||s.tipo==='anexo_respuesta')return true;
@@ -8985,10 +9012,10 @@ function getSoportesUltimaEntrega(t){
 }
 function getSoportePrincipalUltimaEntrega(t){
   const ult=getSoportesUltimaEntrega(t);
-  const main=ult.find(function(s){return s&&!soporteEsAnexoEntrega(s);});
+  const main=ult.find(function(s){return s&&!soporteEsAnexoEntrega(s)&&!soporteEsPorCorregir(s);});
   if(main)return main;
-  const any=(t.soportes||[]).find(function(s){return s&&!soporteEsAnexoEntrega(s);});
-  return any||ult[0]||getSoporteActivo(t)||null;
+  const any=(t.soportes||[]).find(function(s){return s&&!soporteEsAnexoEntrega(s)&&!soporteEsPorCorregir(s);});
+  return any||ult.find(function(s){return s&&!soporteEsAnexoEntrega(s);})||ult[0]||getSoporteActivo(t)||null;
 }
 function getDefaultSoporteSel(t){
   const s=getSoportePrincipalUltimaEntrega(t);
@@ -9351,9 +9378,16 @@ function collectDocsComparables(e,taskId,tDirect,opts){
     const pushSopComparable=function(s){
       const url=soporteUrlComparable(s);
       if(!url&&!s.local)return;
+      const esCorr=soporteEsPorCorregir(s);
       const esAn=soporteEsAnexoEntrega(s);
+      const entregaActual=ultEntregaIds.has(s.id)&&!esCorr;
       let lab;
-      if(esAn){
+      if(esCorr&&esAn){
+        const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
+        lab='📎 Anexo por corregir '+n;
+      }else if(esCorr){
+        lab='📄 Por corregir'+(s.version?' · v'+s.version:'');
+      }else if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
         lab='📎 Anexo '+n;
       }else if(s.es_proyeccion||/proyecci/i.test(String(s.label||''))){
@@ -9362,12 +9396,12 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         lab='📄 Documento principal'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
       }
       add({
-        id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,esAnexo:esAn,entregaActual:ultEntregaIds.has(s.id),
+        id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,esAnexo:esAn,entregaActual:entregaActual,porCorregir:esCorr,
         label:lab,
         titulo:lab,
-        meta:[!esAn&&s.label&&s.label!==lab?s.label:'',fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
+        meta:[!esAn&&!esCorr&&s.label&&s.label!==lab?s.label:'',fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
         preview:s.preview||s.previewLink||s.driveLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
-        sortKey:(s.fecha||'0000')+'_sop_'+String(s.version||0).padStart(5,'0')+(esAn?'_z':'')
+        sortKey:(s.fecha||'0000')+'_sop_'+(esCorr?'0':'1')+String(s.version||0).padStart(5,'0')+(esAn?'_z':'')
       });
     };
     [...sops].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(pushSopComparable);
@@ -9937,7 +9971,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   const esReporteTrasladado=!!(document.getElementById('enviar-modo-traslado')&&document.getElementById('enviar-modo-traslado').value==='1')||taskRecibidaPorTraslado(t);
   const esNuevaEntrega=!!(document.getElementById('enviar-modo-nueva')&&document.getElementById('enviar-modo-nueva').value==='1')||estadoTask(t)==='Por corregir';
   if(!links.length&&!cmt&&!hasDriveUpload&&!hasLocalFile){
-    notif('Escriba un comentario y/o adjunte un archivo o enlace de Drive para enviar a verificación','err');
+    notif('Escriba un comentario y/o adjunte un archivo para enviar a verificación','err');
     return false;
   }
   const parsedLinks=[];
@@ -9962,16 +9996,25 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     const eCtx=getExpById(expId);
     const esPqrsEntregaAct=!!(eCtx&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eCtx));
     if(parsedLinks.length||hasLocalFile||hasNewInstitutional){
-      t.soportes.forEach(s=>{s.activo=false;});
-      // Reemplazo: trámites siempre; PQRSD solo en reentrega (antes de revisión) para no duplicar
+      t.soportes.forEach(s=>{if(s&&s.activo)s.activo=false;});
       if(hasNewInstitutional&&(!esPqrsEntregaAct||esNuevaEntrega)){
-        const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
-        if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
-        drop.forEach(function(s){
-          const fid=String(s.driveFileId||s.fileId||'').trim();
-          if(fid)window._soportesDriveABorrar.push(fid);
-        });
-        t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId&&!s.fileId);
+        if(esNuevaEntrega){
+          (t.soportes||[]).forEach(function(s){
+            if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+            s.activo=false;
+            s.driveEstado='acorregir';
+            s.version_historial=true;
+            if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+          });
+        }else{
+          const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
+          if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
+          drop.forEach(function(s){
+            const fid=String(s.driveFileId||s.fileId||'').trim();
+            if(fid)window._soportesDriveABorrar.push(fid);
+          });
+          t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId&&!s.fileId);
+        }
       }
     }
     let linkNum=0,fileNum=0;
@@ -10831,9 +10874,6 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   const eExp=getExpById(expId);
   const esPqrsEntrega=eExp&&taskEsAtenderPqrs(t,eExp);
   const corrVoluntaria=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
-  const soportes=t.soportes||[];
-  const hasSop=soportes.length>0;
-  const ultima=hasSop?soportes[soportes.length-1]:null;
   const sol=getTaskSolicitudPendiente(t);
   let h='<div class="task-cmt-form task-enviar-unificado" id="task-enviar-panel" style="padding:.65rem;border-radius:var(--r);background:var(--sf2)">';
   h+='<input type="hidden" id="enviar-requiere-link" value="0">';
@@ -10848,27 +10888,13 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como encargado, usted se revisa a sí mismo: la entrega <strong>no pasa por «Por revisar»</strong>. Tras adjuntar el documento, elija el flujo: <strong>Por imprimir → Por firmar → Firmados → Por notificar</strong> (o cierre sin firma si no aplica).</div>';
   }else if(finalizarEnc){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">Como encargado del departamento, al finalizar la actividad queda <strong>cerrada directamente</strong>. Puede adjuntar soporte opcional.</div>';
-  }else if(corrVoluntaria){
-    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
-      '<strong>Corrección voluntaria</strong> — el encargado aún no ha revisado. Puede reemplazar el documento o ajustar el comentario. Si ya lo revisaron, esta opción se desactiva.'+
-      (hasSop&&ultima?' Versión actual: v'+ultima.version+'.':'')+
-    '</div>';
-  }else if(nuevaEntrega){
-    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
-      '<strong>Nueva entrega</strong> — el comentario es sobre <strong>esta entrega</strong> (no el chat de la actividad). Enlace de Drive y/o comentario; sin adjunto, comentario obligatorio.'+
-      (hasSop&&ultima?' Versión anterior: v'+ultima.version+'.':'')+
-    '</div>';
   }else if(traslado){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
-      'Entrega tras traslado — comentario sobre <strong>esta entrega</strong>. Sin enlace Drive, comentario obligatorio.'+
+      'Entrega tras traslado — comentario obligatorio si no adjunta archivo.'+
     '</div>';
   }else if(esPqrsEntrega){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
       'Adjunte el documento de respuesta (se sube al Drive institucional) y/o un comentario sobre esta entrega.'+
-    '</div>';
-  }else{
-    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
-      'Adjunte enlace de Google Drive y/o comentario sobre esta entrega.'+
     '</div>';
   }
   if(esPqrsEntrega&&!sol)h+=renderPqrsEntregaCamposHtml(eExp);
@@ -10878,31 +10904,21 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       ||(esLibreEnv&&typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(String(t.depto||'guaviare')));
     if(showDriveUp&&!esPqrsEntrega){
       const envCtx=typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):('enviar-soporte:'+expId+':'+taskId);
-      const getCtx=typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(expId,taskId):null;
-      h+='<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Subir archivo (Drive institucional — opcional)</label>'+
-        (typeof sstFilePickBlock==='function'
-          ?sstFilePickBlock({inputId:'enviar-adj-file',listId:'enviar-adj-file-list',ctxKey:envCtx,label:'Seleccionar archivo',getUploadCtx:getCtx})
-          :('<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px">'))+
-        '<div style="font-size:10px;color:var(--tx3);margin-top:2px">Documento principal. También puede pegar un enlace externo abajo.</div></div>'+
-        '<div style="margin-bottom:8px"><label style="font-size:11px;font-weight:600;color:var(--tx3)">Anexos (opcionales)</label>'+
-        (typeof sstFilePickBlock==='function'
-          ?sstFilePickBlock({inputId:'enviar-anexos-file',listId:'enviar-anexos-list',ctxKey:envCtx,multi:true,label:'Seleccionar anexos',getUploadCtx:getCtx})
-          :('<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="font-size:12px;width:100%;margin-top:4px">'))+
-        '</div>';
-    }
-    // Los enlaces externos de Drive no aplican para entregas de PQRSD:
-    // los archivos se cargan al Drive institucional y se adjuntan al enviar la respuesta.
-    if(!esPqrsEntrega){
-      h+='<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-bottom:4px">'+(finalizarEnc||autoEnc?'Soporte (link Drive)':'Enlaces Google Drive externos (opcionales)')+'</div>'+
-        '<div id="enviar-adjuntos-rows"></div>'+
-        '<div class="fx" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">'+
-          '<button type="button" class="btn bsm" onclick="addEnviarAdjuntoRow()">+ Link Drive</button>'+
+      h+='<div class="fld" style="margin-bottom:10px">'+
+        '<div class="sst-file-pick-row">'+
+          '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
+          '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
+          '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+          '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
         '</div>'+
-        '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Enlace externo de Google Drive (archivos fuera del Drive institucional). También puede incluir el link en el comentario.</div>';
-    }else{
-      h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
+        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
+        '<div id="enviar-adj-file-list" class="sst-file-slot-list"></div>'+
+        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Anexos</div>'+
+        '<div id="enviar-anexos-list" class="sst-file-slot-list"></div>'+
+      '</div>';
     }
-    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta link Drive)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
+    h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
+    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta archivo)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
     if(autoEnc){
       const eid=escAttr(expId),tid=escAttr(taskId);
       h+='<div style="font-size:12px;font-weight:600;margin:4px 0 6px">Tras la entrega, el flujo será:</div>'+
@@ -10946,13 +10962,7 @@ function openEnviarSoporteModal(expId,taskId,modo){
     renderEnviarPanelHtml(expId,taskId,t,modo);
   ov.classList.add('on');
   window._taskModalCtx={expId,taskId,mode:'enviar',actLibre:!!t.sinExpediente};
-  if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
-    sstFileStagingReset(sstFileEnviarCtxKey(expId,taskId));
-    if(typeof sstFileInitPick==='function'){
-      sstFileInitPick('enviar-adj-file');
-      sstFileInitPick('enviar-anexos-file');
-    }
-  }
+  initEnviarArchivosPick(expId,taskId);
   if(esPqrsEntrega){
     setTimeout(function(){
       if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
@@ -11097,6 +11107,13 @@ function resetTaskPorCorregir(t,nota,reportadoPor){
   if(venceOrig)t.vence=venceOrig;
   if(plazoOrig!=null&&plazoOrig!=='')t.plazoDias=plazoOrig;
   t.ultimaRevisionDepto={tipo:'corregir',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:nota||''};
+  (t.soportes||[]).forEach(function(s){
+    if(!s||!s.activo)return;
+    s.activo=false;
+    s.driveEstado='acorregir';
+    s.version_historial=true;
+    if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+  });
   t.historial.push({tipo:'ajuste_soporte',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:nota||'',reportadoPor:reportadoPor||''});
 }
 function solicitarAjusteSoporte(expId,taskId,nota){
@@ -11319,7 +11336,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     ['En ejecución','Vencida','Por corregir'].includes(est)
     ||(est==='Por verificar'&&taskPuedeCorregirSinRevision(t))
   );
-  const activo=getSoporteActivo(t);
+  const activo=getSoportePrincipalUltimaEntrega(t)||getSoporteActivo(t);
   const sel=soportes.find(s=>s.id===sopSelId)||activo;
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
@@ -13114,6 +13131,16 @@ function submitFinalizarEncargado(expId,taskId){
   }
   run();
 }
+function limpiarSoportesPorCorregirTask(t){
+  const trash=[];
+  if(!t||!Array.isArray(t.soportes))return trash;
+  t.soportes=t.soportes.filter(function(s){
+    if(!s)return false;
+    if(soporteEsPorCorregir(s)){trash.push(s);return false;}
+    return true;
+  });
+  return trash;
+}
 function verificarTaskExp(expId,taskId,fecha){
   // Aprobar/cerrar documento: solo en sistema. No enviar correo al responsable.
   if(esModoResponsable()){notif('Solo el departamento puede verificar','err');return;}
@@ -13121,8 +13148,14 @@ function verificarTaskExp(expId,taskId,fecha){
   if(!t){t=normalizeActLibre(getActLibreById(taskId));if(t)expId=t.codigo;}
   if(!t||!canDeptVerificarCierre(t)){notif('No puede cerrar esta actividad','err');return;}
   const doVerify=function(){
+    const trashIds=[];
     if(mutateTask(expId,taskId,t=>{
     normalizeTask(t);
+    const trash=limpiarSoportesPorCorregirTask(t);
+    trash.forEach(function(s){
+      const fid=String(s.driveFileId||s.fileId||'').trim();
+      if(fid)trashIds.push(fid);
+    });
     const fechaC=fecha||hoy();
     const repPend=getUltimoReportadoPor(t);
     if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
@@ -13148,6 +13181,13 @@ function verificarTaskExp(expId,taskId,fecha){
     t.ultimaRevisionDepto={tipo:'aprobada',fecha:fechaC,ts:Date.now(),por:taskComentarioAutor(),nota:repPend?('Aprobada — '+repPend):'Actividad aprobada y cerrada'};
     t.historial.push({tipo:'verificacion',fecha:fechaC,ts:Date.now(),por:taskComentarioAutor(),nota:repPend?('Aprobada entrega de '+repPend):'Actividad aprobada y cerrada',reportadoPor:repPend||''});
   })){
+      if(trashIds.length&&typeof driveDeleteInstitutional==='function'){
+        (async function(){
+          for(let i=0;i<trashIds.length;i++){
+            try{await driveDeleteInstitutional(trashIds[i]);}catch(err){console.warn('borrar soporte por corregir:',err);}
+          }
+        })();
+      }
       // Marcar publicado + correo ciudadano (trámites sin firma)
       const expRec=getExpById(expId);
       const tDone=getTaskFromExp(expRec,taskId)||getActLibreById(taskId);
@@ -13610,6 +13650,15 @@ function openTaskCommentsModal(expId,taskId,opts){
     modal.classList.remove('task-modal-archivos');
   }
   if(!isRespVerCorr)clearTaskModalHdrOpenBtn();
+  if(!chatOnly&&!soloGestion){
+    const soportesSel=t.soportes||[];
+    const activoSel=getSoporteActivo(t);
+    const prevSel=window._taskSopSel;
+    const validPrev=prevSel&&soportesSel.some(function(s){return s.id===prevSel;});
+    if(isReviewDelivery&&!opts.keepStack)window._taskSopSel=getDefaultSoporteSel(t)||'';
+    else if(validPrev)window._taskSopSel=prevSel;
+    else window._taskSopSel=getDefaultSoporteSel(t)||(activoSel||{}).id||'';
+  }
   const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa)});
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
@@ -13671,11 +13720,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
-    const prevSel=window._taskSopSel;
-    const validPrev=prevSel&&soportes.some(s=>s.id===prevSel);
     window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa};
-    if(validPrev)window._taskSopSel=prevSel;
-    else window._taskSopSel=getDefaultSoporteSel(t)||(activo||{}).id||'';
     window._soportePaginaActual=1;
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;

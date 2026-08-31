@@ -624,11 +624,42 @@ body.task-review-doc-mode #task-modal-overlay{
   display:flex;
 }
 /* Panel lateral compacto: responsable por corregir y encargado por revisar */
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open{
+  align-items:stretch;
+}
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-doc-col-main,
-.task-modal.task-modal-review-wa-side .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-doc-col-main,
-.task-modal.task-modal-resp-ver .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-doc-col-main{
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-side-panel{
+  display:flex;
+  flex-direction:column;
   flex:1 1 50%;
+  min-width:0;
   max-width:50%;
+  min-height:0;
+  align-self:stretch;
+}
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-doc-tabs{
+  display:none;
+}
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-doc-stage.task-review-compare-hide-main{
+  flex:1 1 0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-side-body{
+  flex:1 1 0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  padding:0;
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-compare-preview,
+.task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-compare-preview-a.on{
+  flex:1 1 0;
+  min-height:0;
+  height:auto;
+  margin:0;
 }
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-side-panel,
 .task-modal.task-modal-review-wa-side .task-review-split-view.task-review-side-open.task-review-compare-open .task-review-side-panel,
@@ -1075,16 +1106,19 @@ body.task-review-doc-mode #task-modal-overlay{
   flex-shrink:0;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-hdr{
-  padding:2px 6px;
-  border-bottom:0;
-  min-height:0;
-  justify-content:flex-end;
+  display:none;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-body{
-  padding:4px;
+  flex:1 1 0;
+  min-height:0;
+  padding:0;
   overflow:hidden;
+  display:flex;
+  flex-direction:column;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-compare-preview{
+  flex:1 1 0;
+  min-height:0;
   border:1px solid var(--bd);
   border-radius:var(--r);
   background:var(--sf2);
