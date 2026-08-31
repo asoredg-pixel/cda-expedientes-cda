@@ -5173,53 +5173,107 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
   return h+'</nav>';
 }
-function buildTaskReviewCompareSelectOpts(t,e,taskId){
-  const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
-  if(docs.length<2)return {docs:docs,opts:'',empty:true};
-  const activo=t?getSoporteActivo(t):null;
-  const curId=activo?'sop_'+activo.id:'';
-  const others=docs.filter(function(d){return d.id!==curId;});
-  const pick=others.length?others[others.length-1]:docs[docs.length-1];
-  if(!window._taskReviewCompareDoc||!docs.some(function(d){return d.id===window._taskReviewCompareDoc;}))
-    window._taskReviewCompareDoc=pick.id;
+function compareDocShortLabel(d){
+  if(!d)return'Documento';
+  const lab=String(d.label||d.titulo||'Documento').replace(/^📎\s*|^📄\s*/,'').trim();
+  const meta=String(d.meta||'').trim();
+  const shortMeta=meta?(' · '+meta.split(' · ')[0]):'';
+  if(d.esAnexo&&!/^anexo/i.test(lab))return '📎 Anexo · '+lab+shortMeta;
+  return lab+shortMeta;
+}
+function buildCompareGroupedOptsHtml(docs,selectedId){
+  if(!docs.length)return'';
   const groups=[
     {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo;}},
-    {lbl:'Anexos de la entrega',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo;}},
-    {lbl:'Otras entregas',test:function(d){return d.origen==='Entrega'&&!d.entregaActual;}},
-    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
-    {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''));}}
+    {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo;}},
+    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo;}},
+    {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo;}},
+    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
+    {lbl:'Anexos · expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===true&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
+    {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!d.esAnexo;}},
+    {lbl:'Anexos · registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!!d.esAnexo;}}
   ];
   const used=new Set();
   let opts='';
   groups.forEach(function(g){
-    const items=docs.filter(function(d){return d.id!==curId&&g.test(d)&&!used.has(d.id);});
+    const items=docs.filter(function(d){return g.test(d)&&!used.has(d.id);});
     if(!items.length)return;
     opts+='<optgroup label="'+escAttr(g.lbl)+'">';
     items.forEach(function(d){
       used.add(d.id);
-      opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+      opts+='<option value="'+escAttr(d.id)+'"'+(d.id===selectedId?' selected':'')+'>'+escAttr(compareDocShortLabel(d))+'</option>';
     });
     opts+='</optgroup>';
   });
-  docs.filter(function(d){return d.id!==curId&&!used.has(d.id);}).forEach(function(d){
-    opts+='<option value="'+escAttr(d.id)+'"'+(d.id===window._taskReviewCompareDoc?' selected':'')+'>'+escAttr(d.label)+(d.meta?' · '+escAttr(d.meta):'')+'</option>';
+  docs.filter(function(d){return!used.has(d.id);}).forEach(function(d){
+    opts+='<option value="'+escAttr(d.id)+'"'+(d.id===selectedId?' selected':'')+'>'+escAttr(compareDocShortLabel(d))+'</option>';
   });
-  return {docs:docs,opts:opts,empty:false};
+  return opts;
+}
+function initTaskReviewCompareDefaults(t,e,taskId,docs){
+  if(!docs||docs.length<2)return;
+  const principal=getSoportePrincipalUltimaEntrega(t);
+  let defA=principal?('sop_'+principal.id):'';
+  const ult=getSoportesUltimaEntrega(t);
+  const firstAnx=ult.find(soporteEsAnexoEntrega);
+  let defB=firstAnx?('sop_'+firstAnx.id):'';
+  if(!defB||defB===defA){
+    const other=docs.find(function(d){return d.id!==defA;});
+    defB=other?other.id:'';
+  }
+  if(!defA)defA=docs[0].id;
+  if(!defB)defB=(docs.find(function(d){return d.id!==defA;})||docs[docs.length-1]).id;
+  if(!window._taskReviewCompareDocA||!docs.some(function(d){return d.id===window._taskReviewCompareDocA;}))
+    window._taskReviewCompareDocA=defA;
+  if(!window._taskReviewCompareDocB||!docs.some(function(d){return d.id===window._taskReviewCompareDocB;}))
+    window._taskReviewCompareDocB=defB;
+  if(window._taskReviewCompareDocA===window._taskReviewCompareDocB){
+    const alt=docs.find(function(d){return d.id!==window._taskReviewCompareDocA;});
+    if(alt)window._taskReviewCompareDocB=alt.id;
+  }
+}
+function buildTaskReviewCompareSelectOpts(t,e,taskId){
+  const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
+  if(docs.length<2)return {docs:docs,optsA:'',optsB:'',empty:true};
+  initTaskReviewCompareDefaults(t,e,taskId,docs);
+  return {
+    docs:docs,
+    optsA:buildCompareGroupedOptsHtml(docs,window._taskReviewCompareDocA),
+    optsB:buildCompareGroupedOptsHtml(docs,window._taskReviewCompareDocB),
+    empty:false
+  };
 }
 function renderTaskReviewCompareSelectHtml(t,e,taskId){
   const built=buildTaskReviewCompareSelectOpts(t,e,taskId);
-  if(built.empty)return '';
-  return built.opts;
+  if(built.empty)return {a:'',b:''};
+  return {a:built.optsA,b:built.optsB};
 }
 function taskReviewSyncCompareSelect(t,e,taskId,show){
-  const sel=document.getElementById('task-review-compare-sel');
-  if(!sel)return;
+  const selA=document.getElementById('task-review-compare-sel-a');
+  const selB=document.getElementById('task-review-compare-sel-b');
+  const pair=document.getElementById('task-review-compare-sel-pair');
+  if(!selA||!selB)return;
   if(show){
     const opts=renderTaskReviewCompareSelectHtml(t,e,taskId);
-    if(opts){sel.innerHTML=opts;sel.classList.add('on');sel.setAttribute('aria-hidden','false');}
+    if(opts.a&&opts.b){
+      selA.innerHTML=opts.a;
+      selB.innerHTML=opts.b;
+      selA.value=window._taskReviewCompareDocA||'';
+      selB.value=window._taskReviewCompareDocB||'';
+      selA.classList.add('on');
+      selB.classList.add('on');
+      selA.setAttribute('aria-hidden','false');
+      selB.setAttribute('aria-hidden','false');
+      if(pair){pair.classList.add('on');pair.setAttribute('aria-hidden','false');}
+      renderTaskReviewComparePreviews();
+    }
   }else{
-    sel.classList.remove('on');
-    sel.setAttribute('aria-hidden','true');
+    selA.classList.remove('on');
+    selB.classList.remove('on');
+    selA.setAttribute('aria-hidden','true');
+    selB.setAttribute('aria-hidden','true');
+    if(pair){pair.classList.remove('on');pair.setAttribute('aria-hidden','true');}
+    taskReviewSetComparePaneVisible(false);
   }
 }
 function renderTaskReviewCompareBarHtml(t,e,taskId){
@@ -5513,7 +5567,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   const tit=document.getElementById('task-review-side-title');
   if(!split||!panel||!body)return;
   split.classList.add('task-review-side-open');
-  split.classList.toggle('task-review-compare-open',mode==='compare');
+  taskReviewSetComparePaneVisible(mode==='compare');
   panel.setAttribute('aria-hidden','false');
   taskReviewSyncDocBarClose(true);
   if(tit)tit.textContent=(taskReviewSideTitles()[mode]||mode);
@@ -5536,7 +5590,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     if(typeof initTaskReviewArchivosSide==='function')setTimeout(function(){initTaskReviewArchivosSide(taskId);},40);
   }else if(mode==='compare'){
     body.innerHTML='<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
-    setTimeout(function(){renderTaskReviewComparePreview();},40);
+    setTimeout(function(){renderTaskReviewComparePreviews();},40);
   }else if(mode==='chat'){
     body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);},30);
@@ -5581,30 +5635,45 @@ function renderTaskReviewCompareSideHtml(t,e,taskId){
   if(built.empty)return '<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay otros documentos para comparar.</div>';
   return '<div id="task-review-compare-preview" class="task-review-compare-preview compare-ver-block task-review-compare-preview-full"></div>';
 }
-function onTaskReviewCompareChange(){
-  const sel=document.getElementById('task-review-compare-sel');
-  if(sel)window._taskReviewCompareDoc=sel.value;
-  renderTaskReviewComparePreview();
+function taskReviewSetComparePaneVisible(show){
+  const split=document.getElementById('task-review-split-view');
+  const stage=document.getElementById('task-review-doc-stage');
+  const paneA=document.getElementById('task-review-compare-preview-a');
+  if(split)split.classList.toggle('task-review-compare-open',!!show);
+  if(stage)stage.classList.toggle('task-review-compare-hide-main',!!show);
+  if(paneA)paneA.classList.toggle('on',!!show);
 }
-function renderTaskReviewComparePreview(){
-  const wrap=document.getElementById('task-review-compare-preview');
-  if(!wrap)return;
+function renderTaskReviewCompareEmbedHtml(doc){
+  if(!doc)return'<div style="padding:8px;font-size:12px;color:var(--tx3)">Sin documento</div>';
+  const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
+  if(soporteTieneVista(sopLike)){
+    return soporteEsImagen(sopLike)
+      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
+      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+  }
+  return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
+}
+function onTaskReviewCompareChange(){
+  const selA=document.getElementById('task-review-compare-sel-a');
+  const selB=document.getElementById('task-review-compare-sel-b');
+  if(selA)window._taskReviewCompareDocA=selA.value;
+  if(selB)window._taskReviewCompareDocB=selB.value;
+  renderTaskReviewComparePreviews();
+}
+function renderTaskReviewComparePreviews(){
+  const wrapA=document.getElementById('task-review-compare-preview-a');
+  const wrapB=document.getElementById('task-review-compare-preview');
+  if(!wrapA&&!wrapB)return;
   const ctx=window._taskModalCtx||{};
   const e=typeof getExpById==='function'?getExpById(ctx.expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(ctx.expId,ctx.taskId):null;
   const docs=collectDocsComparables(e,ctx.taskId,t,{incluirAsociados:true});
-  const doc=docs.find(function(d){return d.id===window._taskReviewCompareDoc;})||docs[docs.length-1];
-  if(!doc){wrap.innerHTML='<div style="padding:8px;font-size:12px;color:var(--tx3)">Sin documento</div>';return;}
-  const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
-  let vista='';
-  if(soporteTieneVista(sopLike)){
-    vista=soporteEsImagen(sopLike)
-      ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
-      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
-  }else{
-    vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
-  }
-  wrap.innerHTML=vista;
+  if(docs.length<2)return;
+  initTaskReviewCompareDefaults(t,e,ctx.taskId,docs);
+  const docA=docs.find(function(d){return d.id===window._taskReviewCompareDocA;})||docs[0];
+  const docB=docs.find(function(d){return d.id===window._taskReviewCompareDocB;})||docs[docs.length-1];
+  if(wrapA)wrapA.innerHTML=renderTaskReviewCompareEmbedHtml(docA);
+  if(wrapB)wrapB.innerHTML=renderTaskReviewCompareEmbedHtml(docB);
 }
 function puedeEliminarNotaDoc(n,canAnnot){
   if(!n||!canAnnot)return false;
@@ -8891,9 +8960,16 @@ function getSoportesUltimaEntrega(t){
   const sameDay=s.filter(x=>(x.fecha||'').slice(0,10)===f);
   return sameDay.length>1?sameDay:[last];
 }
-function getDefaultSoporteSel(t){
+function getSoportePrincipalUltimaEntrega(t){
   const ult=getSoportesUltimaEntrega(t);
-  return(ult[0]||getSoporteActivo(t)||{}).id||'';
+  const main=ult.find(function(s){return s&&!soporteEsAnexoEntrega(s);});
+  if(main)return main;
+  const any=(t.soportes||[]).find(function(s){return s&&!soporteEsAnexoEntrega(s);});
+  return any||ult[0]||getSoporteActivo(t)||null;
+}
+function getDefaultSoporteSel(t){
+  const s=getSoportePrincipalUltimaEntrega(t);
+  return(s||{}).id||'';
 }
 function soporteTieneVista(s){
   if(!s)return false;
@@ -9195,7 +9271,14 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         if(!url)return;
         const lbl=_pqrsEtiquetaDocWf(d,wf.documentos||[]);
         const esAn=_pqrsDocEsAnexoRespuesta(d);
-        pushUrl('wf_'+exp._exp+'_'+i,pref+'PQRSD',(esAn?'📎 ':'📄 ')+lbl,url,d.entregado_en||wf.fecha_respuesta||exp._pqrs_respuesta_fecha,d.driveEstado||'');
+        const p=parseDrivePreviewUrl(url);
+        add({
+          id:'wf_'+exp._exp+'_'+i,origen:pref+'PQRSD',soporteId:null,esAnexo:esAn,
+          label:(esAn?'📎 ':'📄 ')+lbl,titulo:(esAn?'📎 ':'📄 ')+lbl,
+          meta:[d.driveEstado||'',fmtF(String(d.entregado_en||wf.fecha_respuesta||'').slice(0,10))].filter(Boolean).join(' · '),
+          preview:p.preview||p.url||url,url,local:false,mime:d.mime||'',fecha:d.entregado_en||wf.fecha_respuesta||'',
+          sortKey:(d.entregado_en||wf.fecha_respuesta||'0000')+'_wf_'+String(i).padStart(4,'0')+(esAn?'_z':'')
+        });
       });
     }
     if(typeof docsTramiteData==='function'){
@@ -9215,9 +9298,10 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       (tk.soportes||[]).forEach(function(s){
         const url=soporteUrlComparable(s);
         if(!url&&!s.local)return;
-        const lab='Act. '+(tk.actividad||tk.desc||'').slice(0,30)+' v'+(s.version||'?');
+        const esAnx=soporteEsAnexoEntrega(s);
+        const lab=esAnx?('📎 Anexo · Act. '+(tk.actividad||tk.desc||'').slice(0,24)+' v'+(s.version||'?')):('Act. '+(tk.actividad||tk.desc||'').slice(0,30)+' v'+(s.version||'?'));
         add({
-          id:'asoc_sop_'+exp._exp+'_'+s.id,origen:pref+'Actividad',soporteId:s.id,
+          id:'asoc_sop_'+exp._exp+'_'+s.id,origen:pref+'Actividad',soporteId:s.id,esAnexo:esAnx,
           label:lab,titulo:lab,
           meta:fmtF((s.fecha||'').slice(0,10)),
           preview:s.preview||s.driveLink||s.previewLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
@@ -9418,6 +9502,16 @@ function selectTaskSoporte(expId,taskId,sopId){
   const curTab=document.querySelector('.task-review-rail-view.on')||document.querySelector('.task-view-tab.on');
   if(curTab&&curTab.dataset.tab)window._taskViewTabPreferido=curTab.dataset.tab;
   const ctx=window._taskModalCtx||{};
+  if(window._taskReviewSideMode==='compare'){
+    const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+    const selObj=(t&&t.soportes||[]).find(function(s){return s.id===sopId;});
+    const canAnnot=canDeptMarcarEnSoporte(t,selObj);
+    document.querySelectorAll('.soporte-doc-tab').forEach(function(btn){
+      btn.classList.toggle('on',btn.getAttribute('onclick')&&btn.getAttribute('onclick').indexOf("'"+sopId+"'")>=0);
+    });
+    if(typeof initSoporteAnnotViewer==='function')setTimeout(function(){initSoporteAnnotViewer(expId,taskId,sopId,canAnnot);},40);
+    return;
+  }
   openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
 }
 function verConDesdeTaskModal(expId){
@@ -11271,7 +11365,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           const lbl=soporteTabLabel(s,i,soportes);
           return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
-        (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Comparar con" onchange="onTaskReviewCompareChange()"></select>':'')+
+        (showCompareBtn?('<div id="task-review-compare-sel-pair" class="task-review-compare-sel-pair" aria-hidden="true">'+
+          '<div class="task-review-compare-sel-col"><span class="task-review-compare-sel-lbl">◀ Izq.</span>'+
+          '<select id="task-review-compare-sel-a" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento izquierdo" onchange="onTaskReviewCompareChange()"></select></div>'+
+          '<div class="task-review-compare-sel-col"><span class="task-review-compare-sel-lbl">Der. ▶</span>'+
+          '<select id="task-review-compare-sel-b" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento derecho" onchange="onTaskReviewCompareChange()"></select></div>'+
+          '</div>'):'')+
         (docToolsBtns?('<div class="task-review-doc-tools">'+docToolsBtns+'</div>'):'')+
         '</div>'+
         '</div>';
@@ -11295,6 +11394,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
     if(isReview){
       h+='<div class="task-review-doc-stage" id="task-review-doc-stage">'+
+        '<div id="task-review-compare-preview-a" class="task-review-compare-preview task-review-compare-preview-a"></div>'+
         '<div class="task-review-viewer-shell">'+
           '<div class="soporte-split task-review-split" id="soporte-split-wrap">'+
             '<div class="soporte-doc-col">'+
@@ -13542,6 +13642,10 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(!chatOnly&&!soloGestion){
     window._compareDocA=null;
     window._compareDocB=null;
+    if(!opts.keepStack){
+      window._taskReviewCompareDocA=null;
+      window._taskReviewCompareDocB=null;
+    }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
     const prevSel=window._taskSopSel;

@@ -983,10 +983,34 @@ body.task-review-doc-mode #task-modal-overlay{
   color:var(--tx3);
   flex-shrink:0;
 }
+.task-modal.task-modal-review .task-review-compare-sel-pair{
+  display:none;
+  flex:1 1 0;
+  min-width:0;
+  gap:6px;
+  align-items:center;
+}
+.task-modal.task-modal-review .task-review-compare-sel-pair.on{
+  display:flex;
+}
+.task-modal.task-modal-review .task-review-compare-sel-col{
+  flex:1 1 0;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:4px;
+}
+.task-modal.task-modal-review .task-review-compare-sel-lbl{
+  flex:0 0 auto;
+  font-size:10px;
+  font-weight:600;
+  color:var(--tx3);
+  white-space:nowrap;
+}
 .task-modal.task-modal-review .task-review-compare-inline-sel{
   display:none;
-  flex:1 1 120px;
-  min-width:min(120px,26vw);
+  flex:1 1 0;
+  min-width:0;
   max-width:none;
   padding:4px 6px;
   border:1px solid var(--bd);
@@ -997,9 +1021,44 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-compare-inline-sel.on{
   display:block;
 }
-.task-modal.task-modal-review .task-review-doc-bar-compare .task-review-compare-inline-sel.on{
-  display:block;
-  flex:1 1 160px;
+.task-modal.task-modal-review .task-review-doc-bar-compare .task-review-compare-sel-pair.on{
+  flex:1 1 0;
+  min-width:min(240px,55%);
+}
+.task-modal.task-modal-review .task-review-doc-bar-compare .task-review-doc-tabs{
+  flex:0 0 auto;
+}
+.task-modal.task-modal-review .task-review-doc-bar-compare .task-review-doc-tools{
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.task-modal.task-modal-review .task-review-compare-preview-a{
+  display:none;
+  flex:1 1 0;
+  min-height:0;
+  overflow:hidden;
+  border:1px solid var(--bd);
+  border-radius:var(--r);
+}
+.task-modal.task-modal-review .task-review-compare-preview-a.on{
+  display:flex;
+  flex-direction:column;
+}
+.task-modal.task-modal-review .task-review-doc-stage.task-review-compare-hide-main .task-review-viewer-shell{
+  display:none;
+}
+.task-modal.task-modal-review .task-review-doc-stage.task-review-compare-hide-main .task-review-compare-preview-a{
+  display:flex;
+}
+.task-modal.task-modal-review .task-review-compare-preview-a iframe,
+.task-modal.task-modal-review .task-review-compare-preview-a img{
+  flex:1 1 0;
+  min-height:0;
+  width:100%;
+  height:100%!important;
+  max-height:none!important;
+  border:0;
+  object-fit:contain;
 }
 .task-modal.task-modal-review .task-review-doc-tools{
   flex:1 1 auto;
@@ -1491,13 +1550,13 @@ body.task-review-doc-mode #task-modal-overlay{
 }
 .task-modal.task-modal-review .task-review-doc-bar-row{
   display:flex;
-  flex-wrap:nowrap;
+  flex-wrap:wrap;
   align-items:center;
   gap:6px 8px;
   min-width:0;
 }
 .task-modal.task-modal-review .task-review-doc-bar-compare .task-review-doc-bar-row{
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
 }
 .task-modal.task-modal-review .task-review-doc-tabs{
   margin:0;
