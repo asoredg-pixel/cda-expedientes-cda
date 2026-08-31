@@ -2975,6 +2975,66 @@ function htmlPqrsCorreoOrigenHtml(e){
   const pane=renderPqrsCorreoPaneInnerHtml(e,{asDetails:true});
   return pane||'';
 }
+function pqrsNormAttName(n){
+  return String(n||'').trim().toLowerCase().replace(/\s+/g,' ');
+}
+function pqrsFindDriveAtt(driveAtts,nombre,idx){
+  const list=Array.isArray(driveAtts)?driveAtts.filter(function(x){return x&&x.driveLink;}):[];
+  if(!list.length)return null;
+  const want=pqrsNormAttName(nombre);
+  if(want){
+    const exact=list.find(function(x){return pqrsNormAttName(x.nombre||x.name)===want;});
+    if(exact)return exact;
+    const loose=list.find(function(x){
+      const dn=pqrsNormAttName(x.nombre||x.name);
+      return dn&&want&&(dn.indexOf(want)>=0||want.indexOf(dn)>=0);
+    });
+    if(loose)return loose;
+  }
+  if(typeof idx==='number'&&idx>=0&&idx<list.length)return list[idx];
+  return null;
+}
+async function abrirPqrsGmailAnexoCorreo(msgId,attId,nombre,mimeType){
+  msgId=String(msgId||'').trim();
+  attId=String(attId||'').trim();
+  if(!msgId||!attId){notif('Adjunto no disponible','err');return;}
+  try{
+    let b64url=null;
+    if(typeof _gmailGetAttachmentAny==='function')b64url=await _gmailGetAttachmentAny(msgId,attId);
+    else if(typeof gmailGetAttachment==='function'){
+      if(typeof gmailIsTokenValid==='function'&&!gmailIsTokenValid()){notif('Conecte el correo para ver este anexo','warn');return;}
+      b64url=await gmailGetAttachment(msgId,attId);
+    }
+    if(!b64url)throw new Error('sin datos');
+    const b64=String(b64url).replace(/-/g,'+').replace(/_/g,'/');
+    const binary=atob(b64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const mime=mimeType||'application/octet-stream';
+    const blob=new Blob([bytes],{type:mime});
+    abrirVisorAdjunto(URL.createObjectURL(blob),nombre||'Adjunto');
+  }catch(err){
+    console.warn('abrirPqrsGmailAnexoCorreo',err);
+    notif('No se pudo abrir el anexo. Si fue radicado por correo, revise la carpeta Drive o reconecte Gmail.','warn');
+  }
+}
+window.abrirPqrsGmailAnexoCorreo=abrirPqrsGmailAnexoCorreo;
+function pqrsAnexoChipHtml(e,a,drv,idx){
+  const nom=a&&(a.nombre||a.name)||(drv&&(drv.nombre||drv.name))||'Adjunto';
+  const mime=(a&&a.mimeType)||(drv&&drv.mime)||'';
+  const ico=(mime||'').startsWith('image/')?'🖼️':(mime||'').includes('pdf')?'📄':(mime||'').includes('word')||(nom||'').match(/\.docx?$/i)?'📝':(mime||'').includes('sheet')||(mime||'').includes('excel')||(nom||'').match(/\.xlsx?$/i)?'📊':'📎';
+  if(drv&&drv.driveLink){
+    const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(drv.driveLink)+'\',\''+jsStr(nom)+'\');return false;';
+    return'<button type="button" class="gmail-att-chip" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
+  }
+  const msgId=e&&e._gmail_message_id||'';
+  const attId=a&&a.attachmentId||'';
+  if(msgId&&attId){
+    const onclick='event.stopPropagation();abrirPqrsGmailAnexoCorreo(\''+jsStr(msgId)+'\',\''+jsStr(attId)+'\',\''+jsStr(nom)+'\',\''+jsStr(mime)+'\');return false;';
+    return'<button type="button" class="gmail-att-chip" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
+  }
+  return'<span class="gmail-att-chip" style="opacity:.85" title="Anexo sin vista previa disponible"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></span>';
+}
 /** Panel: cuerpo del correo + chips de anexos (abribles). */
 function renderPqrsCorreoPaneInnerHtml(e,opts){
   opts=opts||{};
@@ -2985,23 +3045,17 @@ function renderPqrsCorreoPaneInnerHtml(e,opts){
   let attsHtml='';
   let hayAnexoSinLink=false;
   if(adjInfo.length){
-    attsHtml=adjInfo.map(function(a){
-      const drv=driveAtts.find(x=>x&&x.nombre===a.nombre&&x.driveLink)||null;
-      const ico=(a.mimeType||'').startsWith('image/')?'🖼️':(a.mimeType||'').includes('pdf')?'📄':(a.mimeType||'').includes('word')||(a.nombre||'').match(/\.docx?$/i)?'📝':(a.mimeType||'').includes('sheet')||(a.mimeType||'').includes('excel')||(a.nombre||'').match(/\.xlsx?$/i)?'📊':'📎';
-      if(drv&&drv.driveLink){
-        const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(drv.driveLink)+'\',\''+jsStr(a.nombre||'Adjunto')+'\');return false;';
-        return'<a href="'+escAttr(drv.driveLink)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(a.nombre||'adjunto')+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></a>';
-      }
-      hayAnexoSinLink=true;
-      return'<span class="gmail-att-chip" style="opacity:.85" title="Este anexo está en el correo reenviado a su oficina"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(a.nombre||'Adjunto')+'</span></span>';
+    attsHtml=adjInfo.map(function(a,idx){
+      const drv=pqrsFindDriveAtt(driveAtts,a.nombre,idx);
+      const chip=pqrsAnexoChipHtml(e,a,drv,idx);
+      if(chip.indexOf('<span class="gmail-att-chip"')===0)hayAnexoSinLink=true;
+      return chip;
     }).join('');
   }
   if(!attsHtml&&driveAtts.length){
-    attsHtml=driveAtts.map(function(att){
+    attsHtml=driveAtts.map(function(att,idx){
       if(!att||!att.driveLink)return'';
-      const nom=att.nombre||att.name||'Anexo';
-      const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(att.driveLink)+'\',\''+jsStr(nom)+'\');return false;';
-      return'<a href="'+escAttr(att.driveLink)+'" class="gmail-att-chip" style="text-decoration:none" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">📎</span><span class="att-name">'+escAttr(nom)+'</span></a>';
+      return pqrsAnexoChipHtml(e,{nombre:att.nombre||att.name,mimeType:att.mime},att,idx);
     }).join('');
   }
   const notaAnexos=hayAnexoSinLink
@@ -3047,7 +3101,7 @@ function renderPqrsArchivosSolicitudPaneHtml(e){
   h+='<div class="gmail-att-chips" style="display:flex;flex-direction:column;gap:6px;align-items:stretch">';
   items.forEach(function(it){
     const onclick='event.stopPropagation();abrirVisorAdjunto(\''+jsStr(it.url)+'\',\''+jsStr(it.label)+'\');return false;';
-    h+='<a href="'+escAttr(it.url)+'" class="gmail-att-chip" style="text-decoration:none;justify-content:flex-start" onclick="'+escAttr(onclick)+'"><span class="att-ico">📄</span><span class="att-name">'+escAttr(it.label)+'</span></a>';
+    h+='<button type="button" class="gmail-att-chip" style="justify-content:flex-start" onclick="'+escAttr(onclick)+'"><span class="att-ico">📄</span><span class="att-name">'+escAttr(it.label)+'</span></button>';
   });
   h+='</div></div>';
   return h;
@@ -4485,15 +4539,15 @@ function taskAgendaBtnHtml(expId,taskId){
   const exp=escAttr(expId),tid=escAttr(taskId);
   if(ag){
     const tip='En mi día · clic para organizar';
-    return '<button type="button" class="btn bsm bic act-agenda-btn act-agendada-on" title="'+escAttr(tip)+'" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>📅</button>';
+    return '<button type="button" class="btn bsm bic act-ico act-agenda-btn act-agendada-on" title="'+escAttr(tip)+'" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>📅</button>';
   }
-  return '<button type="button" class="btn bsm bic act-agenda-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
+  return '<button type="button" class="btn bsm bic act-ico act-agenda-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')">📅</button>';
 }
 function taskAgendaBtnAtendidaHtml(expId,taskId){
   const ag=typeof taskAgendaResumen==='function'?taskAgendaResumen(expId,taskId):null;
   if(!ag)return'';
   const exp=escAttr(expId),tid=escAttr(taskId);
-  return '<button type="button" class="btn bsm bic act-agenda-btn act-agendada-on" title="En mi día · atendida" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>📅</button>';
+  return '<button type="button" class="btn bsm bic act-ico act-agenda-btn act-agendada-on" title="En mi día · atendida" onclick="openAgendaDesdeActividad(\''+exp+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>📅</button>';
 }
 function taskEntregaComentariosCount(t){
   if(!t)return 0;
@@ -5286,7 +5340,7 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(esPqrs?'Correo y solicitud':'Documento')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">'+(esPqrs?'📧':'📄')+'</button>';
   if(!t.sinExpediente)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewOpenSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">🗂️</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">🗂️</button>';
   if(soloDocAprobado)return h+'</nav>';
   h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
@@ -5298,8 +5352,20 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notas'?' on':'')+'" data-side="notas" title="Notas internas privadas" onclick="taskReviewToggleSidePanel(\'notas\',\''+r+'\',\''+tid+'\')">📝'+(nn?actIcoBadgeHtml(nn,'yellow'):'')+'</button>';
   }
   if(puedeAgendarTask(t))
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
   return h+'</nav>';
+}
+function taskReviewSidePanelShellHtml(){
+  return '<div class="task-review-side-panel" id="task-review-side-panel" aria-hidden="true">'+
+    '<div class="task-review-side-hdr"><span id="task-review-side-title">Panel</span>'+
+    '<button type="button" class="task-review-side-close soporte-sidebar-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel">✕</button></div>'+
+    '<div class="task-review-side-body" id="task-review-side-body"></div></div>';
+}
+function wrapTaskReviewMainWithSidePanel(mainInner){
+  return '<div class="task-review-split-view" id="task-review-split-view">'+
+    '<div class="task-review-doc-col-main task-review-main">'+mainInner+'</div>'+
+    taskReviewSidePanelShellHtml()+
+  '</div>';
 }
 function compareDocShortLabel(d){
   if(!d)return'Documento';
@@ -13974,12 +14040,14 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const railNav=isRespVerCorr?'':(isVerDocMode?taskReviewRespVerRailHtml(refAct,taskId,t):taskReviewFullRailHtml(refAct,taskId,t));
     const pqrsRespBanner='';
+    const reviewMainInner=pqrsRespBanner+sopPanel;
+    const reviewWorkspaceInner=isPqrsOrigenView
+      ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
+      :('<div class="task-review-main">'+reviewMainInner+'</div>');
     if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isVerDocMode?'Documento y observaciones':'Revisión'))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isDeptReviewWa||isPqrsOrigenView?' task-review-layout-resp':'')+'">'+
-        '<div class="task-review-workspace">'+
-          '<div class="task-review-main">'+pqrsRespBanner+sopPanel+'</div>'+
-        '</div>'+
+        '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
         (railNav?'<aside class="task-review-rail" aria-label="Acciones">'+railNav+'</aside>':'')+
       '</div>';
   }else{
