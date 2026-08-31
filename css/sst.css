@@ -1553,36 +1553,20 @@ body.task-review-doc-mode #task-modal-overlay{
   flex-direction:column;
   overflow:hidden;
 }
-.task-modal.task-modal-review .task-review-decision{
-  flex:0 0 auto;
-  max-height:min(32vh,280px);
-  overflow:auto;
-  border-top:1px solid var(--bd);
-  margin-top:4px;
-  padding-top:0;
-  background:var(--sf);
+.task-review-decision-side{padding:4px 2px 12px}
+.task-decision-block{margin-bottom:12px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)}
+.task-decision-block-tit{font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.task-decision-icon-grid{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.task-decision-opt{
+  display:flex;align-items:flex-start;gap:10px;width:100%;
+  padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);
+  background:var(--sf);cursor:pointer;text-align:left;transition:background .15s,border-color .15s;
 }
-.task-modal.task-modal-review .task-review-decision>summary{
-  cursor:pointer;
-  font-size:12px;
-  font-weight:600;
-  color:var(--tx2);
-  padding:6px 4px;
-  list-style:none;
-  user-select:none;
-}
-.task-modal.task-modal-review .task-review-decision>summary::-webkit-details-marker{display:none}
-.task-modal.task-modal-review .task-review-decision>summary::before{
-  content:'▸ ';
-  color:var(--tx3);
-}
-.task-modal.task-modal-review .task-review-decision[open]>summary::before{content:'▾ '}
-.task-modal.task-modal-review .task-review-decision-body{
-  padding:0 4px 6px;
-}
-.task-modal.task-modal-review .task-review-decision .task-verify-bar{
-  margin:0;
-}
+.task-decision-opt:hover{background:var(--sf2);border-color:var(--bl)}
+.task-decision-opt-ico{font-size:22px;line-height:1;flex:0 0 auto}
+.task-decision-opt-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.task-decision-opt-lbl{font-size:13px;font-weight:600;color:var(--tx)}
+.task-decision-opt-sub{font-size:11px;color:var(--tx3);line-height:1.35}
 .task-modal.task-modal-review .task-soporte-panel-review{
   flex:1;
   min-height:0;

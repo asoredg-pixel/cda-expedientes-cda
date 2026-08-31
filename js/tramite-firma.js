@@ -386,8 +386,12 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
     if(typeof clearAltaResponsableAlAprobarDocumento==='function'&&!t.sinExpediente)
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
     notif((atajoDirecto?'🖊 Actividad en «Por firmar» (Director)':'🖨 Actividad enviada a «Por imprimir» (firma Director)')+(notifPor?' · Notificará: '+notifPor:''),'ok');
-    closeTaskModal();
-    try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
+    if(opts.keepOpen&&typeof taskReviewRefreshModal==='function'){
+      taskReviewRefreshModal(refId,taskId,'decision');
+    }else{
+      closeTaskModal();
+      try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
+    }
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   }
@@ -1310,11 +1314,11 @@ window.submitTramiteNotificar=submitTramiteNotificar;
 window.finalizarTramiteTrasPublicar=finalizarTramiteTrasPublicar;
 window.notificarCiudadanoTrasVerificarTramite=notificarCiudadanoTrasVerificarTramite;
 window.confirmarCierreTaskTramiteAware=confirmarCierreTaskTramiteAware;
-function tramiteLibreParaImprimir(expId,taskId){
-  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:'imprimir'});
+function tramiteLibreParaImprimir(expId,taskId,opts){
+  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,Object.assign({modo:'imprimir'},opts||{}));
 }
-function tramiteLibreParaFirma(expId,taskId){
-  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,{modo:'firma'});
+function tramiteLibreParaFirma(expId,taskId,opts){
+  return tramiteEnviarAFirmaDesdeRevision(expId,taskId,Object.assign({modo:'firma'},opts||{}));
 }
 window.tramiteLibreParaImprimir=tramiteLibreParaImprimir;
 window.tramiteLibreParaFirma=tramiteLibreParaFirma;
