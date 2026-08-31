@@ -46,13 +46,12 @@ function buscarExpedientesEntregaResp(q,lim){
 function filtrarExpEntregaRespSug(inp){
   const portal=document.getElementById('entrega-resp-exp-sug');
   if(!portal||!inp)return;
-  const list=buscarExpedientesEntregaResp(inp.value,12);
-  if(!list.length){
-    portal.style.display='none';
-    portal.innerHTML='';
-    return;
-  }
-  portal.innerHTML=list.map(function(e){
+  const q=String(inp.value||'').trim();
+  const list=buscarExpedientesEntregaResp(q,12);
+  const ql=q.toLowerCase();
+  const exact=q&&typeof getExpById==='function'?getExpById(q):null;
+  const hasExact=!!exact||list.some(function(e){return String(e._exp||'').trim().toLowerCase()===ql;});
+  let html=list.map(function(e){
     const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
     const tramNom=tram?tram.nombre:'Trámite';
     const nom=typeof getNom==='function'?getNom(e):'';
@@ -63,8 +62,56 @@ function filtrarExpEntregaRespSug(inp){
       String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
       tag+'<strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tramNom)+' · '+escAttr(nom)+'</button>';
   }).join('');
+  // Si digitan un N° que no está en la base → opción unificada «Crear expediente (1ª entrega)»
+  if(q.length>=2&&!hasExact){
+    const qEsc=String(q).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html+='<button type="button" class="entrega-resp-sug-btn entrega-resp-sug-crear" onmousedown="event.preventDefault();pickCrearExpEntregaResp(\''+qEsc+'\')">'+
+      '<span style="color:var(--gn);font-weight:600">✚ Crear expediente (1ª entrega)</span> · <strong>'+escAttr(q)+'</strong>'+
+      '<div style="font-size:11px;color:var(--tx3);margin-top:2px;font-weight:400">No está en la base de datos — complete los datos de alta</div></button>';
+  }
+  if(!html){
+    portal.style.display='none';
+    portal.innerHTML='';
+    return;
+  }
+  portal.innerHTML=html;
   portal.style.display='block';
 }
+
+function setEntregaRespModoNuevo(on){
+  window._entregaRespCrearNuevo=!!on;
+  const el=document.getElementById('entrega-resp-modo-nuevo');
+  if(el)el.checked=!!on;
+}
+function isEntregaRespModoNuevo(){
+  return !!window._entregaRespCrearNuevo||!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+}
+function onEntregaRespModoRadioChange(){
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  if(libre)setEntregaRespModoNuevo(false);
+  else{
+    // Volver a «Expediente / PQRSD»: limpia alta hasta que elijan crear de nuevo en sugerencias
+    setEntregaRespModoNuevo(false);
+    const hint=document.getElementById('entrega-resp-exp-hint');
+    if(hint&&!String((document.getElementById('entrega-resp-exp')||{}).value||'').trim())
+      hint.textContent='Si el número no existe, elija «Crear expediente (1ª entrega)» en la lista.';
+  }
+  syncEntregaRespModoUi();
+}
+function onEntregaRespExpInput(inp){
+  // Al digitar de nuevo, salir del alta hasta que vuelvan a elegir «Crear…»
+  if(isEntregaRespModoNuevo()){
+    setEntregaRespModoNuevo(false);
+    const boxNuevo=document.getElementById('entrega-resp-alta-box');
+    if(boxNuevo)boxNuevo.style.display='none';
+    const hint=document.getElementById('entrega-resp-exp-hint');
+    if(hint)hint.textContent='Si el número no existe, elija «Crear expediente (1ª entrega)» en la lista.';
+  }
+  filtrarExpEntregaRespSug(inp);
+}
+window.onEntregaRespModoRadioChange=onEntregaRespModoRadioChange;
+window.onEntregaRespExpInput=onEntregaRespExpInput;
+window.setEntregaRespModoNuevo=setEntregaRespModoNuevo;
 
 function pickExpEntregaResp(expNum){
   const inp=document.getElementById('entrega-resp-exp');
@@ -72,12 +119,11 @@ function pickExpEntregaResp(expNum){
   const portal=document.getElementById('entrega-resp-exp-sug');
   if(portal){portal.style.display='none';portal.innerHTML='';}
   const e=typeof getExpById==='function'?getExpById(expNum):null;
-  const modoNuevo=document.getElementById('entrega-resp-modo-nuevo');
   const modoExist=document.getElementById('entrega-resp-modo-existente');
-  if(e){
-    if(modoExist)modoExist.checked=true;
-    if(modoNuevo)modoNuevo.checked=false;
-  }
+  const modoLibre=document.getElementById('entrega-resp-modo-libre');
+  if(modoLibre)modoLibre.checked=false;
+  if(modoExist)modoExist.checked=true;
+  setEntregaRespModoNuevo(false);
   syncEntregaRespModoUi();
   const hint=document.getElementById('entrega-resp-exp-hint');
   if(hint){
@@ -90,14 +136,41 @@ function pickExpEntregaResp(expNum){
         escAttr(tram?tram.nombre:'')+' · '+escAttr(typeof getNom==='function'?getNom(e):'')+
         ' · '+escAttr(e._estado||'')+
         (esPqrs?'<br><span style="color:var(--tx3)">Los archivos irán a la carpeta PQRSD institucional (no a Expedientes).</span>':'');
-    }else hint.textContent='Expediente no encontrado en la app — puede crearlo como alta nueva abajo (solo trámites).';
+    }else hint.textContent='';
   }
   syncEntregaRespPqrsUi();
   if(typeof entregaRespRetryFileUpload==='function')entregaRespRetryFileUpload();
 }
 
+/** Al no existir el N° en la base: activa el formulario de 1ª entrega con ese número. */
+function pickCrearExpEntregaResp(expNum){
+  expNum=String(expNum||'').trim();
+  const inp=document.getElementById('entrega-resp-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('entrega-resp-exp-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const modoLibre=document.getElementById('entrega-resp-modo-libre');
+  const modoExist=document.getElementById('entrega-resp-modo-existente');
+  if(modoLibre)modoLibre.checked=false;
+  if(modoExist)modoExist.checked=true;
+  setEntregaRespModoNuevo(true);
+  const expNuevo=document.getElementById('entrega-resp-exp-nuevo');
+  if(expNuevo)expNuevo.value=expNum;
+  syncEntregaRespModoUi();
+  const hint=document.getElementById('entrega-resp-exp-hint');
+  if(hint)hint.innerHTML='✚ <strong>Crear expediente (1ª entrega)</strong> · '+escAttr(expNum)+
+    '<br><span style="color:var(--tx3)">Complete tipo de trámite e interesado. No use esta opción para PQRSD (se radican en Secretaría).</span>';
+  syncEntregaRespAltaFormPorTramite();
+  syncEntregaRespInteresadoUi();
+  setTimeout(function(){
+    const sel=document.getElementById('entrega-resp-tramite');
+    if(sel)sel.focus();
+  },60);
+}
+window.pickCrearExpEntregaResp=pickCrearExpEntregaResp;
+
 function syncEntregaRespModoUi(){
-  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   if(libre){
     const deptoLibre=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
@@ -112,10 +185,11 @@ function syncEntregaRespModoUi(){
   const boxExist=document.getElementById('entrega-resp-exist-box');
   const libreHint=document.getElementById('entrega-resp-libre-hint');
   const hint=document.getElementById('entrega-resp-exp-hint');
-  if(boxNuevo)boxNuevo.style.display=nuevo?'':'none';
-  if(boxExist)boxExist.style.display=(nuevo||libre)?'none':'';
+  // Búsqueda siempre visible si no es «sin expediente»; alta solo al elegir crear
+  if(boxExist)boxExist.style.display=libre?'none':'';
+  if(boxNuevo)boxNuevo.style.display=(!libre&&nuevo)?'':'none';
   if(libreHint)libreHint.style.display=libre?'':'none';
-  if(nuevo||libre){
+  if(libre){
     if(hint)hint.textContent='';
   }
   if(libre){
@@ -851,7 +925,7 @@ function entregaRespFileUploadCtx(){return typeof resolveEntregaUploadContext===
 function resolveEntregaUploadContext(){
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim()||'Entrega';
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
-  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const stubTask={id:'_staging_',actividad:actividad,detalle:''};
   if(libre){
     const cod=String(window._entregaLibreCodigoPreview||'').trim();
@@ -906,27 +980,29 @@ function openEntregaResponsableModal(){
   if(!ov||!body)return;
   if(tit)tit.textContent='Entregar documento · '+responsableActivo;
   window._entregaLibrePersonaId='';
+  window._entregaRespCrearNuevo=false;
   if(modal){
     modal.classList.add('task-modal-wide');
     modal.classList.add('enviar-modal-only');
   }
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="syncEntregaRespModoUi()"> Expediente / PQRSD existente</label>'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-nuevo" onchange="syncEntregaRespModoUi()"> Crear expediente (1ª entrega)</label>'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-libre" onchange="syncEntregaRespModoUi()"> Sin expediente</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="onEntregaRespModoRadioChange()"> Expediente / PQRSD</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-libre" onchange="onEntregaRespModoRadioChange()"> Actividad sin expediente</label>'+
+      '<input type="checkbox" id="entrega-resp-modo-nuevo" style="display:none" tabindex="-1" aria-hidden="true">'+
     '</div>'+
     '<div id="entrega-resp-exist-box">'+
       '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente / PQRSD</label>'+
         '<div style="position:relative">'+
-          '<input type="text" id="entrega-resp-exp" placeholder="N° expediente, PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
-            'oninput="filtrarExpEntregaRespSug(this)" onfocus="filtrarExpEntregaRespSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'entrega-resp-exp-sug\');if(p)p.style.display=\'none\';},180)">'+
+          '<input type="text" id="entrega-resp-exp" placeholder="Digite N° expediente, PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+            'oninput="onEntregaRespExpInput(this)" onfocus="filtrarExpEntregaRespSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'entrega-resp-exp-sug\');if(p)p.style.display=\'none\';},180)">'+
           '<div id="entrega-resp-exp-sug" class="entrega-resp-sug" style="display:none"></div>'+
         '</div>'+
-        '<div id="entrega-resp-exp-hint" style="font-size:11px;color:var(--tx3);margin-top:4px"></div>'+
+        '<div id="entrega-resp-exp-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Si el número no existe, elija «Crear expediente (1ª entrega)» en la lista.</div>'+
       '</div>'+
     '</div>'+
     '<div id="entrega-resp-alta-box" style="display:none">'+
+      '<div style="font-size:12px;font-weight:600;color:var(--gn);margin:4px 0 8px">✚ Crear expediente (1ª entrega)</div>'+
       '<div class="fg" style="margin-bottom:4px">'+
         '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
           '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -1401,7 +1477,7 @@ function crearStubExpedienteEntregaResp(opts){
 }
 
 function ensureExpTaskEntregaResponsable(){
-  const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const detalle='';
@@ -1474,7 +1550,7 @@ function ensureExpTaskEntregaResponsable(){
     const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
     if(!expNum){notif('Busque y seleccione el expediente o PQRSD','err');return null;}
     e=typeof getExpById==='function'?getExpById(expNum):null;
-    if(!e){notif('No encontrado. Use «Crear expediente» si es un trámite nuevo (no PQRSD), o «Sin expediente» para oficios sin radicado.','err');return null;}
+    if(!e){notif('No encontrado. Digite el N° y elija «Crear expediente (1ª entrega)» en la lista, o use «Actividad sin expediente».','err');return null;}
   }
 
   const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
