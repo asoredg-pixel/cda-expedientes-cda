@@ -352,24 +352,47 @@ async function verificarUsuarioFirestore(fbUser){
   }
 }
 async function iniciarLoginGoogle(){
+  if(window._loginGoogleInFlight)return;
   if(!window._authSignInGoogle){
-    setLoginAuthMsg('Autenticación Google no disponible.','err');
-    return;
+    if(!window._firebaseReady){
+      const waitBtn=document.getElementById('btn-google-login');
+      if(waitBtn)waitBtn.disabled=true;
+      setLoginAuthMsg('Cargando autenticación…','');
+      await new Promise(function(res){
+        const t=setTimeout(res,8000);
+        window.addEventListener('firebase-ready',function(){clearTimeout(t);res();},{once:true});
+      });
+      if(waitBtn)waitBtn.disabled=false;
+    }
+    if(!window._authSignInGoogle){
+      setLoginAuthMsg('Autenticación Google no disponible. Recargue la página.','err');
+      return;
+    }
   }
+  const btn=document.getElementById('btn-google-login');
+  window._loginGoogleInFlight=true;
+  if(btn)btn.disabled=true;
   setLoginAuthMsg('');
-  setLoginStatus('⏳ Verificando acceso…',true);
   try{
+    window._authVerifying=true;
     const cred=await window._authSignInGoogle();
     await verificarUsuarioFirestore(cred.user);
   }catch(err){
     console.error(err);
     setLoginStatus('');
+    initLoginScreen();
     const code=err&&err.code;
     if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){
       setLoginAuthMsg('Inicio de sesión cancelado.','err');
+    }else if(code==='auth/popup-blocked'){
+      setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
     }else{
       setLoginAuthMsg('Error al iniciar sesión con Google.','err');
     }
+  }finally{
+    window._authVerifying=false;
+    window._loginGoogleInFlight=false;
+    if(btn)btn.disabled=false;
   }
 }
 function initFirebaseAuthListener(){
