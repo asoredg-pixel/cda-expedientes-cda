@@ -167,7 +167,12 @@ function taskFirmaEstadoUi(t){
   const imp=!!(wf.impreso&&wf.impreso.en);
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){
     if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))return{lbl:'Firmado',bg:'#dcfce7',fg:'#15803d',sub:''};
-    return{lbl:(imp?'✓ Impreso · ':'🖨 ')+'Por firmar'+(quienLbl?' · notif: '+quienLbl:''),bg:imp?'#dcfce7':'#0d5c2e22',fg:imp?'#15803d':'#0d5c2e',sub:''};
+    return{
+      lbl:imp?'✓ Impreso · Por firmar':'🖨 Por firmar',
+      bg:imp?'#dcfce7':'#0d5c2e22',
+      fg:imp?'#15803d':'#0d5c2e',
+      sub:quienLbl?'notif: '+quienLbl:''
+    };
   }
   if(taskFirmaEnPorNotificar(t))return{lbl:'Por notificar',bg:'#185FA522',fg:'#185FA5',sub:quienLbl?'Notif.: '+quienLbl:''};
   if(taskFirmaEnRevisionFinalNotif(t))return{lbl:'⏳ Revisión final notif.',bg:'#6d3fa822',fg:'#6d3fa8',sub:''};

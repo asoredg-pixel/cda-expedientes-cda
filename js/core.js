@@ -861,11 +861,11 @@ function pqrsEstadoActividadUi(e){
   if(f===PQRS_WF.POR_FIRMAR){
     const firmFis=!!(wf.firma_fisica&&wf.firma_fisica.en);
     if(firmFis)return{lbl:'Firmado',bg:'#dcfce7',fg:'#15803d'};
-    return{lbl:'Por firmar'+(quienLbl?' · notif: '+quienLbl:''),bg:'#0d5c2e22',fg:'#0d5c2e'};
+    return{lbl:'Por firmar',bg:'#0d5c2e22',fg:'#0d5c2e',sub:quienLbl?'notif: '+quienLbl:''};
   }
   if(f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO){
     // Estado corto: sin notificador ni fecha (la fecha va en columna VENCE / paleta Vencidas)
-    return{lbl:'Por notificar',bg:'#185fa522',fg:'var(--bl)'};
+    return{lbl:'Por notificar',bg:'#185fa522',fg:'var(--bl)',sub:quienLbl?'Notif.: '+quienLbl:''};
   }
   if(f===PQRS_WF.REVISION_FINAL)return{lbl:'⏳ Revisión final notif.',bg:'#6d3fa822',fg:'#6d3fa8'};
   return null;
@@ -16335,17 +16335,19 @@ function renderActRowToolbarHtml(t,expAct){
     else
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
-  // 🧐 Revisar: solo tras entrega (por verificar / revisión), no en «por ejecutar»
+  // 🧐 Revisar: solo en «Por revisar» (pendiente). En «Revisados» ya no se usa (igual que responsables).
   const pendienteRev=taskPendienteVerificacion(t)
     ||(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))
     ||est==='Por verificar';
-  const esRevisadaEnc=esVistaActividadesDepto()&&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct);
-  const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&(pendienteRev||esRevisadaEnc)
-    &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct)&&!pendienteRev&&!esRevisadaEnc);
-  if((pendienteRev||esRevisadaEnc)&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
-    const revOpts=esRevisadaEnc&&!pendienteRev?'{verRevisado:true}':'';
-    acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Revisar respuesta enviada':(esRevisadaEnc?'Ver revisión y gestionar':'Revisar entrega'))+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\''+(revOpts?','+revOpts:'')+')">🧐</button>';
+  const esRevisadaEnc=esVistaActividadesDepto()&&!esModoResponsable()
+    &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct)&&!pendienteRev;
+  const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&pendienteRev
+    &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct));
+  if(pendienteRev&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
+    acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Revisar respuesta enviada':'Revisar entrega')+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\')">🧐</button>';
   }
+  if(esRevisadaEnc&&typeof actEliminarActOEntregaBtnHtml==='function')
+    acts+=actEliminarActOEntregaBtnHtml(t.exp,t.id);
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   if(showChat){
     acts+=taskChatBtnHtml(t.exp,t.id,t);
@@ -16370,7 +16372,7 @@ function renderActRowToolbarHtml(t,expAct){
     if(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t)){
       if(puedeImp)acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
       if(typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))
-        acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
       else
         acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();tramiteMarcarFirmadoFisico(\''+eidT+'\',\''+tidT+'\')" title="Firmar">🖊</button>';
     }else if(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&puedeImp){
@@ -16378,10 +16380,10 @@ function renderActRowToolbarHtml(t,expAct){
     }
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
       if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
-        acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+eidT+'\',\''+tidT+'\')" title="Notificar">📬</button>';
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openTramiteNotificarModal(\''+eidT+'\',\''+tidT+'\')" title="Notificar">📬</button>';
       else{
         const quienT=String(wfT.notificar_por||'').trim();
-        acts+='<span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">📬 '+(quienT?escAttr(quienT):'')+'</span>';
+        acts+='<button type="button" class="btn bsm bic act-ico" disabled title="'+(quienT?'Notifica: '+escAttr(quienT):'Por notificar')+'">📬</button>';
       }
     }
     if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
@@ -16405,7 +16407,7 @@ function renderActRowToolbarHtml(t,expAct){
       if(firmFis){
         if(esDir)acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
         else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct))
-          acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Gestionar firmado">📬</button>';
+          acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Gestionar firmado">📬</button>';
         else acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
       }else if(esDir)
         acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Firmar">🖊</button>';
@@ -16416,12 +16418,12 @@ function renderActRowToolbarHtml(t,expAct){
     if(faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO){
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
       if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-        acts+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default;pointer-events:none" title="Por notificar">📬</span>';
+        acts+='<button type="button" class="btn bsm bic act-ico" disabled title="Por notificar">📬</button>';
       else if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
-        acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+peid+'\')" title="Notificar">📬</button>';
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsNotificarOficioModal(\''+peid+'\')" title="Notificar">📬</button>';
       else{
         const quien=String(wfRow.notificar_por||'').trim();
-        acts+='<span class="bdg" style="background:#185fa522;color:var(--bl);font-size:10px">📬'+(quien?' '+escAttr(quien):'')+'</span>';
+        acts+='<button type="button" class="btn bsm bic act-ico" disabled title="'+(quien?'Notifica: '+escAttr(quien):'Por notificar')+'">📬</button>';
       }
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
@@ -16458,7 +16460,14 @@ function renderActividadesRowHtml(t){
     }
   }
   const est=estadoTask(t),lbl=estadoTaskLabel(t),st=taskEstadoStyle(est,t),vencE=taskActividadVencida(t);
-  const badgeHtml=typeof taskEstadoBadgeHtml==='function'?taskEstadoBadgeHtml(t):('<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span>');
+  let badgeHtml=typeof taskEstadoBadgeHtml==='function'?taskEstadoBadgeHtml(t):('<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span>');
+  const pendienteRevRow=taskPendienteVerificacion(t)||est==='Por verificar'
+    ||(expActPre&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expActPre));
+  const revisadoClick=esVistaActividadesDepto()&&!esModoResponsable()&&!pendienteRevRow
+    &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expActPre);
+  if(revisadoClick){
+    badgeHtml='<button type="button" class="act-est-open-btn" title="Gestionar revisión: devolver, firma o eliminar" onclick="event.stopPropagation();openTaskCommentsModal(\''+jsStr(t.exp)+'\',\''+jsStr(t.id)+'\',{verRevisado:true})">'+badgeHtml+'</button>';
+  }
   const venceShow=taskVenceEfectivo(t)||t.vence;
   const esEncOwn=esTareaDelEncargado(t);
   const revDepto=esVistaActividadesDepto()?getTaskRevisionDepto(t):null;
