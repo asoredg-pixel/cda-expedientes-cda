@@ -9014,16 +9014,24 @@ function soporteUrlComparable(s){
   return String(s.url||s.preview||s.driveLink||s.previewLink||'').trim();
 }
 function soporteTabLabel(s,idx,soportes){
+  const list=soportes||[];
   if(soporteEsAnexoEntrega(s)){
-    const anexos=(soportes||[]).filter(soporteEsAnexoEntrega);
+    const anexos=list.filter(soporteEsAnexoEntrega);
     const n=anexos.indexOf(s)+1;
     return 'Anexo '+(n>0?n:(s.anexo_n||1));
   }
-  if(s&&(s.es_proyeccion||/^proyecci/i.test(String(s.label||''))||/^oficio\b/i.test(String(s.label||'')))){
-    return 'Proyección';
+  const esProy=s&&(s.es_proyeccion||/^proyecci/i.test(String(s.label||''))||/^oficio\b/i.test(String(s.label||'')));
+  if(esProy||!s.local){
+    const mains=list.filter(function(x){return !soporteEsAnexoEntrega(x);}).slice().sort(function(a,b){return (a.version||0)-(b.version||0);});
+    const ver=s.version||(mains.indexOf(s)+1)||1;
+    const esCorr=typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s);
+    let lbl='Proy. v'+ver;
+    if(esCorr)lbl+=' · corregir';
+    else if(s.activo)lbl+=' · activa';
+    return lbl;
   }
   const isLink=!s.local;
-  const n=soportes.slice(0,idx+1).filter(x=>!x.local===isLink).length;
+  const n=list.slice(0,idx+1).filter(function(x){return !x.local===isLink;}).length;
   return(isLink?'Link ':'Documento ')+n;
 }
 function getSoportesUltimaEntrega(t){
@@ -16286,21 +16294,21 @@ function renderActividadesRowHtml(t){
   const solBadge=sol?('<span class="solicitud-pill" title="'+(sol.tipo==='traslado'?'Traslado':'Eliminación')+' solicitada por '+escAttr(sol.por)+'">⚠ Solicitud</span>'):'';
   const expAct=getExpById(t.exp);
   const acts=renderActRowToolbarHtml(t,expAct);
-  const respCol=esVistaActividadesDepto()?('<td style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
+  const respCol=esVistaActividadesDepto()?('<td class="act-col-resp" style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
   const esCrit=taskEsPrioridadCriticaVencimiento(t);
   const rowStyle=[
     esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
   const rowCls=esCrit?'prioritaria-crit':(t.prioritaria?'prioritaria':'');
-  return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td>'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
-    '<td style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td>'+
+  return '<tr'+(rowCls?' class="'+rowCls+'"':'')+(rowStyle?' style="'+rowStyle+'"':'')+'><td class="act-col-estado">'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+(revDepto?taskRevisionDeptoLabel(revDepto):'')+'</td>'+
+    '<td class="act-col-ref" style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--bl)">'+refLbl+'</td>'+
     '<td class="act-col-tram">'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
-    '<td>'+actInteresadoCellHtml(t)+'</td><td>'+escAttr(t.desc||t.actividad)+'</td>'+
+    '<td class="act-col-inter">'+actInteresadoCellHtml(t)+'</td><td class="act-col-desc">'+escAttr(t.desc||t.actividad)+'</td>'+
     respCol+
-    '<td style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
-    '<td style="font-size:12px">'+cierreHtml+'</td>'+
-    '<td><div class="fx" style="gap:4px">'+acts+'</div></td></tr>';
+    '<td class="act-col-vence" style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
+    '<td class="act-col-cierre" style="font-size:12px">'+cierreHtml+'</td>'+
+    '<td class="act-col-acciones"><div class="act-row-actions">'+acts+'</div></td></tr>';
 }
 function updateActEstFilterForEnc(forEnc){
   const sel=document.getElementById('f-act-est');if(!sel)return;
@@ -17547,8 +17555,8 @@ function renderActividades(){
   const btnExp=document.getElementById('btn-export-act');
   const thead=document.querySelector('#pg-act table thead tr');
   if(thead){
-    const base='<th>Estado</th><th>Ref.</th><th class="act-col-tram">Trámite</th><th>Interesado</th><th>Actividad</th>';
-    thead.innerHTML=deptView?base+'<th>Responsable</th><th>Vence</th><th>Cierre</th><th>Acciones</th>':base+'<th>Vence</th><th>Cierre</th><th>Acciones</th>';
+    const base='<th class="act-col-estado">Estado</th><th class="act-col-ref">Ref.</th><th class="act-col-tram">Trámite</th><th class="act-col-inter">Interesado</th><th class="act-col-desc">Actividad</th>';
+    thead.innerHTML=deptView?base+'<th class="act-col-resp">Responsable</th><th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>':base+'<th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>';
   }
   if(!deptView&&!responsableActivo){
     if(esResponsableIdentidadFija())fijarResponsableSesion();
