@@ -10307,8 +10307,10 @@ function renderTaskChatPanelHtml(expId,taskId,t,opts){
   if(canWriteDept||canWriteResp){
     if(opts.compactComposer){
       form='<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
+        '<div class="task-cmt-wa-field">'+
         '<input type="text" id="task-cmt-input" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}">'+
         '<button type="button" class="btn bsm bp task-cmt-send-ico" title="Enviar" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
+        '</div>'+
         (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
         '</div>';
     }else{
