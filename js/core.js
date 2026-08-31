@@ -5123,10 +5123,7 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
   if(typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(ref,taskId))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="eliminar" title="Eliminar entrega o actividad" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
-  if(typeof taskReviewCanShowDecisionRail==='function'&&taskReviewCanShowDecisionRail(t,ref)){
-    const side=String(window._taskReviewSideMode||'doc');
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='decision'?' on':'')+'" data-side="decision" title="Decisión y cierre" onclick="taskReviewToggleSidePanel(\'decision\',\''+r+'\',\''+tid+'\')">🎯</button>';
-  }
+  h+=typeof taskReviewDecisionRailHtml==='function'?taskReviewDecisionRailHtml(ref,taskId,t):'';
   return h;
 }
 function taskActividadIconRailHtml(ref,taskId,t){
@@ -5173,7 +5170,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión y cierre'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',atajoFirmado:'Cargar documento firmado'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -5419,107 +5416,63 @@ window.toggleTaskReviewChatSect=toggleTaskReviewChatSect;
 function taskReviewCanShowDecisionRail(t,expId){
   if(!t||esModoResponsable()||esJurisdiccional())return false;
   const e=typeof getExpById==='function'?getExpById(expId):null;
-  if(typeof canDeptVerificarCierre==='function'&&canDeptVerificarCierre(t))return true;
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))return true;
-  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return true;
+  if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t)
+    &&typeof canDeptVerificarCierre==='function'&&canDeptVerificarCierre(t))return true;
   return false;
 }
-function renderTaskReviewDecisionSideHtml(expId,taskId,t){
-  if(window._taskReviewDecisionView==='atajoFirmado'&&typeof renderTaskReviewAtajoFirmadoHtml==='function')
-    return renderTaskReviewAtajoFirmadoHtml(expId,taskId,t);
-  const e=typeof getExpById==='function'?getExpById(expId):null;
-  const eid=jsStr(expId),tid=jsStr(taskId);
-  const esPqrs=e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
-  const pendVer=taskPendienteVerificacion(t);
-  const enFirma=typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t);
-  let h='<div class="task-review-decision-side task-review-side-scroll">';
-  if(esPqrs&&e&&!pqrsEstaCerrada(e)&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)){
-    h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:#6d3fa8">Decisión PQRSD</div>';
-    h+=typeof renderNcaDecisionFormHtml==='function'?renderNcaDecisionFormHtml(expId,e,typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}):'';
-    h+='</div>';
-    return h;
-  }
-  if(enFirma&&typeof renderTramiteFirmaGestionHtml==='function'){
-    h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Gestión de firma</div>';
-    h+=renderTramiteFirmaGestionHtml(expId,taskId,t);
-    h+='</div>';
-    return h;
-  }
-  if(!pendVer){
-    h+='<div style="font-size:12px;color:var(--tx3);padding:8px">No hay entrega pendiente de decisión.</div></div>';
-    return h;
-  }
-  const esLibre=!!t.sinExpediente;
+function taskReviewDecisionRailHtml(ref,taskId,t){
+  if(!taskReviewCanShowDecisionRail(t,ref))return'';
+  const r=escAttr(ref),tid=escAttr(taskId);
+  const eid=jsStr(ref),tidJs=jsStr(taskId);
+  const e=typeof getExpById==='function'?getExpById(ref):null;
+  const esPqrsNca=e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e);
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
-  const puedeImprimir=(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())||deptView;
-  const puedeAtajo=(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())||deptView;
-  h+='<div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--bl)">Decisión sobre la entrega</div>';
-  if(!esLibre&&pendVer){
-    const plazoVal=t.plazoDias!=null&&t.plazoDias!==''?t.plazoDias:(t.vence&&typeof diffDias==='function'?diffDias(t.vence):'');
-    h+='<div class="task-decision-block"><div class="task-decision-block-tit">Plazo</div>'+
-      '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
-      '<label style="font-size:11px">Días <input type="number" id="task-rev-plazo" min="1" step="1" value="'+escAttr(plazoVal)+'" style="width:64px;padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px" oninput="syncPlazoRevisionFromDias()"></label>'+
-      '<label style="font-size:11px">Vence <input type="date" id="task-rev-vence" value="'+escAttr(t.vence||'')+'" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px" onchange="syncPlazoRevisionFromFecha()"></label>'+
-      '<button type="button" class="btn bsm" onclick="aplicarPlazoRevisionTask(\''+eid+'\',\''+tid+'\')">Aplicar</button>'+
-      '</div></div>';
-  }
-  if(typeof renderTramiteFirmaVerifyExtrasHtml==='function')
-    h+=renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t);
-  h+='<div class="task-decision-icon-grid">';
-  h+='<button type="button" class="task-decision-opt" onclick="confirmarCierreTaskReview(\''+eid+'\',\''+tid+'\')">'+
-    '<span class="task-decision-opt-ico">✅</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Aprobar y cerrar</span>'+
-    '<span class="task-decision-opt-sub">Sin firma del Director · responsable queda atendido</span></span></button>';
+  const puedeImprimir=esPqrsNca||((typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())||deptView);
+  const puedeFirma=esPqrsNca||((typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())||deptView)||!puedeImprimir;
+  let h='';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision" title="Aprobar y cerrar" onclick="taskReviewDecidirAprobar(\''+eid+'\',\''+tidJs+'\')">✅</button>';
   if(puedeImprimir)
-    h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">'+
-      '<span class="task-decision-opt-ico">🖨️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Para imprimir</span>'+
-      '<span class="task-decision-opt-sub">Va a «Por firmar» · marque 🖨️ cuando esté impreso</span></span></button>';
-  if(puedeAtajo)
-    h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirFirma(\''+eid+'\',\''+tid+'\')">'+
-      '<span class="task-decision-opt-ico">✍️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Para firma del Director</span>'+
-      '<span class="task-decision-opt-sub">Pasa a «Por firmar» · elija quién notifica abajo</span></span></button>';
-  else if(!puedeImprimir)
-    h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirFirma(\''+eid+'\',\''+tid+'\')">'+
-      '<span class="task-decision-opt-ico">✍️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Enviar a firma</span>'+
-      '<span class="task-decision-opt-sub">Director · VITAL · encargado</span></span></button>';
-  h+='<button type="button" class="task-decision-opt" onclick="taskReviewAbrirAtajoFirmado(\''+eid+'\',\''+tid+'\')">'+
-    '<span class="task-decision-opt-ico">📤</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Cargar documento firmado</span>'+
-    '<span class="task-decision-opt-sub">Pasa a «Por notificar» con PDF firmado</span></span></button>';
-  h+='</div>';
-  if(!esLibre){
-    h+='<div class="task-decision-block" style="margin-top:10px"><label style="font-size:11px;color:var(--tx2)">Fecha cierre (si aprueba sin firma) '+
-      '<input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label></div>';
-  }
-  h+='<div style="margin-top:12px"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver para corregir</button></div>';
-  h+='</div>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision" title="Para imprimir" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tidJs+'\')">🖨️</button>';
+  if(puedeFirma)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision" title="Para firma del Director" onclick="taskReviewDecidirFirma(\''+eid+'\',\''+tidJs+'\')">✍️</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision" data-side="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewAbrirAtajoFirmado(\''+eid+'\',\''+tidJs+'\')">📤</button>';
   return h;
 }
-function initTaskReviewDecisionSide(expId,taskId,t){
-  if(window._taskReviewDecisionView==='atajoFirmado'){
-    if(typeof initTaskReviewAtajoFirmadoSide==='function')initTaskReviewAtajoFirmadoSide(expId,taskId,t,{autoPick:true});
+function taskReviewDecidirAprobar(expId,taskId){
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
+    const canal=String(wf.canal||'').trim();
+    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')&&typeof ncaAprobarInformativa==='function'){ncaAprobarInformativa(expId);return;}
+    if(['aviso','presencial','fisica'].includes(canal)&&tipo!==(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio')&&typeof ncaAprobarCanalFisico==='function'){ncaAprobarCanalFisico(expId);return;}
+    if(typeof ncaAprobarMensajeSimple==='function')ncaAprobarMensajeSimple(expId);
     return;
   }
-  if(typeof sstInitWaComposers==='function'){
-    const body=document.getElementById('task-review-side-body');
-    if(body)sstInitWaComposers(body);
-  }
+  confirmarCierreTaskReview(expId,taskId);
 }
-function taskReviewAbrirAtajoFirmado(expId,taskId){
-  window._taskReviewDecisionView='atajoFirmado';
-  if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('decision',expId,taskId);
-}
-window.taskReviewAbrirAtajoFirmado=taskReviewAbrirAtajoFirmado;
 function confirmarCierreTaskReview(expId,taskId){
   confirmarCierreTask(expId,taskId,{keepOpen:true});
 }
 function taskReviewDecidirImprimir(expId,taskId){
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioFirmado==='function'){ncaAprobarOficioFirmado(expId);return;}
   if(typeof tramiteLibreParaImprimir==='function')tramiteLibreParaImprimir(expId,taskId,{keepOpen:true});
 }
 function taskReviewDecidirFirma(expId,taskId){
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioParaFirmaDirecto==='function'){ncaAprobarOficioParaFirmaDirecto(expId);return;}
   if(typeof tramiteLibreParaFirma==='function')tramiteLibreParaFirma(expId,taskId,{keepOpen:true});
 }
+function taskReviewAbrirAtajoFirmado(expId,taskId){
+  if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('atajoFirmado',expId,taskId);
+}
+window.taskReviewDecidirAprobar=taskReviewDecidirAprobar;
 window.confirmarCierreTaskReview=confirmarCierreTaskReview;
 window.taskReviewDecidirImprimir=taskReviewDecidirImprimir;
 window.taskReviewDecidirFirma=taskReviewDecidirFirma;
+window.taskReviewAbrirAtajoFirmado=taskReviewAbrirAtajoFirmado;
 function initEnviarArchivosPick(expId,taskId){
   if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
     sstFileStagingReset(sstFileEnviarCtxKey(expId,taskId));
@@ -5776,10 +5729,9 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     initTaskReviewBibSide(expId,taskId,t);
   }else if(mode==='eliminar'){
     body.innerHTML=renderTaskReviewEliminarSideHtml(expId,taskId);
-  }else if(mode==='decision'){
-    if(window._taskReviewDecisionView!=='atajoFirmado')window._taskReviewDecisionView='';
-    body.innerHTML=renderTaskReviewDecisionSideHtml(expId,taskId,t);
-    setTimeout(function(){initTaskReviewDecisionSide(expId,taskId,t);},30);
+  }else if(mode==='atajoFirmado'){
+    body.innerHTML=typeof renderTaskReviewAtajoFirmadoHtml==='function'?renderTaskReviewAtajoFirmadoHtml(expId,taskId,t):'';
+    setTimeout(function(){if(typeof initTaskReviewAtajoFirmadoSide==='function')initTaskReviewAtajoFirmadoSide(expId,taskId,t,{autoPick:true});},30);
   }
 }
 function refFromCtx(expId,taskId,t){

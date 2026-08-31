@@ -1375,14 +1375,13 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
     selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto});
   }
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
-    '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="window._taskReviewDecisionView=\'\';taskReviewOpenSidePanel(\'decision\',\''+eid+'\',\''+tid+'\')">← Volver a decisión</button>'+
+    '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
     '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
       (selNotif?'<div class="task-decision-block"><div class="task-decision-block-tit">Notificación</div>'+selNotif+'</div>':'')+
       '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
         '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Cargar y pasar a Por notificar</button>'+
-        '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',true,false,{keepOpen:true})">Cerrar sin PDF</button>'+
         '<button type="button" class="btn bsm" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,true,{keepOpen:true})">📬 Cargar y notificar ahora</button>'+
       '</div></div></div>';
 }
@@ -1588,8 +1587,8 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     if(abrirNotif){
       openTramiteNotificarModal(refId,taskId);
     }else if(keepOpen&&typeof taskReviewRefreshModal==='function'){
-      window._taskReviewDecisionView='';
-      taskReviewRefreshModal(refId,taskId,'decision');
+      taskReviewCloseSidePanel();
+      taskReviewRefreshModal(refId,taskId,'doc');
     }else{
       closeTaskModal();
     }
