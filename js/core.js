@@ -11094,6 +11094,19 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   if(isReview){
     h+='<div class="task-review-doc-bar">';
     if(hasSop&&sel){
+      let docToolsBtns='';
+      if(opts.isRespVerCorr){
+        if(sel.url||sel.preview){
+          docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-open" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
+        }
+        docToolsBtns+='<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
+      }else{
+        docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
+          '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
+        if(sel.url||sel.preview){
+          docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
+        }
+      }
       h+='<div class="task-review-doc-bar-sub">'+
         (soportes.length>1?('<div class="soporte-doc-tabs task-review-doc-tabs">'+soportes.map((s,i)=>{
           const on=sel&&s.id===sel.id;
@@ -11102,12 +11115,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         }).join('')+'</div>'):'')+
         '<div class="task-review-doc-tools">'+
         (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+
-        (opts.isRespVerCorr
-          ?((sel&&(sel.url||sel.preview))?'<button type="button" class="btn bsm bsm-ico task-review-doc-open" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
-            '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'
-          :('<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
-            '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'+
-            (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':''))+
+        docToolsBtns+
         '</div></div>';
     }
     h+='</div>';
