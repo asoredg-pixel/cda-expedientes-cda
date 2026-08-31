@@ -5183,8 +5183,9 @@ function buildTaskReviewCompareSelectOpts(t,e,taskId){
   if(!window._taskReviewCompareDoc||!docs.some(function(d){return d.id===window._taskReviewCompareDoc;}))
     window._taskReviewCompareDoc=pick.id;
   const groups=[
-    {lbl:'Entrega y anexos',test:function(d){return d.origen==='Entrega';}},
-    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&d.soporteId&&activo&&d.soporteId!==activo.id;}},
+    {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo;}},
+    {lbl:'Anexos de la entrega',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo;}},
+    {lbl:'Otras entregas',test:function(d){return d.origen==='Entrega'&&!d.entregaActual;}},
     {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''));}}
   ];
@@ -8853,9 +8854,19 @@ function getSoporteActivo(t){
   if(activos.length)return activos[activos.length-1];
   return(t.soportes||[]).length?(t.soportes||[])[t.soportes.length-1]:null;
 }
+function soporteEsAnexoEntrega(s){
+  if(!s)return false;
+  if(s.es_anexo===true||s.tipo==='anexo_respuesta')return true;
+  if(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s))return true;
+  return /^anexo\b/i.test(String(s.label||s.driveFilename||''));
+}
+function soporteUrlComparable(s){
+  if(!s)return'';
+  return String(s.url||s.preview||s.driveLink||s.previewLink||'').trim();
+}
 function soporteTabLabel(s,idx,soportes){
-  if(s&&(s.es_anexo||s.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(s.label||'')))){
-    const anexos=(soportes||[]).filter(function(x){return x&&(x.es_anexo||x.tipo==='anexo_respuesta'||/^anexo\b/i.test(String(x.label||'')));});
+  if(soporteEsAnexoEntrega(s)){
+    const anexos=(soportes||[]).filter(soporteEsAnexoEntrega);
     const n=anexos.indexOf(s)+1;
     return 'Anexo '+(n>0?n:(s.anexo_n||1));
   }
@@ -9135,10 +9146,27 @@ function collectEnlacesExpediente(e){
 function collectDocsComparables(e,taskId,tDirect,opts){
   opts=opts||{};
   const docs=[],seen=new Set();
+  const docUrlKey=function(d){
+    return String((d&&(d.url||d.preview||d.driveLink||d.previewLink))||'').trim().toLowerCase();
+  };
   const add=(d)=>{
     const k=String(d.id||'').trim();
-    const u=String(d.url||d.preview||'').trim().toLowerCase();
-    if(!k||seen.has(k)||(u&&seen.has('u:'+u)))return;
+    const u=docUrlKey(d);
+    if(!k)return;
+    if(u&&seen.has('u:'+u)){
+      if(d.origen==='Entrega'&&k.indexOf('sop_')===0){
+        const idx=docs.findIndex(function(x){return docUrlKey(x)===u;});
+        if(idx>=0){
+          const prev=docs[idx];
+          seen.delete(prev.id);
+          docs[idx]=d;
+          seen.add(k);
+          return;
+        }
+      }
+      return;
+    }
+    if(seen.has(k))return;
     seen.add(k);
     if(u)seen.add('u:'+u);
     docs.push(d);
@@ -9184,20 +9212,22 @@ function collectDocsComparables(e,taskId,tDirect,opts){
     (exp.tasks||[]).forEach(function(tk){
       if(!tk||tk.eliminada)return;
       (tk.soportes||[]).forEach(function(s){
-        const url=s.url||s.preview||'';
+        const url=soporteUrlComparable(s);
         if(!url&&!s.local)return;
         const lab='Act. '+(tk.actividad||tk.desc||'').slice(0,30)+' v'+(s.version||'?');
         add({
           id:'asoc_sop_'+exp._exp+'_'+s.id,origen:pref+'Actividad',soporteId:s.id,
           label:lab,titulo:lab,
           meta:fmtF((s.fecha||'').slice(0,10)),
-          preview:s.preview||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
+          preview:s.preview||s.driveLink||s.previewLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
           sortKey:(s.fecha||'0000')+'_asoc_'+String(s.version||0).padStart(5,'0')
         });
       });
     });
   };
   const t=tDirect||(e&&taskId?getTaskFromExp(e,taskId):null);
+  const ultEntregaIds=new Set();
+  if(t)(getSoportesUltimaEntrega(t)||[]).forEach(function(s){if(s&&s.id)ultEntregaIds.add(s.id);});
   if(e)pushExpDocs(e,'');
   if(e&&opts.incluirAsociados!==false){
     getExpAsociadosAll(e).forEach(function(num){
@@ -9210,10 +9240,10 @@ function collectDocsComparables(e,taskId,tDirect,opts){
   }
   if(t){
     const sops=t.soportes||[];
-    [...sops].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(s=>{
-      const url=s.url||s.preview||'';
+    const pushSopComparable=function(s){
+      const url=soporteUrlComparable(s);
       if(!url&&!s.local)return;
-      const esAn=typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s);
+      const esAn=soporteEsAnexoEntrega(s);
       let lab;
       if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
@@ -9221,17 +9251,47 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       }else if(s.es_proyeccion||/proyecci/i.test(String(s.label||''))){
         lab='📄 Proyección de respuesta'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
       }else{
-        lab='Entrega v'+(s.version||'?')+(s.activo?' · activa':'');
+        lab='📄 Documento principal'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
       }
       add({
-        id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,
+        id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,esAnexo:esAn,entregaActual:ultEntregaIds.has(s.id),
         label:lab,
         titulo:lab,
         meta:[!esAn&&s.label&&s.label!==lab?s.label:'',fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
-        preview:s.preview||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
-        sortKey:(s.fecha||'0000')+'_sop_'+String(s.version||0).padStart(5,'0')
+        preview:s.preview||s.previewLink||s.driveLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
+        sortKey:(s.fecha||'0000')+'_sop_'+String(s.version||0).padStart(5,'0')+(esAn?'_z':'')
       });
+    };
+    [...sops].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(pushSopComparable);
+    (getSoportesUltimaEntrega(t)||[]).forEach(function(s){
+      if(!s||!s.id||docs.some(function(d){return d.id==='sop_'+s.id;}))return;
+      pushSopComparable(s);
     });
+    if(e&&typeof getPqrsWorkflow==='function'&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+      const wf=getPqrsWorkflow(e);
+      (wf.documentos||[]).forEach(function(d,i){
+        if(!d||!_pqrsDocEsAnexoRespuesta(d))return;
+        const url=String(d.driveLink||d.previewLink||d.url||'').trim();
+        if(!url)return;
+        const sopMatch=sops.find(function(s){
+          if(!s)return false;
+          const su=soporteUrlComparable(s);
+          if(!su)return false;
+          return su.toLowerCase()===url.toLowerCase()||String(s.driveFileId||s.fileId||'')===String(d.fileId||d.driveFileId||'');
+        });
+        if(sopMatch&&docs.some(function(x){return x.id==='sop_'+sopMatch.id;}))return;
+        const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(d,wf.documentos||[]):0)||d.anexo_n||1;
+        const p=parseDrivePreviewUrl(url);
+        add({
+          id:sopMatch?('sop_'+sopMatch.id):('wf_anx_'+e._exp+'_'+i),
+          origen:'Entrega',soporteId:sopMatch?sopMatch.id:null,esAnexo:true,entregaActual:true,
+          label:'📎 Anexo '+n,titulo:'📎 Anexo '+n,
+          meta:fmtF(String(d.entregado_en||d.fecha||wf.fecha_respuesta||'').slice(0,10)),
+          preview:p.preview||p.url||url,url,local:false,mime:d.mime||'',fecha:d.entregado_en||d.fecha||'',
+          sortKey:(d.entregado_en||d.fecha||wf.fecha_respuesta||'0000')+'_sop_anx_'+String(n).padStart(3,'0')
+        });
+      });
+    }
   }
   return docs.sort((a,b)=>String(a.sortKey).localeCompare(String(b.sortKey)));
 }
