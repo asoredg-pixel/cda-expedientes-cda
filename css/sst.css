@@ -651,6 +651,7 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-compose-foot{
   flex:0 0 auto;
   flex-shrink:0;
+  margin-top:auto;
   padding:6px 2px 4px 0;
   border-top:1px solid var(--bd);
   background:var(--sf);
@@ -1194,31 +1195,43 @@ body.task-review-doc-mode #task-modal-overlay{
   box-sizing:border-box;
 }
 .task-cmt-form-wa #task-cmt-input,
-.task-cmt-wa-field #task-cmt-input{
+.task-cmt-wa-field #task-cmt-input,
+.task-cmt-form-wa textarea.sst-wa-compose,
+.task-cmt-wa-field textarea.sst-wa-compose{
   display:block;
   width:100%;
   min-width:0;
-  min-height:0!important;
+  min-height:40px!important;
+  max-height:120px;
   height:40px;
-  padding:8px 40px 8px 12px;
+  padding:9px 40px 9px 12px;
   border:1px solid var(--bd);
   border-radius:20px;
   font-family:'DM Sans',sans-serif;
   font-size:13px;
+  line-height:1.35;
   resize:none;
   box-sizing:border-box;
   background:var(--sf);
+  overflow-x:hidden;
+  overflow-y:hidden;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+  overflow-wrap:break-word;
 }
 .task-cmt-form-wa #task-cmt-input:focus,
-.task-cmt-wa-field #task-cmt-input:focus{
+.task-cmt-wa-field #task-cmt-input:focus,
+.task-cmt-form-wa textarea.sst-wa-compose:focus,
+.task-cmt-wa-field textarea.sst-wa-compose:focus{
   outline:none;
   border-color:var(--bl);
 }
 .task-cmt-wa-field .task-cmt-send-ico{
   position:absolute;
   right:4px;
-  top:50%;
-  transform:translateY(-50%);
+  bottom:5px;
+  top:auto;
+  transform:none;
   width:30px;
   height:30px;
   min-width:30px;
@@ -1241,7 +1254,7 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-cmt-wa-field .task-cmt-send-ico:focus{
   background:rgba(24,95,165,.1);
   color:var(--bld);
-  transform:translateY(-50%);
+  transform:none;
   outline:none;
 }
 .task-modal.task-modal-review .task-review-obs-hint{
@@ -2373,7 +2386,7 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
 .chat-drive-chip{display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:5px 10px;border-radius:16px;background:var(--bll);border:1px solid #b8d2eb;color:var(--bld);font-size:11px;font-weight:600;text-decoration:none}
 .chat-drive-chip:hover{background:#e0eef9}
 .chat-compose{display:flex;gap:6px;padding:8px 10px;background:linear-gradient(180deg,#fff 0%,#f8faf9 100%);border-top:1px solid rgba(0,0,0,.06);align-items:center;flex-shrink:0}
-.chat-compose-wa{align-items:center}
+.chat-compose-wa{align-items:flex-end}
 .chat-compose-wa .chat-wa-field{
   position:relative;
   flex:1 1 auto;
@@ -2381,22 +2394,35 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
   display:block;
 }
 .chat-compose-wa #chat-inp,
-.chat-compose-wa .chat-wa-field #chat-inp{
+.chat-compose-wa .chat-wa-field #chat-inp,
+.chat-compose-wa textarea.sst-wa-compose,
+.chat-compose-wa .chat-wa-field textarea.sst-wa-compose{
   display:block;
   width:100%;
   min-width:0;
+  min-height:40px;
+  max-height:120px;
   height:40px;
-  padding:8px 40px 8px 14px;
+  padding:9px 40px 9px 14px;
   border:1px solid rgba(0,0,0,.08);
   border-radius:20px;
   font-size:12px;
+  line-height:1.35;
   font-family:'DM Sans',sans-serif;
   background:#fff;
   box-sizing:border-box;
+  resize:none;
+  overflow-x:hidden;
+  overflow-y:hidden;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+  overflow-wrap:break-word;
   transition:border-color .18s,box-shadow .18s;
 }
 .chat-compose-wa #chat-inp:focus,
-.chat-compose-wa .chat-wa-field #chat-inp:focus{
+.chat-compose-wa .chat-wa-field #chat-inp:focus,
+.chat-compose-wa textarea.sst-wa-compose:focus,
+.chat-compose-wa .chat-wa-field textarea.sst-wa-compose:focus{
   outline:none;
   border-color:rgba(22,163,74,.45);
   box-shadow:0 0 0 3px rgba(22,163,74,.1);
@@ -2404,8 +2430,9 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
 .chat-compose-wa .chat-wa-send-ico{
   position:absolute;
   right:4px;
-  top:50%;
-  transform:translateY(-50%);
+  bottom:5px;
+  top:auto;
+  transform:none;
   width:30px;
   height:30px;
   min-width:30px;
@@ -2428,7 +2455,7 @@ body.modo-ciudadano .hdr-more-menu{display:none!important}
 .chat-compose-wa .chat-wa-send-ico:focus{
   background:rgba(22,163,74,.1);
   color:#15803d;
-  transform:translateY(-50%);
+  transform:none;
   outline:none;
 }
 .chat-compose input[type=text]{flex:1;min-width:0;padding:9px 14px;border:1px solid rgba(0,0,0,.08);border-radius:22px;font-size:12px;font-family:'DM Sans',sans-serif;background:#fff;transition:border-color .18s,box-shadow .18s}

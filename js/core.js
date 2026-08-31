@@ -5247,6 +5247,7 @@ function initTaskReviewObsSide(expId,taskId,t){
   const side=document.getElementById('soporte-annot-sidebar');
   if(side)side.innerHTML=renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+(canAnnot?renderAnnotSidebarFooter(expId,taskId,canAnnot):'');
   if(typeof applyTaskReviewChatSects==='function')applyTaskReviewChatSects();
+  if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-review-side-body')||document);
 }
 function renderTaskReviewChatSideHtml(expId,taskId,t){
   const sel=t?getSoporteActivo(t):null;
@@ -5536,7 +5537,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     setTimeout(function(){renderTaskReviewComparePreview();},40);
   }else if(mode==='chat'){
     body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
-    setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
+    setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);},30);
   }else if(mode==='entrega'){
     body.innerHTML=renderTaskReviewEntregaSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewEntregaSide(expId,taskId,t);},40);
@@ -10315,6 +10316,32 @@ function renderTaskChatListHtml(t){
 function renderTaskChatMessagesHtml(expId,taskId,t){
   return '<div class="task-chat-sep" id="task-chat-sep"><div class="task-chat-uni-scroll">'+renderTaskChatListHtml(t)+'</div></div>';
 }
+function sstWaComposerGrow(inp){
+  if(!inp||inp.tagName!=='TEXTAREA')return;
+  inp.style.height='auto';
+  const max=parseInt(getComputedStyle(inp).maxHeight,10)||120;
+  const h=Math.max(40,Math.min(inp.scrollHeight,max));
+  inp.style.height=h+'px';
+  inp.style.overflowY=inp.scrollHeight>max?'auto':'hidden';
+}
+function sstWaComposerReset(inp){
+  if(!inp)return;
+  inp.value='';
+  sstWaComposerGrow(inp);
+}
+function sstInitWaComposers(root){
+  const scope=root&&(root.querySelectorAll||root.querySelector)?root:document;
+  const nodes=scope.querySelectorAll?scope.querySelectorAll('textarea.sst-wa-compose,#task-cmt-input,#chat-inp'):[];
+  nodes.forEach(function(inp){
+    if(!inp||inp.tagName!=='TEXTAREA'||inp.dataset.sstWaGrow==='1')return;
+    inp.dataset.sstWaGrow='1';
+    inp.addEventListener('input',function(){sstWaComposerGrow(inp);});
+    sstWaComposerGrow(inp);
+  });
+}
+window.sstWaComposerGrow=sstWaComposerGrow;
+window.sstWaComposerReset=sstWaComposerReset;
+window.sstInitWaComposers=sstInitWaComposers;
 function renderTaskChatComposerHtml(expId,taskId,t,opts){
   opts=opts||{};
   t=normalizeTask(t||{});
@@ -10326,7 +10353,7 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   if(opts.compact!==false){
     return '<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
       '<div class="task-cmt-wa-field">'+
-      '<input type="text" id="task-cmt-input" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}">'+
+      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}"></textarea>'+
       '<button type="button" class="task-cmt-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
       '</div>'+
       (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
@@ -13497,6 +13524,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(el&&el.scrollIntoView)el.scrollIntoView({behavior:'smooth',block:'start'});
     const inp=document.getElementById('task-cmt-input');
     if(inp)inp.focus();
+    if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-modal-body')||document);
     if(chatUnificado&&typeof taskKeepInitTextareas==='function')taskKeepInitTextareas(document.getElementById('task-modal-body'));
   },120);
 }
@@ -13587,6 +13615,7 @@ function submitTaskComment(expId,taskId){
   const modePrev=(window._taskModalCtx||{}).mode;
   if(addTaskComentario(expId,taskId,inp.value)){
     notif('Mensaje enviado','ok');
+    if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
     renderBandejaDepto();
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();

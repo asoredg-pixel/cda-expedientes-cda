@@ -995,6 +995,7 @@ function toggleChatWindow(force){
     renderChatContacts();
     renderChatBadge();
     if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+    setTimeout(function(){if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-window')||document);},50);
     if(typeof chatPurgeExpiredDriveFiles==='function'){
       void chatPurgeExpiredDriveFiles().then(function(ok){
         if(ok){renderChatMessages();renderChatContacts();}
@@ -1128,7 +1129,11 @@ async function chatAbrirConv(contactKey){
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
-  setTimeout(function(){const inp=document.getElementById('chat-inp');if(inp)inp.focus();},80);
+  setTimeout(function(){
+    const inp=document.getElementById('chat-inp');
+    if(inp)inp.focus();
+    if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-main')||document);
+  },80);
 }
 function chatMsgDriveUrl(m){
   if(!m)return'';
@@ -1199,7 +1204,8 @@ async function chatEnviarTexto(){
     ts:new Date().toISOString(),
     readBy:getMyChatKeys()
   };
-  inp.value='';
+  if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
+  else{inp.value='';if(typeof sstWaComposerGrow==='function')sstWaComposerGrow(inp);}
   chatMensajes.push(msg);
   renderChatMessages();
   renderChatContacts();
