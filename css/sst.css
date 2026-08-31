@@ -628,7 +628,8 @@ body.task-review-doc-mode #task-modal-overlay{
   min-width:240px;
   max-width:34%;
 }
-/* Responsable: scroll arriba + compositor fijo abajo */
+/* Responsable / encargado en revisión: scroll arriba + compositor fijo abajo (estilo WhatsApp) */
+.task-modal.task-modal-review .task-review-chat-side-wa,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-side-resp{
   display:flex;
   flex-direction:column;
@@ -636,6 +637,7 @@ body.task-review-doc-mode #task-modal-overlay{
   min-height:0;
   overflow:hidden;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-scroll-stack,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-scroll-stack{
   flex:1 1 auto;
   min-height:0;
@@ -643,6 +645,7 @@ body.task-review-doc-mode #task-modal-overlay{
   display:flex;
   flex-direction:column;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-compose-foot,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-compose-foot{
   flex:0 0 auto;
   flex-shrink:0;
@@ -652,17 +655,20 @@ body.task-review-doc-mode #task-modal-overlay{
   width:100%;
   box-sizing:border-box;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-scroll-stack .task-review-chat-obs-sect:not(.collapsed),
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-scroll-stack .task-review-chat-obs-sect:not(.collapsed){
   flex:0 1 auto;
   max-height:45%;
   min-height:0;
   overflow:auto;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-scroll-stack .task-review-chat-act-sect:not(.collapsed),
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-scroll-stack .task-review-chat-act-sect:not(.collapsed){
   flex:1 1 auto;
   min-height:0;
   overflow:hidden;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-act-sect .task-chat-msgs-wrap,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-act-sect .task-chat-msgs-wrap{
   flex:1 1 auto;
   min-height:0;
@@ -670,6 +676,7 @@ body.task-review-doc-mode #task-modal-overlay{
   display:flex;
   flex-direction:column;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-act-sect .task-chat-msgs-wrap .task-chat-sep,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-act-sect .task-chat-msgs-wrap .task-chat-sep{
   flex:1 1 auto;
   min-height:0;
@@ -680,14 +687,17 @@ body.task-review-doc-mode #task-modal-overlay{
   padding:0!important;
   border-top:none;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa.chat-collapsed .task-review-chat-scroll-stack .task-review-chat-obs-sect:not(.collapsed),
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-side.chat-collapsed .task-review-chat-scroll-stack .task-review-chat-obs-sect:not(.collapsed){
   flex:1 1 auto;
   max-height:none;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa.obs-collapsed .task-review-chat-scroll-stack .task-review-chat-act-sect:not(.collapsed),
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-side.obs-collapsed .task-review-chat-scroll-stack .task-review-chat-act-sect:not(.collapsed){
   flex:1 1 auto;
   max-height:none;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-act-sect.collapsed .task-chat-msgs-wrap,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-act-sect.collapsed .task-chat-msgs-wrap{
   display:none;
 }
@@ -1119,6 +1129,7 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-chat-act-sect.collapsed .task-cmt-form{
   display:none;
 }
+.task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-compose-foot .task-cmt-form,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-compose-foot .task-cmt-form{
   display:flex!important;
 }
@@ -1136,6 +1147,10 @@ body.task-review-doc-mode #task-modal-overlay{
   padding-top:4px;
   width:100%;
   box-sizing:border-box;
+}
+.task-modal.enviar-modal-only .task-cmt-form-wa,
+.task-modal.task-modal-chat .task-cmt-form-wa{
+  margin-top:6px;
 }
 .task-cmt-wa-field{
   position:relative;
