@@ -5253,7 +5253,9 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const sid=sel?sel.id:'';
   const notas=notasDocForSoporte(t,sid);
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
-  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
+  const ctx=window._taskModalCtx||{};
+  const deptWa=!!ctx.isDeptReviewWa;
+  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa);
   const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
   const useWaLayout=isRespView||canReviewSop;
   const eid=escAttr(expId),tid=escAttr(taskId);
@@ -5451,9 +5453,13 @@ function taskReviewSetSidePanelLean(lean){
   if(panel)panel.classList.toggle('task-review-side-lean',!!lean);
   if(tit)tit.style.display=lean?'none':'';
 }
+function taskReviewWaSideActive(){
+  const ctx=window._taskModalCtx||{};
+  return!!(ctx.isRespVerCorr||ctx.isDeptReviewWa);
+}
 function taskReviewSyncDocBarClose(show){
   const ctx=window._taskModalCtx||{};
-  if(ctx.isRespVerCorr)show=false;
+  if(taskReviewWaSideActive())show=false;
   const btn=document.getElementById('btn-review-side-close');
   if(btn){
     btn.style.display=show?'':'none';
@@ -5462,7 +5468,7 @@ function taskReviewSyncDocBarClose(show){
   const hdr=document.querySelector('#task-review-side-panel .task-review-side-hdr');
   const hdrClose=hdr?hdr.querySelector('.task-review-side-close, .soporte-sidebar-close'):null;
   if(hdr){
-    if(ctx.isRespVerCorr){
+    if(taskReviewWaSideActive()){
       hdr.style.display='';
       if(hdrClose){hdrClose.style.display='none';hdrClose.setAttribute('aria-hidden','true');}
     }else{
@@ -11163,7 +11169,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     h+='<div class="task-review-doc-bar">';
     if(hasSop&&sel){
       let docToolsBtns='';
-      if(!opts.isRespVerCorr){
+      if(!opts.isRespVerCorr&&!opts.isReviewWaSide){
         docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
           '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
         if(sel.url||sel.preview){
@@ -13335,15 +13341,6 @@ function openTaskCommentsChatOnly(expId,taskId){
     taskReviewToggleSidePanel('chat',expId,taskId);
     return;
   }
-  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-  if(esModoResponsable()&&t&&taskUsuarioEsAsignado(t,responsableActivo)){
-    const est=estadoTask(t);
-    const miEst=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
-    if(miEst==='Por corregir'||est==='Por corregir'){
-      openTaskVerDocumentoResp(expId,taskId);
-      return;
-    }
-  }
   openTaskCommentsModal(expId,taskId,{chatOnly:true});
 }
 function openTaskCommentsModal(expId,taskId,opts){
@@ -13386,6 +13383,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const forceRevisarEntrega=!!opts.revisarEntrega&&!esModoResponsable()&&!esJurisdiccional();
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(pendVer||forceRevisarEntrega);
   const isReviewDelivery=(canReviewSop||isRespVerDoc)&&!chatOnly&&!soloGestion;
+  const isDeptReviewWa=canReviewSop&&isReviewDelivery&&!isRespVerDoc;
   if(isReviewDelivery)window._taskViewTabPreferido='doc';
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&canReviewSop;
@@ -13394,12 +13392,13 @@ function openTaskCommentsModal(expId,taskId,opts){
     modal.classList.toggle('task-modal-wide',!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2||isReviewDelivery));
     modal.classList.toggle('task-modal-review',!!isReviewDelivery);
     modal.classList.toggle('task-modal-resp-ver',!!isRespVerCorr);
+    modal.classList.toggle('task-modal-review-wa-side',!!(isRespVerCorr||isDeptReviewWa));
     modal.classList.toggle('enviar-modal-only',chatOnly||soloGestion);
     modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
     modal.classList.remove('task-modal-archivos');
   }
   if(!isRespVerCorr)clearTaskModalHdrOpenBtn();
-  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr});
+  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa)});
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
     '<div style="margin-bottom:10px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
@@ -13430,7 +13429,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const pqrsRespBanner=(isRespVerDoc&&e&&taskEsAtenderPqrs(t,e))?pqrsDocBanner:'';
     if(tit)tit.textContent=(isRespVerDoc?'Documento y observaciones':'Revisión')+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
-      '<div class="task-review-layout'+(isRespVerCorr?' task-review-layout-resp':'')+'">'+
+      '<div class="task-review-layout'+(isRespVerCorr||isDeptReviewWa?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+
           '<div class="task-review-main">'+pqrsRespBanner+sopPanel+'</div>'+
           (verifyBar&&!isRespVerDoc?'<details class="task-review-decision"><summary>Decisión y cierre</summary><div class="task-review-decision-body">'+verifyBar+'</div></details>':'')+
@@ -13455,7 +13454,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const activo=getSoporteActivo(t);
     const prevSel=window._taskSopSel;
     const validPrev=prevSel&&soportes.some(s=>s.id===prevSel);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerCorr:!!isRespVerCorr};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa};
     if(validPrev)window._taskSopSel=prevSel;
     else window._taskSopSel=getDefaultSoporteSel(t)||(activo||{}).id||'';
     window._soportePaginaActual=1;
@@ -13467,10 +13466,10 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
-      window._taskReviewSideMode=isRespVerCorr?'chat':(window._taskReviewSideMode||'doc');
+      window._taskReviewSideMode=(isRespVerCorr||isDeptReviewWa)?'chat':(window._taskReviewSideMode||'doc');
       setTimeout(function(){
         const mode=window._taskReviewSideMode;
-        if(isRespVerCorr||isRespVerDoc)taskReviewOpenSidePanel('chat',expId,taskId);
+        if(isRespVerCorr||isRespVerDoc||isDeptReviewWa)taskReviewOpenSidePanel('chat',expId,taskId);
         else if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
           taskReviewOpenSidePanel(mode,expId,taskId);
         if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
@@ -13552,6 +13551,7 @@ function closeTaskModal(){
       modal.classList.remove('review-asoc-consulta-modal');
       modal.classList.remove('task-modal-review');
       modal.classList.remove('task-modal-resp-ver');
+      modal.classList.remove('task-modal-review-wa-side');
     }
   }
   document.body.classList.remove('compare-docs-expanded');

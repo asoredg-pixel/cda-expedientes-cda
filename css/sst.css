@@ -618,11 +618,13 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open .task-review-side-panel{
   display:flex;
 }
-/* Responsable por corregir: más espacio al documento, panel lateral más angosto */
+/* Panel lateral compacto: responsable por corregir y encargado por revisar */
+.task-modal.task-modal-review-wa-side .task-review-split-view.task-review-side-open .task-review-doc-col-main,
 .task-modal.task-modal-resp-ver .task-review-split-view.task-review-side-open .task-review-doc-col-main{
   flex:1 1 66%;
   max-width:72%;
 }
+.task-modal.task-modal-review-wa-side .task-review-side-panel,
 .task-modal.task-modal-resp-ver .task-review-side-panel{
   flex:1 1 30%;
   min-width:240px;
@@ -701,45 +703,56 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-act-sect.collapsed .task-chat-msgs-wrap{
   display:none;
 }
+.task-modal.task-modal-review-wa-side .task-review-layout-resp .task-review-workspace,
 .task-modal.task-modal-resp-ver .task-review-layout-resp .task-review-workspace{
   padding-right:0;
 }
-/* Responsable por corregir: recuadros al borde del panel, sin X duplicada */
+.task-modal.task-modal-review-wa-side .task-review-doc-close,
 .task-modal.task-modal-resp-ver .task-review-doc-close{
   display:none!important;
 }
+.task-modal.task-modal-review-wa-side .task-review-doc-tools,
 .task-modal.task-modal-resp-ver .task-review-doc-tools{
   justify-content:flex-start;
 }
+.task-modal.task-modal-review-wa-side .task-review-doc-tools-spacer,
 .task-modal.task-modal-resp-ver .task-review-doc-tools-spacer{
   flex:1 1 auto;
 }
+.task-modal.task-modal-review-wa-side .task-review-side-hdr,
 .task-modal.task-modal-resp-ver .task-review-side-hdr{
   padding:5px 4px 4px 4px;
   justify-content:flex-start;
 }
+.task-modal.task-modal-review-wa-side .task-review-side-hdr .soporte-sidebar-close,
+.task-modal.task-modal-review-wa-side .task-review-side-hdr .task-review-side-close,
 .task-modal.task-modal-resp-ver .task-review-side-hdr .soporte-sidebar-close,
 .task-modal.task-modal-resp-ver .task-review-side-hdr .task-review-side-close{
   display:none!important;
 }
+.task-modal.task-modal-review-wa-side .task-modal-body,
 .task-modal.task-modal-resp-ver .task-modal-body{
   padding-right:0;
 }
+.task-modal.task-modal-review-wa-side .task-review-side-body,
 .task-modal.task-modal-resp-ver .task-review-side-body{
   padding:2px 0 3px 3px;
   overflow:hidden;
   flex:1 1 0;
   min-height:0;
 }
+.task-modal.task-modal-review.task-modal-review-wa-side .task-review-chat-scroll-stack .task-review-chat-obs-sect,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-scroll-stack .task-review-chat-obs-sect{
   border-bottom:none;
   margin-bottom:0;
   padding-bottom:0;
 }
+.task-modal.task-modal-review-wa-side .task-review-side-sect-hdr,
 .task-modal.task-modal-resp-ver .task-review-side-sect-hdr{
   padding:0 2px 0 0;
   margin-bottom:3px;
 }
+.task-modal.task-modal-review.task-modal-review-wa-side .task-review-chat-obs-sect .soporte-annot-sidebar,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-obs-sect .soporte-annot-sidebar{
   width:100%!important;
   max-width:none!important;
@@ -755,6 +768,7 @@ body.task-review-doc-mode #task-modal-overlay{
   align-self:stretch;
   overflow:visible;
 }
+.task-modal.task-modal-review-wa-side .task-review-chat-act-sect .task-chat-sep,
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-chat-sep{
   padding:0 2px 0 0;
   width:100%;
@@ -766,15 +780,19 @@ body.task-review-doc-mode #task-modal-overlay{
   padding-top:2px!important;
   border-top:none;
 }
+.task-modal.task-modal-review-wa-side .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa),
+.task-modal.task-modal-review-wa-side .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa) textarea,
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa),
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa) textarea{
   width:100%;
   max-width:none;
   box-sizing:border-box;
 }
+.task-modal.task-modal-review.task-modal-review-wa-side .task-review-chat-compose-foot .task-cmt-form-wa,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-compose-foot .task-cmt-form-wa{
   padding-top:0;
 }
+.task-modal.task-modal-review-wa-side .soporte-annot-item,
 .task-modal.task-modal-resp-ver .soporte-annot-item{
   width:100%;
   box-sizing:border-box;
@@ -1130,6 +1148,7 @@ body.task-review-doc-mode #task-modal-overlay{
   display:none;
 }
 .task-modal.task-modal-review .task-review-chat-side-wa .task-review-chat-compose-foot .task-cmt-form,
+.task-modal.task-modal-review.task-modal-review-wa-side .task-review-chat-compose-foot .task-cmt-form,
 .task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-compose-foot .task-cmt-form{
   display:flex!important;
 }
