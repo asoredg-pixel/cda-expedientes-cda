@@ -385,7 +385,8 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
     notif((esImprimir?'🖨 En «Por firmar» — marque impreso cuando corresponda':'🖊 En «Por firmar» (Director)')+(notifPor?' · Notificará: '+notifPor:''),'ok');
     if(opts.keepOpen&&typeof taskReviewRefreshModal==='function'){
-      taskReviewRefreshModal(refId,taskId,'decision');
+      if(opts.closeSide&&typeof taskReviewCloseSidePanel==='function')taskReviewCloseSidePanel();
+      taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
     }else{
       closeTaskModal();
       try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
