@@ -5410,7 +5410,16 @@ function taskReviewSyncDocBarClose(show){
     btn.setAttribute('aria-hidden',show?'false':'true');
   }
   const hdr=document.querySelector('#task-review-side-panel .task-review-side-hdr');
-  if(hdr)hdr.style.display=show?'none':'';
+  const hdrClose=hdr?hdr.querySelector('.task-review-side-close, .soporte-sidebar-close'):null;
+  if(hdr){
+    if(ctx.isRespVerCorr){
+      hdr.style.display='';
+      if(hdrClose){hdrClose.style.display='none';hdrClose.setAttribute('aria-hidden','true');}
+    }else{
+      hdr.style.display=show?'none':'';
+      if(hdrClose){hdrClose.style.display='';hdrClose.removeAttribute('aria-hidden');}
+    }
+  }
 }
 function taskReviewCloseSidePanel(){
   const ctx=window._taskModalCtx||{};
@@ -11093,9 +11102,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         }).join('')+'</div>'):'')+
         '<div class="task-review-doc-tools">'+
         (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+
-        '<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
-        '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'+
-        (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
+        (opts.isRespVerCorr
+          ?((sel&&(sel.url||sel.preview))?'<button type="button" class="btn bsm bsm-ico task-review-doc-open" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
+            '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'
+          :('<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
+            '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'+
+            (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':''))+
         '</div></div>';
     }
     h+='</div>';
@@ -13279,7 +13291,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
     modal.classList.remove('task-modal-archivos');
   }
-  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery});
+  const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr});
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
     '<div style="margin-bottom:10px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+

@@ -622,9 +622,9 @@ body.task-review-doc-mode #task-modal-overlay{
   max-width:72%;
 }
 .task-modal.task-modal-resp-ver .task-review-side-panel{
-  flex:0 0 min(280px,30%);
-  min-width:220px;
-  max-width:32%;
+  flex:1 1 30%;
+  min-width:240px;
+  max-width:34%;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
   flex:1 1 38%;
@@ -638,50 +638,77 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-resp-ver .task-review-layout-resp .task-review-workspace{
   padding-right:0;
 }
-/* Responsable por corregir: recuadros al borde del panel, sin X duplicada en documento */
+/* Responsable por corregir: recuadros al borde del panel, sin X duplicada */
 .task-modal.task-modal-resp-ver .task-review-doc-close{
   display:none!important;
 }
+.task-modal.task-modal-resp-ver .task-review-doc-tools{
+  justify-content:flex-start;
+}
+.task-modal.task-modal-resp-ver .task-review-doc-tools-spacer{
+  flex:1 1 auto;
+}
+.task-modal.task-modal-resp-ver .task-review-side-hdr{
+  padding:5px 4px 4px 4px;
+  justify-content:flex-start;
+}
+.task-modal.task-modal-resp-ver .task-review-side-hdr .soporte-sidebar-close,
+.task-modal.task-modal-resp-ver .task-review-side-hdr .task-review-side-close{
+  display:none!important;
+}
 .task-modal.task-modal-resp-ver .task-modal-body{
-  padding-right:.12rem;
+  padding-right:0;
 }
 .task-modal.task-modal-resp-ver .task-review-side-body{
-  padding:3px 2px 4px 3px;
+  padding:2px 0 3px 3px;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-side{
   gap:0;
   width:100%;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
   padding:0 0 5px;
   margin:0 0 5px;
+  width:100%;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-side-sect-hdr{
-  padding:0 1px 0 0;
+  padding:0 2px 0 0;
   margin-bottom:3px;
 }
-.task-modal.task-modal-resp-ver .task-review-chat-obs-sect .soporte-annot-sidebar{
-  width:100%;
-  max-height:none;
+.task-modal.task-modal-review.task-modal-resp-ver .task-review-chat-obs-sect .soporte-annot-sidebar{
+  width:100%!important;
+  max-width:none!important;
+  max-height:none!important;
   flex:1 1 auto;
-  padding:4px 4px;
+  padding:4px 3px;
   border-radius:4px;
   box-sizing:border-box;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect{
   padding:0;
+  width:100%;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-chat-sep{
-  padding:0 1px 0 0;
+  padding:0 2px 0 0;
   width:100%;
+  max-width:none;
   box-sizing:border-box;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form,
-.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form textarea{
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form textarea,
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect #task-cmt-input{
   width:100%;
+  max-width:none;
   box-sizing:border-box;
 }
 .task-modal.task-modal-resp-ver .soporte-annot-item{
+  width:100%;
+  box-sizing:border-box;
   margin-bottom:4px;
 }
 /* Editar expediente en panel lateral: sin cabeceras de columnas, filas más legibles */
