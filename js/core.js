@@ -5641,26 +5641,37 @@ function taskReviewSetComparePaneVisible(show){
   const paneA=document.getElementById('task-review-compare-preview-a');
   if(split)split.classList.toggle('task-review-compare-open',!!show);
   if(stage)stage.classList.toggle('task-review-compare-hide-main',!!show);
-  if(paneA)paneA.classList.toggle('on',!!show);
+  if(paneA){
+    paneA.classList.toggle('on',!!show);
+    if(show)paneA.removeAttribute('hidden');
+    else{
+      paneA.setAttribute('hidden','');
+      paneA.innerHTML='';
+      paneA.dataset.docId='';
+    }
+  }
 }
 function renderTaskReviewCompareEmbedHtml(doc){
   if(!doc)return'<div style="padding:8px;font-size:12px;color:var(--tx3)">Sin documento</div>';
-  const sopLike={preview:doc.preview,url:doc.url,mime:doc.mime,local:doc.local,version:''};
-  if(soporteTieneVista(sopLike)){
+  const sopLike={preview:doc.preview,url:doc.url,driveLink:doc.url,previewLink:doc.preview,mime:doc.mime,local:doc.local,version:''};
+  if(soporteTieneVista(sopLike)||doc.preview||doc.url){
     return soporteEsImagen(sopLike)
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
       :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
   }
   return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
 }
-function onTaskReviewCompareChange(){
+function onTaskReviewCompareChange(ev){
   const selA=document.getElementById('task-review-compare-sel-a');
   const selB=document.getElementById('task-review-compare-sel-b');
+  const tgt=ev&&ev.target;
+  const side=tgt&&tgt.id==='task-review-compare-sel-b'?'b':(tgt&&tgt.id==='task-review-compare-sel-a'?'a':'both');
   if(selA)window._taskReviewCompareDocA=selA.value;
   if(selB)window._taskReviewCompareDocB=selB.value;
-  renderTaskReviewComparePreviews();
+  renderTaskReviewComparePreviews(side);
 }
-function renderTaskReviewComparePreviews(){
+function renderTaskReviewComparePreviews(changedSide){
+  changedSide=changedSide||'both';
   const wrapA=document.getElementById('task-review-compare-preview-a');
   const wrapB=document.getElementById('task-review-compare-preview');
   if(!wrapA&&!wrapB)return;
@@ -5672,8 +5683,20 @@ function renderTaskReviewComparePreviews(){
   initTaskReviewCompareDefaults(t,e,ctx.taskId,docs);
   const docA=docs.find(function(d){return d.id===window._taskReviewCompareDocA;})||docs[0];
   const docB=docs.find(function(d){return d.id===window._taskReviewCompareDocB;})||docs[docs.length-1];
-  if(wrapA)wrapA.innerHTML=renderTaskReviewCompareEmbedHtml(docA);
-  if(wrapB)wrapB.innerHTML=renderTaskReviewCompareEmbedHtml(docB);
+  if((changedSide==='both'||changedSide==='a')&&wrapA){
+    const idA=String(docA.id||'');
+    if(wrapA.dataset.docId!==idA){
+      wrapA.dataset.docId=idA;
+      wrapA.innerHTML=renderTaskReviewCompareEmbedHtml(docA);
+    }
+  }
+  if((changedSide==='both'||changedSide==='b')&&wrapB){
+    const idB=String(docB.id||'');
+    if(wrapB.dataset.docId!==idB){
+      wrapB.dataset.docId=idB;
+      wrapB.innerHTML=renderTaskReviewCompareEmbedHtml(docB);
+    }
+  }
 }
 function puedeEliminarNotaDoc(n,canAnnot){
   if(!n||!canAnnot)return false;
@@ -11367,9 +11390,9 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         }).join('')+'</div>'):'')+
         (showCompareBtn?('<div id="task-review-compare-sel-pair" class="task-review-compare-sel-pair" aria-hidden="true">'+
           '<div class="task-review-compare-sel-col"><span class="task-review-compare-sel-lbl">◀ Izq.</span>'+
-          '<select id="task-review-compare-sel-a" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento izquierdo" onchange="onTaskReviewCompareChange()"></select></div>'+
+          '<select id="task-review-compare-sel-a" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento izquierdo" onchange="onTaskReviewCompareChange(event)"></select></div>'+
           '<div class="task-review-compare-sel-col"><span class="task-review-compare-sel-lbl">Der. ▶</span>'+
-          '<select id="task-review-compare-sel-b" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento derecho" onchange="onTaskReviewCompareChange()"></select></div>'+
+          '<select id="task-review-compare-sel-b" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Documento derecho" onchange="onTaskReviewCompareChange(event)"></select></div>'+
           '</div>'):'')+
         (docToolsBtns?('<div class="task-review-doc-tools">'+docToolsBtns+'</div>'):'')+
         '</div>'+
@@ -11394,7 +11417,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const showDeptAnnotUi=!esModoResponsable()&&(canAnnot||canReviewSop);
     if(isReview){
       h+='<div class="task-review-doc-stage" id="task-review-doc-stage">'+
-        '<div id="task-review-compare-preview-a" class="task-review-compare-preview task-review-compare-preview-a"></div>'+
+        '<div id="task-review-compare-preview-a" class="task-review-compare-preview-a" hidden></div>'+
         '<div class="task-review-viewer-shell">'+
           '<div class="soporte-split task-review-split" id="soporte-split-wrap">'+
             '<div class="soporte-doc-col">'+

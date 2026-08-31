@@ -1039,16 +1039,15 @@ body.task-review-doc-mode #task-modal-overlay{
   overflow:hidden;
   border:1px solid var(--bd);
   border-radius:var(--r);
+  background:var(--sf2);
 }
-.task-modal.task-modal-review .task-review-compare-preview-a.on{
+.task-modal.task-modal-review .task-review-compare-preview-a.on,
+.task-modal.task-modal-review .task-review-doc-stage.task-review-compare-hide-main .task-review-compare-preview-a{
   display:flex;
   flex-direction:column;
 }
 .task-modal.task-modal-review .task-review-doc-stage.task-review-compare-hide-main .task-review-viewer-shell{
   display:none;
-}
-.task-modal.task-modal-review .task-review-doc-stage.task-review-compare-hide-main .task-review-compare-preview-a{
-  display:flex;
 }
 .task-modal.task-modal-review .task-review-compare-preview-a iframe,
 .task-modal.task-modal-review .task-review-compare-preview-a img{
@@ -1058,6 +1057,7 @@ body.task-review-doc-mode #task-modal-overlay{
   height:100%!important;
   max-height:none!important;
   border:0;
+  border-radius:var(--r);
   object-fit:contain;
 }
 .task-modal.task-modal-review .task-review-doc-tools{
@@ -1081,12 +1081,18 @@ body.task-review-doc-mode #task-modal-overlay{
   justify-content:flex-end;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-side-body{
-  padding:0;
+  padding:4px;
   overflow:hidden;
 }
 .task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-compare-preview{
-  border:none;
-  border-radius:0;
+  border:1px solid var(--bd);
+  border-radius:var(--r);
+  background:var(--sf2);
+  overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-compare-preview iframe,
+.task-modal.task-modal-review .task-review-side-panel.task-review-side-lean .task-review-compare-preview img{
+  border-radius:var(--r);
 }
 .task-modal.task-modal-review .task-review-archivos-side{
   display:flex;
@@ -1619,6 +1625,13 @@ body.task-review-doc-mode #task-modal-overlay{
   display:flex;
   flex-direction:column;
   overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-doc-stage:not(.task-review-compare-hide-main) .task-review-compare-preview-a{
+  display:none!important;
+}
+.task-modal.task-modal-review .task-review-doc-stage:not(.task-review-compare-hide-main) .task-review-viewer-shell{
+  flex:1 1 auto;
+  min-height:0;
 }
 .task-modal.task-modal-review .task-review-viewer-shell{
   flex:1 1 auto;
