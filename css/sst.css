@@ -636,7 +636,53 @@ body.task-review-doc-mode #task-modal-overlay{
   min-height:100px;
 }
 .task-modal.task-modal-resp-ver .task-review-layout-resp .task-review-workspace{
-  padding-right:.25rem;
+  padding-right:0;
+}
+/* Responsable por corregir: recuadros al borde del panel, sin X duplicada en documento */
+.task-modal.task-modal-resp-ver .task-review-doc-close{
+  display:none!important;
+}
+.task-modal.task-modal-resp-ver .task-modal-body{
+  padding-right:.12rem;
+}
+.task-modal.task-modal-resp-ver .task-review-side-body{
+  padding:3px 2px 4px 3px;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-side{
+  gap:0;
+  width:100%;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
+  padding:0 0 5px;
+  margin:0 0 5px;
+}
+.task-modal.task-modal-resp-ver .task-review-side-sect-hdr{
+  padding:0 1px 0 0;
+  margin-bottom:3px;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-obs-sect .soporte-annot-sidebar{
+  width:100%;
+  max-height:none;
+  flex:1 1 auto;
+  padding:4px 4px;
+  border-radius:4px;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect{
+  padding:0;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-chat-sep{
+  padding:0 1px 0 0;
+  width:100%;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form,
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form textarea{
+  width:100%;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-resp-ver .soporte-annot-item{
+  margin-bottom:4px;
 }
 /* Editar expediente en panel lateral: sin cabeceras de columnas, filas más legibles */
 .task-modal.task-modal-review .task-review-form-wrap .tk-act-grid-hdr{

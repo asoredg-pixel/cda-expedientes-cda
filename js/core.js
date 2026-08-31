@@ -5402,6 +5402,8 @@ function taskReviewSetSidePanelLean(lean){
   if(tit)tit.style.display=lean?'none':'';
 }
 function taskReviewSyncDocBarClose(show){
+  const ctx=window._taskModalCtx||{};
+  if(ctx.isRespVerCorr)show=false;
   const btn=document.getElementById('btn-review-side-close');
   if(btn){
     btn.style.display=show?'':'none';
