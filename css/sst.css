@@ -1271,9 +1271,13 @@ body.task-review-doc-mode #task-modal-overlay{
   overflow:hidden;
   margin:0;
 }
-.task-modal.task-modal-review .task-review-chat-act-sect .task-chat-uni-scroll{
+.task-modal.task-modal-review .task-review-chat-act-sect .task-chat-uni-scroll,
+.task-modal.task-modal-review .task-review-chat-side-wa .task-chat-uni-scroll,
+.task-modal.task-modal-review .task-review-chat-act-sect .task-chat-msgs-wrap .task-chat-uni-scroll{
   flex:1 1 0;
   min-height:0;
+  max-height:none;
+  margin-bottom:0;
   overflow:auto;
 }
 .task-modal.task-modal-review .task-review-chat-devolver{
