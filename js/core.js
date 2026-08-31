@@ -5485,7 +5485,7 @@ function taskReviewCloseSidePanel(){
   window._taskReviewSideMode='doc';
   const split=document.getElementById('task-review-split-view');
   const panel=document.getElementById('task-review-side-panel');
-  if(split)split.classList.remove('task-review-side-open');
+  if(split)split.classList.remove('task-review-side-open','task-review-compare-open');
   if(panel)panel.setAttribute('aria-hidden','true');
   taskReviewHideCompareBar();
   taskReviewSetSidePanelLean(false);
@@ -5513,6 +5513,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   const tit=document.getElementById('task-review-side-title');
   if(!split||!panel||!body)return;
   split.classList.add('task-review-side-open');
+  split.classList.toggle('task-review-compare-open',mode==='compare');
   panel.setAttribute('aria-hidden','false');
   taskReviewSyncDocBarClose(true);
   if(tit)tit.textContent=(taskReviewSideTitles()[mode]||mode);
@@ -11263,15 +11264,16 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
         }
       }
-      h+='<div class="task-review-doc-bar-sub">'+
+      h+='<div class="task-review-doc-bar-sub'+(showCompareBtn?' task-review-doc-bar-compare':'')+'">'+
+        '<div class="task-review-doc-bar-row">'+
         (soportes.length>1?('<div class="soporte-doc-tabs task-review-doc-tabs">'+soportes.map((s,i)=>{
           const on=sel&&s.id===sel.id;
           const lbl=soporteTabLabel(s,i,soportes);
           return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
-        (docToolsBtns||showCompareBtn
-          ?('<div class="task-review-doc-tools">'+(showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+docToolsBtns+'</div>')
-          :'')+
+        (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" title="Comparar con" onchange="onTaskReviewCompareChange()"></select>':'')+
+        (docToolsBtns?('<div class="task-review-doc-tools">'+docToolsBtns+'</div>'):'')+
+        '</div>'+
         '</div>';
     }
     h+='</div>';
