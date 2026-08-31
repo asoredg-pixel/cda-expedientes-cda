@@ -2248,7 +2248,10 @@ function bibGuardarRenderModal() {
     const hay = ((r.titulo || '') + ' ' + (r.tematica || '') + ' ' + (r.descripcion || '')).toLowerCase();
     return hay.indexOf(q) >= 0;
   });
-  let h = '<p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Organice este asunto en un <strong>tema</strong> de Biblioteca. Elija carpeta existente o cree una nueva; puede guardar dentro de subcarpetas.</p>';
+  let h = '';
+  if (!inline) {
+    h = '<p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Organice este asunto en un <strong>tema</strong> de Biblioteca. Elija carpeta existente o cree una nueva; puede guardar dentro de subcarpetas.</p>';
+  }
   h += linkedHtml;
   h += '<div class="bib-guardar-grid">';
   h += '<div class="bib-guardar-col"><div class="bib-guardar-col-hdr">Temas / carpetas</div><div class="bib-guardar-col-body">';

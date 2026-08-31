@@ -872,8 +872,11 @@ function pqrsEstadoActividadUi(e){
 }
 function pqrsPuedeMarcarParaFirma(e){
   if(!e||!pqrsEnParaFirma(e))return false;
-  // Por imprimir / VITAL: exclusivo VITAL + NCA (no RN/OAP/Admin oficina/Secretaría)
   return !!(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir());
+}
+function pqrsPuedeMarcarImpreso(e){
+  if(!e||typeof pqrsPuedeFlujoPorImprimir!=='function'||!pqrsPuedeFlujoPorImprimir())return false;
+  return (typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))||(typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e));
 }
 /** Flujo «Por imprimir» + VITAL: solo VITAL y encargado NCA (no otras oficinas). */
 function pqrsPuedeFlujoPorImprimir(){
@@ -5167,7 +5170,6 @@ function taskReviewViewRailHtml(expId,taskId,t){
 }
 function taskReviewFullRailHtml(ref,taskId,t){
   return taskReviewViewRailHtml(ref,taskId,t)+
-    '<div class="task-review-rail-sep" aria-hidden="true"></div>'+
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
@@ -5423,6 +5425,8 @@ function taskReviewCanShowDecisionRail(t,expId){
   return false;
 }
 function renderTaskReviewDecisionSideHtml(expId,taskId,t){
+  if(window._taskReviewDecisionView==='atajoFirmado'&&typeof renderTaskReviewAtajoFirmadoHtml==='function')
+    return renderTaskReviewAtajoFirmadoHtml(expId,taskId,t);
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const eid=jsStr(expId),tid=jsStr(taskId);
   const esPqrs=e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
@@ -5468,7 +5472,7 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
   if(puedeImprimir)
     h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">'+
       '<span class="task-decision-opt-ico">🖨️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Para imprimir</span>'+
-      '<span class="task-decision-opt-sub">Cola de impresión → luego firma del Director</span></span></button>';
+      '<span class="task-decision-opt-sub">Va a «Por firmar» · marque 🖨️ cuando esté impreso</span></span></button>';
   if(puedeAtajo)
     h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirFirma(\''+eid+'\',\''+tid+'\')">'+
       '<span class="task-decision-opt-ico">✍️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Para firma del Director</span>'+
@@ -5477,7 +5481,7 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
     h+='<button type="button" class="task-decision-opt" onclick="taskReviewDecidirFirma(\''+eid+'\',\''+tid+'\')">'+
       '<span class="task-decision-opt-ico">✍️</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Enviar a firma</span>'+
       '<span class="task-decision-opt-sub">Director · VITAL · encargado</span></span></button>';
-  h+='<button type="button" class="task-decision-opt" onclick="tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')">'+
+  h+='<button type="button" class="task-decision-opt" onclick="taskReviewAbrirAtajoFirmado(\''+eid+'\',\''+tid+'\')">'+
     '<span class="task-decision-opt-ico">📤</span><span class="task-decision-opt-body"><span class="task-decision-opt-lbl">Cargar documento firmado</span>'+
     '<span class="task-decision-opt-sub">Pasa a «Por notificar» con PDF firmado</span></span></button>';
   h+='</div>';
@@ -5490,11 +5494,20 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
   return h;
 }
 function initTaskReviewDecisionSide(expId,taskId,t){
+  if(window._taskReviewDecisionView==='atajoFirmado'){
+    if(typeof initTaskReviewAtajoFirmadoSide==='function')initTaskReviewAtajoFirmadoSide(expId,taskId,t,{autoPick:true});
+    return;
+  }
   if(typeof sstInitWaComposers==='function'){
     const body=document.getElementById('task-review-side-body');
     if(body)sstInitWaComposers(body);
   }
 }
+function taskReviewAbrirAtajoFirmado(expId,taskId){
+  window._taskReviewDecisionView='atajoFirmado';
+  if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('decision',expId,taskId);
+}
+window.taskReviewAbrirAtajoFirmado=taskReviewAbrirAtajoFirmado;
 function confirmarCierreTaskReview(expId,taskId){
   confirmarCierreTask(expId,taskId,{keepOpen:true});
 }
@@ -5764,6 +5777,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   }else if(mode==='eliminar'){
     body.innerHTML=renderTaskReviewEliminarSideHtml(expId,taskId);
   }else if(mode==='decision'){
+    if(window._taskReviewDecisionView!=='atajoFirmado')window._taskReviewDecisionView='';
     body.innerHTML=renderTaskReviewDecisionSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewDecisionSide(expId,taskId,t);},30);
   }
@@ -11009,7 +11023,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
       'Tiene una solicitud de <strong>'+(sol.tipo==='traslado'?'traslado':'eliminación')+'</strong> pendiente en el chat — espere respuesta del departamento.</div>';
   }else if(autoEnc){
-    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como encargado, usted se revisa a sí mismo: la entrega <strong>no pasa por «Por revisar»</strong>. Tras adjuntar el documento, elija el flujo: <strong>Por imprimir → Por firmar → Firmados → Por notificar</strong> (o cierre sin firma si no aplica).</div>';
+    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como encargado, usted se revisa a sí mismo: la entrega <strong>no pasa por «Por revisar»</strong>. Tras adjuntar el documento, elija el flujo: <strong>Por firmar → Por notificar</strong> (marque 🖨️ cuando esté impreso) o cierre sin firma si no aplica.</div>';
   }else if(finalizarEnc){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">Como encargado del departamento, al finalizar la actividad queda <strong>cerrada directamente</strong>. Puede adjuntar soporte opcional.</div>';
   }else if(traslado){
@@ -11047,7 +11061,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       const eid=escAttr(expId),tid=escAttr(taskId);
       h+='<div style="font-size:12px;font-weight:600;margin:4px 0 6px">Tras la entrega, el flujo será:</div>'+
         '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-        '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff;border-color:#1a7a4a" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'imprimir\')">🖨 Entregar → Por imprimir</button>'+
+        '<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff;border-color:#1a7a4a" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'imprimir\')">🖨 Entregar → Por firmar</button>'+
         '<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'firma\')">🖊 Entregar → Por firmar</button>'+
         '<button type="button" class="btn bsm" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'notificar\')">⬆ Entregar → Por notificar</button>'+
         '<button type="button" class="btn bsm bp" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'cerrar\')">✓ Entregar y cerrar (sin firma)</button>'+
@@ -11845,7 +11859,7 @@ function renderNcaDecisionFormHtml(expId,e,wf){
   }else if(esCanalFisico&&!esOficio){
     btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarCanalFisico(\''+escAttr(expId)+'\')">✅ Aprobar — Notificación física (cerrar)</button>';
   }else if(esOficio){
-    if(puedeImprimir)btnsDecision+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')" title="Aceptar y enviar a la cola Por imprimir (VITAL / NCA)">🖨 Para imprimir</button>';
+    if(puedeImprimir)btnsDecision+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')" title="Aprobar y enviar a «Por firmar» (marcar impreso después)">🖨 Para imprimir</button>';
     if(puedeAtajoFirma)btnsDecision+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="ncaAprobarOficioParaFirmaDirecto(\''+escAttr(expId)+'\')" title="Enviar a firma del Director (sin impresión)">🖊 Para firma</button>';
     btnsDecision+='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Cambiar a mensaje simple</button>';
   }else{
@@ -16213,7 +16227,7 @@ function actImpresoCheckBtnHtml(impresoObj,onclickJs,opts){
 function pqrsMarcarImpreso(expId){
   if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
-  if(!e||!(typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(e))){
+  if(!e||!(typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(e))){
     notif('No puede marcar impreso','err');return;
   }
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
@@ -16296,15 +16310,15 @@ function renderActRowToolbarHtml(t,expAct){
   if(!sol&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const eidT=eid,tidT=tid;
     const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
-    if(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir()){
-      acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
-      acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();tramitePasarAPorFirmar(\''+eidT+'\',\''+tidT+'\')" title="Pasar a firma del Director">🖊</button>';
-    }
+    const puedeImp=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
     if(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t)){
+      if(puedeImp)acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
       if(typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))
         acts+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
       else
         acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();tramiteMarcarFirmadoFisico(\''+eidT+'\',\''+tidT+'\')" title="Firmar">🖊</button>';
+    }else if(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&puedeImp){
+      acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
     }
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
       if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
@@ -16322,15 +16336,16 @@ function renderActRowToolbarHtml(t,expAct){
     const peid=jsStr(expAct._exp||t.exp);
     const faseWf=pqrsWorkflowFase(expAct);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
-    if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarParaFirma==='function'&&pqrsPuedeMarcarParaFirma(expAct)){
+    if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(expAct)){
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
       acts+=actImpresoCheckBtnHtml(wfRow.impreso,"pqrsMarcarImpreso('"+peid+"')");
-      acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+peid+'\')" title="Pasar a firma">🖊</button>';
     }
     if(faseWf===PQRS_WF.POR_FIRMAR){
       const firmFis=!!(wfRow.firma_fisica&&wfRow.firma_fisica.en);
       const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
       acts+=_pqrsActDocsIconBtnsHtml(wfRow,{expId:expAct._exp||t.exp});
+      if(typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(expAct))
+        acts+=actImpresoCheckBtnHtml(wfRow.impreso,"pqrsMarcarImpreso('"+peid+"')");
       if(firmFis){
         if(esDir)acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
         else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct))
@@ -19278,7 +19293,7 @@ async function ncaAprobarOficioFirmado(expId){
   await _pqrsLimpiarVersionesCorreccionWf(e,wf);
   await _pqrsRenombrarDocsDriveWf(wf,'por_firma',{onlyEstados:['revision','']});
   const patchWf={
-    fase:PQRS_WF.PARA_FIRMA,
+    fase:PQRS_WF.POR_FIRMAR,
     cuerpo:d.cuerpo||wf.cuerpo,
     oficio:d.oficio||wf.oficio,
     fecha_respuesta:d.fecha||wf.fecha_respuesta,
@@ -19291,7 +19306,7 @@ async function ncaAprobarOficioFirmado(expId){
   }
   setPqrsWorkflow(e,patchWf);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por imprimir» (VITAL / NCA)'+(notifPor?' · Notificará: '+notifPor:'')+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
+  e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por firmar»'+(notifPor?' · Notificará: '+notifPor:'')+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(typeof clearAltaResponsableAlAprobarDocumento==='function')clearAltaResponsableAlAprobarDocumento(expId,{force:true});
   persistExpedienteGranular(e);
@@ -19300,7 +19315,7 @@ async function ncaAprobarOficioFirmado(expId){
   renderSecretariaPqrs();
   try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(err){}
   if(typeof renderActividades==='function')renderActividades();
-  notif('🖨 Oficio aprobado — queda en «Por firma» (imprimir)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+  notif('🖨 Oficio aprobado — quedó en «Por firmar»'+(notifPor?' · Notificará: '+notifPor:'')+'. Marque impreso cuando corresponda.','ok');
 }
 
 /** Atajo NCA: aprobar oficio y enviar directo a «Por firmar» (firma digital, sin impresión). */

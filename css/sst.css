@@ -957,10 +957,25 @@ body.task-review-doc-mode #task-modal-overlay{
   flex:1 1 auto;
   min-height:0;
   overflow:auto;
+  overflow-x:hidden;
 }
 .task-modal.task-modal-review .task-review-bib-wrap .bib-guardar-grid{
+  display:flex;
+  flex-direction:column;
   min-height:0;
+  gap:8px;
+  grid-template-columns:none;
 }
+.task-modal.task-modal-review .task-review-bib-wrap .bib-guardar-col{
+  min-height:0;
+  flex:0 1 auto;
+  max-height:min(36vh,240px);
+}
+.task-modal.task-modal-review .task-review-bib-wrap .bib-guardar-col-body{
+  overflow-x:hidden;
+}
+.task-review-atajo-firmado .sst-file-pick-row{margin-bottom:8px}
+.task-review-atajo-firmado .task-atajo-firmado-post{border-top:1px solid var(--bd);padding-top:10px;margin-top:4px}
 .task-modal.task-modal-review .task-review-arch-split{
   flex:1 1 auto;
   min-height:0;
