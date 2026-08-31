@@ -629,13 +629,21 @@ body.task-review-doc-mode #task-modal-overlay{
   max-width:34%;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
-  flex:1 1 38%;
-  min-height:100px;
-  max-height:42%;
+  flex:0 1 auto;
+  min-height:0;
+  max-height:38%;
+  overflow:hidden;
+  padding:0 0 5px;
+  margin:0 0 5px;
+  width:100%;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect{
-  flex:1 1 62%;
-  min-height:100px;
+  flex:1 1 auto;
+  min-height:80px;
+  padding:0;
+  width:100%;
+  align-self:stretch;
 }
 .task-modal.task-modal-resp-ver .task-review-layout-resp .task-review-workspace{
   padding-right:0;
@@ -669,12 +677,6 @@ body.task-review-doc-mode #task-modal-overlay{
   width:100%;
   align-self:stretch;
 }
-.task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
-  padding:0 0 5px;
-  margin:0 0 5px;
-  width:100%;
-  align-self:stretch;
-}
 .task-modal.task-modal-resp-ver .task-review-side-sect-hdr{
   padding:0 2px 0 0;
   margin-bottom:3px;
@@ -683,11 +685,19 @@ body.task-review-doc-mode #task-modal-overlay{
   width:100%!important;
   max-width:none!important;
   max-height:none!important;
-  flex:1 1 auto;
-  padding:4px 3px;
-  border-radius:4px;
+  flex:0 1 auto;
+  min-height:0;
+  padding:0;
+  margin:0;
+  border:none;
+  border-radius:0;
+  background:transparent;
   box-sizing:border-box;
   align-self:stretch;
+  overflow:auto;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-side.chat-collapsed .task-review-chat-obs-sect:not(.collapsed) .soporte-annot-sidebar{
+  flex:1 1 auto;
 }
 .task-modal.task-modal-resp-ver .task-review-chat-act-sect{
   padding:0;
@@ -701,12 +711,21 @@ body.task-review-doc-mode #task-modal-overlay{
   box-sizing:border-box;
   align-self:stretch;
 }
-.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form,
-.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form textarea,
-.task-modal.task-modal-resp-ver .task-review-chat-act-sect #task-cmt-input{
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa),
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form:not(.task-cmt-form-wa) textarea{
   width:100%;
   max-width:none;
   box-sizing:border-box;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form-wa{
+  width:100%;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect .task-cmt-form-wa #task-cmt-input{
+  width:auto;
+  flex:1 1 auto;
+  min-width:0;
+  max-width:none;
 }
 .task-modal.task-modal-resp-ver .soporte-annot-item{
   width:100%;
@@ -1019,6 +1038,88 @@ body.task-review-doc-mode #task-modal-overlay{
   color:var(--tx2);
   margin-bottom:6px;
   flex-shrink:0;
+}
+.task-modal.task-modal-review .task-review-sect-toggle-btn{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  width:100%;
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  text-align:left;
+  font-family:inherit;
+  padding:4px 2px;
+  border-radius:4px;
+}
+.task-modal.task-modal-review .task-review-sect-toggle-btn:hover{
+  background:var(--sf2);
+}
+.task-modal.task-modal-review .task-review-sect-ico{
+  flex-shrink:0;
+  color:var(--tx3);
+  font-size:11px;
+  line-height:1;
+}
+.task-modal.task-modal-review .task-review-chat-obs-sect.collapsed,
+.task-modal.task-modal-review .task-review-chat-act-sect.collapsed{
+  flex:0 0 auto;
+  min-height:0;
+  max-height:none;
+  overflow:hidden;
+  padding-bottom:0;
+  margin-bottom:4px;
+}
+.task-modal.task-modal-review .task-review-chat-obs-sect.collapsed .soporte-annot-sidebar,
+.task-modal.task-modal-review .task-review-chat-obs-sect.collapsed .task-review-obs-hint,
+.task-modal.task-modal-review .task-review-chat-obs-sect.collapsed .soporte-pin-form,
+.task-modal.task-modal-review .task-review-chat-act-sect.collapsed .task-chat-uni-scroll,
+.task-modal.task-modal-review .task-review-chat-act-sect.collapsed .task-cmt-form{
+  display:none;
+}
+.task-modal.task-modal-review .task-review-chat-side.obs-collapsed .task-review-chat-act-sect:not(.collapsed),
+.task-modal.task-modal-review .task-review-chat-side.chat-collapsed .task-review-chat-obs-sect:not(.collapsed){
+  flex:1 1 auto;
+  max-height:none;
+}
+.task-cmt-form-wa{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  gap:6px;
+  flex-shrink:0;
+  padding-top:4px;
+}
+.task-cmt-form-wa #task-cmt-input{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0!important;
+  height:36px;
+  padding:8px 12px;
+  border:1px solid var(--bd);
+  border-radius:18px;
+  font-family:'DM Sans',sans-serif;
+  font-size:13px;
+  resize:none;
+  box-sizing:border-box;
+}
+.task-cmt-form-wa #task-cmt-input:focus{
+  outline:none;
+  border-color:var(--bl);
+}
+.task-cmt-send-ico{
+  width:36px;
+  height:36px;
+  min-width:36px;
+  border-radius:50%;
+  padding:0!important;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  font-size:14px;
+  line-height:1;
 }
 .task-modal.task-modal-review .task-review-obs-hint{
   flex-shrink:0;

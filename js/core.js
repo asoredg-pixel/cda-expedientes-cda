@@ -5246,6 +5246,7 @@ function initTaskReviewObsSide(expId,taskId,t){
   renderAnnotPinsOnOverlay(notas,window._annotSelId||null);
   const side=document.getElementById('soporte-annot-sidebar');
   if(side)side.innerHTML=renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+(canAnnot?renderAnnotSidebarFooter(expId,taskId,canAnnot):'');
+  if(typeof applyTaskReviewChatSects==='function')applyTaskReviewChatSects();
 }
 function renderTaskReviewChatSideHtml(expId,taskId,t){
   const sel=t?getSoporteActivo(t):null;
@@ -5255,21 +5256,63 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
   const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
   const eid=escAttr(expId),tid=escAttr(taskId);
-  let h='<div class="task-review-chat-side">';
+  const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
+  let h='<div class="task-review-chat-side'+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
   if(canReviewSop||notas.length||isRespView){
-    h+='<section class="task-review-chat-obs-sect"><div class="task-review-side-sect-hdr">📌 Observaciones del documento</div>';
+    h+='<section class="task-review-chat-obs-sect'+(st.obs?' collapsed':'')+'">'+
+      '<button type="button" class="task-review-side-sect-hdr task-review-sect-toggle-btn" onclick="toggleTaskReviewChatSect(\'obs\')">'+
+      '<span>📌 Observaciones del documento</span><span class="task-review-sect-ico" aria-hidden="true">'+(st.obs?'▸':'▾')+'</span></button>';
     if(canAnnot)
       h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="toggleModoMarcarAnnot()">📍 Clic en documento para marcar</button></div>';
     h+=(canAnnot?renderAnnotPinFormHtml():'')+
       '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
     h+='</section>';
   }
-  h+='<section class="task-review-chat-act-sect">'+renderTaskChatPanelHtml(expId,taskId,t)+'</section>';
+  h+='<section class="task-review-chat-act-sect'+(st.chat?' collapsed':'')+'">'+
+    '<button type="button" class="task-review-side-sect-hdr task-review-sect-toggle-btn" onclick="toggleTaskReviewChatSect(\'chat\')">'+
+    '<span>'+chatWaIconHtml(16)+' Chat</span><span class="task-review-sect-ico" aria-hidden="true">'+(st.chat?'▸':'▾')+'</span></button>'+
+    renderTaskChatPanelHtml(expId,taskId,t,{hideTitle:true,compactComposer:!!isRespView})+
+    '</section>';
   if(canReviewSop)
     h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
   h+='</div>';
   return h;
 }
+function taskReviewChatSectState(){
+  const st=window._taskReviewSectCollapsed||{obs:false,chat:false};
+  return {obs:!!st.obs,chat:!!st.chat};
+}
+function applyTaskReviewChatSects(){
+  const st=taskReviewChatSectState();
+  const root=document.querySelector('.task-review-chat-side');
+  if(!root)return;
+  root.classList.toggle('obs-collapsed',st.obs);
+  root.classList.toggle('chat-collapsed',st.chat);
+  const obs=root.querySelector('.task-review-chat-obs-sect');
+  const chat=root.querySelector('.task-review-chat-act-sect');
+  if(obs){
+    obs.classList.toggle('collapsed',st.obs);
+    const ico=obs.querySelector('.task-review-sect-ico');
+    if(ico)ico.textContent=st.obs?'▸':'▾';
+  }
+  if(chat){
+    chat.classList.toggle('collapsed',st.chat);
+    const ico=chat.querySelector('.task-review-sect-ico');
+    if(ico)ico.textContent=st.chat?'▸':'▾';
+  }
+}
+function toggleTaskReviewChatSect(which){
+  const st=taskReviewChatSectState();
+  if(which==='obs')st.obs=!st.obs;
+  else if(which==='chat')st.chat=!st.chat;
+  if(st.obs&&st.chat){
+    if(which==='obs')st.chat=false;
+    else st.obs=false;
+  }
+  window._taskReviewSectCollapsed=st;
+  applyTaskReviewChatSects();
+}
+window.toggleTaskReviewChatSect=toggleTaskReviewChatSect;
 function renderTaskReviewEntregaSideHtml(expId,taskId,t){
   const modo=resolveModoEnviar(t,null);
   return '<div class="task-review-side-scroll task-review-entrega-side">'+renderEnviarPanelHtml(expId,taskId,t,modo)+'</div>';
@@ -10251,25 +10294,31 @@ function setTaskChatUniTab(tab){
 function openTaskChatUnificado(expId,taskId){
   openTaskCommentsModal(expId,taskId,{chatOnly:true,chatUnificado:true});
 }
-function renderTaskChatPanelHtml(expId,taskId,t){
+function renderTaskChatPanelHtml(expId,taskId,t,opts){
+  opts=opts||{};
   t=normalizeTask(t||{});
   const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
   const lista=chatAct.length?chatAct.map(c=>'<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+escAttr(c.texto||'')+'</div>').join(''):'';
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
   const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
   const sol=getTaskSolicitudPendiente(t);
+  const eid=escAttr(expId),tid=escAttr(taskId);
   let form='';
-  if(canWriteDept){
-    form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
-      '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Enviar</button>'+
-      '</div></div>';
-  }else if(canWriteResp){
-    form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
-      '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Enviar</button>';
-    if(sol)form+='<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>';
-    form+='</div></div>';
+  if(canWriteDept||canWriteResp){
+    if(opts.compactComposer){
+      form='<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
+        '<input type="text" id="task-cmt-input" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}">'+
+        '<button type="button" class="btn bsm bp task-cmt-send-ico" title="Enviar" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
+        (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
+        '</div>';
+    }else{
+      form='<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
+        '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">Enviar</button>'+
+        (sol?'<span class="solicitud-pill" style="margin-left:4px">Solicitud enviada</span>':'')+
+        '</div></div>';
+    }
   }
-  return '<div class="task-chat-sep" id="task-chat-sep"><div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat</div>'+
+  return '<div class="task-chat-sep" id="task-chat-sep">'+(opts.hideTitle?'':'<div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat</div>')+
     '<div class="task-chat-uni-scroll">'+lista+'</div>'+form+'</div>';
 }
 function renderTaskChatUnificadoHtml(expId,taskId,t){
