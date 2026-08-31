@@ -158,8 +158,7 @@ function pickCrearExpEntregaResp(expNum){
   if(expNuevo)expNuevo.value=expNum;
   syncEntregaRespModoUi();
   const hint=document.getElementById('entrega-resp-exp-hint');
-  if(hint)hint.innerHTML='✚ <strong>Crear expediente (1ª entrega)</strong> · '+escAttr(expNum)+
-    '<br><span style="color:var(--tx3)">Complete tipo de trámite e interesado. No use esta opción para PQRSD (se radican en Secretaría).</span>';
+  if(hint)hint.textContent='';
   syncEntregaRespAltaFormPorTramite();
   syncEntregaRespInteresadoUi();
   setTimeout(function(){
