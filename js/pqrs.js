@@ -1847,7 +1847,7 @@ function openAsignarPqrsOficinaModal(expId){
   window._pqrsAsignarForzarSinCorreo=false;
   togglePqrsAsigModo();
 }
-async function submitAsignarPqrsOficina(expId){
+async function submitAsignarPqrsOficina(expId,taskId){
   const responsables=[...document.querySelectorAll('.pqrs-asig-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
   if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
   const e=exps.find(x=>x._exp===expId);
@@ -1884,8 +1884,12 @@ async function submitAsignarPqrsOficina(expId){
   if(existIdx>=0)e.tasks[existIdx]=normalizeTask({...e.tasks[existIdx],responsable:resp,responsables:responsables,asignados:asignadosArr,entregaModo:entregaModo,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),eliminada:false,prioritaria:prior,vence:vence,plazoDias:plazoDias});
   else e.tasks.push(tk);
   persistExpedienteGranular(e);
-  closeTaskModal();
-  notif('PQRSD asignado a '+nomList,'ok');
+  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
+    notif('PQRSD asignado a '+nomList,'ok');
+  }else{
+    closeTaskModal();
+    notif('PQRSD asignado a '+nomList,'ok');
+  }
   // Reenviar correo a los responsables que aún no lo han recibido
   if(typeof tryReenvioPqrsCorreoAResponsables==='function'){
     await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:false});
@@ -1920,7 +1924,7 @@ function openTrasladoPqrsInicialModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'trasladoPqrsIni',expId};
 }
-async function submitTrasladoPqrsInicial(expId){
+async function submitTrasladoPqrsInicial(expId,taskId){
   const sel=document.getElementById('pqrs-trasl-ini-ofi-sel');
   const nuevaOfi=sel?sel.value:'';
   const motivo=String((document.getElementById('pqrs-trasl-ini-motivo')||{}).value||'').trim();
@@ -1941,8 +1945,12 @@ async function submitTrasladoPqrsInicial(expId){
   await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
   if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
   await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
-  closeTaskModal();
-  notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
+  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
+    notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
+  }else{
+    closeTaskModal();
+    notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
+  }
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   else{
     renderBandejaDepto();
@@ -1979,7 +1987,7 @@ function openTrasladoPqrsInterOficinaModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'trasladoPqrsOfi',expId};
 }
-function submitTrasladoPqrsInterOficina(expId){
+function submitTrasladoPqrsInterOficina(expId,taskId){
   const sel=document.getElementById('pqrs-trasl-ofi-sel');
   const nuevaOfi=sel?sel.value:'';
   const motivo=String((document.getElementById('pqrs-trasl-motivo')||{}).value||'').trim();
@@ -1998,8 +2006,12 @@ function submitTrasladoPqrsInterOficina(expId){
   tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(async function(){
     if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
     await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
-    closeTaskModal();
-    notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
+    if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
+      notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
+    }else{
+      closeTaskModal();
+      notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
+    }
     if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
     else{
       renderBandejaDepto();

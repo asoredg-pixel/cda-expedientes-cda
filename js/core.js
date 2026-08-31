@@ -22,6 +22,29 @@ function elevateOverlayAboveModals(ov,z){
 function resetOverlayElevation(ov){
   if(ov)ov.style.zIndex='';
 }
+function sstZForAgendaAboveModals(){
+  const ov=document.getElementById('task-modal-overlay');
+  if(ov&&ov.classList.contains('on')){
+    if(ov.classList.contains('review-stack-modal-on'))return 100100;
+    const inline=parseInt(String(ov.style.zIndex||''),10);
+    if(inline>=100000)return inline+30;
+    if(inline>=20000)return inline+30;
+    return SST_Z_ABOVE_TASK_MODAL+30;
+  }
+  return 15003;
+}
+function pqrsRefreshAfterSideAction(expId,taskId){
+  const ctx=window._taskModalCtx||{};
+  expId=String(expId||ctx.expId||'').trim();
+  taskId=String(taskId||ctx.taskId||'').trim();
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&expId&&taskId){
+    if(typeof refreshPqrsDetalleViews==='function')refreshPqrsDetalleViews(expId);
+    if(typeof openTaskCommentsModal==='function')
+      openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:true});
+    return true;
+  }
+  return false;
+}
 function taskModalEstaAbierto(){
   const ov=document.getElementById('task-modal-overlay');
   return !!(ov&&ov.classList.contains('on'));
@@ -30,6 +53,7 @@ function taskModalIsReviewOpen(){
   const ctx=window._taskModalCtx||{};
   return !!ctx.isReviewDelivery;
 }
+window.pqrsRefreshAfterSideAction=pqrsRefreshAfterSideAction;
 function pushTaskModalLayer(tag){
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
@@ -2979,13 +3003,26 @@ function pqrsNormAttName(n){
   return String(n||'').trim().toLowerCase().replace(/\s+/g,' ')
     .replace(/^anexo\s+pqrsd?\s+[\w.\-]+\s+/i,'');
 }
-function pqrsFindDriveAtt(driveAtts,nombre,idx){
-  const list=Array.isArray(driveAtts)?driveAtts.filter(function(x){return x&&x.driveLink;}):[];
-  if(!list.length)return null;
-  if(typeof idx==='number'&&idx>=0&&idx<list.length){
-    const byIdx=list[idx];
-    if(byIdx)return byIdx;
-  }
+function pqrsDriveFileKey(url){
+  const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):null;
+  if(p&&p.id)return 'id:'+p.id;
+  return String(url||'').trim().toLowerCase().replace(/[#?].*$/,'');
+}
+function pqrsDriveUrlsMatch(a,b){
+  if(!a||!b)return false;
+  return pqrsDriveFileKey(a)===pqrsDriveFileKey(b);
+}
+function pqrsOrigenDocIdForDriveLink(e,url){
+  if(!e||!url)return'';
+  const docs=collectPqrsOrigenDocs(e);
+  const doc=docs.find(function(d){return pqrsDriveUrlsMatch(d.url,url);});
+  return doc?doc.id:'';
+}
+function pqrsFindDriveAtt(driveAtts,nombre,idx,solicitudLink){
+  const solKey=solicitudLink?pqrsDriveFileKey(solicitudLink):'';
+  const raw=Array.isArray(driveAtts)?driveAtts.filter(function(x){return x&&x.driveLink;}):[];
+  const list=solKey?raw.filter(function(x){return pqrsDriveFileKey(x.driveLink)!==solKey;}):raw.slice();
+  if(!list.length&&!raw.length)return null;
   const want=pqrsNormAttName(nombre);
   if(want){
     const exact=list.find(function(x){return pqrsNormAttName(x.nombre||x.name)===want;});
@@ -2996,7 +3033,14 @@ function pqrsFindDriveAtt(driveAtts,nombre,idx){
     });
     if(loose)return loose;
   }
-  if(typeof idx==='number'&&idx>=0&&idx<list.length)return list[idx];
+  if(typeof idx==='number'&&idx>=0){
+    let seen=0;
+    for(let i=0;i<raw.length;i++){
+      if(solKey&&pqrsDriveFileKey(raw[i].driveLink)===solKey)continue;
+      if(seen===idx)return raw[i];
+      seen++;
+    }
+  }
   return null;
 }
 function puedeEliminarPqrsEnVisor(e){
@@ -3015,9 +3059,14 @@ async function abrirPqrsGmailAnexoCorreo(msgId,attId,nombre,mimeType,expId){
   if(expId){
     const e=typeof getExpById==='function'?getExpById(expId):null;
     if(e){
-      const drv=pqrsFindDriveAtt(e._pqrs_gmail_attachments,nombre);
-      if(drv&&drv.driveLink){abrirVisorAdjunto(drv.driveLink,nombre);return;}
-      if(e._pqrs_solicitud_link){abrirVisorAdjunto(e._pqrs_solicitud_link,nombre);return;}
+      const drv=pqrsFindDriveAtt(e._pqrs_gmail_attachments,nombre,undefined,e._pqrs_solicitud_link);
+      if(drv&&drv.driveLink){
+        if(window._taskModalCtx&&window._taskModalCtx.isPqrsOrigenView){
+          const docId=pqrsOrigenDocIdForDriveLink(e,drv.driveLink);
+          if(docId){selectPqrsOrigenDoc(docId);return;}
+        }
+        abrirVisorAdjunto(drv.driveLink,nombre);return;
+      }
     }
   }
   if(!msgId||!attId){
@@ -3059,7 +3108,10 @@ function pqrsAnexoChipHtml(e,a,drv,idx){
   const expId=e&&e._exp||'';
   const ico=(mime||'').startsWith('image/')?'🖼️':(mime||'').includes('pdf')?'📄':(mime||'').includes('word')||(nom||'').match(/\.docx?$/i)?'📝':(mime||'').includes('sheet')||(mime||'').includes('excel')||(nom||'').match(/\.xlsx?$/i)?'📊':'📎';
   if(drv&&drv.driveLink){
-    const onclick='event.stopPropagation();selectPqrsOrigenDocByUrl(\''+jsStr(drv.driveLink)+'\');return false;';
+    const docId=e?pqrsOrigenDocIdForDriveLink(e,drv.driveLink):'';
+    const onclick=docId
+      ?'event.stopPropagation();selectPqrsOrigenDoc(\''+jsStr(docId)+'\');return false;'
+      :'event.stopPropagation();selectPqrsOrigenDocByUrl(\''+jsStr(drv.driveLink)+'\');return false;';
     return'<button type="button" class="gmail-att-chip" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
   }
   const msgId=e&&e._gmail_message_id||'';
@@ -3090,7 +3142,7 @@ function collectPqrsOrigenDocs(e){
   }
   (e._pqrs_gmail_attachments||[]).forEach(function(att,i){
     if(!att||!att.driveLink)return;
-    if(att.driveLink===e._pqrs_solicitud_link)return;
+    if(e._pqrs_solicitud_link&&pqrsDriveUrlsMatch(att.driveLink,e._pqrs_solicitud_link))return;
     const nom=att.nombre||att.name||('Anexo '+(i+1));
     const short=nom.length>36?nom.slice(0,34)+'…':nom;
     push('pqrs_att_'+i,att.driveLink,nom,short);
@@ -3140,7 +3192,7 @@ function selectPqrsOrigenDocByUrl(url){
   const ctx=window._taskModalCtx||{};
   const e=typeof getExpById==='function'?getExpById(ctx.expId):null;
   const docs=collectPqrsOrigenDocs(e);
-  const doc=docs.find(function(d){return String(d.url||'').trim()===url;});
+  const doc=docs.find(function(d){return pqrsDriveUrlsMatch(d.url,url);});
   if(doc)selectPqrsOrigenDoc(doc.id);
   else abrirVisorAdjunto(url,'Anexo PQRSD');
 }
@@ -3201,7 +3253,7 @@ function renderPqrsCorreoPaneInnerHtml(e,opts){
   let hayAnexoSinLink=false;
   if(adjInfo.length){
     attsHtml=adjInfo.map(function(a,idx){
-      const drv=pqrsFindDriveAtt(driveAtts,a.nombre,idx);
+      const drv=pqrsFindDriveAtt(driveAtts,a.nombre,idx,e._pqrs_solicitud_link);
       const chip=pqrsAnexoChipHtml(e,a,drv,idx);
       if(chip.indexOf('<span class="gmail-att-chip"')===0)hayAnexoSinLink=true;
       return chip;
@@ -4769,11 +4821,10 @@ function openAgendaDesdeActividad(expId,taskId){
 function actAgendaAbrirPanelUi(){
   const dock=document.getElementById('act-agenda-dock');
   const overlay=document.getElementById('act-agenda-overlay');
-  if(typeof taskModalEstaAbierto==='function'&&taskModalEstaAbierto()){
-    const zAgenda=typeof SST_Z_ABOVE_TASK_MODAL!=='undefined'?SST_Z_ABOVE_TASK_MODAL+15:100065;
-    if(overlay&&typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(overlay,zAgenda);
-    if(dock&&typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(dock,zAgenda+1);
-  }
+  const zOv=typeof sstZForAgendaAboveModals==='function'?sstZForAgendaAboveModals():15003;
+  const zDock=zOv+2;
+  if(overlay&&typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(overlay,zOv);
+  if(dock&&typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(dock,zDock);
   const body=document.getElementById('act-agenda-body');
   const tit=document.getElementById('act-agenda-tit');
   const sub=document.getElementById('act-agenda-sub');
@@ -5192,6 +5243,8 @@ function actAgendaSelDia(f){actAgendaSetDia(f);}
 function cerrarActAgendaPanel(){
   const ov=document.getElementById('act-agenda-overlay');
   const dock=document.getElementById('act-agenda-dock');
+  if(ov&&typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
+  if(dock&&typeof resetOverlayElevation==='function')resetOverlayElevation(dock);
   if(ov)ov.classList.remove('on');
   window._actAgendaPanelSide=null;
   window._actAgendaShowCal=false;
@@ -5454,7 +5507,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -5528,7 +5581,7 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   if(e&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='asociar'?' on':'')+'" data-side="asociar" title="Asociar expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
   if(esEnc)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar oficina o asignar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
   if(typeof openBibGuardarModal==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
   if(e&&puedeEliminarPqrsEnVisor(e))
@@ -5982,6 +6035,74 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
     '<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
     '</div></div>';
 }
+function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  e=e||(typeof getExpById==='function'?getExpById(expId):null);
+  if(!e)return'<div style="padding:10px;font-size:12px;color:var(--tx3)">PQRSD no encontrada</div>';
+  const canIni=typeof puedeTrasladarPqrsInicial==='function'&&puedeTrasladarPqrsInicial(e);
+  const canOfi=typeof puedeTrasladarPqrs==='function'&&puedeTrasladarPqrs(e);
+  const canAsig=typeof puedeAsignarPqrsOficina==='function'&&puedeAsignarPqrsOficina(e);
+  let h='<div class="task-review-side-form pqrs-trasl-side">';
+  h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(e.f_f1||e._pqrs_detalle||expId)+'</div>';
+  if(canIni||canOfi){
+    h+='<div style="font-size:12px;font-weight:600;margin:10px 0 6px">🔄 Trasladar a otra oficina</div>';
+    h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">DS, RN, OAP, Admin u otra oficina competente.</div>';
+    if(canIni){
+      const opts='<option value="">— Seleccionar oficina —</option>'+
+        OFICINAS_DEGUV.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
+      h+='<div class="fld" style="margin-bottom:8px"><label>Oficina destino<span class="req-star">*</span></label>'+
+        '<select id="pqrs-trasl-ini-ofi-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-ini-motivo" placeholder="Ej. Competencia de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
+        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
+    }else{
+      const actual=e._pqrs_oficina||'';
+      const destinos=OFICINAS_DEGUV.filter(function(o){return o.id!==actual;});
+      const opts='<option value="">— Seleccionar oficina —</option>'+
+        destinos.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
+      h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Oficina actual: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(actual):actual)+'</strong></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Nueva oficina destino<span class="req-star">*</span></label>'+
+        '<select id="pqrs-trasl-ofi-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
+        '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-motivo" placeholder="Ej. Reasignación por competencia" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
+        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInterOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
+    }
+  }
+  if(canAsig){
+    const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
+    const responsables=typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
+    const yaAsig=[];
+    if(e._pqrs_responsable_oficina)yaAsig.push(String(e._pqrs_responsable_oficina).trim());
+    const existTk=(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&String(tk.actividad).startsWith('Atender PQRSD');});
+    if(existTk){getTaskResponsables(existTk).forEach(function(n){if(n&&!yaAsig.some(function(x){return agendaNorm(x)===agendaNorm(n);}))yaAsig.push(n);});}
+    const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
+    const respChecks=responsables.length
+      ?responsables.map(function(n){
+        const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
+        return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="togglePqrsAsigModo()"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
+      }).join('')
+      :'<div style="padding:8px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
+    const obsPrev=String(e._pqrs_asig_observaciones||'').trim();
+    h+='<div style="border-top:1px solid var(--bd);padding-top:12px;margin-top:4px">'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:6px">👤 Asignar responsable</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(oficina):oficina)+'</strong></div>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Responsable(s)<span class="req-star">*</span></label>'+
+      '<div id="pqrs-asig-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
+      '<div class="fld" id="pqrs-asig-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label>'+
+      '<select id="pqrs-asig-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+
+      '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
+      '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
+      '</select></div>'+
+      '<div class="fld" style="margin-bottom:10px"><label>Observaciones (opcional)</label>'+
+      '<textarea id="pqrs-asig-obs" placeholder="Indicaciones para el/los responsable(s)…" style="width:100%;min-height:56px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif">'+escAttr(obsPrev)+'</textarea></div>'+
+      '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar asignación</button>'+
+      '</div>';
+  }
+  if(!canIni&&!canOfi&&!canAsig)
+    h+='<div style="font-size:12px;color:var(--tx3);padding:8px">No hay acciones de traslado o asignación disponibles.</div>';
+  h+='</div>';
+  return h;
+}
+window.renderTaskReviewTrasladarPqrsSideHtml=renderTaskReviewTrasladarPqrsSideHtml;
 function initTaskReviewAsocSide(ref,taskId,t){
   const opts={ref:ref,taskId:taskId,task:t};
   let ctx={q:'',ref:ref,taskId:taskId};
@@ -6135,8 +6256,15 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML='<div id="task-review-asoc-body" class="task-review-asoc-body review-asoc-body"></div>';
     initTaskReviewAsocSide(refFromCtx(expId,taskId,t),taskId,t);
   }else if(mode==='trasladar'){
-    const canEdit=!esModoResponsable()&&!esJurisdiccional();
-    body.innerHTML='<div class="task-review-side-scroll">'+renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,{hideDelete:true})+'</div>';
+    const ctx=window._taskModalCtx||{};
+    const isPqrsGestion=!!(ctx.isPqrsOrigenView||(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)));
+    if(isPqrsGestion&&!esModoResponsable()&&!esJurisdiccional()){
+      body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t)+'</div>';
+      setTimeout(function(){if(typeof togglePqrsAsigModo==='function')togglePqrsAsigModo();},0);
+    }else{
+      const canEdit=!esModoResponsable()&&!esJurisdiccional();
+      body.innerHTML='<div class="task-review-side-scroll">'+renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,{hideDelete:true})+'</div>';
+    }
   }else if(mode==='biblioteca'){
     body.innerHTML='<div id="task-review-bib-wrap" class="task-review-bib-wrap"></div>';
     initTaskReviewBibSide(expId,taskId,t);

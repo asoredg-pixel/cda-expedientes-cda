@@ -2342,9 +2342,11 @@ html.ui-editor-modal-mode #pqrs-side-panel{z-index:19992!important}
 html.ui-editor-modal-mode #cons-chart-panel{z-index:19991}
 /* Mi día / Tasks: dock lateral (izq desde menú, der desde actividades) */
 html.ui-editor-modal-mode #act-agenda-overlay{z-index:19990;background:rgba(0,0,0,.18)}
+html.ui-editor-modal-mode #act-agenda-overlay.on{z-index:100100!important;background:rgba(0,0,0,.22)}
 html.ui-editor-modal-mode #act-agenda-dock{
   z-index:19993!important;
 }
+html.ui-editor-modal-mode #act-agenda-dock.on{z-index:100102!important}
 html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-left{
   top:0!important;left:56px!important;right:0!important;bottom:auto!important;
   height:100%!important;max-height:none!important;
