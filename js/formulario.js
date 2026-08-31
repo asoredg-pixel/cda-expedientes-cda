@@ -378,7 +378,6 @@ function renderFormulario(tid,ed,targetId){
     '<datalist id="acts-pred-list">'+(cfg.actividadesPred||[]).map(a=>'<option value="'+a+'"></option>').join('')+'</datalist>'+
     '<div class="tk-act-grid-hdr">'+
     '<span>Actividad</span><span>Detalles</span><span>Responsable</span><span>Días</span><span>Vence</span><span>F. cierre</span><span>Estado</span><span></span></div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">El contratista reporta la ejecución (✓ en Actividades). Usted verifica aquí con fecha de cierre, comentarios, traslado o eliminación.</div>'+
     '<div class="tk-cont"></div>'+
     '<div class="fx" style="gap:5px;margin-top:5px">'+
     '<button class="btn bsm" onclick="addTask()">+ Actividad</button>'+

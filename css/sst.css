@@ -616,6 +616,48 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open .task-review-side-panel{
   display:flex;
 }
+/* Responsable por corregir: más espacio al documento, panel lateral más angosto */
+.task-modal.task-modal-resp-ver .task-review-split-view.task-review-side-open .task-review-doc-col-main{
+  flex:1 1 66%;
+  max-width:72%;
+}
+.task-modal.task-modal-resp-ver .task-review-side-panel{
+  flex:0 0 min(280px,30%);
+  min-width:220px;
+  max-width:32%;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-obs-sect{
+  flex:1 1 38%;
+  min-height:100px;
+  max-height:42%;
+}
+.task-modal.task-modal-resp-ver .task-review-chat-act-sect{
+  flex:1 1 62%;
+  min-height:100px;
+}
+.task-modal.task-modal-resp-ver .task-review-layout-resp .task-review-workspace{
+  padding-right:.25rem;
+}
+/* Editar expediente en panel lateral: sin cabeceras de columnas, filas más legibles */
+.task-modal.task-modal-review .task-review-form-wrap .tk-act-grid-hdr{
+  display:none;
+}
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap{
+  grid-template-columns:1fr 1fr;
+  gap:6px 8px;
+  padding:8px;
+}
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .act-wrap,
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .td,
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .tk-asig-extra,
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .tkr-foot,
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .tk-coej-panel{
+  grid-column:1 / -1;
+}
+.task-modal.task-modal-review .task-review-form-wrap .tkr-wrap .te-display{
+  justify-self:start;
+  max-width:100%;
+}
 .task-modal.task-modal-review .task-review-side-hdr{
   flex-shrink:0;
   display:flex;
