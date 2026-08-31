@@ -5077,8 +5077,6 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t){
   const r=escAttr(ref),tid=escAttr(taskId);
   let h='';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
-  if(!libre)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="actividades" title="Actividades asignadas — añadir actividad" onclick="taskReviewToggleSidePanel(\'actividades\',\''+r+'\',\''+tid+'\')">📌</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="archivos" title="Archivos del expediente o actividad" onclick="taskReviewToggleSidePanel(\'archivos\',\''+r+'\',\''+tid+'\')">📁</button>';
   h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(libre)
@@ -5122,9 +5120,15 @@ function taskReviewViewOpts(expId,taskId,t){
   return {e,showPqrsCompare,showCompare,defTab};
 }
 function taskReviewViewRailHtml(expId,taskId,t){
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
+  const docsCompare=collectDocsComparables(e,taskId,t);
+  const showCompareBtn=canReviewSop?docsCompare.length>=2:(t&&(t.soportes||[]).length>=2);
   const side=String(window._taskReviewSideMode||'doc');
   let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Vistas del documento">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documento" onclick="taskReviewOpenSidePanel(\'doc\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">📄</button>';
+  if(showCompareBtn)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" id="btn-review-compare-rail" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">⇅</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">📋</button>';
   return h+'</nav>';
 }
@@ -5318,7 +5322,9 @@ function taskReviewSyncRailSide(mode){
     b.classList.toggle('on',b.dataset.side===mode);
   });
   const cmp=document.getElementById('btn-review-compare');
+  const cmpRail=document.getElementById('btn-review-compare-rail');
   if(cmp)cmp.classList.toggle('on',mode==='compare');
+  if(cmpRail)cmpRail.classList.toggle('on',mode==='compare');
 }
 function taskReviewHideCompareBar(){
   taskReviewSyncCompareSelect(null,null,null,false);
@@ -5347,6 +5353,7 @@ function taskReviewCloseSidePanel(){
   taskReviewHideCompareBar();
   taskReviewSetSidePanelLean(false);
   taskReviewSyncDocBarClose(false);
+  if(typeof cancelPendingAnnotPin==='function')cancelPendingAnnotPin();
   if(window._annotMarking)releaseAnnotMarkingMode();
   taskReviewSyncRailSide('doc');
 }
@@ -5355,6 +5362,10 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
   if(mode==='doc'){taskReviewCloseSidePanel();return;}
+  if(mode!=='chat'){
+    if(typeof cancelPendingAnnotPin==='function')cancelPendingAnnotPin();
+    if(window._annotMarking&&typeof releaseAnnotMarkingMode==='function')releaseAnnotMarkingMode();
+  }
   window._taskReviewSideMode=mode;
   const split=document.getElementById('task-review-split-view');
   const panel=document.getElementById('task-review-side-panel');
@@ -10979,7 +10990,6 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         '<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
         '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>'+
         (sel&&(sel.url||sel.preview)?'<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>':'')+
-        (showCompareBtn?'<button type="button" class="btn bsm bsm-ico" id="btn-review-compare" onclick="taskReviewToggleSidePanel(\'compare\',\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Comparar documentos">⇅</button>':'')+
         '</div></div>';
     }
     h+='</div>';

@@ -374,15 +374,10 @@ function renderFormulario(tid,ed,targetId){
       btnGuardarSeccion()+'</div></details>';
   })();
   const contableSection=contableHtml(ev);
-  const actHtml='<details class="form-section overflow-visible"><summary class="form-section-hdr">Actividades asignadas</summary><div class="form-section-body form-section-body-act">'+
+  const actHtml='<details class="form-section"><summary class="form-section-hdr">Actividades asignadas</summary><div class="form-section-body form-section-body-act">'+
     '<datalist id="acts-pred-list">'+(cfg.actividadesPred||[]).map(a=>'<option value="'+a+'"></option>').join('')+'</datalist>'+
-    '<div style="display:grid;grid-template-columns:1fr 1.1fr 130px 68px 100px 108px 92px 28px;gap:6px;padding:0 0 5px">'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Actividad</span>'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Detalles</span>'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Responsable</span>'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Días</span>'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Vence</span>'+
-    '<span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">F. cierre</span><span style="font-size:11px;color:var(--tx3);font-weight:600;text-transform:uppercase">Estado</span><span></span></div>'+
+    '<div class="tk-act-grid-hdr">'+
+    '<span>Actividad</span><span>Detalles</span><span>Responsable</span><span>Días</span><span>Vence</span><span>F. cierre</span><span>Estado</span><span></span></div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">El contratista reporta la ejecución (✓ en Actividades). Usted verifica aquí con fecha de cierre, comentarios, traslado o eliminación.</div>'+
     '<div class="tk-cont"></div>'+
     '<div class="fx" style="gap:5px;margin-top:5px">'+
