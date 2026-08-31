@@ -797,6 +797,35 @@ function sortTasksPorEjecutar(tasks){
     return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
   });
 }
+function taskUrgencyBandPorRevisar(t){
+  if(t&&t.prioritaria)return 0;
+  if(taskEsPrioridadCriticaVencimiento(t))return 1;
+  return 2;
+}
+function taskFechaEntregaSortKey(t){
+  if(!t)return'9999';
+  const hits=(t.historial||[]).filter(function(h){return h&&h.tipo==='reenvio_verificacion';});
+  const ult=hits.length?hits[hits.length-1]:null;
+  if(ult&&ult.ts)return String(ult.ts).padStart(15,'0');
+  if(ult&&ult.fecha)return ult.fecha.length>10?ult.fecha:ult.fecha+'T00:00:00';
+  const fr=String(t.fechaReportada||'').trim();
+  if(fr)return fr.length>10?fr:fr+'T00:00:00';
+  const asig=(t.asignados||[]).filter(function(a){return a&&a.estado==='por_verificar'&&a.fechaReportada;}).map(function(a){return a.fechaReportada;}).sort();
+  if(asig.length){
+    const d=asig[0];
+    return d.length>10?d:d+'T00:00:00';
+  }
+  return'9999';
+}
+function sortTasksPorRevisar(tasks){
+  return [...tasks].sort(function(a,b){
+    const ba=taskUrgencyBandPorRevisar(a),bb=taskUrgencyBandPorRevisar(b);
+    if(ba!==bb)return ba-bb;
+    const fa=taskFechaEntregaSortKey(a),fb=taskFechaEntregaSortKey(b);
+    if(fa!==fb)return fa.localeCompare(fb);
+    return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
+  });
+}
 function taskPrioridadBadgeHtml(t){
   let h='';
   if(t&&t.prioritaria)h+='<span class="bdg bdg-prior" style="margin-left:4px">⚡ Prioritaria</span>';
@@ -9911,20 +9940,7 @@ function devolverDocumentoConObservaciones(expId,taskId){
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
   const obs=(t.notasDoc||[]).filter(n=>n.rol==='revisor'&&(!sopId||n.soporteId===sopId));
   const nuevas=ultDev?obs.filter(n=>(n.fecha||'')>(ultDev.fecha||'')):obs;
-  const doDevolver=function(){
-    devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
-  };
-  if(nuevas.length){doDevolver();return;}
-  if(typeof confirmPrecaucion==='function'){
-    confirmPrecaucion({
-      title:'Devolver sin observaciones nuevas',
-      message:'No hay observaciones nuevas en el documento activo. ¿Devolver igualmente al responsable?',
-      confirmLabel:'↩ Devolver',
-      tone:'warn'
-    },doDevolver);
-    return;
-  }
-  doDevolver();
+  devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
 }
 function resolveModoEnviar(t,modoHint){
   if(modoHint)return modoHint;
@@ -11167,17 +11183,12 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
 function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
-  const sideMode=window._taskReviewSideMode||'doc';
   if(solicitarAjusteSoporte(expId,taskId,nota||'Devuelta al responsable')){
     if(typeof driveRenombrarSoporteActivoExp==='function'){
       driveRenombrarSoporteActivoExp(expId,taskId,'corregir').catch(function(err){console.warn('drive rename corregir:',err);});
     }
-    notif('Actividad devuelta — queda por corregir','ok');
-    if(inReview){
-      taskReviewRefreshModal(expId,taskId,sideMode==='chat'?sideMode:'doc');
-    }else{
-      closeTaskModal();
-    }
+    if(!inReview)notif('Actividad devuelta — queda por corregir','ok');
+    closeTaskModal();
     renderBandejaDepto();
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
     if(window._conPanelEditMode&&document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
@@ -11968,7 +11979,7 @@ function aplicarPlazoRevisionTask(expId,taskId){
   }
   return ok;
 }
-/** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o pide motivo. */
+/** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o nota genérica. */
 function devolverTaskUnificado(expId,taskId){
   const t=getTaskAny(expId,taskId);
   const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
@@ -11978,27 +11989,11 @@ function devolverTaskUnificado(expId,taskId){
   const nObs=obs.length;
   let nota=chat;
   if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
-  const fin=function(motivo){
-    motivo=String(motivo||'').trim();
-    if(!motivo){notif('Indique el motivo de la devolución','err');return;}
-    if(chat){
-      try{addTaskComentario(expId,taskId,chat);}catch(err){}
-    }
-    devolverTaskAlResponsable(expId,taskId,motivo);
-  };
-  if(nota){fin(nota);return;}
-  if(typeof confirmPrecaucion==='function'){
-    confirmPrecaucion({
-      title:'Devolver para corregir',
-      message:'Indique el motivo de la devolución (obligatorio).',
-      prompt:true,
-      promptPlaceholder:'Motivo de la devolución…',
-      confirmLabel:'↩ Devolver',
-      tone:'warn'
-    },function(val){fin(val);});
-    return;
+  if(!nota)nota='Devuelta para corregir';
+  if(chat){
+    try{addTaskComentario(expId,taskId,chat);}catch(err){}
   }
-  fin('');
+  devolverTaskAlResponsable(expId,taskId,nota);
 }
 function confirmarCierreTask(expId,taskId){
   const e=getExpById(expId);
@@ -13847,8 +13842,9 @@ function submitTaskComment(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
   if(!inp)return;
   const modePrev=(window._taskModalCtx||{}).mode;
+  const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   if(addTaskComentario(expId,taskId,inp.value)){
-    notif('Mensaje enviado','ok');
+    if(!inReview)notif('Mensaje enviado','ok');
     if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
     renderBandejaDepto();
@@ -17624,7 +17620,8 @@ function renderActividades(){
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
   if(q)list=list.filter(t=>[t.desc,t.exp,t.nombre,t.tram,t.actividad,t.codigo,t.responsable,t.interesadoNombre,t._pn_nombre,t._entidad_representa,t._pj_empresa].join(' ').toLowerCase().includes(q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
-    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):sortTasksByUrgency(list));
+    (filtroAct==='porver'?sortTasksPorRevisar(list):
+    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):sortTasksByUrgency(list)));
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
