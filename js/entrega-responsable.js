@@ -256,6 +256,15 @@ function htmlEntregaRespPqrsAltaBox(){
       '<input type="hidden" id="er-pqrs-medio-notif" value="">'+
     '</div>'+
     '<div id="er-pqrs-solicitante-wrap">'+
+      '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="er-pqrs-anonimo" onchange="toggleErPqrsAnonimo()"> Solicitud anónima</label>'+
+      '<div id="er-pqrs-anon-contact-block" style="display:none;margin-bottom:8px;padding:8px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">'+
+        '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Datos de contacto opcionales — solo para notificación (no identifican al solicitante)</div>'+
+        '<div class="fg">'+
+          '<div class="fld"><label>Correo (notificación)</label><input type="email" id="er-pqrs-anon-correo" placeholder="correo@ejemplo.com" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+          '<div class="fld"><label>Teléfono</label><input type="tel" id="er-pqrs-anon-tel" placeholder="3001234567" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '</div>'+
+      '</div>'+
+      '<div id="er-pqrs-persona-fields">'+
       '<div class="fg" style="margin-bottom:8px">'+
         '<div class="fld"><label>Tipo de persona <span style="color:var(--rd)">*</span></label>'+
           '<select id="er-pqrs-tipo-persona" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" onchange="toggleErPqrsPersona()">'+
@@ -281,6 +290,7 @@ function htmlEntregaRespPqrsAltaBox(){
           '<div class="fld"><label>Correo</label><input type="email" id="er-pqrs-pj-ofi-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono</label><input type="tel" id="er-pqrs-pj-ofi-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
         '</div>'+
+      '</div>'+
       '</div>'+
     '</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Asunto / tema <span style="color:var(--rd)">*</span></label>'+
@@ -329,18 +339,45 @@ function toggleErPqrsInterna(){
   const medioNotif=document.getElementById('er-pqrs-medio-notif-wrap');
   if(medioNotif)medioNotif.style.display=interna?'none':'';
   if(interna){
+    const anon=document.getElementById('er-pqrs-anonimo');
+    if(anon)anon.checked=false;
     const tp=document.getElementById('er-pqrs-tipo-persona');if(tp)tp.value='';
     setErPqrsMedioNotificacion('no_indica',false);
+  }
+  toggleErPqrsAnonimo();
+}
+function toggleErPqrsAnonimo(){
+  const interna=!!((document.getElementById('er-pqrs-interna')||{}).checked);
+  const anon=interna?false:!!((document.getElementById('er-pqrs-anonimo')||{}).checked);
+  const anonBlock=document.getElementById('er-pqrs-anon-contact-block');
+  if(anonBlock)anonBlock.style.display=(!interna&&anon)?'':'none';
+  const personaFields=document.getElementById('er-pqrs-persona-fields');
+  if(personaFields)personaFields.style.display=(!interna&&!anon)?'':'none';
+  const tp=document.getElementById('er-pqrs-tipo-persona');
+  if(tp){
+    tp.disabled=anon||interna;
+    if(anon||interna)tp.value='';
+  }
+  if(anon){
+    ['er-pqrs-pn-nombre','er-pqrs-pn-identificacion','er-pqrs-pn-correo','er-pqrs-pn-telefono',
+     'er-pqrs-pj-empresa','er-pqrs-pj-nit','er-pqrs-pj-correo','er-pqrs-pj-telefono',
+     'er-pqrs-pj-ofi-nombre','er-pqrs-pj-ofi-identificacion','er-pqrs-pj-ofi-correo','er-pqrs-pj-ofi-telefono'].forEach(function(id){
+      const el=document.getElementById(id);if(el)el.value='';
+    });
+  }else{
+    const ac=document.getElementById('er-pqrs-anon-correo');if(ac)ac.value='';
+    const at=document.getElementById('er-pqrs-anon-tel');if(at)at.value='';
   }
   toggleErPqrsPersona();
 }
 function toggleErPqrsPersona(){
   const interna=!!((document.getElementById('er-pqrs-interna')||{}).checked);
+  const anon=interna?false:!!((document.getElementById('er-pqrs-anonimo')||{}).checked);
   const tp=String((document.getElementById('er-pqrs-tipo-persona')||{}).value||'');
   const pn=document.getElementById('er-pqrs-pn-block');
   const pj=document.getElementById('er-pqrs-pj-block');
-  if(pn)pn.style.display=(!interna&&tp==='natural')?'':'none';
-  if(pj)pj.style.display=(!interna&&tp==='juridica')?'':'none';
+  if(pn)pn.style.display=(!interna&&!anon&&tp==='natural')?'':'none';
+  if(pj)pj.style.display=(!interna&&!anon&&tp==='juridica')?'':'none';
 }
 function initEntregaRespPqrsAltaUi(){
   const btns=document.getElementById('er-pqrs-medio-notif-btns');
@@ -352,6 +389,7 @@ function initEntregaRespPqrsAltaUi(){
 window.setErPqrsMedioNotificacion=setErPqrsMedioNotificacion;
 window.onErPqrsMedioRecepcionChange=onErPqrsMedioRecepcionChange;
 window.toggleErPqrsInterna=toggleErPqrsInterna;
+window.toggleErPqrsAnonimo=toggleErPqrsAnonimo;
 window.toggleErPqrsPersona=toggleErPqrsPersona;
 window.initEntregaRespPqrsAltaUi=initEntregaRespPqrsAltaUi;
 window.htmlEntregaRespPqrsAltaBox=htmlEntregaRespPqrsAltaBox;
@@ -1629,13 +1667,17 @@ function buildTaskEntregaResponsable(actividad,detalle,responsable){
 function collectEntregaRespPqrsAlta(){
   const gv=function(id){return String((document.getElementById(id)||{}).value||'').trim();};
   const interna=!!((document.getElementById('er-pqrs-interna')||{}).checked);
-  const tipoPersonaRaw=interna?'':gv('er-pqrs-tipo-persona');
+  const anon=interna?false:!!((document.getElementById('er-pqrs-anonimo')||{}).checked);
+  const tipoPersonaRaw=(interna||anon)?'':gv('er-pqrs-tipo-persona');
   const data={
     expId:gv('er-pqrs-exp')||gv('entrega-resp-exp'),
     fechaSol:gv('er-pqrs-fecha-solicitud'),
     tipo:gv('er-pqrs-tipo'),
     medio:typeof normMedioRecepcionPqrs==='function'?normMedioRecepcionPqrs(gv('er-pqrs-medio')):gv('er-pqrs-medio'),
     interna:interna,
+    anonimo:anon,
+    anonCorreo:anon?gv('er-pqrs-anon-correo').toLowerCase():'',
+    anonTel:anon?gv('er-pqrs-anon-tel'):'',
     oficinaRemitente:interna?gv('er-pqrs-oficina-remitente'):'',
     medioNotif:interna?'':(typeof medioNotificacionNorm==='function'?medioNotificacionNorm(gv('er-pqrs-medio-notif')):gv('er-pqrs-medio-notif')),
     tipoPersona:tipoPersonaRaw,
@@ -1658,7 +1700,7 @@ function validateEntregaRespPqrsAlta(d){
   if(!d.medio)return'Seleccione el medio de recepción';
   if(d.interna){
     if(!d.oficinaRemitente)return'Seleccione la oficina remitente';
-  }else{
+  }else if(!d.anonimo){
     if(!d.tipoPersona)return'Seleccione el tipo de persona';
     if(d.tipoPersona==='natural'&&!d.pn.nombre)return'Indique el nombre del solicitante';
     if(d.tipoPersona==='juridica'){
@@ -1684,8 +1726,9 @@ function crearStubPqrsEntregaResp(datos){
   }
   const tramId=typeof getTramPqrsId==='function'?getTramPqrsId('guaviare'):'pqrs';
   const interna=!!datos.interna;
+  const anon=!!datos.anonimo&&!interna;
   const oficina=String(datos.oficina||defaultOficinaEntregaRespPqrs()).trim();
-  const tipoPersona=interna?'natural':(datos.tipoPersona||'natural');
+  const tipoPersona=(interna||anon)?'natural':(datos.tipoPersona||'natural');
   const medio=datos.medio||'Ventanilla';
   const tipo=datos.tipo||'Petición';
   const asunto=datos.asunto||'';
@@ -1694,6 +1737,9 @@ function crearStubPqrsEntregaResp(datos){
   const pjFields={};
   if(interna){
     nombre=datos.oficinaRemitente||'';
+  }else if(anon){
+    correo=String(datos.anonCorreo||'').trim().toLowerCase();
+    tel=String(datos.anonTel||'').trim();
   }else if(tipoPersona==='juridica'){
     pjFields._tipo_persona='juridica';
     pjFields._pj_empresa=datos.pj&&datos.pj.empresa||'';
@@ -1717,7 +1763,7 @@ function crearStubPqrsEntregaResp(datos){
   const por=responsableActivo||'Responsable';
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:por,fecha:fecha}]):'[]';
   const hist=[
-    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':'')+'Alta PQRSD por responsable ('+por+') — transición (ya radicada fuera de la app)',oficina:''},
+    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Alta PQRSD por responsable ('+por+') — transición (ya radicada fuera de la app)',oficina:''},
     {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente al crear desde entrega',oficina:oficina,oficinaAnterior:'secretaria',por:por}
   ];
   const tipoRadicacion=typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
@@ -1729,11 +1775,15 @@ function crearStubPqrsEntregaResp(datos){
     _pqrs_interna:!!interna,
     _pqrs_oficina_remitente:interna?(datos.oficinaRemitente||''):'',
     _medio_notificacion:datos.medioNotif||'',_pqrs_prioritaria:false,
-    _qd_anonimo:false,_qd_nombre:interna?(datos.oficinaRemitente||''):nombre,_qd_identificacion:interna?'':ident,_qd_correo:interna?'':correo,_qd_telefono:interna?'':tel,
-    _pn_nombre:interna?(datos.oficinaRemitente||''):(tipoPersona==='natural'?nombre:''),
-    _pn_identificacion:tipoPersona==='natural'&&!interna?ident:'',
-    _pn_correo:tipoPersona==='natural'&&!interna?correo:'',
-    _pn_telefono:tipoPersona==='natural'&&!interna?tel:'',
+    _qd_anonimo:!!anon,
+    _qd_nombre:interna?(datos.oficinaRemitente||''):(anon?'':nombre),
+    _qd_identificacion:interna||anon?'':ident,
+    _qd_correo:interna?'':correo,
+    _qd_telefono:interna?'':tel,
+    _pn_nombre:interna?(datos.oficinaRemitente||''):(tipoPersona==='natural'&&!anon?nombre:''),
+    _pn_identificacion:tipoPersona==='natural'&&!interna&&!anon?ident:'',
+    _pn_correo:tipoPersona==='natural'&&!interna&&!anon?correo:'',
+    _pn_telefono:tipoPersona==='natural'&&!interna&&!anon?tel:'',
     ...pjFields,
     f_f1:asunto,f_f2:medio,
     _detalle_notas:detNotas,_detalle_general:detalle,
@@ -1758,7 +1808,7 @@ function crearStubPqrsEntregaResp(datos){
   if(!Array.isArray(exps))exps=[];
   exps.push(data);
   if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
-  if(!interna&&typeof upsertPersonaCatalog==='function')upsertPersonaCatalog(data);
+  if(!interna&&!anon&&typeof upsertPersonaCatalog==='function')upsertPersonaCatalog(data);
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
   if(typeof logAudit==='function')logAudit('Alta PQRSD por responsable ['+expId+']','pqrsd',expId);
