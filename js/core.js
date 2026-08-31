@@ -5529,7 +5529,7 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='asociar'?' on':'')+'" data-side="asociar" title="Asociar expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
   if(esEnc)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
-  if(typeof openBibGuardarModal==='function'))
+  if(typeof openBibGuardarModal==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
   if(e&&puedeEliminarPqrsEnVisor(e))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar PQRSD" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
