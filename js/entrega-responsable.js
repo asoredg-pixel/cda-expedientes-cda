@@ -273,20 +273,20 @@ function htmlEntregaRespPqrsAltaBox(){
       '</div>'+
       '<div id="er-pqrs-pn-block" style="display:none">'+
         '<div class="fg" style="margin-bottom:8px">'+
-          '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pn-nombre" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-          '<div class="fld"><label>Identificación</label><input type="text" id="er-pqrs-pn-identificacion" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+          '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pn-nombre" placeholder="Buscar por nombre…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pn','nombre'):'')+'></div>'+
+          '<div class="fld"><label>Identificación</label><input type="text" id="er-pqrs-pn-identificacion" placeholder="Buscar por identificación…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pn','identificacion'):'')+'></div>'+
           '<div class="fld"><label>Correo</label><input type="email" id="er-pqrs-pn-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono</label><input type="tel" id="er-pqrs-pn-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
         '</div>'+
       '</div>'+
       '<div id="er-pqrs-pj-block" style="display:none">'+
         '<div class="fg" style="margin-bottom:8px">'+
-          '<div class="fld"><label>Razón social / entidad <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-empresa" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-          '<div class="fld"><label>NIT</label><input type="text" id="er-pqrs-pj-nit" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+          '<div class="fld"><label>Razón social / entidad <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-empresa" placeholder="Buscar por razón social…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pj','empresa'):'')+'></div>'+
+          '<div class="fld"><label>NIT</label><input type="text" id="er-pqrs-pj-nit" placeholder="Buscar por NIT…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pj','nit'):'')+'></div>'+
           '<div class="fld"><label>Correo entidad</label><input type="email" id="er-pqrs-pj-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono entidad</label><input type="tel" id="er-pqrs-pj-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-          '<div class="fld"><label>Quien radica (nombre) <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-ofi-nombre" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-          '<div class="fld"><label>Identificación</label><input type="text" id="er-pqrs-pj-ofi-identificacion" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+          '<div class="fld"><label>Quien radica (nombre) <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-ofi-nombre" placeholder="Buscar por nombre…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-ofi','nombre'):'')+'></div>'+
+          '<div class="fld"><label>Identificación</label><input type="text" id="er-pqrs-pj-ofi-identificacion" placeholder="Buscar por identificación…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-ofi','identificacion'):'')+'></div>'+
           '<div class="fld"><label>Correo</label><input type="email" id="er-pqrs-pj-ofi-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono</label><input type="tel" id="er-pqrs-pj-ofi-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
         '</div>'+
@@ -505,16 +505,16 @@ function htmlEntregaRespApoAut(ev){
   return '<div style="margin-top:10px">'+
     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500"><input type="checkbox" id="entrega-int-apoderado" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--pu)"> Tiene apoderado <span style="font-weight:400;color:var(--tx2)">(abogado)</span></label>'+
     '<div id="entrega-int-apo-box" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Apoderado</div><div class="fg">'+
-    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-apo-nombre" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-apo-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-apo-nombre" placeholder="Buscar por nombre…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-apo','nombre'):'')+'></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-apo-identificacion" placeholder="Buscar por identificación…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-apo','identificacion'):'')+'></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-apo-correo" style="'+inpStyle+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-apo-telefono" style="'+inpStyle+'"></div>'+
     htmlEntregaRespDir('apo',ev)+
     '</div></div>'+
     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500;margin-top:10px"><input type="checkbox" id="entrega-int-autorizado" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--bl)"> Tiene autorizado</label>'+
     '<div id="entrega-int-aut-box" style="display:none;margin-top:8px"><div class="slbl" style="margin-bottom:6px;font-size:11px">Autorizado</div><div class="fg">'+
-    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-aut-nombre" style="'+inpStyle+'"></div>'+
-    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-aut-identificacion" style="'+inpStyle+'"></div>'+
+    '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-aut-nombre" placeholder="Buscar por nombre…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-aut','nombre'):'')+'></div>'+
+    '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-aut-identificacion" placeholder="Buscar por identificación…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-aut','identificacion'):'')+'></div>'+
     '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-aut-correo" style="'+inpStyle+'"></div>'+
     '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-aut-telefono" style="'+inpStyle+'"></div>'+
     htmlEntregaRespDir('aut',ev)+
@@ -584,8 +584,8 @@ function htmlEntregaRespInteresadoBox(tramiteId){
   if(esSanc){
     h+='<label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;font-weight:500;margin-bottom:8px"><input type="checkbox" id="entrega-int-qd-anonimo" onchange="syncEntregaRespInteresadoUi()" style="width:15px;height:15px;accent-color:var(--pu)"> Actúa como anónimo</label>';
     h+='<div id="entrega-int-qd-box"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Quejoso / denunciante</div><div class="fg">'+
-      '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-qd-nombre" style="'+inpStyle+'"></div>'+
-      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-qd-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre</label><input type="text" id="entrega-int-qd-nombre" placeholder="Buscar por nombre…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-qd','nombre'):'')+'></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-qd-identificacion" placeholder="Buscar por identificación…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-qd','identificacion'):'')+'></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-qd-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-qd-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('qd',{})+
@@ -597,8 +597,8 @@ function htmlEntregaRespInteresadoBox(tramiteId){
   }else{
     h+='<div class="fg"><div class="fld"><label>Tipo de persona</label><select id="entrega-int-tipo" onchange="syncEntregaRespInteresadoUi()" style="'+inpStyle+'"><option value="natural">Persona natural</option><option value="juridica">Persona jurídica</option></select></div></div>';
     h+='<div id="entrega-int-natural"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Persona natural</div><div class="fg">'+
-      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pn-nombre" style="'+inpStyle+'"></div>'+
-      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pn-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pn-nombre" placeholder="Buscar por nombre…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pn','nombre'):'')+'></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pn-identificacion" placeholder="Buscar por identificación…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pn','identificacion'):'')+'></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pn-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pn-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('pn',{})+
@@ -611,13 +611,13 @@ function htmlEntregaRespInteresadoBox(tramiteId){
       htmlEntregaRespDir('ec',{})+
       '</div></div></div>';
     h+='<div id="entrega-int-juridica" style="display:none"><div class="slbl" style="margin:.4rem 0 .35rem;font-size:11px">Representante legal</div><div class="fg">'+
-      '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-int-pj-rep-nombre" style="'+inpStyle+'"></div>'+
-      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pj-rep-identificacion" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre representante</label><input type="text" id="entrega-int-pj-rep-nombre" placeholder="Buscar por nombre…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','rep_nombre'):'')+'></div>'+
+      '<div class="fld"><label>Identificación</label><input type="text" id="entrega-int-pj-rep-identificacion" placeholder="Buscar por identificación…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','rep_identificacion'):'')+'></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-rep-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-rep-telefono" style="'+inpStyle+'"></div>'+
       '</div><div class="slbl" style="margin:.5rem 0 .35rem;font-size:11px">Empresa</div><div class="fg">'+
-      '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pj-empresa" style="'+inpStyle+'"></div>'+
-      '<div class="fld"><label>NIT</label><input type="text" id="entrega-int-pj-nit" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Nombre / razón social <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-int-pj-empresa" placeholder="Buscar por razón social…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','empresa'):'')+'></div>'+
+      '<div class="fld"><label>NIT</label><input type="text" id="entrega-int-pj-nit" placeholder="Buscar por NIT…" style="'+inpStyle+'"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pj','nit'):'')+'></div>'+
       '<div class="fld"><label>Correo</label><input type="email" id="entrega-int-pj-correo" style="'+inpStyle+'"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-int-pj-telefono" style="'+inpStyle+'"></div>'+
       htmlEntregaRespDir('pj',{})+

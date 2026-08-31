@@ -9711,7 +9711,14 @@ function collectDocsComparables(e,taskId,tDirect,opts){
 function uiEditorContenedorLbl(){return document.documentElement.classList.contains('ui-editor-modal-mode')?'ventana':'panel lateral';}
 function portalZIndexFlotante(){
   const taskModal=document.getElementById('task-modal-overlay');
-  if(taskModal&&taskModal.classList.contains('on'))return 21000;
+  if(taskModal&&taskModal.classList.contains('on')){
+    // Encima de review-stack / editor modal (~100080) y overlays de archivos (~26000)
+    if(taskModal.classList.contains('review-stack-modal-on')
+      ||taskModal.classList.contains('con-arch-modal-on')
+      ||document.documentElement.classList.contains('ui-editor-modal-mode'))
+      return 100120;
+    return 21000;
+  }
   if(document.documentElement.classList.contains('ui-editor-modal-mode'))return 20050;
   const panel=document.getElementById('con-side-panel');
   const pqrs=document.getElementById('pqrs-side-panel');
@@ -18164,11 +18171,11 @@ function personaAptaParaTarget(p,target,field){
     if(field==='nombre')return !!(personaNombreNatural(p)||p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pi_nombre);
     return true;
   }
-  if(['apo','aut','pn','qd'].includes(target)){
+  if(['apo','aut','pn','qd','sec-pn','sec-ofi','er-pqrs-pn','er-pqrs-ofi','er-pn','er-qd','er-apo','er-aut'].includes(target)){
     if(field==='empresa'||field==='nit'||field==='rep_nombre'||field==='rep_identificacion')return false;
     if(personaTieneDatosEmpresa(p)&&!personaTieneDatosNatural(p))return false;
   }
-  if((target==='pj'||target==='pi')&&(field==='empresa'||field==='nit'))return personaTieneDatosEmpresa(p);
+  if((target==='pj'||target==='pi'||target==='sec-pj'||target==='er-pj'||target==='er-pqrs-pj')&&(field==='empresa'||field==='nit'))return personaTieneDatosEmpresa(p);
   return true;
 }
 function llenarEmpresaJuridica(p,pref){
@@ -18380,7 +18387,22 @@ function pickPersonaCatalog(idx,target){
   hidePersonSug();
 }
 function aplicarPersonaCatalog(p,target){
-  if((target==='pj'||target==='pi')&&(personSugField==='rep_nombre'||personSugField==='rep_identificacion')){
+  if((target==='pj'||target==='pi'||target==='er-pj')&&(personSugField==='rep_nombre'||personSugField==='rep_identificacion')){
+    if(target==='er-pj'){
+      const tp=document.getElementById('entrega-int-tipo');if(tp){tp.value='juridica';}
+      if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();
+      setv('entrega-int-pj-rep-nombre',personaNombreNatural(p));
+      setv('entrega-int-pj-rep-identificacion',personaIdNatural(p));
+      setv('entrega-int-pj-rep-correo',personaCorreoNatural(p));
+      setv('entrega-int-pj-rep-telefono',personaTelefonoNatural(p));
+      if(personaTieneDatosEmpresa(p)||p.tipo_persona==='juridica'||p.pi_tipo_persona==='juridica'){
+        setv('entrega-int-pj-empresa',p.pj_empresa||p.pi_empresa||'');
+        setv('entrega-int-pj-nit',p.pj_nit||p.pi_nit||'');
+        setv('entrega-int-pj-correo',p.pj_correo||p.pi_correo_emp||'');
+        setv('entrega-int-pj-telefono',p.pj_telefono||p.pi_telefono_emp||'');
+      }
+      return;
+    }
     const pref=target==='pi'?'pi':'pj';
     if(target==='pj'){
       const tp=document.getElementById('fld__tipo_persona');if(tp){tp.value='juridica';togglePersona();}
@@ -18394,7 +18416,20 @@ function aplicarPersonaCatalog(p,target){
     if(personaTieneDatosEmpresa(p)||p.tipo_persona==='juridica'||p.pi_tipo_persona==='juridica')llenarEmpresaJuridica(p,pref);
     return;
   }
-  if((target==='pj'||target==='pi')&&(personSugField==='empresa'||personSugField==='nit')){
+  if((target==='pj'||target==='pi'||target==='er-pj')&&(personSugField==='empresa'||personSugField==='nit')){
+    if(target==='er-pj'){
+      const tp=document.getElementById('entrega-int-tipo');if(tp){tp.value='juridica';}
+      if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();
+      setv('entrega-int-pj-empresa',p.pj_empresa||p.pi_empresa||'');
+      setv('entrega-int-pj-nit',p.pj_nit||p.pi_nit||'');
+      setv('entrega-int-pj-correo',p.pj_correo||p.pi_correo_emp||'');
+      setv('entrega-int-pj-telefono',p.pj_telefono||p.pi_telefono_emp||'');
+      setv('entrega-int-pj-rep-nombre',p.pj_rep_nombre||personaNombreNatural(p));
+      setv('entrega-int-pj-rep-identificacion',p.pj_rep_identificacion||personaIdNatural(p));
+      setv('entrega-int-pj-rep-correo',p.pj_rep_correo||personaCorreoNatural(p));
+      setv('entrega-int-pj-rep-telefono',p.pj_rep_telefono||personaTelefonoNatural(p));
+      return;
+    }
     const pref=target;
     if(target==='pj'){
       const tp=document.getElementById('fld__tipo_persona');if(tp){tp.value='juridica';togglePersona();}
@@ -18513,6 +18548,84 @@ function aplicarPersonaCatalog(p,target){
     setv('sec-pj-ofi-identificacion',p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pj_rep_identificacion||'');
     setv('sec-pj-ofi-correo',p.pn_correo||p.qd_correo||'');
     setv('sec-pj-ofi-telefono',p.pn_telefono||p.qd_telefono||'');
+    return;
+  }
+  if(target==='er-pqrs-pn'){
+    const tp=document.getElementById('er-pqrs-tipo-persona');if(tp){tp.value='natural';}
+    if(typeof toggleErPqrsPersona==='function')toggleErPqrsPersona();
+    setv('er-pqrs-pn-nombre',p.pn_nombre||p.qd_nombre||personaNombreNatural(p)||'');
+    setv('er-pqrs-pn-identificacion',p.pn_identificacion||p.qd_identificacion||personaIdNatural(p)||'');
+    setv('er-pqrs-pn-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
+    setv('er-pqrs-pn-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-pqrs-pj'){
+    const tp=document.getElementById('er-pqrs-tipo-persona');if(tp){tp.value='juridica';}
+    if(typeof toggleErPqrsPersona==='function')toggleErPqrsPersona();
+    setv('er-pqrs-pj-empresa',p.pj_empresa||p.pi_empresa||'');
+    setv('er-pqrs-pj-nit',p.pj_nit||p.pi_nit||'');
+    setv('er-pqrs-pj-correo',p.pj_correo||p.pi_correo_emp||'');
+    setv('er-pqrs-pj-telefono',p.pj_telefono||p.pi_telefono_emp||'');
+    if(personSugField!=='empresa'&&personSugField!=='nit'){
+      setv('er-pqrs-pj-ofi-nombre',personaNombreNatural(p)||p.pn_nombre||'');
+      setv('er-pqrs-pj-ofi-identificacion',personaIdNatural(p)||p.pn_identificacion||'');
+      setv('er-pqrs-pj-ofi-correo',personaCorreoNatural(p)||'');
+      setv('er-pqrs-pj-ofi-telefono',personaTelefonoNatural(p)||'');
+    }
+    return;
+  }
+  if(target==='er-pqrs-ofi'){
+    const tp=document.getElementById('er-pqrs-tipo-persona');if(tp){tp.value='juridica';}
+    if(typeof toggleErPqrsPersona==='function')toggleErPqrsPersona();
+    setv('er-pqrs-pj-ofi-nombre',p.pn_nombre||p.qd_nombre||p.apo_nombre||p.pj_rep_nombre||personaNombreNatural(p)||'');
+    setv('er-pqrs-pj-ofi-identificacion',p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pj_rep_identificacion||personaIdNatural(p)||'');
+    setv('er-pqrs-pj-ofi-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
+    setv('er-pqrs-pj-ofi-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-pn'){
+    const tp=document.getElementById('entrega-int-tipo');if(tp){tp.value='natural';}
+    if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();
+    setv('entrega-int-pn-nombre',p.pn_nombre||p.qd_nombre||personaNombreNatural(p)||'');
+    setv('entrega-int-pn-identificacion',p.pn_identificacion||p.qd_identificacion||personaIdNatural(p)||'');
+    setv('entrega-int-pn-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
+    setv('entrega-int-pn-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-pj'){
+    const tp=document.getElementById('entrega-int-tipo');if(tp){tp.value='juridica';}
+    if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();
+    setv('entrega-int-pj-empresa',p.pj_empresa||p.pi_empresa||'');
+    setv('entrega-int-pj-nit',p.pj_nit||p.pi_nit||'');
+    setv('entrega-int-pj-correo',p.pj_correo||p.pi_correo_emp||'');
+    setv('entrega-int-pj-telefono',p.pj_telefono||p.pi_telefono_emp||'');
+    setv('entrega-int-pj-rep-nombre',p.pj_rep_nombre||personaNombreNatural(p)||'');
+    setv('entrega-int-pj-rep-identificacion',p.pj_rep_identificacion||personaIdNatural(p)||'');
+    setv('entrega-int-pj-rep-correo',p.pj_rep_correo||personaCorreoNatural(p)||'');
+    setv('entrega-int-pj-rep-telefono',p.pj_rep_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-qd'){
+    setv('entrega-int-qd-nombre',p.qd_nombre||p.pn_nombre||personaNombreNatural(p)||'');
+    setv('entrega-int-qd-identificacion',p.qd_identificacion||p.pn_identificacion||personaIdNatural(p)||'');
+    setv('entrega-int-qd-correo',p.qd_correo||p.pn_correo||personaCorreoNatural(p)||'');
+    setv('entrega-int-qd-telefono',p.qd_telefono||p.pn_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-apo'){
+    const cb=document.getElementById('entrega-int-apoderado');if(cb&&!cb.checked){cb.checked=true;if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();}
+    setv('entrega-int-apo-nombre',p.apo_nombre||p.pn_nombre||p.qd_nombre||personaNombreNatural(p)||'');
+    setv('entrega-int-apo-identificacion',p.apo_identificacion||p.pn_identificacion||p.qd_identificacion||personaIdNatural(p)||'');
+    setv('entrega-int-apo-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
+    setv('entrega-int-apo-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    return;
+  }
+  if(target==='er-aut'){
+    const cb=document.getElementById('entrega-int-autorizado');if(cb&&!cb.checked){cb.checked=true;if(typeof syncEntregaRespInteresadoUi==='function')syncEntregaRespInteresadoUi();}
+    setv('entrega-int-aut-nombre',p.pn_nombre||p.qd_nombre||p.apo_nombre||personaNombreNatural(p)||'');
+    setv('entrega-int-aut-identificacion',p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||personaIdNatural(p)||'');
+    setv('entrega-int-aut-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
+    setv('entrega-int-aut-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
     return;
   }
   if(target==='pj'||p.tipo_persona==='juridica'){

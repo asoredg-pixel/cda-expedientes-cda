@@ -2350,7 +2350,9 @@ html.ui-editor-modal-mode #act-agenda-dock.act-agenda-dock-right.on{
   opacity:1!important;pointer-events:auto!important;
 }
 html.ui-editor-modal-mode #act-agenda-panel{z-index:auto}
-html.ui-editor-modal-mode .act-sug-portal{z-index:20050!important}
+html.ui-editor-modal-mode .act-sug-portal{z-index:100120!important}
+.task-modal-overlay.on ~ #person-sug-portal,
+.task-modal-overlay.review-stack-modal-on ~ #person-sug-portal{z-index:100120!important}
 html.ui-editor-modal-mode .task-modal-overlay,
 html.ui-editor-modal-mode #ciudadano-doc-overlay{z-index:20100!important}
 html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:100080!important}
