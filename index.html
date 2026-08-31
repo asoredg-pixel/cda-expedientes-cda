@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260830r">
+<link rel="stylesheet" href="css/sst.css?v=20260830t">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -22,7 +22,7 @@
 <script src="js/roles.js?v=20260826j"></script>
 <script src="js/config-store.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260830r"></script>
+<script src="js/core.js?v=20260830t"></script>
 <script src="js/formulario.js?v=20260821b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260828b"></script>
@@ -621,10 +621,12 @@
     <div id="chat-main" class="chat-main hidden">
       <div id="chat-msgs" class="chat-msgs"></div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
-      <div class="chat-compose">
+      <div class="chat-compose chat-compose-wa">
         <button type="button" class="btn bsm btn-chat-attach" title="Adjuntar archivo (máx. 25 MB)" onclick="chatAdjuntarArchivoClick()">📎</button>
-        <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter')chatEnviarTexto()">
-        <button type="button" class="btn bsm bp" onclick="chatEnviarTexto()" title="Enviar">➤</button>
+        <div class="chat-wa-field">
+          <input type="text" id="chat-inp" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter'){event.preventDefault();chatEnviarTexto();}">
+          <button type="button" class="chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="chatEnviarTexto()">➤</button>
+        </div>
       </div>
     </div>
   </div>

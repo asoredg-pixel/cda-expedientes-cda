@@ -13425,6 +13425,10 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
   if(isReviewDelivery){
+    if(!opts.keepStack){
+      if(isRespVerCorr)window._taskReviewSideMode='chat';
+      else window._taskReviewSideMode='doc';
+    }
     const railNav=isRespVerCorr?'':(isRespVerDoc?taskReviewRespVerRailHtml(refAct,taskId,t):taskReviewFullRailHtml(refAct,taskId,t));
     const pqrsRespBanner=(isRespVerDoc&&e&&taskEsAtenderPqrs(t,e))?pqrsDocBanner:'';
     if(tit)tit.textContent=(isRespVerDoc?'Documento y observaciones':'Revisión')+' · '+(t.codigo||expId);
@@ -13443,7 +13447,6 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(isReviewDelivery){
     document.body.classList.add('task-review-doc-mode');
     window._soporteObsOpen=false;
-    if(!opts.keepStack)window._taskReviewSideMode='doc';
   }else{
     document.body.classList.remove('task-review-doc-mode');
   }
@@ -13466,12 +13469,16 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
-      window._taskReviewSideMode=(isRespVerCorr||isDeptReviewWa)?'chat':(window._taskReviewSideMode||'doc');
+      if(isRespVerCorr)window._taskReviewSideMode='chat';
+      else if(!opts.keepStack)window._taskReviewSideMode='doc';
       setTimeout(function(){
-        const mode=window._taskReviewSideMode;
-        if(isRespVerCorr||isRespVerDoc||isDeptReviewWa)taskReviewOpenSidePanel('chat',expId,taskId);
-        else if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
-          taskReviewOpenSidePanel(mode,expId,taskId);
+        if(isRespVerCorr||isRespVerDoc){
+          taskReviewOpenSidePanel('chat',expId,taskId);
+        }else{
+          const mode=window._taskReviewSideMode;
+          if(mode&&mode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
+            taskReviewOpenSidePanel(mode,expId,taskId);
+        }
         if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
       },90);
     }else if(preferTab){
