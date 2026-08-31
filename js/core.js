@@ -5138,7 +5138,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Archivos',compare:'Comparar',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Trasladar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -5146,10 +5146,32 @@ function taskReviewChatRailBtnHtml(ref,taskId,t){
   const no=(t&&t.notasDoc||[]).filter(function(n){return!sel||!n.soporteId||n.soporteId===sel.id;}).length;
   const badge=Math.max(nc,no);
   const r=escAttr(ref),tid=escAttr(taskId);
-  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" data-side="chat" title="Chat y observaciones del documento" onclick="taskReviewToggleSidePanel(\'chat\',\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(badge?actIcoBadgeHtml(badge,'blue'):'')+'</button>';
+  const side=String(window._taskReviewSideMode||'doc');
+  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='chat'?' on':'')+'" data-side="chat" title="Chat y observaciones del documento" onclick="taskReviewToggleSidePanel(\'chat\',\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(badge?actIcoBadgeHtml(badge,'blue'):'')+'</button>';
 }
 function taskReviewRespVerRailHtml(ref,taskId,t){
-  return taskReviewChatRailBtnHtml(ref,taskId,t);
+  if(!t)return'';
+  const refExp=t.sinExpediente?(t.codigo||ref):ref;
+  const r=escAttr(refExp),tid=escAttr(taskId);
+  const side=String(window._taskReviewSideMode||'doc');
+  const yo=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
+  const usuario=responsableActivo;
+  const est=estadoTask(t);
+  const miEst=taskEsMultiAsignada(t)&&usuario?estadoTaskForAsignado(t,usuario):est;
+  let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documento" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
+  h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
+  if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
+  }
+  const autor=notasInternasAutor();
+  if(autor){
+    const nn=(getNotasInternasList(refExp,taskId,autor)||[]).length;
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notas'?' on':'')+'" data-side="notas" title="Notas internas privadas" onclick="taskReviewToggleSidePanel(\'notas\',\''+r+'\',\''+tid+'\')">📝'+(nn?actIcoBadgeHtml(nn,'yellow'):'')+'</button>';
+  }
+  if(puedeAgendarTask(t))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
+  return h+'</nav>';
 }
 function buildTaskReviewCompareSelectOpts(t,e,taskId){
   const docs=collectDocsComparables(e,taskId,t,{incluirAsociados:true});
@@ -5240,11 +5262,55 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
       h+='<div class="task-review-obs-hint"><button type="button" class="btn bsm" id="btn-modo-marcar-side" onclick="toggleModoMarcarAnnot()">📍 Clic en documento para marcar</button></div>';
     h+=(canAnnot?renderAnnotPinFormHtml():'')+
       '<div class="soporte-annot-sidebar" id="soporte-annot-sidebar">'+renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+'</div>';
-    if(canAnnot)h+=renderAnnotSidebarFooter(expId,taskId,canAnnot);
     h+='</section>';
   }
-  h+='<section class="task-review-chat-act-sect">'+renderTaskChatPanelHtml(expId,taskId,t)+'</section></div>';
+  h+='<section class="task-review-chat-act-sect">'+renderTaskChatPanelHtml(expId,taskId,t)+'</section>';
+  if(canReviewSop)
+    h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
+  h+='</div>';
   return h;
+}
+function renderTaskReviewEntregaSideHtml(expId,taskId,t){
+  const modo=resolveModoEnviar(t,null);
+  return '<div class="task-review-side-scroll task-review-entrega-side">'+renderEnviarPanelHtml(expId,taskId,t,modo)+'</div>';
+}
+function initTaskReviewEntregaSide(expId,taskId,t){
+  if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
+    sstFileStagingReset(sstFileEnviarCtxKey(expId,taskId));
+    if(typeof sstFileInitPick==='function'){
+      sstFileInitPick('enviar-adj-file');
+      sstFileInitPick('enviar-anexos-file');
+    }
+  }
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+    setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
+  }
+  setTimeout(function(){const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();},80);
+}
+function renderTaskReviewNotasSideHtml(expId,taskId,t){
+  const autor=notasInternasAutor();
+  const list=getNotasInternasList(expId,t.id||taskId,autor);
+  const cards=list.map(function(n){return taskKeepNoteCardHtml(n,expId,t.id||taskId);}).join('');
+  return '<div class="task-review-notas-side task-keep-standalone">'+
+    taskKeepComposeHtml(expId,t.id||taskId)+
+    '<div class="task-keep-list task-chat-uni-scroll" id="task-notas-list">'+cards+'</div>'+
+    '<div class="task-keep-foot"><button type="button" class="task-keep-save" onclick="guardarNotasInternasUnificado(\''+escAttr(expId)+'\',\''+escAttr(t.id||taskId)+'\')">Guardar</button></div>'+
+    '</div>';
+}
+function initTaskReviewNotasSide(expId,taskId){
+  setTimeout(function(){
+    const wrap=document.getElementById('task-review-side-body');
+    if(wrap&&typeof taskKeepInitTextareas==='function')taskKeepInitTextareas(wrap);
+  },40);
+}
+function taskReviewRefreshModal(expId,taskId,sideMode){
+  const ctx=window._taskModalCtx||{};
+  if(typeof taskModalIsReviewOpen!=='function'||!taskModalIsReviewOpen())return false;
+  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
+  if(sideMode&&sideMode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
+    setTimeout(function(){taskReviewOpenSidePanel(sideMode,expId,taskId);},100);
+  return true;
 }
 function renderTaskReviewEditSideHtml(expId,taskId,t){
   if(t&&t.sinExpediente){
@@ -5399,6 +5465,12 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   }else if(mode==='chat'){
     body.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
+  }else if(mode==='entrega'){
+    body.innerHTML=renderTaskReviewEntregaSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewEntregaSide(expId,taskId,t);},40);
+  }else if(mode==='notas'){
+    body.innerHTML=renderTaskReviewNotasSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewNotasSide(expId,taskId);},40);
   }else if(mode==='edit'){
     body.innerHTML=renderTaskReviewEditSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewEditSide(expId,taskId,t,false);},40);
@@ -9325,9 +9397,7 @@ function releaseAnnotMarkingMode(){
   if(btnSide){btnSide.classList.remove('on');btnSide.textContent='📍 Clic en documento para marcar';}
 }
 function renderAnnotSidebarFooter(expId,taskId,canAnnot){
-  if(!canAnnot)return'';
-  return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--bd)">'+
-    '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Guarde los marcadores. Use <strong>↩ Devolver</strong> en la barra de revisión (una sola vez).</div></div>';
+  return '';
 }
 function refreshAnnotAfterPinSave(expId,taskId,soporteId){
   cancelPendingAnnotPin();
@@ -9950,6 +10020,10 @@ function taskNotasInternasBtnHtml(expId,taskId){
 function openNotasInternasModal(expId,taskId){
   const autor=notasInternasAutor();
   if(!autor){notif('Seleccione su nombre como responsable para usar notas internas','err');return;}
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewToggleSidePanel==='function'){
+    taskReviewToggleSidePanel('notas',expId,taskId);
+    return;
+  }
   let t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
   if(t.sinExpediente)expId=t.codigo||expId;
@@ -10137,6 +10211,13 @@ function guardarNotasInternasUnificado(expId,taskId){
     nombre:(t&&t.nombre)||(e&&typeof getNom==='function'?getNom(e):'')||''
   });
   if(!ok){notif('No se pudieron guardar las notas','err');return;}
+  notif('Notas guardadas','ok');
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&window._taskReviewSideMode==='notas'){
+    const t=getTaskAny(expId,taskId);
+    const sideBody=document.getElementById('task-review-side-body');
+    if(t&&sideBody)sideBody.innerHTML=renderTaskReviewNotasSideHtml(expId,taskId,t);
+    setTimeout(function(){initTaskReviewNotasSide(expId,taskId);},30);
+  }
   if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
 }
 function setTaskChatUniTab(tab){
@@ -10346,7 +10427,10 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       renderSecretariaPqrs();
       notif(pq.tipo===PQRS_WF_TIPO.INFORMATIVA?'ℹ️ Respuesta informativa enviada a revisión del encargado':'📤 Respuesta enviada a revisión del encargado NCA','ok');
     }
-    closeTaskModal();
+    if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()){
+      const side=window._taskReviewSideMode||'doc';
+      taskReviewRefreshModal(expId,taskId,side==='entrega'?'entrega':'doc');
+    }else closeTaskModal();
   };
   const allUpload=[].concat(adj.files||[],adj.anexos||[]);
   const preUploaded=adj.preUploaded||[];
@@ -10542,6 +10626,10 @@ function openEnviarSoporteModal(expId,taskId,modo){
   let e=getExpById(expId),t=getTaskFromExp(e,taskId);
   if(!t){t=normalizeActLibre(getActLibreById(taskId));if(t){expId=t.codigo;e=null;}}
   if(!t)return;
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewToggleSidePanel==='function'){
+    taskReviewToggleSidePanel('entrega',expId,taskId);
+    return;
+  }
   if(!modo)modo=resolveModoEnviar(t,null);
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
@@ -10761,12 +10849,18 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
 }
 function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
+  const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
+  const sideMode=window._taskReviewSideMode||'doc';
   if(solicitarAjusteSoporte(expId,taskId,nota||'Devuelta al responsable')){
     if(typeof driveRenombrarSoporteActivoExp==='function'){
       driveRenombrarSoporteActivoExp(expId,taskId,'corregir').catch(function(err){console.warn('drive rename corregir:',err);});
     }
     notif('Actividad devuelta — queda por corregir','ok');
-    closeTaskModal();
+    if(inReview){
+      taskReviewRefreshModal(expId,taskId,sideMode==='chat'?sideMode:'doc');
+    }else{
+      closeTaskModal();
+    }
     renderBandejaDepto();
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
     if(window._conPanelEditMode&&document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
@@ -12433,6 +12527,10 @@ async function respMarcarPorVerificar(expId,taskId){
     openAutoentregaEncargadoModal(expId,taskId);
     return;
   }
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewToggleSidePanel==='function'){
+    taskReviewToggleSidePanel('entrega',expId,taskId);
+    return;
+  }
   const modo=resolveModoEnviar(t,null);
   openEnviarSoporteModal(expId,taskId,modo);
 }
@@ -13107,6 +13205,15 @@ function openTaskCommentsChatOnly(expId,taskId){
     taskReviewToggleSidePanel('chat',expId,taskId);
     return;
   }
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(esModoResponsable()&&t&&taskUsuarioEsAsignado(t,responsableActivo)){
+    const est=estadoTask(t);
+    const miEst=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
+    if(miEst==='Por corregir'||est==='Por corregir'){
+      openTaskVerDocumentoResp(expId,taskId);
+      return;
+    }
+  }
   openTaskCommentsModal(expId,taskId,{chatOnly:true});
 }
 function openTaskCommentsModal(expId,taskId,opts){
@@ -13213,7 +13320,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const activo=getSoporteActivo(t);
     const prevSel=window._taskSopSel;
     const validPrev=prevSel&&soportes.some(s=>s.id===prevSel);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc};
     if(validPrev)window._taskSopSel=prevSel;
     else window._taskSopSel=getDefaultSoporteSel(t)||(activo||{}).id||'';
     window._soportePaginaActual=1;
@@ -13312,6 +13419,19 @@ function submitTaskComment(expId,taskId){
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
     renderBandejaDepto();
     if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()){
+      const t=getTaskAny(expId,taskId);
+      if(window._taskReviewSideMode==='chat'&&t){
+        const sideBody=document.getElementById('task-review-side-body');
+        if(sideBody){
+          sideBody.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
+          setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
+        }
+      }else{
+        taskReviewRefreshModal(expId,taskId,window._taskReviewSideMode||'chat');
+      }
+      return;
+    }
     if(modePrev==='pqrsDirectorFirmar'&&typeof openPqrsDirectorFirmarModal==='function'){
       openPqrsDirectorFirmarModal(expId);
       return;
