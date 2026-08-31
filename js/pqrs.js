@@ -1541,9 +1541,11 @@ function openEditPqrsSecretariaModal(expId){
   try{
     expId=String(expId||'').trim();
     if(!expId){notif('PQRSD no indicado','err');return;}
-    if(!esSecretaria()){notif('Solo Secretaría puede editar PQRSD','err');return;}
     const e=exps.find(x=>String(x._exp||'').trim()===expId);
     if(!e||!puedeEditarPqrsSecretaria(e)){notif('No puede editar esta PQRSD','err');return;}
+    if(!esSecretaria()&&!(typeof expPendienteRevisionAlta==='function'&&expPendienteRevisionAlta(e))){
+      notif('Solo Secretaría puede editar PQRSD','err');return;
+    }
     abrirPqrsModalPrep();
     const rec=normalizePqrsOficinaFields(e);
   const ov=document.getElementById('task-modal-overlay');
@@ -1722,6 +1724,7 @@ async function submitEditPqrsSecretaria(expId){
   // ────────────────────────────────────────────────────────────────────
   upsertPersonaCatalog(e);
   logAudit('Editó PQRSD ['+expId+']','pqrsd',expId);
+  if(typeof maybeClearPendienteRevisionAltaOnSave==='function')maybeClearPendienteRevisionAltaOnSave(e);
   persistExpedienteGranular(e,true);
   closeTaskModal();
   notif('PQRSD actualizada','ok');
@@ -1731,6 +1734,7 @@ async function submitEditPqrsSecretaria(expId){
   renderPqrsOficinaInbox();
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
+  if(typeof refreshTaskViews==='function')refreshTaskViews();
 }
 function _pqrsNecesitaCorreoParaAsignar(e){
   if(!e)return false;

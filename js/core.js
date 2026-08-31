@@ -1333,9 +1333,15 @@ function puedeTrasladarPqrsSecretaria(e){
   return !!(e&&esPqrsSecretaria(e)&&esSecretaria()&&!pqrsEstaCerrada(e));
 }
 function puedeEditarPqrsSecretaria(e){
-  if(!e||!esSecretaria()||pqrsEstaCerrada(e))return false;
+  if(!e||pqrsEstaCerrada(e))return false;
   e=normalizePqrsOficinaFields(e);
-  return esPqrsSecretaria(e)||(!!e._pqrs_oficina&&esTramitePqrs(e._tramite));
+  if(!(esPqrsSecretaria(e)||(!!e._pqrs_oficina&&esTramitePqrs(e._tramite))))return false;
+  if(esSecretaria())return true;
+  // Encargado / depto: alta PQRSD creada por responsable pendiente de revisión
+  if(typeof expPendienteRevisionAlta==='function'&&expPendienteRevisionAlta(e)
+    &&typeof puedeRevisarAltaExpediente==='function'&&puedeRevisarAltaExpediente(e))
+    return true;
+  return false;
 }
 function devolverPqrsASecretaria(expId){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -1474,9 +1480,15 @@ function puedeMarcarPqrsInformativa(e){
 }
 function puedeEliminarPqrs(e){
   if(!e||!esPqrsSecretaria(e))return false;
-  if(!esSecretaria()&&!esAdministrador())return false;
-  if(pqrsEstaCerrada(e))return esAdministrador()||esAdminActuandoComoSecretaria();
-  return true;
+  if(esSecretaria()||esAdministrador()){
+    if(pqrsEstaCerrada(e))return esAdministrador()||esAdminActuandoComoSecretaria();
+    return true;
+  }
+  // Encargado: puede eliminar alta PQRSD por responsable aún pendiente de revisión
+  if(typeof expPendienteRevisionAlta==='function'&&expPendienteRevisionAlta(e)
+    &&typeof puedeRevisarAltaExpediente==='function'&&puedeRevisarAltaExpediente(e))
+    return true;
+  return false;
 }
 function pushPqrsAvisoOficina(e,oficinaId,tipo,texto){
   if(!e||!oficinaId||oficinaId==='secretaria')return;
@@ -3110,14 +3122,14 @@ function togglePqrsPrioritariaDs(expId){
   refreshPqrsDetalleViews(expId);
 }
 function eliminarPqrs(expId){
-  if(!esSecretaria()&&!esAdministrador()){notif('Solo Secretaría o el administrador pueden eliminar PQRSD','err');return;}
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e||!esPqrsSecretaria(e)){notif('PQRSD no encontrado','err');return;}
   if(!puedeEliminarPqrs(e)){
-    notif('Solo el administrador (rol Secretaría) puede eliminar una PQRSD ya atendida','err');
+    notif('No tiene permiso para eliminar esta PQRSD','err');
     return;
   }
-  // Admin: elimina sin motivo. Secretaría: motivo obligatorio (con campo visible).
+  const esEncAlta=!esSecretaria()&&!esAdministrador();
+  // Admin: elimina sin motivo. Secretaría / encargado en alta: motivo obligatorio.
   const pedirMotivo=!(typeof esAdministrador==='function'&&esAdministrador());
   const msg=pqrsEstaCerrada(e)
     ?'¿Mover esta PQRSD atendida a la papelera? (90 días para restaurar)'
@@ -3131,7 +3143,7 @@ function eliminarPqrs(expId){
   };
   if(pedirMotivo){
     opts.prompt='Motivo de anulación (obligatorio)';
-    opts.promptPlaceholder='Ej. Radicada por error, duplicada…';
+    opts.promptPlaceholder=esEncAlta?'Ej. Alta incorrecta, duplicada…':'Ej. Radicada por error, duplicada…';
     opts.requirePrompt=true;
   }
   confirmPrecaucion(opts,async function(motivo){
@@ -3150,10 +3162,13 @@ function eliminarPqrs(expId){
     }
     window._secPqrsSelExp=null;
     window._pqrsOfiSelExp=null;
+    if(typeof closeTaskModal==='function')closeTaskModal();
     cerrarPqrsSidePanel();
     renderSecretariaPqrs();
     renderPqrsOficinaInbox();
     renderTabla();
+    if(typeof refreshTaskViews==='function')refreshTaskViews();
+    if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
     notif('PQRSD movida a la papelera','ok');
   });
 }
