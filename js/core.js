@@ -9299,7 +9299,8 @@ function selectTaskSoporte(expId,taskId,sopId){
   window._soporteObsOpen=false;
   const curTab=document.querySelector('.task-review-rail-view.on')||document.querySelector('.task-view-tab.on');
   if(curTab&&curTab.dataset.tab)window._taskViewTabPreferido=curTab.dataset.tab;
-  openTaskCommentsModal(expId,taskId);
+  const ctx=window._taskModalCtx||{};
+  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
 }
 function verConDesdeTaskModal(expId){
   closeTaskModal();
@@ -11095,12 +11096,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     h+='<div class="task-review-doc-bar">';
     if(hasSop&&sel){
       let docToolsBtns='';
-      if(opts.isRespVerCorr){
-        if(sel.url||sel.preview){
-          docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-open" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
-        }
-        docToolsBtns+='<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
-      }else{
+      if(!opts.isRespVerCorr){
         docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
           '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
         if(sel.url||sel.preview){
@@ -11113,10 +11109,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           const lbl=soporteTabLabel(s,i,soportes);
           return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
-        '<div class="task-review-doc-tools">'+
-        (showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+
-        docToolsBtns+
-        '</div></div>';
+        (docToolsBtns||showCompareBtn
+          ?('<div class="task-review-doc-tools">'+(showCompareBtn?'<select id="task-review-compare-sel" class="task-review-compare-inline-sel compare-ver-select" aria-hidden="true" onchange="onTaskReviewCompareChange()"></select>':'')+docToolsBtns+'</div>')
+          :'')+
+        '</div>';
     }
     h+='</div>';
     h+='<div class="task-review-split-view" id="task-review-split-view">';
@@ -13299,6 +13295,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
     modal.classList.remove('task-modal-archivos');
   }
+  if(!isRespVerCorr)clearTaskModalHdrOpenBtn();
   const sopPanel=(chatOnly||soloGestion)?'':renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr});
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
@@ -13362,6 +13359,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;
     const selObj=soportes.find(s=>s.id===selSop)||activo;
+    if(isRespVerCorr)syncTaskModalHdrOpenBtn(selObj&&(selObj.url||selObj.preview)||'');
     const canAnnot=canDeptMarcarEnSoporte(t,selObj);
     if(selSop)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
@@ -13402,8 +13400,35 @@ function devolverTaskConComentario(expId,taskId){
 function devolverSoporteTask(expId,taskId){
   devolverTaskAlResponsable(expId,taskId,'Devuelta desde revisión del documento');
 }
+function syncTaskModalHdrOpenBtn(url){
+  const actions=document.getElementById('task-modal-hdr-actions');
+  if(!actions)return;
+  let openBtn=document.getElementById('task-modal-hdr-open');
+  const u=String(url||'').trim();
+  if(!u){
+    if(openBtn)openBtn.remove();
+    return;
+  }
+  if(!openBtn){
+    openBtn=document.createElement('button');
+    openBtn.type='button';
+    openBtn.id='task-modal-hdr-open';
+    openBtn.className='btn bsm bsm-ico task-modal-hdr-open';
+    openBtn.title='Abrir en ventana emergente';
+    openBtn.textContent='↗';
+    const closeBtn=actions.querySelector('button[onclick*="closeTaskModal"]')||actions.lastElementChild;
+    if(closeBtn)actions.insertBefore(openBtn,closeBtn);
+    else actions.appendChild(openBtn);
+  }
+  openBtn.onclick=function(){openDriveVentanaEmergente(u);};
+}
+function clearTaskModalHdrOpenBtn(){
+  const openBtn=document.getElementById('task-modal-hdr-open');
+  if(openBtn)openBtn.remove();
+}
 function closeTaskModal(){
   if(popTaskModalLayer())return;
+  clearTaskModalHdrOpenBtn();
   const ctx=window._taskModalCtx||{};
   const formRow=ctx.formRowEl;
   const ov=document.getElementById('task-modal-overlay');
@@ -13423,6 +13448,7 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-viewport-expand');
       modal.classList.remove('review-asoc-consulta-modal');
       modal.classList.remove('task-modal-review');
+      modal.classList.remove('task-modal-resp-ver');
     }
   }
   document.body.classList.remove('compare-docs-expanded');

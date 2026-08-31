@@ -504,6 +504,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   display:flex;gap:8px;flex-wrap:wrap
 }
 .task-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--bd);font-weight:600;font-size:14px}
+.task-modal-hdr-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:8px}
+.task-modal-hdr-open{min-width:32px}
 .task-modal-body{padding:1rem;overflow:auto;flex:1}
 .soporte-split{display:grid;grid-template-columns:1fr;gap:10px;margin:.5rem 0;position:relative;align-items:stretch}
 .soporte-split.soporte-split-obs-open{grid-template-columns:minmax(0,1fr) minmax(280px,380px)}
