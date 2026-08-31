@@ -474,6 +474,40 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .con-exp-link:hover{opacity:.85;text-decoration:underline}
 .act-ref-btn{display:inline-flex;align-items:center;gap:0;padding:0;margin:0;border:0;background:transparent;font-family:'DM Mono',monospace;font-size:12px;color:var(--bl);cursor:pointer;text-align:left;max-width:100%}
 .act-ref-btn:hover .act-ref-link{text-decoration:underline;opacity:.85}
+.act-ref-plain{display:inline;font-family:'DM Mono',monospace;font-size:12px;color:var(--bl)}
+.act-ref-plain .act-ref-link{text-decoration:none;cursor:default}
+
+/* Visor PQRSD: correo | solicitud */
+.pqrs-origen-split{
+  display:grid;grid-template-columns:1fr 1fr;gap:0;
+  height:100%;min-height:min(68vh,620px);
+  border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;background:var(--sf);
+}
+.pqrs-origen-split-left,.pqrs-origen-split-right{
+  min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;
+}
+.pqrs-origen-split-left{border-right:1px solid var(--bd);background:var(--sf2,#f8fafc)}
+.pqrs-origen-correo-pane,.pqrs-origen-doc-pane{
+  display:flex;flex-direction:column;height:100%;min-height:0;padding:10px 12px;box-sizing:border-box;
+}
+.pqrs-origen-pane-tit{
+  font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:8px;
+  display:flex;align-items:center;flex-wrap:wrap;gap:4px;flex-shrink:0;
+}
+.pqrs-origen-correo-pane .pqrs-email-body{
+  flex:1;min-height:120px;max-height:none;overflow:auto;
+}
+.pqrs-origen-doc-iframe{
+  flex:1;width:100%;min-height:280px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;
+}
+@media(max-width:900px){
+  .pqrs-origen-split{grid-template-columns:1fr;min-height:auto}
+  .pqrs-origen-split-left{border-right:0;border-bottom:1px solid var(--bd);max-height:42vh}
+  .pqrs-origen-doc-iframe{min-height:240px}
+}
+.task-modal.task-modal-review .task-review-main .pqrs-origen-split{
+  height:calc(100% - 4px);min-height:min(72vh,680px);
+}
 .act-ref-btn .act-ref-link{color:inherit}
 .verify-banner.on{display:block}
 .task-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20000;align-items:center;justify-content:center;padding:1rem}
