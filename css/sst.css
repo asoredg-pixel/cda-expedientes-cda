@@ -527,8 +527,32 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   flex:1 1 auto;min-height:0;width:100%;height:100%;
 }
 .task-modal.task-modal-review .pqrs-origen-mail-stage{
+  flex:1 1 auto;min-height:0;overflow:hidden;padding:0;
+}
+.pqrs-origen-mail-split{
+  display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;
+}
+.pqrs-origen-mail-scroll{
   flex:1 1 auto;min-height:0;overflow:auto;padding:8px 10px;
 }
+.pqrs-origen-mail-split.has-att-inline .pqrs-origen-mail-scroll{
+  flex:0 0 38%;max-height:42%;border-bottom:1px solid var(--bd);
+}
+.pqrs-origen-att-inline{
+  display:none;flex:1 1 auto;min-height:0;flex-direction:column;background:var(--sf);overflow:hidden;
+}
+.pqrs-origen-att-inline.open{display:flex}
+.pqrs-origen-att-inline-hdr{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--sf2);border-bottom:1px solid var(--bd);flex-shrink:0;
+}
+.pqrs-origen-att-inline-hdr span{
+  flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:600;
+}
+.pqrs-origen-att-inline-body{
+  flex:1 1 auto;min-height:0;overflow:hidden;display:flex;align-items:stretch;justify-content:center;
+}
+.pqrs-origen-att-inline-body iframe{width:100%;height:100%;border:none}
+.pqrs-origen-att-inline-body img{max-width:100%;max-height:100%;object-fit:contain;margin:auto;display:block;padding:8px}
 .task-modal.task-modal-review .pqrs-origen-doc-tabs{
   flex-wrap:wrap;max-height:72px;overflow-y:auto;
 }

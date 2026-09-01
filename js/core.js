@@ -3040,6 +3040,7 @@ function pqrsFindDriveAtt(driveAtts,nombre,idx,solicitudLink){
       if(seen===idx)return raw[i];
       seen++;
     }
+    if(list[idx])return list[idx];
   }
   return null;
 }
@@ -3051,55 +3052,213 @@ function puedeEliminarPqrsEnVisor(e){
   if(typeof puedeRevisarAltaExpediente==='function'&&puedeRevisarAltaExpediente(e))return true;
   return false;
 }
-async function abrirPqrsGmailAnexoCorreo(msgId,attId,nombre,mimeType,expId){
+function cerrarPqrsOrigenAttInline(){
+  const el=document.getElementById('pqrs-origen-att-inline');
+  const body=document.getElementById('pqrs-origen-att-inline-body');
+  const stage=document.querySelector('.pqrs-origen-mail-split');
+  if(window._pqrsOrigenAttBlobUrl){try{URL.revokeObjectURL(window._pqrsOrigenAttBlobUrl);}catch(e){}window._pqrsOrigenAttBlobUrl='';}
+  if(body)body.innerHTML='';
+  if(el){el.classList.remove('open');el.setAttribute('aria-hidden','true');}
+  if(stage)stage.classList.remove('has-att-inline');
+}
+window.cerrarPqrsOrigenAttInline=cerrarPqrsOrigenAttInline;
+function pqrsOrigenAttInlineSetHdr(nombre,downloadUrl){
+  const title=document.getElementById('pqrs-origen-att-inline-title');
+  const dl=document.getElementById('pqrs-origen-att-inline-dl');
+  if(title)title.textContent=nombre||'Anexo';
+  if(dl){
+    if(downloadUrl){
+      dl.href=downloadUrl;
+      dl.setAttribute('download',nombre||'adjunto');
+      dl.style.display='';
+    }else dl.style.display='none';
+  }
+}
+function pqrsOrigenMailStageWrap(inner){
+  return '<div class="pqrs-origen-mail-stage pqrs-origen-mail-split">'+
+    '<div class="pqrs-origen-mail-scroll">'+inner+'</div>'+
+    '<div class="pqrs-origen-att-inline" id="pqrs-origen-att-inline" aria-hidden="true">'+
+      '<div class="pqrs-origen-att-inline-hdr">'+
+        '<span id="pqrs-origen-att-inline-title"></span>'+
+        '<a id="pqrs-origen-att-inline-dl" class="btn bsm" style="display:none;font-size:11px;white-space:nowrap" download>⬇ Descargar</a>'+
+        '<button type="button" class="btn bsm bsm-ico" onclick="cerrarPqrsOrigenAttInline()" title="Cerrar vista del anexo">✕</button>'+
+      '</div>'+
+      '<div class="pqrs-origen-att-inline-body" id="pqrs-origen-att-inline-body"></div>'+
+    '</div></div>';
+}
+function mostrarPqrsOrigenAttInlineDrive(driveLink,previewLink,nombre){
+  const url=previewLink||String(driveLink||'').replace(/\/view(\?.*)?$/,'/preview');
+  const inlineEl=document.getElementById('pqrs-origen-att-inline');
+  const body=document.getElementById('pqrs-origen-att-inline-body');
+  const stage=document.querySelector('.pqrs-origen-mail-split');
+  pqrsOrigenAttInlineSetHdr(nombre||'Anexo',null);
+  if(body)body.innerHTML='<iframe src="'+escAttr(url)+'" title="'+escAttr(nombre||'Anexo')+'" allowfullscreen></iframe>';
+  if(inlineEl){inlineEl.classList.add('open');inlineEl.setAttribute('aria-hidden','false');}
+  if(stage)stage.classList.add('has-att-inline');
+}
+async function pqrsFetchGmailMsgForExp(e){
+  if(!e)return null;
+  const expId=String(e._exp||'').trim();
+  if(!expId)return null;
+  if(!window._pqrsGmailMsgCache)window._pqrsGmailMsgCache={};
+  if(window._pqrsGmailMsgCache[expId])return window._pqrsGmailMsgCache[expId];
+  let msg=null;
+  // Prioridad: correo reenviado en la bandeja de la oficina (donde están los anexos originales)
+  if(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid()&&typeof _gmailOfiApi==='function'&&typeof GMAIL_API_BASE!=='undefined'){
+    try{
+      const queries=['subject:"PQRSD #'+expId+'"','"PQRSD #'+expId+'"','"'+expId+'"'];
+      for(let qi=0;qi<queries.length&&!msg;qi++){
+        const sr=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages?q='+encodeURIComponent(queries[qi])+'&maxResults=8');
+        if(!sr||!sr.messages||!sr.messages.length)continue;
+        for(let i=0;i<sr.messages.length;i++){
+          const found=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages/'+sr.messages[i].id+'?format=full');
+          if(!found||!found.payload)continue;
+          const parts=typeof gmailExtractParts==='function'?gmailExtractParts(found.payload):{attachments:[]};
+          if((parts.attachments||[]).length){msg=found;break;}
+          if(!msg)msg=found;
+        }
+      }
+    }catch(err){console.warn('pqrsFetchGmailMsgForExp ofi:',err);}
+  }
+  const gmailMsgId=String(e._gmail_message_id||'').trim();
+  if(!msg&&gmailMsgId&&typeof _gmailFetchMessageFull==='function'){
+    try{msg=await _gmailFetchMessageFull(gmailMsgId);}catch(err){console.warn('pqrsFetchGmailMsgForExp sec:',err);}
+  }
+  if(msg)window._pqrsGmailMsgCache[expId]=msg;
+  return msg;
+}
+function pqrsFindAttInGmailMsg(msg,nombre,attId,idx){
+  if(!msg||!msg.payload||typeof gmailExtractParts!=='function')return null;
+  const atts=(gmailExtractParts(msg.payload).attachments||[]);
+  if(attId){
+    const hit=atts.find(function(a){return a&&a.attachmentId===attId;});
+    if(hit)return{msgId:msg.id,attId:hit.attachmentId,nombre:hit.filename,mime:hit.mimeType||''};
+  }
+  const want=pqrsNormAttName(nombre);
+  if(want){
+    const exact=atts.find(function(a){return pqrsNormAttName(a.filename)===want;});
+    if(exact)return{msgId:msg.id,attId:exact.attachmentId,nombre:exact.filename,mime:exact.mimeType||''};
+    const loose=atts.find(function(a){
+      const fn=pqrsNormAttName(a.filename);
+      return fn&&(fn.indexOf(want)>=0||want.indexOf(fn)>=0);
+    });
+    if(loose)return{msgId:msg.id,attId:loose.attachmentId,nombre:loose.filename,mime:loose.mimeType||''};
+  }
+  if(typeof idx==='number'&&!isNaN(idx)&&idx>=0&&atts[idx]&&atts[idx].attachmentId){
+    const a=atts[idx];
+    return{msgId:msg.id,attId:a.attachmentId,nombre:a.filename,mime:a.mimeType||''};
+  }
+  return null;
+}
+async function pqrsFetchGmailAttachmentB64(msgId,attId){
+  if(typeof _gmailGetAttachmentAny==='function')return _gmailGetAttachmentAny(msgId,attId);
+  if(typeof _gmailApiBest==='function'){
+    const data=await _gmailApiBest('GET',GMAIL_API_BASE+'/messages/'+msgId+'/attachments/'+attId);
+    return data&&data.data;
+  }
+  if(typeof gmailGetAttachment==='function')return gmailGetAttachment(msgId,attId);
+  return null;
+}
+function pqrsEsArchivoOffice(nombre,mime){
+  if(typeof _gmailIsOfficeFile==='function')return _gmailIsOfficeFile(nombre,mime);
+  const ext=String(nombre||'').toLowerCase().split('.').pop();
+  return['doc','docx','xls','xlsx','ppt','pptx','odt','ods'].indexOf(ext)>=0
+    ||/(word|excel|spreadsheet|presentation|msword|wordprocessing)/i.test(String(mime||''));
+}
+async function mostrarPqrsOrigenAttInlineBlob(nombre,mime,b64url){
+  const inlineEl=document.getElementById('pqrs-origen-att-inline');
+  const body=document.getElementById('pqrs-origen-att-inline-body');
+  const stage=document.querySelector('.pqrs-origen-mail-split');
+  if(!body)return;
+  const b64=String(b64url||'').replace(/-/g,'+').replace(/_/g,'/');
+  const binary=atob(b64);
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  const mimeType=mime||'application/octet-stream';
+  const blob=new Blob([bytes],{type:mimeType});
+  if(window._pqrsOrigenAttBlobUrl){try{URL.revokeObjectURL(window._pqrsOrigenAttBlobUrl);}catch(e){}}
+  const url=URL.createObjectURL(blob);
+  window._pqrsOrigenAttBlobUrl=url;
+  const nom=String(nombre||'');
+  pqrsOrigenAttInlineSetHdr(nom,url);
+  if(mimeType==='application/pdf'||/\.pdf$/i.test(nom)){
+    body.innerHTML='<iframe src="'+escAttr(url)+'#toolbar=1" title="'+escAttr(nom)+'"></iframe>';
+  }else if((mimeType||'').startsWith('image/')){
+    body.innerHTML='<img src="'+escAttr(url)+'" alt="'+escAttr(nom)+'">';
+  }else if(pqrsEsArchivoOffice(nom,mimeType)){
+    body.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:var(--tx2)">'+
+      '<div style="font-size:32px;margin-bottom:8px">📄</div>'+
+      '<div style="font-weight:600;margin-bottom:6px">'+escAttr(nom)+'</div>'+
+      '<div style="margin-bottom:12px">Vista previa no disponible sin subir a Drive. Use <strong>Descargar</strong> para abrirlo en su equipo.</div>'+
+      '<a href="'+escAttr(url)+'" download="'+escAttr(nom)+'" class="btn bsm bp">⬇ Descargar archivo</a></div>';
+  }else{
+    body.innerHTML='<div style="padding:20px;text-align:center;font-size:12px;color:var(--tx2)">'+
+      '<div style="margin-bottom:10px">'+escAttr(nom)+'</div>'+
+      '<a href="'+escAttr(url)+'" download="'+escAttr(nom)+'" class="btn bsm bp">⬇ Descargar archivo</a></div>';
+  }
+  if(inlineEl){inlineEl.classList.add('open');inlineEl.setAttribute('aria-hidden','false');}
+  if(stage)stage.classList.add('has-att-inline');
+}
+async function abrirPqrsGmailAnexoCorreo(msgId,attId,nombre,mimeType,expId,idxOpt){
   msgId=String(msgId||'').trim();
   attId=String(attId||'').trim();
   nombre=String(nombre||'Adjunto').trim();
   expId=String(expId||'').trim();
-  if(expId){
-    const e=typeof getExpById==='function'?getExpById(expId):null;
-    if(e){
-      const drv=pqrsFindDriveAtt(e._pqrs_gmail_attachments,nombre,undefined,e._pqrs_solicitud_link);
-      if(drv&&drv.driveLink){
-        if(window._taskModalCtx&&window._taskModalCtx.isPqrsOrigenView){
-          const docId=pqrsOrigenDocIdForDriveLink(e,drv.driveLink);
-          if(docId){selectPqrsOrigenDoc(docId);return;}
-        }
-        abrirVisorAdjunto(drv.driveLink,nombre);return;
+  const idx=(typeof idxOpt==='number'&&!isNaN(idxOpt))?idxOpt:parseInt(idxOpt,10);
+  const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
+  const inOrigen=!!(window._taskModalCtx&&window._taskModalCtx.isPqrsOrigenView);
+  const enCorreo=inOrigen&&String(window._pqrsOrigenSelDoc||'')==='mail';
+  let resolvedMsgId=msgId,resolvedAttId=attId,resolvedMime=mimeType||'',resolvedNom=nombre;
+  if(e){
+    const msg=await pqrsFetchGmailMsgForExp(e);
+    if(msg){
+      const useStoredAttId=(msg.id===String(e._gmail_message_id||''));
+      const hit=pqrsFindAttInGmailMsg(msg,nombre,useStoredAttId?attId:null,isNaN(idx)?undefined:idx);
+      if(hit){
+        resolvedMsgId=hit.msgId;resolvedAttId=hit.attId;
+        resolvedNom=hit.nombre||nombre;resolvedMime=hit.mime||mimeType||'';
       }
     }
   }
-  if(!msgId||!attId){
-    notif('Adjunto no disponible en Drive. Consulte la carpeta de la PQRSD.','warn');
-    return;
-  }
-  try{
-    let b64url=null;
-    if(typeof _gmailApiBest==='function'){
-      const data=await _gmailApiBest('GET',GMAIL_API_BASE+'/messages/'+msgId+'/attachments/'+attId);
-      b64url=data&&data.data;
-    }else if(typeof _gmailGetAttachmentAny==='function'){
-      b64url=await _gmailGetAttachmentAny(msgId,attId);
-    }else if(typeof gmailGetAttachment==='function'){
-      if(typeof gmailIsTokenValid==='function'&&!gmailIsTokenValid()
-        &&typeof _gmailOfiTokenValid==='function'&&!_gmailOfiTokenValid()){
-        notif('Conecte el correo institucional para ver este anexo','warn');
+  if(resolvedMsgId&&resolvedAttId){
+    const chipEl=attId?document.getElementById('pqrs-att-chip-'+attId):null;
+    const origChip=chipEl?chipEl.innerHTML:'';
+    if(chipEl){chipEl.innerHTML='<span class="att-ico">⏳</span><span class="att-name">Cargando…</span>';chipEl.style.opacity='0.7';}
+    try{
+      const b64url=await pqrsFetchGmailAttachmentB64(resolvedMsgId,resolvedAttId);
+      if(!b64url)throw new Error('sin datos');
+      if(enCorreo||inOrigen){
+        await mostrarPqrsOrigenAttInlineBlob(resolvedNom,resolvedMime,b64url);
         return;
       }
-      b64url=await gmailGetAttachment(msgId,attId);
+      const b64=String(b64url).replace(/-/g,'+').replace(/_/g,'/');
+      const binary=atob(b64);
+      const bytes=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+      const mime=resolvedMime||'application/octet-stream';
+      abrirVisorAdjunto(URL.createObjectURL(new Blob([bytes],{type:mime})),resolvedNom);
+      return;
+    }catch(err){
+      console.warn('abrirPqrsGmailAnexoCorreo gmail:',err);
+    }finally{
+      if(chipEl){chipEl.innerHTML=origChip;chipEl.style.opacity='';}
     }
-    if(!b64url)throw new Error('sin datos');
-    const b64=String(b64url).replace(/-/g,'+').replace(/_/g,'/');
-    const binary=atob(b64);
-    const bytes=new Uint8Array(binary.length);
-    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
-    const mime=mimeType||'application/octet-stream';
-    const blob=new Blob([bytes],{type:mime});
-    abrirVisorAdjunto(URL.createObjectURL(blob),nombre);
-  }catch(err){
-    console.warn('abrirPqrsGmailAnexoCorreo',err);
-    notif('No se pudo abrir el anexo. Use las pestañas del visor o la carpeta Drive de la PQRSD.','warn');
   }
+  if(e){
+    const drv=pqrsFindDriveAtt(e._pqrs_gmail_attachments,nombre,isNaN(idx)?undefined:idx,e._pqrs_solicitud_link);
+    if(drv&&drv.driveLink){
+      if(enCorreo||inOrigen){
+        mostrarPqrsOrigenAttInlineDrive(drv.driveLink,drv.previewLink,nombre||drv.nombre||drv.name);
+        return;
+      }
+      abrirVisorAdjunto(drv.driveLink,nombre);return;
+    }
+  }
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())
+    ||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  notif(tokOk
+    ?'No se encontró el anexo en el correo reenviado. Abra Correos y busque el mensaje PQRSD #'+expId+'.'
+    :'Conecte el correo institucional (menú Correos) para ver o descargar los anexos del correo reenviado.','warn');
 }
 window.abrirPqrsGmailAnexoCorreo=abrirPqrsGmailAnexoCorreo;
 function pqrsAnexoChipHtml(e,a,drv,idx){
@@ -3107,20 +3266,12 @@ function pqrsAnexoChipHtml(e,a,drv,idx){
   const mime=(a&&a.mimeType)||(drv&&drv.mime)||'';
   const expId=e&&e._exp||'';
   const ico=(mime||'').startsWith('image/')?'🖼️':(mime||'').includes('pdf')?'📄':(mime||'').includes('word')||(nom||'').match(/\.docx?$/i)?'📝':(mime||'').includes('sheet')||(mime||'').includes('excel')||(nom||'').match(/\.xlsx?$/i)?'📊':'📎';
-  if(drv&&drv.driveLink){
-    const docId=e?pqrsOrigenDocIdForDriveLink(e,drv.driveLink):'';
-    const onclick=docId
-      ?'event.stopPropagation();selectPqrsOrigenDoc(\''+jsStr(docId)+'\');return false;'
-      :'event.stopPropagation();selectPqrsOrigenDocByUrl(\''+jsStr(drv.driveLink)+'\');return false;';
-    return'<button type="button" class="gmail-att-chip" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
-  }
   const msgId=e&&e._gmail_message_id||'';
   const attId=a&&a.attachmentId||'';
-  if(msgId&&attId){
-    const onclick='event.stopPropagation();abrirPqrsGmailAnexoCorreo(\''+jsStr(msgId)+'\',\''+jsStr(attId)+'\',\''+jsStr(nom)+'\',\''+jsStr(mime)+'\',\''+jsStr(expId)+'\');return false;';
-    return'<button type="button" class="gmail-att-chip" onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
-  }
-  return'<span class="gmail-att-chip" style="opacity:.85" title="Anexo sin vista previa disponible"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></span>';
+  const idxArg=(typeof idx==='number'&&!isNaN(idx))?String(idx):'null';
+  const onclick='event.stopPropagation();abrirPqrsGmailAnexoCorreo(\''+jsStr(msgId)+'\',\''+jsStr(attId)+'\',\''+jsStr(nom)+'\',\''+jsStr(mime)+'\',\''+jsStr(expId)+'\','+idxArg+');return false;';
+  const chipId=attId?(' id="pqrs-att-chip-'+escAttr(attId)+'"'):'';
+  return'<button type="button" class="gmail-att-chip"'+chipId+' onclick="'+escAttr(onclick)+'" title="Ver '+escAttr(nom)+'"><span class="att-ico">'+ico+'</span><span class="att-name">'+escAttr(nom)+'</span></button>';
 }
 function collectPqrsOrigenDocs(e){
   if(!e)return[];
@@ -3157,7 +3308,7 @@ function pqrsOrigenHasMailPane(e){
 function renderPqrsOrigenMailStageHtml(e){
   const inner=typeof renderPqrsCorreoPaneInnerHtml==='function'?renderPqrsCorreoPaneInnerHtml(e,{asDetails:false}):'';
   if(!inner)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin correo almacenado.</div>';
-  return '<div class="pqrs-origen-mail-stage">'+inner+'</div>';
+  return pqrsOrigenMailStageWrap(inner);
 }
 function renderPqrsOrigenDocStageHtml(doc){
   if(!doc)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin documento seleccionado.</div>';
@@ -3172,8 +3323,10 @@ function selectPqrsOrigenDoc(docId){
   const ctx=window._taskModalCtx||{};
   const e=typeof getExpById==='function'?getExpById(ctx.expId):null;
   if(docId==='mail'){
+    cerrarPqrsOrigenAttInline();
     stage.innerHTML=renderPqrsOrigenMailStageHtml(e);
   }else{
+    cerrarPqrsOrigenAttInline();
     const docs=collectPqrsOrigenDocs(e);
     const doc=docs.find(function(d){return d.id===docId;})||docs[0];
     stage.innerHTML=doc?renderPqrsOrigenDocStageHtml(doc):'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin documento.</div>';
@@ -3250,13 +3403,10 @@ function renderPqrsCorreoPaneInnerHtml(e,opts){
   const driveAtts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
   const adjInfo=Array.isArray(d.adjuntosInfo)?d.adjuntosInfo:[];
   let attsHtml='';
-  let hayAnexoSinLink=false;
   if(adjInfo.length){
     attsHtml=adjInfo.map(function(a,idx){
       const drv=pqrsFindDriveAtt(driveAtts,a.nombre,idx,e._pqrs_solicitud_link);
-      const chip=pqrsAnexoChipHtml(e,a,drv,idx);
-      if(chip.indexOf('<span class="gmail-att-chip"')===0)hayAnexoSinLink=true;
-      return chip;
+      return pqrsAnexoChipHtml(e,a,drv,idx);
     }).join('');
   }
   if(!attsHtml&&driveAtts.length){
@@ -3265,8 +3415,8 @@ function renderPqrsCorreoPaneInnerHtml(e,opts){
       return pqrsAnexoChipHtml(e,{nombre:att.nombre||att.name,mimeType:att.mime},att,idx);
     }).join('');
   }
-  const notaAnexos=hayAnexoSinLink
-    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;display:flex;gap:5px;align-items:flex-start"><span>📥</span><span>Los anexos originales se conservan en el <strong>correo reenviado a su oficina</strong>. El PDF de soporte está a la derecha.</span></div>'
+  const notaAnexos=adjInfo.length
+    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;display:flex;gap:5px;align-items:flex-start"><span>📥</span><span>Los anexos del correo <strong>no se guardan en Drive</strong>; se obtienen del correo reenviado a la oficina. Conecte el correo institucional (menú Correos) y haga clic en un anexo para verlo o descargarlo.</span></div>'
     :'';
   const bodyHtml=d.cuerpoHtml||(d.cuerpoTxt?'<pre style="white-space:pre-wrap;font-size:12px;margin:0">'+escAttr(d.cuerpoTxt)+'</pre>':'');
   const fechaStr=d.fecha?' · '+escAttr(d.fecha):'';
