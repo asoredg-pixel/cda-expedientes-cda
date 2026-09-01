@@ -5718,7 +5718,7 @@ function taskReviewRespEntregaPendienteRailHtml(ref,taskId,t){
   if(showCompareBtn)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">🗂️</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
   h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
   const autor=notasInternasAutor();
   if(autor){
@@ -6957,6 +6957,15 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
     };
     if(cerrar){
       e._pqrs_respuesta_soportes=archivos.map(function(a,i){return mapSop(a,i,null);});
+    }else if(opts.reemplazarRevision){
+      const prev=(Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes:[]).filter(function(s){
+        return s&&_pqrsDocEsPorCorregir(s);
+      });
+      prev.forEach(function(s){if(s)s.activo=false;});
+      const wfPrev=getPqrsWorkflow(e);
+      const entregaN=(Number(wfPrev.entrega_n)||0)+1;
+      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);});
+      e._pqrs_respuesta_soportes=prev.concat(nuevos);
     }else{
       // Conservar soportes de versiones anteriores (por corregir) para comparar
       const prev=Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes.slice():[];
@@ -7114,9 +7123,7 @@ async function purgePqrsRevisionDocsForReplace(e,t){
   const hist=(wf.documentos||[]).filter(function(d){return d&&_pqrsDocEsPorCorregir(d);});
   if(typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,{documentos:hist});
   if(t){
-    t.soportes=(t.soportes||[]).filter(function(s){
-      return s&&(s.version_historial||/por corregir/i.test(String(s.label||'')));
-    });
+    t.soportes=[];
   }
   return fileIds;
 }
@@ -9914,6 +9921,15 @@ function soporteEsPorCorregir(s){
   if(est==='acorregir'||est==='corregir')return true;
   return /por corregir/i.test(String(s.label||''));
 }
+function soportesVisiblesParaVista(t){
+  const sops=(t&&t.soportes)||[];
+  if(!sops.length)return sops;
+  return sops.filter(function(s){
+    if(!s)return false;
+    if(!soporteEsPorCorregir(s))return true;
+    return soporteTieneVista(s);
+  });
+}
 function soporteEsAnexoEntrega(s){
   if(!s)return false;
   if(s.es_anexo===true||s.tipo==='anexo_respuesta')return true;
@@ -9987,6 +10003,13 @@ function getDefaultSoporteSel(t){
       const sops=t.soportes||[];
       const corrMain=sops.filter(function(s){return s&&soporteEsPorCorregir(s)&&!soporteEsAnexoEntrega(s);});
       if(corrMain.length)return corrMain[corrMain.length-1].id;
+    }
+    if(esModoResponsable()&&(miEst==='Por verificar'||est==='Por verificar')){
+      const vis=soportesVisiblesParaVista(t);
+      const main=vis.filter(function(s){return s&&!soporteEsAnexoEntrega(s)&&!soporteEsPorCorregir(s);});
+      if(main.length)return main[main.length-1].id;
+      const any=vis.filter(function(s){return s&&!soporteEsAnexoEntrega(s);});
+      if(any.length)return any[any.length-1].id;
     }
   }
   const s=getSoportePrincipalUltimaEntrega(t);
@@ -10963,10 +10986,30 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     const hasNewInstitutional=archivos.some(a=>a&&(a.driveFileId||a.fileId));
     const eCtx=getExpById(expId);
     const esPqrsEntregaAct=!!(eCtx&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eCtx));
+    const estAct=estadoTask(t);
+    const esReemplazoPqrsVerificar=esPqrsEntregaAct&&typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
+    const esCorreccionDevuelta=estAct==='Por corregir';
     if(parsedLinks.length||hasLocalFile||hasNewInstitutional){
       t.soportes.forEach(s=>{if(s&&s.activo)s.activo=false;});
       if(hasNewInstitutional&&(!esPqrsEntregaAct||esNuevaEntrega)){
-        if(esNuevaEntrega){
+        if(esNuevaEntrega&&esCorreccionDevuelta){
+          (t.soportes||[]).forEach(function(s){
+            if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+            if(soporteEsPorCorregir(s))return;
+            s.activo=false;
+            s.driveEstado='acorregir';
+            s.version_historial=true;
+            if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+          });
+        }else if(esReemplazoPqrsVerificar){
+          const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
+          if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
+          drop.forEach(function(s){
+            const fid=String(s.driveFileId||s.fileId||'').trim();
+            if(fid)window._soportesDriveABorrar.push(fid);
+          });
+          t.soportes=(t.soportes||[]).filter(s=>!s||(!s.driveInstitutional&&!s.driveFileId&&!s.fileId));
+        }else if(esNuevaEntrega){
           (t.soportes||[]).forEach(function(s){
             if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
             s.activo=false;
@@ -12298,7 +12341,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   normalizeTask(t);
   const esLibre=!!t.sinExpediente||isActLibreRef(expId,taskId);
   const e=esLibre?null:getExpById(expId);
-  const soportes=t.soportes||[];
+  const soportes=soportesVisiblesParaVista(t);
   const hasSop=soportes.length>0;
   const est=estadoTask(t);
   const yoResp=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
@@ -14684,7 +14727,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   if(isReviewDelivery){
     if(!opts.keepStack){
       if(isRespVerCorr)window._taskReviewSideMode='chat';
-      else if(isPqrsOrigenView)window._taskReviewSideMode='doc';
+      else if(isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
       else if(isVerDocMode&&!hasSop)window._taskReviewSideMode='exp';
       else window._taskReviewSideMode='doc';
     }
@@ -14730,12 +14773,14 @@ function openTaskCommentsModal(expId,taskId,opts){
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
       if(isRespVerCorr)window._taskReviewSideMode='chat';
-      else if(isPqrsOrigenView)window._taskReviewSideMode='doc';
+      else if(isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
       else if(isVerDocMode&&!hasSop&&!t.sinExpediente)window._taskReviewSideMode='exp';
       else if(!opts.keepStack)window._taskReviewSideMode='doc';
       setTimeout(function(){
         if(isRespVerCorr){
           taskReviewOpenSidePanel('chat',expId,taskId);
+        }else if(isRespVerEntregaPendiente){
+          taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida){
           taskReviewCloseSidePanel();
           if(isPqrsOrigenView&&typeof initPqrsOrigenDocViewer==='function')initPqrsOrigenDocViewer(e);
@@ -14744,7 +14789,7 @@ function openTaskCommentsModal(expId,taskId,opts){
           else taskReviewCloseSidePanel();
         }else if(isVerDocMode&&!hasSop&&!t.sinExpediente){
           taskReviewOpenSidePanel('exp',expId,taskId);
-        }else if(isRespVerDoc&&!isPqrsOrigenView){
+        }else if(isRespVerDoc&&!isPqrsOrigenView&&!isRespVerEntregaPendiente){
           taskReviewOpenSidePanel('chat',expId,taskId);
         }else{
           const mode=window._taskReviewSideMode;
