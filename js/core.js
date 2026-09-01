@@ -7162,7 +7162,6 @@ function renderPqrsEntregaCamposHtml(e){
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0">'+
     '<input type="checkbox" id="pqrs-entrega-notif-correo" onchange="pqrsEntregaToggleNotifCorreo()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
     '<span>Se notificará por correo electrónico</span></label>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:6px;padding-left:23px">Si no marca esta opción, solo cargue el oficio y los anexos. El encargado o VITAL definirán después la notificación presencial u otro canal.</div>'+
     '</div>';
   h+='<input type="hidden" id="pqrs-resp-canal" value="">';
   h+='<div id="pqrs-entrega-canal-correo-note" style="display:none;font-size:11px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)"></div>';
@@ -7357,9 +7356,6 @@ function pqrsEntregaRefreshUi(){
     }else if(isOficio&&notifCorreoOficio){
       correoNote.style.display='';
       correoNote.textContent='📧 Diligencie destinatarios y cuerpo del correo. El encargado podrá revisarlos y modificarlos.';
-    }else if(isOficio){
-      correoNote.style.display='';
-      correoNote.textContent='Solo oficio y anexos. El encargado o VITAL definirán la notificación después.';
     }else{
       correoNote.style.display='none';
       correoNote.textContent='';
@@ -7382,7 +7378,7 @@ function pqrsEntregaRefreshUi(){
   if(cuerpoInfo)cuerpoInfo.style.display=isInfo?'':'none';
   if(cuerpoLbl){
     if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
-    else if(isOficio&&notifCorreoOficio)cuerpoLbl.innerHTML='Cuerpo del correo <span class="req-star">*</span>';
+    else if(isOficio&&notifCorreoOficio)cuerpoLbl.innerHTML='Mensaje / plantilla de respuesta <span class="req-star">*</span>';
     else if(isOficio)cuerpoLbl.innerHTML='Nota interna <span style="font-weight:400;color:var(--tx3)">(opcional)</span>';
     else if(isCorreo)cuerpoLbl.innerHTML='Mensaje / plantilla de respuesta <span class="req-star">*</span>';
     else cuerpoLbl.innerHTML='Resumen de la respuesta <span class="req-star">*</span>';
@@ -7394,7 +7390,7 @@ function pqrsEntregaRefreshUi(){
       cuerpoTxt.style.minHeight='180px';
       cuerpoTxt.style.display='';
     }else if(isOficio&&notifCorreoOficio){
-      cuerpoTxt.placeholder='Texto del correo al ciudadano…';
+      cuerpoTxt.placeholder='Plantilla de respuesta al ciudadano…';
       cuerpoTxt.style.minHeight='180px';
       cuerpoTxt.style.display='';
     }else if(isOficio){
@@ -7413,7 +7409,10 @@ function pqrsEntregaRefreshUi(){
     }
   }
   if(isCorreo&&isMensaje)pqrsAplicarPlantillaSegunTipo(tipo,false);
-  else if(isOficio&&cuerpoTxt&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
+  else if(isOficio&&notifCorreoOficio){
+    const vacio=!cuerpoTxt||!String(cuerpoTxt.value||'').trim();
+    pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.MENSAJE,vacio||_pqrsEsPlantillaRespuesta(cuerpoTxt.value));
+  }else if(isOficio&&cuerpoTxt&&(_pqrsEsPlantillaRespuesta(cuerpoTxt.value)||(window._pqrsUltimaPlantillaMensaje&&cuerpoTxt.value===window._pqrsUltimaPlantillaMensaje)))cuerpoTxt.value='';
 }
 function collectPqrsEntregaDatos(expId){
   const e=getExpById(expId);
