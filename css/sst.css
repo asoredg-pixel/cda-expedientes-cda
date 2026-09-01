@@ -690,18 +690,19 @@ body.task-review-doc-mode #task-modal-overlay{
   overflow:hidden;
 }
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-doc-col-main{
-  flex:1 1 52%;
-  max-width:58%;
+  flex:1 1 50%;
+  max-width:50%;
+  min-width:0;
 }
 .task-modal.task-modal-review .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-side-panel{
-  flex:1 1 48%;
-  min-width:min(320px,42%);
-  max-width:48%;
+  flex:1 1 50%;
+  min-width:0;
+  max-width:50%;
 }
 .task-modal.task-modal-review .task-review-side-panel{
-  flex:1 1 48%;
-  min-width:min(320px,42%);
-  max-width:48%;
+  flex:1 1 50%;
+  min-width:0;
+  max-width:50%;
   display:none;
   flex-direction:column;
   min-height:0;
@@ -760,20 +761,21 @@ body.task-review-doc-mode #task-modal-overlay{
 }
 .task-modal.task-modal-review-wa-side .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-doc-col-main,
 .task-modal.task-modal-resp-ver .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-doc-col-main{
-  flex:1 1 66%;
-  max-width:72%;
+  flex:1 1 50%;
+  max-width:50%;
+  min-width:0;
 }
 .task-modal.task-modal-review-wa-side .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-side-panel,
 .task-modal.task-modal-resp-ver .task-review-split-view.task-review-side-open:not(.task-review-compare-open) .task-review-side-panel{
-  flex:1 1 30%;
-  min-width:240px;
-  max-width:34%;
+  flex:1 1 50%;
+  min-width:0;
+  max-width:50%;
 }
 .task-modal.task-modal-review-wa-side .task-review-side-panel,
 .task-modal.task-modal-resp-ver .task-review-side-panel{
-  flex:1 1 30%;
-  min-width:240px;
-  max-width:34%;
+  flex:1 1 50%;
+  min-width:0;
+  max-width:50%;
 }
 /* Responsable / encargado en revisión: scroll arriba + compositor fijo abajo (estilo WhatsApp) */
 .task-modal.task-modal-review .task-review-chat-side-wa,
@@ -1540,15 +1542,55 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-modal.task-modal-review .task-review-notas-side{
   flex:1 1 0;
   min-height:0;
+  height:100%;
   display:flex;
   flex-direction:column;
   overflow:hidden;
+}
+.task-modal.task-modal-review .task-review-side-panel.task-review-side-notas-mode .task-review-side-body{
+  overflow:hidden;
+  padding:6px 8px 0;
+}
+.task-modal.task-modal-review .task-review-notas-side .task-keep-compose{
+  flex:0 0 auto;
+  margin-bottom:8px;
 }
 .task-modal.task-modal-review .task-review-entrega-side .task-enviar-unificado,
 .task-modal.task-modal-review .task-review-notas-side .task-keep-list{
   flex:1 1 0;
   min-height:0;
   overflow:auto;
+  max-height:none!important;
+}
+.task-modal.task-modal-review .task-review-notas-side.task-keep-standalone .task-chat-uni-scroll,
+.task-modal.task-modal-review .task-review-notas-side .task-chat-uni-scroll{
+  max-height:none!important;
+}
+.task-modal.task-modal-review .task-review-notas-side .task-keep-foot{
+  flex:0 0 auto;
+  margin-top:auto;
+  padding:10px 0 8px;
+  border-top:1px solid var(--bd);
+  background:var(--sf);
+  width:100%;
+  box-sizing:border-box;
+}
+.task-modal.task-modal-review .task-review-notas-side .task-keep-save{
+  display:block;
+  width:100%;
+  border:none;
+  background:var(--bl);
+  color:#fff;
+  font:inherit;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  padding:9px 16px;
+  border-radius:8px;
+  text-align:center;
+}
+.task-modal.task-modal-review .task-review-notas-side .task-keep-save:hover{
+  filter:brightness(1.06);
 }
 .task-modal.task-modal-review .task-review-doc-tools .btn.on,
 .task-modal.task-modal-review .task-review-rail-btn.on{

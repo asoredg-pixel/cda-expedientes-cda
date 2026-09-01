@@ -6155,9 +6155,14 @@ function taskReviewSetSidePanelLean(lean){
   if(panel)panel.classList.toggle('task-review-side-lean',!!lean);
   if(tit)tit.style.display=lean?'none':'';
 }
+function taskReviewSetSidePanelMode(mode){
+  const panel=document.getElementById('task-review-side-panel');
+  if(!panel)return;
+  panel.classList.toggle('task-review-side-notas-mode',mode==='notas');
+}
 function taskReviewWaSideActive(){
   const ctx=window._taskModalCtx||{};
-  return!!(ctx.isRespVerCorr||ctx.isDeptReviewWa);
+  return!!(ctx.isRespVerCorr||ctx.isDeptReviewWa||ctx.isPqrsOrigenView);
 }
 function taskReviewSyncDocBarClose(show){
   const ctx=window._taskModalCtx||{};
@@ -6189,6 +6194,7 @@ function taskReviewCloseSidePanel(){
   if(panel)panel.setAttribute('aria-hidden','true');
   taskReviewHideCompareBar();
   taskReviewSetSidePanelLean(false);
+  taskReviewSetSidePanelMode('');
   taskReviewSyncDocBarClose(false);
   if(typeof cancelPendingAnnotPin==='function')cancelPendingAnnotPin();
   if(window._annotMarking)releaseAnnotMarkingMode();
@@ -6223,6 +6229,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   if(mode==='compare')taskReviewSyncCompareSelect(t,e,taskId,true);
   else taskReviewSyncCompareSelect(null,null,null,false);
   taskReviewSetSidePanelLean(mode==='compare');
+  taskReviewSetSidePanelMode(mode);
   if(mode==='exp'){
     const esLibre=!!(t&&t.sinExpediente);
     body.innerHTML='<div class="task-review-side-scroll">'+(esLibre
