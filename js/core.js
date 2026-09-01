@@ -5511,8 +5511,8 @@ function taskReviewSideTitles(){
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
-  const sel=t?getSoporteActivo(t):null;
-  const no=(t&&t.notasDoc||[]).filter(function(n){return!sel||!n.soporteId||n.soporteId===sel.id;}).length;
+  const sel=typeof getSoporteSeleccionado==='function'?getSoporteSeleccionado(t):getSoporteActivo(t);
+  const no=(t&&t.notasDoc||[]).filter(function(n){return n&&n.rol==='revisor'&&sel&&String(n.soporteId||'')===String(sel.id||'');}).length;
   const badge=Math.max(nc,no);
   const r=escAttr(ref),tid=escAttr(taskId);
   const side=String(window._taskReviewSideMode||'doc');
@@ -5530,8 +5530,12 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   const soloDocAprobado=miEst==='Atendida'||est==='Atendida';
   const e=typeof getExpById==='function'?getExpById(refExp):null;
   const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
+  const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(esPqrs?'Correo y solicitud':'Documento')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">'+(esPqrs?'📧':'📄')+'</button>';
+  if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar versiones del documento" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">🗂️</button>';
   if(soloDocAprobado)return h+'</nav>';
@@ -5713,7 +5717,7 @@ function renderTaskReviewCompareBarHtml(t,e,taskId){
   return '';
 }
 function renderTaskReviewObsSideHtml(expId,taskId,t,withMarcarBtn){
-  const sel=t?getSoporteActivo(t):null;
+  const sel=t?getSoporteSeleccionado(t):null;
   const sid=sel?sel.id:'';
   const notas=notasDocForSoporte(t,sid);
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
@@ -5726,7 +5730,7 @@ function renderTaskReviewObsSideHtml(expId,taskId,t,withMarcarBtn){
   return h+'</div>';
 }
 function initTaskReviewObsSide(expId,taskId,t){
-  const sel=t?getSoporteActivo(t):null;
+  const sel=t?getSoporteSeleccionado(t):null;
   const sid=sel?sel.id:'';
   const notas=notasDocForSoporte(t,sid);
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
@@ -5738,7 +5742,7 @@ function initTaskReviewObsSide(expId,taskId,t){
   if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-review-side-body')||document);
 }
 function renderTaskReviewChatSideHtml(expId,taskId,t){
-  const sel=t?getSoporteActivo(t):null;
+  const sel=t?getSoporteSeleccionado(t):null;
   const sid=sel?sel.id:'';
   const notas=notasDocForSoporte(t,sid);
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
@@ -9681,7 +9685,30 @@ function getSoportePrincipalUltimaEntrega(t){
   const any=(t.soportes||[]).find(function(s){return s&&!soporteEsAnexoEntrega(s)&&!soporteEsPorCorregir(s);});
   return any||ult.find(function(s){return s&&!soporteEsAnexoEntrega(s);})||ult[0]||getSoporteActivo(t)||null;
 }
+function getSoporteSeleccionado(t,sopSelId){
+  const sops=(t&&t.soportes)||[];
+  const sid=String(sopSelId||window._taskSopSel||'').trim();
+  if(sid){
+    const hit=sops.find(function(s){return s&&s.id===sid;});
+    if(hit)return hit;
+  }
+  const def=getDefaultSoporteSel(t);
+  if(def){
+    const hit=sops.find(function(s){return s&&s.id===def;});
+    if(hit)return hit;
+  }
+  return getSoporteActivo(t)||sops[sops.length-1]||null;
+}
 function getDefaultSoporteSel(t){
+  if(t){
+    const est=estadoTask(t);
+    const miEst=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
+    if(esModoResponsable()&&(miEst==='Por corregir'||est==='Por corregir')){
+      const sops=t.soportes||[];
+      const corrMain=sops.filter(function(s){return s&&soporteEsPorCorregir(s)&&!soporteEsAnexoEntrega(s);});
+      if(corrMain.length)return corrMain[corrMain.length-1].id;
+    }
+  }
   const s=getSoportePrincipalUltimaEntrega(t);
   return(s||{}).id||'';
 }
@@ -9817,7 +9844,10 @@ function nextPinNumForSoporte(t,soporteId){
   return nums.length?Math.max(...nums)+1:1;
 }
 function notasDocForSoporte(t,soporteId){
-  return (t.notasDoc||[]).filter(n=>!soporteId||!n.soporteId||n.soporteId===soporteId);
+  const sid=String(soporteId||'').trim();
+  const all=(t&&t.notasDoc)||[];
+  if(!sid)return all.filter(function(n){return!String(n.soporteId||'').trim();});
+  return all.filter(function(n){return String(n.soporteId||'').trim()===sid;});
 }
 function renderAnnotSidebarHtml(notas,expId,taskId,selId,canAnnot){
   const tit=canAnnot?'Sin observaciones aún. Use «Marcar en documento».':'Observaciones del departamento sobre el documento.';
@@ -10580,7 +10610,7 @@ function devolverDocumentoConObservaciones(expId,taskId){
   const wrap=document.getElementById('soporte-annot-wrap');
   const sopId=wrap?wrap.dataset.sop:(getSoporteActivo(t)||{}).id;
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
-  const obs=(t.notasDoc||[]).filter(n=>n.rol==='revisor'&&(!sopId||n.soporteId===sopId));
+  const obs=(t.notasDoc||[]).filter(function(n){return n.rol==='revisor'&&String(n.soporteId||'')===String(sopId||'');});
   const nuevas=ultDev?obs.filter(n=>(n.fecha||'')>(ultDev.fecha||'')):obs;
   devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
 }
@@ -11169,7 +11199,6 @@ function guardarNotasInternasUnificado(expId,taskId){
     nombre:(t&&t.nombre)||(e&&typeof getNom==='function'?getNom(e):'')||''
   });
   if(!ok){notif('No se pudieron guardar las notas','err');return;}
-  notif('Notas guardadas','ok');
   if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&window._taskReviewSideMode==='notas'){
     const t=getTaskAny(expId,taskId);
     const sideBody=document.getElementById('task-review-side-body');
@@ -11997,10 +12026,10 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const canComparePqrs=esPqrsSolResp&&canReviewSop;
   const showPqrsCompare=canComparePqrs&&(e._pqrs_solicitud_link||e._pqrs_solicitud_archivo||getPqrsRespuestaDocPreview(e,t));
   const docsCompare=(!esLibre&&e)?collectDocsComparables(e,taskId,t,{incluirAsociados:true}):collectDocsComparables(null,null,t,{incluirAsociados:true});
-  const showCompareDocs=canReviewSop&&docsCompare.length>=2;
-  const showCompareVer=!canReviewSop&&soportes.length>=2;
+  const showCompareDocs=(canReviewSop||!!opts.isRespVerCorr)&&docsCompare.length>=2;
+  const showCompareVer=!canReviewSop&&!opts.isRespVerCorr&&soportes.length>=2;
   const showCompare=showCompareDocs||showCompareVer;
-  const showCompareBtn=isReview&&(canReviewSop?docsCompare.length>=2:soportes.length>=2);
+  const showCompareBtn=isReview&&((canReviewSop||!!opts.isRespVerCorr)?docsCompare.length>=2:soportes.length>=2);
   const showEnviar=canAddSop&&!opts.hideEnviar;
   let h=isReview?'<div class="task-soporte-panel task-soporte-panel-review">':'<div style="margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px dashed var(--bd)">';
   if(!isReview){
@@ -12625,9 +12654,8 @@ function aplicarPlazoRevisionTask(expId,taskId){
 function devolverTaskUnificado(expId,taskId){
   const t=getTaskAny(expId,taskId);
   const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
-  const wrap=document.getElementById('soporte-annot-wrap');
-  const sopId=wrap?wrap.dataset.sop:(getSoporteActivo(t)||{}).id;
-  const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&(!sopId||!n.soporteId||n.soporteId===sopId);});
+  const ronda=getMarcadoresRonda(t);
+  const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&n.rondaRevision===ronda;});
   const nObs=obs.length;
   let nota=chat;
   if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
@@ -16750,7 +16778,7 @@ function taskCuentaComoRevisadaEncargado(t,e){
   if(e&&typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e))return true;
   if(e&&typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))return true;
   const rev=typeof getTaskRevisionDepto==='function'?getTaskRevisionDepto(t):null;
-  if(rev&&rev.tipo==='aprobada')return true;
+  if(rev&&(rev.tipo==='aprobada'||rev.tipo==='corregir'))return true;
   if((t.historial||[]).some(function(h){return h&&(h.tipo==='verificacion'||h.tipo==='enviar_firma'||h.tipo==='atajo_firmado_revision');}))return true;
   if(estadoTask(t)==='Atendida'&&(t.verificadoPor||t.ultimaRevisionDepto))return true;
   return false;
@@ -18404,7 +18432,7 @@ function renderActividades(){
     else if(filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados')
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
-    else if(filtroAct==='revisados')sub.textContent='Revisados: aprobadas o enviadas a firma/impresión. Puede devolver, eliminar o ajustar el trámite.';
+    else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: también aparecen en «Por ejecutar» según estén en término o vencidas.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
