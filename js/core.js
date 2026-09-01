@@ -10551,6 +10551,42 @@ function setTaskViewTab(tab){
     if(stack)stack.classList.add('compare-ver-stack-expand');
   }
 }
+function refreshTaskReviewSoporteInPlace(expId,taskId,sopId,t){
+  t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
+  if(!t)return false;
+  const vis=typeof soportesVisiblesParaVista==='function'?soportesVisiblesParaVista(t):(t.soportes||[]);
+  const selObj=vis.find(function(s){return s&&s.id===sopId;})||(t.soportes||[]).find(function(s){return s&&s.id===sopId;});
+  if(!selObj)return false;
+  document.querySelectorAll('.soporte-doc-tab').forEach(function(btn){
+    const oc=String(btn.getAttribute('onclick')||'');
+    btn.classList.toggle('on',oc.indexOf("'"+sopId+"'")>=0||oc.indexOf('"'+sopId+'"')>=0);
+  });
+  const wrap=document.getElementById('soporte-annot-wrap');
+  if(wrap){
+    wrap.dataset.sop=sopId;
+    const embedHtml=typeof renderSoporteEmbedHtml==='function'?renderSoporteEmbedHtml(selObj):'';
+    const embedEl=wrap.querySelector('iframe,soporte-local-img,soporte-local-vid,#soporte-iframe');
+    if(embedEl&&embedHtml){
+      const tmp=document.createElement('div');
+      tmp.innerHTML=embedHtml;
+      const neu=tmp.firstElementChild;
+      if(neu)embedEl.replaceWith(neu);
+    }else if(embedHtml){
+      wrap.innerHTML=embedHtml+'<div class="soporte-annot-overlay" id="soporte-annot-overlay"></div>';
+    }
+    if(!wrap.querySelector('.soporte-annot-overlay'))
+      wrap.insertAdjacentHTML('beforeend','<div class="soporte-annot-overlay" id="soporte-annot-overlay"></div>');
+  }
+  const canAnnot=typeof canDeptMarcarEnSoporte==='function'?canDeptMarcarEnSoporte(t,selObj):false;
+  if(typeof initSoporteAnnotViewer==='function')initSoporteAnnotViewer(expId,taskId,sopId,canAnnot);
+  const sideMode=String(window._taskReviewSideMode||'doc');
+  if(sideMode==='chat'&&typeof initTaskReviewObsSide==='function')initTaskReviewObsSide(expId,taskId,t);
+  if(typeof taskReviewSyncRailSide==='function')taskReviewSyncRailSide(sideMode);
+  const ctx=window._taskModalCtx||{};
+  if(ctx.isRespVerCorr&&typeof syncTaskModalHdrOpenBtn==='function')
+    syncTaskModalHdrOpenBtn(selObj.url||selObj.preview||'');
+  return true;
+}
 function selectTaskSoporte(expId,taskId,sopId){
   window._taskSopSel=sopId;
   window._annotSelId=null;
@@ -10569,6 +10605,10 @@ function selectTaskSoporte(expId,taskId,sopId){
     });
     if(typeof initSoporteAnnotViewer==='function')setTimeout(function(){initSoporteAnnotViewer(expId,taskId,sopId,canAnnot);},40);
     return;
+  }
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&(ctx.isReviewDelivery||ctx.isRespVerDoc)){
+    const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+    if(typeof refreshTaskReviewSoporteInPlace==='function'&&refreshTaskReviewSoporteInPlace(expId,taskId,sopId,t))return;
   }
   openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
 }
@@ -14618,6 +14658,7 @@ function openTaskCommentsChatOnly(expId,taskId){
 function openTaskCommentsModal(expId,taskId,opts){
   opts=typeof opts==='object'&&opts?opts:{};
   if(!opts.keepStack)window._taskModalStack=[];
+  const savedSideMode=opts.keepStack?String(window._taskReviewSideMode||'doc'):'';
   const chatOnly=!!opts.chatOnly;
   const chatUnificado=!!opts.chatUnificado;
   const soloGestion=!!opts.gestionAsignados;
@@ -14768,11 +14809,15 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(selSop&&!isPqrsOrigenView)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
-      if(isRespVerCorr||isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
-      else if(isVerDocMode&&!hasSop&&!t.sinExpediente)window._taskReviewSideMode='exp';
-      else if(!opts.keepStack)window._taskReviewSideMode='doc';
+      if(!opts.keepStack){
+        if(isRespVerCorr||isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
+        else if(isVerDocMode&&!hasSop&&!t.sinExpediente)window._taskReviewSideMode='exp';
+        else window._taskReviewSideMode='doc';
+      }else if(savedSideMode)window._taskReviewSideMode=savedSideMode;
       setTimeout(function(){
-        if(isRespVerCorr||isRespVerEntregaPendiente){
+        if(opts.keepStack&&savedSideMode&&savedSideMode!=='doc'){
+          if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel(savedSideMode,expId,taskId);
+        }else if(isRespVerCorr||isRespVerEntregaPendiente){
           taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida){
           taskReviewCloseSidePanel();
