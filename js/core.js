@@ -6124,6 +6124,27 @@ window.confirmarCierreTaskReview=confirmarCierreTaskReview;
 window.taskReviewDecidirImprimir=taskReviewDecidirImprimir;
 window.taskReviewDecidirFirma=taskReviewDecidirFirma;
 window.taskReviewAbrirAtajoFirmado=taskReviewAbrirAtajoFirmado;
+function initPqrsEntregaArchivosPick(){
+  const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
+  if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
+  const getCtx=typeof entregaRespFileUploadCtx==='function'?entregaRespFileUploadCtx:null;
+  if(typeof sstFileRegisterPick==='function'){
+    sstFileRegisterPick('enviar-adj-file',{ctxKey:ctxKey,listId:'pqrs-entrega-att-list',multi:false,getUploadCtx:getCtx});
+    sstFileRegisterPick('enviar-anexos-file',{ctxKey:ctxKey,listId:'pqrs-entrega-anexos-list',multi:true,getUploadCtx:getCtx});
+  }
+  if(typeof sstFileRegisterList==='function'){
+    sstFileRegisterList('pqrs-entrega-att-list',ctxKey,'main');
+    sstFileRegisterList('pqrs-entrega-anexos-list',ctxKey,'anexos');
+  }
+  if(typeof sstFileInitPick==='function'){
+    sstFileInitPick('enviar-adj-file');
+    sstFileInitPick('enviar-anexos-file');
+  }
+  if(typeof sstFileRenderList==='function'){
+    sstFileRenderList('pqrs-entrega-att-list',ctxKey);
+    sstFileRenderList('pqrs-entrega-anexos-list',ctxKey);
+  }
+}
 function initEnviarArchivosPick(expId,taskId){
   if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
     sstFileStagingReset(sstFileEnviarCtxKey(expId,taskId));
@@ -6152,9 +6173,11 @@ function renderTaskReviewEntregaSideHtml(expId,taskId,t){
   return '<div class="task-review-side-scroll task-review-entrega-side">'+renderEnviarPanelHtml(expId,taskId,t,modo)+'</div>';
 }
 function initTaskReviewEntregaSide(expId,taskId,t){
-  initEnviarArchivosPick(expId,taskId);
   const e=typeof getExpById==='function'?getExpById(expId):null;
-  if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+  const esPqrs=e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+  if(esPqrs)initPqrsEntregaArchivosPick();
+  else initEnviarArchivosPick(expId,taskId);
+  if(esPqrs){
     setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
   }
   setTimeout(function(){const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();},80);
@@ -7041,26 +7064,17 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px'+(esInformativa?';display:none':'')+'">'+
     '<label id="pqrs-entrega-adj-label" style="font-size:11px;font-weight:600;color:var(--tx3)">Documentos adjuntos</label>'+
     '<div id="pqrs-entrega-adj-hint" style="font-size:10px;color:var(--tx3);margin-top:2px"></div>'+
-    '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsEntregaOnFileChange(this)">'+
-    '<div id="pqrs-entrega-att-list" class="pqrs-compose-att-list" style="margin-top:4px"></div>'+
+    '<div class="sst-file-pick-row" style="margin-top:6px">'+
+      '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
+      '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
+      '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+      '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+    '</div>'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="pqrs-entrega-main-lbl">Principal</div>'+
+    '<div id="pqrs-entrega-att-list" class="sst-file-slot-list"></div>'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="pqrs-entrega-anexos-lbl">Anexos</div>'+
+    '<div id="pqrs-entrega-anexos-list" class="sst-file-slot-list"></div>'+
     '<div id="pqrs-entrega-adj-err" class="fld-err" style="display:none"></div>'+
-    '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
-    '<button type="button" class="btn bsm" id="pqrs-entrega-adj-btn" onclick="pqrsEntregaAddAttachment()">📎 Adjuntar archivo</button>'+
-    '</div>'+
-    '<div id="pqrs-entrega-anexos-wrap" style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--bd)'+(tipoActual===PQRS_WF_TIPO.OFICIO?'':';display:none')+'">'+
-      '<label class="fx" style="gap:8px;align-items:flex-start;font-size:12px;cursor:pointer">'+
-        '<input type="checkbox" id="pqrs-entrega-tiene-anexos" onchange="pqrsEntregaToggleAnexos()" style="margin-top:2px">'+
-        '<span><strong>Esta entrega incluye anexos</strong><br><span style="font-size:10px;color:var(--tx2)">Los anexos también se revisan (encargado, firma y notificación). Son distintos del oficio.</span></span>'+
-      '</label>'+
-      '<div id="pqrs-entrega-anexos-box" style="display:none;margin-top:8px">'+
-        '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
-          '<button type="button" class="btn bsm bd2" onclick="(typeof sstSolicitarGmailParaAdjuntar===\'function\'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){if(ok)document.getElementById(\'enviar-anexos-file\').click();})">📎 Adjuntar anexos</button>'+
-          '<span style="font-size:10px;color:var(--tx2)">Puede seleccionar varios archivos</span>'+
-        '</div>'+
-        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsEntregaOnAnexosChange(this)">'+
-        '<div id="pqrs-entrega-anexos-list" style="margin-top:4px"></div>'+
-      '</div>'+
-    '</div>'+
     '</div>';
   h+='</div></div>';
   return h;
@@ -7207,16 +7221,11 @@ function pqrsEntregaRefreshUi(){
   if(emailCompose)emailCompose.style.display=isCorreo?'':'none';
   if(adjWrap)adjWrap.style.display=isInfo?'none':'';
   if(adjLabel)adjLabel.textContent=isOficio?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
-  if(adjHint)adjHint.textContent=isOficio?'Debe adjuntar el PDF del oficio. Si hay anexos, márquelos abajo.':'';
-  const anexosWrap=document.getElementById('pqrs-entrega-anexos-wrap');
-  if(anexosWrap)anexosWrap.style.display=isOficio?'':'none';
-  if(!isOficio){
-    const cb=document.getElementById('pqrs-entrega-tiene-anexos');
-    if(cb)cb.checked=false;
-    pqrsEntregaClearAnexos();
-    const box=document.getElementById('pqrs-entrega-anexos-box');
-    if(box)box.style.display='none';
-  }
+  if(adjHint)adjHint.textContent=isOficio?'Debe adjuntar el PDF del oficio en Principal. Los anexos van en Anexos +.':'';
+  const mainLbl=document.getElementById('pqrs-entrega-main-lbl');
+  const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
+  if(mainLbl)mainLbl.style.display=isInfo?'none':'';
+  if(anexosLbl)anexosLbl.style.display=isInfo?'none':'';
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
     b.style.display='';
     b.classList.toggle('on',b.getAttribute('data-val')===tipo);
@@ -7314,11 +7323,6 @@ function collectPqrsEntregaDatos(expId){
     notif('Para oficio firmado debe adjuntar el documento del oficio','err');
     const err=document.getElementById('pqrs-entrega-adj-err');
     if(err){err.style.display='';err.textContent='Adjunte el PDF del oficio firmado.';}
-    return null;
-  }
-  const tieneAnexos=!!(document.getElementById('pqrs-entrega-tiene-anexos')||{}).checked;
-  if(tipo===PQRS_WF_TIPO.OFICIO&&tieneAnexos&&!(adj.anexos&&adj.anexos.length)){
-    notif('Marcó que hay anexos: adjunte al menos un archivo de anexo','err');
     return null;
   }
   if(tipo!==PQRS_WF_TIPO.INFORMATIVA&&pqrsEsCanalCorreo(canal)){
@@ -11013,7 +11017,7 @@ function collectEnviarAdjuntos(){
       if(files.length||anexos.length||preUploaded.length)return{links,files,anexos,preUploaded};
     }
   }
-  if(typeof sstFileCollect==='function'&&(document.getElementById('entrega-resp-file-list')||document.getElementById('pqrs-entrega-att-list'))){
+  if(typeof sstFileCollect==='function'&&(document.getElementById('entrega-resp-file-list')||document.getElementById('pqrs-entrega-att-list')||document.getElementById('pqrs-entrega-anexos-list'))){
     const staged=sstFileCollect(typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp');
     if(staged){
       (staged.files||[]).forEach(function(f){files.push(f);});
@@ -11812,7 +11816,8 @@ function openEnviarSoporteModal(expId,taskId,modo){
     renderEnviarPanelHtml(expId,taskId,t,modo);
   ov.classList.add('on');
   window._taskModalCtx={expId,taskId,mode:'enviar',actLibre:!!t.sinExpediente};
-  initEnviarArchivosPick(expId,taskId);
+  if(esPqrsEntrega)initPqrsEntregaArchivosPick();
+  else initEnviarArchivosPick(expId,taskId);
   if(esPqrsEntrega){
     setTimeout(function(){
       if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
