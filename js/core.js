@@ -5677,7 +5677,8 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   const usuario=responsableActivo;
   const est=estadoTask(t);
   const miEst=taskEsMultiAsignada(t)&&usuario?estadoTaskForAsignado(t,usuario):est;
-  const soloDocAprobado=miEst==='Atendida'||est==='Atendida';
+  const soloDocAprobado=yo&&usuario&&typeof taskRespParticipacionAtendida==='function'
+    ?taskRespParticipacionAtendida(t,usuario):(miEst==='Atendida'||est==='Atendida');
   const e=typeof getExpById==='function'?getExpById(refExp):null;
   const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
@@ -5779,7 +5780,8 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   const usuario=responsableActivo;
   const est=estadoTask(t);
   const miEst=taskEsMultiAsignada(t)&&usuario?estadoTaskForAsignado(t,usuario):est;
-  const soloDocAprobado=miEst==='Atendida'||est==='Atendida';
+  const soloDocAprobado=yo&&usuario&&typeof taskRespParticipacionAtendida==='function'
+    ?taskRespParticipacionAtendida(t,usuario):(miEst==='Atendida'||est==='Atendida');
   let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Vistas PQRSD">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documentos y correo" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
   if(!t.sinExpediente)
@@ -6209,7 +6211,11 @@ function initTaskReviewEntregaSide(expId,taskId,t){
   if(esPqrs){
     setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
   }
-  setTimeout(function(){const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();},80);
+  setTimeout(function(){
+    const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+    if(esPqrs&&!tipo)return;
+    const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();
+  },80);
 }
 function renderTaskReviewNotasSideHtml(expId,taskId,t){
   const autor=notasInternasAutor();
@@ -7127,10 +7133,9 @@ async function purgePqrsRevisionDocsForReplace(e,t){
 function renderPqrsEntregaCamposHtml(e){
   e=e||{};
   const wf=getPqrsWorkflow(e);
-  const tipoActual=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const tipoActual='';
   const canalDef=(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO);
   const canalActual=wf.canal||e._pqrs_respuesta_medio||canalDef;
-  const esInformativa=tipoActual===PQRS_WF_TIPO.INFORMATIVA;
   const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
   const emailTo=String(wf.email_to||correos.join(', ')||e._qd_correo||e._pn_correo||'').trim();
   const emailCc=String(wf.email_cc||'').trim();
@@ -7141,18 +7146,19 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
   h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
-    mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+
+    mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje simple')+
     mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
     mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
-    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>';
-  h+='<div id="pqrs-entrega-tipo-detalles">';
+    '</div><input type="hidden" id="pqrs-resp-tipo" value=""></div>';
+  h+='<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
+  h+='<div id="pqrs-entrega-tipo-detalles" style="display:none">';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
     '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span id="pqrs-entrega-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-entrega-oficio-hint" style="font-weight:400;color:var(--tx3)"> (si aplica)</span></label>'+
     '<input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'" oninput="onPqrsEntregaOficioInput()" onblur="onPqrsEntregaOficioBlur()">'+
     '<div id="pqrs-entrega-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>';
-  h+='<input type="hidden" id="pqrs-resp-canal" value="'+escAttr(esInformativa?canalActual:PQRS_WF_CANAL.CORREO)+'">';
+  h+='<input type="hidden" id="pqrs-resp-canal" value="'+escAttr(PQRS_WF_CANAL.CORREO)+'">';
   h+='<div id="pqrs-entrega-canal-correo-note" style="display:none;font-size:11px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)"></div>';
   // Correo: verificar Para + CC + BCC (mismo criterio que oficinas)
   h+='<div id="pqrs-entrega-email-compose" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
@@ -7167,16 +7173,12 @@ function renderPqrsEntregaCamposHtml(e){
     '<div class="fld" style="margin-bottom:6px"><label>Asunto (referencia)</label>'+
     '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wf.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '</div>';
-  h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">'+
-    (esInformativa
-      ?'Descripción informativa <span class="req-star">*</span>'
-      :'Mensaje / plantilla <span class="req-star">*</span>')+
-    '</label>'+
-    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="'+(esInformativa?'Texto visible en consulta ciudadana…':'Plantilla de respuesta…')+'" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
-    (esInformativa?'<div style="font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ Visible en consulta ciudadana · sin correo</div>':'')+
+  h+='<div class="fld"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>'+
+    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
+    '<div id="pqrs-entrega-cuerpo-info" style="display:none;font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ Visible en consulta ciudadana · sin correo</div>'+
     '</div>';
   // Adjunto estilo oficinas (oculto para informativa)
-  h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px'+(esInformativa?';display:none':'')+'">'+
+  h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px">'+
     '<label id="pqrs-entrega-adj-label" style="font-size:11px;font-weight:600;color:var(--tx3)">Documentos adjuntos</label>'+
     '<div id="pqrs-entrega-adj-hint" style="font-size:10px;color:var(--tx3);margin-top:2px"></div>'+
     '<div class="sst-file-pick-row" style="margin-top:6px">'+
@@ -7296,7 +7298,20 @@ function onPqrsEntregaOficioBlur(){
 }
 function pqrsEntregaRefreshUi(){
   if(!document.getElementById('pqrs-entrega-resp-cuerpo'))return;
-  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
+  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+  const detalles=document.getElementById('pqrs-entrega-tipo-detalles');
+  const hint=document.getElementById('pqrs-entrega-tipo-hint');
+  document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
+    b.style.display='';
+    b.classList.toggle('on',!!tipo&&b.getAttribute('data-val')===tipo);
+  });
+  if(!tipo){
+    if(detalles)detalles.style.display='none';
+    if(hint)hint.style.display='';
+    return;
+  }
+  if(hint)hint.style.display='none';
+  if(detalles)detalles.style.display='';
   const canalHid=document.getElementById('pqrs-resp-canal');
   const isInfo=tipo===PQRS_WF_TIPO.INFORMATIVA;
   const isOficio=tipo===PQRS_WF_TIPO.OFICIO;
@@ -7305,7 +7320,6 @@ function pqrsEntregaRefreshUi(){
   if(!isInfo&&canalHid)canalHid.value=PQRS_WF_CANAL.CORREO;
   const canal=String((canalHid&&canalHid.value)||PQRS_WF_CANAL.CORREO);
   const isCorreo=!isInfo&&pqrsEsCanalCorreo(canal);
-  const detalles=document.getElementById('pqrs-entrega-tipo-detalles');
   const correoNote=document.getElementById('pqrs-entrega-canal-correo-note');
   const oficioRow=document.getElementById('pqrs-entrega-oficio-row');
   const oficioReq=document.getElementById('pqrs-entrega-oficio-req');
@@ -7316,7 +7330,7 @@ function pqrsEntregaRefreshUi(){
   const adjHint=document.getElementById('pqrs-entrega-adj-hint');
   const cuerpoLbl=document.getElementById('pqrs-entrega-cuerpo-label');
   const cuerpoTxt=document.getElementById('pqrs-entrega-resp-cuerpo');
-  if(detalles)detalles.style.display=tipo?'':'none';
+  const cuerpoInfo=document.getElementById('pqrs-entrega-cuerpo-info');
   if(correoNote){
     if(isMensaje){
       correoNote.style.display='';
@@ -7343,13 +7357,7 @@ function pqrsEntregaRefreshUi(){
   const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
   if(mainLbl)mainLbl.style.display=isInfo?'none':'';
   if(anexosLbl)anexosLbl.style.display=isInfo?'none':'';
-  document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
-    b.style.display='';
-    b.classList.toggle('on',b.getAttribute('data-val')===tipo);
-  });
-  const cuerpoWrap=document.getElementById('pqrs-entrega-resp-cuerpo')&&document.getElementById('pqrs-entrega-resp-cuerpo').closest
-    ?document.getElementById('pqrs-entrega-resp-cuerpo').closest('.fld')
-    :null;
+  if(cuerpoInfo)cuerpoInfo.style.display=isInfo?'':'none';
   if(cuerpoLbl){
     if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
     else if(isOficio)cuerpoLbl.innerHTML='Nota interna <span style="font-weight:400;color:var(--tx3)">(opcional)</span>';
@@ -7377,9 +7385,6 @@ function pqrsEntregaRefreshUi(){
       cuerpoTxt.style.display='';
     }
   }
-  if(cuerpoWrap&&isOficio){
-    // Mantener visible pero compacto
-  }
   if(isCorreo&&isMensaje)pqrsAplicarPlantillaSegunTipo(tipo,false);
   else if(isOficio&&cuerpoTxt&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
 }
@@ -7389,8 +7394,14 @@ function collectPqrsEntregaDatos(expId){
   const fechaResp=String((document.getElementById('pqrs-entrega-resp-fecha')||{}).value||'').trim();
   const oficioExt=String((document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
   const cuerpo=String((document.getElementById('pqrs-entrega-resp-cuerpo')||{}).value||'').trim();
-  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE).trim();
+  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
   const canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim();
+  if(!tipo||![PQRS_WF_TIPO.MENSAJE,PQRS_WF_TIPO.OFICIO,PQRS_WF_TIPO.INFORMATIVA].includes(tipo)){
+    notif('Seleccione el tipo de respuesta (mensaje simple, oficio firmado o informativa)','err');
+    const hint=document.getElementById('pqrs-entrega-tipo-hint');
+    if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return null;
+  }
   const emailTo=String((document.getElementById('pqrs-entrega-email-to')||{}).value||'').trim();
   const emailCc=String((document.getElementById('pqrs-entrega-email-cc')||{}).value||'').trim();
   const emailBcc=String((document.getElementById('pqrs-entrega-email-bcc')||{}).value||'').trim();
@@ -8035,6 +8046,14 @@ function estadoTaskForAsignado(t,nombre){
     return'Atendida';
   }
   return estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
+}
+/** Participación del responsable en paleta «Atendidas» (incl. proyección PQRSD / firma post-aprobación). */
+function taskRespParticipacionAtendida(t,usuario){
+  if(!t||!usuario)return false;
+  const est=estadoTask(t);
+  const miEst=taskEsMultiAsignada(t)&&t.entregaModo==='individual'
+    ?estadoTaskForAsignado(t,usuario):est;
+  return miEst==='Atendida'||est==='Atendida'||estadoTaskForAsignado(t,usuario)==='Atendida';
 }
 function getUltimoReportadoPor(t){
   const h=(t.historial||[]).slice().reverse().find(x=>x.tipo==='reenvio_verificacion');
@@ -12029,7 +12048,11 @@ function openEnviarSoporteModal(expId,taskId,modo){
       }
     },40);
   }
-  setTimeout(()=>{const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();},80);
+  setTimeout(function(){
+    const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+    if(esPqrsEntrega&&!tipo)return;
+    const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();
+  },80);
 }
 function renderCompareVersionesPanel(t,e,taskId){
   const docs=collectDocsComparables(e,taskId,t);
@@ -14697,7 +14720,8 @@ function openTaskCommentsModal(expId,taskId,opts){
   const isVerDocMode=isRespVerDoc||isDeptVerDoc;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
   const isRespVerCorr=isRespVerDoc&&(miEstResp==='Por corregir'||est==='Por corregir');
-  const isRespVerAtendida=isRespVerDoc&&(miEstResp==='Atendida'||est==='Atendida');
+  const isRespVerAtendida=isRespVerDoc&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
+    &&taskRespParticipacionAtendida(t,responsableActivo);
   const isPqrsOrigenView=isVerDocMode&&e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
   if(isPqrsOrigenView&&!opts.keepStack)window._pqrsOrigenSelDoc='';
   const forceRevisarEntrega=!!opts.revisarEntrega||verRevisado;
@@ -14827,7 +14851,7 @@ function openTaskCommentsModal(expId,taskId,opts){
           else taskReviewCloseSidePanel();
         }else if(isVerDocMode&&!hasSop&&!t.sinExpediente){
           taskReviewOpenSidePanel('exp',expId,taskId);
-        }else if(isRespVerDoc&&!isPqrsOrigenView&&!isRespVerEntregaPendiente&&!isRespVerCorr){
+        }else if(isRespVerDoc&&!isPqrsOrigenView&&!isRespVerEntregaPendiente&&!isRespVerCorr&&!isRespVerAtendida){
           taskReviewOpenSidePanel('chat',expId,taskId);
         }else{
           const mode=window._taskReviewSideMode;
