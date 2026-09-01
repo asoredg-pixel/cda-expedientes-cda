@@ -5687,7 +5687,7 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar versiones del documento" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">🗂️</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
   if(soloDocAprobado)return h+'</nav>';
   h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
@@ -6431,7 +6431,6 @@ function taskReviewSyncDocBarClose(show){
 }
 function taskReviewCloseSidePanel(){
   const ctx=window._taskModalCtx||{};
-  if(ctx.isRespVerCorr)return;
   window._taskReviewSideMode='doc';
   const split=document.getElementById('task-review-split-view');
   const panel=document.getElementById('task-review-side-panel');
@@ -6450,7 +6449,6 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
   if(mode==='doc'){
-    if(window._taskModalCtx&&window._taskModalCtx.isRespVerCorr)return;
     taskReviewCloseSidePanel();return;
   }
   if(mode!=='chat'){
@@ -6534,7 +6532,6 @@ function refFromCtx(expId,taskId,t){
 function taskReviewToggleSidePanel(mode,expId,taskId){
   const ctx=window._taskModalCtx||{};
   if(window._taskReviewSideMode===mode){
-    if(ctx.isRespVerCorr&&mode==='chat')return;
     taskReviewCloseSidePanel();
   }
   else taskReviewOpenSidePanel(mode,expId,taskId);
@@ -14726,18 +14723,17 @@ function openTaskCommentsModal(expId,taskId,opts){
   const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
   if(isReviewDelivery){
     if(!opts.keepStack){
-      if(isRespVerCorr)window._taskReviewSideMode='chat';
-      else if(isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
+      if(isRespVerCorr||isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
       else if(isVerDocMode&&!hasSop)window._taskReviewSideMode='exp';
       else window._taskReviewSideMode='doc';
     }
-    const railNav=isRespVerCorr?'':(isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e):(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isDeptVerDoc?taskReviewActividadVerRailHtml(refAct,taskId,t,e):(isVerDocMode?taskReviewRespVerRailHtml(refAct,taskId,t):taskReviewFullRailHtml(refAct,taskId,t)))));
+    const railNav=isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e):(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isRespVerCorr||isVerDocMode?taskReviewRespVerRailHtml(refAct,taskId,t):(isDeptVerDoc?taskReviewActividadVerRailHtml(refAct,taskId,t,e):taskReviewFullRailHtml(refAct,taskId,t))));
     const pqrsRespBanner='';
     const reviewMainInner=pqrsRespBanner+sopPanel;
     const reviewWorkspaceInner=(isPqrsOrigenView||isDeptVerDoc)
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isVerDocMode?(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones')):'Revisión'))+' · '+(t.codigo||expId);
+    if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión'))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
@@ -14772,14 +14768,11 @@ function openTaskCommentsModal(expId,taskId,opts){
     if(selSop&&!isPqrsOrigenView)setTimeout(()=>{setSoportePagina(1);initSoporteAnnotViewer(expId,taskId,selSop,canAnnot);},80);
     const preferTab=String(window._taskViewTabPreferido||'').trim();
     if(isReviewDelivery){
-      if(isRespVerCorr)window._taskReviewSideMode='chat';
-      else if(isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
+      if(isRespVerCorr||isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
       else if(isVerDocMode&&!hasSop&&!t.sinExpediente)window._taskReviewSideMode='exp';
       else if(!opts.keepStack)window._taskReviewSideMode='doc';
       setTimeout(function(){
-        if(isRespVerCorr){
-          taskReviewOpenSidePanel('chat',expId,taskId);
-        }else if(isRespVerEntregaPendiente){
+        if(isRespVerCorr||isRespVerEntregaPendiente){
           taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida){
           taskReviewCloseSidePanel();
@@ -14789,7 +14782,7 @@ function openTaskCommentsModal(expId,taskId,opts){
           else taskReviewCloseSidePanel();
         }else if(isVerDocMode&&!hasSop&&!t.sinExpediente){
           taskReviewOpenSidePanel('exp',expId,taskId);
-        }else if(isRespVerDoc&&!isPqrsOrigenView&&!isRespVerEntregaPendiente){
+        }else if(isRespVerDoc&&!isPqrsOrigenView&&!isRespVerEntregaPendiente&&!isRespVerCorr){
           taskReviewOpenSidePanel('chat',expId,taskId);
         }else{
           const mode=window._taskReviewSideMode;
