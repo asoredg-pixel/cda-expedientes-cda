@@ -461,6 +461,7 @@ function syncEntregaRespPqrsUi(){
       box.style.display='';
       if(regBox){regBox.style.display='none';regBox.innerHTML='';}
       setTimeout(function(){
+        if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
         if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
       },40);
     }else{
@@ -868,6 +869,12 @@ function entregaRespOnOficioBlur(){
 }
 
 function validateEntregaRespOficioRequerido(actividad,excludeId){
+  const pqrsTipoEl=document.getElementById('pqrs-resp-tipo');
+  if(pqrsTipoEl){
+    const tipo=String(pqrsTipoEl.value||'').trim();
+    if(typeof PQRS_WF_TIPO!=='undefined'&&tipo!==PQRS_WF_TIPO.OFICIO)return true;
+    if(tipo&&tipo!=='oficio')return true;
+  }
   if(!resolveActividadRequiereOficio(actividad))return true;
   const pqrsOfi=document.getElementById('pqrs-entrega-resp-oficio');
   const oficio=pqrsOfi
