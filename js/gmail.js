@@ -4683,11 +4683,17 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc) {
 
 // Construye un MIME cuyo cuerpo YA es HTML (no lo re-escapa como texto de usuario).
 // Se usa para las notificaciones automáticas al ciudadano (radicación/respuesta PQRSD).
+function _gmailOfiAppendSignatureHtml(htmlBody){
+  const body=String(htmlBody||'');
+  if(typeof _gmailOfiSignatureHtml==='undefined'||!_gmailOfiSignatureHtml)return body;
+  return body+'<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">'+_gmailOfiSignatureHtml+'</div></div>';
+}
 function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
   const boundary = 'sst_ofihtml_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
-  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
-  const plainAlt = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
+  const htmlFull=_gmailOfiAppendSignatureHtml(htmlBody);
+  const htmlB64 = btoa(unescape(encodeURIComponent(htmlFull || '')));
+  const plainAlt = String(htmlFull || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
   const lines = [
     'To: ' + to,
     'Subject: ' + subjectEnc,
@@ -4723,8 +4729,9 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
   const altBoundary = 'sst_ofihtml_alt_' + Date.now();
   const mixBoundary = 'sst_ofihtml_mix_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject || ''))) + '?=';
-  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
-  const plainAlt = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
+  const htmlFull=_gmailOfiAppendSignatureHtml(htmlBody);
+  const htmlB64 = btoa(unescape(encodeURIComponent(htmlFull || '')));
+  const plainAlt = String(htmlFull || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
   const altPart = [
     '--' + altBoundary,
     'Content-Type: text/plain; charset=utf-8',
