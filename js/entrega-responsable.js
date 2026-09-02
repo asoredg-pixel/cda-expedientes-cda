@@ -300,8 +300,7 @@ function htmlEntregaRespPqrsAltaBox(){
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label>'+
       '<textarea id="er-pqrs-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif"></textarea></div>'+
     '<div class="fld" style="margin-bottom:4px"><label>Oficina <span style="color:var(--rd)">*</span></label>'+
-      '<select id="er-pqrs-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+erPqrsOficinaOptsHtml(ofiDef)+'</select></div>'+
-    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Adjunte el documento y anexos abajo (misma sección de entrega) para enviar a revisión del encargado.</div>';
+      '<select id="er-pqrs-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+erPqrsOficinaOptsHtml(ofiDef)+'</select></div>';
 }
 function setErPqrsMedioNotificacion(val,userPick){
   const hid=document.getElementById('er-pqrs-medio-notif');
@@ -443,32 +442,46 @@ function syncEntregaRespModoUi(){
   }
 }
 
-/** Muestra campos PQRSD (respuesta + Drive PQRSD) cuando se selecciona una PQRSD existente. */
+function entregaRespEsFlujoPqrs(){
+  const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
+  if(pqrsNuevo)return true;
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  if(libre)return false;
+  const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():false;
+  const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  const e=!nuevo&&!pqrsNuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
+  return !!(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+    ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))));
+}
+
+/** Muestra campos PQRSD (respuesta + Drive PQRSD) al crear o entregar sobre PQRSD. */
 function syncEntregaRespPqrsUi(){
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
   const e=!nuevo&&!pqrsNuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
-  const esPqrs=!!(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+  const esPqrsExistente=!!(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
     ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))));
+  const esPqrsFlujo=esPqrsExistente||pqrsNuevo;
+  const actWrap=document.getElementById('entrega-resp-actividad-wrap');
+  if(actWrap)actWrap.style.display=esPqrsFlujo?'none':'';
+  if(esPqrsFlujo&&typeof applyDefaultActividadEntregaPqrs==='function')applyDefaultActividadEntregaPqrs();
   const box=document.getElementById('entrega-resp-pqrs-box');
   const tramFiles=document.getElementById('entrega-resp-tramite-files');
   const regBox=document.getElementById('entrega-resp-registro-box');
   if(tramFiles&&!tramFiles._tramiteFilesHtmlBackup)
     tramFiles._tramiteFilesHtmlBackup=tramFiles.innerHTML;
   if(box){
-    if(esPqrs&&typeof renderPqrsEntregaCamposHtml==='function'){
+    if(esPqrsFlujo&&typeof renderPqrsEntregaCamposHtml==='function'){
       if(tramFiles){tramFiles.innerHTML='';tramFiles.style.display='none';}
-      box.innerHTML=renderPqrsEntregaCamposHtml(e);
+      const eRender=esPqrsExistente?e:{_alta_por_responsable:true};
+      box.innerHTML=renderPqrsEntregaCamposHtml(eRender);
       box.style.display='';
       if(regBox){regBox.style.display='none';regBox.innerHTML='';}
       setTimeout(function(){
         if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
         if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
-        else if(typeof setPqrsRespTipo==='function'&&e&&e._alta_por_responsable&&typeof PQRS_WF_TIPO!=='undefined')
-          setPqrsRespTipo(PQRS_WF_TIPO.OFICIO);
       },40);
-      applyDefaultActividadEntregaPqrs();
     }else{
       box.innerHTML='';
       box.style.display='none';
@@ -1270,7 +1283,7 @@ function openEntregaResponsableModal(){
     '</div>'+
     '<div id="entrega-resp-libre-hint" style="display:none"></div>'+
     '<div id="entrega-resp-libre-box" style="display:none;margin-bottom:10px">'+htmlEntregaLibreInteresadoBox()+'</div>'+
-    '<div class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
+    '<div id="entrega-resp-actividad-wrap" class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
           'oninput="filtrarActEntregaRespSug(this)" onfocus="filtrarActEntregaRespSug(this)" '+
@@ -1453,15 +1466,15 @@ function syncEntregaRespRegistroUi(){
   const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
-  if(pqrsNuevo){
-    if(hint)hint.textContent='Alta PQRSD: complete el formulario y adjunte el documento para revisión.';
+  if(pqrsNuevo||typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs()){
+    if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
     syncEntregaRespOficioUi();
     return;
   }
   const eSel=!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
   if(eSel&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eSel))||(typeof esTramitePqrs==='function'&&esTramitePqrs(eSel._tramite)))){
-    if(hint)hint.textContent='PQRSD existente: complete los datos de respuesta abajo. El archivo irá a la carpeta PQRSD.';
+    if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
     return;
   }
@@ -1919,7 +1932,8 @@ function ensureExpTaskEntregaResponsable(){
   if(!actividad){
     if(esPqrsPreview)applyDefaultActividadEntregaPqrs();
   }
-  const actFinalCheck=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  let actFinalCheck=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  if(!actFinalCheck&&esPqrsPreview)actFinalCheck=defaultActividadEntregaPqrs();
   if(!actFinalCheck){notif('Indique la actividad predeterminada','err');return null;}
   if(!actividadPredEntregaValida(actFinalCheck,esPqrsPreview)){
     notif(msgActividadPredNoExiste(),'err');
@@ -2124,6 +2138,7 @@ window.submitEntregaResponsable=submitEntregaResponsable;
 window.filtrarExpEntregaRespSug=filtrarExpEntregaRespSug;
 window.pickExpEntregaResp=pickExpEntregaResp;
 window.syncEntregaRespModoUi=syncEntregaRespModoUi;
+window.entregaRespEsFlujoPqrs=entregaRespEsFlujoPqrs;
 window.syncEntregaRespPqrsUi=syncEntregaRespPqrsUi;
 window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
