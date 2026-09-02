@@ -17568,6 +17568,17 @@ function pqrsMarcarImpreso(expId){
 window.pqrsMarcarImpreso=pqrsMarcarImpreso;
 window.actImpresoCheckBtnHtml=actImpresoCheckBtnHtml;
 
+/** Toolbar responsable en deuda (Por ejecutar / Por corregir / Prioritarias): 💬 📝 📅 🔍 📤 */
+function actToolbarRespEjecCorrHtml(t,expAct,yo){
+  let h='';
+  h+=taskChatBtnHtml(t.exp,t.id,t);
+  h+=taskNotasInternasBtnHtml(t.exp,t.id);
+  if(yo&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(t.exp,t.id);
+  h+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);
+  h+=taskReporteBtnHtml(t.exp,t.id,yo);
+  return h;
+}
+
 function renderActRowToolbarHtml(t,expAct){
   const eid=jsStr(t.exp),tid=jsStr(t.id);
   const est=estadoTask(t);
@@ -17615,12 +17626,7 @@ function renderActRowToolbarHtml(t,expAct){
   }
   if(esPorCorregir&&esRespAsignado){
     let actsC='<span class="sst-act-toolbar">';
-    actsC+='<button type="button" class="btn bsm bic act-ico" title="Ver documento devuelto y observaciones" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>';
-    if(typeof puedeReportarTask==='function'&&puedeReportarTask(t,responsableActivo))
-      actsC+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar corrección" onclick="event.stopPropagation();respMarcarPorVerificar(\''+eid+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
-    actsC+=taskChatBtnHtml(t.exp,t.id,t);
-    actsC+=taskNotasInternasBtnHtml(t.exp,t.id);
-    if(yo&&typeof taskAgendaBtnHtml==='function')actsC+=taskAgendaBtnHtml(t.exp,t.id);
+    actsC+=actToolbarRespEjecCorrHtml(t,expAct,yo);
     actsC+='</span>';
     return actsC;
   }
@@ -17637,6 +17643,21 @@ function renderActRowToolbarHtml(t,expAct){
     actsR+=taskNotasInternasBtnHtml(t.exp,t.id);
     actsR+='</span>';
     return actsR;
+  }
+  // Responsable en «Por ejecutar» / «Prioritarias»: 💬 📝 📅 🔍 📤 (notif asignada usa bloque anterior)
+  const esRespDeudaAct=esRespAsignado&&!enPorRevisarResp
+    &&!(puedeNotifYo||esPqrsNotifResp||esTramNotifResp)
+    &&((typeof esActividadPorEjecutar==='function'&&esActividadPorEjecutar(t))
+      ||(typeof esActividadPrioritariaPendiente==='function'&&esActividadPrioritariaPendiente(t)));
+  if(esRespDeudaAct){
+    let actsE='<span class="sst-act-toolbar">';
+    actsE+=actToolbarRespEjecCorrHtml(t,expAct,yo);
+    actsE+='</span>';
+    if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)){
+      actsE+=taskCoEjecutorBtnHtml(t.exp,t.id);
+      if(sol)actsE+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
+    }
+    return actsE;
   }
   let acts='<span class="sst-act-toolbar">';
   // ✏️ encargados (incl. PQRSD); nunca responsables
