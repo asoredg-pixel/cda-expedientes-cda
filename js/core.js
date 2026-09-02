@@ -7180,7 +7180,6 @@ function renderPqrsEntregaCamposHtml(e){
     '</div>';
   h+='<div class="fld" id="pqrs-entrega-cuerpo-wrap"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>'+
     '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
-    '<div id="pqrs-entrega-cuerpo-info" style="display:none;font-size:11px;color:var(--tx2);margin-top:3px">ℹ️ Visible en consulta ciudadana · sin correo</div>'+
     '</div>';
   // Adjunto estilo oficinas (oculto para informativa)
   h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px">'+
@@ -7346,20 +7345,11 @@ function pqrsEntregaRefreshUi(){
   const adjHint=document.getElementById('pqrs-entrega-adj-hint');
   const cuerpoLbl=document.getElementById('pqrs-entrega-cuerpo-label');
   const cuerpoTxt=document.getElementById('pqrs-entrega-resp-cuerpo');
-  const cuerpoInfo=document.getElementById('pqrs-entrega-cuerpo-info');
   if(notifRow)notifRow.style.display=isOficio?'':'none';
   if(cuerpoWrap)cuerpoWrap.style.display=(isInfo||isMensaje||notifCorreoOficio)?'':'none';
   if(correoNote){
-    if(isMensaje){
-      correoNote.style.display='';
-      correoNote.textContent='📧 Se enviará por correo electrónico al ciudadano (puede adjuntar archivos).';
-    }else if(isOficio&&notifCorreoOficio){
-      correoNote.style.display='';
-      correoNote.textContent='📧 Diligencie destinatarios y cuerpo del correo. El encargado podrá revisarlos y modificarlos.';
-    }else{
-      correoNote.style.display='none';
-      correoNote.textContent='';
-    }
+    correoNote.style.display='none';
+    correoNote.textContent='';
   }
   if(oficioRow)oficioRow.style.display=isInfo?'none':'';
   if(oficioReq)oficioReq.style.display=isOficio?'':'none';
@@ -7375,7 +7365,6 @@ function pqrsEntregaRefreshUi(){
   const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
   if(mainLbl)mainLbl.style.display=isInfo?'none':'';
   if(anexosLbl)anexosLbl.style.display=isInfo?'none':'';
-  if(cuerpoInfo)cuerpoInfo.style.display=isInfo?'':'none';
   if(cuerpoLbl){
     if(isInfo)cuerpoLbl.innerHTML='Descripción informativa <span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(obligatoria — visible en consulta ciudadana)</span>';
     else if(isOficio&&notifCorreoOficio)cuerpoLbl.innerHTML='Mensaje / plantilla de respuesta <span class="req-star">*</span>';
