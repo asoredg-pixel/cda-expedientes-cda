@@ -13403,10 +13403,13 @@ function taskEstadoBadgeHtml(t){
   function badgeFromUi(ui){
     if(!ui||!ui.lbl)return'';
     if(ui.sub){
-      const subSt=(ui.subFg||ui.subBg)
-        ?(' style="'+(ui.subFg?'color:'+ui.subFg+';':'')+(ui.subBg?'background:'+ui.subBg+';padding:1px 5px;border-radius:4px;':'')+'"')
-        :'';
-      return '<span class="bdg act-est-stack" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'"><span>'+escAttr(ui.lbl)+'</span><span class="act-est-sub"'+subSt+'>'+escAttr(ui.sub)+'</span></span>';
+      const subBg=ui.subBg||(ui.subFg==='var(--gn)'?'var(--gnl)':'#fef9c3');
+      const subFg=ui.subFg||'#a16207';
+      const subBorder=(ui.subFg==='var(--gn)'?'1px solid #bbf7d0':'1px solid #fde68a');
+      return '<span class="act-est-dual">'+
+        '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>'+
+        '<span class="bdg act-est-sub-badge" style="background:'+subBg+';color:'+subFg+';border:'+subBorder+'">'+escAttr(ui.sub)+'</span>'+
+        '</span>';
     }
     return '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>';
   }

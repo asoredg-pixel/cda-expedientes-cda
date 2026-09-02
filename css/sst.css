@@ -371,6 +371,10 @@ tr:hover td{background:var(--bg)}
 .bdg.act-est-stack{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;padding:4px 8px;white-space:normal;max-width:10rem;vertical-align:middle}
 .bdg.act-est-stack .act-est-sub{font-size:9px;font-weight:500;opacity:.92;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bdg.act-est-stack .act-est-sub[style*="background"]{opacity:1;font-weight:600}
+/* ✓ Revisada + X Firma/Notificar: dos burbujas apiladas (como estado + prioritaria) */
+.act-est-dual{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;vertical-align:middle;max-width:100%}
+.act-est-dual>.bdg{margin:0!important}
+.act-est-sub-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px}
 .act-est-open-btn{display:inline-flex;align-items:center;padding:0;margin:0;border:0;background:transparent;cursor:pointer;font:inherit;max-width:100%}
 .act-est-open-btn:hover .bdg{filter:brightness(.97);box-shadow:0 0 0 1px rgba(15,23,42,.12)}
 .act-est-open-btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px;border-radius:6px}
@@ -443,11 +447,8 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   max-width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;
   display:inline-flex;vertical-align:middle;
 }
-#pg-act #act-table-wrap .act-col-estado .bdg.act-est-stack{
-  flex-direction:column;align-items:flex-start;gap:1px;padding:3px 6px;line-height:1.2;
-}
-#pg-act #act-table-wrap .act-col-estado .act-est-sub{
-  font-size:9px;font-weight:500;opacity:.9;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+#pg-act #act-table-wrap .act-col-estado .act-est-dual .bdg{
+  font-size:10px;padding:1px 6px;max-width:100%;
 }
 #pg-act #act-table-wrap .act-col-ref{overflow:hidden;max-width:140px}
 #pg-act #act-table-wrap .act-col-resp{max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
