@@ -6991,6 +6991,9 @@ function taskEsAtenderPqrs(t,e){
 function pqrsActividadNombreDefault(){
   return 'Oficio de respuesta';
 }
+function pqrsEsAltaPorEncargado(e){
+  return !!(e&&e._alta_por_responsable);
+}
 /** Texto visible en columna Actividad (tabla): sin asunto de la PQRSD. */
 function actActividadLabelDisplay(t,expAct){
   const e=expAct||(typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null);
@@ -7218,7 +7221,8 @@ async function purgePqrsRevisionDocsForReplace(e,t){
 function renderPqrsEntregaCamposHtml(e){
   e=e||{};
   const wf=getPqrsWorkflow(e);
-  const tipoActual='';
+  const esAltaEnc=typeof pqrsEsAltaPorEncargado==='function'?pqrsEsAltaPorEncargado(e):!!e._alta_por_responsable;
+  const tipoActual=esAltaEnc?PQRS_WF_TIPO.OFICIO:String(wf.tipo||'').trim();
   const canalDef=(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO);
   const canalActual=wf.canal||e._pqrs_respuesta_medio||canalDef;
   const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
@@ -7229,14 +7233,20 @@ function renderPqrsEntregaCamposHtml(e){
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoActual===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   let h='<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)" id="pqrs-entrega-campos">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
-  h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
-    '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
-    mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje simple')+
-    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
-    mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
-    '</div><input type="hidden" id="pqrs-resp-tipo" value=""></div>';
-  h+='<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
-  h+='<div id="pqrs-entrega-tipo-detalles" style="display:none">';
+  if(esAltaEnc){
+    h+='<input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(PQRS_WF_TIPO.OFICIO)+'">'+
+      '<div id="pqrs-resp-tipo-btns" style="display:none"></div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">📄 <strong>Oficio firmado</strong> — predeterminado para PQRSD creada por la oficina</div>';
+  }else{
+    h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
+      '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
+      mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje simple')+
+      mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
+      mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
+      '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>'+
+      '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
+  }
+  h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoActual?'block':'none')+'">';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
     '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span id="pqrs-entrega-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-entrega-oficio-hint" style="font-weight:400;color:var(--tx3)"> (si aplica)</span></label>'+
@@ -7394,7 +7404,8 @@ function pqrsEntregaToggleNotifCorreo(){
 }
 function pqrsEntregaRefreshUi(){
   if(!document.getElementById('pqrs-entrega-resp-cuerpo'))return;
-  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+  const tipoHid=document.getElementById('pqrs-resp-tipo');
+  const tipo=String((tipoHid&&tipoHid.value)||'').trim();
   const detalles=document.getElementById('pqrs-entrega-tipo-detalles');
   const hint=document.getElementById('pqrs-entrega-tipo-hint');
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
@@ -7494,16 +7505,21 @@ function collectPqrsEntregaDatos(expId){
   const fechaResp=String((document.getElementById('pqrs-entrega-resp-fecha')||{}).value||'').trim();
   const oficioExt=String((document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
   const cuerpo=String((document.getElementById('pqrs-entrega-resp-cuerpo')||{}).value||'').trim();
-  const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+  let tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+  const esAltaEnc=typeof pqrsEsAltaPorEncargado==='function'?pqrsEsAltaPorEncargado(e):!!e._alta_por_responsable;
+  if(!tipo&&esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
   let canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim();
   const notifCorreoOficio=tipo===PQRS_WF_TIPO.OFICIO&&pqrsEntregaOficioNotifCorreo();
   if(tipo===PQRS_WF_TIPO.OFICIO)canal=notifCorreoOficio?PQRS_WF_CANAL.CORREO:PQRS_WF_CANAL.PRESENCIAL;
   else if(tipo===PQRS_WF_TIPO.MENSAJE)canal=PQRS_WF_CANAL.CORREO;
   if(!tipo||![PQRS_WF_TIPO.MENSAJE,PQRS_WF_TIPO.OFICIO,PQRS_WF_TIPO.INFORMATIVA].includes(tipo)){
-    notif('Seleccione el tipo de respuesta (mensaje simple, oficio firmado o informativa)','err');
-    const hint=document.getElementById('pqrs-entrega-tipo-hint');
-    if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
-    return null;
+    if(esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
+    else{
+      notif('Seleccione el tipo de respuesta (mensaje simple, oficio firmado o informativa)','err');
+      const hint=document.getElementById('pqrs-entrega-tipo-hint');
+      if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
+      return null;
+    }
   }
   const emailTo=String((document.getElementById('pqrs-entrega-email-to')||{}).value||'').trim();
   const emailCc=String((document.getElementById('pqrs-entrega-email-cc')||{}).value||'').trim();

@@ -149,6 +149,7 @@ function pickExpEntregaResp(expNum){
     }else hint.textContent='';
   }
   syncEntregaRespPqrsUi();
+  applyDefaultActividadEntregaPqrs();
   if(typeof entregaRespRetryFileUpload==='function')entregaRespRetryFileUpload();
 }
 
@@ -196,6 +197,7 @@ function pickCrearPqrsEntregaResp(expNum){
   const hint=document.getElementById('entrega-resp-exp-hint');
   if(hint)hint.textContent='';
   initEntregaRespPqrsAltaUi();
+  applyDefaultActividadEntregaPqrs();
   setTimeout(function(){
     const f=document.getElementById('er-pqrs-fecha-solicitud');
     if(f)f.focus();
@@ -463,7 +465,10 @@ function syncEntregaRespPqrsUi(){
       setTimeout(function(){
         if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
         if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+        else if(typeof setPqrsRespTipo==='function'&&e&&e._alta_por_responsable&&typeof PQRS_WF_TIPO!=='undefined')
+          setPqrsRespTipo(PQRS_WF_TIPO.OFICIO);
       },40);
+      applyDefaultActividadEntregaPqrs();
     }else{
       box.innerHTML='';
       box.style.display='none';
@@ -1354,6 +1359,22 @@ function actividadPredEntregaExiste(nombre){
   return listActividadesPredEntregaResp().some(function(a){return String(a||'').trim().toLowerCase()===nom;});
 }
 
+function defaultActividadEntregaPqrs(){
+  return typeof pqrsActividadNombreDefault==='function'?pqrsActividadNombreDefault():'Oficio de respuesta';
+}
+
+function applyDefaultActividadEntregaPqrs(){
+  const inp=document.getElementById('entrega-resp-actividad');
+  if(!inp)return;
+  if(!String(inp.value||'').trim())inp.value=defaultActividadEntregaPqrs();
+}
+
+function actividadPredEntregaValida(nombre,esPqrs){
+  if(actividadPredEntregaExiste(nombre))return true;
+  if(esPqrs&&String(nombre||'').trim().toLowerCase()===defaultActividadEntregaPqrs().toLowerCase())return true;
+  return false;
+}
+
 function msgActividadPredNoExiste(){
   return 'Esa actividad predeterminada no está configurada. Contacte al administrador para que la agregue en Configuración → Actividades predeterminadas.';
 }
@@ -1889,10 +1910,18 @@ function crearStubExpedienteEntregaResp(opts){
 function ensureExpTaskEntregaResponsable(){
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const detalle='';
-  if(!actividad){notif('Indique la actividad predeterminada','err');return null;}
-  if(!actividadPredEntregaExiste(actividad)){
+  const expPreview=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  const ePreview=!nuevo&&!pqrsNuevo&&!libre&&expPreview&&typeof getExpById==='function'?getExpById(expPreview):null;
+  const esPqrsPreview=!!(pqrsNuevo||(ePreview&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(ePreview)));
+  if(!actividad){
+    if(esPqrsPreview)applyDefaultActividadEntregaPqrs();
+  }
+  const actFinalCheck=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  if(!actFinalCheck){notif('Indique la actividad predeterminada','err');return null;}
+  if(!actividadPredEntregaValida(actFinalCheck,esPqrsPreview)){
     notif(msgActividadPredNoExiste(),'err');
     return null;
   }
@@ -1908,8 +1937,8 @@ function ensureExpTaskEntregaResponsable(){
       :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
     const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
     const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
-    if(!validateEntregaRespOficioRequerido(actividad,cod))return null;
-    let t=buildTaskEntregaResponsable(actividad,detalle,responsableActivo);
+    if(!validateEntregaRespOficioRequerido(actFinalCheck,cod))return null;
+    let t=buildTaskEntregaResponsable(actFinalCheck,detalle,responsableActivo);
     t=typeof normalizeActLibre==='function'?normalizeActLibre(Object.assign(t,{
       depto:deptoOk,
       codigo:cod,
@@ -1918,7 +1947,7 @@ function ensureExpTaskEntregaResponsable(){
       origen:'responsable'
     })):Object.assign(t,{depto:deptoOk,codigo:cod,sinExpediente:true});
     applyEntregaLibreInteresadoToTask(t,interesadoDatos);
-    applyEntregaRespOficioToTask(t,actividad);
+    applyEntregaRespOficioToTask(t,actFinalCheck);
     if(typeof upsertPersonaEntregaLibre==='function')upsertPersonaEntregaLibre(interesadoDatos,cod,deptoOk);
     if(!Array.isArray(actividadesLibres))actividadesLibres=[];
     t._pending_fs_sync=true;
@@ -1934,7 +1963,6 @@ function ensureExpTaskEntregaResponsable(){
   let e=null;
   let createdStub=false;
   let interesadoDatos=null;
-  const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   if(nuevo&&pqrsNuevo){
     const pqrsDatos=collectEntregaRespPqrsAlta();
     const errPqrs=validateEntregaRespPqrsAlta(pqrsDatos);
@@ -1984,11 +2012,14 @@ function ensureExpTaskEntregaResponsable(){
   }
 
   const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
-  // PQRSD: la actividad debe ser «Atender PQRSD…» para entrar al flujo y carpetas PQRSD
-  let actFinal=actividad;
+  let actFinal=actFinalCheck;
   if(esPqrs){
-    if(!String(actFinal).startsWith('Atender PQRSD'))
-      actFinal='Atender PQRSD'+(actividad?' — '+actividad:'');
+    const def=defaultActividadEntregaPqrs();
+    if(!actFinal||actFinal==='Entrega')actFinal=def;
+    else if(String(actFinal).startsWith('Atender PQRSD')){
+      const m=String(actFinal).match(/Atender PQRSD(?:\s*[—-]\s*)?(.+)/i);
+      actFinal=(m&&m[1])?String(m[1]).trim():def;
+    }
   }
 
   e.tasks=Array.isArray(e.tasks)?e.tasks:[];
@@ -2014,9 +2045,9 @@ function ensureExpTaskEntregaResponsable(){
     if(typeof ensureAsignado==='function')ensureAsignado(t,responsableActivo);
   }
   t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
-  if(!validateEntregaRespOficioRequerido(actividad,e._exp))return null;
-  applyEntregaRespOficioToTask(t,actividad);
-  const regPayload=(!esPqrs)?collectEntregaRespRegistroPayload(actividad):null;
+  if(!validateEntregaRespOficioRequerido(actFinalCheck,e._exp))return null;
+  applyEntregaRespOficioToTask(t,actFinalCheck);
+  const regPayload=(!esPqrs)?collectEntregaRespRegistroPayload(actFinalCheck):null;
   if(regPayload){
     if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
       notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
@@ -2458,8 +2489,12 @@ function vincularActLibreAExpediente(taskId,e){
 
   if(esPqrs){
     const act=String(t.actividad||'').trim();
-    if(!act.startsWith('Atender PQRSD'))
-      t.actividad='Atender PQRSD'+(act?' — '+act:'');
+    const def=defaultActividadEntregaPqrs();
+    if(!act||act==='Entrega')t.actividad=def;
+    else if(act.startsWith('Atender PQRSD')){
+      const m=act.match(/Atender PQRSD(?:\s*[—-]\s*)?(.+)/i);
+      t.actividad=(m&&m[1])?String(m[1]).trim():def;
+    }
     t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
   }
 
