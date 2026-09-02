@@ -1622,7 +1622,7 @@ function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
   const fecha = (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10)).replace(/-/g, '');
   const extMatch = String(origName || '').match(/\.([a-zA-Z0-9]{1,8})$/);
   const ext = extMatch ? extMatch[1].toLowerCase() : 'pdf';
-  const pref = estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' || estado === 'acorregir' ? 'acorregir' : (estado === 'por_firmar' ? 'por_firmar' : (estado === 'por_firma' ? 'por_firma' : (estado === 'por_notificar' ? 'por_notificar' : 'revision'))));
+  const pref = estado === 'guia_correccion' ? 'guia' : (estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' || estado === 'acorregir' ? 'acorregir' : (estado === 'por_firmar' ? 'por_firmar' : (estado === 'por_firma' ? 'por_firma' : (estado === 'por_notificar' ? 'por_notificar' : 'revision')))));
   const anexoM = String(origName || '').match(/^anexo[-_\s]?(\d+)/i);
   const anexoPref = anexoM ? ('anexo' + anexoM[1] + '-') : (/^anexo[-_\s]/i.test(String(origName || '')) ? 'anexo-' : '');
   return anexoPref + pref + '-' + exp + '-' + act + '-' + fecha + '-' + resp + '.' + ext;

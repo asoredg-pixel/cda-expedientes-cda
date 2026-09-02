@@ -1522,6 +1522,73 @@ body.task-review-doc-mode #task-modal-overlay{
   transform:none;
   outline:none;
 }
+.task-cmt-form-wa.has-guia-attach .task-cmt-wa-field #task-cmt-input,
+.task-cmt-form-wa.has-guia-attach .task-cmt-wa-field textarea.sst-wa-compose{
+  padding-right:72px;
+}
+.task-cmt-wa-field .task-cmt-attach-ico{
+  position:absolute;
+  right:36px;
+  bottom:5px;
+  width:30px;
+  height:30px;
+  min-width:30px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:var(--tx2);
+  cursor:pointer;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  font-size:16px;
+  line-height:1;
+  z-index:2;
+}
+.task-cmt-wa-field .task-cmt-attach-ico:hover,
+.task-cmt-wa-field .task-cmt-attach-ico:focus{
+  background:rgba(24,95,165,.08);
+  color:var(--bl);
+  outline:none;
+}
+.task-chat-guia-list{
+  margin-bottom:4px;
+}
+.task-chat-guia-list .sst-file-row{
+  padding:4px 8px;
+  font-size:12px;
+}
+.task-cmt-adjs{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  margin-top:6px;
+}
+.task-cmt-adj{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  font-size:12px;
+  padding:4px 8px;
+  background:var(--bg);
+  border:1px solid var(--bd);
+  border-radius:var(--r);
+}
+.task-cmt-adj-name{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.task-cmt-adj-act{
+  text-decoration:none;
+  font-size:14px;
+  line-height:1;
+}
 .task-modal.task-modal-review .task-review-obs-hint{
   flex-shrink:0;
   margin-bottom:6px;

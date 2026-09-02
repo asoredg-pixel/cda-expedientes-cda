@@ -5987,6 +5987,7 @@ function initTaskReviewObsSide(expId,taskId,t){
   if(side)side.innerHTML=renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+(canAnnot?renderAnnotSidebarFooter(expId,taskId,canAnnot):'');
   if(typeof applyTaskReviewChatSects==='function')applyTaskReviewChatSects();
   if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-review-side-body')||document);
+  if(!esModoResponsable()&&!esJurisdiccional()&&typeof initTaskChatGuiaComposer==='function')initTaskChatGuiaComposer(expId,taskId);
 }
 function renderTaskReviewChatSideHtml(expId,taskId,t){
   const sel=t?getSoporteSeleccionado(t):null;
@@ -6083,12 +6084,12 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
   const puedeImprimir=esPqrsNca||((typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir())||deptView);
   const puedeFirma=esPqrsNca||((typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())||deptView)||!puedeImprimir;
   let h='';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" title="Aprobar y cerrar" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="Aprobar y cerrar" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
   if(puedeImprimir)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='imprimir'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" title="Para imprimir" onclick="taskReviewOpenDecisionPanel(\'imprimir\',\''+eid+'\',\''+tidJs+'\')">🖨️</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='imprimir'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="imprimir" title="Para imprimir" onclick="taskReviewOpenDecisionPanel(\'imprimir\',\''+eid+'\',\''+tidJs+'\')">🖨️</button>';
   if(puedeFirma)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='firma'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" title="Para firma del Director" onclick="taskReviewOpenDecisionPanel(\'firma\',\''+eid+'\',\''+tidJs+'\')">✍️</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='firma'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="firma" title="Para firma del Director" onclick="taskReviewOpenDecisionPanel(\'firma\',\''+eid+'\',\''+tidJs+'\')">✍️</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   return h;
 }
 function taskReviewOpenDecisionPanel(mode,expId,taskId){
@@ -6418,8 +6419,14 @@ function initTaskReviewBibSide(ref,taskId,t){
 }
 function taskReviewSyncRailSide(mode){
   mode=mode||'doc';
+  const decMode=String(window._taskReviewDecisionMode||'').trim();
   document.querySelectorAll('.task-review-rail-btn[data-side]').forEach(function(b){
-    b.classList.toggle('on',b.dataset.side===mode);
+    const side=b.dataset.side;
+    if(side==='decision'){
+      b.classList.toggle('on',mode==='decision'&&String(b.dataset.decisionMode||'')===decMode);
+    }else{
+      b.classList.toggle('on',side===mode);
+    }
   });
   const cmp=document.getElementById('btn-review-compare');
   const cmpRail=document.getElementById('btn-review-compare-rail');
@@ -10642,6 +10649,31 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       });
     }
   }
+  const pushGuiaDoc=function(g,i,prefix){
+    if(!g)return;
+    const url=String(g.previewLink||g.driveLink||g.url||'').trim();
+    if(!url)return;
+    const gid=String(g.id||g.driveFileId||('g'+i)).trim();
+    const p=parseDrivePreviewUrl(url);
+    add({
+      id:'guia_'+gid,origen:prefix||'Guía corrección',soporteId:null,esAnexo:true,guiaCorreccion:true,
+      label:'📎 Guía · '+(g.nombre||g.driveFilename||'Documento'),
+      titulo:'📎 Guía · '+(g.nombre||g.driveFilename||'Documento'),
+      meta:[fmtF(String(g.fecha||'').slice(0,10)),'provisional'].filter(Boolean).join(' · '),
+      preview:p.preview||p.url||url,url,local:false,mime:g.mime||'',fecha:g.fecha||'',
+      sortKey:(g.fecha||'0000')+'_guia_'+String(i).padStart(4,'0')
+    });
+  };
+  if(t){
+    (t.guiaCorreccionDocs||[]).forEach(function(g,i){pushGuiaDoc(g,i,'Guía corrección');});
+    (t.comentarios||[]).forEach(function(c,ci){
+      (c.adjuntos||[]).forEach(function(a,ai){
+        if(!a||!a.provisional)return;
+        if((t.guiaCorreccionDocs||[]).some(function(g){return g&&String(g.id||g.driveFileId||'')===String(a.id||a.driveFileId||'');}))return;
+        pushGuiaDoc(a,ci+'_'+ai,'Guía corrección · chat');
+      });
+    });
+  }
   return docs.sort((a,b)=>String(a.sortKey).localeCompare(String(b.sortKey)));
 }
 function uiEditorContenedorLbl(){return document.documentElement.classList.contains('ui-editor-modal-mode')?'ventana':'panel lateral';}
@@ -11791,10 +11823,82 @@ function setTaskChatUniTab(tab){
 function openTaskChatUnificado(expId,taskId){
   openTaskCommentsModal(expId,taskId,{chatOnly:true,chatUnificado:true});
 }
+function renderTaskChatAdjuntosHtml(adjuntos){
+  if(!adjuntos||!adjuntos.length)return'';
+  return '<div class="task-cmt-adjs">'+adjuntos.map(function(a){
+    if(!a)return'';
+    const url=String(a.previewLink||a.driveLink||a.url||'').trim();
+    const dl=String(a.driveLink||url||'').trim();
+    const nom=escAttr(a.nombre||a.driveFilename||'Documento');
+    let acts='';
+    if(url)acts+='<a class="task-cmt-adj-act" href="'+escAttr(url)+'" target="_blank" rel="noopener" title="Ver documento">🔍</a>';
+    if(dl)acts+='<a class="task-cmt-adj-act" href="'+escAttr(dl)+'" target="_blank" rel="noopener" download title="Descargar">⬇</a>';
+    return '<span class="task-cmt-adj"><span class="task-cmt-adj-name" title="'+nom+'">📎 '+nom+'</span>'+acts+'</span>';
+  }).join('')+'</div>';
+}
+function taskChatGuiaUploadCtx(expId,taskId){
+  const base=typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(expId,taskId):null;
+  if(!base)return null;
+  return function(){
+    const ctx=base();
+    if(!ctx)return null;
+    ctx.driveEstado='guia_correccion';
+    return ctx;
+  };
+}
+function taskChatGuiaCollectAdjuntos(ctxKey){
+  if(typeof sstFileStagingCtx!=='function')return[];
+  const ctx=sstFileStagingCtx(ctxKey);
+  const out=[];
+  function push(it){
+    if(!it||it.state!=='uploaded'||!it.driveFileId)return;
+    out.push({
+      id:it.id,
+      nombre:it.nombre||it.driveFilename||'Documento',
+      driveFileId:it.driveFileId,
+      driveLink:it.driveLink||'',
+      previewLink:it.previewLink||it.driveLink||'',
+      driveFilename:it.driveFilename||it.nombre||'',
+      driveEstado:'guia_correccion',
+      provisional:true
+    });
+  }
+  if(ctx.main)push(ctx.main);
+  (ctx.anexos||[]).forEach(push);
+  return out;
+}
+function taskChatGuiaPick(expId,taskId){
+  const run=function(){
+    const inp=document.getElementById('task-chat-guia-file');
+    if(inp)inp.click();
+  };
+  (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true))
+    .then(function(ok){if(ok)run();});
+}
+function taskChatGuiaOnPick(expId,taskId,inputEl){
+  if(typeof sstFileOnAnexosPick!=='function')return;
+  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
+  sstFileOnAnexosPick(inputEl,{
+    ctxKey:ctxKey,
+    listId:'task-chat-guia-list',
+    getUploadCtx:taskChatGuiaUploadCtx(expId,taskId)
+  });
+}
+function initTaskChatGuiaComposer(expId,taskId){
+  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
+  if(typeof sstFileRegisterList==='function')sstFileRegisterList('task-chat-guia-list',ctxKey,'anexos');
+  if(typeof sstFileRenderList==='function')sstFileRenderList('task-chat-guia-list',ctxKey);
+}
+window.taskChatGuiaPick=taskChatGuiaPick;
+window.taskChatGuiaOnPick=taskChatGuiaOnPick;
 function renderTaskChatListHtml(t){
   t=normalizeTask(t||{});
   const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
-  return chatAct.length?chatAct.map(c=>'<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+escAttr(c.texto||'')+'</div>').join(''):'';
+  return chatAct.length?chatAct.map(function(c){
+    const body=escAttr(c.texto||'');
+    const adjs=renderTaskChatAdjuntosHtml(c.adjuntos);
+    return '<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+(body||'')+adjs+'</div>';
+  }).join(''):'';
 }
 function renderTaskChatMessagesHtml(expId,taskId,t){
   return '<div class="task-chat-sep" id="task-chat-sep"><div class="task-chat-uni-scroll">'+renderTaskChatListHtml(t)+'</div></div>';
@@ -11833,14 +11937,24 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   if(!canWriteDept&&!canWriteResp)return'';
   const sol=getTaskSolicitudPendiente(t);
   const eid=escAttr(expId),tid=escAttr(taskId);
+  const eidJs=jsStr(expId),tidJs=jsStr(taskId);
+  const mctx=window._taskModalCtx||{};
+  const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&!esModoResponsable()));
+  const canGuiaAttach=canWriteDept&&inReviewChat&&opts.allowGuiaAttach!==false;
   if(opts.compact!==false){
-    return '<div class="task-cmt-form task-cmt-form-wa" id="task-chat-form">'+
-      '<div class="task-cmt-wa-field">'+
-      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}"></textarea>'+
-      '<button type="button" class="task-cmt-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
+    let h='<div class="task-cmt-form task-cmt-form-wa'+(canGuiaAttach?' has-guia-attach':'')+'" id="task-chat-form">';
+    if(canGuiaAttach)h+='<div class="task-chat-guia-list sst-file-list" id="task-chat-guia-list"></div>';
+    h+='<div class="task-cmt-wa-field">'+
+      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}"></textarea>';
+    if(canGuiaAttach){
+      h+='<input type="file" id="task-chat-guia-file" style="display:none" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,image/*" onchange="taskChatGuiaOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
+        '<button type="button" class="task-cmt-attach-ico" title="Adjuntar guía de corrección" aria-label="Adjuntar documento guía" onclick="taskChatGuiaPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>';
+    }
+    h+='<button type="button" class="task-cmt-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
       '</div>'+
       (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
       '</div>';
+    return h;
   }
   return '<div class="task-cmt-form" id="task-chat-form"><textarea id="task-cmt-input" placeholder="Mensaje…"></textarea><div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
     '<button type="button" class="btn bsm bp" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">Enviar</button>'+
@@ -11862,7 +11976,7 @@ function renderTaskChatPanelHtml(expId,taskId,t,opts){
 function renderTaskChatUnificadoHtml(expId,taskId,t){
   t=normalizeTask(t||{});
   const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
-  const lista=chatAct.length?chatAct.map(c=>'<div class="task-cmt"><div class="task-cmt-meta">'+escAttr(c.autor||'')+' · '+fmtF((c.fecha||'').slice(0,10))+'</div>'+escAttr(c.texto||'')+'</div>').join(''):'';
+  const lista=chatAct.length?renderTaskChatListHtml(t):'';
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
   const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
   let form='';
@@ -14498,6 +14612,19 @@ function submitFinalizarEncargado(expId,taskId){
   }
   run();
 }
+function limpiarGuiaCorreccionTask(t){
+  const trash=[];
+  if(!t)return trash;
+  (t.guiaCorreccionDocs||[]).forEach(function(g){if(g)trash.push(g);});
+  t.guiaCorreccionDocs=[];
+  (t.comentarios||[]).forEach(function(c){
+    if(!c||!c.adjuntos||!c.adjuntos.length)return;
+    c.adjuntos.forEach(function(a){if(a&&a.provisional)trash.push(a);});
+    c.adjuntos=(c.adjuntos||[]).filter(function(a){return a&&!a.provisional;});
+    if(!c.adjuntos.length)delete c.adjuntos;
+  });
+  return trash;
+}
 function limpiarSoportesPorCorregirTask(t){
   const trash=[];
   if(!t||!Array.isArray(t.soportes))return trash;
@@ -14521,6 +14648,11 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     if(mutateTask(expId,taskId,t=>{
     normalizeTask(t);
     const trash=limpiarSoportesPorCorregirTask(t);
+    const guiaTrash=limpiarGuiaCorreccionTask(t);
+    guiaTrash.forEach(function(s){
+      const fid=String(s.driveFileId||s.fileId||'').trim();
+      if(fid)trashIds.push(fid);
+    });
     trash.forEach(function(s){
       const fid=String(s.driveFileId||s.fileId||'').trim();
       if(fid)trashIds.push(fid);
@@ -14593,10 +14725,28 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     driveRenombrarSoporteActivoExp(expId,taskId,'aprobado').then(function(){doVerify();}).catch(function(){doVerify();});
   }else doVerify();
 }
-function addTaskComentario(expId,taskId,texto){
-  const txt=String(texto||'').trim();if(!txt)return false;
+function addTaskComentario(expId,taskId,texto,opts){
+  opts=opts||{};
+  const txt=String(texto||'').trim();
+  const adj=Array.isArray(opts.adjuntos)?opts.adjuntos.filter(Boolean):[];
+  if(!txt&&!adj.length)return false;
   return mutateTask(expId,taskId,t=>{
-    t.comentarios.push({autor:taskComentarioAutor(),fecha:new Date().toISOString(),texto:txt,rol:esModoResponsable()?'ejecutor':'asignador'});
+    normalizeTask(t);
+    const cmt={
+      id:'cmt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      autor:taskComentarioAutor(),
+      fecha:new Date().toISOString(),
+      texto:txt,
+      rol:esModoResponsable()?'ejecutor':'asignador'
+    };
+    if(adj.length)cmt.adjuntos=adj.map(function(a){return Object.assign({},a);});
+    t.comentarios.push(cmt);
+    if(adj.length){
+      if(!t.guiaCorreccionDocs)t.guiaCorreccionDocs=[];
+      adj.forEach(function(a){
+        t.guiaCorreccionDocs.push(Object.assign({},a,{cmtId:cmt.id,fecha:cmt.fecha}));
+      });
+    }
   });
 }
 function trasladarTaskExp(expId,taskId,nuevoResp,opts){
@@ -15272,12 +15422,33 @@ function closeTaskModal(){
   if(ctx.expId&&(ctx.gestionAsignados||ctx.soloCoEj))syncTkRowsFromExp(ctx.expId,ctx.taskId);
   if(formRow)refreshTkCoEjPanel(formRow);
 }
-function submitTaskComment(expId,taskId){
+async function submitTaskComment(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
   if(!inp)return;
   const modePrev=(window._taskModalCtx||{}).mode;
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
-  if(addTaskComentario(expId,taskId,inp.value)){
+  const mctx=window._taskModalCtx||{};
+  const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(inReview&&!esModoResponsable()));
+  const canGuiaAttach=!esModoResponsable()&&!esJurisdiccional()&&inReviewChat;
+  let adjuntos=[];
+  if(canGuiaAttach&&typeof sstFileChatGuiaCtxKey==='function'){
+    const ctxKey=sstFileChatGuiaCtxKey(expId,taskId);
+    const getCtx=typeof taskChatGuiaUploadCtx==='function'?taskChatGuiaUploadCtx(expId,taskId):null;
+    if(typeof sstFileTryUpload==='function'&&getCtx)await sstFileTryUpload(ctxKey,'task-chat-guia-list',getCtx);
+    if(typeof taskChatGuiaCollectAdjuntos==='function')adjuntos=taskChatGuiaCollectAdjuntos(ctxKey);
+    const txtDraft=String(inp.value||'').trim();
+    if(!txtDraft&&!adjuntos.length){
+      if(typeof notif==='function')notif('Escriba un mensaje o adjunte una guía','err');
+      return;
+    }
+    if(adjuntos.length&&adjuntos.some(function(a){return!a||!a.driveFileId;})){
+      if(typeof notif==='function')notif('Espere a que terminen de cargar los adjuntos','err');
+      return;
+    }
+  }
+  if(addTaskComentario(expId,taskId,inp.value,{adjuntos:adjuntos})){
+    if(canGuiaAttach&&typeof sstFileStagingReset==='function'&&typeof sstFileChatGuiaCtxKey==='function')
+      sstFileStagingReset(sstFileChatGuiaCtxKey(expId,taskId));
     if(!inReview)notif('Mensaje enviado','ok');
     if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);

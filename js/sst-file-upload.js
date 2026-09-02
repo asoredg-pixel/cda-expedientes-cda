@@ -191,18 +191,19 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
       nombre: up.nombre || nombre
     };
   }
+  const driveEstado = uploadCtx.driveEstado || 'revision';
   if (uploadCtx.esPqrs && typeof driveUploadPqrsExpediente === 'function') {
     const up = await driveUploadPqrsExpediente(f, nombre, tipo, uploadCtx.e, {
-      label: it.esAnexo ? 'Anexo' : 'Respuesta',
+      label: driveEstado === 'guia_correccion' ? 'Guía corrección' : (it.esAnexo ? 'Anexo' : 'Respuesta'),
       uploadTarget: 'respuesta',
       driveName: undefined
     });
     if (onPct) onPct(100);
-    return up;
+    return Object.assign({}, up, { driveEstado: driveEstado });
   }
   const eDrive = uploadCtx.eDrive || uploadCtx.e;
   if (eDrive && typeof driveUploadExpedienteActividad === 'function') {
-    const up = await driveUploadExpedienteActividad(f, nombre, tipo, eDrive, uploadCtx.t, rep, 'revision');
+    const up = await driveUploadExpedienteActividad(f, nombre, tipo, eDrive, uploadCtx.t, rep, driveEstado);
     if (onPct) onPct(100);
     return up;
   }
@@ -426,6 +427,10 @@ function sstFileEnviarCtxKey(expId, taskId) {
   return 'enviar-soporte:' + String(expId || '').trim() + ':' + String(taskId || '').trim();
 }
 
+function sstFileChatGuiaCtxKey(expId, taskId) {
+  return 'chat-guia:' + String(expId || '').trim() + ':' + String(taskId || '').trim();
+}
+
 function sstFileUploadCtxForExpTask(expId, taskId) {
   return function () {
     expId = String(expId || '').trim();
@@ -531,6 +536,7 @@ window.sstFileGetMainItem = sstFileGetMainItem;
 window.sstFileGetMainBlob = sstFileGetMainBlob;
 window.sstFileHasMain = sstFileHasMain;
 window.sstFileEnviarCtxKey = sstFileEnviarCtxKey;
+window.sstFileChatGuiaCtxKey = sstFileChatGuiaCtxKey;
 window.sstFileUploadCtxForExpTask = sstFileUploadCtxForExpTask;
 window.sstFileUploadCtxForPqrsExp = sstFileUploadCtxForPqrsExp;
 window.sstFileUploadCtxForBiblioteca = sstFileUploadCtxForBiblioteca;
