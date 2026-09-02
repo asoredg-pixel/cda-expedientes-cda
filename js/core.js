@@ -15098,7 +15098,9 @@ function openTaskCommentsModal(expId,taskId,opts){
     const railNav=isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e):(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isRespVerCorr||isVerDocMode?taskReviewRespVerRailHtml(refAct,taskId,t):(isDeptVerDoc?taskReviewActividadVerRailHtml(refAct,taskId,t,e):taskReviewFullRailHtml(refAct,taskId,t))));
     const pqrsRespBanner='';
     const reviewMainInner=pqrsRespBanner+sopPanel;
-    const reviewWorkspaceInner=(isPqrsOrigenView||isDeptVerDoc)
+    // Origen PQRSD no trae split/side-panel: envolver. El resto (isReview) ya incluye
+    // task-review-split-view + side-panel; no volver a envolver (evita 3 columnas).
+    const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
     if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión'))+' · '+(t.codigo||expId);
