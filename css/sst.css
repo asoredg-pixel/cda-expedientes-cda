@@ -370,6 +370,7 @@ tr:hover td{background:var(--bg)}
 .nbdg{background:var(--bll);color:var(--bld);font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;vertical-align:middle}
 .bdg.act-est-stack{display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;line-height:1.2;padding:4px 8px;white-space:normal;max-width:10rem;vertical-align:middle}
 .bdg.act-est-stack .act-est-sub{font-size:9px;font-weight:500;opacity:.92;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bdg.act-est-stack .act-est-sub[style*="background"]{opacity:1;font-weight:600}
 .act-est-open-btn{display:inline-flex;align-items:center;padding:0;margin:0;border:0;background:transparent;cursor:pointer;font:inherit;max-width:100%}
 .act-est-open-btn:hover .bdg{filter:brightness(.97);box-shadow:0 0 0 1px rgba(15,23,42,.12)}
 .act-est-open-btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px;border-radius:6px}

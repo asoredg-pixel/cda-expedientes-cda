@@ -150,28 +150,26 @@ function tramitePuedeNotificar(t){
   const wf=getTaskFirmaWf(t);
   const notifPor=String(wf.notificar_por||'').trim();
   if(typeof esModoResponsable==='function'&&esModoResponsable()&&typeof responsableActivo!=='undefined'&&responsableActivo){
-    if(notifPor){
-      if(typeof agendaNorm==='function')return agendaNorm(notifPor)===agendaNorm(responsableActivo);
-      return notifPor===responsableActivo;
-    }
-    return typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo);
+    // Solo si está designado como notificador (sin designación → solo «Atendidas»)
+    if(!notifPor)return false;
+    if(typeof agendaNorm==='function')return agendaNorm(notifPor)===agendaNorm(responsableActivo);
+    return notifPor===responsableActivo;
   }
   return false;
 }
 function taskFirmaEstadoUi(t){
   if(!taskEnFlujoFirmaTramite(t)&&!taskFirmaFase(t)&&!taskFirmaEnRevisionFinalNotif(t))return null;
   const f=taskFirmaFase(t);
-  const wf=getTaskFirmaWf(t);
-  const quien=String(wf.notificar_por||'').trim();
-  const quienLbl=typeof pqrsNotifQuienLabelUi==='function'?pqrsNotifQuienLabelUi(quien):quien;
+  const subPend=typeof _actEstSubPendienteUi==='function'?_actEstSubPendienteUi:function(s){return{sub:s,subFg:'#a16207',subBg:'#fef9c3'};};
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){
-    if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))return{lbl:'Firmado',bg:'#dcfce7',fg:'#15803d',sub:''};
-    return{lbl:'Por firmar',bg:'#0d5c2e22',fg:'#0d5c2e',sub:''};
+    if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))
+      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
+    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Firma'));
   }
-  if(taskFirmaEnPorNotificar(t))return{lbl:'✓ Aprobada',bg:'var(--gnl)',fg:'var(--gn)',sub:quienLbl?('Not: '+quienLbl):''};
-  if(taskFirmaEnRevisionFinalNotif(t))return{lbl:'✓ Aprobada',bg:'var(--gnl)',fg:'var(--gn)',sub:'Rev. final notif.'};
+  if(taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t))
+    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
   if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))
-    return{lbl:'✓ Aprobada',bg:'var(--gnl)',fg:'var(--gn)',sub:''};
+    return{lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'✓ Notificada',subFg:'var(--gn)'};
   return null;
 }
 /**
