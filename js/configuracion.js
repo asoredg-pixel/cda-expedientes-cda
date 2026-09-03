@@ -374,7 +374,7 @@ function renderListasCfg(){
       cfgSectionFold('Tipos de concepto','Opciones al añadir conceptos en Información técnica o al entregar actividades de concepto.',ro?cfgCardReadonlyStrings(cfg.tiposConcepto||[]):tipoConceptoCardBody(),false)+
       cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
       cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
-      cfgSectionFold('Información técnica (campos)','Campos técnicos configurables por trámite, además de los conceptos.',ro?('<div class="cfcard" style="font-size:12px;color:var(--tx2)">'+(cfg.infoTecnica||[]).length+' campo(s) — edite en la pestaña Información técnica o aquí abajo.</div>'):infoTecnicaCfgCardBody(),false);
+      cfgSectionFold('Información técnica','Campos técnicos configurables por trámite, además de los conceptos.',ro?('<div class="cfcard" style="font-size:12px;color:var(--tx2)">'+(cfg.infoTecnica||[]).length+' campo(s) configurado(s).</div>'):infoTecnicaCfgCardBody(),false);
     el.innerHTML=html;
     restoreCfgFoldState(open);
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
@@ -742,15 +742,12 @@ function infoTecnicaCfgCardBody(){
     infoTecnicaCfgListInnerHtml(false)+'</div>';
 }
 function refreshInfoTecCfgUi(){
-  if(document.getElementById('cfg-info-tecnica-panel'))renderInfoTecCfg();
   if(document.getElementById('cfg-panels'))renderListasCfg();
 }
 function renderInfoTecCfg(){
-  if(!cfg.infoTecnica)cfg.infoTecnica=[];
-  const ro=cfgEsSoloLectura();
-  document.getElementById('cfg-info-tecnica-panel').innerHTML=(ro?cfgRestringidoBannerHtml():'')+'<div class="card"><div class="cft">Información técnica'+(ro?' <span style="font-size:11px;color:var(--tx3)">(solo lectura)</span>':'')+'</div>'+
-    '<div class="cfs">Campos reutilizables en expedientes (después de información contable). Puede asociar cada campo a <strong>todos</strong> los trámites o solo a los que aplique.</div>'+
-    infoTecnicaCfgListInnerHtml(ro)+'</div>';
+  // Información técnica vive solo en Configuración base
+  if(typeof showCfgTab==='function')showCfgTab('listas');
+  else refreshInfoTecCfgUi();
 }
 function addInfoTec(){
   if(guardCfgEditGeneral())return;

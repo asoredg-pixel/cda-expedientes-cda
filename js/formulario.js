@@ -120,7 +120,18 @@ function showCfgTab(t){
     return;
   }
   if(t==='listas')renderListasCfg();
-  if(t==='info-tecnica')renderInfoTecCfg();
+  if(t==='info-tecnica'){
+    // Unificado en Configuración base
+    t='listas';
+    document.querySelectorAll('.cfg-pg').forEach(p=>p.classList.remove('on'));
+    document.querySelectorAll('.cfg-tab').forEach(b=>b.classList.remove('on'));
+    const pgL=document.getElementById('cpg-listas');
+    const tabL=document.getElementById('ctab-listas');
+    if(pgL)pgL.classList.add('on');
+    if(tabL)tabL.classList.add('on');
+    renderListasCfg();
+    return;
+  }
   if(t==='tramites'){
     renderTramsCfg();
     if(typeof syncNtColorAuto==='function')syncNtColorAuto();

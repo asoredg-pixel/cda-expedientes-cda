@@ -2052,6 +2052,59 @@ function validarNumeroConceptoDisponible(concepto,excludeExpId,excludeIndex){
   if(_avisoNumeroContableDuplicado('concepto',concepto,usos))return false;
   return true;
 }
+function buscarUsosNumeroRequerimiento(reqNum,excludeExpId,excludeIndex){
+  const needle=normContableRefNum(reqNum);
+  if(!needle)return[];
+  const excl=String(excludeExpId||'').trim();
+  const hits=[];
+  const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  lista.forEach(function(e){
+    if(!e)return;
+    const id=String(e._exp||'').trim();
+    let arr=[];
+    try{arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):(e._conceptos_seg?JSON.parse(e._conceptos_seg):[]);}catch(x){arr=[];}
+    if(!Array.isArray(arr))return;
+    arr.forEach(function(c,i){
+      if(!c)return;
+      if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      const n=normContableRefNum(c.reqNum);
+      if(n&&n===needle){
+        hits.push({
+          expId:id||'—',
+          contexto:'Requerimiento',
+          detalle:'N° '+String(c.reqNum||'')+(c.concepto?' · Concepto '+c.concepto:'')
+        });
+      }
+    });
+  });
+  return hits;
+}
+function _avisoNumeroRequerimientoDuplicado(valor,usos){
+  if(!usos||!usos.length)return false;
+  const u=usos[0];
+  const mas=usos.length>1?' (+'+(usos.length-1)+' más)':'';
+  const detail='Usado en: '+u.expId+' ('+u.contexto+')'+(u.detalle?' — '+u.detalle:'')+mas;
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'N° de requerimiento no válido',
+      message:'El N° de requerimiento «'+String(valor||'').trim()+'» ya fue ingresado en otro registro.',
+      detail:detail,
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else if(typeof notif==='function'){
+    notif('N° de requerimiento ya usado: '+detail,'err');
+  }
+  return true;
+}
+/** false si el N° de requerimiento ya existe. */
+function validarNumeroRequerimientoDisponible(reqNum,excludeExpId,excludeIndex){
+  if(!normContableRefNum(reqNum))return true;
+  const usos=buscarUsosNumeroRequerimiento(reqNum,excludeExpId,excludeIndex);
+  if(_avisoNumeroRequerimientoDuplicado(reqNum,usos))return false;
+  return true;
+}
 /** Valida adjuntos según canal (oficio + soporte de notificación). */
 function pqrsValidateAdjuntosPorCanal(tipoResp,canal,opts){
   opts=opts||{};
@@ -12302,10 +12355,15 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   }
   if(esPqrsEntrega&&!sol)h+=renderPqrsEntregaCamposHtml(eExp);
   if(!sol&&eExp&&!esPqrsEntrega){
-    const regTipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(t.actividad||''):'';
-    if(regTipo==='concepto'&&typeof htmlEntregaRegConceptoBlock==='function'){
+    const actNom=String(t.actividad||'').trim();
+    const regTipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(actNom):'';
+    if(typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(actNom)&&typeof htmlEntregaOficioRequerimientoBlock==='function'){
       h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
-      h+=htmlEntregaRegConceptoBlock(eExp,{actividad:String(t.actividad||'').trim()});
+      h+=htmlEntregaOficioRequerimientoBlock(eExp,t);
+      h+='</div>';
+    }else if(regTipo==='concepto'&&typeof htmlEntregaRegConceptoBlock==='function'){
+      h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+      h+=htmlEntregaRegConceptoBlock(eExp,{actividad:actNom});
       h+='</div>';
     }
   }
@@ -16296,6 +16354,8 @@ function estadoConceptoSeg(c){
   if(cumple)return{noCumple:false,incumplio:false,cumplido:false};
   const noCumple=c.cumple==='no'||c.cumple===false;
   if(!noCumple)return{noCumple:false,incumplio:false,cumplido:false};
+  const aplica=c.aplicaReq!==false&&c.aplicaReq!=='no'&&c.aplicaReq!==0;
+  if(!aplica)return{noCumple:true,incumplio:false,cumplido:false};
   if(c.reqCumplido)return{noCumple:true,incumplio:false,cumplido:true};
   const vence=c.reqVence||calcReqVence(c.reqNotif,c.reqDias);
   const incumplio=!!(vence&&vence<hoy());
@@ -16633,14 +16693,17 @@ function conceptoSegRowHtml(c,i){
   const st=estadoConceptoSeg(c);
   const noCumple=c.cumple==='no'||c.cumple===false;
   const noAplica=c.cumple==='na';
+  const aplicaReq=noCumple&&c.aplicaReq!==false&&c.aplicaReq!=='no'&&c.aplicaReq!==0;
+  const aplicaReqSel=c.aplicaReq==='no'||c.aplicaReq===false?'no':'si';
   let flags='';
   if(st.cumplido)flags+=' <span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>';
   else if(st.incumplio)flags+=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags+=' <span class="flag flag-ncumple">No cumple</span>';
   else if(noAplica)flags+=' <span class="flag" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)">No aplica</span>';
+  if(aplicaReq&&!c.reqNotif&&!st.cumplido)flags+=' <span class="flag" style="background:var(--aml);color:var(--am);border:1px solid #f1d795">Req. pendiente</span>';
   const tit=(tipoSel?tipoSel+' · ':'')+'Concepto '+(c.concepto||('#'+(i+1)))+flags;
   const reqCumplido=!!c.reqCumplido;
-  return '<details class="item-fold concepto-seg">'+
+  return '<details class="item-fold concepto-seg" data-concepto-req-id="'+escAttr(c.conceptoReqId||'')+'">'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo de concepto <span class="req-star">*</span></label><select class="cs-tipo-concepto" onchange="syncConceptosSeg();refreshConceptoFold(this)"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
@@ -16648,9 +16711,13 @@ function conceptoSegRowHtml(c,i){
     '<div class="fld"><label>N° concepto técnico</label><input type="text" class="cs-concepto" value="'+escAttr(c.concepto||'')+'" oninput="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea class="cs-obs" style="min-height:55px" oninput="syncConceptosSeg()">'+escTextarea(c.observaciones||'')+'</textarea></div>'+
     '<div class="fld"><label>¿Cumple?</label><select class="cs-cumple" onchange="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"><option value="si"'+(c.cumple==='si'||c.cumple===true?' selected':'')+'>Cumple</option><option value="no"'+(noCumple?' selected':'')+'>No cumple</option><option value="na"'+(noAplica?' selected':'')+'>No aplica</option></select></div>'+
+    '<div class="fld cs-aplica-req-fld" style="'+(noCumple?'':'display:none')+'"><label>¿Aplica requerimiento?</label><select class="cs-aplica-req" onchange="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"><option value="si"'+(aplicaReqSel==='si'?' selected':'')+'>Sí</option><option value="no"'+(aplicaReqSel==='no'?' selected':'')+'>No</option></select></div>'+
     '</div>'+
-    '<div class="cs-req" style="'+(noCumple?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--or);padding-left:.8rem">'+
-    '<div class="slbl" style="margin-bottom:.5rem;color:var(--or)">Requerimiento por incumplimiento</div><div class="fg">'+
+    '<div class="cs-req" style="'+(noCumple&&aplicaReq?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--or);padding-left:.8rem">'+
+    '<div class="slbl" style="margin-bottom:.5rem;color:var(--or)">Requerimiento por incumplimiento</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:.5rem">N° de oficio, N° de requerimiento y días para cumplir se diligencian al entregar la actividad <strong>Oficio de requerimiento</strong>. El plazo de cumplimiento inicia al notificar el oficio (correo VITAL/encargado, presencial, WhatsApp o aviso).</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>N° oficio</label><input type="text" class="cs-req-oficio" value="'+escAttr(c.reqOficio||'')+'" oninput="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld"><label>N° requerimiento</label><input type="text" class="cs-req-num" value="'+escAttr(c.reqNum||'')+'" oninput="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld"><label>Fecha notificación</label><input type="date" class="cs-req-notif" value="'+(c.reqNotif||'')+'" onchange="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"></div>'+
     '<div class="fld"><label>Días para cumplir</label><input type="number" class="cs-req-dias" min="0" value="'+(c.reqDias||'')+'" oninput="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"></div>'+
@@ -16658,7 +16725,7 @@ function conceptoSegRowHtml(c,i){
     '</div>'+
     '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;font-weight:500;margin-top:.6rem"><input type="checkbox" class="cs-req-cumplido"'+(reqCumplido?' checked':'')+' onchange="toggleConceptoReqCumplido(this)" style="width:15px;height:15px;accent-color:var(--gn)"> Requerimiento ya cumplido</label>'+
     '<div class="cs-req-cump-fecha fg" style="margin-top:.5rem;'+(reqCumplido?'':'display:none')+'"><div class="fld"><label>Fecha de cumplimiento<span class="req-star">*</span></label><input type="date" class="cs-req-fecha-cump" value="'+(c.reqFechaCump||'')+'" onchange="syncConceptosSeg();refreshConceptoFold(this)"></div></div>'+
-    '</div></div>'+
+    '</div>'+
     '<div class="cs-san" style="'+(noCumple?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--pu);padding-left:.8rem">'+
     '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;font-weight:500"><input type="checkbox" class="cs-traslado-san"'+(c.trasladoSan?' checked':'')+' onchange="toggleConceptoTraslado(this)" style="width:15px;height:15px;accent-color:var(--pu)"> Traslada a expediente sancionatorio (p. ej. queja con concepto técnico)</label>'+
     '<div class="cs-exp-san-wrap fg" style="margin-top:.5rem;'+(c.trasladoSan?'':'display:none')+'"><div class="fld"><label>N° expediente sancionatorio</label><input type="text" class="cs-exp-san" value="'+escAttr(c.expSan||'')+'" oninput="syncConceptosSeg()" placeholder="EXP-SAN-2026-001"></div></div></div>'+
@@ -16684,11 +16751,15 @@ function toggleConceptoReqCumplido(cb){
 function updateConceptoSegRow(row){
   if(!row)return;
   const cumple=row.querySelector('.cs-cumple').value;
+  const aplicaEl=row.querySelector('.cs-aplica-req');
+  const aplica=cumple==='no'&&(!aplicaEl||aplicaEl.value!=='no');
+  const aplicaFld=row.querySelector('.cs-aplica-req-fld');
+  if(aplicaFld)aplicaFld.style.display=cumple==='no'?'':'none';
   const req=row.querySelector('.cs-req');
-  if(req)req.style.display=cumple==='no'?'':'none';
+  if(req)req.style.display=aplica?'':'none';
   const san=row.querySelector('.cs-san');
   if(san)san.style.display=cumple==='no'?'':'none';
-  if(cumple!=='no'){
+  if(cumple!=='no'||!aplica){
     const rc=row.querySelector('.cs-req-cumplido');if(rc)rc.checked=false;
     const box=row.querySelector('.cs-req-cump-fecha');if(box)box.style.display='none';
   }
@@ -16701,11 +16772,13 @@ function updateConceptoSegRow(row){
 function refreshConceptoFold(el){
   const row=el.closest('.concepto-seg');if(!row)return;
   const rc=row.querySelector('.cs-req-cumplido');
+  const aplicaEl=row.querySelector('.cs-aplica-req');
   const c={
     tipoConcepto:row.querySelector('.cs-tipo-concepto')?row.querySelector('.cs-tipo-concepto').value:'',
     fecha:row.querySelector('.cs-fecha').value,
     concepto:row.querySelector('.cs-concepto').value,
     cumple:row.querySelector('.cs-cumple').value,
+    aplicaReq:aplicaEl?aplicaEl.value!=='no':true,
     reqNotif:row.querySelector('.cs-req-notif')?row.querySelector('.cs-req-notif').value:'',
     reqDias:row.querySelector('.cs-req-dias')?row.querySelector('.cs-req-dias').value:'',
     reqVence:row.querySelector('.cs-req-vence')?row.querySelector('.cs-req-vence').value:'',
@@ -16718,6 +16791,7 @@ function refreshConceptoFold(el){
   else if(st.incumplio)flags=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags=' <span class="flag flag-ncumple">No cumple</span>';
   else if(c.cumple==='na')flags=' <span class="flag" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)">No aplica</span>';
+  if(c.cumple==='no'&&c.aplicaReq&&!c.reqNotif&&!st.cumplido)flags+=' <span class="flag" style="background:var(--aml);color:var(--am);border:1px solid #f1d795">Req. pendiente</span>';
   const sum=row.querySelector('summary');
   if(sum)sum.innerHTML=escAttr((c.tipoConcepto?c.tipoConcepto+' · ':'')+'Concepto '+(c.concepto||'sin número'))+flags;
 }
@@ -16766,18 +16840,24 @@ function syncConceptosSeg(){
     const dias=r.querySelector('.cs-req-dias')?r.querySelector('.cs-req-dias').value:'';
     const reqCumplido=!!(r.querySelector('.cs-req-cumplido')&&r.querySelector('.cs-req-cumplido').checked);
     const q=r.querySelector.bind(r);
+    const cumple=q('.cs-cumple')?q('.cs-cumple').value:'';
+    const aplicaEl=q('.cs-aplica-req');
+    const aplicaReq=cumple==='no'?(aplicaEl?aplicaEl.value!=='no':true):false;
     return {
       tipoConcepto:q('.cs-tipo-concepto')?q('.cs-tipo-concepto').value:'',
       fecha:q('.cs-fecha')?q('.cs-fecha').value:'',
       concepto:q('.cs-concepto')?q('.cs-concepto').value:'',
       observaciones:q('.cs-obs')?q('.cs-obs').value:'',
-      cumple:q('.cs-cumple')?q('.cs-cumple').value:'',
-      reqNum:r.querySelector('.cs-req-num')?r.querySelector('.cs-req-num').value:'',
-      reqNotif:notif,
-      reqDias:dias,
-      reqVence:calcReqVence(notif,dias),
-      reqCumplido:reqCumplido,
-      reqFechaCump:reqCumplido&&r.querySelector('.cs-req-fecha-cump')?r.querySelector('.cs-req-fecha-cump').value:'',
+      cumple:cumple,
+      aplicaReq:aplicaReq,
+      conceptoReqId:r.getAttribute('data-concepto-req-id')||'',
+      reqOficio:aplicaReq&&r.querySelector('.cs-req-oficio')?r.querySelector('.cs-req-oficio').value:'',
+      reqNum:aplicaReq&&r.querySelector('.cs-req-num')?r.querySelector('.cs-req-num').value:'',
+      reqNotif:aplicaReq?notif:'',
+      reqDias:aplicaReq?dias:'',
+      reqVence:aplicaReq?calcReqVence(notif,dias):'',
+      reqCumplido:aplicaReq&&reqCumplido,
+      reqFechaCump:aplicaReq&&reqCumplido&&r.querySelector('.cs-req-fecha-cump')?r.querySelector('.cs-req-fecha-cump').value:'',
       trasladoSan:!!(r.querySelector('.cs-traslado-san')&&r.querySelector('.cs-traslado-san').checked),
       expSan:r.querySelector('.cs-exp-san')?r.querySelector('.cs-exp-san').value:''
     };
@@ -20840,7 +20920,7 @@ function infoTecnicaExpHtml(ev,opts){
   const conceptosPart=opts.includeConceptos!==false?conceptosExpBlockHtml(ev):'';
   return '<details class="form-section"><summary class="form-section-hdr">Información técnica</summary><div class="form-section-body">'+
     conceptosPart+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Campos técnicos de Configuración → Información técnica aplicables a este trámite'+(nCat?' ('+nCat+')':'')+'.</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Campos técnicos de Configuración base → Información técnica aplicables a este trámite'+(nCat?' ('+nCat+')':'')+'.</div>'+
     '<input type="hidden" id="fld__info_tecnica_items" value=\''+escAttr(ev._info_tecnica_items||'[]')+'\'>'+
     '<div id="info-tecnica-exp-list">'+items.map((it,i)=>infoTecnicaExpRowHtml(it,i,depto,tramId)).join('')+'</div>'+
     '<button type="button" class="btn bsm" onclick="addInfoTecnicaExp()">+ Añadir información técnica</button>'+
@@ -20895,7 +20975,7 @@ function addInfoTecnicaExp(){
     ||(document.getElementById('fld__tramite')?document.getElementById('fld__tramite').value:'')
     ||(window._conPanelActive?resolveExpTramiteId(getExpById(window._conPanelActive)):'');
   const catalog=getInfoTecCatalogForTramite(depto,tramId);
-  if(!catalog.length){notif('No hay campos técnicos para este trámite. Revise Configuración → Información técnica.','err');return;}
+  if(!catalog.length){notif('No hay campos técnicos para este trámite. Revise Configuración base → Información técnica.','err');return;}
   const c=document.getElementById('info-tecnica-exp-list');
   const item={campoId:'',valor:''};
   c.insertAdjacentHTML('beforeend',infoTecnicaExpRowHtml(item,c.children.length,depto,tramId));

@@ -177,10 +177,12 @@ function guardCfgEditGeneral(){
   return false;
 }
 function updateCfgTabsDepto(){
-  ['info-tecnica','tramites'].forEach(id=>{
+  ['tramites'].forEach(id=>{
     const tab=document.getElementById('ctab-'+id);
     if(tab)tab.style.display='';
   });
+  const infoTecTab=document.getElementById('ctab-info-tecnica');
+  if(infoTecTab)infoTecTab.style.display='none';
   const nuevoWrap=document.getElementById('tram-nuevo-wrap');
   if(nuevoWrap)nuevoWrap.style.display=cfgEsSoloLectura()?'none':'';
   const listasTab=document.getElementById('ctab-listas');

@@ -881,6 +881,15 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
     }
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
   });
+  if(opts.via==='notificacion'&&typeof applyConceptoReqDesdeNotificacion==='function'){
+    try{
+      const eNot=typeof getExpById==='function'?getExpById(expId):null;
+      const tNot=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+      const fechaN=(tNot&&tNot.firmaWf&&tNot.firmaWf.notificacion_reportada&&tNot.firmaWf.notificacion_reportada.fecha)
+        ||fechaC;
+      if(eNot&&tNot)applyConceptoReqDesdeNotificacion(eNot,tNot,fechaN,opts.canal||'');
+    }catch(errN){console.warn('applyConceptoReqDesdeNotificacion',errN);}
+  }
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
 }

@@ -72,7 +72,7 @@ const DEF={
   gravedades:['Leve','Grave','Gravísima'],
   cargos:['Auxiliar administrativo','Profesional universitario','Técnico operativo','Secretaria','Conductor','Director','Subdirector','Asesor','Contratista'],
   instructores:[],
-  actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Proyectar acto administrativo','Notificar decisión','Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
+  actividadesPred:['Revisar documentación aportada','Solicitar información adicional','Programar visita técnica','Elaborar concepto técnico','Oficio de requerimiento','Proyectar acto administrativo','Notificar decisión','Capacitación brigada forestal','Puesto de control','Visita de campo','Reunión de coordinación','Informe de gestión','Seguimiento operativo'],
   actPlazoMap:{},
   actPlazoUnidadMap:{},
   actividadesCortasPred:[],

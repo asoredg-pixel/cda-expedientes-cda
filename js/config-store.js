@@ -73,6 +73,17 @@ function normalizeCfgObj(c){
     c.actFirmaMap['Proyectar acto administrativo']=true;
   if((c.actividadesPred||[]).indexOf('Elaborar concepto técnico')>=0&&!c.actConceptoTipoMap['Elaborar concepto técnico'])
     c.actConceptoTipoMap['Elaborar concepto técnico']='Concepto técnico';
+  // Oficio de requerimiento: actividad automática al no cumplir un concepto con requerimiento
+  (function(){
+    const oficioReq='Oficio de requerimiento';
+    if(!Array.isArray(c.actividadesPred))c.actividadesPred=[];
+    if(c.actividadesPred.indexOf(oficioReq)<0)c.actividadesPred.push(oficioReq);
+    if(c.actRegistroMap[oficioReq]==null)c.actRegistroMap[oficioReq]='ninguno';
+    if(c.actOficioMap[oficioReq]==null)c.actOficioMap[oficioReq]=true;
+    if(c.actPlazoMap[oficioReq]==null)c.actPlazoMap[oficioReq]=1;
+    if(!c.actPlazoUnidadMap||typeof c.actPlazoUnidadMap!=='object')c.actPlazoUnidadMap={};
+    if(c.actPlazoUnidadMap[oficioReq]==null)c.actPlazoUnidadMap[oficioReq]='dias';
+  })();
   c.tramites.forEach(t=>{
     if(!t.campos)t.campos=[];
     if(!t.etapasSeg)t.etapasSeg=[];

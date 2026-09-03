@@ -266,6 +266,20 @@ function guardarExpCore(stayOnForm){
       seenCon[key]=true;
       if(typeof validarNumeroConceptoDisponible==='function'&&!validarNumeroConceptoDisponible(con,expExcl,i))return;
     }
+    const seenReq={};
+    for(let i=0;i<consChk.length;i++){
+      const req=consChk[i]&&consChk[i].reqNum;
+      const key=typeof normContableRefNum==='function'?normContableRefNum(req):String(req||'').trim().toUpperCase();
+      if(!key)continue;
+      if(seenReq[key]){
+        if(typeof confirmPrecaucion==='function'){
+          confirmPrecaucion({title:'N° de requerimiento no válido',message:'El N° de requerimiento «'+String(req).trim()+'» está repetido en este expediente.',confirmLabel:'Entendido',hideCancel:true,tone:'warn'},function(){});
+        }else notif('N° de requerimiento repetido en el expediente','err');
+        return;
+      }
+      seenReq[key]=true;
+      if(typeof validarNumeroRequerimientoDisponible==='function'&&!validarNumeroRequerimientoDisponible(req,expExcl,i))return;
+    }
   }
   if(!stayOnForm&&responsablePuedeEditarSec('campos')){
     for(const c of (t.campos||[])){

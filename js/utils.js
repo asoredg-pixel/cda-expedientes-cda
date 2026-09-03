@@ -275,7 +275,7 @@ function sanitizeExpRecord(e,ctx){
     }
   });
   if(e._detalle_notas)e._detalle_notas=sanitizeJsonArrayField(e._detalle_notas,['texto','autor'],ctx+'._detalle_notas');
-  if(e._conceptos_seg)e._conceptos_seg=sanitizeJsonArrayField(e._conceptos_seg,['observaciones','concepto','reqNum','expSan','nota','tipoConcepto'],ctx+'._conceptos_seg');
+  if(e._conceptos_seg)e._conceptos_seg=sanitizeJsonArrayField(e._conceptos_seg,['observaciones','concepto','reqNum','expSan','nota','tipoConcepto','reqOficio','conceptoReqId','reqMedio'],ctx+'._conceptos_seg');
   if(e._actos_admin)e._actos_admin=sanitizeActoAdminJson(e._actos_admin,ctx+'._actos_admin');
   if(Array.isArray(e.tasks))e.tasks.forEach((t,i)=>sanitizeTaskRecord(t,ctx+'.tasks['+i+']'));
   if(Array.isArray(e.historial))e.historial.forEach((h,i)=>sanitizeHistRecord(h,ctx+'.historial['+i+']'));
