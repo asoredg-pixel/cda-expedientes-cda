@@ -7235,8 +7235,7 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
   if(esAltaEnc){
     h+='<input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(PQRS_WF_TIPO.OFICIO)+'">'+
-      '<div id="pqrs-resp-tipo-btns" style="display:none"></div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">📄 <strong>Oficio firmado</strong> — predeterminado para PQRSD creada por la oficina</div>';
+      '<div id="pqrs-resp-tipo-btns" style="display:none"></div>';
   }else{
     h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
       '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
@@ -7456,7 +7455,7 @@ function pqrsEntregaRefreshUi(){
   if(emailCompose)emailCompose.style.display=(isMensaje||notifCorreoOficio)?'':'none';
   if(adjWrap)adjWrap.style.display=isInfo?'none':'';
   if(adjLabel)adjLabel.textContent=isOficio?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
-  if(adjHint)adjHint.textContent=isOficio?'Debe adjuntar el PDF del oficio en Principal. Los anexos van en Anexos +.':'';
+  if(adjHint)adjHint.textContent='';
   const mainLbl=document.getElementById('pqrs-entrega-main-lbl');
   const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
   if(mainLbl)mainLbl.style.display=isInfo?'none':'';
