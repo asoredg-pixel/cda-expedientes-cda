@@ -22989,15 +22989,18 @@ function pqrsCorreosCiudadano(e){
   };
   const set=new Set();
   const add=em=>{const v=valida(em);if(v)set.add(v);};
-  // _qd_correo se usa siempre (incluye anónimos con correo de notificación)
+  // Incluir todo correo diligenciado (natural, jurídica, oficiante, representante,
+  // apoderado, autorizado, establecimiento y anónimo con dato de notificación).
   add(e._qd_correo);
-  if(!e._qd_anonimo){
-    add(e._pn_correo);
-    if(e._tipo_persona==='juridica'){add(e._pj_correo);add(e._pj_rep_correo);}
-    if(e._apoderado){add(e._apo_correo);}
-    if(e._autorizado){add(e._aut_correo);}
-    if(e._est_com)add(e._ec_correo);
-  }
+  add(e._pn_correo);
+  add(e._pj_correo);
+  add(e._pj_rep_correo);
+  add(e._apo_correo);
+  add(e._aut_correo);
+  add(e._ec_correo);
+  add(e._pi_correo);
+  add(e._pi_rep_correo);
+  add(e._pi_correo_emp);
   return Array.from(set);
 }
 // Genera el PDF de soporte de respuesta (equivalente al soporte de radicación) usando jsPDF.
@@ -23258,16 +23261,19 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos,opts){
 async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachments,opts){
   opts=opts||{};
   const files=Array.isArray(attachments)?attachments.filter(Boolean):[];
-  const tokOfi=typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid();
-  const tokSec=typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();
   const ofiId=String(opts.oficinaId||(opts.expediente&&typeof getOficinaParaEnvioCorreoPqrs==='function'?getOficinaParaEnvioCorreoPqrs(opts.expediente):'')||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim();
   if(preferOfi&&typeof gmailOfiAsegurarCuentaOficinaParaEnvio==='function'){
     await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId==='responsables'||ofiId==='ds_deguv'?'guaviare':ofiId);
   }
+  const tokenSecOk=function(){return typeof gmailIsTokenValid==='function'&&gmailIsTokenValid();};
+  const tokenOfiOk=function(){
+    return (typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())
+      ||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  };
   const send=async(para)=>{
     let res=null,cuenta='';
     if(preferOfi){
-      if(!tokOfi&&!(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid())){
+      if(!tokenOfiOk()){
         throw new Error('Conecte el correo autorizado de la oficina. El aviso al ciudadano no puede salir del correo personal.');
       }
       if(files.length&&typeof gmailOfiSendHtmlWithAttachments==='function'){
@@ -23279,9 +23285,9 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
       }
       const em=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
       cuenta=em||'oficina';
-    }else if(tokSec&&typeof gmailSendMessage==='function'){
+    }else if(tokenSecOk()&&typeof gmailSendMessage==='function'){
       res=await gmailSendMessage(para,subject,htmlBody);cuenta='secretaria';
-    }else if(tokOfi&&typeof gmailOfiSendMessage==='function'){
+    }else if(tokenOfiOk()&&typeof gmailOfiSendMessage==='function'){
       if(typeof gmailOfiAsegurarCuentaOficinaParaEnvio==='function'){
         await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId==='responsables'||ofiId==='ds_deguv'?'guaviare':ofiId);
       }
@@ -23293,7 +23299,7 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
       const em2=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
       cuenta=em2||'oficina';
     }else{
-      throw new Error('No hay token Gmail activo. Conecte el correo de la oficina en la pestaña Correos.');
+      throw new Error('No hay token Gmail activo. Conecte la bandeja institucional para enviar el correo de radicación.');
     }
     return{messageId:(res&&(res.id||res.messageId))||'',cuenta,raw:res};
   };

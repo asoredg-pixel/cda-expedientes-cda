@@ -342,6 +342,25 @@ function notificarResultadoRadicacionPqrs(opts){
     notif(msg,'ok');
   }
 }
+async function tryEnviarNotifRadicacionAlRadicar(data,opts){
+  if(!data||data._pqrs_interna)return{skipped:true,reason:'interna'};
+  if(typeof enviarNotificacionRadicacionPqrsAuto!=='function'){
+    console.warn('tryEnviarNotifRadicacionAlRadicar: función no disponible');
+    return{skipped:true,reason:'fn'};
+  }
+  try{
+    return(await enviarNotificacionRadicacionPqrsAuto(data,opts||{}))||{};
+  }catch(err){
+    console.warn('notif radicacion auto:',err);
+    return{ok:false,error:err};
+  }
+}
+function textoResultadoNotifRadicacion(res){
+  if(!res||res.skipped)return'';
+  if(res.ok)return' · Correo de radicación enviado'+(res.a?(' a '+res.a):'');
+  const err=res.error?String(res.error.message||res.error).slice(0,80):'';
+  return' · No se pudo enviar el correo de radicación al solicitante'+(err?(' ('+err+')'):'');
+}
 async function guardarPqrsSecretaria(modo){
   modo=modo||'trasladar';
   const soloRadicar=modo==='solo';
@@ -482,6 +501,15 @@ async function guardarPqrsSecretaria(modo){
     _gmail_email_data:gmailEmailData,
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion})
   });
+  // Conservar correos para la notificación: el spread de pjFields puede dejar
+  // _qd_correo vacío si quien oficia no tiene email pero sí la entidad.
+  if(!interna){
+    const ofiCorr=String(pjFields._qd_correo||'').trim();
+    const entCorr=String(pjFields._pj_correo||'').trim();
+    if(!String(data._qd_correo||'').trim())data._qd_correo=correo||ofiCorr||entCorr||'';
+    if(tipoPersona==='juridica'&&entCorr&&!String(data._pj_correo||'').trim())data._pj_correo=entCorr;
+    if(anon&&anonCorreo&&!String(data._qd_correo||'').trim())data._qd_correo=anonCorreo;
+  }
   exps.push(data);
   if(!soloRadicar){
     if(oficina==='guaviare')ensureTareaPqrsNca(data);
@@ -495,8 +523,10 @@ async function guardarPqrsSecretaria(modo){
   const fsOk=await (typeof persistExpedienteGranularAsync==='function'
     ?persistExpedienteGranularAsync(data,true)
     :Promise.resolve(null));
+  const notifOpts={gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif};
   if(fsOk===false){
-    // persistExpedienteGranular guardó backup local; avisamos y salimos de drive
+    // persistExpedienteGranular guardó backup local; el correo de radicación igual debe salir
+    const notifResLocal=await tryEnviarNotifRadicacionAlRadicar(data,notifOpts);
     window._gmailPendingMsgId=null;
     window._gmailPendingAttachments=null;
     window._gmailPendingEmailData=null;
@@ -504,6 +534,11 @@ async function guardarPqrsSecretaria(modo){
     renderBandejaDepto();
     renderSecretariaPqrs();
     if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    const extraLocal=textoResultadoNotifRadicacion(notifResLocal);
+    notificarResultadoRadicacionPqrs({
+      title:'PQRSD radicada (local)',
+      message:'PQRSD '+expId+' quedó guardada localmente (pendiente sincronizar).'+extraLocal
+    });
     return;
   }
   if(fsOk===undefined||fsOk===null){
@@ -511,6 +546,9 @@ async function guardarPqrsSecretaria(modo){
     await persistExpedienteGranular(data,true);
     if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
   }
+  // Correo de radicación al solicitante: inmediatamente tras guardar, con Gmail aún válido
+  // (antes de Drive / reenvíos, que pueden tardar y caducar el token).
+  const notifRes=await tryEnviarNotifRadicacionAlRadicar(data,notifOpts);
   // Refresco inmediato: Actividades NCA / bandeja oficina / consulta
   // (antes solo se actualizaba al llegar el snapshot remoto, ~1–3 min).
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
@@ -619,19 +657,17 @@ async function guardarPqrsSecretaria(modo){
     data._pqrs_drive_path_label=driveFolderMeta.pathLabel||'';
     data._pqrs_gmail_attachments=gmailAtts||null;
     if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
-    // Sincroniza metadata Drive al registro ya guardado en Firestore
-    await (typeof persistExpedienteGranularAsync==='function'
-      ?persistExpedienteGranularAsync(data,false)
-      :persistExpedienteGranular(data,false));
+    try{
+      await (typeof persistExpedienteGranularAsync==='function'
+        ?persistExpedienteGranularAsync(data,false)
+        :persistExpedienteGranular(data,false));
+    }catch(errDrive){console.warn('persist Drive metadata:',errDrive);}
   }
-  try{
-    if(!data._pqrs_interna)await enviarNotificacionRadicacionPqrsAuto(data,{gmailMsgId:gmailMsgId,medio:medio,medioNotif:medioNotif});
-  }catch(err){console.warn('notif radicacion auto:',err);}
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina'+(reenvioDsOk?' · Correo reenviado a DS DEGUV':''):(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'');
+  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina'+(reenvioDsOk?' · Correo reenviado a DS DEGUV':''):(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'')+textoResultadoNotifRadicacion(notifRes);
   notificarResultadoRadicacionPqrs({
     title:soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada'),
     message:msgPrincipal

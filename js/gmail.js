@@ -631,7 +631,8 @@ function gmailDisconnect() {
 // ----------------------------------------------------------------
 // Generic API caller
 // ----------------------------------------------------------------
-async function gmailApiCall(method, url, body) {
+async function gmailApiCall(method, url, body, callOpts) {
+  callOpts = callOpts || {};
   const token = gmailGetToken();
   if (!token) throw new Error('Sin token Gmail. Conecte la bandeja primero.');
   const opts = {
@@ -641,9 +642,11 @@ async function gmailApiCall(method, url, body) {
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
   if (res.status === 401) {
-    gmailSetToken('');
-    updateGmailConnectBtn();
-    notif('⚠️ La sesión de Gmail expiró. Haga clic en Reconectar para continuar.', 'err');
+    if (!callOpts.keepToken) {
+      gmailSetToken('');
+      updateGmailConnectBtn();
+      notif('⚠️ La sesión de Gmail expiró. Haga clic en Reconectar para continuar.', 'err');
+    }
     throw new Error('Token expirado. Reconecte la bandeja.');
   }
   if (!res.ok) {
@@ -3070,7 +3073,7 @@ async function gmailLoadSecSignature(force) {
   if (_gmailSecSignatureLoaded && !force) return _gmailSecSignatureHtml;
   try {
     if (!gmailIsTokenValid()) { _gmailSecSignatureHtml = ''; return ''; }
-    const data = await gmailApiCall('GET', GMAIL_API_BASE + '/settings/sendAs');
+    const data = await gmailApiCall('GET', GMAIL_API_BASE + '/settings/sendAs', null, { keepToken: true });
     const primary = (data.sendAs || []).find(function(s){ return s.isPrimary; }) || (data.sendAs || [])[0];
     _gmailSecSignatureHtml = (primary && primary.signature) ? String(primary.signature) : '';
     _gmailSecSignatureLoaded = true;
