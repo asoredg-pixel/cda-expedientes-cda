@@ -277,7 +277,7 @@ function renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t){
   return '<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
       '<input type="checkbox" id="task-rev-requiere-firma"'+(req?' checked':'')+' style="width:15px;height:15px;accent-color:var(--bl)"> '+
-      '<span><strong>Requiere firma del Director</strong> — al aprobar pasa a Por imprimir → Por firmar → Por notificar (como PQRSD). Si no, se cierra y se notifica al ciudadano.</span>'+
+      '<span><strong>Requiere firma del Director</strong> — al aprobar pasa a Por firmar (imprimir → firma → notificar). Si no, se cierra y se notifica al ciudadano.</span>'+
     '</label>'+
     (selNotif?'<div style="margin-top:8px">'+selNotif+'</div>':'')+
     '</div>';
@@ -380,7 +380,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   if(ok){
     if(typeof clearAltaResponsableAlAprobarDocumento==='function'&&!t.sinExpediente)
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
-    notif((esImprimir?'🖨 En «Por firmar» — marque impreso cuando corresponda':'🖊 En «Por firmar» (Director)')+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    notif('✍️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:''),'ok');
     if(opts.keepOpen&&typeof taskReviewRefreshModal==='function'){
       if(opts.closeSide&&typeof taskReviewCloseSidePanel==='function')taskReviewCloseSidePanel();
       taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
@@ -410,6 +410,10 @@ function tramiteMarcarImpreso(expId,taskId){
   notif('✓ Marcado como impreso','ok');
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewRefreshModal==='function'){
+    const refId=(t.sinExpediente?(t.codigo||expId):expId);
+    taskReviewRefreshModal(refId,taskId,window._taskReviewSideMode||'doc');
+  }
 }
 
 async function tramitePasarAPorFirmar(expId,taskId){
@@ -1392,30 +1396,70 @@ function openTramiteAtajoFirmadoModal(expId,taskId){
 }
 /**
  * Panel lateral de revisión: cargar documento firmado (mismo UI que entrega responsable).
+ * Si ya hay correo listo (Para/asunto/cuerpo), permite notificar ya.
+ * Si no es por correo, elige quién notifica (Vital / encargado) → Por notificar.
  */
 function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
   const eid=jsStr(refId),tid=jsStr(taskId);
+  const e=tramiteFirmaExpCtx(t,expId);
+  const esPqrs=e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  if(esPqrs){
+    return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
+      '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Documento firmado (PQRSD)</div>'+
+      '<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Cargue el PDF firmado o confirme la firma física desde el flujo PQRSD.</p>'+
+      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e" onclick="closeTaskModal();openPqrsDirectorFirmarModal(\''+escAttr(e._exp||refId)+'\')">📤 Abrir carga / firma</button>'+
+      '</div>';
+  }
   const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
   const pick=typeof sstFilePickBlock==='function'
     ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
     :'';
-  const e=tramiteFirmaExpCtx(t,expId);
+  const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
+  const canal=String(wf.canal||'correo').trim().toLowerCase();
+  const esCorreo=canal===''||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  const emailTo=String(wf.email_to||'').trim();
+  const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
+  const correoListo=esCorreo&&!!(emailTo||cuerpo);
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
-    const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
-    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto});
+    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{
+      modo:correoListo?'firma':'revision',
+      id:'tramite-atajo-notif-por-sel',
+      todosResponsables:true,
+      deptoId:e._depto,
+      canal:esCorreo?'correo':canal
+    });
+  }
+  let postHtml='';
+  if(correoListo){
+    postHtml=
+      '<div class="task-decision-block"><div class="task-decision-block-tit">Correo de notificación</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Ya hay datos de correo. Verifique y notifique (queda <strong>revisada y notificada</strong>).</div>'+
+      (emailTo?'<div style="font-size:11px;margin-bottom:4px"><strong>Para:</strong> '+escAttr(emailTo)+'</div>':'')+
+      (cuerpo?'<div style="font-size:11px;white-space:pre-wrap;max-height:120px;overflow:auto;padding:6px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+escAttr(cuerpo.slice(0,600))+(cuerpo.length>600?'…':'')+'</div>':'')+
+      '</div>'+
+      (selNotif?'':'')+
+      '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
+        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,true,{keepOpen:true})">📬 Notificar y atender</button>'+
+        '<button type="button" class="btn bsm" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Solo cargar → Por notificar</button>'+
+      '</div>';
+  }else{
+    postHtml=
+      '<div class="task-decision-block"><div class="task-decision-block-tit">Quién notificará</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Predeterminado: quien eligió el encargado al pasar a firma. Puede ser VITAL o el encargado.</div>'+
+      (selNotif||'')+
+      '</div>'+
+      '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
+        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Cargar y pasar a Por notificar</button>'+
+      '</div>';
   }
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
     '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
-      (selNotif?'<div class="task-decision-block"><div class="task-decision-block-tit">Notificación</div>'+selNotif+'</div>':'')+
-      '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
-        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Cargar y pasar a Por notificar</button>'+
-        '<button type="button" class="btn bsm" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,true,{keepOpen:true})">📬 Cargar y notificar ahora</button>'+
-      '</div></div></div>';
+    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+postHtml+'</div></div>';
 }
 function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
   opts=opts||{};
@@ -1563,7 +1607,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
       try{await driveRenombrarSoporteActivoExp(refId,taskId,'por_notificar');}catch(errR){console.warn(errR);}
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-    const esCorreo=true; // atajo desde revisión usa canal correo
+    const wfPrev=getTaskFirmaWf(t);
+    const canalPrev=String(wfPrev.canal||'correo').trim().toLowerCase();
+    const esCorreo=canalPrev===''||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO);
     const sinPlazo=esCorreo&&(!notifPor||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor)));
     let vence='';
     if(!sinPlazo){
@@ -1580,7 +1626,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
         fase:faseNotif,
         notificar_por:sinPlazo?'':(notifPor||prev.notificar_por||''),
         notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-        canal:'correo',
+        canal:esCorreo?'correo':(canalPrev||prev.canal||'correo'),
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
         firma_director:{
           por:taskComentarioAutor(),
@@ -1603,8 +1649,8 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
         fecha:inicio,
         por:taskComentarioAutor(),
         nota:pdfLink
-          ?('Atajo: documento firmado cargado → Por notificar'+(pdfLink?' · '+pdfLink:''))
-          :'Atajo: ya firmado (sin PDF) → Por notificar'
+          ?('Documento firmado cargado → Por notificar'+(pdfLink?' · '+pdfLink:''))
+          :'Ya firmado (sin PDF) → Por notificar'
       });
       if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
         tramiteSincronizarParticipacionPostAprobacionFirma(tk);
