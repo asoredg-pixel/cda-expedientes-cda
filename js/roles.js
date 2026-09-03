@@ -349,24 +349,28 @@ function getInstructorByNombre(nombre){
   return null;
 }
 function getRegSeccionesResponsableActivo(){
-  if(!esModoResponsable()||!responsableActivo)return null;
-  const ins=getInstructorByNombre(responsableActivo);
+  if((!esModoResponsable()&&!esModoContratista())||!responsableActivo)return null;
+  let ins=getInstructorByNombre(responsableActivo);
+  if(!ins&&typeof findInstructorByEmail==='function'&&window._usuarioActual&&window._usuarioActual.email)
+    ins=findInstructorByEmail(window._usuarioActual.email);
   if(!ins)return [];
   if(ins.rol==='encargado_depto')return Object.keys(REG_EDIT_SECS);
   return Array.isArray(ins.regSecciones)?ins.regSecciones.filter(Boolean):[];
 }
 function responsablePuedeVerRegistro(){
-  if(!esModoResponsable())return true;
-  return getRegSeccionesResponsableActivo().length>0;
+  if(!esModoResponsable()&&!esModoContratista())return true;
+  const secs=getRegSeccionesResponsableActivo();
+  return Array.isArray(secs)&&secs.length>0;
 }
 function responsablePuedeEditarSec(key){
   if(esJurisdiccional())return false;
-  if(!esModoResponsable())return true;
-  return getRegSeccionesResponsableActivo().includes(key);
+  if(!esModoResponsable()&&!esModoContratista())return true;
+  const secs=getRegSeccionesResponsableActivo();
+  return Array.isArray(secs)&&secs.includes(key);
 }
 function regSecHtml(key,html){
   if(!html)return '';
-  if(esModoResponsable()&&!responsablePuedeEditarSec(key))return '';
+  if((esModoResponsable()||esModoContratista())&&!responsablePuedeEditarSec(key))return '';
   return html;
 }
 function mergeExpDataPorSecciones(data,prev,secs){
@@ -394,8 +398,7 @@ function esSoloLectura(){
   if(typeof esMantenimientoActivo==='function'&&esMantenimientoActivo())return true;
   if(esModoCiudadano())return true;
   if(esJurisdiccional())return true;
-  if(esModoContratista())return true;
-  if(esModoResponsable())return !responsablePuedeVerRegistro();
+  if(esModoContratista()||esModoResponsable())return !responsablePuedeVerRegistro();
   return false;
 }
 function esMantenimientoActivo(){
@@ -1187,6 +1190,12 @@ function getBibliotecaDriveRootId(deptoCtx){
 }
 
 // Pestañas visibles por rol / módulo activo (menú principal)
+function tabsResponsableContratista(){
+  const G='gmail-ofi',R='reg',A='act',C='con',Rec='rec';
+  const tabs=[G,A,C,Rec];
+  if(typeof responsablePuedeVerRegistro==='function'&&responsablePuedeVerRegistro())tabs.splice(1,0,R);
+  return tabs;
+}
 function getTabsVisiblesSesion(){
   const G='gmail-ofi',S='sec',P='pqrs-ofi',R='reg',A='act',C='con',Rec='rec',Co='cons',Cfg='cfg',Ciu='ciudadano';
   // Mantenimiento: solo consulta (admin también Config para apagar el modo)
@@ -1201,13 +1210,13 @@ function getTabsVisiblesSesion(){
   if(esJurisdiccional())return[C,Co];
   if(esSecretaria())return[G,S,P,C,Rec];
   if(esModoOficinaDeguv())return[G,P,C,Rec];
-  if(esModoResponsable()||esModoContratista())return[G,A,C,Rec];
+  if(esModoResponsable()||esModoContratista())return tabsResponsableContratista();
   if(esAdministrador()){
     const sel=getSelDeptoVal();
     if(sel==='secretaria')return[G,S,P,C,Rec];
     if(esModuloOficina(sel))return[G,P,C,Rec];
     if(sel==='jurisdiccional')return[C,Co];
-    if(sel==='responsables')return[G,A,C,Rec];
+    if(sel==='responsables')return tabsResponsableContratista();
     if(sel==='ciudadano')return[Ciu];
     if(sel==='admin')return[R,G,S,P,A,C,Rec,Co,Cfg];
     if(DEPTOS.some(d=>d.id===sel))return deptTabs;

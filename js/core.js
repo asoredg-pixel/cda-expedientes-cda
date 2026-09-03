@@ -17534,13 +17534,14 @@ function onDeptoChange(){
 }
 function updateDeptoUI(){
   if(esVistaActividadesDepto())ensureEncargadoActivo();
-  if(esModoResponsable()&&esResponsableIdentidadFija())fijarResponsableSesion();
+  if((esModoResponsable()||esModoContratista())&&esResponsableIdentidadFija())fijarResponsableSesion();
   if(typeof aplicarModoMantenimientoUI==='function')aplicarModoMantenimientoUI();
   const ban=document.getElementById('reg-depto-banner');
   const respBar=document.getElementById('resp-global-bar');
   const sub=document.querySelector('.lsb');
   const juris=esJurisdiccional();
   const resp=esModoResponsable();
+  const respLike=esModoResponsable()||esModoContratista();
   const encDepto=esVistaActividadesDepto();
   const encNom=getEncargadoDepto(deptoActivo);
   const sec=esSecretaria();
@@ -17594,7 +17595,7 @@ function updateDeptoUI(){
     }
   }
   const tabReg=document.getElementById('tab-reg');
-  const hideRegResp=resp&&!responsablePuedeVerRegistro();
+  const hideRegResp=respLike&&!responsablePuedeVerRegistro();
   if(tabReg){tabReg.classList.toggle('tab-resp-reg-off',hideRegResp);}
   if(typeof aplicarVisibilidadTabsSesion==='function')aplicarVisibilidadTabsSesion();
   if(typeof initSstNav==='function')initSstNav();
@@ -17603,13 +17604,13 @@ function updateDeptoUI(){
   const optPqrsRec=document.getElementById('f-act-opt-pqrsrec');
   if(optPqrsRec)optPqrsRec.style.display='none';
   const tramSel=document.getElementById('tram-selector-wrap');
-  if(tramSel)tramSel.style.display=(resp&&!responsablePuedeVerRegistro()||sec||ciudadano||ofi)?'none':'';
+  if(tramSel)tramSel.style.display=(respLike&&!responsablePuedeVerRegistro()||sec||ciudadano||ofi)?'none':'';
   const regPg=document.getElementById('pg-reg');
   if(regPg&&juris&&regPg.classList.contains('on'))showTab('con');
   if(regPg&&ciudadano&&regPg.classList.contains('on'))showTab('ciudadano');
   if(regPg&&sec&&regPg.classList.contains('on'))showTab('sec');
   if(regPg&&ofi&&regPg.classList.contains('on'))showTab('pqrs-ofi');
-  if(regPg&&resp&&regPg.classList.contains('on')&&!responsablePuedeVerRegistro())showTab('act');
+  if(regPg&&respLike&&regPg.classList.contains('on')&&!responsablePuedeVerRegistro())showTab('act');
   const actDeptActions=document.getElementById('act-dept-actions');
   const actDeptBar=document.getElementById('act-dept-resp-bar');
   if(actDeptActions)actDeptActions.style.display=encDepto?'flex':'none';

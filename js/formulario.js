@@ -25,7 +25,7 @@ function showTab(t){
   if(esSecretaria()&&t!=='sec'&&t!=='con'&&t!=='pqrs-ofi'&&t!=='gmail-ofi'&&t!=='rec')t='sec';
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');
   if(esJurisdiccional()&&t!=='con'&&t!=='cons')t='con';
-  if(esModoResponsable()&&t==='reg'&&!responsablePuedeVerRegistro())t='act';
+  if((esModoResponsable()||esModoContratista())&&t==='reg'&&!responsablePuedeVerRegistro())t='act';
   if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
   if(t==='rec'&&!puedeVerRecursos())t=esModoResponsable()?'act':'con';
