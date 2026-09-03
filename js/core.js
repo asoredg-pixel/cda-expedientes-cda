@@ -20674,7 +20674,7 @@ function coordHtml(id,v,opts){
   let html='<input type="hidden" id="'+id+'" value=\''+(v||'')+'\'><div class="coord-box'+(compact?' coord-box-compact':'')+'" data-coord="'+id+'">'+
     '<select onchange="coordToggle(\''+id+'\',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx)">'+
     '<option value="punto"'+(tipo==='punto'?' selected':'')+'>Coordenada punto</option><option value="area"'+(tipo==='area'?' selected':'')+'>Área (4 coordenadas)</option></select>'+
-    '<div class="coord-pts">';
+    '<div class="coord-pts'+(tipo==='area'?' coord-pts-area':'')+'">';
   for(let i=0;i<n;i++)html+=coordPointHtml(id,i,tipo==='area'?'Punto '+(i+1):'Punto',pts[i]||{},tipo==='area');
   return html+'</div></div>';
 }
@@ -20687,6 +20687,7 @@ function coordHiddenInput(id){
 }
 function coordToggle(id,tipo){
   const box=document.querySelector('[data-coord="'+id+'"]'),pts=box.querySelector('.coord-pts'),data=coordData(document.getElementById(id).value);
+  pts.classList.toggle('coord-pts-area',tipo==='area');
   pts.innerHTML='';const n=tipo==='area'?4:1;
   for(let i=0;i<n;i++)pts.insertAdjacentHTML('beforeend',coordPointHtml(id,i,tipo==='area'?'Punto '+(i+1):'Punto',(data.pts||[])[i]||{},tipo==='area'));
   coordSync(id,tipo);
