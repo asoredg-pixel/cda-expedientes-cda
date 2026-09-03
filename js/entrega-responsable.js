@@ -149,7 +149,6 @@ function pickExpEntregaResp(expNum){
     }else hint.textContent='';
   }
   syncEntregaRespPqrsUi();
-  applyDefaultActividadEntregaPqrs();
   if(typeof entregaRespRetryFileUpload==='function')entregaRespRetryFileUpload();
 }
 
@@ -197,7 +196,6 @@ function pickCrearPqrsEntregaResp(expNum){
   const hint=document.getElementById('entrega-resp-exp-hint');
   if(hint)hint.textContent='';
   initEntregaRespPqrsAltaUi();
-  applyDefaultActividadEntregaPqrs();
   setTimeout(function(){
     const f=document.getElementById('er-pqrs-fecha-solicitud');
     if(f)f.focus();
@@ -463,9 +461,6 @@ function syncEntregaRespPqrsUi(){
   const esPqrsExistente=!!(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
     ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))));
   const esPqrsFlujo=esPqrsExistente||pqrsNuevo;
-  const actWrap=document.getElementById('entrega-resp-actividad-wrap');
-  if(actWrap)actWrap.style.display=esPqrsFlujo?'none':'';
-  if(esPqrsFlujo&&typeof applyDefaultActividadEntregaPqrs==='function')applyDefaultActividadEntregaPqrs();
   const box=document.getElementById('entrega-resp-pqrs-box');
   const tramFiles=document.getElementById('entrega-resp-tramite-files');
   const regBox=document.getElementById('entrega-resp-registro-box');
@@ -1372,22 +1367,6 @@ function actividadPredEntregaExiste(nombre){
   return listActividadesPredEntregaResp().some(function(a){return String(a||'').trim().toLowerCase()===nom;});
 }
 
-function defaultActividadEntregaPqrs(){
-  return typeof pqrsActividadNombreDefault==='function'?pqrsActividadNombreDefault():'Oficio de respuesta';
-}
-
-function applyDefaultActividadEntregaPqrs(){
-  const inp=document.getElementById('entrega-resp-actividad');
-  if(!inp)return;
-  if(!String(inp.value||'').trim())inp.value=defaultActividadEntregaPqrs();
-}
-
-function actividadPredEntregaValida(nombre,esPqrs){
-  if(actividadPredEntregaExiste(nombre))return true;
-  if(esPqrs&&String(nombre||'').trim().toLowerCase()===defaultActividadEntregaPqrs().toLowerCase())return true;
-  return false;
-}
-
 function msgActividadPredNoExiste(){
   return 'Esa actividad predeterminada no está configurada. Contacte al administrador para que la agregue en Configuración → Actividades predeterminadas.';
 }
@@ -1926,19 +1905,12 @@ function ensureExpTaskEntregaResponsable(){
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const detalle='';
-  const expPreview=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
-  const ePreview=!nuevo&&!pqrsNuevo&&!libre&&expPreview&&typeof getExpById==='function'?getExpById(expPreview):null;
-  const esPqrsPreview=!!(pqrsNuevo||(ePreview&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(ePreview)));
-  if(!actividad){
-    if(esPqrsPreview)applyDefaultActividadEntregaPqrs();
-  }
-  let actFinalCheck=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
-  if(!actFinalCheck&&esPqrsPreview)actFinalCheck=defaultActividadEntregaPqrs();
-  if(!actFinalCheck){notif('Indique la actividad predeterminada','err');return null;}
-  if(!actividadPredEntregaValida(actFinalCheck,esPqrsPreview)){
+  if(!actividad){notif('Indique la actividad predeterminada','err');return null;}
+  if(!actividadPredEntregaExiste(actividad)){
     notif(msgActividadPredNoExiste(),'err');
     return null;
   }
+  const actFinalCheck=actividad;
   if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
 
   // Sin expediente: actividad libre autoasignada al responsable
@@ -2028,12 +2000,9 @@ function ensureExpTaskEntregaResponsable(){
   const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
   let actFinal=actFinalCheck;
   if(esPqrs){
-    const def=defaultActividadEntregaPqrs();
-    if(!actFinal||actFinal==='Entrega')actFinal=def;
-    else if(String(actFinal).startsWith('Atender PQRSD')){
-      const m=String(actFinal).match(/Atender PQRSD(?:\s*[—-]\s*)?(.+)/i);
-      actFinal=(m&&m[1])?String(m[1]).trim():def;
-    }
+    const act=String(actFinal||'').trim();
+    if(!act.startsWith('Atender PQRSD')&&!/^Oficio de respuesta\b/i.test(act))
+      actFinal='Atender PQRSD'+(act?' — '+act:'');
   }
 
   e.tasks=Array.isArray(e.tasks)?e.tasks:[];
@@ -2504,12 +2473,8 @@ function vincularActLibreAExpediente(taskId,e){
 
   if(esPqrs){
     const act=String(t.actividad||'').trim();
-    const def=defaultActividadEntregaPqrs();
-    if(!act||act==='Entrega')t.actividad=def;
-    else if(act.startsWith('Atender PQRSD')){
-      const m=act.match(/Atender PQRSD(?:\s*[—-]\s*)?(.+)/i);
-      t.actividad=(m&&m[1])?String(m[1]).trim():def;
-    }
+    if(act&&!act.startsWith('Atender PQRSD')&&!/^Oficio de respuesta\b/i.test(act))
+      t.actividad='Atender PQRSD'+(act?' — '+act:'');
     t.desc=(t.actividad||'')+(t.detalle?' - '+t.detalle:'');
   }
 
