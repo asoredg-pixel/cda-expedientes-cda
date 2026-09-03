@@ -23806,10 +23806,10 @@ function pqrsRequiereCorreoNotificacion(e){
   return medioNotificacionNorm(e._medio_notificacion||'')==='electronica';
 }
 function pqrsCorreoHtmlPieInstitucional(){
+  // No incluir «NO RESPONDER» ni sedes aquí: Secretaría sí recibe peticiones en su correo,
+  // y la firma de Gmail del encargado ya lleva ese aviso (evitar duplicidad).
   return'<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e5e5">'+
-    '<p style="font-size:12px;color:#b45309;line-height:1.5;margin:0 0 8px;font-weight:600">IMPORTANTE: Favor NO RESPONDER a esta dirección de correo. Para más información o respuesta del contenido de este mensaje, contactar al correo institucional: <a href="mailto:cdaguaviare1@gmail.com" style="color:#1a5f9e">cdaguaviare1@gmail.com</a></p>'+
-    '<p style="font-size:11px;color:#4a5568;line-height:1.45;margin:0 0 10px">🌎 “Por favor no imprima este correo electrónico a menos que sea necesario” 🌳</p>'+
-    '<p style="font-size:10px;color:#888;line-height:1.45;margin:0">Sede Principal: Inírida – Guainía, Calle 26 No 11-131 · Seccional Guaviare: San José del Guaviare, Transv. 20 No 12-135 · Seccional Vaupés: Mitú, Av. 15 No. 8-144<br>Website: www.cda.gov.co · e-mail: contactenos@cda.gov.co</p>'+
+    '<p style="font-size:11px;color:#888;line-height:1.5;margin:0">Este mensaje es informativo. Conserve el número de radicado para consultar el estado de su solicitud.</p>'+
     '</div>';
 }
 function pqrsCorreoHtmlBloqueConsulta(expId){
