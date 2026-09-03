@@ -5864,7 +5864,7 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
   if(enPorFirmar){
     h+=typeof taskReviewImpresoRailBtnHtml==='function'?taskReviewImpresoRailBtnHtml(refExp,taskId,t,e):'';
-    if(!esModoResponsable())
+    if(typeof actPuedeCargarFirmadoPorFirmar==='function'?actPuedeCargarFirmadoPorFirmar():!esModoResponsable())
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&side==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   }
   if(esEnc&&!enPorFirmar){
@@ -18547,7 +18547,7 @@ function pqrsHealTaskTrasDevolucionDirector(e,t){
   t.fechaReportada=fr;
   return true;
 }
-/** Botón 🖨 con ✓ cuando ya está marcado impreso (mismo patrón que agenda 📅). */
+/** Botón 🖨️ con ✓ cuando ya está marcado impreso (mismo patrón que agenda 📅). */
 function actImpresoCheckBtnHtml(impresoObj,onclickJs,opts){
   opts=opts||{};
   const imp=!!(impresoObj&&impresoObj.en);
@@ -18556,9 +18556,58 @@ function actImpresoCheckBtnHtml(impresoObj,onclickJs,opts){
     ?('Impreso'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(impresoObj.por?' · '+impresoObj.por:''))
     :(opts.tipPend||'Marcar como impreso');
   if(imp){
-    return '<button type="button" class="btn bsm act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'"><span class="act-agenda-check" aria-hidden="true">✓</span>🖨</button>';
+    return '<button type="button" class="btn bsm act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'"><span class="act-agenda-check" aria-hidden="true">✓</span>🖨️</button>';
   }
-  return '<button type="button" class="btn bsm act-ico act-impreso-btn" style="background:#1a7a4a;color:#fff" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'">🖨</button>';
+  return '<button type="button" class="btn bsm act-ico act-impreso-btn" style="background:#1a7a4a;color:#fff" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'">🖨️</button>';
+}
+/**
+ * Paleta «Por firmar»: 🖨️ abre documentos/anexos (marcar impreso en el rail).
+ * Muestra ✓ si ya está impreso.
+ */
+function actPorFirmarPrintOpenBtnHtml(impresoObj,openOnclickJs){
+  const imp=!!(impresoObj&&impresoObj.en);
+  const cuando=imp?String(impresoObj.en||'').slice(0,10):'';
+  const tip=imp
+    ?('Impreso'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(impresoObj&&impresoObj.por?' · '+impresoObj.por:'')+' — ver documentos')
+    :'Ver documentos/anexos para imprimir y marcar impreso';
+  if(imp){
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'"><span class="act-agenda-check" aria-hidden="true">✓</span>🖨️</button>';
+  }
+  return '<button type="button" class="btn bsm bic act-ico act-impreso-btn" style="background:#1a7a4a;color:#fff" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'">🖨️</button>';
+}
+function openActPorFirmarDocs(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  if(typeof openTaskVerDocumentoResp==='function')
+    openTaskVerDocumentoResp(expId,taskId,{soloAprobados:true});
+  else if(typeof openTaskCommentsModal==='function')
+    openTaskCommentsModal(expId,taskId,{verDocumento:true,soloAprobados:true});
+}
+window.openActPorFirmarDocs=openActPorFirmarDocs;
+window.actPorFirmarPrintOpenBtnHtml=actPorFirmarPrintOpenBtnHtml;
+/** 📤 Cargar documento firmado → flujo de notificación. */
+function actPorFirmarCargarBtnHtml(expId,taskId,t,expAct){
+  const eid=jsStr(expId),tid=jsStr(taskId);
+  const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)
+    &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
+  if(esPqrs){
+    return '<button type="button" class="btn bsm bic act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" title="Cargar documento firmado" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')">📤</button>';
+  }
+  return '<button type="button" class="btn bsm bic act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" title="Cargar documento firmado" onclick="event.stopPropagation();tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')">📤</button>';
+}
+window.actPorFirmarCargarBtnHtml=actPorFirmarCargarBtnHtml;
+function actPuedeCargarFirmadoPorFirmar(){
+  if(typeof esCargoVital==='function'&&esCargoVital())return true;
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  if(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())return true;
+  if(typeof esAdministrador==='function'&&esAdministrador())return true;
+  // Encargado (depto / oficina): misma opción 📤 que VITAL
+  if(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto())return true;
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()&&!esModoResponsable())return true;
+  if(typeof esEncargadoActivo==='function'&&esEncargadoActivo())return true;
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&!esModoResponsable())return true;
+  if(typeof esSecretaria==='function'&&esSecretaria()&&!esModoResponsable())return true;
+  return false;
 }
 function pqrsMarcarImpreso(expId){
   if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
@@ -18711,27 +18760,30 @@ function renderActRowToolbarHtml(t,expAct){
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
   if(yo&&est!=='Atendida')acts+=taskAgendaBtnHtml(t.exp,t.id);
+  const enPorFirmarVista=(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
+      &&((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
+    ||(esPqrs&&expAct&&((typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(expAct))||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct))));
+  // En «Por firmar» la vista de docs es 🖨️ (no duplicar 🔍)
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo))
     acts+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);
-  else if(!esModoResponsable())
+  else if(!esModoResponsable()&&!enPorFirmarVista)
     acts+=actBtnVerPqrsOrigenDeptHtml(t.exp,t.id,t,expAct);
   // Firma / notificar solo si NO hay solicitud de traslado o eliminación pendiente
-  // En «Revisados» no se muestran 🖨/🖊 (se gestionan desde 🧐 / paleta Por firma)
+  // Paleta «Por firmar»: 🖨️ (docs + marcar impreso) y 📤 cargar firmado (VITAL y encargado)
   if(!sol&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const eidT=eid,tidT=tid;
     const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
     const puedeImp=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
-    if(!esRevisadaEnc&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t)){
-      if(puedeImp)acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
-      if(typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))
+    const enPorFirmarRow=(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))
+      ||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t));
+    if(enPorFirmarRow){
+      if(puedeImp)
+        acts+=actPorFirmarPrintOpenBtnHtml(wfT.impreso,"openActPorFirmarDocs('"+eidT+"','"+tidT+"')");
+      const firmPend=typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
+      if(firmPend&&!actPuedeCargarFirmadoPorFirmar())
         acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
-      else
-        acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();tramiteMarcarFirmadoFisico(\''+eidT+'\',\''+tidT+'\')" title="Firmar">🖊</button>';
-    }else if(!esRevisadaEnc&&typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&puedeImp){
-      acts+=actImpresoCheckBtnHtml(wfT.impreso,"tramiteMarcarImpreso('"+eidT+"','"+tidT+"')");
-    }else if(esRevisadaEnc&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t)
-      &&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t)){
-      acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
+      else if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
+        acts+=actPorFirmarCargarBtnHtml(t.exp,t.id,t,expAct);
     }
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
       if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
@@ -18749,28 +18801,20 @@ function renderActRowToolbarHtml(t,expAct){
     const peid=jsStr(expAct._exp||t.exp);
     const faseWf=pqrsWorkflowFase(expAct);
     const wfRow=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(expAct):{};
-    // 👁 proyección y 📬 notificar: no en acciones de filas (ni Revisados ni post-aprobación);
-    // se gestionan desde las paletas Por firmar / Por notificar.
-    if(!esRevisadaEnc&&typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct)&&typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(expAct)){
-      acts+=actImpresoCheckBtnHtml(wfRow.impreso,"pqrsMarcarImpreso('"+peid+"')");
-    }
+    const puedeImpPq=typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(expAct);
+    const enFirmaPq=(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct))
+      ||faseWf===PQRS_WF.POR_FIRMAR;
+    if(enFirmaPq&&puedeImpPq)
+      acts+=actPorFirmarPrintOpenBtnHtml(wfRow.impreso,"openActPorFirmarDocs('"+peid+"','"+tid+"')");
     if(faseWf===PQRS_WF.POR_FIRMAR){
       const firmFis=!!(wfRow.firma_fisica&&wfRow.firma_fisica.en);
       const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-      if(!esRevisadaEnc&&typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(expAct))
-        acts+=actImpresoCheckBtnHtml(wfRow.impreso,"pqrsMarcarImpreso('"+peid+"')");
-      if(firmFis){
-        if(esDir||esRevisadaEnc)acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
-        else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct))
-          acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
-        else acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
-      }else if(!esRevisadaEnc){
-        if(esDir)
-          acts+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Firmar">🖊</button>';
-        else if(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(expAct))
-          acts+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Ya firmado">✓</button>';
-        else acts+='<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e;font-size:10px">🖊</span>';
-      }
+      if(firmFis&&esDir)
+        acts+='<span class="bdg" style="background:#dcfce7;color:#15803d;font-size:10px">✓</span>';
+      else if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
+        acts+=actPorFirmarCargarBtnHtml(expAct._exp||t.exp,t.id,t,expAct);
+      else if(esDir)
+        acts+='<button type="button" class="btn bsm bic act-ico" style="background:#0d5c2e;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Firmar">📤</button>';
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+peid+'\')" title="Aprobar notificación">✅</button>';
