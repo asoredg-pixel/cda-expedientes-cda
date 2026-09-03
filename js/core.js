@@ -6404,10 +6404,15 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   if(canAsig){
     const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
     const responsables=typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
-    const yaAsig=[];
-    if(e._pqrs_responsable_oficina)yaAsig.push(String(e._pqrs_responsable_oficina).trim());
     const existTk=(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&(String(tk.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(tk.actividad)));});
-    if(existTk){getTaskResponsables(existTk).forEach(function(n){if(n&&!yaAsig.some(function(x){return agendaNorm(x)===agendaNorm(n);}))yaAsig.push(n);});}
+    // Si ya hay tarea asignada, pre-marcar solo los responsables de esa tarea
+    // (evita que el encargado quede marcado junto al responsable asignado)
+    const yaAsig=[];
+    if(existTk){
+      getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
+    }else if(e._pqrs_responsable_oficina){
+      yaAsig.push(String(e._pqrs_responsable_oficina).trim());
+    }
     const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
     const respChecks=responsables.length
       ?responsables.map(function(n){

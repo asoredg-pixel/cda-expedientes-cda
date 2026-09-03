@@ -1612,7 +1612,7 @@ function htmlEntregaRegConceptoBlock(e,opts){
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
     coordBlock+
     '</div>'+
-    '<div id="entrega-reg-concepto-req-hint" style="display:none;margin-top:8px;font-size:11px;color:var(--tx2);padding:8px;border-left:3px solid var(--or);background:var(--sf)">Si aplica requerimiento, el sistema creará automáticamente la actividad prioritaria <strong>Oficio de requerimiento</strong> (plazo 1 día). Los datos del requerimiento se diligencian al entregar esa actividad.</div>';
+    '<div id="entrega-reg-concepto-req-hint" style="display:none"></div>';
 }
 function coordSyncEntregaReview(id){
   if(String(id||'')!=='entrega-reg-concepto-coord')return;
