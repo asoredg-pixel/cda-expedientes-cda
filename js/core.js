@@ -468,7 +468,13 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
   e=normalizePqrsOficinaFields(e);
   if(t.eliminada)return false;
   if(pqrsEstaCerrada(e)){
-    if(usuario&&taskUsuarioEsAsignado(t,usuario)&&estadoTask(t)==='Atendida')return true;
+    // Cerrada/atendida: el responsable asignado la ve en Atendidas;
+    // el encargado la ve en Revisados / Atendidas (usuario=null = «Todos» / paleta Revisados).
+    if(!usuario)return true;
+    if(taskUsuarioEsAsignado(t,usuario))return true;
+    const enc=(typeof getEncargadoDepto==='function'?getEncargadoDepto(e._depto||(typeof deptoActivo!=='undefined'?deptoActivo:'')):'')
+      ||(typeof getEncargadoOficina==='function'?getEncargadoOficina(e._pqrs_oficina||''):'');
+    if(enc&&typeof agendaNorm==='function'&&agendaNorm(usuario)===agendaNorm(enc))return true;
     return false;
   }
   const ofi=e._pqrs_oficina||'';
@@ -1177,6 +1183,22 @@ function _ncaMarcarTaskRevisadaAprobada(expId,taskId,meta){
     normalizeTask(t);
     t.ultimaRevisionDepto={tipo:'aprobada',fecha:fechaC,ts:Date.now(),por:por,nota:nota,notificada:!!meta.notificada};
     t.verificadoPor=por+' · '+new Date().toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    if(meta.notificada||meta.marcarAtendida){
+      const hoyStr=fechaC;
+      (t.asignados||[]).forEach(function(a){
+        if(!a)return;
+        if(a.estado!=='atendido'){
+          a.estado='atendido';
+          a.fechaAtendida=a.fechaAtendida||hoyStr;
+          if(!a.fechaReportada)a.fechaReportada=hoyStr;
+        }
+      });
+      t.fechaReportada=t.fechaReportada||hoyStr;
+      t.fechaAtendida=t.fechaAtendida||hoyStr;
+      t.estado='Atendida';
+      t._pqrs_proyeccion_atendida=true;
+      if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+    }
     if(!Array.isArray(t.historial))t.historial=[];
     if(!t.historial.some(function(h){return h&&h.tipo==='verificacion'&&String(h.fecha||'')===fechaC;})){
       t.historial.push({tipo:'verificacion',fecha:fechaC,ts:Date.now(),por:por,nota:nota,reportadoPor:meta.reportadoPor||''});
@@ -6592,10 +6614,13 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
         para:destinos.join(', '),soporteDoc:soporteDoc,
         via:'confirmar_notificar',canal:'correo'
       });
+      if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')
+        pqrsSincronizarParticipacionPostAprobacion(e);
       const tidAct=(t&&t.id)||taskId;
       if(tidAct&&typeof _ncaMarcarTaskRevisadaAprobada==='function')
-        _ncaMarcarTaskRevisadaAprobada(e._exp||refId,tidAct,{fecha:fechaC,nota:'Aprobada y notificada por correo',notificada:true,por:por});
+        _ncaMarcarTaskRevisadaAprobada(e._exp||refId,tidAct,{fecha:fechaC,nota:'Aprobada y notificada por correo',notificada:true,marcarAtendida:true,por:por});
       else verificarTaskExp(refId,taskId,fechaC,{notificada:true,skipAutoMail:true,silent:true,forceClosePqrs:true});
+      try{if(typeof setActFiltro==='function')setActFiltro('revisados');}catch(errF){}
       if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
       closeTaskModal();
       if(typeof renderActividades==='function')renderActividades();
@@ -18434,18 +18459,22 @@ function taskReentregaBadgeHtml(t){
 }
 function taskEsRevisada(t){return !!getTaskRevisionDepto(t);}
 function taskCuentaComoRevisadaEncargado(t,e){
-  if(!t||t.eliminada||esTareaDelEncargado(t))return false;
+  if(!t||t.eliminada)return false;
+  // PQRSD ya cerrada/notificada: siempre en «Revisados» del encargado
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+    if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return true;
+    if(typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))return true;
+    if(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))return true;
+    if(typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e))return true;
+    if(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))return true;
+  }
+  if(esTareaDelEncargado(t))return false;
   if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return true;
-  if(e&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))return true;
-  if(e&&typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e))return true;
-  if(e&&typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))return true;
-  if(e&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return true;
-  if(e&&typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return true;
   if(t._pqrs_proyeccion_atendida)return true;
   const rev=typeof getTaskRevisionDepto==='function'?getTaskRevisionDepto(t):null;
   if(rev&&(rev.tipo==='aprobada'||rev.tipo==='corregir'))return true;
-  if((t.historial||[]).some(function(h){return h&&(h.tipo==='verificacion'||h.tipo==='enviar_firma'||h.tipo==='atajo_firmado_revision'||h.tipo==='pqrs_proyeccion_atendida');}))return true;
+  if((t.historial||[]).some(function(h){return h&&(h.tipo==='verificacion'||h.tipo==='enviar_firma'||h.tipo==='atajo_firmado_revision'||h.tipo==='pqrs_proyeccion_atendida'||h.tipo==='cierre_pqrs');}))return true;
   if(estadoTask(t)==='Atendida'&&(t.verificadoPor||t.ultimaRevisionDepto))return true;
   return false;
 }
@@ -20049,6 +20078,10 @@ function filtrarActividadesPorEstado(list,filtro){
         &&!(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)))return true;
       return false;
     }
+    // Encargado / depto: Atendidas incluye PQRSD ya cerrada (✓ Revisada ✓ Notificada)
+    const eEnc=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+    if(eEnc&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eEnc)
+      &&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eEnc))return true;
     return estadoTask(t)==='Atendida';
   });
   if(filtro==='revisados'){
