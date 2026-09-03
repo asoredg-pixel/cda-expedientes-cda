@@ -1506,7 +1506,7 @@ function syncEntregaRespRegistroUi(){
     box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Información contable · Factura</div>'+
       '<div class="fg">'+
       '<div class="fld"><label>Tipo de factura <span style="color:var(--rd)">*</span></label><select id="entrega-reg-fac-tipo" style="'+inp+'"><option value="">— Seleccione (Evaluación, TCAF…) —</option>'+tipos+'</select></div>'+
-      '<div class="fld"><label>Valor (pesos)</label><input type="number" id="entrega-reg-fac-valor" step="any" min="0" placeholder="0" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Valor (pesos)</label>'+moneyInputHtml('entrega-reg-fac-valor','','','entrega-reg-fac-valor')+'</div>'+
       '<div class="fld"><label>Referencia / N°</label><input type="text" id="entrega-reg-fac-ref" placeholder="N° / ref." style="'+inp+'"></div>'+
       '<div class="fld"><label>Fecha vencimiento</label><input type="date" id="entrega-reg-fac-venc" style="'+inp+'"></div>'+
       '<div class="fld"><label>Fecha pago (si ya pagó)</label><input type="date" id="entrega-reg-fac-pago" style="'+inp+'"></div>'+
@@ -1683,7 +1683,9 @@ function collectEntregaRespRegistroPayload(actividad){
     }};
   }
   if(tipo==='factura'){
-    const valorRaw=String((document.getElementById('entrega-reg-fac-valor')||{}).value||'').trim();
+    const valorRaw=typeof moneyRaw==='function'
+      ?moneyRaw(String((document.getElementById('entrega-reg-fac-valor')||{}).value||''))
+      :String((document.getElementById('entrega-reg-fac-valor')||{}).value||'').trim();
     return{tipo:'factura',item:{
       tipo:String((document.getElementById('entrega-reg-fac-tipo')||{}).value||'').trim(),
       valor:valorRaw,

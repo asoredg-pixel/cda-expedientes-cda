@@ -16435,9 +16435,18 @@ function moneyFmt(v){
   const dec=p[1]!==undefined?p[1]:'';
   return intp.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(dec!==''?','+dec:'');
 }
-function onMoneyInput(inp){inp.value=moneyFmt(inp.value);syncFacturasExtra();}
-function moneyInputHtml(cls,val,onchange){
-  return '<div class="money-wrap"><span>$</span><input type="text" inputmode="decimal" class="'+cls+'" value="'+moneyFmt(val)+'" oninput="onMoneyInput(this);'+(onchange||'')+'"></div>';
+function onMoneyInput(inp){
+  inp.value=moneyFmt(inp.value);
+  if(typeof syncFacturasExtra==='function')syncFacturasExtra();
+  // También sincroniza si el input está en el panel de entrega de factura (responsable)
+  const entregaFac=document.getElementById('entrega-reg-fac-valor');
+  if(entregaFac&&(inp===entregaFac||inp.closest&&inp.closest('#entrega-reg-box'))){
+    // nada más — el valor queda en el input; se lee en collectEntregaRespRegistroPayload
+  }
+}
+function moneyInputHtml(cls,val,onchange,extraId){
+  const idAttr=extraId?' id="'+escAttr(extraId)+'"':'';
+  return '<div class="money-wrap"><span>$</span><input type="text" inputmode="decimal"'+idAttr+' class="'+cls+'" value="'+moneyFmt(val)+'" oninput="onMoneyInput(this);'+(onchange||'')+'"></div>';
 }
 function acuerdoCuotasData(f){return Array.isArray(f&&f.acuerdoCuotas)?f.acuerdoCuotas:[];}
 function acuerdoCuotaEnMora(c){return c&&c.fecha&&c.fecha<hoy()&&!c.pago;}
