@@ -1430,6 +1430,13 @@ function resolveActividadRegistroTipo(nombreAct,deptoId){
   if(/acto|resoluci[oó]n|auto de|proyectar acto/.test(s))return'acto';
   return'';
 }
+function resolveActividadConceptoTipo(nombreAct,deptoId){
+  const nom=String(nombreAct||'').trim();
+  if(!nom)return'';
+  const cfgAct=typeof cfgFor==='function'?cfgFor(deptoId||getDeptoOperativo()):{};
+  const map=(cfgAct&&cfgAct.actConceptoTipoMap)||{};
+  return map[nom]?String(map[nom]):'';
+}
 function syncEntregaRespRegistroUi(){
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const box=document.getElementById('entrega-resp-registro-box');
@@ -1464,7 +1471,7 @@ function syncEntregaRespRegistroUi(){
   if(hint){
     if(!act)hint.textContent='';
     else if(!actividadPredEntregaExiste(act))hint.innerHTML='<span style="color:var(--or)">Esta actividad no está en la lista predeterminada. Contacte al administrador para configurarla.</span>';
-    else if(tipo==='concepto')hint.textContent='Apartado Registro: Seguimiento / conceptos técnicos.';
+    else if(tipo==='concepto')hint.textContent='Apartado Registro: Información técnica / conceptos.';
     else if(tipo==='factura')hint.textContent='Apartado Registro: Información contable (Evaluación, TCAF, etc.).';
     else if(tipo==='acto')hint.textContent='Apartado Registro: Normatividad legal / actos administrativos.';
     else if(tipo==='ninguno')hint.textContent='Solo actividad (sin datos de Registro asociados).';
@@ -1476,7 +1483,7 @@ function syncEntregaRespRegistroUi(){
   box.style.display='';
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
-    box.innerHTML=typeof htmlEntregaRegConceptoBlock==='function'?htmlEntregaRegConceptoBlock(eSel):'';
+    box.innerHTML=typeof htmlEntregaRegConceptoBlock==='function'?htmlEntregaRegConceptoBlock(eSel,{actividad:act}):'';
     setTimeout(function(){
       if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview('entrega-reg-concepto-coord');
     },0);
@@ -1556,12 +1563,20 @@ function renderEntregaConceptoCoordBlock(e,coordId){
   }
   return h;
 }
-function htmlEntregaRegConceptoBlock(e){
+function htmlEntregaRegConceptoBlock(e,opts){
+  opts=opts||{};
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   const hoyStr=typeof hoy==='function'?hoy():'';
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const tipos=typeof getTiposConceptoCfg==='function'?getTiposConceptoCfg(depto):['Concepto técnico','Informe técnico','Otro'];
+  const defTipo=opts.tipoConcepto||resolveActividadConceptoTipo(opts.actividad||'',depto)||'';
+  const tipoOpts=tipos.map(function(t){
+    return '<option value="'+escAttr(t)+'"'+(defTipo===t?' selected':'')+'>'+escAttr(t)+'</option>';
+  }).join('');
   const coordBlock=typeof renderEntregaConceptoCoordBlock==='function'?renderEntregaConceptoCoordBlock(e,'entrega-reg-concepto-coord'):'';
-  return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Seguimiento · Concepto técnico</div>'+
+  return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Información técnica · Concepto</div>'+
     '<div class="fg">'+
+    '<div class="fld"><label>Tipo de concepto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-concepto-tipo" style="'+inp+'"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
     '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'"></div>'+
     '<div class="fld"><label>Fecha seguimiento</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
     '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
@@ -1616,6 +1631,11 @@ function collectEntregaRespRegistroPayload(actividad){
       try{coordSync('entrega-reg-concepto-coord',null,true);}catch(err){}
     }
     const coordenadas=coordEl?String(coordEl.value||'').trim():'';
+    const tipoConcepto=String((document.getElementById('entrega-reg-concepto-tipo')||{}).value||'').trim();
+    if(!tipoConcepto){
+      notif('Seleccione el tipo de concepto','err');
+      return false;
+    }
     const baseline=String((document.getElementById('entrega-coord-baseline')||{}).value||'').trim();
     let coordCambioNota='';
     let coordAnterior='';
@@ -1628,6 +1648,7 @@ function collectEntregaRespRegistroPayload(actividad){
       coordAnterior=baseline;
     }
     return{tipo:'concepto',item:{
+      tipoConcepto:tipoConcepto,
       fecha:String((document.getElementById('entrega-reg-concepto-fecha')||{}).value||(typeof hoy==='function'?hoy():'')),
       concepto:String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim(),
       observaciones:String((document.getElementById('entrega-reg-concepto-obs')||{}).value||'').trim(),
@@ -1671,7 +1692,7 @@ function appendRegistroDesdeEntrega(e,payload){
   const item=payload.item;
   if(payload.tipo==='concepto'){
     const arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
-    if(!item.concepto&&!item.observaciones&&!item.coordenadas)return false;
+    if(!item.concepto&&!item.observaciones&&!item.coordenadas&&!item.tipoConcepto)return false;
     arr.push(item);
     e._conceptos_seg=JSON.stringify(arr);
     if(item.coordenadas){

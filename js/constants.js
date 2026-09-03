@@ -78,6 +78,7 @@ const DEF={
   actividadesCortasPred:[],
   etapasPred:['Radicación','Revisión documental','Evaluación técnica','Visita de campo','Concepto técnico','Acto administrativo','Notificación','Archivo'],
   tiposFactura:['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'],
+  tiposConcepto:['Concepto técnico','Concepto de seguimiento','Concepto ambiental','Informe técnico','Visita técnica','Otro'],
   tiposActoAdmin:[
     {nombre:'Auto de inicio',tieneVencimiento:false},
     {nombre:'Auto de archivo',tieneVencimiento:false},

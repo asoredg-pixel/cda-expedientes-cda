@@ -12,7 +12,7 @@ function cfgFor(deptoOrExp){
 }
 function normalizeCfgObj(c){
   if(!c||typeof c!=='object')c=JSON.parse(JSON.stringify(DEF));
-  ['gravedades','cargos','instructores','actividadesPred','actividadesCortasPred','etapasPred','tiposFactura','tiposActoAdmin','infoTecnica','tiposSancionatorio','tramites'].forEach(k=>{if(!c[k])c[k]=JSON.parse(JSON.stringify(DEF[k]||[]));});
+  ['gravedades','cargos','instructores','actividadesPred','actividadesCortasPred','etapasPred','tiposFactura','tiposConcepto','tiposActoAdmin','infoTecnica','tiposSancionatorio','tramites'].forEach(k=>{if(!c[k])c[k]=JSON.parse(JSON.stringify(DEF[k]||[]));});
   // Migración: unificar lista «sin expediente» dentro de Actividades predeterminadas
   if(Array.isArray(c.actividadesCortasPred)&&c.actividadesCortasPred.length){
     if(!Array.isArray(c.actividadesPred))c.actividadesPred=[];
@@ -53,6 +53,7 @@ function normalizeCfgObj(c){
   if(!c.actOficioMap||typeof c.actOficioMap!=='object')c.actOficioMap={};
   if(!c.actPlazoMap||typeof c.actPlazoMap!=='object')c.actPlazoMap={};
   if(!c.actPlazoUnidadMap||typeof c.actPlazoUnidadMap!=='object')c.actPlazoUnidadMap={};
+  if(!c.actConceptoTipoMap||typeof c.actConceptoTipoMap!=='object')c.actConceptoTipoMap={};
   // Semillas por defecto (solo si la actividad existe y aún no tiene mapeo)
   const seeds={
     'Elaborar concepto técnico':'concepto',
@@ -70,6 +71,8 @@ function normalizeCfgObj(c){
   });
   if((c.actividadesPred||[]).indexOf('Proyectar acto administrativo')>=0&&c.actFirmaMap['Proyectar acto administrativo']==null)
     c.actFirmaMap['Proyectar acto administrativo']=true;
+  if((c.actividadesPred||[]).indexOf('Elaborar concepto técnico')>=0&&!c.actConceptoTipoMap['Elaborar concepto técnico'])
+    c.actConceptoTipoMap['Elaborar concepto técnico']='Concepto técnico';
   c.tramites.forEach(t=>{
     if(!t.campos)t.campos=[];
     if(!t.etapasSeg)t.etapasSeg=[];

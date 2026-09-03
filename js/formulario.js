@@ -275,7 +275,9 @@ function renderFormulario(tid,ed,targetId){
     camposHtml+='<details class="form-section"><summary class="form-section-hdr">'+sec+'</summary><div class="form-section-body"><div class="fg">'+fh+'</div>'+btnGuardarSeccion()+'</div></details>';
   });
   migrarInfoTecExpediente(ev);
-  const infoTecExpSection=infoTecnicaExpHtml(ev);
+  const inclConceptosInfoTec=!esModoResponsable()&&!esModoContratista()||typeof responsablePuedeEditarSec==='function'&&responsablePuedeEditarSec('info_tec');
+  const inclConceptosSeg=!inclConceptosInfoTec&&(!esModoResponsable()&&!esModoContratista()||typeof responsablePuedeEditarSec==='function'&&responsablePuedeEditarSec('seguimiento'));
+  const infoTecExpSection=infoTecnicaExpHtml(ev,{includeConceptos:inclConceptosInfoTec});
   const estadoActual=isArchivadoEstado(ev._estado)?'Archivado o anulado':(ev._estado||'Solicitud');
   const estOpts=ESTADOS.map(v=>'<option'+(estadoActual===v?' selected':'')+'>'+v+'</option>').join('');
   const ter=ed?calcTerminos(ed):null;
@@ -298,7 +300,7 @@ function renderFormulario(tid,ed,targetId){
     expedientesAsociadosHtml(ev)+
     '<input type="hidden" id="fld__expedientes_asociados" value=\''+escAttr(ev._expedientes_asociados||'[]')+'\'>'+
     btnGuardarSeccion()+'</div></details>';
-  const segHtml=seguimientoHtml({...ev,_estado:estadoActual});
+  const segHtml=seguimientoHtml({...ev,_estado:estadoActual},{includeConceptos:inclConceptosSeg});
   const normativaSection=normativaHtml(ev);
   const tipoPersona=ev._tipo_persona||'natural';
   const esPqrs=esTramitePqrs(tid);

@@ -12305,7 +12305,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     const regTipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(t.actividad||''):'';
     if(regTipo==='concepto'&&typeof htmlEntregaRegConceptoBlock==='function'){
       h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
-      h+=htmlEntregaRegConceptoBlock(eExp);
+      h+=htmlEntregaRegConceptoBlock(eExp,{actividad:String(t.actividad||'').trim()});
       h+='</div>';
     }
   }
@@ -16625,17 +16625,23 @@ function delActoAdmin(btn){
 function collectActosAdmin(){syncActosAdmin();return{_actos_admin:gv('fld__actos_admin')||'[]'};}
 function conceptoSegRowHtml(c,i){
   c=c||{};
+  const tipos=getTiposConceptoCfg(getDeptoOperativo());
+  const tipoSel=String(c.tipoConcepto||'');
+  const tipoOpts=tipos.map(function(t){
+    return '<option value="'+escAttr(t)+'"'+(tipoSel===t?' selected':'')+'>'+escAttr(t)+'</option>';
+  }).join('');
   const st=estadoConceptoSeg(c);
   let flags='';
   if(st.cumplido)flags+=' <span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>';
   else if(st.incumplio)flags+=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags+=' <span class="flag flag-ncumple">No cumple</span>';
-  const tit='Concepto '+(c.concepto||('#'+(i+1)))+flags;
+  const tit=(tipoSel?tipoSel+' · ':'')+'Concepto '+(c.concepto||('#'+(i+1)))+flags;
   const noCumple=c.cumple==='no'||c.cumple===false;
   const reqCumplido=!!c.reqCumplido;
   return '<details class="item-fold concepto-seg">'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
+    '<div class="fld"><label>Tipo de concepto <span class="req-star">*</span></label><select class="cs-tipo-concepto" onchange="syncConceptosSeg();refreshConceptoFold(this)"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
     '<div class="fld"><label>Fecha seguimiento</label><input type="date" class="cs-fecha" value="'+(c.fecha||'')+'" onchange="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld"><label>N° concepto técnico</label><input type="text" class="cs-concepto" value="'+escAttr(c.concepto||'')+'" oninput="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea class="cs-obs" style="min-height:55px" oninput="syncConceptosSeg()">'+escTextarea(c.observaciones||'')+'</textarea></div>'+
@@ -16694,6 +16700,7 @@ function refreshConceptoFold(el){
   const row=el.closest('.concepto-seg');if(!row)return;
   const rc=row.querySelector('.cs-req-cumplido');
   const c={
+    tipoConcepto:row.querySelector('.cs-tipo-concepto')?row.querySelector('.cs-tipo-concepto').value:'',
     fecha:row.querySelector('.cs-fecha').value,
     concepto:row.querySelector('.cs-concepto').value,
     cumple:row.querySelector('.cs-cumple').value,
@@ -16709,7 +16716,7 @@ function refreshConceptoFold(el){
   else if(st.incumplio)flags=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags=' <span class="flag flag-ncumple">No cumple</span>';
   const sum=row.querySelector('summary');
-  if(sum)sum.innerHTML='Concepto '+escAttr(c.concepto||'sin número')+flags;
+  if(sum)sum.innerHTML=escAttr((c.tipoConcepto?c.tipoConcepto+' · ':'')+'Concepto '+(c.concepto||'sin número'))+flags;
 }
 function migrarSegLegacy(ev){
   if(ev._conceptos_seg&&ev._conceptos_seg!=='[]')return;
@@ -16717,18 +16724,23 @@ function migrarSegLegacy(ev){
     ev._conceptos_seg=JSON.stringify([{fecha:ev._fecha_seg||hoy(),concepto:'',observaciones:ev._obs_seg||'',cumple:'si'}]);
   }
 }
-function seguimientoHtml(ev){
+function seguimientoHtml(ev,opts){
+  opts=opts||{};
   migrarSegLegacy(ev);
-  const list=conceptosSegData(ev._conceptos_seg);
   const show=ev._estado==='Seguimiento';
+  const conceptosBlock=opts.includeConceptos?(
+    '<input type="hidden" id="fld__conceptos_seg" value=\''+escAttr(ev._conceptos_seg||'[]')+'\'>'+
+    '<div id="conceptos-seg-list">'+conceptosSegData(ev._conceptos_seg).map(function(c,i){return conceptoSegRowHtml(c,i);}).join('')+'</div>'+
+    '<div class="seg-inner-tools" id="seg-add-wrap">'+
+    '<button class="btn bsm" type="button" onclick="addConceptoSeg()">+ Añadir concepto de seguimiento</button>'+
+    btnGuardarSeccion()+'</div>'
+  ):('<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Los conceptos técnicos se registran en la sección <strong>Información técnica</strong>.</div>'+
+    btnGuardarSeccion());
   return '<details class="form-section" id="seg-section" style="'+(show?'':'display:none')+'" ontoggle="onSegSectionToggle()">'+
     '<summary class="form-section-hdr">Seguimiento</summary>'+
     '<div class="form-section-body seg-section-body">'+
-    '<input type="hidden" id="fld__conceptos_seg" value=\''+escAttr(ev._conceptos_seg||'[]')+'\'>'+
-    '<div id="conceptos-seg-list">'+list.map((c,i)=>conceptoSegRowHtml(c,i)).join('')+'</div>'+
-    '<div class="seg-inner-tools" id="seg-add-wrap">'+
-    '<button class="btn bsm" type="button" onclick="addConceptoSeg()">+ Añadir concepto de seguimiento</button>'+
-    btnGuardarSeccion()+'</div></div></details>';
+    conceptosBlock+
+    '</div></details>';
 }
 function syncSeguimientoUi(){
   const v=gv('fld__estado');
@@ -16752,6 +16764,7 @@ function syncConceptosSeg(){
     const reqCumplido=!!(r.querySelector('.cs-req-cumplido')&&r.querySelector('.cs-req-cumplido').checked);
     const q=r.querySelector.bind(r);
     return {
+      tipoConcepto:q('.cs-tipo-concepto')?q('.cs-tipo-concepto').value:'',
       fecha:q('.cs-fecha')?q('.cs-fecha').value:'',
       concepto:q('.cs-concepto')?q('.cs-concepto').value:'',
       observaciones:q('.cs-obs')?q('.cs-obs').value:'',
@@ -20721,6 +20734,27 @@ function esSecDetalleProceso(sec){
 }
 function esSecInfoTecnica(sec){return String(sec||'').trim().toLowerCase()==='información técnica'||String(sec||'').trim().toLowerCase()==='informacion tecnica';}
 function getInfoTecCatalog(deptoOrExp){return cfgFor(deptoOrExp).infoTecnica||[];}
+function getTiposConceptoCfg(deptoOrExp){
+  const c=cfgFor(deptoOrExp);
+  const list=(c&&c.tiposConcepto)||[];
+  return list.length?list.slice():['Concepto técnico','Concepto de seguimiento','Informe técnico','Otro'];
+}
+function resolveActividadConceptoTipo(nombreAct,deptoId){
+  const nom=String(nombreAct||'').trim();
+  if(!nom)return'';
+  const cfgAct=cfgFor(deptoId||getDeptoOperativo());
+  const map=(cfgAct&&cfgAct.actConceptoTipoMap)||{};
+  return map[nom]?String(map[nom]):'';
+}
+function conceptosExpBlockHtml(ev){
+  migrarSegLegacy(ev);
+  const list=conceptosSegData(ev._conceptos_seg);
+  return '<div class="info-tec-conceptos-block" style="margin-bottom:1rem;padding-bottom:.8rem;border-bottom:1px dashed var(--bd)">'+
+    '<div class="slbl" style="margin-bottom:.5rem">Conceptos técnicos</div>'+
+    '<input type="hidden" id="fld__conceptos_seg" value=\''+escAttr(ev._conceptos_seg||'[]')+'\'>'+
+    '<div id="conceptos-seg-list">'+list.map(function(c,i){return conceptoSegRowHtml(c,i);}).join('')+'</div>'+
+    '<button class="btn bsm" type="button" onclick="addConceptoSeg()" style="margin-top:6px">+ Añadir concepto</button></div>';
+}
 /** true si el campo técnico aplica al trámite (vacío / «all» = todos). */
 function infoTecAplicaATramite(campo,tramId){
   if(!campo)return false;
@@ -20794,13 +20828,16 @@ function infoTecnicaExpRowHtml(item,i,depto,tramId){
     '<div class="fld it-valor-wrap"><label>Valor</label>'+infoTecValorInputHtml(def,item.valor,i)+'</div>'+
     '</div><div class="ar"><button type="button" class="btn bsm bd2" onclick="delInfoTecnicaExp(this)">Eliminar</button></div></div></details>';
 }
-function infoTecnicaExpHtml(ev){
+function infoTecnicaExpHtml(ev,opts){
+  opts=opts||{};
   const depto=getDeptoOperativo();
   const tramId=resolveExpTramiteId(ev)||(document.getElementById('fld__tramite')?document.getElementById('fld__tramite').value:'')||'';
   const items=infoTecnicaExpData(ev._info_tecnica_items);
   const nCat=getInfoTecCatalogForTramite(depto,tramId).length;
+  const conceptosPart=opts.includeConceptos!==false?conceptosExpBlockHtml(ev):'';
   return '<details class="form-section"><summary class="form-section-hdr">Información técnica</summary><div class="form-section-body">'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Campos de Configuración → Información técnica aplicables a este trámite'+(nCat?' ('+nCat+')':'')+'. Si un campo no aparece, revise su alcance en configuración.</div>'+
+    conceptosPart+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">Campos técnicos de Configuración → Información técnica aplicables a este trámite'+(nCat?' ('+nCat+')':'')+'.</div>'+
     '<input type="hidden" id="fld__info_tecnica_items" value=\''+escAttr(ev._info_tecnica_items||'[]')+'\'>'+
     '<div id="info-tecnica-exp-list">'+items.map((it,i)=>infoTecnicaExpRowHtml(it,i,depto,tramId)).join('')+'</div>'+
     '<button type="button" class="btn bsm" onclick="addInfoTecnicaExp()">+ Añadir información técnica</button>'+

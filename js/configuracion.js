@@ -371,8 +371,10 @@ function renderListasCfg(){
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Recursos (enlaces y biblioteca)','Enlaces externos y repositorios Drive por ámbito: sistema, departamento u oficina.',typeof recursosCfgCardBody==='function'?recursosCfgCardBody():'',false);
     html+=cfgSectionFold('Actividades predeterminadas','Opciones reutilizables al asignar o entregar actividades (con o sin expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
+      cfgSectionFold('Tipos de concepto','Opciones al añadir conceptos en Información técnica o al entregar actividades de concepto.',ro?cfgCardReadonlyStrings(cfg.tiposConcepto||[]):tipoConceptoCardBody(),false)+
       cfgSectionFold('Tipos de factura','Opciones disponibles al añadir facturas en Información contable.',ro?cfgCardReadonlyStrings(cfg.tiposFactura||[]):tipoFacturaCardBody(),false)+
-      cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false);
+      cfgSectionFold('Tipos de actos administrativos','Actos registrables en Normatividad / legal.',ro?cfgCardReadonlyStrings((cfg.tiposActoAdmin||[]).map(t=>t.nombre||t)):tipoActoAdminCardBody(),false)+
+      cfgSectionFold('Información técnica (campos)','Campos técnicos configurables por trámite, además de los conceptos.',ro?('<div class="cfcard" style="font-size:12px;color:var(--tx2)">'+(cfg.infoTecnica||[]).length+' campo(s) — edite en la pestaña Información técnica o aquí abajo.</div>'):infoTecnicaCfgCardBody(),false);
     el.innerHTML=html;
     restoreCfgFoldState(open);
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
@@ -467,6 +469,21 @@ function tipoFacturaCardBody(){
   '</ul><div class="cfadd"><input type="text" id="tipofac-new" placeholder="Nuevo tipo de factura..." onkeydown="if(event.key===\'Enter\')addTipoFactura()"><button class="btn bsm bp" onclick="addTipoFactura()">+</button></div></div>';
 }
 function tipoFacturaCardHtml(){return cfgSectionFold('Tipos de factura','',tipoFacturaCardBody(),false);}
+function tipoConceptoCardBody(){
+  const tipos=cfg.tiposConcepto||[];
+  return '<div class="cfcard"><ul class="cfl">'+
+    tipos.map((v,i)=>'<li class="cfi"><input type="text" value="'+escAttr(v)+'" onchange="editTipoConcepto('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);width:100%"><div class="fx" style="gap:2px">'+
+      '<button class="btn bsm bic bd2" onclick="delTipoConcepto('+i+')">✕</button></div></li>').join('')+
+  '</ul><div class="cfadd"><input type="text" id="tipocon-new" placeholder="Nuevo tipo de concepto..." onkeydown="if(event.key===\'Enter\')addTipoConcepto()"><button class="btn bsm bp" onclick="addTipoConcepto()">+</button></div></div>';
+}
+function addTipoConcepto(){if(guardCfgEditGeneral())return;if(!cfg.tiposConcepto)cfg.tiposConcepto=[];const inp=document.getElementById('tipocon-new');const v=inp.value.trim();if(!v){notif('Escribe un tipo de concepto','err');return;}if(cfg.tiposConcepto.includes(v)){notif('Ya existe','err');return;}cfg.tiposConcepto.push(v);inp.value='';saveLS();renderListasCfg();}
+function editTipoConcepto(i,v){if(guardCfgEditGeneral())return;if(!cfg.tiposConcepto)return;const prev=cfg.tiposConcepto[i];cfg.tiposConcepto[i]=v.trim();if(prev&&prev!==v.trim()&&cfg.actConceptoTipoMap){Object.keys(cfg.actConceptoTipoMap).forEach(function(k){if(cfg.actConceptoTipoMap[k]===prev)cfg.actConceptoTipoMap[k]=v.trim();});}saveLS();}
+function delTipoConcepto(i){
+  if(guardCfgEditGeneral())return;
+  confirmEliminar({message:'¿Eliminar este tipo de concepto?'},()=>{
+    if(!cfg.tiposConcepto)return;cfg.tiposConcepto.splice(i,1);saveLS();renderListasCfg();
+  });
+}
 function addTipoFactura(){if(guardCfgEditGeneral())return;if(!cfg.tiposFactura)cfg.tiposFactura=[];const inp=document.getElementById('tipofac-new');const v=inp.value.trim();if(!v){notif('Escribe un tipo de factura','err');return;}if(cfg.tiposFactura.includes(v)){notif('Ya existe','err');return;}cfg.tiposFactura.push(v);inp.value='';saveLS();renderListasCfg();}
 function editTipoFactura(i,v){if(guardCfgEditGeneral())return;if(!cfg.tiposFactura)return;cfg.tiposFactura[i]=v.trim();saveLS();}
 function delTipoFactura(i){
@@ -482,6 +499,7 @@ function actPredCardBody(){
   if(!cfg.actOficioMap||typeof cfg.actOficioMap!=='object')cfg.actOficioMap={};
   if(!cfg.actPlazoMap||typeof cfg.actPlazoMap!=='object')cfg.actPlazoMap={};
   if(!cfg.actPlazoUnidadMap||typeof cfg.actPlazoUnidadMap!=='object')cfg.actPlazoUnidadMap={};
+  if(!cfg.actConceptoTipoMap||typeof cfg.actConceptoTipoMap!=='object')cfg.actConceptoTipoMap={};
   const tipoOpts=function(sel){
     return [['','— Registro —'],['concepto','Concepto'],['factura','Factura'],['acto','Acto / resolución'],['ninguno','Solo actividad']].map(function(o){
       return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
@@ -492,9 +510,15 @@ function actPredCardBody(){
       return '<option value="'+o[0]+'"'+(sel===o[0]?' selected':'')+'>'+o[1]+'</option>';
     }).join('');
   };
-  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Sirve para entregas <strong>con expediente/PQRSD</strong> y <strong>sin expediente</strong>. El tipo de <strong>Registro</strong> (solo con expediente) define qué datos se piden (concepto → Seguimiento, factura → Información contable, acto → Normatividad). «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar. «N° oficio» exige el consecutivo de documentación externa al entregar (mismo control que respuestas PQRSD). <strong>Plazo</strong>: días por defecto al asignar la actividad (el encargado puede ajustarlos).</div><ul class="cfl">'+
+  const conceptoTipos=cfg.tiposConcepto||['Concepto técnico','Concepto de seguimiento','Informe técnico','Otro'];
+  const conceptoTipoOpts=function(sel,disabled){
+    return '<option value=""'+(sel?'':' selected')+'>— Tipo concepto —</option>'+
+      conceptoTipos.map(function(t){return '<option value="'+escAttr(t)+'"'+(sel===t?' selected':'')+'>'+escAttr(t)+'</option>';}).join('');
+  };
+  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Sirve para entregas <strong>con expediente/PQRSD</strong> y <strong>sin expediente</strong>. El tipo de <strong>Registro</strong> (solo con expediente) define qué datos se piden (concepto → Información técnica, factura → Información contable, acto → Normatividad). Si el destino es <strong>Concepto</strong>, indique el tipo de concepto por defecto. «Firma Director» envía la actividad al flujo Por imprimir → Por firmar → Por notificar. «N° oficio» exige el consecutivo de documentación externa al entregar (mismo control que respuestas PQRSD). <strong>Plazo</strong>: días por defecto al asignar la actividad (el encargado puede ajustarlos).</div><ul class="cfl">'+
     acts.map((v,i)=>{
       const tipo=cfg.actRegistroMap[v]||'';
+      const conceptoTipo=cfg.actConceptoTipoMap[v]||'';
       const firma=!!cfg.actFirmaMap[v];
       const oficio=!!cfg.actOficioMap[v];
       const plazo=cfg.actPlazoMap[v]!=null?cfg.actPlazoMap[v]:'';
@@ -502,6 +526,7 @@ function actPredCardBody(){
       return '<li class="cfi" style="flex-wrap:wrap;align-items:flex-start">'+
       '<input type="text" value="'+escAttr(v)+'" onchange="editActPred('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 7px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx);flex:1;min-width:140px">'+
       '<select onchange="editActPredRegistroTipo('+i+',this.value)" title="Destino en menú Registro" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;max-width:150px">'+tipoOpts(tipo)+'</select>'+
+      '<select onchange="editActPredConceptoTipo('+i+',this.value)" title="Tipo de concepto (si destino es Concepto)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;max-width:160px;'+(tipo!=='concepto'?'opacity:.45':'')+'"'+(tipo!=='concepto'?' disabled':'')+'>'+conceptoTipoOpts(conceptoTipo)+'</select>'+
       '<input type="number" min="0" step="1" value="'+escAttr(plazo)+'" placeholder="Plazo" title="Días por defecto" onchange="editActPredPlazo('+i+',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;width:64px">'+
       '<select onchange="editActPredPlazoUnidad('+i+',this.value)" title="Tipo de días" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:11px;max-width:120px">'+unidadOpts(plazoU)+'</select>'+
       '<label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap" title="Requiere firma del Director"><input type="checkbox" '+(firma?'checked ':'')+'onchange="editActPredRequiereFirma('+i+',this.checked)"> Firma</label>'+
@@ -535,6 +560,7 @@ function editActPred(i,v){
   if(!cfg.actOficioMap)cfg.actOficioMap={};
   if(!cfg.actPlazoMap)cfg.actPlazoMap={};
   if(!cfg.actPlazoUnidadMap)cfg.actPlazoUnidadMap={};
+  if(!cfg.actConceptoTipoMap)cfg.actConceptoTipoMap={};
   if(prev&&prev!==nv&&cfg.actRegistroMap[prev]!=null){
     cfg.actRegistroMap[nv]=cfg.actRegistroMap[prev];
     delete cfg.actRegistroMap[prev];
@@ -555,6 +581,10 @@ function editActPred(i,v){
     cfg.actPlazoUnidadMap[nv]=cfg.actPlazoUnidadMap[prev];
     delete cfg.actPlazoUnidadMap[prev];
   }
+  if(prev&&prev!==nv&&cfg.actConceptoTipoMap[prev]!=null){
+    cfg.actConceptoTipoMap[nv]=cfg.actConceptoTipoMap[prev];
+    delete cfg.actConceptoTipoMap[prev];
+  }
   saveLS();
 }
 function editActPredRegistroTipo(i,tipo){
@@ -563,6 +593,15 @@ function editActPredRegistroTipo(i,tipo){
   const nom=cfg.actividadesPred[i];
   if(!tipo)delete cfg.actRegistroMap[nom];
   else cfg.actRegistroMap[nom]=tipo;
+  saveLS();
+  renderListasCfg();
+}
+function editActPredConceptoTipo(i,tipo){
+  if(!cfg.actividadesPred||!cfg.actividadesPred[i])return;
+  if(!cfg.actConceptoTipoMap)cfg.actConceptoTipoMap={};
+  const nom=cfg.actividadesPred[i];
+  if(!tipo)delete cfg.actConceptoTipoMap[nom];
+  else cfg.actConceptoTipoMap[nom]=tipo;
   saveLS();
 }
 function editActPredRequiereFirma(i,on){
@@ -607,6 +646,7 @@ function delActPred(i){
   if(cfg.actOficioMap&&nom)delete cfg.actOficioMap[nom];
   if(cfg.actPlazoMap&&nom)delete cfg.actPlazoMap[nom];
   if(cfg.actPlazoUnidadMap&&nom)delete cfg.actPlazoUnidadMap[nom];
+  if(cfg.actConceptoTipoMap&&nom)delete cfg.actConceptoTipoMap[nom];
   saveLS();renderListasCfg();notif('Eliminado','ok');
 }
 function mvActPred(i,d){const a=cfg.actividadesPred;if(!a)return;const n=i+d;if(n<0||n>=a.length)return;[a[i],a[n]]=[a[n],a[i]];saveLS();renderListasCfg();}
@@ -656,7 +696,7 @@ function infoTecCfgItemBody(c,i){
     :'<div style="font-size:12px;color:var(--tx3)">No hay trámites configurados en este departamento.</div>';
   return '<div class="fg" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.6rem">'+
     '<div class="fld"><label>Nombre</label><input type="text" value="'+(c.label||'')+'" onchange="editInfoTec('+i+',\'label\',this.value)"></div>'+
-    '<div class="fld"><label>Tipo</label><select onchange="editInfoTec('+i+',\'tipo\',this.value);renderInfoTecCfg()">'+TIPO_KEYS.map(k=>'<option value="'+k+'"'+(c.tipo===k?' selected':'')+'>'+TIPOS[k].label+'</option>').join('')+'</select></div>'+
+    '<div class="fld"><label>Tipo</label><select onchange="editInfoTec('+i+',\'tipo\',this.value);refreshInfoTecCfgUi()">'+TIPO_KEYS.map(k=>'<option value="'+k+'"'+(c.tipo===k?' selected':'')+'>'+TIPOS[k].label+'</option>').join('')+'</select></div>'+
     '<div class="fld"><label>Placeholder</label><input type="text" value="'+(c.placeholder||'')+'" onchange="editInfoTec('+i+',\'placeholder\',this.value)"></div>'+
     '<div class="fld"><label>Requerido</label><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-top:6px"><input type="checkbox" '+(c.requerido?'checked':'')+' onchange="editInfoTec('+i+',\'requerido\',this.checked)"> Sí</label></div>'+
     '</div>'+
@@ -685,26 +725,38 @@ function infoTecCfgScopeLabel(c){
   if(names.length<=2)return names.join(', ')||(ids.length+' trámite(s)');
   return names.slice(0,2).join(', ')+' +'+(names.length-2);
 }
-function renderInfoTecCfg(){
+function infoTecnicaCfgListInnerHtml(ro){
   if(!cfg.infoTecnica)cfg.infoTecnica=[];
-  const ro=cfgEsSoloLectura();
   const items=cfg.infoTecnica.length?cfg.infoTecnica.map((c,i)=>{
     const tipoLbl=TIPOS[c.tipo]?TIPOS[c.tipo].label:c.tipo||'texto';
     const scopeLbl=infoTecCfgScopeLabel(c);
     const title=(c.label||'Campo '+(i+1))+' · '+tipoLbl+' · '+scopeLbl;
     const roBody='<div style="font-size:13px;padding:4px 0">'+escAttr(c.label)+' · '+escAttr(tipoLbl)+'<div style="font-size:11px;color:var(--tx3);margin-top:4px">'+escAttr(scopeLbl)+'</div></div>';
     return cfgSectionFold(title,'',ro?roBody:infoTecCfgItemBody(c,i),false);
-  }).join(''):'<div style="font-size:12px;color:var(--tx3);padding:.8rem;border:1px dashed var(--bd);border-radius:var(--r)">Sin campos técnicos.</div>';
+  }).join(''):'<div style="font-size:12px;color:var(--tx3);padding:.8rem;border:1px dashed var(--bd);border-radius:var(--r)">Sin campos técnicos configurados.</div>';
+  return '<div id="it-list" style="display:flex;flex-direction:column;gap:.5rem;max-width:720px">'+items+'</div>'+
+    (ro?'':'<div class="ar" style="margin-top:.8rem"><button class="btn bp" onclick="addInfoTec()">+ Crear campo técnico</button></div>');
+}
+function infoTecnicaCfgCardBody(){
+  return '<div class="cfcard"><div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Campos reutilizables en expedientes (coordenadas, caudales, etc.). Los conceptos usan los <strong>tipos de concepto</strong> configurados arriba.</div>'+
+    infoTecnicaCfgListInnerHtml(false)+'</div>';
+}
+function refreshInfoTecCfgUi(){
+  if(document.getElementById('cfg-info-tecnica-panel'))renderInfoTecCfg();
+  if(document.getElementById('cfg-panels'))renderListasCfg();
+}
+function renderInfoTecCfg(){
+  if(!cfg.infoTecnica)cfg.infoTecnica=[];
+  const ro=cfgEsSoloLectura();
   document.getElementById('cfg-info-tecnica-panel').innerHTML=(ro?cfgRestringidoBannerHtml():'')+'<div class="card"><div class="cft">Información técnica'+(ro?' <span style="font-size:11px;color:var(--tx3)">(solo lectura)</span>':'')+'</div>'+
     '<div class="cfs">Campos reutilizables en expedientes (después de información contable). Puede asociar cada campo a <strong>todos</strong> los trámites o solo a los que aplique.</div>'+
-    '<div id="it-list" style="display:flex;flex-direction:column;gap:.5rem;max-width:720px">'+items+'</div>'+
-    (ro?'':'<div class="ar" style="margin-top:.8rem"><button class="btn bp" onclick="addInfoTec()">+ Crear campo técnico</button></div>')+'</div>';
+    infoTecnicaCfgListInnerHtml(ro)+'</div>';
 }
 function addInfoTec(){
   if(guardCfgEditGeneral())return;
   if(!cfg.infoTecnica)cfg.infoTecnica=[];
   cfg.infoTecnica.push({id:'it'+Date.now(),label:'Nuevo campo técnico',tipo:'texto',placeholder:'',requerido:false,tramitesScope:'all',tramitesIds:[]});
-  saveLS();renderInfoTecCfg();
+  saveLS();refreshInfoTecCfgUi();
 }
 function editInfoTec(i,k,v){if(guardCfgEditGeneral())return;const c=cfg.infoTecnica&&cfg.infoTecnica[i];if(!c)return;c[k]=v;saveLS();}
 function setInfoTecTramitesScope(i,scope){
@@ -714,7 +766,7 @@ function setInfoTecTramitesScope(i,scope){
   c.tramitesScope=scope;
   if(!Array.isArray(c.tramitesIds))c.tramitesIds=[];
   if(scope==='all')c.tramitesIds=[];
-  saveLS();renderInfoTecCfg();
+  saveLS();refreshInfoTecCfgUi();
 }
 function toggleInfoTecTramite(i,tramId,on){
   if(guardCfgEditGeneral())return;
@@ -732,7 +784,7 @@ function delInfoTec(i){
   if(guardCfgEditGeneral())return;
   const c=cfg.infoTecnica&&cfg.infoTecnica[i];
   confirmEliminar({message:'¿Eliminar este campo técnico?',detail:c?c.label:''},()=>{
-    cfg.infoTecnica.splice(i,1);saveLS();renderInfoTecCfg();
+    cfg.infoTecnica.splice(i,1);saveLS();refreshInfoTecCfgUi();
   });
 }
 function addItem(k){
