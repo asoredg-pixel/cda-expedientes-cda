@@ -5786,12 +5786,15 @@ function taskReviewRespEntregaPendienteRailHtml(ref,taskId,t){
   const side=String(window._taskReviewSideMode||'doc');
   const e=typeof getExpById==='function'?getExpById(refExp):null;
   const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  const showPqrsCorreo=esPqrs&&typeof pqrsRevisionMuestraCorreo==='function'&&pqrsRevisionMuestraCorreo(e);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   const puedeReemplazar=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
   const puedeElim=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(refExp,taskId);
   let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(esPqrs?'Documentos entregados':'Documento entregado')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">'+(esPqrs?'📄':'📄')+'</button>';
+  if(showPqrsCorreo)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='pqrsCorreo'?' on':'')+'" data-side="pqrsCorreo" title="Cuerpo y correos de la respuesta" onclick="taskReviewToggleSidePanel(\'pqrsCorreo\',\''+r+'\',\''+tid+'\')">✉️</button>';
   if(showCompareBtn)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
@@ -6404,23 +6407,40 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   if(canAsig){
     const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
     const responsables=typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
-    const existTk=(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&(String(tk.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(tk.actividad)));});
-    // Si ya hay tarea asignada, pre-marcar solo los responsables de esa tarea
-    // (evita que el encargado quede marcado junto al responsable asignado)
+    const existTk=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e,taskId):(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&(String(tk.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(tk.actividad)));});
+    // Pre-marcar solo los responsables reales de la tarea de atención.
+    // Si aún no hay asignación real (solo encargado por defecto del traslado), marcar al encargado.
     const yaAsig=[];
-    if(existTk){
+    const estadoOfi=String(e._pqrs_estado_oficina||'').trim();
+    const respOfi=String(e._pqrs_responsable_oficina||'').trim();
+    if(existTk&&estadoOfi==='asignado'){
       getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
-    }else if(e._pqrs_responsable_oficina){
-      yaAsig.push(String(e._pqrs_responsable_oficina).trim());
+    }else if(respOfi){
+      yaAsig.push(respOfi);
+    }else if(existTk){
+      getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
     }
     const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
     const respChecks=responsables.length
       ?responsables.map(function(n){
         const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
-        return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="togglePqrsAsigModo()"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
+        return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="onPqrsAsigRespChange(this)"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
       }).join('')
       :'<div style="padding:8px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
-    const obsPrev=String(e._pqrs_asig_observaciones||'').trim();
+    const chatTaskId=String((existTk&&existTk.id)||taskId||'').trim();
+    const chatTk=existTk||(t&&String(t.id)===chatTaskId?t:null)||{id:chatTaskId,comentarios:[],responsables:yaAsig};
+    let chatBlock='';
+    if(chatTaskId&&typeof renderTaskChatComposerHtml==='function'){
+      const msgs=typeof renderTaskChatListHtml==='function'?renderTaskChatListHtml(typeof normalizeTask==='function'?normalizeTask(chatTk):chatTk):'';
+      const composer=renderTaskChatComposerHtml(expId,chatTaskId,chatTk,{allowGuiaAttach:true});
+      chatBlock='<div class="fld pqrs-asig-chat-wrap" style="margin-bottom:10px">'+
+        '<label style="display:flex;align-items:center;gap:6px">'+(typeof chatWaIconHtml==='function'?chatWaIconHtml(14):'')+' Chat de la actividad <span style="font-weight:400;color:var(--tx3)">(indicaciones / adjuntos)</span></label>'+
+        '<div id="pqrs-asig-chat-msgs" class="task-chat-uni-scroll" style="max-height:160px;margin:6px 0;padding:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+        (msgs||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún. Escriba una indicación y envíe con ➤</div>')+
+        '</div>'+
+        '<div id="pqrs-asig-chat-compose">'+composer+'</div>'+
+        '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Los mensajes quedan en el chat de la actividad (rail 💬).</div></div>';
+    }
     h+='<div style="border-top:1px solid var(--bd);padding-top:12px;margin-top:4px">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px">👤 Asignar responsable</div>'+
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(oficina):oficina)+'</strong></div>'+
@@ -6431,9 +6451,8 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
       '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
       '</select></div>'+
-      '<div class="fld" style="margin-bottom:10px"><label>Observaciones (opcional)</label>'+
-      '<textarea id="pqrs-asig-obs" placeholder="Indicaciones para el/los responsable(s)…" style="width:100%;min-height:56px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif">'+escAttr(obsPrev)+'</textarea></div>'+
-      '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar asignación</button>'+
+      chatBlock+
+      '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(chatTaskId||taskId)+'\')">Confirmar asignación</button>'+
       '</div>';
   }
   if(!canIni&&!canOfi&&!canAsig)
@@ -6614,7 +6633,10 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     const isPqrsGestion=!!(ctx.isPqrsOrigenView||(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)));
     if(isPqrsGestion&&!esModoResponsable()&&!esJurisdiccional()){
       body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t)+'</div>';
-      setTimeout(function(){if(typeof togglePqrsAsigModo==='function')togglePqrsAsigModo();},0);
+      setTimeout(function(){
+        if(typeof togglePqrsAsigModo==='function')togglePqrsAsigModo();
+        if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
+      },0);
     }else{
       const canEdit=!esModoResponsable()&&!esJurisdiccional();
       body.innerHTML='<div class="task-review-side-scroll">'+renderTaskAsignadosPanelHtml(expId,taskId,t,canEdit,{hideDelete:true})+'</div>';
@@ -6970,6 +6992,16 @@ function getTareasResponsableActivo(){
   const out=[];
   exps.forEach(e=>{
     if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
+    if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof dedupePqrsAtencionTasks==='function'){
+      if(dedupePqrsAtencionTasks(e)){
+        if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
+        const dk=String(e._exp||'');
+        if(dk&&!window._pqrsDedupePersist.has(dk)){
+          window._pqrsDedupePersist.add(dk);
+          try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
+        }
+      }
+    }
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -6996,6 +7028,14 @@ function getTareasOficinaPqrsActividades(respFilter){
   const list=[];
   const ofi=deptoActivo;
   exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===ofi).forEach(e=>{
+    if(typeof dedupePqrsAtencionTasks==='function'&&dedupePqrsAtencionTasks(e)){
+      if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
+      const dk=String(e._exp||'');
+      if(dk&&!window._pqrsDedupePersist.has(dk)){
+        window._pqrsDedupePersist.add(dk);
+        try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
+      }
+    }
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada||!taskEsAtenderPqrs(t,e))return;
@@ -7012,6 +7052,16 @@ function getTareasDeptActividades(respFilter){
   const depto=deptoActivo;
   exps.filter(e=>(e._depto||'guaviare')===depto).forEach(e=>{
     if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
+    if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof dedupePqrsAtencionTasks==='function'){
+      if(dedupePqrsAtencionTasks(e)){
+        if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
+        const dk=String(e._exp||'');
+        if(dk&&!window._pqrsDedupePersist.has(dk)){
+          window._pqrsDedupePersist.add(dk);
+          try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
+        }
+      }
+    }
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -7049,6 +7099,104 @@ function taskEsAtenderPqrs(t,e){
 function pqrsActividadNombreDefault(){
   return 'Oficio de respuesta';
 }
+/** Índice de la tarea de atención PQRSD (Oficio de respuesta / Atender PQRSD). */
+function findPqrsAtencionTaskIndex(e,preferTaskId){
+  if(!e||!Array.isArray(e.tasks))return -1;
+  const prefer=String(preferTaskId||'').trim();
+  if(prefer){
+    const byId=e.tasks.findIndex(function(t){return t&&!t.eliminada&&String(t.id||'')===prefer;});
+    if(byId>=0)return byId;
+  }
+  return e.tasks.findIndex(function(t){
+    if(!t||t.eliminada)return false;
+    const act=String(t.actividad||'');
+    return act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act);
+  });
+}
+function getPqrsAtencionTask(e,preferTaskId){
+  const i=findPqrsAtencionTaskIndex(e,preferTaskId);
+  return i>=0?e.tasks[i]:null;
+}
+window.findPqrsAtencionTaskIndex=findPqrsAtencionTaskIndex;
+window.getPqrsAtencionTask=getPqrsAtencionTask;
+/** Une tareas duplicadas «Oficio de respuesta / Atender PQRSD» dejadas por un bug de asignación. */
+function dedupePqrsAtencionTasks(e){
+  if(!e||!Array.isArray(e.tasks))return false;
+  const idxs=[];
+  e.tasks.forEach(function(t,i){
+    if(!t||t.eliminada)return;
+    const act=String(t.actividad||'');
+    if(act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act))idxs.push(i);
+  });
+  if(idxs.length<=1)return false;
+  const score=function(t){
+    let s=0;
+    if(t.fechaReportada)s+=100;
+    if(t.fechaAtendida)s+=40;
+    if((t.soportes||[]).length)s+=50+(t.soportes.length*5);
+    if((t.comentarios||[]).length)s+=10;
+    const resps=(typeof getTaskResponsables==='function'?getTaskResponsables(t):(t.responsables||[])).filter(Boolean);
+    s+=resps.length*8;
+    const enc=typeof getEncargadoOficina==='function'?String(getEncargadoOficina(e._pqrs_oficina||'')||'').trim():'';
+    if(enc&&resps.length===1&&agendaNorm(resps[0])===agendaNorm(enc)&&!t.fechaReportada)s-=30;
+    if(e._pqrs_responsable_oficina&&resps.some(function(n){return agendaNorm(n)===agendaNorm(e._pqrs_responsable_oficina);}))s+=20;
+    return s;
+  };
+  let keepIdx=idxs[0];
+  let best=-1e9;
+  idxs.forEach(function(i){
+    const sc=score(e.tasks[i]);
+    if(sc>best){best=sc;keepIdx=i;}
+  });
+  const keep=normalizeTask(e.tasks[keepIdx]);
+  const resps=new Set((keep.responsables||[]).map(String).filter(Boolean));
+  const soportes=(keep.soportes||[]).slice();
+  const comentarios=(keep.comentarios||[]).slice();
+  const historial=(keep.historial||[]).slice();
+  let changed=false;
+  idxs.forEach(function(i){
+    if(i===keepIdx)return;
+    const dup=normalizeTask(e.tasks[i]);
+    (dup.responsables||[]).forEach(function(n){if(n)resps.add(String(n).trim());});
+    (dup.soportes||[]).forEach(function(s){
+      if(!s)return;
+      if(!soportes.some(function(x){return x&&(x.id===s.id||(x.url&&x.url===s.url)||(x.driveFileId&&x.driveFileId===s.driveFileId));}))soportes.push(s);
+    });
+    (dup.comentarios||[]).forEach(function(c){
+      if(!c)return;
+      if(!comentarios.some(function(x){return x&&x.fecha===c.fecha&&x.texto===c.texto&&x.autor===c.autor;}))comentarios.push(c);
+    });
+    (dup.historial||[]).forEach(function(h){historial.push(h);});
+    if(!keep.fechaReportada&&dup.fechaReportada)keep.fechaReportada=dup.fechaReportada;
+    if(!keep.fechaAtendida&&dup.fechaAtendida)keep.fechaAtendida=dup.fechaAtendida;
+    e.tasks[i]=normalizeTask(Object.assign({},dup,{
+      eliminada:true,
+      historial:(dup.historial||[]).concat([{tipo:'dedupe',fecha:hoy(),nota:'Tarea duplicada unificada con '+(keep.id||'actividad principal')}])
+    }));
+    changed=true;
+  });
+  if(!changed)return false;
+  const respsArr=Array.from(resps).filter(Boolean);
+  const preferResp=String(e._pqrs_responsable_oficina||'').trim();
+  if(preferResp&&!respsArr.some(function(n){return agendaNorm(n)===agendaNorm(preferResp);}))respsArr.unshift(preferResp);
+  // Preferir el responsable asignado (no el encargado solo) si hay varios
+  let respPrimary=preferResp||respsArr[0]||keep.responsable||'';
+  if(preferResp)respPrimary=preferResp;
+  keep.responsable=respPrimary;
+  keep.responsables=respsArr.length?respsArr:[respPrimary].filter(Boolean);
+  keep.asignados=(keep.responsables||[]).map(function(n){
+    const prev=(keep.asignados||[]).find(function(a){return a&&agendaNorm(a.nombre)===agendaNorm(n);});
+    return prev||{nombre:n,fechaReportada:keep.fechaReportada||'',fechaAtendida:keep.fechaAtendida||'',estado:keep.fechaAtendida?'atendido':(keep.fechaReportada?'por_verificar':'pendiente')};
+  });
+  keep.soportes=soportes;
+  keep.comentarios=comentarios;
+  keep.historial=historial.concat([{tipo:'dedupe',fecha:hoy(),nota:'Se unificaron actividades duplicadas de atención PQRSD'}]);
+  if(keep.fechaReportada&&!keep.estado)keep.estado='Por verificar';
+  e.tasks[keepIdx]=normalizeTask(keep);
+  if(respPrimary)e._pqrs_responsable_oficina=respPrimary;
+  return true;
+}
+window.dedupePqrsAtencionTasks=dedupePqrsAtencionTasks;
 function pqrsEsAltaPorEncargado(e){
   return !!(e&&e._alta_por_responsable);
 }
@@ -12013,7 +12161,8 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   const eidJs=jsStr(expId),tidJs=jsStr(taskId);
   const mctx=window._taskModalCtx||{};
   const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&!esModoResponsable()));
-  const canGuiaAttach=canWriteDept&&inReviewChat&&opts.allowGuiaAttach!==false;
+  // allowGuiaAttach:true fuerza el clip aunque no esté en el rail de chat (p. ej. panel de asignación)
+  const canGuiaAttach=canWriteDept&&(opts.allowGuiaAttach===true||(!!inReviewChat&&opts.allowGuiaAttach!==false));
   if(opts.compact!==false){
     let h='<div class="task-cmt-form task-cmt-form-wa'+(canGuiaAttach?' has-guia-attach':'')+'" id="task-chat-form">';
     if(canGuiaAttach)h+='<div class="task-chat-guia-list sst-file-list" id="task-chat-guia-list"></div>';
@@ -12344,7 +12493,8 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   h+='<input type="hidden" id="enviar-requiere-link" value="0">';
   h+='<input type="hidden" id="enviar-modo-nueva" value="'+(nuevaEntrega?'1':'0')+'">';
   h+='<input type="hidden" id="enviar-modo-traslado" value="'+(traslado&&!nuevaEntrega?'1':'0')+'">';
-  h+=renderEntregaHistorialHtml(t);
+  // En «nueva corrección» no mostrar el bloque de historial de entregas (evita ruido).
+  if(!nuevaEntrega&&!corrVoluntaria)h+=renderEntregaHistorialHtml(t);
   h+='<div style="font-size:13px;font-weight:600;margin-bottom:6px">'+(autoEnc?'📤 Autoentrega (encargado)':finalizarEnc?'✓ Finalizar actividad (encargado del departamento)':corrVoluntaria?'📤 Corregir entrega (aún sin revisión)':nuevaEntrega?'📤 Nueva entrega':'📤 Entrega de actividad')+'</div>';
   if(sol){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
@@ -13220,15 +13370,46 @@ function renderTaskReviewPqrsCorreoSideHtml(expId,taskId,t,e){
   const tipo=wf.tipo||PQRS_WF_TIPO.MENSAJE;
   const esMensaje=tipo===PQRS_WF_TIPO.MENSAJE;
   const esOficio=tipo===PQRS_WF_TIPO.OFICIO;
+  const esResp=!!esModoResponsable();
   let h='<div class="task-review-side-scroll task-review-pqrs-correo">';
-  h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Supervisión del correo</div>';
-  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Verifique destinatarios, asunto y cuerpo antes de aprobar.</div>';
-  h+=renderNcaRevisionEmailBlockHtml(expId,e,wf);
-  if(esMensaje){
-    h+='<button type="button" class="btn bsm bp" style="background:var(--gn);color:#fff;width:100%;margin-top:12px" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar y enviar</button>';
-  }else if(esOficio){
-    h+='<div style="font-size:11px;color:var(--tx2);margin-top:10px;padding:8px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">Revise el documento a la izquierda y apruebe el oficio desde las opciones de decisión abajo.</div>';
+  if(esResp){
+    h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Correo de su respuesta</div>';
+    h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Destinatarios y cuerpo que diligenció. Si aún no ha sido revisado, puede hacer una nueva entrega desde 📤.</div>';
+    h+=renderRespPqrsCorreoReadonlyHtml(expId,e,wf);
+  }else{
+    h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Supervisión del correo</div>';
+    h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Verifique destinatarios, asunto y cuerpo antes de aprobar.</div>';
+    h+=renderNcaRevisionEmailBlockHtml(expId,e,wf);
+    if(esMensaje){
+      h+='<button type="button" class="btn bsm bp" style="background:var(--gn);color:#fff;width:100%;margin-top:12px" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar y enviar</button>';
+    }else if(esOficio){
+      h+='<div style="font-size:11px;color:var(--tx2);margin-top:10px;padding:8px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">Revise el documento a la izquierda y apruebe el oficio desde las opciones de decisión abajo.</div>';
+    }
   }
+  h+='</div>';
+  return h;
+}
+/** Vista de solo lectura del correo (para el responsable en Por revisar). */
+function renderRespPqrsCorreoReadonlyHtml(expId,e,wf){
+  e=e||exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  if(!e)return'';
+  wf=wf||getPqrsWorkflow(e);
+  const correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
+  const emailTo=String(wf.email_to||correos.join(', ')||e._qd_correo||e._pn_correo||'').trim();
+  const emailCc=String(wf.email_cc||'').trim();
+  const emailBcc=String(wf.email_bcc||'').trim();
+  const asunto=String(wf.email_subject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
+  const cuerpo=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
+  const tipo=wf.tipo||PQRS_WF_TIPO.MENSAJE;
+  const tipoLbl=tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':(tipo===PQRS_WF_TIPO.INFORMATIVA?'Informativa':'Mensaje simple');
+  let h='<div style="padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
+  h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Tipo: <strong style="color:var(--tx)">'+escAttr(tipoLbl)+'</strong></div>';
+  h+='<div class="fld" style="margin-bottom:8px"><label>Para</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+(emailTo?escAttr(emailTo):'<span style="color:var(--tx3)">—</span>')+'</div></div>';
+  if(emailCc)h+='<div class="fld" style="margin-bottom:8px"><label>Cc</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailCc)+'</div></div>';
+  if(emailBcc)h+='<div class="fld" style="margin-bottom:8px"><label>Cco</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailBcc)+'</div></div>';
+  h+='<div class="fld" style="margin-bottom:8px"><label>Asunto</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(asunto||'—')+'</div></div>';
+  h+='<div class="fld" style="margin-bottom:0"><label>Cuerpo del correo</label>'+
+    '<div style="font-size:12px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;white-space:pre-wrap;line-height:1.45;max-height:280px;overflow:auto;margin-top:4px">'+(cuerpo?escAttr(cuerpo):'<span style="color:var(--tx3)">Sin cuerpo registrado</span>')+'</div></div>';
   h+='</div>';
   return h;
 }
@@ -15411,7 +15592,9 @@ function openTaskCommentsModal(expId,taskId,opts){
         if(opts.keepStack&&savedSideMode&&savedSideMode!=='doc'){
           if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel(savedSideMode,expId,taskId);
         }else if(isRespVerCorr||isRespVerEntregaPendiente){
-          taskReviewCloseSidePanel();
+          if(isRespVerEntregaPendiente&&e&&typeof pqrsRevisionMuestraCorreo==='function'&&pqrsRevisionMuestraCorreo(e))
+            taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
+          else taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida){
           taskReviewCloseSidePanel();
           if(isPqrsOrigenView&&typeof initPqrsOrigenDocViewer==='function')initPqrsOrigenDocViewer(e);
@@ -15540,7 +15723,7 @@ async function submitTaskComment(expId,taskId){
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   const mctx=window._taskModalCtx||{};
   const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(inReview&&!esModoResponsable()));
-  const canGuiaAttach=!esModoResponsable()&&!esJurisdiccional()&&inReviewChat;
+  const canGuiaAttach=!esModoResponsable()&&!esJurisdiccional()&&(inReviewChat||window._taskReviewSideMode==='trasladar'||modePrev==='asignarPqrsOfi');
   let adjuntos=[];
   if(canGuiaAttach&&typeof sstFileChatGuiaCtxKey==='function'){
     const ctxKey=sstFileChatGuiaCtxKey(expId,taskId);
@@ -15573,9 +15756,27 @@ async function submitTaskComment(expId,taskId){
           sideBody.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
           setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
         }
+      }else if(window._taskReviewSideMode==='trasladar'&&t){
+        const msgs=document.getElementById('pqrs-asig-chat-msgs');
+        if(msgs&&typeof renderTaskChatListHtml==='function'){
+          msgs.innerHTML=renderTaskChatListHtml(t)||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún.</div>';
+          try{msgs.scrollTop=msgs.scrollHeight;}catch(err){}
+        }
+        if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('pqrs-asig-chat-compose')||document);
       }else{
         taskReviewRefreshModal(expId,taskId,window._taskReviewSideMode||'chat');
       }
+      return;
+    }
+    if(modePrev==='asignarPqrsOfi'){
+      const t=getTaskAny(expId,taskId);
+      const msgs=document.getElementById('pqrs-asig-chat-msgs');
+      if(msgs&&t&&typeof renderTaskChatListHtml==='function'){
+        msgs.innerHTML=renderTaskChatListHtml(t)||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún.</div>';
+        try{msgs.scrollTop=msgs.scrollHeight;}catch(err){}
+      }
+      if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('pqrs-asig-chat-compose')||document);
+      if(typeof notif==='function')notif('Mensaje enviado','ok');
       return;
     }
     if(modePrev==='pqrsDirectorFirmar'&&typeof openPqrsDirectorFirmarModal==='function'){
@@ -19331,6 +19532,11 @@ function actividadCuentaComoPorRevisar(t){
   if(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'){
     const ePv=getExpById(src.exp||src.codigo||t.exp||t.codigo);
     if(ePv&&taskEsAtenderPqrs(src,ePv)&&typeof pqrsWorkflowFase==='function'){
+      // Si hay duplicados, solo la tarea canónica cuenta en «Por revisar»
+      if(typeof getPqrsAtencionTask==='function'){
+        const canon=getPqrsAtencionTask(ePv);
+        if(canon&&String(canon.id||'')&&String(src.id||'')&&String(canon.id)!==String(src.id))return false;
+      }
       const fPv=pqrsWorkflowFase(ePv);
       // Solo «Por revisar» mientras el encargado no ha decidido (pendiente de revisión)
       if(fPv===PQRS_WF.PENDIENTE_REVISION)return true;

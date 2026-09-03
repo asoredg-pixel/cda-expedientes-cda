@@ -1825,6 +1825,25 @@ function togglePqrsAsigModo(){
   const w=document.getElementById('pqrs-asig-modo-wrap');
   if(w)w.style.display=n>1?'':'none';
 }
+/** Al marcar un responsable distinto al encargado por defecto, desmarcar al encargado
+ *  (salvo que el usuario vuelva a marcarlo a propósito para multi-asignación). */
+function onPqrsAsigRespChange(el){
+  if(el&&el.checked){
+    const wrap=document.getElementById('pqrs-asig-resps');
+    const cbs=wrap?[...wrap.querySelectorAll('.pqrs-asig-resp-cb')]:[...document.querySelectorAll('.pqrs-asig-resp-cb')];
+    const checked=cbs.filter(function(c){return c.checked;});
+    if(checked.length===2){
+      const encLbl=cbs.find(function(c){
+        const row=c.closest('.act-libre-resp-row');
+        const nom=row?row.querySelector('.act-libre-resp-nom'):null;
+        return nom&&/\(encargado\)/i.test(String(nom.textContent||''));
+      });
+      if(encLbl&&encLbl.checked&&encLbl!==el)encLbl.checked=false;
+    }
+  }
+  togglePqrsAsigModo();
+}
+window.onPqrsAsigRespChange=onPqrsAsigRespChange;
 function _pqrsAsignarSinCorreo(expId){
   window._pqrsAsignarForzarSinCorreo=true;
   submitAsignarPqrsOficina(expId);
@@ -1845,21 +1864,38 @@ function openAsignarPqrsOficinaModal(expId){
   if(tit)tit.textContent='Asignar PQRSD · '+expId;
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   // Responsable(s) ya asignados previamente (para preseleccionar al reasignar)
+  const existTk=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
   const yaAsig=[];
-  if(e._pqrs_responsable_oficina)yaAsig.push(String(e._pqrs_responsable_oficina).trim());
-  const existTk=(e.tasks||[]).find(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
-  if(existTk){getTaskResponsables(existTk).forEach(n=>{if(n&&!yaAsig.some(x=>agendaNorm(x)===agendaNorm(n)))yaAsig.push(n);});}
+  const estadoOfi=String(e._pqrs_estado_oficina||'').trim();
+  if(existTk&&estadoOfi==='asignado'){
+    getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
+  }else if(e._pqrs_responsable_oficina){
+    yaAsig.push(String(e._pqrs_responsable_oficina).trim());
+  }else if(existTk){
+    getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
+  }
   const respChecks=responsables.length
     ?responsables.map(n=>{
       const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
-      return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="togglePqrsAsigModo()"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
+      return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(r=>agendaNorm(r)===agendaNorm(n))?' checked':'')+' onchange="onPqrsAsigRespChange(this)"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
     }).join('')
     :'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
   const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
   const necesitaCorreo=_pqrsNecesitaCorreoParaAsignar(e);
   const tokOk=_pqrsTokOk();
   const bannerCorreo=(necesitaCorreo&&!tokOk)?_pqrsHtmlBannerCorreoDesconectado(expId):'';
-  const obsPrev=String(e._pqrs_asig_observaciones||'').trim();
+  const chatTaskId=String((existTk&&existTk.id)||'').trim();
+  let chatBlock='';
+  if(chatTaskId&&typeof renderTaskChatComposerHtml==='function'){
+    const msgs=typeof renderTaskChatListHtml==='function'?renderTaskChatListHtml(typeof normalizeTask==='function'?normalizeTask(existTk):existTk):'';
+    const composer=renderTaskChatComposerHtml(expId,chatTaskId,existTk,{allowGuiaAttach:true});
+    chatBlock='<div class="fld pqrs-asig-chat-wrap" style="margin-bottom:12px">'+
+      '<label style="display:flex;align-items:center;gap:6px">'+(typeof chatWaIconHtml==='function'?chatWaIconHtml(14):'')+' Chat de la actividad <span style="font-weight:400;color:var(--tx3)">(indicaciones / adjuntos)</span></label>'+
+      '<div id="pqrs-asig-chat-msgs" class="task-chat-uni-scroll" style="max-height:160px;margin:6px 0;padding:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+      (msgs||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún. Escriba una indicación y envíe con ➤</div>')+
+      '</div>'+
+      '<div id="pqrs-asig-chat-compose">'+composer+'</div></div>';
+  }
   body.innerHTML=bannerCorreo+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(labelOficina(oficina))+'</strong></div>'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:.75rem">'+escAttr(e.f_f1||e._pqrs_detalle||'PQRSD')+'</div>'+
@@ -1870,18 +1906,18 @@ function openAsignarPqrsOficinaModal(expId){
     '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
     '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
     '</select></div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Observaciones para orientar la actividad <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<textarea id="pqrs-asig-obs" placeholder="Indicaciones para el/los responsable(s)…" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif">'+escAttr(obsPrev)+'</textarea></div>'+
+    chatBlock+
     htmlPqrsAdjuntosDrive(e)+
     (e._pqrs_solicitud_archivo?'<div style="font-size:12px;margin-bottom:8px;color:var(--tx2)">📄 Referencia: '+escAttr(e._pqrs_solicitud_archivo)+'</div>':'')+
     '<div class="fx" style="gap:8px" id="pqrs-asig-footer">'+
-    (necesitaCorreo&&!tokOk?'':('<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'))+
+    (necesitaCorreo&&!tokOk?'':('<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(chatTaskId)+'\')">Confirmar asignación</button>'))+
     (typeof bibGuardarEnBibliotecaBtnHtml==='function'?bibGuardarEnBibliotecaBtnHtml({tipo:'pqrsd',id:expId,label:expId}):'')+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
-  window._taskModalCtx={mode:'asignarPqrsOfi',expId};
+  window._taskModalCtx={mode:'asignarPqrsOfi',expId,taskId:chatTaskId};
   window._pqrsAsignarForzarSinCorreo=false;
   togglePqrsAsigModo();
+  setTimeout(function(){if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);},30);
 }
 async function submitAsignarPqrsOficina(expId,taskId){
   const responsables=[...document.querySelectorAll('.pqrs-asig-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
@@ -1896,31 +1932,61 @@ async function submitAsignarPqrsOficina(expId,taskId){
   window._pqrsAsignarForzarSinCorreo=false;
   const modoEl=document.getElementById('pqrs-asig-modo');
   const entregaModo=(modoEl&&responsables.length>1)?(modoEl.value==='unificada'?'unificada':'individual'):'individual';
-  const obs=String((document.getElementById('pqrs-asig-obs')||{}).value||'').trim();
+  // Observaciones legacy: ya no hay textarea; las indicaciones van por el chat de la actividad.
+  const obsEl=document.getElementById('pqrs-asig-obs');
+  const obs=obsEl?String(obsEl.value||'').trim():'';
   const resp=responsables[0];
   const asignadosArr=responsables.map(n=>({nombre:n,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}));
   e._pqrs_responsable_oficina=resp;
   e._pqrs_estado_oficina='asignado';
-  if(obs!==undefined)e._pqrs_asig_observaciones=obs;
+  if(obs)e._pqrs_asig_observaciones=obs;
+  else if(e._pqrs_asig_observaciones==null)e._pqrs_asig_observaciones='';
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   const nomList=responsables.join(', ');
   e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   const prior=!!e._pqrs_prioritaria;
-  const actNombre='Atender PQRSD';
+  const actNombre=typeof pqrsActividadNombreDefault==='function'?pqrsActividadNombreDefault():'Oficio de respuesta';
   const detalle=obs||'';
-  const tk=normalizeTask({
-    id:genTaskId(),actividad:actNombre,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),
-    responsable:resp,responsables:responsables,asignados:asignadosArr,
-    entregaModo:entregaModo,plazoDias:plazoDias,vence:vence,prioritaria:prior,
-    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'PQRSD asignado desde oficina '+labelOficina(e._pqrs_oficina)+(obs?' · '+obs:'')}],soportes:[],notasDoc:[]
-  });
   if(!Array.isArray(e.tasks))e.tasks=[];
-  const existIdx=e.tasks.findIndex(t=>t&&!t.eliminada&&t.actividad&&String(t.actividad).startsWith('Atender PQRSD'));
-  if(existIdx>=0)e.tasks[existIdx]=normalizeTask({...e.tasks[existIdx],responsable:resp,responsables:responsables,asignados:asignadosArr,entregaModo:entregaModo,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),eliminada:false,prioritaria:prior,vence:vence,plazoDias:plazoDias});
-  else e.tasks.push(tk);
+  // Actualizar la tarea real (Oficio de respuesta / Atender PQRSD), no crear otra.
+  let existIdx=typeof findPqrsAtencionTaskIndex==='function'?findPqrsAtencionTaskIndex(e,taskId):-1;
+  if(existIdx<0){
+    existIdx=e.tasks.findIndex(t=>t&&!t.eliminada&&t.actividad&&(String(t.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(t.actividad))));
+  }
+  const histAsig={tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'PQRSD asignado desde oficina '+labelOficina(e._pqrs_oficina)+(obs?' · '+obs:'')};
+  if(existIdx>=0){
+    const prev=normalizeTask(e.tasks[existIdx]);
+    const actKeep=String(prev.actividad||'').trim()||actNombre;
+    e.tasks[existIdx]=normalizeTask({
+      ...prev,
+      actividad:actKeep,
+      responsable:resp,
+      responsables:responsables,
+      asignados:asignadosArr,
+      entregaModo:entregaModo,
+      detalle:detalle||prev.detalle||'',
+      desc:actKeep+(detalle?' — '+detalle:''),
+      eliminada:false,
+      prioritaria:prior,
+      vence:vence,
+      plazoDias:plazoDias,
+      historial:(prev.historial||[]).concat([histAsig])
+    });
+  }else{
+    e.tasks.push(normalizeTask({
+      id:genTaskId(),actividad:actNombre,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),
+      responsable:resp,responsables:responsables,asignados:asignadosArr,
+      entregaModo:entregaModo,plazoDias:plazoDias,vence:vence,prioritaria:prior,
+      comentarios:[],historial:[histAsig],soportes:[],notasDoc:[]
+    }));
+    existIdx=e.tasks.length-1;
+  }
+  const tkFinal=e.tasks[existIdx];
+  if(typeof dedupePqrsAtencionTasks==='function')dedupePqrsAtencionTasks(e);
   persistExpedienteGranular(e);
-  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
+  const refreshId=String(taskId||(tkFinal&&tkFinal.id)||'').trim();
+  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,refreshId)){
     notif('PQRSD asignado a '+nomList,'ok');
   }else{
     closeTaskModal();
@@ -1935,7 +2001,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
   refreshPqrsDetalleViews(expId);
-  if(typeof isFormExpVisible==='function'&&isFormExpVisible(expId)&&typeof syncTkRowsFromExp==='function')syncTkRowsFromExp(expId,(existIdx>=0?e.tasks[existIdx].id:tk.id));
+  if(typeof isFormExpVisible==='function'&&isFormExpVisible(expId)&&typeof syncTkRowsFromExp==='function')syncTkRowsFromExp(expId,(tkFinal&&tkFinal.id)||'');
 }
 function openTrasladoPqrsInicialModal(expId){
   const e=exps.find(x=>x._exp===expId);
