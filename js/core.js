@@ -5708,8 +5708,7 @@ function taskReviewViewOpts(expId,taskId,t){
 function taskReviewViewRailHtml(expId,taskId,t){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
-  const pqrsRevEnc=!!(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
-  const showPqrsCorreo=pqrsRevEnc&&pqrsRevisionMuestraCorreo(e);
+  const showPqrsCorreo=typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t);
   const docsCompare=collectDocsComparables(e,taskId,t);
   const showCompareBtn=canReviewSop?docsCompare.length>=2:(t&&(t.soportes||[]).length>=2);
   const side=String(window._taskReviewSideMode||'doc');
@@ -5786,7 +5785,7 @@ function taskReviewRespEntregaPendienteRailHtml(ref,taskId,t){
   const side=String(window._taskReviewSideMode||'doc');
   const e=typeof getExpById==='function'?getExpById(refExp):null;
   const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
-  const showPqrsCorreo=esPqrs&&typeof pqrsRevisionMuestraCorreo==='function'&&pqrsRevisionMuestraCorreo(e);
+  const showPqrsCorreo=typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   const puedeReemplazar=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
@@ -5818,12 +5817,15 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   const r=escAttr(refExp),tid=escAttr(taskId);
   const side=String(window._taskReviewSideMode||'doc');
   const esEnc=!esModoResponsable()&&!esJurisdiccional();
+  const showPqrsCorreo=typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Vistas">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documento" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
   if(showCompareBtn)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
+  if(showPqrsCorreo)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='pqrsCorreo'?' on':'')+'" data-side="pqrsCorreo" title="Correo de respuesta" onclick="taskReviewToggleSidePanel(\'pqrsCorreo\',\''+r+'\',\''+tid+'\')">✉️</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
   h+='</nav>';
@@ -5861,8 +5863,11 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   const miEst=taskEsMultiAsignada(t)&&usuario?estadoTaskForAsignado(t,usuario):est;
   const soloDocAprobado=yo&&usuario&&typeof taskRespParticipacionAtendida==='function'
     ?taskRespParticipacionAtendida(t,usuario):(miEst==='Atendida'||est==='Atendida');
+  const showPqrsCorreo=typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t);
   let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Vistas PQRSD">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documentos y correo" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
+  if(showPqrsCorreo)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='pqrsCorreo'?' on':'')+'" data-side="pqrsCorreo" title="Correo de respuesta" onclick="taskReviewToggleSidePanel(\'pqrsCorreo\',\''+r+'\',\''+tid+'\')">✉️</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
   h+='</nav>';
@@ -6788,7 +6793,10 @@ function actBtnVerActividadDeptHtml(expId,taskId,t,expAct){
   ))||!!(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))
     ||!!(typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct));
   const tip=esPqrs
-    ?(postAprob?'Ver documento y anexos aprobados':'Ver PQRSD: correo y solicitud')
+    ?(postAprob?'Ver documento y anexos aprobados'
+      :(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))
+        ?'Revisar respuesta y correo'
+        :'Ver PQRSD: correo y solicitud')
     :(t.sinExpediente?'Ver actividad asignada':'Ver actividad y documentos');
   const optsJs=postAprob?'{soloAprobados:true}':'';
   return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(tip)+'" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\''+(optsJs?','+optsJs:'')+')">🔍</button>';
@@ -13324,6 +13332,16 @@ function pqrsRevisionMuestraCorreo(e,wf){
     return pqrsEsCanalCorreo(wf.canal||'')||!!String(wf.email_to||'').trim();
   return false;
 }
+/** Rail ✉️ «Correo de respuesta»: PQRSD en revisión (encargado) o entrega pendiente (responsable). */
+function taskReviewShouldShowPqrsCorreo(e,t){
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
+  if(typeof pqrsRevisionMuestraCorreo!=='function'||!pqrsRevisionMuestraCorreo(e))return false;
+  if(typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))return true;
+  if(t&&typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return true;
+  if(t&&typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))return true;
+  return false;
+}
+window.taskReviewShouldShowPqrsCorreo=taskReviewShouldShowPqrsCorreo;
 function renderNcaRevisionEmailBlockHtml(expId,e,wf){
   e=e||exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e)return'';
@@ -15466,12 +15484,17 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e))
     ||(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))
   ));
-  // Solicitud/origen: no en corrección, entrega pendiente ni post-aprobación (docs aprobados)
+  // Solicitud/origen: no en corrección, entrega pendiente, revisión pendiente ni post-aprobación
+  const pqrsPendRevVista=!!(e&&(
+    (typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))
+    ||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))
+  ));
   const isPqrsOrigenView=isVerDocMode&&e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
     &&!forceSoloAprobados
     &&!isRespVerCorr
     &&!isRespVerEntregaPendiente
     &&!pqrsPostAprobVista
+    &&!pqrsPendRevVista
     &&!(isDeptVerDoc&&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,e));
   if(isPqrsOrigenView&&!opts.keepStack)window._pqrsOrigenSelDoc='';
   if(forceSoloAprobados&&e&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
@@ -15480,7 +15503,9 @@ function openTaskCommentsModal(expId,taskId,opts){
   const pqrsRevEnc=!!(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional());
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(pendVer||forceRevisarEntrega||pqrsRevEnc);
   const isReviewDelivery=(canReviewSop||isVerDocMode)&&!chatOnly&&!soloGestion;
-  const isDeptReviewWa=canReviewSop&&isReviewDelivery&&!isVerDocMode;
+  // Encargado 🔍 en PQRSD pendiente de revisión: mismo rail/panel WA que 🧐
+  const isDeptReviewWa=(canReviewSop&&isReviewDelivery&&!isVerDocMode)
+    ||(!!isDeptVerDoc&&!!pqrsPendRevVista&&!!canReviewSop&&!chatOnly&&!soloGestion);
   if(isReviewDelivery)window._taskViewTabPreferido='doc';
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&(canReviewSop||isPqrsOrigenView);
@@ -15540,7 +15565,7 @@ function openTaskCommentsModal(expId,taskId,opts){
       else if(isVerDocMode&&!hasSop)window._taskReviewSideMode='exp';
       else window._taskReviewSideMode='doc';
     }
-    const railNav=isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e):(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isRespVerCorr||isVerDocMode?taskReviewRespVerRailHtml(refAct,taskId,t):(isDeptVerDoc?taskReviewActividadVerRailHtml(refAct,taskId,t,e):taskReviewFullRailHtml(refAct,taskId,t))));
+    const railNav=isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e):(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isRespVerCorr||isRespVerDoc?taskReviewRespVerRailHtml(refAct,taskId,t):(isDeptVerDoc?(pqrsPendRevVista?taskReviewFullRailHtml(refAct,taskId,t):taskReviewActividadVerRailHtml(refAct,taskId,t,e)):taskReviewFullRailHtml(refAct,taskId,t))));
     const pqrsRespBanner='';
     const reviewMainInner=pqrsRespBanner+sopPanel;
     // Origen PQRSD no trae split/side-panel: envolver. El resto (isReview) ya incluye
@@ -15548,7 +15573,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión'))+' · '+(t.codigo||expId);
+    if(tit)tit.textContent=(isPqrsOrigenView?'PQRSD · correo y solicitud':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
@@ -15592,17 +15617,18 @@ function openTaskCommentsModal(expId,taskId,opts){
         if(opts.keepStack&&savedSideMode&&savedSideMode!=='doc'){
           if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel(savedSideMode,expId,taskId);
         }else if(isRespVerCorr||isRespVerEntregaPendiente){
-          if(isRespVerEntregaPendiente&&e&&typeof pqrsRevisionMuestraCorreo==='function'&&pqrsRevisionMuestraCorreo(e))
+          if(isRespVerEntregaPendiente&&e&&typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t))
             taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
           else taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida){
           taskReviewCloseSidePanel();
           if(isPqrsOrigenView&&typeof initPqrsOrigenDocViewer==='function')initPqrsOrigenDocViewer(e);
-        }else if(canReviewSop&&e&&taskEsAtenderPqrs(t,e)&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)){
-          if(pqrsRevisionMuestraCorreo(e))taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
-          else taskReviewCloseSidePanel();
+        }else if(canReviewSop&&e&&typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t)){
+          taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
         }else if(isDeptVerDoc&&!isPqrsOrigenView){
-          if(t.sinExpediente&&!hasSop)taskReviewOpenSidePanel('chat',expId,taskId);
+          if(e&&typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t))
+            taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
+          else if(t.sinExpediente&&!hasSop)taskReviewOpenSidePanel('chat',expId,taskId);
           else taskReviewCloseSidePanel();
         }else if(isVerDocMode&&!hasSop&&!t.sinExpediente){
           taskReviewOpenSidePanel('exp',expId,taskId);
@@ -21440,7 +21466,7 @@ async function ncaAprobarMensajeSimple(expId){
   const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
   const canal=d.notifCorreo===false?PQRS_WF_CANAL.PRESENCIAL:(wf.canal||PQRS_WF_CANAL.CORREO);
   const cerradoPor=responsableActivo||'NCA';
-  if(d.notifCorreo!==false&&!d.cuerpo&&wf.tipo===PQRS_WF_TIPO.MENSAJE){notif('Escriba el cuerpo del correo','err');return;}
+  if(d.notifCorreo!==false&&!cuerpoFinal&&(wf.tipo||PQRS_WF_TIPO.MENSAJE)===PQRS_WF_TIPO.MENSAJE){notif('Escriba el cuerpo del correo','err');return;}
   if(d.notifCorreo&&d.notifCorreo!==false){
     const toList=_ncaRevisionCorreosDestino(d,wf,e);
     if(!toList.length){notif('Verifique el correo de destino (Para)','err');return;}
