@@ -2176,7 +2176,10 @@ function ciudadanoTaskEventoLabel(h){
   if(!h)return'';
   if(h.tipo==='traslado'||h.tipo==='asignacion_extra')return 'Actividad reasignada en el departamento';
   if(h.tipo==='asignacion')return 'Actividad asignada para gestión';
-  if(h.tipo==='verificacion')return 'Respuesta verificada';
+  if(h.tipo==='verificacion'){
+    if(h.nota&&/notif/i.test(String(h.nota)))return 'Respuesta notificada — solicitud atendida';
+    return 'Respuesta verificada — solicitud atendida';
+  }
   if(h.tipo==='reporte'||h.tipo==='entrega')return 'Entrega reportada — en revisión';
   if(h.tipo==='solicitud_traslado')return 'Solicitud de reasignación en trámite';
   return'';

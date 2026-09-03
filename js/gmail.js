@@ -2679,16 +2679,23 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const maxW = pageW - margin * 2;
-  let y = margin;
+  let y = typeof cdaPdfDrawHeader === 'function'
+    ? await cdaPdfDrawHeader(doc, 'SOPORTE DE SOLICITUD — PQRSD', 'Radicación por correo electrónico' + (expId ? ' · Radicado: ' + expId : ''))
+    : margin;
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-  doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  doc.setTextColor(110);
-  doc.text('Corporación CDA — Radicación por correo electrónico', margin, y); y += 16;
-  doc.setTextColor(0);
-  if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
-  doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+  if (!(typeof cdaPdfDrawHeader === 'function')) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(110);
+    doc.text('Corporación CDA — Radicación por correo electrónico', margin, y); y += 16;
+    doc.setTextColor(0);
+    if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
+    doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+  } else if (expId) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0);
+    doc.text('Radicado: PQRSD #' + expId, margin, y); y += 14;
+  }
 
   const meta = [
     ['Remitente:', ed.remitente || ''],
@@ -2712,28 +2719,30 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
   const cuerpo = _gmailCleanBodyForPdf(cuerpoRaw) || String(ed.asunto || '(sin contenido de texto)').trim();
   const bodyLines = doc.splitTextToSize(cuerpo, maxW);
   const lineH = 13;
+  const bottomY = typeof cdaPdfContentBottomY === 'function' ? cdaPdfContentBottomY(doc, margin) : (pageH - margin);
   for (let i = 0; i < bodyLines.length; i++) {
-    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    if (y > bottomY) { doc.addPage(); y = margin; }
     doc.text(bodyLines[i], margin, y); y += lineH;
   }
 
   // Nota de anexos (no se suben al Drive; llegan al correo de la oficina).
   if (ed.adjuntosInfo && ed.adjuntosInfo.length) {
-    y += 10; if (y > pageH - margin) { doc.addPage(); y = margin; }
+    y += 10; if (y > bottomY) { doc.addPage(); y = margin; }
     doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 16;
     doc.setFont('helvetica', 'bold'); doc.text('Anexos del correo original (' + ed.adjuntosInfo.length + '):', margin, y); y += 14;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
     ed.adjuntosInfo.forEach(function(a) {
-      if (y > pageH - margin) { doc.addPage(); y = margin; }
+      if (y > bottomY) { doc.addPage(); y = margin; }
       doc.text('• ' + (a.nombre || 'adjunto'), margin + 6, y); y += 12;
     });
     doc.setTextColor(0);
-    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    if (y > bottomY) { doc.addPage(); y = margin; }
     doc.setFontSize(8); doc.setTextColor(130);
     doc.text('Los anexos no se almacenan en Drive; se conservan en el correo reenviado a la oficina responsable.', margin, y);
     doc.setTextColor(0);
   }
 
+  if (typeof cdaPdfDrawFooterAllPages === 'function') cdaPdfDrawFooterAllPages(doc);
   return doc.output('blob');
 }
 
@@ -2753,13 +2762,111 @@ function _pdfMedioRadicacionLabel(medio) {
 }
 
 function _pdfWriteLines(doc, lines, x, y, lineH, pageH, margin) {
+  const bottom = (typeof cdaPdfContentBottomY === 'function')
+    ? cdaPdfContentBottomY(doc, margin)
+    : (pageH - margin);
   for (let i = 0; i < lines.length; i++) {
-    if (y > pageH - margin) { doc.addPage(); y = margin; }
+    if (y > bottom) { doc.addPage(); y = margin; }
     doc.text(lines[i], x, y);
     y += lineH;
   }
   return y;
 }
+
+/** Datos de sedes / contacto (plantilla Comunicación Externa CDA). */
+function cdaPdfDatosPieLines() {
+  return [
+    'Sede Principal: Inírida – Guainía, Calle 26 No 11-131. Tel: (608) 3143717167 – 3115138768 – 3102051477',
+    'Seccional Guaviare: San José del Guaviare, Transv. 20 No 12-135. Cel: 311 513 88 04',
+    'Seccional Vaupés: Mitú, Av. 15 No. 8-144. Cel.: 310 7869166',
+    'Website: www.cda.gov.co  ·  e-mail: contactenos@cda.gov.co'
+  ];
+}
+function cdaPdfContentBottomY(doc, margin) {
+  const pageH = doc.internal.pageSize.getHeight();
+  return pageH - (margin || 48) - 52;
+}
+var _cdaLogoPdfDataUrl = null;
+async function cdaLoadLogoPdfDataUrl() {
+  if (_cdaLogoPdfDataUrl) return _cdaLogoPdfDataUrl;
+  const candidates = ['assets/logo-cda-pdf.png', 'assets/logo-cda.png', 'assets/logo-cda-icon.png'];
+  for (let i = 0; i < candidates.length; i++) {
+    try {
+      const url = new URL(candidates[i], window.location.href).href;
+      const res = await fetch(url, { cache: 'force-cache' });
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      _cdaLogoPdfDataUrl = await new Promise(function(resolve, reject) {
+        const r = new FileReader();
+        r.onload = function() { resolve(r.result); };
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      if (_cdaLogoPdfDataUrl) return _cdaLogoPdfDataUrl;
+    } catch (err) { /* try next */ }
+  }
+  return null;
+}
+/** Encabezado corporativo con logo CDA. Devuelve Y tras el encabezado. */
+async function cdaPdfDrawHeader(doc, titulo, subtitulo) {
+  const margin = 48;
+  const pageW = doc.internal.pageSize.getWidth();
+  let y = 32;
+  const logo = await cdaLoadLogoPdfDataUrl();
+  const logoW = 78;
+  const logoH = 50;
+  if (logo) {
+    try { doc.addImage(logo, 'PNG', margin, y - 4, logoW, logoH); } catch (err) { console.warn('cdaPdf logo:', err); }
+  }
+  const textX = logo ? (margin + logoW + 12) : margin;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(25, 55, 35);
+  doc.text('Corporación para el Desarrollo Sostenible', textX, y + 10);
+  doc.text('del Norte y el Oriente Amazónico — CDA', textX, y + 23);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(90);
+  doc.text('Dirección Seccional Guaviare', textX, y + 36);
+  y = Math.max(y + logoH + 6, y + 48);
+  doc.setDrawColor(0, 110, 60); doc.setLineWidth(1.1);
+  doc.line(margin, y, pageW - margin, y); y += 14;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(0);
+  if (titulo) { doc.text(String(titulo), margin, y); y += 14; }
+  if (subtitulo) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100);
+    doc.text(String(subtitulo), margin, y); y += 12; doc.setTextColor(0);
+  }
+  doc.setDrawColor(190); doc.setLineWidth(0.5);
+  doc.line(margin, y, pageW - margin, y); y += 14;
+  return y;
+}
+/** Pie institucional (sedes y contacto) en la página actual. */
+function cdaPdfDrawFooter(doc) {
+  const margin = 48;
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const lines = cdaPdfDatosPieLines();
+  let y = pageH - margin - 44;
+  doc.setDrawColor(0, 110, 60); doc.setLineWidth(0.7);
+  doc.line(margin, y, pageW - margin, y); y += 9;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(75);
+  lines.forEach(function(ln) {
+    doc.text(ln, margin, y);
+    y += 8;
+  });
+  doc.setTextColor(0);
+}
+/** Dibuja el pie en todas las páginas del documento. */
+function cdaPdfDrawFooterAllPages(doc) {
+  const n = doc.getNumberOfPages ? doc.getNumberOfPages() : 1;
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    cdaPdfDrawFooter(doc);
+  }
+}
+window.cdaPdfDatosPieLines = cdaPdfDatosPieLines;
+window.cdaLoadLogoPdfDataUrl = cdaLoadLogoPdfDataUrl;
+window.cdaPdfDrawHeader = cdaPdfDrawHeader;
+window.cdaPdfDrawFooter = cdaPdfDrawFooter;
+window.cdaPdfDrawFooterAllPages = cdaPdfDrawFooterAllPages;
+window.cdaPdfContentBottomY = cdaPdfContentBottomY;
 
 // PDF soporte para radicación manual (ventanilla, teléfono, web, etc.).
 async function generarPdfSolicitudManual(opts) {
@@ -2771,19 +2878,23 @@ async function generarPdfSolicitudManual(opts) {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const maxW = pageW - margin * 2;
-  let y = margin;
   const lineH = 13;
   const expId = opts.expId || '';
   const medio = opts.medio || 'Ventanilla';
+  let y = typeof cdaPdfDrawHeader === 'function'
+    ? await cdaPdfDrawHeader(doc, 'SOPORTE DE SOLICITUD — PQRSD', _pdfMedioRadicacionLabel(medio) + (expId ? ' · Radicado: ' + expId : ''))
+    : margin;
 
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-  doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  doc.setTextColor(110);
-  doc.text('Corporación CDA — ' + _pdfMedioRadicacionLabel(medio), margin, y); y += 16;
-  doc.setTextColor(0);
-  if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
-  doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+  if (!(typeof cdaPdfDrawHeader === 'function')) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('SOPORTE DE SOLICITUD — PQRSD', margin, y); y += 18;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(110);
+    doc.text('Corporación CDA — ' + _pdfMedioRadicacionLabel(medio), margin, y); y += 16;
+    doc.setTextColor(0);
+    if (expId) { doc.setFont('helvetica', 'bold'); doc.text('Radicado: PQRSD #' + expId, margin, y); y += 16; }
+    doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
+  }
 
   const meta = [
     ['Tipo:', opts.tipo || 'Petición'],
@@ -2843,17 +2954,18 @@ async function generarPdfSolicitudManual(opts) {
 
   const anexosNombres = opts.anexosNombres || [];
   if (anexosNombres.length) {
-    y += 10; if (y > pageH - margin) { doc.addPage(); y = margin; }
+    y += 10; if (y > cdaPdfContentBottomY(doc, margin)) { doc.addPage(); y = margin; }
     doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 16;
     doc.setFont('helvetica', 'bold'); doc.text('Anexos digitales (' + anexosNombres.length + '):', margin, y); y += 14;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90);
     anexosNombres.forEach(function(n) {
-      if (y > pageH - margin) { doc.addPage(); y = margin; }
+      if (y > cdaPdfContentBottomY(doc, margin)) { doc.addPage(); y = margin; }
       doc.text('• ' + n, margin + 6, y); y += 12;
     });
     doc.setTextColor(0); doc.setFontSize(10);
   }
 
+  if (typeof cdaPdfDrawFooterAllPages === 'function') cdaPdfDrawFooterAllPages(doc);
   return doc.output('blob');
 }
 

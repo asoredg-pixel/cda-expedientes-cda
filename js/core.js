@@ -6175,7 +6175,6 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
   const eid=jsStr(expId),tid=jsStr(taskId);
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const esMensaje=typeof taskReviewEsMensajeSimpleRevision==='function'&&taskReviewEsMensajeSimpleRevision(e);
-  const esPqrsRev=e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e);
   const titulos={aprobar:esMensaje?'✅ Correo de respuesta':'✅ Aprobar y cerrar',imprimir:'🖨️ Para imprimir',firma:'✍️ Para firma del Director'};
   let h='<div class="task-review-decision-side task-review-side-scroll">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--bl)">'+(titulos[mode]||'Decisión')+'</div>';
@@ -6196,11 +6195,9 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
   if(mode==='aprobar'){
     h+='<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Sin firma del Director. El responsable queda atendido.</p>';
     h+='<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar</button>';
-    if(!esPqrsRev){
-      const showNotif=!!window._taskReviewAprobarNotificar;
-      h+='<div style="margin-top:8px"><button type="button" class="btn bsm bp" id="task-rev-notif-btn" style="background:#185fa5;border-color:#185fa5" onclick="taskReviewConfirmarYNotificar(\''+eid+'\',\''+tid+'\')">'+(showNotif?'✓ Enviar notificación y cerrar':'✓ Confirmar y notificar')+'</button></div>';
-      if(showNotif)h+=renderTaskReviewNotifEmailFieldsHtml(e,t,expId);
-    }
+    const showNotif=!!window._taskReviewAprobarNotificar;
+    h+='<div style="margin-top:8px"><button type="button" class="btn bsm bp" id="task-rev-notif-btn" style="background:#185fa5;border-color:#185fa5" onclick="taskReviewConfirmarYNotificar(\''+eid+'\',\''+tid+'\')">'+(showNotif?'✓ Enviar notificación y cerrar':'✓ Confirmar y notificar')+'</button></div>';
+    if(showNotif)h+=renderTaskReviewNotifEmailFieldsHtml(e,t,expId);
   }else if(mode==='imprimir'){
     h+='<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Pasa a «Por firmar». Marque 🖨️ cuando esté impreso.</p>';
     h+='<button type="button" class="btn bsm bp" style="background:#1a7a4a;border-color:#1a7a4a" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">🖨️ Enviar a Por firmar</button>';
@@ -6232,13 +6229,38 @@ function taskReviewConfirmarDecision(expId,taskId){
 }
 function taskReviewDecidirAprobar(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
     const canal=String(wf.canal||'').trim();
     if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')&&typeof ncaAprobarInformativa==='function'){ncaAprobarInformativa(expId);return;}
     if(['aviso','presencial','fisica'].includes(canal)&&tipo!==(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio')&&typeof ncaAprobarCanalFisico==='function'){ncaAprobarCanalFisico(expId);return;}
-    if(typeof ncaAprobarMensajeSimple==='function')ncaAprobarMensajeSimple(expId);
+    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje')&&typeof ncaAprobarMensajeSimple==='function'){ncaAprobarMensajeSimple(expId);return;}
+    // Oficio u otro: cerrar como atendida sin firma (confirmación directa del encargado)
+    if(typeof taskReviewCerrarPqrsAtendida==='function'){
+      taskReviewCerrarPqrsAtendida(e,{fecha:hoy(),notificada:false,via:'confirmar_cerrar',cuerpo:wf.cuerpo||''});
+      verificarTaskExp(expId,taskId,hoy(),{silent:false,skipAutoMail:true,forceClosePqrs:true});
+      closeTaskModal();
+      if(typeof renderActividades==='function')renderActividades();
+      if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+      if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+      notif('✅ PQRSD cerrada — atendida','ok');
+      return;
+    }
+    if(typeof ncaAprobarMensajeSimple==='function'){ncaAprobarMensajeSimple(expId);return;}
+    return;
+  }
+  if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e)
+    &&typeof taskReviewCerrarPqrsAtendida==='function'){
+    taskReviewCerrarPqrsAtendida(e,{fecha:hoy(),notificada:false,via:'confirmar_cerrar'});
+    verificarTaskExp(expId,taskId,hoy(),{silent:false,skipAutoMail:true,forceClosePqrs:true});
+    closeTaskModal();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    notif('✅ PQRSD cerrada — atendida','ok');
     return;
   }
   confirmarCierreTaskReview(expId,taskId);
@@ -6360,17 +6382,23 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
   const pageW=doc.internal.pageSize.getWidth();
   const pageH=doc.internal.pageSize.getHeight();
   const maxW=pageW-margin*2;
-  let y=margin;
   const lineH=13;
   const act=String((t&&(t.actividad||t.desc))||'Actividad').trim();
   const expId=(e&&e._exp)||(t&&(t.exp||t.codigo))||'';
-  doc.setFont('helvetica','bold');doc.setFontSize(13);
-  doc.text('SOPORTE DE ENVÍO — NOTIFICACIÓN',margin,y);y+=18;
-  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(110);
-  doc.text('Corporación CDA — Delegación Guaviare',margin,y);y+=16;
-  doc.setTextColor(0);
-  doc.setFont('helvetica','bold');doc.text((e?'Expediente: ':'Actividad: ')+expId,margin,y);y+=16;
-  doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+  const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
+  let y=typeof cdaPdfDrawHeader==='function'
+    ?await cdaPdfDrawHeader(doc,esPqrs?'SOPORTE DE RESPUESTA / NOTIFICACIÓN — PQRSD':'SOPORTE DE ENVÍO — NOTIFICACIÓN',
+      (e?'Expediente: ':'Actividad: ')+expId+(act?' · '+act:''))
+    :margin;
+  if(typeof cdaPdfDrawHeader!=='function'){
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text('SOPORTE DE ENVÍO — NOTIFICACIÓN',margin,y);y+=18;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(110);
+    doc.text('Corporación CDA — Delegación Guaviare',margin,y);y+=16;
+    doc.setTextColor(0);
+    doc.setFont('helvetica','bold');doc.text((e?'Expediente: ':'Actividad: ')+expId,margin,y);y+=16;
+    doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+  }
   const meta=[
     ['Actividad:',act],
     ['Fecha envío:',(typeof fmtF==='function'?fmtF(hoy()):hoy())],
@@ -6400,10 +6428,13 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesC,margin,y,lineH,pageH,margin);
     else{doc.text(linesC,margin,y);y+=lineH*linesC.length;}
   }
-  y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
-  doc.setDrawColor(220);doc.line(margin,y,pageW-margin,y);y+=14;
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(130);
-  doc.text('Documento generado por el Sistema de Seguimiento de Trámites — CDA Delegación Guaviare.',margin,y);
+  if(typeof cdaPdfDrawFooterAllPages==='function')cdaPdfDrawFooterAllPages(doc);
+  else{
+    y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    doc.setDrawColor(220);doc.line(margin,y,pageW-margin,y);y+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(130);
+    doc.text('Documento generado por el Sistema de Seguimiento de Trámites — CDA Delegación Guaviare.',margin,y);
+  }
   return doc.output('blob');
 }
 async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
@@ -6412,6 +6443,9 @@ async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
   const file=new File([blob],fileName,{type:'application/pdf'});
   const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
   const ctx=e||{_exp:expId,_sin_expediente:!!(t&&t.sinExpediente)};
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof driveUploadInstitutional==='function'){
+    return await driveUploadInstitutional(blob,fileName,'application/pdf','respuesta_aprobada',e._exp||expId,e._qd_nombre||e._pn_nombre||e._pj_empresa||expId,e._fecha||'',{expediente:e,uploadTarget:'respuesta'});
+  }
   if(typeof driveUploadExpedienteActividad==='function'){
     return await driveUploadExpedienteActividad(file,fileName,'application/pdf',ctx,t,autor,'atendido');
   }
@@ -6420,6 +6454,54 @@ async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
   }
   return null;
 }
+/** Cierra PQRSD a Atendido (workflow + estado + historial). */
+function taskReviewCerrarPqrsAtendida(e,opts){
+  opts=opts||{};
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return true;
+  const fecha=opts.fecha||hoy();
+  const por=opts.por||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')||'NCA';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  let docs=(wf.documentos||[]).slice();
+  if(opts.soporteDoc)docs.push(opts.soporteDoc);
+  const canal=opts.canal||wf.canal||(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.CORREO:'correo');
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.CERRADA,
+    canal:canal,
+    cuerpo:opts.cuerpo!=null?opts.cuerpo:(wf.cuerpo||''),
+    fecha_respuesta:fecha,
+    documentos:docs,
+    cerrado_por:por,
+    cerrado_en:new Date().toISOString(),
+    revision_nca:Object.assign({},wf.revision_nca||{},{aprobado:true,por:por,en:new Date().toISOString(),via:opts.via||'revision'})
+  });
+  e._pqrs_respuesta_fecha=fecha;
+  e._pqrs_respuesta_medio=canal;
+  if(opts.cuerpo)e._pqrs_respuesta_nota=opts.cuerpo;
+  if(opts.soporteDoc&&(opts.soporteDoc.driveLink||opts.soporteDoc.url)){
+    if(!Array.isArray(e._pqrs_respuesta_soportes))e._pqrs_respuesta_soportes=[];
+    e._pqrs_respuesta_soportes.push({
+      label:opts.soporteDoc.nombre||'Soporte de envío',
+      url:opts.soporteDoc.driveLink||opts.soporteDoc.url||'',
+      preview:opts.soporteDoc.previewLink||opts.soporteDoc.driveLink||opts.soporteDoc.url||'',
+      mime:'application/pdf'
+    });
+  }
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({
+    tipo:opts.notificada?'notificacion_correo':'revision_final_aprobada',
+    fecha:fecha,
+    nota:opts.histNota||(opts.notificada
+      ?('Respuesta notificada por correo'+(opts.para?' a '+opts.para:'')+' — PQRSD atendida')
+      :'PQRSD aprobada y cerrada — atendida'),
+    oficina:e._pqrs_oficina||'guaviare',
+    por:por
+  });
+  if(typeof _pqrsAplicarCierrePqrs==='function')
+    _pqrsAplicarCierrePqrs(e,fecha,opts.notificada?'PQRSD cerrada — notificada':'PQRSD cerrada — atendida');
+  return true;
+}
+window.taskReviewCerrarPqrsAtendida=taskReviewCerrarPqrsAtendida;
 async function taskReviewConfirmarYNotificar(expId,taskId){
   if(!window._taskReviewAprobarNotificar){
     window._taskReviewAprobarNotificar=true;
@@ -6442,7 +6524,8 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   if(btn){btn.disabled=true;btn.textContent='Enviando…';}
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
   const htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>'+
-    (e&&e._exp&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(e._exp):'');
+    (e&&e._exp&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(e._exp):'')+
+    (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
   try{
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
       const okG=await sstSolicitarGmailParaAdjuntar();
@@ -6493,6 +6576,36 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       }
     }
     window._taskReviewAprobarNotificar=false;
+    const soporteDoc=up?{
+      nombre:'Soporte de envío',
+      driveLink:up.driveLink||'',
+      previewLink:up.previewLink||up.driveLink||'',
+      fileId:up.fileId||up.driveFileId||'',
+      tipo:'soporte_respuesta',
+      driveEstado:'atendido'
+    }:null;
+    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+      &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+      &&typeof taskReviewCerrarPqrsAtendida==='function'){
+      taskReviewCerrarPqrsAtendida(e,{
+        fecha:fechaC,por:por,cuerpo:cuerpo,notificada:true,
+        para:destinos.join(', '),soporteDoc:soporteDoc,
+        via:'confirmar_notificar',canal:'correo'
+      });
+      const tidAct=(t&&t.id)||taskId;
+      if(tidAct&&typeof _ncaMarcarTaskRevisadaAprobada==='function')
+        _ncaMarcarTaskRevisadaAprobada(e._exp||refId,tidAct,{fecha:fechaC,nota:'Aprobada y notificada por correo',notificada:true,por:por});
+      else verificarTaskExp(refId,taskId,fechaC,{notificada:true,skipAutoMail:true,silent:true,forceClosePqrs:true});
+      if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
+      closeTaskModal();
+      if(typeof renderActividades==='function')renderActividades();
+      if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+      if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+      if(typeof refreshPqrsDetalleViews==='function')refreshPqrsDetalleViews(e._exp||refId);
+      if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+      notif('✅ PQRSD notificada y atendida','ok');
+      return;
+    }
     verificarTaskExp(refId,taskId,fechaC,{notificada:true,skipAutoMail:true,silent:true});
     if(e&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
     if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
@@ -23535,17 +23648,20 @@ async function generarPdfRespuestaPqrs(e,opts){
   const pageW=doc.internal.pageSize.getWidth();
   const pageH=doc.internal.pageSize.getHeight();
   const maxW=pageW-margin*2;
-  let y=margin;
   const lineH=13;
   const fmt=d=>(typeof fmtF==='function'?fmtF(d):d)||'';
-
-  doc.setFont('helvetica','bold');doc.setFontSize(13);
-  doc.text('SOPORTE DE RESPUESTA — PQRSD',margin,y);y+=18;
-  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(110);
-  doc.text('Corporación CDA — Delegación Guaviare',margin,y);y+=16;
-  doc.setTextColor(0);
-  doc.setFont('helvetica','bold');doc.text('Radicado: '+expId,margin,y);y+=16;
-  doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+  let y=typeof cdaPdfDrawHeader==='function'
+    ?await cdaPdfDrawHeader(doc,'SOPORTE DE RESPUESTA — PQRSD','Delegación Guaviare · Radicado: '+expId)
+    :margin;
+  if(typeof cdaPdfDrawHeader!=='function'){
+    doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text('SOPORTE DE RESPUESTA — PQRSD',margin,y);y+=18;
+    doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(110);
+    doc.text('Corporación CDA — Delegación Guaviare',margin,y);y+=16;
+    doc.setTextColor(0);
+    doc.setFont('helvetica','bold');doc.text('Radicado: '+expId,margin,y);y+=16;
+    doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+  }
 
   const canal=wf.canal||e._pqrs_respuesta_medio||'';
   const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial',fisica:'Correo físico',aviso:'Por aviso'}[canal]||canal||'—';
@@ -23604,21 +23720,25 @@ async function generarPdfRespuestaPqrs(e,opts){
     y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoText,maxW),margin,y,lineH,pageH,margin);
   }
   const docs=Array.isArray(opts.documentos)?opts.documentos:(wf.documentos||[]);
+  const bottomY=typeof cdaPdfContentBottomY==='function'?cdaPdfContentBottomY(doc,margin):(pageH-margin);
   if(docs.length){
-    y+=6;if(y>pageH-margin){doc.addPage();y=margin;}
+    y+=6;if(y>bottomY){doc.addPage();y=margin;}
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=16;
     doc.setFont('helvetica','bold');doc.text('Documentos de respuesta ('+docs.length+'):',margin,y);y+=14;
     doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90);
     docs.forEach(d=>{
-      if(y>pageH-margin){doc.addPage();y=margin;}
+      if(y>bottomY){doc.addPage();y=margin;}
       doc.text('• '+(d.nombre||d.driveLink||'Documento'),margin+6,y);y+=12;
     });
     doc.setTextColor(0);doc.setFontSize(10);
   }
-  y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
-  doc.setDrawColor(220);doc.line(margin,y,pageW-margin,y);y+=14;
-  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(130);
-  doc.text('Documento generado por el Sistema de Seguimiento de Trámites — CDA Delegación Guaviare.',margin,y);
+  if(typeof cdaPdfDrawFooterAllPages==='function')cdaPdfDrawFooterAllPages(doc);
+  else{
+    y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    doc.setDrawColor(220);doc.line(margin,y,pageW-margin,y);y+=14;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(130);
+    doc.text('Documento generado por el Sistema de Seguimiento de Trámites — CDA Delegación Guaviare.',margin,y);
+  }
   return doc.output('blob');
 }
 // Genera y sube el PDF de soporte de respuesta al Drive institucional (carpeta Respuesta del expediente).
@@ -23654,7 +23774,9 @@ function pqrsRequiereCorreoNotificacion(e){
 }
 function pqrsCorreoHtmlPieInstitucional(){
   return'<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e5e5">'+
-    '<p style="font-size:11px;color:#888;line-height:1.5;margin:0">Este mensaje es informativo. Conserve el número de radicado para consultar el estado de su solicitud.</p>'+
+    '<p style="font-size:12px;color:#b45309;line-height:1.5;margin:0 0 8px;font-weight:600">IMPORTANTE: Favor NO RESPONDER a esta dirección de correo. Para más información o respuesta del contenido de este mensaje, contactar al correo institucional: <a href="mailto:cdaguaviare1@gmail.com" style="color:#1a5f9e">cdaguaviare1@gmail.com</a></p>'+
+    '<p style="font-size:11px;color:#4a5568;line-height:1.45;margin:0 0 10px">🌎 “Por favor no imprima este correo electrónico a menos que sea necesario” 🌳</p>'+
+    '<p style="font-size:10px;color:#888;line-height:1.45;margin:0">Sede Principal: Inírida – Guainía, Calle 26 No 11-131 · Seccional Guaviare: San José del Guaviare, Transv. 20 No 12-135 · Seccional Vaupés: Mitú, Av. 15 No. 8-144<br>Website: www.cda.gov.co · e-mail: contactenos@cda.gov.co</p>'+
     '</div>';
 }
 function pqrsCorreoHtmlBloqueConsulta(expId){
