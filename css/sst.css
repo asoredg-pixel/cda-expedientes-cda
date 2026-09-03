@@ -333,10 +333,12 @@ tr:hover td{background:var(--bg)}
 .coord-dms input{border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--sf);color:var(--tx);width:100%;min-width:0}
 .coord-box-compact .coord-axis{grid-template-columns:52px auto;gap:4px 6px}
 .coord-box-compact .coord-dms{display:flex;gap:3px;width:auto;flex-wrap:nowrap}
-.coord-box-compact .coord-dms input{width:54px;max-width:54px;flex:0 0 54px;text-align:center;padding:3px 4px;font-size:11px}
+.coord-box-compact .coord-dms input{width:44px;max-width:44px;flex:0 0 44px;text-align:center;padding:3px 4px;font-size:11px}
+.coord-box-compact .coord-dms input[data-k$="M"],
+.coord-box-compact .coord-dms input[data-k$="S"]{width:64px;max-width:64px;flex:0 0 64px}
 .coord-pts.coord-pts-area{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding-bottom:2px;margin-top:6px}
-.coord-pts.coord-pts-area .coord-point{flex:0 0 auto;min-width:168px;margin-top:0;padding:6px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf)}
-.coord-box-compact .coord-pts.coord-pts-area .coord-point{min-width:152px;padding:5px}
+.coord-pts.coord-pts-area .coord-point{flex:0 0 auto;min-width:188px;margin-top:0;padding:6px;border:1px dashed var(--bd);border-radius:var(--r);background:var(--sf)}
+.coord-box-compact .coord-pts.coord-pts-area .coord-point{min-width:188px;padding:5px}
 .coord-box-compact .coord-pts.coord-pts-area .coord-pt-lbl{font-size:10px;text-align:center;margin-bottom:4px}
 .coord-box-compact .coord-pts.coord-pts-area .coord-axis{grid-template-columns:46px auto;gap:2px 4px}
 .coord-box-compact .coord-pts.coord-pts-area .coord-axis-lbl{font-size:10px}
