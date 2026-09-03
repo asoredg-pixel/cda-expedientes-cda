@@ -6193,10 +6193,6 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
     h+='</div>';
     return h;
   }
-  if(mode==='aprobar'&&t&&!t.sinExpediente){
-    h+='<div class="task-decision-block"><label style="font-size:11px;color:var(--tx2)">Fecha cierre '+
-      '<input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:4px 6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label></div>';
-  }
   if(mode==='aprobar'){
     h+='<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Sin firma del Director. El responsable queda atendido.</p>';
     h+='<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar</button>';
@@ -6329,8 +6325,7 @@ function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
   const asunto='Notificación — '+act+(expLbl?' — '+expLbl:'');
   const cuerpo=taskReviewCuerpoNotifPredeterminado(e,t);
   return '<div id="task-rev-notif-email-wrap" style="margin-top:12px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Correo de notificación</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Saldrá del correo institucional del encargado. Destinatarios: persona natural, o si es jurídica el de la empresa, representante legal, apoderado, autorizado y establecimiento comercial.</div>'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px">Correo de notificación</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Varios correos separados por coma</div>'+
     '<input type="text" id="task-rev-notif-to" value="'+escAttr(dest)+'" style="width:100%;box-sizing:border-box"></div>'+
@@ -13952,14 +13947,8 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+eid+'\',\''+tid+'\')">✓ Confirmar y cerrar (sin firma)</button>'+
       '<button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button>';
     h+='</div></div>';
-    if(!esLibre){
-      h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'+
-        '<label style="font-size:12px">Fecha cierre (si cierra sin firma) <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
-        '</div>';
-    }
   }else if(!enFirmaTram){
     h+='<div class="fx" style="gap:8px;flex-wrap:wrap;align-items:center">'+
-      '<label style="font-size:12px">Fecha cierre actividad <input type="date" id="task-verify-fecha" value="'+hoy()+'" style="padding:6px;border:1px solid var(--bd);border-radius:var(--r);margin-left:4px"></label>'+
       '<button type="button" class="btn bsm bp" onclick="confirmarCierreTask(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">✓ Confirmar actividad cerrada</button>'+
       '</div>';
   }
@@ -14031,8 +14020,7 @@ function confirmarCierreTask(expId,taskId,opts){
   opts=opts||{};
   const e=getExpById(expId);
   const t=getTaskFromExp(e,taskId);
-  const fechaEl=document.getElementById('task-verify-fecha');
-  const fechaCierre=fechaEl?fechaEl.value:hoy();
+  const fechaCierre=hoy();
   // PQRSD: nunca cerrar como trámite desde este botón — enrutar al flujo correcto
   if(e&&t&&taskEsAtenderPqrs(t,e)&&!pqrsEstaCerrada(e)){
     const fase=pqrsWorkflowFase(e);
