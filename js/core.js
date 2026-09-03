@@ -18632,13 +18632,13 @@ function actImpresoCheckBtnHtml(impresoObj,onclickJs,opts){
     ?('Impreso'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(impresoObj.por?' · '+impresoObj.por:'')+' — clic para desmarcar')
     :(opts.tipPend||'Marcar como impreso');
   if(imp){
-    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'"><span class="act-impreso-check" aria-hidden="true">✓</span>🖨️</button>';
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'"><span class="act-agenda-check" aria-hidden="true">✓</span>🖨️</button>';
   }
   return '<button type="button" class="btn bsm bic act-ico act-impreso-btn" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+onclickJs+'">🖨️</button>';
 }
 /**
  * Paleta «Por firmar»: 🖨️ abre documentos/anexos (marcar impreso / imprimir en el rail).
- * Muestra ✓ a la derecha si ya está impreso.
+ * Muestra ✓ verde en esquina superior derecha si ya está impreso.
  */
 function actPorFirmarPrintOpenBtnHtml(impresoObj,openOnclickJs){
   const imp=!!(impresoObj&&impresoObj.en);
@@ -18647,7 +18647,7 @@ function actPorFirmarPrintOpenBtnHtml(impresoObj,openOnclickJs){
     ?('Impreso'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(impresoObj&&impresoObj.por?' · '+impresoObj.por:'')+' — ver documentos')
     :'Ver documentos/anexos para imprimir y marcar impreso';
   if(imp){
-    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'"><span class="act-impreso-check" aria-hidden="true">✓</span>🖨️</button>';
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'"><span class="act-agenda-check" aria-hidden="true">✓</span>🖨️</button>';
   }
   return '<button type="button" class="btn bsm bic act-ico act-impreso-btn" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'">🖨️</button>';
 }

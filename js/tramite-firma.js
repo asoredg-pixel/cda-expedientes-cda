@@ -296,7 +296,7 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
         btns+=actImpresoCheckBtnHtml(wf.impreso,"tramiteMarcarImpreso('"+eid+"','"+tid+"')")+' ';
       else{
         const imp=!!(wf.impreso&&wf.impreso.en);
-        btns+='<button type="button" class="btn bsm bic act-ico act-impreso-btn'+(imp?' act-impreso-on':'')+'" onclick="tramiteMarcarImpreso(\''+eid+'\',\''+tid+'\')" title="'+(imp?'Desmarcar impreso':'Marcar como impreso')+'">'+(imp?'<span class="act-impreso-check" aria-hidden="true">✓</span>':'')+'🖨️</button> ';
+        btns+='<button type="button" class="btn bsm bic act-ico act-impreso-btn'+(imp?' act-impreso-on':'')+'" onclick="tramiteMarcarImpreso(\''+eid+'\',\''+tid+'\')" title="'+(imp?'Desmarcar impreso':'Marcar como impreso')+'">'+(imp?'<span class="act-agenda-check" aria-hidden="true">✓</span>':'')+'🖨️</button> ';
       }
     }else if(!enPorFirmar) btns+='<span style="font-size:11px;color:var(--tx2)">Pendiente VITAL / encargado</span> ';
     if(enPorFirmar){
