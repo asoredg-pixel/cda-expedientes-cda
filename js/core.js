@@ -12110,6 +12110,12 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     expId=t.codigo||expId;
     e=null;
   }
+  const ctxEntrega=window._taskModalCtx||{};
+  if(e&&t&&typeof trySaveEntregaRegistroFromPanel==='function'&&!ctxEntrega.entregaResponsable){
+    if(!trySaveEntregaRegistroFromPanel(e,String(t.actividad||'')))return;
+    if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+    else if(typeof persistExpLocal==='function')persistExpLocal();
+  }
   // Proxy mínimo para Drive cuando es actividad sin expediente
   const eDrive=e||(t&&t.sinExpediente?{
     _exp:t.codigo||expId,
@@ -12295,6 +12301,14 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     '</div>';
   }
   if(esPqrsEntrega&&!sol)h+=renderPqrsEntregaCamposHtml(eExp);
+  if(!sol&&eExp&&!esPqrsEntrega){
+    const regTipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(t.actividad||''):'';
+    if(regTipo==='concepto'&&typeof htmlEntregaRegConceptoBlock==='function'){
+      h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+      h+=htmlEntregaRegConceptoBlock(eExp);
+      h+='</div>';
+    }
+  }
   if(!sol){
     const esLibreEnv=!!(t&&t.sinExpediente);
     const showDriveUp=(eExp&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eExp))
@@ -12381,6 +12395,10 @@ function openEnviarSoporteModal(expId,taskId,modo){
     if(esPqrsEntrega&&!tipo)return;
     const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();
   },80);
+  setTimeout(function(){
+    if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview('entrega-reg-concepto-coord');
+    if(typeof syncEntregaRespConceptoCumpleUi==='function')syncEntregaRespConceptoCumpleUi();
+  },50);
 }
 function renderCompareVersionesPanel(t,e,taskId){
   const docs=collectDocsComparables(e,taskId,t);
@@ -14558,6 +14576,12 @@ async function submitAutoentregaEncargado(expId,taskId,destino){
     return;
   }
   const run=async function(){
+    const e=getExpById(expId);
+    if(e&&t&&typeof trySaveEntregaRegistroFromPanel==='function'){
+      if(!trySaveEntregaRegistroFromPanel(e,String(t.actividad||'')))return;
+      if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      else if(typeof persistExpLocal==='function')persistExpLocal();
+    }
     // Subida Drive si hay archivos (reutiliza flujo de envío cuando aplica)
     if(typeof submitEnviarSoporteVerificacion==='function'&&adj.files&&adj.files.length&&typeof _driveExpedienteEsGuaviare==='function'){
       // Los archivos locales se registran vía registrarSoportes; upload institucional ocurre en enviar si se usara ese path.
@@ -14617,6 +14641,11 @@ function submitFinalizarEncargado(expId,taskId){
   const adj=collectEnviarAdjuntos();
   const cmt=(document.getElementById('enviar-cmt-opcional')||{}).value;
   const run=function(){
+    if(e&&t&&typeof trySaveEntregaRegistroFromPanel==='function'){
+      if(!trySaveEntregaRegistroFromPanel(e,String(t.actividad||'')))return;
+      if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      else if(typeof persistExpLocal==='function')persistExpLocal();
+    }
     if(finalizarTaskEncargado(expId,taskId,adj.links,cmt,[],pqrsOpts))closeTaskModal();
   };
   if(adj.files&&adj.files.length){
@@ -20638,9 +20667,11 @@ function coordPointHtml(id,pi,label,d,showPtLbl){
     '<div class="coord-axis"><span class="coord-axis-lbl">Longitud</span>'+coordDmsInputs(id,pi,'lon',d)+'</div>'+
   '</div>';
 }
-function coordHtml(id,v){
+function coordHtml(id,v,opts){
+  opts=opts||{};
+  const compact=!!opts.compact||String(id||'').indexOf('entrega-reg')>=0;
   const data=coordData(v),tipo=data.tipo||'punto',pts=data.pts&&data.pts.length?data.pts:[{}],n=tipo==='area'?4:1;
-  let html='<input type="hidden" id="'+id+'" value=\''+(v||'')+'\'><div class="coord-box" data-coord="'+id+'">'+
+  let html='<input type="hidden" id="'+id+'" value=\''+(v||'')+'\'><div class="coord-box'+(compact?' coord-box-compact':'')+'" data-coord="'+id+'">'+
     '<select onchange="coordToggle(\''+id+'\',this.value)" style="border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:12px;font-family:\'DM Sans\',sans-serif;background:var(--sf);color:var(--tx)">'+
     '<option value="punto"'+(tipo==='punto'?' selected':'')+'>Coordenada punto</option><option value="area"'+(tipo==='area'?' selected':'')+'>Área (4 coordenadas)</option></select>'+
     '<div class="coord-pts">';
@@ -20673,6 +20704,7 @@ function coordSync(id,tipo,skipParentSync){
   const hid=coordHiddenInput(id);
   if(hid)hid.value=has?JSON.stringify(data):'';
   if(!skipParentSync)syncInfoTecnicaExp();
+  if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview(id);
 }
 function fmtCoord(v){
   const d=coordData(v);if(!v)return'';

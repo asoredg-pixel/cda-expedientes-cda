@@ -331,6 +331,10 @@ tr:hover td{background:var(--bg)}
 .coord-axis-lbl{font-size:11px;font-weight:600;color:var(--tx2)}
 .coord-dms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
 .coord-dms input{border:1px solid var(--bd);border-radius:5px;padding:4px 6px;font-size:12px;font-family:'DM Sans',sans-serif;background:var(--sf);color:var(--tx);width:100%;min-width:0}
+.coord-box-compact .coord-axis{grid-template-columns:52px auto;gap:4px 6px}
+.coord-box-compact .coord-dms{display:flex;gap:3px;width:auto;flex-wrap:nowrap}
+.coord-box-compact .coord-dms input{width:54px;max-width:54px;flex:0 0 54px;text-align:center;padding:3px 4px;font-size:11px}
+.entrega-coord-review-banner{padding:8px 10px;background:var(--bll);border:1px solid var(--bd);border-radius:var(--r)}
 .exp-asoc-wrap{position:relative;flex:1;min-width:0}
 .exp-asoc-wrap input{padding:7px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;background:var(--sf);color:var(--tx);width:100%}
 .exp-asoc-wrap input:focus{outline:none;border-color:var(--bl);box-shadow:0 0 0 3px rgba(24,95,165,.1)}

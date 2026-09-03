@@ -1476,23 +1476,10 @@ function syncEntregaRespRegistroUi(){
   box.style.display='';
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
-    const coordBlock=typeof coordHtml==='function'
-      ?('<div class="fld" style="grid-column:1/-1;margin-top:6px"><label>Coordenadas (opcional)</label>'+coordHtml('entrega-reg-concepto-coord','')+'</div>')
-      :'';
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Seguimiento · Concepto técnico</div>'+
-      '<div class="fg">'+
-      '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'"></div>'+
-      '<div class="fld"><label>Fecha seguimiento</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
-      '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
-      '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
-      coordBlock+
-      '</div>'+
-      '<div id="entrega-reg-concepto-req" style="display:none;margin-top:10px;padding:8px;border-left:3px solid var(--or);background:var(--sf)">'+
-        '<div style="font-size:11px;font-weight:600;color:var(--or);margin-bottom:6px">Requerimiento por incumplimiento</div><div class="fg">'+
-        '<div class="fld"><label>N° requerimiento</label><input type="text" id="entrega-reg-concepto-req-num" style="'+inp+'"></div>'+
-        '<div class="fld"><label>Fecha notificación</label><input type="date" id="entrega-reg-concepto-req-notif" style="'+inp+'"></div>'+
-        '<div class="fld"><label>Días para cumplir</label><input type="number" id="entrega-reg-concepto-req-dias" min="0" style="'+inp+'"></div>'+
-      '</div></div>';
+    box.innerHTML=typeof htmlEntregaRegConceptoBlock==='function'?htmlEntregaRegConceptoBlock(eSel):'';
+    setTimeout(function(){
+      if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview('entrega-reg-concepto-coord');
+    },0);
   }else if(tipo==='factura'){
     const tipos=(cfgAct.tiposFactura||['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'])
       .map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
@@ -1524,6 +1511,85 @@ function syncEntregaRespConceptoCumpleUi(){
   const box=document.getElementById('entrega-reg-concepto-req');
   if(box)box.style.display=cumple==='no'?'':'none';
 }
+function getExpCoordenadasGuardadas(e){
+  if(!e)return '';
+  const tramId=typeof resolveExpTramiteId==='function'?resolveExpTramiteId(e):(e._tramite||'');
+  const cat=typeof getInfoTecCatalogForTramite==='function'?getInfoTecCatalogForTramite(e,tramId):[];
+  const def=(cat||[]).find(function(c){return c&&c.tipo==='coordenadas';});
+  const campoId=def?def.id:'coord_entrega';
+  const items=typeof infoTecnicaExpData==='function'?infoTecnicaExpData(e._info_tecnica_items):[];
+  const it=items.find(function(i){return i&&i.campoId===campoId;});
+  if(it&&it.valor)return String(it.valor).trim();
+  const g=e['g_'+campoId];
+  if(g)return String(g).trim();
+  return '';
+}
+function coordJsonEqual(a,b){
+  if(!a&&!b)return true;
+  if(!a||!b)return false;
+  try{
+    const da=typeof coordData==='function'?coordData(a):JSON.parse(a);
+    const db=typeof coordData==='function'?coordData(b):JSON.parse(b);
+    return JSON.stringify(da)===JSON.stringify(db);
+  }catch(err){return String(a).trim()===String(b).trim();}
+}
+function renderEntregaConceptoCoordBlock(e,coordId){
+  coordId=coordId||'entrega-reg-concepto-coord';
+  const saved=e?getExpCoordenadasGuardadas(e):'';
+  const hasSaved=!!saved;
+  let h='';
+  if(hasSaved){
+    const fmt=typeof fmtCoord==='function'?fmtCoord(saved):saved;
+    h+='<div id="entrega-coord-review-banner" class="entrega-coord-review-banner" style="grid-column:1/-1;margin-bottom:6px">'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Coordenadas registradas — verifique si siguen siendo las mismas:</div>'+
+      '<div style="font-size:12px;font-weight:500;color:var(--tx)">'+escAttr(fmt)+'</div></div>';
+  }
+  h+='<div class="fld entrega-coord-field" style="grid-column:1/-1;margin-top:6px">'+
+    '<label>Coordenadas'+(hasSaved?' (verificar o actualizar)':' (opcional)')+'</label>'+
+    (typeof coordHtml==='function'?coordHtml(coordId,hasSaved?saved:'',{compact:true}):'')+
+    '</div>';
+  if(hasSaved){
+    h+='<div id="entrega-coord-cambio-wrap" class="fld" style="display:none;grid-column:1/-1;margin-top:6px">'+
+      '<label>Nota de cambio de coordenadas <span style="color:var(--rd)">*</span></label>'+
+      '<textarea id="entrega-coord-cambio-nota" rows="2" placeholder="Indique por qué cambian las coordenadas (obligatorio si modifica los valores registrados)…" style="width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
+      '<input type="hidden" id="entrega-coord-baseline" value=\''+escAttr(saved)+'\'>';
+  }
+  return h;
+}
+function htmlEntregaRegConceptoBlock(e){
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const hoyStr=typeof hoy==='function'?hoy():'';
+  const coordBlock=typeof renderEntregaConceptoCoordBlock==='function'?renderEntregaConceptoCoordBlock(e,'entrega-reg-concepto-coord'):'';
+  return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Seguimiento · Concepto técnico</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'"></div>'+
+    '<div class="fld"><label>Fecha seguimiento</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
+    '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
+    coordBlock+
+    '</div>'+
+    '<div id="entrega-reg-concepto-req" style="display:none;margin-top:10px;padding:8px;border-left:3px solid var(--or);background:var(--sf)">'+
+      '<div style="font-size:11px;font-weight:600;color:var(--or);margin-bottom:6px">Requerimiento por incumplimiento</div><div class="fg">'+
+      '<div class="fld"><label>N° requerimiento</label><input type="text" id="entrega-reg-concepto-req-num" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha notificación</label><input type="date" id="entrega-reg-concepto-req-notif" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Días para cumplir</label><input type="number" id="entrega-reg-concepto-req-dias" min="0" style="'+inp+'"></div>'+
+    '</div></div>';
+}
+function coordSyncEntregaReview(id){
+  if(String(id||'')!=='entrega-reg-concepto-coord')return;
+  const baseEl=document.getElementById('entrega-coord-baseline');
+  const wrap=document.getElementById('entrega-coord-cambio-wrap');
+  if(!baseEl||!wrap)return;
+  const hid=document.getElementById(id);
+  const cur=hid?String(hid.value||'').trim():'';
+  const base=String(baseEl.value||'').trim();
+  const changed=!!base&&(!cur||!coordJsonEqual(cur,base));
+  wrap.style.display=changed?'':'none';
+  if(!changed){
+    const nota=document.getElementById('entrega-coord-cambio-nota');
+    if(nota)nota.value='';
+  }
+}
 function syncEntregaRespActoVencUi(){
   const tipoNom=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
   const wrap=document.getElementById('entrega-reg-acto-venc-wrap');
@@ -1543,18 +1609,32 @@ function collectEntregaRespRegistroPayload(actividad){
   const tipo=resolveActividadRegistroTipo(actividad);
   if(!tipo||tipo==='ninguno')return null;
   if(tipo==='concepto'){
+    if(!document.getElementById('entrega-reg-concepto'))return null;
     const cumple=String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si');
     const coordEl=document.getElementById('entrega-reg-concepto-coord');
     if(coordEl&&typeof coordSync==='function'){
       try{coordSync('entrega-reg-concepto-coord',null,true);}catch(err){}
     }
     const coordenadas=coordEl?String(coordEl.value||'').trim():'';
+    const baseline=String((document.getElementById('entrega-coord-baseline')||{}).value||'').trim();
+    let coordCambioNota='';
+    let coordAnterior='';
+    if(baseline&&(!coordenadas||!coordJsonEqual(coordenadas,baseline))){
+      coordCambioNota=String((document.getElementById('entrega-coord-cambio-nota')||{}).value||'').trim();
+      if(!coordCambioNota){
+        notif('Indique el motivo del cambio de coordenadas','err');
+        return false;
+      }
+      coordAnterior=baseline;
+    }
     return{tipo:'concepto',item:{
       fecha:String((document.getElementById('entrega-reg-concepto-fecha')||{}).value||(typeof hoy==='function'?hoy():'')),
       concepto:String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim(),
       observaciones:String((document.getElementById('entrega-reg-concepto-obs')||{}).value||'').trim(),
       cumple:cumple,
       coordenadas:coordenadas,
+      coordCambioNota:coordCambioNota,
+      coordAnterior:coordAnterior,
       reqNum:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-num')||{}).value||'').trim():'',
       reqNotif:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-notif')||{}).value||''):'',
       reqDias:cumple==='no'?String((document.getElementById('entrega-reg-concepto-req-dias')||{}).value||''):'',
@@ -1594,7 +1674,15 @@ function appendRegistroDesdeEntrega(e,payload){
     if(!item.concepto&&!item.observaciones&&!item.coordenadas)return false;
     arr.push(item);
     e._conceptos_seg=JSON.stringify(arr);
-    if(item.coordenadas)appendCoordEntregaAInfoTecnica(e,item.coordenadas);
+    if(item.coordenadas){
+      const coordOpts={};
+      if(item.coordCambioNota){
+        coordOpts.notaCambio=item.coordCambioNota;
+        coordOpts.coordAnterior=item.coordAnterior||'';
+        coordOpts.coordAnteriorFmt=typeof fmtCoord==='function'?fmtCoord(item.coordAnterior):'';
+      }
+      appendCoordEntregaAInfoTecnica(e,item.coordenadas,coordOpts);
+    }
     return true;
   }
   if(payload.tipo==='factura'){
@@ -1617,7 +1705,8 @@ function appendRegistroDesdeEntrega(e,payload){
 }
 
 /** Guarda coordenadas de la entrega en información técnica (campo coordenadas del catálogo o g_coord_entrega). */
-function appendCoordEntregaAInfoTecnica(e,coordJson){
+function appendCoordEntregaAInfoTecnica(e,coordJson,opts){
+  opts=opts||{};
   if(!e||!coordJson)return;
   const tramId=typeof resolveExpTramiteId==='function'?resolveExpTramiteId(e):(e._tramite||'');
   const cat=typeof getInfoTecCatalogForTramite==='function'
@@ -1631,6 +1720,48 @@ function appendCoordEntregaAInfoTecnica(e,coordJson){
   else items.push({campoId:campoId,valor:coordJson});
   e._info_tecnica_items=JSON.stringify(items);
   e['g_'+campoId]=coordJson;
+  if(opts.notaCambio){
+    const autor=typeof responsableActivo!=='undefined'&&responsableActivo?responsableActivo:(typeof taskComentarioAutor==='function'?taskComentarioAutor():'');
+    const fecha=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+    const txt='Cambio de coordenadas: '+opts.notaCambio+(opts.coordAnteriorFmt?' · Anterior: '+opts.coordAnteriorFmt:'');
+    if(typeof detalleNotasData==='function'){
+      const notas=detalleNotasData(e._detalle_notas);
+      notas.push({texto:txt,autor:autor,fecha:fecha});
+      e._detalle_notas=JSON.stringify(notas);
+    }
+    if(typeof logAudit==='function')logAudit('Coordenadas actualizadas ['+e._exp+']: '+opts.notaCambio,'expedientes',e._exp);
+  }
+}
+
+function validateAndAppendEntregaRegistro(e,regPayload){
+  if(!e||!regPayload||regPayload===false)return false;
+  if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
+    notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
+    return false;
+  }
+  if(regPayload.tipo==='acto'&&!regPayload.item.tipo){
+    notif('Seleccione el tipo de acto / resolución','err');
+    return false;
+  }
+  if(regPayload.tipo==='factura'&&regPayload.item.ref&&typeof validarNumeroFacturaDisponible==='function'){
+    if(!validarNumeroFacturaDisponible(regPayload.item.ref,null,null))return false;
+  }
+  if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
+    if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return false;
+  }
+  if(regPayload.tipo==='acto'&&regPayload.item.numero&&typeof validarNumeroOficioDisponible==='function'){
+    if(!validarNumeroOficioDisponible(regPayload.item.numero,e._exp))return false;
+  }
+  appendRegistroDesdeEntrega(e,regPayload);
+  return true;
+}
+
+function trySaveEntregaRegistroFromPanel(e,actividad){
+  if(!e||!actividad||!document.getElementById('entrega-reg-concepto'))return true;
+  const regPayload=collectEntregaRespRegistroPayload(actividad);
+  if(regPayload===false)return false;
+  if(!regPayload)return true;
+  return validateAndAppendEntregaRegistro(e,regPayload);
 }
 
 function findTaskEntregaRespDedupe(e,actividad,responsable){
@@ -2031,25 +2162,9 @@ function ensureExpTaskEntregaResponsable(){
   if(!validateEntregaRespOficioRequerido(actFinalCheck,e._exp))return null;
   applyEntregaRespOficioToTask(t,actFinalCheck);
   const regPayload=(!esPqrs)?collectEntregaRespRegistroPayload(actFinalCheck):null;
+  if(regPayload===false)return null;
   if(regPayload){
-    if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
-      notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
-      return null;
-    }
-    if(regPayload.tipo==='acto'&&!regPayload.item.tipo){
-      notif('Seleccione el tipo de acto / resolución','err');
-      return null;
-    }
-    if(regPayload.tipo==='factura'&&regPayload.item.ref&&typeof validarNumeroFacturaDisponible==='function'){
-      if(!validarNumeroFacturaDisponible(regPayload.item.ref,null,null))return null;
-    }
-    if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
-      if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return null;
-    }
-    if(regPayload.tipo==='acto'&&regPayload.item.numero&&typeof validarNumeroOficioDisponible==='function'){
-      if(!validarNumeroOficioDisponible(regPayload.item.numero,e._exp))return null;
-    }
-    appendRegistroDesdeEntrega(e,regPayload);
+    if(!validateAndAppendEntregaRegistro(e,regPayload))return null;
   }
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
@@ -2111,6 +2226,10 @@ window.entregaRespEsFlujoPqrs=entregaRespEsFlujoPqrs;
 window.syncEntregaRespPqrsUi=syncEntregaRespPqrsUi;
 window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
+window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
+window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
+window.coordSyncEntregaReview=coordSyncEntregaReview;
+window.trySaveEntregaRegistroFromPanel=trySaveEntregaRegistroFromPanel;
 window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;
 window.filtrarActEntregaRespSug=filtrarActEntregaRespSug;
 window.pickActEntregaResp=pickActEntregaResp;
@@ -2140,7 +2259,6 @@ window.entregaRespClearOficioError=entregaRespClearOficioError;
 window.syncEntregaRespInfractorCard=syncEntregaRespInfractorCard;
 window.entregaRespAddInfractor=entregaRespAddInfractor;
 window.entregaRespQuitarInfractor=entregaRespQuitarInfractor;
-window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.syncEntregaRespActoVencUi=syncEntregaRespActoVencUi;
 
 /** Expediente creado por responsable y aún pendiente de revisión/corrección del encargado. */
