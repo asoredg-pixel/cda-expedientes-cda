@@ -16631,21 +16631,23 @@ function conceptoSegRowHtml(c,i){
     return '<option value="'+escAttr(t)+'"'+(tipoSel===t?' selected':'')+'>'+escAttr(t)+'</option>';
   }).join('');
   const st=estadoConceptoSeg(c);
+  const noCumple=c.cumple==='no'||c.cumple===false;
+  const noAplica=c.cumple==='na';
   let flags='';
   if(st.cumplido)flags+=' <span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>';
   else if(st.incumplio)flags+=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags+=' <span class="flag flag-ncumple">No cumple</span>';
+  else if(noAplica)flags+=' <span class="flag" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)">No aplica</span>';
   const tit=(tipoSel?tipoSel+' · ':'')+'Concepto '+(c.concepto||('#'+(i+1)))+flags;
-  const noCumple=c.cumple==='no'||c.cumple===false;
   const reqCumplido=!!c.reqCumplido;
   return '<details class="item-fold concepto-seg">'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo de concepto <span class="req-star">*</span></label><select class="cs-tipo-concepto" onchange="syncConceptosSeg();refreshConceptoFold(this)"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
-    '<div class="fld"><label>Fecha seguimiento</label><input type="date" class="cs-fecha" value="'+(c.fecha||'')+'" onchange="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
+    '<div class="fld"><label>Fecha elaboración</label><input type="date" class="cs-fecha" value="'+(c.fecha||'')+'" onchange="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld"><label>N° concepto técnico</label><input type="text" class="cs-concepto" value="'+escAttr(c.concepto||'')+'" oninput="syncConceptosSeg();refreshConceptoFold(this)"></div>'+
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea class="cs-obs" style="min-height:55px" oninput="syncConceptosSeg()">'+escTextarea(c.observaciones||'')+'</textarea></div>'+
-    '<div class="fld"><label>¿Cumple?</label><select class="cs-cumple" onchange="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"><option value="si"'+(c.cumple==='si'||c.cumple===true?' selected':'')+'>Cumple</option><option value="no"'+(noCumple?' selected':'')+'>No cumple</option></select></div>'+
+    '<div class="fld"><label>¿Cumple?</label><select class="cs-cumple" onchange="updateConceptoSegRow(this.closest(\'.concepto-seg\'));syncConceptosSeg()"><option value="si"'+(c.cumple==='si'||c.cumple===true?' selected':'')+'>Cumple</option><option value="no"'+(noCumple?' selected':'')+'>No cumple</option><option value="na"'+(noAplica?' selected':'')+'>No aplica</option></select></div>'+
     '</div>'+
     '<div class="cs-req" style="'+(noCumple?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--or);padding-left:.8rem">'+
     '<div class="slbl" style="margin-bottom:.5rem;color:var(--or)">Requerimiento por incumplimiento</div><div class="fg">'+
@@ -16715,6 +16717,7 @@ function refreshConceptoFold(el){
   if(st.cumplido)flags=' <span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>';
   else if(st.incumplio)flags=' <span class="flag flag-incumple">Incumplió requerimiento</span>';
   else if(st.noCumple)flags=' <span class="flag flag-ncumple">No cumple</span>';
+  else if(c.cumple==='na')flags=' <span class="flag" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)">No aplica</span>';
   const sum=row.querySelector('summary');
   if(sum)sum.innerHTML=escAttr((c.tipoConcepto?c.tipoConcepto+' · ':'')+'Concepto '+(c.concepto||'sin número'))+flags;
 }

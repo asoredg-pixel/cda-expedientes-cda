@@ -259,7 +259,7 @@ function renderConceptosSegView(e){
   return '<div><div class="slbl">Conceptos de seguimiento</div>'+cs.map(c=>{
     const st=estadoConceptoSeg(c);
     return '<div class="tkv" style="flex-direction:column;align-items:flex-start"><div class="fx" style="gap:6px;flex-wrap:wrap"><span style="font-weight:600">'+fmtF(c.fecha)+' · Concepto '+escAttr(c.concepto||'—')+'</span>'+
-      (st.cumplido?'<span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>':st.incumplio?'<span class="flag flag-incumple">Incumplió requerimiento</span>':st.noCumple?'<span class="flag flag-ncumple">No cumple</span>':'')+
+      (st.cumplido?'<span class="flag" style="background:var(--gnl);color:var(--gn);border:1px solid #9fe1cb">Requerimiento cumplido</span>':st.incumplio?'<span class="flag flag-incumple">Incumplió requerimiento</span>':st.noCumple?'<span class="flag flag-ncumple">No cumple</span>':c.cumple==='na'?'<span class="flag" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--bd)">No aplica</span>':'')+
       '</div>'+(c.observaciones?'<div style="font-size:12px;color:var(--tx2);margin-top:3px">'+escAttr(c.observaciones)+'</div>':'')+
       (c.reqNum?'<div style="font-size:11px;color:var(--tx3)">Req. '+escAttr(c.reqNum)+' · Notif. '+fmtF(c.reqNotif)+' · Límite '+fmtF(c.reqVence||calcReqVence(c.reqNotif,c.reqDias))+(c.reqFechaCump?' · Cumplió '+fmtF(c.reqFechaCump):'')+'</div>':'')+
       (c.trasladoSan?'<div style="font-size:11px;color:var(--pu);margin-top:3px">Traslado sancionatorio: '+escAttr(c.expSan||'sin N°')+'</div>':'')+

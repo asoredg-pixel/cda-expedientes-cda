@@ -1578,8 +1578,8 @@ function htmlEntregaRegConceptoBlock(e,opts){
     '<div class="fg">'+
     '<div class="fld"><label>Tipo de concepto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-concepto-tipo" style="'+inp+'"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
     '<div class="fld"><label>N° concepto técnico</label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'"></div>'+
-    '<div class="fld"><label>Fecha seguimiento</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
-    '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option></select></div>'+
+    '<div class="fld"><label>Fecha elaboración</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option><option value="na">No aplica</option></select></div>'+
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
     coordBlock+
     '</div>'+
@@ -2314,7 +2314,7 @@ function resumenAltaEntregaHtml(e){
     const concepts=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
     if(concepts.length){
       const c=concepts[concepts.length-1];
-      bits.push('<strong>Concepto:</strong> '+(c.concepto?escAttr(c.concepto):'—')+(c.cumple==='no'?' · No cumple':''));
+      bits.push('<strong>Concepto:</strong> '+(c.concepto?escAttr(c.concepto):'—')+(c.cumple==='no'?' · No cumple':c.cumple==='na'?' · No aplica':''));
     }
     const facs=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
     if(facs.length){
