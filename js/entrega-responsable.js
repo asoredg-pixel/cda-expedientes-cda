@@ -1512,19 +1512,25 @@ function syncEntregaRespRegistroUi(){
       '<div class="fld"><label>Fecha pago (si ya pagó)</label><input type="date" id="entrega-reg-fac-pago" style="'+inp+'"></div>'+
       '</div>';
   }else if(tipo==='acto'){
-    const actos=(cfgAct.tiposActoAdmin||[]).map(function(t){
-      const n=t.nombre||t;
-      return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';
-    }).join('');
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Normatividad legal · Acto / resolución</div>'+
-      '<div class="fg">'+
-      '<div class="fld"><label>Tipo de acto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-acto-tipo" onchange="syncEntregaRespActoVencUi()" style="'+inp+'"><option value="">— Seleccione —</option>'+actos+'</select></div>'+
-      '<div class="fld"><label>N° acto administrativo</label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="'+inp+'"></div>'+
-      '<div class="fld"><label>Fecha del acto</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
-      '<div class="fld" id="entrega-reg-acto-venc-wrap"><label>Fecha de vencimiento</label><input type="date" id="entrega-reg-acto-venc" style="'+inp+'"></div>'+
-      '</div>';
-    setTimeout(syncEntregaRespActoVencUi,0);
+    box.innerHTML=typeof htmlEntregaRegActoBlock==='function'?htmlEntregaRegActoBlock():'';
   }
+}
+function htmlEntregaRegActoBlock(){
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const hoyStr=typeof hoy==='function'?hoy():'';
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
+  const actos=(cfgAct.tiposActoAdmin||[]).map(function(t){
+    const n=t.nombre||t;
+    return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';
+  }).join('');
+  return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Normatividad legal · Acto / resolución</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Tipo de acto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-acto-tipo" style="'+inp+'"><option value="">— Seleccione —</option>'+actos+'</select></div>'+
+    '<div class="fld"><label>N° acto administrativo</label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="'+inp+'"></div>'+
+    '<div class="fld"><label>Fecha del acto</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:8px">La <strong>fecha de vencimiento</strong> (si aplica) se indica al <strong>notificar</strong> el acto (correo VITAL/encargado, presencial, WhatsApp o aviso). También puede ajustarse en Registro → Normatividad.</div>';
 }
 function syncEntregaRespConceptoCumpleUi(){
   const cumple=String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si');
@@ -1624,19 +1630,8 @@ function coordSyncEntregaReview(id){
   }
 }
 function syncEntregaRespActoVencUi(){
-  const tipoNom=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
-  const wrap=document.getElementById('entrega-reg-acto-venc-wrap');
-  if(!wrap)return;
-  let show=true;
-  if(typeof getTipoActo==='function'&&tipoNom){
-    const t=getTipoActo(tipoNom);
-    show=!!(t&&t.tieneVencimiento);
-  }
-  wrap.style.display=show?'':'none';
-  if(!show){
-    const v=document.getElementById('entrega-reg-acto-venc');
-    if(v)v.value='';
-  }
+  // La fecha de vencimiento del acto ya no se pide en la entrega a revisión;
+  // se diligencia al notificar (correo / presencial / WhatsApp / aviso).
 }
 function collectEntregaRespRegistroPayload(actividad){
   const tipo=resolveActividadRegistroTipo(actividad);
@@ -1699,11 +1694,13 @@ function collectEntregaRespRegistroPayload(actividad){
     }};
   }
   if(tipo==='acto'){
+    if(!document.getElementById('entrega-reg-acto-tipo'))return null;
     return{tipo:'acto',item:{
+      actoAdminId:'aa_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6),
       tipo:String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim(),
       numero:String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim(),
       fecha:String((document.getElementById('entrega-reg-acto-fecha')||{}).value||(typeof hoy==='function'?hoy():'')),
-      vencimiento:String((document.getElementById('entrega-reg-acto-venc')||{}).value||''),
+      vencimiento:'',
       prorrogas:[],trasladoSan:false,expSan:'',archivoNum:'',archivoFecha:''
     }};
   }
@@ -1740,11 +1737,24 @@ function appendRegistroDesdeEntrega(e,payload){
   }
   if(payload.tipo==='acto'){
     const arr=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
-    const clean=typeof cleanActoForStore==='function'?cleanActoForStore(item):item;
+    const clean=typeof cleanActoForStore==='function'?cleanActoForStore(item):Object.assign({},item);
     if(!clean.tipo&&!clean.numero)return false;
+    if(!clean.actoAdminId)clean.actoAdminId='aa_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);
+    clean.vencimiento=clean.vencimiento||'';
     arr.push(clean);
     e._actos_admin=JSON.stringify(arr);
     if(clean.numero&&!e._resolucion){e._resolucion=clean.numero;e._fecha_res=clean.fecha||'';}
+    // Vincular el acto a la tarea en entrega (para pedir vencimiento al notificar)
+    try{
+      const ctx=window._taskModalCtx||{};
+      let t=null;
+      if(ctx.taskId&&typeof getTaskFromExp==='function')t=getTaskFromExp(e,ctx.taskId);
+      if(!t&&e.tasks&&e.tasks.length)t=e.tasks[e.tasks.length-1];
+      if(t){
+        t.actoAdminId=clean.actoAdminId;
+        t.esActoAdmin=true;
+      }
+    }catch(errLink){}
     return true;
   }
   return false;
@@ -1923,6 +1933,96 @@ function applyConceptoReqDesdeNotificacion(e,t,fechaNotif,canal){
   return true;
 }
 
+function findActoByAdminId(e,actoAdminId){
+  const id=String(actoAdminId||'').trim();
+  if(!e||!id)return null;
+  const arr=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
+  for(let i=0;i<arr.length;i++){
+    if(arr[i]&&String(arr[i].actoAdminId||'')===id)return{item:arr[i],index:i,arr:arr};
+  }
+  return null;
+}
+function taskTieneActoAdminPendienteVenc(e,t){
+  if(!t)return false;
+  if(t.actoAdminId||t.esActoAdmin)return true;
+  const act=String(t.actividad||t.desc||'').trim();
+  if(typeof resolveActividadRegistroTipo==='function'&&resolveActividadRegistroTipo(act)==='acto')return true;
+  return false;
+}
+function resolveActoParaNotificacion(e,t){
+  if(!e||!t)return null;
+  let hit=findActoByAdminId(e,t.actoAdminId);
+  if(hit)return hit;
+  const arr=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
+  if(!arr.length)return null;
+  // Preferir el último acto sin vencimiento; si no, el último
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i]&&!String(arr[i].vencimiento||'').trim())return{item:arr[i],index:i,arr:arr};
+  }
+  return{item:arr[arr.length-1],index:arr.length-1,arr:arr};
+}
+function htmlTramiteNotifActoVencBlock(e,t){
+  if(!taskTieneActoAdminPendienteVenc(e,t))return'';
+  const hit=resolveActoParaNotificacion(e,t);
+  const a=hit?hit.item:{};
+  const tieneCfg=typeof getTipoActo==='function'&&a.tipo?!!(getTipoActo(a.tipo)||{}).tieneVencimiento:true;
+  const defSi=!!(a.vencimiento||tieneCfg);
+  const venc=String(a.vencimiento||'');
+  return '<div id="tramite-notif-acto-venc-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);border-left:3px solid var(--bl)">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">Acto / resolución · Vencimiento</div>'+
+    '<input type="hidden" id="tramite-notif-acto-id" value="'+escAttr(a.actoAdminId||t.actoAdminId||'')+'">'+
+    '<div class="fld" style="margin-bottom:8px"><label>¿El acto administrativo cuenta con fecha de vencimiento? <span class="req-star">*</span></label>'+
+    '<select id="tramite-notif-acto-tiene-venc" onchange="syncTramiteNotifActoVencUi()" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<option value="si"'+(defSi?' selected':'')+'>Sí</option>'+
+    '<option value="no"'+(defSi?'':' selected')+'>No</option>'+
+    '</select></div>'+
+    '<div class="fld" id="tramite-notif-acto-venc-wrap" style="'+(defSi?'':'display:none')+'"><label>Fecha de vencimiento <span class="req-star">*</span></label>'+
+    '<input type="date" id="tramite-notif-acto-venc" value="'+escAttr(venc)+'" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<div style="font-size:11px;color:var(--tx2);margin-top:4px">A partir de esta fecha se calcula la vigencia; si vence, el expediente mostrará el flag de resolución vencida. También puede modificarse en Registro → Normatividad.</div></div>'+
+    '</div>';
+}
+function syncTramiteNotifActoVencUi(){
+  const tiene=String((document.getElementById('tramite-notif-acto-tiene-venc')||{}).value||'no');
+  const wrap=document.getElementById('tramite-notif-acto-venc-wrap');
+  if(wrap)wrap.style.display=tiene==='si'?'':'none';
+  if(tiene!=='si'){
+    const f=document.getElementById('tramite-notif-acto-venc');
+    if(f)f.value='';
+  }
+}
+function collectTramiteNotifActoVencimiento(){
+  if(!document.getElementById('tramite-notif-acto-tiene-venc'))return null;
+  const tiene=String((document.getElementById('tramite-notif-acto-tiene-venc')||{}).value||'no');
+  const actoAdminId=String((document.getElementById('tramite-notif-acto-id')||{}).value||'').trim();
+  if(tiene!=='si')return{actoAdminId:actoAdminId,tieneVencimiento:false,vencimiento:''};
+  const venc=String((document.getElementById('tramite-notif-acto-venc')||{}).value||'').trim();
+  if(!venc){
+    notif('Indique la fecha de vencimiento del acto administrativo','err');
+    return false;
+  }
+  return{actoAdminId:actoAdminId,tieneVencimiento:true,vencimiento:venc};
+}
+function applyActoVencimientoDesdeNotificacion(e,t,payload){
+  if(!e||payload===false)return false;
+  if(!payload)return true;
+  const hit=resolveActoParaNotificacion(e,t)||findActoByAdminId(e,payload.actoAdminId);
+  if(!hit||!hit.item){
+    if(payload.tieneVencimiento){notif('No se encontró el acto administrativo para guardar el vencimiento','err');return false;}
+    return true;
+  }
+  if(payload.tieneVencimiento)hit.item.vencimiento=payload.vencimiento;
+  else hit.item.vencimiento='';
+  if(!hit.item.actoAdminId&&payload.actoAdminId)hit.item.actoAdminId=payload.actoAdminId;
+  e._actos_admin=JSON.stringify(hit.arr);
+  if(t){
+    t.actoAdminId=hit.item.actoAdminId||t.actoAdminId||'';
+    t.esActoAdmin=true;
+  }
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+  else if(typeof persistExpLocal==='function')persistExpLocal();
+  return true;
+}
+
 /** Guarda coordenadas de la entrega en información técnica (campo coordenadas del catálogo o g_coord_entrega). */
 function appendCoordEntregaAInfoTecnica(e,coordJson,opts){
   opts=opts||{};
@@ -1995,11 +2095,18 @@ function trySaveEntregaRegistroFromPanel(e,actividad){
     }
     return applyEntregaOficioRequerimiento(e,t,payload.item);
   }
-  if(!document.getElementById('entrega-reg-concepto'))return true;
+  if(!document.getElementById('entrega-reg-concepto')&&!document.getElementById('entrega-reg-acto-tipo'))return true;
   const regPayload=collectEntregaRespRegistroPayload(actividad);
   if(regPayload===false)return false;
   if(!regPayload)return true;
-  return validateAndAppendEntregaRegistro(e,regPayload);
+  const ok=validateAndAppendEntregaRegistro(e,regPayload);
+  if(ok&&regPayload.tipo==='acto'&&regPayload.item&&regPayload.item.actoAdminId){
+    const ctx=window._taskModalCtx||{};
+    let t=null;
+    if(ctx.taskId&&typeof getTaskFromExp==='function')t=getTaskFromExp(e,ctx.taskId);
+    if(t){t.actoAdminId=regPayload.item.actoAdminId;t.esActoAdmin=true;}
+  }
+  return ok;
 }
 
 function findTaskEntregaRespDedupe(e,actividad,responsable){
@@ -2412,6 +2519,10 @@ function ensureExpTaskEntregaResponsable(){
     if(regPayload.tipo==='oficio_requerimiento'){
       if(!applyEntregaOficioRequerimiento(e,t,regPayload.item))return null;
     }else if(!validateAndAppendEntregaRegistro(e,regPayload))return null;
+    if(regPayload.tipo==='acto'&&regPayload.item&&regPayload.item.actoAdminId){
+      t.actoAdminId=regPayload.item.actoAdminId;
+      t.esActoAdmin=true;
+    }
   }
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
@@ -2475,11 +2586,16 @@ window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
 window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
+window.htmlEntregaRegActoBlock=htmlEntregaRegActoBlock;
 window.htmlEntregaOficioRequerimientoBlock=htmlEntregaOficioRequerimientoBlock;
 window.syncEntregaOfiReqMedioUi=syncEntregaOfiReqMedioUi;
 window.esActividadOficioRequerimiento=esActividadOficioRequerimiento;
 window.applyConceptoReqDesdeNotificacion=applyConceptoReqDesdeNotificacion;
 window.ensureOficioRequerimientoTask=ensureOficioRequerimientoTask;
+window.htmlTramiteNotifActoVencBlock=htmlTramiteNotifActoVencBlock;
+window.syncTramiteNotifActoVencUi=syncTramiteNotifActoVencUi;
+window.collectTramiteNotifActoVencimiento=collectTramiteNotifActoVencimiento;
+window.applyActoVencimientoDesdeNotificacion=applyActoVencimientoDesdeNotificacion;
 window.coordSyncEntregaReview=coordSyncEntregaReview;
 window.trySaveEntregaRegistroFromPanel=trySaveEntregaRegistroFromPanel;
 window.resolveActividadRegistroTipo=resolveActividadRegistroTipo;

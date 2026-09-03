@@ -605,6 +605,7 @@ function openTramiteNotificarModal(expId,taskId){
       :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'tramite-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="tramite-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" style="display:none"><span id="tramite-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
     '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a <strong>revisión del departamento</strong> para cerrar la actividad.</div></div>'+
     '</div>'+
+    (typeof htmlTramiteNotifActoVencBlock==='function'?htmlTramiteNotifActoVencBlock(e,t):'')+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
     '<button type="button" class="btn bsm bp" id="tramite-notif-btn" onclick="submitTramiteNotificar(\''+escAttr(refId)+'\',\''+escAttr(taskId)+'\')">✅ Confirmar notificación</button>'+
     '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -618,6 +619,7 @@ function openTramiteNotificarModal(expId,taskId){
     sstFileInitPick('tramite-notif-oficio-file');
     sstFileInitPick('tramite-notif-soporte');
   }
+  if(typeof syncTramiteNotifActoVencUi==='function')syncTramiteNotifActoVencUi();
 }
 
 function tramiteNotifSetCanal(val){
@@ -653,6 +655,21 @@ async function submitTramiteNotificar(expId,taskId){
     if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
     return;
   }
+
+  let actoVencPayload=null;
+  if(typeof collectTramiteNotifActoVencimiento==='function'){
+    actoVencPayload=collectTramiteNotifActoVencimiento();
+    if(actoVencPayload===false){
+      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
+      return;
+    }
+  }
+  const applyActoVenc=function(){
+    if(!actoVencPayload||typeof applyActoVencimientoDesdeNotificacion!=='function')return true;
+    const eAct=(!t.sinExpediente&&typeof getExpById==='function')?getExpById(refId):(e&&e._exp?e:null);
+    if(!eAct||eAct._sin_expediente)return true;
+    return applyActoVencimientoDesdeNotificacion(eAct,t,actoVencPayload);
+  };
 
   // Subir oficio notificado (opcional / recomendado)
   const ctxOfi='tramite-notif-oficio:'+refId+':'+taskId;
@@ -733,6 +750,10 @@ async function submitTramiteNotificar(expId,taskId){
       return;
     }
     setTaskFirmaWf(refId,taskId,{canal:'correo'});
+    if(!applyActoVenc()){
+      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
+      return;
+    }
     await finalizarTramiteTrasPublicar(refId,taskId,{via:'notificacion',destinos:destinos,canal:'correo'});
     notif('📬 Notificado por correo y actividad cerrada','ok');
     closeTaskModal();
@@ -808,6 +829,10 @@ async function submitTramiteNotificar(expId,taskId){
     });
     window._tramiteNotifSoporteFile=null;
     if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxSop);
+    if(!applyActoVenc()){
+      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
+      return;
+    }
     notif('⏳ Soporte cargado — pasa a revisión del departamento para cerrar','ok');
     closeTaskModal();
     if(typeof renderActividades==='function')renderActividades();

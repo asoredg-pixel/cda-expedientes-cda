@@ -12365,6 +12365,10 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
       h+=htmlEntregaRegConceptoBlock(eExp,{actividad:actNom});
       h+='</div>';
+    }else if(regTipo==='acto'&&typeof htmlEntregaRegActoBlock==='function'){
+      h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+      h+=htmlEntregaRegActoBlock();
+      h+='</div>';
     }
   }
   if(!sol){
@@ -16218,7 +16222,7 @@ function mergeExpedienteFlags(actos,conceptos){
 }
 function actoVenceHtml(a){
   const tipo=getTipoActo(a.tipo);
-  if(!tipo.tieneVencimiento||a.archivoFecha)return'';
+  if((!tipo.tieneVencimiento&&!String(a.vencimiento||'').trim())||a.archivoFecha)return'';
   const vig=vigenteActo(a);
   if(!vig)return'';
   return'<span style="font-size:11px;color:var(--tx2);margin-left:6px">Vence: '+fmtF(vig)+'</span>';
@@ -16291,6 +16295,7 @@ function readActoFromRow(row){
     vencimiento:item.querySelector('.la-pr-venc')?item.querySelector('.la-pr-venc').value:''
   })).filter(p=>p.numero||p.vencimiento);
   return{
+    actoAdminId:row.getAttribute('data-acto-admin-id')||'',
     tipo:row.querySelector('.la-tipo')?row.querySelector('.la-tipo').value:'',
     numero:row.querySelector('.la-num')?row.querySelector('.la-num').value:'',
     fecha:row.querySelector('.la-fecha')?row.querySelector('.la-fecha').value:'',
@@ -16306,7 +16311,8 @@ function estadoActoAdmin(a){
   a=normalizeActoProrrogas(a||{});
   if(a.archivoFecha)return{archivada:true,prorroga:false,vencida:false};
   const tipo=getTipoActo(a.tipo);
-  if(!tipo.tieneVencimiento)return{archivada:false,prorroga:false,vencida:false};
+  const usaVenc=!!(tipo.tieneVencimiento||String(a.vencimiento||'').trim());
+  if(!usaVenc)return{archivada:false,prorroga:false,vencida:false};
   const vig=vigenteActo(a);
   if(!vig)return{archivada:false,prorroga:false,vencida:false};
   const tieneProrroga=tieneProrrogasActo(a);
@@ -16593,11 +16599,13 @@ function actoAdminRowHtml(a,i){
   else if(st.prorroga)flags+=' <span class="flag flag-prorroga">Prórroga</span>';
   else if(st.vencida)flags+=' <span class="flag flag-venc-acto">Vencida</span>';
   const tit=(a.tipo||'Acto')+(a.numero?' · '+a.numero:'')+flags;
-  const showVenc=tipo.tieneVencimiento&&!st.archivada;
-  const showGestion=tipo.tieneVencimiento&&!st.archivada&&(st.vencida||tieneProrrogasActo(a)||a.archivoFecha||a.archivoNum);
+  const usaVenc=!!(tipo.tieneVencimiento||String(a.vencimiento||'').trim());
+  // En Registro siempre se puede indicar/ajustar vencimiento (también se pide al notificar)
+  const showVenc=!st.archivada;
+  const showGestion=usaVenc&&!st.archivada&&(st.vencida||tieneProrrogasActo(a)||a.archivoFecha||a.archivoNum);
   const prorrogaHint=st.vencida&&!st.archivada?'<div style="font-size:11px;color:var(--am);margin-bottom:.5rem">Plazo vencido: registre prórroga, acto vinculado o archive el acto.</div>':'';
-  const vincHtml=st.vencida&&!st.archivada&&tipo.tieneVencimiento?actosVinculadosQuickHtml():'';
-  return '<details class="item-fold acto-admin">'+
+  const vincHtml=st.vencida&&!st.archivada&&usaVenc?actosVinculadosQuickHtml():'';
+  return '<details class="item-fold acto-admin" data-acto-admin-id="'+escAttr(a.actoAdminId||'')+'">'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo de acto administrativo</label><select class="la-tipo" onchange="updateActoAdminRow(this.closest(\'.acto-admin\'));syncActosAdmin()">'+actoTipoOpts(a.tipo||'')+'</select></div>'+
@@ -16620,11 +16628,12 @@ function updateActoAdminRow(row){
   if(!row)return;
   const a=readActoFromRow(row);
   const tipo=getTipoActo(a.tipo);
+  const usaVenc=!!(tipo.tieneVencimiento||String(a.vencimiento||'').trim());
   const vencW=row.querySelector('.la-venc-wrap');
-  if(vencW)vencW.style.display=tipo.tieneVencimiento&&!estadoActoAdmin(a).archivada?'':'none';
+  if(vencW)vencW.style.display=!estadoActoAdmin(a).archivada?'':'none';
   const st=estadoActoAdmin(a);
   const gest=row.querySelector('.la-gestion');
-  if(gest)gest.style.display=(tipo.tieneVencimiento&&!st.archivada&&(st.vencida||tieneProrrogasActo(a)||a.archivoFecha||a.archivoNum))?'':'none';
+  if(gest)gest.style.display=(usaVenc&&!st.archivada&&(st.vencida||tieneProrrogasActo(a)||a.archivoFecha||a.archivoNum))?'':'none';
   const tr=row.querySelector('.la-traslado-san');
   if(tr)tr.style.display=tipo.puedeTrasladoSan?'':'none';
   const list=row.querySelector('.la-prorrogas-list');
