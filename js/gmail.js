@@ -1758,6 +1758,37 @@ window.driveListFolderChildren = driveListFolderChildren;
 window.driveListFolderAllRecursive = driveListFolderAllRecursive;
 window.driveDeleteFolderRecursive = driveDeleteFolderRecursive;
 
+/** Descarga el contenido de un archivo Drive (PDF u exportación a PDF de Docs). */
+async function driveFetchFileBlob(fileId) {
+  const token = _driveGetBestToken();
+  if (!token || !fileId) return null;
+  try {
+    let mime = '';
+    try {
+      const meta = await driveGetFileMeta(fileId);
+      mime = String((meta && meta.mimeType) || '');
+    } catch (eM) {}
+    let url = '';
+    if (/^application\/vnd\.google-apps\./i.test(mime)) {
+      url = DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '/export?mimeType=' + encodeURIComponent('application/pdf') + _DRIVE_API_QS;
+    } else {
+      url = DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?alt=media' + _DRIVE_API_QS;
+    }
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) {
+      console.warn('driveFetchFileBlob:', fileId, res.status);
+      return null;
+    }
+    return await res.blob();
+  } catch (e) {
+    console.warn('driveFetchFileBlob:', e);
+    return null;
+  }
+}
+window.driveFetchFileBlob = driveFetchFileBlob;
+
 async function driveDeleteInstitutional(fileId) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;

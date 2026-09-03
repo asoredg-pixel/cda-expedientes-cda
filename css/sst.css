@@ -2240,7 +2240,12 @@ body.task-review-doc-mode #task-modal-overlay{
   box-shadow:0 0 0 1.5px var(--sf)
 }
 .act-impreso-btn{position:relative}
-.btn.act-impreso-on{background:var(--gnl);color:var(--gn);border:1px solid #a8d4a8;font-weight:700}
+/* Impreso: mismo estilo que otros iconos; ✓ a la derecha */
+.btn.act-impreso-on{background:var(--sf);color:var(--tx);border:1px solid var(--bd);font-weight:600}
+.act-impreso-btn .act-impreso-check,
+.act-impreso-btn .act-agenda-check{
+  left:auto;right:-4px;
+}
 .gt-layout{display:flex;flex-direction:column;gap:2px;min-height:0}
 .gt-list-name{display:flex;align-items:center;gap:4px;padding:2px 0 10px;border-bottom:1px solid var(--bd);margin-bottom:4px}
 .gt-nav{border:0;background:transparent;color:var(--tx3);font-size:18px;line-height:1;padding:2px 6px;cursor:pointer;border-radius:4px}

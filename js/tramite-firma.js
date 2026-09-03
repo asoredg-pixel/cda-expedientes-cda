@@ -296,7 +296,7 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
         btns+=actImpresoCheckBtnHtml(wf.impreso,"tramiteMarcarImpreso('"+eid+"','"+tid+"')")+' ';
       else{
         const imp=!!(wf.impreso&&wf.impreso.en);
-        btns+='<button type="button" class="btn bsm" style="background:#1a7a4a;color:#fff" onclick="tramiteMarcarImpreso(\''+eid+'\',\''+tid+'\')">'+(imp?'✓ 🖨️ Impreso':'🖨️ Marcar impreso')+'</button> ';
+        btns+='<button type="button" class="btn bsm bic act-ico act-impreso-btn'+(imp?' act-impreso-on':'')+'" onclick="tramiteMarcarImpreso(\''+eid+'\',\''+tid+'\')" title="'+(imp?'Desmarcar impreso':'Marcar como impreso')+'">'+(imp?'<span class="act-impreso-check" aria-hidden="true">✓</span>':'')+'🖨️</button> ';
       }
     }else if(!enPorFirmar) btns+='<span style="font-size:11px;color:var(--tx2)">Pendiente VITAL / encargado</span> ';
     if(enPorFirmar){
@@ -401,7 +401,14 @@ function tramiteMarcarImpreso(expId,taskId){
   }
   const wf=getTaskFirmaWf(t);
   if(wf.impreso&&wf.impreso.en){
-    notif('Ya estaba marcado como impreso','ok');
+    setTaskFirmaWf(expId,taskId,{impreso:null});
+    notif('Impreso desmarcado','ok');
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewRefreshModal==='function'){
+      const refId=(t.sinExpediente?(t.codigo||expId):expId);
+      taskReviewRefreshModal(refId,taskId,window._taskReviewSideMode||'doc');
+    }
     return;
   }
   setTaskFirmaWf(expId,taskId,{
