@@ -5043,12 +5043,19 @@ function puedeAgendarTask(t){
     ||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t));
   const vitalPorFirmar=typeof esCargoVital==='function'&&esCargoVital()&&(tramPorFirmarAg||pqrsPorFirmarAg);
   const encPorFirmar=esVistaActividadesDepto()&&!esModoResponsable()&&(tramPorFirmarAg||pqrsPorFirmarAg);
-  // Designado a notificar: puede organizar el día aunque su participación esté «Atendida»
+  // Designado a notificar / VITAL / encargado en Por notificar (trámites y PQRSD)
   const enPorNotifAg=(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)
       &&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
-    ||(esPqrsAg&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eAg)
-      &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eAg));
+    ||(esPqrsAg&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eAg)&&(
+      (typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eAg))
+      ||(typeof esCargoVital==='function'&&esCargoVital())
+      ||(esVistaActividadesDepto()&&!esModoResponsable())
+    ));
   if(enPorNotifAg)return true;
+  // Encargado en «Revisados»
+  if(esVistaActividadesDepto()&&!esModoResponsable()
+    &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,eAg))
+    return true;
   if(estadoTask(t)==='Atendida'&&!vitalPorFirmar&&!encPorFirmar)return false;
   if(vitalPorFirmar||encPorFirmar)return true;
   if(esModoResponsable()){
@@ -14009,7 +14016,28 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
   const esLibre=!!t.sinExpediente||isActLibreRef(expId,taskId);
   const e=esLibre?null:getExpById(expId);
   const soloAprob=!!opts.soloAprobados||!!opts.isRespVerAtendida;
-  const soportes=soportesVisiblesParaVista(t,{soloAprobados:soloAprob});
+  const porNotifVista=!!opts.porNotificarVista||!!opts.isRespVerPorNotificar
+    ||!!((window._taskModalCtx||{}).porNotificarVista)||!!((window._taskModalCtx||{}).isRespVerPorNotificar);
+  let soportes=soportesVisiblesParaVista(t,{soloAprobados:soloAprob});
+  // Documento a notificar: un solo archivo (firmado / aprobado), sin pestañas de versiones duplicadas
+  if(porNotifVista&&soportes.length){
+    const defId=typeof getDefaultSoporteSel==='function'?getDefaultSoporteSel(t):'';
+    let prefer=soportes.find(function(s){return s&&s.id===String(sopSelId||'').trim();})
+      ||(defId?soportes.find(function(s){return s&&s.id===defId;}):null);
+    if(!prefer){
+      const firm=soportes.filter(function(s){
+        if(!s||soporteEsAnexoEntrega(s))return false;
+        const estD=String(s.driveEstado||'').toLowerCase();
+        return estD==='por_notificar'||estD==='firmado'||s.notificado===true;
+      });
+      prefer=firm.length?firm[firm.length-1]:null;
+    }
+    if(!prefer){
+      const mains=soportes.filter(function(s){return s&&!soporteEsAnexoEntrega(s);});
+      prefer=mains.length?mains[mains.length-1]:soportes[soportes.length-1];
+    }
+    soportes=prefer?[prefer]:soportes.slice(-1);
+  }
   const hasSop=soportes.length>0;
   const est=estadoTask(t);
   const yoResp=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
@@ -14018,7 +14046,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     ||(est==='Por verificar'&&taskPuedeCorregirSinRevision(t))
   );
   const activo=getSoportePrincipalUltimaEntrega(t)||getSoporteActivo(t);
-  const sel=soportes.find(s=>s.id===sopSelId)||activo;
+  const sel=soportes.find(s=>s.id===sopSelId)||soportes[0]||activo;
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&taskPendienteVerificacion(t);
   const esPqrsSolResp=e&&taskEsAtenderPqrs(t,e);
@@ -16633,8 +16661,10 @@ function openTaskCommentsModal(expId,taskId,opts){
   ));
   const isRespVerDoc=verDocumento&&esModoResponsable()
     &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen)&&!forcePorFirmarVista;
-  const isDeptVerDoc=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista;
-  const isVerDocMode=isRespVerDoc||isDeptVerDoc;
+  // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
+  const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista;
+  const isDeptVerDoc=isDeptVerDocBase&&!opts.porNotificarVista;
+  const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
   const isRespVerCorr=isRespVerDoc&&(miEstResp==='Por corregir'||est==='Por corregir');
   const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
@@ -16643,7 +16673,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     miEstResp==='Por verificar'||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))
   );
-  const isRespVerPorNotificar=!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
+  const isRespVerPorNotificar=!!opts.porNotificarVista||!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
   const forceSoloAprobados=!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar;
   const pqrsPostAprobVista=!!(e&&(
     (typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))
@@ -16703,7 +16733,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const sopPanel=(chatOnly||soloGestion)?'':(
     isPqrsOrigenView
       ?(typeof renderPqrsOrigenReviewHtml==='function'?renderPqrsOrigenReviewHtml(e):'')
-      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)),directorRevisarPorFirmar:!!directorRevisarPorFirmar})
+      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)),directorRevisarPorFirmar:!!directorRevisarPorFirmar,porNotificarVista:!!isRespVerPorNotificar||!!opts.porNotificarVista})
   );
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
@@ -19514,7 +19544,16 @@ function renderActRowToolbarHtml(t,expAct){
   // VITAL/encargado en «Por firmar» (incl. PQRSD proyectada Atendida): no cortar el toolbar
   const keepPorFirmaToolbar=enPorFirmarVistaEarly&&(isVitalRowEarly||esVistaActividadesDepto()||(esModoResponsable()&&isVitalRowEarly));
   // Por notificar / Por ejecutar (deuda notif): chat · notas · organizar · 🔍 documento · 📬 notificar
-  if(!keepPorFirmaToolbar&&puedeNotifYo&&filtroActRow!=='done'){
+  // Incluye VITAL/encargado (no solo modo responsable) y PQRSD creadas por el encargado
+  const esPqrsNotifDept=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct)
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(expAct)
+    &&((typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
+      ||(typeof esCargoVital==='function'&&esCargoVital())
+      ||(esVistaActividadesDepto()&&!esModoResponsable()));
+  const esTramNotifDept=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)
+    &&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t);
+  const puedeNotifToolbar=puedeNotifYo||esPqrsNotifDept||esTramNotifDept;
+  if(!keepPorFirmaToolbar&&puedeNotifToolbar&&filtroActRow!=='done'){
     let actsN='<span class="sst-act-toolbar">';
     actsN+=taskChatBtnHtml(t.exp,t.id,t);
     actsN+=taskNotasInternasBtnHtml(t.exp,t.id);
@@ -19612,7 +19651,7 @@ function renderActRowToolbarHtml(t,expAct){
     acts+=taskCoEjecutorBtnHtml(t.exp,t.id);
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
-  if((yo&&est!=='Atendida')||showVitalPorFirmaActs||(enPorFirmarVista&&isVitalRow))acts+=taskAgendaBtnHtml(t.exp,t.id);
+  if((yo&&est!=='Atendida')||showVitalPorFirmaActs||(enPorFirmarVista&&isVitalRow)||esRevisadaEnc)acts+=taskAgendaBtnHtml(t.exp,t.id);
   // En «Por firmar» la vista de docs es 🖨️ (no duplicar 🔍)
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)&&!enPorFirmarVista)
     acts+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);

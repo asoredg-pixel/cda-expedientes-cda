@@ -1319,6 +1319,17 @@ function pqrsAccionesTablaHtml(e){
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Gestionar firmado">📬</button> ';
   }
   if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)){
+    const wfN=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    let tidN=String(wfN.task_id||'').trim();
+    if(!tidN&&typeof getPqrsAtencionTask==='function'){
+      const tN=getPqrsAtencionTask(e);
+      if(tN)tidN=String(tN.id||'').trim();
+    }
+    if(!tidN&&Array.isArray(e.tasks)){
+      const tHitN=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+      if(tHitN)tidN=String(tHitN.id||'').trim();
+    }
+    if(tidN&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(e._exp,tidN)+' ';
     if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
       h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Por notificar">📬</span> ';
     else if(typeof pqrsPuedeNotificarOficio==='function'?pqrsPuedeNotificarOficio(e):(esNcaDeguv()||esOficinaPqrsNca()||typeof esCargoVital==='function'&&esCargoVital()||esAdministrador()))
