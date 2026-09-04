@@ -5724,13 +5724,20 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t,opts){
   }
   return h;
 }
-/** Rail Director DS DEGUV al revisar desde «Por firmar» (como encargado, sin editar/trasladar/eliminar). */
+/** Rail Director DS DEGUV al revisar desde «Por firmar»: chat/biblioteca + ⬇️ descargar + 📤 cargar (sin editar/asociar/trasladar/eliminar/aprobar/firma). */
 function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t){
   if(!t)return'';
-  return taskReviewViewRailHtml(ref,taskId,t)+
-    '<nav class="task-review-rail-nav" aria-label="Acciones Director">'+
-    taskActividadToolbarReviewRailHtml(ref,taskId,t,{hideEdit:true,hideTrasladar:true,hideEliminar:true,forceDecision:true})+
-    '</nav>';
+  const r=escAttr(ref),tid=escAttr(taskId);
+  const eid=jsStr(ref),tidJs=jsStr(taskId);
+  let h=taskReviewViewRailHtml(ref,taskId,t);
+  h+='<nav class="task-review-rail-nav" aria-label="Acciones Director">';
+  h+=taskReviewChatRailBtnHtml(ref,taskId,t);
+  if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Descargar documento para firmar digitalmente" onclick="descargarSoportesAprobadosTask(\''+eid+'\',\''+tidJs+'\')">⬇️</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  h+='</nav>';
+  return h;
 }
 window.taskReviewDirectorPorFirmarRailHtml=taskReviewDirectorPorFirmarRailHtml;
 /** Abre revisión del Director desde paleta «Por firmar» (🧐). */
@@ -13608,10 +13615,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
           '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
         if(sel.url||sel.preview){
+          const ctxDir=window._taskModalCtx||{};
           const porImp=!!(opts.porFirmarVista||opts.showImprimirDoc||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)));
-          if(porImp){
+          // Director en revisión por firmar: sin «Imprimir documento seleccionado» (usa ⬇️ del rail)
+          if(porImp&&!ctxDir.directorRevisarPorFirmar){
             docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="imprimirSoporteSeleccionadoTask(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Imprimir documento seleccionado">🖨️</button>';
-          }else{
+          }else if(!porImp){
             docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
           }
         }
@@ -18849,13 +18858,49 @@ window.actPorFirmarPrintOpenBtnHtml=actPorFirmarPrintOpenBtnHtml;
 /** 📤 Cargar documento firmado → flujo de notificación. */
 function actPorFirmarCargarBtnHtml(expId,taskId,t,expAct){
   const eid=jsStr(expId),tid=jsStr(taskId);
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)
     &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
+  if(esDir){
+    if(esPqrs)
+      return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+eid+'\')">📤</button>';
+    return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+eid+'\',\''+tid+'\')">📤</button>';
+  }
   if(esPqrs){
-    return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\')">📤</button>';
+    return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\',\'cargar\')">📤</button>';
   }
   return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')">📤</button>';
 }
+/** Entrada unificada del Director para 📤 fuera del rail. */
+function openDirectorCargarFirmado(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())&&!(typeof esAdministrador==='function'&&esAdministrador())){
+    notif('Solo el Director puede cargar el firmado desde esta acción','err');return;
+  }
+  if(taskId&&typeof openTramiteDirectorFirmarModal==='function'){
+    openTramiteDirectorFirmarModal(expId,taskId,'cargar');
+    return;
+  }
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof openPqrsDirectorFirmarModal==='function'){
+    openPqrsDirectorFirmarModal(expId,'cargar');
+    return;
+  }
+  // Trámite sin taskId explícito: buscar actividad en por firmar
+  if(e){
+    const tFirma=(e.tasks||[]).find(function(tk){
+      return tk&&!tk.eliminada&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(tk);
+    });
+    if(tFirma&&typeof openTramiteDirectorFirmarModal==='function'){
+      openTramiteDirectorFirmarModal(expId,tFirma.id,'cargar');
+      return;
+    }
+  }
+  if(typeof openPqrsDirectorFirmarModal==='function')openPqrsDirectorFirmarModal(expId,'cargar');
+  else notif('No se pudo abrir la carga del documento firmado','err');
+}
+window.openDirectorCargarFirmado=openDirectorCargarFirmado;
 window.actPorFirmarCargarBtnHtml=actPorFirmarCargarBtnHtml;
 function actPuedeCargarFirmadoPorFirmar(){
   if(typeof esCargoVital==='function'&&esCargoVital())return true;
@@ -19098,7 +19143,7 @@ function renderActRowToolbarHtml(t,expAct){
       else if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
         acts+=actPorFirmarCargarBtnHtml(expAct._exp||t.exp,t.id,t,expAct);
       else if(esDir)
-        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\',\'cargar\')" title="Cargar documento firmado">📤</button>';
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+peid+'\')" title="Cargar documento firmado">📤</button>';
     }
     if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+peid+'\')" title="Aprobar notificación">✅</button>';
@@ -22135,9 +22180,32 @@ function htmlNcaRevisionBadge(e){
     return'<span class="bdg" style="background:#6d3fa822;color:#6d3fa8;border:1px solid #6d3fa8">'+(devDir?'↩ Devuelto Director · Por revisar':'⏳ Por revisar NCA')+'</span>';
   }
   if(f===PQRS_WF.LISTA_ENVIO)return'<span class="bdg" style="background:var(--gnl);color:var(--gn)">✅ Aprobada — lista para envío</span>';
-  if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)return'<span class="bdg" style="background:#1a7a4a22;color:#1a7a4a">✍ Para firma</span>';
-  if(f===PQRS_WF.POR_FIRMAR)return'<span class="bdg" style="background:#0d5c2e22;color:#0d5c2e">🖊 Por firmar</span>';
-  if(f===PQRS_WF.PENDIENTE_NOTIF)return'<span class="bdg" style="background:#185fa522;color:var(--bl)">📬 Por notificar</span>';
+  // Misma proyección unificada (✓ Revisada · X Firma / X Notificar) para todos los roles
+  if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR
+    ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.REVISION_FINAL
+    ||(f===PQRS_WF.CERRADA&&typeof pqrsEstadoActividadUi==='function')){
+    if(typeof pqrsEstadoActividadUi==='function'){
+      const ui=pqrsEstadoActividadUi(e);
+      if(ui&&ui.lbl&&typeof taskEstadoBadgeHtml==='function'){
+        // Reutilizar dual badge vía proyección directa
+        const st={bg:ui.bg||'var(--gnl)',fg:ui.fg||'var(--gn)'};
+        if(ui.sub){
+          const subBg=ui.subBg||(ui.subFg==='var(--gn)'?'var(--gnl)':'#fef9c3');
+          const subFg=ui.subFg||'#a16207';
+          const subBorder=(ui.subFg==='var(--gn)'?'1px solid #bbf7d0':'1px solid #fde68a');
+          return '<span class="act-est-dual">'+
+            '<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(ui.lbl)+'</span>'+
+            '<span class="bdg act-est-sub-badge" style="background:'+subBg+';color:'+subFg+';border:'+subBorder+'">'+escAttr(ui.sub)+'</span>'+
+            '</span>';
+        }
+        return '<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(ui.lbl)+'</span>';
+      }
+      if(ui&&ui.lbl)return'<span class="bdg" style="background:'+(ui.bg||'var(--gnl)')+';color:'+(ui.fg||'var(--gn)')+'">'+escAttr(ui.lbl)+(ui.sub?' · '+escAttr(ui.sub):'')+'</span>';
+    }
+  }
+  if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)return'<span class="act-est-dual"><span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Revisada</span><span class="bdg act-est-sub-badge" style="background:#fef9c3;color:#a16207;border:1px solid #fde68a">X Firma</span></span>';
+  if(f===PQRS_WF.POR_FIRMAR)return'<span class="act-est-dual"><span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Revisada</span><span class="bdg act-est-sub-badge" style="background:#fef9c3;color:#a16207;border:1px solid #fde68a">X Firma</span></span>';
+  if(f===PQRS_WF.PENDIENTE_NOTIF)return'<span class="act-est-dual"><span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Revisada</span><span class="bdg act-est-sub-badge" style="background:#fef9c3;color:#a16207;border:1px solid #fde68a">X Notificar</span></span>';
   if(f===PQRS_WF.REVISION_FINAL)return'<span class="bdg" style="background:#6d3fa822;color:#6d3fa8">⏳ Revisión final notificación</span>';
   if(f===PQRS_WF.RECHAZADA)return'<span class="bdg" style="background:var(--rdl);color:var(--rd)">↩ Devuelta al responsable</span>';
   return'';
@@ -23162,7 +23230,7 @@ function openPqrsDirectorFirmarModal(expId,mode){
     ||(typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
     ||(typeof pqrsEsRolGestionFirmaSinDirector==='function'&&pqrsEsRolGestionFirmaSinDirector()&&pqrsEnPorFirmar(e))
   );
-  if(!pqrsPuedeFirmarDirector(e)&&!esAtajo&&!(esDirector&&mode==='ver')){
+  if(!pqrsPuedeFirmarDirector(e)&&!esAtajo&&!(esDirector&&(mode==='ver'||mode==='cargar'||mode==='ya_firmado'||mode==='devolver'))){
     notif('Solo el Director (DS DEGUV), VITAL o el encargado pueden gestionar esta firma','err');return;
   }
   if(pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR){notif('Esta PQRSD no está en «Por firmar» / «Firmados»','err');return;}

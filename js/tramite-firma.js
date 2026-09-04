@@ -1106,6 +1106,7 @@ function openTramiteDirectorAccionModal(expId,taskId,mode){
   if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())&&!(typeof esAdministrador==='function'&&esAdministrador())){
     notif('Solo el Director puede usar esta acción','err');return;
   }
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
   const e=tramiteFirmaExpCtx(t,expId);
   const wf=getTaskFirmaWf(t);
   const urls=_tramiteDirectorDocUrls(t);
