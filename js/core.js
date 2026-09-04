@@ -23696,7 +23696,9 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    notif('📬 Oficio firmado cargado — «Por notificar»'+(notifPor?' · '+notifPor:''),'ok');
+    const esDirOk=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+    if(!esDirOk)
+      notif('📬 Oficio firmado cargado — «Por notificar»'+(notifPor?' · '+notifPor:''),'ok');
     return true;
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();

@@ -1303,7 +1303,6 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteDirectorSignedFile=null;
     closeTaskModal();
-    notif(sinPlazo?'📬 Documento firmado — Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»'+(notifPor?' · '+notifPor:''),'ok');
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
   }catch(err){
@@ -1776,7 +1775,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteAtajoFirmadoFile=null;
     if(!ok){notif('No se pudo actualizar la actividad','err');return;}
-    notif((sinPlazo?'📬 Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),'ok');
+    const esDirOk=(window._taskModalCtx&&window._taskModalCtx.directorRevisarPorFirmar)||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
+    if(!esDirOk)
+      notif((sinPlazo?'📬 Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),'ok');
     try{if(typeof setActFiltro==='function')setActFiltro(sinPlazo?'porfirma':'pornotif');}catch(eF){}
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
