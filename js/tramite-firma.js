@@ -743,8 +743,7 @@ function openActReportarNotificacion(expId,taskId){
   const formHtml=esPqrs&&typeof renderTaskReviewPqrsNotificarSideHtml==='function'
     ?renderTaskReviewPqrsNotificarSideHtml(refId,taskId,e,t)
     :(typeof renderTaskReviewNotificarSideHtml==='function'?renderTaskReviewNotificarSideHtml(refId,taskId,t):'');
-  body.innerHTML='<div style="max-width:480px;margin:0 auto">'+formHtml+
-    '<div class="fx" style="gap:8px;margin-top:10px"><button type="button" class="btn bsm" style="width:100%" onclick="closeTaskModal()">Cancelar</button></div></div>';
+  body.innerHTML='<div style="max-width:480px;margin:0 auto">'+formHtml+'</div>';
   ov.classList.add('on');
   window._taskModalCtx={expId:refId,taskId:taskId,mode:'reportarNotificacion',actLibre:!!t.sinExpediente};
   setTimeout(function(){

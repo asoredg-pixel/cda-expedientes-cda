@@ -1146,6 +1146,7 @@ function pqrsPuedeNotificarOficio(e){
     return pqrsEsFlujoNcaNotif(e);
   }
   if(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())return true;
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
   if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&deptoActivo!=='ds_deguv'){
     // Oficina solo notifica las de su propia oficina
     return !e._pqrs_oficina||e._pqrs_oficina===deptoActivo;
@@ -19621,7 +19622,7 @@ function renderActRowToolbarHtml(t,expAct){
     }
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
       if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
-        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openTramiteNotificarModal(\''+eidT+'\',\''+tidT+'\')" title="Notificar">📬</button>';
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openActReportarNotificacion(\''+eidT+'\',\''+tidT+'\')" title="Reportar notificación">📬</button>';
       else{
         const quienT=String(wfT.notificar_por||'').trim();
         acts+='<button type="button" class="btn bsm bic act-ico" disabled title="'+(quienT?'Notifica: '+escAttr(quienT):'Por notificar')+'">📬</button>';
@@ -19652,7 +19653,10 @@ function renderActRowToolbarHtml(t,expAct){
       else if(esDir)
         acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+peid+'\')" title="Cargar documento firmado">📤</button>';
     }
-    if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
+    if((faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO)
+      &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
+      acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openActReportarNotificacion(\''+peid+'\',\''+tid+'\')" title="Reportar notificación">📬</button>';
+    if(faseWf===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()||esVistaActividadesDepto()))
       acts+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+peid+'\')" title="Aprobar notificación">✅</button>';
   }
   return acts;
