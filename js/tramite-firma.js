@@ -357,6 +357,12 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   }
   const ok=mutateTask(refId,taskId,function(tk){
     tk.requiereFirma=true;
+    try{
+      if(typeof confirmarRegistroPendienteDeEntrega==='function'){
+        const eConf=(e&&!e._sin_expediente)?e:null;
+        confirmarRegistroPendienteDeEntrega(eConf,tk);
+      }
+    }catch(errConf){}
     const prev=getTaskFirmaWf(tk);
     const patch={
       fase:faseDest,

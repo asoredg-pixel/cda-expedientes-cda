@@ -1933,7 +1933,7 @@ function buscarUsosNumeroOficio(oficio,excludeExpId){
     const tasks=Array.isArray(e.tasks)?e.tasks:[];
     tasks.forEach(function(t){
       if(!t||t.eliminada)return;
-      const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||'');
+      const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||t.oficioNumero||'');
       if(tofi&&tofi===needle){
         hits.push({
           expId:id,
@@ -1948,7 +1948,7 @@ function buscarUsosNumeroOficio(oficio,excludeExpId){
     try{
       actividadesLibres.forEach(function(t){
         if(!t||t.eliminada)return;
-        const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||'');
+        const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||t.oficioNumero||'');
         if(tofi&&tofi===needle){
           hits.push({
             expId:String(t.codigo||t.id||'—'),
@@ -1983,6 +1983,74 @@ function validarNumeroOficioDisponible(oficio,excludeExpId){
   pqrsShowRespOficioError('Este N° de oficio ya fue usado ('+u.expId+').');
   return false;
 }
+/** Busca usos del N° de acto administrativo (todos los expedientes, incl. el actual). */
+function buscarUsosNumeroActo(numero,excludeExpId,excludeActoAdminId){
+  const needle=typeof pqrsNormOficioNum==='function'?pqrsNormOficioNum(numero):String(numero||'').trim().toUpperCase().replace(/\s+/g,'');
+  if(!needle||needle.length<2)return[];
+  const exclActo=String(excludeActoAdminId||'').trim();
+  const hits=[];
+  const seen={};
+  function pushHit(h){
+    if(!h)return;
+    const k=String(h.expId||'')+'|'+String(h.contexto||'')+'|'+String(h.detalle||'');
+    if(seen[k])return;
+    seen[k]=true;
+    hits.push(h);
+  }
+  const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  lista.forEach(function(e){
+    if(!e)return;
+    const id=String(e._exp||'').trim();
+    const esPqrs=typeof esPqrsSecretaria==='function'?esPqrsSecretaria(e):(!!e._es_pqrs||String(e._tipo_solicitud||'').toUpperCase().indexOf('PQR')>=0);
+    const tipoLbl=esPqrs?'PQRSD':(e._tramite||'Trámite');
+    let actos=[];
+    try{
+      actos=typeof actosAdminData==='function'?actosAdminData(e._actos_admin)
+        :(typeof e._actos_admin==='string'?JSON.parse(e._actos_admin||'[]'):(e._actos_admin||[]));
+    }catch(x){actos=[];}
+    if(Array.isArray(actos)){
+      actos.forEach(function(a){
+        if(!a)return;
+        if(exclActo&&String(a.actoAdminId||'')===exclActo)return;
+        const num=typeof pqrsNormOficioNum==='function'?pqrsNormOficioNum(a.numero||a.oficio||''):String(a.numero||'').trim().toUpperCase();
+        if(num&&num===needle){
+          pushHit({
+            expId:id||'—',
+            contexto:tipoLbl+' · acto administrativo',
+            detalle:(a.tipo||'Acto')+(a.numero?' · '+a.numero:'')+(a.pendienteAprobacion?' · pendiente aprobación':'')
+          });
+        }
+      });
+    }
+  });
+  // También chocar con oficios/respuestas (misma unicidad de numeración)
+  const oficios=typeof buscarUsosNumeroOficio==='function'?buscarUsosNumeroOficio(numero,null):[];
+  oficios.forEach(pushHit);
+  return hits;
+}
+/** false si el N° de acto administrativo ya existe. */
+function validarNumeroActoDisponible(numero,excludeExpId,excludeActoAdminId){
+  const usos=buscarUsosNumeroActo(numero,excludeExpId,excludeActoAdminId);
+  if(!usos.length)return true;
+  const u=usos[0];
+  const mas=usos.length>1?' (+'+(usos.length-1)+' más)':'';
+  const detail='Usado en: '+u.expId+' ('+u.contexto+')'+(u.detalle?' — '+u.detalle:'')+mas;
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'N° de acto administrativo no válido',
+      message:'El N° de acto administrativo «'+String(numero||'').trim()+'» ya fue usado en otro registro.',
+      detail:detail,
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+  }else if(typeof notif==='function'){
+    notif('N° de acto administrativo ya usado: '+detail,'err');
+  }
+  return false;
+}
+window.buscarUsosNumeroActo=buscarUsosNumeroActo;
+window.validarNumeroActoDisponible=validarNumeroActoDisponible;
 /** Normaliza N° factura / concepto para unicidad. */
 function normContableRefNum(s){
   return String(s||'').trim().toUpperCase().replace(/\s+/g,'');
@@ -6496,33 +6564,67 @@ function taskReviewCorreosNotificacion(e,t){
   return Array.from(set);
 }
 function taskReviewNumeroDocumentoAct(e,t){
+  const actoNum=String((t&&(t.actoNumero||t.numeroActo))||'').trim();
+  if(actoNum)return actoNum;
+  if(e&&t&&t.actoAdminId&&typeof findActoByAdminId==='function'){
+    const hitA=findActoByAdminId(e,t.actoAdminId);
+    if(hitA&&hitA.item&&hitA.item.numero)return String(hitA.item.numero).trim();
+  }
   const fromT=String((t&&(t.concepto||t.oficio||t.nro_oficio||t._oficio||t.oficioNumero))||'').trim();
   if(fromT)return fromT;
   if(e&&t&&t.conceptoReqId&&typeof findConceptoByReqId==='function'){
     const hit=findConceptoByReqId(e,t.conceptoReqId);
-    if(hit&&hit.item&&hit.item.concepto)return String(hit.item.concepto).trim();
+    if(hit&&hit.item){
+      if(hit.item.reqOficio)return String(hit.item.reqOficio).trim();
+      if(hit.item.concepto)return String(hit.item.concepto).trim();
+    }
   }
-  if(e&&typeof conceptosSegData==='function'){
-    const arr=conceptosSegData(e._conceptos_seg)||[];
-    for(let i=arr.length-1;i>=0;i--){
-      if(arr[i]&&arr[i].concepto)return String(arr[i].concepto).trim();
+  if(e&&t&&typeof resolveActividadRegistroTipo==='function'){
+    const tipo=resolveActividadRegistroTipo(String(t.actividad||t.desc||''));
+    if(tipo==='concepto'&&typeof conceptosSegData==='function'){
+      const arr=conceptosSegData(e._conceptos_seg)||[];
+      const tid=String(t.id||'');
+      for(let i=arr.length-1;i>=0;i--){
+        if(arr[i]&&arr[i].concepto&&(!tid||String(arr[i].taskId||'')===tid))
+          return String(arr[i].concepto).trim();
+      }
+    }
+    if(tipo==='acto'&&typeof actosAdminData==='function'){
+      const actos=actosAdminData(e._actos_admin)||[];
+      const tid=String(t.id||'');
+      for(let i=actos.length-1;i>=0;i--){
+        if(actos[i]&&actos[i].numero&&(!tid||String(actos[i].taskId||'')===tid||String(actos[i].actoAdminId||'')===String(t.actoAdminId||'')))
+          return String(actos[i].numero).trim();
+      }
     }
   }
   return'';
+}
+function taskReviewTipoDocumentoAct(e,t){
+  const actoTipo=String((t&&(t.actoTipo||t.tipoActo))||'').trim();
+  if(actoTipo)return actoTipo;
+  if(e&&t&&t.actoAdminId&&typeof findActoByAdminId==='function'){
+    const hitA=findActoByAdminId(e,t.actoAdminId);
+    if(hitA&&hitA.item&&hitA.item.tipo)return String(hitA.item.tipo).trim();
+  }
+  const conceptoTipo=String((t&&t.conceptoTipo)||'').trim();
+  if(conceptoTipo)return conceptoTipo;
+  return String((t&&(t.actividad||t.desc))||'').trim();
 }
 function taskReviewCuerpoNotifPredeterminado(e,t){
   const act=String((t&&(t.actividad||t.desc))||'actividad').trim();
   const expLbl=(e&&e._exp)||(t&&!t.sinExpediente&&(t.exp||t.codigo))||'';
   const num=taskReviewNumeroDocumentoAct(e,t);
+  const tipoDoc=taskReviewTipoDocumentoAct(e,t);
   const tipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(act):'';
   const refExp=expLbl?' del expediente '+expLbl:'';
   const numTxt=num||'XXXXX';
   if(tipo==='concepto'||/concepto/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
   if(tipo==='factura'||/factura|liquidaci[oó]n|tasa|multa|tcaf/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite la factura No. '+numTxt+' correspondiente a «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
   if(tipo==='acto'||/acto|resoluci[oó]n/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el acto administrativo No. '+numTxt+' («'+act+'»)'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el acto administrativo No. '+numTxt+' («'+(tipoDoc||act)+'»)'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
   if(/oficio\s+de\s+requerimiento/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el oficio de requerimiento No. '+numTxt+' para su conocimiento y cumplimiento.\n\nCordialmente.';
   if(/oficio/i.test(act)||num)
@@ -13193,11 +13295,21 @@ function htmlEntregaNotifCorreoCheck(opts){
   const expLbl=String(opts.expId||(e&&e._exp)||(t&&!t.sinExpediente&&(t.exp||t.codigo))||(t&&t.codigo)||'').trim();
   const wf=(t&&t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
   const stubT=t||{actividad:act,desc:act,sinExpediente:!!opts.sinExpediente};
+  // Preferir lo digitado en el formulario de entrega (acto/concepto/oficio)
+  const actoNumUi=String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim();
+  const actoTipoUi=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
+  const conceptoUi=String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim();
+  const oficioUi=String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim()
+    ||String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim();
+  if(actoNumUi){stubT.actoNumero=actoNumUi;stubT.actoTipo=actoTipoUi||stubT.actoTipo||'';}
+  if(conceptoUi)stubT.concepto=conceptoUi;
+  if(oficioUi){stubT.oficio=oficioUi;stubT.nro_oficio=oficioUi;}
   const emailTo=String(opts.emailTo!=null?opts.emailTo:(wf.email_to||'')).trim()||entregaNotifCorreosDefault(e,stubT,opts);
   const emailCc=String(opts.emailCc!=null?opts.emailCc:(wf.email_cc||'')).trim();
   const emailBcc=String(opts.emailBcc!=null?opts.emailBcc:(wf.email_bcc||'')).trim();
+  const asuntoDef='Notificación — '+(actoTipoUi||act||'actividad')+(actoNumUi?' No. '+actoNumUi:'')+(expLbl?' — '+expLbl:'');
   const asunto=String(opts.emailSubject!=null?opts.emailSubject:(wf.email_subject||wf.asunto||'')).trim()
-    ||('Notificación — '+(act||'actividad')+(expLbl?' — '+expLbl:''));
+    ||asuntoDef;
   const cuerpo=String(opts.cuerpo!=null?opts.cuerpo:(wf.cuerpo||wf.email_body||'')).trim()
     ||(typeof taskReviewCuerpoNotifPredeterminado==='function'?taskReviewCuerpoNotifPredeterminado(e,stubT):'');
   return '<div id="'+escAttr(id)+'-wrap" class="entrega-notif-correo-wrap" style="margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
@@ -13232,16 +13344,27 @@ function entregaNotifCorreoToggleUi(cbId){
   const expNuevo=String((document.getElementById('entrega-resp-exp-nuevo')||{}).value||'').trim();
   const e=(!libre&&!nuevo&&expNum&&typeof getExpById==='function')?getExpById(expNum):null;
   const stubT={actividad:act,desc:act,sinExpediente:libre};
+  const actoNum=String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim();
+  const actoTipo=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
+  const conceptoNum=String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim();
+  const oficioNum=String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim()
+    ||String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim();
+  if(actoNum){stubT.actoNumero=actoNum;stubT.actoTipo=actoTipo;}
+  if(conceptoNum)stubT.concepto=conceptoNum;
+  if(oficioNum){stubT.oficio=oficioNum;stubT.nro_oficio=oficioNum;}
   const expLbl=libre?'':(nuevo?expNuevo:expNum);
   const toEl=document.getElementById('entrega-notif-email-to');
   if(toEl&&!String(toEl.value||'').trim())
     toEl.value=entregaNotifCorreosDefault(e,stubT)||'';
   const subjEl=document.getElementById('entrega-notif-email-subject');
   if(subjEl&&!String(subjEl.value||'').trim())
-    subjEl.value='Notificación — '+(act||'actividad')+(expLbl?' — '+expLbl:'');
+    subjEl.value='Notificación — '+(actoTipo||act||'actividad')+(actoNum?' No. '+actoNum:'')+(expLbl?' — '+expLbl:'');
   const cuerpoEl=document.getElementById('entrega-notif-email-cuerpo');
-  if(cuerpoEl&&!String(cuerpoEl.value||'').trim()&&typeof taskReviewCuerpoNotifPredeterminado==='function')
-    cuerpoEl.value=taskReviewCuerpoNotifPredeterminado(e,stubT)||'';
+  if(cuerpoEl&&(!String(cuerpoEl.value||'').trim()||typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')){
+    if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
+    else if(typeof taskReviewCuerpoNotifPredeterminado==='function')
+      cuerpoEl.value=taskReviewCuerpoNotifPredeterminado(e,stubT)||'';
+  }
 }
 function entregaNotifCorreoCheckedFromUi(){
   const ids=['entrega-notif-correo','entrega-ofi-req-notif-correo','pqrs-entrega-notif-correo'];
@@ -13567,6 +13690,24 @@ function renderCompareVerStack(t,e){
   stack.innerHTML=renderCompareDocSideHtml(a,'◀ Izquierda',t)+renderCompareDocSideHtml(b,'Derecha ▶',t);
 }
 function resetTaskPorCorregir(t,nota,reportadoPor){
+  // Liberar N° de acto/concepto/oficio/requerimiento pendientes (no aprobados)
+  try{
+    if(typeof retirarRegistroPendienteDeEntrega==='function'){
+      let e=null;
+      if(typeof getExpById==='function'){
+        e=getExpById(t&&(t.exp||t.codigo))||null;
+        if(!e&&typeof exps!=='undefined'&&Array.isArray(exps)&&t&&t.id){
+          const tid=String(t.id);
+          for(let i=0;i<exps.length;i++){
+            const ex=exps[i];
+            if(!ex||!Array.isArray(ex.tasks))continue;
+            if(ex.tasks.some(function(x){return x&&String(x.id)===tid;})){e=ex;break;}
+          }
+        }
+      }
+      retirarRegistroPendienteDeEntrega(e,t);
+    }
+  }catch(errRet){}
   // Conservar el plazo/vencimiento original al devolver
   const venceOrig=t.vence||'';
   const plazoOrig=t.plazoDias;
@@ -15899,6 +16040,12 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     const trashIds=[];
     if(mutateTask(expId,taskId,t=>{
     normalizeTask(t);
+    try{
+      if(typeof confirmarRegistroPendienteDeEntrega==='function'){
+        const eConf=getExpById(expId);
+        confirmarRegistroPendienteDeEntrega(eConf,t);
+      }
+    }catch(errConf){}
     const trash=limpiarSoportesPorCorregirTask(t);
     const guiaTrash=limpiarGuiaCorreccionTask(t);
     guiaTrash.forEach(function(s){
