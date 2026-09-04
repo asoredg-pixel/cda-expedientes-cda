@@ -19352,8 +19352,8 @@ function actPorFirmarCargarBtnHtml(expId,taskId,t,expAct){
   return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openCargarFirmadoPorFirmar(\''+eid+'\',\''+tid+'\')">📤</button>';
 }
 /**
- * Abre la vista de por firmar con rail + documento/anexos y el panel «Cargar documento firmado».
- * Director: misma UI que 🧐 → 📤. VITAL/encargado: docs + comparar anexos + panel de carga/notif.
+ * Abre ventana compacta «Cargar documento firmado» (PDF + acordeones correo / asignar),
+ * sin rail vertical — igual que reportar notificación desde la fila.
  */
 function openCargarFirmadoPorFirmar(expId,taskId){
   expId=String(expId||'').trim();
@@ -19372,24 +19372,41 @@ function openCargarFirmadoPorFirmar(expId,taskId){
     if(t)taskId=String(t.id||'');
   }
   if(!t&&!taskId){notif('Actividad no encontrada','err');return;}
+  const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
   if(e&&t&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
     try{ensurePqrsSoportesAprobadosOnTask(t,e);}catch(err){}
-  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewAbrirAtajoFirmado==='function'){
+  // Si ya está abierto el rail de revisión, reutilizar el panel lateral
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()
+    &&window._taskModalCtx&&window._taskModalCtx.mode!=='cargarFirmadoStandalone'
+    &&typeof taskReviewAbrirAtajoFirmado==='function'){
     taskReviewAbrirAtajoFirmado(expId,taskId);
     return;
   }
-  if(typeof openTaskCommentsModal!=='function'){notif('No se pudo abrir la carga','err');return;}
-  if(esDir||esAdmin){
-    openTaskCommentsModal(expId,taskId,{directorRevisarPorFirmar:true,revisarEntrega:true,openAtajoFirmado:true});
-    return;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body||typeof renderTaskReviewAtajoFirmadoHtml!=='function'){
+    notif('No se pudo abrir la carga','err');return;
   }
-  openTaskCommentsModal(expId,taskId,{
-    verDocumento:true,
-    soloAprobados:true,
-    porFirmarVista:true,
-    cargarFirmadoVista:true,
-    openAtajoFirmado:true
-  });
+  if(tit)tit.textContent='Cargar documento firmado · '+(t.sinExpediente?(t.codigo||refId):((e&&e._exp)||refId));
+  if(modal){
+    modal.classList.remove('task-modal-wide','task-modal-review','task-modal-resp-ver','task-modal-review-wa-side','task-modal-archivos','task-modal-chat');
+    modal.classList.add('enviar-modal-only');
+  }
+  document.body.classList.remove('task-review-doc-mode');
+  window._taskModalCtx={
+    expId:refId,taskId:taskId,mode:'cargarFirmadoStandalone',actLibre:!!(t&&t.sinExpediente),
+    directorRevisarPorFirmar:!!(esDir||esAdmin)
+  };
+  body.innerHTML='<div style="max-width:520px;margin:0 auto;max-height:min(78vh,640px);overflow:auto">'+
+    renderTaskReviewAtajoFirmadoHtml(refId,taskId,t,{standalone:true})+
+    '</div>';
+  ov.classList.add('on');
+  setTimeout(function(){
+    if(typeof initTaskReviewAtajoFirmadoSide==='function')
+      initTaskReviewAtajoFirmadoSide(refId,taskId,t,{autoPick:false});
+  },40);
 }
 /** Alias histórico (Director 📤 en paleta). */
 function openDirectorCargarFirmado(expId,taskId){
