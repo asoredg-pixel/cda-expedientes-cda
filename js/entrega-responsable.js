@@ -1453,10 +1453,35 @@ function syncEntregaRespNotifCorreoUi(){
     box.style.display='none';box.innerHTML='';
     return;
   }
-  if(typeof htmlEntregaNotifCorreoCheck==='function')
-    box.innerHTML=htmlEntregaNotifCorreoCheck({id:'entrega-notif-correo'});
-  else
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
+  const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  const eSel=!libre&&!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
+  const prevChecked=!!(document.getElementById('entrega-notif-correo')&&document.getElementById('entrega-notif-correo').checked);
+  const prevTo=String((document.getElementById('entrega-notif-email-to')||{}).value||'');
+  const prevCc=String((document.getElementById('entrega-notif-email-cc')||{}).value||'');
+  const prevBcc=String((document.getElementById('entrega-notif-email-bcc')||{}).value||'');
+  const prevSubj=String((document.getElementById('entrega-notif-email-subject')||{}).value||'');
+  const prevCuerpo=String((document.getElementById('entrega-notif-email-cuerpo')||{}).value||'');
+  const keep=!!document.getElementById('entrega-notif-email-compose');
+  if(typeof htmlEntregaNotifCorreoCheck==='function'){
+    box.innerHTML=htmlEntregaNotifCorreoCheck({
+      id:'entrega-notif-correo',
+      checked:keep?prevChecked:false,
+      e:eSel,
+      t:null,
+      actividad:act,
+      sinExpediente:libre,
+      expId:libre?'':(nuevo?String((document.getElementById('entrega-resp-exp-nuevo')||{}).value||'').trim():expNum),
+      emailTo:keep?prevTo:undefined,
+      emailCc:keep?prevCc:undefined,
+      emailBcc:keep?prevBcc:undefined,
+      emailSubject:keep?prevSubj:undefined,
+      cuerpo:keep?prevCuerpo:undefined
+    });
+  }else{
     box.innerHTML='<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0"><input type="checkbox" id="entrega-notif-correo" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0"><span>Se notificará por correo electrónico</span></label>';
+  }
   box.style.display='';
 }
 function syncEntregaRespRegistroUi(){
@@ -1858,8 +1883,14 @@ function htmlEntregaOficioRequerimientoBlock(e,t){
   const notifCorreo=String(c.reqMedio||'')==='correo'
     ||!!(t&&(t.notifCorreoEntrega||(t.firmaWf&&t.firmaWf.notif_correo_entrega)));
   const notifHtml=typeof htmlEntregaNotifCorreoCheck==='function'
-    ?htmlEntregaNotifCorreoCheck({id:'entrega-notif-correo',checked:notifCorreo})
-    :'<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0"><input type="checkbox" id="entrega-notif-correo"'+(notifCorreo?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0"><span>Se notificará por correo electrónico</span></label>';
+    ?htmlEntregaNotifCorreoCheck({
+      id:'entrega-notif-correo',
+      checked:notifCorreo,
+      e:e,
+      t:t,
+      actividad:String((t&&(t.actividad||t.desc))||'Oficio de requerimiento').trim()
+    })
+    :'<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0"><input type="checkbox" id="entrega-notif-correo"'+(notifCorreo?' checked':'')+' onchange="entregaNotifCorreoToggleUi(\'entrega-notif-correo\')" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0"><span>Se notificará por correo electrónico</span></label>';
   return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--or)">Oficio de requerimiento</div>'+
     '<input type="hidden" id="entrega-ofi-req-concepto-id" value="'+escAttr(t&&t.conceptoReqId||c.conceptoReqId||'')+'">'+
     '<div class="fg">'+
