@@ -5735,7 +5735,7 @@ function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t){
   if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Descargar documento para firmar digitalmente" onclick="descargarSoportesAprobadosTask(\''+eid+'\',\''+tidJs+'\')">⬇️</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Cargar documento firmado" onclick="closeTaskModal();openDirectorCargarFirmado(\''+eid+'\',\''+tidJs+'\')">📤</button>';
   h+='</nav>';
   return h;
 }
@@ -18878,16 +18878,18 @@ function openDirectorCargarFirmado(expId,taskId){
   if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())&&!(typeof esAdministrador==='function'&&esAdministrador())){
     notif('Solo el Director puede cargar el firmado desde esta acción','err');return;
   }
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=taskId&&typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+    &&(!t||(typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))));
+  if(esPqrs&&typeof openPqrsDirectorFirmarModal==='function'){
+    openPqrsDirectorFirmarModal(expId,'cargar');
+    return;
+  }
   if(taskId&&typeof openTramiteDirectorFirmarModal==='function'){
     openTramiteDirectorFirmarModal(expId,taskId,'cargar');
     return;
   }
-  const e=typeof getExpById==='function'?getExpById(expId):null;
-  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof openPqrsDirectorFirmarModal==='function'){
-    openPqrsDirectorFirmarModal(expId,'cargar');
-    return;
-  }
-  // Trámite sin taskId explícito: buscar actividad en por firmar
   if(e){
     const tFirma=(e.tasks||[]).find(function(tk){
       return tk&&!tk.eliminada&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(tk);

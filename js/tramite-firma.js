@@ -465,6 +465,11 @@ function tramiteMarcarFirmadoFisico(expId,taskId){
   notif('✓ Firmado físico registrado — pase a «Por notificar»','ok');
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
+  // No abrir modal de actividad completo (biblioteca / co-ejecutores) para el Director
+  if(puedeDir){
+    if(typeof closeTaskModal==='function')closeTaskModal();
+    return;
+  }
   if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,taskId);
 }
 
@@ -1692,8 +1697,14 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     if(abrirNotif){
       openTramiteNotificarModal(refId,taskId);
     }else if(keepOpen&&typeof taskReviewRefreshModal==='function'){
-      taskReviewCloseSidePanel();
-      taskReviewRefreshModal(refId,taskId,'doc');
+      const ctxA=window._taskModalCtx||{};
+      // Director: no reabrir el modal de actividad (biblioteca / co-ejecutores / soportes)
+      if(ctxA.directorRevisarPorFirmar||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
+        closeTaskModal();
+      }else{
+        taskReviewCloseSidePanel();
+        taskReviewRefreshModal(refId,taskId,'doc');
+      }
     }else{
       closeTaskModal();
     }
