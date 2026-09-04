@@ -160,11 +160,14 @@ function tramitePuedeNotificar(t){
 function taskFirmaEstadoUi(t){
   if(!taskEnFlujoFirmaTramite(t)&&!taskFirmaFase(t)&&!taskFirmaEnRevisionFinalNotif(t))return null;
   const f=taskFirmaFase(t);
+  const wf=getTaskFirmaWf(t);
   const subPend=typeof _actEstSubPendienteUi==='function'?_actEstSubPendienteUi:function(s){return{sub:s,subFg:'#a16207',subBg:'#fef9c3'};};
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){
     if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))
       return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
-    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Firma'));
+    if(wf.impreso&&wf.impreso.en)
+      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Firmar'));
+    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Imprimir'));
   }
   if(taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t))
     return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
@@ -359,9 +362,12 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       fase:faseDest,
       notificar_por:notifPor||prev.notificar_por||'',
       notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-      canal:'correo',
+      canal:prev.canal||'correo',
       enviado_firma_en:new Date().toISOString(),
-      enviado_firma_por:typeof taskComentarioAutor==='function'?taskComentarioAutor():''
+      enviado_firma_por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+      impreso:null,
+      firma_fisica:null,
+      firma_director:null
     };
     if(esFirmaAtajo&&!esImprimir){
       patch.listo_firma={por:taskComentarioAutor(),en:new Date().toISOString(),atajo_digital:true};
@@ -380,7 +386,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   if(ok){
     if(typeof clearAltaResponsableAlAprobarDocumento==='function'&&!t.sinExpediente)
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
-    notif('✍️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    notif('🖨️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:''),'ok');
     if(opts.keepOpen&&typeof taskReviewRefreshModal==='function'){
       if(opts.closeSide&&typeof taskReviewCloseSidePanel==='function')taskReviewCloseSidePanel();
       taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
