@@ -19502,7 +19502,7 @@ function renderActRowToolbarHtml(t,expAct){
     actsN+=taskNotasInternasBtnHtml(t.exp,t.id);
     if(typeof taskAgendaBtnHtml==='function')actsN+=taskAgendaBtnHtml(t.exp,t.id);
     actsN+='<button type="button" class="btn bsm bic act-ico" title="Ver documento a notificar" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true,porNotificarVista:true})">🔍</button>';
-    actsN+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true,porNotificarVista:true,openNotificar:true})">📬</button>';
+    actsN+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="event.stopPropagation();openActReportarNotificacion(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">📬</button>';
     actsN+='</span>';
     return actsN;
   }

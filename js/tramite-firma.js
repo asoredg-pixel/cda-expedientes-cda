@@ -712,6 +712,48 @@ window.renderTaskReviewNotificarSideHtml=renderTaskReviewNotificarSideHtml;
 window.initTaskReviewNotificarSide=initTaskReviewNotificarSide;
 window.tramiteNotifSetCanal=tramiteNotifSetCanal;
 
+/** Ventana standalone 📬 (desde la fila): mismo formulario del panel, sin rail de documento. */
+function openActReportarNotificacion(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const esPqrs=e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e);
+  if(esPqrs){
+    if(typeof pqrsPuedeNotificarOficio==='function'&&!pqrsPuedeNotificarOficio(e)){
+      notif('No puede notificar esta PQRSD','err');return;
+    }
+  }else if(typeof tramitePuedeNotificar==='function'&&!tramitePuedeNotificar(t)){
+    notif('No puede notificar esta actividad (revise quién está designado)','err');return;
+  }
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body)return;
+  if(tit)tit.textContent='Reportar notificación · '+(t.sinExpediente?(t.codigo||refId):((e&&e._exp)||refId));
+  if(modal){
+    modal.classList.remove('task-modal-wide','task-modal-review','task-modal-resp-ver','task-modal-review-wa-side','task-modal-archivos','task-modal-chat');
+    modal.classList.add('enviar-modal-only');
+  }
+  document.body.classList.remove('task-review-doc-mode');
+  const formHtml=esPqrs&&typeof renderTaskReviewPqrsNotificarSideHtml==='function'
+    ?renderTaskReviewPqrsNotificarSideHtml(refId,taskId,e,t)
+    :(typeof renderTaskReviewNotificarSideHtml==='function'?renderTaskReviewNotificarSideHtml(refId,taskId,t):'');
+  body.innerHTML='<div style="max-width:480px;margin:0 auto">'+formHtml+
+    '<div class="fx" style="gap:8px;margin-top:10px"><button type="button" class="btn bsm" style="width:100%" onclick="closeTaskModal()">Cancelar</button></div></div>';
+  ov.classList.add('on');
+  window._taskModalCtx={expId:refId,taskId:taskId,mode:'reportarNotificacion',actLibre:!!t.sinExpediente};
+  setTimeout(function(){
+    if(esPqrs&&typeof initTaskReviewPqrsNotificarSide==='function')initTaskReviewPqrsNotificarSide(refId);
+    else if(typeof initTaskReviewNotificarSide==='function')initTaskReviewNotificarSide(refId,taskId);
+  },40);
+}
+window.openActReportarNotificacion=openActReportarNotificacion;
+
 async function submitTramiteNotificar(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t)return;
