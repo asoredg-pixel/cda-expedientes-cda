@@ -1132,9 +1132,8 @@ function getPqrsOficinaList(oficinaId,filtro){
     const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     let listF=exps.filter(e=>{
       if(!esPqrsSecretaria(e)||typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
-      // Firmados → paleta «Firmados» (todos los roles)
-      if(typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e))return false;
-      if(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e))return false;
+      // Director: firmados físicos salen a «Firmados». VITAL/encargado/oficina: siguen en «Por firmar» (✍️✓ + 📤).
+      if(esDir&&typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e))return false;
       return true;
     }).map(normalizePqrsOficinaFields);
     // NCA / oficinas: solo las de su oficina; Director: transversal
@@ -1213,21 +1212,19 @@ function getPqrsOficinaList(oficinaId,filtro){
   list=filterExpsPeriodo(list,'pqrs-ofi');
   return list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
 }
-/** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar». */
+/** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar»: 🧐 revisar · 📤 cargar firmado · ✍️ firma física. */
 function pqrsDirectorPorFirmarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
   if(!id)return'';
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);
-    return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver documento a firmar">👁</button> '+
-      '<button type="button" class="btn bsm act-ico" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'cargar\')" title="Cargar documento ya firmado">⬆</button> '+
-      '<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff;border-color:#15803d" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ya_firmado\')" title="Indicar que ya está firmado">✓</button> '+
-      '<button type="button" class="btn bsm act-ico bd2" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'devolver\')" title="Devolver documento">↩</button>';
+    return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')" title="Revisar documento a firmar">🧐</button> '+
+      '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'cargar\')" title="Cargar documento firmado">📤</button> '+
+      '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ya_firmado\')" title="Confirmar firma física">✍️</button>';
   }
-  return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ver\')" title="Ver documento a firmar">👁</button> '+
-    '<button type="button" class="btn bsm act-ico" style="background:#0f766e;color:#fff;border-color:#0f766e" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'cargar\')" title="Cargar documento ya firmado">⬆</button> '+
-    '<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff;border-color:#15803d" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ya_firmado\')" title="Indicar que ya está firmado">✓</button> '+
-    '<button type="button" class="btn bsm act-ico bd2" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'devolver\')" title="Devolver documento">↩</button>';
+  return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\')" title="Revisar documento a firmar">🧐</button> '+
+    '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'cargar\')" title="Cargar documento firmado">📤</button> '+
+    '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ya_firmado\')" title="Confirmar firma física">✍️</button>';
 }
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
@@ -1241,10 +1238,10 @@ function pqrsAccionesTablaHtml(e){
     const ofiDueña=t&&typeof tramitePuedeGestionarComoOficina==='function'&&tramitePuedeGestionarComoOficina(t);
     if(esDir&&!firmFis&&!enNotif)return pqrsDirectorPorFirmarAccionesHtml(e);
     if(esDir&&firmFis)
-      return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver">👁</button> '+
-        '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+      return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')" title="Revisar">🧐</button> '+
+        '<span class="btn bsm act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma física registrada — Firmados"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span> ';
     if(esDir&&enNotif)
-      return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\',\'ver\')" title="Ver">👁</button> '+
+      return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')" title="Revisar">🧐</button> '+
         '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="En notificación">📬</span> ';
     let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
     if(enNotif&&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
@@ -1264,8 +1261,8 @@ function pqrsAccionesTablaHtml(e){
   if(fase===PQRS_WF.POR_FIRMAR&&esDir){
     const wfDir=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     if(!(wfDir.firma_fisica&&wfDir.firma_fisica.en))return pqrsDirectorPorFirmarAccionesHtml(e);
-    return '<button type="button" class="btn bsm act-ico" style="background:#185FA5;color:#fff;border-color:#185FA5" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ver\')" title="Ver">👁</button> '+
-      '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado — pendiente de notificación">📬</span> ';
+    return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\')" title="Revisar">🧐</button> '+
+      '<span class="btn bsm act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma física registrada — Firmados"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span> ';
   }
   let h='<span class="sst-act-toolbar">';
   // ✏️ / 🔍 abren paneles completos (no menús)

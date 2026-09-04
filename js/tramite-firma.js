@@ -1006,11 +1006,13 @@ function confirmarCierreTaskTramiteAware(expId,taskId){
 /** Filas sintéticas para la paleta PQRSD (trámites / oficios oficina en firma). */
 function getTramiteFirmaRowsParaPaletaDirector(modo){
   modo=String(modo||'por_firmar');
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const tasks=getTareasTramiteFirmaPorFase(function(t){
     if(modo==='firmados')return taskFirmaEsFirmadoPendiente(t);
     if(modo==='por_notificar')return taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t);
     if(!taskFirmaEnPorFirmar(t))return false;
-    if(taskFirmaEsFirmadoPendiente(t))return false;
+    // Director: firmados físicos van a «Firmados». VITAL/oficina: siguen en «Por firmar».
+    if(esDir&&taskFirmaEsFirmadoPendiente(t))return false;
     return true;
   });
   return tasks.map(function(t){
@@ -1160,32 +1162,39 @@ function openTramiteDirectorAccionModal(expId,taskId,mode){
       preview+infoReadonly+docsExp+histHtml+
       '<div class="pqrs-firma-actions"><button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
   }else if(mode==='cargar'){
-    titulo='⬆ Cargar documento firmado — '+expLbl;
+    titulo='📤 Cargar documento firmado — '+expLbl;
     const dirPdfCtx=typeof sstFileCtxKeyTramiteDirectorPdf==='function'?sstFileCtxKeyTramiteDirectorPdf(refId,taskId):('tramite-director-pdf:'+refId+':'+taskId);
     const dirPdfPick=typeof sstFilePickBlock==='function'
       ?sstFilePickBlock({inputId:'tramite-director-pdf-file',listId:'tramite-director-pdf-list',ctxKey:dirPdfCtx,label:'Seleccionar PDF firmado',accept:'.pdf,application/pdf'})
       :'';
+    let selNotif='';
+    if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
+      selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{
+        modo:'firma',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:(e&&e._depto)||t.depto
+      });
+    }
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Cargar PDF ya firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado para que procedan a notificar. Usted no asigna quién notifica.</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Suba el documento firmado. Pasará a <strong>Por notificar</strong> a la persona designada (puede cambiarla).</div>'+
       preview+infoReadonly+
+      (selNotif?'<div style="margin-bottom:12px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+selNotif+'</div>':'')+
       '<div style="margin-bottom:12px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:#0d5c2e08">'+
       dirPdfPick+
       '</div>'+
       '<div class="pqrs-firma-actions">'+
-      '<button type="button" class="btn bsm bp" id="tramite-director-firmar-btn" onclick="tramiteDirectorConfirmarFirmado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">⬆ Confirmar y pasar a notificar</button>'+
+      '<button type="button" class="btn bsm bp" id="tramite-director-firmar-btn" onclick="tramiteDirectorConfirmarFirmado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">📤 Confirmar y pasar a notificar</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   }else if(mode==='ya_firmado'){
-    titulo='✓ Ya firmado — '+expLbl;
-    html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Indicar que ya está firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Cuando firmó el documento impreso (sin volver a cargar PDF). No asigna quién notifica; solo puede verlo.</div>'+
+    titulo='✍️ Firma física — '+expLbl;
+    html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Confirmar firma física</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Cuando firmó el documento <strong>impreso</strong>. Queda en su paleta <strong>Firmados</strong>. VITAL/encargado verán ✍️✓ en «Por firmar» para cargar el escaneado.</div>'+
       infoReadonly+
       '<div class="pqrs-firma-actions">'+
-      '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="tramiteDirectorMarcarYaFirmado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">✓ Confirmar ya firmado</button>'+
+      '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="tramiteDirectorMarcarYaFirmado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">✍️ Confirmar firma física</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   }else if(mode==='devolver'){
     titulo='↩ Devolver documento — '+expLbl;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Devolver por error / corrección</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">La actividad volverá a revisión para corregir el documento.</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">La actividad quedará <strong>Por corregir</strong> (por ejecutar) para el encargado u oficina.</div>'+
       preview+
       '<div style="margin-bottom:12px;padding:10px;border:1px dashed var(--or);border-radius:var(--r);background:#fff7ed">'+
       '<textarea id="tramite-director-devolver-motivo" placeholder="Indique el error o qué debe corregirse…" style="width:100%;min-height:80px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif"></textarea></div>'+
@@ -1233,11 +1242,11 @@ function tramiteDirectorMarcarYaFirmado(expId,taskId){
   const puedeDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   if(!puedeDir&&!(typeof esAdministrador==='function'&&esAdministrador())){notif('Solo el Director puede marcar firmado','err');return;}
   setTaskFirmaWf(expId,taskId,{
-    firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString()},
+    firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),modo:'fisico'},
     firma_director:{por:taskComentarioAutor(),en:new Date().toISOString(),modo:'fisico'}
   });
   closeTaskModal();
-  notif('✓ Firmado físico registrado — queda pendiente de notificación','ok');
+  notif('✍️ Firma física registrada — queda en «Firmados»','ok');
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
 }
@@ -1252,7 +1261,7 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
   try{
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
       const okG=await sstSolicitarGmailParaAdjuntar();
-      if(!okG){if(btn){btn.disabled=false;btn.textContent='⬆ Confirmar y pasar a notificar';}return;}
+      if(!okG){if(btn){btn.disabled=false;btn.textContent='📤 Confirmar y pasar a notificar';}return;}
     }
     const e=tramiteFirmaExpCtx(t,expId);
     if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo documento…',sub:file.name||'PDF',pct:20});
@@ -1265,10 +1274,12 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
     const wfPrev=getTaskFirmaWf(t);
     const canal=String(wfPrev.canal||'correo').trim();
     const esCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
-    const sinPlazo=esCorreo; // Director firma → correo VITAL/encargado: sin plazo 5 días
+    const sinPlazo=esCorreo;
     let vence='';
     if(!sinPlazo&&typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
-    setTaskFirmaWf(expId,taskId,{
+    let notifPor=typeof _pqrsLeerNotifPorSel==='function'?_pqrsLeerNotifPorSel('tramite-notif-por-sel'):'';
+    if(!notifPor)notifPor=String(wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
+    const patchNotif={
       fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion'),
       firma_director:{por:taskComentarioAutor(),en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
       firma_fisica:null,
@@ -1276,22 +1287,31 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
       notif_vence:vence,
       notif_plazo_dias:sinPlazo?0:5,
       notif_sin_plazo:!!sinPlazo
-    });
+    };
+    if(notifPor){
+      if(sinPlazo)patchNotif.notificar_por_propuesto=notifPor;
+      else{patchNotif.notificar_por=notifPor;patchNotif.notificar_por_propuesto=notifPor;}
+    }
+    setTaskFirmaWf(expId,taskId,patchNotif);
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteDirectorSignedFile=null;
     closeTaskModal();
-    notif(sinPlazo?'📬 Documento firmado — Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»','ok');
+    notif(sinPlazo?'📬 Documento firmado — Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»'+(notifPor?' · '+notifPor:''),'ok');
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();
     notif('Error: '+String(err.message||err).slice(0,100),'err');
-    if(btn){btn.disabled=false;btn.textContent='⬆ Confirmar y pasar a notificar';}
+    if(btn){btn.disabled=false;btn.textContent='📤 Confirmar y pasar a notificar';}
   }
 }
 function tramiteDirectorDevolver(expId,taskId){
   const motivo=String((document.getElementById('tramite-director-devolver-motivo')||{}).value||'').trim();
   if(!motivo){notif('Indique el motivo de la devolución','err');return;}
+  if(typeof directorDevolverDesdePorFirmar==='function'){
+    directorDevolverDesdePorFirmar(expId,taskId,motivo);
+    return;
+  }
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'DS DEGUV';
   setTaskFirmaWf(expId,taskId,{
     fase:'',
@@ -1303,20 +1323,19 @@ function tramiteDirectorDevolver(expId,taskId){
   });
   mutateTask(expId,taskId,function(tk){
     if(!tk)return;
-    tk.fechaAtendida='';
-    tk.verificadoPor='';
-    tk.ultimaRevisionDepto=null;
-    const fr=tk.fechaReportada||(typeof hoy==='function'?hoy():'');
-    tk.fechaReportada=fr;
-    tk.estado='Por verificar';
+    if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(tk,motivo);
+    else{
+      tk.fechaAtendida='';
+      tk.verificadoPor='';
+      tk.estado='Por corregir';
+    }
     if(!Array.isArray(tk.comentarios))tk.comentarios=[];
     tk.comentarios.push({autor:por,fecha:new Date().toISOString(),texto:'[Devolución Director — por firmar] '+motivo,rol:'asignador',incluidoEnReporte:false});
     if(!Array.isArray(tk.historial))tk.historial=[];
     tk.historial.push({tipo:'devuelto_director_firma',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:por,nota:motivo});
-    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
   });
   closeTaskModal();
-  notif('↩ Documento devuelto — vuelve a revisión','ok');
+  notif('↩ Documento devuelto — queda por corregir','ok');
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();
 }
