@@ -581,6 +581,7 @@ function openTramiteNotificarModal(expId,taskId){
     ?('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» ha sido aprobado y notificado.\n\nCordialmente.')
     :('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» del expediente '+((e&&e._exp)||'')+' ha sido aprobado y notificado.\n\nPuede consultarlo en la consulta ciudadana de la Corporación CDA.\n\nCordialmente.'));
   const isCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  const docsNotif=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e&&!e._sin_expediente?e:null,t):[];
   let canalBtns='';
   if(puedeCorreo){
     canalBtns+='<button type="button" class="btn bsm canal-resp-btn'+(isCorreo?' on':'')+'" data-val="correo" onclick="tramiteNotifSetCanal(\'correo\')">📧 Correo</button>';
@@ -599,10 +600,12 @@ function openTramiteNotificarModal(expId,taskId){
     (notifAsignado?' Encargado de notificar: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+
     (plazo?' '+plazo:'')+
     '</div>'+
-    '<div style="margin-bottom:10px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:4px">📄 Documento firmado</div>'+
-    tramiteDocsFirmadosHtml(t,wf)+
-    '</div>'+
+    (typeof renderAdjuntosNotificacionPreviewHtml==='function'
+      ?renderAdjuntosNotificacionPreviewHtml(docsNotif,{title:'📎 Documento y anexos que se enviarán'})
+      :('<div style="margin-bottom:10px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+        '<div style="font-size:12px;font-weight:600;margin-bottom:4px">📄 Documento firmado</div>'+
+        tramiteDocsFirmadosHtml(t,wf)+
+        '</div>'))+
     '<div style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:4px">📄 Oficio / documento notificado (PDF)</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Cargue aquí el documento ya notificado (recomendado). Quedará en Drive y, al cerrar, en consulta ciudadana.</div>'+
@@ -753,14 +756,22 @@ async function submitTramiteNotificar(expId,taskId){
     if(!destinos.length){notif('Indique al menos un correo destino','err');if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
     if(!cuerpo){notif('Indique el mensaje','err');if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
     const htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>';
+    let adjuntos=[];
     try{
       if(typeof sstSolicitarGmailParaAdjuntar==='function'){
         const okG=await sstSolicitarGmailParaAdjuntar();
         if(!okG){if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
       }
+      if(btn)btn.textContent='Preparando adjuntos…';
+      const emailCc=String((document.getElementById('tramite-notif-cc')||{}).value||'').trim();
+      const emailBcc=String((document.getElementById('tramite-notif-bcc')||{}).value||'').trim();
+      if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function')
+        adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(null,{e:e&&!e._sin_expediente?e:null,t:t});
+      else if(typeof taskReviewAdjuntosDesdeSoportes==='function')
+        adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e&&!e._sin_expediente?e:null);
       if(btn)btn.textContent='Enviando correo…';
       if(typeof pqrsEnviarCorreoCiudadano==='function'){
-        await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,[],{});
+        await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,adjuntos,{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:(e&&e._depto)||t.depto||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare')});
       }else if(typeof gmailSend==='function'){
         for(let i=0;i<destinos.length;i++)await gmailSend(destinos[i],asunto,htmlBody);
       }else{
@@ -779,7 +790,7 @@ async function submitTramiteNotificar(expId,taskId){
       return;
     }
     await finalizarTramiteTrasPublicar(refId,taskId,{via:'notificacion',destinos:destinos,canal:'correo'});
-    notif('📬 Notificado por correo y actividad cerrada','ok');
+    notif('📬 Notificado por correo'+(adjuntos.length?' · '+adjuntos.length+' adjunto(s)':'')+' y actividad cerrada','ok');
     closeTaskModal();
     return;
   }
