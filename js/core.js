@@ -6391,7 +6391,7 @@ function renderTaskReviewDecisionNotifSel(expId,taskId,t){
   }
   if(!e)return'';
   return '<div class="task-decision-block" style="margin-top:8px"><div class="task-decision-block-tit">Quién notificará <span style="font-weight:400;color:var(--tx3)">(opcional)</span></div>'+
-    _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto)})+
+    _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),sinLabel:true})+
     '</div>';
 }
 function taskReviewToggleAprobarAcc(btn){
@@ -6447,7 +6447,6 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
       '<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Aprobar y cerrar</button>',
       false);
     h+=renderTaskReviewAprobarAccHtml(2,'Aprobar y pasar para Imprimir',
-      '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Va a <strong>Por firmar</strong> (encargado, VITAL y Director). Estado: <strong>✓ Revisada · X Imprimir</strong>. Al marcar impreso pasa a <strong>X Firmar</strong>.</p>'+
       renderTaskReviewDecisionNotifSel(expId,taskId,t)+
       '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;margin-top:8px" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">🖨️ Aprobar y pasar para Imprimir</button>',
       false);
@@ -23401,8 +23400,8 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
       :' <span style="font-weight:400;color:var(--tx3)">(sugerencia — VITAL / encargado pueden cambiarla)</span>';
     hint=ofiSinVital||soloCorreo?hint:'Solo aplica a oficio firmado. Quien quede designado verá la actividad en <strong>Por notificar</strong> cuando el Director ya haya firmado.';
   }else if(modo==='revision'){
-    label='Quién notificará al ciudadano';
-    sub=' <span style="font-weight:400;color:var(--tx3)">(después de la firma)</span>';
+    label='Quién notificará';
+    sub='';
     hint=(ofiSinVital||soloCorreo)?hint:(propuesto
       ?('El responsable sugirió: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo. Solo se refleja en actividades del notificador cuando pase a <strong>Por notificar</strong>.')
       :'Opcional. Si no elige, VITAL / encargado lo definirán al pasar a firma.');
@@ -23417,9 +23416,11 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
       ?('Ya hay alguien asignado para notificar: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo antes de pasar a Por notificar.')
       :hint);
   }
-  return '<div class="fld" style="margin-bottom:10px" id="'+escAttr(selId)+'-wrap"><label>'+label+sub+'</label>'+
-    '<select id="'+escAttr(selId)+'" style="width:100%;max-width:360px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;margin-top:4px">'+optsHtml+'</select>'+
-    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">'+hint+'</div></div>';
+  if(opts.sinLabel){label='';sub='';}
+  const labelHtml=label?('<label>'+label+sub+'</label>'):'';
+  return '<div class="fld" style="margin-bottom:10px" id="'+escAttr(selId)+'-wrap">'+labelHtml+
+    '<select id="'+escAttr(selId)+'" style="width:100%;max-width:360px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;'+(label?'margin-top:4px':'')+'">'+optsHtml+'</select>'+
+    (hint?'<div style="font-size:10px;color:var(--tx3);margin-top:4px">'+hint+'</div>':'')+'</div>';
 }
 function _pqrsLeerNotifPorSel(id){
   if(id)return String((document.getElementById(id)||{}).value||'').trim();
