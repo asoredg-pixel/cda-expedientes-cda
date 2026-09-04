@@ -1143,7 +1143,16 @@ function openTramiteDirectorAccionModal(expId,taskId,mode){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(modal){modal.classList.add('task-modal-wide');modal.classList.add('task-modal-firma');}
+  if(modal){
+    if(mode==='ya_firmado'){
+      modal.classList.remove('task-modal-wide','task-modal-firma');
+      modal.classList.add('enviar-modal-only','task-modal-firma-fisica');
+    }else{
+      modal.classList.remove('enviar-modal-only','task-modal-firma-fisica');
+      modal.classList.add('task-modal-wide');
+      modal.classList.add('task-modal-firma');
+    }
+  }
   const infoReadonly='<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px;font-size:12px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px">Datos de la actividad</div>'+
     '<div style="margin-bottom:4px">Actividad: <strong>'+escAttr(actNom)+'</strong></div>'+

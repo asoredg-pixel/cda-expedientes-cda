@@ -6326,6 +6326,26 @@ function renderTaskReviewDecisionNotifSel(expId,taskId,t){
     _pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto)})+
     '</div>';
 }
+function taskReviewToggleAprobarAcc(btn){
+  const acc=btn&&btn.closest?btn.closest('.task-decision-acc'):null;
+  if(!acc)return;
+  const open=!acc.classList.contains('is-open');
+  const root=acc.parentElement;
+  if(root){
+    root.querySelectorAll('.task-decision-acc.is-open').forEach(function(el){
+      if(el!==acc)el.classList.remove('is-open');
+    });
+  }
+  acc.classList.toggle('is-open',open);
+}
+window.taskReviewToggleAprobarAcc=taskReviewToggleAprobarAcc;
+function renderTaskReviewAprobarAccHtml(n,tit,bodyHtml,forceOpen){
+  return '<div class="task-decision-acc'+(forceOpen?' is-open':'')+'" data-acc="'+escAttr(String(n))+'">'+
+    '<button type="button" class="task-decision-acc-hdr" onclick="taskReviewToggleAprobarAcc(this)">'+
+    '<span class="task-decision-acc-arrow" aria-hidden="true">▸</span>'+
+    '<span class="task-decision-acc-tit">'+n+'. '+escAttr(tit)+'</span></button>'+
+    '<div class="task-decision-acc-body">'+bodyHtml+'</div></div>';
+}
 function renderTaskReviewDecisionSideHtml(expId,taskId,t){
   const mode=String(window._taskReviewDecisionMode||'aprobar').trim();
   if(mode==='atajoFirmado'&&typeof renderTaskReviewAtajoFirmadoHtml==='function')
@@ -6349,34 +6369,26 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
       '<input type="text" id="nca-rev-comentario" placeholder="Ej: Aprobado. Proceda a enviar." style="margin-top:4px;width:100%;box-sizing:border-box"></div>';
     h+='<input type="hidden" id="nca-rev-fecha" value="'+escAttr(hoy())+'">';
     h+='<button type="button" class="btn bsm bp" style="background:var(--gn);color:#fff;width:100%" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Aprobar y enviar</button>';
-    h+='<div style="margin-top:10px"><button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver para corregir</button></div>';
     h+='</div>';
     return h;
   }
   if(mode==='aprobar'){
     const showNotif=!!window._taskReviewAprobarNotificar;
-    // 1. Aprobar y cerrar (sin notificar)
-    h+='<div class="task-decision-block" style="margin-bottom:12px">'+
-      '<div class="task-decision-block-tit">1. Aprobar y cerrar</div>'+
+    h+=renderTaskReviewAprobarAccHtml(1,'Aprobar y cerrar',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Sin notificación ni firma. Queda <strong>✓ Revisada</strong>.</p>'+
-      '<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Aprobar y cerrar</button>'+
-      '</div>';
-    // 2. Aprobar y pasar para Imprimir
-    h+='<div class="task-decision-block" style="margin-bottom:12px">'+
-      '<div class="task-decision-block-tit">2. Aprobar y pasar para Imprimir</div>'+
+      '<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Aprobar y cerrar</button>',
+      false);
+    h+=renderTaskReviewAprobarAccHtml(2,'Aprobar y pasar para Imprimir',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Va a <strong>Por firmar</strong> (encargado, VITAL y Director). Estado: <strong>✓ Revisada · X Imprimir</strong>. Al marcar impreso pasa a <strong>X Firmar</strong>.</p>'+
       renderTaskReviewDecisionNotifSel(expId,taskId,t)+
-      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;margin-top:8px" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">🖨️ Aprobar y pasar para Imprimir</button>'+
-      '</div>';
-    // 3. Aprobar y notificar
-    h+='<div class="task-decision-block" style="margin-bottom:12px">'+
-      '<div class="task-decision-block-tit">3. Aprobar y notificar</div>'+
+      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;margin-top:8px" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">🖨️ Aprobar y pasar para Imprimir</button>',
+      false);
+    h+=renderTaskReviewAprobarAccHtml(3,'Aprobar y notificar',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Notifica por correo y cierra. Queda <strong>✓ Revisada · ✓ Notificada</strong>.</p>'+
       '<button type="button" class="btn bsm bp" id="task-rev-notif-btn" style="background:#185fa5;border-color:#185fa5" onclick="taskReviewConfirmarYNotificar(\''+eid+'\',\''+tid+'\')">'+(showNotif?'✓ Enviar notificación y cerrar':'📬 Aprobar y notificar')+'</button>'+
-      (showNotif?renderTaskReviewNotifEmailFieldsHtml(e,t,expId):'')+
-      '</div>';
+      (showNotif?renderTaskReviewNotifEmailFieldsHtml(e,t,expId):''),
+      showNotif);
   }
-  h+='<div style="margin-top:10px"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver para corregir</button></div>';
   h+='</div>';
   return h;
 }
@@ -16531,6 +16543,7 @@ function closeTaskModal(){
     if(modal){
       modal.classList.remove('task-modal-wide');
       modal.classList.remove('task-modal-firma');
+      modal.classList.remove('task-modal-firma-fisica');
       modal.classList.remove('enviar-modal-only');
       modal.classList.remove('task-modal-chat');
       modal.classList.remove('task-modal-notas');
@@ -19167,23 +19180,21 @@ function renderActRowToolbarHtml(t,expAct){
   const pendienteRev=taskPendienteVerificacion(t)
     ||(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))
     ||est==='Por verificar';
-  // ✏️ / 🗑️ en fila: no en «Por revisar» (van en el rail de 🧐 Revisar entrega)
-  if(puedeGestionarActividadesDepto()&&!pendienteRev){
+  const esRevisadaEnc=esVistaActividadesDepto()&&!esModoResponsable()
+    &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct)&&!pendienteRev;
+  // ✏️ / 🗑️ en fila: no en «Por revisar» ni «Revisados» (van en el rail de 🧐)
+  if(puedeGestionarActividadesDepto()&&!pendienteRev&&!esRevisadaEnc){
     if(t.sinExpediente)
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
     else
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
-  const esRevisadaEnc=esVistaActividadesDepto()&&!esModoResponsable()
-    &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct)&&!pendienteRev;
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&(pendienteRev||esRevisadaEnc)
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct)&&!pendienteRev&&!esRevisadaEnc);
   if((pendienteRev||esRevisadaEnc)&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
     const revOpts=esRevisadaEnc?'{verRevisado:true}':'';
     acts+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Revisar respuesta enviada':(esRevisadaEnc?'Ver revisión y gestionar':'Revisar entrega'))+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\''+(revOpts?','+revOpts:'')+')">🧐</button>';
   }
-  if(esRevisadaEnc&&!pendienteRev&&typeof actEliminarActOEntregaBtnHtml==='function')
-    acts+=actEliminarActOEntregaBtnHtml(t.exp,t.id);
   const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   const enPorFirmarVista=(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
       &&((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
@@ -23445,7 +23456,16 @@ function openPqrsDirectorAccionModal(expId,mode){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(modal){modal.classList.add('task-modal-wide');modal.classList.add('task-modal-firma');}
+  if(modal){
+    if(mode==='ya_firmado'){
+      modal.classList.remove('task-modal-wide','task-modal-firma');
+      modal.classList.add('enviar-modal-only','task-modal-firma-fisica');
+    }else{
+      modal.classList.remove('enviar-modal-only','task-modal-firma-fisica');
+      modal.classList.add('task-modal-wide');
+      modal.classList.add('task-modal-firma');
+    }
+  }
   const ctx=_pqrsDirectorDocsFirmaCtx(e);
   const wf=ctx.wf;
   const usaDrive=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has('guaviare');

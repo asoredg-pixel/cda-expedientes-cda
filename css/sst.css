@@ -1809,6 +1809,23 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-review-decision-side{padding:4px 2px 12px}
 .task-decision-block{margin-bottom:12px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)}
 .task-decision-block-tit{font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+.task-decision-acc{margin-bottom:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2);overflow:hidden}
+.task-decision-acc-hdr{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:10px 12px;border:0;background:transparent;cursor:pointer;text-align:left;
+  font:inherit;color:var(--tx);
+}
+.task-decision-acc-hdr:hover{background:rgba(0,0,0,.03)}
+.task-decision-acc-arrow{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:1.1em;flex:0 0 auto;font-size:12px;color:var(--tx3);
+  transition:transform .15s ease;
+}
+.task-decision-acc.is-open .task-decision-acc-arrow{transform:rotate(90deg);color:var(--bl)}
+.task-decision-acc-tit{font-size:12px;font-weight:600;letter-spacing:.02em}
+.task-decision-acc-body{display:none;padding:0 12px 12px}
+.task-decision-acc.is-open .task-decision-acc-body{display:block}
+.task-modal.task-modal-firma-fisica{width:min(420px,94vw);max-height:85vh}
 .task-decision-icon-grid{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .task-decision-opt{
   display:flex;align-items:flex-start;gap:10px;width:100%;
