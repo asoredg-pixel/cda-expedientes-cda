@@ -86,7 +86,7 @@ function sstFileRenderItemRow(it, ctxKey, listId) {
   } else if (st === 'uploaded') {
     statusHtml = '<span class="sst-file-row-ok" title="En Drive">✓</span>';
   } else {
-    statusHtml = '<span class="sst-file-row-local" title="Se subirá al confirmar">…</span>';
+    statusHtml = '<span class="sst-file-row-ok" title="Cargado">✓</span>';
   }
   const previewBtn = canPreview
     ? '<button type="button" class="btn bsm bic act-ico" onclick="sstFilePreview(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\')" title="Ver documento">🔍</button>'

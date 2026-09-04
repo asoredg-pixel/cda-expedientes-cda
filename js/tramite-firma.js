@@ -671,56 +671,29 @@ function renderTaskReviewNotificarSideHtml(expId,taskId,t){
   t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
   if(!t)return'<div style="padding:12px;font-size:12px;color:var(--tx3)">Actividad no encontrada</div>';
   const refId=t.sinExpediente?(t.codigo||expId):expId;
-  const e=typeof tramiteFirmaExpCtx==='function'?tramiteFirmaExpCtx(t,refId):null;
   const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
-  const puedeCorreo=typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t);
   let canal=String(wf.canal||'').trim().toLowerCase();
-  if(!canal||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO))
-    canal=puedeCorreo?'correo':(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.PRESENCIAL:'presencial');
-  if(!puedeCorreo&&(canal==='correo'||canal==='electronica'))
+  if(!canal||canal==='correo'||canal==='electronica'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO))
     canal=(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.PRESENCIAL:'presencial');
-  const isCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
-  const notifAsignado=String(wf.notificar_por||'').trim();
-  const plazo=(!wf.notif_sin_plazo&&wf.notif_vence)
-    ?('<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Plazo: <strong>'+(typeof fmtF==='function'?fmtF(wf.notif_vence):wf.notif_vence)+'</strong> (5 días hábiles)</div>')
-    :'';
-  let canalBtns='';
-  if(puedeCorreo)
-    canalBtns+='<button type="button" class="btn bsm canal-resp-btn'+(isCorreo?' on':'')+'" data-val="correo" onclick="tramiteNotifSetCanal(\'correo\')">📧 Correo</button>';
-  canalBtns+=
-    '<button type="button" class="btn bsm canal-resp-btn'+(!isCorreo&&(canal==='presencial'||canal==='fisica')?' on':'')+'" data-val="presencial" onclick="tramiteNotifSetCanal(\'presencial\')">🤝 Presencial</button>'+
+  const canalBtns=
+    '<button type="button" class="btn bsm canal-resp-btn'+(canal==='presencial'||canal==='fisica'?' on':'')+'" data-val="presencial" onclick="tramiteNotifSetCanal(\'presencial\')">🤝 Presencial</button>'+
     '<button type="button" class="btn bsm canal-resp-btn'+(canal==='whatsapp'?' on':'')+'" data-val="whatsapp" onclick="tramiteNotifSetCanal(\'whatsapp\')">💬 WhatsApp</button>'+
     '<button type="button" class="btn bsm canal-resp-btn'+(canal==='aviso'||canal==='avisos'?' on':'')+'" data-val="aviso" onclick="tramiteNotifSetCanal(\'aviso\')">📌 Por aviso</button>';
-  const correos=(!t.sinExpediente&&e&&typeof pqrsCorreosCiudadano==='function')?pqrsCorreosCiudadano(e):[];
-  const dest=String(wf.email_to||'').trim()||correos.join(', ');
+  const ctxDoc='tramite-notif-doc:'+refId+':'+taskId;
+  const pickDoc=typeof sstFilePickBlock==='function'
+    ?sstFilePickBlock({inputId:'tramite-notif-doc-file',listId:'tramite-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+    :'<input type="file" id="tramite-notif-doc-file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">';
   return '<div class="task-review-side-scroll" style="padding:10px 12px">'+
-    '<div style="font-size:13px;font-weight:600;margin-bottom:6px">📬 Reportar notificación</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Indique cómo y cuándo notificó. Quedará para <strong>revisión del encargado</strong>.'+
-    (notifAsignado?' Notifica: <strong>'+escAttr(notifAsignado)+'</strong>.':'')+'</div>'+
-    plazo+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">📬 Reportar notificación</div>'+
     '<div class="fld" style="margin-bottom:8px"><label style="font-weight:600;font-size:12px">Medio de notificación</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="tramite-notif-canal-btns">'+canalBtns+'</div>'+
     '<input type="hidden" id="tramite-notif-canal" value="'+escAttr(canal)+'"></div>'+
-    '<div id="tramite-notif-correo-box" style="'+(isCorreo?'':'display:none')+'">'+
-    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="tramite-notif-to" value="'+escAttr(dest)+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cc</label><input type="text" id="tramite-notif-cc" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cco</label><input type="text" id="tramite-notif-bcc" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="tramite-notif-asunto" value="'+escAttr(String(wf.email_subject||wf.asunto||'').trim()||('Documento aprobado — '+(t.actividad||t.desc||refId)))+'"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Mensaje</label><textarea id="tramite-notif-cuerpo" style="min-height:80px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(String(wf.cuerpo||wf.email_body||'').trim())+'</textarea></div>'+
-    '</div>'+
-    '<div id="tramite-notif-otro-box" style="'+(isCorreo?'display:none':'')+'">'+
+    '<div id="tramite-notif-correo-box" style="display:none"></div>'+
+    '<div id="tramite-notif-otro-box">'+
     '<div class="fld" style="margin-bottom:8px"><label>Fecha de notificación<span class="req-star">*</span></label><input type="date" id="tramite-notif-fecha" value="'+escAttr(typeof hoy==='function'?hoy():'')+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="tramite-notif-obs" placeholder="Ej. Entregado en ventanilla / WhatsApp…" style="min-height:56px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span></label>'+
-    (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'tramite-notif-soporte',listId:'tramite-notif-soporte-list',ctxKey:'tramite-notif-soporte:'+refId+':'+taskId,label:'Seleccionar archivo',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-      :'<input type="file" id="tramite-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">')+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a revisión del encargado.</div></div>'+
-    '</div>'+
-    '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documento notificado (PDF, opcional)</label>'+
-    (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'tramite-notif-oficio-file',listId:'tramite-notif-oficio-list',ctxKey:'tramite-notif-oficio:'+refId+':'+taskId,label:'Cargar documento notificado',accept:'.pdf,application/pdf',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-      :'')+
+    '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documento notificado<span class="req-star">*</span></label>'+
+    '<div class="sst-file-pick-row" style="margin-top:4px">'+pickDoc+'</div></div>'+
     '</div>'+
     '<button type="button" class="btn bsm bp" id="tramite-notif-btn" style="width:100%" onclick="submitTramiteNotificar(\''+escAttr(refId)+'\',\''+escAttr(taskId)+'\')">✅ Reportar como notificado</button>'+
     '</div>';
@@ -729,13 +702,11 @@ function initTaskReviewNotificarSide(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
   if(typeof sstFileStagingReset==='function'){
+    sstFileStagingReset('tramite-notif-doc:'+refId+':'+taskId);
     sstFileStagingReset('tramite-notif-oficio:'+refId+':'+taskId);
     sstFileStagingReset('tramite-notif-soporte:'+refId+':'+taskId);
   }
-  if(typeof sstFileInitPick==='function'){
-    sstFileInitPick('tramite-notif-oficio-file');
-    sstFileInitPick('tramite-notif-soporte');
-  }
+  if(typeof sstFileInitPick==='function')sstFileInitPick('tramite-notif-doc-file');
 }
 window.renderTaskReviewNotificarSideHtml=renderTaskReviewNotificarSideHtml;
 window.initTaskReviewNotificarSide=initTaskReviewNotificarSide;
@@ -777,55 +748,18 @@ async function submitTramiteNotificar(expId,taskId){
     return applyActoVencimientoDesdeNotificacion(eAct,t,actoVencPayload);
   };
 
-  // Subir oficio notificado (opcional / recomendado)
+  // Documento notificado único (panel responsable) o legado soporte/oficio
+  const ctxDoc='tramite-notif-doc:'+refId+':'+taskId;
   const ctxOfi='tramite-notif-oficio:'+refId+':'+taskId;
-  const itOfi=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxOfi):null;
-  const fileOficio=(itOfi&&itOfi.blob)||window._tramiteNotifOficioFile||((document.getElementById('tramite-notif-oficio-file')||{}).files||[])[0]||null;
-  if(fileOficio||itOfi){
-    try{
-      if(btn)btn.textContent='Subiendo documento notificado…';
-      if(typeof sstSolicitarGmailParaAdjuntar==='function'){
-        const okG=await sstSolicitarGmailParaAdjuntar();
-        if(!okG){if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
-      }
-      const resOf=(itOfi&&itOfi.state==='uploaded'&&itOfi.uploaded)
-        ?{driveLink:itOfi.uploaded.driveLink||itOfi.uploaded.previewLink,fileId:itOfi.uploaded.fileId||itOfi.uploaded.driveFileId,nombre:itOfi.uploaded.nombre||itOfi.nombre,previewLink:itOfi.uploaded.previewLink||itOfi.uploaded.driveLink}
-        :await tramiteUploadPdfFirmado(fileOficio,t,e,refId);
-      mutateTask(refId,taskId,function(tk){
-        const prev=getTaskFirmaWf(tk);
-        const docs=(prev.documentos||[]).slice();
-        docs.push({
-          nombre:'oficio-notificado-'+(fileOficio.name||'documento.pdf'),
-          driveLink:resOf&&(resOf.driveLink||resOf.previewLink)||'',
-          previewLink:resOf&&(resOf.previewLink||resOf.driveLink)||'',
-          fileId:resOf&&(resOf.fileId||resOf.driveFileId)||'',
-          tipo:'oficio_firmado',
-          driveEstado:'por_notificar',
-          notificado:true
-        });
-        if(!Array.isArray(tk.soportes))tk.soportes=[];
-        if(resOf&&(resOf.fileId||resOf.driveFileId)){
-          tk.soportes.push({
-            id:'sop_'+Date.now(),
-            nombre:resOf.nombre||fileOficio.name||'oficio-notificado.pdf',
-            driveFileId:resOf.fileId||resOf.driveFileId,
-            driveLink:resOf.driveLink||'',
-            previewLink:resOf.previewLink||resOf.driveLink||'',
-            driveInstitutional:true,
-            autor:por,
-            fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10)
-          });
-        }
-        tk.firmaWf=Object.assign({},prev,{documentos:docs,canal:canal});
-      });
-      window._tramiteNotifOficioFile=null;
-      if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxOfi);
-    }catch(errOf){
-      notif('No se pudo subir el documento notificado: '+String(errOf.message||errOf).slice(0,90),'err');
-      if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
-      return;
-    }
-  }
+  const ctxSopLegacy='tramite-notif-soporte:'+refId+':'+taskId;
+  const itDoc=(typeof sstFileGetMainItem==='function'&&(sstFileGetMainItem(ctxDoc)||sstFileGetMainItem(ctxSopLegacy)||sstFileGetMainItem(ctxOfi)))||null;
+  const fileDoc=(itDoc&&itDoc.blob)
+    ||window._tramiteNotifSoporteFile
+    ||window._tramiteNotifOficioFile
+    ||((document.getElementById('tramite-notif-doc-file')||{}).files||[])[0]
+    ||((document.getElementById('tramite-notif-soporte')||{}).files||[])[0]
+    ||((document.getElementById('tramite-notif-oficio-file')||{}).files||[])[0]
+    ||null;
 
   if(isCorreo){
     const toRaw=String((document.getElementById('tramite-notif-to')||{}).value||'').trim();
@@ -874,46 +808,48 @@ async function submitTramiteNotificar(expId,taskId){
     return;
   }
 
-  // Canales no correo → soporte + revisión final del departamento
+  // Canales no correo → documento notificado + revisión final del departamento
   const fechaN=String((document.getElementById('tramite-notif-fecha')||{}).value||(typeof hoy==='function'?hoy():'')).trim()||(typeof hoy==='function'?hoy():'');
   const obs=String((document.getElementById('tramite-notif-obs')||{}).value||'').trim();
-  const ctxSop='tramite-notif-soporte:'+refId+':'+taskId;
-  const itSop=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxSop):null;
-  const fileSop=(itSop&&itSop.blob)||window._tramiteNotifSoporteFile||((document.getElementById('tramite-notif-soporte')||{}).files||[])[0]||null;
-  if(!fileSop&&!itSop){
-    notif('Adjunte el soporte de la notificación (PDF o imagen)','err');
+  if(!fileDoc&&!itDoc){
+    notif('Cargue el documento notificado','err');
     if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
     return;
   }
   try{
-    if(btn)btn.textContent='Subiendo soporte…';
+    if(btn)btn.textContent='Subiendo documento notificado…';
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG){if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
     }
-    const res=(itSop&&itSop.state==='uploaded'&&itSop.uploaded)
-      ?{driveLink:itSop.uploaded.driveLink||itSop.uploaded.previewLink,fileId:itSop.uploaded.fileId||itSop.uploaded.driveFileId,nombre:itSop.uploaded.nombre||itSop.nombre,previewLink:itSop.uploaded.previewLink||itSop.uploaded.driveLink}
-      :await tramiteUploadPdfFirmado(fileSop,t,e,refId);
+    const res=(itDoc&&itDoc.state==='uploaded'&&itDoc.uploaded)
+      ?{driveLink:itDoc.uploaded.driveLink||itDoc.uploaded.previewLink,fileId:itDoc.uploaded.fileId||itDoc.uploaded.driveFileId,nombre:itDoc.uploaded.nombre||itDoc.nombre,previewLink:itDoc.uploaded.previewLink||itDoc.uploaded.driveLink}
+      :await tramiteUploadPdfFirmado(fileDoc,t,e,refId);
+    const nomDoc=(res&&res.nombre)||(fileDoc&&fileDoc.name)||(itDoc&&itDoc.nombre)||'documento-notificado.pdf';
     mutateTask(refId,taskId,function(tk){
       const prev=getTaskFirmaWf(tk);
       const docs=(prev.documentos||[]).slice();
       docs.push({
-        nombre:'Soporte notificación '+canal+' — '+(fileSop.name||'soporte'),
+        nombre:'Documento notificado '+canal+' — '+nomDoc,
         driveLink:res&&(res.driveLink||res.previewLink)||'',
         previewLink:res&&(res.previewLink||res.driveLink)||'',
         fileId:res&&(res.fileId||res.driveFileId)||'',
         tipo:'notificacion_soporte',
         driveEstado:'revision_final',
-        canal:canal
+        canal:canal,
+        notificado:true
       });
       if(!Array.isArray(tk.soportes))tk.soportes=[];
       if(res&&(res.fileId||res.driveFileId)){
         tk.soportes.push({
           id:'sop_'+Date.now(),
-          nombre:res.nombre||fileSop.name||'soporte-notif',
+          nombre:nomDoc,
+          label:nomDoc,
           driveFileId:res.fileId||res.driveFileId,
           driveLink:res.driveLink||'',
           previewLink:res.previewLink||res.driveLink||'',
+          url:res.driveLink||res.previewLink||'',
+          preview:res.previewLink||res.driveLink||'',
           driveInstitutional:true,
           autor:por,
           fecha:fechaN
@@ -924,7 +860,7 @@ async function submitTramiteNotificar(expId,taskId){
         tipo:'notif_reportada_revision',
         fecha:typeof hoy==='function'?hoy():fechaN,
         por:por,
-        nota:'Notificación '+canal+' reportada con soporte — pendiente revisión del departamento'+(obs?' · '+obs:'')
+        nota:'Notificación '+canal+' reportada con documento notificado — pendiente revisión del departamento'+(obs?' · '+obs:'')
       });
       tk.firmaWf=Object.assign({},prev,{
         fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.REVISION_FINAL:'revision_final_nca'),
@@ -937,21 +873,26 @@ async function submitTramiteNotificar(expId,taskId){
           en:new Date().toISOString(),
           soporteLink:res&&(res.driveLink||'')||'',
           soporteFileId:res&&(res.fileId||res.driveFileId)||'',
-          soporteNombre:fileSop.name||''
+          soporteNombre:nomDoc
         }
       });
     });
     window._tramiteNotifSoporteFile=null;
-    if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxSop);
+    window._tramiteNotifOficioFile=null;
+    if(typeof sstFileStagingReset==='function'){
+      sstFileStagingReset(ctxDoc);
+      sstFileStagingReset(ctxOfi);
+      sstFileStagingReset(ctxSopLegacy);
+    }
     if(!applyActoVenc()){
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
       return;
     }
-    notif('⏳ Soporte cargado — pasa a revisión del departamento para cerrar','ok');
+    notif('⏳ Documento cargado — pasa a revisión del departamento para cerrar','ok');
     closeTaskModal();
     if(typeof renderActividades==='function')renderActividades();
   }catch(err){
-    notif('No se pudo subir el soporte: '+String(err.message||err).slice(0,90),'err');
+    notif('No se pudo subir el documento notificado: '+String(err.message||err).slice(0,90),'err');
     if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
   }
 }
