@@ -24008,7 +24008,9 @@ async function pqrsPasarFirmadoAPorNotificar(expId,opts){
   let notifPor=String((document.getElementById('pqrs-notif-por-sel')||{}).value||wf.notificar_por||wf.notificar_por_propuesto||'').trim();
   notifPor=pqrsAplicarReglaNotificadorCanal(e,wf.canal||'',notifPor);
   const notifBase=hoy();
-  const sinPlazo=typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e,wf.canal||'',notifPor);
+  // Con notificador designado (aunque sea encargado/VITAL): siempre plazo 5 días. Sin designar + correo: sin plazo.
+  const formalAssign=!!notifPor||wf.notif_correo_entrega===false;
+  const sinPlazo=!formalAssign&&typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e,wf.canal||'',notifPor);
   const notifVence=sinPlazo?'':(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(notifBase,5):notifBase);
   const por=responsableActivo||rolSesion||'';
   try{await _pqrsRenombrarDocsDriveWf(wf,'por_notificar');}catch(err){console.warn('pqrsPasarFirmadoAPorNotificar rename:',err);}
@@ -24022,24 +24024,19 @@ async function pqrsPasarFirmadoAPorNotificar(expId,opts){
     notif_plazo_dias:sinPlazo?0:5,
     notif_sin_plazo:!!sinPlazo
   };
-  // Correo VITAL/encargado: no autoasignar notificador (pueden notificar en el acto)
-  if(notifPor&&!sinPlazo){
+  if(notifPor){
     patch.notificar_por=notifPor;
     patch.notificar_por_propuesto=notifPor;
-  }else if(notifPor&&sinPlazo){
-    patch.notificar_por_propuesto=notifPor;
-    // no forzar notificar_por
   }
   setPqrsWorkflow(e,patch);
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'asignado_por_notificar',fecha:hoy(),nota:(sinPlazo?'Por notificar (correo VITAL/encargado · sin plazo 5 días)':'Asignado a «Por notificar» tras firma física')+(firm.sin_pdf?' (sin PDF firmado)':'')+(notifVence?' (vence '+fmtF(notifVence)+')':'')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:por});
+  e._pqrs_historial.push({tipo:'asignado_por_notificar',fecha:hoy(),nota:(sinPlazo?'Por notificar (correo · sin plazo 5 días)':'Asignado a «Por notificar» tras firma física')+(firm.sin_pdf?' (sin PDF firmado)':'')+(notifVence?' (vence '+fmtF(notifVence)+')':'')+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:por});
   persistExpedienteGranular(e);
   if(!opts.skipClose){
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    notif(sinPlazo?'📬 Por notificar (correo · sin plazo de 5 días)':'📬 Pasó a «Por notificar» · vence '+fmtF(notifVence),'ok');
   }
   return true;
 }
@@ -24086,9 +24083,12 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
       notifPor=pqrsAplicarReglaNotificadorCanal(e,wf.canal||'',notifPor);
     }
     const notifBase=hoy();
-    const sinPlazo=typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e,wf.canal||'',notifPor);
+    // Asignar quién notificará (notif_correo_entrega=false) o notificador elegido: siempre plazo. Solo «notificar ahora» por correo queda sin plazo.
+    const formalAssign=wf.notif_correo_entrega===false||(!skipClose&&!!notifPor);
+    const notificarAhora=!!skipClose&&wf.notif_correo_entrega===true;
+    const sinPlazo=notificarAhora||(!formalAssign&&typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e,wf.canal||'',notifPor));
     const notifVence=sinPlazo?'':(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(notifBase,5):notifBase);
-    // Director carga PDF firmado → Por notificar (persona designada / editable)
+    // Director / VITAL / encargado: PDF firmado → Por notificar
     const patchDir={
       fase:PQRS_WF.PENDIENTE_NOTIF,
       documentos:wf.documentos,
@@ -24120,9 +24120,7 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
-    const esDirOk=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-    if(!esDirOk)
-      notif('📬 Oficio firmado cargado — «Por notificar»'+(notifPor?' · '+notifPor:''),'ok');
+    try{if(typeof setActFiltro==='function')setActFiltro('pornotif');}catch(eF){}
     return true;
   }catch(err){
     if(typeof sstCargaHide==='function')sstCargaHide();

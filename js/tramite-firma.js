@@ -490,14 +490,9 @@ function tramitePasarAPorNotificar(expId,taskId){
   const wf=getTaskFirmaWf(t);
   if(!(wf.firma_fisica&&wf.firma_fisica.en)){notif('Marque primero como firmado','err');return;}
   const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-  const canal=String(wf.canal||'correo').trim();
   const notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
-  const esCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
-  const sinPlazo=esCorreo&&(
-    !notifPor
-    ||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))
-    ||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor))
-  );
+  // Si hay notificador designado (aunque sea el encargado/VITAL), siempre plazo 5 días
+  const sinPlazo=!notifPor&&(String(wf.canal||'').trim().toLowerCase()==='correo'||wf.notif_correo_entrega===true);
   let vence='';
   if(!sinPlazo){
     if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
@@ -513,14 +508,11 @@ function tramitePasarAPorNotificar(expId,taskId){
     notif_plazo_dias:sinPlazo?0:5,
     notif_sin_plazo:!!sinPlazo
   };
-  // Correo VITAL/encargado: no autoasignar
-  if(notifPor&&!sinPlazo)patch.notificar_por=notifPor;
-  else if(notifPor&&sinPlazo)patch.notificar_por_propuesto=notifPor;
+  if(notifPor){patch.notificar_por=notifPor;patch.notificar_por_propuesto=notifPor;}
   setTaskFirmaWf(expId,taskId,patch);
   if(typeof mutateTask==='function'){
     mutateTask(expId,taskId,function(tk){tramiteSincronizarParticipacionPostAprobacionFirma(tk);});
   }
-  notif(sinPlazo?'📬 Por notificar (correo · sin plazo de 5 días)':'📬 Quedó en «Por notificar»','ok');
   closeTaskModal();
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
@@ -1924,27 +1916,27 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
     const wfPrev=getTaskFirmaWf(t);
-    const canalPrev=String(wfPrev.canal||'').trim().toLowerCase();
-    const esCorreo=!!abrirNotif||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO)
-      ||wfPrev.notif_correo_entrega===true;
-    const sinPlazo=esCorreo&&(!notifPor||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor)));
+    // Opción 1 (notificar por correo ahora): sin plazo. Opción 2 (asignar quién notificará): siempre con plazo 5 días y notificar_por, aunque sea el encargado/VITAL.
+    const sinPlazo=!!abrirNotif;
     let vence='';
     if(!sinPlazo){
       if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
+      else if(typeof addDiasHabilesCO==='function')vence=addDiasHabilesCO(inicio,5);
       else{
         const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
       }
     }
+    const quienNotif=String(notifPor||wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
     const faseNotif=typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion';
     const ok=mutateTask(refId,taskId,function(tk){
       tk.requiereFirma=true;
       const prev=getTaskFirmaWf(tk);
       tk.firmaWf=Object.assign({},prev,{
         fase:faseNotif,
-        notificar_por:sinPlazo?'':(notifPor||prev.notificar_por||''),
-        notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-        canal:esCorreo?'correo':(prev.canal&&prev.canal!=='correo'?prev.canal:''),
-        notif_correo_entrega:!!esCorreo,
+        notificar_por:sinPlazo?'':quienNotif,
+        notificar_por_propuesto:quienNotif||prev.notificar_por_propuesto||'',
+        canal:sinPlazo?'correo':(prev.canal&&String(prev.canal).toLowerCase()!=='correo'?prev.canal:''),
+        notif_correo_entrega:!!sinPlazo,
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
         firma_director:{
           por:taskComentarioAutor(),
@@ -1976,10 +1968,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteAtajoFirmadoFile=null;
     if(!ok){notif('No se pudo actualizar la actividad','err');return;}
-    const esDirOk=(window._taskModalCtx&&window._taskModalCtx.directorRevisarPorFirmar)||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
-    if(!esDirOk)
-      notif((sinPlazo?'📬 Por notificar (correo · sin plazo 5 días)':'📬 Documento firmado — quedó en «Por notificar»')+(notifPor&&!sinPlazo?' · Notificará: '+notifPor:''),'ok');
-    try{if(typeof setActFiltro==='function')setActFiltro(sinPlazo?'porfirma':'pornotif');}catch(eF){}
+    try{if(typeof setActFiltro==='function')setActFiltro('pornotif');}catch(eF){}
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
     if(abrirNotif){
