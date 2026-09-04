@@ -1462,7 +1462,10 @@ function openTramiteAtajoFirmadoModal(expId,taskId){
  * Panel lateral: cargar documento firmado.
  * VITAL/encargado: tras elegir PDF → acordeón (1) notificar por correo · (2) asignar quién notifica.
  */
-function renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs){
+function renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs,ctxKey){
+  ctxKey=ctxKey||(typeof sstFileCtxKeyTramiteAtajoFirmado==='function'
+    ?sstFileCtxKeyTramiteAtajoFirmado(expId,taskId)
+    :('tramite-atajo-firmado:'+expId+':'+taskId));
   const docs=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e,t):[];
   const anexos=docs.filter(function(d){
     if(!d||d.excluido_notif)return false;
@@ -1471,13 +1474,22 @@ function renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs){
       ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(d));
   });
   const eid=escAttr(expId),tid=escAttr(taskId);
-  let h='<div id="atajo-firmado-docs-box" style="margin:8px 0 12px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
+  const it=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
+  const listo=!!(it&&(it.blob||it.blobUrl||it.state==='uploaded'||it.state==='uploading'||it.nombre));
+  let h='<div id="atajo-firmado-docs-box" data-atajo-ctx="'+escAttr(ctxKey)+'" data-atajo-exp="'+eid+'" data-atajo-task="'+tid+'" data-atajo-pqrs="'+(esPqrs?'1':'0')+'" style="margin:8px 0 12px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Documentos para notificar</div>';
-  h+='<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">El PDF firmado que cargue será el documento principal. Los anexos aprobados de la entrega se incluyen; puede quitar alguno si no aplica.</div>';
-  h+='<div class="sst-file-row" style="margin-bottom:6px">'+
-    '<span class="sst-file-row-name" title="PDF firmado">📄 Documento firmado (el que cargue arriba)</span>'+
-    '<span class="sst-file-row-ok" title="Se usará al confirmar">✓</span>'+
-    '</div>';
+  if(listo){
+    const lbl=String(it.nombre||'Documento firmado.pdf').trim();
+    const canPrev=!!(it.blobUrl||it.previewLink||it.driveLink||it.blob);
+    const previewBtn=canPrev
+      ?('<button type="button" class="btn bsm bic act-ico" onclick="sstFilePreview(\''+jsStr(ctxKey)+'\',\''+jsStr(it.id)+'\')" title="Ver documento">🔍</button>')
+      :'';
+    const delBtn='<button type="button" class="btn bsm bic act-ico bd2" onclick="atajoFirmadoQuitarPdfFirmado(\''+jsStr(ctxKey)+'\')" title="Quitar documento">🗑</button>';
+    h+='<div class="sst-file-row" style="margin-bottom:6px">'+
+      '<span class="sst-file-row-name" title="'+escAttr(lbl)+'">📄 '+escAttr(lbl)+'</span>'+
+      '<span class="sst-file-row-ok" title="Cargado">✓</span>'+
+      '<div class="sst-file-row-actions">'+previewBtn+delBtn+'</div></div>';
+  }
   if(anexos.length){
     h+='<div style="font-size:11px;font-weight:600;margin:8px 0 4px;color:var(--tx2)">Anexos aprobados ('+anexos.length+')</div>';
     anexos.forEach(function(d,i){
@@ -1495,11 +1507,37 @@ function renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs){
         '<span class="sst-file-row-ok" title="Aprobado">✓</span>'+
         '<div class="sst-file-row-actions">'+previewBtn+delBtn+'</div></div>';
     });
-  }else{
+  }else if(listo){
     h+='<div style="font-size:11px;color:var(--tx3);margin-top:4px">Sin anexos en la última entrega aprobada.</div>';
   }
   h+='</div>';
   return h;
+}
+function atajoFirmadoRefreshDocsBox(){
+  const box=document.getElementById('atajo-firmado-docs-box');
+  if(!box)return;
+  const expId=String(box.getAttribute('data-atajo-exp')||'').trim();
+  const taskId=String(box.getAttribute('data-atajo-task')||'').trim();
+  const ctxKey=String(box.getAttribute('data-atajo-ctx')||'').trim();
+  const esPqrs=box.getAttribute('data-atajo-pqrs')==='1';
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const wrap=document.createElement('div');
+  wrap.innerHTML=renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs,ctxKey);
+  if(wrap.firstChild)box.replaceWith(wrap.firstChild);
+}
+function atajoFirmadoQuitarPdfFirmado(ctxKey){
+  ctxKey=String(ctxKey||'').trim();
+  const it=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
+  if(it&&typeof sstFileRemove==='function'){
+    sstFileRemove(ctxKey,it.id,'tramite-atajo-firmado-list');
+  }
+  window._tramiteAtajoFirmadoFile=null;
+  const inp=document.getElementById('tramite-atajo-firmado-file');
+  if(inp)inp.value='';
+  atajoFirmadoRefreshDocsBox();
+  const post=document.getElementById('task-atajo-firmado-post');
+  if(post)post.style.display='none';
 }
 function atajoFirmadoVerDoc(url,nombre){
   url=String(url||'').trim();
@@ -1539,15 +1577,12 @@ function atajoFirmadoQuitarAnexo(expId,taskId,esPqrs,docKey){
     if(changed&&e&&!e._sin_expediente&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
     else if(changed&&typeof persistExpLocal==='function')persistExpLocal();
   }
-  const box=document.getElementById('atajo-firmado-docs-box');
-  if(box){
-    const wrap=document.createElement('div');
-    wrap.innerHTML=renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,!!esPqrs);
-    if(wrap.firstChild)box.replaceWith(wrap.firstChild);
-  }
+  atajoFirmadoRefreshDocsBox();
   notif('Anexo quitado de la notificación','ok');
 }
 window.renderAtajoFirmadoDocsAnexosHtml=renderAtajoFirmadoDocsAnexosHtml;
+window.atajoFirmadoRefreshDocsBox=atajoFirmadoRefreshDocsBox;
+window.atajoFirmadoQuitarPdfFirmado=atajoFirmadoQuitarPdfFirmado;
 window.atajoFirmadoVerDoc=atajoFirmadoVerDoc;
 window.atajoFirmadoQuitarAnexo=atajoFirmadoQuitarAnexo;
 
@@ -1585,7 +1620,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
       canal:'presencial',sinLabel:true,sinHint:true
     });
   }
-  const docsHtml=renderAtajoFirmadoDocsAnexosHtml(e,t,esPqrs?(e._exp||refId):refId,taskId,esPqrs);
+  const docsHtml=renderAtajoFirmadoDocsAnexosHtml(e,t,esPqrs?(e._exp||refId):refId,taskId,esPqrs,ctxKey);
   const pqrsExp=escAttr(esPqrs?(e._exp||refId):refId);
   const confCargar='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',false)';
   const confNotif='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',true)';
@@ -1626,8 +1661,8 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
     '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;width:100%" onclick="'+confCargar+'">📤 Cargar y pasar a Por notificar</button>';
 
   const postAcc=
-    accHtml(1,'Notificar por correo ahora',emailBlock,!!esCorreo)+
-    accHtml(2,'Asignar quién notificará',asignarBlock,!esCorreo);
+    accHtml(1,'Notificar por correo ahora',emailBlock,false)+
+    accHtml(2,'Asignar quién notificará',asignarBlock,false);
 
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
     '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
@@ -1738,17 +1773,23 @@ function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
   const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
   if(typeof sstFileInitPick==='function')sstFileInitPick('tramite-atajo-firmado-file');
+  const listEl=document.getElementById('tramite-atajo-firmado-list');
+  if(listEl)listEl.style.display='none';
   const syncPost=function(){
     const post=document.getElementById('task-atajo-firmado-post');
-    if(!post)return;
     const it=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
-    const listo=!!(it&&(it.blob||it.state==='uploaded'||it.state==='uploading'));
-    post.style.display=listo?'':'none';
+    const listo=!!(it&&(it.blob||it.blobUrl||it.state==='uploaded'||it.state==='uploading'||it.nombre));
+    if(post){
+      post.style.display=listo?'':'none';
+      // Acordeones cerrados al cargar
+      post.querySelectorAll('.task-decision-acc.is-open').forEach(function(el){el.classList.remove('is-open');});
+    }
+    if(typeof atajoFirmadoRefreshDocsBox==='function')atajoFirmadoRefreshDocsBox();
+    if(listEl)listEl.style.display='none';
   };
-  const listEl=document.getElementById('tramite-atajo-firmado-list');
   if(listEl){
     const obs=new MutationObserver(syncPost);
-    obs.observe(listEl,{childList:true,subtree:true});
+    obs.observe(listEl,{childList:true,subtree:true,characterData:true});
     window._taskReviewAtajoObs=obs;
   }
   syncPost();
