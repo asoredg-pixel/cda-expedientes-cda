@@ -1192,7 +1192,6 @@ function openTramiteDirectorAccionModal(expId,taskId,mode){
   }else if(mode==='ya_firmado'){
     titulo='✍️ Firma física — '+expLbl;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Confirmar firma física</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Cuando firmó el documento <strong>impreso</strong>. Queda en su paleta <strong>Firmados</strong>. VITAL/encargado verán ✍️✓ en «Por firmar» para cargar el escaneado.</div>'+
       infoReadonly+
       '<div class="pqrs-firma-actions">'+
       '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="tramiteDirectorMarcarYaFirmado(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">✍️ Confirmar firma física</button>'+
@@ -1436,12 +1435,38 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const eid=jsStr(refId),tid=jsStr(taskId);
   const e=tramiteFirmaExpCtx(t,expId);
   const esPqrs=e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+  const ctx=window._taskModalCtx||{};
+  const esDirRev=!!ctx.directorRevisarPorFirmar||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
+  // Director desde rail: panel lateral con carga → «Cargar y pasar para notificar»
+  if(esDirRev){
+    const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
+    const pick=typeof sstFilePickBlock==='function'
+      ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+      :'';
+    const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
+    let selNotif='';
+    if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
+      selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por||'',{
+        modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto,canal:wf.canal||'correo'
+      });
+    }
+    const confOnclick='directorCargarFirmadoDesdeRail(\''+escAttr(esPqrs?(e._exp||refId):refId)+'\',\''+tid+'\','+(esPqrs?'true':'false')+')';
+    return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
+      '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Pasará a <strong>Por notificar</strong>.</div>'+
+      '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
+      (selNotif?'<div style="margin-bottom:12px">'+selNotif+'</div>':'')+
+      '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
+      '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confOnclick+'">📤 Cargar y pasar para notificar</button>'+
+      '</div></div>';
+  }
   if(esPqrs){
     return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
       '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Documento firmado (PQRSD)</div>'+
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Cargue el PDF firmado o confirme la firma física desde el flujo PQRSD.</p>'+
-      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e" onclick="closeTaskModal();openPqrsDirectorFirmarModal(\''+escAttr(e._exp||refId)+'\')">📤 Abrir carga / firma</button>'+
+      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e" onclick="closeTaskModal();openPqrsDirectorFirmarModal(\''+escAttr(e._exp||refId)+'\',\'cargar\')">📤 Abrir carga / firma</button>'+
       '</div>';
   }
   const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
@@ -1493,6 +1518,29 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
     '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+postHtml+'</div></div>';
 }
+/** Director: confirma PDF firmado desde el panel lateral del rail → Por notificar. */
+async function directorCargarFirmadoDesdeRail(expId,taskId,esPqrs){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const refId=(t&&t.sinExpediente)?(t.codigo||expId):expId;
+  const file=typeof tramiteAtajoFirmadoGetPdfBlob==='function'?tramiteAtajoFirmadoGetPdfBlob(refId,taskId):null;
+  if(!file){notif('Seleccione el PDF firmado','err');return;}
+  const btn=document.getElementById('tramite-atajo-firmado-btn');
+  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  try{
+    if(esPqrs&&typeof pqrsDirectorConfirmarFirmado==='function'){
+      window._directorSignedFile=file;
+      await pqrsDirectorConfirmarFirmado(expId);
+      return;
+    }
+    await tramiteAtajoFirmadoConfirmar(refId,taskId,false,false,{keepOpen:false});
+  }catch(err){
+    notif('Error: '+String(err.message||err).slice(0,100),'err');
+    if(btn){btn.disabled=false;btn.textContent='📤 Cargar y pasar para notificar';}
+  }
+}
+window.directorCargarFirmadoDesdeRail=directorCargarFirmadoDesdeRail;
 function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
   opts=opts||{};
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;

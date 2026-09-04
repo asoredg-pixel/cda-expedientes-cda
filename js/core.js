@@ -5735,7 +5735,7 @@ function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t){
   if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Descargar documento para firmar digitalmente" onclick="descargarSoportesAprobadosTask(\''+eid+'\',\''+tidJs+'\')">⬇️</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Cargar documento firmado" onclick="closeTaskModal();openDirectorCargarFirmado(\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   h+='</nav>';
   return h;
 }
@@ -13615,12 +13615,12 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
           '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
         if(sel.url||sel.preview){
-          const ctxDir=window._taskModalCtx||{};
           const porImp=!!(opts.porFirmarVista||opts.showImprimirDoc||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)));
-          // Director en revisión por firmar: sin «Imprimir documento seleccionado» (usa ⬇️ del rail)
-          if(porImp&&!ctxDir.directorRevisarPorFirmar){
+          const esDirRev=!!opts.directorRevisarPorFirmar||!!((window._taskModalCtx||{}).directorRevisarPorFirmar);
+          // Director en revisión por firmar: sin 🖨️ (usa ⬇️ del rail)
+          if(porImp&&!esDirRev){
             docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="imprimirSoporteSeleccionadoTask(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Imprimir documento seleccionado">🖨️</button>';
-          }else if(!porImp){
+          }else if(!porImp&&!esDirRev){
             docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
           }
         }
@@ -16226,7 +16226,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const sopPanel=(chatOnly||soloGestion)?'':(
     isPqrsOrigenView
       ?(typeof renderPqrsOrigenReviewHtml==='function'?renderPqrsOrigenReviewHtml(e):'')
-      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e))})
+      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)),directorRevisarPorFirmar:!!directorRevisarPorFirmar})
   );
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
@@ -23348,9 +23348,7 @@ function openPqrsDirectorAccionModal(expId,mode){
   }else if(mode==='ya_firmado'){
     titulo='✍️ Firma física — '+expId;
     html='<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">Confirmar firma física</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Use esta opción cuando firmó el documento <strong>impreso</strong>. Queda en su paleta <strong>Firmados</strong>. VITAL/encargado verán ✍️✓ en «Por firmar» para cargar el escaneado con 📤.</div>'+
       _pqrsDirectorInfoFirmaReadonlyHtml(e,wf)+
-      '<div style="margin-bottom:12px;padding:10px;border:1px solid #86efac;border-radius:var(--r);background:#f0fdf4;font-size:12px">Al confirmar, el oficio queda en <strong>Firmados</strong>.</div>'+
       '<div class="pqrs-firma-actions">'+
       '<button type="button" class="btn bsm" style="background:#15803d;color:#fff;border-color:#15803d" onclick="pqrsDirectorMarcarFirmadoFisico(\''+escAttr(expId)+'\',{force:true})">✍️ Confirmar firma física</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
@@ -23631,7 +23629,7 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     }
     await _pqrsRenombrarDocsDriveWf(wf,'por_firmar');
     const porDir=responsableActivo||'DS DEGUV';
-    let notifPor=typeof _pqrsLeerNotifPorSel==='function'?(_pqrsLeerNotifPorSel('pqrs-notif-por-sel')||_pqrsLeerNotifPorSel('tramite-notif-por-sel')):'';
+    let notifPor=typeof _pqrsLeerNotifPorSel==='function'?(_pqrsLeerNotifPorSel('pqrs-notif-por-sel')||_pqrsLeerNotifPorSel('tramite-notif-por-sel')||_pqrsLeerNotifPorSel('tramite-atajo-notif-por-sel')):'';
     if(!notifPor)notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
     if(typeof pqrsAsegurarNotificadorSegunOficina==='function'){
       notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor);
