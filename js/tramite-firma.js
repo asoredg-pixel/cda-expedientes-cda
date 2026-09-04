@@ -1460,8 +1460,7 @@ function openTramiteAtajoFirmadoModal(expId,taskId){
 }
 /**
  * Panel lateral de revisión: cargar documento firmado (mismo UI que en 🧐 → 📤).
- * Director → PDF + quién notifica → Por notificar.
- * VITAL/encargado → PDF + (correo digitedo o quién notifica) → notificar ya o Por notificar.
+ * VITAL/encargado: tras elegir PDF → acordeón (1) notificar por correo · (2) asignar quién notifica (presencial/WhatsApp/aviso).
  */
 function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
@@ -1475,77 +1474,90 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
     ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
     :'';
   const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
-  const canal=String(wf.canal||'correo').trim().toLowerCase();
-  const esCorreo=canal===''||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  const canalRaw=String(wf.canal||'').trim().toLowerCase();
+  const notifCorreoFlag=wf.notif_correo_entrega===true||(t&&t.notifCorreoEntrega===true)
+    ||canalRaw==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalRaw===PQRS_WF_CANAL.CORREO);
+  const notifNoCorreoFlag=wf.notif_correo_entrega===false||(t&&t.notifCorreoEntrega===false)
+    ||['presencial','fisica','whatsapp','aviso'].indexOf(canalRaw)>=0;
+  const esCorreo=notifCorreoFlag||(!notifNoCorreoFlag&&(canalRaw===''||!!String(wf.email_to||wf.cuerpo||wf.email_body||'').trim()));
   const emailTo=String(wf.email_to||'').trim();
   const emailCc=String(wf.email_cc||'').trim();
   const emailBcc=String(wf.email_bcc||'').trim();
   const emailSubj=String(wf.email_subject||wf.asunto||'').trim();
   const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
+  const tieneDatosCorreo=!!(emailTo||emailCc||emailBcc||emailSubj||cuerpo);
+  const destDef=emailTo||(e&&typeof pqrsCorreosCiudadano==='function'?(pqrsCorreosCiudadano(e)||[]).join(', '):'')
+    ||(typeof taskReviewCorreosNotificacion==='function'?taskReviewCorreosNotificacion(e,t).join(', '):'');
+  const asuntoDef=emailSubj||((t&&(t.actividad||t.desc))?('Notificación — '+(t.actividad||t.desc)+(e&&e._exp?' — '+e._exp:'')):'Documento firmado');
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
     selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por||'',{
-      modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),canal:esCorreo?'correo':canal
+      modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),canal:'presencial',sinLabel:true
     });
   }
+  const docsPrev=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e,t):[];
+  const anexosHtml=typeof renderAdjuntosNotificacionPreviewHtml==='function'
+    ?renderAdjuntosNotificacionPreviewHtml(docsPrev,{title:'📎 Documento y anexos aprobados (se enviarán / quedarán disponibles)'})
+    :'';
   const pqrsExp=escAttr(esPqrs?(e._exp||refId):refId);
   const confCargar='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',false)';
   const confNotif='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',true)';
+  const accHtml=typeof renderTaskReviewAprobarAccHtml==='function'?renderTaskReviewAprobarAccHtml:function(n,tit,body,open){
+    return '<div class="task-decision-acc'+(open?' is-open':'')+'"><button type="button" class="task-decision-acc-hdr" onclick="taskReviewToggleAprobarAcc(this)"><span class="task-decision-acc-arrow">▸</span><span class="task-decision-acc-tit">'+n+'. '+tit+'</span></button><div class="task-decision-acc-body">'+body+'</div></div>';
+  };
+  const canalMedio=canalRaw&&canalRaw!=='correo'?canalRaw:'presencial';
+  const medioOpts=['presencial','whatsapp','aviso'].map(function(m){
+    const lbl=m==='whatsapp'?'WhatsApp':(m==='aviso'?'Aviso':'Presencial');
+    return '<option value="'+m+'"'+(canalMedio===m||(canalMedio==='fisica'&&m==='presencial')?' selected':'')+'>'+lbl+'</option>';
+  }).join('');
 
-  // Director: mismo panel que pide el usuario (PDF + quién notifica)
+  // Director: PDF + quién notifica
   if(esDirRev){
     return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
       '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Pasará a <strong>Por notificar</strong>.</div>'+
       '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-      (selNotif?'<div style="margin-bottom:12px">'+selNotif+'</div>':'')+
+      (anexosHtml||'')+
+      (selNotif?'<div style="margin:12px 0">'+selNotif+'</div>':'')+
       '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
       '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confCargar+'">📤 Cargar y pasar para notificar</button>'+
       '</div></div>';
   }
 
-  // VITAL / encargado: correo → editar y notificar; otro medio → quién notifica
-  let midHtml='';
-  let postBtns='';
-  if(esCorreo){
-    const destDef=emailTo||(e&&typeof pqrsCorreosCiudadano==='function'?(pqrsCorreosCiudadano(e)||[]).join(', '):'');
-    const asuntoDef=emailSubj||((t&&(t.actividad||t.desc))?(('Documento firmado — '+(t.actividad||t.desc))+(e&&e._exp?' — '+e._exp:'')):'Documento firmado');
-    midHtml=
-      '<div class="task-decision-block" style="margin-bottom:12px"><div class="task-decision-block-tit">Correo de notificación</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Datos digitados por el encargado. Puede ajustarlos y notificar de una vez.</div>'+
-      '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
-      '<input type="text" id="tramite-atajo-email-to" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
-      '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-      '<input type="text" id="tramite-atajo-email-cc" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
-      '<div class="fld" style="margin-bottom:6px"><label>Cco <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-      '<input type="text" id="tramite-atajo-email-bcc" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
-      '<div class="fld" style="margin-bottom:6px"><label>Asunto</label>'+
-      '<input type="text" id="tramite-atajo-email-subject" value="'+escAttr(asuntoDef)+'" style="width:100%;box-sizing:border-box"></div>'+
-      '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo</label>'+
-      '<textarea id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
-      '</div>';
-    postBtns=
-      '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>'+
-        '<button type="button" class="btn bsm" onclick="'+confCargar+'">✓ Solo cargar → Por notificar</button>'+
-      '</div>';
-  }else{
-    midHtml=
-      '<div class="task-decision-block" style="margin-bottom:12px"><div class="task-decision-block-tit">Quién notificará</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Si el encargado ya eligió a alguien, aparece sugerido. Puede confirmarlo o cambiarlo.</div>'+
-      (selNotif||'')+
-      '</div>';
-    postBtns=
-      '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confCargar+'">📤 Cargar y pasar para notificar</button>';
-  }
+  const emailBlock=
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">'+(tieneDatosCorreo
+      ?'Datos diligenciados en la entrega (editables). Supervíselos y ajuste si hace falta.'
+      :'Complete los datos del correo para notificar al ciudadano.')+'</div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
+    '<input type="text" id="tramite-atajo-email-to" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+    '<input type="text" id="tramite-atajo-email-cc" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cco <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+    '<input type="text" id="tramite-atajo-email-bcc" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Asunto</label>'+
+    '<input type="text" id="tramite-atajo-email-subject" value="'+escAttr(asuntoDef)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo</label>'+
+    '<textarea id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
+    '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5;width:100%" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>';
+
+  const asignarBlock=
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">El PDF firmado quedará en <strong>Por notificar</strong> para quien designe (responsable, VITAL o encargado). Medio: presencial, WhatsApp o aviso.</div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Medio de notificación</label>'+
+    '<select id="tramite-atajo-canal-medio" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+medioOpts+'</select></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Quién notificará</label>'+(selNotif||'<div style="font-size:11px;color:var(--rd)">No hay opciones de notificador</div>')+'</div>'+
+    '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;width:100%" onclick="'+confCargar+'">📤 Cargar y pasar a Por notificar</button>';
+
+  const postAcc=
+    accHtml(1,'Notificar por correo ahora',emailBlock,!!esCorreo)+
+    accHtml(2,'Asignar quién notificará (presencial / WhatsApp / aviso)',asignarBlock,!esCorreo);
+
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
     '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Use ⇅ en el rail para ver anexos de la entrega.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Luego elija cómo continuar.</div>'+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-    midHtml+
-    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+postBtns+'</div></div>';
+    (anexosHtml||'')+
+    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none;margin-top:10px">'+postAcc+'</div></div>';
 }
 /** Guarda Para/Cc/Cco/asunto/cuerpo digitados en el panel atajo (si existen). */
 function atajoFirmadoPersistEmailFields(expId,taskId,esPqrs){
@@ -1557,8 +1569,29 @@ function atajoFirmadoPersistEmailFields(expId,taskId,esPqrs){
     email_bcc:String((document.getElementById('tramite-atajo-email-bcc')||{}).value||'').trim(),
     email_subject:String((document.getElementById('tramite-atajo-email-subject')||{}).value||'').trim(),
     cuerpo:String((document.getElementById('tramite-atajo-email-cuerpo')||{}).value||'').trim(),
-    canal:'correo'
+    email_body:String((document.getElementById('tramite-atajo-email-cuerpo')||{}).value||'').trim(),
+    canal:'correo',
+    notif_correo_entrega:true
   };
+  if(esPqrs){
+    const e=typeof getExpById==='function'?getExpById(expId):null;
+    if(e&&typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,patch);
+    return;
+  }
+  if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(expId,taskId,patch);
+}
+/** Persiste medio + quién notificará (opción 2 del acordeón). */
+function atajoFirmadoPersistAsignarFields(expId,taskId,esPqrs){
+  const medio=String((document.getElementById('tramite-atajo-canal-medio')||{}).value||'presencial').trim()||'presencial';
+  const notifPor=String((document.getElementById('tramite-atajo-notif-por-sel')||{}).value||'').trim();
+  const patch={
+    canal:medio,
+    notif_correo_entrega:false
+  };
+  if(notifPor){
+    patch.notificar_por=notifPor;
+    patch.notificar_por_propuesto=notifPor;
+  }
   if(esPqrs){
     const e=typeof getExpById==='function'?getExpById(expId):null;
     if(e&&typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,patch);
@@ -1575,15 +1608,30 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   const refId=(t&&t.sinExpediente)?(t.codigo||expId):expId;
   const file=typeof tramiteAtajoFirmadoGetPdfBlob==='function'?tramiteAtajoFirmadoGetPdfBlob(refId,taskId):null;
   if(!file){notif('Seleccione el PDF firmado','err');return;}
-  atajoFirmadoPersistEmailFields(esPqrs?expId:refId,taskId,!!esPqrs);
-  const btn=document.getElementById('tramite-atajo-firmado-btn');
-  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  if(abrirNotif){
+    const to=String((document.getElementById('tramite-atajo-email-to')||{}).value||'').trim();
+    if(!to){notif('Indique al menos un correo en «Para»','err');return;}
+    const cuerpo=String((document.getElementById('tramite-atajo-email-cuerpo')||{}).value||'').trim();
+    if(!cuerpo){notif('Indique el cuerpo del correo','err');return;}
+    atajoFirmadoPersistEmailFields(esPqrs?expId:refId,taskId,!!esPqrs);
+  }else{
+    const notifPor=String((document.getElementById('tramite-atajo-notif-por-sel')||{}).value||'').trim();
+    if(!notifPor&&document.getElementById('tramite-atajo-notif-por-sel')){
+      notif('Seleccione quién notificará','err');return;
+    }
+    atajoFirmadoPersistAsignarFields(esPqrs?expId:refId,taskId,!!esPqrs);
+  }
+  const btns=document.querySelectorAll('#task-atajo-firmado-post .btn.bp, #tramite-atajo-firmado-btn');
+  btns.forEach(function(b){b.disabled=true;});
+  const btn=document.getElementById('tramite-atajo-firmado-btn')||btns[0];
+  if(btn)btn.textContent='Procesando…';
   try{
     if(esPqrs&&typeof pqrsDirectorConfirmarFirmado==='function'){
       window._directorSignedFile=file;
       const ok=await pqrsDirectorConfirmarFirmado(expId,!!abrirNotif);
       if(ok===false){
-        if(btn){btn.disabled=false;btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar para notificar';}
+        btns.forEach(function(b){b.disabled=false;});
+        if(btn)btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar a Por notificar';
         return;
       }
       if(abrirNotif){
@@ -1596,11 +1644,13 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
     await tramiteAtajoFirmadoConfirmar(refId,taskId,false,abrirNotif,{keepOpen:false});
   }catch(err){
     notif('Error: '+String(err.message||err).slice(0,100),'err');
-    if(btn){btn.disabled=false;btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar para notificar';}
+    btns.forEach(function(b){b.disabled=false;});
+    if(btn)btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar a Por notificar';
   }
 }
 window.cargarFirmadoDesdeRail=cargarFirmadoDesdeRail;
 window.atajoFirmadoPersistEmailFields=atajoFirmadoPersistEmailFields;
+window.atajoFirmadoPersistAsignarFields=atajoFirmadoPersistAsignarFields;
 /** @deprecated use cargarFirmadoDesdeRail */
 async function directorCargarFirmadoDesdeRail(expId,taskId,esPqrs){
   return cargarFirmadoDesdeRail(expId,taskId,esPqrs,false);
@@ -1757,8 +1807,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
     const wfPrev=getTaskFirmaWf(t);
-    const canalPrev=String(wfPrev.canal||'correo').trim().toLowerCase();
-    const esCorreo=canalPrev===''||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO);
+    const medioUi=String((document.getElementById('tramite-atajo-canal-medio')||{}).value||'').trim();
+    const canalPrev=String(medioUi||wfPrev.canal||'correo').trim().toLowerCase();
+    const esCorreo=!!abrirNotif||canalPrev===''||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO);
     const sinPlazo=esCorreo&&(!notifPor||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor)));
     let vence='';
     if(!sinPlazo){
@@ -1775,7 +1826,8 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
         fase:faseNotif,
         notificar_por:sinPlazo?'':(notifPor||prev.notificar_por||''),
         notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-        canal:esCorreo?'correo':(canalPrev||prev.canal||'correo'),
+        canal:esCorreo?'correo':(canalPrev||prev.canal||'presencial'),
+        notif_correo_entrega:!!esCorreo,
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
         firma_director:{
           por:taskComentarioAutor(),

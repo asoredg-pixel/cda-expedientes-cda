@@ -1291,7 +1291,16 @@ function pqrsAccionesTablaHtml(e){
   }
   if(fase===PQRS_WF.POR_FIRMAR||fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION){
     if(typeof esCargoVital==='function'&&esCargoVital()){
-      const tidAg=String((typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}).task_id||'').trim();
+      const wfAg=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+      let tidAg=String(wfAg.task_id||'').trim();
+      if(!tidAg&&typeof getPqrsAtencionTask==='function'){
+        const tAg=getPqrsAtencionTask(e);
+        if(tAg)tidAg=String(tAg.id||'').trim();
+      }
+      if(!tidAg&&Array.isArray(e.tasks)){
+        const tHit=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+        if(tHit)tidAg=String(tHit.id||'').trim();
+      }
       if(tidAg&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(e._exp,tidAg)+' ';
     }
   }

@@ -5028,20 +5028,22 @@ function taskAgendaResumen(expId,taskId){
 function puedeAgendarTask(t){
   if(!t)return false;
   if(!puedeVerTabAgenda())return false;
-  // VITAL en «Por firmar»: agenda aunque la actividad esté proyectada como Atendida
-  const vitalPorFirmar=typeof esCargoVital==='function'&&esCargoVital()&&(
-    (typeof taskFirmaEnPorFirmar==='function'&&(taskFirmaEnPorFirmar(t)||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
-    ||(function(){
-      const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-      if(!e)return false;
-      const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
-      return f===PQRS_WF.POR_FIRMAR||f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION
-        ||(typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e))
-        ||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e));
-    })()
+  // VITAL (y vista por firmar): agenda aunque la actividad esté proyectada como Atendida
+  const eAg=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  const esPqrsAg=eAg&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eAg);
+  const pqrsPorFirmarAg=esPqrsAg&&(
+    (typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(eAg))
+    ||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(eAg))
+    ||(typeof pqrsWorkflowFase==='function'&&(pqrsWorkflowFase(eAg)===PQRS_WF.POR_FIRMAR
+      ||pqrsWorkflowFase(eAg)===PQRS_WF.PARA_FIRMA
+      ||pqrsWorkflowFase(eAg)===PQRS_WF.VITAL_GESTION))
   );
-  if(estadoTask(t)==='Atendida'&&!vitalPorFirmar)return false;
-  if(vitalPorFirmar)return true;
+  const tramPorFirmarAg=(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))
+    ||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t));
+  const vitalPorFirmar=typeof esCargoVital==='function'&&esCargoVital()&&(tramPorFirmarAg||pqrsPorFirmarAg);
+  const encPorFirmar=esVistaActividadesDepto()&&!esModoResponsable()&&(tramPorFirmarAg||pqrsPorFirmarAg);
+  if(estadoTask(t)==='Atendida'&&!vitalPorFirmar&&!encPorFirmar)return false;
+  if(vitalPorFirmar||encPorFirmar)return true;
   if(esModoResponsable()){
     if(taskUsuarioEsAsignado(t,responsableActivo))return true;
     return false;
@@ -19406,8 +19408,15 @@ function renderActRowToolbarHtml(t,expAct){
   const puedeNotifYo=(esPqrsNotifResp&&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
     ||(esTramNotifResp&&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t));
   const filtroActRow=document.getElementById('f-act-est')?String(document.getElementById('f-act-est').value||''):'';
+  const enPorFirmarVistaEarly=(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
+      &&((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
+    ||(expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)
+      &&((typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(expAct))||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct))));
+  const isVitalRowEarly=typeof esCargoVital==='function'&&esCargoVital();
+  // VITAL/encargado en «Por firmar» (incl. PQRSD proyectada Atendida): no cortar el toolbar
+  const keepPorFirmaToolbar=enPorFirmarVistaEarly&&(isVitalRowEarly||esVistaActividadesDepto()||(esModoResponsable()&&isVitalRowEarly));
   // Atendidas: solo 🔍. Por notificar / Por ejecutar (deuda notif): 🔍 + 📤
-  if(esRespAtendida||puedeNotifYo||esPqrsNotifResp||esTramNotifResp){
+  if(!keepPorFirmaToolbar&&(esRespAtendida||puedeNotifYo||esPqrsNotifResp||esTramNotifResp)){
     let actsA='<span class="sst-act-toolbar">';
     const esPqrsA=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
     if((t.soportes||[]).length>0||esPqrsA||!t.sinExpediente||esTramNotifResp)
@@ -19483,8 +19492,8 @@ function renderActRowToolbarHtml(t,expAct){
       &&((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
     ||(esPqrs&&expAct&&((typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(expAct))||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct))));
   const isVitalRow=typeof esCargoVital==='function'&&esCargoVital();
-  // VITAL en «Por firmar»: chat, notas y organizar día a la izquierda de 🖨️📤
-  const showVitalPorFirmaActs=enPorFirmarVista&&isVitalRow;
+  // VITAL / encargado en «Por firmar»: chat, notas y organizar día (también PQRSD)
+  const showVitalPorFirmaActs=enPorFirmarVista&&(isVitalRow||esVistaActividadesDepto());
   if(showChat){
     acts+=taskChatBtnHtml(t.exp,t.id,t);
     acts+=taskNotasInternasBtnHtml(t.exp,t.id);
@@ -19500,7 +19509,7 @@ function renderActRowToolbarHtml(t,expAct){
     acts+=taskCoEjecutorBtnHtml(t.exp,t.id);
     if(sol)acts+='<span class="solicitud-pill" title="Solicitud enviada">📩</span>';
   }
-  if((yo&&est!=='Atendida')||showVitalPorFirmaActs)acts+=taskAgendaBtnHtml(t.exp,t.id);
+  if((yo&&est!=='Atendida')||showVitalPorFirmaActs||(enPorFirmarVista&&isVitalRow))acts+=taskAgendaBtnHtml(t.exp,t.id);
   // En «Por firmar» la vista de docs es 🖨️ (no duplicar 🔍)
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)&&!enPorFirmarVista)
     acts+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);
@@ -23360,6 +23369,13 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
         if(typeof pqrsNombresVital==='function')(pqrsNombresVital()||[]).forEach(add);
       }
     }
+  }
+  // VITAL / encargado siempre elegibles al asignar notificador (presencial/WhatsApp/aviso)
+  if(opts.todosResponsables||!soloCorreo){
+    add(enc);
+    if(typeof getEncargadoDepto==='function')add(getEncargadoDepto(ofi||'guaviare'));
+    if(typeof pqrsNombresVital==='function'&&!ofiSinVital)(pqrsNombresVital()||[]).forEach(add);
+    if(typeof getResponsablesOficinaPqrs==='function')(getResponsablesOficinaPqrs(ofi||'guaviare')||[]).forEach(add);
   }
   // En oficinas autónomas nunca listar VITAL
   if(ofiSinVital&&typeof pqrsNombresVital==='function'){
