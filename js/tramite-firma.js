@@ -1459,9 +1459,98 @@ function openTramiteAtajoFirmadoModal(expId,taskId){
   window._taskModalCtx={expId:refId,taskId,mode:'tramiteAtajoFirmado'};
 }
 /**
- * Panel lateral de revisión: cargar documento firmado (mismo UI que en 🧐 → 📤).
- * VITAL/encargado: tras elegir PDF → acordeón (1) notificar por correo · (2) asignar quién notifica (presencial/WhatsApp/aviso).
+ * Panel lateral: cargar documento firmado.
+ * VITAL/encargado: tras elegir PDF → acordeón (1) notificar por correo · (2) asignar quién notifica.
  */
+function renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,esPqrs){
+  const docs=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e,t):[];
+  const anexos=docs.filter(function(d){
+    if(!d||d.excluido_notif)return false;
+    return d._notif_rol==='anexo'
+      ||(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d))
+      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(d));
+  });
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  let h='<div id="atajo-firmado-docs-box" style="margin:8px 0 12px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
+  h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Documentos para notificar</div>';
+  h+='<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">El PDF firmado que cargue será el documento principal. Los anexos aprobados de la entrega se incluyen; puede quitar alguno si no aplica.</div>';
+  h+='<div class="sst-file-row" style="margin-bottom:6px">'+
+    '<span class="sst-file-row-name" title="PDF firmado">📄 Documento firmado (el que cargue arriba)</span>'+
+    '<span class="sst-file-row-ok" title="Se usará al confirmar">✓</span>'+
+    '</div>';
+  if(anexos.length){
+    h+='<div style="font-size:11px;font-weight:600;margin:8px 0 4px;color:var(--tx2)">Anexos aprobados ('+anexos.length+')</div>';
+    anexos.forEach(function(d,i){
+      const n=d.anexo_n||(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(d,anexos):0)||(i+1);
+      const lbl=String(d.label||d.nombre||('Anexo '+n)).trim();
+      const url=String(d.driveLink||d.previewLink||d.url||d.preview||'').trim();
+      const key=String(d.id||d.soporteId||d.fileId||d.driveFileId||d.driveLink||lbl||i).trim();
+      const keyJs=jsStr(key);
+      const previewBtn=url
+        ?('<button type="button" class="btn bsm bic act-ico" onclick="atajoFirmadoVerDoc(\''+escAttr(url)+'\',\''+escAttr(lbl)+'\')" title="Ver anexo">🔍</button>')
+        :'';
+      const delBtn='<button type="button" class="btn bsm bic act-ico bd2" onclick="atajoFirmadoQuitarAnexo(\''+eid+'\',\''+tid+'\','+(esPqrs?'true':'false')+',\''+keyJs+'\')" title="Quitar anexo">🗑</button>';
+      h+='<div class="sst-file-row" style="margin-bottom:4px" data-atajo-anx="'+escAttr(key)+'">'+
+        '<span class="sst-file-row-name" title="'+escAttr(lbl)+'">📎 '+escAttr(lbl)+'</span>'+
+        '<span class="sst-file-row-ok" title="Aprobado">✓</span>'+
+        '<div class="sst-file-row-actions">'+previewBtn+delBtn+'</div></div>';
+    });
+  }else{
+    h+='<div style="font-size:11px;color:var(--tx3);margin-top:4px">Sin anexos en la última entrega aprobada.</div>';
+  }
+  h+='</div>';
+  return h;
+}
+function atajoFirmadoVerDoc(url,nombre){
+  url=String(url||'').trim();
+  if(!url){notif('No hay enlace para ver el documento','warn');return;}
+  if(typeof openPqrsDocViewer==='function')openPqrsDocViewer(url,nombre||'Documento');
+  else window.open(url,'_blank','noopener');
+}
+function atajoFirmadoDocKey(d){
+  if(!d)return'';
+  return String(d.id||d.soporteId||d.fileId||d.driveFileId||d.driveLink||d.previewLink||d.url||d.nombre||d.label||'').trim();
+}
+function atajoFirmadoQuitarAnexo(expId,taskId,esPqrs,docKey){
+  docKey=String(docKey||'').trim();
+  if(!docKey)return;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  let changed=false;
+  if(esPqrs&&e&&typeof getPqrsWorkflow==='function'&&typeof setPqrsWorkflow==='function'){
+    const wf=getPqrsWorkflow(e);
+    const docs=Array.isArray(wf.documentos)?wf.documentos.slice():[];
+    docs.forEach(function(d){
+      if(!d)return;
+      if(atajoFirmadoDocKey(d)===docKey||String(d.driveLink||'')===docKey||String(d.fileId||d.driveFileId||'')===docKey){
+        d.excluido_notif=true;changed=true;
+      }
+    });
+    if(changed)setPqrsWorkflow(e,{documentos:docs});
+  }
+  if(t&&Array.isArray(t.soportes)){
+    t.soportes.forEach(function(s){
+      if(!s)return;
+      const k=atajoFirmadoDocKey(s);
+      if(k===docKey||String(s.id||'')===docKey){
+        s.excluido_notif=true;changed=true;
+      }
+    });
+    if(changed&&e&&!e._sin_expediente&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+    else if(changed&&typeof persistExpLocal==='function')persistExpLocal();
+  }
+  const box=document.getElementById('atajo-firmado-docs-box');
+  if(box){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=renderAtajoFirmadoDocsAnexosHtml(e,t,expId,taskId,!!esPqrs);
+    if(wrap.firstChild)box.replaceWith(wrap.firstChild);
+  }
+  notif('Anexo quitado de la notificación','ok');
+}
+window.renderAtajoFirmadoDocsAnexosHtml=renderAtajoFirmadoDocsAnexosHtml;
+window.atajoFirmadoVerDoc=atajoFirmadoVerDoc;
+window.atajoFirmadoQuitarAnexo=atajoFirmadoQuitarAnexo;
+
 function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
   const eid=jsStr(refId),tid=jsStr(taskId);
@@ -1492,33 +1581,25 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
     selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por||'',{
-      modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),canal:'presencial',sinLabel:true
+      modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),
+      canal:'presencial',sinLabel:true,sinHint:true
     });
   }
-  const docsPrev=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e,t):[];
-  const anexosHtml=typeof renderAdjuntosNotificacionPreviewHtml==='function'
-    ?renderAdjuntosNotificacionPreviewHtml(docsPrev,{title:'📎 Documento y anexos aprobados (se enviarán / quedarán disponibles)'})
-    :'';
+  const docsHtml=renderAtajoFirmadoDocsAnexosHtml(e,t,esPqrs?(e._exp||refId):refId,taskId,esPqrs);
   const pqrsExp=escAttr(esPqrs?(e._exp||refId):refId);
   const confCargar='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',false)';
   const confNotif='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',true)';
   const accHtml=typeof renderTaskReviewAprobarAccHtml==='function'?renderTaskReviewAprobarAccHtml:function(n,tit,body,open){
     return '<div class="task-decision-acc'+(open?' is-open':'')+'"><button type="button" class="task-decision-acc-hdr" onclick="taskReviewToggleAprobarAcc(this)"><span class="task-decision-acc-arrow">▸</span><span class="task-decision-acc-tit">'+n+'. '+tit+'</span></button><div class="task-decision-acc-body">'+body+'</div></div>';
   };
-  const canalMedio=canalRaw&&canalRaw!=='correo'?canalRaw:'presencial';
-  const medioOpts=['presencial','whatsapp','aviso'].map(function(m){
-    const lbl=m==='whatsapp'?'WhatsApp':(m==='aviso'?'Aviso':'Presencial');
-    return '<option value="'+m+'"'+(canalMedio===m||(canalMedio==='fisica'&&m==='presencial')?' selected':'')+'>'+lbl+'</option>';
-  }).join('');
 
-  // Director: PDF + quién notifica
   if(esDirRev){
     return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
       '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
       '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-      (anexosHtml||'')+
-      (selNotif?'<div style="margin:12px 0">'+selNotif+'</div>':'')+
+      docsHtml+
+      (selNotif?'<div class="fld" style="margin:12px 0"><label>Quién notificará</label>'+selNotif+'</div>':'')+
       '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
       '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confCargar+'">📤 Cargar y pasar para notificar</button>'+
       '</div></div>';
@@ -1541,22 +1622,19 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
     '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5;width:100%" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>';
 
   const asignarBlock=
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">El PDF firmado quedará en <strong>Por notificar</strong> para quien designe (responsable, VITAL o encargado). Medio: presencial, WhatsApp o aviso.</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Medio de notificación</label>'+
-    '<select id="tramite-atajo-canal-medio" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)">'+medioOpts+'</select></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Quién notificará</label>'+(selNotif||'<div style="font-size:11px;color:var(--rd)">No hay opciones de notificador</div>')+'</div>'+
     '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;width:100%" onclick="'+confCargar+'">📤 Cargar y pasar a Por notificar</button>';
 
   const postAcc=
     accHtml(1,'Notificar por correo ahora',emailBlock,!!esCorreo)+
-    accHtml(2,'Asignar quién notificará (presencial / WhatsApp / aviso)',asignarBlock,!esCorreo);
+    accHtml(2,'Asignar quién notificará',asignarBlock,!esCorreo);
 
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
     '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Luego elija cómo continuar.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Cargue el PDF ya firmado. Luego elija cómo continuar.</div>'+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-    (anexosHtml||'')+
+    docsHtml+
     '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none;margin-top:10px">'+postAcc+'</div></div>';
 }
 /** Guarda Para/Cc/Cco/asunto/cuerpo digitados en el panel atajo (si existen). */
@@ -1580,12 +1658,10 @@ function atajoFirmadoPersistEmailFields(expId,taskId,esPqrs){
   }
   if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(expId,taskId,patch);
 }
-/** Persiste medio + quién notificará (opción 2 del acordeón). */
+/** Persiste quién notificará (opción 2). El medio lo reporta el responsable al notificar. */
 function atajoFirmadoPersistAsignarFields(expId,taskId,esPqrs){
-  const medio=String((document.getElementById('tramite-atajo-canal-medio')||{}).value||'presencial').trim()||'presencial';
   const notifPor=String((document.getElementById('tramite-atajo-notif-por-sel')||{}).value||'').trim();
   const patch={
-    canal:medio,
     notif_correo_entrega:false
   };
   if(notifPor){
@@ -1807,9 +1883,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     }
     const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
     const wfPrev=getTaskFirmaWf(t);
-    const medioUi=String((document.getElementById('tramite-atajo-canal-medio')||{}).value||'').trim();
-    const canalPrev=String(medioUi||wfPrev.canal||'correo').trim().toLowerCase();
-    const esCorreo=!!abrirNotif||canalPrev===''||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO);
+    const canalPrev=String(wfPrev.canal||'').trim().toLowerCase();
+    const esCorreo=!!abrirNotif||canalPrev==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canalPrev===PQRS_WF_CANAL.CORREO)
+      ||wfPrev.notif_correo_entrega===true;
     const sinPlazo=esCorreo&&(!notifPor||(typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t))||(typeof pqrsNombreEsVital==='function'&&pqrsNombreEsVital(notifPor)));
     let vence='';
     if(!sinPlazo){
@@ -1826,7 +1902,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
         fase:faseNotif,
         notificar_por:sinPlazo?'':(notifPor||prev.notificar_por||''),
         notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-        canal:esCorreo?'correo':(canalPrev||prev.canal||'presencial'),
+        canal:esCorreo?'correo':(prev.canal&&prev.canal!=='correo'?prev.canal:''),
         notif_correo_entrega:!!esCorreo,
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},
         firma_director:{

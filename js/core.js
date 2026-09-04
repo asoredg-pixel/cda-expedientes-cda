@@ -23403,7 +23403,7 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
   });
   let label='Quién notificará al ciudadano';
   let sub='';
-  let hint='Tras la firma del Director, esa persona verá la actividad en <strong>Por notificar</strong>.';
+  let hint='';
   if(ofiSinVital){
     hint='<strong>Esta oficina notifica:</strong> correo, personal, aviso o WhatsApp. <strong>VITAL solo notifica PQRSD de NCA.</strong>';
   }else if(soloCorreo){
@@ -23414,25 +23414,24 @@ function _pqrsOpcionesNotificadorHtml(e,wf,selected,opts){
     sub=ofiSinVital
       ?' <span style="font-weight:400;color:var(--tx3)">(sugerencia — la oficina puede cambiarla)</span>'
       :' <span style="font-weight:400;color:var(--tx3)">(sugerencia — VITAL / encargado pueden cambiarla)</span>';
-    hint=ofiSinVital||soloCorreo?hint:'Solo aplica a oficio firmado. Quien quede designado verá la actividad en <strong>Por notificar</strong> cuando el Director ya haya firmado.';
+    hint=ofiSinVital||soloCorreo?hint:'';
   }else if(modo==='revision'){
     label='Quién notificará';
     sub='';
     hint=(ofiSinVital||soloCorreo)?hint:(propuesto
-      ?('El responsable sugirió: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo. Solo se refleja en actividades del notificador cuando pase a <strong>Por notificar</strong>.')
+      ?('El responsable sugirió: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo.')
       :'Opcional. Si no elige, VITAL / encargado lo definirán al pasar a firma.');
   }else if(modo==='firma'){
-    label='Quién notificará al ciudadano';
-    sub=' <span style="font-weight:400;color:var(--tx3)">(después de la firma del Director)</span>';
-    hint=(ofiSinVital||soloCorreo)?hint:(propuesto
-      ?('Selección previa: <strong>'+escAttr(propuesto)+'</strong>'+(wf&&wf.entregado_por?' (propuesta de '+escAttr(wf.entregado_por)+')':'')+'. Puede confirmarla o cambiarla.')
-      :hint);
+    label='Quién notificará';
+    sub='';
+    hint=(ofiSinVital||soloCorreo)?hint:'';
   }else if(modo==='director'){
     hint=(ofiSinVital||soloCorreo)?hint:(propuesto
       ?('Ya hay alguien asignado para notificar: <strong>'+escAttr(propuesto)+'</strong>. Puede confirmarlo o cambiarlo antes de pasar a Por notificar.')
       :hint);
   }
   if(opts.sinLabel){label='';sub='';}
+  if(opts.sinHint)hint='';
   const labelHtml=label?('<label>'+label+sub+'</label>'):'';
   return '<div class="fld" style="margin-bottom:10px" id="'+escAttr(selId)+'-wrap">'+labelHtml+
     '<select id="'+escAttr(selId)+'" style="width:100%;max-width:360px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;'+(label?'margin-top:4px':'')+'">'+optsHtml+'</select>'+
@@ -24749,6 +24748,7 @@ function collectDocsParaNotificacionCorreo(e,t){
     const docs=(wf.documentos||[]).filter(function(d){
       return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url)
         &&d.tipo!=='notificacion_soporte'
+        &&!d.excluido_notif
         &&!(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d));
     });
     // Última entrega_n si existe (correcciones: solo anexos/docs de esa entrega + oficio firmado vigente)
@@ -24786,8 +24786,8 @@ function collectDocsParaNotificacionCorreo(e,t){
     const sops=typeof soportesVisiblesParaVista==='function'
       ?soportesVisiblesParaVista(t,{soloAprobados:true})
       :(t.soportes||[]).filter(function(s){return s&&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s));});
-    const mains=sops.filter(function(s){return !soporteEsAnexoEntrega(s);});
-    const anex=sops.filter(soporteEsAnexoEntrega);
+    const mains=sops.filter(function(s){return s&&!s.excluido_notif&&!soporteEsAnexoEntrega(s);});
+    const anex=sops.filter(function(s){return s&&!s.excluido_notif&&soporteEsAnexoEntrega(s);});
     const main=mains.length?mains[mains.length-1]:null;
     if(main)push(Object.assign({},main,{_notif_rol:'documento',nombre:main.label||main.nombre||'Documento'}));
     anex.forEach(function(s,i){
