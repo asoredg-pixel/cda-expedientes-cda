@@ -567,13 +567,13 @@ function openTramiteNotificarModal(expId,taskId){
   const notifAsignado=String(wf.notificar_por||'').trim();
   const sinPlazo=!!wf.notif_sin_plazo||(puedeCorreo&&(!wf.notif_vence||!notifAsignado));
   const plazo=(!sinPlazo&&wf.notif_vence)?('<span style="color:'+(wf.notif_vence<(typeof hoy==='function'?hoy():'')?'var(--rd)':'var(--bl)')+'">Plazo: <strong>'+(typeof fmtF==='function'?fmtF(wf.notif_vence):wf.notif_vence)+'</strong> (5 días hábiles).</span>'):(sinPlazo&&puedeCorreo?'<span style="color:var(--tx2)">Correo VITAL/encargado: sin plazo de 5 días ni autoasignación.</span>':'');
-  const dest=correos.join(', ');
-  const asuntoDef=t.sinExpediente
+  const dest=String(wf.email_to||'').trim()||correos.join(', ');
+  const asuntoDef=String(wf.email_subject||wf.asunto||'').trim()||(t.sinExpediente
     ?('Documento aprobado — '+(t.actividad||t.desc||t.codigo||'actividad'))
-    :('Documento aprobado — expediente '+((e&&e._exp)||''));
-  const cuerpoDef=t.sinExpediente
+    :('Documento aprobado — expediente '+((e&&e._exp)||'')));
+  const cuerpoDef=String(wf.cuerpo||wf.email_body||'').trim()||(t.sinExpediente
     ?('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» ha sido aprobado y notificado.\n\nCordialmente.')
-    :('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» del expediente '+((e&&e._exp)||'')+' ha sido aprobado y notificado.\n\nPuede consultarlo en la consulta ciudadana de la Corporación CDA.\n\nCordialmente.');
+    :('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» del expediente '+((e&&e._exp)||'')+' ha sido aprobado y notificado.\n\nPuede consultarlo en la consulta ciudadana de la Corporación CDA.\n\nCordialmente.'));
   const isCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
   let canalBtns='';
   if(puedeCorreo){
@@ -609,6 +609,8 @@ function openTramiteNotificarModal(expId,taskId){
     '<input type="hidden" id="tramite-notif-canal" value="'+escAttr(canal)+'"></div>'+
     '<div id="tramite-notif-correo-box" style="'+(isCorreo?'':'display:none')+'">'+
     '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="tramite-notif-to" value="'+escAttr(dest)+'" placeholder="correo1@ejemplo.com, …"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="tramite-notif-cc" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="tramite-notif-bcc" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="tramite-notif-asunto" value="'+escAttr(asuntoDef)+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Mensaje</label><textarea id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoDef)+'</textarea></div>'+
     '</div>'+
@@ -1426,9 +1428,9 @@ function openTramiteAtajoFirmadoModal(expId,taskId){
   window._taskModalCtx={expId:refId,taskId,mode:'tramiteAtajoFirmado'};
 }
 /**
- * Panel lateral de revisión: cargar documento firmado (mismo UI que entrega responsable).
- * Si ya hay correo listo (Para/asunto/cuerpo), permite notificar ya.
- * Si no es por correo, elige quién notifica (Vital / encargado) → Por notificar.
+ * Panel lateral de revisión: cargar documento firmado (mismo UI que en 🧐 → 📤).
+ * Director → PDF + quién notifica → Por notificar.
+ * VITAL/encargado → PDF + (correo digitedo o quién notifica) → notificar ya o Por notificar.
  */
 function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const refId=t&&t.sinExpediente?(t.codigo||expId):expId;
@@ -1437,20 +1439,30 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
   const esPqrs=e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
   const ctx=window._taskModalCtx||{};
   const esDirRev=!!ctx.directorRevisarPorFirmar||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
-  // Director desde rail: panel lateral con carga → «Cargar y pasar para notificar»
+  const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
+  const pick=typeof sstFilePickBlock==='function'
+    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+    :'';
+  const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
+  const canal=String(wf.canal||'correo').trim().toLowerCase();
+  const esCorreo=canal===''||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  const emailTo=String(wf.email_to||'').trim();
+  const emailCc=String(wf.email_cc||'').trim();
+  const emailBcc=String(wf.email_bcc||'').trim();
+  const emailSubj=String(wf.email_subject||wf.asunto||'').trim();
+  const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
+  let selNotif='';
+  if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
+    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por||'',{
+      modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto||(t&&t.depto),canal:esCorreo?'correo':canal
+    });
+  }
+  const pqrsExp=escAttr(esPqrs?(e._exp||refId):refId);
+  const confCargar='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',false)';
+  const confNotif='cargarFirmadoDesdeRail(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+',true)';
+
+  // Director: mismo panel que pide el usuario (PDF + quién notifica)
   if(esDirRev){
-    const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
-    const pick=typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-      :'';
-    const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
-    let selNotif='';
-    if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
-      selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||wf.entregado_por||'',{
-        modo:'firma',id:'tramite-atajo-notif-por-sel',todosResponsables:true,deptoId:e._depto,canal:wf.canal||'correo'
-      });
-    }
-    const confOnclick='directorCargarFirmadoDesdeRail(\''+escAttr(esPqrs?(e._exp||refId):refId)+'\',\''+tid+'\','+(esPqrs?'true':'false')+')';
     return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
       '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
@@ -1458,87 +1470,109 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t){
       '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
       (selNotif?'<div style="margin-bottom:12px">'+selNotif+'</div>':'')+
       '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+
-      '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confOnclick+'">📤 Cargar y pasar para notificar</button>'+
+      '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confCargar+'">📤 Cargar y pasar para notificar</button>'+
       '</div></div>';
   }
-  if(esPqrs){
-    return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
-      '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
-      '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Documento firmado (PQRSD)</div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin:0 0 10px">Cargue el PDF firmado o confirme la firma física desde el flujo PQRSD.</p>'+
-      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e" onclick="closeTaskModal();openPqrsDirectorFirmarModal(\''+escAttr(e._exp||refId)+'\',\'cargar\')">📤 Abrir carga / firma</button>'+
+
+  // VITAL / encargado: correo → editar y notificar; otro medio → quién notifica
+  let midHtml='';
+  let postBtns='';
+  if(esCorreo){
+    const destDef=emailTo||(e&&typeof pqrsCorreosCiudadano==='function'?(pqrsCorreosCiudadano(e)||[]).join(', '):'');
+    const asuntoDef=emailSubj||((t&&(t.actividad||t.desc))?(('Documento firmado — '+(t.actividad||t.desc))+(e&&e._exp?' — '+e._exp:'')):'Documento firmado');
+    midHtml=
+      '<div class="task-decision-block" style="margin-bottom:12px"><div class="task-decision-block-tit">Correo de notificación</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Datos digitados por el encargado. Puede ajustarlos y notificar de una vez.</div>'+
+      '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
+      '<input type="text" id="tramite-atajo-email-to" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
+      '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+      '<input type="text" id="tramite-atajo-email-cc" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
+      '<div class="fld" style="margin-bottom:6px"><label>Cco <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+      '<input type="text" id="tramite-atajo-email-bcc" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
+      '<div class="fld" style="margin-bottom:6px"><label>Asunto</label>'+
+      '<input type="text" id="tramite-atajo-email-subject" value="'+escAttr(asuntoDef)+'" style="width:100%;box-sizing:border-box"></div>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo</label>'+
+      '<textarea id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
       '</div>';
-  }
-  const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
-  const pick=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-    :'';
-  const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
-  const canal=String(wf.canal||'correo').trim().toLowerCase();
-  const esCorreo=canal===''||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
-  const emailTo=String(wf.email_to||'').trim();
-  const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
-  const correoListo=esCorreo&&!!(emailTo||cuerpo);
-  let selNotif='';
-  if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
-    selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{
-      modo:correoListo?'firma':'revision',
-      id:'tramite-atajo-notif-por-sel',
-      todosResponsables:true,
-      deptoId:e._depto,
-      canal:esCorreo?'correo':canal
-    });
-  }
-  let postHtml='';
-  if(correoListo){
-    postHtml=
-      '<div class="task-decision-block"><div class="task-decision-block-tit">Correo de notificación</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Ya hay datos de correo. Verifique y notifique (queda <strong>revisada y notificada</strong>).</div>'+
-      (emailTo?'<div style="font-size:11px;margin-bottom:4px"><strong>Para:</strong> '+escAttr(emailTo)+'</div>':'')+
-      (cuerpo?'<div style="font-size:11px;white-space:pre-wrap;max-height:120px;overflow:auto;padding:6px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+escAttr(cuerpo.slice(0,600))+(cuerpo.length>600?'…':'')+'</div>':'')+
-      '</div>'+
-      (selNotif?'':'')+
-      '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
-        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,true,{keepOpen:true})">📬 Notificar y atender</button>'+
-        '<button type="button" class="btn bsm" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Solo cargar → Por notificar</button>'+
+    postBtns=
+      '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>'+
+        '<button type="button" class="btn bsm" onclick="'+confCargar+'">✓ Solo cargar → Por notificar</button>'+
       '</div>';
   }else{
-    postHtml=
-      '<div class="task-decision-block"><div class="task-decision-block-tit">Quién notificará</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Predeterminado: quien eligió el encargado al pasar a firma. Puede ser VITAL o el encargado.</div>'+
+    midHtml=
+      '<div class="task-decision-block" style="margin-bottom:12px"><div class="task-decision-block-tit">Quién notificará</div>'+
+      '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Si el encargado ya eligió a alguien, aparece sugerido. Puede confirmarlo o cambiarlo.</div>'+
       (selNotif||'')+
-      '</div>'+
-      '<div class="fx" style="gap:8px;flex-wrap:wrap;margin-top:10px">'+
-        '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="tramiteAtajoFirmadoConfirmar(\''+eid+'\',\''+tid+'\',false,false,{keepOpen:true})">✓ Cargar y pasar a Por notificar</button>'+
       '</div>';
+    postBtns=
+      '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" onclick="'+confCargar+'">📤 Cargar y pasar para notificar</button>';
   }
   return '<div class="task-review-decision-side task-review-side-scroll task-review-atajo-firmado">'+
     '<button type="button" class="btn bsm bd2" style="margin-bottom:10px" onclick="taskReviewCloseSidePanel()">← Cerrar</button>'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Seleccione el PDF firmado. Use ⇅ en el rail para ver anexos de la entrega.</div>'+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
-    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+postHtml+'</div></div>';
+    midHtml+
+    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none">'+postBtns+'</div></div>';
 }
-/** Director: confirma PDF firmado desde el panel lateral del rail → Por notificar. */
-async function directorCargarFirmadoDesdeRail(expId,taskId,esPqrs){
+/** Guarda Para/Cc/Cco/asunto/cuerpo digitados en el panel atajo (si existen). */
+function atajoFirmadoPersistEmailFields(expId,taskId,esPqrs){
+  const toEl=document.getElementById('tramite-atajo-email-to');
+  if(!toEl)return;
+  const patch={
+    email_to:String(toEl.value||'').trim(),
+    email_cc:String((document.getElementById('tramite-atajo-email-cc')||{}).value||'').trim(),
+    email_bcc:String((document.getElementById('tramite-atajo-email-bcc')||{}).value||'').trim(),
+    email_subject:String((document.getElementById('tramite-atajo-email-subject')||{}).value||'').trim(),
+    cuerpo:String((document.getElementById('tramite-atajo-email-cuerpo')||{}).value||'').trim(),
+    canal:'correo'
+  };
+  if(esPqrs){
+    const e=typeof getExpById==='function'?getExpById(expId):null;
+    if(e&&typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,patch);
+    return;
+  }
+  if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(expId,taskId,patch);
+}
+/** Carga PDF firmado desde el panel del rail (Director / VITAL / encargado). */
+async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
+  abrirNotif=!!abrirNotif;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const refId=(t&&t.sinExpediente)?(t.codigo||expId):expId;
   const file=typeof tramiteAtajoFirmadoGetPdfBlob==='function'?tramiteAtajoFirmadoGetPdfBlob(refId,taskId):null;
   if(!file){notif('Seleccione el PDF firmado','err');return;}
+  atajoFirmadoPersistEmailFields(esPqrs?expId:refId,taskId,!!esPqrs);
   const btn=document.getElementById('tramite-atajo-firmado-btn');
   if(btn){btn.disabled=true;btn.textContent='Procesando…';}
   try{
     if(esPqrs&&typeof pqrsDirectorConfirmarFirmado==='function'){
       window._directorSignedFile=file;
-      await pqrsDirectorConfirmarFirmado(expId);
+      const ok=await pqrsDirectorConfirmarFirmado(expId,!!abrirNotif);
+      if(ok===false){
+        if(btn){btn.disabled=false;btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar para notificar';}
+        return;
+      }
+      if(abrirNotif){
+        if(typeof openPqrsNotificarOficioModal==='function')openPqrsNotificarOficioModal(expId);
+        else if(typeof openPqrsNotificarDesdeAct==='function')openPqrsNotificarDesdeAct(expId,taskId);
+        else closeTaskModal();
+      }
       return;
     }
-    await tramiteAtajoFirmadoConfirmar(refId,taskId,false,false,{keepOpen:false});
+    await tramiteAtajoFirmadoConfirmar(refId,taskId,false,abrirNotif,{keepOpen:false});
   }catch(err){
     notif('Error: '+String(err.message||err).slice(0,100),'err');
-    if(btn){btn.disabled=false;btn.textContent='📤 Cargar y pasar para notificar';}
+    if(btn){btn.disabled=false;btn.textContent=abrirNotif?'📬 Cargar y notificar ahora':'📤 Cargar y pasar para notificar';}
   }
+}
+window.cargarFirmadoDesdeRail=cargarFirmadoDesdeRail;
+window.atajoFirmadoPersistEmailFields=atajoFirmadoPersistEmailFields;
+/** @deprecated use cargarFirmadoDesdeRail */
+async function directorCargarFirmadoDesdeRail(expId,taskId,esPqrs){
+  return cargarFirmadoDesdeRail(expId,taskId,esPqrs,false);
 }
 window.directorCargarFirmadoDesdeRail=directorCargarFirmadoDesdeRail;
 function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
@@ -1566,6 +1600,10 @@ function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
   }
 }
 function tramiteAtajoFirmadoDesdeRevision(expId,taskId){
+  if(typeof openCargarFirmadoPorFirmar==='function'){
+    openCargarFirmadoPorFirmar(expId,taskId);
+    return;
+  }
   if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewAbrirAtajoFirmado==='function'){
     taskReviewAbrirAtajoFirmado(expId,taskId);
     return;

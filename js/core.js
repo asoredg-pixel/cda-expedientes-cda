@@ -5949,10 +5949,24 @@ function taskReviewPorFirmarRailHtml(ref,taskId,t,e){
   e=e||(typeof getExpById==='function'?getExpById(ref):null);
   const refExp=t.sinExpediente?(t.codigo||ref):ref;
   const r=escAttr(refExp),tid=escAttr(taskId);
+  const eid=jsStr(refExp),tidJs=jsStr(taskId);
   const side=String(window._taskReviewSideMode||'doc');
-  let h='<nav class="task-review-rail-nav" aria-label="Por firmar — imprimir">';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documentos y anexos para imprimir (última entrega)" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
+  const ctx=window._taskModalCtx||{};
+  const cargarFirmado=!!ctx.cargarFirmadoVista||String(window._taskReviewDecisionMode||'')==='atajoFirmado';
+  const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
+  const showCompare=(docsCompare.length>=2)||((t.soportes||[]).length>=2);
+  let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Por firmar — vistas">';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documentos y anexos (última entrega)" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
+  if(showCompare)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar / ver anexos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
+  if(!t.sinExpediente)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
+  h+='</nav>';
+  h+='<nav class="task-review-rail-nav" aria-label="Por firmar — acciones">';
+  h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
   h+=typeof taskReviewImpresoRailBtnHtml==='function'?taskReviewImpresoRailBtnHtml(refExp,taskId,t,e):'';
+  if(cargarFirmado||(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar()))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&side==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   h+='</nav>';
   return h;
 }
@@ -16193,6 +16207,8 @@ function openTaskCommentsModal(expId,taskId,opts){
     ensurePqrsSoportesAprobadosOnTask(t,e);
   const forceRevisarEntrega=!!opts.revisarEntrega||verRevisado;
   const directorRevisarPorFirmar=!!opts.directorRevisarPorFirmar;
+  const cargarFirmadoVista=!!opts.cargarFirmadoVista;
+  const openAtajoFirmado=!!opts.openAtajoFirmado;
   const pqrsRevEnc=!!(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional());
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(pendVer||forceRevisarEntrega||pqrsRevEnc||directorRevisarPorFirmar);
   const isReviewDelivery=(canReviewSop||isVerDocMode)&&!chatOnly&&!soloGestion;
@@ -16296,7 +16312,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,cargarFirmadoVista:!!cargarFirmadoVista};
     window._soportePaginaActual=1;
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;
@@ -16312,6 +16328,11 @@ function openTaskCommentsModal(expId,taskId,opts){
         else window._taskReviewSideMode='doc';
       }else if(savedSideMode)window._taskReviewSideMode=savedSideMode;
       setTimeout(function(){
+        if(openAtajoFirmado&&typeof taskReviewOpenDecisionPanel==='function'){
+          taskReviewOpenDecisionPanel('atajoFirmado',expId,taskId);
+          if(typeof syncSoporteObsPanelUi==='function')syncSoporteObsPanelUi();
+          return;
+        }
         if(opts.keepStack&&savedSideMode&&savedSideMode!=='doc'){
           if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel(savedSideMode,expId,taskId);
         }else if(isRespVerCorr||isRespVerEntregaPendiente){
@@ -18855,53 +18876,56 @@ function openActPorFirmarDocs(expId,taskId){
 }
 window.openActPorFirmarDocs=openActPorFirmarDocs;
 window.actPorFirmarPrintOpenBtnHtml=actPorFirmarPrintOpenBtnHtml;
-/** 📤 Cargar documento firmado → flujo de notificación. */
+/** 📤 Cargar documento firmado → misma vista de revisión (rail + panel) que en 🧐. */
 function actPorFirmarCargarBtnHtml(expId,taskId,t,expAct){
   const eid=jsStr(expId),tid=jsStr(taskId);
-  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-  const esPqrs=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct)
-    &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
-  if(esDir){
-    if(esPqrs)
-      return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+eid+'\')">📤</button>';
-    return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+eid+'\',\''+tid+'\')">📤</button>';
-  }
-  if(esPqrs){
-    return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+eid+'\',\'cargar\')">📤</button>';
-  }
-  return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();tramiteAtajoFirmadoDesdeRevision(\''+eid+'\',\''+tid+'\')">📤</button>';
+  return '<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openCargarFirmadoPorFirmar(\''+eid+'\',\''+tid+'\')">📤</button>';
 }
-/** Entrada unificada del Director para 📤 fuera del rail. */
-function openDirectorCargarFirmado(expId,taskId){
+/**
+ * Abre la vista de por firmar con rail + documento/anexos y el panel «Cargar documento firmado».
+ * Director: misma UI que 🧐 → 📤. VITAL/encargado: docs + comparar anexos + panel de carga/notif.
+ */
+function openCargarFirmadoPorFirmar(expId,taskId){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
-  if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())&&!(typeof esAdministrador==='function'&&esAdministrador())){
-    notif('Solo el Director puede cargar el firmado desde esta acción','err');return;
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  const esAdmin=typeof esAdministrador==='function'&&esAdministrador();
+  if(!esDir&&!esAdmin&&!(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())){
+    notif('No tiene permiso para cargar el documento firmado','err');return;
   }
-  const e=typeof getExpById==='function'?getExpById(expId):null;
-  const t=taskId&&typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-  const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
-    &&(!t||(typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))));
-  if(esPqrs&&typeof openPqrsDirectorFirmarModal==='function'){
-    openPqrsDirectorFirmarModal(expId,'cargar');
+  let e=typeof getExpById==='function'?getExpById(expId):null;
+  let t=taskId&&typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t&&e){
+    t=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
+    if(!t)t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);})||null;
+    if(!t)t=(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(tk);})||null;
+    if(t)taskId=String(t.id||'');
+  }
+  if(!t&&!taskId){notif('Actividad no encontrada','err');return;}
+  if(e&&t&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
+    try{ensurePqrsSoportesAprobadosOnTask(t,e);}catch(err){}
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewAbrirAtajoFirmado==='function'){
+    taskReviewAbrirAtajoFirmado(expId,taskId);
     return;
   }
-  if(taskId&&typeof openTramiteDirectorFirmarModal==='function'){
-    openTramiteDirectorFirmarModal(expId,taskId,'cargar');
+  if(typeof openTaskCommentsModal!=='function'){notif('No se pudo abrir la carga','err');return;}
+  if(esDir||esAdmin){
+    openTaskCommentsModal(expId,taskId,{directorRevisarPorFirmar:true,revisarEntrega:true,openAtajoFirmado:true});
     return;
   }
-  if(e){
-    const tFirma=(e.tasks||[]).find(function(tk){
-      return tk&&!tk.eliminada&&typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(tk);
-    });
-    if(tFirma&&typeof openTramiteDirectorFirmarModal==='function'){
-      openTramiteDirectorFirmarModal(expId,tFirma.id,'cargar');
-      return;
-    }
-  }
-  if(typeof openPqrsDirectorFirmarModal==='function')openPqrsDirectorFirmarModal(expId,'cargar');
-  else notif('No se pudo abrir la carga del documento firmado','err');
+  openTaskCommentsModal(expId,taskId,{
+    verDocumento:true,
+    soloAprobados:true,
+    porFirmarVista:true,
+    cargarFirmadoVista:true,
+    openAtajoFirmado:true
+  });
 }
+/** Alias histórico (Director 📤 en paleta). */
+function openDirectorCargarFirmado(expId,taskId){
+  openCargarFirmadoPorFirmar(expId,taskId);
+}
+window.openCargarFirmadoPorFirmar=openCargarFirmadoPorFirmar;
 window.openDirectorCargarFirmado=openDirectorCargarFirmado;
 window.actPorFirmarCargarBtnHtml=actPorFirmarCargarBtnHtml;
 function actPuedeCargarFirmadoPorFirmar(){
