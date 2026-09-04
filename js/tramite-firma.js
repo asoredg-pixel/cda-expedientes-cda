@@ -362,7 +362,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       fase:faseDest,
       notificar_por:notifPor||prev.notificar_por||'',
       notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
-      canal:prev.canal||'correo',
+      canal:prev.canal||(prev.notif_correo_entrega===false?'presencial':(tk.notifCorreoEntrega===false?'presencial':'correo')),
       enviado_firma_en:new Date().toISOString(),
       enviado_firma_por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
       impreso:null,

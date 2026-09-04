@@ -1289,6 +1289,12 @@ function pqrsAccionesTablaHtml(e){
     }
     h+='<button type="button" class="btn bsm act-ico" style="background:#1a7a4a;color:#fff" onclick="event.stopPropagation();openPqrsParaFirmaModal(\''+id+'\')" title="Pasar a firma">🖊</button> ';
   }
+  if(fase===PQRS_WF.POR_FIRMAR||fase===PQRS_WF.PARA_FIRMA||fase===PQRS_WF.VITAL_GESTION){
+    if(typeof esCargoVital==='function'&&esCargoVital()){
+      const tidAg=String((typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}).task_id||'').trim();
+      if(tidAg&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(e._exp,tidAg)+' ';
+    }
+  }
   if(fase===PQRS_WF.POR_FIRMAR){
     const wfF=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const firmFis=!!(wfF.firma_fisica&&wfF.firma_fisica.en);
@@ -1452,6 +1458,10 @@ function renderPqrsOficinaInbox(){
         return'<span class="act-est-dual"><span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Revisada</span><span class="bdg act-est-sub-badge" style="background:#fef9c3;color:#a16207;border:1px solid #fde68a">X Firma</span></span>';
       })()
       :(typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'');
+    // En firma/notif: solo badges de flujo (como trámite). Sin «En trámite» ni 🌐.
+    const hideExpEstadoExtra=!!e._tramite_firma_task
+      ||(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))
+      ||(typeof pqrsEstadoActividadUi==='function'&&!!(pqrsEstadoActividadUi(e)||{}).lbl);
     const tipoLbl=e._tramite_firma_task
       ?((e._oficina_firma||e._tipo_solicitud==='Oficio oficina')?'Oficio':'Trámite')
       :(e._tipo_solicitud||'PQRSD');
@@ -1462,7 +1472,7 @@ function renderPqrsOficinaInbox(){
       :(e._tramite_firma_task
         ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
         :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')'));
-    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="'+clickFn+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(e._tramite_firma_task?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(e._tramite_firma_task?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+    return '<tr class="'+(on?'pqrs-ofi-row-sel':'')+'" style="cursor:pointer" onclick="'+clickFn+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+escAttr(asunto)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(hideExpEstadoExtra?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(hideExpEstadoExtra?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
   renderPqrsOficinaDetallePanel();
 }

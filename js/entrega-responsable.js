@@ -486,6 +486,7 @@ function syncEntregaRespPqrsUi(){
       }
     }
   }
+  if(typeof syncEntregaRespNotifCorreoUi==='function')syncEntregaRespNotifCorreoUi();
 }
 
 function entregaRespMunOptsHtml(dep,sel){
@@ -1296,6 +1297,7 @@ function openEntregaResponsableModal(){
         '<div id="entrega-resp-oficio-err" style="display:none;font-size:11px;color:var(--rd);margin-top:4px"></div>'+
       '</div></div>'+
     '<div id="entrega-resp-registro-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)"></div>'+
+    '<div id="entrega-resp-notif-correo-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-pqrs-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-tramite-files">'+
     '<div class="fld" style="margin-bottom:10px">'+
@@ -1440,6 +1442,23 @@ function resolveActividadConceptoTipo(nombreAct,deptoId){
   const map=(cfgAct&&cfgAct.actConceptoTipoMap)||{};
   return map[nom]?String(map[nom]):'';
 }
+function syncEntregaRespNotifCorreoUi(){
+  const box=document.getElementById('entrega-resp-notif-correo-box');
+  if(!box)return;
+  const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
+  const esPqrs=pqrsNuevo||(typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs());
+  if(esPqrs){box.style.display='none';box.innerHTML='';return;}
+  const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  if(typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(act)){
+    box.style.display='none';box.innerHTML='';
+    return;
+  }
+  if(typeof htmlEntregaNotifCorreoCheck==='function')
+    box.innerHTML=htmlEntregaNotifCorreoCheck({id:'entrega-notif-correo'});
+  else
+    box.innerHTML='<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0"><input type="checkbox" id="entrega-notif-correo" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0"><span>Se notificará por correo electrónico</span></label>';
+  box.style.display='';
+}
 function syncEntregaRespRegistroUi(){
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const box=document.getElementById('entrega-resp-registro-box');
@@ -1449,6 +1468,7 @@ function syncEntregaRespRegistroUi(){
     if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
     syncEntregaRespOficioUi();
+    syncEntregaRespNotifCorreoUi();
     return;
   }
   // PQRSD: no mini-form de Registro (concepto/factura/acto) — solo sobre PQRSD existente
@@ -1459,12 +1479,14 @@ function syncEntregaRespRegistroUi(){
     if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
     syncEntregaRespOficioUi();
+    syncEntregaRespNotifCorreoUi();
     return;
   }
   const eSel=!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
   if(eSel&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eSel))||(typeof esTramitePqrs==='function'&&esTramitePqrs(eSel._tramite)))){
     if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
+    syncEntregaRespNotifCorreoUi();
     return;
   }
   const tipo=resolveActividadRegistroTipo(act);
@@ -1482,17 +1504,21 @@ function syncEntregaRespRegistroUi(){
     else hint.textContent='Sin mapeo a Registro — el administrador puede configurarlo en Actividades predeterminadas.';
   }
   syncEntregaRespOficioUi();
-  if(!box)return;
+  if(!box){syncEntregaRespNotifCorreoUi();return;}
   if(esActividadOficioRequerimiento(act)&&actividadPredEntregaExiste(act)){
     box.style.display='';
     const tExist=eSel?((eSel.tasks||[]).map(function(x){return typeof normalizeTask==='function'?normalizeTask(x):x;}).find(function(x){
       return x&&!x.eliminada&&esActividadOficioRequerimiento(x.actividad||'');
     })||{conceptoReqId:''}):{conceptoReqId:''};
     box.innerHTML=htmlEntregaOficioRequerimientoBlock(eSel,tExist);
-    setTimeout(syncEntregaOfiReqMedioUi,0);
+    syncEntregaRespNotifCorreoUi();
     return;
   }
-  if(!act||!actividadPredEntregaExiste(act)||!tipo||tipo==='ninguno'){box.style.display='none';box.innerHTML='';return;}
+  if(!act||!actividadPredEntregaExiste(act)||!tipo||tipo==='ninguno'){
+    box.style.display='none';box.innerHTML='';
+    syncEntregaRespNotifCorreoUi();
+    return;
+  }
   box.style.display='';
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
@@ -1514,6 +1540,7 @@ function syncEntregaRespRegistroUi(){
   }else if(tipo==='acto'){
     box.innerHTML=typeof htmlEntregaRegActoBlock==='function'?htmlEntregaRegActoBlock():'';
   }
+  syncEntregaRespNotifCorreoUi();
 }
 function htmlEntregaRegActoBlock(){
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
@@ -1529,8 +1556,7 @@ function htmlEntregaRegActoBlock(){
     '<div class="fld"><label>Tipo de acto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-acto-tipo" style="'+inp+'"><option value="">— Seleccione —</option>'+actos+'</select></div>'+
     '<div class="fld"><label>N° acto administrativo</label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="'+inp+'"></div>'+
     '<div class="fld"><label>Fecha del acto</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
-    '</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-top:8px">La <strong>fecha de vencimiento</strong> (si aplica) se indica al <strong>notificar</strong> el acto (correo VITAL/encargado, presencial, WhatsApp o aviso). También puede ajustarse en Registro → Normatividad.</div>';
+    '</div>';
 }
 function syncEntregaRespConceptoCumpleUi(){
   const cumple=String((document.getElementById('entrega-reg-concepto-cumple')||{}).value||'si');
@@ -1827,54 +1853,38 @@ function ensureOficioRequerimientoTask(e,conceptoItem){
 }
 function htmlEntregaOficioRequerimientoBlock(e,t){
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
-  const hoyStr=typeof hoy==='function'?hoy():'';
   const hit=e&&t?findConceptoByReqId(e,t.conceptoReqId):null;
   const c=hit?hit.item:{};
-  const medio=String(c.reqMedio||'');
+  const notifCorreo=String(c.reqMedio||'')==='correo'
+    ||!!(t&&(t.notifCorreoEntrega||(t.firmaWf&&t.firmaWf.notif_correo_entrega)));
+  const notifHtml=typeof htmlEntregaNotifCorreoCheck==='function'
+    ?htmlEntregaNotifCorreoCheck({id:'entrega-notif-correo',checked:notifCorreo})
+    :'<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0"><input type="checkbox" id="entrega-notif-correo"'+(notifCorreo?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0"><span>Se notificará por correo electrónico</span></label>';
   return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--or)">Oficio de requerimiento</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Diligencie el oficio y el requerimiento. El plazo de cumplimiento del interesado inicia al <strong>notificar</strong> el oficio (correo VITAL/encargado, o al indicar en esta entrega que ya se notificó presencial / WhatsApp / aviso).</div>'+
     '<input type="hidden" id="entrega-ofi-req-concepto-id" value="'+escAttr(t&&t.conceptoReqId||c.conceptoReqId||'')+'">'+
     '<div class="fg">'+
     '<div class="fld"><label>N° de oficio <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-oficio" value="'+escAttr(c.reqOficio||'')+'" placeholder="Ej. DSGV-E261485" style="'+inp+'"></div>'+
     '<div class="fld"><label>N° requerimiento <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-num" value="'+escAttr(c.reqNum||'')+'" placeholder="N° requerimiento" style="'+inp+'"></div>'+
     '<div class="fld"><label>Días para cumplir <span style="color:var(--rd)">*</span></label><input type="number" id="entrega-ofi-req-dias" min="1" value="'+escAttr(c.reqDias||'')+'" placeholder="Ej. 10" style="'+inp+'"></div>'+
-    '<div class="fld"><label>Medio de notificación en esta entrega</label><select id="entrega-ofi-req-medio" onchange="syncEntregaOfiReqMedioUi()" style="'+inp+'">'+
-      '<option value="">— Se notificará después (correo VITAL/encargado) —</option>'+
-      '<option value="presencial"'+(medio==='presencial'?' selected':'')+'>Presencial (ya notificado)</option>'+
-      '<option value="whatsapp"'+(medio==='whatsapp'?' selected':'')+'>WhatsApp (ya notificado)</option>'+
-      '<option value="aviso"'+(medio==='aviso'?' selected':'')+'>Por aviso (ya notificado)</option>'+
-      '<option value="correo"'+(medio==='correo'?' selected':'')+'>Correo (pendiente VITAL/encargado)</option>'+
-    '</select></div>'+
-    '<div class="fld" id="entrega-ofi-req-fecha-wrap" style="display:none"><label>Fecha de notificación <span style="color:var(--rd)">*</span></label><input type="date" id="entrega-ofi-req-fecha" value="'+escAttr(c.reqNotif||hoyStr)+'" style="'+inp+'"></div>'+
-    '</div>';
+    '</div>'+
+    '<div style="margin-top:10px">'+notifHtml+'</div>';
 }
 function syncEntregaOfiReqMedioUi(){
-  const medio=String((document.getElementById('entrega-ofi-req-medio')||{}).value||'');
-  const wrap=document.getElementById('entrega-ofi-req-fecha-wrap');
-  if(!wrap)return;
-  const inmediata=medio==='presencial'||medio==='whatsapp'||medio==='aviso';
-  wrap.style.display=inmediata?'':'none';
-  if(inmediata){
-    const f=document.getElementById('entrega-ofi-req-fecha');
-    if(f&&!f.value&&typeof hoy==='function')f.value=hoy();
-  }
+  // Compat: el medio inmediato ya no se captura en la entrega (solo checkbox de correo).
 }
 function collectEntregaOficioRequerimientoPayload(){
   if(!document.getElementById('entrega-ofi-req-num')&&!document.getElementById('entrega-ofi-req-oficio'))return null;
   const oficio=String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim();
   const reqNum=String((document.getElementById('entrega-ofi-req-num')||{}).value||'').trim();
   const dias=String((document.getElementById('entrega-ofi-req-dias')||{}).value||'').trim();
-  const medio=String((document.getElementById('entrega-ofi-req-medio')||{}).value||'').trim();
+  const notifCorreo=typeof entregaNotifCorreoCheckedFromUi==='function'
+    ?!!entregaNotifCorreoCheckedFromUi()
+    :!!(document.getElementById('entrega-notif-correo')&&document.getElementById('entrega-notif-correo').checked);
+  const medio=notifCorreo?'correo':'';
   const conceptoReqId=String((document.getElementById('entrega-ofi-req-concepto-id')||{}).value||'').trim();
   if(!oficio){notif('Indique el N° de oficio','err');return false;}
   if(!reqNum){notif('Indique el N° de requerimiento','err');return false;}
   if(!dias||isNaN(Number(dias))||Number(dias)<1){notif('Indique los días para cumplir (mínimo 1)','err');return false;}
-  const inmediata=medio==='presencial'||medio==='whatsapp'||medio==='aviso';
-  let fechaNotif='';
-  if(inmediata){
-    fechaNotif=String((document.getElementById('entrega-ofi-req-fecha')||{}).value||(typeof hoy==='function'?hoy():'')).trim();
-    if(!fechaNotif){notif('Indique la fecha de notificación','err');return false;}
-  }
   return{
     tipo:'oficio_requerimiento',
     item:{
@@ -1883,8 +1893,8 @@ function collectEntregaOficioRequerimientoPayload(){
       reqNum:reqNum,
       reqDias:dias,
       reqMedio:medio,
-      reqNotif:fechaNotif,
-      reqVence:fechaNotif&&typeof calcReqVence==='function'?calcReqVence(fechaNotif,dias):''
+      reqNotif:'',
+      reqVence:''
     }
   };
 }
@@ -2586,6 +2596,7 @@ window.entregaRespEsFlujoPqrs=entregaRespEsFlujoPqrs;
 window.syncEntregaRespPqrsUi=syncEntregaRespPqrsUi;
 window.updateActRespActionsUi=updateActRespActionsUi;
 window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
+window.syncEntregaRespNotifCorreoUi=syncEntregaRespNotifCorreoUi;
 window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
 window.htmlEntregaRegActoBlock=htmlEntregaRegActoBlock;
