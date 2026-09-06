@@ -1158,7 +1158,11 @@ function getPqrsOficinaList(oficinaId,filtro){
   if(filtro==='firmados'){
     if(!(typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())))return[];
     const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-    let listFd=exps.filter(e=>esPqrsSecretaria(e)&&(typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e)))).map(normalizePqrsOficinaFields);
+    let listFd=exps.filter(function(e){
+      if(!esPqrsSecretaria(e))return false;
+      if(esDir&&typeof pqrsEnPaletaFirmadosDirector==='function')return pqrsEnPaletaFirmadosDirector(e);
+      return typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e));
+    }).map(normalizePqrsOficinaFields);
     if(!esDir){
       const ofiAct=oficinaId||getPqrsOficinaActiva();
       listFd=listFd.filter(e=>e._pqrs_oficina===ofiAct||(ofiAct==='guaviare'&&e._pqrs_oficina==='guaviare'));
@@ -1226,23 +1230,50 @@ function pqrsDirectorPorFirmarAccionesHtml(e){
     '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+id+'\')" title="Cargar documento firmado">📤</button> '+
     '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\',\'ya_firmado\')" title="Confirmar firma física">✍️</button>';
 }
+/**
+ * Acciones Director en «Firmados»: 🧐 · ✍️✓ · 📬 (✓ si ya notificada).
+ * 📬 abre solo el documento (pendiente notificar / ya notificado).
+ */
+function pqrsDirectorFirmadosAccionesHtml(e){
+  const id=jsStr(e&&e._exp);
+  if(!id)return'';
+  const tid=e&&e._tramite_firma_task&&e._taskId?jsStr(e._taskId):'';
+  const t=tid&&typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
+  const esPqrs=!e._tramite_firma_task;
+  let notificada=false;
+  if(esPqrs&&typeof pqrsEsNotificadaTrasFirma==='function')notificada=pqrsEsNotificadaTrasFirma(e);
+  else if(t&&typeof taskFirmaEsNotificada==='function')notificada=taskFirmaEsNotificada(t);
+  const revJs=tid
+    ?('openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')')
+    :('openDirectorRevisarPorFirmar(\''+id+'\')');
+  const notifJs=tid
+    ?('openDirectorVistaNotificacion(\''+id+'\',\''+tid+'\')')
+    :('openDirectorVistaNotificacion(\''+id+'\')');
+  let h='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();'+revJs+'" title="Revisar">🧐</button> ';
+  h+='<span class="btn bsm act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma registrada"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span> ';
+  if(notificada){
+    h+='<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" onclick="event.stopPropagation();'+notifJs+'" title="Notificada — ver documento"><span class="act-agenda-check" aria-hidden="true">✓</span>📬</button>';
+  }else{
+    h+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();'+notifJs+'" title="Ver documento a notificar / quién notifica">📬</button>';
+  }
+  return h;
+}
+window.pqrsDirectorFirmadosAccionesHtml=pqrsDirectorFirmadosAccionesHtml;
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  const filtroOfi=String(window._pqrsOfiFiltro||'');
   // Trámite / oficio oficina en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);
     const t=typeof getTaskAny==='function'?getTaskAny(e._exp,e._taskId):null;
     const firmFis=t&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
+    const pasoFirma=t&&typeof taskPasoPorFirmaDirector==='function'&&taskPasoPorFirmaDirector(t);
     const enNotif=t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
     const ofiDueña=t&&typeof tramitePuedeGestionarComoOficina==='function'&&tramitePuedeGestionarComoOficina(t);
+    if(esDir&&(filtroOfi==='firmados'||firmFis||pasoFirma||enNotif||(t&&typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))))
+      return pqrsDirectorFirmadosAccionesHtml(e);
     if(esDir&&!firmFis&&!enNotif)return pqrsDirectorPorFirmarAccionesHtml(e);
-    if(esDir&&firmFis)
-      return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')" title="Revisar">🧐</button> '+
-        '<span class="btn bsm act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma física registrada — Firmados"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span> ';
-    if(esDir&&enNotif)
-      return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\',\''+tid+'\')" title="Revisar">🧐</button> '+
-        '<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="En notificación">📬</span> ';
     let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
     if(enNotif&&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+id+'\',\''+tid+'\')" title="Notificar">📬</button> ';
@@ -1255,14 +1286,14 @@ function pqrsAccionesTablaHtml(e){
     return h;
   }
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
-  const filtroOfi=String(window._pqrsOfiFiltro||'');
-  const enPaletaPorFirmar=filtroOfi==='por_firmar'||fase===PQRS_WF.POR_FIRMAR;
+  // Director en «Firmados»: seguimiento 🧐 · ✍️✓ · 📬
+  if(esDir&&filtroOfi==='firmados')
+    return pqrsDirectorFirmadosAccionesHtml(e);
   // Director en «Por firmar»: solo Ver / Cargar firmado / Ya firmado / Devolver
   if(fase===PQRS_WF.POR_FIRMAR&&esDir){
     const wfDir=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     if(!(wfDir.firma_fisica&&wfDir.firma_fisica.en))return pqrsDirectorPorFirmarAccionesHtml(e);
-    return '<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorRevisarPorFirmar(\''+id+'\')" title="Revisar">🧐</button> '+
-      '<span class="btn bsm act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma física registrada — Firmados"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span> ';
+    return pqrsDirectorFirmadosAccionesHtml(e);
   }
   let h='<span class="sst-act-toolbar">';
   // ✏️ / 🔍 abren paneles completos (no menús)
@@ -1314,7 +1345,7 @@ function pqrsAccionesTablaHtml(e){
   }
   if(filtroOfi==='firmados'){
     if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
-      h+='<span class="btn bsm act-ico" style="background:#185fa522;color:var(--bl);cursor:default" title="Firmado">📬</span> ';
+      return pqrsDirectorFirmadosAccionesHtml(e);
     else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Gestionar firmado">📬</button> ';
   }
@@ -1395,6 +1426,7 @@ function renderPqrsOficinaInbox(){
     const esDirMets=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const showFirmadosCard=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirMets;
     const esFirmadoFn=function(e){
+      if(esDirMets&&typeof pqrsEnPaletaFirmadosDirector==='function')return pqrsEnPaletaFirmadosDirector(e);
       return typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e));
     };
     const ofiActMets=getPqrsOficinaActiva();

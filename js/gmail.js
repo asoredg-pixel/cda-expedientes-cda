@@ -4783,7 +4783,7 @@ async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inRe
     altPart,
     ''
   ].concat(attParts).concat(['--' + mixBoundary + '--']).filter(function(l) { return l !== null; });
-  return btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return _gmailOfiMimeToRawB64(lines.join('\r\n'));
 }
 
 function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc) {
@@ -4824,7 +4824,7 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc) {
     '',
     '--' + boundary + '--'
   ].filter(l => l !== null).join('\r\n');
-  return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  return _gmailOfiMimeToRawB64(lines);
 }
 
 // Construye un MIME cuyo cuerpo YA es HTML (no lo re-escapa como texto de usuario).
@@ -4833,6 +4833,23 @@ function _gmailOfiAppendSignatureHtml(htmlBody){
   const body=String(htmlBody||'');
   if(typeof _gmailOfiSignatureHtml==='undefined'||!_gmailOfiSignatureHtml)return body;
   return body+'<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">'+_gmailOfiSignatureHtml+'</div></div>';
+}
+/** Base64url del MIME. Evita encodeURIComponent sobre PDFs grandes (rompe / lanza URIError). */
+function _gmailOfiMimeToRawB64(mimeStr) {
+  const s = String(mimeStr || '');
+  const CHUNK = 0x8000;
+  let bin = '';
+  for (let j = 0; j < s.length; j += CHUNK) {
+    const slice = s.slice(j, j + CHUNK);
+    const arr = new Array(slice.length);
+    for (let k = 0; k < slice.length; k++) arr[k] = slice.charCodeAt(k) & 0xff;
+    bin += String.fromCharCode.apply(null, arr);
+  }
+  let b64 = '';
+  for (let i = 0; i < bin.length; i += CHUNK) {
+    b64 += btoa(bin.slice(i, i + CHUNK));
+  }
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
   const boundary = 'sst_ofihtml_' + Date.now();
@@ -4859,11 +4876,12 @@ function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
     '',
     '--' + boundary + '--'
   ].join('\r\n');
-  return btoa(unescape(encodeURIComponent(lines))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return _gmailOfiMimeToRawB64(lines);
 }
 
 // Alias used by core.js workflow — sends a plain HTML email using the office token
 async function gmailOfiSendMessage(to, subject, htmlBody) {
+  try { await _gmailOfiLoadSignature(); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
   const mime = _gmailOfiBuildHtmlMime(to, subject, htmlBody);
   return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
@@ -4921,12 +4939,13 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
     altPart,
     ''
   ].concat(attParts).concat(['--' + mixBoundary + '--']).filter(function(l) { return l !== null; });
-  return btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return _gmailOfiMimeToRawB64(lines.join('\r\n'));
 }
 
 /** Envía HTML desde el Gmail de oficina con adjuntos (File/Blob). opts: {cc,bcc} */
 async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opts) {
   opts = opts || {};
+  try { await _gmailOfiLoadSignature(); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
     to, subject, htmlBody, files || [], opts.cc || '', opts.bcc || ''
   );
@@ -4974,9 +4993,8 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
   const cuerpo = String((mail && mail.body) || '').trim();
   const tipo = ctx.tipo || (typeof PQRS_WF_TIPO !== 'undefined' ? PQRS_WF_TIPO.MENSAJE : 'mensaje');
   const oficio = ctx.oficio || '';
-  const todosCorreos = typeof pqrsCorreosCiudadano === 'function' ? pqrsCorreosCiudadano(e) : [];
-  const paraRaw = String(ctx.ciudEmail || (mail && mail.to) || '').trim().toLowerCase();
-  const para = todosCorreos.length ? todosCorreos.join(', ') : paraRaw;
+  const paraRaw = String(ctx.ciudEmail || (mail && mail.to) || '').trim();
+  const para = paraRaw.split(/[,;]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(function(s){ return s && s.indexOf('@') > 0; }).join(', ') || paraRaw;
   const canalCorreo = typeof PQRS_WF_CANAL !== 'undefined' ? PQRS_WF_CANAL.CORREO : 'correo';
   const cerradoPor = typeof responsableActivo !== 'undefined' ? responsableActivo : '';
   const documentos = [];

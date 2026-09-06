@@ -80,6 +80,30 @@ function taskFirmaEsFirmadoPendiente(t){
   const wf=getTaskFirmaWf(t);
   return !!(wf.firma_fisica&&wf.firma_fisica.en);
 }
+/** Pasó por firma del Director (físico o PDF) — seguimiento en «Firmados». */
+function taskPasoPorFirmaDirector(t){
+  if(!t||t.eliminada)return false;
+  const wf=getTaskFirmaWf(t);
+  if(wf.firma_fisica&&wf.firma_fisica.en)return true;
+  if(wf.firma_director&&wf.firma_director.en)return true;
+  if((t.historial||[]).some(function(h){
+    return h&&(h.tipo==='firma_fisica_director'||h.tipo==='atajo_firmado_revision'||h.tipo==='firma_director');
+  }))return true;
+  return false;
+}
+/** Ya notificada / cerrada tras firma. */
+function taskFirmaEsNotificada(t){
+  if(!t)return false;
+  const f=taskFirmaFase(t);
+  if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))return true;
+  const wf=getTaskFirmaWf(t);
+  if(wf.notificacion&&(wf.notificacion.en||wf.notificacion.a))return true;
+  if(wf.notificacion_reportada&&(wf.notificacion_reportada.en||wf.notificacion_reportada.fecha||wf.notificacion_reportada.soporteLink))return true;
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.notificada)return true;
+  return false;
+}
+window.taskPasoPorFirmaDirector=taskPasoPorFirmaDirector;
+window.taskFirmaEsNotificada=taskFirmaEsNotificada;
 function taskFirmaEnPorNotificar(t){
   const f=taskFirmaFase(t);
   return f===(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion')
@@ -566,7 +590,6 @@ function openTramiteNotificarModal(expId,taskId){
     canal=(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.PRESENCIAL:'presencial');
   }
   if(puedeCorreo&&!canal)canal=(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.CORREO:'correo');
-  const correos=(!t.sinExpediente&&e&&typeof pqrsCorreosCiudadano==='function')?pqrsCorreosCiudadano(e):[];
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
@@ -577,7 +600,8 @@ function openTramiteNotificarModal(expId,taskId){
   const notifAsignado=String(wf.notificar_por||'').trim();
   const sinPlazo=!!wf.notif_sin_plazo||(puedeCorreo&&(!wf.notif_vence||!notifAsignado));
   const plazo=(!sinPlazo&&wf.notif_vence)?('<span style="color:'+(wf.notif_vence<(typeof hoy==='function'?hoy():'')?'var(--rd)':'var(--bl)')+'">Plazo: <strong>'+(typeof fmtF==='function'?fmtF(wf.notif_vence):wf.notif_vence)+'</strong> (5 días hábiles).</span>'):(sinPlazo&&puedeCorreo?'<span style="color:var(--tx2)">Correo VITAL/encargado: sin plazo de 5 días ni autoasignación.</span>':'');
-  const dest=String(wf.email_to||'').trim()||correos.join(', ');
+  const dest=String(wf.email_to||'').trim();
+  const sugTram=typeof htmlCorreosSugeridosNotificacion==='function'?htmlCorreosSugeridosNotificacion(e&&!e._sin_expediente?e:null,t):'';
   const asuntoDef=String(wf.email_subject||wf.asunto||'').trim()||(t.sinExpediente
     ?('Documento aprobado — '+(t.actividad||t.desc||t.codigo||'actividad'))
     :('Documento aprobado — expediente '+((e&&e._exp)||'')));
@@ -621,6 +645,7 @@ function openTramiteNotificarModal(expId,taskId){
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="tramite-notif-canal-btns">'+canalBtns+'</div>'+
     '<input type="hidden" id="tramite-notif-canal" value="'+escAttr(canal)+'"></div>'+
     '<div id="tramite-notif-correo-box" style="'+(isCorreo?'':'display:none')+'">'+
+    sugTram+
     '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="tramite-notif-to" value="'+escAttr(dest)+'" placeholder="correo1@ejemplo.com, …"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="tramite-notif-cc" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="tramite-notif-bcc" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
@@ -1021,20 +1046,15 @@ async function notificarCiudadanoTrasVerificarTramite(expId,taskId){
   const t=getTaskFromExp(e,taskId);
   const actNom=String((t&&(t.actividad||t.desc))||'').trim();
   const esConceptoSeg=/concepto\s+de\s+seguimiento/i.test(actNom);
-  let correos=typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e):[];
-  // Ampliar: si no hay lista, intentar campos sueltos del expediente
-  if(!correos.length){
-    const extra=[e._pn_correo,e._pj_correo,e._pj_rep_correo,e._apo_correo,e._aut_correo,e._ec_correo,e._qd_correo];
-    const set=new Set();
-    extra.forEach(function(em){
-      const v=String(em||'').trim().toLowerCase();
-      if(v&&v.includes('@')&&(typeof emailValido!=='function'||emailValido(v)))set.add(v);
-    });
-    correos=Array.from(set);
+  const wf=(t&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):null)||(t&&t.firmaWf)||{};
+  let correos=String(wf.email_to||'').split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.includes('@');});
+  if(!correos.length&&t&&t.interesadoCorreo){
+    const v=String(t.interesadoCorreo||'').trim().toLowerCase();
+    if(v&&v.includes('@'))correos=[v];
   }
   if(!correos.length){
     if(esConceptoSeg&&typeof notif==='function')
-      notif('Concepto de seguimiento aprobado, pero el expediente no tiene correos registrados para notificar','warn');
+      notif('Concepto de seguimiento aprobado, pero no hay destinatarios digitados en Para para notificar','warn');
     return;
   }
   const expLbl=e._exp||expId;
@@ -1092,14 +1112,16 @@ function confirmarCierreTaskTramiteAware(expId,taskId){
 function getTramiteFirmaRowsParaPaletaDirector(modo){
   modo=String(modo||'por_firmar');
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
-  const tasks=getTareasTramiteFirmaPorFase(function(t){
-    if(modo==='firmados')return taskFirmaEsFirmadoPendiente(t);
-    if(modo==='por_notificar')return taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t);
-    if(!taskFirmaEnPorFirmar(t))return false;
-    // Director: firmados físicos van a «Firmados». VITAL/oficina: siguen en «Por firmar».
-    if(esDir&&taskFirmaEsFirmadoPendiente(t))return false;
-    return true;
-  });
+  const tasks=(modo==='firmados'&&esDir)
+    ?getTareasTramiteFirmaDirectorSeguimiento()
+    :getTareasTramiteFirmaPorFase(function(t){
+      if(modo==='firmados')return taskFirmaEsFirmadoPendiente(t);
+      if(modo==='por_notificar')return taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t);
+      if(!taskFirmaEnPorFirmar(t))return false;
+      // Director: firmados físicos van a «Firmados». VITAL/oficina: siguen en «Por firmar».
+      if(esDir&&taskFirmaEsFirmadoPendiente(t))return false;
+      return true;
+    });
   return tasks.map(function(t){
     const e=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
     const nom=e?(typeof getNom==='function'?getNom(e):''):(t.nombre||'(Sin expediente)');
@@ -1123,6 +1145,34 @@ function getTramiteFirmaRowsParaPaletaDirector(modo){
     };
   });
 }
+/** Director «Firmados»: trámites que ya firmó (incluye por notificar y cerrados). */
+function getTareasTramiteFirmaDirectorSeguimiento(){
+  const out=[];
+  const pushT=function(t,e){
+    if(!t||t.eliminada||!taskPasoPorFirmaDirector(t))return;
+    const tramObj=e&&typeof getTram==='function'?getTram(e._tramite,e):null;
+    const nt=typeof normalizeTask==='function'?normalizeTask(Object.assign({},t,{
+      codigo:(e&&e._exp)||t.codigo||t.exp,
+      exp:(e&&e._exp)||t.exp||t.codigo,
+      tram:tramObj?tramObj.nombre:((e&&e._tramite)||(t.sinExpediente?'Actividad':'')),
+      nombre:e?(typeof getNom==='function'?getNom(e):''):(t.nombre||'(Sin expediente)'),
+      depto:(e&&e._depto)||t.depto||'',
+      sinExpediente:!!t.sinExpediente
+    })):t;
+    out.push(nt);
+  };
+  (typeof exps!=='undefined'?exps:[]).forEach(function(e){
+    if(!e||(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)))return;
+    if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))return;
+    (e.tasks||[]).forEach(function(t){pushT(t,e);});
+  });
+  (typeof actividadesLibres!=='undefined'?actividadesLibres:[]).forEach(function(raw){
+    const t=typeof normalizeActLibre==='function'?normalizeActLibre(raw):(raw||{});
+    pushT(t,null);
+  });
+  return out;
+}
+window.getTareasTramiteFirmaDirectorSeguimiento=getTareasTramiteFirmaDirectorSeguimiento;
 /** Filtra filas de trámite-firma por oficina (Director ve todas). */
 function filterTramiteFirmaRowsPorOficina(rows,oficinaId,esDir){
   rows=Array.isArray(rows)?rows:[];
@@ -1668,8 +1718,8 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   const emailSubj=String(wf.email_subject||wf.asunto||'').trim();
   const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
   const tieneDatosCorreo=!!(emailTo||emailCc||emailBcc||emailSubj||cuerpo);
-  const destDef=emailTo||(e&&typeof pqrsCorreosCiudadano==='function'?(pqrsCorreosCiudadano(e)||[]).join(', '):'')
-    ||(typeof taskReviewCorreosNotificacion==='function'?taskReviewCorreosNotificacion(e,t).join(', '):'');
+  const destDef=emailTo;
+  const sugAtajo=typeof htmlCorreosSugeridosNotificacion==='function'?htmlCorreosSugeridosNotificacion(e&&!e._sin_expediente?e:null,t):'';
   const asuntoDef=emailSubj||((t&&(t.actividad||t.desc))?('Notificación — '+(t.actividad||t.desc)+(e&&e._exp?' — '+e._exp:'')):'Documento firmado');
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
@@ -1700,6 +1750,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   }
 
   const emailBlock=
+    sugAtajo+
     '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="tramite-atajo-email-to" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
@@ -1818,12 +1869,12 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
     notif('No puede notificar esta PQRSD','err');return false;
   }
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
-  const toRaw=String(wf.email_to||(typeof pqrsCorreosCiudadano==='function'?pqrsCorreosCiudadano(e).join(', '):'')||e._qd_correo||'').trim();
+  const toRaw=String(wf.email_to||'').trim();
   const destinos=toRaw.split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s.includes('@');});
   const asunto=String(wf.email_subject||wf.asunto||('Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+expId)).trim();
   let cuerpo=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
   if(!cuerpo&&typeof pqrsPlantillaOficioFirmado==='function')cuerpo=pqrsPlantillaOficioFirmado(expId,wf.oficio)||'';
-  if(!destinos.length){notif('Indique al menos un correo destino','err');return false;}
+  if(!destinos.length){notif('Indique al menos un correo en Para','err');return false;}
   if(!cuerpo){notif('Indique el mensaje','err');return false;}
   const ccRaw=String(wf.email_cc||'').trim();
   const bccRaw=String(wf.email_bcc||'').trim();
