@@ -4161,4 +4161,46 @@ body:not(.sesion-activa) #pg-login{
   body.sesion-activa .chat-fab{bottom:calc(12px + env(safe-area-inset-bottom,0px))!important}
 }
 
+/* ─── Email chips (Gmail-style Para/Cc/Cco) ─── */
+.email-chips{
+  display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:34px;
+  padding:4px 8px;border:1px solid var(--bd);border-radius:var(--r,8px);
+  background:var(--sf,#fff);box-sizing:border-box;width:100%;cursor:text;
+}
+.email-chips:focus-within{border-color:var(--bl,#185fa5);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+.email-chips--inline{
+  border:none;box-shadow:none;padding:2px 0;min-height:28px;background:transparent;flex:1;
+}
+.email-chips--inline:focus-within{box-shadow:none}
+.email-chips-pills{display:contents}
+.email-chip{
+  display:inline-flex;align-items:center;gap:5px;max-width:100%;
+  padding:2px 4px 2px 2px;border:1px solid #dadce0;border-radius:16px;
+  background:#f8f9fa;font-size:12px;line-height:1.2;color:var(--tx,#202124);
+}
+.email-chip-av{
+  width:20px;height:20px;border-radius:50%;background:#e8eaed;color:#5f6368;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;flex-shrink:0;text-transform:uppercase;
+}
+.email-chip-txt{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;
+}
+.email-chip-x{
+  border:0;background:transparent;color:#5f6368;cursor:pointer;
+  width:18px;height:18px;border-radius:50%;padding:0;margin:0;
+  font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.email-chip-x:hover{background:#dadce0;color:#202124}
+.email-chips-edit{
+  flex:1 1 120px;min-width:100px;border:0!important;outline:none!important;
+  box-shadow:none!important;background:transparent!important;padding:4px 2px!important;
+  font-size:13px;font-family:'DM Sans',sans-serif;color:var(--tx);width:auto!important;
+}
+.email-chips-edit.is-invalid{color:var(--rd,#c5221f)}
+.email-chips-value{display:none!important}
+.gm-compose-field .email-chips{width:auto}
+.fld .email-chips{margin-top:2px}
+
 /* ─── END MOBILE APP SHELL ─── */

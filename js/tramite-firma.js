@@ -646,9 +646,9 @@ function openTramiteNotificarModal(expId,taskId){
     '<input type="hidden" id="tramite-notif-canal" value="'+escAttr(canal)+'"></div>'+
     '<div id="tramite-notif-correo-box" style="'+(isCorreo?'':'display:none')+'">'+
     sugTram+
-    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="tramite-notif-to" value="'+escAttr(dest)+'" placeholder="correo1@ejemplo.com, …"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="tramite-notif-cc" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="tramite-notif-bcc" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="tramite-notif-to" class="sst-email-chips" value="'+escAttr(dest)+'" placeholder="correo1@ejemplo.com, …"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="tramite-notif-cc" class="sst-email-chips" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="tramite-notif-bcc" class="sst-email-chips" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="tramite-notif-asunto" value="'+escAttr(asuntoDef)+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Mensaje</label><textarea id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoDef)+'</textarea></div>'+
     '</div>'+
@@ -1752,11 +1752,11 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   const emailBlock=
     sugAtajo+
     '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
-    '<input type="text" id="tramite-atajo-email-to" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="tramite-atajo-email-to" class="sst-email-chips" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="tramite-atajo-email-cc" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="tramite-atajo-email-cc" class="sst-email-chips" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cco <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="tramite-atajo-email-bcc" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="tramite-atajo-email-bcc" class="sst-email-chips" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label>'+
     '<input type="text" id="tramite-atajo-email-subject" value="'+escAttr(asuntoDef)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo</label>'+

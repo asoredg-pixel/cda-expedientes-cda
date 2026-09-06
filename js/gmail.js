@@ -4630,7 +4630,12 @@ function gmailOfiOpenCompose(opts) {
   // Limpiar contexto de respuesta PQRSD: solo aplica cuando se abre vía gmailOfiAbrirComposeRespuestaPqrs.
   window._gmailOfiPqrsRespCtx = null;
   opts = opts || {};
-  const f = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+  const f = (id, v) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = v || '';
+    if (typeof sstEmailChipsRefresh === 'function') sstEmailChipsRefresh(el);
+  };
   f('gm-compose-to',      opts.to || '');
   f('gm-compose-cc',      opts.cc || '');
   f('gm-compose-bcc',     opts.bcc || '');
@@ -4651,10 +4656,13 @@ function gmailOfiOpenCompose(opts) {
   if (title) title.textContent = opts.title || 'Nuevo mensaje';
   modal.dataset.inReplyTo = opts.inReplyTo || '';
   modal.style.display = 'flex';
+  if (typeof sstInitEmailChipsIn === 'function') sstInitEmailChipsIn(modal);
   const toEl = document.getElementById('gm-compose-to');
   const bodyEl = document.getElementById('gm-compose-body');
-  if (toEl && !toEl.value) toEl.focus();
-  else if (bodyEl) bodyEl.focus();
+  if (toEl && !toEl.value) {
+    const edit = toEl.closest && toEl.closest('.email-chips') && toEl.closest('.email-chips')._sstChips && toEl.closest('.email-chips')._sstChips.edit;
+    if (edit) edit.focus(); else toEl.focus();
+  } else if (bodyEl) bodyEl.focus();
 }
 
 function gmailOfiReplyCurrent() {

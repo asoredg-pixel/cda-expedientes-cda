@@ -1768,7 +1768,7 @@ async function openPqrsRespuestaModal(expId,opts){
     '</div>'+
     (fromGmail?('<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios</div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Para</label><input type="text" id="gmail-resp-pqrs-email" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="ciudadano@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para</label><input type="text" id="gmail-resp-pqrs-email" class="sst-email-chips" value="'+escAttr(emailCiu)+'" style="margin-top:4px" placeholder="ciudadano@ejemplo.com"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="gmail-resp-pqrs-cc" value="" style="margin-top:4px"></div>'+
     '<div class="fld"><label>Cco (opcional)</label><input type="text" id="gmail-resp-pqrs-bcc" value="" style="margin-top:4px"></div>'+
     '</div>'):'')+
@@ -1784,9 +1784,9 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Correo</div>'+
     sugResp+
     '<div class="pqrs-resp-compose-box">'+
-    '<div class="gm-compose-field"><label>Para</label><input type="text" id="pqrs-compose-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
-    '<div class="gm-compose-field"><label>Cc (opcional)</label><input type="text" id="pqrs-compose-cc" value=""></div>'+
-    '<div class="gm-compose-field"><label>Cco (opcional)</label><input type="text" id="pqrs-compose-bcc" value=""></div>'+
+    '<div class="gm-compose-field"><label>Para</label><input type="text" id="pqrs-compose-to" class="sst-email-chips" placeholder="ciudadano@ejemplo.com" value="'+escAttr(ciudEmail)+'"></div>'+
+    '<div class="gm-compose-field"><label>Cc (opcional)</label><input type="text" id="pqrs-compose-cc" class="sst-email-chips" value=""></div>'+
+    '<div class="gm-compose-field"><label>Cco (opcional)</label><input type="text" id="pqrs-compose-bcc" class="sst-email-chips" value=""></div>'+
     '<div class="gm-compose-field"><label>Asunto</label><input type="text" id="pqrs-compose-subject" value="'+escAttr(asuntoMail)+'"></div>'+
     '<label style="font-size:12px;font-weight:600;display:block;margin:6px 0 4px">Mensaje</label>'+
     '<textarea id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Mensaje al ciudadano…" style="min-height:160px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
@@ -6841,12 +6841,11 @@ function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
     sug+
     '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">'+(destWf?'Datos diligenciados en la entrega (editables).':'Indique los destinatarios en Para / Cc / Cco.')+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
-    '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Varios correos separados por coma</div>'+
-    '<input type="text" id="task-rev-notif-to" value="'+escAttr(dest)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="task-rev-notif-to" class="sst-email-chips" value="'+escAttr(dest)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="task-rev-notif-cc" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="task-rev-notif-cc" class="sst-email-chips" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="task-rev-notif-bcc" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="task-rev-notif-bcc" class="sst-email-chips" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Asunto</label>'+
     '<input type="text" id="task-rev-notif-subject" value="'+escAttr(asunto)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Cuerpo del correo <span style="font-weight:400">(editable)</span></div>'+
@@ -8383,12 +8382,11 @@ function renderPqrsEntregaCamposHtml(e){
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
     sugEnt+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
-    '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Varios correos separados por coma</div>'+
-    '<input type="text" id="pqrs-entrega-email-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="pqrs-entrega-email-to" class="sst-email-chips" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="pqrs-entrega-email-cc" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+    '<input type="text" id="pqrs-entrega-email-cc" class="sst-email-chips" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="pqrs-entrega-email-bcc" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+    '<input type="text" id="pqrs-entrega-email-bcc" class="sst-email-chips" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto (referencia)</label>'+
     '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wf.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '</div>';
@@ -13547,14 +13545,12 @@ function htmlEntregaNotifCorreoCheck(opts){
     '<div id="entrega-notif-email-compose" style="'+(checked?'':'display:none;')+'margin-top:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
       sug+
-      '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Estos datos los verá el encargado / VITAL al notificar. Puede ajustarlos ahora.</div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
-      '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Varios correos separados por coma</div>'+
-      '<input type="text" id="entrega-notif-email-to" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'" style="width:100%;box-sizing:border-box"></div>'+
+      '<input type="text" id="entrega-notif-email-to" class="sst-email-chips" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailTo)+'" style="width:100%;box-sizing:border-box"></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-      '<input type="text" id="entrega-notif-email-cc" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+      '<input type="text" id="entrega-notif-email-cc" class="sst-email-chips" placeholder="copia@ejemplo.com" value="'+escAttr(emailCc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-      '<input type="text" id="entrega-notif-email-bcc" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+      '<input type="text" id="entrega-notif-email-bcc" class="sst-email-chips" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Asunto</label>'+
       '<input type="text" id="entrega-notif-email-subject" value="'+escAttr(asunto)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
       '<div class="fld" style="margin-bottom:0"><label>Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></label>'+
@@ -13583,8 +13579,10 @@ function entregaNotifCorreoToggleUi(cbId){
   if(oficioNum){stubT.oficio=oficioNum;stubT.nro_oficio=oficioNum;}
   const expLbl=libre?'':(nuevo?expNuevo:expNum);
   const toEl=document.getElementById('entrega-notif-email-to');
-  if(toEl&&!String(toEl.value||'').trim())
+  if(toEl&&!String(toEl.value||'').trim()){
     toEl.value=entregaNotifCorreosDefault(e,stubT)||'';
+    if(typeof sstEmailChipsRefresh==='function')sstEmailChipsRefresh(toEl);
+  }
   const subjEl=document.getElementById('entrega-notif-email-subject');
   if(subjEl&&!String(subjEl.value||'').trim())
     subjEl.value='Notificación — '+(actoTipo||act||'actividad')+(actoNum?' No. '+actoNum:'')+(expLbl?' — '+expLbl:'');
@@ -14608,12 +14606,11 @@ function renderNcaRevisionEmailBlockHtml(expId,e,wf){
     '<div id="nca-rev-email-fields" style="'+(notifCorreoRev||!esOficio?'':'display:none')+'">'+
     sugNca+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
-    '<div style="font-size:10px;color:var(--tx3);margin:2px 0 4px">Varios correos separados por coma</div>'+
-    '<input type="text" id="nca-rev-email-to" value="'+escAttr(emailToRev)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="nca-rev-email-to" class="sst-email-chips" value="'+escAttr(emailToRev)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="nca-rev-email-cc" value="'+escAttr(emailCcRev)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="nca-rev-email-cc" class="sst-email-chips" value="'+escAttr(emailCcRev)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
-    '<input type="text" id="nca-rev-email-bcc" value="'+escAttr(emailBccRev)+'" style="width:100%;box-sizing:border-box"></div>'+
+    '<input type="text" id="nca-rev-email-bcc" class="sst-email-chips" value="'+escAttr(emailBccRev)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:4px"><label>Asunto</label>'+
     '<input type="text" id="nca-rev-email-subject" value="'+escAttr(asuntoRev)+'" style="width:100%;box-sizing:border-box"></div>'+
     '</div>'+
@@ -22059,6 +22056,8 @@ function setv(id,val){
     return;
   }
   el.value=v;
+  if(el.dataset&&el.dataset.emailChipsMounted==='1'&&typeof sstEmailChipsRefresh==='function')
+    sstEmailChipsRefresh(el);
 }
 function extraerPersonaDeExpediente(data){
   if(esModoCasoEspecial(data)){
@@ -24552,9 +24551,9 @@ function openPqrsNotificarOficioModal(expId){
     '</div><input type="hidden" id="pqrs-notif-canal" value="'+escAttr(canalUi)+'"></div>'+
     '<div id="pqrs-notif-correo-box" style="'+(puedeCorreoNotif&&canalUi===PQRS_WF_CANAL.CORREO?'':'display:none')+'">'+
     sugNotif+
-    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="pqrs-notif-to" value="'+escAttr(emailTo)+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="pqrs-notif-cc" value="'+escAttr(wf.email_cc||'')+'"></div>'+
-    '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="pqrs-notif-bcc" value="'+escAttr(wf.email_bcc||'')+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label><input type="text" id="pqrs-notif-to" class="sst-email-chips" value="'+escAttr(emailTo)+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="pqrs-notif-cc" class="sst-email-chips" value="'+escAttr(wf.email_cc||'')+'"></div>'+
+    '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="pqrs-notif-bcc" class="sst-email-chips" value="'+escAttr(wf.email_bcc||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="pqrs-notif-asunto" value="Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+escAttr(expId)+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Mensaje'+(esVitalNcaPlantilla?' <span style="font-weight:400;color:var(--tx3)">(plantilla de oficio firmado)</span>':'')+'</label><textarea id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoNotif)+'</textarea></div>'+
     '<div style="font-size:11px;color:'+(correoOfiOk?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+    (correoOfiOk
@@ -24935,7 +24934,6 @@ function htmlCorreosSugeridosNotificacion(e,t,opts){
   });
   return '<div class="correos-sugeridos-notif" style="font-size:10px;color:var(--tx2);margin:0 0 8px;line-height:1.45;padding:5px 8px;background:var(--sf2);border:1px dashed var(--bd);border-radius:var(--r)">'+
     '<strong style="color:var(--tx)">'+escAttr(titulo)+':</strong> '+parts.join(' · ')+
-    '<div style="font-size:9px;color:var(--tx3);margin-top:3px">Sugerencia del registro — no se envían solos. Copie y pegue en Para / Cc si aplica.</div>'+
     '</div>';
 }
 window.pqrsCorreosSugeridosDetalle=pqrsCorreosSugeridosDetalle;
@@ -25543,10 +25541,10 @@ function confirmarEnvioRespuestaEmailPqrs(e,ciudEmail,cuerpo,documentos){
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Se enviará el correo de respuesta al ciudadano usando el <strong>correo autorizado de '+(ofiLblM||'la oficina')+'</strong>'+(correoEsp?' (<strong>'+escAttr(correoEsp)+'</strong>)':'')+' — no el correo personal del responsable.</div>'+
     sugMail+
     '<div class="fld" style="margin-bottom:8px"><label>Para (ciudadano)</label>'+
-    '<input type="text" id="pqrs-mail-para" value="'+escAttr(paraDisplay)+'" placeholder="correo1@x.com, correo2@x.com">'+
+    '<input type="text" id="pqrs-mail-para" class="sst-email-chips" value="'+escAttr(paraDisplay)+'" placeholder="correo1@x.com, correo2@x.com">'+
     multiInfo+'</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Cc (opcional)</label><input type="text" id="pqrs-mail-cc" value="'+escAttr(wf.email_cc||'')+'" placeholder="copia@ejemplo.com"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Cco (opcional)</label><input type="text" id="pqrs-mail-bcc" value="'+escAttr(wf.email_bcc||'')+'" placeholder="oculto@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Cc (opcional)</label><input type="text" id="pqrs-mail-cc" class="sst-email-chips" value="'+escAttr(wf.email_cc||'')+'" placeholder="copia@ejemplo.com"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Cco (opcional)</label><input type="text" id="pqrs-mail-bcc" class="sst-email-chips" value="'+escAttr(wf.email_bcc||'')+'" placeholder="oculto@ejemplo.com"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Asunto</label><input type="text" id="pqrs-mail-asunto" value="'+escAttr(wf.email_subject||('Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+e._exp))+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></label>'+
     '<textarea id="pqrs-mail-cuerpo" style="min-height:100px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(cuerpo)+'</textarea></div>'+

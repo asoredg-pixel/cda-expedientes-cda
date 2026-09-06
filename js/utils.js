@@ -387,3 +387,226 @@ function sstShowDesktopNotify(title,body,opts){
     return false;
   }
 }
+
+// ── Email chips (estilo Gmail Para/Cc/Cco) ───────────────────────────────────
+function sstParseEmailList(raw){
+  return String(raw||'').split(/[,;\s]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.indexOf('@')>0;});
+}
+function sstEmailLooksValid(em){
+  const v=String(em||'').trim().toLowerCase();
+  if(!v)return false;
+  if(typeof emailValido==='function')return !!emailValido(v);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+function sstEmailChipsIsMultiId(id){
+  const s=String(id||'');
+  return /(^|[_-])(to|cc|bcc|para)$/i.test(s)
+    ||/(email)-(to|cc|bcc)/i.test(s)
+    ||/(compose|notif)-(to|cc|bcc)/i.test(s)
+    ||/mail-(para|cc|bcc)/i.test(s)
+    ||/^gm-compose-(to|cc|bcc)$/i.test(s)
+    ||/^gmail-resp-pqrs-email$/i.test(s);
+}
+function sstEmailChipsShouldMount(el){
+  if(!el||el.tagName!=='INPUT')return false;
+  if(el.dataset.emailChipsMounted==='1')return false;
+  if(el.classList.contains('email-chips-edit')||el.classList.contains('email-chips-value'))return false;
+  if(el.type==='hidden'||el.type==='checkbox'||el.type==='radio'||el.type==='file'||el.type==='password')return false;
+  if(el.dataset.emailChips==='0'||el.dataset.noEmailChips==='1')return false;
+  if(el.dataset.emailChips==='1'||el.classList.contains('sst-email-chips'))return true;
+  if(el.type==='email')return true;
+  return sstEmailChipsIsMultiId(el.id);
+}
+function sstEmailChipsMaxFor(el){
+  if(el&&el.dataset.emailChipsMax)return Math.max(0,parseInt(el.dataset.emailChipsMax,10)||0);
+  if(el&&sstEmailChipsIsMultiId(el.id))return 0;
+  if(el&&el.type==='email')return 1;
+  return 0;
+}
+function sstMountEmailChips(inputEl,opts){
+  opts=opts||{};
+  if(!inputEl)return null;
+  if(inputEl.dataset.emailChipsMounted==='1')return inputEl.closest('.email-chips');
+  if(!opts.force&&!sstEmailChipsShouldMount(inputEl))return null;
+  const max=opts.max!=null?opts.max:sstEmailChipsMaxFor(inputEl);
+  const wrap=document.createElement('div');
+  wrap.className='email-chips'+(opts.inline||(inputEl.closest&&inputEl.closest('.gm-compose-field'))?' email-chips--inline':'');
+  wrap.setAttribute('role','group');
+  wrap.setAttribute('aria-label',inputEl.getAttribute('aria-label')||inputEl.placeholder||'Correos');
+  const pills=document.createElement('span');
+  pills.className='email-chips-pills';
+  const edit=document.createElement('input');
+  edit.type='text';
+  edit.className='email-chips-edit';
+  edit.placeholder=inputEl.placeholder||'';
+  edit.autocomplete='off';
+  edit.spellcheck=false;
+  if(inputEl.disabled)edit.disabled=true;
+  if(inputEl.readOnly)edit.readOnly=true;
+  let emails=sstParseEmailList(inputEl.value).filter(sstEmailLooksValid);
+  if(max===1&&emails.length>1)emails=emails.slice(0,1);
+  const parent=inputEl.parentNode;
+  if(!parent)return null;
+  parent.insertBefore(wrap,inputEl);
+  wrap.appendChild(pills);
+  wrap.appendChild(edit);
+  wrap.appendChild(inputEl);
+  inputEl.dataset.emailChipsMounted='1';
+  inputEl.classList.add('email-chips-value');
+  if(inputEl.type==='email'||inputEl.type==='text')inputEl.type='hidden';
+  function syncHidden(){
+    inputEl.value=emails.join(', ');
+    try{inputEl.dispatchEvent(new Event('input',{bubbles:true}));}catch(e0){}
+    try{inputEl.dispatchEvent(new Event('change',{bubbles:true}));}catch(e1){}
+  }
+  function render(){
+    pills.innerHTML='';
+    emails.forEach(function(em,idx){
+      const chip=document.createElement('span');
+      chip.className='email-chip';
+      chip.title=em;
+      const av=document.createElement('span');
+      av.className='email-chip-av';
+      av.textContent=(em.charAt(0)||'?').toUpperCase();
+      const txt=document.createElement('span');
+      txt.className='email-chip-txt';
+      txt.textContent=em;
+      const x=document.createElement('button');
+      x.type='button';
+      x.className='email-chip-x';
+      x.setAttribute('aria-label','Quitar '+em);
+      x.textContent='\u00d7';
+      x.addEventListener('click',function(ev){
+        ev.preventDefault();ev.stopPropagation();
+        emails=emails.filter(function(_,i){return i!==idx;});
+        render();
+        edit.focus();
+      });
+      chip.appendChild(av);chip.appendChild(txt);chip.appendChild(x);
+      pills.appendChild(chip);
+    });
+    syncHidden();
+    wrap.classList.toggle('has-chips',emails.length>0);
+  }
+  function commitToken(raw){
+    const token=String(raw||'').trim().toLowerCase().replace(/^[,;\s]+|[,;\s]+$/g,'');
+    if(!token)return false;
+    if(!sstEmailLooksValid(token)){
+      edit.classList.add('is-invalid');
+      return false;
+    }
+    edit.classList.remove('is-invalid');
+    if(emails.indexOf(token)>=0){edit.value='';return true;}
+    if(max===1)emails=[token];
+    else emails.push(token);
+    edit.value='';
+    render();
+    return true;
+  }
+  function commitBuffer(){
+    const raw=edit.value;
+    if(!String(raw||'').trim())return;
+    const parts=String(raw).split(/[,;]+/);
+    let ok=true;
+    parts.forEach(function(p){
+      if(!String(p||'').trim())return;
+      if(!commitToken(p))ok=false;
+    });
+    if(ok)edit.value='';
+  }
+  edit.addEventListener('keydown',function(ev){
+    if(ev.key==='Enter'||ev.key===','||ev.key===';'){
+      if(String(edit.value||'').trim()){
+        ev.preventDefault();
+        commitBuffer();
+      }
+      return;
+    }
+    if(ev.key==='Tab'&&String(edit.value||'').trim()){
+      commitBuffer();
+      return;
+    }
+    if((ev.key==='Backspace'||ev.key==='Delete')&&!edit.value&&emails.length){
+      ev.preventDefault();
+      emails.pop();
+      render();
+    }
+  });
+  edit.addEventListener('input',function(){
+    const v=edit.value;
+    if(/[,;]\s*$/.test(v)){
+      edit.value=v.replace(/[,;]\s*$/,'');
+      commitBuffer();
+    }else if(/\s$/.test(v)&&sstEmailLooksValid(v.trim())){
+      edit.value=v.trim();
+      commitBuffer();
+    }
+    edit.classList.toggle('is-invalid',!!edit.value&&edit.value.indexOf('@')>0&&!sstEmailLooksValid(edit.value.trim()));
+  });
+  edit.addEventListener('blur',function(){commitBuffer();});
+  edit.addEventListener('paste',function(ev){
+    const txt=(ev.clipboardData||window.clipboardData||{}).getData('text')||'';
+    if(txt&&/[,;\s]/.test(txt)){
+      ev.preventDefault();
+      edit.value=(edit.value||'')+txt;
+      commitBuffer();
+    }
+  });
+  wrap.addEventListener('click',function(ev){
+    if(ev.target===wrap||ev.target===pills)edit.focus();
+  });
+  function setFromValue(raw){
+    emails=sstParseEmailList(raw).filter(sstEmailLooksValid);
+    if(max===1&&emails.length>1)emails=emails.slice(0,1);
+    edit.value='';
+    edit.classList.remove('is-invalid');
+    render();
+  }
+  wrap._sstChips={setFromValue:setFromValue,max:max,edit:edit};
+  render();
+  return wrap;
+}
+function sstEmailChipsRefresh(elOrId){
+  const el=typeof elOrId==='string'?document.getElementById(elOrId):elOrId;
+  if(!el)return;
+  const wrap=el.classList&&el.classList.contains('email-chips')?el:(el.closest?el.closest('.email-chips'):null);
+  const hid=wrap?(wrap.querySelector('input.email-chips-value')||el):(el.dataset&&el.dataset.emailChipsMounted==='1'?el:null);
+  if(wrap&&wrap._sstChips&&wrap._sstChips.setFromValue){
+    wrap._sstChips.setFromValue(hid?hid.value:el.value);
+    return;
+  }
+  if(el&&sstEmailChipsShouldMount(el))sstMountEmailChips(el);
+}
+function sstInitEmailChipsIn(root){
+  root=root||document;
+  if(!root||!root.querySelectorAll)return;
+  const nodes=root.querySelectorAll('input[type="email"],input[type="text"],input.sst-email-chips,input[data-email-chips="1"]');
+  for(let i=0;i<nodes.length;i++){
+    const el=nodes[i];
+    if(!sstEmailChipsShouldMount(el))continue;
+    try{sstMountEmailChips(el);}catch(err){console.warn('sstMountEmailChips',el.id,err);}
+  }
+}
+function sstWatchEmailChips(root){
+  root=root||document.body;
+  if(!root||root._sstEmailChipsWatch)return;
+  root._sstEmailChipsWatch=true;
+  const run=function(){try{sstInitEmailChipsIn(root);}catch(e){}};
+  const obs=new MutationObserver(function(){
+    if(root._sstEmailChipsTick)return;
+    root._sstEmailChipsTick=setTimeout(function(){root._sstEmailChipsTick=null;run();},40);
+  });
+  obs.observe(root,{childList:true,subtree:true});
+  run();
+}
+window.sstParseEmailList=sstParseEmailList;
+window.sstMountEmailChips=sstMountEmailChips;
+window.sstEmailChipsRefresh=sstEmailChipsRefresh;
+window.sstInitEmailChipsIn=sstInitEmailChipsIn;
+window.sstWatchEmailChips=sstWatchEmailChips;
+document.addEventListener('DOMContentLoaded',function(){
+  try{sstWatchEmailChips(document.body);}catch(e){}
+});
+if(document.readyState!=='loading'){
+  try{sstWatchEmailChips(document.body);}catch(e){}
+}
