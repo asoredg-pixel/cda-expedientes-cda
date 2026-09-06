@@ -850,6 +850,8 @@ async function submitTramiteNotificar(expId,taskId){
         adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(null,{e:e&&!e._sin_expediente?e:null,t:t});
       else if(typeof taskReviewAdjuntosDesdeSoportes==='function')
         adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e&&!e._sin_expediente?e:null);
+      if(typeof registrarSoporteEnvioCorreoNotif==='function')
+        await registrarSoporteEnvioCorreoNotif(e&&!e._sin_expediente?e:null,t,refId,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por},adjuntos);
       if(btn)btn.textContent='Enviando correo…';
       if(typeof pqrsEnviarCorreoCiudadano==='function'){
         await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,adjuntos,{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:(e&&e._depto)||t.depto||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare')});
@@ -866,6 +868,9 @@ async function submitTramiteNotificar(expId,taskId){
       return;
     }
     setTaskFirmaWf(refId,taskId,{canal:'correo'});
+    if(t&&t.soportes&&typeof mutateTask==='function'){
+      mutateTask(refId,taskId,function(tk){tk.soportes=(t.soportes||[]).slice();});
+    }
     if(!applyActoVenc()){
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
       return;
@@ -1035,8 +1040,33 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
         notificacion:{en:new Date().toISOString(),a:(opts.destinos||[]).join(', '),por:taskComentarioAutor(),canal:opts.canal||prev.canal||''}
       });
     }
+    // Si hubo firma + notificación: quitar proyección intermedia (queda Firma. + Not.)
+    if(opts.via==='notificacion'&&Array.isArray(t.soportes)&&t.soportes.length){
+      const hasFirm=t.soportes.some(function(s){return typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s);});
+      const hasNot=t.soportes.some(function(s){return typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s);});
+      if(hasFirm&&hasNot){
+        const drop=[];
+        t.soportes=t.soportes.filter(function(s){
+          if(!s)return false;
+          if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return true;
+          if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s))return true;
+          if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return true;
+          drop.push(s);
+          return false;
+        });
+        // Borrado Drive async fuera de mutate (best-effort)
+        window._tramiteDropProyPend=(window._tramiteDropProyPend||[]).concat(drop.map(function(s){return s.driveFileId||s.fileId;}).filter(Boolean));
+      }
+    }
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
   });
+  const dropIds=window._tramiteDropProyPend||[];
+  window._tramiteDropProyPend=[];
+  if(dropIds.length&&typeof driveDeleteInstitutional==='function'){
+    for(let i=0;i<dropIds.length;i++){
+      try{await driveDeleteInstitutional(dropIds[i]);}catch(err){}
+    }
+  }
   if(opts.via==='notificacion'&&typeof applyConceptoReqDesdeNotificacion==='function'){
     try{
       const eNot=typeof getExpById==='function'?getExpById(expId):null;
@@ -1851,6 +1881,9 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
       adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(null,{e:e&&!e._sin_expediente?e:null,t:t});
     else if(typeof taskReviewAdjuntosDesdeSoportes==='function')
       adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e&&!e._sin_expediente?e:null);
+    const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
+    if(typeof registrarSoporteEnvioCorreoNotif==='function')
+      await registrarSoporteEnvioCorreoNotif(e&&!e._sin_expediente?e:null,t,refId,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por},adjuntos);
     if(typeof pqrsEnviarCorreoCiudadano==='function'){
       await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,adjuntos,{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:(e&&e._depto)||t.depto||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare')});
     }else if(typeof gmailSend==='function'){
@@ -1859,6 +1892,10 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
       notif('No hay envío de correo disponible','err');return false;
     }
     if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(refId,taskId,{canal:'correo'});
+    // Persistir soportes (incl. soporte de envío) antes del cierre
+    if(t&&t.soportes&&typeof mutateTask==='function'){
+      mutateTask(refId,taskId,function(tk){tk.soportes=(t.soportes||[]).slice();});
+    }
     await finalizarTramiteTrasPublicar(refId,taskId,{via:'notificacion',destinos:destinos,canal:'correo'});
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     notif('📬 Notificado por correo'+(adjuntos.length?' · '+adjuntos.length+' adjunto(s)':'')+' y actividad cerrada','ok');
@@ -1899,6 +1936,9 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
     const adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
       ?await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null})
       :[];
+    const tAct=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
+    if(typeof registrarSoporteEnvioCorreoNotif==='function')
+      await registrarSoporteEnvioCorreoNotif(e,tAct,expId,{para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por},adjuntos);
     const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+escAttr(cuerpo)+'</p>');
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){notif('No hay envío de correo disponible','err');return false;}
     const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
