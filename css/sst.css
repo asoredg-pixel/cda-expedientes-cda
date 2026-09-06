@@ -386,7 +386,8 @@ tr:hover td{background:var(--bg)}
 /* ✓ Revisada + X Firma/Notificar: dos burbujas apiladas (como estado + prioritaria) */
 .act-est-dual{display:inline-flex;flex-direction:column;align-items:flex-start;gap:3px;vertical-align:middle;max-width:100%}
 .act-est-dual>.bdg{margin:0!important}
-.act-est-sub-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px}
+.act-est-sub-badge{font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px;position:relative}
+.act-est-sub-badge.act-est-sub-badge-count{padding-right:10px}
 .act-est-open-btn{display:inline-flex;align-items:center;padding:0;margin:0;border:0;background:transparent;cursor:pointer;font:inherit;max-width:100%}
 .act-est-open-btn:hover .bdg{filter:brightness(.97);box-shadow:0 0 0 1px rgba(15,23,42,.12)}
 .act-est-open-btn:focus-visible{outline:2px solid var(--bl);outline-offset:2px;border-radius:6px}
