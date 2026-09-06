@@ -188,13 +188,15 @@ function taskFirmaEstadoUi(t){
   const subPend=typeof _actEstSubPendienteUi==='function'?_actEstSubPendienteUi:function(s){return{sub:s,subFg:'#a16207',subBg:'#fef9c3'};};
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){
     if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))
-      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
+      return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
     if(wf.impreso&&wf.impreso.en)
       return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Firmar'));
     return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Imprimir'));
   }
-  if(taskFirmaEnPorNotificar(t)||taskFirmaEnRevisionFinalNotif(t))
-    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
+  if(taskFirmaEnPorNotificar(t))
+    return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
+  if(taskFirmaEnRevisionFinalNotif(t))
+    return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Revisar'));
   if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))
     return{lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'✓ Notificada',subFg:'var(--gn)'};
   return null;
@@ -350,7 +352,7 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
     }
   }else if(taskFirmaEnRevisionFinalNotif(t)){
     if(tramitePuedeNotificar(t))
-      btns+='<button type="button" class="btn bsm" style="background:#6d3fa8;color:#fff" onclick="tramiteAprobarRevisionFinalNotif(\''+eid+'\',\''+tid+'\')">✅ Aprobar notificación</button> ';
+      btns+='<button type="button" class="btn bsm bp" style="background:var(--gn);border-color:var(--gn)" onclick="openTaskCommentsModal(\''+eid+'\',\''+tid+'\',{revisarEntrega:true})">🧐 Revisar entrega</button> ';
     else btns+='<span style="font-size:11px;color:var(--tx2)">Pendiente revisión del departamento</span> ';
   }
   const e=tramiteFirmaExpCtx(t,expId);
@@ -942,6 +944,8 @@ async function submitTramiteNotificar(expId,taskId){
           soporteNombre:nomDoc
         }
       });
+      if(typeof marcarActividadTrasNotifReportada==='function')
+        marcarActividadTrasNotifReportada(tk,por,fechaN);
     });
     window._tramiteNotifSoporteFile=null;
     window._tramiteNotifOficioFile=null;

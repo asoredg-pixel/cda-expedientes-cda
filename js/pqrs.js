@@ -1304,8 +1304,13 @@ function pqrsAccionesTablaHtml(e){
   h+='<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🧐</button> ';
   if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
     h+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();openNcaRevisionModal(\''+id+'\')" title="Revisar entrega">⏳</button> ';
-  if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
-    h+='<button type="button" class="btn bsm act-ico" style="background:#6d3fa8;color:#fff" onclick="event.stopPropagation();ncaAprobarRevisionFinalNotif(\''+id+'\')" title="Aprobar notificación">✅</button> ';
+  if(fase===PQRS_WF.REVISION_FINAL&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()))){
+    const tidRev=(typeof getPqrsAtencionTask==='function'&&getPqrsAtencionTask(e))?String(getPqrsAtencionTask(e).id||'').trim():'';
+    if(tidRev)
+      h+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openTaskCommentsModal(\''+id+'\',\''+escAttr(tidRev)+'\',{revisarEntrega:true})" title="Revisar entrega">🧐</button> ';
+    else
+      h+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')" title="Revisar entrega">🧐</button> ';
+  }
   if((fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA)&&puedeMarcarPqrsRespondida(e)&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
     h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\',{modo:\'firma\'})" title="Enviar a firma">🖊</button> ';
   h+='</span> ';
