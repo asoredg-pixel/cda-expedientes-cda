@@ -912,7 +912,7 @@ async function submitTramiteNotificar(expId,taskId){
         tk.soportes.push({
           id:'sop_'+Date.now(),
           nombre:nomDoc,
-          label:nomDoc,
+          label:'Documento notificado',
           driveFileId:res.fileId||res.driveFileId,
           driveLink:res.driveLink||'',
           previewLink:res.previewLink||res.driveLink||'',
@@ -920,7 +920,13 @@ async function submitTramiteNotificar(expId,taskId){
           preview:res.previewLink||res.driveLink||'',
           driveInstitutional:true,
           autor:por,
-          fecha:fechaN
+          fecha:fechaN,
+          tipo:'notificacion_soporte',
+          notificado:true,
+          driveEstado:'revision_final',
+          es_proyeccion:false,
+          activo:true,
+          version:1
         });
       }
       if(!Array.isArray(tk.historial))tk.historial=[];

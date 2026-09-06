@@ -481,6 +481,15 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
   const respOfi=String(e._pqrs_responsable_oficina||'').trim();
   if(!respOfi&&ofi!=='guaviare')return false;
   if(!usuario)return true;
+  // Notificador designado / quien reportó la notificación: visible en Por notificar y Por revisar
+  const faseVis=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  const wfVis=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const notifPorVis=String((wfVis&&wfVis.notificar_por)||'').trim();
+  const notifRepVis=String((wfVis&&wfVis.notificacion_reportada&&wfVis.notificacion_reportada.por)||'').trim();
+  const esNotifVis=(notifPorVis&&typeof agendaNorm==='function'&&agendaNorm(notifPorVis)===agendaNorm(usuario))
+    ||(notifRepVis&&typeof agendaNorm==='function'&&agendaNorm(notifRepVis)===agendaNorm(usuario));
+  if(esNotifVis&&(faseVis===PQRS_WF.PENDIENTE_NOTIF||faseVis===PQRS_WF.LISTA_ENVIO||faseVis===PQRS_WF.REVISION_FINAL))
+    return true;
   // Encargado y responsables: solo las asignadas a ellos.
   // Para ver todas use el filtro «Todos los responsables» (usuario=null).
   if(!taskUsuarioEsAsignado(t,usuario))return false;
@@ -1251,8 +1260,9 @@ function _ncaMarcarTaskRevisadaAprobada(expId,taskId,meta){
 function pqrsFasePostAprobacionProyeccion(e){
   if(!e)return false;
   const f=pqrsWorkflowFase(e);
+  // REVISION_FINAL no: ya hay entrega notificada pendiente de «Por revisar»
   return f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR
-    ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL;
+    ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO;
 }
 function pqrsEsNotificadorDesignado(e,nombre){
   if(!e||!nombre)return false;
@@ -1269,6 +1279,7 @@ function pqrsEsNotificadorDesignado(e,nombre){
 function pqrsSincronizarParticipacionPostAprobacion(e){
   if(!e)return;
   const fase=pqrsWorkflowFase(e);
+  if(fase===PQRS_WF.REVISION_FINAL)return; // no reabrir/atender: queda en Por revisar
   if(fase!==PQRS_WF.CERRADA&&!pqrsFasePostAprobacionProyeccion(e))return;
   const wf0=getPqrsWorkflow(e);
   const t=getPqrsTaskActiva(e,wf0.task_id)||(e.tasks||[]).find(x=>x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e));
@@ -1364,6 +1375,11 @@ function _pqrsAnexoNumero(d,docs){
 }
 function _pqrsEtiquetaDocWf(d,docsOpt){
   if(!d)return'Documento';
+  if(d.tipo==='notificacion_soporte'||d.notificado===true||String(d.driveEstado||'').toLowerCase()==='revision_final'
+    ||/^documento notificado/i.test(String(d.nombre||d.label||d.driveFilename||''))){
+    const canal=String(d.canal||'').trim();
+    return 'Documento notificado'+(canal?' · '+canal:'');
+  }
   if(_pqrsDocEsAnexoRespuesta(d)){
     const n=_pqrsAnexoNumero(d,docsOpt);
     return 'Anexo '+n;
@@ -4069,7 +4085,7 @@ function puedeVerTabActividades(){
   return esModoResponsable()||esVistaActividadesDepto();
 }
 function puedeVerTabAgenda(){
-  return esModoResponsable()||esVistaActividadesDepto();
+  return esModoResponsable()||esVistaActividadesDepto()||(typeof esCargoVital==='function'&&esCargoVital());
 }
 /** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés), no oficinas RN/OAP/DS/Admin. */
 function puedeAsignarEventoAgendaResponsables(){
@@ -5093,6 +5109,15 @@ function puedeAgendarTask(t){
       ||(esVistaActividadesDepto()&&!esModoResponsable())
     ));
   if(enPorNotifAg)return true;
+  // Responsable asignado viendo ítem en fase por notificar (misma 📅 que VITAL)
+  if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
+    if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return true;
+    if(esPqrsAg&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eAg))return true;
+  }
+  if(typeof esCargoVital==='function'&&esCargoVital()){
+    if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return true;
+    if(esPqrsAg&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eAg))return true;
+  }
   // Encargado en «Revisados»
   if(esVistaActividadesDepto()&&!esModoResponsable()
     &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,eAg))
@@ -6330,11 +6355,13 @@ function buildCompareGroupedOptsHtml(docs,selectedId){
   if(!docs.length)return'';
   const groups=[
     {lbl:'Versiones por corregir',test:function(d){return d.origen==='Entrega'&&d.porCorregir;}},
-    {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Documento a notificar (proyección)',test:function(d){return !d.notificado&&d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Documento notificado',test:function(d){return!!d.notificado&&!d.esAnexo;}},
+    {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo&&!d.porCorregir&&!d.notificado;}},
     {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
-    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo&&!d.porCorregir&&!d.notificado;}},
     {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
-    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===false&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
+    {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===false&&!d.notificado&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Anexos · expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===true&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!d.esAnexo;}},
     {lbl:'Anexos · registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!!d.esAnexo;}}
@@ -6363,8 +6390,15 @@ function initTaskReviewCompareDefaults(t,e,taskId,docs){
   const ult=getSoportesUltimaEntrega(t);
   const firstAnx=ult.find(soporteEsAnexoEntrega);
   let defB=firstAnx?('sop_'+firstAnx.id):'';
+  // Revisión de notificación: Proy. a la izquierda, Not. a la derecha
+  const proyDoc=docs.find(function(d){return !d.esAnexo&&!d.notificado&&!d.porCorregir&&(/proy/i.test(String(d.label||''))||d.origen==='Entrega'||d.origen==='PQRSD');});
+  const notDoc=docs.find(function(d){return d.notificado||/^not\./i.test(String(d.label||''));});
+  if(proyDoc&&notDoc){
+    defA=proyDoc.id;
+    defB=notDoc.id;
+  }
   const porCorr=docs.find(function(d){return d.porCorregir&&!d.esAnexo;});
-  if(porCorr)defB=porCorr.id;
+  if(porCorr&&!notDoc)defB=porCorr.id;
   if(!defB||defB===defA){
     const other=docs.find(function(d){return d.id!==defA;});
     defB=other?other.id:'';
@@ -6547,6 +6581,7 @@ function marcarActividadTrasNotifReportada(t,por,fechaN){
   t.estado='Por verificar';
   t.fechaReportada=f;
   t.fechaAtendida='';
+  t._pqrs_notif_en_revision=true;
   if(quien&&typeof ensureAsignado==='function'){
     const a=ensureAsignado(t,quien);
     if(a){
@@ -6554,6 +6589,10 @@ function marcarActividadTrasNotifReportada(t,por,fechaN){
       a.fechaReportada=f;
       a.fechaAtendida='';
     }
+    // Asegurar que figure en responsables para la bandeja del notificador
+    if(!Array.isArray(t.responsables))t.responsables=[];
+    if(!t.responsables.some(function(n){return typeof agendaNorm==='function'?agendaNorm(n)===agendaNorm(quien):n===quien;}))
+      t.responsables=t.responsables.concat([quien]);
   }
   if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
 }
@@ -7978,8 +8017,11 @@ function getTareasResponsableActivo(){
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
-      if(!pqrsTaskVisibleEnActividades(t,e,responsableActivo))return;
-      if(!taskUsuarioEsAsignado(t,responsableActivo))return;
+      const esPqrsAt=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+      if(esPqrsAt){
+        if(!pqrsTaskVisibleEnActividades(t,e,responsableActivo))return;
+      }else if(!taskUsuarioEsAsignado(t,responsableActivo))return;
+      else if(typeof pqrsTaskVisibleEnActividades==='function'&&!pqrsTaskVisibleEnActividades(t,e,responsableActivo))return;
       out.push({
         ...normalizeTask(t),
         exp:e._exp,
@@ -8345,25 +8387,32 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
     const url=d.driveLink||d.previewLink||d.url||'';
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
     const esAn=typeof _pqrsDocEsAnexoRespuesta==='function'?_pqrsDocEsAnexoRespuesta(d):false;
+    const esNot=d.tipo==='notificacion_soporte'||d.notificado===true
+      ||String(d.driveEstado||'').toLowerCase()==='revision_final'
+      ||/^documento notificado/i.test(String(d.nombre||d.label||''));
     const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,docs):'Documento';
     return{
       id:'pqrs_wf_'+(d.fileId||d.driveFileId||i)+'_'+i,
       label:lbl,
       url:p.url||url,
       preview:p.preview||url,
-      version:ver,
-      fecha:(wf&&(wf.entregado_en||wf.fecha_respuesta))||hoy(),
+      version:esNot?1:ver,
+      fecha:esNot?((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.fecha)||hoy())
+        :((wf&&(wf.entregado_en||wf.fecha_respuesta))||hoy()),
       driveFileId:d.fileId||d.driveFileId||'',
       fileId:d.fileId||d.driveFileId||'',
       es_anexo:esAn,
-      tipo:esAn?'anexo_respuesta':'drive',
+      es_proyeccion:!esAn&&!esNot,
+      notificado:!!esNot,
+      tipo:esNot?'notificacion_soporte':(esAn?'anexo_respuesta':'drive'),
       activo:true,
-      autor:rep,
-      reportadoPor:rep,
+      autor:esNot?((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.por)||rep):rep,
+      reportadoPor:esNot?((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.por)||rep):rep,
       local:false,
       driveInstitutional:true,
-      driveEstado:d.driveEstado||'aprobado',
-      loteEntrega:'wf_aprob_'+String((wf&&wf.entrega_n)||1)
+      driveEstado:d.driveEstado||(esNot?'revision_final':'aprobado'),
+      loteEntrega:esNot?'wf_notif_'+String((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.fecha)||1)
+        :('wf_aprob_'+String((wf&&wf.entrega_n)||1))
     };
   });
 }
@@ -11407,6 +11456,16 @@ function soporteEsAnexoEntrega(s){
   if(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s))return true;
   return /^anexo\b/i.test(String(s.label||s.driveFilename||''));
 }
+/** Documento cargado como evidencia de notificación (presencial / WhatsApp / aviso). */
+function soporteEsDocumentoNotificado(s){
+  if(!s)return false;
+  if(s.notificado===true||s.tipo==='notificacion_soporte')return true;
+  const est=String(s.driveEstado||'').toLowerCase();
+  if(est==='revision_final'||est==='notificado')return true;
+  const lbl=String(s.label||s.nombre||s.driveFilename||'');
+  return /^documento notificado/i.test(lbl)||/^not\.\s*v/i.test(lbl);
+}
+window.soporteEsDocumentoNotificado=soporteEsDocumentoNotificado;
 function soporteUrlComparable(s){
   if(!s)return'';
   return String(s.url||s.preview||s.driveLink||s.previewLink||'').trim();
@@ -11418,9 +11477,18 @@ function soporteTabLabel(s,idx,soportes){
     const n=anexos.indexOf(s)+1;
     return 'Anexo '+(n>0?n:(s.anexo_n||1));
   }
+  if(soporteEsDocumentoNotificado(s)){
+    const nots=list.filter(function(x){return x&&!soporteEsAnexoEntrega(x)&&soporteEsDocumentoNotificado(x);})
+      .slice().sort(function(a,b){return (a.version||0)-(b.version||0);});
+    const ver=s.version||(nots.indexOf(s)+1)||1;
+    let lbl='Not. v'+ver;
+    if(s.activo)lbl+=' · activa';
+    return lbl;
+  }
   const esProy=s&&(s.es_proyeccion||/^proyecci/i.test(String(s.label||''))||/^oficio\b/i.test(String(s.label||'')));
   if(esProy||!s.local){
-    const mains=list.filter(function(x){return !soporteEsAnexoEntrega(x);}).slice().sort(function(a,b){return (a.version||0)-(b.version||0);});
+    const mains=list.filter(function(x){return x&&!soporteEsAnexoEntrega(x)&&!soporteEsDocumentoNotificado(x);})
+      .slice().sort(function(a,b){return (a.version||0)-(b.version||0);});
     const ver=s.version||(mains.indexOf(s)+1)||1;
     const esCorr=typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s);
     let lbl='Proy. v'+ver;
@@ -11812,13 +11880,18 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         if(!url)return;
         const lbl=_pqrsEtiquetaDocWf(d,wf.documentos||[]);
         const esAn=_pqrsDocEsAnexoRespuesta(d);
+        const esNot=d.tipo==='notificacion_soporte'||d.notificado===true
+          ||String(d.driveEstado||'').toLowerCase()==='revision_final'
+          ||/^documento notificado/i.test(String(d.nombre||d.label||''));
+        const shortLab=esAn?('Anexo '+(_pqrsAnexoNumero(d,wf.documentos||[])||1))
+          :(esNot?('Not. v1'+(d.canal?' · '+d.canal:'')):('Proy. · '+String(lbl).replace(/^Proyección de respuesta\s*/i,'').trim()||'v1'));
         const p=parseDrivePreviewUrl(url);
         add({
-          id:'wf_'+exp._exp+'_'+i,origen:pref+'PQRSD',soporteId:null,esAnexo:esAn,
-          label:(esAn?'📎 ':'📄 ')+lbl,titulo:(esAn?'📎 ':'📄 ')+lbl,
-          meta:[d.driveEstado||'',fmtF(String(d.entregado_en||wf.fecha_respuesta||'').slice(0,10))].filter(Boolean).join(' · '),
+          id:'wf_'+exp._exp+'_'+i,origen:pref+'PQRSD',soporteId:null,esAnexo:esAn,notificado:esNot,
+          label:(esAn?'📎 ':esNot?'📬 ':'📄 ')+shortLab,titulo:(esAn?'📎 ':esNot?'📬 ':'📄 ')+lbl,
+          meta:[esNot?'notificado':(d.driveEstado||''),fmtF(String(d.entregado_en||(wf.notificacion_reportada&&wf.notificacion_reportada.fecha)||wf.fecha_respuesta||'').slice(0,10))].filter(Boolean).join(' · '),
           preview:p.preview||p.url||url,url,local:false,mime:d.mime||'',fecha:d.entregado_en||wf.fecha_respuesta||'',
-          sortKey:(d.entregado_en||wf.fecha_respuesta||'0000')+'_wf_'+String(i).padStart(4,'0')+(esAn?'_z':'')
+          sortKey:(d.entregado_en||wf.fecha_respuesta||'0000')+'_wf_'+String(i).padStart(4,'0')+(esAn?'_z':'')+(esNot?'_n':'')
         });
       });
     }
@@ -11881,16 +11954,19 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       }else if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
         lab='📎 Anexo '+n;
+      }else if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s)){
+        lab='Not. v'+(s.version||1)+(s.activo?' · activa':'');
       }else if(s.es_proyeccion||/proyecci/i.test(String(s.label||''))){
-        lab='📄 Proyección de respuesta'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
+        lab='Proy. v'+(s.version||1)+(s.activo?' · activa':'');
       }else{
-        lab='📄 Documento principal'+(s.version?' · v'+s.version:'')+(s.activo?' · activa':'');
+        lab='Doc. v'+(s.version||1)+(s.activo?' · activa':'');
       }
       add({
         id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,esAnexo:esAn,entregaActual:entregaActual,porCorregir:esCorr,
+        notificado:typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s),
         label:lab,
         titulo:lab,
-        meta:[!esAn&&!esCorr&&s.label&&s.label!==lab?s.label:'',fmtF((s.fecha||'').slice(0,10))].filter(Boolean).join(' · '),
+        meta:fmtF((s.fecha||'').slice(0,10)),
         preview:s.preview||s.previewLink||s.driveLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
         sortKey:(s.fecha||'0000')+'_sop_'+(esCorr?'0':'1')+String(s.version||0).padStart(5,'0')+(esAn?'_z':'')
       });
@@ -21265,7 +21341,34 @@ function filtrarActividadesPorEstado(list,filtro){
     out=mergeActividadLists(out,typeof getTareasNotifConPlazoDeuda==='function'?getTareasNotifConPlazoDeuda():[]);
     return out;
   }
-  if(filtro==='porver')return (list||[]).filter(actividadCuentaComoPorRevisar);
+  if(filtro==='porver'){
+    let out=(list||[]).filter(actividadCuentaComoPorRevisar);
+    // Revisión final de notificación: incluir aunque el notificador no esté en el listado base
+    const revFinal=getTareasPqrsPorFaseWorkflow(function(e){
+      return typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.REVISION_FINAL;
+    });
+    const tramRev=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
+      return typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t);
+    }):[];
+    out=mergeActividadLists(out,mergeActividadLists(revFinal,tramRev));
+    if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
+      out=(out||[]).filter(function(t){
+        if(!t)return false;
+        if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
+        const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+        if(e&&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(e,responsableActivo))return true;
+        const wf=e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(t.firmaWf||{});
+        const rep=String((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.por)||'').trim();
+        if(rep&&typeof agendaNorm==='function'&&agendaNorm(rep)===agendaNorm(responsableActivo))return true;
+        if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)){
+          const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
+          if(nPor&&typeof agendaNorm==='function'&&agendaNorm(nPor)===agendaNorm(responsableActivo))return true;
+        }
+        return false;
+      });
+    }
+    return out;
+  }
   if(filtro==='venc'){
     let out=(list||[]).filter(t=>taskActividadVencida(t));
     if(esModoResponsable()||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())){
@@ -21278,6 +21381,7 @@ function filtrarActividadesPorEstado(list,filtro){
     if(esModoResponsable()&&responsableActivo&&taskUsuarioEsAsignado(t,responsableActivo)){
       // Designado a notificar: solo «Por notificar» / «Por ejecutar», no «Atendidas»
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eD))return false;
       if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)
         &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eD)
         &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eD))return false;
