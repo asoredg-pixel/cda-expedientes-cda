@@ -439,11 +439,28 @@ function recExpCanEdit() {
   return recExpCanManage();
 }
 
-/** Dueño: eliminar, renombrar, nueva subcarpeta, arrastrar. */
+/** Dueño: eliminar, renombrar, arrastrar, gestionar. */
 function recExpCanManage() {
   const st = recExpState();
   const r = st ? getRecursosRepoById(st.repoId) : null;
   return !!(r && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r));
+}
+
+/** Acceso solo por compartir (carpeta principal o subcarpeta), sin ser gestor. */
+function recExpIsSharedCollaborator() {
+  const st = recExpState();
+  const r = st ? getRecursosRepoById(st.repoId) : null;
+  if (!r || typeof puedeVerRecursos !== 'function' || !puedeVerRecursos()) return false;
+  if (typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r)) return false;
+  if (st && st.sharedEntry && st.rootId && typeof archivosRepoCompartidosConmigo === 'function') {
+    return archivosRepoCompartidosConmigo(r).some(function(a) {
+      return a.fileId === st.rootId && a.isFolder;
+    });
+  }
+  return typeof recursosItemCompartidoVisible === 'function' &&
+    recursosItemCompartidoVisible(r) &&
+    typeof recursosItemVisiblePorScope === 'function' &&
+    !recursosItemVisiblePorScope(r);
 }
 
 /** Puede subir archivos (dueño, compartido del repo, o entrada de subcarpeta compartida). */
@@ -452,12 +469,32 @@ function recExpCanUpload() {
   const r = st ? getRecursosRepoById(st.repoId) : null;
   if (!r) return false;
   if (typeof puedeAdjuntarBibliotecaRepo === 'function' && puedeAdjuntarBibliotecaRepo(r)) return true;
-  if (st && st.sharedEntry && st.rootId && typeof archivosRepoCompartidosConmigo === 'function') {
-    return archivosRepoCompartidosConmigo(r).some(function(a) {
-      return a.fileId === st.rootId && a.isFolder;
-    });
-  }
+  if (recExpIsSharedCollaborator()) return true;
   return false;
+}
+
+/** Crear subcarpetas: gestores y quienes tienen la carpeta compartida. */
+function recExpCanCreateFolder() {
+  return recExpCanManage() || recExpIsSharedCollaborator();
+}
+
+/** Carpeta compartida (raíz) o ítems en archivosCompartidos: no eliminables por colaboradores. */
+function recExpIsProtectedSharedItem(fileId) {
+  const st = recExpState();
+  const r = st ? getRecursosRepoById(st.repoId) : null;
+  if (!fileId || !r) return false;
+  if (st && st.sharedEntry && fileId === st.rootId) return true;
+  const arch = (r.archivosCompartidos || []).find(function(a) { return a.fileId === fileId; });
+  return !!(arch && (arch.compartidoCon || []).length);
+}
+
+function recExpCanDeleteSelection() {
+  if (recExpCanManage()) return true;
+  if (!recExpIsSharedCollaborator()) return false;
+  const st = recExpState();
+  const ids = (st && st.selection) || [];
+  if (!ids.length) return false;
+  return ids.some(function(id) { return !recExpIsProtectedSharedItem(id); });
 }
 
 function recExpCanShare() {
@@ -578,11 +615,13 @@ function renderRecExpToolbar(canManage, canUpload) {
   const view = (st && st.view) || 'details';
   const canUp = !!canUpload;
   const canMg = !!canManage;
+  const canCreate = recExpCanCreateFolder();
+  const canDelBtn = canMg || recExpIsSharedCollaborator();
   const depth = (st && st.path && st.path.length) || 0;
   let h = '<div class="rec-exp-toolbar">';
   h += '<div class="rec-exp-toolbar-left">';
   h += '<button type="button" class="btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()"' + (depth <= 1 ? ' disabled' : '') + '>←</button>';
-  if (canMg) {
+  if (canCreate) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Nueva carpeta" onclick="recExpNuevaCarpeta()">📁</button>';
   }
   if (canUp) {
@@ -604,7 +643,7 @@ function renderRecExpToolbar(canManage, canUpload) {
       h += '<label class="btn bsm bic act-ico" style="cursor:pointer" title="Subir">📎<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
     }
   }
-  if (canMg) {
+  if (canDelBtn) {
     h += '<button type="button" class="btn bsm bic act-ico" onclick="recExpEliminarSeleccion()" title="Eliminar selección">🗑️</button>';
   }
   h += '<button type="button" class="btn bsm bic act-ico" onclick="cargarRecursosRepoArchivos()" title="Actualizar">↻</button>';
@@ -637,10 +676,11 @@ function renderRecExpItemsHtml(files, canManage, canShare, repo, canUpload) {
   const sel = new Set((st && st.selection) || []);
   const canEdit = !!canManage;
   const canUp = canUpload !== undefined ? !!canUpload : canEdit;
+  const canCreate = recExpCanCreateFolder();
   if (!(files || []).length) {
     return '<div class="rec-exp-empty" data-rec-exp-pane="1">Carpeta vacía. ' +
       (canUp ? 'Arrastre archivos aquí o use «Subir».' : '') +
-      (canEdit ? ' También puede crear una subcarpeta.' : '') + '</div>';
+      (canCreate ? ' También puede crear una subcarpeta.' : '') + '</div>';
   }
   if (view === 'icons') {
     let h = '<div class="rec-exp-icons" data-rec-exp-pane="1" tabindex="0">';
@@ -913,14 +953,14 @@ function recExpKeyDown(ev) {
     recExpRenombrar(st.selection[0]);
     return;
   }
-  if ((ev.key === 'Delete' || ev.key === 'Del') && canEdit && (st.selection || []).length) {
+  if ((ev.key === 'Delete' || ev.key === 'Del') && recExpCanDeleteSelection()) {
     ev.preventDefault();
     recExpEliminarSeleccion();
   }
 }
 
 async function recExpNuevaCarpeta() {
-  if (!recExpCanManage()) return;
+  if (!recExpCanCreateFolder()) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear carpetas en el repositorio'); return; }
   const nom = await recExpAskText({
     title: 'Nueva carpeta',
@@ -1116,10 +1156,24 @@ async function recExpRenombrar(fileId) {
 }
 
 async function recExpEliminarSeleccion() {
-  if (!recExpCanManage()) return;
   const st = recExpState();
-  const ids = (st && st.selection) || [];
+  let ids = ((st && st.selection) || []).slice();
   if (!ids.length) { notif('Seleccione uno o más elementos', 'err'); return; }
+  if (recExpCanManage()) {
+    // dueño: elimina todo lo seleccionado
+  } else if (recExpIsSharedCollaborator()) {
+    const blocked = ids.filter(recExpIsProtectedSharedItem);
+    ids = ids.filter(function(id) { return !recExpIsProtectedSharedItem(id); });
+    if (blocked.length && !ids.length) {
+      notif('No puede eliminar la carpeta o los archivos compartidos', 'err');
+      return;
+    }
+    if (blocked.length) {
+      notif('Se omitieron ' + blocked.length + ' elemento(s) compartido(s) protegidos', 'err');
+    }
+  } else {
+    return;
+  }
   const items = ids.map(recExpItemById).filter(Boolean);
   if (!items.length) return;
   const msg = items.length === 1
@@ -1152,7 +1206,8 @@ function recExpPaneContextMenu(ev) {
   ev.preventDefault();
   const canManage = recExpCanManage();
   const canUpload = recExpCanUpload();
-  if (!canManage && !canUpload) return;
+  const canCreate = recExpCanCreateFolder();
+  if (!canManage && !canUpload && !canCreate) return;
   const st = recExpState();
   if (st) st.selection = [];
   recExpRefreshSelectionUi();
@@ -1170,7 +1225,7 @@ function recExpPaneContextMenu(ev) {
     b.onclick = function() { recExpHideContextMenu(); fn(); };
     menu.appendChild(b);
   };
-  if (canManage) add('Nueva carpeta', function() { recExpNuevaCarpeta(); });
+  if (canCreate) add('Nueva carpeta', function() { recExpNuevaCarpeta(); });
   if (canUpload) {
     add('Subir archivos…', function() {
       const inp = document.createElement('input');
@@ -1210,7 +1265,9 @@ function recExpItemContextMenu(ev, fileId) {
   const canManage = recExpCanManage();
   const canUpload = recExpCanUpload();
   const canShare = recExpCanShare();
+  const canCreate = recExpCanCreateFolder();
   const isFolder = recExpIsFolder(f);
+  const canDelItem = canManage || (recExpIsSharedCollaborator() && !recExpIsProtectedSharedItem(fileId));
   recExpHideContextMenu();
   const menu = document.createElement('div');
   menu.id = 'rec-exp-ctx';
@@ -1247,12 +1304,12 @@ function recExpItemContextMenu(ev, fileId) {
       recursosAbrirCompartir('archivo', st2.repoId, fileId, f.name, isFolder);
     });
   }
-  if (canManage || canUpload) {
+  if (canCreate || canUpload || canDelItem) {
     const sep = document.createElement('div');
     sep.className = 'rec-exp-ctx-sep';
     menu.appendChild(sep);
   }
-  if (canManage) add('Nueva carpeta aquí', function() { recExpNuevaCarpeta(); });
+  if (canCreate) add('Nueva carpeta aquí', function() { recExpNuevaCarpeta(); });
   if (canUpload) {
     add('Subir aquí…', function() {
       const inp = document.createElement('input');
@@ -1262,7 +1319,7 @@ function recExpItemContextMenu(ev, fileId) {
       inp.click();
     });
   }
-  if (canManage) {
+  if (canDelItem) {
     add('Eliminar', function() { recExpEliminarSeleccion(); }, true);
   }
   document.body.appendChild(menu);
