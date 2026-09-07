@@ -1027,8 +1027,8 @@ function chatInitUnreadButtonGuard(){
   }
 }
 function chatToggleContactos(force){
-  if(typeof force==='boolean')window._chatContactsCollapsed=force;
-  else window._chatContactsCollapsed=!window._chatContactsCollapsed;
+  // Contactos siempre visibles: no colapsar
+  window._chatContactsCollapsed=false;
   chatSyncLayout();
 }
 function chatInitContactsClicks(){
@@ -1053,20 +1053,17 @@ function chatSyncLayout(){
   const back=document.getElementById('chat-back-btn');
   const toggleBtn=document.getElementById('chat-toggle-contacts-btn');
   const conv=window._chatConvActiva;
-  const mobile=window.innerWidth<640;
-  const collapsed=!!window._chatContactsCollapsed;
+  window._chatContactsCollapsed=false;
   if(contacts){
-    // Nunca dejar wide+with-conv a la vez: wide a 100% tapa el panel de escritura
+    // Lista siempre visible: ancha al elegir contacto; al lado al conversar
     if(conv){
-      contacts.classList.remove('wide');
-      contacts.classList.toggle('with-conv',!collapsed&&!mobile);
-      contacts.classList.toggle('collapsed',!!collapsed);
-      contacts.style.display=collapsed?'none':'';
+      contacts.classList.remove('wide','collapsed');
+      contacts.classList.add('with-conv');
+      contacts.style.display='';
     }else{
       contacts.classList.add('wide');
       contacts.classList.remove('with-conv','collapsed');
       contacts.style.display='';
-      window._chatContactsCollapsed=false;
     }
   }
   if(main){
@@ -1079,9 +1076,10 @@ function chatSyncLayout(){
       main.style.display='';
     }
   }
-  // Volver / contactos visibles también en escritorio (primer clic oculta la lista)
-  if(back)back.style.display=conv?'inline-flex':'none';
-  if(toggleBtn)toggleBtn.style.display=conv?'inline-block':'none';
+  // Solo flecha atrás en móvil (lista sigue visible en escritorio)
+  const mobile=window.innerWidth<640;
+  if(back)back.style.display=(conv&&mobile)?'inline-flex':'none';
+  if(toggleBtn)toggleBtn.style.display='none';
 }
 function chatVolverContactos(){
   stopChatActiveSync();
@@ -1168,8 +1166,8 @@ async function chatAbrirConv(contactKey){
   window._chatAbrirConvBusy=contactKey;
   window._chatActiveContactKey=contactKey;
   window._chatVista='chat';
-  // Primer clic: pasar directo a escribir (ocultar lista tipo WhatsApp)
-  window._chatContactsCollapsed=true;
+  // Primer clic: abrir conversación con contactos siempre a la vista
+  window._chatContactsCollapsed=false;
   const c=chatContactFromKey(contactKey);
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
