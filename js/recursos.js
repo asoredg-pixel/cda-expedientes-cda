@@ -161,15 +161,11 @@ function renderRecursosPanel() {
 function renderRecursosEnlacesPanel(depto) {
   const lista = esAdministrador() ? enlacesVisiblesAdminTodos() : enlacesVisiblesParaSesion();
   const q = String(document.getElementById('rec-enlace-q') && document.getElementById('rec-enlace-q').value || window._recEnlaceQ || '').trim().toLowerCase();
-  const fa = String(document.getElementById('rec-enlace-area') && document.getElementById('rec-enlace-area').value || window._recEnlaceArea || '').trim().toLowerCase();
-  const ft = String(document.getElementById('rec-enlace-tem') && document.getElementById('rec-enlace-tem').value || window._recEnlaceTem || '').trim().toLowerCase();
 
   const filtrada = lista.filter(function(l) {
-    if (q && !(l.titulo || '').toLowerCase().includes(q) && !(l.url || '').toLowerCase().includes(q) &&
-        !(l.descripcion || '').toLowerCase().includes(q)) return false;
-    if (fa && !(l.area || '').toLowerCase().includes(fa)) return false;
-    if (ft && !(l.tematica || '').toLowerCase().includes(ft)) return false;
-    return true;
+    if (!q) return true;
+    const blob = [l.titulo, l.url, l.descripcion, l.area, l.tematica].join(' ').toLowerCase();
+    return blob.includes(q);
   });
 
   const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
@@ -179,14 +175,13 @@ function renderRecursosEnlacesPanel(depto) {
   h += '<div class="rec-side-title"><span class="rec-side-ico" aria-hidden="true">🔗</span><span>Enlaces</span>';
   h += '<span class="rec-side-count">' + filtrada.length + '</span></div>';
   if (puedeCrear) {
-    h += '<button type="button" class="rec-side-add" onclick="recursosMostrarFormEnlace()" title="Nuevo enlace">+</button>';
+    h += '<button type="button" class="btn bsm bic act-ico" onclick="recursosMostrarFormEnlace()" title="Nuevo enlace">+</button>';
   }
   h += '</div>';
 
-  h += '<div class="rec-side-filters">';
-  h += '<input type="search" id="rec-enlace-q" class="rec-inp rec-inp-side" placeholder="Buscar…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;renderRecursosPanel()">';
-  h += '<input type="text" id="rec-enlace-area" class="rec-inp rec-inp-side" placeholder="Área" value="' + escAttr(window._recEnlaceArea || '') + '" oninput="window._recEnlaceArea=this.value;renderRecursosPanel()">';
-  h += '<input type="text" id="rec-enlace-tem" class="rec-inp rec-inp-side" placeholder="Temática" value="' + escAttr(window._recEnlaceTem || '') + '" oninput="window._recEnlaceTem=this.value;renderRecursosPanel()">';
+  h += '<div class="rec-search" role="search">';
+  h += '<span class="rec-search-ico" aria-hidden="true">🔍</span>';
+  h += '<input type="search" id="rec-enlace-q" class="rec-search-inp" placeholder="Buscar enlaces…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;renderRecursosPanel()" aria-label="Buscar enlaces">';
   h += '</div>';
 
   if (window._recursosEnlaceForm) {
@@ -194,7 +189,7 @@ function renderRecursosEnlacesPanel(depto) {
   }
 
   if (!filtrada.length) {
-    h += '<div class="rec-empty rec-empty-side">No hay enlaces para este contexto.</div>';
+    h += '<div class="rec-empty rec-empty-side">' + (q ? 'Sin resultados.' : 'No hay enlaces para este contexto.') + '</div>';
   } else {
     h += '<div class="rec-enlace-list">';
     filtrada.forEach(function(l) {
@@ -212,15 +207,15 @@ function renderRecursosEnlacesPanel(depto) {
       h += '<a class="rec-enlace-tit" href="' + escAttr(l.url) + '" target="_blank" rel="noopener noreferrer">' + escAttr(l.titulo || l.url) + '</a>';
       if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
       h += '<div class="rec-enlace-actions">';
-      h += '<a class="btn bsm" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Abrir ↗</a>';
+      h += '<a class="btn bsm bic act-ico" href="' + escAttr(l.url) + '" target="_blank" rel="noopener" title="Abrir">🔍</a>';
       if (canEdit) {
-        h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormEnlace(\'' + escAttr(l.id) + '\')">Editar</button>';
+        h += '<button type="button" class="btn bsm bic act-ico" title="Editar" onclick="recursosMostrarFormEnlace(\'' + escAttr(l.id) + '\')">✏️</button>';
       }
       if (canShare) {
-        h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">Compartir</button>';
+        h += '<button type="button" class="btn bsm bic act-ico" title="Compartir" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">📤</button>';
       }
       if (canDel) {
-        h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">Eliminar</button>';
+        h += '<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">🗑️</button>';
       }
       h += '</div></article>';
     });
@@ -258,9 +253,9 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   h += '<div class="rec-bib-panel">';
   h += '<div class="rec-bib-hdr">';
   h += '<div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📁 Biblioteca</span>';
-  h += '<p class="rec-bib-lead">Temas y carpetas documentales de su contexto.</p></div>';
+  h += '<p class="rec-bib-lead">Carpetas documentales de su contexto.</p></div>';
   if (puedeCrear) {
-    h += '<button type="button" class="rec-bib-compose" onclick="recursosMostrarFormRepo()"><span class="rec-bib-compose-ico" aria-hidden="true">+</span><span>Nuevo repositorio</span></button>';
+    h += '<button type="button" class="rec-bib-compose" onclick="recursosMostrarFormRepo()"><span class="rec-bib-compose-ico" aria-hidden="true">+</span><span>Nueva carpeta</span></button>';
   }
   h += '</div>';
 
@@ -274,7 +269,7 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
 
   const repos = reposBibliotecaVisibles();
   if (!repos.length) {
-    h += '<div class="rec-empty rec-bib-empty">Sin repositorios para su contexto (<strong>' + escAttr(recursosContextoLabel()) + '</strong>).</div>';
+    h += '<div class="rec-empty rec-bib-empty">Sin carpetas para su contexto (<strong>' + escAttr(recursosContextoLabel()) + '</strong>).</div>';
   } else {
     h += '<div class="rec-repo-grid">';
     repos.forEach(function(r, idx) {
@@ -378,7 +373,7 @@ function recExpCurrentFolderId() {
 
 function renderRecursosRepoDetalle(repoId) {
   const r = getRecursosRepoById(repoId);
-  if (!r) return '<div class="rec-empty">Repositorio no encontrado.</div>';
+  if (!r) return '<div class="rec-empty">Carpeta no encontrada.</div>';
   const s = getRepoScope(r);
   const canEdit = puedeEditarBiblioteca(s.scope, s.scopeId);
   const canDel = puedeEliminarRecursosItem(r);
@@ -396,13 +391,13 @@ function renderRecursosRepoDetalle(repoId) {
   if (canEdit || canShare || canDel) {
     h += '<div class="rec-toolbar" style="margin:0">';
     if (canEdit) {
-      h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">Editar datos</button>';
+      h += '<button type="button" class="btn bsm bic act-ico" title="Editar carpeta" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">✏️</button>';
     }
     if (canShare) {
-      h += '<button type="button" class="btn bsm" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">Compartir repositorio</button>';
+      h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
     }
     if (canDel) {
-      h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">Eliminar repo</button>';
+      h += '<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
     }
     h += '</div>';
   }
@@ -1178,24 +1173,29 @@ function renderRecursosEnlaceForm(editId) {
   const scope = existing ? existing.scope : auto.scope;
   const scopeId = existing ? existing.scopeId : auto.scopeId;
 
-  let h = '<div class="card rec-card rec-form-card"><div class="cft">' + (existing ? 'Editar enlace' : 'Nuevo enlace externo') + '</div><div class="fg">';
+  let h = '<div class="rec-form-card">';
+  h += '<div class="rec-form-hdr"><span class="rec-form-title">' + (existing ? 'Editar enlace' : 'Nuevo enlace') + '</span>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Cerrar" onclick="recursosOcultarFormEnlace()">✕</button></div>';
+  if (!recursosMuestraSelectorAmbito() && !existing) {
+    h += '<p class="rec-form-scope">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong></p>';
+  }
+  h += '<div class="rec-form-body"><div class="fg">';
   if (recursosMuestraSelectorAmbito()) {
     h += renderRecursosScopeFields(scope, scopeId, 'rec-enl');
   } else {
     h += '<input type="hidden" id="rec-enl-scope" value="' + escAttr(scope) + '">';
     h += '<input type="hidden" id="rec-enl-scope-id" value="' + escAttr(scopeId) + '">';
-    if (!existing) {
-      h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong> y sus responsables asignados.</p>';
-    }
   }
   h += '<div class="fld"><label>Título</label><input type="text" id="rec-enl-titulo" value="' + escAttr(existing && existing.titulo || '') + '"></div>';
   h += '<div class="fld"><label>URL</label><input type="url" id="rec-enl-url" value="' + escAttr(existing && existing.url || '') + '" placeholder="https://…"></div>';
   h += '<div class="fld"><label>Área</label><input type="text" id="rec-enl-area" value="' + escAttr(existing && existing.area || '') + '" placeholder="Texto libre"></div>';
   h += '<div class="fld"><label>Temática</label><input type="text" id="rec-enl-tematica" value="' + escAttr(existing && existing.tematica || '') + '" placeholder="Texto libre"></div>';
   h += '<div class="fld"><label>Descripción (opcional)</label><textarea id="rec-enl-desc" rows="2">' + escTextarea(existing && existing.descripcion || '') + '</textarea></div>';
-  h += '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="guardarRecursosEnlace(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
-  h += '<button type="button" class="btn bsm" onclick="recursosOcultarFormEnlace()">Cancelar</button></div>';
-  h += '</div></div>';
+  h += '</div>';
+  h += '<div class="rec-form-foot">';
+  h += '<button type="button" class="btn bsm bp" onclick="guardarRecursosEnlace(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Cancelar" onclick="recursosOcultarFormEnlace()">✕</button>';
+  h += '</div></div></div>';
   return h;
 }
 
@@ -1321,25 +1321,30 @@ function renderRecursosRepoForm(editId) {
   const s = existing ? getRepoScope(existing) : auto;
   const scope = s.scope;
   const scopeId = s.scopeId;
-  let h = '<div class="card rec-card rec-form-card"><div class="cft">' + (existing ? 'Editar repositorio' : 'Nuevo repositorio') + '</div><div class="fg">';
+  let h = '<div class="rec-form-card">';
+  h += '<div class="rec-form-hdr"><span class="rec-form-title">' + (existing ? 'Editar carpeta' : 'Nueva carpeta') + '</span>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Cerrar" onclick="recursosOcultarFormRepo()">✕</button></div>';
+  if (!recursosMuestraSelectorAmbito() && !existing) {
+    h += '<p class="rec-form-scope">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong></p>';
+  }
+  h += '<div class="rec-form-body"><div class="fg">';
   if (recursosMuestraSelectorAmbito()) {
     h += renderRecursosScopeFields(scope, scopeId, 'rec-repo');
   } else {
     h += '<input type="hidden" id="rec-repo-scope" value="' + escAttr(scope) + '">';
     h += '<input type="hidden" id="rec-repo-scope-id" value="' + escAttr(scopeId) + '">';
-    if (!existing) {
-      h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong> y sus responsables asignados.</p>';
-    }
   }
-  h += '<div class="fld"><label>Título</label><input type="text" id="rec-repo-titulo" value="' + escAttr(existing && existing.titulo || '') + '"></div>';
+  h += '<div class="fld"><label>Nombre</label><input type="text" id="rec-repo-titulo" value="' + escAttr(existing && existing.titulo || '') + '" placeholder="Nombre de la carpeta"></div>';
   h += '<div class="fld"><label>Temática</label><input type="text" id="rec-repo-tematica" value="' + escAttr(existing && existing.tematica || '') + '"></div>';
   h += '<div class="fld"><label>Descripción</label><textarea id="rec-repo-desc" rows="2">' + escTextarea(existing && existing.descripcion || '') + '</textarea></div>';
   if (!existing) {
-    h += '<div class="fld"><label>Vincular carpeta Drive existente (opcional)</label><input type="url" id="rec-repo-drive-link" placeholder="https://drive.google.com/drive/folders/…"><span style="font-size:11px;color:var(--tx3)">Si se deja vacío, se crea carpeta en Drive institucional.</span></div>';
+    h += '<div class="fld"><label>Vincular carpeta Drive existente (opcional)</label><input type="url" id="rec-repo-drive-link" placeholder="https://drive.google.com/drive/folders/…"><span class="rec-form-hint">Si se deja vacío, se crea carpeta en Drive institucional.</span></div>';
   }
-  h += '<div style="display:flex;gap:8px"><button type="button" class="btn bsm bp" onclick="guardarRecursosRepo(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
-  h += '<button type="button" class="btn bsm" onclick="recursosOcultarFormRepo()">Cancelar</button></div>';
-  h += '</div></div>';
+  h += '</div>';
+  h += '<div class="rec-form-foot">';
+  h += '<button type="button" class="btn bsm bp" onclick="guardarRecursosRepo(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Cancelar" onclick="recursosOcultarFormRepo()">✕</button>';
+  h += '</div></div></div>';
   return h;
 }
 
@@ -1422,8 +1427,8 @@ async function guardarRecursosRepo(editId) {
   window._recursosCfgForm = null;
   const ok = await saveRecursosFirestore();
   if (ok) {
-    notif('Repositorio guardado', 'ok');
-    if (typeof logAudit === 'function') logAudit('Guardó repositorio biblioteca', 'configuracion', null, titulo);
+    notif('Carpeta guardada', 'ok');
+    if (typeof logAudit === 'function') logAudit('Guardó carpeta biblioteca', 'configuracion', null, titulo);
     renderRecursosPanel();
     if (typeof renderListasCfg === 'function') renderListasCfg();
   } else notif('Error al guardar', 'err');
@@ -1432,10 +1437,10 @@ async function guardarRecursosRepo(editId) {
 async function eliminarRecursosRepo(id) {
   const r = getRecursosRepoById(id);
   if (!r || !puedeEliminarRecursosItem(r)) {
-    notif(r && recursosCreadoPorAdmin(r) ? 'Solo el administrador puede eliminar este repositorio' : 'Sin permiso', 'err');
+    notif(r && recursosCreadoPorAdmin(r) ? 'Solo el administrador puede eliminar esta carpeta' : 'Sin permiso', 'err');
     return;
   }
-  if (!confirm('¿Eliminar este repositorio de la biblioteca? (La carpeta en Drive no se borra)')) return;
+  if (!confirm('¿Eliminar esta carpeta de la biblioteca? (La carpeta en Drive no se borra)')) return;
   const vinc = bibNormalizeVinculosList(r.vinculados);
   bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
   vinc.forEach(function(v) { bibRemoveRepoIdFromEntidad(v, id); });
@@ -1445,7 +1450,7 @@ async function eliminarRecursosRepo(id) {
       try { await bibPersistEntidadVinculo(vinc[i]); } catch (err) { console.warn('limpiar vínculo al eliminar repo:', err); }
     }
     window._recursosRepoSel = null;
-    notif('Repositorio eliminado', 'ok');
+    notif('Carpeta eliminada', 'ok');
     renderRecursosPanel();
     if (typeof renderListasCfg === 'function') renderListasCfg();
   }
