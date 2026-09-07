@@ -6,7 +6,8 @@
 // REQUISITO (configuración única en Google Cloud Console):
 //   1. Habilitar Gmail API, Google Drive API, Google Sheets API y Google Calendar API.
 //   2. Pantalla de consentimiento OAuth → agregar scopes:
-//      gmail.modify · gmail.send · drive.file · spreadsheets · calendar.events
+//      gmail.modify · gmail.send · drive.file · drive.readonly · spreadsheets · calendar.events
+//      (drive.readonly permite explorar carpetas compartidas / «cualquiera con el enlace»)
 //   3. Agregar usuarios de prueba: cdaguaviare1@gmail.com + correo secretaria.
 //   4. Credencial OAuth web → Orígenes autorizados:
 //      https://asoredg-pixel.github.io
@@ -19,10 +20,12 @@ const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
 const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 const GMAIL_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+const GMAIL_DRIVE_READONLY_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/drive.file',
+  GMAIL_DRIVE_READONLY_SCOPE,
   'https://www.googleapis.com/auth/spreadsheets',
   GMAIL_CALENDAR_SCOPE
 ].join(' ');
@@ -171,7 +174,33 @@ function gmailHasCalendarScope() {
   const s = gmailGetStoredScopes();
   return /calendar\.events|\/auth\/calendar(\s|$)/.test(s);
 }
+function gmailHasDriveReadonlyScope() {
+  const s = (gmailGetStoredScopes() + ' ' + (typeof gmailOfiGetStoredScopes === 'function' ? gmailOfiGetStoredScopes() : '')).trim();
+  // Sesiones antiguas sin scopes guardados: asumir que falta readonly (solo tenían drive.file)
+  if (!s) return false;
+  return /drive\.readonly|\/auth\/drive(\s|$)/.test(s);
+}
+/** Reconecta OAuth pidiendo drive.readonly (necesario para carpetas compartidas). */
+function gmailReconectarDriveReadonly(cb) {
+  const useOfi = typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid()
+    && !(typeof esSecretaria === 'function' && esSecretaria());
+  const scope = useOfi
+    ? (typeof GMAIL_OFI_SCOPES !== 'undefined' ? GMAIL_OFI_SCOPES : GMAIL_SCOPES)
+    : GMAIL_SCOPES;
+  const done = function(tok, exp) {
+    if (useOfi && typeof gmailOfiSetToken === 'function') {
+      gmailOfiSetToken(tok, exp, null, scope);
+    } else {
+      gmailSetToken(tok, exp, scope);
+    }
+    notif('Permiso de lectura Drive actualizado. Abriendo carpeta…', 'ok');
+    if (typeof cb === 'function') cb(true);
+  };
+  _gmailStartOAuth(scope, done, 'consent');
+}
 window.gmailHasCalendarScope = gmailHasCalendarScope;
+window.gmailHasDriveReadonlyScope = gmailHasDriveReadonlyScope;
+window.gmailReconectarDriveReadonly = gmailReconectarDriveReadonly;
 window.gmailGetStoredScopes = gmailGetStoredScopes;
 function _gmailScheduleTokenWarning(expMs) {
   if (_gmailTokenWarnTimer) clearTimeout(_gmailTokenWarnTimer);
@@ -2275,6 +2304,8 @@ async function driveEnsurePqrsUploadFolder(tipo, pqrsNum, nombreCarpeta, fechaRe
 }
 
 // Lista archivos y subcarpetas de una carpeta Drive (biblioteca / enlaces).
+// Nota: con solo drive.file NO se listan carpetas ajenas compartidas por enlace;
+// hace falta drive.readonly (reconectar Correos).
 async function driveListFolderContents(folderId, pageToken) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
@@ -2284,49 +2315,43 @@ async function driveListFolderContents(folderId, pageToken) {
       resolvedId = (await driveResolveFolderId(folderId)) || folderId;
     }
   } catch (e) { /* usar id original */ }
-  // Comillas simples: requeridas por la query de Drive API
   const q = "'" + resolvedId + "' in parents and trashed=false";
   const fields = 'nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink,description,shortcutDetails)';
-  const baseQs = '&fields=' + encodeURIComponent(fields) +
-    '&pageSize=100&corpora=allDrives' + (_DRIVE_API_QS || '');
-  const buildUrl = function(orderBy, tokenPg) {
-    let u = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) + baseQs;
-    if (orderBy) u += '&orderBy=' + encodeURIComponent(orderBy);
-    if (tokenPg) u += '&pageToken=' + encodeURIComponent(tokenPg);
-    return u;
+  const mapFiles = function(data) {
+    return (data.files || []).map(function(f) {
+      if (!f) return f;
+      if (f.mimeType === 'application/vnd.google-apps.shortcut' &&
+          f.shortcutDetails && f.shortcutDetails.targetMimeType === 'application/vnd.google-apps.folder' &&
+          f.shortcutDetails.targetId) {
+        return Object.assign({}, f, {
+          id: f.shortcutDetails.targetId,
+          mimeType: 'application/vnd.google-apps.folder',
+          _shortcutFrom: f.id
+        });
+      }
+      return f;
+    });
   };
-  // orderBy=folder no es válido en unidades compartidas; reintentar sin él
-  let orderBy = 'folder,name';
-  let url = buildUrl(orderBy, pageToken || '');
-  let res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-  let data = await res.json().catch(function() { return {}; });
-  if (!res.ok && /orderBy|shared drive|invalid/i.test(String(data.error && data.error.message || ''))) {
-    orderBy = 'name';
-    url = buildUrl(orderBy, pageToken || '');
-    res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-    data = await res.json().catch(function() { return {}; });
+  const tryList = async function(extraQs, orderBy) {
+    let u = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+      '&fields=' + encodeURIComponent(fields) +
+      '&pageSize=100' + (_DRIVE_API_QS || '') + (extraQs || '');
+    if (orderBy) u += '&orderBy=' + encodeURIComponent(orderBy);
+    if (pageToken) u += '&pageToken=' + encodeURIComponent(pageToken);
+    const res = await fetch(u, { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await res.json().catch(function() { return {}; });
+    return { res: res, data: data };
+  };
+  // Default corpora=user + supportsAllDrives (en _DRIVE_API_QS). No usar
+  // corpora=allDrives sin driveId (la API lo rechaza o devuelve vacío).
+  let attempt = await tryList('', 'name');
+  if (!attempt.res.ok && /orderBy|shared drive|invalid/i.test(String(attempt.data.error && attempt.data.error.message || ''))) {
+    attempt = await tryList('', '');
   }
-  if (!res.ok && /orderBy|shared drive|invalid/i.test(String(data.error && data.error.message || ''))) {
-    url = buildUrl('', pageToken || '');
-    res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-    data = await res.json().catch(function() { return {}; });
+  if (!attempt.res.ok) {
+    throw new Error(attempt.data.error && attempt.data.error.message || 'Error listando Drive');
   }
-  if (!res.ok) throw new Error(data.error && data.error.message || 'Error listando Drive');
-  const files = (data.files || []).map(function(f) {
-    if (!f) return f;
-    // Acceso directo a carpeta: tratarlo como carpeta navegable
-    if (f.mimeType === 'application/vnd.google-apps.shortcut' &&
-        f.shortcutDetails && f.shortcutDetails.targetMimeType === 'application/vnd.google-apps.folder' &&
-        f.shortcutDetails.targetId) {
-      return Object.assign({}, f, {
-        id: f.shortcutDetails.targetId,
-        mimeType: 'application/vnd.google-apps.folder',
-        _shortcutFrom: f.id
-      });
-    }
-    return f;
-  });
-  return { nextPageToken: data.nextPageToken || '', files: files };
+  return { nextPageToken: attempt.data.nextPageToken || '', files: mapFiles(attempt.data) };
 }
 
 /** Crea una carpeta nueva bajo parentId (nombre exacto; no reutiliza otra existente con el mismo nombre). */
@@ -3883,11 +3908,13 @@ async function gmailSubirAdjuntosYVincular() {
 const GMAIL_OFI_TOKEN_KEY = 'sst_gmail_ofi_token';
 const GMAIL_OFI_TOKEN_EXP_KEY = 'sst_gmail_ofi_exp';
 const GMAIL_OFI_ACCOUNT_KEY = 'sst_gmail_ofi_account';
-// drive.file: upload y crear carpetas; acceso a lo que la app creó
+const GMAIL_OFI_SCOPES_KEY = 'sst_gmail_ofi_scopes';
+// drive.file: upload y crear carpetas; drive.readonly: ver carpetas compartidas
 const GMAIL_OFI_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/spreadsheets'
 ].join(' ');
 const GMAIL_OFI_SYS_LABELS = new Set([
@@ -3906,12 +3933,15 @@ let _gmailOfiLabels      = [];
 function gmailOfiGetToken() {
   try { return sessionStorage.getItem(GMAIL_OFI_TOKEN_KEY) || ''; } catch(e) { return ''; }
 }
-function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
+function gmailOfiSetToken(tok, expiresInSec, accountEmail, scopesOpt) {
   try {
     if (tok) {
       sessionStorage.setItem(GMAIL_OFI_TOKEN_KEY, tok);
       const expMs = Date.now() + (expiresInSec || 3600) * 1000;
       sessionStorage.setItem(GMAIL_OFI_TOKEN_EXP_KEY, String(expMs));
+      if (scopesOpt) {
+        try { sessionStorage.setItem(GMAIL_OFI_SCOPES_KEY, String(scopesOpt)); } catch (eS) {}
+      }
       _sstGmailExpiryWarnShown = false;
       _gmailScheduleTokenWarning(expMs);
       _gmailScheduleTokenExpiry(expMs, 'ofi');
@@ -3921,10 +3951,15 @@ function gmailOfiSetToken(tok, expiresInSec, accountEmail) {
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_KEY);
       sessionStorage.removeItem(GMAIL_OFI_TOKEN_EXP_KEY);
       sessionStorage.removeItem(GMAIL_OFI_ACCOUNT_KEY);
+      try { sessionStorage.removeItem(GMAIL_OFI_SCOPES_KEY); } catch (eC) {}
       _gmailClearExpiryTimer('ofi');
     }
   } catch(e) {}
 }
+function gmailOfiGetStoredScopes() {
+  try { return sessionStorage.getItem(GMAIL_OFI_SCOPES_KEY) || ''; } catch (e) { return ''; }
+}
+window.gmailOfiGetStoredScopes = gmailOfiGetStoredScopes;
 function gmailOfiGetAccountEmail() {
   try { return String(sessionStorage.getItem(GMAIL_OFI_ACCOUNT_KEY) || '').trim().toLowerCase(); } catch(e) { return ''; }
 }
@@ -4077,7 +4112,7 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
       }
     }
   }
-  gmailOfiSetToken(tok, expiresInSec, email);
+  gmailOfiSetToken(tok, expiresInSec, email, GMAIL_OFI_SCOPES);
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
   // No avisar aquí por falta de carpeta raíz: el mensaje sale al intentar cargar un archivo.

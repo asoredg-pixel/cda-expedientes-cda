@@ -407,6 +407,21 @@ function cerrarRecursosEnlace() {
   renderRecursosPanel();
 }
 
+function recursosReconectarDriveReadonly() {
+  if (typeof gmailReconectarDriveReadonly !== 'function') {
+    notif('No se pudo iniciar la reconexión. Recargue la página.', 'err');
+    return;
+  }
+  gmailReconectarDriveReadonly(function(ok) {
+    if (!ok) return;
+    if (window._recursosEnlaceSel && typeof cargarRecursosEnlaceDriveArchivos === 'function') {
+      cargarRecursosEnlaceDriveArchivos();
+    } else if (typeof cargarRecursosDriveArchivos === 'function') {
+      cargarRecursosDriveArchivos();
+    }
+  });
+}
+
 async function cargarRecursosEnlaceDriveArchivos(pageToken) {
   const st = recExpState();
   const enlaceId = (st && st.enlaceId) || window._recursosEnlaceSel;
@@ -462,11 +477,21 @@ async function cargarRecursosEnlaceDriveArchivos(pageToken) {
       return files.some(function(f) { return f.id === id; });
     });
     if (!files.length) {
+      const needsReadonly = typeof gmailHasDriveReadonlyScope !== 'function' || !gmailHasDriveReadonlyScope();
+      let emptyMsg = needsReadonly
+        ? 'La app necesita permiso de <strong>lectura de Drive</strong> para ver carpetas compartidas (aunque el enlace sea público). ' +
+          'Pulse el botón para reconectar Correos y aceptar el nuevo permiso.'
+        : 'No se encontraron elementos. Compruebe que el enlace sea la carpeta correcta y que su correo tenga permiso de verla en Drive.';
+      emptyMsg += ' <a href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Abrir en Drive ↗</a>';
+      if (typeof gmailReconectarDriveReadonly === 'function') {
+        emptyMsg += '<div style="margin-top:12px"><button type="button" class="btn bsm bp" onclick="recursosReconectarDriveReadonly()">' +
+          (needsReadonly ? 'Reconectar Correos (lectura Drive)' : 'Reintentar con permiso Drive') +
+          '</button></div>';
+      }
       el.innerHTML = '<div class="rec-exp" id="rec-exp-root">' +
         renderRecExpToolbar(false, false) + renderRecExpBreadcrumb() +
         '<div class="rec-exp-body"><div class="rec-exp-empty" data-rec-exp-pane="1">' +
-        'No se encontraron elementos. Compruebe que el enlace sea la carpeta correcta y que su correo tenga permiso de verla en Drive. ' +
-        '<a href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Abrir en Drive ↗</a>' +
+        emptyMsg +
         '</div></div></div>';
       return;
     }
@@ -1735,6 +1760,7 @@ window.cerrarRecursosRepo = cerrarRecursosRepo;
 window.abrirRecursosEnlace = abrirRecursosEnlace;
 window.cerrarRecursosEnlace = cerrarRecursosEnlace;
 window.cargarRecursosEnlaceDriveArchivos = cargarRecursosEnlaceDriveArchivos;
+window.recursosReconectarDriveReadonly = recursosReconectarDriveReadonly;
 window.recExpKeyDown = recExpKeyDown;
 window.recExpPaneClick = recExpPaneClick;
 window.recExpPaneContextMenu = recExpPaneContextMenu;
