@@ -1184,6 +1184,35 @@ function labelRecursosScope(scope,scopeId){
 function puedeEditarRecursosEnlaces(scope,scopeId){
   return puedeEditarRecursosItem(scope,scopeId);
 }
+/**
+ * Gestionar enlace (editar / eliminar / compartir): creador, admin o gestor del ámbito dueño.
+ * Quien solo lo ve por compartido → solo lectura.
+ */
+function puedeGestionarRecursosEnlace(item){
+  if(!item||!puedeVerRecursos())return false;
+  if(esAdministrador()||esAdminRepos())return true;
+  if(recursosCreadoPorAdmin(item))return false;
+  const email=getAuthEmailNorm();
+  if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
+  if(!recursosItemVisiblePorScope(item))return false;
+  const scope=item.scope||'oficina';
+  const scopeId=item.scopeId||(scope==='oficina'?item.oficinaId:'')||'';
+  if(scope==='sistema')return false;
+  if(scope==='oficina'){
+    if(esEncargadoOficinaUsuario(scopeId))return true;
+    if(scopeId==='guaviare'&&(esNcaDeguv()||esEncargadoDeptoUsuario('guaviare')))return true;
+    if(esModoOficinaDeguv()&&deptoActivo===scopeId)return true;
+    if(esSecretaria()&&scopeId==='secretaria')return true;
+    if(esModoResponsable()||esModoContratista())return false;
+    return false;
+  }
+  if(scope==='departamento'){
+    if(esEncargadoDeptoUsuario(scopeId))return true;
+    if(scopeId==='guaviare'&&esNcaDeguv())return true;
+    return false;
+  }
+  return false;
+}
 function puedeEditarBiblioteca(scope,scopeId){
   return puedeEditarRecursosItem(scope,scopeId);
 }
@@ -1235,23 +1264,12 @@ function puedeAdjuntarBibliotecaRepo(repo){
 function puedeEliminarRecursosItem(item){
   if(!item)return false;
   if(esBibliotecaRepoItem(item))return puedeGestionarBibliotecaRepo(item);
-  if(esAdministrador()||esAdminFirestore())return true;
-  if(recursosCreadoPorAdmin(item))return false;
-  const email=getAuthEmailNorm();
-  if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
-  if(!recursosItemVisiblePorScope(item))return false;
-  const scope=item.scope||'oficina';
-  const scopeId=item.scopeId||(scope==='oficina'?item.oficinaId:'');
-  return puedeEditarRecursosItem(scope,scopeId);
+  return puedeGestionarRecursosEnlace(item);
 }
 function puedeCompartirRecursosItem(item){
   if(!item||!puedeVerRecursos())return false;
   if(esBibliotecaRepoItem(item))return puedeGestionarBibliotecaRepo(item);
-  if(esAdministrador()||esAdminFirestore())return true;
-  const email=getAuthEmailNorm();
-  if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
-  if(!recursosItemVisiblePorScope(item))return false;
-  return puedeEditarRecursosItem(item.scope,item.scopeId||item.oficinaId);
+  return puedeGestionarRecursosEnlace(item);
 }
 function bibliotecaDriveDisponible(deptoCtx){
   const d=deptoCtx||getRecursosDeptoContext();

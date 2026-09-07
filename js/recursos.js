@@ -237,7 +237,7 @@ function renderRecursosEnlacesPanel(depto) {
   } else {
     h += '<div class="rec-enlace-list">';
     filtrada.forEach(function(l) {
-      const canEdit = puedeEditarRecursosEnlaces(l.scope, l.scopeId);
+      const canEdit = typeof puedeGestionarRecursosEnlace === 'function' ? puedeGestionarRecursosEnlace(l) : puedeEditarRecursosEnlaces(l.scope, l.scopeId);
       const canDel = puedeEliminarRecursosItem(l);
       const canShare = puedeCompartirRecursosItem(l);
       const compLbl = labelRecursosCompartidoCon(l.compartidoCon);
@@ -1497,6 +1497,13 @@ window.recExpDragLeavePane = recExpDragLeavePane;
 window.recExpDropOnPane = recExpDropOnPane;
 
 function recursosMostrarFormEnlace(editId) {
+  if (editId && editId !== '__new__') {
+    const l = (recursosEnlaces || []).find(function(x) { return x.id === editId; });
+    if (!l || (typeof puedeGestionarRecursosEnlace === 'function' && !puedeGestionarRecursosEnlace(l))) {
+      notif('Sin permiso para editar este enlace', 'err');
+      return;
+    }
+  }
   window._recursosEnlaceForm = editId || '__new__';
   renderRecursosPanel();
 }
@@ -1599,11 +1606,17 @@ async function guardarRecursosEnlace(editId) {
   const tematica = String(document.getElementById('rec-enl-tematica').value || '').trim();
   const descripcion = String(document.getElementById('rec-enl-desc').value || '').trim();
   if (!titulo || !url) { notif('Título y URL son obligatorios', 'err'); return; }
-  if (!puedeEditarRecursosEnlaces(scope, scopeId) && !esAdministrador()) {
-    notif('No tiene permiso para editar enlaces de este ámbito', 'err');
+  const isNew = !editId || editId === '__new__';
+  if (!isNew) {
+    const existing = (recursosEnlaces || []).find(function(l) { return l.id === editId; });
+    if (!existing || (typeof puedeGestionarRecursosEnlace === 'function' ? !puedeGestionarRecursosEnlace(existing) : !puedeEditarRecursosEnlaces(existing.scope, existing.scopeId))) {
+      notif('Sin permiso para editar este enlace (solo lectura si es compartido)', 'err');
+      return;
+    }
+  } else if (!puedeEditarRecursosEnlaces(scope, scopeId) && !esAdministrador()) {
+    notif('No tiene permiso para crear enlaces de este ámbito', 'err');
     return;
   }
-  const isNew = !editId || editId === '__new__';
   const email = getAuthEmailNorm() || (window._usuarioActual && window._usuarioActual.email) || '';
   const byAdmin = esAdministrador() || esAdminFirestore();
   if (!isNew) {
