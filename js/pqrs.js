@@ -1281,7 +1281,12 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   // ✍️ Por firmar / marcar-desmarcar firma Director
   if(typeof pqrsOficinaFirmaFisicaBtnHtml==='function')
     h+=pqrsOficinaFirmaFisicaBtnHtml(e)+' ';
-  if(t&&tid&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(e._exp,t.id);
+  if(t&&tid&&typeof taskAgendaBtnHtml==='function'){
+    const agBtn=taskAgendaBtnHtml(e._exp,t.id);
+    if(agBtn)h+=agBtn;
+    else if(typeof openAgendaDesdeActividad==='function')
+      h+='<button type="button" class="btn bsm bic act-ico act-agenda-btn" title="Organizar en mi día" onclick="event.stopPropagation();openAgendaDesdeActividad(\''+escAttr(e._exp)+'\',\''+escAttr(t.id)+'\')">📅</button> ';
+  }
   if(t&&tid&&typeof actBtnVerActividadDeptHtml==='function')
     h+=actBtnVerActividadDeptHtml(e._exp,t.id,t,e);
   else
@@ -1290,6 +1295,34 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   return h;
 }
 window.pqrsOficinaPorEjecutarAccionesHtml=pqrsOficinaPorEjecutarAccionesHtml;
+/** Acciones «Respondidas»: 🔍 ver respuesta y anexos aprobados (rail sin editar/trasladar para oficinas). */
+function pqrsOficinaRespondidasAccionesHtml(e){
+  const id=jsStr(e&&e._exp);
+  if(!id)return'';
+  const ofi=String(e._pqrs_oficina||'').trim();
+  let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+  if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  if(!t){
+    try{
+      if(ofi==='guaviare'&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+      else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
+    }catch(err){}
+    t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+    if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  }
+  let h='<span class="sst-act-toolbar">';
+  if(t&&t.id){
+    const eid=escAttr(e._exp),tid=escAttr(t.id);
+    h+='<button type="button" class="btn bsm bic act-ico" title="Ver respuesta y anexos aprobados" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+eid+'\',\''+tid+'\',{soloAprobados:true})">🔍</button>';
+    if(typeof taskAgendaResumen==='function'&&taskAgendaResumen(e._exp,t.id)&&typeof taskAgendaBtnAtendidaHtml==='function')
+      h+=taskAgendaBtnAtendidaHtml(e._exp,t.id);
+  }else{
+    h+='<button type="button" class="btn bsm bic act-ico" title="Ver PQRSD" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🔍</button>';
+  }
+  h+='</span>';
+  return h;
+}
+window.pqrsOficinaRespondidasAccionesHtml=pqrsOficinaRespondidasAccionesHtml;
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
@@ -1300,7 +1333,10 @@ function pqrsAccionesTablaHtml(e){
     ||(typeof esAdministrador==='function'&&esAdministrador())
     ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
     ||(typeof esNcaDeguv==='function'&&esNcaDeguv());
-  if(esOfiToolbar&&(filtroOfi==='pend'||filtroOfi==='atras')&&!e._tramite_firma_task){
+  // Vencidas: mismas opciones que Por ejecutar (cualquier fase pendiente de respuesta / firma)
+  if(esOfiToolbar&&filtroOfi==='atras'&&!e._tramite_firma_task)
+    return pqrsOficinaPorEjecutarAccionesHtml(e);
+  if(esOfiToolbar&&filtroOfi==='pend'&&!e._tramite_firma_task){
     const fasePend=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
     if(!fasePend||fasePend===PQRS_WF.SIN_RESPUESTA||fasePend===PQRS_WF.RECHAZADA)
       return pqrsOficinaPorEjecutarAccionesHtml(e);
@@ -1311,6 +1347,9 @@ function pqrsAccionesTablaHtml(e){
     if(fasePf===PQRS_WF.POR_FIRMAR)
       return pqrsOficinaPorEjecutarAccionesHtml(e);
   }
+  // Respondidas: 🔍 ver docs/anexos aprobados (rail tipo NCA, sin editar/trasladar en oficinas)
+  if(!esDir&&esOfiToolbar&&filtroOfi==='cerr'&&!e._tramite_firma_task)
+    return pqrsOficinaRespondidasAccionesHtml(e);
   // Trámite / oficio oficina en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);

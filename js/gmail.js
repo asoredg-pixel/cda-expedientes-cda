@@ -4185,6 +4185,7 @@ function gmailOfiDisconnect() {
   _gmailOfiLabels     = [];
   _gmailOfiSignature     = '';
   _gmailOfiSignatureHtml = '';
+  _gmailOfiSignatureForAccount = '';
   _updateGmailOfiBtn();
   const listEl = document.getElementById('gmail-ofi-inbox-list');
   if (listEl) listEl.innerHTML = '<div class="gm-empty-state"><div class="gm-empty-ico">🔒</div><div>Conecte su correo para ver los mensajes.</div></div>';
@@ -4492,9 +4493,17 @@ async function _gmailOfiUpdateBadges() {
 // ---- Gmail Signature ----
 let _gmailOfiSignature = '';     // plain-text version (for text/plain MIME part)
 let _gmailOfiSignatureHtml = ''; // raw HTML version (for text/html MIME part + preview)
+let _gmailOfiSignatureForAccount = ''; // email de la cuenta cuya firma está en caché
 
-async function _gmailOfiLoadSignature() {
+async function _gmailOfiLoadSignature(force) {
   try {
+    const cuenta = (typeof gmailOfiCuentaConectadaParaEnvio === 'function'
+      ? gmailOfiCuentaConectadaParaEnvio()
+      : '') || '';
+    if (!force && _gmailOfiSignatureHtml && _gmailOfiSignatureForAccount
+      && cuenta && cuenta === _gmailOfiSignatureForAccount) {
+      return;
+    }
     const data = await _gmailOfiApi('GET', 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs');
     const primary = (data.sendAs || []).find(s => s.isPrimary) || (data.sendAs || [])[0];
     if (primary && primary.signature) {
@@ -4502,8 +4511,17 @@ async function _gmailOfiLoadSignature() {
       const div = document.createElement('div');
       div.innerHTML = primary.signature;
       _gmailOfiSignature = '\n-- \n' + (div.textContent || div.innerText || '').trim();
+      _gmailOfiSignatureForAccount = String(primary.sendAsEmail || cuenta || '').trim().toLowerCase();
+    } else {
+      _gmailOfiSignature = '';
+      _gmailOfiSignatureHtml = '';
+      _gmailOfiSignatureForAccount = cuenta || '';
     }
-  } catch(e) { _gmailOfiSignature = ''; _gmailOfiSignatureHtml = ''; }
+  } catch(e) {
+    _gmailOfiSignature = '';
+    _gmailOfiSignatureHtml = '';
+    _gmailOfiSignatureForAccount = '';
+  }
 }
 
 // Convert plain text to simple HTML paragraphs for the html/mime part
@@ -4991,7 +5009,7 @@ function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
 
 // Alias used by core.js workflow — sends a plain HTML email using the office token
 async function gmailOfiSendMessage(to, subject, htmlBody) {
-  try { await _gmailOfiLoadSignature(); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
+  try { await _gmailOfiLoadSignature(true); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
   const mime = _gmailOfiBuildHtmlMime(to, subject, htmlBody);
   return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
 }
@@ -5055,7 +5073,7 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
 /** Envía HTML desde el Gmail de oficina con adjuntos (File/Blob). opts: {cc,bcc} */
 async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opts) {
   opts = opts || {};
-  try { await _gmailOfiLoadSignature(); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
+  try { await _gmailOfiLoadSignature(true); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
     to, subject, htmlBody, files || [], opts.cc || '', opts.bcc || ''
   );
@@ -5637,9 +5655,8 @@ async function gmailOfiSendPqrsRespuestaInline(opts) {
   if (typeof gmailOfiAsegurarCuentaOficinaParaEnvio === 'function') {
     await gmailOfiAsegurarCuentaOficinaParaEnvio(ofiEnvio);
   }
-  if (!_gmailOfiSignature && !_gmailOfiSignatureHtml) {
-    await _gmailOfiLoadSignature();
-  }
+  // Siempre recargar firma de la cuenta Gmail de esa oficina (logo / pie institucional)
+  try { await _gmailOfiLoadSignature(true); } catch (eSig) { console.warn('gmailOfiSendPqrsRespuestaInline signature:', eSig); }
   const cc = ccList.join(', ');
   const bcc = bccList.join(', ');
   // Un solo envío con To (todos) + Cc + Bcc — evita duplicar adjuntos por destinatario

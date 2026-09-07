@@ -5622,8 +5622,10 @@ function puedeAgendarTask(t){
   if(esVistaActividadesDepto()&&!esModoResponsable()
     &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,eAg))
     return true;
-  if(estadoTask(t)==='Atendida'&&!vitalPorFirmar&&!encPorFirmar)return false;
-  if(vitalPorFirmar||encPorFirmar)return true;
+  // Oficinas DEGUV/Secretaría en «Por firmar»: permitir organizar día (aunque la tarea figure Atendida)
+  const ofiPorFirmarAg=typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()&&pqrsPorFirmarAg;
+  if(estadoTask(t)==='Atendida'&&!vitalPorFirmar&&!encPorFirmar&&!ofiPorFirmarAg)return false;
+  if(vitalPorFirmar||encPorFirmar||ofiPorFirmarAg)return true;
   if(esModoResponsable()){
     if(taskUsuarioEsAsignado(t,responsableActivo))return true;
     return false;
@@ -6924,12 +6926,13 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   if(esEnc&&!enPorFirmar){
     const esNcaRail=typeof esNcaDeguv==='function'&&esNcaDeguv()||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
     const esPqrsRail=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
-    // Oficinas: sin ✏️ editar expediente en PQRSD (NCA sí)
+    const esOfiBasicaRail=typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()&&!esNcaRail;
+    // Oficinas: sin ✏️ editar expediente ni 🔄 trasladar/asignar en PQRSD (NCA sí)
     if(t.sinExpediente)
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Editar actividad" onclick="closeTaskModal();abrirPanelActLibre(\''+jsStr(refExp)+'\',\''+jsStr(taskId)+'\')">✏️</button>';
-    else if((!esPqrsRail||esNcaRail)&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel())
+    else if(!esOfiBasicaRail&&(!esPqrsRail||esNcaRail)&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel())
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='edit'?' on':'')+'" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
-    if(!t.sinExpediente)
+    if(!t.sinExpediente&&!esOfiBasicaRail)
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar oficina o asignar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
   }
   if(typeof openBibGuardarModal==='function')
