@@ -275,16 +275,14 @@ function renderRecursosEnlacesPanel(depto) {
         recursosItemCompartidoVisible(l) &&
         typeof recursosItemVisiblePorScope === 'function' &&
         !recursosItemVisiblePorScope(l);
-      const compLbl = canEdit ? labelRecursosCompartidoCon(l.compartidoCon) : '';
       h += '<article class="rec-enlace-card' + (esCompartido ? ' shared' : '') + '">';
       h += '<div class="rec-enlace-body">';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelRecursosScopeContexto(l.scope, l.scopeId)) + '</span>';
       if (esCompartido) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
-      if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
       if (l.area) h += '<span class="rec-tag">' + escAttr(l.area) + '</span>';
       if (l.tematica) h += '<span class="rec-tag rec-tag-2">' + escAttr(l.tematica) + '</span>';
       h += '</div>';
-      h += '<a class="rec-enlace-tit" href="' + escAttr(l.url) + '" target="_blank" rel="noopener noreferrer">' + escAttr(l.titulo || l.url) + '</a>';
+      h += '<div class="rec-enlace-tit">' + escAttr(l.titulo || l.url) + '</div>';
       if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
       h += '</div>';
       h += '<div class="rec-enlace-actions">';
