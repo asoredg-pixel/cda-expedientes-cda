@@ -336,13 +336,24 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   const compArch = archivosBibliotecaCompartidosVisibles();
   if (compArch.length) {
     h += '<div class="rec-shared-block">';
-    h += '<div class="rec-shared-hdr">Documentos compartidos con su oficina</div>';
+    h += '<div class="rec-shared-hdr">Documentos y carpetas compartidos</div>';
     h += '<div class="rec-files-list">';
     compArch.forEach(function(x) {
       const a = x.archivo;
-      const link = a.driveLink || (a.fileId ? 'https://drive.google.com/file/d/' + a.fileId + '/view' : '#');
-      h += '<div class="rec-file-row"><span>📄 ' + escAttr(a.fileName || 'Documento') + ' <span class="rec-file-repo">· ' + escAttr(x.repo.titulo) + '</span></span>';
-      h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a></div>';
+      const isFolder = !!a.isFolder;
+      const ico = isFolder ? '📁' : '📄';
+      const link = a.driveLink || (a.fileId
+        ? (isFolder
+          ? ('https://drive.google.com/drive/folders/' + a.fileId)
+          : ('https://drive.google.com/file/d/' + a.fileId + '/view'))
+        : '#');
+      h += '<div class="rec-file-row"><span>' + ico + ' ' + escAttr(a.fileName || (isFolder ? 'Carpeta' : 'Documento')) + ' <span class="rec-file-repo">· ' + escAttr(x.repo.titulo) + '</span></span>';
+      if (isFolder && a.fileId) {
+        h += '<button type="button" class="btn bsm" onclick="abrirRecursosCarpetaCompartida(\'' + escAttr(x.repo.id) + '\',\'' + escAttr(a.fileId) + '\',\'' + escAttr(a.fileName || 'Carpeta') + '\')">Abrir</button>';
+      } else {
+        h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a>';
+      }
+      h += '</div>';
     });
     h += '</div></div>';
   }
@@ -365,13 +376,43 @@ function abrirRecursosRepo(repoId) {
     selection: [],
     files: [],
     lastClickedId: null,
-    dragIds: null
+    dragIds: null,
+    sharedEntry: false
   };
   renderRecursosPanel();
   if (!recursosDriveConectado()) {
     const el = document.getElementById('rec-repo-files');
     if (el) {
       el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en la pestaña <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para listar y adjuntar archivos del repositorio.</div>';
+    }
+    return;
+  }
+  cargarRecursosRepoArchivos();
+}
+
+/** Abre una subcarpeta compartida sin exigir acceso a la carpeta principal. */
+function abrirRecursosCarpetaCompartida(repoId, folderId, folderName) {
+  window._recursosNav = 'biblioteca';
+  window._recursosRepoSel = repoId;
+  window._recursosDrivePage = null;
+  const name = folderName || 'Carpeta compartida';
+  window._recExplorer = {
+    repoId: repoId,
+    rootId: folderId,
+    folderId: folderId,
+    path: [{ id: folderId, name: name }],
+    view: (window._recExplorer && window._recExplorer.view) || 'details',
+    selection: [],
+    files: [],
+    lastClickedId: null,
+    dragIds: null,
+    sharedEntry: true
+  };
+  renderRecursosPanel();
+  if (!recursosDriveConectado()) {
+    const el = document.getElementById('rec-repo-files');
+    if (el) {
+      el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para explorar la carpeta compartida.</div>';
     }
     return;
   }
@@ -405,12 +446,18 @@ function recExpCanManage() {
   return !!(r && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r));
 }
 
-/** Puede subir archivos (dueño o compartido). */
+/** Puede subir archivos (dueño, compartido del repo, o entrada de subcarpeta compartida). */
 function recExpCanUpload() {
   const st = recExpState();
   const r = st ? getRecursosRepoById(st.repoId) : null;
-  if (r && typeof puedeAdjuntarBibliotecaRepo === 'function') return puedeAdjuntarBibliotecaRepo(r);
-  return recExpCanManage();
+  if (!r) return false;
+  if (typeof puedeAdjuntarBibliotecaRepo === 'function' && puedeAdjuntarBibliotecaRepo(r)) return true;
+  if (st && st.sharedEntry && st.rootId && typeof archivosRepoCompartidosConmigo === 'function') {
+    return archivosRepoCompartidosConmigo(r).some(function(a) {
+      return a.fileId === st.rootId && a.isFolder;
+    });
+  }
+  return false;
 }
 
 function recExpCanShare() {
@@ -439,36 +486,41 @@ function renderRecursosRepoDetalle(repoId) {
   const canDel = puedeEliminarRecursosItem(r);
   const canShare = puedeCompartirRecursosItem(r);
   const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
+  const st = recExpState();
+  const sharedEntry = !!(st && st.sharedEntry && st.repoId === repoId);
+  const sharedName = sharedEntry && st.path && st.path[0] ? st.path[0].name : '';
   let h = '<div class="rec-bib-panel rec-bib-detalle">';
   h += '<div class="rec-repo-hdr">';
-  h += '<div class="rec-repo-hdr-main"><strong class="rec-repo-hdr-title">' + escAttr(r.titulo) + '</strong>';
+  h += '<div class="rec-repo-hdr-main"><strong class="rec-repo-hdr-title">' + escAttr(sharedEntry && sharedName ? sharedName : r.titulo) + '</strong>';
+  if (sharedEntry) h += '<span class="rec-tag rec-tag-share">Compartida</span>';
   h += '<span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
   h += '<span class="rec-repo-hdr-actions">';
-  if (canManage) {
+  if (canManage && !sharedEntry) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Editar carpeta" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">✏️</button>';
   }
-  if (canShare) {
+  if (canShare && !sharedEntry) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
   }
-  if (canDel) {
+  if (canDel && !sharedEntry) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
   }
   h += '</span></div>';
-  if (r.driveFolderLink) h += '<a class="btn bsm" href="' + escAttr(r.driveFolderLink) + '" target="_blank" rel="noopener">Drive ↗</a>';
+  if (r.driveFolderLink && !sharedEntry) h += '<a class="btn bsm" href="' + escAttr(r.driveFolderLink) + '" target="_blank" rel="noopener">Drive ↗</a>';
   h += '</div>';
-  if (r.descripcion) h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
-  if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
-  if (!canManage && typeof puedeAdjuntarBibliotecaRepo === 'function' && puedeAdjuntarBibliotecaRepo(r)) {
-    h += '<p class="rec-share-hint">Carpeta compartida: puede adjuntar documentos. No puede eliminar, renombrar ni editar la carpeta.</p>';
+  if (sharedEntry) {
+    h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Subcarpeta de <strong>' + escAttr(r.titulo) + '</strong> compartida con usted.</p>';
+  } else if (r.descripcion) {
+    h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
   }
-  if (window._recursosRepoForm === r.id) {
+  if (compLbl && !sharedEntry) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
+  if (window._recursosRepoForm === r.id && !sharedEntry) {
     h += renderRecursosRepoForm(r.id);
   }
   h += '<div class="rec-exp-shell">';
   h += '<div class="cft" style="margin:8px 0 6px">Explorador de archivos</div>';
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
   h += '</div>';
-  h += renderRecursosRepoVinculosBlock(r, canManage);
+  if (!sharedEntry) h += renderRecursosRepoVinculosBlock(r, canManage);
   h += '</div>';
   return h;
 }
@@ -540,20 +592,22 @@ function renderRecExpToolbar(canManage, canUpload) {
         listId: 'rec-exp-upload-list',
         ctxKey: 'rec-exp-upload',
         multi: true,
-        label: 'Subir',
-        btnClass: 'btn bsm',
+        label: '',
+        iconOnly: true,
+        title: 'Subir',
+        btnClass: 'btn bsm bic act-ico',
         getUploadCtx: typeof sstFileUploadCtxForBiblioteca === 'function'
           ? sstFileUploadCtxForBiblioteca(function () { return recExpCurrentFolderId(); })
           : null
       });
     } else {
-      h += '<label class="btn bsm" style="cursor:pointer">📤 Subir<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
+      h += '<label class="btn bsm bic act-ico" style="cursor:pointer" title="Subir">📎<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
     }
   }
   if (canMg) {
-    h += '<button type="button" class="btn bsm" onclick="recExpEliminarSeleccion()" title="Eliminar selección">🗑</button>';
+    h += '<button type="button" class="btn bsm bic act-ico" onclick="recExpEliminarSeleccion()" title="Eliminar selección">🗑️</button>';
   }
-  h += '<button type="button" class="btn bsm" onclick="cargarRecursosRepoArchivos()" title="Actualizar">↻</button>';
+  h += '<button type="button" class="btn bsm bic act-ico" onclick="cargarRecursosRepoArchivos()" title="Actualizar">↻</button>';
   h += '</div>';
   h += '<div class="rec-exp-views" role="group" aria-label="Vista">';
   h += '<button type="button" class="btn bsm' + (view === 'icons' ? ' bp' : '') + '" onclick="recExpSetView(\'icons\')" title="Iconos">▦</button>';
@@ -633,7 +687,7 @@ function renderRecExpItemsHtml(files, canManage, canShare, repo, canUpload) {
   files.forEach(function(f) {
     const isFolder = recExpIsFolder(f);
     const on = sel.has(f.id);
-    const archComp = (!isFolder && repo) ? (repo.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; }) : null;
+    const archComp = repo ? (repo.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; }) : null;
     const shareLbl = archComp ? labelRecursosCompartidoCon(archComp.compartidoCon) : '';
     const det = String(f.description || '').trim();
     h += '<div class="rec-exp-details-row' + (on ? ' selected' : '') + '" draggable="' + (canEdit ? 'true' : 'false') + '" ' +
@@ -667,7 +721,6 @@ async function cargarRecursosRepoArchivos(pageToken) {
     return;
   }
   const canManage = typeof puedeGestionarBibliotecaRepo === 'function' ? puedeGestionarBibliotecaRepo(r) : puedeEditarBiblioteca(getRepoScope(r).scope, getRepoScope(r).scopeId);
-  const canUpload = typeof puedeAdjuntarBibliotecaRepo === 'function' ? puedeAdjuntarBibliotecaRepo(r) : canManage;
   const canShare = puedeCompartirRecursosItem(r);
   const rootId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
   if (!rootId) {
@@ -684,13 +737,18 @@ async function cargarRecursosRepoArchivos(pageToken) {
       selection: [],
       files: [],
       lastClickedId: null,
-      dragIds: null
+      dragIds: null,
+      sharedEntry: false
     };
-  } else {
+  } else if (!st.sharedEntry) {
     st.rootId = rootId;
     if (!st.folderId) st.folderId = rootId;
     if (!(st.path || []).length) st.path = [{ id: rootId, name: r.titulo || 'Repositorio' }];
+  } else {
+    if (!st.folderId) st.folderId = st.rootId;
+    if (!(st.path || []).length) st.path = [{ id: st.rootId, name: 'Carpeta compartida' }];
   }
+  const canUpload = recExpCanUpload();
   const cur = recExpState();
   const folderId = cur.folderId || rootId;
   try {
@@ -1184,10 +1242,10 @@ function recExpItemContextMenu(ev, fileId) {
   if (canManage) {
     add('Renombrar', function() { recExpRenombrar(fileId); });
   }
-  if (!isFolder && canShare) {
+  if (canShare) {
     add('Compartir…', function() {
       const st2 = recExpState();
-      recursosAbrirCompartir('archivo', st2.repoId, fileId, f.name);
+      recursosAbrirCompartir('archivo', st2.repoId, fileId, f.name, isFolder);
     });
   }
   if (canManage || canUpload) {
@@ -1675,8 +1733,8 @@ async function eliminarRecursosRepo(id) {
   }
 }
 
-function recursosAbrirCompartir(tipo, id, fileId, fileName) {
-  window._recShareCtx = { tipo: tipo, id: id, fileId: fileId || '', fileName: fileName || '' };
+function recursosAbrirCompartir(tipo, id, fileId, fileName, isFolder) {
+  window._recShareCtx = { tipo: tipo, id: id, fileId: fileId || '', fileName: fileName || '', isFolder: !!isFolder };
   const ov = document.getElementById('rec-share-overlay');
   const body = document.getElementById('rec-share-body');
   if (!ov || !body) return;
@@ -1691,7 +1749,8 @@ function recursosAbrirCompartir(tipo, id, fileId, fileName) {
   } else if (tipo === 'archivo') {
     item = getRecursosRepoById(id);
     const f = item && (item.archivosCompartidos || []).find(function(a) { return a.fileId === fileId; });
-    titulo = f ? f.fileName : 'Documento';
+    titulo = fileName || (f && f.fileName) || (isFolder ? 'Carpeta' : 'Documento');
+    if (f && f.isFolder) window._recShareCtx.isFolder = true;
   }
   if (!item || !puedeCompartirRecursosItem(item)) {
     notif('Sin permiso para compartir', 'err');
@@ -1724,7 +1783,11 @@ function recursosAbrirCompartir(tipo, id, fileId, fileName) {
   h += '</div></div>';
   body.innerHTML = h;
   const titEl = document.getElementById('rec-share-title');
-  if (titEl) titEl.textContent = tipo === 'archivo' ? 'Compartir documento' : (tipo === 'repo' ? 'Compartir carpeta' : 'Compartir enlace');
+  if (titEl) {
+    if (tipo === 'archivo') titEl.textContent = window._recShareCtx.isFolder ? 'Compartir subcarpeta' : 'Compartir documento';
+    else if (tipo === 'repo') titEl.textContent = 'Compartir carpeta';
+    else titEl.textContent = 'Compartir enlace';
+  }
   if (typeof elevateOverlayAboveModals === 'function') elevateOverlayAboveModals(ov);
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
@@ -1769,14 +1832,24 @@ async function recursosGuardarCompartir() {
     const repo = bibliotecaRepos[idx];
     if (!Array.isArray(repo.archivosCompartidos)) repo.archivosCompartidos = [];
     let arch = repo.archivosCompartidos.find(function(a) { return a.fileId === ctx.fileId; });
+    const asFolder = !!ctx.isFolder;
     if (!arch) {
       arch = {
         fileId: ctx.fileId,
-        fileName: ctx.fileName || 'Documento',
-        driveLink: 'https://drive.google.com/file/d/' + ctx.fileId + '/view',
+        fileName: ctx.fileName || (asFolder ? 'Carpeta' : 'Documento'),
+        isFolder: asFolder,
+        driveLink: asFolder
+          ? ('https://drive.google.com/drive/folders/' + ctx.fileId)
+          : ('https://drive.google.com/file/d/' + ctx.fileId + '/view'),
         compartidoCon: []
       };
       repo.archivosCompartidos.push(arch);
+    } else {
+      if (ctx.fileName) arch.fileName = ctx.fileName;
+      arch.isFolder = asFolder || !!arch.isFolder;
+      arch.driveLink = arch.isFolder
+        ? ('https://drive.google.com/drive/folders/' + ctx.fileId)
+        : (arch.driveLink || ('https://drive.google.com/file/d/' + ctx.fileId + '/view'));
     }
     arch.compartidoCon = sel;
     bibliotecaRepos[idx] = Object.assign({}, repo, {

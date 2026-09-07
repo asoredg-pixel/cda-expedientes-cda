@@ -3780,6 +3780,9 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 .rec-exp.ext-drag-over{outline:2px dashed var(--bl);outline-offset:-2px;background:color-mix(in srgb,var(--bl) 6%,var(--sf))}
 .rec-exp-toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--bd);background:color-mix(in srgb,var(--bg) 55%,var(--sf))}
 .rec-exp-toolbar-left,.rec-exp-views{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.rec-exp-toolbar-left .sst-file-pick{margin-top:0;display:inline-flex;align-items:center}
+.rec-exp-toolbar-left .sst-file-pick .btn.act-ico{min-width:32px;width:32px;height:32px}
+.rec-exp-toolbar-left .sst-file-slot-list:empty{display:none}
 .rec-exp-crumb{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px 12px;font-size:12px;border-bottom:1px solid var(--bd);background:var(--bg)}
 .rec-exp-crumb-btn{border:0;background:transparent;color:var(--bl);cursor:pointer;padding:2px 4px;font:inherit;border-radius:4px}
 .rec-exp-crumb-btn:hover{background:color-mix(in srgb,var(--bl) 10%,transparent);text-decoration:underline}

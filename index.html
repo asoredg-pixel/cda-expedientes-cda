@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260907f">
+<link rel="stylesheet" href="css/sst.css?v=20260907i">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -34,13 +34,13 @@
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260907d"></script>
-<script src="js/sst-file-upload.js?v=20260907d"></script>
+<script src="js/sst-file-upload.js?v=20260907e"></script>
 <script src="js/pqrs.js?v=20260906h"></script>
 <script src="js/consulta.js?v=20260903a"></script>
 <script src="js/entrega-responsable.js?v=20260904c"></script>
 <script src="js/tramite-firma.js?v=20260906j"></script>
 <script src="js/papelera.js?v=20260806b"></script>
-<script src="js/recursos.js?v=20260907g"></script>
+<script src="js/recursos.js?v=20260907i"></script>
 <script src="js/ingreso.js?v=20260831v"></script>
 </head>
 <body>
@@ -1169,8 +1169,7 @@
     <div class="task-modal-body">
       <div class="fld"><label id="rec-prompt-label" for="rec-prompt-inp">Nombre</label><input type="text" id="rec-prompt-inp" class="rec-inp" style="max-width:none;width:100%" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();recExpCerrarPrompt(true)}else if(event.key==='Escape'){event.preventDefault();recExpCerrarPrompt(false)}"></div>
     </div>
-    <div class="rec-form-foot" style="padding:0 1rem 1rem;margin:0;border:0">
-      <button type="button" class="btn bsm bic act-ico" title="Cancelar" onclick="recExpCerrarPrompt(false)">✕</button>
+    <div class="rec-form-foot" style="padding:0 1rem 1rem;margin:0;border:0;justify-content:flex-end">
       <button type="button" class="btn bsm bp" id="rec-prompt-ok" onclick="recExpCerrarPrompt(true)">Crear</button>
     </div>
   </div>

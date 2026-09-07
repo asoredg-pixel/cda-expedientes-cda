@@ -379,12 +379,14 @@ function sstFilePickBlock(opts) {
   const ctxKey = opts.ctxKey || inputId;
   const multi = !!opts.multi;
   const accept = opts.accept || '.pdf,.doc,.docx,image/*,video/*';
-  const label = opts.label || (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
+  const label = opts.label != null ? opts.label : (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
   const btnCls = opts.btnClass || (multi ? 'btn bsm' : 'btn bsm bp');
+  const title = opts.title || (label ? String(label) : 'Subir');
+  const btnText = opts.iconOnly ? '📎' : ('📎' + (label ? ' ' + escAttr(label) : ''));
   sstFileRegisterPick(inputId, { ctxKey: ctxKey, listId: listId, multi: multi, getUploadCtx: opts.getUploadCtx || null });
   if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, multi ? 'anexos' : 'main');
   return '<div class="sst-file-pick">' +
-    '<button type="button" class="' + btnCls + '" onclick="sstFilePickByInputId(\'' + jsStr(inputId) + '\')">📎 ' + escAttr(label) + '</button>' +
+    '<button type="button" class="' + btnCls + '" title="' + escAttr(title) + '" onclick="sstFilePickByInputId(\'' + jsStr(inputId) + '\')">' + btnText + '</button>' +
     '<input type="file" id="' + escAttr(inputId) + '"' + (multi ? ' multiple' : '') + ' accept="' + escAttr(accept) + '" style="display:none" onchange="sstFileOnPickByInputId(this)">' +
     '</div>' +
     '<div id="' + escAttr(listId) + '" class="sst-file-slot-list"></div>';
