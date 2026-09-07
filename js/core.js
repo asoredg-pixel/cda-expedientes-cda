@@ -1168,11 +1168,22 @@ function pqrsEnPaletaFirmadosDirector(e){
 window.pqrsPasoPorFirmaDirector=pqrsPasoPorFirmaDirector;
 window.pqrsEsNotificadaTrasFirma=pqrsEsNotificadaTrasFirma;
 window.pqrsEnPaletaFirmadosDirector=pqrsEnPaletaFirmadosDirector;
-/** Quién ve la paleta Firmados (Director, VITAL, NCA, oficinas/encargados de gestión). */
+/** Quién ve la paleta Firmados (Director, VITAL, NCA). Oficinas DEGUV/Secretaría: no. */
 function pqrsPuedeVerPaletaFirmados(){
   if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return true;
+  // Oficinas básicas (Admin/OAP/RN/Secretaría/DS): sin paleta Firmados
+  if(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()
+    &&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))
+    return false;
   return typeof pqrsEsRolGestionFirmaSinDirector==='function'&&pqrsEsRolGestionFirmaSinDirector();
 }
+/** Oficinas DEGUV/Secretaría: sin paletas Firmados ni Por notificar. */
+function pqrsOficinaSinPaletasFirmadosNotif(){
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
+  if(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica())return true;
+  return false;
+}
+window.pqrsOficinaSinPaletasFirmadosNotif=pqrsOficinaSinPaletasFirmadosNotif;
 function pqrsPuedeFirmarDirector(e){
   if(!e||!pqrsEnPorFirmar(e))return false;
   return !!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()||esAdministrador());
@@ -1761,8 +1772,9 @@ function htmlPqrsSidePanelContent(e){
 function puedeMarcarPqrsRespondida(e){
   if(!e||pqrsEstaCerrada(e))return false;
   const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):PQRS_WF.SIN_RESPUESTA;
-  // Allow direct response only if sin_respuesta or rechazada
-  if(fase!==PQRS_WF.SIN_RESPUESTA&&fase!==PQRS_WF.RECHAZADA)return false;
+  // Directo: sin respuesta, rechazada, o en por firmar (oficinas/NCA entregan desde ambas paletas)
+  const okFase=fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA||fase===PQRS_WF.POR_FIRMAR;
+  if(!okFase)return false;
   if(esSecretaria())return e._pqrs_oficina==='secretaria';
   if(esModoOficinaDeguv())return e._pqrs_oficina===deptoActivo;
   // NCA encargado can respond directly (he is encargado + responsable)
@@ -1807,6 +1819,135 @@ function openPqrsEntregaDirecta(expId){
   if(typeof openPqrsRespuestaModal==='function')openPqrsRespuestaModal(expId);
 }
 window.openPqrsEntregaDirecta=openPqrsEntregaDirecta;
+/**
+ * Oficinas: desde «Por ejecutar», ✍️ envía la PQRSD a «Por firmar» (espera firma del Director).
+ */
+function pqrsOficinaEnviarAPorFirmar(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
+  expId=String(expId||'').trim();
+  const e=typeof getExpById==='function'?getExpById(expId):(exps||[]).find(function(x){return String(x._exp||'').trim()===expId;});
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){notif('La PQRSD ya está cerrada','err');return;}
+  const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  if(fase===PQRS_WF.POR_FIRMAR){
+    if(typeof pqrsOficinaToggleFirmaFisica==='function')pqrsOficinaToggleFirmaFisica(expId);
+    return;
+  }
+  if(fase&&fase!==PQRS_WF.SIN_RESPUESTA&&fase!==PQRS_WF.RECHAZADA){
+    notif('Solo se puede pasar a «Por firmar» desde Por ejecutar','err');return;
+  }
+  if(!(typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(e))
+    &&!(typeof puedeResponderDirecto==='function'&&puedeResponderDirecto(e))){
+    notif('No puede enviar esta PQRSD a firma','err');return;
+  }
+  const por=responsableActivo||(typeof labelOficina==='function'?labelOficina(deptoActivo):'')||rolSesion||'';
+  const ofi=e._pqrs_oficina||deptoActivo||'';
+  let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+  if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  if(!t){
+    try{
+      if(ofi==='guaviare'&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+      else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
+    }catch(err){}
+    t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+  }
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.POR_FIRMAR,
+    tipo:PQRS_WF_TIPO.OFICIO,
+    firma_fisica:null,
+    impreso:null,
+    task_id:t?String(t.id||'').trim():''
+  });
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({
+    tipo:'oficina_a_por_firmar',
+    fecha:hoy(),
+    nota:'Oficina envió a «Por firmar» — pendiente firma del Director',
+    oficina:ofi,
+    por:por
+  });
+  try{persistExpedienteGranular(e);}catch(err){console.warn('pqrsOficinaEnviarAPorFirmar:',err);}
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
+  notif('✍️ Enviada a «Por firmar» — esperando firma del Director','ok');
+}
+window.pqrsOficinaEnviarAPorFirmar=pqrsOficinaEnviarAPorFirmar;
+/**
+ * Oficinas (y quien gestiona firmado): marcar / desmarcar que el Director ya firmó en físico.
+ * Queda en «Por firmar» (el Director también lo ve allí con ✓).
+ */
+function pqrsOficinaToggleFirmaFisica(expId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
+  expId=String(expId||'').trim();
+  const e=typeof getExpById==='function'?getExpById(expId):(exps||[]).find(function(x){return String(x._exp||'').trim()===expId;});
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  if(typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR){
+    notif('La PQRSD no está en «Por firmar»','err');return;
+  }
+  const puede=typeof pqrsPuedeGestionarFirmadoExpediente==='function'&&pqrsPuedeGestionarFirmadoExpediente(e)
+    ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    ||(typeof esAdministrador==='function'&&esAdministrador())
+    ||(typeof puedeResponderDirecto==='function'&&puedeResponderDirecto(e));
+  if(!puede){notif('No puede marcar firma física','err');return;}
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const por=responsableActivo||(typeof labelOficina==='function'?labelOficina(deptoActivo):'')||rolSesion||'';
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  if(wf.firma_fisica&&wf.firma_fisica.en){
+    setPqrsWorkflow(e,{fase:PQRS_WF.POR_FIRMAR,firma_fisica:null});
+    e._pqrs_historial.push({
+      tipo:'firma_fisica_desmarcar',
+      fecha:hoy(),
+      nota:'Se desmarcó firma física del Director',
+      oficina:e._pqrs_oficina||deptoActivo||'',
+      por:por
+    });
+    try{persistExpedienteGranular(e);}catch(err){console.warn('pqrsOficinaToggleFirmaFisica:',err);}
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderActividades==='function')renderActividades();
+    notif('Firma física desmarcada — sigue en «Por firmar»','ok');
+    return;
+  }
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.POR_FIRMAR,
+    firma_fisica:{por:por,en:new Date().toISOString(),modo:'fisico',registrado_por:'oficina'}
+  });
+  e._pqrs_historial.push({
+    tipo:'firma_fisica_oficina',
+    fecha:hoy(),
+    nota:'Oficina/NCA marcó oficio ya firmado por el Director',
+    oficina:e._pqrs_oficina||deptoActivo||'',
+    por:por
+  });
+  try{persistExpedienteGranular(e);}catch(err){console.warn('pqrsOficinaToggleFirmaFisica:',err);}
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
+  notif('✓ Firma física marcada — visible para el Director en «Por firmar»','ok');
+}
+window.pqrsOficinaToggleFirmaFisica=pqrsOficinaToggleFirmaFisica;
+/** ✍️ clicable: marcar/desmarcar firma física (oficinas). */
+function pqrsOficinaFirmaFisicaBtnHtml(e,opts){
+  opts=opts||{};
+  if(!e)return'';
+  const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  const id=jsStr(e._exp);
+  if(!id)return'';
+  // Por ejecutar: enviar a por firmar
+  if(fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA||!fase){
+    return '<button type="button" class="btn bsm bic act-ico" title="Enviar a Por firmar (espera firma del Director)" onclick="event.stopPropagation();pqrsOficinaEnviarAPorFirmar(\''+id+'\')">✍️</button>';
+  }
+  if(fase!==PQRS_WF.POR_FIRMAR)return'';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const firm=!!(wf.firma_fisica&&wf.firma_fisica.en);
+  const cuando=firm?String(wf.firma_fisica.en||'').slice(0,10):'';
+  const tip=firm
+    ?('Firma física marcada'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(wf.firma_fisica.por?' · '+wf.firma_fisica.por:'')+' — clic para desmarcar')
+    :'Marcar que el Director ya firmó (clic de nuevo para desmarcar)';
+  if(firm){
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();pqrsOficinaToggleFirmaFisica(\''+id+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</button>';
+  }
+  return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(tip)+'" onclick="event.stopPropagation();pqrsOficinaToggleFirmaFisica(\''+id+'\')">✍️</button>';
+}
+window.pqrsOficinaFirmaFisicaBtnHtml=pqrsOficinaFirmaFisicaBtnHtml;
 /** true si la sesión responde PQRSD sin pasar por revisión NCA. */
 function pqrsEsEntregaDirectaCtx(e){
   const ctx=window._taskModalCtx||{};
@@ -1857,7 +1998,28 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
     });
     return true;
   }
-  // Oficio firmado: listo para notificar (sin revisión NCA)
+  // Oficio firmado: oficinas sin paleta «Por notificar» → cierran; NCA → por notificar
+  const ofiCierraOficio=typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif();
+  if(pq.tipo===PQRS_WF_TIPO.OFICIO&&ofiCierraOficio){
+    const docsCierre=docs.map(function(d){
+      return Object.assign({},d,{driveEstado:d.es_anexo||d.tipo==='anexo_respuesta'?d.driveEstado:'cerrado'});
+    });
+    guardarPqrsRespuestaDatos(e,{
+      fechaResp:pq.fechaResp,oficioExt:pq.oficioExt,cuerpo:pq.cuerpo,tipo:pq.tipo,
+      canal:pq.canal||PQRS_WF_CANAL.CORREO,nota:cmt||pq.cuerpo,adj:pq.adj,archivos:docsCierre,
+      emailTo:pq.emailTo,emailCc:pq.emailCc,emailBcc:pq.emailBcc,emailSubject:pq.emailSubject,taskId:taskId
+    },true);
+    setPqrsWorkflow(e,{
+      fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.OFICIO,canal:pq.canal||PQRS_WF_CANAL.CORREO,
+      cuerpo:pq.cuerpo||('Oficio '+(pq.oficioExt||'')),oficio:pq.oficioExt||'',fecha_respuesta:pq.fechaResp,
+      documentos:docsCierre,
+      email_to:pq.emailTo||'',email_cc:pq.emailCc||'',email_bcc:pq.emailBcc||'',email_subject:pq.emailSubject||'',
+      cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim(),
+      firma_fisica:(typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}).firma_fisica||{por:por,en:new Date().toISOString(),modo:'fisico'}
+    });
+    return true;
+  }
+  // Oficio firmado (NCA / con paleta notificar): listo para notificar
   let notifPor=pq.notificarPor||responsableActivo||'';
   if(typeof pqrsAsegurarNotificadorSegunOficina==='function')
     notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor||responsableActivo||'');
@@ -14215,7 +14377,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           normalizeTask(tk);
           const hoyStr=hoy();
           tk.fechaReportada=hoyStr;
-          if(pq.tipo===PQRS_WF_TIPO.OFICIO){
+          if(pq.tipo===PQRS_WF_TIPO.OFICIO
+            &&!(typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif())){
             tk.estado='En ejecución';
             tk.fechaAtendida='';
           }else{
@@ -14234,7 +14397,9 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       const msgOk=pq.tipo===PQRS_WF_TIPO.INFORMATIVA
         ?'ℹ️ PQRSD informativa cerrada'
         :(pq.tipo===PQRS_WF_TIPO.OFICIO
-          ?'📤 Oficio firmado listo para notificar'
+          ?((typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif())
+            ?'✅ Oficio firmado registrado — PQRSD atendida'
+            :'📤 Oficio firmado listo para notificar')
           :'✅ Respuesta enviada y PQRSD atendida');
       notif(msgOk,'ok');
       if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()){
@@ -14580,8 +14745,6 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   if(sol){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px;background:var(--orl);border-radius:var(--r)">'+
       'Tiene una solicitud de <strong>'+(sol.tipo==='traslado'?'traslado':'eliminación')+'</strong> pendiente en el chat — espere respuesta del departamento.</div>';
-  }else if(entregaDirectaUi){
-    h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como oficina/NCA, la respuesta <strong>no pasa por revisión</strong>: mensaje simple o informativa cierran la PQRSD; oficio firmado queda listo para <strong>notificar</strong>.</div>';
   }else if(autoEnc){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:#0d5c2e12;border-radius:var(--r);border:1px solid #0d5c2e">Como encargado, usted se revisa a sí mismo: la entrega <strong>no pasa por «Por revisar»</strong>. Tras adjuntar el documento, elija el flujo: <strong>Por firmar → Por notificar</strong> (marque 🖨️ cuando esté impreso) o cierre sin firma si no aplica.</div>';
   }else if(finalizarEnc){
