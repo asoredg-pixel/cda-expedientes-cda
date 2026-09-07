@@ -158,9 +158,22 @@ function renderRecursosPanel() {
   root.innerHTML = h;
 }
 
+function toggleRecEnlaceSearch() {
+  window._recEnlaceSearchOpen = !window._recEnlaceSearchOpen;
+  if (!window._recEnlaceSearchOpen) window._recEnlaceQ = '';
+  renderRecursosPanel();
+  if (window._recEnlaceSearchOpen) {
+    setTimeout(function() {
+      const el = document.getElementById('rec-enlace-q');
+      if (el) el.focus();
+    }, 0);
+  }
+}
+
 function renderRecursosEnlacesPanel(depto) {
   const lista = esAdministrador() ? enlacesVisiblesAdminTodos() : enlacesVisiblesParaSesion();
   const q = String(document.getElementById('rec-enlace-q') && document.getElementById('rec-enlace-q').value || window._recEnlaceQ || '').trim().toLowerCase();
+  const searchOpen = !!window._recEnlaceSearchOpen || !!q;
 
   const filtrada = lista.filter(function(l) {
     if (!q) return true;
@@ -174,15 +187,18 @@ function renderRecursosEnlacesPanel(depto) {
   h += '<div class="rec-side-hdr">';
   h += '<div class="rec-side-title"><span class="rec-side-ico" aria-hidden="true">🔗</span><span>Enlaces</span>';
   h += '<span class="rec-side-count">' + filtrada.length + '</span></div>';
+  h += '<div class="rec-side-tools">';
+  h += '<button type="button" class="btn bsm bic act-ico' + (searchOpen ? ' on' : '') + '" title="Buscar" onclick="toggleRecEnlaceSearch()" aria-expanded="' + (searchOpen ? 'true' : 'false') + '">🔍</button>';
   if (puedeCrear) {
     h += '<button type="button" class="btn bsm bic act-ico" onclick="recursosMostrarFormEnlace()" title="Nuevo enlace">+</button>';
   }
-  h += '</div>';
+  h += '</div></div>';
 
-  h += '<div class="rec-search" role="search">';
-  h += '<span class="rec-search-ico" aria-hidden="true">🔍</span>';
-  h += '<input type="search" id="rec-enlace-q" class="rec-search-inp" placeholder="Buscar enlaces…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;renderRecursosPanel()" aria-label="Buscar enlaces">';
-  h += '</div>';
+  if (searchOpen) {
+    h += '<div class="rec-search" role="search">';
+    h += '<input type="search" id="rec-enlace-q" class="rec-search-inp" placeholder="Buscar…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;window._recEnlaceSearchOpen=true;renderRecursosPanel()" aria-label="Buscar enlaces">';
+    h += '</div>';
+  }
 
   if (window._recursosEnlaceForm) {
     h += renderRecursosEnlaceForm(window._recursosEnlaceForm);
@@ -204,8 +220,8 @@ function renderRecursosEnlacesPanel(depto) {
       if (l.area) h += '<span class="rec-tag">' + escAttr(l.area) + '</span>';
       if (l.tematica) h += '<span class="rec-tag rec-tag-2">' + escAttr(l.tematica) + '</span>';
       h += '</div>';
+      h += '<div class="rec-enlace-row">';
       h += '<a class="rec-enlace-tit" href="' + escAttr(l.url) + '" target="_blank" rel="noopener noreferrer">' + escAttr(l.titulo || l.url) + '</a>';
-      if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
       h += '<div class="rec-enlace-actions">';
       h += '<a class="btn bsm bic act-ico" href="' + escAttr(l.url) + '" target="_blank" rel="noopener" title="Abrir">🔍</a>';
       if (canEdit) {
@@ -215,9 +231,11 @@ function renderRecursosEnlacesPanel(depto) {
         h += '<button type="button" class="btn bsm bic act-ico" title="Compartir" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">📤</button>';
       }
       if (canDel) {
-        h += '<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">🗑️</button>';
+        h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">🗑️</button>';
       }
-      h += '</div></article>';
+      h += '</div></div>';
+      if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
+      h += '</article>';
     });
     h += '</div>';
   }
@@ -397,7 +415,7 @@ function renderRecursosRepoDetalle(repoId) {
       h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
     }
     if (canDel) {
-      h += '<button type="button" class="btn bsm bic act-ico bd2" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
+      h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
     }
     h += '</div>';
   }
@@ -1486,17 +1504,26 @@ function recursosAbrirCompartir(tipo, id, fileId, fileName) {
     sel = (item.compartidoCon || []).slice();
   }
   const ofis = getRecursosOficinasParaCompartir(item);
-  let h = '<p style="font-size:13px;color:var(--tx2);margin:0 0 12px">Seleccione las oficinas que podrán ver <strong>' + escAttr(titulo) + '</strong> en su pestaña Recursos.</p>';
-  h += '<div class="rec-share-ofis">';
+  const resps = typeof getRecursosResponsablesParaCompartir === 'function' ? getRecursosResponsablesParaCompartir() : [];
+  let h = '<p style="font-size:13px;color:var(--tx2);margin:0 0 12px">Seleccione oficinas y/o responsables que podrán ver <strong>' + escAttr(titulo) + '</strong> en Recursos.</p>';
+  h += '<div class="rec-share-sec"><div class="rec-share-sec-tit">Oficinas</div><div class="rec-share-ofis">';
   ofis.forEach(function(o) {
     const checked = sel.includes(o.id);
     h += '<label class="rec-share-ofi-lbl"><input type="checkbox" value="' + escAttr(o.id) + '"' + (checked ? ' checked' : '') + '> ' + escAttr(o.nombre) + '</label>';
   });
-  h += '</div>';
-  if (!ofis.length) h += '<p style="font-size:12px;color:var(--tx3)">No hay otras oficinas disponibles para compartir.</p>';
+  if (!ofis.length) h += '<p style="font-size:12px;color:var(--tx3);margin:0">No hay otras oficinas disponibles.</p>';
+  h += '</div></div>';
+  h += '<div class="rec-share-sec"><div class="rec-share-sec-tit">Responsables</div><div class="rec-share-ofis">';
+  h += '<label class="rec-share-ofi-lbl"><input type="checkbox" value="r:*"' + (sel.includes('r:*') ? ' checked' : '') + '> Todos los responsables</label>';
+  resps.forEach(function(r) {
+    const checked = sel.includes(r.id);
+    h += '<label class="rec-share-ofi-lbl"><input type="checkbox" value="' + escAttr(r.id) + '"' + (checked ? ' checked' : '') + '> ' + escAttr(r.nombre) + '</label>';
+  });
+  if (!resps.length) h += '<p style="font-size:12px;color:var(--tx3);margin:0">No hay responsables con correo registrados.</p>';
+  h += '</div></div>';
   body.innerHTML = h;
   const titEl = document.getElementById('rec-share-title');
-  if (titEl) titEl.textContent = tipo === 'archivo' ? 'Compartir documento' : (tipo === 'repo' ? 'Compartir repositorio' : 'Compartir enlace');
+  if (titEl) titEl.textContent = tipo === 'archivo' ? 'Compartir documento' : (tipo === 'repo' ? 'Compartir carpeta' : 'Compartir enlace');
   if (typeof elevateOverlayAboveModals === 'function') elevateOverlayAboveModals(ov);
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');

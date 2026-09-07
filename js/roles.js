@@ -1068,7 +1068,11 @@ function recursosItemCompartidoVisible(item){
   const comp=Array.isArray(item&&item.compartidoCon)?item.compartidoCon:[];
   if(!comp.length)return false;
   const vis=getRecursosOficinasVisiblesSesion();
-  return comp.some(function(id){return vis.includes(id);});
+  if(comp.some(function(id){return vis.includes(id);}))return true;
+  if(comp.includes('r:*')&&(esModoResponsable()||esModoContratista()))return true;
+  const email=getAuthEmailNorm();
+  if(email&&comp.includes('r:'+email))return true;
+  return false;
 }
 function recursosItemVisibleParaSesion(item){
   if(!item||item.activo===false)return false;
@@ -1080,20 +1084,51 @@ function getRecursosOficinasParaCompartir(item){
   const ownerOfi=n.scope==='oficina'?n.scopeId:'';
   return OFICINAS_DEGUV.filter(function(o){return o.id!==ownerOfi;});
 }
+function getRecursosResponsablesParaCompartir(){
+  const out=[];
+  const seen=new Set();
+  (DEPTOS||[]).forEach(function(d){
+    const lista=(typeof getInstructoresActivos==='function'?getInstructoresActivos(d.id):null)||[];
+    lista.forEach(function(ins){
+      if(!ins||ins.activo===false)return;
+      const email=String(ins.email||'').trim().toLowerCase();
+      if(!email||seen.has(email))return;
+      seen.add(email);
+      out.push({id:'r:'+email,email:email,nombre:String(ins.nombre||email).trim()||email});
+    });
+  });
+  out.sort(function(a,b){return String(a.nombre).localeCompare(String(b.nombre),'es');});
+  return out;
+}
 function labelRecursosCompartidoCon(ids){
   const arr=Array.isArray(ids)?ids:[];
   if(!arr.length)return '';
-  return arr.map(labelOficina).join(', ');
+  return arr.map(function(id){
+    const s=String(id||'');
+    if(s==='r:*')return 'Todos los responsables';
+    if(s.indexOf('r:')===0){
+      const email=s.slice(2);
+      const lista=getRecursosResponsablesParaCompartir();
+      const hit=lista.find(function(r){return r.email===email;});
+      return hit?hit.nombre:email;
+    }
+    return labelOficina(s);
+  }).join(', ');
 }
 function puedeCompartirRecursosItem(item){
-  if(!item)return false;
-  const n=normalizeRecursosScopeItem(item);
-  return puedeEditarRecursosItem(n.scope,n.scopeId);
+  if(!item||!puedeVerRecursos())return false;
+  return recursosItemVisibleParaSesion(item);
 }
 function archivosRepoCompartidosConmigo(repo){
   const vis=getRecursosOficinasVisiblesSesion();
+  const email=getAuthEmailNorm();
+  const soyResp=esModoResponsable()||esModoContratista();
   return (repo&&repo.archivosCompartidos||[]).filter(function(a){
-    return (a.compartidoCon||[]).some(function(id){return vis.includes(id);});
+    const comp=a.compartidoCon||[];
+    if(comp.some(function(id){return vis.includes(id);}))return true;
+    if(soyResp&&comp.includes('r:*'))return true;
+    if(email&&comp.includes('r:'+email))return true;
+    return false;
   });
 }
 function getRecursosScopeAutoSesion(){
@@ -1116,22 +1151,16 @@ function labelRecursosScopeContexto(scope,scopeId){
 }
 function puedeEditarRecursosItem(scope,scopeId){
   if(esAdministrador()||esAdminFirestore())return true;
+  if(!puedeVerRecursos())return false;
   if(scope==='sistema')return false;
-  if(scope==='departamento'){
-    if(scopeId==='guaviare'&&esNcaDeguv())return true;
-    return esEncargadoDeptoUsuario(scopeId);
-  }
-  if(scope==='oficina'){
-    if(esEncargadoOficinaUsuario(scopeId))return true;
-    if(scopeId==='guaviare'&&esEncargadoDeptoUsuario('guaviare'))return true;
-    return false;
-  }
-  return false;
+  /* Oficinas (NCA/OAP/RN/ADMIN/DS/Sec), deptos y responsables con ese ámbito visible pueden crear/gestionar. */
+  return recursosScopeVisibleParaSesion(scope,scopeId);
 }
 function puedeCrearRecursosEnScope(scope,scopeId){
   return puedeEditarRecursosItem(scope,scopeId);
 }
 function getRecursosScopesCreablesSesion(){
+  if(!puedeVerRecursos())return [];
   if(recursosMuestraSelectorAmbito()){
     const out=[{scope:'sistema',scopeId:'sistema'}];
     DEPTOS.forEach(function(d){out.push({scope:'departamento',scopeId:d.id});});
@@ -1139,7 +1168,15 @@ function getRecursosScopesCreablesSesion(){
     return out;
   }
   const auto=getRecursosScopeAutoSesion();
-  if(puedeEditarRecursosItem(auto.scope,auto.scopeId))return [auto];
+  if(auto&&puedeCrearRecursosEnScope(auto.scope,auto.scopeId))return [auto];
+  /* Fallback: primera oficina visible de la sesión */
+  const ofis=getRecursosOficinasVisiblesSesion();
+  if(ofis.length){
+    const o=ofis[0];
+    if(puedeCrearRecursosEnScope('oficina',o))return [{scope:'oficina',scopeId:o}];
+  }
+  const depto=getRecursosDeptoContext();
+  if(depto&&puedeCrearRecursosEnScope('departamento',depto))return [{scope:'departamento',scopeId:depto}];
   return [];
 }
 function labelRecursosScope(scope,scopeId){
