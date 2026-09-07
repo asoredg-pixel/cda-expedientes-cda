@@ -1229,7 +1229,6 @@ function recExpItemContextMenu(ev, fileId) {
     if (isFolder) recExpEnterFolder(fileId); else recExpOpenFile(fileId);
   });
   if (!isFolder) {
-    add('Vista previa', function() { recExpPreviewFile(fileId); });
     add('Abrir en Drive', function() {
       const link = f.webViewLink || ('https://drive.google.com/file/d/' + f.id + '/view');
       window.open(link, '_blank', 'noopener,noreferrer');
