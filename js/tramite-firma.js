@@ -189,7 +189,7 @@ function taskFirmaEstadoUi(t){
   const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
   const notifDev=!!(wf.notificacion_devuelta||wf._notif_devuelta_corregir);
   if(est==='Por corregir'&&(notifDev||taskFirmaEnRevisionFinalNotif(t)||(taskFirmaEnPorNotificar(t)&&notifDev))){
-    const n=typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(t):0;
+    const n=typeof taskCountDevolucionesNotifCorreccion==='function'?taskCountDevolucionesNotifCorreccion(t):(typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(t):0);
     return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Corregir'),{subCount:n});
   }
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){

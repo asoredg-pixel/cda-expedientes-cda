@@ -964,6 +964,11 @@ function taskCountDevolucionesCorreccion(t){
   if(!t)return 0;
   return (t.historial||[]).filter(function(h){return h&&h.tipo==='ajuste_soporte';}).length;
 }
+/** Devoluciones de la notificación reportada (2ª+ → numerito en X Corregir). */
+function taskCountDevolucionesNotifCorreccion(t){
+  if(!t)return 0;
+  return (t.historial||[]).filter(function(h){return h&&h.tipo==='notif_devuelta_corregir';}).length;
+}
 /** Badge dual: ✓ Entregada · X Revisar / ✓ Revisada · X Corregir / ✓ Notificada · X Corregir. */
 function taskEntregaRevisionEstadoUi(t){
   if(!t||t.eliminada)return null;
@@ -983,7 +988,7 @@ function taskEntregaRevisionEstadoUi(t){
     if(mi&&mi!=='Eliminada')est=mi;
   }
   if(est==='Por corregir'&&notifDev){
-    const n=taskCountDevolucionesCorreccion(t);
+    const n=typeof taskCountDevolucionesNotifCorreccion==='function'?taskCountDevolucionesNotifCorreccion(t):taskCountDevolucionesCorreccion(t);
     return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:n});
   }
   if(taskEnPipelineFirmaNotifAbierta(t)&&!notifDev)return null;
@@ -1035,13 +1040,13 @@ function pqrsEstadoActividadUi(e){
     const tNot=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
     const estNot=tNot&&typeof estadoTask==='function'?estadoTask(tNot):'';
     if(estNot==='Por corregir'&&(wf.notificacion_devuelta||wf._notif_devuelta_corregir))
-      return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tNot):0});
+      return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesNotifCorreccion==='function'?taskCountDevolucionesNotifCorreccion(tNot):0});
     return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Notificar'));
   }
   if(f===PQRS_WF.REVISION_FINAL){
     const tRf=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
     if(tRf&&typeof estadoTask==='function'&&estadoTask(tRf)==='Por corregir')
-      return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tRf):0});
+      return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesNotifCorreccion==='function'?taskCountDevolucionesNotifCorreccion(tRf):0});
     return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'));
   }
   if(f===PQRS_WF.CERRADA||(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))){
