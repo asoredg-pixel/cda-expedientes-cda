@@ -271,30 +271,34 @@ function renderRecursosEnlacesPanel(depto) {
       const canEdit = typeof puedeGestionarRecursosEnlace === 'function' ? puedeGestionarRecursosEnlace(l) : puedeEditarRecursosEnlaces(l.scope, l.scopeId);
       const canDel = puedeEliminarRecursosItem(l);
       const canShare = puedeCompartirRecursosItem(l);
-      const compLbl = labelRecursosCompartidoCon(l.compartidoCon);
-      h += '<article class="rec-enlace-card">';
+      const esCompartido = typeof recursosItemCompartidoVisible === 'function' &&
+        recursosItemCompartidoVisible(l) &&
+        typeof recursosItemVisiblePorScope === 'function' &&
+        !recursosItemVisiblePorScope(l);
+      const compLbl = canEdit ? labelRecursosCompartidoCon(l.compartidoCon) : '';
+      h += '<article class="rec-enlace-card' + (esCompartido ? ' shared' : '') + '">';
+      h += '<div class="rec-enlace-body">';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelRecursosScopeContexto(l.scope, l.scopeId)) + '</span>';
-      if (recursosItemCompartidoVisible(l) && !recursosItemVisiblePorScope(l)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
+      if (esCompartido) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
       if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
       if (l.area) h += '<span class="rec-tag">' + escAttr(l.area) + '</span>';
       if (l.tematica) h += '<span class="rec-tag rec-tag-2">' + escAttr(l.tematica) + '</span>';
       h += '</div>';
-      h += '<div class="rec-enlace-row">';
       h += '<a class="rec-enlace-tit" href="' + escAttr(l.url) + '" target="_blank" rel="noopener noreferrer">' + escAttr(l.titulo || l.url) + '</a>';
+      if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
+      h += '</div>';
       h += '<div class="rec-enlace-actions">';
       h += '<a class="btn bsm bic act-ico" href="' + escAttr(l.url) + '" target="_blank" rel="noopener" title="Abrir">🔍</a>';
       if (canEdit) {
         h += '<button type="button" class="btn bsm bic act-ico" title="Editar" onclick="recursosMostrarFormEnlace(\'' + escAttr(l.id) + '\')">✏️</button>';
       }
       if (canShare) {
-        h += '<button type="button" class="btn bsm bic act-ico" title="Compartir" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">📤</button>';
+        h += '<button type="button" class="btn bsm bic act-ico" title="Compartir" onclick="recursosAbrirCompartir(\'enlace\',\'' + escAttr(l.id) + '\')">👥</button>';
       }
       if (canDel) {
         h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">🗑️</button>';
       }
-      h += '</div></div>';
-      if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
-      h += '</article>';
+      h += '</div></article>';
     });
     h += '</div>';
   }
@@ -1579,7 +1583,10 @@ function renderRecursosEnlaceForm(editId) {
   let h = '<div class="rec-form-card">';
   h += '<div class="rec-form-hdr"><span class="rec-form-title">' + (existing ? 'Editar enlace' : 'Nuevo enlace') + '</span>';
   h += '<button type="button" class="btn bsm bic act-ico" title="Cerrar" onclick="recursosOcultarFormEnlace()">✕</button></div>';
-  if (!recursosMuestraSelectorAmbito() && !existing) {
+  /* Responsables/contratistas crean enlaces para su uso; no mostrar «Para: NCA…» */
+  const ocultarPara = (typeof esModoResponsable === 'function' && esModoResponsable()) ||
+    (typeof esModoContratista === 'function' && esModoContratista());
+  if (!recursosMuestraSelectorAmbito() && !existing && !ocultarPara) {
     h += '<p class="rec-form-scope">Para: <strong>' + escAttr(labelRecursosScopeContexto(scope, scopeId)) + '</strong></p>';
   }
   h += '<div class="rec-form-body"><div class="fg">';
@@ -1595,9 +1602,8 @@ function renderRecursosEnlaceForm(editId) {
   h += '<div class="fld"><label>Temática</label><input type="text" id="rec-enl-tematica" value="' + escAttr(existing && existing.tematica || '') + '" placeholder="Texto libre"></div>';
   h += '<div class="fld"><label>Descripción (opcional)</label><textarea id="rec-enl-desc" rows="2">' + escTextarea(existing && existing.descripcion || '') + '</textarea></div>';
   h += '</div>';
-  h += '<div class="rec-form-foot">';
+  h += '<div class="rec-form-foot" style="justify-content:flex-end">';
   h += '<button type="button" class="btn bsm bp" onclick="guardarRecursosEnlace(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
-  h += '<button type="button" class="btn bsm bic act-ico" title="Cancelar" onclick="recursosOcultarFormEnlace()">✕</button>';
   h += '</div></div></div>';
   return h;
 }
