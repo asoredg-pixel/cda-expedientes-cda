@@ -27,7 +27,7 @@
 <script src="js/roles.js?v=20260907h"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260907u"></script>
+<script src="js/core.js?v=20260907v"></script>
 <script src="js/formulario.js?v=20260903a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260903a"></script>
@@ -43,7 +43,7 @@
 <script src="js/pqrs.js?v=20260907f"></script>
 <script src="js/consulta.js?v=20260903a"></script>
 <script src="js/entrega-responsable.js?v=20260904c"></script>
-<script src="js/tramite-firma.js?v=20260906j"></script>
+<script src="js/tramite-firma.js?v=20260907a"></script>
 <script src="js/papelera.js?v=20260806b"></script>
 <script src="js/recursos.js?v=20260907w"></script>
 <script src="js/ingreso.js?v=20260907b"></script>
@@ -901,7 +901,7 @@
   <div class="card" style="border-left:4px solid var(--bl)">
     <div class="fx" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:.8rem">
       <div class="slbl" style="margin:0" id="pqrs-ofi-titulo">PQRSD</div>
-      <button type="button" class="btn bsm bp" id="btn-entrega-ofi-firma" style="display:none" onclick="openEntregaOficinaFirmaModal()" title="Oficio u otro documento que no es PQRSD — enviar a firma del Director">🖊 Documento para firma</button>
+      <button type="button" class="btn bsm bp" id="btn-entrega-ofi-firma" style="display:none" onclick="openEntregaOficinaFirmaModal()" title="Comunicado u oficio (no PQRSD): mensaje, firma del Director o ya notificado">📤 Documento / comunicado</button>
     </div>
     <div class="sb periodo-filtro act-periodo-row" style="margin-bottom:10px">
       <div class="fld" style="min-width:130px"><label style="font-size:11px;color:var(--tx2)">Corte rápido</label><select id="pqrs-ofi-preset" onchange="onPresetPeriodo('pqrs-ofi')"><option value="">Todo el historial</option><option value="ano">Año completo</option><option value="trim1">Trimestre 1 (ene–mar)</option><option value="trim2">Trimestre 2 (abr–jun)</option><option value="trim3">Trimestre 3 (jul–sep)</option><option value="trim4">Trimestre 4 (oct–dic)</option><option value="sem1">Semestre 1 (ene–jun)</option><option value="sem2">Semestre 2 (jul–dic)</option><option value="mes">Mes específico</option><option value="custom">Rango personalizado</option></select></div>

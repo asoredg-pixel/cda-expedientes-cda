@@ -2303,10 +2303,10 @@ function genCodigoActOficinaFirma(ofi){
   return pref+'-'+String(n).padStart(4,'0');
 }
 
-/** Modal PQRSD oficinas: oficios / documentos para firma del Director (no PQRSD). */
+/** Modal oficinas: comunicado / oficio (no PQRSD) — mensaje, firma Director o ya notificado. */
 function openEntregaOficinaFirmaModal(){
   if(!puedeEntregarOficinaParaFirma()){
-    notif('Solo oficinas RN, OAP, Admin o Secretaría pueden entregar documentos para firma','err');
+    notif('Solo oficinas RN, OAP, Admin o Secretaría pueden registrar documentos / comunicados','err');
     return;
   }
   const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():(typeof deptoActivo!=='undefined'?deptoActivo:'');
@@ -2316,24 +2316,89 @@ function openEntregaOficinaFirmaModal(){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Documento para firma · '+ofiLbl;
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  if(tit)tit.textContent='Documento / comunicado · '+ofiLbl;
+  if(modal){
+    modal.classList.remove('task-modal-wide','task-modal-review','task-modal-resp-ver','task-modal-review-wa-side','task-modal-archivos','task-modal-chat');
+    modal.classList.add('enviar-modal-only');
+  }
   const notifDef=typeof pqrsDefaultNotificadorOficina==='function'?pqrsDefaultNotificadorOficina(ofi):'';
+  const hoyStr=typeof hoy==='function'?hoy():'';
+  const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+  const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
   body.innerHTML=
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Oficio u otro documento <strong>que no es PQRSD</strong>. Se envía al Director (Por firmar) y luego usted notifica, igual que con PQRSD de oficina.</div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Asunto / descripción <span style="color:var(--rd)">*</span></label>'+
-      '<input type="text" id="entrega-ofi-firma-asunto" placeholder="Ej. Oficio de remisión, respuesta a entidad…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>N° de oficio (opcional)</label>'+
-      '<input type="text" id="entrega-ofi-firma-oficio" placeholder="OFI-2026-…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld" style="margin-bottom:10px"><label>Documento para firma <span style="color:var(--rd)">*</span></label>'+
-      (typeof sstFilePickBlock==='function'
-        ?sstFilePickBlock({inputId:'entrega-ofi-firma-file',listId:'entrega-ofi-firma-file-list',ctxKey:'entrega-ofi-firma:'+ofi,label:'Seleccionar archivo',accept:'.pdf,.doc,.docx,application/pdf',getUploadCtx:typeof entregaOfiFirmaUploadCtx==='function'?entregaOfiFirmaUploadCtx:null})
-        :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="(typeof sstSolicitarGmailParaAdjuntar===\'function\'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){if(ok){var i=document.getElementById(\'entrega-ofi-firma-file\');if(i)i.click();}})">📎 Seleccionar archivo</button><input type="file" id="entrega-ofi-firma-file" accept=".pdf,.doc,.docx,application/pdf" style="display:none" onchange="syncEntregaOfiFirmaFileLabel(this)"><span id="entrega-ofi-firma-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px;padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+      'Comunicado o solicitud a entidades/usuarios <strong>(no es PQRSD)</strong>. Puede enviarse como <strong>mensaje simple</strong>, quedar <strong>para firma del Director</strong>, notificarse por <strong>correo</strong> o registrarse <strong>ya notificado</strong> (presencial / WhatsApp / aviso).'+
     '</div>'+
-    '<div class="fld" style="margin-bottom:12px"><label>Quién notificará</label>'+
-      '<input type="text" id="entrega-ofi-firma-notif" value="'+escAttr(notifDef)+'" placeholder="Encargado de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fx" style="gap:8px">'+
-      '<button type="button" class="btn bsm bp" id="entrega-ofi-firma-btn" onclick="submitEntregaOficinaFirma()">🖊 Enviar a firma</button>'+
+    '<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">'+
+      '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Tipo de salida</div>'+
+      '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-bottom:10px" id="ofi-doc-tipo-btns">'+
+        '<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(TIPO_MSG)+'" onclick="ofiDocSetTipo(\''+jsStr(TIPO_MSG)+'\')">Mensaje simple</button>'+
+        '<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(TIPO_OFI)+'" onclick="ofiDocSetTipo(\''+jsStr(TIPO_OFI)+'\')">📄 Oficio firmado</button>'+
+      '</div>'+
+      '<input type="hidden" id="ofi-doc-tipo" value="">'+
+      '<div id="ofi-doc-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de salida.</div>'+
+      '<div id="ofi-doc-detalles" style="display:none">'+
+        '<div class="fld" style="margin-bottom:8px"><label>Asunto / descripción <span style="color:var(--rd)">*</span></label>'+
+          '<input type="text" id="ofi-doc-asunto" placeholder="Ej. Invitación, remisión a entidad, comunicado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box"></div>'+
+        '<div class="fg" style="margin-bottom:8px">'+
+          '<div class="fld"><label>Fecha <span class="req-star">*</span></label><input type="date" id="ofi-doc-fecha" value="'+escAttr(hoyStr)+'"></div>'+
+          '<div class="fld" id="ofi-doc-oficio-row" style="display:none"><label>N° de oficio <span class="req-star">*</span></label>'+
+            '<input type="text" id="ofi-doc-oficio" placeholder="OFI-2026-…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box"></div>'+
+        '</div>'+
+        '<div id="ofi-doc-destino-wrap" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+          '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Destino del oficio</div>'+
+          '<div class="fx" style="gap:5px;flex-wrap:wrap" id="ofi-doc-destino-btns">'+
+            '<button type="button" class="btn bsm tipo-resp-btn on" data-val="firma" onclick="ofiDocSetDestino(\'firma\')">🖊 Enviar a firma del Director</button>'+
+            '<button type="button" class="btn bsm tipo-resp-btn" data-val="listo" onclick="ofiDocSetDestino(\'listo\')">✓ Ya firmado / notificar ahora</button>'+
+          '</div>'+
+          '<input type="hidden" id="ofi-doc-destino" value="firma">'+
+        '</div>'+
+        '<div id="ofi-doc-notif-correo-wrap" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+          '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0">'+
+            '<input type="checkbox" id="ofi-doc-notif-correo" onchange="ofiDocRefreshUi()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
+            '<span>Se notificará por correo electrónico</span></label>'+
+        '</div>'+
+        '<div id="ofi-doc-otro-medio-wrap" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+          '<div style="font-size:12px;font-weight:600;margin-bottom:4px">Notificado por otro medio</div>'+
+          '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">No se enviará correo. La actividad quedará <strong>atendida</strong>.</div>'+
+          '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-bottom:8px" id="ofi-doc-canal-btns">'+
+            '<button type="button" class="btn bsm canal-resp-btn on" data-val="presencial" onclick="ofiDocSetCanal(\'presencial\')">🤝 Presencial</button>'+
+            '<button type="button" class="btn bsm canal-resp-btn" data-val="whatsapp" onclick="ofiDocSetCanal(\'whatsapp\')">💬 WhatsApp</button>'+
+            '<button type="button" class="btn bsm canal-resp-btn" data-val="aviso" onclick="ofiDocSetCanal(\'aviso\')">📌 Por aviso</button>'+
+          '</div>'+
+          '<input type="hidden" id="ofi-doc-canal" value="presencial">'+
+          '<div class="fld" style="margin-bottom:8px"><label>Fecha de notificación<span class="req-star">*</span></label>'+
+            '<input type="date" id="ofi-doc-notif-fecha" value="'+escAttr(hoyStr)+'"></div>'+
+          '<div class="fld" style="margin-bottom:0"><label>Observación <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+            '<textarea id="ofi-doc-notif-obs" placeholder="Ej. Entregado en ventanilla…" style="min-height:56px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box"></textarea></div>'+
+        '</div>'+
+        '<div id="ofi-doc-email-compose" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
+          '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
+          '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
+            '<input type="text" id="ofi-doc-email-to" class="sst-email-chips" placeholder="destinatario@ejemplo.com" style="width:100%;box-sizing:border-box"></div>'+
+          '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+            '<input type="text" id="ofi-doc-email-cc" class="sst-email-chips" placeholder="copia@ejemplo.com" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+          '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
+            '<input type="text" id="ofi-doc-email-bcc" class="sst-email-chips" placeholder="oculto@ejemplo.com" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+          '<div class="fld" style="margin-bottom:8px"><label>Asunto</label>'+
+            '<input type="text" id="ofi-doc-email-subject" placeholder="Asunto del correo" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+        '</div>'+
+        '<div class="fld" id="ofi-doc-cuerpo-wrap" style="margin-bottom:10px"><label id="ofi-doc-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje <span class="req-star">*</span></label>'+
+          '<textarea id="ofi-doc-cuerpo" placeholder="Texto del mensaje o cuerpo del correo…" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box"></textarea></div>'+
+        '<div id="ofi-doc-adj-wrap" style="margin-bottom:10px">'+
+          '<label style="font-size:11px;font-weight:600;color:var(--tx3)" id="ofi-doc-adj-label">Documento</label>'+
+          '<div class="sst-file-pick-row" style="margin-top:6px">'+
+            (typeof sstFilePickBlock==='function'
+              ?sstFilePickBlock({inputId:'entrega-ofi-firma-file',listId:'entrega-ofi-firma-file-list',ctxKey:'entrega-ofi-firma:'+ofi,label:'Seleccionar archivo',accept:'.pdf,.doc,.docx,application/pdf,image/*',getUploadCtx:typeof entregaOfiFirmaUploadCtx==='function'?entregaOfiFirmaUploadCtx:null})
+              :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'entrega-ofi-firma-file\').click()">📎 Seleccionar archivo</button><input type="file" id="entrega-ofi-firma-file" accept=".pdf,.doc,.docx,application/pdf,image/*" style="display:none" onchange="syncEntregaOfiFirmaFileLabel(this)"><span id="entrega-ofi-firma-file-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
+          '</div>'+
+        '</div>'+
+        '<div class="fld" id="ofi-doc-notif-por-wrap" style="margin-bottom:12px;display:none"><label>Quién notificará <span style="font-weight:400;color:var(--tx3)">(tras firma)</span></label>'+
+          '<input type="text" id="entrega-ofi-firma-notif" value="'+escAttr(notifDef)+'" placeholder="Encargado de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
+      '<button type="button" class="btn bsm bp" id="entrega-ofi-firma-btn" onclick="submitEntregaOficinaFirma()">📤 Registrar</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   ov.classList.add('on');
@@ -2341,8 +2406,96 @@ function openEntregaOficinaFirmaModal(){
   window._entregaOfiFirmaCodigo=typeof genCodigoActOficinaFirma==='function'?genCodigoActOficinaFirma(ofi):('ACT-'+Date.now());
   if(typeof sstFileStagingReset==='function')sstFileStagingReset('entrega-ofi-firma:'+ofi);
   if(typeof sstFileInitPick==='function')sstFileInitPick('entrega-ofi-firma-file');
-  setTimeout(function(){const a=document.getElementById('entrega-ofi-firma-asunto');if(a)a.focus();},80);
+  ofiDocRefreshUi();
+  setTimeout(function(){const a=document.getElementById('ofi-doc-asunto');if(a)a.focus();},80);
 }
+function ofiDocSetTipo(val){
+  const hid=document.getElementById('ofi-doc-tipo');
+  if(hid)hid.value=String(val||'');
+  document.querySelectorAll('#ofi-doc-tipo-btns .tipo-resp-btn').forEach(function(b){
+    b.classList.toggle('on',b.getAttribute('data-val')===String(val||''));
+  });
+  ofiDocRefreshUi();
+}
+function ofiDocSetDestino(val){
+  val=String(val||'firma').trim()==='listo'?'listo':'firma';
+  const hid=document.getElementById('ofi-doc-destino');
+  if(hid)hid.value=val;
+  document.querySelectorAll('#ofi-doc-destino-btns .tipo-resp-btn').forEach(function(b){
+    b.classList.toggle('on',b.getAttribute('data-val')===val);
+  });
+  ofiDocRefreshUi();
+}
+function ofiDocSetCanal(val){
+  val=String(val||'presencial').trim().toLowerCase();
+  if(val!=='presencial'&&val!=='whatsapp'&&val!=='aviso')val='presencial';
+  const hid=document.getElementById('ofi-doc-canal');
+  if(hid)hid.value=val;
+  document.querySelectorAll('#ofi-doc-canal-btns .canal-resp-btn').forEach(function(b){
+    b.classList.toggle('on',b.getAttribute('data-val')===val);
+  });
+}
+function ofiDocRefreshUi(){
+  const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+  const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
+  const tipo=String((document.getElementById('ofi-doc-tipo')||{}).value||'').trim();
+  const destino=String((document.getElementById('ofi-doc-destino')||{}).value||'firma').trim()||'firma';
+  const notifCorreo=!!((document.getElementById('ofi-doc-notif-correo')||{}).checked);
+  const detalles=document.getElementById('ofi-doc-detalles');
+  const hint=document.getElementById('ofi-doc-tipo-hint');
+  const isMsg=tipo===TIPO_MSG;
+  const isOfi=tipo===TIPO_OFI;
+  if(!tipo){
+    if(detalles)detalles.style.display='none';
+    if(hint)hint.style.display='';
+    const btn0=document.getElementById('entrega-ofi-firma-btn');
+    if(btn0)btn0.textContent='📤 Registrar';
+    return;
+  }
+  if(hint)hint.style.display='none';
+  if(detalles)detalles.style.display='';
+  const oficioRow=document.getElementById('ofi-doc-oficio-row');
+  const destWrap=document.getElementById('ofi-doc-destino-wrap');
+  const notifCorreoWrap=document.getElementById('ofi-doc-notif-correo-wrap');
+  const otroWrap=document.getElementById('ofi-doc-otro-medio-wrap');
+  const emailCompose=document.getElementById('ofi-doc-email-compose');
+  const cuerpoWrap=document.getElementById('ofi-doc-cuerpo-wrap');
+  const cuerpoLbl=document.getElementById('ofi-doc-cuerpo-label');
+  const adjLabel=document.getElementById('ofi-doc-adj-label');
+  const notifPorWrap=document.getElementById('ofi-doc-notif-por-wrap');
+  const btn=document.getElementById('entrega-ofi-firma-btn');
+  if(oficioRow)oficioRow.style.display=isOfi?'':'none';
+  if(destWrap)destWrap.style.display=isOfi?'':'none';
+  const showListo=isOfi&&destino==='listo';
+  const showFirma=isOfi&&destino==='firma';
+  const showEmail=isMsg||(showListo&&notifCorreo);
+  const showOtro=showListo&&!notifCorreo;
+  if(notifCorreoWrap)notifCorreoWrap.style.display=showListo?'':'none';
+  if(otroWrap)otroWrap.style.display=showOtro?'':'none';
+  if(emailCompose)emailCompose.style.display=showEmail?'':'none';
+  if(cuerpoWrap)cuerpoWrap.style.display=(isMsg||showEmail||showOtro)?'':'none';
+  if(cuerpoLbl){
+    if(showOtro)cuerpoLbl.innerHTML='Nota <span style="font-weight:400;color:var(--tx3)">(opcional)</span>';
+    else if(showEmail||isMsg)cuerpoLbl.innerHTML='Mensaje / cuerpo del correo <span class="req-star">*</span>';
+    else cuerpoLbl.innerHTML='Nota <span style="font-weight:400;color:var(--tx3)">(opcional)</span>';
+  }
+  if(adjLabel)adjLabel.textContent=isOfi?'Documento del oficio (obligatorio)':'Documento / anexo (opcional)';
+  if(notifPorWrap)notifPorWrap.style.display=showFirma?'':'none';
+  if(btn){
+    if(isMsg)btn.textContent='📤 Enviar mensaje y atender';
+    else if(showFirma)btn.textContent='📤 Enviar a firma del Director';
+    else if(showEmail)btn.textContent='📤 Notificar por correo y atender';
+    else btn.textContent='✓ Dar por atendida';
+  }
+  // Asunto de correo por defecto
+  const subjEl=document.getElementById('ofi-doc-email-subject');
+  const asunto=String((document.getElementById('ofi-doc-asunto')||{}).value||'').trim();
+  if(subjEl&&showEmail&&!String(subjEl.value||'').trim()&&asunto)subjEl.value=asunto;
+}
+window.ofiDocSetTipo=ofiDocSetTipo;
+window.ofiDocSetDestino=ofiDocSetDestino;
+window.ofiDocSetCanal=ofiDocSetCanal;
+window.ofiDocRefreshUi=ofiDocRefreshUi;
 function entregaOfiFirmaUploadCtx(){
   const ofi=(typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'')||(window._taskModalCtx&&window._taskModalCtx.oficina)||'';
   const cod=window._entregaOfiFirmaCodigo||(typeof genCodigoActOficinaFirma==='function'?genCodigoActOficinaFirma(ofi):('ACT-'+Date.now()));
@@ -2354,7 +2507,7 @@ function entregaOfiFirmaUploadCtx(){
     _sin_expediente:true,
     _pn_nombre:'Sin expediente'
   };
-  const t={id:'_staging_',actividad:'Documento para firma',codigo:cod,depto:'guaviare',oficina:ofi,sinExpediente:true};
+  const t={id:'_staging_',actividad:'Documento / comunicado',codigo:cod,depto:'guaviare',oficina:ofi,sinExpediente:true};
   return{esPqrs:false,expId:cod,e:null,eDrive:eDrive,t:t};
 }
 function syncEntregaOfiFirmaFileLabel(inp){
@@ -2367,25 +2520,62 @@ async function submitEntregaOficinaFirma(){
   if(!puedeEntregarOficinaParaFirma()){notif('No autorizado','err');return;}
   const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():(typeof deptoActivo!=='undefined'?deptoActivo:'');
   if(!ofi||ofi==='ds_deguv'){notif('Oficina no válida','err');return;}
-  const asunto=String((document.getElementById('entrega-ofi-firma-asunto')||{}).value||'').trim();
-  const oficio=String((document.getElementById('entrega-ofi-firma-oficio')||{}).value||'').trim();
+  const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+  const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
+  const tipo=String((document.getElementById('ofi-doc-tipo')||{}).value||'').trim();
+  if(!tipo){notif('Seleccione el tipo de salida (mensaje simple u oficio firmado)','err');return;}
+  const destino=String((document.getElementById('ofi-doc-destino')||{}).value||'firma').trim()||'firma';
+  const notifCorreo=!!((document.getElementById('ofi-doc-notif-correo')||{}).checked);
+  const asunto=String((document.getElementById('ofi-doc-asunto')||{}).value||'').trim();
+  const fecha=String((document.getElementById('ofi-doc-fecha')||{}).value||'').trim()||(typeof hoy==='function'?hoy():'');
+  const oficio=String((document.getElementById('ofi-doc-oficio')||{}).value||'').trim();
+  const cuerpo=String((document.getElementById('ofi-doc-cuerpo')||{}).value||'').trim();
   let notifPor=String((document.getElementById('entrega-ofi-firma-notif')||{}).value||'').trim();
+  const emailTo=String((document.getElementById('ofi-doc-email-to')||{}).value||'').trim();
+  const emailCc=String((document.getElementById('ofi-doc-email-cc')||{}).value||'').trim();
+  const emailBcc=String((document.getElementById('ofi-doc-email-bcc')||{}).value||'').trim();
+  const emailSubject=String((document.getElementById('ofi-doc-email-subject')||{}).value||'').trim()||asunto;
+  const canalOtro=String((document.getElementById('ofi-doc-canal')||{}).value||'presencial').trim()||'presencial';
+  const notifFecha=String((document.getElementById('ofi-doc-notif-fecha')||{}).value||'').trim()||fecha;
+  const notifObs=String((document.getElementById('ofi-doc-notif-obs')||{}).value||'').trim();
   const fileInp=document.getElementById('entrega-ofi-firma-file');
   const ctxKey='entrega-ofi-firma:'+ofi;
   const itFile=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
   const file=(itFile&&itFile.blob)||(fileInp&&fileInp.files&&fileInp.files[0]);
   if(!asunto){notif('Indique el asunto o descripción','err');return;}
-  if(!file&&!itFile){notif('Adjunte el documento para firma','err');return;}
+  if(!fecha){notif('Indique la fecha','err');return;}
+  const isMsg=tipo===TIPO_MSG;
+  const isOfi=tipo===TIPO_OFI;
+  const modoFirma=isOfi&&destino==='firma';
+  const modoListo=isOfi&&destino==='listo';
+  const modoEmail=isMsg||(modoListo&&notifCorreo);
+  const modoOtro=modoListo&&!notifCorreo;
+  if(isOfi&&!oficio){notif('Para oficio firmado debe diligenciar el N° de oficio','err');return;}
+  if((modoFirma||modoListo)&&!file&&!itFile){notif('Adjunte el documento del oficio','err');return;}
+  if(modoEmail){
+    const toList=emailTo.split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.includes('@');});
+    if(!toList.length){notif('Indique al menos un correo en «Para»','err');return;}
+    if(!cuerpo){notif('Escriba el mensaje / cuerpo del correo','err');return;}
+  }
+  if(modoOtro&&!notifFecha){notif('Indique la fecha de notificación','err');return;}
   if(!notifPor&&typeof pqrsDefaultNotificadorOficina==='function')notifPor=pqrsDefaultNotificadorOficina(ofi);
   const btn=document.getElementById('entrega-ofi-firma-btn');
-  if(btn){btn.disabled=true;btn.textContent='Enviando…';}
+  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
   let createdId='';
   try{
-    if(typeof sstCargaShow==='function')sstCargaShow({title:'Documento para firma',message:'Subiendo documento y enviando a firma…',pct:15,sub:file.name||''});
     const cod=window._entregaOfiFirmaCodigo||genCodigoActOficinaFirma(ofi);
     const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof labelOficina==='function'?labelOficina(ofi):ofi);
     const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
     const actNom=oficio?('Oficio '+oficio+' — '+asunto):asunto;
+    const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida';
+    const faseFirma=typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar';
+    const canalFinal=modoEmail?(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.CORREO:'correo')
+      :(modoOtro?canalOtro:(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.CORREO:'correo'));
+    if(typeof sstCargaShow==='function')sstCargaShow({
+      title:'Documento / comunicado',
+      message:modoFirma?'Subiendo y enviando a firma…':(modoEmail?'Preparando envío…':'Registrando…'),
+      pct:15,sub:(file&&file.name)||asunto
+    });
     let t={
       id:typeof genTaskId==='function'?genTaskId():('tk_'+Date.now()),
       actividad:actNom,
@@ -2393,17 +2583,27 @@ async function submitEntregaOficinaFirma(){
       desc:actNom,
       responsable:autor,
       responsables:[autor],
-      asignados:[{nombre:autor,fechaReportada:hoyStr,fechaAtendida:'',estado:'pendiente'}],
+      asignados:[{nombre:autor,fechaReportada:hoyStr,fechaAtendida:modoFirma?'':hoyStr,estado:modoFirma?'pendiente':'atendida'}],
       depto:'guaviare',
       oficina:ofi,
       codigo:cod,
       sinExpediente:true,
       origen:'oficina_firma',
-      requiereFirma:true,
-      fechaReportada:hoyStr,
-      estado:'En ejecución',
+      requiereFirma:!!modoFirma,
+      fechaReportada:fecha||hoyStr,
+      fechaAtendida:modoFirma?'':(notifFecha||hoyStr),
+      estado:modoFirma?'En ejecución':'Atendida',
       comentarios:[],
-      historial:[{tipo:'oficina_firma',fecha:hoyStr,por:autor,nota:'Documento no-PQRSD enviado a firma del Director'}],
+      historial:[{
+        tipo:'oficina_doc_comunicado',
+        fecha:hoyStr,
+        por:autor,
+        nota:modoFirma
+          ?'Documento enviado a firma del Director'
+          :(modoEmail
+            ?((isMsg?'Mensaje simple':'Oficio')+' notificado por correo')
+            :('Notificado por '+(typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(canalOtro):canalOtro)+(notifObs?' · '+notifObs:'')))
+      }],
       soportes:[],
       notasDoc:[],
       _pending_fs_sync:true,
@@ -2419,83 +2619,155 @@ async function submitEntregaOficinaFirma(){
     actividadesLibres.push(t);
     const ctx=tramiteFirmaExpCtx(t,cod);
     let up=null;
-    if(itFile&&itFile.state==='uploaded'&&itFile.uploaded){
-      up=itFile.uploaded;
-    }else if(typeof driveUploadExpedienteActividad==='function'){
-      up=await driveUploadExpedienteActividad(file,file.name||'documento.pdf',file.type||'application/pdf',ctx,t,autor,'por_firmar');
+    if(file||itFile){
+      if(itFile&&itFile.state==='uploaded'&&itFile.uploaded){
+        up=itFile.uploaded;
+      }else if(typeof driveUploadExpedienteActividad==='function'){
+        up=await driveUploadExpedienteActividad(file,file.name||'documento.pdf',file.type||'application/pdf',ctx,t,autor,modoFirma?'por_firmar':'cerrado');
+      }
+      if(t._drive_folder_id||(ctx&&ctx._drive_folder_id)){
+        t._drive_folder_id=t._drive_folder_id||ctx._drive_folder_id;
+        t._drive_folder_link=t._drive_folder_link||ctx._drive_folder_link||'';
+      }
+      const sop={
+        id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        url:(up&&(up.driveLink||up.url))||'',
+        preview:(up&&(up.previewLink||up.driveLink||up.url))||'',
+        label:file.name||'Documento',
+        nombre:file.name||'Documento',
+        fecha:new Date().toISOString(),
+        autor:autor,
+        version:1,
+        activo:true,
+        local:!up,
+        driveFileId:(up&&(up.driveFileId||up.fileId))||'',
+        driveFilename:(up&&(up.driveFilename||up.nombre))||'',
+        driveEstado:modoFirma?'por_firmar':'cerrado',
+        driveInstitutional:!!up,
+        tipo:file.type||''
+      };
+      if(!sop.url&&typeof FileReader!=='undefined'&&file){
+        await new Promise(function(resolve){
+          const fr=new FileReader();
+          fr.onload=function(){sop.url=fr.result;sop.preview=fr.result;sop.local=true;resolve();};
+          fr.onerror=function(){resolve();};
+          fr.readAsDataURL(file);
+        });
+      }
+      if(!sop.url&&(modoFirma||modoListo)){
+        const ix=actividadesLibres.findIndex(function(x){return x&&x.id===t.id;});
+        if(ix>=0)actividadesLibres.splice(ix,1);
+        throw new Error('No se pudo adjuntar el archivo. Conecte Gmail/Drive e intente de nuevo.');
+      }
+      if(sop.url)t.soportes=[sop];
     }
-    if(t._drive_folder_id||(ctx&&ctx._drive_folder_id)){
-      t._drive_folder_id=t._drive_folder_id||ctx._drive_folder_id;
-      t._drive_folder_link=t._drive_folder_link||ctx._drive_folder_link||'';
+    if(modoFirma){
+      t.firmaWf={
+        fase:faseFirma,
+        tipo:TIPO_OFI,
+        notificar_por:notifPor||'',
+        notificar_por_propuesto:notifPor||'',
+        canal:'correo',
+        oficio:oficio||'',
+        cuerpo:cuerpo||'',
+        enviado_firma_en:new Date().toISOString(),
+        enviado_firma_por:autor,
+        listo_firma:{por:autor,en:new Date().toISOString(),atajo_digital:true,oficina:ofi},
+        documentos:(t.soportes||[]).map(function(sop){
+          return{
+            nombre:sop.nombre||'Documento para firma',
+            driveLink:sop.url,
+            previewLink:sop.preview||sop.url,
+            fileId:sop.driveFileId||'',
+            tipo:'oficio_firma',
+            driveEstado:'por_firmar'
+          };
+        })
+      };
+    }else{
+      t.firmaWf={
+        fase:faseCerrada,
+        tipo:isMsg?TIPO_MSG:TIPO_OFI,
+        canal:canalFinal,
+        oficio:oficio||'',
+        cuerpo:cuerpo||'',
+        email_to:modoEmail?emailTo:'',
+        email_cc:modoEmail?emailCc:'',
+        email_bcc:modoEmail?emailBcc:'',
+        email_subject:modoEmail?emailSubject:'',
+        notif_correo_entrega:!!modoEmail,
+        notificacion:{
+          canal:canalFinal,
+          fecha:notifFecha||fecha,
+          obs:notifObs||'',
+          por:autor,
+          en:new Date().toISOString(),
+          a:modoEmail?emailTo:''
+        },
+        cerrado_por:autor,
+        cerrado_en:new Date().toISOString(),
+        documentos:(t.soportes||[]).map(function(sop){
+          return{
+            nombre:sop.nombre||'Documento',
+            driveLink:sop.url,
+            previewLink:sop.preview||sop.url,
+            fileId:sop.driveFileId||'',
+            tipo:isMsg?'mensaje':'oficio_firmado',
+            driveEstado:'cerrado'
+          };
+        })
+      };
+      t.estado='Atendida';
+      t.fechaAtendida=notifFecha||hoyStr;
+      t.verificadoPor=autor+' · documento/comunicado oficina';
     }
-    const sop={
-      id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-      url:(up&&(up.driveLink||up.url))||'',
-      preview:(up&&(up.previewLink||up.driveLink||up.url))||'',
-      label:file.name||'Documento para firma',
-      nombre:file.name||'Documento para firma',
-      fecha:new Date().toISOString(),
-      autor:autor,
-      version:1,
-      activo:true,
-      local:!up,
-      driveFileId:(up&&(up.driveFileId||up.fileId))||'',
-      driveFilename:(up&&(up.driveFilename||up.nombre))||'',
-      driveEstado:'por_firmar',
-      driveInstitutional:!!up,
-      tipo:file.type||''
-    };
-    if(!sop.url&&typeof FileReader!=='undefined'){
-      // Fallback local si no hubo Drive
-      await new Promise(function(resolve){
-        const fr=new FileReader();
-        fr.onload=function(){sop.url=fr.result;sop.preview=fr.result;sop.local=true;resolve();};
-        fr.onerror=function(){resolve();};
-        fr.readAsDataURL(file);
+    if(modoEmail&&typeof pqrsEnviarCorreoCiudadano==='function'){
+      const destinos=emailTo.split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.includes('@');});
+      let htmlBody=(cuerpo||'').replace(/\n/g,'<br>');
+      const docsMail=(t.soportes||[]).filter(function(s){return s&&(s.url||s.preview);}).map(function(s){
+        return{nombre:s.nombre||s.label||'Documento',driveLink:s.url||s.preview,previewLink:s.preview||s.url,fileId:s.driveFileId||''};
       });
+      if(docsMail.length){
+        htmlBody+='<hr><p style="font-size:12px"><strong>Documentos:</strong></p><ul>';
+        docsMail.forEach(function(d){
+          htmlBody+='<li><a href="'+escAttr(d.driveLink)+'">'+escAttr(d.nombre)+'</a></li>';
+        });
+        htmlBody+='</ul>';
+      }
+      let adjuntos=[];
+      if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'&&docsMail.length){
+        try{adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(docsMail,{});}catch(errAdj){console.warn('ofi-doc adjuntos:',errAdj);}
+      }
+      const sent=await pqrsEnviarCorreoCiudadano(destinos,emailSubject||asunto,htmlBody,true,adjuntos,{
+        cc:emailCc,bcc:emailBcc,oficinaId:ofi
+      });
+      if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
     }
-    if(!sop.url){
-      // Revertir actividad si no se pudo adjuntar
-      const ix=actividadesLibres.findIndex(function(x){return x&&x.id===t.id;});
-      if(ix>=0)actividadesLibres.splice(ix,1);
-      throw new Error('No se pudo adjuntar el archivo. Conecte Gmail/Drive e intente de nuevo.');
-    }
-    t.soportes=[sop];
-    const faseDest=typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar';
-    t.firmaWf={
-      fase:faseDest,
-      notificar_por:notifPor||'',
-      notificar_por_propuesto:notifPor||'',
-      canal:'correo',
-      enviado_firma_en:new Date().toISOString(),
-      enviado_firma_por:autor,
-      listo_firma:{por:autor,en:new Date().toISOString(),atajo_digital:true,oficina:ofi},
-      documentos:[{
-        nombre:sop.nombre||'Documento para firma',
-        driveLink:sop.url,
-        previewLink:sop.preview||sop.url,
-        fileId:sop.driveFileId||'',
-        tipo:'oficio_firma',
-        driveEstado:'por_firmar'
-      }]
-    };
     if(typeof persistActividadesLibresFirestore==='function'){
       try{await persistActividadesLibresFirestore();}catch(errP){console.warn('persist act libre oficina:',errP);}
     }else if(typeof persistExpLocal==='function')persistExpLocal();
     else if(typeof saveLS==='function')saveLS();
     if(typeof sstCargaDone==='function')sstCargaDone({holdMs:200});
     closeTaskModal();
-    notif('🖊 Documento '+cod+' enviado a «Por firmar» (Director)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
-    window._pqrsOfiFiltro='por_firmar';
+    if(modoFirma){
+      notif('📤 Documento '+cod+' enviado a «Por firmar» (Director)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+      window._pqrsOfiFiltro='por_firmar';
+    }else if(modoEmail){
+      notif('✅ '+(isMsg?'Mensaje':'Oficio')+' enviado por correo — actividad '+cod+' atendida','ok');
+    }else{
+      const ml=typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(canalOtro):canalOtro;
+      notif('✅ Notificado por '+ml+' — actividad '+cod+' atendida','ok');
+    }
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderActividades==='function')renderActividades();
   }catch(err){
     if(createdId&&Array.isArray(actividadesLibres)){
       const ix=actividadesLibres.findIndex(function(x){return x&&x.id===createdId;});
       if(ix>=0)actividadesLibres.splice(ix,1);
     }
     if(typeof sstCargaHide==='function')sstCargaHide();
-    notif('Error: '+String(err.message||err).slice(0,140),'err');
-    if(btn){btn.disabled=false;btn.textContent='🖊 Enviar a firma';}
+    notif('Error: '+String(err.message||err).slice(0,160),'err');
+    if(btn){btn.disabled=false;ofiDocRefreshUi();}
   }
 }
 
