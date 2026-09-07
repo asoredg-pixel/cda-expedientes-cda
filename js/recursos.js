@@ -347,7 +347,6 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   } else {
     h += '<div class="rec-repo-grid">';
     repos.forEach(function(r, idx) {
-      const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
       const nv = (r.vinculados || []).length;
       const tone = idx % 3;
       h += '<button type="button" class="rec-repo-card tone-' + tone + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')">';
@@ -355,9 +354,6 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
       h += '<span class="rec-repo-card-go" aria-hidden="true">→</span></div>';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
       if (recursosItemCompartidoVisible(r) && !recursosItemVisiblePorScope(r)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
-      if (compLbl && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r)) {
-        h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
-      }
       if (r.tematica) h += '<span class="rec-tag">' + escAttr(r.tematica) + '</span>';
       if (nv) h += '<span class="rec-tag rec-tag-vinc" title="Casos asociados">' + nv + ' asociado' + (nv === 1 ? '' : 's') + '</span>';
       h += '</div>';
