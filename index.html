@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260907s">
+<link rel="stylesheet" href="css/sst.css?v=20260907t">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -27,7 +27,7 @@
 <script src="js/roles.js?v=20260907h"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260907m"></script>
+<script src="js/core.js?v=20260907n"></script>
 <script src="js/formulario.js?v=20260903a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260903a"></script>
@@ -40,7 +40,7 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260907g"></script>
 <script src="js/sst-file-upload.js?v=20260907e"></script>
-<script src="js/pqrs.js?v=20260906h"></script>
+<script src="js/pqrs.js?v=20260907a"></script>
 <script src="js/consulta.js?v=20260903a"></script>
 <script src="js/entrega-responsable.js?v=20260904c"></script>
 <script src="js/tramite-firma.js?v=20260906j"></script>
@@ -373,7 +373,7 @@
           <option value="done">Atendidas</option>
           <option value="all">Todas las asignadas</option>
         </select>
-        <input type="text" id="s-act" placeholder="Buscar actividad o expediente…" oninput="renderActividades()" style="flex:1;min-width:180px">
+        <input type="text" id="s-act" placeholder="Nombre, expediente, resolución, NIT, ciudad…" oninput="renderActividades()" style="flex:1;min-width:180px">
         <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">⬇ Descargar</button>
       </div>
     </div>
@@ -913,6 +913,9 @@
     </div>
     <div id="pqrs-ofi-periodo-resumen" style="font-size:11px;color:var(--tx2);margin-bottom:8px"></div>
     <div id="pqrs-ofi-mets" class="pqrs-ofi-mets"></div>
+    <div class="sb" style="margin:8px 0 10px;flex-wrap:wrap">
+      <input type="text" id="s-pqrs-ofi" placeholder="Nombre, expediente, resolución, NIT, ciudad…" oninput="renderPqrsOficinaInbox()" style="flex:1;min-width:200px">
+    </div>
     <div class="tw"><table><thead><tr><th>Expediente</th><th>Tipo</th><th>Asunto</th><th>Radicación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tbl-pqrs-ofi"></tbody></table></div>
     <div id="pqrs-ofi-detalle" class="pqrs-ofi-detalle pqrs-ofi-det-below" style="display:none"></div>
   </div>
