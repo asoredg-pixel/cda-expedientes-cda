@@ -393,11 +393,22 @@ function recExpState() {
 }
 
 function recExpCanEdit() {
+  return recExpCanManage();
+}
+
+/** Dueño: eliminar, renombrar, nueva subcarpeta, arrastrar. */
+function recExpCanManage() {
   const st = recExpState();
   const r = st ? getRecursosRepoById(st.repoId) : null;
-  if (!r) return false;
-  const s = getRepoScope(r);
-  return !!puedeEditarBiblioteca(s.scope, s.scopeId);
+  return !!(r && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r));
+}
+
+/** Puede subir archivos (dueño o compartido). */
+function recExpCanUpload() {
+  const st = recExpState();
+  const r = st ? getRecursosRepoById(st.repoId) : null;
+  if (r && typeof puedeAdjuntarBibliotecaRepo === 'function') return puedeAdjuntarBibliotecaRepo(r);
+  return recExpCanManage();
 }
 
 function recExpCanShare() {
@@ -411,44 +422,57 @@ function recExpCurrentFolderId() {
   return (st && st.folderId) || '';
 }
 
+function recExpAtras() {
+  const st = recExpState();
+  if (!st) {
+    cerrarRecursosRepo();
+    return;
+  }
+  if ((st.path || []).length > 1) {
+    recExpNavigateToIndex(st.path.length - 2);
+    return;
+  }
+  cerrarRecursosRepo();
+}
+
 function renderRecursosRepoDetalle(repoId) {
   const r = getRecursosRepoById(repoId);
   if (!r) return '<div class="rec-empty">Carpeta no encontrada.</div>';
-  const s = getRepoScope(r);
-  const canEdit = puedeEditarBiblioteca(s.scope, s.scopeId);
+  const canManage = typeof puedeGestionarBibliotecaRepo === 'function' ? puedeGestionarBibliotecaRepo(r) : puedeEditarBiblioteca(getRepoScope(r).scope, getRepoScope(r).scopeId);
   const canDel = puedeEliminarRecursosItem(r);
   const canShare = puedeCompartirRecursosItem(r);
   const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
   let h = '<div class="rec-bib-panel rec-bib-detalle">';
   h += '<div class="rec-repo-hdr">';
-  h += '<button type="button" class="btn bsm" onclick="cerrarRecursosRepo()">← Volver</button>';
-  h += '<div class="rec-repo-hdr-main"><strong>' + escAttr(r.titulo) + '</strong>';
-  h += '<span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span></div>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Volver a mis carpetas" onclick="cerrarRecursosRepo()">←</button>';
+  h += '<div class="rec-repo-hdr-main"><strong class="rec-repo-hdr-title">' + escAttr(r.titulo) + '</strong>';
+  h += '<span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
+  h += '<span class="rec-repo-hdr-actions">';
+  if (canManage) {
+    h += '<button type="button" class="btn bsm bic act-ico" title="Editar carpeta" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">✏️</button>';
+  }
+  if (canShare) {
+    h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
+  }
+  if (canDel) {
+    h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
+  }
+  h += '</span></div>';
   if (r.driveFolderLink) h += '<a class="btn bsm" href="' + escAttr(r.driveFolderLink) + '" target="_blank" rel="noopener">Drive ↗</a>';
   h += '</div>';
   if (r.descripcion) h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
   if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
-  if (canEdit || canShare || canDel) {
-    h += '<div class="rec-toolbar" style="margin:0">';
-    if (canEdit) {
-      h += '<button type="button" class="btn bsm bic act-ico" title="Editar carpeta" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">✏️</button>';
-    }
-    if (canShare) {
-      h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
-    }
-    if (canDel) {
-      h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
-    }
-    h += '</div>';
+  if (!canManage && typeof puedeAdjuntarBibliotecaRepo === 'function' && puedeAdjuntarBibliotecaRepo(r)) {
+    h += '<p class="rec-share-hint">Carpeta compartida: puede adjuntar documentos. No puede eliminar, renombrar ni editar la carpeta.</p>';
   }
   if (window._recursosRepoForm === r.id) {
     h += renderRecursosRepoForm(r.id);
   }
-  h += renderRecursosRepoVinculosBlock(r, canEdit);
   h += '<div class="rec-exp-shell">';
   h += '<div class="cft" style="margin:8px 0 6px">Explorador de archivos</div>';
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
   h += '</div>';
+  h += renderRecursosRepoVinculosBlock(r, canManage);
   h += '</div>';
   return h;
 }
@@ -501,13 +525,19 @@ function recExpTypeLabel(f) {
   return f && f.mimeType ? String(f.mimeType).split('/').pop() : 'Archivo';
 }
 
-function renderRecExpToolbar(canEdit) {
+function renderRecExpToolbar(canManage, canUpload) {
   const st = recExpState();
   const view = (st && st.view) || 'details';
+  const canUp = !!canUpload;
+  const canMg = !!canManage;
+  const depth = (st && st.path && st.path.length) || 0;
   let h = '<div class="rec-exp-toolbar">';
   h += '<div class="rec-exp-toolbar-left">';
-  if (canEdit) {
+  h += '<button type="button" class="btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()" ' + (depth <= 1 && !st ? 'disabled' : '') + '>←</button>';
+  if (canMg) {
     h += '<button type="button" class="btn bsm bp" onclick="recExpNuevaCarpeta()">📁 Nueva carpeta</button>';
+  }
+  if (canUp) {
     if (typeof sstFilePickBlock === 'function') {
       h += sstFilePickBlock({
         inputId: 'rec-exp-upload-inp',
@@ -523,9 +553,11 @@ function renderRecExpToolbar(canEdit) {
     } else {
       h += '<label class="btn bsm" style="cursor:pointer">📤 Subir<input type="file" multiple style="display:none" onchange="recExpSubirDesdeInput(event)"></label>';
     }
-    h += '<button type="button" class="btn bsm bd2" onclick="recExpEliminarSeleccion()">🗑 Eliminar</button>';
   }
-  h += '<button type="button" class="btn bsm" onclick="cargarRecursosRepoArchivos()">↻ Actualizar</button>';
+  if (canMg) {
+    h += '<button type="button" class="btn bsm" onclick="recExpEliminarSeleccion()" title="Eliminar selección">🗑</button>';
+  }
+  h += '<button type="button" class="btn bsm" onclick="cargarRecursosRepoArchivos()" title="Actualizar">↻</button>';
   h += '</div>';
   h += '<div class="rec-exp-views" role="group" aria-label="Vista">';
   h += '<button type="button" class="btn bsm' + (view === 'icons' ? ' bp' : '') + '" onclick="recExpSetView(\'icons\')" title="Iconos">▦</button>';
@@ -539,6 +571,7 @@ function renderRecExpBreadcrumb() {
   const st = recExpState();
   if (!st || !(st.path || []).length) return '';
   let h = '<nav class="rec-exp-crumb" aria-label="Ruta">';
+  h += '<button type="button" class="rec-exp-crumb-back btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()">←</button>';
   (st.path || []).forEach(function(p, i) {
     if (i) h += '<span class="rec-exp-crumb-sep">›</span>';
     const isLast = i === st.path.length - 1;
@@ -549,13 +582,16 @@ function renderRecExpBreadcrumb() {
   return h;
 }
 
-function renderRecExpItemsHtml(files, canEdit, canShare, repo) {
+function renderRecExpItemsHtml(files, canManage, canShare, repo, canUpload) {
   const st = recExpState();
   const view = (st && st.view) || 'details';
   const sel = new Set((st && st.selection) || []);
+  const canEdit = !!canManage;
+  const canUp = canUpload !== undefined ? !!canUpload : canEdit;
   if (!(files || []).length) {
     return '<div class="rec-exp-empty" data-rec-exp-pane="1">Carpeta vacía. ' +
-      (canEdit ? 'Arrastre archivos aquí o use «Subir» / «Nueva carpeta».' : '') + '</div>';
+      (canUp ? 'Arrastre archivos aquí o use «Subir».' : '') +
+      (canEdit ? ' También puede crear una subcarpeta.' : '') + '</div>';
   }
   if (view === 'icons') {
     let h = '<div class="rec-exp-icons" data-rec-exp-pane="1" tabindex="0">';
@@ -635,8 +671,8 @@ async function cargarRecursosRepoArchivos(pageToken) {
     el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver y adjuntar archivos. <button type="button" class="btn bsm" style="margin-left:8px" onclick="recursosModalCorreoRequerido(\'listar y adjuntar documentos en el repositorio\')">Más información</button></div>';
     return;
   }
-  const s = getRepoScope(r);
-  const canEdit = puedeEditarBiblioteca(s.scope, s.scopeId);
+  const canManage = typeof puedeGestionarBibliotecaRepo === 'function' ? puedeGestionarBibliotecaRepo(r) : puedeEditarBiblioteca(getRepoScope(r).scope, getRepoScope(r).scopeId);
+  const canUpload = typeof puedeAdjuntarBibliotecaRepo === 'function' ? puedeAdjuntarBibliotecaRepo(r) : canManage;
   const canShare = puedeCompartirRecursosItem(r);
   const rootId = r.driveFolderId || parseDriveFolderId(r.driveFolderLink);
   if (!rootId) {
@@ -677,9 +713,9 @@ async function cargarRecursosRepoArchivos(pageToken) {
     let h = '<div class="rec-exp" id="rec-exp-root" tabindex="0" ' +
       'ondragover="recExpDragOverPane(event)" ondragleave="recExpDragLeavePane(event)" ondrop="recExpDropOnPane(event)" ' +
       'onkeydown="recExpKeyDown(event)" onclick="recExpPaneClick(event)" oncontextmenu="recExpPaneContextMenu(event)">';
-    h += renderRecExpToolbar(canEdit);
+    h += renderRecExpToolbar(canManage, canUpload);
     h += renderRecExpBreadcrumb();
-    h += '<div class="rec-exp-body">' + renderRecExpItemsHtml(files, canEdit, canShare, r) + '</div>';
+    h += '<div class="rec-exp-body">' + renderRecExpItemsHtml(files, canManage, canShare, r, canUpload) + '</div>';
     h += '</div>';
     el.innerHTML = h;
     setTimeout(function() {
@@ -805,10 +841,10 @@ function recExpKeyDown(ev) {
   if (!st) return;
   const tag = (ev.target && ev.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
-  const canEdit = recExpCanEdit();
+  const canEdit = recExpCanManage();
   if (ev.key === 'Backspace') {
     ev.preventDefault();
-    if ((st.path || []).length > 1) recExpNavigateToIndex(st.path.length - 2);
+    recExpAtras();
     return;
   }
   if (ev.key === 'Enter' && (st.selection || []).length === 1) {
@@ -831,7 +867,7 @@ function recExpKeyDown(ev) {
 }
 
 async function recExpNuevaCarpeta() {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanManage()) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear carpetas en el repositorio'); return; }
   const nom = await recExpAskText({
     title: 'Nueva carpeta',
@@ -929,7 +965,7 @@ async function recExpSubirDesdeInput(ev) {
 }
 
 async function recExpUploadFileList(fileList, destFolderId) {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanUpload()) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('adjuntar documentos al repositorio'); return; }
   const files = fileList ? Array.from(fileList) : [];
   if (!files.length) return;
@@ -1002,7 +1038,7 @@ async function subirRecursosRepoArchivos(ev, repoId) {
 }
 
 async function recExpRenombrar(fileId) {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanManage()) return;
   const f = recExpItemById(fileId);
   if (!f) return;
   const nom = await recExpAskText({
@@ -1027,7 +1063,7 @@ async function recExpRenombrar(fileId) {
 }
 
 async function recExpEliminarSeleccion() {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanManage()) return;
   const st = recExpState();
   const ids = (st && st.selection) || [];
   if (!ids.length) { notif('Seleccione uno o más elementos', 'err'); return; }
@@ -1061,8 +1097,9 @@ function recExpHideContextMenu() {
 function recExpPaneContextMenu(ev) {
   if (ev.target && ev.target.closest && ev.target.closest('[data-file-id]')) return;
   ev.preventDefault();
-  const canEdit = recExpCanEdit();
-  if (!canEdit) return;
+  const canManage = recExpCanManage();
+  const canUpload = recExpCanUpload();
+  if (!canManage && !canUpload) return;
   const st = recExpState();
   if (st) st.selection = [];
   recExpRefreshSelectionUi();
@@ -1080,14 +1117,16 @@ function recExpPaneContextMenu(ev) {
     b.onclick = function() { recExpHideContextMenu(); fn(); };
     menu.appendChild(b);
   };
-  add('Nueva carpeta', function() { recExpNuevaCarpeta(); });
-  add('Subir archivos…', function() {
-    const inp = document.createElement('input');
-    inp.type = 'file';
-    inp.multiple = true;
-    inp.onchange = function(e) { recExpSubirDesdeInput(e); };
-    inp.click();
-  });
+  if (canManage) add('Nueva carpeta', function() { recExpNuevaCarpeta(); });
+  if (canUpload) {
+    add('Subir archivos…', function() {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.multiple = true;
+      inp.onchange = function(e) { recExpSubirDesdeInput(e); };
+      inp.click();
+    });
+  }
   add('Actualizar', function() { cargarRecursosRepoArchivos(); });
   document.body.appendChild(menu);
   const closer = function(e) {
@@ -1115,7 +1154,8 @@ function recExpItemContextMenu(ev, fileId) {
   }
   const f = recExpItemById(fileId);
   if (!f) return;
-  const canEdit = recExpCanEdit();
+  const canManage = recExpCanManage();
+  const canUpload = recExpCanUpload();
   const canShare = recExpCanShare();
   const isFolder = recExpIsFolder(f);
   recExpHideContextMenu();
@@ -1146,7 +1186,7 @@ function recExpItemContextMenu(ev, fileId) {
       window.open('https://drive.google.com/drive/folders/' + f.id, '_blank', 'noopener,noreferrer');
     });
   }
-  if (canEdit) {
+  if (canManage) {
     add('Renombrar', function() { recExpRenombrar(fileId); });
   }
   if (!isFolder && canShare) {
@@ -1155,11 +1195,13 @@ function recExpItemContextMenu(ev, fileId) {
       recursosAbrirCompartir('archivo', st2.repoId, fileId, f.name);
     });
   }
-  if (canEdit) {
+  if (canManage || canUpload) {
     const sep = document.createElement('div');
     sep.className = 'rec-exp-ctx-sep';
     menu.appendChild(sep);
-    add('Nueva carpeta aquí', function() { recExpNuevaCarpeta(); });
+  }
+  if (canManage) add('Nueva carpeta aquí', function() { recExpNuevaCarpeta(); });
+  if (canUpload) {
     add('Subir aquí…', function() {
       const inp = document.createElement('input');
       inp.type = 'file';
@@ -1167,6 +1209,8 @@ function recExpItemContextMenu(ev, fileId) {
       inp.onchange = function(e) { recExpSubirDesdeInput(e); };
       inp.click();
     });
+  }
+  if (canManage) {
     add('Eliminar', function() { recExpEliminarSeleccion(); }, true);
   }
   document.body.appendChild(menu);
@@ -1184,7 +1228,7 @@ function recExpItemContextMenu(ev, fileId) {
 }
 
 function recExpDragStart(ev) {
-  if (!recExpCanEdit()) { ev.preventDefault(); return; }
+  if (!recExpCanManage()) { ev.preventDefault(); return; }
   const st = recExpState();
   const id = ev.currentTarget && ev.currentTarget.getAttribute('data-file-id');
   if (!st || !id) return;
@@ -1211,10 +1255,10 @@ function recExpDragEnd(ev) {
 }
 
 function recExpDragOverFolder(ev) {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanManage() && !recExpCanUpload()) return;
   ev.preventDefault();
   ev.stopPropagation();
-  try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {}
+  try { ev.dataTransfer.dropEffect = recExpCanManage() ? 'move' : 'copy'; } catch (e) {}
   const row = ev.currentTarget;
   if (row) row.classList.add('drag-over');
 }
@@ -1229,14 +1273,16 @@ async function recExpDropOnFolder(ev) {
   ev.stopPropagation();
   const targetId = ev.currentTarget && ev.currentTarget.getAttribute('data-file-id');
   if (ev.currentTarget) ev.currentTarget.classList.remove('drag-over');
-  if (!recExpCanEdit() || !targetId) return;
+  if (!targetId) return;
 
-  // External files from OS → upload into target folder
+  // External files from OS → upload into target folder (dueño o compartido)
   if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+    if (!recExpCanUpload()) return;
     await recExpUploadFileList(ev.dataTransfer.files, targetId);
     return;
   }
 
+  if (!recExpCanManage()) return;
   const st = recExpState();
   let ids = (st && st.dragIds) || [];
   if (!ids.length && ev.dataTransfer) {
@@ -1253,10 +1299,10 @@ async function recExpDropOnFolder(ev) {
 }
 
 function recExpDragOverPane(ev) {
-  if (!recExpCanEdit()) return;
+  if (!recExpCanUpload() && !recExpCanManage()) return;
   if (!(ev.dataTransfer && ev.dataTransfer.types)) return;
   const types = Array.from(ev.dataTransfer.types || []);
-  if (types.indexOf('Files') >= 0 || types.indexOf('application/x-rec-exp-ids') >= 0) {
+  if (types.indexOf('Files') >= 0 || (recExpCanManage() && types.indexOf('application/x-rec-exp-ids') >= 0)) {
     ev.preventDefault();
     const root = document.getElementById('rec-exp-root');
     if (root) root.classList.add('ext-drag-over');
@@ -1273,16 +1319,16 @@ function recExpDragLeavePane(ev) {
 async function recExpDropOnPane(ev) {
   const root = document.getElementById('rec-exp-root');
   if (root) root.classList.remove('ext-drag-over');
-  if (!recExpCanEdit()) return;
-  // If dropping on a folder row, folder handler already ran
   if (ev.target && ev.target.closest && ev.target.closest('[data-is-folder="1"]')) return;
   ev.preventDefault();
   if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+    if (!recExpCanUpload()) return;
     await recExpUploadFileList(ev.dataTransfer.files);
   }
 }
 
 async function recExpMoveIdsToFolder(ids, destFolderId) {
+  if (!recExpCanManage()) return;
   if (!ids || !ids.length || !destFolderId) return;
   const moveFn = typeof driveMoveFileToFolder === 'function' ? driveMoveFileToFolder : window.driveMoveFileToFolder;
   const parentId = recExpCurrentFolderId();
@@ -1308,6 +1354,7 @@ window.recExpItemClick = recExpItemClick;
 window.recExpItemDblClick = recExpItemDblClick;
 window.recExpItemContextMenu = recExpItemContextMenu;
 window.recExpNuevaCarpeta = recExpNuevaCarpeta;
+window.recExpAtras = recExpAtras;
 window.recExpSubirDesdeInput = recExpSubirDesdeInput;
 window.recExpAskUploadDetalle = recExpAskUploadDetalle;
 window.recExpCerrarUploadDetalle = recExpCerrarUploadDetalle;
@@ -1538,6 +1585,13 @@ async function guardarRecursosRepo(editId) {
   const descripcion = String(document.getElementById('rec-repo-desc').value || '').trim();
   if (!titulo) { notif('El título es obligatorio', 'err'); return; }
   const isNew = !editId || editId === '__new__';
+  if (!isNew) {
+    const existing = getRecursosRepoById(editId);
+    if (!existing || (typeof puedeGestionarBibliotecaRepo === 'function' && !puedeGestionarBibliotecaRepo(existing))) {
+      notif('Sin permiso para editar esta carpeta', 'err');
+      return;
+    }
+  }
   const email = getAuthEmailNorm() || '';
   const byAdmin = esAdministrador() || esAdminFirestore();
   if (!isNew) {
@@ -2065,7 +2119,10 @@ async function bibAsociarARepo(repoId, tipo, id, taskId, libre) {
   const r = getRecursosRepoById(repoId);
   if (!r) { notif('Repositorio no encontrado', 'err'); return; }
   const s = getRepoScope(r);
-  if (!puedeEditarBiblioteca(s.scope, s.scopeId)) { notif('Sin permiso para asociar casos a esta carpeta', 'err'); return; }
+  if (typeof puedeGestionarBibliotecaRepo === 'function' ? !puedeGestionarBibliotecaRepo(r) : !puedeEditarBiblioteca(s.scope, s.scopeId)) {
+    notif('Sin permiso para asociar casos a esta carpeta', 'err');
+    return;
+  }
 
   let label = id;
   let depto = '';
@@ -2125,7 +2182,10 @@ async function bibDesasociarDeRepo(repoId, tipo, id, taskId) {
   const r = getRecursosRepoById(repoId);
   if (!r) return;
   const s = getRepoScope(r);
-  if (!puedeEditarBiblioteca(s.scope, s.scopeId)) { notif('Sin permiso', 'err'); return; }
+  if (typeof puedeGestionarBibliotecaRepo === 'function' ? !puedeGestionarBibliotecaRepo(r) : !puedeEditarBiblioteca(s.scope, s.scopeId)) {
+    notif('Sin permiso', 'err');
+    return;
+  }
   const key = [tipo, id, taskId || ''].join('|');
   const found = bibNormalizeVinculosList(r.vinculados).find(function(v) { return bibVinculoKey(v) === key; });
   if (!found) return;
@@ -2250,6 +2310,7 @@ function bibAbrirReposTaskModal(expRef, taskId) {
 function reposBibliotecaAsociables() {
   return reposBibliotecaVisibles().filter(function(r) {
     if (r.activo === false) return false;
+    if (typeof puedeGestionarBibliotecaRepo === 'function') return puedeGestionarBibliotecaRepo(r);
     const s = getRepoScope(r);
     return typeof puedeEditarBiblioteca === 'function' && puedeEditarBiblioteca(s.scope, s.scopeId);
   });

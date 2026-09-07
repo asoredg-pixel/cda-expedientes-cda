@@ -3717,6 +3717,11 @@ body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabs
 .rec-repo-row:hover{border-color:var(--ac);background:color-mix(in srgb,var(--ac) 4%,var(--sf))}
 .rec-repo-hdr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:0}
 .rec-repo-hdr-main{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+.rec-repo-hdr-title{font-size:15px}
+.rec-repo-hdr-actions{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;margin-left:4px}
+.rec-share-hint{font-size:12px;color:var(--tx2);margin:0;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--bl) 6%,var(--sf));border:1px solid color-mix(in srgb,var(--bl) 18%,var(--bd))}
+.rec-exp-crumb{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:8px 12px;font-size:12px;border-bottom:1px solid var(--bd);background:var(--bg)}
+.rec-exp-crumb-back{margin-right:4px;flex-shrink:0}
 .rec-bib-detalle{
   padding:14px;border:1px solid #e8eaed;border-radius:10px;background:var(--sf);
   box-shadow:0 1px 2px rgba(60,64,67,.06);

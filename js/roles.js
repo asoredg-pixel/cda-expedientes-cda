@@ -1115,10 +1115,6 @@ function labelRecursosCompartidoCon(ids){
     return labelOficina(s);
   }).join(', ');
 }
-function puedeCompartirRecursosItem(item){
-  if(!item||!puedeVerRecursos())return false;
-  return recursosItemVisibleParaSesion(item);
-}
 function archivosRepoCompartidosConmigo(repo){
   const vis=getRecursosOficinasVisiblesSesion();
   const email=getAuthEmailNorm();
@@ -1197,13 +1193,65 @@ function puedeEditarBibliotecaLegacy(oficinaId){
 function recursosCreadoPorAdmin(item){
   return !!(item&&item.createdByAdmin===true);
 }
+/** Ítem de biblioteca (carpeta Drive / repo), no enlace externo. */
+function esBibliotecaRepoItem(item){
+  if(!item||typeof item!=='object')return false;
+  return !!(item.driveFolderId||item.driveFolderLink||Array.isArray(item.vinculados)||Array.isArray(item.archivosCompartidos));
+}
+/**
+ * Dueño / gestor de la carpeta: creador, admin, oficina dueña o encargado
+ * (si un responsable creó la carpeta, el encargado sí puede editar/eliminar).
+ * Quien solo la ve por compartido NO gestiona.
+ */
+function puedeGestionarBibliotecaRepo(repo){
+  if(!repo||!puedeVerRecursos())return false;
+  if(esAdministrador()||esAdminFirestore())return true;
+  if(recursosCreadoPorAdmin(repo))return false;
+  const email=getAuthEmailNorm();
+  if(email&&String(repo.createdBy||'').trim().toLowerCase()===email)return true;
+  if(!recursosItemVisiblePorScope(repo))return false;
+  const n=normalizeRecursosScopeItem(repo);
+  const scope=n.scope||'oficina';
+  const scopeId=n.scopeId||n.oficinaId||'';
+  if(scope==='oficina'){
+    if(esEncargadoOficinaUsuario(scopeId))return true;
+    if(scopeId==='guaviare'&&(esNcaDeguv()||esEncargadoDeptoUsuario('guaviare')))return true;
+    if(esModoOficinaDeguv()&&deptoActivo===scopeId)return true;
+    if(esSecretaria()&&scopeId==='secretaria')return true;
+    if(esModoResponsable()||esModoContratista())return false;
+    return false;
+  }
+  if(scope==='departamento'){
+    if(esEncargadoDeptoUsuario(scopeId))return true;
+    if(scopeId==='guaviare'&&esNcaDeguv())return true;
+    return false;
+  }
+  return false;
+}
+/** Puede subir/adjuntar si ve la carpeta (propia o compartida). */
+function puedeAdjuntarBibliotecaRepo(repo){
+  return !!(repo&&puedeVerRecursos()&&recursosItemVisibleParaSesion(repo));
+}
 function puedeEliminarRecursosItem(item){
   if(!item)return false;
+  if(esBibliotecaRepoItem(item))return puedeGestionarBibliotecaRepo(item);
   if(esAdministrador()||esAdminFirestore())return true;
   if(recursosCreadoPorAdmin(item))return false;
+  const email=getAuthEmailNorm();
+  if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
+  if(!recursosItemVisiblePorScope(item))return false;
   const scope=item.scope||'oficina';
   const scopeId=item.scopeId||(scope==='oficina'?item.oficinaId:'');
   return puedeEditarRecursosItem(scope,scopeId);
+}
+function puedeCompartirRecursosItem(item){
+  if(!item||!puedeVerRecursos())return false;
+  if(esBibliotecaRepoItem(item))return puedeGestionarBibliotecaRepo(item);
+  if(esAdministrador()||esAdminFirestore())return true;
+  const email=getAuthEmailNorm();
+  if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
+  if(!recursosItemVisiblePorScope(item))return false;
+  return puedeEditarRecursosItem(item.scope,item.scopeId||item.oficinaId);
 }
 function bibliotecaDriveDisponible(deptoCtx){
   const d=deptoCtx||getRecursosDeptoContext();
