@@ -631,6 +631,7 @@ function initChatNotifySync(){
     if(chatWin&&chatWin.classList.contains('on')){
       renderChatContacts();
       if(window._chatConvActiva)renderChatMessages();
+      chatSyncLayout();
     }
   },function(err){
     console.error('initChatNotifySync collectionGroup:',err);
@@ -664,6 +665,7 @@ function chatNotifyConvIdsFallback(){
       if(document.getElementById('chat-window')?.classList.contains('on')){
         renderChatContacts();
         if(window._chatConvActiva)renderChatMessages();
+        chatSyncLayout();
       }
     });
     _chatNotifyUnsubs.push(unsub);
@@ -987,7 +989,9 @@ function toggleChatWindow(force){
   if(fab)fab.classList.toggle('open',open);
   if(open){
     window._chatConvActiva=null;
+    window._chatActiveContactKey=null;
     window._chatVista='contactos';
+    window._chatContactsCollapsed=false;
     chatInvalidateContactsCache();
     const sub=document.getElementById('chat-hdr-sub');
     if(sub)sub.textContent='Seleccione un contacto';
@@ -998,11 +1002,15 @@ function toggleChatWindow(force){
     setTimeout(function(){if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-window')||document);},50);
     if(typeof chatPurgeExpiredDriveFiles==='function'){
       void chatPurgeExpiredDriveFiles().then(function(ok){
-        if(ok){renderChatMessages();renderChatContacts();}
+        if(ok){
+          if(window._chatConvActiva)renderChatMessages();
+          renderChatContacts();
+          chatSyncLayout();
+        }
       });
     }
   }
-  else{window._chatConvActiva=null;window._chatVista='contactos';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatActiveContactKey=null;window._chatVista='contactos';window._chatContactsCollapsed=false;_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
 }
 function chatPurgeUnreadButton(){
   document.querySelectorAll('#chat-unread-btn,[onclick*="chatMarcarNoLeido"],[title*="Marcar como no leído"],[title*="no leído"]').forEach(function(el){el.remove();});
@@ -1023,9 +1031,23 @@ function chatToggleContactos(force){
   else window._chatContactsCollapsed=!window._chatContactsCollapsed;
   chatSyncLayout();
 }
+function chatInitContactsClicks(){
+  const el=document.getElementById('chat-contacts');
+  if(!el||el.dataset.chatClickBound==='1')return;
+  el.dataset.chatClickBound='1';
+  el.addEventListener('click',function(ev){
+    const row=ev.target&&ev.target.closest?ev.target.closest('.chat-contact[data-chat-key]'):null;
+    if(!row||!el.contains(row))return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const key=String(row.getAttribute('data-chat-key')||'').trim();
+    if(key)void chatAbrirConv(key);
+  });
+}
 function chatSyncLayout(){
   chatInitUnreadButtonGuard();
   chatPurgeUnreadButton();
+  chatInitContactsClicks();
   const contacts=document.getElementById('chat-contacts');
   const main=document.getElementById('chat-main');
   const back=document.getElementById('chat-back-btn');
@@ -1034,22 +1056,37 @@ function chatSyncLayout(){
   const mobile=window.innerWidth<640;
   const collapsed=!!window._chatContactsCollapsed;
   if(contacts){
-    contacts.classList.toggle('wide',!conv);
-    contacts.classList.toggle('with-conv',!!conv&&!mobile);
-    contacts.classList.toggle('collapsed',!!conv&&collapsed&&mobile);
-    contacts.style.display=(conv&&collapsed&&mobile)?'none':'';
+    // Nunca dejar wide+with-conv a la vez: wide a 100% tapa el panel de escritura
+    if(conv){
+      contacts.classList.remove('wide');
+      contacts.classList.toggle('with-conv',!collapsed&&!mobile);
+      contacts.classList.toggle('collapsed',!!collapsed);
+      contacts.style.display=collapsed?'none':'';
+    }else{
+      contacts.classList.add('wide');
+      contacts.classList.remove('with-conv','collapsed');
+      contacts.style.display='';
+      window._chatContactsCollapsed=false;
+    }
   }
   if(main){
     main.classList.toggle('hidden',!conv);
-    if(conv)main.style.flex='1';
+    if(conv){
+      main.style.display='flex';
+      main.style.flex='1';
+      main.style.minWidth='0';
+    }else{
+      main.style.display='';
+    }
   }
-  if(back)back.style.display=(conv&&mobile)?'inline-flex':'none';
-  if(toggleBtn)toggleBtn.style.display=conv&&mobile?'inline-block':'none';
-  if(conv&&contacts&&!mobile&&!collapsed)contacts.classList.remove('wide');
+  // Volver / contactos visibles también en escritorio (primer clic oculta la lista)
+  if(back)back.style.display=conv?'inline-flex':'none';
+  if(toggleBtn)toggleBtn.style.display=conv?'inline-block':'none';
 }
 function chatVolverContactos(){
   stopChatActiveSync();
   window._chatConvActiva=null;
+  window._chatActiveContactKey=null;
   window._chatVista='contactos';
   window._chatContactsCollapsed=false;
   const tit=document.getElementById('chat-hdr-tit');
@@ -1062,10 +1099,12 @@ function chatVolverContactos(){
 function renderChatContacts(){
   const el=document.getElementById('chat-contacts');
   if(!el)return;
+  chatInitContactsClicks();
   try{
     const me=chatEffectiveIdentity();
     if(!me){
       el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Seleccione departamento o responsable para usar el chat.</div>';
+      chatSyncLayout();
       return;
     }
     chatInvalidateContactsCache();
@@ -1073,6 +1112,7 @@ function renderChatContacts(){
     window._chatContactsCache=contacts;
     if(!contacts.length){
       el.innerHTML='<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';
+      chatSyncLayout();
       return;
     }
     contacts=contacts.slice().sort(function(a,b){
@@ -1095,7 +1135,7 @@ function renderChatContacts(){
       }catch(e){}
       const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
       const meta=c.meta||c.sub||'';
-      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" data-chat-key="'+escAttr(c.key)+'" onclick="chatAbrirConv(this.getAttribute(\'data-chat-key\'))">'+
+      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" role="button" tabindex="0" data-chat-key="'+escAttr(c.key)+'">'+
         '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
@@ -1103,33 +1143,40 @@ function renderChatContacts(){
         (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
         '</div>';
     }).join('');
-    const contactsEl=document.getElementById('chat-contacts');
-    if(contactsEl&&!window._chatConvActiva)contactsEl.classList.add('wide');
   }catch(err){
     console.error('renderChatContacts:',err);
     el.innerHTML='<div style="padding:14px;font-size:12px;color:#b42318">No se pudo cargar la lista de contactos. Recargue con Ctrl+F5.</div>';
   }
+  chatSyncLayout();
 }
 async function chatAbrirConv(contactKey){
   chatPurgeUnreadButton();
   contactKey=String(contactKey||'').trim();
   if(!contactKey)return;
-  // Misma identidad que la lista de contactos (getChatIdentity a veces es null)
   const me=chatEffectiveIdentity()||getChatIdentity();
   if(!me){
     if(typeof notif==='function')notif('No se pudo identificar su cuenta de chat. Vuelva a entrar o elija departamento.','warn');
     return;
   }
+  // Evitar doble apertura / carreras con re-render de Firestore
+  if(window._chatAbrirConvBusy===contactKey&&window._chatConvActiva&&window._chatActiveContactKey===contactKey){
+    chatSyncLayout();
+    const inpBusy=document.getElementById('chat-inp');
+    if(inpBusy){try{inpBusy.focus();}catch(e){}}
+    return;
+  }
+  window._chatAbrirConvBusy=contactKey;
   window._chatActiveContactKey=contactKey;
   window._chatVista='chat';
-  window._chatContactsCollapsed=window.innerWidth<640;
+  // Primer clic: pasar directo a escribir (ocultar lista tipo WhatsApp)
+  window._chatContactsCollapsed=true;
   const c=chatContactFromKey(contactKey);
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent=(c&&c.label)||'Conversación';
   if(sub)sub.textContent=(c&&(c.meta||c.sub))||'Conversación';
-  // Mostrar panel de escritura de inmediato (no esperar a Firestore)
-  window._chatConvActiva=chatPrimaryConvId(me,contactKey);
+  const convId=chatPrimaryConvId(me,contactKey);
+  window._chatConvActiva=convId||('tmp|'+contactKey);
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
@@ -1137,9 +1184,10 @@ async function chatAbrirConv(contactKey){
     const inp=document.getElementById('chat-inp');
     if(inp){try{inp.focus();}catch(e){}}
     if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-main')||document);
-  },40);
+  },30);
   try{
     await loadChatMensajesForContact(me,contactKey);
+    if(window._chatActiveContactKey!==contactKey)return;
     initChatSyncForContact(contactKey);
     await chatMarcarLeido(window._chatConvActiva);
     renderChatMessages();
@@ -1148,8 +1196,14 @@ async function chatAbrirConv(contactKey){
   }catch(err){
     console.error('chatAbrirConv:',err);
     if(typeof notif==='function')notif('No se pudieron cargar los mensajes. Puede escribir de todos modos.','warn');
+  }finally{
+    if(window._chatAbrirConvBusy===contactKey)window._chatAbrirConvBusy='';
   }
 }
+window.chatAbrirConv=chatAbrirConv;
+window.chatVolverContactos=chatVolverContactos;
+window.chatSyncLayout=chatSyncLayout;
+window.toggleChatWindow=toggleChatWindow;
 function chatMsgDriveUrl(m){
   if(!m)return'';
   if(m.driveLink)return normalizeDriveUrlInput(m.driveLink);
