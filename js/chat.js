@@ -257,7 +257,7 @@ function chatSessionUserContact(){
 }
 function chatMyKeySet(){
   const set=new Set();
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity()||getChatIdentity();
   if(me)chatPersonKeysFor(me.key).forEach(function(k){set.add(k);});
   const ses=chatSessionUserContact();
   if(ses)chatPersonKeysFor(ses.key).forEach(function(k){set.add(k);});
@@ -265,7 +265,7 @@ function chatMyKeySet(){
 }
 function getMyChatKeys(){
   const out=new Set();
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity()||getChatIdentity();
   if(me)chatPersonKeysFor(me.key).forEach(function(k){out.add(chatNormKey(k));});
   const ses=chatSessionUserContact();
   if(ses)chatPersonKeysFor(ses.key).forEach(function(k){out.add(chatNormKey(k));});
@@ -861,7 +861,7 @@ function initChatSyncForContact(contactKey){
   stopChatActiveSync();
   contactKey=String(contactKey||'').trim();
   if(!contactKey)return;
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity()||getChatIdentity();
   if(!me)return;
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
@@ -891,7 +891,7 @@ function chatMsgsForDeptResp(deptoId,respKey){
   return chatMsgsForContact({kind:'depto',key:'depto:'+deptoId,deptoId:deptoId},respKey);
 }
 function chatMsgsForActiveConv(){
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity()||getChatIdentity();
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!me||!contactKey)return[];
   return chatMsgsForContact(me,contactKey);
@@ -927,7 +927,7 @@ function chatUnreadConv(convId){
 async function chatMarcarLeido(convId){
   const my=getMyChatKeys();
   if(!my.length)return;
-  const me=getChatIdentity();
+  const me=chatEffectiveIdentity()||getChatIdentity();
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   let msgs=contactKey&&me?chatMsgsForContact(me,contactKey):chatConvMessages(convId);
   let ch=false;
@@ -1095,7 +1095,7 @@ function renderChatContacts(){
       }catch(e){}
       const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
       const meta=c.meta||c.sub||'';
-      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" onclick="chatAbrirConv(\''+escAttr(c.key)+'\')">'+
+      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" data-chat-key="'+escAttr(c.key)+'" onclick="chatAbrirConv(this.getAttribute(\'data-chat-key\'))">'+
         '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
@@ -1112,28 +1112,43 @@ function renderChatContacts(){
 }
 async function chatAbrirConv(contactKey){
   chatPurgeUnreadButton();
-  const me=getChatIdentity();
-  if(!me)return;
+  contactKey=String(contactKey||'').trim();
+  if(!contactKey)return;
+  // Misma identidad que la lista de contactos (getChatIdentity a veces es null)
+  const me=chatEffectiveIdentity()||getChatIdentity();
+  if(!me){
+    if(typeof notif==='function')notif('No se pudo identificar su cuenta de chat. Vuelva a entrar o elija departamento.','warn');
+    return;
+  }
   window._chatActiveContactKey=contactKey;
   window._chatVista='chat';
   window._chatContactsCollapsed=window.innerWidth<640;
   const c=chatContactFromKey(contactKey);
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
-  if(tit)tit.textContent=c.label;
-  if(sub)sub.textContent=c.meta||c.sub||'Conversación';
-  await loadChatMensajesForContact(me,contactKey);
+  if(tit)tit.textContent=(c&&c.label)||'Conversación';
+  if(sub)sub.textContent=(c&&(c.meta||c.sub))||'Conversación';
+  // Mostrar panel de escritura de inmediato (no esperar a Firestore)
   window._chatConvActiva=chatPrimaryConvId(me,contactKey);
-  initChatSyncForContact(contactKey);
-  await chatMarcarLeido(window._chatConvActiva);
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
   setTimeout(function(){
     const inp=document.getElementById('chat-inp');
-    if(inp)inp.focus();
+    if(inp){try{inp.focus();}catch(e){}}
     if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-main')||document);
-  },80);
+  },40);
+  try{
+    await loadChatMensajesForContact(me,contactKey);
+    initChatSyncForContact(contactKey);
+    await chatMarcarLeido(window._chatConvActiva);
+    renderChatMessages();
+    renderChatContacts();
+    renderChatBadge();
+  }catch(err){
+    console.error('chatAbrirConv:',err);
+    if(typeof notif==='function')notif('No se pudieron cargar los mensajes. Puede escribir de todos modos.','warn');
+  }
 }
 function chatMsgDriveUrl(m){
   if(!m)return'';
