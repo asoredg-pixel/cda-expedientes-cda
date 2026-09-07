@@ -3544,7 +3544,9 @@ body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabs
 .rec-drive-nav{
   display:flex;flex-direction:column;gap:8px;padding:12px 10px;
   border-right:1px solid #e8eaed;background:color-mix(in srgb,var(--bg) 70%,#fff);
+  overflow-y:auto;min-height:0;position:relative;z-index:2;
 }
+.rec-drive-menu{flex-shrink:0;position:relative;z-index:3}
 .rec-drive-new{
   display:inline-flex;align-items:center;gap:8px;justify-content:center;
   width:100%;padding:10px 12px;border:0;border-radius:24px;cursor:pointer;

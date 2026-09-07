@@ -81,7 +81,14 @@ function setRecursosNav(nav) {
   /* Mis carpetas / Enlaces desde el menú izquierdo cierran el explorador abierto */
   window._recursosRepoSel = null;
   window._recExplorer = null;
-  renderRecursosPanel();
+  window._recursosRepoForm = null;
+  window._recursosEnlaceForm = null;
+  try {
+    renderRecursosPanel();
+  } catch (err) {
+    console.error('setRecursosNav', err);
+    notif('No se pudo abrir ' + (nav === 'enlaces' ? 'Enlaces' : 'Mis carpetas'), 'err');
+  }
 }
 
 function renderRecursosPanel() {
@@ -106,8 +113,8 @@ function renderRecursosPanel() {
     h += '<button type="button" class="rec-drive-new" onclick="recursosMostrarFormEnlace()"><span class="rec-drive-new-ico" aria-hidden="true">+</span> Nuevo enlace</button>';
   }
   h += '<nav class="rec-drive-menu">';
-  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'biblioteca' ? ' on' : '') + '" onclick="setRecursosNav(\'biblioteca\')"><span aria-hidden="true">📁</span><span>Mis carpetas</span></button>';
-  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'enlaces' ? ' on' : '') + '" onclick="setRecursosNav(\'enlaces\')"><span aria-hidden="true">🔗</span><span>Enlaces</span></button>';
+  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'biblioteca' ? ' on' : '') + '" onclick="event.preventDefault();setRecursosNav(\'biblioteca\')"><span aria-hidden="true">📁</span><span>Mis carpetas</span></button>';
+  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'enlaces' ? ' on' : '') + '" onclick="event.preventDefault();setRecursosNav(\'enlaces\')"><span aria-hidden="true">🔗</span><span>Enlaces</span></button>';
   h += '</nav>';
   if (nav === 'biblioteca' && bibOk) {
     const repos = reposBibliotecaVisibles();
@@ -125,15 +132,26 @@ function renderRecursosPanel() {
   h += '</aside>';
 
   h += '<section class="rec-drive-main" aria-label="' + (nav === 'enlaces' ? 'Enlaces' : 'Biblioteca') + '">';
-  if (nav === 'enlaces') {
-    h += renderRecursosEnlacesPanel(depto);
-  } else {
-    h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
+  try {
+    if (nav === 'enlaces') {
+      h += renderRecursosEnlacesPanel(depto);
+    } else {
+      h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
+    }
+  } catch (err) {
+    console.error('renderRecursosPanel content', err);
+    h += '<div class="rec-info-banner warn">Error al cargar el panel. Recargue la página. <code style="font-size:11px">' + escAttr(String(err && err.message || err)) + '</code></div>';
   }
   h += '</section></div></div>';
   root.innerHTML = h;
   if (nav === 'biblioteca' && window._recursosRepoSel && typeof cargarRecursosRepoArchivos === 'function') {
     setTimeout(function() { cargarRecursosRepoArchivos(); }, 0);
+  }
+  if (window._recursosRepoForm || window._recursosEnlaceForm) {
+    setTimeout(function() {
+      const form = root.querySelector('.rec-form-card');
+      if (form) try { form.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    }, 40);
   }
 }
 
@@ -539,7 +557,11 @@ function renderRecursosRepoDetalle(repoId) {
   const st = recExpState();
   const sharedEntry = !!(st && st.sharedEntry && st.repoId === repoId);
   const sharedName = sharedEntry && st.path && st.path[0] ? st.path[0].name : '';
+  const editing = !sharedEntry && String(window._recursosRepoForm || '') === String(r.id);
   let h = '<div class="rec-bib-panel rec-bib-detalle">';
+  if (editing) {
+    h += renderRecursosRepoForm(r.id);
+  }
   h += '<div class="rec-repo-hdr">';
   h += '<div class="rec-repo-hdr-main"><strong class="rec-repo-hdr-title">' + escAttr(sharedEntry && sharedName ? sharedName : r.titulo) + '</strong>';
   if (sharedEntry) h += '<span class="rec-tag rec-tag-share">Compartida</span>';
@@ -563,9 +585,6 @@ function renderRecursosRepoDetalle(repoId) {
     h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
   }
   if (compLbl && !sharedEntry) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
-  if (window._recursosRepoForm === r.id && !sharedEntry) {
-    h += renderRecursosRepoForm(r.id);
-  }
   h += '<div class="rec-exp-shell">';
   h += '<div class="cft" style="margin:8px 0 6px">Explorador de archivos</div>';
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
@@ -1190,22 +1209,35 @@ async function recExpEliminarSeleccion() {
   const items = ids.map(recExpItemById).filter(Boolean);
   if (!items.length) return;
   const msg = items.length === 1
-    ? ('¿Eliminar «' + (items[0].name || '') + '» de Drive? Esta acción no se puede deshacer fácilmente.')
+    ? ('¿Eliminar «' + (items[0].name || '') + '» de Drive?')
     : ('¿Eliminar ' + items.length + ' elementos de Drive?');
-  if (!confirm(msg)) return;
-  const delFn = typeof driveDeleteBibliotecaItem === 'function' ? driveDeleteBibliotecaItem : window.driveDeleteBibliotecaItem;
-  let ok = 0;
-  for (let i = 0; i < items.length; i++) {
-    try {
-      if (await delFn(items[i].id, recExpIsFolder(items[i]))) ok++;
-    } catch (err) {
-      notif('Error eliminando ' + (items[i].name || ''), 'err');
+  const detail = 'Esta acción no se puede deshacer fácilmente.';
+  const run = async function() {
+    const delFn = typeof driveDeleteBibliotecaItem === 'function' ? driveDeleteBibliotecaItem : window.driveDeleteBibliotecaItem;
+    let ok = 0;
+    for (let i = 0; i < items.length; i++) {
+      try {
+        if (await delFn(items[i].id, recExpIsFolder(items[i]))) ok++;
+      } catch (err) {
+        notif('Error eliminando ' + (items[i].name || ''), 'err');
+      }
     }
-  }
-  if (ok) {
-    notif(ok + ' eliminado(s)', 'ok');
-    st.selection = [];
-    cargarRecursosRepoArchivos();
+    if (ok) {
+      notif(ok + ' eliminado(s)', 'ok');
+      st.selection = [];
+      cargarRecursosRepoArchivos();
+    }
+  };
+  if (typeof confirmEliminar === 'function') {
+    confirmEliminar({
+      title: 'Eliminar de Drive',
+      message: msg,
+      detail: detail,
+      confirmLabel: 'Sí, eliminar'
+    }, function() { run(); });
+  } else {
+    if (!confirm(msg + ' ' + detail)) return;
+    await run();
   }
 }
 
@@ -1484,6 +1516,16 @@ window.recExpAskText = recExpAskText;
 window.recExpCerrarPrompt = recExpCerrarPrompt;
 window.recExpEliminarSeleccion = recExpEliminarSeleccion;
 window.setRecursosNav = setRecursosNav;
+window.setRecursosSubTab = setRecursosSubTab;
+window.renderRecursosPanel = renderRecursosPanel;
+window.recursosMostrarFormRepo = recursosMostrarFormRepo;
+window.recursosOcultarFormRepo = recursosOcultarFormRepo;
+window.recursosMostrarFormEnlace = recursosMostrarFormEnlace;
+window.recursosOcultarFormEnlace = recursosOcultarFormEnlace;
+window.eliminarRecursosRepo = eliminarRecursosRepo;
+window.eliminarRecursosEnlace = eliminarRecursosEnlace;
+window.abrirRecursosRepo = abrirRecursosRepo;
+window.cerrarRecursosRepo = cerrarRecursosRepo;
 window.recExpKeyDown = recExpKeyDown;
 window.recExpPaneClick = recExpPaneClick;
 window.recExpPaneContextMenu = recExpPaneContextMenu;
@@ -1651,14 +1693,41 @@ async function eliminarRecursosEnlace(id) {
     notif(l && recursosCreadoPorAdmin(l) ? 'Solo el administrador puede eliminar este enlace' : 'Sin permiso', 'err');
     return;
   }
-  if (!confirm('¿Eliminar este enlace?')) return;
-  recursosEnlaces = recursosEnlaces.filter(function(x) { return x.id !== id; });
-  const ok = await saveRecursosFirestore();
-  if (ok) { notif('Enlace eliminado', 'ok'); renderRecursosPanel(); if (typeof renderListasCfg === 'function') renderListasCfg(); }
+  const run = async function() {
+    recursosEnlaces = recursosEnlaces.filter(function(x) { return x.id !== id; });
+    const ok = await saveRecursosFirestore();
+    if (ok) { notif('Enlace eliminado', 'ok'); renderRecursosPanel(); if (typeof renderListasCfg === 'function') renderListasCfg(); }
+    else notif('Error al eliminar', 'err');
+  };
+  if (typeof confirmEliminar === 'function') {
+    confirmEliminar({
+      title: 'Eliminar enlace',
+      message: '¿Eliminar el enlace «' + (l.titulo || l.url || '') + '»?',
+      detail: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Sí, eliminar'
+    }, function() { run(); });
+  } else {
+    if (!confirm('¿Eliminar este enlace?')) return;
+    await run();
+  }
 }
 
 function recursosMostrarFormRepo(editId) {
-  window._recursosRepoForm = editId || '__new__';
+  const id = editId || '__new__';
+  if (id !== '__new__') {
+    const r = getRecursosRepoById(id);
+    if (!r || (typeof puedeGestionarBibliotecaRepo === 'function' && !puedeGestionarBibliotecaRepo(r))) {
+      notif('Sin permiso para editar esta carpeta', 'err');
+      return;
+    }
+    window._recursosRepoSel = id;
+  } else {
+    /* Nueva carpeta: salir del explorador para mostrar el formulario */
+    window._recursosRepoSel = null;
+    window._recExplorer = null;
+  }
+  window._recursosNav = 'biblioteca';
+  window._recursosRepoForm = id;
   renderRecursosPanel();
 }
 
@@ -1799,19 +1868,32 @@ async function eliminarRecursosRepo(id) {
     notif(r && recursosCreadoPorAdmin(r) ? 'Solo el administrador puede eliminar esta carpeta' : 'Sin permiso', 'err');
     return;
   }
-  if (!confirm('¿Eliminar esta carpeta de la biblioteca? (La carpeta en Drive no se borra)')) return;
-  const vinc = bibNormalizeVinculosList(r.vinculados);
-  bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
-  vinc.forEach(function(v) { bibRemoveRepoIdFromEntidad(v, id); });
-  const ok = await saveRecursosFirestore();
-  if (ok) {
-    for (let i = 0; i < vinc.length; i++) {
-      try { await bibPersistEntidadVinculo(vinc[i]); } catch (err) { console.warn('limpiar vínculo al eliminar repo:', err); }
-    }
-    window._recursosRepoSel = null;
-    notif('Carpeta eliminada', 'ok');
-    renderRecursosPanel();
-    if (typeof renderListasCfg === 'function') renderListasCfg();
+  const run = async function() {
+    const vinc = bibNormalizeVinculosList(r.vinculados);
+    bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
+    vinc.forEach(function(v) { bibRemoveRepoIdFromEntidad(v, id); });
+    const ok = await saveRecursosFirestore();
+    if (ok) {
+      for (let i = 0; i < vinc.length; i++) {
+        try { await bibPersistEntidadVinculo(vinc[i]); } catch (err) { console.warn('limpiar vínculo al eliminar repo:', err); }
+      }
+      window._recursosRepoSel = null;
+      window._recursosRepoForm = null;
+      notif('Carpeta eliminada', 'ok');
+      renderRecursosPanel();
+      if (typeof renderListasCfg === 'function') renderListasCfg();
+    } else notif('Error al eliminar', 'err');
+  };
+  if (typeof confirmEliminar === 'function') {
+    confirmEliminar({
+      title: 'Eliminar carpeta',
+      message: '¿Eliminar «' + (r.titulo || 'esta carpeta') + '» de la biblioteca?',
+      detail: 'La carpeta en Google Drive no se borra. Solo se quita de Recursos y se limpian las asociaciones.',
+      confirmLabel: 'Sí, eliminar'
+    }, function() { run(); });
+  } else {
+    if (!confirm('¿Eliminar esta carpeta de la biblioteca? (La carpeta en Drive no se borra)')) return;
+    await run();
   }
 }
 
