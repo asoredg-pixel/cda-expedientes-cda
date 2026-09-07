@@ -180,7 +180,7 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
   if (onPct) onPct(8);
   if (uploadCtx.biblioteca && typeof driveUploadBiblioteca === 'function') {
     if (onPct) onPct(12);
-    const up = await driveUploadBiblioteca(f, nombre, tipo, uploadCtx.folderId);
+    const up = await driveUploadBiblioteca(f, nombre, tipo, uploadCtx.folderId, uploadCtx.description || '');
     if (onPct) onPct(100);
     return {
       driveFileId: up.fileId || '',
@@ -222,6 +222,14 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
     : true;
   if (!okAuth) return;
   let bibliotecaUploaded = false;
+  if (uploadCtx.biblioteca && typeof recExpAskUploadDetalle === 'function') {
+    const pending = items.filter(function (it) { return it && it.state !== 'uploaded' && it.blob; });
+    if (pending.length) {
+      const det = await recExpAskUploadDetalle(pending.map(function (it) { return it.nombre || 'archivo'; }));
+      if (det === null) return;
+      uploadCtx.description = det;
+    }
+  }
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (!it || it.state === 'uploaded' || !it.blob) continue;

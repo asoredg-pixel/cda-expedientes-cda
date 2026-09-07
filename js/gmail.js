@@ -2263,7 +2263,7 @@ async function driveListFolderContents(folderId, pageToken) {
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   const q = '"' + folderId + '" in parents and trashed=false';
   let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
-    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink)' +
+    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink,description)' +
     '&orderBy=folder,name&pageSize=100' + (_DRIVE_API_QS || '');
   if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
   const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
@@ -2359,13 +2359,15 @@ if (typeof window !== 'undefined') {
   window.driveGetFileMeta = driveGetFileMeta;
 }
 
-// Sube archivo a carpeta de biblioteca.
-async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
+// Sube archivo a carpeta de biblioteca (description opcional = detalle del documento).
+async function driveUploadBiblioteca(blob, filename, mimeType, folderId, description) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   if (!folderId) throw new Error('Carpeta de repositorio no definida.');
   const form = new FormData();
   const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folderId] };
+  const det = String(description || '').trim();
+  if (det) meta.description = det.slice(0, 1000);
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
   form.append('file', blob, filename);
   const res = await fetch(DRIVE_UPLOAD_URL, {
@@ -2384,7 +2386,8 @@ async function driveUploadBiblioteca(blob, filename, mimeType, folderId) {
     fileId: file.id,
     driveLink: 'https://drive.google.com/file/d/' + file.id + '/view',
     previewLink: 'https://drive.google.com/file/d/' + file.id + '/preview',
-    nombre: filename
+    nombre: filename,
+    description: det
   };
 }
 

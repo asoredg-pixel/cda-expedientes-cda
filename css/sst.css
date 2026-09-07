@@ -3528,25 +3528,57 @@ body.sesion-activa .sst-nav-items .tab,body.sesion-activa .tabsi .tab{display:no
 body.sesion-activa .sst-nav-items .tab.tab-sesion-on,body.sesion-activa .tabsi .tab.tab-sesion-on{display:inline-flex!important}
 body.sesion-activa .sst-nav-items .tab.tab-sesion-on{display:flex!important}
 body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabsi .tab.tab-resp-reg-off{display:none!important}
-/* Recursos — biblioteca + enlaces (split) */
+/* Recursos — shell tipo Drive */
 .rec-wrap{padding:.5rem 0 2rem}
 .rec-hdr{margin-bottom:.85rem}
 .rec-title{margin:0;font-size:1.25rem}
 .rec-sub{margin:.25rem 0 0;font-size:13px;color:var(--tx2)}
-.rec-split{
+.rec-drive{
   display:grid;
-  grid-template-columns:minmax(0,3fr) minmax(240px,1fr);
-  gap:16px;
-  align-items:start;
+  grid-template-columns:minmax(180px,220px) minmax(0,1fr);
+  gap:0;
+  min-height:min(70vh,640px);
+  border:1px solid #e8eaed;border-radius:12px;background:var(--sf);
+  box-shadow:0 1px 3px rgba(60,64,67,.08);overflow:hidden;
 }
-.rec-split.rec-split-repo-open{grid-template-columns:1fr}
-.rec-col-bib,.rec-col-enlaces{min-width:0}
-.rec-col-enlaces{position:sticky;top:8px}
+.rec-drive-nav{
+  display:flex;flex-direction:column;gap:8px;padding:12px 10px;
+  border-right:1px solid #e8eaed;background:color-mix(in srgb,var(--bg) 70%,#fff);
+}
+.rec-drive-new{
+  display:inline-flex;align-items:center;gap:8px;justify-content:center;
+  width:100%;padding:10px 12px;border:0;border-radius:24px;cursor:pointer;
+  font:inherit;font-size:13px;font-weight:600;color:var(--tx);
+  background:#fff;box-shadow:0 1px 3px rgba(60,64,67,.2),0 1px 2px rgba(60,64,67,.1);
+  transition:box-shadow .15s,background .15s;
+}
+.rec-drive-new:hover{box-shadow:0 2px 6px rgba(60,64,67,.22)}
+.rec-drive-new-ico{
+  width:22px;height:22px;border-radius:50%;background:var(--bl);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;line-height:1;
+}
+.rec-drive-menu,.rec-drive-repo-nav{display:flex;flex-direction:column;gap:2px}
+.rec-drive-nav-sec{font-size:11px;font-weight:600;color:var(--tx3);padding:10px 10px 4px;text-transform:uppercase;letter-spacing:.03em}
+.rec-drive-nav-item{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:8px 10px;border:0;border-radius:20px;background:transparent;cursor:pointer;
+  font:inherit;font-size:13px;color:var(--tx);transition:background .12s;
+}
+.rec-drive-nav-item:hover{background:color-mix(in srgb,var(--bl) 8%,transparent)}
+.rec-drive-nav-item.on{background:color-mix(in srgb,var(--bl) 14%,transparent);font-weight:600;color:var(--bl)}
+.rec-drive-nav-repo .rec-drive-nav-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-drive-main{min-width:0;padding:14px 16px;overflow:auto}
+.rec-enlaces-main{display:flex;flex-direction:column;gap:10px}
+.rec-upload-files{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow:auto}
+.rec-upload-file-row{font-size:12px;color:var(--tx2);padding:4px 0}
+.rec-exp-name-wrap{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.rec-exp-desc-mini{font-size:11px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-exp-col-desc{color:var(--tx2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rec-card{margin-top:0}
 .rec-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .rec-inp{min-width:120px;flex:1;max-width:200px;padding:6px 10px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px}
 .rec-inp-side{max-width:none;width:100%;flex:none;min-width:0;box-sizing:border-box}
-/* Biblioteca — cabecera y tarjetas (lenguaje notes/keep) */
+/* Biblioteca — cabecera y tarjetas */
 .rec-bib-panel{display:flex;flex-direction:column;gap:14px}
 .rec-bib-hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
 .rec-bib-kicker{display:block;font-size:15px;font-weight:600;color:var(--tx)}
@@ -3564,7 +3596,7 @@ body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabs
 }
 .rec-bib-drive-hint{margin:0}
 .rec-bib-empty{padding:2rem 1rem;border:1px dashed var(--bd);border-radius:10px;background:var(--sf)}
-.rec-repo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.rec-repo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .rec-repo-card{
   display:flex;flex-direction:column;align-items:stretch;gap:8px;text-align:left;
   padding:14px 14px 12px;border:1px solid #e8eaed;border-radius:10px;cursor:pointer;
@@ -3700,8 +3732,9 @@ body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabs
 .rec-vinc-list{display:flex;flex-direction:column;gap:6px}
 .rec-vinc-acts{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}
 @media(max-width:900px){
-  .rec-split{grid-template-columns:1fr;gap:14px}
-  .rec-col-enlaces{position:static}
+  .rec-drive{grid-template-columns:1fr}
+  .rec-drive-nav{border-right:0;border-bottom:1px solid #e8eaed}
+  .rec-drive-repo-nav{display:none}
   .rec-side-panel{max-height:none}
 }
 .flag-bib{background:color-mix(in srgb,var(--bl) 10%,var(--sf));color:var(--bl);border:1px solid color-mix(in srgb,var(--bl) 28%,var(--bd));cursor:pointer;font:inherit}
@@ -3713,7 +3746,8 @@ html.ui-editor-modal-mode #bib-guardar-overlay,
 #ciudadano-doc-overlay,
 html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 #adj-viewer-ov,
-#rec-share-overlay.task-modal-overlay.on{
+#rec-share-overlay.task-modal-overlay.on,
+#rec-upload-overlay.task-modal-overlay.on{
   z-index:100050!important;
 }
 .bib-guardar-modal{width:min(920px,96vw)!important;max-height:min(92vh,820px);display:flex;flex-direction:column}
@@ -3749,7 +3783,7 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 .rec-exp-ico{width:1.4em;display:inline-block;text-align:center}
 .rec-exp-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rec-exp-details{display:flex;flex-direction:column}
-.rec-exp-details-head,.rec-exp-details-row{display:grid;grid-template-columns:minmax(160px,2.2fr) 1.1fr .9fr .7fr;gap:8px;align-items:center;padding:6px 10px;font-size:12px}
+.rec-exp-details-head,.rec-exp-details-row{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(100px,1.4fr) 1fr .8fr .6fr;gap:8px;align-items:center;padding:6px 10px;font-size:12px}
 .rec-exp-details-head{font-weight:600;color:var(--tx2);border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--sf);z-index:1}
 .rec-exp-details-row{border-bottom:1px solid color-mix(in srgb,var(--bd) 55%,transparent);cursor:default;user-select:none}
 .rec-exp-details-row:hover,.rec-exp-list-row:hover,.rec-exp-icon-item:hover{background:color-mix(in srgb,var(--bl) 7%,transparent)}
@@ -3771,8 +3805,9 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 .rec-exp-ctx-sep{height:1px;background:var(--bd);margin:4px 6px}
 @media(max-width:720px){
   .rec-exp-details-head,.rec-exp-details-row{grid-template-columns:1fr auto;grid-template-rows:auto auto}
-  .rec-exp-col-type,.rec-exp-details-head span:nth-child(3){display:none}
-  .rec-exp-col-size,.rec-exp-details-head span:nth-child(4){display:none}
+  .rec-exp-col-desc,.rec-exp-details-head span:nth-child(2){display:none}
+  .rec-exp-col-type,.rec-exp-details-head span:nth-child(4){display:none}
+  .rec-exp-col-size,.rec-exp-details-head span:nth-child(5){display:none}
 }
 /* =====================================================================
    GMAIL PANEL — OFICINAS / NCA / RESPONSABLES

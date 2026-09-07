@@ -2,7 +2,8 @@
 // recursos.js — Enlaces externos + Biblioteca (repositorio Drive por oficina)
 // =============================================================================
 
-window._recursosSubTab = 'biblioteca'; // compat: ya no hay subtabs; se muestran ambas columnas
+window._recursosSubTab = 'biblioteca'; // compat
+window._recursosNav = 'biblioteca'; // 'biblioteca' | 'enlaces'
 window._recursosRepoSel = null;
 window._recursosDrivePage = null;
 
@@ -69,11 +70,69 @@ function recursosInitPanel() {
   });
 }
 
-/** Compat: las subtabs se eliminaron; ambas columnas se muestran juntas. */
+/** Compat: navega a Biblioteca o Enlaces en el shell tipo Drive. */
 function setRecursosSubTab(tab) {
   window._recursosSubTab = tab === 'biblioteca' ? 'biblioteca' : 'enlaces';
-  if (tab === 'enlaces') window._recursosRepoSel = null;
+  setRecursosNav(tab === 'biblioteca' ? 'biblioteca' : 'enlaces');
+}
+
+function setRecursosNav(nav) {
+  window._recursosNav = nav === 'enlaces' ? 'enlaces' : 'biblioteca';
+  if (window._recursosNav === 'enlaces') {
+    window._recursosRepoSel = null;
+    window._recExplorer = null;
+  }
   renderRecursosPanel();
+}
+
+function renderRecursosPanel() {
+  const root = document.getElementById('recursos-panel-root');
+  if (!root) return;
+  const depto = getRecursosDeptoContext();
+  const bibOk = bibliotecaDriveDisponible(depto);
+  const ofiSel = getBibliotecaOficinaSesion();
+  const ctxLbl = recursosContextoLabel();
+  const nav = window._recursosNav === 'enlaces' ? 'enlaces' : 'biblioteca';
+  const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
+
+  let h = '<div class="rec-wrap">';
+  h += '<div class="rec-hdr"><div><h2 class="rec-title">📚 Recursos</h2>';
+  h += '<p class="rec-sub">Biblioteca documental · <strong>' + escAttr(ctxLbl) + '</strong></p></div></div>';
+
+  h += '<div class="rec-drive">';
+  h += '<aside class="rec-drive-nav" aria-label="Navegación Recursos">';
+  if (puedeCrear && nav === 'biblioteca') {
+    h += '<button type="button" class="rec-drive-new" onclick="recursosMostrarFormRepo()"><span class="rec-drive-new-ico" aria-hidden="true">+</span> Nueva carpeta</button>';
+  } else if (puedeCrear && nav === 'enlaces') {
+    h += '<button type="button" class="rec-drive-new" onclick="recursosMostrarFormEnlace()"><span class="rec-drive-new-ico" aria-hidden="true">+</span> Nuevo enlace</button>';
+  }
+  h += '<nav class="rec-drive-menu">';
+  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'biblioteca' ? ' on' : '') + '" onclick="setRecursosNav(\'biblioteca\')"><span aria-hidden="true">📁</span><span>Mis carpetas</span></button>';
+  h += '<button type="button" class="rec-drive-nav-item' + (nav === 'enlaces' ? ' on' : '') + '" onclick="setRecursosNav(\'enlaces\')"><span aria-hidden="true">🔗</span><span>Enlaces</span></button>';
+  h += '</nav>';
+  if (nav === 'biblioteca' && bibOk) {
+    const repos = reposBibliotecaVisibles();
+    if (repos.length) {
+      h += '<div class="rec-drive-nav-sec">Carpetas</div>';
+      h += '<div class="rec-drive-repo-nav">';
+      repos.forEach(function(r) {
+        const on = window._recursosRepoSel === r.id;
+        h += '<button type="button" class="rec-drive-nav-item rec-drive-nav-repo' + (on ? ' on' : '') + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')" title="' + escAttr(r.titulo) + '">';
+        h += '<span aria-hidden="true">📂</span><span class="rec-drive-nav-lbl">' + escAttr(r.titulo) + '</span></button>';
+      });
+      h += '</div>';
+    }
+  }
+  h += '</aside>';
+
+  h += '<section class="rec-drive-main" aria-label="' + (nav === 'enlaces' ? 'Enlaces' : 'Biblioteca') + '">';
+  if (nav === 'enlaces') {
+    h += renderRecursosEnlacesPanel(depto);
+  } else {
+    h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
+  }
+  h += '</section></div></div>';
+  root.innerHTML = h;
 }
 
 function getBibliotecaOficinaSesion() {
@@ -130,34 +189,6 @@ function recursosContextoLabel() {
   return depto + ' · ' + ofis.join(', ');
 }
 
-function renderRecursosPanel() {
-  const root = document.getElementById('recursos-panel-root');
-  if (!root) return;
-  const depto = getRecursosDeptoContext();
-  const bibOk = bibliotecaDriveDisponible(depto);
-  const ofiSel = getBibliotecaOficinaSesion();
-  const ctxLbl = recursosContextoLabel();
-  const repoOpen = !!window._recursosRepoSel;
-
-  let h = '<div class="rec-wrap">';
-  h += '<div class="rec-hdr"><div><h2 class="rec-title">📚 Recursos</h2>';
-  h += '<p class="rec-sub">Biblioteca documental y enlaces externos · <strong>' + escAttr(ctxLbl) + '</strong>.</p></div></div>';
-
-  h += '<div class="rec-split' + (repoOpen ? ' rec-split-repo-open' : '') + '">';
-  h += '<section class="rec-col-bib" aria-label="Biblioteca">';
-  h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
-  h += '</section>';
-  if (!repoOpen) {
-    h += '<aside class="rec-col-enlaces" aria-label="Enlaces externos">';
-    h += renderRecursosEnlacesPanel(depto);
-    h += '</aside>';
-  }
-  h += '</div>';
-
-  h += '</div>';
-  root.innerHTML = h;
-}
-
 function toggleRecEnlaceSearch() {
   window._recEnlaceSearchOpen = !window._recEnlaceSearchOpen;
   if (!window._recEnlaceSearchOpen) window._recEnlaceQ = '';
@@ -181,17 +212,12 @@ function renderRecursosEnlacesPanel(depto) {
     return blob.includes(q);
   });
 
-  const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
-
-  let h = '<div class="rec-side-panel">';
+  let h = '<div class="rec-enlaces-main">';
   h += '<div class="rec-side-hdr">';
-  h += '<div class="rec-side-title"><span class="rec-side-ico" aria-hidden="true">🔗</span><span>Enlaces</span>';
+  h += '<div class="rec-side-title"><span class="rec-side-ico" aria-hidden="true">🔗</span><span>Enlaces externos</span>';
   h += '<span class="rec-side-count">' + filtrada.length + '</span></div>';
   h += '<div class="rec-side-tools">';
   h += '<button type="button" class="btn bsm bic act-ico' + (searchOpen ? ' on' : '') + '" title="Buscar" onclick="toggleRecEnlaceSearch()" aria-expanded="' + (searchOpen ? 'true' : 'false') + '">🔍</button>';
-  if (puedeCrear) {
-    h += '<button type="button" class="btn bsm bic act-ico" onclick="recursosMostrarFormEnlace()" title="Nuevo enlace">+</button>';
-  }
   h += '</div></div>';
 
   if (searchOpen) {
@@ -267,22 +293,17 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
     return h;
   }
 
-  const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
   h += '<div class="rec-bib-panel">';
-  h += '<div class="rec-bib-hdr">';
-  h += '<div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📁 Biblioteca</span>';
-  h += '<p class="rec-bib-lead">Carpetas documentales de su contexto.</p></div>';
-  if (puedeCrear) {
-    h += '<button type="button" class="rec-bib-compose" onclick="recursosMostrarFormRepo()"><span class="rec-bib-compose-ico" aria-hidden="true">+</span><span>Nueva carpeta</span></button>';
+  if (window._recursosRepoForm && !window._recursosRepoSel) {
+    h += renderRecursosRepoForm(window._recursosRepoForm);
   }
+  h += '<div class="rec-bib-hdr">';
+  h += '<div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📁 Mis carpetas</span>';
+  h += '<p class="rec-bib-lead">Abra una carpeta para explorar y subir documentos (como en Drive).</p></div>';
   h += '</div>';
 
   if (!recursosDriveConectado()) {
     h += '<div class="rec-info-banner warn rec-bib-drive-hint">Conecte correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para crear carpetas y subir archivos.</div>';
-  }
-
-  if (window._recursosRepoForm && !window._recursosRepoSel) {
-    h += renderRecursosRepoForm(window._recursosRepoForm);
   }
 
   const repos = reposBibliotecaVisibles();
@@ -328,6 +349,7 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
 }
 
 function abrirRecursosRepo(repoId) {
+  window._recursosNav = 'biblioteca';
   window._recursosRepoSel = repoId;
   window._recursosDrivePage = null;
   const r = getRecursosRepoById(repoId);
@@ -566,7 +588,9 @@ function renderRecExpItemsHtml(files, canEdit, canShare, repo) {
         'onclick="recExpItemClick(event,\'' + escAttr(f.id) + '\')" ' +
         'ondblclick="recExpItemDblClick(event,\'' + escAttr(f.id) + '\')" ' +
         'oncontextmenu="recExpItemContextMenu(event,\'' + escAttr(f.id) + '\')">';
-      h += '<span class="rec-exp-ico">' + recExpIcon(f) + '</span><span class="rec-exp-name">' + escAttr(f.name) + '</span>';
+      h += '<span class="rec-exp-ico">' + recExpIcon(f) + '</span><div class="rec-exp-name-wrap"><span class="rec-exp-name">' + escAttr(f.name) + '</span>';
+      if (f.description) h += '<span class="rec-exp-desc-mini">' + escAttr(f.description) + '</span>';
+      h += '</div>';
       h += '</div>';
     });
     h += '</div>';
@@ -574,12 +598,13 @@ function renderRecExpItemsHtml(files, canEdit, canShare, repo) {
   }
   // details
   let h = '<div class="rec-exp-details" data-rec-exp-pane="1" tabindex="0">';
-  h += '<div class="rec-exp-details-head"><span>Nombre</span><span>Modificado</span><span>Tipo</span><span>Tamaño</span></div>';
+  h += '<div class="rec-exp-details-head"><span>Nombre</span><span>Detalle</span><span>Modificado</span><span>Tipo</span><span>Tamaño</span></div>';
   files.forEach(function(f) {
     const isFolder = recExpIsFolder(f);
     const on = sel.has(f.id);
     const archComp = (!isFolder && repo) ? (repo.archivosCompartidos || []).find(function(a) { return a.fileId === f.id; }) : null;
     const shareLbl = archComp ? labelRecursosCompartidoCon(archComp.compartidoCon) : '';
+    const det = String(f.description || '').trim();
     h += '<div class="rec-exp-details-row' + (on ? ' selected' : '') + '" draggable="' + (canEdit ? 'true' : 'false') + '" ' +
       'data-file-id="' + escAttr(f.id) + '" data-is-folder="' + (isFolder ? '1' : '0') + '" ' +
       'ondragstart="recExpDragStart(event)" ondragend="recExpDragEnd(event)" ' +
@@ -590,6 +615,7 @@ function renderRecExpItemsHtml(files, canEdit, canShare, repo) {
     h += '<span class="rec-exp-col-name"><span class="rec-exp-ico">' + recExpIcon(f) + '</span> ' + escAttr(f.name);
     if (shareLbl) h += ' <span class="rec-tag rec-tag-share" title="Compartido">↗ ' + escAttr(shareLbl) + '</span>';
     h += '</span>';
+    h += '<span class="rec-exp-col-desc" title="' + escAttr(det) + '">' + escAttr(det || '—') + '</span>';
     h += '<span class="rec-exp-col-date">' + escAttr(recExpFmtDate(f.modifiedTime)) + '</span>';
     h += '<span class="rec-exp-col-type">' + escAttr(recExpTypeLabel(f)) + '</span>';
     h += '<span class="rec-exp-col-size">' + escAttr(isFolder ? '—' : recExpFmtSize(f.size)) + '</span>';
@@ -836,11 +862,14 @@ async function recExpUploadFileList(fileList, destFolderId) {
   if (!files.length) return;
   const folderId = destFolderId || recExpCurrentFolderId();
   if (!folderId) { notif('Sin carpeta Drive', 'err'); return; }
+  const names = files.map(function(f) { return f.name || 'archivo'; });
+  const detalle = await recExpAskUploadDetalle(names);
+  if (detalle === null) return;
   notif('Subiendo ' + files.length + ' archivo(s)…', 'info');
   let ok = 0;
   for (let i = 0; i < files.length; i++) {
     try {
-      await driveUploadBiblioteca(files[i], files[i].name, files[i].type || 'application/octet-stream', folderId);
+      await driveUploadBiblioteca(files[i], files[i].name, files[i].type || 'application/octet-stream', folderId, detalle);
       ok++;
     } catch (err) {
       notif('Error: ' + (err.message || files[i].name), 'err');
@@ -850,6 +879,45 @@ async function recExpUploadFileList(fileList, destFolderId) {
     notif(ok + ' archivo(s) subido(s)', 'ok');
     cargarRecursosRepoArchivos();
   }
+}
+
+/** Modal: detalle del documento al subir. null = canceló; '' = sin detalle. */
+function recExpAskUploadDetalle(fileNames) {
+  return new Promise(function(resolve) {
+    const ov = document.getElementById('rec-upload-overlay');
+    const list = document.getElementById('rec-upload-files');
+    const ta = document.getElementById('rec-upload-detalle');
+    if (!ov || !ta) {
+      const fallback = prompt('Detalle del documento (opcional):', '');
+      resolve(fallback === null ? null : String(fallback).trim());
+      return;
+    }
+    window._recUploadDetalleResolve = resolve;
+    if (list) {
+      const names = (fileNames || []).slice(0, 8);
+      list.innerHTML = names.map(function(n) {
+        return '<div class="rec-upload-file-row">📄 ' + escAttr(n) + '</div>';
+      }).join('') + ((fileNames || []).length > 8 ? '<div class="rec-upload-file-row">… y ' + ((fileNames.length) - 8) + ' más</div>' : '');
+    }
+    ta.value = '';
+    ov.classList.add('on');
+    ov.setAttribute('aria-hidden', 'false');
+    setTimeout(function() { try { ta.focus(); } catch (e) {} }, 30);
+  });
+}
+
+function recExpCerrarUploadDetalle(ok) {
+  const ov = document.getElementById('rec-upload-overlay');
+  const ta = document.getElementById('rec-upload-detalle');
+  const resolve = window._recUploadDetalleResolve;
+  window._recUploadDetalleResolve = null;
+  if (ov) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+  }
+  if (typeof resolve !== 'function') return;
+  if (!ok) { resolve(null); return; }
+  resolve(String(ta && ta.value || '').trim());
 }
 
 async function subirRecursosRepoArchivos(ev, repoId) {
@@ -1162,7 +1230,10 @@ window.recExpItemDblClick = recExpItemDblClick;
 window.recExpItemContextMenu = recExpItemContextMenu;
 window.recExpNuevaCarpeta = recExpNuevaCarpeta;
 window.recExpSubirDesdeInput = recExpSubirDesdeInput;
+window.recExpAskUploadDetalle = recExpAskUploadDetalle;
+window.recExpCerrarUploadDetalle = recExpCerrarUploadDetalle;
 window.recExpEliminarSeleccion = recExpEliminarSeleccion;
+window.setRecursosNav = setRecursosNav;
 window.recExpKeyDown = recExpKeyDown;
 window.recExpPaneClick = recExpPaneClick;
 window.recExpPaneContextMenu = recExpPaneContextMenu;
@@ -2013,6 +2084,7 @@ function abrirBibliotecaRepoDesdeExp(repoId) {
   const id = String(repoId || '').trim();
   if (!id) return;
   window._recursosSubTab = 'biblioteca';
+  window._recursosNav = 'biblioteca';
   window._recursosRepoSel = id;
   window._recursosDrivePage = null;
   if (typeof showTab === 'function') showTab('rec');
