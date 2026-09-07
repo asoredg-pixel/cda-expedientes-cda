@@ -833,8 +833,14 @@ function recExpKeyDown(ev) {
 async function recExpNuevaCarpeta() {
   if (!recExpCanEdit()) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear carpetas en el repositorio'); return; }
-  const nom = prompt('Nombre de la nueva carpeta:');
-  if (nom == null) return;
+  const nom = await recExpAskText({
+    title: 'Nueva carpeta',
+    label: 'Nombre de la carpeta',
+    placeholder: 'Ej. Conceptos 2026',
+    okLabel: 'Crear',
+    required: true
+  });
+  if (nom === null) return;
   const name = String(nom).trim();
   if (!name) { notif('Nombre inválido', 'err'); return; }
   const folderId = recExpCurrentFolderId();
@@ -847,6 +853,73 @@ async function recExpNuevaCarpeta() {
   } catch (err) {
     notif(err.message || 'No se pudo crear la carpeta', 'err');
   }
+}
+
+/** Modal de texto del sistema (reemplaza prompt nativo). null = canceló. */
+function recExpAskText(opts) {
+  opts = opts || {};
+  return new Promise(function(resolve) {
+    const ov = document.getElementById('rec-prompt-overlay');
+    const tit = document.getElementById('rec-prompt-title');
+    const lbl = document.getElementById('rec-prompt-label');
+    const inp = document.getElementById('rec-prompt-inp');
+    const okBtn = document.getElementById('rec-prompt-ok');
+    if (!ov || !inp) {
+      const fallback = prompt(opts.label || opts.title || 'Valor:', opts.value || '');
+      resolve(fallback === null ? null : String(fallback));
+      return;
+    }
+    window._recPromptResolve = resolve;
+    window._recPromptRequired = !!opts.required;
+    if (tit) tit.textContent = opts.title || 'Recursos';
+    if (lbl) lbl.textContent = opts.label || 'Nombre';
+    if (okBtn) okBtn.textContent = opts.okLabel || 'Aceptar';
+    inp.value = opts.value != null ? String(opts.value) : '';
+    inp.placeholder = opts.placeholder || '';
+    ov.classList.add('on');
+    ov.setAttribute('aria-hidden', 'false');
+    if (typeof elevateOverlayAboveModals === 'function') elevateOverlayAboveModals(ov);
+    setTimeout(function() {
+      try { inp.focus(); inp.select(); } catch (e) {}
+    }, 30);
+  });
+}
+
+function recExpCerrarPrompt(ok) {
+  const ov = document.getElementById('rec-prompt-overlay');
+  const inp = document.getElementById('rec-prompt-inp');
+  const resolve = window._recPromptResolve;
+  if (typeof resolve !== 'function') {
+    if (ov) {
+      ov.classList.remove('on');
+      ov.setAttribute('aria-hidden', 'true');
+      if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
+    }
+    return;
+  }
+  if (!ok) {
+    window._recPromptResolve = null;
+    if (ov) {
+      ov.classList.remove('on');
+      ov.setAttribute('aria-hidden', 'true');
+      if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
+    }
+    resolve(null);
+    return;
+  }
+  const val = String(inp && inp.value || '').trim();
+  if (window._recPromptRequired && !val) {
+    notif('Indique un nombre', 'err');
+    if (inp) try { inp.focus(); } catch (e) {}
+    return;
+  }
+  window._recPromptResolve = null;
+  if (ov) {
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
+    if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
+  }
+  resolve(val);
 }
 
 async function recExpSubirDesdeInput(ev) {
@@ -932,8 +1005,14 @@ async function recExpRenombrar(fileId) {
   if (!recExpCanEdit()) return;
   const f = recExpItemById(fileId);
   if (!f) return;
-  const nom = prompt('Nuevo nombre:', f.name || '');
-  if (nom == null) return;
+  const nom = await recExpAskText({
+    title: 'Renombrar',
+    label: 'Nuevo nombre',
+    value: f.name || '',
+    okLabel: 'Guardar',
+    required: true
+  });
+  if (nom === null) return;
   const name = String(nom).trim();
   if (!name || name === f.name) return;
   try {
@@ -1232,6 +1311,8 @@ window.recExpNuevaCarpeta = recExpNuevaCarpeta;
 window.recExpSubirDesdeInput = recExpSubirDesdeInput;
 window.recExpAskUploadDetalle = recExpAskUploadDetalle;
 window.recExpCerrarUploadDetalle = recExpCerrarUploadDetalle;
+window.recExpAskText = recExpAskText;
+window.recExpCerrarPrompt = recExpCerrarPrompt;
 window.recExpEliminarSeleccion = recExpEliminarSeleccion;
 window.setRecursosNav = setRecursosNav;
 window.recExpKeyDown = recExpKeyDown;
@@ -2538,8 +2619,13 @@ async function bibGuardarNuevaSubcarpeta() {
   const ctx = window._bibGuardarCtx;
   if (!ctx || !ctx.folderId) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear subcarpetas'); return; }
-  const name = prompt('Nombre de la subcarpeta:');
-  if (!name || !String(name).trim()) return;
+  const name = await recExpAskText({
+    title: 'Nueva subcarpeta',
+    label: 'Nombre de la subcarpeta',
+    okLabel: 'Crear',
+    required: true
+  });
+  if (name === null || !String(name).trim()) return;
   try {
     await driveCreateFolder(String(name).trim(), ctx.folderId);
     notif('Subcarpeta creada', 'ok');

@@ -3747,9 +3747,11 @@ html.ui-editor-modal-mode #bib-guardar-overlay,
 html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 #adj-viewer-ov,
 #rec-share-overlay.task-modal-overlay.on,
-#rec-upload-overlay.task-modal-overlay.on{
+#rec-upload-overlay.task-modal-overlay.on,
+#rec-prompt-overlay.task-modal-overlay.on{
   z-index:100050!important;
 }
+.rec-prompt-modal{width:min(400px,96vw)!important}
 .bib-guardar-modal{width:min(920px,96vw)!important;max-height:min(92vh,820px);display:flex;flex-direction:column}
 .bib-guardar-modal .task-modal-body{overflow:auto;flex:1;min-height:0}
 .bib-guardar-foot{padding:0 1rem 1rem;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;border-top:1px solid var(--bd);padding-top:12px;margin-top:0}
