@@ -4093,6 +4093,7 @@ function pqrsMetCard(filterVal,style,inner,accent){
 function setPqrsOfiFiltro(v){
   window._pqrsOfiFiltro=v||'pend';
   window._pqrsOfiFiltroSticky=true;
+  window._pqrsOfiShown=30;
   renderPqrsOficinaInbox();
 }
 function getInstructoresCfg(deptoId){
@@ -6084,9 +6085,11 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t,opts){
   }
   return h;
 }
-/** Rail Director DS DEGUV al revisar desde «Por firmar»: chat/biblioteca + ⬇️ descargar + 📤 cargar (sin editar/asociar/trasladar/eliminar/aprobar/firma). */
-function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t){
+/** Rail Director DS DEGUV al revisar desde «Por firmar»: chat/biblioteca + ⬇️ descargar + 📤 cargar (sin editar/asociar/trasladar/eliminar/aprobar/firma).
+ *  Desde «Firmados» (opts.hideCargarFirmado): sin 📤. */
+function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t,opts){
   if(!t)return'';
+  opts=opts||{};
   const r=escAttr(ref),tid=escAttr(taskId);
   const eid=jsStr(ref),tidJs=jsStr(taskId);
   let h=taskReviewViewRailHtml(ref,taskId,t);
@@ -6094,8 +6097,10 @@ function taskReviewDirectorPorFirmarRailHtml(ref,taskId,t){
   h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(typeof bibGuardarEnBibliotecaBtnHtml==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Descargar documento para firmar digitalmente" onclick="descargarSoportesAprobadosTask(\''+eid+'\',\''+tidJs+'\')">⬇️</button>';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Descargar documento" onclick="descargarSoportesAprobadosTask(\''+eid+'\',\''+tidJs+'\')">⬇️</button>';
+  if(!opts.hideCargarFirmado){
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  }
   h+='</nav>';
   return h;
 }
@@ -17512,6 +17517,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     ensurePqrsSoportesAprobadosOnTask(t,e);
   const forceRevisarEntrega=!!opts.revisarEntrega||verRevisado;
   const directorRevisarPorFirmar=!!opts.directorRevisarPorFirmar;
+  const directorFirmadosVista=!!opts.directorFirmadosVista||!!((window._taskModalCtx||{}).directorFirmadosVista&&opts.keepStack);
   const cargarFirmadoVista=!!opts.cargarFirmadoVista;
   const openAtajoFirmado=!!opts.openAtajoFirmado;
   const pqrsRevEnc=!!(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&!esModoResponsable()&&!esJurisdiccional());
@@ -17586,7 +17592,7 @@ function openTaskCommentsModal(expId,taskId,opts){
       else window._taskReviewSideMode='doc';
     }
     const railNav=directorRevisarPorFirmar&&typeof taskReviewDirectorPorFirmarRailHtml==='function'
-      ?taskReviewDirectorPorFirmarRailHtml(refAct,taskId,t)
+      ?taskReviewDirectorPorFirmarRailHtml(refAct,taskId,t,{hideCargarFirmado:!!directorFirmadosVista})
       :(forcePorFirmarVista&&typeof taskReviewPorFirmarRailHtml==='function'
       ?taskReviewPorFirmarRailHtml(refAct,taskId,t,e)
       :(isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e)
@@ -17600,7 +17606,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(directorRevisarPorFirmar?(opts.directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))))+' · '+(t.codigo||expId);
+    if(tit)tit.textContent=(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
@@ -17625,7 +17631,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosVista:!!directorFirmadosVista,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar};
     window._soportePaginaActual=1;
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;
@@ -18332,7 +18338,10 @@ function refreshPeriodoView(prefix){
   if(prefix==='q')renderConsulta();
   else if(prefix==='cons'&&document.getElementById('pg-cons').classList.contains('on'))renderConsolidado();
   else if(prefix==='act'&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-  else if(prefix==='pqrs-ofi'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
+  else if(prefix==='pqrs-ofi'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on')){
+    window._pqrsOfiShown=30;
+    renderPqrsOficinaInbox();
+  }
 }
 function taskFechaRef(t){
   const rev=getTaskRevisionDepto(t);
@@ -20363,7 +20372,7 @@ function renderActRowToolbarHtml(t,expAct){
   const isVitalRowEarly=typeof esCargoVital==='function'&&esCargoVital();
   // VITAL/encargado en «Por firmar» (incl. PQRSD proyectada Atendida): no cortar el toolbar
   const keepPorFirmaToolbar=enPorFirmarVistaEarly&&(isVitalRowEarly||esVistaActividadesDepto()||(esModoResponsable()&&isVitalRowEarly));
-  // Director «Firmados»: 🔍 · ✍️✓ · 📬(✓ si notificada)
+  // Director «Firmados»: solo 🔍
   const esDirRow=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   if(esDirRow){
     const esPqrsDir=expAct&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expAct);
