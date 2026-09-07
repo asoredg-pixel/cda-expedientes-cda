@@ -452,15 +452,28 @@ function recExpIsSharedCollaborator() {
   const r = st ? getRecursosRepoById(st.repoId) : null;
   if (!r || typeof puedeVerRecursos !== 'function' || !puedeVerRecursos()) return false;
   if (typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r)) return false;
-  if (st && st.sharedEntry && st.rootId && typeof archivosRepoCompartidosConmigo === 'function') {
-    return archivosRepoCompartidosConmigo(r).some(function(a) {
-      return a.fileId === st.rootId && a.isFolder;
-    });
+  // Entrada abierta como subcarpeta compartida
+  if (st && st.sharedEntry) {
+    if (typeof archivosRepoCompartidosConmigo === 'function' && st.rootId) {
+      const hit = archivosRepoCompartidosConmigo(r).some(function(a) {
+        return a.fileId === st.rootId;
+      });
+      if (hit) return true;
+    }
+    return true;
   }
-  return typeof recursosItemCompartidoVisible === 'function' &&
-    recursosItemCompartidoVisible(r) &&
-    typeof recursosItemVisiblePorScope === 'function' &&
-    !recursosItemVisiblePorScope(r);
+  // Carpeta principal compartida (sin ámbito propio)
+  if (typeof recursosItemCompartidoVisible === 'function' &&
+      recursosItemCompartidoVisible(r) &&
+      typeof recursosItemVisiblePorScope === 'function' &&
+      !recursosItemVisiblePorScope(r)) {
+    return true;
+  }
+  // Tiene algún archivo/subcarpeta compartido y está explorando ese repo
+  if (typeof archivosRepoCompartidosConmigo === 'function' && archivosRepoCompartidosConmigo(r).length) {
+    return true;
+  }
+  return false;
 }
 
 /** Puede subir archivos (dueño, compartido del repo, o entrada de subcarpeta compartida). */
@@ -473,9 +486,9 @@ function recExpCanUpload() {
   return false;
 }
 
-/** Crear subcarpetas: gestores y quienes tienen la carpeta compartida. */
+/** Crear subcarpetas: misma regla que subir (gestor o a quien se compartió). */
 function recExpCanCreateFolder() {
-  return recExpCanManage() || recExpIsSharedCollaborator();
+  return recExpCanUpload();
 }
 
 /** Carpeta compartida (raíz) o ítems en archivosCompartidos: no eliminables por colaboradores. */
