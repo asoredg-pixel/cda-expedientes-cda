@@ -123,8 +123,13 @@ function renderRecursosPanel() {
       h += '<div class="rec-drive-repo-nav">';
       repos.forEach(function(r) {
         const on = window._recursosRepoSel === r.id;
-        h += '<button type="button" class="rec-drive-nav-item rec-drive-nav-repo' + (on ? ' on' : '') + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')" title="' + escAttr(r.titulo) + '">';
-        h += '<span aria-hidden="true">📂</span><span class="rec-drive-nav-lbl">' + escAttr(r.titulo) + '</span></button>';
+        const esCompartida = typeof recursosItemCompartidoVisible === 'function' &&
+          recursosItemCompartidoVisible(r) &&
+          typeof recursosItemVisiblePorScope === 'function' &&
+          !recursosItemVisiblePorScope(r);
+        const ico = esCompartida ? '📁👥' : '📁';
+        h += '<button type="button" class="rec-drive-nav-item rec-drive-nav-repo' + (on ? ' on' : '') + (esCompartida ? ' shared' : '') + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')" title="' + escAttr((esCompartida ? 'Compartida: ' : '') + (r.titulo || '')) + '">';
+        h += '<span aria-hidden="true">' + ico + '</span><span class="rec-drive-nav-lbl">' + escAttr(r.titulo) + '</span></button>';
       });
       h += '</div>';
     }
@@ -571,7 +576,7 @@ function renderRecursosRepoDetalle(repoId) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Editar carpeta" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">✏️</button>';
   }
   if (canShare && !sharedEntry) {
-    h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">📤</button>';
+    h += '<button type="button" class="btn bsm bic act-ico" title="Compartir carpeta" onclick="recursosAbrirCompartir(\'repo\',\'' + escAttr(r.id) + '\')">👥</button>';
   }
   if (canDel && !sharedEntry) {
     h += '<button type="button" class="btn bsm bic act-ico" title="Eliminar carpeta" onclick="eliminarRecursosRepo(\'' + escAttr(r.id) + '\')">🗑️</button>';
@@ -1762,9 +1767,8 @@ function renderRecursosRepoForm(editId) {
     h += '<div class="fld"><label>Vincular carpeta Drive existente (opcional)</label><input type="url" id="rec-repo-drive-link" placeholder="https://drive.google.com/drive/folders/…"><span class="rec-form-hint">Si se deja vacío, se crea carpeta en Drive institucional.</span></div>';
   }
   h += '</div>';
-  h += '<div class="rec-form-foot">';
+  h += '<div class="rec-form-foot" style="justify-content:flex-end">';
   h += '<button type="button" class="btn bsm bp" onclick="guardarRecursosRepo(\'' + escAttr(editId || '__new__') + '\')">Guardar</button>';
-  h += '<button type="button" class="btn bsm bic act-ico" title="Cancelar" onclick="recursosOcultarFormRepo()">✕</button>';
   h += '</div></div></div>';
   return h;
 }

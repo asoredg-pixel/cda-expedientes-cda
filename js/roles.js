@@ -1190,7 +1190,7 @@ function puedeEditarRecursosEnlaces(scope,scopeId){
  */
 function puedeGestionarRecursosEnlace(item){
   if(!item||!puedeVerRecursos())return false;
-  if(esAdministrador()||esAdminRepos())return true;
+  if(esAdministrador()||esAdminFirestore())return true;
   if(recursosCreadoPorAdmin(item))return false;
   const email=getAuthEmailNorm();
   if(email&&String(item.createdBy||'').trim().toLowerCase()===email)return true;
