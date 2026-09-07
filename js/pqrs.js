@@ -2434,12 +2434,12 @@ async function buscarExpCiudadano(){
         (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
         '</div>';
     }else{
+      // No mostrar cuerpo de correo/plantilla: la respuesta al ciudadano está en los documentos (oficio / soporte PDF)
       respuestaHtml='<div style="margin-bottom:12px;padding:12px;background:var(--gnl);border:1px solid #b2dfdb;border-radius:var(--r);border-left:4px solid var(--gn)">'+
         '<div style="font-size:12px;font-weight:700;color:var(--gn);margin-bottom:6px">✅ Esta solicitud fue respondida</div>'+
         (fechaResp?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Fecha de respuesta: <strong>'+fmtF(fechaResp)+'</strong></div>'):'')+
         (oficio?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">N° de oficio: <strong>'+escAttr(oficio)+'</strong></div>'):'')+
         (canalLabel?('<div style="font-size:11px;color:var(--tx2);margin-bottom:4px">Canal de notificación: <strong>'+escAttr(canalLabel)+'</strong></div>'):'')+
-        (cuerpo?('<div style="font-size:12px;margin-top:8px;padding:8px;background:#fff;border-radius:var(--r);white-space:pre-wrap;color:var(--tx)">'+escAttr(cuerpo)+'</div>'):'')+
         '</div>';
     }
   }

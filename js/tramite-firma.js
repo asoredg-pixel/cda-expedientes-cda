@@ -186,6 +186,12 @@ function taskFirmaEstadoUi(t){
   const f=taskFirmaFase(t);
   const wf=getTaskFirmaWf(t);
   const subPend=typeof _actEstSubPendienteUi==='function'?_actEstSubPendienteUi:function(s){return{sub:s,subFg:'#a16207',subBg:'#fef9c3'};};
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  const notifDev=!!(wf.notificacion_devuelta||wf._notif_devuelta_corregir);
+  if(est==='Por corregir'&&(notifDev||taskFirmaEnRevisionFinalNotif(t)||(taskFirmaEnPorNotificar(t)&&notifDev))){
+    const n=typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(t):0;
+    return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Corregir'),{subCount:n});
+  }
   if(taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t)){
     if(taskFirmaEnPorFirmar(t)&&taskFirmaEsFirmadoPendiente(t))
       return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
@@ -945,6 +951,8 @@ async function submitTramiteNotificar(expId,taskId){
         fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.REVISION_FINAL:'revision_final_nca'),
         canal:canal,
         documentos:docs,
+        notificacion_devuelta:null,
+        _notif_devuelta_corregir:false,
         notificacion_reportada:{
           fecha:fechaN,
           obs:obs,
