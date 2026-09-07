@@ -5,11 +5,17 @@
 window._recursosSubTab = 'biblioteca'; // compat
 window._recursosNav = 'biblioteca'; // 'biblioteca' | 'enlaces'
 window._recursosRepoSel = null;
+window._recursosEnlaceSel = null; // enlace abierto como explorador Drive
 window._recursosDrivePage = null;
 
 function parseDriveFolderId(url) {
   const m = String(url || '').match(/\/folders\/([^/?#]+)/);
   return m ? m[1] : '';
+}
+
+/** True si la URL apunta a una carpeta de Google Drive. */
+function enlaceEsCarpetaDrive(l) {
+  return !!(l && parseDriveFolderId(l.url));
 }
 
 function recursosDriveConectado() {
@@ -80,6 +86,7 @@ function setRecursosNav(nav) {
   window._recursosNav = nav === 'enlaces' ? 'enlaces' : 'biblioteca';
   /* Mis carpetas / Enlaces desde el menú izquierdo cierran el explorador abierto */
   window._recursosRepoSel = null;
+  window._recursosEnlaceSel = null;
   window._recExplorer = null;
   window._recursosRepoForm = null;
   window._recursosEnlaceForm = null;
@@ -148,6 +155,9 @@ function renderRecursosPanel() {
   root.innerHTML = h;
   if (nav === 'biblioteca' && window._recursosRepoSel && typeof cargarRecursosRepoArchivos === 'function') {
     setTimeout(function() { cargarRecursosRepoArchivos(); }, 0);
+  }
+  if (nav === 'enlaces' && window._recursosEnlaceSel && typeof cargarRecursosEnlaceDriveArchivos === 'function') {
+    setTimeout(function() { cargarRecursosEnlaceDriveArchivos(); }, 0);
   }
   if (window._recursosRepoForm || window._recursosEnlaceForm) {
     setTimeout(function() {
@@ -235,6 +245,9 @@ function toggleRecEnlaceSearch() {
 }
 
 function renderRecursosEnlacesPanel(depto) {
+  if (window._recursosEnlaceSel) {
+    return renderRecursosEnlaceDriveDetalle(window._recursosEnlaceSel);
+  }
   const lista = esAdministrador() ? enlacesVisiblesAdminTodos() : enlacesVisiblesParaSesion();
   const q = String(document.getElementById('rec-enlace-q') && document.getElementById('rec-enlace-q').value || window._recEnlaceQ || '').trim().toLowerCase();
   const searchOpen = !!window._recEnlaceSearchOpen || !!q;
@@ -275,9 +288,11 @@ function renderRecursosEnlacesPanel(depto) {
         recursosItemCompartidoVisible(l) &&
         typeof recursosItemVisiblePorScope === 'function' &&
         !recursosItemVisiblePorScope(l);
-      h += '<article class="rec-enlace-card' + (esCompartido ? ' shared' : '') + '">';
+      const esDriveFolder = enlaceEsCarpetaDrive(l);
+      h += '<article class="rec-enlace-card' + (esCompartido ? ' shared' : '') + (esDriveFolder ? ' drive-folder' : '') + '">';
       h += '<div class="rec-enlace-body">';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelRecursosScopeContexto(l.scope, l.scopeId)) + '</span>';
+      if (esDriveFolder) h += '<span class="rec-tag" title="Carpeta Drive">📁 Drive</span>';
       if (esCompartido) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
       if (l.area) h += '<span class="rec-tag">' + escAttr(l.area) + '</span>';
       if (l.tematica) h += '<span class="rec-tag rec-tag-2">' + escAttr(l.tematica) + '</span>';
@@ -286,7 +301,11 @@ function renderRecursosEnlacesPanel(depto) {
       if (l.descripcion) h += '<div class="rec-enlace-desc">' + escAttr(l.descripcion) + '</div>';
       h += '</div>';
       h += '<div class="rec-enlace-actions">';
-      h += '<a class="btn bsm bic act-ico" href="' + escAttr(l.url) + '" target="_blank" rel="noopener" title="Abrir">🔍</a>';
+      if (esDriveFolder) {
+        h += '<button type="button" class="btn bsm bic act-ico" title="Explorar carpeta Drive" onclick="abrirRecursosEnlace(\'' + escAttr(l.id) + '\')">🔍</button>';
+      } else {
+        h += '<a class="btn bsm bic act-ico" href="' + escAttr(l.url) + '" target="_blank" rel="noopener" title="Abrir">🔍</a>';
+      }
       if (canEdit) {
         h += '<button type="button" class="btn bsm bic act-ico" title="Editar" onclick="recursosMostrarFormEnlace(\'' + escAttr(l.id) + '\')">✏️</button>';
       }
@@ -302,6 +321,146 @@ function renderRecursosEnlacesPanel(depto) {
   }
   h += '</div>';
   return h;
+}
+
+function renderRecursosEnlaceDriveDetalle(enlaceId) {
+  const l = (recursosEnlaces || []).find(function(x) { return x.id === enlaceId; });
+  if (!l) {
+    window._recursosEnlaceSel = null;
+    return '<div class="rec-empty">Enlace no encontrado. <button type="button" class="btn bsm" onclick="cerrarRecursosEnlace()">Volver</button></div>';
+  }
+  const folderId = parseDriveFolderId(l.url);
+  let h = '<div class="rec-enlaces-main rec-enlace-drive">';
+  h += '<div class="rec-repo-hdr">';
+  h += '<div class="rec-repo-hdr-main">';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Volver a enlaces" onclick="cerrarRecursosEnlace()">←</button>';
+  h += '<strong class="rec-repo-hdr-title">' + escAttr(l.titulo || 'Carpeta Drive') + '</strong>';
+  h += '<span class="rec-tag" title="Solo lectura">👁 Ver</span>';
+  h += '</div>';
+  if (l.url) h += '<a class="btn bsm" href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Drive ↗</a>';
+  h += '</div>';
+  if (l.descripcion) h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(l.descripcion) + '</p>';
+  if (!folderId) {
+    h += '<div class="rec-info-banner warn">Este enlace no es una carpeta de Drive válida.</div>';
+  } else if (!recursosDriveConectado()) {
+    h += '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para explorar la carpeta.</div>';
+  } else {
+    h += '<div class="rec-exp-shell">';
+    h += '<div class="cft" style="margin:8px 0 6px">Contenido de la carpeta</div>';
+    h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/** Abrir enlace: si es carpeta Drive, explorador interno; si no, URL externa. */
+function abrirRecursosEnlace(id) {
+  const l = (recursosEnlaces || []).find(function(x) { return x.id === id; });
+  if (!l) { notif('Enlace no encontrado', 'err'); return; }
+  const folderId = parseDriveFolderId(l.url);
+  if (!folderId) {
+    window.open(l.url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  if (!recursosDriveConectado()) {
+    recursosModalCorreoRequerido('explorar la carpeta Drive del enlace');
+    return;
+  }
+  window._recursosNav = 'enlaces';
+  window._recursosEnlaceSel = id;
+  window._recursosEnlaceForm = null;
+  window._recExplorer = {
+    enlaceMode: true,
+    enlaceId: id,
+    repoId: null,
+    rootId: folderId,
+    folderId: folderId,
+    path: [{ id: folderId, name: l.titulo || 'Carpeta Drive' }],
+    view: (window._recExplorer && window._recExplorer.view) || 'details',
+    selection: [],
+    files: [],
+    lastClickedId: null,
+    dragIds: null,
+    sharedEntry: false,
+    readOnly: true
+  };
+  renderRecursosPanel();
+  cargarRecursosEnlaceDriveArchivos();
+}
+
+function cerrarRecursosEnlace() {
+  window._recursosEnlaceSel = null;
+  if (window._recExplorer && window._recExplorer.enlaceMode) window._recExplorer = null;
+  renderRecursosPanel();
+}
+
+async function cargarRecursosEnlaceDriveArchivos(pageToken) {
+  const st = recExpState();
+  const enlaceId = (st && st.enlaceId) || window._recursosEnlaceSel;
+  const l = (recursosEnlaces || []).find(function(x) { return x.id === enlaceId; });
+  const el = document.getElementById('rec-repo-files');
+  if (!l || !el) return;
+  if (!recursosDriveConectado()) {
+    el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver los archivos.</div>';
+    return;
+  }
+  const rootId = parseDriveFolderId(l.url);
+  if (!rootId) {
+    el.innerHTML = '<div class="rec-empty">URL de carpeta Drive no válida.</div>';
+    return;
+  }
+  if (!st || !st.enlaceMode || st.enlaceId !== enlaceId) {
+    window._recExplorer = {
+      enlaceMode: true,
+      enlaceId: enlaceId,
+      repoId: null,
+      rootId: rootId,
+      folderId: rootId,
+      path: [{ id: rootId, name: l.titulo || 'Carpeta Drive' }],
+      view: (window._recExplorer && window._recExplorer.view) || 'details',
+      selection: [],
+      files: [],
+      lastClickedId: null,
+      dragIds: null,
+      readOnly: true
+    };
+  } else {
+    if (!st.folderId) st.folderId = st.rootId || rootId;
+    if (!(st.path || []).length) st.path = [{ id: st.rootId || rootId, name: l.titulo || 'Carpeta Drive' }];
+  }
+  const cur = recExpState();
+  const folderId = cur.folderId || rootId;
+  try {
+    let files = [];
+    let token = pageToken || '';
+    do {
+      const data = await driveListFolderContents(folderId, token || '');
+      files = files.concat(data.files || []);
+      token = data.nextPageToken || '';
+    } while (token);
+    cur.files = files;
+    cur.selection = (cur.selection || []).filter(function(id) {
+      return files.some(function(f) { return f.id === id; });
+    });
+    let h = '<div class="rec-exp" id="rec-exp-root" tabindex="0" ' +
+      'onkeydown="recExpKeyDown(event)" onclick="recExpPaneClick(event)" oncontextmenu="recExpPaneContextMenu(event)">';
+    h += renderRecExpToolbar(false, false);
+    h += renderRecExpBreadcrumb();
+    h += '<div class="rec-exp-body">' + renderRecExpItemsHtml(files, false, false, null, false) + '</div>';
+    h += '</div>';
+    el.innerHTML = h;
+    setTimeout(function() {
+      const root = document.getElementById('rec-exp-root');
+      if (root) try { root.focus({ preventScroll: true }); } catch (e) {}
+    }, 30);
+  } catch (err) {
+    const msg = String(err.message || 'Error al listar Drive');
+    if (msg.toLowerCase().includes('token') || msg.toLowerCase().includes('correo')) {
+      recursosModalCorreoRequerido('explorar la carpeta Drive del enlace');
+    }
+    el.innerHTML = '<div class="rec-info-banner warn">' + escAttr(msg) + '. <button type="button" class="btn bsm" onclick="recursosModalCorreoRequerido(\'usar Drive\')">Conectar correo</button></div>';
+  }
 }
 
 function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
@@ -473,6 +632,7 @@ function recExpCanEdit() {
 /** Dueño: eliminar, renombrar, arrastrar, gestionar. */
 function recExpCanManage() {
   const st = recExpState();
+  if (st && st.enlaceMode) return false;
   const r = st ? getRecursosRepoById(st.repoId) : null;
   return !!(r && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r));
 }
@@ -510,6 +670,7 @@ function recExpIsSharedCollaborator() {
 /** Puede subir archivos (dueño, compartido del repo, o entrada de subcarpeta compartida). */
 function recExpCanUpload() {
   const st = recExpState();
+  if (st && st.enlaceMode) return false;
   const r = st ? getRecursosRepoById(st.repoId) : null;
   if (!r) return false;
   if (typeof puedeAdjuntarBibliotecaRepo === 'function' && puedeAdjuntarBibliotecaRepo(r)) return true;
@@ -543,6 +704,7 @@ function recExpCanDeleteSelection() {
 
 function recExpCanShare() {
   const st = recExpState();
+  if (st && st.enlaceMode) return false;
   const r = st ? getRecursosRepoById(st.repoId) : null;
   return !!(r && puedeCompartirRecursosItem(r));
 }
@@ -796,7 +958,11 @@ function renderRecExpItemsHtml(files, canManage, canShare, repo, canUpload) {
 }
 
 async function cargarRecursosRepoArchivos(pageToken) {
-  const st = recExpState();
+  const st0 = recExpState();
+  if (st0 && st0.enlaceMode) {
+    return cargarRecursosEnlaceDriveArchivos(pageToken);
+  }
+  const st = st0;
   const repoId = (st && st.repoId) || window._recursosRepoSel;
   const r = getRecursosRepoById(repoId);
   const el = document.getElementById('rec-repo-files');
@@ -1539,6 +1705,9 @@ window.eliminarRecursosRepo = eliminarRecursosRepo;
 window.eliminarRecursosEnlace = eliminarRecursosEnlace;
 window.abrirRecursosRepo = abrirRecursosRepo;
 window.cerrarRecursosRepo = cerrarRecursosRepo;
+window.abrirRecursosEnlace = abrirRecursosEnlace;
+window.cerrarRecursosEnlace = cerrarRecursosEnlace;
+window.cargarRecursosEnlaceDriveArchivos = cargarRecursosEnlaceDriveArchivos;
 window.recExpKeyDown = recExpKeyDown;
 window.recExpPaneClick = recExpPaneClick;
 window.recExpPaneContextMenu = recExpPaneContextMenu;
@@ -1591,7 +1760,7 @@ function renderRecursosEnlaceForm(editId) {
     h += '<input type="hidden" id="rec-enl-scope-id" value="' + escAttr(scopeId) + '">';
   }
   h += '<div class="fld"><label>Título</label><input type="text" id="rec-enl-titulo" value="' + escAttr(existing && existing.titulo || '') + '"></div>';
-  h += '<div class="fld"><label>URL</label><input type="url" id="rec-enl-url" value="' + escAttr(existing && existing.url || '') + '" placeholder="https://…"></div>';
+  h += '<div class="fld"><label>URL</label><input type="url" id="rec-enl-url" value="' + escAttr(existing && existing.url || '') + '" placeholder="https://… o carpeta Drive"><span class="rec-form-hint">Si pega un enlace de carpeta de Drive, se podrá explorar su contenido aquí.</span></div>';
   h += '<div class="fld"><label>Área</label><input type="text" id="rec-enl-area" value="' + escAttr(existing && existing.area || '') + '" placeholder="Texto libre"></div>';
   h += '<div class="fld"><label>Temática</label><input type="text" id="rec-enl-tematica" value="' + escAttr(existing && existing.tematica || '') + '" placeholder="Texto libre"></div>';
   h += '<div class="fld"><label>Descripción (opcional)</label><textarea id="rec-enl-desc" rows="2">' + escTextarea(existing && existing.descripcion || '') + '</textarea></div>';
