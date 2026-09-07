@@ -1244,13 +1244,15 @@ function pqrsDirectorFirmadosAccionesHtml(e){
 }
 window.pqrsDirectorFirmadosAccionesHtml=pqrsDirectorFirmadosAccionesHtml;
 /**
- * Acciones «Por ejecutar» para oficinas (Admin, OAP, RN, Secretaría, DS DEGUV):
- * mismas opciones que el encargado NCA — ✏️ · chat · 📝 · 📤 · 📅 · 🔍
+ * Acciones «Por ejecutar» (oficinas + NCA): chat · 📝 · 📤 · 📅 · 🔍
+ * ✏️ solo NCA (oficinas no editan expediente). 📤 = panel tipo responsable, envío directo.
  */
 function pqrsOficinaPorEjecutarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
   if(!id)return'';
   const ofi=String(e._pqrs_oficina||'').trim();
+  const esNca=typeof esNcaDeguv==='function'&&esNcaDeguv()
+    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
   let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
   if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
   if(!t){
@@ -1263,25 +1265,18 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   }
   const tid=t?jsStr(t.id):'';
   let h='<span class="sst-act-toolbar">';
-  // ✏️
-  if(typeof esSecretaria==='function'&&esSecretaria()&&typeof puedeEditarPqrsSecretaria==='function'&&puedeEditarPqrsSecretaria(e))
-    h+='<button type="button" class="btn bsm bic act-ico" title="Editar PQRSD" onclick="event.stopPropagation();openEditPqrsSecretariaModal(\''+id+'\')">✏️</button> ';
-  else if(tid)
+  // ✏️ solo NCA (oficinas: sin editar expediente)
+  if(esNca&&tid)
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(e._exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button> ';
-  else
+  else if(esNca)
     h+='<button type="button" class="btn bsm bic act-ico" title="Ver / editar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">✏️</button> ';
-  // Chat · 📝 · 📅 · 🔍 (requieren tarea)
   if(t&&tid){
     if(typeof taskChatBtnHtml==='function')h+=taskChatBtnHtml(e._exp,t.id,t);
     if(typeof taskNotasInternasBtnHtml==='function')h+=taskNotasInternasBtnHtml(e._exp,t.id);
   }
-  // 📤 Entregar / registrar respuesta (mismo rol que encargado NCA en Por ejecutar)
+  // 📤 Entregar respuesta (panel tipo responsable → envío directo, sin revisión NCA)
   if(typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(e))
-    h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar / registrar respuesta" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\')">📤</button> ';
-  else if(t&&tid&&typeof taskReporteBtnHtml==='function'){
-    const yo=true;
-    h+=taskReporteBtnHtml(e._exp,t.id,yo);
-  }
+    h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar respuesta" onclick="event.stopPropagation();openPqrsEntregaDirecta(\''+id+'\')">📤</button> ';
   if(t&&tid&&typeof taskAgendaBtnHtml==='function')h+=taskAgendaBtnHtml(e._exp,t.id);
   if(t&&tid&&typeof actBtnVerActividadDeptHtml==='function')
     h+=actBtnVerActividadDeptHtml(e._exp,t.id,t,e);
@@ -1295,10 +1290,12 @@ function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const filtroOfi=String(window._pqrsOfiFiltro||'');
-  // Oficinas (Admin/OAP/RN/Secretaría/DS DEGUV): «Por ejecutar» / «Vencidas» = toolbar tipo encargado NCA
+  // Oficinas + NCA: «Por ejecutar» / «Vencidas» = toolbar unificado (✏️ solo NCA)
   const esOfiToolbar=typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()
     ||esDir
-    ||(typeof esAdministrador==='function'&&esAdministrador());
+    ||(typeof esAdministrador==='function'&&esAdministrador())
+    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+    ||(typeof esNcaDeguv==='function'&&esNcaDeguv());
   if(esOfiToolbar&&(filtroOfi==='pend'||filtroOfi==='atras')&&!e._tramite_firma_task){
     const fasePend=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
     if(!fasePend||fasePend===PQRS_WF.SIN_RESPUESTA||fasePend===PQRS_WF.RECHAZADA)
@@ -1337,10 +1334,11 @@ function pqrsAccionesTablaHtml(e){
     return pqrsDirectorFirmadosAccionesHtml(e);
   }
   let h='<span class="sst-act-toolbar">';
-  // ✏️ / 🔍 abren paneles completos (no menús)
+  // ✏️ solo NCA / Secretaría (editar PQRSD de radicación); oficinas DEGUV: sin editar expediente
+  const esNcaAcc=typeof esNcaDeguv==='function'&&esNcaDeguv()||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
   if(esSecretaria()&&puedeEditarPqrsSecretaria(e))
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar PQRSD" onclick="event.stopPropagation();openEditPqrsSecretariaModal(\''+id+'\')">✏️</button> ';
-  else
+  else if(esNcaAcc)
     h+='<button type="button" class="btn bsm bic act-ico" title="Ver / editar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">✏️</button> ';
   h+='<button type="button" class="btn bsm bic act-ico" title="Revisar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">🧐</button> ';
   if(fase===PQRS_WF.PENDIENTE_REVISION&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()))
@@ -1352,6 +1350,8 @@ function pqrsAccionesTablaHtml(e){
     else
       h+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')" title="Revisar entrega">🧐</button> ';
   }
+  if((fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA)&&puedeMarcarPqrsRespondida(e))
+    h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar respuesta" onclick="event.stopPropagation();openPqrsEntregaDirecta(\''+id+'\')">📤</button> ';
   if((fase===PQRS_WF.SIN_RESPUESTA||fase===PQRS_WF.RECHAZADA)&&puedeMarcarPqrsRespondida(e)&&typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())
     h+='<button type="button" class="btn bsm act-ico" style="background:#0d5c2e;color:#fff;border-color:#0d5c2e" onclick="event.stopPropagation();openPqrsRespuestaModal(\''+id+'\',{modo:\'firma\'})" title="Enviar a firma">🖊</button> ';
   h+='</span> ';
@@ -1384,7 +1384,23 @@ function pqrsAccionesTablaHtml(e){
   if(fase===PQRS_WF.POR_FIRMAR){
     const wfF=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const firmFis=!!(wfF.firma_fisica&&wfF.firma_fisica.en);
-    if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
+    let tidPf=String(wfF.task_id||'').trim();
+    if(!tidPf&&typeof getPqrsAtencionTask==='function'){
+      const tPf=getPqrsAtencionTask(e);
+      if(tPf)tidPf=String(tPf.id||'').trim();
+    }
+    // 🖨️ marcar/desmarcar impreso · ✍️ firma física (como encargado/VITAL)
+    if(!esDir&&typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(e)&&typeof actPorFirmarPrintOpenBtnHtml==='function'){
+      const openJs=tidPf
+        ?("openActPorFirmarDocs('"+jsStr(e._exp)+"','"+jsStr(tidPf)+"')")
+        :("pqrsMarcarImpreso('"+jsStr(e._exp)+"')");
+      h+=actPorFirmarPrintOpenBtnHtml(wfF.impreso,openJs)+' ';
+    }
+    if(!esDir&&typeof actPorFirmarFirmaFisicaBtnHtml==='function')
+      h+=actPorFirmarFirmaFisicaBtnHtml(wfF.firma_fisica)+' ';
+    if(firmFis&&typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar()&&tidPf)
+      h+=(typeof actPorFirmarCargarBtnHtml==='function'?actPorFirmarCargarBtnHtml(e._exp,tidPf):'')+' ';
+    else if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Gestionar firmado">📬</button> ';
     else if(!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
       h+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ya firmado">✓</button> ';
