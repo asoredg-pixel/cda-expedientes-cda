@@ -2737,6 +2737,17 @@ html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:1000
 .export-reminder-overlay.on{display:flex}
 .gmail-sesion-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:29000;align-items:center;justify-content:center;padding:1rem}
 .gmail-sesion-overlay.on{display:flex}
+body.sesion-activa.gmail-sesion-bloqueado #gmail-sesion-overlay,
+body.sesion-activa #gmail-sesion-overlay.on{
+  display:flex!important;visibility:visible!important;pointer-events:auto!important;z-index:50000;
+}
+body.gmail-sesion-bloqueado .sst-shell,
+body.gmail-sesion-bloqueado .chat-fab,
+body.gmail-sesion-bloqueado .chat-window{
+  pointer-events:none!important;user:blur(1.5px) grayscale(.12);
+}
+body.gmail-sesion-bloqueado #gmail-sesion-overlay,
+body.gmail-sesion-bloqueado #gmail-sesion-overlay *{pointer-events:auto!important;filter:none}
 .gmail-sesion-box{background:var(--sf);border-radius:var(--rl);padding:28px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25);border:1px solid var(--bd)}
 .gmail-sesion-icon{font-size:2.4rem;line-height:1;margin-bottom:8px}
 .gmail-sesion-tit{font-size:17px;font-weight:700;color:var(--tx);margin:0 0 10px}

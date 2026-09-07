@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260907r">
+<link rel="stylesheet" href="css/sst.css?v=20260907s">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -27,7 +27,7 @@
 <script src="js/roles.js?v=20260907h"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260907k"></script>
+<script src="js/core.js?v=20260907m"></script>
 <script src="js/formulario.js?v=20260903a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260903a"></script>
@@ -38,7 +38,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260907f"></script>
+<script src="js/gmail.js?v=20260907g"></script>
 <script src="js/sst-file-upload.js?v=20260907e"></script>
 <script src="js/pqrs.js?v=20260906h"></script>
 <script src="js/consulta.js?v=20260903a"></script>
@@ -46,7 +46,7 @@
 <script src="js/tramite-firma.js?v=20260906j"></script>
 <script src="js/papelera.js?v=20260806b"></script>
 <script src="js/recursos.js?v=20260907w"></script>
-<script src="js/ingreso.js?v=20260907a"></script>
+<script src="js/ingreso.js?v=20260907b"></script>
 </head>
 <body>
 <div id="mant-banner" class="mant-banner" role="status" aria-live="polite"></div>
@@ -67,11 +67,11 @@
   <div class="gmail-sesion-box">
     <div class="gmail-sesion-icon" aria-hidden="true">☁️</div>
     <h2 class="gmail-sesion-tit">Conectar Gmail / Drive</h2>
-    <p class="gmail-sesion-txt">Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.</p>
-    <p class="gmail-sesion-txt gmail-sesion-txt-sm">Puede seguir navegando sin conectar. La conexión dura ~1 hora; el botón <strong>Drive</strong> junto a la campanita muestra el tiempo restante.</p>
+    <p class="gmail-sesion-txt">Para usar el sistema debe autorizar <strong>su correo institucional</strong> (Gmail y Drive). Sin esta conexión no puede continuar.</p>
+    <p class="gmail-sesion-txt gmail-sesion-txt-sm">La autorización de Google dura aproximadamente 1 hora. Al vencer deberá volver a conectar. El tiempo restante aparece en el menú (Drive).</p>
     <div class="gmail-sesion-btns">
       <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar Gmail / Drive</button>
-      <button type="button" class="btn bs" onclick="sstCerrarGmailAttachModal(false)">Continuar sin conectar</button>
+      <button type="button" class="btn bs" id="gmail-sesion-skip-btn" style="display:none" onclick="sstCerrarGmailAttachModal(false)">Continuar sin conectar</button>
     </div>
   </div>
 </div>

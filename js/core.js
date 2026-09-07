@@ -419,6 +419,9 @@ function ensureOverlaysClosed(){
 /** Cierra modales/timers al volver a la pantalla de inicio (evita ventanas fugaces de Drive/Gmail). */
 function sstPrepararPantallaLogin(){
   try{
+    document.body.classList.remove('gmail-sesion-bloqueado');
+    window._sstGmailAttachForce=false;
+    window._sstGmailAttachCb=null;
     if(typeof closeConfirmExito==='function')closeConfirmExito();
     ensureOverlaysClosed();
     // Tokens Gmail en sessionStorage siguen vivos tras cerrar sesión app y disparan avisos

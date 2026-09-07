@@ -582,8 +582,8 @@ function ingresarComoRol(rolId,respNombre){
   setTimeout(()=>maybeShowExportReminder(),800);
   startIdleSessionWatch();
 }
-/** 1 hora sin actividad (mouse/teclado/toque) → cierre forzado de sesión. */
-const SST_IDLE_MS=60*60*1000;
+/** 4 horas sin actividad (mouse/teclado/toque) → cierre forzado de sesión. */
+const SST_IDLE_MS=4*60*60*1000;
 const SST_IDLE_CHECK_MS=30000;
 let _idleTimer=null;
 let _idleLastActivity=0;
@@ -605,7 +605,7 @@ function startIdleSessionWatch(){
     if(!document.body.classList.contains('sesion-activa')){stopIdleSessionWatch();return;}
     if(Date.now()-_idleLastActivity<SST_IDLE_MS)return;
     stopIdleSessionWatch();
-    if(typeof notif==='function')notif('Sesión cerrada por inactividad (1 hora). Vuelva a iniciar sesión.','err');
+    if(typeof notif==='function')notif('Sesión cerrada por inactividad (4 horas). Vuelva a iniciar sesión.','err');
     try{cerrarSesionGoogle();}catch(e){try{salirDeSesionApp();}catch(x){}}
   },SST_IDLE_CHECK_MS);
 }
