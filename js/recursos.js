@@ -78,10 +78,9 @@ function setRecursosSubTab(tab) {
 
 function setRecursosNav(nav) {
   window._recursosNav = nav === 'enlaces' ? 'enlaces' : 'biblioteca';
-  if (window._recursosNav === 'enlaces') {
-    window._recursosRepoSel = null;
-    window._recExplorer = null;
-  }
+  /* Mis carpetas / Enlaces desde el menú izquierdo cierran el explorador abierto */
+  window._recursosRepoSel = null;
+  window._recExplorer = null;
   renderRecursosPanel();
 }
 
@@ -133,6 +132,9 @@ function renderRecursosPanel() {
   }
   h += '</section></div></div>';
   root.innerHTML = h;
+  if (nav === 'biblioteca' && window._recursosRepoSel && typeof cargarRecursosRepoArchivos === 'function') {
+    setTimeout(function() { cargarRecursosRepoArchivos(); }, 0);
+  }
 }
 
 function getBibliotecaOficinaSesion() {
@@ -424,15 +426,10 @@ function recExpCurrentFolderId() {
 
 function recExpAtras() {
   const st = recExpState();
-  if (!st) {
-    cerrarRecursosRepo();
-    return;
-  }
+  if (!st) return;
   if ((st.path || []).length > 1) {
     recExpNavigateToIndex(st.path.length - 2);
-    return;
   }
-  cerrarRecursosRepo();
 }
 
 function renderRecursosRepoDetalle(repoId) {
@@ -444,7 +441,6 @@ function renderRecursosRepoDetalle(repoId) {
   const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
   let h = '<div class="rec-bib-panel rec-bib-detalle">';
   h += '<div class="rec-repo-hdr">';
-  h += '<button type="button" class="btn bsm bic act-ico" title="Volver a mis carpetas" onclick="cerrarRecursosRepo()">←</button>';
   h += '<div class="rec-repo-hdr-main"><strong class="rec-repo-hdr-title">' + escAttr(r.titulo) + '</strong>';
   h += '<span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
   h += '<span class="rec-repo-hdr-actions">';
@@ -533,9 +529,9 @@ function renderRecExpToolbar(canManage, canUpload) {
   const depth = (st && st.path && st.path.length) || 0;
   let h = '<div class="rec-exp-toolbar">';
   h += '<div class="rec-exp-toolbar-left">';
-  h += '<button type="button" class="btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()" ' + (depth <= 1 && !st ? 'disabled' : '') + '>←</button>';
+  h += '<button type="button" class="btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()"' + (depth <= 1 ? ' disabled' : '') + '>←</button>';
   if (canMg) {
-    h += '<button type="button" class="btn bsm bp" onclick="recExpNuevaCarpeta()">📁 Nueva carpeta</button>';
+    h += '<button type="button" class="btn bsm bic act-ico" title="Nueva carpeta" onclick="recExpNuevaCarpeta()">📁</button>';
   }
   if (canUp) {
     if (typeof sstFilePickBlock === 'function') {
@@ -571,7 +567,6 @@ function renderRecExpBreadcrumb() {
   const st = recExpState();
   if (!st || !(st.path || []).length) return '';
   let h = '<nav class="rec-exp-crumb" aria-label="Ruta">';
-  h += '<button type="button" class="rec-exp-crumb-back btn bsm bic act-ico" title="Atrás" onclick="recExpAtras()">←</button>';
   (st.path || []).forEach(function(p, i) {
     if (i) h += '<span class="rec-exp-crumb-sep">›</span>';
     const isLast = i === st.path.length - 1;
