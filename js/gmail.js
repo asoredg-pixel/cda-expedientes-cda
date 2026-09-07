@@ -1681,7 +1681,7 @@ async function driveGetFileMeta(fileId) {
   if (!token || !fileId) return null;
   try {
     const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
-      '?fields=id,name,mimeType,parents' + _DRIVE_API_QS, {
+      '?fields=id,name,mimeType,parents,shortcutDetails,driveId,capabilities' + _DRIVE_API_QS, {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if (!res.ok) return null;
@@ -1691,6 +1691,23 @@ async function driveGetFileMeta(fileId) {
     return null;
   }
 }
+
+/** Resuelve ID real de carpeta (incluye accesos directos / shortcuts de Drive). */
+async function driveResolveFolderId(folderId) {
+  const id = String(folderId || '').trim();
+  if (!id) return '';
+  const meta = await driveGetFileMeta(id);
+  if (!meta) return id;
+  if (meta.mimeType === 'application/vnd.google-apps.shortcut' &&
+      meta.shortcutDetails && meta.shortcutDetails.targetId) {
+    const targetMime = meta.shortcutDetails.targetMimeType || '';
+    if (!targetMime || targetMime === 'application/vnd.google-apps.folder') {
+      return meta.shortcutDetails.targetId;
+    }
+  }
+  return meta.id || id;
+}
+window.driveResolveFolderId = driveResolveFolderId;
 
 /** Lista archivos y carpetas (1 nivel) dentro de una carpeta. */
 async function driveListFolderChildren(folderId) {
@@ -2257,19 +2274,59 @@ async function driveEnsurePqrsUploadFolder(tipo, pqrsNum, nombreCarpeta, fechaRe
   return Object.assign({ folderId: folderId, folderLink: folderLink }, folders);
 }
 
-// Lista archivos y subcarpetas de una carpeta Drive (biblioteca de recursos).
+// Lista archivos y subcarpetas de una carpeta Drive (biblioteca / enlaces).
 async function driveListFolderContents(folderId, pageToken) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
-  const q = '"' + folderId + '" in parents and trashed=false';
-  let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
-    '&fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink,description)' +
-    '&orderBy=folder,name&pageSize=100' + (_DRIVE_API_QS || '');
-  if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
-  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-  const data = await res.json();
+  let resolvedId = folderId;
+  try {
+    if (typeof driveResolveFolderId === 'function') {
+      resolvedId = (await driveResolveFolderId(folderId)) || folderId;
+    }
+  } catch (e) { /* usar id original */ }
+  // Comillas simples: requeridas por la query de Drive API
+  const q = "'" + resolvedId + "' in parents and trashed=false";
+  const fields = 'nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink,iconLink,description,shortcutDetails)';
+  const baseQs = '&fields=' + encodeURIComponent(fields) +
+    '&pageSize=100&corpora=allDrives' + (_DRIVE_API_QS || '');
+  const buildUrl = function(orderBy, tokenPg) {
+    let u = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) + baseQs;
+    if (orderBy) u += '&orderBy=' + encodeURIComponent(orderBy);
+    if (tokenPg) u += '&pageToken=' + encodeURIComponent(tokenPg);
+    return u;
+  };
+  // orderBy=folder no es válido en unidades compartidas; reintentar sin él
+  let orderBy = 'folder,name';
+  let url = buildUrl(orderBy, pageToken || '');
+  let res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  let data = await res.json().catch(function() { return {}; });
+  if (!res.ok && /orderBy|shared drive|invalid/i.test(String(data.error && data.error.message || ''))) {
+    orderBy = 'name';
+    url = buildUrl(orderBy, pageToken || '');
+    res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+    data = await res.json().catch(function() { return {}; });
+  }
+  if (!res.ok && /orderBy|shared drive|invalid/i.test(String(data.error && data.error.message || ''))) {
+    url = buildUrl('', pageToken || '');
+    res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+    data = await res.json().catch(function() { return {}; });
+  }
   if (!res.ok) throw new Error(data.error && data.error.message || 'Error listando Drive');
-  return data;
+  const files = (data.files || []).map(function(f) {
+    if (!f) return f;
+    // Acceso directo a carpeta: tratarlo como carpeta navegable
+    if (f.mimeType === 'application/vnd.google-apps.shortcut' &&
+        f.shortcutDetails && f.shortcutDetails.targetMimeType === 'application/vnd.google-apps.folder' &&
+        f.shortcutDetails.targetId) {
+      return Object.assign({}, f, {
+        id: f.shortcutDetails.targetId,
+        mimeType: 'application/vnd.google-apps.folder',
+        _shortcutFrom: f.id
+      });
+    }
+    return f;
+  });
+  return { nextPageToken: data.nextPageToken || '', files: files };
 }
 
 /** Crea una carpeta nueva bajo parentId (nombre exacto; no reutiliza otra existente con el mismo nombre). */

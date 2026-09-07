@@ -9,8 +9,15 @@ window._recursosEnlaceSel = null; // enlace abierto como explorador Drive
 window._recursosDrivePage = null;
 
 function parseDriveFolderId(url) {
-  const m = String(url || '').match(/\/folders\/([^/?#]+)/);
-  return m ? m[1] : '';
+  const s = String(url || '').trim();
+  if (!s) return '';
+  let m = s.match(/\/folders\/([^/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  m = s.match(/[?&]id=([^&#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  m = s.match(/\/drive\/(?:u\/\d+\/)?folders\/([^/?#]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return '';
 }
 
 /** True si la URL apunta a una carpeta de Google Drive. */
@@ -355,10 +362,10 @@ function renderRecursosEnlaceDriveDetalle(enlaceId) {
 }
 
 /** Abrir enlace: si es carpeta Drive, explorador interno; si no, URL externa. */
-function abrirRecursosEnlace(id) {
+async function abrirRecursosEnlace(id) {
   const l = (recursosEnlaces || []).find(function(x) { return x.id === id; });
   if (!l) { notif('Enlace no encontrado', 'err'); return; }
-  const folderId = parseDriveFolderId(l.url);
+  let folderId = parseDriveFolderId(l.url);
   if (!folderId) {
     window.open(l.url, '_blank', 'noopener,noreferrer');
     return;
@@ -367,6 +374,11 @@ function abrirRecursosEnlace(id) {
     recursosModalCorreoRequerido('explorar la carpeta Drive del enlace');
     return;
   }
+  try {
+    if (typeof driveResolveFolderId === 'function') {
+      folderId = (await driveResolveFolderId(folderId)) || folderId;
+    }
+  } catch (e) { /* seguir con id parseado */ }
   window._recursosNav = 'enlaces';
   window._recursosEnlaceSel = id;
   window._recursosEnlaceForm = null;
@@ -405,11 +417,17 @@ async function cargarRecursosEnlaceDriveArchivos(pageToken) {
     el.innerHTML = '<div class="rec-info-banner warn">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver los archivos.</div>';
     return;
   }
-  const rootId = parseDriveFolderId(l.url);
-  if (!rootId) {
+  const rootIdRaw = parseDriveFolderId(l.url);
+  if (!rootIdRaw) {
     el.innerHTML = '<div class="rec-empty">URL de carpeta Drive no válida.</div>';
     return;
   }
+  let rootId = rootIdRaw;
+  try {
+    if (typeof driveResolveFolderId === 'function') {
+      rootId = (await driveResolveFolderId(rootIdRaw)) || rootIdRaw;
+    }
+  } catch (e) { rootId = rootIdRaw; }
   if (!st || !st.enlaceMode || st.enlaceId !== enlaceId) {
     window._recExplorer = {
       enlaceMode: true,
@@ -443,6 +461,15 @@ async function cargarRecursosEnlaceDriveArchivos(pageToken) {
     cur.selection = (cur.selection || []).filter(function(id) {
       return files.some(function(f) { return f.id === id; });
     });
+    if (!files.length) {
+      el.innerHTML = '<div class="rec-exp" id="rec-exp-root">' +
+        renderRecExpToolbar(false, false) + renderRecExpBreadcrumb() +
+        '<div class="rec-exp-body"><div class="rec-exp-empty" data-rec-exp-pane="1">' +
+        'No se encontraron elementos. Compruebe que el enlace sea la carpeta correcta y que su correo tenga permiso de verla en Drive. ' +
+        '<a href="' + escAttr(l.url) + '" target="_blank" rel="noopener">Abrir en Drive ↗</a>' +
+        '</div></div></div>';
+      return;
+    }
     let h = '<div class="rec-exp" id="rec-exp-root" tabindex="0" ' +
       'onkeydown="recExpKeyDown(event)" onclick="recExpPaneClick(event)" oncontextmenu="recExpPaneContextMenu(event)">';
     h += renderRecExpToolbar(false, false);
