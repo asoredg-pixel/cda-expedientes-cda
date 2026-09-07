@@ -228,6 +228,7 @@ function setLoginStatus(msg,show){
   }
 }
 function initLoginScreen(){
+  if(typeof sstPrepararPantallaLogin==='function')sstPrepararPantallaLogin();
   const authPanel=document.getElementById('login-auth-panel');
   const rolesWrap=document.getElementById('login-roles-wrap');
   const sub=document.getElementById('login-sub');
@@ -629,6 +630,7 @@ function salirDeSesionApp(){
   cerrarConsultaPanel();
   closeTaskModal();
   closeBandejaDepto();
+  if(typeof sstPrepararPantallaLogin==='function')sstPrepararPantallaLogin();
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   const login=document.getElementById('pg-login');
   if(login)login.classList.add('on');

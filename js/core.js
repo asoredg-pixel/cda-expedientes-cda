@@ -393,17 +393,44 @@ function handleSstUiClick(ev){
   if(action)sstRunAction(action,hit);
 }
 function ensureOverlaysClosed(){
-  ['con-side-overlay','task-modal-overlay','confirm-prec-overlay','pqrs-side-overlay','act-agenda-overlay'].forEach(function(id){
+  ['con-side-overlay','task-modal-overlay','confirm-prec-overlay','pqrs-side-overlay','act-agenda-overlay',
+   'export-reminder-overlay','gmail-sesion-overlay','agenda-cal-overlay','rec-drive-overlay',
+   'rec-upload-overlay','rec-prompt-overlay','rec-share-overlay','bib-guardar-overlay','ciudadano-doc-overlay'].forEach(function(id){
     const el=document.getElementById(id);
     if(!el)return;
     el.classList.remove('on');
+    if(el.getAttribute('aria-hidden')!=null)el.setAttribute('aria-hidden','true');
   });
   ['con-side-panel','pqrs-side-panel','act-agenda-panel','act-agenda-dock'].forEach(function(id){
     const el=document.getElementById(id);
     if(!el)return;
     el.classList.remove('on','con-panel-editing','act-agenda-closing');
   });
+  const gm=document.getElementById('gm-compose-modal');
+  if(gm)gm.style.display='none';
+  const chatWin=document.getElementById('chat-window');
+  if(chatWin)chatWin.classList.remove('on');
+  const chatFab=document.getElementById('chat-fab');
+  if(chatFab)chatFab.classList.remove('open');
+  if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
+  window._confirmExitoMode=false;
+  window._confirmRadicacionLoading=false;
 }
+/** Cierra modales/timers al volver a la pantalla de inicio (evita ventanas fugaces de Drive/Gmail). */
+function sstPrepararPantallaLogin(){
+  try{
+    if(typeof closeConfirmExito==='function')closeConfirmExito();
+    ensureOverlaysClosed();
+    // Tokens Gmail en sessionStorage siguen vivos tras cerrar sesión app y disparan avisos
+    if(typeof gmailSetToken==='function')gmailSetToken('');
+    if(typeof gmailOfiSetToken==='function')gmailOfiSetToken('');
+    if(typeof updateGmailConnectBtn==='function')updateGmailConnectBtn();
+    if(typeof _updateGmailOfiBtn==='function')_updateGmailOfiBtn();
+    if(typeof sstRenderGmailDriveStatusBtn==='function')sstRenderGmailDriveStatusBtn();
+  }catch(e){}
+}
+window.ensureOverlaysClosed=ensureOverlaysClosed;
+window.sstPrepararPantallaLogin=sstPrepararPantallaLogin;
 function initSstUiDelegation(){
   if(window._sstUiDelegation)return;
   window._sstUiDelegation=true;
