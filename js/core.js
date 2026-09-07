@@ -4283,7 +4283,10 @@ function puedeVerTabActividades(){
   return esModoResponsable()||esVistaActividadesDepto();
 }
 function puedeVerTabAgenda(){
-  return esModoResponsable()||esVistaActividadesDepto()||(typeof esCargoVital==='function'&&esCargoVital());
+  return esModoResponsable()||esVistaActividadesDepto()
+    ||(typeof esCargoVital==='function'&&esCargoVital())
+    ||(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica())
+    ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
 }
 /** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés), no oficinas RN/OAP/DS/Admin. */
 function puedeAsignarEventoAgendaResponsables(){
@@ -4361,6 +4364,12 @@ function openMiDiaDesdeNav(opts){
 function getAgendaResponsableActivo(){
   if(esModoResponsable())return String(responsableActivo||'').trim();
   if(esVistaActividadesDepto())return String(getEncargadoDepto(deptoActivo)||'').trim();
+  if(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()){
+    const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():deptoActivo;
+    return String(responsableActivo||(typeof getEncargadoOficina==='function'?getEncargadoOficina(ofi):'')||'').trim();
+  }
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    return String(responsableActivo||(typeof getEncargadoOficina==='function'?getEncargadoOficina('ds_deguv'):'')||'Director DS DEGUV').trim();
   return String(responsableActivo||getEncargadoDepto(deptoActivo)||'').trim();
 }
 function getAgendaEventoById(id){
@@ -5327,6 +5336,9 @@ function puedeAgendarTask(t){
     return false;
   }
   if(esVistaActividadesDepto())return esTareaDelEncargado(t);
+  // Oficinas / Secretaría / DS DEGUV: agenda desde bandeja «Por ejecutar»
+  if(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica())return true;
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return true;
   return false;
 }
 function taskAgendaBtnHtml(expId,taskId){
@@ -9392,7 +9404,7 @@ function puedeAsignarPqrsOficina(e){
   return false;
 }
 function ensureTareaPqrsOficina(e,oficinaId){
-  if(!e||!oficinaId||oficinaId==='secretaria'||oficinaId==='guaviare')return;
+  if(!e||!oficinaId||oficinaId==='guaviare')return;
   if(!Array.isArray(e.tasks))e.tasks=[];
   const {plazoInicio,vence,plazoDias}=pqrsPlazoTaskMeta(e);
   const prior=!!e._pqrs_prioritaria;
@@ -13446,6 +13458,13 @@ function notasInternasAutor(){
     const enc=typeof getEncargadoDepto==='function'?getEncargadoDepto(deptoActivo):'';
     return String(responsableActivo||enc||'').trim();
   }
+  if(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()){
+    const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():deptoActivo;
+    const encO=typeof getEncargadoOficina==='function'?getEncargadoOficina(ofi):'';
+    return String(responsableActivo||encO||labelOficina(ofi)||ofi||'').trim();
+  }
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    return String(responsableActivo||'Director DS DEGUV').trim();
   return String(responsableActivo||'').trim();
 }
 function notasInternasStoreKey(autor,expId,taskId){
