@@ -3569,6 +3569,7 @@ body.sesion-activa .sst-nav-items .tab.tab-resp-reg-off,body.sesion-activa .tabs
 .rec-drive-nav-item:hover{background:color-mix(in srgb,var(--bl) 8%,transparent)}
 .rec-drive-nav-item.on{background:color-mix(in srgb,var(--bl) 14%,transparent);font-weight:600;color:var(--bl)}
 .rec-drive-nav-repo .rec-drive-nav-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-drive-nav-ico{flex-shrink:0;font-size:14px;line-height:1;letter-spacing:-2px}
 .rec-drive-main{min-width:0;padding:14px 16px;overflow:auto}
 .rec-enlaces-main{display:flex;flex-direction:column;gap:10px}
 .rec-upload-files{display:flex;flex-direction:column;gap:4px;max-height:120px;overflow:auto}

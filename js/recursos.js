@@ -116,20 +116,17 @@ function renderRecursosPanel() {
   h += '<button type="button" class="rec-drive-nav-item' + (nav === 'biblioteca' ? ' on' : '') + '" onclick="event.preventDefault();setRecursosNav(\'biblioteca\')"><span aria-hidden="true">📁</span><span>Mis carpetas</span></button>';
   h += '<button type="button" class="rec-drive-nav-item' + (nav === 'enlaces' ? ' on' : '') + '" onclick="event.preventDefault();setRecursosNav(\'enlaces\')"><span aria-hidden="true">🔗</span><span>Enlaces</span></button>';
   h += '</nav>';
-  if (nav === 'biblioteca' && bibOk) {
+  if (bibOk) {
     const repos = reposBibliotecaVisibles();
     if (repos.length) {
       h += '<div class="rec-drive-nav-sec">Carpetas</div>';
       h += '<div class="rec-drive-repo-nav">';
       repos.forEach(function(r) {
-        const on = window._recursosRepoSel === r.id;
-        const esCompartida = typeof recursosItemCompartidoVisible === 'function' &&
-          recursosItemCompartidoVisible(r) &&
-          typeof recursosItemVisiblePorScope === 'function' &&
-          !recursosItemVisiblePorScope(r);
+        const on = nav === 'biblioteca' && window._recursosRepoSel === r.id;
+        const esCompartida = recursosRepoEsCompartidaVista(r);
         const ico = esCompartida ? '📁👥' : '📁';
         h += '<button type="button" class="rec-drive-nav-item rec-drive-nav-repo' + (on ? ' on' : '') + (esCompartida ? ' shared' : '') + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')" title="' + escAttr((esCompartida ? 'Compartida: ' : '') + (r.titulo || '')) + '">';
-        h += '<span aria-hidden="true">' + ico + '</span><span class="rec-drive-nav-lbl">' + escAttr(r.titulo) + '</span></button>';
+        h += '<span class="rec-drive-nav-ico" aria-hidden="true">' + ico + '</span><span class="rec-drive-nav-lbl">' + escAttr(r.titulo) + '</span></button>';
       });
       h += '</div>';
     }
@@ -183,6 +180,17 @@ function reposBibliotecaVisibles() {
   return normalizeBibliotecaReposList(bibliotecaRepos).filter(function(r) {
     return recursosItemVisibleParaSesion(r);
   });
+}
+
+/** Carpeta compartida (tiene destinatarios o solo se ve por compartido). */
+function recursosRepoEsCompartidaVista(r) {
+  if (!r) return false;
+  if (Array.isArray(r.compartidoCon) && r.compartidoCon.length > 0) return true;
+  if (typeof recursosItemCompartidoVisible === 'function' && recursosItemCompartidoVisible(r) &&
+      typeof recursosItemVisiblePorScope === 'function' && !recursosItemVisiblePorScope(r)) {
+    return true;
+  }
+  return false;
 }
 
 function archivosBibliotecaCompartidosVisibles() {
@@ -341,11 +349,13 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
       const nv = (r.vinculados || []).length;
       const tone = idx % 3;
       h += '<button type="button" class="rec-repo-card tone-' + tone + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')">';
-      h += '<div class="rec-repo-card-top"><span class="rec-repo-card-ico" aria-hidden="true">📁</span>';
+      h += '<div class="rec-repo-card-top"><span class="rec-repo-card-ico" aria-hidden="true">' + (recursosRepoEsCompartidaVista(r) ? '📁👥' : '📁') + '</span>';
       h += '<span class="rec-repo-card-go" aria-hidden="true">→</span></div>';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
       if (recursosItemCompartidoVisible(r) && !recursosItemVisiblePorScope(r)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
-      if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
+      if (compLbl && typeof puedeGestionarBibliotecaRepo === 'function' && puedeGestionarBibliotecaRepo(r)) {
+        h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
+      }
       if (r.tematica) h += '<span class="rec-tag">' + escAttr(r.tematica) + '</span>';
       if (nv) h += '<span class="rec-tag rec-tag-vinc" title="Casos asociados">' + nv + ' asociado' + (nv === 1 ? '' : 's') + '</span>';
       h += '</div>';
@@ -589,7 +599,7 @@ function renderRecursosRepoDetalle(repoId) {
   } else if (r.descripcion) {
     h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
   }
-  if (compLbl && !sharedEntry) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
+  if (compLbl && !sharedEntry && canManage) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
   h += '<div class="rec-exp-shell">';
   h += '<div class="cft" style="margin:8px 0 6px">Explorador de archivos</div>';
   h += '<div id="rec-repo-files"><div class="rec-empty">Cargando archivos…</div></div>';
