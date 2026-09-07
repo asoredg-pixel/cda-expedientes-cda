@@ -2,7 +2,7 @@
 // recursos.js — Enlaces externos + Biblioteca (repositorio Drive por oficina)
 // =============================================================================
 
-window._recursosSubTab = 'enlaces';
+window._recursosSubTab = 'biblioteca'; // compat: ya no hay subtabs; se muestran ambas columnas
 window._recursosRepoSel = null;
 window._recursosDrivePage = null;
 
@@ -69,9 +69,10 @@ function recursosInitPanel() {
   });
 }
 
+/** Compat: las subtabs se eliminaron; ambas columnas se muestran juntas. */
 function setRecursosSubTab(tab) {
   window._recursosSubTab = tab === 'biblioteca' ? 'biblioteca' : 'enlaces';
-  window._recursosRepoSel = null;
+  if (tab === 'enlaces') window._recursosRepoSel = null;
   renderRecursosPanel();
 }
 
@@ -132,26 +133,26 @@ function recursosContextoLabel() {
 function renderRecursosPanel() {
   const root = document.getElementById('recursos-panel-root');
   if (!root) return;
-  const sub = window._recursosSubTab;
   const depto = getRecursosDeptoContext();
   const bibOk = bibliotecaDriveDisponible(depto);
   const ofiSel = getBibliotecaOficinaSesion();
   const ctxLbl = recursosContextoLabel();
+  const repoOpen = !!window._recursosRepoSel;
 
   let h = '<div class="rec-wrap">';
   h += '<div class="rec-hdr"><div><h2 class="rec-title">📚 Recursos</h2>';
-  h += '<p class="rec-sub">Enlaces externos y biblioteca documental · <strong>' + escAttr(ctxLbl) + '</strong>.</p></div></div>';
+  h += '<p class="rec-sub">Biblioteca documental y enlaces externos · <strong>' + escAttr(ctxLbl) + '</strong>.</p></div></div>';
 
-  h += '<div class="rec-subtabs">';
-  h += '<button type="button" class="rec-subtab' + (sub === 'enlaces' ? ' on' : '') + '" onclick="setRecursosSubTab(\'enlaces\')"><span class="rec-subtab-ico" aria-hidden="true">🔗</span><span>Enlaces</span></button>';
-  h += '<button type="button" class="rec-subtab' + (sub === 'biblioteca' ? ' on' : '') + '" onclick="setRecursosSubTab(\'biblioteca\')"><span class="rec-subtab-ico" aria-hidden="true">📁</span><span>Biblioteca</span></button>';
-  h += '</div>';
-
-  if (sub === 'enlaces') {
+  h += '<div class="rec-split' + (repoOpen ? ' rec-split-repo-open' : '') + '">';
+  h += '<section class="rec-col-bib" aria-label="Biblioteca">';
+  h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
+  h += '</section>';
+  if (!repoOpen) {
+    h += '<aside class="rec-col-enlaces" aria-label="Enlaces externos">';
     h += renderRecursosEnlacesPanel(depto);
-  } else {
-    h += renderRecursosBibliotecaPanel(depto, bibOk, ofiSel);
+    h += '</aside>';
   }
+  h += '</div>';
 
   h += '</div>';
   root.innerHTML = h;
@@ -173,14 +174,19 @@ function renderRecursosEnlacesPanel(depto) {
 
   const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
 
-  let h = '<div class="card rec-card">';
-  h += '<div class="rec-toolbar">';
-  h += '<input type="search" id="rec-enlace-q" class="rec-inp" placeholder="Buscar…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;renderRecursosPanel()">';
-  h += '<input type="text" id="rec-enlace-area" class="rec-inp" placeholder="Área" value="' + escAttr(window._recEnlaceArea || '') + '" oninput="window._recEnlaceArea=this.value;renderRecursosPanel()">';
-  h += '<input type="text" id="rec-enlace-tem" class="rec-inp" placeholder="Temática" value="' + escAttr(window._recEnlaceTem || '') + '" oninput="window._recEnlaceTem=this.value;renderRecursosPanel()">';
+  let h = '<div class="rec-side-panel">';
+  h += '<div class="rec-side-hdr">';
+  h += '<div class="rec-side-title"><span class="rec-side-ico" aria-hidden="true">🔗</span><span>Enlaces</span>';
+  h += '<span class="rec-side-count">' + filtrada.length + '</span></div>';
   if (puedeCrear) {
-    h += '<button type="button" class="btn bsm bp" onclick="recursosMostrarFormEnlace()">+ Enlace</button>';
+    h += '<button type="button" class="rec-side-add" onclick="recursosMostrarFormEnlace()" title="Nuevo enlace">+</button>';
   }
+  h += '</div>';
+
+  h += '<div class="rec-side-filters">';
+  h += '<input type="search" id="rec-enlace-q" class="rec-inp rec-inp-side" placeholder="Buscar…" value="' + escAttr(window._recEnlaceQ || '') + '" oninput="window._recEnlaceQ=this.value;renderRecursosPanel()">';
+  h += '<input type="text" id="rec-enlace-area" class="rec-inp rec-inp-side" placeholder="Área" value="' + escAttr(window._recEnlaceArea || '') + '" oninput="window._recEnlaceArea=this.value;renderRecursosPanel()">';
+  h += '<input type="text" id="rec-enlace-tem" class="rec-inp rec-inp-side" placeholder="Temática" value="' + escAttr(window._recEnlaceTem || '') + '" oninput="window._recEnlaceTem=this.value;renderRecursosPanel()">';
   h += '</div>';
 
   if (window._recursosEnlaceForm) {
@@ -188,15 +194,15 @@ function renderRecursosEnlacesPanel(depto) {
   }
 
   if (!filtrada.length) {
-    h += '<div class="rec-empty">No hay enlaces para este contexto.</div>';
+    h += '<div class="rec-empty rec-empty-side">No hay enlaces para este contexto.</div>';
   } else {
-    h += '<div class="rec-enlace-grid">';
+    h += '<div class="rec-enlace-list">';
     filtrada.forEach(function(l) {
       const canEdit = puedeEditarRecursosEnlaces(l.scope, l.scopeId);
       const canDel = puedeEliminarRecursosItem(l);
       const canShare = puedeCompartirRecursosItem(l);
       const compLbl = labelRecursosCompartidoCon(l.compartidoCon);
-      h += '<div class="rec-enlace-item">';
+      h += '<article class="rec-enlace-card">';
       h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelRecursosScopeContexto(l.scope, l.scopeId)) + '</span>';
       if (recursosItemCompartidoVisible(l) && !recursosItemVisiblePorScope(l)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
       if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
@@ -216,7 +222,7 @@ function renderRecursosEnlacesPanel(depto) {
       if (canDel) {
         h += '<button type="button" class="btn bsm bd2" onclick="eliminarRecursosEnlace(\'' + escAttr(l.id) + '\')">Eliminar</button>';
       }
-      h += '</div></div>';
+      h += '</div></article>';
     });
     h += '</div>';
   }
@@ -243,60 +249,68 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
     return h;
   }
 
-  h += '<div class="rec-toolbar" style="margin-bottom:12px">';
-  if (getRecursosScopesCreablesSesion().length > 0) {
-    h += '<button type="button" class="btn bsm bp" onclick="recursosMostrarFormRepo()">+ Repositorio</button>';
-  }
-  if (!recursosDriveConectado()) {
-    h += '<span class="rec-drive-hint" style="font-size:12px;color:var(--tx2)">⚠️ Conecte correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para crear carpetas y subir archivos.</span>';
-  } else {
-    h += '<span class="rec-drive-hint" style="font-size:12px;color:var(--tx3)">Abra un repositorio para explorar carpetas y documentos.</span>';
-  }
-  h += '</div>';
-
-  if (window._recursosRepoForm && !window._recursosRepoSel) {
-    h += renderRecursosRepoForm(window._recursosRepoForm);
-  }
-
   if (window._recursosRepoSel) {
     h += renderRecursosRepoDetalle(window._recursosRepoSel);
     return h;
   }
 
+  const puedeCrear = getRecursosScopesCreablesSesion().length > 0;
+  h += '<div class="rec-bib-panel">';
+  h += '<div class="rec-bib-hdr">';
+  h += '<div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📁 Biblioteca</span>';
+  h += '<p class="rec-bib-lead">Temas y carpetas documentales de su contexto.</p></div>';
+  if (puedeCrear) {
+    h += '<button type="button" class="rec-bib-compose" onclick="recursosMostrarFormRepo()"><span class="rec-bib-compose-ico" aria-hidden="true">+</span><span>Nuevo repositorio</span></button>';
+  }
+  h += '</div>';
+
+  if (!recursosDriveConectado()) {
+    h += '<div class="rec-info-banner warn rec-bib-drive-hint">Conecte correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para crear carpetas y subir archivos.</div>';
+  }
+
+  if (window._recursosRepoForm && !window._recursosRepoSel) {
+    h += renderRecursosRepoForm(window._recursosRepoForm);
+  }
+
   const repos = reposBibliotecaVisibles();
-  h += '<div class="card rec-card">';
   if (!repos.length) {
-    h += '<div class="rec-empty">Sin repositorios para su contexto (<strong>' + escAttr(recursosContextoLabel()) + '</strong>).</div>';
+    h += '<div class="rec-empty rec-bib-empty">Sin repositorios para su contexto (<strong>' + escAttr(recursosContextoLabel()) + '</strong>).</div>';
   } else {
-    h += '<div class="rec-repo-list">';
-    repos.forEach(function(r) {
+    h += '<div class="rec-repo-grid">';
+    repos.forEach(function(r, idx) {
       const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
-      h += '<div class="rec-repo-row" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')">';
-      h += '<div><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
+      const nv = (r.vinculados || []).length;
+      const tone = idx % 3;
+      h += '<button type="button" class="rec-repo-card tone-' + tone + '" onclick="abrirRecursosRepo(\'' + escAttr(r.id) + '\')">';
+      h += '<div class="rec-repo-card-top"><span class="rec-repo-card-ico" aria-hidden="true">📁</span>';
+      h += '<span class="rec-repo-card-go" aria-hidden="true">→</span></div>';
+      h += '<div class="rec-enlace-meta"><span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span>';
       if (recursosItemCompartidoVisible(r) && !recursosItemVisiblePorScope(r)) h += '<span class="rec-tag rec-tag-share">Compartido</span>';
       if (compLbl) h += '<span class="rec-tag rec-tag-share" title="Compartido con">↗ ' + escAttr(compLbl) + '</span>';
-      h += ' <strong>' + escAttr(r.titulo) + '</strong>';
-      if (r.tematica) h += ' <span class="rec-tag">' + escAttr(r.tematica) + '</span>';
-      const nv = (r.vinculados || []).length;
-      if (nv) h += ' <span class="rec-tag rec-tag-vinc" title="Casos asociados">' + nv + ' asociado' + (nv === 1 ? '' : 's') + '</span>';
-      if (r.descripcion) h += '<div style="font-size:12px;color:var(--tx2);margin-top:4px">' + escAttr(r.descripcion) + '</div>';
+      if (r.tematica) h += '<span class="rec-tag">' + escAttr(r.tematica) + '</span>';
+      if (nv) h += '<span class="rec-tag rec-tag-vinc" title="Casos asociados">' + nv + ' asociado' + (nv === 1 ? '' : 's') + '</span>';
       h += '</div>';
-      h += '<span style="font-size:12px;color:var(--tx3)">Ver →</span></div>';
+      h += '<div class="rec-repo-card-title">' + escAttr(r.titulo) + '</div>';
+      if (r.descripcion) h += '<div class="rec-repo-card-desc">' + escAttr(r.descripcion) + '</div>';
+      h += '</button>';
     });
     h += '</div>';
   }
-  h += '</div>';
+
   const compArch = archivosBibliotecaCompartidosVisibles();
   if (compArch.length) {
-    h += '<div class="card rec-card" style="margin-top:12px"><div class="cft">Documentos compartidos con su oficina</div><div class="rec-files-list">';
+    h += '<div class="rec-shared-block">';
+    h += '<div class="rec-shared-hdr">Documentos compartidos con su oficina</div>';
+    h += '<div class="rec-files-list">';
     compArch.forEach(function(x) {
       const a = x.archivo;
       const link = a.driveLink || (a.fileId ? 'https://drive.google.com/file/d/' + a.fileId + '/view' : '#');
-      h += '<div class="rec-file-row"><span>📄 ' + escAttr(a.fileName || 'Documento') + ' <span style="color:var(--tx3);font-size:11px">· ' + escAttr(x.repo.titulo) + '</span></span>';
+      h += '<div class="rec-file-row"><span>📄 ' + escAttr(a.fileName || 'Documento') + ' <span class="rec-file-repo">· ' + escAttr(x.repo.titulo) + '</span></span>';
       h += '<a class="btn bsm" href="' + escAttr(link) + '" target="_blank" rel="noopener">Abrir</a></div>';
     });
     h += '</div></div>';
   }
+  h += '</div>';
   return h;
 }
 
@@ -370,15 +384,17 @@ function renderRecursosRepoDetalle(repoId) {
   const canDel = puedeEliminarRecursosItem(r);
   const canShare = puedeCompartirRecursosItem(r);
   const compLbl = labelRecursosCompartidoCon(r.compartidoCon);
-  let h = '<div class="card rec-card">';
-  h += '<div class="rec-repo-hdr"><button type="button" class="btn bsm" onclick="cerrarRecursosRepo()">← Volver</button>';
-  h += '<div><strong>' + escAttr(r.titulo) + '</strong> · ' + escAttr(labelScopeRepo(r)) + '</div>';
+  let h = '<div class="rec-bib-panel rec-bib-detalle">';
+  h += '<div class="rec-repo-hdr">';
+  h += '<button type="button" class="btn bsm" onclick="cerrarRecursosRepo()">← Volver</button>';
+  h += '<div class="rec-repo-hdr-main"><strong>' + escAttr(r.titulo) + '</strong>';
+  h += '<span class="rec-badge">' + escAttr(labelScopeRepo(r)) + '</span></div>';
   if (r.driveFolderLink) h += '<a class="btn bsm" href="' + escAttr(r.driveFolderLink) + '" target="_blank" rel="noopener">Drive ↗</a>';
   h += '</div>';
-  if (r.descripcion) h += '<p style="font-size:13px;color:var(--tx2);margin:8px 0">' + escAttr(r.descripcion) + '</p>';
-  if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 8px">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
+  if (r.descripcion) h += '<p class="rec-repo-card-desc" style="-webkit-line-clamp:unset;overflow:visible">' + escAttr(r.descripcion) + '</p>';
+  if (compLbl) h += '<p style="font-size:12px;color:var(--tx2);margin:0">Compartido con: <strong>' + escAttr(compLbl) + '</strong></p>';
   if (canEdit || canShare || canDel) {
-    h += '<div class="rec-toolbar" style="margin:10px 0">';
+    h += '<div class="rec-toolbar" style="margin:0">';
     if (canEdit) {
       h += '<button type="button" class="btn bsm" onclick="recursosMostrarFormRepo(\'' + escAttr(r.id) + '\')">Editar datos</button>';
     }
