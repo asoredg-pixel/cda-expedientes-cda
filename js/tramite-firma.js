@@ -1300,7 +1300,10 @@ function getTareasTramiteFirmaDirectorSeguimiento(){
   return out;
 }
 window.getTareasTramiteFirmaDirectorSeguimiento=getTareasTramiteFirmaDirectorSeguimiento;
-/** Documentos/comunicados de oficina ya notificados o cerrados → paleta Respondidas. */
+/** Documentos/comunicados de oficina ya notificados o cerrados → paleta Respondidas.
+ *  Director (DS): no incluye docs de otras oficinas ni los que pasó a firma (van a «Firmados»).
+ *  Oficinas: solo los de su oficina (incl. oficios ya firmados/notificados).
+ */
 function getOficinaDocRespondidasRows(oficinaId,esDir){
   const ofi=String(oficinaId||'').trim();
   const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida';
@@ -1317,7 +1320,16 @@ function getOficinaDocRespondidasRows(oficinaId,esDir){
     if(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))return;
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return;
     const ofiT=typeof tramiteFirmaOficinaId==='function'?tramiteFirmaOficinaId(t):String(t.oficina||'');
-    if(!esDir&&ofi&&ofiT!==ofi)return;
+    const pasoFirmaDir=typeof taskPasoPorFirmaDirector==='function'&&taskPasoPorFirmaDirector(t);
+    if(esDir){
+      // Director: Respondidas = solo lo que él emite como oficina (ds_deguv), sin firma de Director.
+      // Oficios firmados de otras oficinas → paleta «Firmados», no aquí.
+      if(pasoFirmaDir)return;
+      if(ofiT&&ofiT!=='ds_deguv')return;
+      if(ofi&&ofi!=='ds_deguv'&&ofiT!==ofi)return;
+    }else{
+      if(ofi&&ofiT!==ofi)return;
+    }
     const wf=t.firmaWf&&typeof t.firmaWf==='object'?t.firmaWf:{};
     const tipoWf=String(wf.tipo||'').trim();
     const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';

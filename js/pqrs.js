@@ -1216,6 +1216,7 @@ function getPqrsOficinaList(oficinaId,filtro){
     list=list.filter(e=>pqrsEstaCerrada(e));
     if(typeof getOficinaDocRespondidasRows==='function'){
       const esDirC=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+      // Director: no mezclar Documento/comunicado firmados de otras oficinas (van a «Firmados»)
       const docsCerr=getOficinaDocRespondidasRows(oficinaId||getPqrsOficinaActiva(),esDirC)||[];
       docsCerr.forEach(function(r){list.push(r);});
     }
