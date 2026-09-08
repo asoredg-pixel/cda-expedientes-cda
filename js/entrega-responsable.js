@@ -281,10 +281,14 @@ function htmlEntregaRespPqrsAltaBox(){
       '</div>'+
       '<div id="er-pqrs-pj-block" style="display:none">'+
         '<div class="fg" style="margin-bottom:8px">'+
+          '<div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Entidad / empresa</div>'+
           '<div class="fld"><label>Razón social / entidad <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-empresa" placeholder="Buscar por razón social…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-pj','empresa'):'')+'></div>'+
           '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('er-pqrs-pj-nit',{sugTarget:'er-pqrs-pj',placeholder:'Buscar por NIT…',style:'width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)'}):'<input type="text" id="er-pqrs-pj-nit" placeholder="Buscar por NIT…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">')+'</div>'+
           '<div class="fld"><label>Correo entidad</label><input type="email" id="er-pqrs-pj-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Teléfono entidad</label><input type="tel" id="er-pqrs-pj-telefono" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '</div>'+
+        '<div class="fg" style="margin-bottom:8px">'+
+          '<div class="slbl" style="grid-column:1/-1;margin:0 0 4px">Quien radica</div>'+
           '<div class="fld"><label>Quien radica (nombre) <span style="color:var(--rd)">*</span></label><input type="text" id="er-pqrs-pj-ofi-nombre" placeholder="Buscar por nombre…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-ofi','nombre'):'')+'></div>'+
           '<div class="fld"><label>Identificación</label><input type="text" id="er-pqrs-pj-ofi-identificacion" placeholder="Buscar por identificación…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"'+(typeof personSugAttrs==='function'?personSugAttrs('er-pqrs-ofi','identificacion'):'')+'></div>'+
           '<div class="fld"><label>Correo</label><input type="email" id="er-pqrs-pj-ofi-correo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
