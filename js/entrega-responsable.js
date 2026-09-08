@@ -2452,7 +2452,15 @@ function crearStubPqrsEntregaResp(datos,opts){
   const fechaSol=String(datos.fechaSol||hoyStr).trim()||hoyStr;
   const fecha=hoyStr;
   if(!expId){notif('Indique el número de PQRSD','err');return null;}
-  if(typeof getExpById==='function'&&getExpById(expId)){notif('Ya existe un registro con ese número — use la búsqueda de existente','err');return null;}
+  if(typeof getExpById==='function'&&getExpById(expId)){
+    // Permitir reintento tras alta previa incompleta (crear + atender)
+    if(opts.reuseIfExists){
+      const ex=getExpById(expId);
+      if(ex&&(typeof esPqrsSecretaria!=='function'||esPqrsSecretaria(ex)))return ex;
+    }
+    notif('Ya existe un registro con ese número — use la búsqueda de existente','err');
+    return null;
+  }
   if(typeof expNumeroDuplicado==='function'&&expNumeroDuplicado(expId)){
     notif('Número de PQRSD duplicado','err');
     return null;

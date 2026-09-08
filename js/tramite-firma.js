@@ -2796,42 +2796,214 @@ function submitEntregaOficinaFirmaOrPqrs(){
 }
 async function submitEntregaOficinaPqrsMigracion(){
   if(!puedeEntregarOficinaParaFirma()){notif('No autorizado','err');return;}
-  const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
-  const crear=!!window._ofiDocPqrsCrear;
-  let e=null;
-  let expId=String(window._ofiDocPqrsExpId||(document.getElementById('ofi-doc-pqrs-exp')||{}).value||'').trim();
-  if(crear){
-    if(typeof collectEntregaRespPqrsAlta!=='function'||typeof validateEntregaRespPqrsAlta!=='function'||typeof crearStubPqrsEntregaResp!=='function'){
-      notif('No se pudo cargar el formulario de alta PQRSD','err');return;
-    }
-    const datos=collectEntregaRespPqrsAlta();
-    const err=validateEntregaRespPqrsAlta(datos);
-    if(err){notif(err,'err');return;}
-    if(!datos.oficina)datos.oficina=ofi;
-    e=crearStubPqrsEntregaResp(datos,{origen:'oficina',skipRevisionAlta:true,por:typeof labelOficina==='function'?labelOficina(ofi):ofi});
-    if(!e)return;
-    expId=e._exp;
-  }else{
-    if(!expId){notif('Busque y seleccione una PQRSD, o créela','err');return;}
-    e=typeof getExpById==='function'?getExpById(expId):null;
-    if(!e){notif('PQRSD no encontrada','err');return;}
-    if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(e)){notif('El registro seleccionado no es una PQRSD','err');return;}
-  }
-  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){notif('La PQRSD ya está atendida','err');return;}
+  const btn=document.getElementById('entrega-ofi-firma-btn');
+  const btnLbl=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  const restoreBtn=function(){
+    if(!btn||!document.getElementById('entrega-ofi-firma-btn'))return;
+    btn.disabled=false;
+    btn.textContent=btnLbl||'📤 Crear y atender PQRSD';
+  };
   try{
-    if(ofi==='guaviare'&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
-    else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
-  }catch(err){}
-  let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
-  if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
-  if(!t||!t.id){notif('No se pudo preparar la actividad de atención','err');return;}
-  window._ofiDocPqrsExpId=expId;
-  window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{
-    expId:expId,taskId:t.id,entregaDirectaPqrs:true,mode:'enviar',actLibre:false
-  });
-  if(typeof submitEnviarSoporteVerificacion==='function')
-    submitEnviarSoporteVerificacion(expId,t.id);
-  else notif('No se pudo registrar la entrega','err');
+    const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
+    let crear=!!window._ofiDocPqrsCrear;
+    let e=null;
+    let expId=String(window._ofiDocPqrsExpId||(document.getElementById('ofi-doc-pqrs-exp')||{}).value||'').trim();
+
+    if(crear){
+      if(typeof collectEntregaRespPqrsAlta!=='function'||typeof validateEntregaRespPqrsAlta!=='function'||typeof crearStubPqrsEntregaResp!=='function'){
+        notif('No se pudo cargar el formulario de alta PQRSD','err');restoreBtn();return;
+      }
+      const datos=collectEntregaRespPqrsAlta();
+      const err=validateEntregaRespPqrsAlta(datos);
+      if(err){notif(err,'err');restoreBtn();return;}
+      if(!datos.oficina)datos.oficina=ofi;
+      expId=String(datos.expId||expId).trim();
+      // Si ya se creó en un intento anterior, reutilizar (evita «Ya existe…» al 2.º clic)
+      const ya=typeof getExpById==='function'?getExpById(expId):null;
+      if(ya&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(ya)){
+        e=ya;
+        crear=false;
+        window._ofiDocPqrsCrear=false;
+      }else{
+        e=crearStubPqrsEntregaResp(datos,{
+          origen:'oficina',
+          skipRevisionAlta:true,
+          por:typeof labelOficina==='function'?labelOficina(ofi):ofi
+        });
+        if(!e){restoreBtn();return;}
+        expId=e._exp;
+        window._ofiDocPqrsCrear=false;
+        window._ofiDocPqrsExpId=expId;
+      }
+    }else{
+      if(!expId){notif('Busque y seleccione una PQRSD, o créela','err');restoreBtn();return;}
+      e=typeof getExpById==='function'?getExpById(expId):null;
+      if(!e){notif('PQRSD no encontrada','err');restoreBtn();return;}
+      if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(e)){notif('El registro seleccionado no es una PQRSD','err');restoreBtn();return;}
+    }
+
+    if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){
+      notif('La PQRSD ya está atendida','err');restoreBtn();return;
+    }
+
+    // Validar respuesta ANTES de dejar la PQRSD a medias
+    const pq=typeof collectPqrsEntregaDatos==='function'?collectPqrsEntregaDatos(expId):null;
+    if(!pq){restoreBtn();return;}
+
+    try{
+      if((ofi==='guaviare'||e._pqrs_oficina==='guaviare')&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+      else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
+      else if(e._pqrs_oficina&&e._pqrs_oficina!=='guaviare'&&typeof ensureTareaPqrsOficina==='function')
+        ensureTareaPqrsOficina(e,e._pqrs_oficina);
+    }catch(errT){console.warn('ensure tarea pqrs migracion:',errT);}
+
+    let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+    if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+    if(!t||!t.id){
+      // Crear tarea mínima si ensure falló
+      if(!Array.isArray(e.tasks))e.tasks=[];
+      t={
+        id:typeof genTaskId==='function'?genTaskId():('tk_'+Date.now()),
+        actividad:typeof pqrsActividadNombreDefault==='function'?pqrsActividadNombreDefault():'Oficio de respuesta',
+        desc:'Oficio de respuesta',
+        responsable:typeof labelOficina==='function'?labelOficina(ofi||e._pqrs_oficina):'',
+        responsables:[],
+        estado:'En ejecución',
+        comentarios:[],historial:[],soportes:[],notasDoc:[]
+      };
+      if(typeof normalizeTask==='function')t=normalizeTask(t);
+      e.tasks.push(t);
+    }
+    if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+
+    const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
+    const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
+    const allUpload=[].concat(adj.files||[],adj.anexos||[]);
+    const preUploaded=adj.preUploaded||[];
+    let driveArchivos=preUploaded.slice();
+
+    if(allUpload.length){
+      if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+        const okG=await sstSolicitarGmailParaAdjuntar();
+        if(!okG){
+          notif('Conecte Gmail/Drive para subir los documentos y complete el envío','err');
+          restoreBtn();
+          return;
+        }
+      }
+      if(typeof sstCargaShow==='function'){
+        sstCargaShow({
+          title:'Crear y atender PQRSD',
+          message:'Subiendo a carpeta PQRSD institucional…',
+          pct:10,
+          sub:allUpload[0]&&allUpload[0].nombre||expId
+        });
+      }
+      try{
+        let anexoSeq=0;
+        for(let i=0;i<allUpload.length;i++){
+          const f=allUpload[i];
+          let pref=f.nombre;
+          if(f.esAnexo){
+            anexoSeq++;
+            pref='anexo-'+anexoSeq+'-'+(f.nombre||'doc');
+          }
+          if(typeof sstCargaProgress==='function')
+            sstCargaProgress(Math.round(10+((i/allUpload.length)*80)),'Subiendo «'+(f.nombre||'archivo')+'»…');
+          if(typeof driveUploadPqrsExpediente!=='function')
+            throw new Error('Subida Drive no disponible');
+          const up=await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
+            label:f.esAnexo?('Anexo '+anexoSeq):'Respuesta',
+            uploadTarget:'respuesta'
+          });
+          if(up){
+            if(!up.driveFileId&&up.fileId)up.driveFileId=up.fileId;
+            up.esAnexo=!!f.esAnexo;
+            if(f.esAnexo){
+              up.tipo='anexo_respuesta';
+              up.es_anexo=true;
+              up.anexo_n=anexoSeq;
+              up.nombre='Anexo '+anexoSeq;
+            }else{
+              up.nombre=up.nombre||(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta');
+            }
+            up.driveEstado='cerrado';
+            driveArchivos.push(up);
+          }
+        }
+        if(typeof sstCargaProgress==='function')sstCargaProgress(95,'Registrando respuesta…');
+      }catch(errUp){
+        console.warn('submitEntregaOficinaPqrsMigracion upload:',errUp);
+        if(typeof sstCargaHide==='function')sstCargaHide();
+        if(typeof alertErrorDriveAdjunto==='function')alertErrorDriveAdjunto(errUp);
+        else notif('No se pudo subir el archivo: '+String(errUp.message||errUp).slice(0,90),'err');
+        restoreBtn();
+        return;
+      }
+    }
+
+    const adjDocumentos=(adj.links||[]).map(function(lnk){return{nombre:'Link Drive',driveLink:lnk,tipo:'link'};});
+    driveArchivos.forEach(function(da){
+      if(!da||!da.driveLink)return;
+      if(adjDocumentos.find(function(x){return x.driveLink===da.driveLink;}))return;
+      const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+      adjDocumentos.push({
+        nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta'),
+        driveLink:da.driveLink,
+        previewLink:da.previewLink||da.driveLink||'',
+        fileId:da.fileId||da.driveFileId||'',
+        tipo:esAnexo?'anexo_respuesta':(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'oficio_firmado':'drive'),
+        es_anexo:esAnexo,
+        anexo_n:esAnexo?(da.anexo_n||null):null,
+        driveFilename:da.driveFilename||da.nombre||'',
+        driveEstado:'cerrado'
+      });
+    });
+
+    if(typeof aplicarPqrsEntregaDirecta==='function')aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,t.id,cmt);
+    try{
+      if(typeof mutateTask==='function'){
+        mutateTask(expId,t.id,function(tk){
+          if(typeof normalizeTask==='function')normalizeTask(tk);
+          const hoyStr=typeof hoy==='function'?hoy():'';
+          tk.fechaReportada=hoyStr;
+          tk.fechaAtendida=hoyStr;
+          tk.estado='Atendida';
+          tk.verificadoPor=(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')+' · crear y atender oficina';
+          if(!Array.isArray(tk.historial))tk.historial=[];
+          tk.historial.push({tipo:'entrega_directa_pqrs',fecha:hoyStr,ts:Date.now(),por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',nota:cmt||('Crear y atender · '+pq.tipo)});
+        });
+      }else{
+        t.fechaAtendida=typeof hoy==='function'?hoy():'';
+        t.estado='Atendida';
+      }
+    }catch(errM){console.warn('migracion task:',errM);}
+
+    if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+    if(typeof sstCargaDone==='function')sstCargaDone({holdMs:200});
+    else if(typeof sstCargaHide==='function')sstCargaHide();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+    if(typeof renderActividades==='function')renderActividades();
+
+    const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
+    const TIPO_INFO=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa';
+    let msgOk='✅ PQRSD '+expId+' atendida';
+    if(pq.tipo===TIPO_INFO)msgOk='ℹ️ PQRSD '+expId+' informativa cerrada';
+    else if(pq.tipo===TIPO_OFI){
+      msgOk=(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&!pqrsEsCanalCorreo(pq.canal))
+        ?('✅ Oficio notificado — PQRSD '+expId+' atendida')
+        :('✅ Oficio registrado — PQRSD '+expId+' atendida');
+    }
+    notif(msgOk,'ok');
+    if(typeof closeTaskModal==='function')closeTaskModal();
+  }catch(err){
+    console.warn('submitEntregaOficinaPqrsMigracion:',err);
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    notif('No se pudo completar: '+String(err.message||err).slice(0,120),'err');
+    restoreBtn();
+  }
 }
 window.ofiDocModoChange=ofiDocModoChange;
 window.ofiDocPqrsExpInput=ofiDocPqrsExpInput;
