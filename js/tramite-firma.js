@@ -3121,18 +3121,25 @@ async function submitEntregaOficinaPqrsMigracion(){
     }
 
     if(typeof aplicarPqrsEntregaDirecta==='function')aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,t.id,cmt);
-    // Forzar estado atendida (por si ensureTarea dejó «asignado»)
+    // Forzar estado atendida y documentos de cierre (oficio/anexos) visibles en consulta
     e._pqrs_estado_oficina='cerrado';
     e._estado='Atendido';
     if(typeof setPqrsWorkflow==='function'){
       const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada';
       const wfCur=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+      const docsWf=Array.isArray(wfCur.documentos)?wfCur.documentos:[];
+      const docsAdjClean=(adjDocumentos||[]).map(function(d){
+        return typeof _pqrsSanitizeDocParaWf==='function'?_pqrsSanitizeDocParaWf(d):d;
+      }).filter(function(d){return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url);});
+      const docsFinal=docsWf.length?docsWf:(docsAdjClean.length?docsAdjClean:[]);
       setPqrsWorkflow(e,{
         fase:faseCerrada,
         fecha_respuesta:pq.fechaResp||(typeof hoy==='function'?hoy():''),
-        documentos:Array.isArray(wfCur.documentos)?wfCur.documentos:(adjDocumentos||[])
+        documentos:docsFinal
       });
     }
+    if(typeof _pqrsAplicarCierrePqrs==='function')
+      _pqrsAplicarCierrePqrs(e,pq.fechaResp||(typeof hoy==='function'?hoy():''),'PQRSD cerrada — crear y atender oficina');
     if(typeof finalizarTareasPqrsAlCerrar==='function')
       finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — crear y atender oficina');
     // Persistir soportes de la tarea (incl. PDF de envío) tras el cierre

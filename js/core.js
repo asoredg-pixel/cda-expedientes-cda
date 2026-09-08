@@ -1960,22 +1960,35 @@ function pqrsEsEntregaDirectaCtx(e){
 /**
  * Aplica entrega directa de oficina/NCA (mensaje/informativa/oficio → atendida; no «Por notificar»).
  */
+function _pqrsSanitizeDocParaWf(a){
+  if(!a||typeof a!=='object')return a;
+  const o={};
+  Object.keys(a).forEach(function(k){
+    if(k==='localBlob'||k==='_localBlob'||k==='blob'||k==='file'||k==='data')return;
+    const v=a[k];
+    if(typeof Blob!=='undefined'&&v instanceof Blob)return;
+    if(typeof File!=='undefined'&&v instanceof File)return;
+    o[k]=v;
+  });
+  return o;
+}
 function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
   if(!e||!pq)return false;
   const por=responsableActivo||(typeof labelOficina==='function'?labelOficina(deptoActivo):'')||rolSesion||'';
   const docs=(adjDocumentos||[]).map(function(a,i){
-    const esAnexo=!!(a.es_anexo||a.esAnexo||a.tipo==='anexo_respuesta');
-    const esSoporte=a.tipo==='soporte_notificacion'||a.tipo==='soporte_respuesta'||a.notificado===true
-      ||/^soporte de env/i.test(String(a.nombre||a.label||''));
-    return Object.assign({},a,{
-      nombre:esAnexo?(a.nombre||('Anexo '+(a.anexo_n||(i+1))))
-        :(esSoporte?(a.nombre||'Soporte de envío (correo)')
-        :(a.nombre&&!/^Proyecci/i.test(a.nombre)?a.nombre:'Oficio firmado')),
-      tipo:esAnexo?'anexo_respuesta':(esSoporte?'soporte_notificacion':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(a.tipo||'drive'))),
-      driveEstado:esSoporte?'notificado':'cerrado',
-      notificado:esSoporte?true:!!a.notificado
+    const base=_pqrsSanitizeDocParaWf(a)||{};
+    const esAnexo=!!(base.es_anexo||base.esAnexo||base.tipo==='anexo_respuesta');
+    const esSoporte=base.tipo==='soporte_notificacion'||base.tipo==='soporte_respuesta'||base.notificado===true
+      ||/^soporte de env/i.test(String(base.nombre||base.label||''));
+    return Object.assign({},base,{
+      nombre:esAnexo?(base.nombre||('Anexo '+(base.anexo_n||(i+1))))
+        :(esSoporte?(base.nombre||'Soporte de envío (correo)')
+        :(base.nombre&&!/^Proyecci/i.test(base.nombre)?base.nombre:'Oficio firmado')),
+      tipo:esAnexo?'anexo_respuesta':(esSoporte?'soporte_notificacion':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(base.tipo||'drive'))),
+      driveEstado:esSoporte?'notificado':(base.driveEstado==='revision'?'cerrado':(base.driveEstado||'cerrado')),
+      notificado:esSoporte?true:!!base.notificado
     });
-  });
+  }).filter(function(d){return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url);});
   if(pq.tipo===PQRS_WF_TIPO.INFORMATIVA){
     e._pqrs_informativa=true;
     guardarPqrsRespuestaDatos(e,{
@@ -1987,6 +2000,7 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       oficio:'',fecha_respuesta:pq.fechaResp,documentos:docs,
       cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim()
     });
+    if(typeof _pqrsAplicarCierrePqrs==='function')_pqrsAplicarCierrePqrs(e,pq.fechaResp||hoy(),'PQRSD informativa cerrada');
     return true;
   }
   if(pq.tipo===PQRS_WF_TIPO.MENSAJE){
@@ -2001,13 +2015,13 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       email_to:pq.emailTo||'',email_cc:pq.emailCc||'',email_bcc:pq.emailBcc||'',email_subject:pq.emailSubject||'',
       cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim()
     });
+    if(typeof _pqrsAplicarCierrePqrs==='function')_pqrsAplicarCierrePqrs(e,pq.fechaResp||hoy(),'PQRSD cerrada — mensaje notificado');
     return true;
   }
   // Oficio firmado en entrega directa (NCA + oficinas): siempre atendida
-  // (correo notificado aquí, o ya notificado presencial/WhatsApp/aviso — no «Por notificar»).
   if(pq.tipo===PQRS_WF_TIPO.OFICIO){
     const docsCierre=docs.map(function(d){
-      return Object.assign({},d,{driveEstado:d.es_anexo||d.tipo==='anexo_respuesta'?'cerrado':'cerrado'});
+      return Object.assign({},d,{driveEstado:d.tipo==='soporte_notificacion'?'notificado':'cerrado'});
     });
     const canalCierre=pq.canal||PQRS_WF_CANAL.CORREO;
     const esOtroMedio=canalCierre&&!pqrsEsCanalCorreo(canalCierre);
@@ -2057,6 +2071,7 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       e._medio_notificacion=canalCierre;
     }
     e._pendiente_revision_alta=false;
+    if(typeof _pqrsAplicarCierrePqrs==='function')_pqrsAplicarCierrePqrs(e,pq.fechaResp||hoy(),'PQRSD cerrada — oficio notificado');
     return true;
   }
   return false;
@@ -2156,41 +2171,6 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
   });
   if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
-  // Tras el envio: PDF de soporte en Drive (no va adjunto al correo).
-  prog(98,'Registrando soporte de envío…');
-  let soporteReg={pdfBlob:null,up:null};
-  if(typeof registrarSoporteEnvioCorreoNotif==='function'){
-    try{
-      const sopP=registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
-        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
-        skipAttach:true
-      },[]);
-      soporteReg=await Promise.race([
-        sopP,
-        new Promise(function(resolve){
-          setTimeout(function(){resolve({pdfBlob:null,up:null,_timeout:true});},25000);
-        })
-      ]);
-      if(soporteReg&&soporteReg._timeout)console.warn('soporte envio: timeout Drive (correo ya enviado)');
-    }catch(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte:',errSop);}
-  }
-  if(soporteReg&&soporteReg.up&&(soporteReg.up.driveLink||soporteReg.up.fileId||soporteReg.up.driveFileId)&&Array.isArray(adjDocumentos)){
-    const up=soporteReg.up;
-    const link=up.driveLink||up.previewLink||'';
-    if(link&&!adjDocumentos.some(function(d){return d&&(d.driveLink===link||d.fileId===(up.fileId||up.driveFileId));})){
-      adjDocumentos.push({
-        nombre:'Soporte de envío (correo)',
-        driveLink:link,
-        previewLink:up.previewLink||link,
-        fileId:up.fileId||up.driveFileId||'',
-        tipo:'soporte_notificacion',
-        driveEstado:'notificado',
-        notificado:true,
-        canal:'correo',
-        mime:'application/pdf'
-      });
-    }
-  }
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
     registrarNotificacionCiudadanoPqrs(e,{
@@ -2202,7 +2182,48 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       histNota:(isMsg?'Mensaje':'Oficio firmado')+' notificado por correo ('+ofiLbl+') a '+destinos.join(', ')
     });
   }
-  return{sent:true,result:sent,soporte:soporteReg};
+  // Soporte PDF en segundo plano: no bloquear el cierre a Atendidas.
+  if(typeof registrarSoporteEnvioCorreoNotif==='function'){
+    prog(98,'Cerrando atención…');
+    Promise.resolve().then(function(){
+      return registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
+        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+        skipAttach:true
+      },[]);
+    }).then(function(soporteReg){
+      if(!soporteReg||!soporteReg.up)return;
+      const up=soporteReg.up;
+      const link=up.driveLink||up.previewLink||'';
+      if(!link)return;
+      if(Array.isArray(adjDocumentos)&&!adjDocumentos.some(function(d){return d&&(d.driveLink===link||d.fileId===(up.fileId||up.driveFileId));})){
+        adjDocumentos.push({
+          nombre:'Soporte de envío (correo)',driveLink:link,previewLink:up.previewLink||link,
+          fileId:up.fileId||up.driveFileId||'',tipo:'soporte_notificacion',
+          driveEstado:'notificado',notificado:true,canal:'correo',mime:'application/pdf'
+        });
+      }
+      try{
+        if(typeof getPqrsWorkflow==='function'&&typeof setPqrsWorkflow==='function'){
+          const wf=getPqrsWorkflow(e);
+          const docs=(wf.documentos||[]).slice();
+          if(!docs.some(function(d){return d&&(d.driveLink===link||d.fileId===(up.fileId||up.driveFileId));})){
+            docs.push({
+              nombre:'Soporte de envío (correo)',driveLink:link,previewLink:up.previewLink||link,
+              fileId:up.fileId||up.driveFileId||'',tipo:'soporte_notificacion',
+              driveEstado:'notificado',notificado:true,canal:'correo'
+            });
+            setPqrsWorkflow(e,{documentos:docs});
+          }
+        }
+        if(!Array.isArray(e._pqrs_respuesta_soportes))e._pqrs_respuesta_soportes=[];
+        if(!e._pqrs_respuesta_soportes.some(function(s){return s&&(s.url===link||s.preview===link);})){
+          e._pqrs_respuesta_soportes.push({label:'Soporte de envío (correo)',url:link,preview:up.previewLink||link,mime:'application/pdf'});
+        }
+        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      }catch(errMerge){console.warn('merge soporte envio:',errMerge);}
+    }).catch(function(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte bg:',errSop);});
+  }
+  return{sent:true,result:sent,soporte:null};
 }
 window.pqrsEntregaDirectaEnviarCorreoSiAplica=pqrsEntregaDirectaEnviarCorreoSiAplica;
 function puedeGestionarPqrsAsociacion(e){
@@ -9812,7 +9833,9 @@ function collectPqrsEntregaDatos(expId,eOpt){
     if(!validarNumeroOficioDisponible(oficioExt,expExcl))return null;
   }
   const adj=collectEnviarAdjuntos();
-  if(tipo===PQRS_WF_TIPO.OFICIO&&!(adj.files&&adj.files.length)&&!(adj.links&&adj.links.length)){
+  const tieneAdjOficio=(adj.files&&adj.files.length)||(adj.links&&adj.links.length)
+    ||(adj.preUploaded&&adj.preUploaded.length)||(adj.anexos&&adj.anexos.length);
+  if(tipo===PQRS_WF_TIPO.OFICIO&&!tieneAdjOficio){
     notif('Para oficio firmado debe adjuntar el documento del oficio','err');
     const err=document.getElementById('pqrs-entrega-adj-err');
     if(err){err.style.display='';err.textContent='Adjunte el PDF del oficio firmado.';}
@@ -22161,12 +22184,19 @@ async function submitCrearPqrsDesdeActLibre(){
     if(typeof setPqrsWorkflow==='function'){
       const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada';
       const wfCur=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+      const docsWf=Array.isArray(wfCur.documentos)?wfCur.documentos:[];
+      const docsAdjClean=(adjDocumentos||[]).map(function(d){
+        return typeof _pqrsSanitizeDocParaWf==='function'?_pqrsSanitizeDocParaWf(d):d;
+      }).filter(function(d){return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url);});
+      const docsFinal=docsWf.length?docsWf:(docsAdjClean.length?docsAdjClean:[]);
       setPqrsWorkflow(e,{
         fase:faseCerrada,
         fecha_respuesta:pq.fechaResp||(typeof hoy==='function'?hoy():''),
-        documentos:Array.isArray(wfCur.documentos)?wfCur.documentos:(adjDocumentos||[])
+        documentos:docsFinal
       });
     }
+    if(typeof _pqrsAplicarCierrePqrs==='function')
+      _pqrsAplicarCierrePqrs(e,pq.fechaResp||(typeof hoy==='function'?hoy():''),'PQRSD cerrada — crear y atender NCA');
     if(typeof finalizarTareasPqrsAlCerrar==='function')
       finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — crear y atender NCA');
 
@@ -25430,11 +25460,10 @@ function _pqrsDocEsDefinitivoCierre(d,opts){
   if(['oficio_firmado','notificacion_soporte','soporte_notificacion','soporte_respuesta','correo'].includes(tipo))return true;
   if(d.notificado===true)return true;
   const est=String(d.driveEstado||'').toLowerCase();
-  if(['por_notificar','firmado','notificado','revision_final'].includes(est))return true;
+  if(['por_notificar','firmado','notificado','revision_final','cerrado','atendido','aprobado'].includes(est))return true;
   if(['revision','acorregir','por_firma','por_firmar','vital_gestion'].includes(est))return false;
-  // Proyección / aprobado: solo si no hay documento firmado que la reemplace
   if(opts.hasFirmado)return false;
-  if(['atendido','aprobado',''].includes(est)||!est)return true;
+  if(!est)return true;
   return false;
 }
 async function _pqrsLimpiarDocumentosTrasCierre(e,wf){
