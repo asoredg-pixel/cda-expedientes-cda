@@ -871,7 +871,7 @@
         <div id="sec-anexo-pick-wrap" style="margin-top:6px"></div>
         <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos también se suben. Use <strong>Agregar archivo</strong> para añadir varios.</span>
       </div>
-      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="guardarPqrsSecretaria('solo')" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
+      <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="avisarRadicarSinTrasladoDeshabilitado()" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 
   </div><!-- /sec-radicar-split -->

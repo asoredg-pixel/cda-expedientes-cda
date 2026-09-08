@@ -361,9 +361,27 @@ function textoResultadoNotifRadicacion(res){
   const err=res.error?String(res.error.message||res.error).slice(0,80):'';
   return' · No se pudo enviar el correo de radicación al solicitante'+(err?(' ('+err+')'):'');
 }
+function avisarRadicarSinTrasladoDeshabilitado(){
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'Opción no disponible',
+      message:'Opción deshabilitada por el Director Seccional, para habilitarla, entrar en contacto con él',
+      confirmLabel:'Entendido',
+      hideCancel:true,
+      tone:'warn'
+    },function(){});
+    return;
+  }
+  notif('Opción deshabilitada por el Director Seccional, para habilitarla, entrar en contacto con él','warn');
+}
+window.avisarRadicarSinTrasladoDeshabilitado=avisarRadicarSinTrasladoDeshabilitado;
 async function guardarPqrsSecretaria(modo){
   modo=modo||'trasladar';
-  const soloRadicar=modo==='solo';
+  if(modo==='solo'){
+    avisarRadicarSinTrasladoDeshabilitado();
+    return;
+  }
+  const soloRadicar=false;
   const expId=String((document.getElementById('sec-exp')||{}).value||'').trim();
   const fecha=puedeEditarFechaRadicacionPqrs()?((document.getElementById('sec-fecha')||{}).value||hoy()):hoy();
   const fechaSol=String((document.getElementById('sec-fecha-solicitud')||{}).value||'').trim();
