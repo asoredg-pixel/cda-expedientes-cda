@@ -203,20 +203,12 @@ window.gmailHasDriveReadonlyScope = gmailHasDriveReadonlyScope;
 window.gmailReconectarDriveReadonly = gmailReconectarDriveReadonly;
 window.gmailGetStoredScopes = gmailGetStoredScopes;
 function _gmailScheduleTokenWarning(expMs) {
+  // Sin renovación automática ni avisos: al vencer solo se marca Drive desconectado.
   if (_gmailTokenWarnTimer) { clearTimeout(_gmailTokenWarnTimer); _gmailTokenWarnTimer = null; }
-  if (_gmailTokenRefreshTimer) clearTimeout(_gmailTokenRefreshTimer);
-  // Solo renovación silenciosa ~20 min antes (sin popup ni avisos). Si falla, al vencer se bloquea.
-  const refreshAt = expMs - Date.now() - SST_GMAIL_DRIVE_REFRESH_MS;
-  if (refreshAt > 0) {
-    _gmailTokenRefreshTimer = setTimeout(function() {
-      _gmailTokenRefreshTimer = null;
-      _gmailTrySilentTokenRefresh();
-    }, refreshAt);
-  }
+  if (_gmailTokenRefreshTimer) { clearTimeout(_gmailTokenRefreshTimer); _gmailTokenRefreshTimer = null; }
 }
 function sstTriggerDriveExpiryWarn() {
-  // Desactivado: ya no se muestran avisos de «faltan 5 minutos».
-  // Al expirar el token se bloquea la pantalla y se exige reconectar.
+  // Desactivado: sin avisos ni reconexión forzada.
 }
 function sstShowDriveExpiryWarnModal() { /* noop — avisos de reconexión eliminados */ }
 function sstShowDriveReconectarFallidoModal() { /* noop */ }
@@ -297,19 +289,14 @@ function sstGmailReconectarDriveInteractivo(doneCb) {
   }, 'select_account');
 }
 function sstGmailIntentarReconectarDrive(doneCb) {
-  sstGmailTrySilentReconnect(function(silentOk) {
-    if (silentOk) { if (doneCb) doneCb(true); return; }
-    sstGmailReconectarDriveInteractivo(function(interOk) {
-      if (doneCb) doneCb(!!interOk && sstGmailDriveRenovadaOk());
-    });
+  // Solo bajo acción explícita del usuario (botón Conectar); sin silent OAuth.
+  sstGmailReconectarDriveInteractivo(function(interOk) {
+    if (doneCb) doneCb(!!interOk && sstGmailDriveRenovadaOk());
   });
 }
 let _gmailSilentRefreshInFlight = false;
 function _gmailTrySilentTokenRefresh() {
-  if (_gmailConnecting) return;
-  sstGmailTrySilentReconnect(function(ok) {
-    if (ok) console.log('Gmail: token renovado silenciosamente');
-  });
+  // Desactivado: prompt:'' abría/cerraba sola la ventana de cuentas Google.
 }
 function _gmailClearExpiryTimer(which) {
   if (which === 'ofi') {
@@ -560,20 +547,8 @@ function sstIniciarGmailObligatorio() {
   sstRescheduleGmailExpiryTimers();
   sstStartGmailDriveStatusTick();
   renderSstGmailSesionBloqueo();
-  if (sstGmailSesionActiva()) return;
-  // Al iniciar sesión: ofrecer conexión de una vez (sin bloquear si cancela)
-  if (_sstGmailAutoConnectPending || _gmailConnecting) return;
-  _sstGmailAutoConnectPending = true;
-  setTimeout(function() {
-    if (!sstRolRequiereGmailConectado() || sstGmailSesionActiva()) {
-      _sstGmailAutoConnectPending = false;
-      return;
-    }
-    sstAbrirGmailDriveModal({ force: false });
-    sstConectarGmailObligatorio(function() {
-      _sstGmailAutoConnectPending = false;
-    });
-  }, 450);
+  // Sin auto-conexión ni popup al entrar o al desconectarse:
+  // el usuario conecta desde el menú Drive o al cargar un documento.
 }
 window.sstConectarGmailObligatorio = sstConectarGmailObligatorio;
 window.renderSstGmailSesionBloqueo = renderSstGmailSesionBloqueo;
