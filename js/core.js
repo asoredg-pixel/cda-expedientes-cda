@@ -19129,6 +19129,10 @@ function getFechasEstado(e){
 }
 function getFechaEstado(e,est){return getFechasEstado(e)[est]||'';}
 function fechaRefExpediente(e){
+  if(!e)return'';
+  // Documentos/comunicados de oficina (filas stub en Respondidas / Por firmar)
+  if(e._oficina_doc_respondida||(e._tramite_firma_task&&e._sin_expediente))
+    return String(e._fecha||e.fechaAtendida||e.fechaReportada||'').slice(0,10);
   const est=isArchivadoEstado(e._estado)?'Archivado o anulado':(e._estado||'Solicitud');
   return getFechaEstado(e,est)||e._fecha||'';
 }
@@ -19267,7 +19271,8 @@ function getPeriodoRango(prefix){
 function expEnPeriodo(e,rango){
   if(!rango)return true;
   const f=fechaRefExpediente(e);
-  if(!f)return false;
+  // Sin fecha: no excluir docs/comunicados ni stubs de actividad libre
+  if(!f)return !!(e&&(e._oficina_doc_respondida||e._tramite_firma_task||e._sin_expediente));
   return f>=rango.desde&&f<=rango.hasta;
 }
 function filterExpsPeriodo(list,prefix){

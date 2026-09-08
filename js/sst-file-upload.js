@@ -537,6 +537,7 @@ function sstFileCtxKeyTramiteAtajoFirmado(refId, taskId) {
 
 window.sstFileRegisterList = sstFileRegisterList;
 window.sstFileRefreshCtxLists = sstFileRefreshCtxLists;
+window.sstFileStagingCtx = sstFileStagingCtx;
 window.sstFileStagingReset = sstFileStagingReset;
 window.sstFileOnMainPick = sstFileOnMainPick;
 window.sstFileOnAnexosPick = sstFileOnAnexosPick;

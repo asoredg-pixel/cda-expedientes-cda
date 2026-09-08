@@ -655,11 +655,8 @@ async function saveActividadesLibresDeptoFirestore(deptoId){
   if(typeof DEPTOS_FIRESTORE!=='undefined'&&DEPTOS_FIRESTORE.indexOf(d)<0)return false;
   try{
     const list=actividadesLibresForDepto(d).map(function(t){
-      const copy=Object.assign({},t);
-      delete copy._pending_fs_sync;
-      delete copy._pending_fs_at;
-      return copy;
-    });
+      return sanitizeActLibreForFirestore(t);
+    }).filter(Boolean);
     await window._fsSetDoc(window._fsDoc(db,'departamentos',d),{
       actividadesLibres:list,
       updatedAt:new Date().toISOString()
@@ -671,6 +668,36 @@ async function saveActividadesLibresDeptoFirestore(deptoId){
     return false;
   }
 }
+/** Quita blobs / File / data-URL enormes para que Firestore no falle al guardar. */
+function sanitizeActLibreForFirestore(t){
+  if(!t||typeof t!=='object')return null;
+  let copy;
+  try{
+    copy=JSON.parse(JSON.stringify(t,function(k,v){
+      if(k==='localBlob'||k==='_localBlob'||k==='blob'||k==='file'||k==='data')return undefined;
+      if(typeof Blob!=='undefined'&&v instanceof Blob)return undefined;
+      if(typeof File!=='undefined'&&v instanceof File)return undefined;
+      if(typeof v==='string'&&v.indexOf('data:')===0&&v.length>8000)return undefined;
+      return v;
+    }));
+  }catch(err){
+    copy=Object.assign({},t);
+  }
+  delete copy._pending_fs_sync;
+  delete copy._pending_fs_at;
+  if(Array.isArray(copy.soportes)){
+    copy.soportes=copy.soportes.map(function(s){
+      if(!s||typeof s!=='object')return s;
+      const o=Object.assign({},s);
+      delete o.localBlob;delete o._localBlob;delete o.blob;delete o.file;delete o.data;
+      if(o.url&&String(o.url).indexOf('data:')===0)o.url=o.preview&&String(o.preview).indexOf('data:')!==0?o.preview:'';
+      if(o.preview&&String(o.preview).indexOf('data:')===0)o.preview=o.url||'';
+      return o;
+    });
+  }
+  return copy;
+}
+window.sanitizeActLibreForFirestore=sanitizeActLibreForFirestore;
 
 /**
  * Persiste actividadesLibres: primero por departamento (fiable para responsable→encargado),
@@ -723,7 +750,9 @@ async function saveGlobalFirestore(){
   try{
     const payload={
       personas:personas||[],
-      actividadesLibres:actividadesLibres||[],
+      actividadesLibres:(actividadesLibres||[]).map(function(t){
+        return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
+      }).filter(Boolean),
       agendaEventos:agendaEventos||[],
       bandejaLeidos:getBandejaLeidos(),
       bandejaEliminados:getBandejaEliminados(),
