@@ -228,7 +228,6 @@ function erPqrsRemitenteOptsHtml(sel){
   }).join('');
 }
 function htmlEntregaRespPqrsAltaBox(){
-  const hoyStr=typeof hoy==='function'?hoy():'';
   const ofiDef=defaultOficinaEntregaRespPqrs();
   const tipos=['Petición','Queja','Reclamo','Denuncia','Sugerencia','Reunión','Audiencia'];
   const tipoOpts='<option value="">— Seleccionar —</option>'+tipos.map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
@@ -240,7 +239,8 @@ function htmlEntregaRespPqrsAltaBox(){
       '<div class="fld"><label>N° PQRSD <span style="color:var(--rd)">*</span></label>'+
         '<input type="text" id="er-pqrs-exp" placeholder="N° radicado (sistema actual)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
       '<div class="fld"><label>Fecha de solicitud <span style="color:var(--rd)">*</span></label>'+
-        '<input type="date" id="er-pqrs-fecha-solicitud" value="'+escAttr(hoyStr)+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '<input type="date" id="er-pqrs-fecha-solicitud" value="" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+
+        '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Seleccione la fecha real de la solicitud (no se asume la de hoy).</div></div>'+
       '<div class="fld"><label>Tipo de solicitud <span style="color:var(--rd)">*</span></label>'+
         '<select id="er-pqrs-tipo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tipoOpts+'</select></div>'+
       '<div class="fld"><label>Medio de recepción <span style="color:var(--rd)">*</span></label>'+
@@ -2427,7 +2427,7 @@ function collectEntregaRespPqrsAlta(){
 function validateEntregaRespPqrsAlta(d){
   if(!d||!d.expId)return'Indique el número de PQRSD';
   if(String(d.expId).trim().length<2)return'Indique un número de PQRSD válido';
-  if(!d.fechaSol)return'Indique la fecha de solicitud';
+  if(!d.fechaSol)return'Seleccione la fecha de solicitud (obligatoria)';
   if(!d.tipo)return'Seleccione el tipo de solicitud';
   if(!d.medio)return'Seleccione el medio de recepción';
   if(d.interna){
@@ -2449,9 +2449,10 @@ function crearStubPqrsEntregaResp(datos,opts){
   opts=opts||{};
   const expId=String(datos.expId||'').trim();
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-  const fechaSol=String(datos.fechaSol||hoyStr).trim()||hoyStr;
+  const fechaSol=String(datos.fechaSol||'').trim();
   const fecha=hoyStr;
   if(!expId){notif('Indique el número de PQRSD','err');return null;}
+  if(!fechaSol){notif('Seleccione la fecha de solicitud','err');return null;}
   if(typeof getExpById==='function'&&getExpById(expId)){
     // Permitir reintento tras alta previa incompleta (crear + atender)
     if(opts.reuseIfExists){

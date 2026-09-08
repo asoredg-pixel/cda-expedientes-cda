@@ -2795,6 +2795,7 @@ function ofiDocPqrsPrefillEmailTo(e,force){
   if(force||!cur||(prevAuto&&cur===prevAuto)){
     toEl.value=mail;
     window._ofiDocEmailPrefill=mail;
+    if(typeof sstEmailChipsRefresh==='function')sstEmailChipsRefresh(toEl);
   }
 }
 function ofiDocPqrsBindAltaCorreoPrefill(){
@@ -2863,19 +2864,21 @@ function ofiDocPqrsShowEntrega(e){
   if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
   ofiDocPqrsPrefillEmailTo(e||stub,true);
   ofiDocPqrsBindAltaCorreoPrefill();
+  if(typeof sstInitEmailChipsIn==='function')sstInitEmailChipsIn(host);
+  ofiDocPqrsPrefillEmailTo(e||stub,true);
   // Al marcar «notificar por correo» / mensaje, volver a precargar si Para quedó vacío
   const notifCb=document.getElementById('pqrs-entrega-notif-correo');
   if(notifCb&&!notifCb._ofiPrefillBound){
     notifCb._ofiPrefillBound=true;
     notifCb.addEventListener('change',function(){
-      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,false);},30);
+      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,true);},30);
     });
   }
   document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
     if(b._ofiPrefillBound)return;
     b._ofiPrefillBound=true;
     b.addEventListener('click',function(){
-      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,false);},40);
+      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,true);},40);
     });
   });
 }
@@ -2911,6 +2914,21 @@ async function submitEntregaOficinaPqrsMigracion(){
       const err=validateEntregaRespPqrsAlta(datos);
       if(err){notif(err,'err');restoreBtn();return;}
       expId=String(datos.expId||expId).trim();
+
+      // Precargar Para desde el alta y validar la respuesta ANTES de crear el expediente
+      ofiDocPqrsPrefillEmailTo(null,true);
+      const stubPrev={
+        _exp:expId,
+        _tipo_solicitud:datos.tipo||'Petición',
+        _alta_por_oficina:true,
+        _pn_correo:(datos.pn&&datos.pn.correo)||'',
+        _qd_correo:(datos.pn&&datos.pn.correo)||(datos.pj&&(datos.pj.correo||datos.pj.ofiCorreo))||datos.anonCorreo||'',
+        _pj_correo:(datos.pj&&datos.pj.correo)||'',
+        _pj_ofi_correo:(datos.pj&&datos.pj.ofiCorreo)||''
+      };
+      const pqPrev=typeof collectPqrsEntregaDatos==='function'?collectPqrsEntregaDatos(expId,stubPrev):null;
+      if(!pqPrev){restoreBtn();return;}
+
       // Si ya se creó en un intento anterior, reutilizar (evita «Ya existe…» al 2.º clic)
       const ya=typeof getExpById==='function'?getExpById(expId):null;
       if(ya&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(ya)){
@@ -2939,8 +2957,9 @@ async function submitEntregaOficinaPqrsMigracion(){
       notif('La PQRSD ya está atendida','err');restoreBtn();return;
     }
 
-    // Validar respuesta ANTES de dejar la PQRSD a medias
-    const pq=typeof collectPqrsEntregaDatos==='function'?collectPqrsEntregaDatos(expId):null;
+    // Validar respuesta (tras create, con expediente real)
+    ofiDocPqrsPrefillEmailTo(e,true);
+    const pq=typeof collectPqrsEntregaDatos==='function'?collectPqrsEntregaDatos(expId,e):null;
     if(!pq){restoreBtn();return;}
 
     try{
@@ -3077,6 +3096,15 @@ async function submitEntregaOficinaPqrsMigracion(){
     }
 
     if(typeof aplicarPqrsEntregaDirecta==='function')aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,t.id,cmt);
+    // Forzar estado atendida (por si ensureTarea dejó «asignado»)
+    e._pqrs_estado_oficina='cerrado';
+    e._estado='Atendido';
+    if(typeof setPqrsWorkflow==='function'){
+      const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada';
+      setPqrsWorkflow(e,{fase:faseCerrada,fecha_respuesta:pq.fechaResp||(typeof hoy==='function'?hoy():'')});
+    }
+    if(typeof finalizarTareasPqrsAlCerrar==='function')
+      finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — crear y atender oficina');
 
     try{
       if(typeof mutateTask==='function'){

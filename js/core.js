@@ -3102,6 +3102,9 @@ function setPqrsRespTipo(val){
   if(val!==PQRS_WF_TIPO.OFICIO)pqrsClearRespOficioError();
   if(document.getElementById('pqrs-entrega-resp-cuerpo')){
     pqrsEntregaRefreshUi();
+    if(typeof ofiDocPqrsPrefillEmailTo==='function'){
+      setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},30);
+    }
     return;
   }
   if(window._taskModalCtx&&window._taskModalCtx.mode==='gmailVincularPqrs')pqrsRespRefreshModalUiGmail();
@@ -9502,7 +9505,7 @@ window.pqrsEntregaSetOtroCanal=pqrsEntregaSetOtroCanal;
 function pqrsEntregaToggleNotifCorreo(){
   if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
   if(typeof ofiDocPqrsPrefillEmailTo==='function'){
-    setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,false);},20);
+    setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},20);
   }
 }
 function pqrsEntregaRefreshUi(){
@@ -9620,9 +9623,12 @@ function pqrsEntregaRefreshUi(){
     const vacio=!cuerpoTxt||!String(cuerpoTxt.value||'').trim();
     pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.MENSAJE,vacio||_pqrsEsPlantillaRespuesta(cuerpoTxt.value));
   }else if(isOficio&&cuerpoTxt&&(_pqrsEsPlantillaRespuesta(cuerpoTxt.value)||(window._pqrsUltimaPlantillaMensaje&&cuerpoTxt.value===window._pqrsUltimaPlantillaMensaje)))cuerpoTxt.value='';
+  if(typeof ofiDocPqrsPrefillEmailTo==='function'&&(isMensaje||notifCorreoOficio)){
+    ofiDocPqrsPrefillEmailTo(null,false);
+  }
 }
-function collectPqrsEntregaDatos(expId){
-  const e=getExpById(expId);
+function collectPqrsEntregaDatos(expId,eOpt){
+  const e=eOpt||getExpById(expId);
   if(!e)return null;
   const fechaResp=String((document.getElementById('pqrs-entrega-resp-fecha')||{}).value||'').trim();
   const oficioExt=String((document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
@@ -23481,6 +23487,7 @@ function aplicarPersonaCatalog(p,target){
     setv('er-pqrs-pn-identificacion',p.pn_identificacion||p.qd_identificacion||personaIdNatural(p)||'');
     setv('er-pqrs-pn-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
     setv('er-pqrs-pn-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    if(typeof ofiDocPqrsPrefillEmailTo==='function')setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},20);
     return;
   }
   if(target==='er-pqrs-pj'){
@@ -23496,6 +23503,7 @@ function aplicarPersonaCatalog(p,target){
       setv('er-pqrs-pj-ofi-correo',personaCorreoNatural(p)||'');
       setv('er-pqrs-pj-ofi-telefono',personaTelefonoNatural(p)||'');
     }
+    if(typeof ofiDocPqrsPrefillEmailTo==='function')setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},20);
     return;
   }
   if(target==='er-pqrs-ofi'){
@@ -23505,6 +23513,7 @@ function aplicarPersonaCatalog(p,target){
     setv('er-pqrs-pj-ofi-identificacion',p.pn_identificacion||p.qd_identificacion||p.apo_identificacion||p.pj_rep_identificacion||personaIdNatural(p)||'');
     setv('er-pqrs-pj-ofi-correo',p.pn_correo||p.qd_correo||personaCorreoNatural(p)||'');
     setv('er-pqrs-pj-ofi-telefono',p.pn_telefono||p.qd_telefono||personaTelefonoNatural(p)||'');
+    if(typeof ofiDocPqrsPrefillEmailTo==='function')setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},20);
     return;
   }
   if(target==='er-pn'){
