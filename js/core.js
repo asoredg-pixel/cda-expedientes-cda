@@ -1965,10 +1965,15 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
   const por=responsableActivo||(typeof labelOficina==='function'?labelOficina(deptoActivo):'')||rolSesion||'';
   const docs=(adjDocumentos||[]).map(function(a,i){
     const esAnexo=!!(a.es_anexo||a.esAnexo||a.tipo==='anexo_respuesta');
+    const esSoporte=a.tipo==='soporte_notificacion'||a.tipo==='soporte_respuesta'||a.notificado===true
+      ||/^soporte de env/i.test(String(a.nombre||a.label||''));
     return Object.assign({},a,{
-      nombre:esAnexo?(a.nombre||('Anexo '+(a.anexo_n||(i+1)))):(a.nombre&&!/^Proyecci/i.test(a.nombre)?a.nombre:'Oficio firmado'),
-      tipo:esAnexo?'anexo_respuesta':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(a.tipo||'drive')),
-      driveEstado:'cerrado'
+      nombre:esAnexo?(a.nombre||('Anexo '+(a.anexo_n||(i+1))))
+        :(esSoporte?(a.nombre||'Soporte de envío (correo)')
+        :(a.nombre&&!/^Proyecci/i.test(a.nombre)?a.nombre:'Oficio firmado')),
+      tipo:esAnexo?'anexo_respuesta':(esSoporte?'soporte_notificacion':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(a.tipo||'drive'))),
+      driveEstado:esSoporte?'notificado':'cerrado',
+      notificado:esSoporte?true:!!a.notificado
     });
   });
   if(pq.tipo===PQRS_WF_TIPO.INFORMATIVA){
@@ -2076,11 +2081,40 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     const okG=await sstSolicitarGmailParaAdjuntar();
     if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
   }
-  const docsAdj=Array.isArray(adjDocumentos)?adjDocumentos:(pq.adj&&pq.adj.links?[]:[]);
+  const docsAdj=Array.isArray(adjDocumentos)?adjDocumentos:[];
   let adjuntos=[];
   if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'){
     try{adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null});}
     catch(errAdj){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica adj:',errAdj);}
+  }
+  const tAct=(opts.t)||(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
+    ||(typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null);
+  const por=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
+  let soporteReg=null;
+  if(typeof registrarSoporteEnvioCorreoNotif==='function'){
+    try{
+      soporteReg=await registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
+        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
+      },adjuntos);
+    }catch(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte:',errSop);}
+  }
+  // Incluir el PDF de soporte en los documentos de cierre / visor 🔍
+  if(soporteReg&&soporteReg.up&&(soporteReg.up.driveLink||soporteReg.up.fileId||soporteReg.up.driveFileId)&&Array.isArray(adjDocumentos)){
+    const up=soporteReg.up;
+    const link=up.driveLink||up.previewLink||'';
+    if(link&&!adjDocumentos.some(function(d){return d&&(d.driveLink===link||d.fileId===(up.fileId||up.driveFileId));})){
+      adjDocumentos.push({
+        nombre:'Soporte de envío (correo)',
+        driveLink:link,
+        previewLink:up.previewLink||link,
+        fileId:up.fileId||up.driveFileId||'',
+        tipo:'soporte_notificacion',
+        driveEstado:'notificado',
+        notificado:true,
+        canal:'correo',
+        mime:'application/pdf'
+      });
+    }
   }
   const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
@@ -2090,7 +2124,6 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
-    const por=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
     registrarNotificacionCiudadanoPqrs(e,{
       tipo:'respuesta',medio:'correo',enviado:true,
       a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),
@@ -2100,7 +2133,7 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       histNota:(isMsg?'Mensaje':'Oficio firmado')+' notificado por correo ('+ofiLbl+') a '+destinos.join(', ')
     });
   }
-  return{sent:true,result:sent};
+  return{sent:true,result:sent,soporte:soporteReg};
 }
 window.pqrsEntregaDirectaEnviarCorreoSiAplica=pqrsEntregaDirectaEnviarCorreoSiAplica;
 function puedeGestionarPqrsAsociacion(e){
@@ -3684,8 +3717,8 @@ function renderPqrsTrazabilidadHtml(e){
   const tl=items.map(h=>{
     const lbl=pqrsHistorialEventoLabel(h);
     let nota=String(h.nota||'').trim();
-    // No mostrar notas internas de alta/migración en radicación
-    if(h.tipo==='radicacion'||/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))nota='';
+    // No mostrar notas internas de alta/migración ni cuerpo de respuesta en radicación/respuesta
+    if(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))nota='';
     const esTrasl=h.tipo==='traslado_oficina';
     const motivoHtml=esTrasl&&nota?('<div class="tl-motivo"><strong>Motivo:</strong> '+escAttr(nota)+'</div>'):'';
     const extra=(!esTrasl&&nota)?(': '+escAttr(nota)):'';
@@ -14531,7 +14564,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       };
       const needMailEd=pq.tipo===PQRS_WF_TIPO.MENSAJE||(pq.tipo===PQRS_WF_TIPO.OFICIO&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
       if(needMailEd&&typeof pqrsEntregaDirectaEnviarCorreoSiAplica==='function'){
-        return pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos).then(function(){
+        const tMail=getTaskFromExp(e,taskId)||t;
+        return pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{t:tMail}).then(function(){
           runCierreUi();
         }).catch(function(errMail){
           console.warn('entrega directa correo:',errMail);

@@ -3083,7 +3083,7 @@ async function submitEntregaOficinaPqrsMigracion(){
         }
         if(typeof pqrsEntregaDirectaEnviarCorreoSiAplica!=='function')
           throw new Error('Envío de correo no disponible');
-        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{registrarHist:true});
+        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{registrarHist:true,t:t});
       }catch(errMail){
         console.warn('submitEntregaOficinaPqrsMigracion correo:',errMail);
         if(typeof sstCargaHide==='function')sstCargaHide();
@@ -3101,10 +3101,31 @@ async function submitEntregaOficinaPqrsMigracion(){
     e._estado='Atendido';
     if(typeof setPqrsWorkflow==='function'){
       const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada';
-      setPqrsWorkflow(e,{fase:faseCerrada,fecha_respuesta:pq.fechaResp||(typeof hoy==='function'?hoy():'')});
+      const wfCur=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+      setPqrsWorkflow(e,{
+        fase:faseCerrada,
+        fecha_respuesta:pq.fechaResp||(typeof hoy==='function'?hoy():''),
+        documentos:Array.isArray(wfCur.documentos)?wfCur.documentos:(adjDocumentos||[])
+      });
     }
     if(typeof finalizarTareasPqrsAlCerrar==='function')
       finalizarTareasPqrsAlCerrar(e,'PQRSD cerrada — crear y atender oficina');
+    // Persistir soportes de la tarea (incl. PDF de envío) tras el cierre
+    try{
+      if(t&&Array.isArray(t.soportes)&&t.soportes.length&&typeof mutateTask==='function'){
+        const sops=t.soportes.slice();
+        mutateTask(expId,t.id,function(tk){
+          if(!Array.isArray(tk.soportes))tk.soportes=[];
+          sops.forEach(function(s){
+            if(!s)return;
+            const key=String(s.driveLink||s.url||s.fileId||s.driveFileId||'');
+            if(!key)return;
+            if(tk.soportes.some(function(x){return String((x&&(x.driveLink||x.url||x.fileId||x.driveFileId))||'')===key;}))return;
+            tk.soportes.push(s);
+          });
+        });
+      }
+    }catch(errSops){console.warn('migracion soportes envio:',errSops);}
 
     try{
       if(typeof mutateTask==='function'){

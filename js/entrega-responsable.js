@@ -239,8 +239,7 @@ function htmlEntregaRespPqrsAltaBox(){
       '<div class="fld"><label>N° PQRSD <span style="color:var(--rd)">*</span></label>'+
         '<input type="text" id="er-pqrs-exp" placeholder="N° radicado (sistema actual)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
       '<div class="fld"><label>Fecha de solicitud <span style="color:var(--rd)">*</span></label>'+
-        '<input type="date" id="er-pqrs-fecha-solicitud" value="" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+
-        '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Seleccione la fecha real de la solicitud (no se asume la de hoy).</div></div>'+
+        '<input type="date" id="er-pqrs-fecha-solicitud" value="" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
       '<div class="fld"><label>Tipo de solicitud <span style="color:var(--rd)">*</span></label>'+
         '<select id="er-pqrs-tipo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+tipoOpts+'</select></div>'+
       '<div class="fld"><label>Medio de recepción <span style="color:var(--rd)">*</span></label>'+

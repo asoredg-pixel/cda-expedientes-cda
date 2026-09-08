@@ -2486,8 +2486,8 @@ function ciudadanoEventoLabel(h){
 }
 function ciudadanoNotaPublica(h,nota){
   if(h&&h.tipo==='asignacion_oficina')return'';
-  // Radicación: no mostrar notas internas de alta/migración
-  if(h&&h.tipo==='radicacion')return'';
+  // Radicación / respuesta: sin notas internas (cuerpo, oficio, canal, autor)
+  if(h&&(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||h.tipo==='entrega_directa_oficina'||h.tipo==='notif_otro_medio_entrega'))return'';
   nota=anonimizarParaCiudadano(String(nota||'').trim());
   if(!nota)return'';
   if(h&&h.tipo==='traslado_oficina'){
@@ -2496,6 +2496,7 @@ function ciudadanoNotaPublica(h,nota){
   }
   if(/^(traslad|asign|aprob|recib|actividad)/i.test(nota)&&nota.length<90)return'';
   if(/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))return'';
+  if(/Cordial saludo|Quedamos atentos|Oficio\s+|·\s*Correo/i.test(nota))return'';
   return nota;
 }
 function ciudadanoTaskEventoLabel(h){
