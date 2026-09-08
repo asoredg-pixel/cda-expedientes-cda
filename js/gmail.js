@@ -403,12 +403,6 @@ function sstStartGmailDriveStatusTick() {
   _sstGmailDriveStatusInterval = setInterval(function() {
     if (!document.body.classList.contains('sesion-activa')) return;
     sstRenderGmailDriveStatusBtn();
-    // Si expiró el token, mantener bloqueo obligatorio
-    if (typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado() && !sstGmailSesionActiva()) {
-      if (!document.body.classList.contains('gmail-sesion-bloqueado')) {
-        renderSstGmailSesionBloqueo();
-      }
-    }
   }, 1000);
 }
 function sstToggleDriveConnectPanel(ev) {
@@ -418,11 +412,12 @@ function sstToggleDriveConnectPanel(ev) {
     if (typeof notif === 'function') {
       notif(rem > 0
         ? 'Conexión Drive activa · ' + sstFormatDriveCountdown(rem) + ' restantes'
-        : 'Conexión Drive expirada — debe reconectar', rem > 0 ? 'ok' : 'warn');
+        : 'Conexión Drive expirada — puede reconectar desde aquí', rem > 0 ? 'ok' : 'warn');
     }
     return;
   }
-  sstAbrirGmailDriveModal({ force: true });
+  // Manual: conectar sin bloquear el resto de la app
+  sstAbrirGmailDriveModal({ force: false });
 }
 function sstSecretariaDriveActiva() {
   return !!(typeof _driveGetSecretariaToken === 'function' && _driveGetSecretariaToken());
@@ -435,22 +430,24 @@ function sstAbrirGmailDriveModal(opts) {
   const txt = ov.querySelector('.gmail-sesion-txt');
   const txtSm = ov.querySelector('.gmail-sesion-txt-sm');
   const skipBtn = document.getElementById('gmail-sesion-skip-btn') || ov.querySelector('.gmail-sesion-btns .bs');
-  const force = opts.force !== false; // por defecto obligatorio para funcionarios
+  const force = !!opts.force; // true solo cuando una acción requiere Drive (subir/adjuntar)
   if (tit) tit.textContent = 'Conectar Gmail / Drive';
   if (txt) {
     txt.innerHTML = force
-      ? 'Debe autorizar <strong>su correo institucional</strong> (Gmail y Drive) para continuar. Sin esta conexión la aplicación permanece bloqueada.'
-      : 'Para <strong>adjuntar archivos</strong> al expediente o radicar con anexos debe autorizar su correo institucional.';
+      ? 'Para <strong>cargar o adjuntar este documento</strong> debe autorizar su correo institucional (Gmail y Drive).'
+      : 'Autorice <strong>su correo institucional</strong> para adjuntar archivos, radicar con anexos o usar Drive. Puede cerrar y seguir navegando.';
   }
   if (txtSm) {
-    txtSm.textContent = 'La autorización de Google dura ~1 hora. Al vencer deberá conectar de nuevo. El tiempo restante se muestra en el menú (Drive).';
+    txtSm.textContent = 'La autorización de Google dura ~1 hora. Al vencer, el menú Drive mostrará «desconectado»; podrá seguir usando el sistema hasta que necesite subir un archivo.';
   }
-  if (skipBtn) skipBtn.style.display = force ? 'none' : '';
+  if (skipBtn) {
+    skipBtn.style.display = '';
+    skipBtn.textContent = force ? 'Cancelar' : 'Cerrar';
+  }
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
 }
 function sstCerrarGmailAttachModal(success) {
-  if (window._sstGmailAttachForce && !success) return;
   const ov = document.getElementById('gmail-sesion-overlay');
   if (ov) {
     ov.classList.remove('on');
@@ -458,6 +455,7 @@ function sstCerrarGmailAttachModal(success) {
     const skipBtn = document.getElementById('gmail-sesion-skip-btn') || ov.querySelector('.gmail-sesion-btns .bs');
     if (skipBtn) skipBtn.style.display = 'none';
   }
+  document.body.classList.remove('gmail-sesion-bloqueado');
   window._sstGmailAttachForce = false;
   window._sstGmailAttachRequireSecretaria = false;
   if (window._sstGmailAttachCb) {
@@ -489,35 +487,23 @@ function sstSolicitarGmailParaAdjuntar(opts) {
 function sstSolicitarDriveParaPqrs(expRef) {
   return sstSolicitarGmailParaAdjuntar({ requireSecretaria: false, force: true });
 }
+/** Actualiza estado Drive; no bloquea la pantalla si está desconectado. */
 function renderSstGmailSesionBloqueo() {
-  const need = typeof sstRolRequiereGmailConectado === 'function' && sstRolRequiereGmailConectado();
-  const ok = need && sstGmailSesionActiva();
+  document.body.classList.remove('gmail-sesion-bloqueado');
   const ov = document.getElementById('gmail-sesion-overlay');
-  if (!need) {
-    document.body.classList.remove('gmail-sesion-bloqueado');
-    window._sstGmailAttachForce = false;
-    if (ov && !window._sstGmailAttachCb) {
-      ov.classList.remove('on');
-      ov.setAttribute('aria-hidden', 'true');
-    }
-    sstRenderGmailDriveStatusBtn();
-    return;
-  }
-  if (ok) {
-    document.body.classList.remove('gmail-sesion-bloqueado');
+  const connected = sstGmailSesionActiva();
+  if (connected) {
     window._sstGmailAttachForce = false;
     _sstGmailAutoConnectPending = false;
     if (ov) {
       ov.classList.remove('on');
       ov.setAttribute('aria-hidden', 'true');
     }
-    sstRenderGmailDriveStatusBtn();
-    return;
+  } else if (ov && !window._sstGmailAttachCb) {
+    // Sin acción pendiente de adjuntar: no dejar modal abierto
+    ov.classList.remove('on');
+    ov.setAttribute('aria-hidden', 'true');
   }
-  // Obligatorio: bloquear pantalla hasta conectar
-  document.body.classList.add('gmail-sesion-bloqueado');
-  window._sstGmailAttachForce = true;
-  sstAbrirGmailDriveModal({ force: true });
   sstRenderGmailDriveStatusBtn();
 }
 function sstOnGmailTokenExpiradoCheck() {
@@ -532,13 +518,10 @@ function sstOnGmailTokenExpiradoForceLogout() {
   if (typeof gmailOfiDisconnect === 'function') gmailOfiDisconnect();
   if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
   _sstGmailAutoConnectPending = false;
-  // Bloqueo obligatorio (sin «seguir navegando»)
+  document.body.classList.remove('gmail-sesion-bloqueado');
+  window._sstGmailAttachForce = false;
+  // Sin bloqueo ni popup: solo marca Drive desconectado; se pedirá al subir un archivo
   renderSstGmailSesionBloqueo();
-  setTimeout(function() {
-    if (sstRolRequiereGmailConectado() && !sstGmailSesionActiva()) {
-      sstConectarGmailObligatorio();
-    }
-  }, 350);
 }
 function sstConectarGmailObligatorio(doneCb) {
   if (!sstRolRequiereGmailConectado()) {
@@ -576,12 +559,9 @@ function sstIniciarGmailObligatorio() {
   }
   sstRescheduleGmailExpiryTimers();
   sstStartGmailDriveStatusTick();
-  if (sstGmailSesionActiva()) {
-    renderSstGmailSesionBloqueo();
-    return;
-  }
   renderSstGmailSesionBloqueo();
-  // Al iniciar sesión: abrir Google de una vez (evita segundo paso manual)
+  if (sstGmailSesionActiva()) return;
+  // Al iniciar sesión: ofrecer conexión de una vez (sin bloquear si cancela)
   if (_sstGmailAutoConnectPending || _gmailConnecting) return;
   _sstGmailAutoConnectPending = true;
   setTimeout(function() {
@@ -589,6 +569,7 @@ function sstIniciarGmailObligatorio() {
       _sstGmailAutoConnectPending = false;
       return;
     }
+    sstAbrirGmailDriveModal({ force: false });
     sstConectarGmailObligatorio(function() {
       _sstGmailAutoConnectPending = false;
     });
