@@ -880,10 +880,11 @@ function pqrsPendienteTraslado(e){
 }
 function esDirectorDsDeguv(){return deptoActivo==='ds_deguv';}
 function puedeGestionarPendientesTraslado(){
-  return esSecretaria()||esDirectorDsDeguv()||esAdministrador();
+  // Sección «Pendientes por trasladar» ocultada por ahora (no implementada en flujo actual)
+  return false;
 }
 function puedeVerFiltroPorTrasladarOficina(){
-  // Paleta «Por trasladar» deshabilitada (Director Seccional): oculta para Secretaría y DS DEGUV
+  // Paleta «Por trasladar» deshabilitada: oculta para Secretaría y DS DEGUV
   return false;
 }
 function puedeTrasladarPqrsInicial(e){

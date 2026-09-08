@@ -1067,36 +1067,18 @@ function renderSecretariaPqrs(){
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
     '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
-    '<div class="met'+(puedeVerFiltroPorTrasladarOficina()?' met-click':'')+'" style="border-left:3px solid #7c5cbf"'+(puedeVerFiltroPorTrasladarOficina()?' onclick="setPqrsOfiFiltro(\'por_trasladar\');showTab(\'pqrs-ofi\')" title="Ver bandeja por trasladar"':'')+'><div class="v" style="color:#7c5cbf">'+pendientes.length+'</div><div class="l">Pend. traslado</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
   const pendTb=document.getElementById('tbl-sec-pend-trasl');
   const pendMore=document.getElementById('sec-pend-trasl-more');
   if(pendWrap&&pendTb){
-    const showPend=puedeGestionarPendientesTraslado();
-    pendWrap.style.display=showPend?'':'none';
-    if(!showPend){
-      pendTb.innerHTML='';
-      if(pendMore)pendMore.style.display='none';
-    }else if(!pendientes.length){
-      pendTb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">No hay PQRSD pendientes de traslado.</td></tr>';
-      if(pendMore)pendMore.style.display='none';
-    }else{
-      const lim=Math.min(window._secPendTraslShown,SEC_PQRS_MAX,pendientes.length);
-      const slice=pendientes.slice(0,lim);
-      pendTb.innerHTML=slice.map(e=>{
-        const asunto=e.f_f1||e._pqrs_detalle||'—';
-        return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td><td>'+fmtF(e._fecha_solicitud||e._fecha)+'</td><td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
-      }).join('');
-      if(pendMore){
-        const rest=Math.min(pendientes.length,SEC_PQRS_MAX)-lim;
-        if(rest>0){
-          pendMore.style.display='';
-          pendMore.textContent='Ver 10 más ('+rest+' restantes, máx. '+SEC_PQRS_MAX+')';
-        }else pendMore.style.display='none';
-      }
-    }
+    // Oculto por ahora: flujo «Pendientes por trasladar» no implementado
+    pendWrap.style.display='none';
+    pendWrap.setAttribute('hidden','');
+    pendWrap.setAttribute('aria-hidden','true');
+    pendTb.innerHTML='';
+    if(pendMore)pendMore.style.display='none';
   }
   const tb=document.getElementById('tbl-sec-pqrs');
   const asigMore=document.getElementById('sec-asignadas-more');

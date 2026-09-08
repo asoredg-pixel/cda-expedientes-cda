@@ -20,14 +20,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260908s"></script>
+<script src="js/constants.js?v=20260908t"></script>
 <script src="js/utils.js?v=20260906a"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260908n"></script>
-<script src="js/roles.js?v=20260907h"></script>
+<script src="js/roles.js?v=20260908t"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260908r"></script>
+<script src="js/core.js?v=20260908t"></script>
 <script src="js/formulario.js?v=20260903a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260903a"></script>
@@ -40,7 +40,7 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260908j"></script>
 <script src="js/sst-file-upload.js?v=20260908n"></script>
-<script src="js/pqrs.js?v=20260908s"></script>
+<script src="js/pqrs.js?v=20260908t"></script>
 <script src="js/consulta.js?v=20260908q"></script>
 <script src="js/entrega-responsable.js?v=20260908k"></script>
 <script src="js/tramite-firma.js?v=20260908s"></script>
@@ -786,8 +786,7 @@
         <p class="sec-form-lock-txt">Para radicar debe conectar la cuenta institucional (cdaguaviare1). Sin conexión no se genera el soporte PDF ni se sincroniza la hoja PQRSD en Google Sheets.</p>
         <button type="button" class="btn bp" id="sec-gmail-connect-btn" onclick="secGmailConnectParaRadicar()">Conectar bandeja Gmail</button>
       </div>
-      <div class="slbl">Nueva radicación PQRSD</div>
-      <div class="ssub">Complete los datos del solicitante, adjunte la solicitud digital e indique la oficina destino. <span id="sst-build-tag" style="font-size:10px;color:var(--tx3)"></span></div>
+      <div class="slbl">Nueva radicación PQRSD <span id="sst-build-tag" style="font-size:10px;color:var(--tx3);font-weight:400"></span></div>
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label>
           <div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">
@@ -813,7 +812,6 @@
         <label>Medio de notificación</label>
         <div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="sec-medio-notif-btns"></div>
         <input type="hidden" id="sec-medio-notif" value="">
-        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Al elegir medio de recepción se predetermina el de notificación. Si cambia la recepción después, la notificación vuelve a «No indica».</div>
       </div>
       <div id="sec-solicitante-wrap">
       <div class="fg" style="margin-bottom:10px">
@@ -869,14 +867,13 @@
       <div class="fld" style="margin-bottom:10px">
         <label>Solicitud digital — anexos (opcional)</label>
         <div id="sec-anexo-pick-wrap" style="margin-top:6px"></div>
-        <span style="font-size:11px;color:var(--tx3);display:block;margin-top:4px">Opcional. Al radicar se genera soporte PDF en Drive; los archivos también se suben. Use <strong>Agregar archivo</strong> para añadir varios.</span>
       </div>
       <div class="fx" style="gap:8px;flex-wrap:wrap"><button type="button" class="btn bp" id="sec-btn-radicar-trasl" onclick="guardarPqrsSecretaria('trasladar')" disabled>📤 Radicar y trasladar a oficina</button><button type="button" class="btn" id="sec-btn-radicar-solo" onclick="avisarRadicarSinTrasladoDeshabilitado()" disabled>📋 Radicar sin traslado</button><button type="button" class="btn" onclick="limpiarFormSecretaria()">Limpiar</button></div>
     </div>
 
   </div><!-- /sec-radicar-split -->
   <div id="sec-pqrs-mets" class="pqrs-ofi-mets" style="margin-top:1rem"></div>
-  <div class="card" id="sec-pend-trasl-wrap" style="margin-top:1rem">
+  <div class="card" id="sec-pend-trasl-wrap" style="margin-top:1rem;display:none" hidden aria-hidden="true">
     <div class="slbl">Pendientes por trasladar</div>
     <div class="ssub" style="margin-bottom:8px">Radicadas sin oficina asignada. El director DS DEGUV o Secretaría pueden trasladarlas a la oficina competente.</div>
     <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Estado</th><th>Radicación</th><th>Solicitud</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pend-trasl"></tbody></table></div>
@@ -884,7 +881,6 @@
   </div>
   <div class="card" style="margin-top:1rem">
     <div class="slbl">PQRSD asignadas a oficinas</div>
-    <div class="ssub" style="margin-bottom:8px">Seguimiento de solicitudes radicadas (oficinas DEGUV y Secretaría). Use ✏️ Editar o 🔍 Revisar para gestionar cada PQRSD. Se muestran las más recientes (máx. 30); use Consulta para buscar anteriores.</div>
     <div class="tw"><table><thead><tr><th>PQRSD</th><th>Tipo</th><th>Asunto</th><th>Oficina</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody id="tbl-sec-pqrs"></tbody></table></div>
     <button type="button" class="btn bsm" id="sec-asignadas-more" style="display:none;margin-top:8px;width:100%" onclick="secPqrsVerMasAsignadas()">Ver 10 más</button>
   </div>
