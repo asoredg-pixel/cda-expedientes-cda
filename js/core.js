@@ -6857,6 +6857,14 @@ function openDirectorVerDocumentoFirmados(expId,taskId){
     if(t)taskId=String(t.id||'');
   }
   if(!t&&!taskId){notif('Actividad no encontrada','err');return;}
+  // Documento/comunicado de oficina: mismo rail que usan las oficinas en Respondidas
+  if(t&&(typeof taskEsDocumentoComunicadoOficina==='function'?taskEsDocumentoComunicadoOficina(t):t.origen==='oficina_firma')){
+    if(typeof openOficinaDocRespondida==='function'){openOficinaDocRespondida(expId,taskId);return;}
+    if(typeof openTaskCommentsModal==='function'){
+      openTaskCommentsModal(expId,taskId,{verDocumento:true,oficinaDocRespondida:true});
+      return;
+    }
+  }
   if(e&&t&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
     try{ensurePqrsSoportesAprobadosOnTask(t,e);}catch(err){}
   const resolved=_directorFirmadosDocsResolve(e,t);

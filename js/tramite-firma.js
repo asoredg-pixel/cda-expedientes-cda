@@ -122,6 +122,19 @@ function tramiteFirmaOficinaId(t){
     return String(t.depto);
   return'';
 }
+/** Documento/comunicado creado desde oficinas / Secretaría (paleta Respondidas / Firmados Director). */
+function taskEsDocumentoComunicadoOficina(t){
+  if(!t)return false;
+  if(String(t.origen||'').trim()==='oficina_firma')return true;
+  const wf=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{}))||{};
+  if(wf.doc_comunicado_oficina||wf.oficina_doc_comunicado)return true;
+  const ofi=String(t.oficina||tramiteFirmaOficinaId(t)||'').trim();
+  if(!t.sinExpediente||!ofi)return false;
+  if(ofi==='secretaria')return true;
+  if(typeof OFICINAS_DEGUV!=='undefined'&&OFICINAS_DEGUV.some(function(o){return o&&o.id===ofi;}))return true;
+  return false;
+}
+window.taskEsDocumentoComunicadoOficina=taskEsDocumentoComunicadoOficina;
 /** Oficinas RN/OAP/Admin/Secretaría: entregar oficios no-PQRSD a firma del Director. */
 function puedeEntregarOficinaParaFirma(){
   if(typeof esAdministrador==='function'&&esAdministrador()&&typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&typeof deptoActivo!=='undefined'&&deptoActivo!=='ds_deguv')return true;
@@ -203,12 +216,16 @@ function taskFirmaEstadoUi(t){
     return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
   if(taskFirmaEnRevisionFinalNotif(t))
     return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Revisar'));
-  if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA)){
+  if(f==='cerrada_atendida'||f==='cerrada'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA)){
     // Documento/comunicado de oficina: estado simple «Atendida» (no dual Revisada/Notificada de trámites)
-    if(t&&t.origen==='oficina_firma')
+    if(typeof taskEsDocumentoComunicadoOficina==='function'?taskEsDocumentoComunicadoOficina(t):(t&&t.origen==='oficina_firma'))
       return{lbl:'✓ Atendida',bg:'var(--gnl)',fg:'var(--gn)'};
     return{lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'✓ Notificada',subFg:'var(--gn)'};
   }
+  // Cerrado por estado/notificación aunque la fase venga incompleta
+  if((typeof taskEsDocumentoComunicadoOficina==='function'?taskEsDocumentoComunicadoOficina(t):(t&&t.origen==='oficina_firma'))
+    &&(est==='Atendida'||(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))))
+    return{lbl:'✓ Atendida',bg:'var(--gnl)',fg:'var(--gn)'};
   return null;
 }
 /**
@@ -1092,9 +1109,14 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
     t.historial.push({tipo:'verificacion',fecha:fechaC,por:taskComentarioAutor(),nota:opts.via==='notificacion'?'Notificación ciudadana':'Publicación en consulta ciudadana',reportadoPor:repPend||''});
     const prev=getTaskFirmaWf(t);
     if(prev.fase||t.requiereFirma){
+      const esOfiDoc=String(t.origen||'')==='oficina_firma'
+        ||!!prev.doc_comunicado_oficina
+        ||!!(t.sinExpediente&&String(t.oficina||'').trim());
+      if(esOfiDoc)t.origen='oficina_firma';
       t.firmaWf=Object.assign({},prev,{
         fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida'),
         publicado:true,
+        doc_comunicado_oficina:!!(esOfiDoc||prev.doc_comunicado_oficina),
         canal:opts.canal||prev.canal||'',
         notificacion:{en:new Date().toISOString(),a:(opts.destinos||[]).join(', '),por:taskComentarioAutor(),canal:opts.canal||prev.canal||''}
       });
@@ -1225,7 +1247,12 @@ function getTramiteFirmaRowsParaPaletaDirector(modo){
     const e=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
     const nom=e?(typeof getNom==='function'?getNom(e):''):(t.nombre||'(Sin expediente)');
     const ofi=tramiteFirmaOficinaId(t)||(e&&e._pqrs_oficina)||(e&&e._depto)||'';
-    const tipoLbl=t.origen==='oficina_firma'?'Oficio oficina':'Trámite';
+    const tipoLbl=(typeof taskEsDocumentoComunicadoOficina==='function'?taskEsDocumentoComunicadoOficina(t):t.origen==='oficina_firma')?'Oficio oficina':'Trámite';
+    const esOfiDoc=typeof taskEsDocumentoComunicadoOficina==='function'?taskEsDocumentoComunicadoOficina(t):t.origen==='oficina_firma';
+    const f=String(typeof taskFirmaFase==='function'?taskFirmaFase(t):((t.firmaWf&&t.firmaWf.fase)||'')).trim();
+    const cerrada=f==='cerrada_atendida'||f==='cerrada'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA)
+      ||(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))
+      ||String(t.estado||'')==='Atendida';
     return {
       _exp:t.exp||t.codigo,
       _tramite_firma_task:true,
@@ -1240,7 +1267,8 @@ function getTramiteFirmaRowsParaPaletaDirector(modo){
       _tramite:e?e._tramite:'',
       _pqrs_oficina:ofi||'guaviare',
       _sin_expediente:!!t.sinExpediente,
-      _oficina_firma:t.origen==='oficina_firma'
+      _oficina_firma:!!esOfiDoc,
+      _oficina_doc_respondida:!!(esOfiDoc&&cerrada)
     };
   });
 }
@@ -3681,6 +3709,7 @@ async function submitEntregaOficinaFirma(){
       t.firmaWf={
         fase:faseFirma,
         tipo:TIPO_OFI,
+        doc_comunicado_oficina:true,
         notificar_por:notifPor||'',
         notificar_por_propuesto:notifPor||'',
         canal:'correo',
@@ -3707,6 +3736,7 @@ async function submitEntregaOficinaFirma(){
       t.firmaWf={
         fase:faseCerrada,
         tipo:isMsg?TIPO_MSG:TIPO_OFI,
+        doc_comunicado_oficina:true,
         canal:canalFinal,
         oficio:oficio||'',
         cuerpo:cuerpo||'',
