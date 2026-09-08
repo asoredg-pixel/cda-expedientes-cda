@@ -3719,42 +3719,49 @@ async function submitEntregaOficinaFirma(){
       t.verificadoPor=autor+' · documento/comunicado oficina';
     }
     if(modoEmail&&typeof pqrsEnviarCorreoCiudadano==='function'){
+      if(typeof sstCargaProgress==='function')sstCargaProgress(70,'Enviando correo…');
       const destinos=emailTo.split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s&&s.includes('@');});
       let htmlBody=(cuerpo||'').replace(/\n/g,'<br>');
       const docsMail=(t.soportes||[]).filter(function(s){return s&&(s.url||s.preview);}).map(function(s){
-        return{nombre:s.nombre||s.label||'Documento',driveLink:s.url||s.preview,previewLink:s.preview||s.url,fileId:s.driveFileId||'',localBlob:s.localBlob||null};
+        return{nombre:s.nombre||s.label||'Documento',driveLink:s.url||s.preview,previewLink:s.preview||s.url,fileId:s.driveFileId||''};
+      });
+      const tieneLinksDrive=docsMail.some(function(d){
+        return d.driveLink&&!String(d.driveLink).startsWith('data:');
       });
       if(docsMail.length){
         htmlBody+='<hr><p style="font-size:12px"><strong>Documentos:</strong></p><ul>';
         docsMail.forEach(function(d){
           if(d.driveLink&&!String(d.driveLink).startsWith('data:'))
             htmlBody+='<li><a href="'+escAttr(d.driveLink)+'">'+escAttr(d.nombre)+'</a></li>';
-          else htmlBody+='<li>'+escAttr(d.nombre)+' (adjunto)</li>';
+          else htmlBody+='<li>'+escAttr(d.nombre)+'</li>';
         });
         htmlBody+='</ul>';
       }
-      const adjuntos=[];
-      const pushBlob=function(blob,nombre,mime){
-        if(!blob)return;
-        try{
-          adjuntos.push(blob instanceof File?blob:new File([blob],nombre||'documento.pdf',{type:mime||blob.type||'application/pdf'}));
-        }catch(errF){console.warn('ofi-doc File:',errF);}
-      };
-      // 1) Blobs en soportes  2) staging (aunque ya estén subidos a Drive)
-      (t.soportes||[]).forEach(function(s){
-        if(s)pushBlob(s.localBlob,s.nombre||s.localNombre,s.tipo||s.localMime);
-      });
-      if(typeof sstFileStagingCtx==='function'){
-        const stg=sstFileStagingCtx(ctxKey);
-        if(stg&&stg.main&&stg.main.blob)pushBlob(stg.main.blob,stg.main.nombre,stg.main.tipo);
-        (stg&&stg.anexos||[]).forEach(function(a){if(a&&a.blob)pushBlob(a.blob,a.nombre,a.tipo);});
+      // Si ya hay links Drive en el cuerpo, NO adjuntar binarios (MIME grande → timeout).
+      // Antes el flujo enviaba solo HTML+links y funcionaba; los adjuntos File son opcionales.
+      let adjuntos=[];
+      if(!tieneLinksDrive){
+        const pushBlob=function(blob,nombre,mime){
+          if(!blob)return;
+          try{
+            adjuntos.push(blob instanceof File?blob:new File([blob],nombre||'documento.pdf',{type:mime||blob.type||'application/pdf'}));
+          }catch(errF){console.warn('ofi-doc File:',errF);}
+        };
+        (t.soportes||[]).forEach(function(s){
+          if(s)pushBlob(s.localBlob,s.nombre||s.localNombre,s.tipo||s.localMime);
+        });
+        if(typeof sstFileStagingCtx==='function'){
+          const stg=sstFileStagingCtx(ctxKey);
+          if(stg&&stg.main&&stg.main.blob)pushBlob(stg.main.blob,stg.main.nombre,stg.main.tipo);
+          (stg&&stg.anexos||[]).forEach(function(a){if(a&&a.blob)pushBlob(a.blob,a.nombre,a.tipo);});
+        }
       }
-      // No re-descargar de Drive: el HTML ya lleva los links; evita el aviso engañoso
       const sent=await pqrsEnviarCorreoCiudadano(destinos,emailSubject||asunto,htmlBody,true,adjuntos,{
         cc:emailCc,bcc:emailBcc,oficinaId:ofi
       });
       if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
       correoEnviado=true;
+      if(typeof sstCargaProgress==='function')sstCargaProgress(90,'Guardando actividad…');
     }
     // Quitar blobs / data-URL enormes antes de Firestore
     (t.soportes||[]).forEach(function(s){
