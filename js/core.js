@@ -2122,9 +2122,9 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const tAct=(opts.t)||(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
     ||(typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null);
   const por=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
-  prog(progBase,'Preparando adjuntos…');
+  prog(progBase,'Preparando correo…');
   let adjuntos=[];
-  // 1) Archivos locales del formulario (recién elegidos) — no dependen de re-descarga Drive
+  // Solo archivos locales (nunca re-descargar de Drive aqui: eso colgaba minutos).
   const localSrc=[].concat(opts.localFiles||[],opts.allUpload||[]);
   localSrc.forEach(function(it){
     const f=_pqrsFileFromLocalAdj(it);
@@ -2138,43 +2138,40 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&x.size===f.size;}))return;
     adjuntos.push(f);
   });
-  // 2) Completar desde Drive solo lo que falte (sin alertas que interrumpan la carga)
-  if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'){
-    try{
-      const fromDrive=await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:tAct,quiet:true});
-      (fromDrive||[]).forEach(function(f){
-        if(!f)return;
-        const key=String(f.name||'').toLowerCase()+':'+(f.size||0);
-        if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()+':'+(x.size||0)===key;}))return;
-        adjuntos.push(f);
-      });
-    }catch(errAdj){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica adj:',errAdj);}
+  // Si ya estan en Drive, enviar con enlaces (evita empaquetar PDFs en base64 1-5+ min).
+  const docsConLink=docsAdj.filter(function(d){
+    return d&&d.driveLink&&d.tipo!=='soporte_notificacion'&&d.tipo!=='link';
+  });
+  let totalLocal=0;
+  adjuntos.forEach(function(f){totalLocal+=(f&&f.size)||0;});
+  const MAX_ATTACH=1.5*1024*1024;
+  if(docsConLink.length>0||totalLocal>MAX_ATTACH){
+    adjuntos=[];
+    prog(progBase+1,docsConLink.length?'Enviando con enlaces Drive…':'Enviando correo…');
   }
-  prog(Math.min(92,progBase+2),'Generando soporte de envío…');
-  let pdfBlob=null;
-  try{
-    if(typeof generarPdfSoporteNotificacionActividad==='function'){
-      pdfBlob=await generarPdfSoporteNotificacionActividad(e,tAct,{
-        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
-      });
-    }
-  }catch(errP){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica pdf:',errP);}
-  if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
   const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
-  prog(Math.min(95,progBase+4),'Enviando correo al ciudadano…');
+  prog(Math.min(97,progBase+3),'Enviando correo al ciudadano…');
   const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
     cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
   });
   if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
-  prog(97,'Registrando soporte en Drive…');
-  let soporteReg={pdfBlob:pdfBlob,up:null};
-  if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
+  // Tras el envio: PDF de soporte en Drive (no va adjunto al correo).
+  prog(98,'Registrando soporte de envío…');
+  let soporteReg={pdfBlob:null,up:null};
+  if(typeof registrarSoporteEnvioCorreoNotif==='function'){
     try{
-      soporteReg=await registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
+      const sopP=registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
         para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
-        skipAttach:true,pdfBlob:pdfBlob
-      },adjuntos);
+        skipAttach:true
+      },[]);
+      soporteReg=await Promise.race([
+        sopP,
+        new Promise(function(resolve){
+          setTimeout(function(){resolve({pdfBlob:null,up:null,_timeout:true});},25000);
+        })
+      ]);
+      if(soporteReg&&soporteReg._timeout)console.warn('soporte envio: timeout Drive (correo ya enviado)');
     }catch(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte:',errSop);}
   }
   if(soporteReg&&soporteReg.up&&(soporteReg.up.driveLink||soporteReg.up.fileId||soporteReg.up.driveFileId)&&Array.isArray(adjDocumentos)){

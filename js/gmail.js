@@ -4227,27 +4227,42 @@ function _updateGmailOfiBtn() {
 }
 
 // ---- API helper ----
-async function _gmailOfiApi(method, url, body) {
+async function _gmailOfiApi(method, url, body, optsApi) {
+  optsApi = optsApi || {};
   // Secretary reuses her primary token; other roles use the OFI token
   const token = _gmailOfiIsSecretaria()
     ? (sessionStorage.getItem(GMAIL_TOKEN_KEY) || '')
     : gmailOfiGetToken();
   if (!token) { notif('⚠️ Reconecte su correo para continuar.', 'err'); throw new Error('Sin token.'); }
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const ms = optsApi.timeoutMs != null ? optsApi.timeoutMs : 45000;
+  let timer = null;
+  if (ctrl) timer = setTimeout(function() { try { ctrl.abort(); } catch (eA) {} }, ms);
   const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  if (res.status === 401) {
-    if (_gmailOfiIsSecretaria()) {
-      gmailSetToken('', 0); // Clear primary token
-    } else {
-      gmailOfiSetToken('');
+  if (ctrl) opts.signal = ctrl.signal;
+  try {
+    const res = await fetch(url, opts);
+    if (res.status === 401) {
+      if (_gmailOfiIsSecretaria()) {
+        gmailSetToken('', 0); // Clear primary token
+      } else {
+        gmailOfiSetToken('');
+      }
+      _updateGmailOfiBtn();
+      notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
+      throw new Error('Token expirado.');
     }
-    _updateGmailOfiBtn();
-    notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
-    throw new Error('Token expirado.');
+    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
+    return res.json();
+  } catch (err) {
+    if (err && (err.name === 'AbortError' || /aborted/i.test(String(err.message || '')))) {
+      throw new Error('El envío de correo no respondió a tiempo. Verifique la conexión Gmail e intente de nuevo.');
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
-  return res.json();
 }
 
 // ---- Date formatting ----
@@ -4467,7 +4482,13 @@ async function _gmailOfiLoadSignature(force) {
       && cuenta && cuenta === _gmailOfiSignatureForAccount) {
       return;
     }
-    const data = await _gmailOfiApi('GET', 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs');
+    // No bloquear el envío si la firma tarda: tope 6s.
+    const data = await Promise.race([
+      _gmailOfiApi('GET', 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs', null, { timeoutMs: 6000 }),
+      new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('firma timeout')); }, 6000);
+      })
+    ]);
     const primary = (data.sendAs || []).find(s => s.isPrimary) || (data.sendAs || [])[0];
     if (primary && primary.signature) {
       _gmailOfiSignatureHtml = primary.signature; // keep full HTML (logo, colors, etc.)
@@ -4481,9 +4502,11 @@ async function _gmailOfiLoadSignature(force) {
       _gmailOfiSignatureForAccount = cuenta || '';
     }
   } catch(e) {
-    _gmailOfiSignature = '';
-    _gmailOfiSignatureHtml = '';
-    _gmailOfiSignatureForAccount = '';
+    if (!_gmailOfiSignatureHtml) {
+      _gmailOfiSignature = '';
+      _gmailOfiSignatureHtml = '';
+      _gmailOfiSignatureForAccount = '';
+    }
   }
 }
 
@@ -4928,17 +4951,28 @@ function _gmailOfiAppendSignatureHtml(htmlBody){
 /** Base64url del MIME. Evita encodeURIComponent sobre PDFs grandes (rompe / lanza URIError). */
 function _gmailOfiMimeToRawB64(mimeStr) {
   const s = String(mimeStr || '');
+  // Ruta rápida: TextEncoder + btoa por bloques (evita congelar 1–5 min con PDFs).
+  try {
+    if (typeof TextEncoder !== 'undefined') {
+      const bytes = new TextEncoder().encode(s);
+      const CHUNK = 0x8000;
+      let b64 = '';
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+        let bin = '';
+        for (let k = 0; k < slice.length; k++) bin += String.fromCharCode(slice[k]);
+        b64 += btoa(bin);
+      }
+      return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+  } catch (errFast) { console.warn('_gmailOfiMimeToRawB64 fast:', errFast); }
   const CHUNK = 0x8000;
-  let bin = '';
+  let b64 = '';
   for (let j = 0; j < s.length; j += CHUNK) {
     const slice = s.slice(j, j + CHUNK);
-    const arr = new Array(slice.length);
-    for (let k = 0; k < slice.length; k++) arr[k] = slice.charCodeAt(k) & 0xff;
-    bin += String.fromCharCode.apply(null, arr);
-  }
-  let b64 = '';
-  for (let i = 0; i < bin.length; i += CHUNK) {
-    b64 += btoa(bin.slice(i, i + CHUNK));
+    let bin = '';
+    for (let k = 0; k < slice.length; k++) bin += String.fromCharCode(slice.charCodeAt(k) & 0xff);
+    b64 += btoa(bin);
   }
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -4972,9 +5006,9 @@ function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
 
 // Alias used by core.js workflow — sends a plain HTML email using the office token
 async function gmailOfiSendMessage(to, subject, htmlBody) {
-  try { await _gmailOfiLoadSignature(true); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
+  try { await _gmailOfiLoadSignature(false); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
   const mime = _gmailOfiBuildHtmlMime(to, subject, htmlBody);
-  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
+  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 45000 });
 }
 
 /** MIME HTML institucional con adjuntos reales (oficio / anexos de notificación PQRSD). */
@@ -5036,11 +5070,16 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
 /** Envía HTML desde el Gmail de oficina con adjuntos (File/Blob). opts: {cc,bcc} */
 async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opts) {
   opts = opts || {};
-  try { await _gmailOfiLoadSignature(true); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
+  // Usar firma en caché; no forzar recarga en cada envío (eso sumaba varios segundos o colgaba).
+  try { await _gmailOfiLoadSignature(false); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
+  const list = Array.isArray(files) ? files.filter(Boolean) : [];
+  if (!list.length) {
+    return gmailOfiSendMessage(to, subject, htmlBody);
+  }
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
-    to, subject, htmlBody, files || [], opts.cc || '', opts.bcc || ''
+    to, subject, htmlBody, list, opts.cc || '', opts.bcc || ''
   );
-  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime });
+  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
 }
 
 async function gmailOfiSendCompose() {
