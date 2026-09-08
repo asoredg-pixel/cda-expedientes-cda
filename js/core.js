@@ -2063,16 +2063,30 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
 }
 window.aplicarPqrsEntregaDirecta=aplicarPqrsEntregaDirecta;
 /** Envía correo al ciudadano en entrega directa (mensaje u oficio con notificación por correo). */
-function _pqrsAwaitConTimeout(promise,ms,label){
-  ms=ms!=null?ms:90000;
-  label=label||'Operación';
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise(function(_,reject){
-      setTimeout(function(){reject(new Error(label+' (tiempo agotado tras '+Math.round(ms/1000)+'s)'));},ms);
-    })
-  ]);
+function _pqrsFileFromLocalAdj(item){
+  if(!item)return null;
+  const blob=item.blob||item.localBlob||item._localBlob||null;
+  if(!blob)return null;
+  let nombre=String(item.nombre||item.localNombre||item.name||'adjunto.pdf').trim()||'adjunto.pdf';
+  const mime=item.tipo||item.localMime||item.type||blob.type||'application/pdf';
+  return blob instanceof File?blob:new File([blob],nombre,{type:mime});
 }
+/** Revierte un alta PQRSD incompleta (crear+atender falló) para poder reintentar el mismo número. */
+async function pqrsRollbackAltaIncompleta(e,motivo){
+  if(!e||!e._exp)return false;
+  const expId=String(e._exp).trim();
+  const idx=(typeof exps!=='undefined'&&Array.isArray(exps))?exps.findIndex(function(x){return String(x._exp||'').trim()===expId;}):-1;
+  if(idx>=0)exps.splice(idx,1);
+  try{
+    if(typeof persistExpedienteDelete==='function')await persistExpedienteDelete(e);
+    else if(typeof purgeExpFromLocalStorageCache==='function')purgeExpFromLocalStorageCache(expId);
+  }catch(err){console.warn('pqrsRollbackAltaIncompleta:',err);}
+  try{
+    if(typeof logAudit==='function')logAudit('Rollback alta incompleta PQRSD ['+expId+'] · '+(motivo||''),'pqrsd',expId);
+  }catch(errA){}
+  return true;
+}
+window.pqrsRollbackAltaIncompleta=pqrsRollbackAltaIncompleta;
 async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   opts=opts||{};
   if(!e||!pq)return{skipped:true};
@@ -2088,11 +2102,12 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const cuerpo=String(pq.cuerpo||'').trim();
   if(!cuerpo)throw new Error('Indique el cuerpo del correo');
   const expSub=String(e._exp||'').trim();
+  const progBase=opts.progBase!=null?Number(opts.progBase):88;
   const prog=function(pct,msg){
-    if(typeof sstCargaProgress==='function')sstCargaProgress(pct,msg||expSub);
-    else if(typeof sstCargaShow==='function')sstCargaShow({title:'Notificando por correo',message:msg||'Enviando respuesta al ciudadano…',pct:pct,sub:expSub});
+    const p=Math.max(progBase,Math.min(99,pct));
+    if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
   };
-  // Si falta Gmail, ocultar la carga para que el usuario pueda conectar (evita quedarse en 70%).
+  // Si falta Gmail, ocultar la carga para que el usuario pueda conectar.
   if(typeof sstSolicitarGmailParaAdjuntar==='function'){
     const yaGmail=typeof sstGmailSesionActiva==='function'&&sstGmailSesionActiva();
     if(!yaGmail){
@@ -2100,63 +2115,66 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
       if(typeof sstCargaShow==='function')
-        sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:72,sub:expSub});
+        sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:progBase,sub:expSub});
     }
   }
   const docsAdj=Array.isArray(adjDocumentos)?adjDocumentos:[];
   const tAct=(opts.t)||(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
     ||(typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null);
   const por=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
-  prog(75,'Preparando adjuntos…');
+  prog(progBase,'Preparando adjuntos…');
   let adjuntos=[];
+  // 1) Archivos locales del formulario (recién elegidos) — no dependen de re-descarga Drive
+  const localSrc=[].concat(opts.localFiles||[],opts.allUpload||[]);
+  localSrc.forEach(function(it){
+    const f=_pqrsFileFromLocalAdj(it);
+    if(f)adjuntos.push(f);
+  });
+  docsAdj.forEach(function(d){
+    if(!d||!(d.localBlob||d._localBlob||d.blob))return;
+    const f=_pqrsFileFromLocalAdj(d);
+    if(!f)return;
+    const key=String(f.name||'').toLowerCase();
+    if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&x.size===f.size;}))return;
+    adjuntos.push(f);
+  });
+  // 2) Completar desde Drive solo lo que falte (sin alertas que interrumpan la carga)
   if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'){
     try{
-      adjuntos=await _pqrsAwaitConTimeout(
-        pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:tAct}),
-        60000,
-        'Descarga de adjuntos'
-      );
+      const fromDrive=await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:tAct,quiet:true});
+      (fromDrive||[]).forEach(function(f){
+        if(!f)return;
+        const key=String(f.name||'').toLowerCase()+':'+(f.size||0);
+        if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()+':'+(x.size||0)===key;}))return;
+        adjuntos.push(f);
+      });
     }catch(errAdj){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica adj:',errAdj);}
   }
-  // Generar PDF de soporte y adjuntarlo al correo ANTES de subir a Drive (la subida no debe bloquear el envío).
-  prog(80,'Generando soporte de envío…');
+  prog(Math.min(92,progBase+2),'Generando soporte de envío…');
   let pdfBlob=null;
   try{
     if(typeof generarPdfSoporteNotificacionActividad==='function'){
-      pdfBlob=await _pqrsAwaitConTimeout(
-        generarPdfSoporteNotificacionActividad(e,tAct,{
-          para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
-        }),
-        30000,
-        'Generación del PDF de soporte'
-      );
+      pdfBlob=await generarPdfSoporteNotificacionActividad(e,tAct,{
+        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
+      });
     }
   }catch(errP){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica pdf:',errP);}
   if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
   const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
-  prog(88,'Enviando correo al ciudadano…');
-  const sent=await _pqrsAwaitConTimeout(
-    pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
-      cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
-    }),
-    90000,
-    'Envío de correo'
-  );
+  prog(Math.min(95,progBase+4),'Enviando correo al ciudadano…');
+  const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
+    cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
+  });
   if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
-  // Tras el envío: registrar PDF en Drive / expediente (con tope de tiempo; si falla, el correo ya salió).
-  prog(94,'Registrando soporte en Drive…');
+  prog(97,'Registrando soporte en Drive…');
   let soporteReg={pdfBlob:pdfBlob,up:null};
   if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
     try{
-      soporteReg=await _pqrsAwaitConTimeout(
-        registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
-          para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
-          skipAttach:true,pdfBlob:pdfBlob
-        },adjuntos),
-        45000,
-        'Registro de soporte en Drive'
-      );
+      soporteReg=await registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
+        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+        skipAttach:true,pdfBlob:pdfBlob
+      },adjuntos);
     }catch(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte:',errSop);}
   }
   if(soporteReg&&soporteReg.up&&(soporteReg.up.driveLink||soporteReg.up.fileId||soporteReg.up.driveFileId)&&Array.isArray(adjDocumentos)){
@@ -14584,7 +14602,10 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             es_anexo:esAnexo,
             anexo_n:esAnexo?(da.anexo_n||null):null,
             driveFilename:da.driveFilename||da.nombre||'',
-            driveEstado:'cerrado'
+            driveEstado:'cerrado',
+            localBlob:da.localBlob||null,
+            localNombre:da.localNombre||da.nombre||'',
+            localMime:da.localMime||''
           });
         }
       });
@@ -14623,10 +14644,16 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       const needMailEd=pq.tipo===PQRS_WF_TIPO.MENSAJE||(pq.tipo===PQRS_WF_TIPO.OFICIO&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
       if(needMailEd&&typeof pqrsEntregaDirectaEnviarCorreoSiAplica==='function'){
         const tMail=getTaskFromExp(e,taskId)||t;
-        return pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{t:tMail}).then(function(){
+        const localUpload=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{files:[],anexos:[]};
+        const localFiles=[].concat(localUpload.files||[],localUpload.anexos||[]);
+        if(typeof sstCargaProgress==='function')sstCargaProgress(96,'Enviando respuesta al ciudadano…');
+        return pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{
+          t:tMail,allUpload:localFiles,progBase:96
+        }).then(function(){
           runCierreUi();
         }).catch(function(errMail){
           console.warn('entrega directa correo:',errMail);
+          if(typeof sstCargaHide==='function')sstCargaHide();
           notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110),'err');
         });
       }
@@ -14739,6 +14766,9 @@ function submitEnviarSoporteVerificacion(expId,taskId){
               up.nombre=up.nombre||'Proyección de respuesta';
               up.labelProyeccion='Proyección de respuesta';
             }
+            up.localBlob=f.blob;
+            up.localNombre=f.nombre||up.nombre;
+            up.localMime=f.tipo||'';
             uploaded.push(up);
           }
         }
@@ -21895,6 +21925,7 @@ async function submitCrearPqrsDesdeActLibre(){
     btn.disabled=false;
     btn.textContent=btnLbl||'✚ Crear PQRSD';
   };
+  let altaCreadaEnEsteIntento=false;
   try{
     const datos=collectEntregaRespPqrsAlta();
     datos.oficina='guaviare';
@@ -21935,6 +21966,7 @@ async function submitCrearPqrsDesdeActLibre(){
         por:responsableActivo||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'NCA')
       });
       if(!e){restoreBtn();return;}
+      altaCreadaEnEsteIntento=true;
       expId=e._exp;
       window._actLibrePqrsExpId=expId;
       window._actLibrePqrsCrear=false;
@@ -22010,6 +22042,10 @@ async function submitCrearPqrsDesdeActLibre(){
         const okG=await sstSolicitarGmailParaAdjuntar();
         if(!okG){
           notif('Conecte Gmail/Drive para subir los documentos y complete el envío','err');
+          if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+            await pqrsRollbackAltaIncompleta(e,'sin Gmail al subir');
+            window._actLibrePqrsCrear=true;
+          }
           restoreBtn();
           return;
         }
@@ -22046,6 +22082,9 @@ async function submitCrearPqrsDesdeActLibre(){
               up.nombre=up.nombre||(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta');
             }
             up.driveEstado='cerrado';
+            up.localBlob=f.blob;
+            up.localNombre=f.nombre||up.nombre;
+            up.localMime=f.tipo||'';
             driveArchivos.push(up);
           }
         }
@@ -22053,6 +22092,10 @@ async function submitCrearPqrsDesdeActLibre(){
       }catch(errUp){
         console.warn('submitCrearPqrsDesdeActLibre upload:',errUp);
         if(typeof sstCargaHide==='function')sstCargaHide();
+        if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+          await pqrsRollbackAltaIncompleta(e,'falló subida Drive');
+          window._actLibrePqrsCrear=true;
+        }
         if(typeof alertErrorDriveAdjunto==='function')alertErrorDriveAdjunto(errUp);
         else notif('No se pudo subir el archivo: '+String(errUp.message||errUp).slice(0,90),'err');
         restoreBtn();
@@ -22074,7 +22117,10 @@ async function submitCrearPqrsDesdeActLibre(){
         es_anexo:esAnexo,
         anexo_n:esAnexo?(da.anexo_n||null):null,
         driveFilename:da.driveFilename||da.nombre||'',
-        driveEstado:'cerrado'
+        driveEstado:'cerrado',
+        localBlob:da.localBlob||null,
+        localNombre:da.localNombre||da.nombre||'',
+        localMime:da.localMime||''
       });
     });
 
@@ -22083,18 +22129,30 @@ async function submitCrearPqrsDesdeActLibre(){
     const necesitaCorreo=(pq.tipo===TIPO_MSG)||(pq.tipo===TIPO_OFI_SEND&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
     if(necesitaCorreo){
       try{
-        if(typeof sstCargaShow==='function'){
-          sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:70,sub:expId});
+        const ovCarga=document.getElementById('confirm-prec-overlay');
+        if(typeof sstCargaProgress==='function'&&ovCarga&&ovCarga.classList.contains('on')){
+          sstCargaProgress(96,'Enviando respuesta al ciudadano…');
+        }else if(typeof sstCargaShow==='function'){
+          sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:96,sub:expId});
         }
         if(typeof pqrsEntregaDirectaEnviarCorreoSiAplica!=='function')
           throw new Error('Envío de correo no disponible');
-        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{registrarHist:true,t:t});
+        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{
+          registrarHist:true,t:t,allUpload:allUpload,progBase:96
+        });
       }catch(errMail){
         console.warn('submitCrearPqrsDesdeActLibre correo:',errMail);
         if(typeof sstCargaHide==='function')sstCargaHide();
-        notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. La PQRSD quedó en Por ejecutar; reintente la atención.','err');
-        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
-        if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+        if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+          await pqrsRollbackAltaIncompleta(e,String(errMail&&errMail.message||errMail||'').slice(0,80));
+          window._actLibrePqrsCrear=true;
+          window._actLibrePqrsExpId=expId;
+          notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. Se revirtieron los datos de alta; puede reintentar con el mismo número.','err');
+        }else{
+          notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. Puede reintentar la atención desde Por ejecutar.','err');
+          if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+          if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+        }
         restoreBtn();
         return;
       }
@@ -27145,24 +27203,29 @@ function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos){
 /** Descarga un doc del workflow desde Drive como File (para adjuntar al correo). */
 async function pqrsDriveDocToFile(doc){
   if(!doc)return null;
+  // Preferir blob local (acabado de seleccionar/subir) — evita fallos al re-descargar de Drive.
+  const localBlob=doc.localBlob||doc._localBlob||doc.blob||null;
+  if(localBlob){
+    let nombre=String(doc.localNombre||doc.nombre||doc.label||doc.driveFilename||'adjunto.pdf').replace(/^(por_notificar|atendido|por_firma|por_firmar|revision)-/i,'');
+    if(!nombre||nombre==='.')nombre='adjunto.pdf';
+    const mime=doc.localMime||doc.mimeType||doc.mime||(localBlob.type)||'application/pdf';
+    return localBlob instanceof File?localBlob:new File([localBlob],nombre,{type:mime});
+  }
   let fid=String(doc.fileId||doc.driveFileId||'').trim();
   if(!fid&&typeof parseDrivePreviewUrl==='function'){
     const p=parseDrivePreviewUrl(doc.driveLink||doc.previewLink||doc.url||doc.preview||'');
     fid=String(p&&p.id||'').trim();
   }
   if(!fid)return null;
-  // Preferir token de oficina (encargado) — los PDF firmados suelen subirse con esa cuenta.
-  // Luego Secretaría. Antes se priorizaba Secretaría y fallaba el download (403) → correo sin adjuntos.
+  // Mismo orden que la subida: best token primero; luego oficina / Secretaría.
   const tokens=[];
+  const best=typeof _driveGetBestToken==='function'?_driveGetBestToken():'';
+  if(best)tokens.push(best);
   const ofiTok=(typeof gmailOfiGetToken==='function'&&typeof gmailOfiIsTokenValid==='function'&&gmailOfiIsTokenValid())
     ?gmailOfiGetToken():'';
   const secTok=typeof _driveGetSecretariaToken==='function'?_driveGetSecretariaToken():'';
-  if(ofiTok)tokens.push(ofiTok);
-  if(secTok&&secTok!==ofiTok)tokens.push(secTok);
-  if(!tokens.length&&typeof _driveGetBestToken==='function'){
-    const best=_driveGetBestToken();
-    if(best)tokens.push(best);
-  }
+  if(ofiTok&&ofiTok!==best)tokens.push(ofiTok);
+  if(secTok&&secTok!==best&&secTok!==ofiTok)tokens.push(secTok);
   if(!tokens.length)throw new Error('Conecte Gmail/Drive para adjuntar los documentos');
   const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
   let lastErr=null;
@@ -27335,10 +27398,15 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos,opts){
       fallos.push(String(d.nombre||d.label||err.message||'doc'));
     }
   }
-  if(docs.length&&!files.length&&typeof notif==='function')
-    notif('⚠️ No se pudieron descargar los adjuntos desde Drive. Verifique la conexión Gmail/Drive e intente de nuevo.','warn');
-  else if(fallos.length&&typeof notif==='function')
-    notif('⚠️ Algunos adjuntos no se pudieron incluir: '+fallos.slice(0,3).join(', ')+(fallos.length>3?'…':''),'warn');
+  if(docs.length&&!files.length){
+    console.warn('pqrsPrepararAdjuntosNotificacionCorreo: no se pudieron obtener adjuntos',fallos);
+    if(!opts.quiet&&typeof notif==='function')
+      notif('⚠️ No se pudieron descargar los adjuntos desde Drive. Verifique la conexión Gmail/Drive e intente de nuevo.','warn');
+  }else if(fallos.length){
+    console.warn('pqrsPrepararAdjuntosNotificacionCorreo parcial:',fallos);
+    if(!opts.quiet&&typeof notif==='function')
+      notif('⚠️ Algunos adjuntos no se pudieron incluir: '+fallos.slice(0,3).join(', ')+(fallos.length>3?'…':''),'warn');
+  }
   return files;
 }
 // Envía un correo a uno o varios destinatarios.

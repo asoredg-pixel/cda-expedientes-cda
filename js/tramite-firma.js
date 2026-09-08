@@ -2897,6 +2897,7 @@ async function submitEntregaOficinaPqrsMigracion(){
     btn.disabled=false;
     btn.textContent=btnLbl||'📤 Crear y atender PQRSD';
   };
+  let altaCreadaEnEsteIntento=false;
   try{
     const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
     let crear=!!window._ofiDocPqrsCrear;
@@ -2929,7 +2930,6 @@ async function submitEntregaOficinaPqrsMigracion(){
       const pqPrev=typeof collectPqrsEntregaDatos==='function'?collectPqrsEntregaDatos(expId,stubPrev):null;
       if(!pqPrev){restoreBtn();return;}
 
-      // Si ya se creó en un intento anterior, reutilizar (evita «Ya existe…» al 2.º clic)
       const ya=typeof getExpById==='function'?getExpById(expId):null;
       if(ya&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(ya)){
         e=ya;
@@ -2942,6 +2942,7 @@ async function submitEntregaOficinaPqrsMigracion(){
           por:typeof labelOficina==='function'?labelOficina(ofi):ofi
         });
         if(!e){restoreBtn();return;}
+        altaCreadaEnEsteIntento=true;
         expId=e._exp;
         window._ofiDocPqrsCrear=false;
         window._ofiDocPqrsExpId=expId;
@@ -2972,7 +2973,6 @@ async function submitEntregaOficinaPqrsMigracion(){
     let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
     if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
     if(!t||!t.id){
-      // Crear tarea mínima si ensure falló
       if(!Array.isArray(e.tasks))e.tasks=[];
       t={
         id:typeof genTaskId==='function'?genTaskId():('tk_'+Date.now()),
@@ -2999,6 +2999,10 @@ async function submitEntregaOficinaPqrsMigracion(){
         const okG=await sstSolicitarGmailParaAdjuntar();
         if(!okG){
           notif('Conecte Gmail/Drive para subir los documentos y complete el envío','err');
+          if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+            await pqrsRollbackAltaIncompleta(e,'sin Gmail al subir');
+            window._ofiDocPqrsCrear=true;
+          }
           restoreBtn();
           return;
         }
@@ -3040,6 +3044,9 @@ async function submitEntregaOficinaPqrsMigracion(){
               up.nombre=up.nombre||(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta');
             }
             up.driveEstado='cerrado';
+            up.localBlob=f.blob;
+            up.localNombre=f.nombre||up.nombre;
+            up.localMime=f.tipo||'';
             driveArchivos.push(up);
           }
         }
@@ -3047,6 +3054,10 @@ async function submitEntregaOficinaPqrsMigracion(){
       }catch(errUp){
         console.warn('submitEntregaOficinaPqrsMigracion upload:',errUp);
         if(typeof sstCargaHide==='function')sstCargaHide();
+        if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+          await pqrsRollbackAltaIncompleta(e,'falló subida Drive');
+          window._ofiDocPqrsCrear=true;
+        }
         if(typeof alertErrorDriveAdjunto==='function')alertErrorDriveAdjunto(errUp);
         else notif('No se pudo subir el archivo: '+String(errUp.message||errUp).slice(0,90),'err');
         restoreBtn();
@@ -3068,7 +3079,10 @@ async function submitEntregaOficinaPqrsMigracion(){
         es_anexo:esAnexo,
         anexo_n:esAnexo?(da.anexo_n||null):null,
         driveFilename:da.driveFilename||da.nombre||'',
-        driveEstado:'cerrado'
+        driveEstado:'cerrado',
+        localBlob:da.localBlob||null,
+        localNombre:da.localNombre||da.nombre||'',
+        localMime:da.localMime||''
       });
     });
 
@@ -3078,18 +3092,29 @@ async function submitEntregaOficinaPqrsMigracion(){
     const necesitaCorreo=(pq.tipo===TIPO_MSG)||(pq.tipo===TIPO_OFI_SEND&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
     if(necesitaCorreo){
       try{
-        if(typeof sstCargaShow==='function'){
-          sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:70,sub:expId});
+        if(typeof sstCargaProgress==='function'&&document.getElementById('confirm-prec-overlay')&&document.getElementById('confirm-prec-overlay').classList.contains('on')){
+          sstCargaProgress(96,'Enviando respuesta al ciudadano…');
+        }else if(typeof sstCargaShow==='function'){
+          sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:96,sub:expId});
         }
         if(typeof pqrsEntregaDirectaEnviarCorreoSiAplica!=='function')
           throw new Error('Envío de correo no disponible');
-        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{registrarHist:true,t:t});
+        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{
+          registrarHist:true,t:t,allUpload:allUpload,progBase:96
+        });
       }catch(errMail){
         console.warn('submitEntregaOficinaPqrsMigracion correo:',errMail);
         if(typeof sstCargaHide==='function')sstCargaHide();
-        notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. La PQRSD quedó en Por ejecutar; reintente la atención.','err');
-        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
-        if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+        if(altaCreadaEnEsteIntento&&typeof pqrsRollbackAltaIncompleta==='function'){
+          await pqrsRollbackAltaIncompleta(e,String(errMail&&errMail.message||errMail||'').slice(0,80));
+          window._ofiDocPqrsCrear=true;
+          window._ofiDocPqrsExpId=expId;
+          notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. Se revirtieron los datos de alta; puede reintentar con el mismo número.','err');
+        }else{
+          notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. Puede reintentar la atención desde Por ejecutar.','err');
+          if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+          if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+        }
         restoreBtn();
         return;
       }
