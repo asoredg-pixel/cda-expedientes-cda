@@ -1323,6 +1323,46 @@ function pqrsOficinaRespondidasAccionesHtml(e){
   return h;
 }
 window.pqrsOficinaRespondidasAccionesHtml=pqrsOficinaRespondidasAccionesHtml;
+/**
+ * Documento/comunicado (oficina_firma) en «Por firmar»:
+ * mismas acciones que PQRSD de oficina, sin chat (no hay interlocutor).
+ */
+function pqrsOficinaDocFirmaAccionesHtml(e,t){
+  if(!e||!e._taskId)return'';
+  const expId=String(e._exp||'').trim();
+  const taskId=String(e._taskId||'').trim();
+  t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
+  if(!t)return'';
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  let h='<span class="sst-act-toolbar">';
+  // Sin 💬 chat (actividad autocreada / sin interlocutor)
+  if(typeof taskNotasInternasBtnHtml==='function')h+=taskNotasInternasBtnHtml(expId,taskId);
+  // 📤 Cargar firmado / gestionar (equivalente a «Entregar respuesta» en PQRSD Por firmar)
+  if(typeof actPuedeCargarFirmadoPorFirmar==='function'?actPuedeCargarFirmadoPorFirmar():true){
+    if(typeof actPorFirmarCargarBtnHtml==='function')
+      h+=actPorFirmarCargarBtnHtml(expId,taskId,t,null)+' ';
+    else
+      h+='<button type="button" class="btn bsm bic act-ico" title="Cargar documento firmado" onclick="event.stopPropagation();openCargarFirmadoPorFirmar(\''+eid+'\',\''+tid+'\')">📤</button> ';
+  }
+  // ✍️ marcar / desmarcar firma física
+  if(typeof tramiteOficinaFirmaFisicaBtnHtml==='function')
+    h+=tramiteOficinaFirmaFisicaBtnHtml(expId,taskId,t)+' ';
+  // 📅 organizar mi día
+  if(typeof taskAgendaBtnHtml==='function'){
+    const agBtn=taskAgendaBtnHtml(expId,taskId);
+    if(agBtn)h+=agBtn;
+    else if(typeof openAgendaDesdeActividad==='function')
+      h+='<button type="button" class="btn bsm bic act-ico act-agenda-btn" title="Organizar en mi día" onclick="event.stopPropagation();openAgendaDesdeActividad(\''+eid+'\',\''+tid+'\')">📅</button> ';
+  }
+  // 🔍 ver documentos (vista por firmar)
+  if(typeof openActPorFirmarDocs==='function')
+    h+='<button type="button" class="btn bsm bic act-ico" title="Ver documento y anexos" onclick="event.stopPropagation();openActPorFirmarDocs(\''+eid+'\',\''+tid+'\')">🔍</button>';
+  else if(typeof openTaskVerDocumentoResp==='function')
+    h+='<button type="button" class="btn bsm bic act-ico" title="Ver documento y anexos" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+eid+'\',\''+tid+'\',{soloAprobados:true,porFirmarVista:true})">🔍</button>';
+  h+='</span>';
+  return h;
+}
+window.pqrsOficinaDocFirmaAccionesHtml=pqrsOficinaDocFirmaAccionesHtml;
 function pqrsAccionesTablaHtml(e){
   const id=jsStr(e._exp);
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
@@ -1358,9 +1398,13 @@ function pqrsAccionesTablaHtml(e){
     const pasoFirma=t&&typeof taskPasoPorFirmaDirector==='function'&&taskPasoPorFirmaDirector(t);
     const enNotif=t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
     const ofiDueña=t&&typeof tramitePuedeGestionarComoOficina==='function'&&tramitePuedeGestionarComoOficina(t);
+    const esDocOficina=!!(e._oficina_firma||(t&&t.origen==='oficina_firma'));
     if(esDir&&(filtroOfi==='firmados'||firmFis||pasoFirma||enNotif||(t&&typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))))
       return pqrsDirectorFirmadosAccionesHtml(e);
     if(esDir&&!firmFis&&!enNotif)return pqrsDirectorPorFirmarAccionesHtml(e);
+    // Documento/comunicado de oficina: mismas acciones que PQRSD (sin chat)
+    if(!esDir&&esDocOficina&&(filtroOfi==='por_firmar'||!enNotif)&&typeof pqrsOficinaDocFirmaAccionesHtml==='function')
+      return pqrsOficinaDocFirmaAccionesHtml(e,t);
     let h='<button type="button" class="btn bsm" onclick="event.stopPropagation();openTramiteDirectorFirmarModal(\''+id+'\',\''+tid+'\')">Ver</button> ';
     if(enNotif&&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))
       h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openTramiteNotificarModal(\''+id+'\',\''+tid+'\')" title="Notificar">📬</button> ';

@@ -522,6 +522,53 @@ function tramiteMarcarFirmadoFisico(expId,taskId){
   }
   if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,taskId);
 }
+/** Oficinas (Documento/comunicado): marcar / desmarcar firma física del Director (como PQRSD). */
+function tramiteOficinaToggleFirmaFisica(expId,taskId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  if(!(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))){
+    notif('El documento no está en «Por firmar»','err');return;
+  }
+  const puede=tramitePuedeAtajoFirmaGestion(t)
+    ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    ||(typeof esAdministrador==='function'&&esAdministrador());
+  if(!puede){notif('No puede marcar firma física','err');return;}
+  const wf=getTaskFirmaWf(t);
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+  if(wf.firma_fisica&&wf.firma_fisica.en){
+    setTaskFirmaWf(expId,taskId,{firma_fisica:null,firma_director:null});
+    notif('Firma física desmarcada — sigue en «Por firmar»','ok');
+  }else{
+    setTaskFirmaWf(expId,taskId,{
+      firma_fisica:{por:por,en:new Date().toISOString(),modo:'fisico',registrado_por:'oficina'},
+      firma_director:{por:por,en:new Date().toISOString(),modo:'fisico'}
+    });
+    notif('✓ Firma física marcada — visible para el Director en «Por firmar»','ok');
+  }
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
+}
+/** ✍️ clicable para Documento/comunicado en Por firmar (oficinas). */
+function tramiteOficinaFirmaFisicaBtnHtml(expId,taskId,t){
+  t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
+  if(!t||!(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t)))return'';
+  const wf=getTaskFirmaWf(t);
+  const firm=!!(wf.firma_fisica&&wf.firma_fisica.en);
+  const cuando=firm?String(wf.firma_fisica.en||'').slice(0,10):'';
+  const tip=firm
+    ?('Firma física marcada'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(wf.firma_fisica.por?' · '+wf.firma_fisica.por:'')+' — clic para desmarcar')
+    :'Marcar que el Director ya firmó (clic de nuevo para desmarcar)';
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  if(firm){
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="event.stopPropagation();tramiteOficinaToggleFirmaFisica(\''+eid+'\',\''+tid+'\')"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</button>';
+  }
+  return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(tip)+'" onclick="event.stopPropagation();tramiteOficinaToggleFirmaFisica(\''+eid+'\',\''+tid+'\')">✍️</button>';
+}
+window.tramiteOficinaToggleFirmaFisica=tramiteOficinaToggleFirmaFisica;
+window.tramiteOficinaFirmaFisicaBtnHtml=tramiteOficinaFirmaFisicaBtnHtml;
 
 function tramitePasarAPorNotificar(expId,taskId){
   const t=getTaskAny(expId,taskId);
