@@ -7099,6 +7099,7 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   const side=String(window._taskReviewSideMode||'doc');
   const esEnc=!esModoResponsable()&&!esJurisdiccional();
   const showPqrsCorreo=typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t);
+  const showOfiCorreo=typeof taskReviewShouldShowOficinaDocCorreo==='function'&&taskReviewShouldShowOficinaDocCorreo(t);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   const enPorFirmar=typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e);
@@ -7109,8 +7110,8 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(enPorFirmar?'Documentos y anexos para imprimir':'Documento')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
   if(showCompareBtn)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
-  if(showPqrsCorreo)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='pqrsCorreo'?' on':'')+'" data-side="pqrsCorreo" title="Correo de respuesta" onclick="taskReviewToggleSidePanel(\'pqrsCorreo\',\''+r+'\',\''+tid+'\')">✉️</button>';
+  if(showPqrsCorreo||showOfiCorreo)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='pqrsCorreo'?' on':'')+'" data-side="pqrsCorreo" title="'+(showOfiCorreo?'Correo enviado':'Correo de respuesta')+'" onclick="taskReviewToggleSidePanel(\'pqrsCorreo\',\''+r+'\',\''+tid+'\')">✉️</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
   h+='</nav>';
@@ -15988,6 +15989,13 @@ function taskReviewShouldShowPqrsCorreo(e,t){
   if(t&&typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))return true;
   return false;
 }
+/** Documento/comunicado de oficina (Respondidas): hay datos de correo para el rail ✉️. */
+function taskReviewShouldShowOficinaDocCorreo(t){
+  if(!t||t.origen!=='oficina_firma')return false;
+  const wf=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{}))||{};
+  return !!(String(wf.email_to||'').trim()||String(wf.cuerpo||wf.email_body||'').trim()||String(wf.email_subject||'').trim());
+}
+window.taskReviewShouldShowOficinaDocCorreo=taskReviewShouldShowOficinaDocCorreo;
 window.taskReviewEsMensajeSimpleRevision=taskReviewEsMensajeSimpleRevision;
 window.taskReviewShouldShowPqrsCorreo=taskReviewShouldShowPqrsCorreo;
 function renderNcaRevisionEmailBlockHtml(expId,e,wf){
@@ -16031,6 +16039,9 @@ function renderNcaRevisionEmailBlockHtml(expId,e,wf){
 }
 function renderTaskReviewPqrsCorreoSideHtml(expId,taskId,t,e){
   e=e||getExpById(expId);
+  t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
+  if(!e&&t&&t.origen==='oficina_firma')
+    return renderOficinaDocCorreoReadonlyHtml(t);
   if(!e)return'';
   const wf=getPqrsWorkflow(e);
   const tipo=wf.tipo||PQRS_WF_TIPO.MENSAJE;
@@ -16055,6 +16066,34 @@ function renderTaskReviewPqrsCorreoSideHtml(expId,taskId,t,e){
   h+='</div>';
   return h;
 }
+/** Solo lectura: correo enviado en Documento/comunicado de oficina (Respondidas). */
+function renderOficinaDocCorreoReadonlyHtml(t){
+  if(!t)return'';
+  const wf=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{}))||{};
+  const emailTo=String(wf.email_to||(wf.notificacion&&wf.notificacion.a)||'').trim();
+  const emailCc=String(wf.email_cc||'').trim();
+  const emailBcc=String(wf.email_bcc||'').trim();
+  const asunto=String(wf.email_subject||t.actividad||t.desc||'').trim();
+  const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
+  const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+  const tipo=String(wf.tipo||'').trim();
+  const tipoLbl=tipo===TIPO_MSG||tipo==='mensaje'?'Mensaje / comunicado':'Oficio oficina';
+  const canal=String((wf.notificacion&&wf.notificacion.canal)||wf.canal||'').trim();
+  let h='<div class="task-review-side-scroll task-review-pqrs-correo">';
+  h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Correo enviado</div>';
+  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Documento / comunicado · vista de solo lectura.</div>';
+  h+='<div style="padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
+  h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Tipo: <strong style="color:var(--tx)">'+escAttr(tipoLbl)+'</strong>'+(canal?' · Canal: <strong style="color:var(--tx)">'+escAttr(canal)+'</strong>':'')+'</div>';
+  h+='<div class="fld" style="margin-bottom:8px"><label>Para</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+(emailTo?escAttr(emailTo):'<span style="color:var(--tx3)">—</span>')+'</div></div>';
+  if(emailCc)h+='<div class="fld" style="margin-bottom:8px"><label>Cc</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailCc)+'</div></div>';
+  if(emailBcc)h+='<div class="fld" style="margin-bottom:8px"><label>Cco</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailBcc)+'</div></div>';
+  h+='<div class="fld" style="margin-bottom:8px"><label>Asunto</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(asunto||'—')+'</div></div>';
+  h+='<div class="fld" style="margin-bottom:0"><label>Cuerpo del correo</label>'+
+    '<div style="font-size:12px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;white-space:pre-wrap;line-height:1.45;max-height:320px;overflow:auto;margin-top:4px">'+(cuerpo?escAttr(cuerpo):'<span style="color:var(--tx3)">Sin cuerpo registrado</span>')+'</div></div>';
+  h+='</div></div>';
+  return h;
+}
+window.renderOficinaDocCorreoReadonlyHtml=renderOficinaDocCorreoReadonlyHtml;
 /** Vista de solo lectura del correo (para el responsable en Por revisar). */
 function renderRespPqrsCorreoReadonlyHtml(expId,e,wf){
   e=e||exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -18317,6 +18356,13 @@ function openTaskCommentsModal(expId,taskId,opts){
   const pendVer=taskPendienteVerificacion(t);
   const verDocumento=!!opts.verDocumento;
   const verRevisado=!!opts.verRevisado;
+  const ofiFaseOpen=String((t.firmaWf&&t.firmaWf.fase)||(typeof taskFirmaFase==='function'?taskFirmaFase(t):'')||'').trim();
+  const isOficinaDocRespondida=!!opts.oficinaDocRespondida||(!!verDocumento&&t.origen==='oficina_firma'&&(
+    String(t.estado||'')==='Atendida'
+    ||ofiFaseOpen==='cerrada_atendida'||ofiFaseOpen==='cerrada'
+    ||(typeof PQRS_WF!=='undefined'&&ofiFaseOpen===PQRS_WF.CERRADA)
+    ||(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))
+  ));
   const enPorFirmarOpen=!!opts.porFirmarVista
     ||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e));
   // VITAL opera en modo responsable: forzar rail de «Por firmar» como el encargado
@@ -18329,10 +18375,11 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(e&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)
       &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e))
   ));
-  const isRespVerDoc=verDocumento&&esModoResponsable()
+  const isRespVerDoc=!isOficinaDocRespondida&&verDocumento&&esModoResponsable()
     &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen)&&!forcePorFirmarVista;
   // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
-  const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista;
+  // Documento/comunicado Respondidas: siempre rail depto (Secretaría / oficinas / DS)
+  const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista||isOficinaDocRespondida;
   const isDeptVerDoc=isDeptVerDocBase&&!opts.porNotificarVista;
   const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
@@ -18344,7 +18391,8 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))
   );
   const isRespVerPorNotificar=!!opts.porNotificarVista||!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
-  const forceSoloAprobados=!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar;
+  // Respondidas oficina: mostrar todos los soportes (no filtrar «aprobados»)
+  const forceSoloAprobados=!isOficinaDocRespondida&&(!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar);
   const pqrsPostAprobVista=!!(e&&(
     (typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))
     ||(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))
@@ -18458,7 +18506,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))))+' · '+(t.codigo||expId);
+    if(tit)tit.textContent=(isOficinaDocRespondida?'Documento / comunicado':(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión'))))))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
@@ -18483,7 +18531,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosVista:!!directorFirmadosVista,directorFirmadosSopIds:(opts.directorFirmadosSopIds!=null?opts.directorFirmadosSopIds:((window._taskModalCtx||{}).directorFirmadosSopIds))||null,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar,entregaDirectaPqrs:!!((window._taskModalCtx||{}).entregaDirectaPqrs||opts.entregaDirectaPqrs)};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,oficinaDocRespondida:!!isOficinaDocRespondida,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosVista:!!directorFirmadosVista,directorFirmadosSopIds:(opts.directorFirmadosSopIds!=null?opts.directorFirmadosSopIds:((window._taskModalCtx||{}).directorFirmadosSopIds))||null,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar,entregaDirectaPqrs:!!((window._taskModalCtx||{}).entregaDirectaPqrs||opts.entregaDirectaPqrs)};
     window._soportePaginaActual=1;
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;
@@ -18525,7 +18573,10 @@ function openTaskCommentsModal(expId,taskId,opts){
         }else if(canReviewSop&&e&&typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t)){
           taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
         }else if(isDeptVerDoc&&!isPqrsOrigenView){
-          if(e&&typeof taskReviewEsMensajeSimpleRevision==='function'&&taskReviewEsMensajeSimpleRevision(e)){
+          if(isOficinaDocRespondida&&typeof taskReviewShouldShowOficinaDocCorreo==='function'&&taskReviewShouldShowOficinaDocCorreo(t)){
+            if(!hasSop)taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
+            else taskReviewCloseSidePanel();
+          }else if(e&&typeof taskReviewEsMensajeSimpleRevision==='function'&&taskReviewEsMensajeSimpleRevision(e)){
             window._taskReviewDecisionMode='aprobar';
             if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
             else taskReviewOpenSidePanel('decision',expId,taskId);

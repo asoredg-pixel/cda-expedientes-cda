@@ -1419,7 +1419,7 @@ function pqrsAccionesTablaHtml(e){
   // Documento/comunicado ya respondido (mensaje simple u oficio notificado)
   if(filtroOfi==='cerr'&&e&&e._tramite_firma_task&&e._oficina_firma&&e._taskId){
     const eid=escAttr(e._exp),tid=escAttr(e._taskId);
-    return '<span class="sst-act-toolbar"><button type="button" class="btn bsm bic act-ico" title="Ver documento / comunicado" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+eid+'\',\''+tid+'\',{soloAprobados:true})">🔍</button></span>';
+    return '<span class="sst-act-toolbar"><button type="button" class="btn bsm bic act-ico" title="Ver documento / comunicado" onclick="event.stopPropagation();openOficinaDocRespondida(\''+eid+'\',\''+tid+'\')">🔍</button></span>';
   }
   // Trámite / oficio oficina en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
@@ -1795,6 +1795,8 @@ function renderPqrsOficinaInbox(){
             return '<span class="bdg" style="background:'+(ui.bg||'var(--gnl)')+';color:'+(ui.fg||'var(--gn)')+'">'+escAttr(ui.lbl)+'</span>';
           }
         }
+        if(e._oficina_firma||e._oficina_doc_respondida)
+          return'<span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Atendida</span>';
         return'<span class="act-est-dual"><span class="bdg" style="background:var(--gnl);color:var(--gn)">✓ Revisada</span><span class="bdg act-est-sub-badge" style="background:#fef9c3;color:#a16207;border:1px solid #fde68a">X Firma</span></span>';
       })()
       :(typeof htmlNcaRevisionBadge==='function'?htmlNcaRevisionBadge(e):'');
@@ -1811,7 +1813,7 @@ function renderPqrsOficinaInbox(){
     const clickFn=esFilaFirma
       ?''
       :(esDocRespondida
-        ?('openTaskVerDocumentoResp(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\',{soloAprobados:true})')
+        ?('openOficinaDocRespondida(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
         :(e._tramite_firma_task
           ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
           :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')')));

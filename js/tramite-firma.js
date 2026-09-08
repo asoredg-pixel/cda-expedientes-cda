@@ -203,8 +203,12 @@ function taskFirmaEstadoUi(t){
     return Object.assign({lbl:'✓ Firmada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Notificar'));
   if(taskFirmaEnRevisionFinalNotif(t))
     return Object.assign({lbl:'✓ Notificada',bg:'var(--gnl)',fg:'var(--gn)'},subPend('X Revisar'));
-  if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))
+  if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA)){
+    // Documento/comunicado de oficina: estado simple «Atendida» (no dual Revisada/Notificada de trámites)
+    if(t&&t.origen==='oficina_firma')
+      return{lbl:'✓ Atendida',bg:'var(--gnl)',fg:'var(--gn)'};
     return{lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'✓ Notificada',subFg:'var(--gn)'};
+  }
   return null;
 }
 /**
@@ -1311,6 +1315,17 @@ function getOficinaDocRespondidasRows(oficinaId,esDir){
   return out;
 }
 window.getOficinaDocRespondidasRows=getOficinaDocRespondidasRows;
+/** Abre Documento/comunicado desde Respondidas con rail vertical (mismo modal de revisión PQRSD). */
+function openOficinaDocRespondida(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  if(!expId||!taskId){notif('Documento no encontrado','err');return;}
+  if(typeof openTaskCommentsModal==='function')
+    openTaskCommentsModal(expId,taskId,{verDocumento:true,oficinaDocRespondida:true});
+  else if(typeof openTaskVerDocumentoResp==='function')
+    openTaskVerDocumentoResp(expId,taskId);
+}
+window.openOficinaDocRespondida=openOficinaDocRespondida;
 /** Filtra filas de trámite-firma por oficina (Director ve todas). */
 function filterTramiteFirmaRowsPorOficina(rows,oficinaId,esDir){
   rows=Array.isArray(rows)?rows:[];
