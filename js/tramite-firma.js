@@ -2823,11 +2823,11 @@ function ofiDocPqrsFijarOficinaActiva(){
     if(wrap)wrap.style.display='none';
   }
 }
-function ofiDocPqrsShowEntrega(e){
-  const host=document.getElementById('ofi-doc-pqrs-entrega-host');
+function ofiDocPqrsShowEntrega(e,hostId){
+  const host=document.getElementById(hostId||'ofi-doc-pqrs-entrega-host');
   if(!host)return;
   host.style.display='';
-  const stub=e||{_exp:window._ofiDocPqrsExpId||'',_tipo_solicitud:'solicitud PQRSD'};
+  const stub=e||{_exp:window._ofiDocPqrsExpId||window._actLibrePqrsExpId||'',_tipo_solicitud:'solicitud PQRSD'};
   // Precargar correo del alta en el stub para renderPqrsEntregaCamposHtml
   const mailPref=ofiDocPqrsCorreoDesdeAltaOExp(e);
   if(mailPref&&!stub._pn_correo&&!stub._qd_correo){
@@ -2848,7 +2848,7 @@ function ofiDocPqrsShowEntrega(e){
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
   // Si la PQRSD aún no existe (alta nueva), no subir a Drive hasta el submit
   const getCtx=function(){
-    const id=String(window._ofiDocPqrsExpId||'').trim();
+    const id=String(window._ofiDocPqrsExpId||window._actLibrePqrsExpId||'').trim();
     const ex=(e&&e._exp)?e:(typeof getExpById==='function'?getExpById(id):null);
     if(!ex||(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(ex)))return null;
     return{esPqrs:true,expId:String(ex._exp||id).trim(),e:ex,eDrive:ex,t:{id:'_staging_',actividad:'Respuesta PQRSD'},driveEstado:'cerrado'};
