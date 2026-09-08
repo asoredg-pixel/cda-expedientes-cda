@@ -1268,6 +1268,49 @@ function getTareasTramiteFirmaDirectorSeguimiento(){
   return out;
 }
 window.getTareasTramiteFirmaDirectorSeguimiento=getTareasTramiteFirmaDirectorSeguimiento;
+/** Documentos/comunicados de oficina ya notificados o cerrados → paleta Respondidas. */
+function getOficinaDocRespondidasRows(oficinaId,esDir){
+  const ofi=String(oficinaId||'').trim();
+  const faseCerrada=typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida';
+  const out=[];
+  (typeof actividadesLibres!=='undefined'?actividadesLibres:[]).forEach(function(raw){
+    const t=typeof normalizeActLibre==='function'?normalizeActLibre(raw):(raw||{});
+    if(!t||t.eliminada||t.origen!=='oficina_firma')return;
+    const f=String(typeof taskFirmaFase==='function'?taskFirmaFase(t):((t.firmaWf&&t.firmaWf.fase)||'')).trim();
+    const cerrada=f===faseCerrada||f==='cerrada_atendida'||f==='cerrada'
+      ||(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))
+      ||String(t.estado||'')==='Atendida';
+    if(!cerrada)return;
+    // Excluir los que siguen en por firmar / por notificar
+    if(typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))return;
+    if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return;
+    const ofiT=typeof tramiteFirmaOficinaId==='function'?tramiteFirmaOficinaId(t):String(t.oficina||'');
+    if(!esDir&&ofi&&ofiT!==ofi)return;
+    const wf=t.firmaWf&&typeof t.firmaWf==='object'?t.firmaWf:{};
+    const tipoWf=String(wf.tipo||'').trim();
+    const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+    const tipoLbl=tipoWf===TIPO_MSG||tipoWf==='mensaje'?'Mensaje / comunicado':'Oficio oficina';
+    out.push({
+      _exp:t.codigo||t.id,
+      _tramite_firma_task:true,
+      _taskId:t.id,
+      _fecha:t.fechaAtendida||t.fechaReportada||(wf.cerrado_en||'').slice(0,10)||'',
+      _tipo_solicitud:tipoLbl,
+      f_f1:t.actividad||t.desc||'Documento / comunicado',
+      _pn_nombre:'(Sin expediente)',
+      _qd_nombre:'(Sin expediente)',
+      _depto:t.depto||'',
+      _estado:'Atendido',
+      _tramite:'',
+      _pqrs_oficina:ofiT||'guaviare',
+      _sin_expediente:true,
+      _oficina_firma:true,
+      _oficina_doc_respondida:true
+    });
+  });
+  return out;
+}
+window.getOficinaDocRespondidasRows=getOficinaDocRespondidasRows;
 /** Filtra filas de trámite-firma por oficina (Director ve todas). */
 function filterTramiteFirmaRowsPorOficina(rows,oficinaId,esDir){
   rows=Array.isArray(rows)?rows:[];
@@ -3528,7 +3571,10 @@ async function submitEntregaOficinaFirma(){
         es_anexo:!!esAnexo,
         esAnexo:!!esAnexo,
         anexo_n:esAnexo?(anexoN||null):null,
-        localBlob:(!up&&blob)?blob:null
+        // Conservar blob para adjuntar al correo sin re-descargar de Drive
+        localBlob:blob||null,
+        localNombre:nm,
+        localMime:tp||''
       };
       if(!sop.url&&blob&&typeof FileReader!=='undefined'){
         await new Promise(function(resolve){
@@ -3678,21 +3724,31 @@ async function submitEntregaOficinaFirma(){
         htmlBody+='</ul>';
       }
       let adjuntos=[];
-      // Preferir blobs locales si no hay enlace Drive público
+      // Preferir blobs locales (recién subidos) — evita re-descarga fallida desde Drive
       (t.soportes||[]).forEach(function(s){
         if(!s||!s.localBlob)return;
-        const f=s.localBlob instanceof File?s.localBlob:new File([s.localBlob],s.nombre||'documento.pdf',{type:s.tipo||'application/pdf'});
+        const f=s.localBlob instanceof File?s.localBlob:new File([s.localBlob],s.nombre||s.localNombre||'documento.pdf',{type:s.tipo||s.localMime||'application/pdf'});
         adjuntos.push(f);
       });
       if(!adjuntos.length&&typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'&&docsMail.length){
-        try{adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(docsMail,{});}catch(errAdj){console.warn('ofi-doc adjuntos:',errAdj);}
+        try{
+          adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(docsMail,{quiet:true});
+        }catch(errAdj){console.warn('ofi-doc adjuntos:',errAdj);}
       }
+      // Si no hay Files pero sí hay enlaces Drive en el HTML, el correo igual es válido
       const sent=await pqrsEnviarCorreoCiudadano(destinos,emailSubject||asunto,htmlBody,true,adjuntos,{
         cc:emailCc,bcc:emailBcc,oficinaId:ofi
       });
       if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
       correoEnviado=true;
     }
+    // Quitar blobs locales antes de Firestore (solo servían para el adjunto del correo)
+    (t.soportes||[]).forEach(function(s){
+      if(!s)return;
+      delete s.localBlob;
+      delete s.localNombre;
+      delete s.localMime;
+    });
     if(typeof persistActividadesLibresFirestore==='function'){
       try{await persistActividadesLibresFirestore();}catch(errP){console.warn('persist act libre oficina:',errP);}
     }else if(typeof persistExpLocal==='function')persistExpLocal();

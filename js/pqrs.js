@@ -1212,7 +1212,14 @@ function getPqrsOficinaList(oficinaId,filtro){
       return f===PQRS_WF.SIN_RESPUESTA||f===PQRS_WF.RECHAZADA||!f;
     });
   }
-  else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
+  else if(filtro==='cerr'){
+    list=list.filter(e=>pqrsEstaCerrada(e));
+    if(typeof getOficinaDocRespondidasRows==='function'){
+      const esDirC=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+      const docsCerr=getOficinaDocRespondidasRows(oficinaId||getPqrsOficinaActiva(),esDirC)||[];
+      docsCerr.forEach(function(r){list.push(r);});
+    }
+  }
   else if(filtro==='revision')list=list.filter(e=>{
     const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
     return f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.REVISION_FINAL;
@@ -1409,6 +1416,11 @@ function pqrsAccionesTablaHtml(e){
   // Respondidas: 🔍 ver docs/anexos aprobados (rail tipo NCA, sin editar/trasladar en oficinas)
   if(!esDir&&esOfiToolbar&&filtroOfi==='cerr'&&!e._tramite_firma_task)
     return pqrsOficinaRespondidasAccionesHtml(e);
+  // Documento/comunicado ya respondido (mensaje simple u oficio notificado)
+  if(filtroOfi==='cerr'&&e&&e._tramite_firma_task&&e._oficina_firma&&e._taskId){
+    const eid=escAttr(e._exp),tid=escAttr(e._taskId);
+    return '<span class="sst-act-toolbar"><button type="button" class="btn bsm bic act-ico" title="Ver documento / comunicado" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+eid+'\',\''+tid+'\',{soloAprobados:true})">🔍</button></span>';
+  }
   // Trámite / oficio oficina en firma del Director (paleta unificada)
   if(e&&e._tramite_firma_task&&e._taskId){
     const tid=jsStr(e._taskId);
@@ -1687,7 +1699,6 @@ function renderPqrsOficinaInbox(){
     // Por ejecutar = pendientes de respuesta (no incluye Por firmar / Por notificar)
     const porEjec=getPqrsOficinaList(getPqrsOficinaActiva(),'pend').length;
     const vencidas=getPqrsOficinaList(getPqrsOficinaActiva(),'atras').length;
-    const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
     const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
     const showParaImprimirCard=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
     const esDirMets=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
@@ -1700,6 +1711,10 @@ function renderPqrsOficinaInbox(){
       return typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e));
     };
     const ofiActMets=getPqrsOficinaActiva();
+    const cerrPqrs=listAll.filter(e=>pqrsEstaCerrada(e)).length;
+    const docsRespondidas=(typeof getOficinaDocRespondidasRows==='function'
+      ?getOficinaDocRespondidasRows(ofiActMets,esDirMets):[])||[];
+    const cerr=cerrPqrs+docsRespondidas.length;
     const tramPorFirmarRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
       ?(typeof filterTramiteFirmaRowsPorOficina==='function'
         ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[],ofiActMets,esDirMets)
@@ -1788,15 +1803,18 @@ function renderPqrsOficinaInbox(){
       ||(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))
       ||(typeof pqrsEstadoActividadUi==='function'&&!!(pqrsEstadoActividadUi(e)||{}).lbl);
     const tipoLbl=e._tramite_firma_task
-      ?((e._oficina_firma||e._tipo_solicitud==='Oficio oficina')?'Oficio':'Trámite')
+      ?(e._tipo_solicitud||((e._oficina_firma)?'Oficio':'Trámite'))
       :(e._tipo_solicitud||'PQRSD');
     // En «Por firmar» / «Firmados»: sin manito ni clic de fila (acciones van en iconos)
     const esFilaFirma=filtro==='por_firmar'||filtro==='firmados';
+    const esDocRespondida=!!(e._oficina_doc_respondida||(filtro==='cerr'&&e._tramite_firma_task&&e._oficina_firma));
     const clickFn=esFilaFirma
       ?''
-      :(e._tramite_firma_task
-        ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
-        :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')'));
+      :(esDocRespondida
+        ?('openTaskVerDocumentoResp(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\',{soloAprobados:true})')
+        :(e._tramite_firma_task
+          ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
+          :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')')));
     const rowCls=(esFilaFirma?'pqrs-ofi-row-static':'');
     const rowStyle=esFilaFirma?'cursor:default':'cursor:pointer';
     const rowClick=clickFn?(' onclick="'+clickFn+'"'):'';
