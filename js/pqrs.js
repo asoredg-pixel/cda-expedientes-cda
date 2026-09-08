@@ -2538,17 +2538,26 @@ function getDocsAprobadosCiudadano(e){
   return docs;
 }
 function openCiudadanoDocViewer(url,label,externalUrl){
-  const parsed=parseDrivePreviewUrl(url);
-  const previewUrl=parsed.preview||parsed.url||url||'';
-  const openUrl=externalUrl||parsed.url||url||'';
+  const raw=String(url||'').trim();
+  const isLocal=/^(blob:|data:)/i.test(raw);
+  const parsed=isLocal?{url:raw,preview:raw,valid:true,local:true}:parseDrivePreviewUrl(raw);
+  const previewUrl=parsed.preview||parsed.url||raw||'';
+  const openUrl=externalUrl||parsed.url||raw||'';
   const ov=document.getElementById('ciudadano-doc-overlay');
   const ifr=document.getElementById('ciudadano-doc-iframe');
   const tit=document.getElementById('ciudadano-doc-tit');
   const foot=document.getElementById('ciudadano-doc-foot');
   if(tit)tit.textContent=label||'Documento';
-  if(ifr)ifr.src=previewUrl;
+  if(ifr){
+    // Sandbox estricto rompe el visor PDF de Chrome con blob:/data:
+    if(isLocal||parsed.local)ifr.removeAttribute('sandbox');
+    else ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+    ifr.src=previewUrl;
+  }
   if(foot){
-    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">Si la vista previa pide acceso, abra el documento en una ventana emergente.</span>'+
+    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">'+(isLocal
+      ?'Vista previa del archivo cargado.'
+      :'Si la vista previa pide acceso, abra el documento en una ventana emergente.')+'</span>'+
       (openUrl?'<button type="button" class="btn bsm bp" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana emergente</button>':'');
   }
   if(ov){
@@ -2566,7 +2575,10 @@ function closeCiudadanoDocViewer(){
     ov.setAttribute('aria-hidden','true');
     if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
   }
-  if(ifr)ifr.src='';
+  if(ifr){
+    ifr.src='';
+    ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');
+  }
   if(foot)foot.innerHTML='';
 }
 async function buscarExpCiudadano(){

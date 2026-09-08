@@ -127,14 +127,19 @@ function sstFilePreview(ctxKey, itemId) {
   const hit = sstFileFindItem(ctx, itemId);
   if (!hit || !hit.item) return;
   const it = hit.item;
-  const url = it.previewLink || it.driveLink || it.blobUrl;
-  if (!url) return;
-  if ((it.previewLink || it.driveLink) && typeof openPqrsDocViewer === 'function') {
-    openPqrsDocViewer(it.previewLink || it.driveLink, it.nombre || 'Documento');
+  // Preferir blob local: el iframe de Drive /preview suele fallar; la ventana emergente sí abre.
+  if (it.blobUrl) {
+    if (typeof openCiudadanoDocViewer === 'function') {
+      openCiudadanoDocViewer(it.blobUrl, it.nombre || 'Vista previa', it.driveLink || it.previewLink || it.blobUrl);
+      return;
+    }
+    window.open(it.blobUrl, '_blank', 'noopener');
     return;
   }
-  if (it.blobUrl && typeof openCiudadanoDocViewer === 'function') {
-    openCiudadanoDocViewer(it.blobUrl, it.nombre || 'Vista previa', it.blobUrl);
+  const url = it.previewLink || it.driveLink;
+  if (!url) return;
+  if (typeof openPqrsDocViewer === 'function') {
+    openPqrsDocViewer(url, it.nombre || 'Documento');
     return;
   }
   window.open(url, '_blank', 'noopener');
@@ -252,9 +257,14 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
         if (uploadCtx.biblioteca) bibliotecaUploaded = true;
       }
     } catch (err) {
-      it.state = 'error';
+      // Mantener como local con ✓: el envío puede adjuntar el archivo y subir a Drive al registrar.
+      it.state = 'local';
       it.error = (err && err.message) ? err.message : 'Error al subir';
-      if (typeof notif === 'function') notif('No se pudo subir «' + it.nombre + '»', 'err');
+      it.pct = 0;
+      console.warn('sstFileTryUpload:', it.nombre, err);
+      if (typeof notif === 'function') {
+        notif('«' + (it.nombre || 'Archivo') + '» quedó en el formulario; se subirá al registrar/enviar.', 'warn');
+      }
     }
     sstFileRefreshCtxLists(ctxKey, listId);
   }
