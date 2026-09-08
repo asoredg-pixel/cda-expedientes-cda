@@ -2063,6 +2063,16 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
 }
 window.aplicarPqrsEntregaDirecta=aplicarPqrsEntregaDirecta;
 /** Envía correo al ciudadano en entrega directa (mensaje u oficio con notificación por correo). */
+function _pqrsAwaitConTimeout(promise,ms,label){
+  ms=ms!=null?ms:90000;
+  label=label||'Operación';
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise(function(_,reject){
+      setTimeout(function(){reject(new Error(label+' (tiempo agotado tras '+Math.round(ms/1000)+'s)'));},ms);
+    })
+  ]);
+}
 async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   opts=opts||{};
   if(!e||!pq)return{skipped:true};
@@ -2077,28 +2087,78 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const asunto=String(pq.emailSubject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
   const cuerpo=String(pq.cuerpo||'').trim();
   if(!cuerpo)throw new Error('Indique el cuerpo del correo');
+  const expSub=String(e._exp||'').trim();
+  const prog=function(pct,msg){
+    if(typeof sstCargaProgress==='function')sstCargaProgress(pct,msg||expSub);
+    else if(typeof sstCargaShow==='function')sstCargaShow({title:'Notificando por correo',message:msg||'Enviando respuesta al ciudadano…',pct:pct,sub:expSub});
+  };
+  // Si falta Gmail, ocultar la carga para que el usuario pueda conectar (evita quedarse en 70%).
   if(typeof sstSolicitarGmailParaAdjuntar==='function'){
-    const okG=await sstSolicitarGmailParaAdjuntar();
-    if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
+    const yaGmail=typeof sstGmailSesionActiva==='function'&&sstGmailSesionActiva();
+    if(!yaGmail){
+      if(typeof sstCargaHide==='function')sstCargaHide();
+      const okG=await sstSolicitarGmailParaAdjuntar();
+      if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
+      if(typeof sstCargaShow==='function')
+        sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:72,sub:expSub});
+    }
   }
   const docsAdj=Array.isArray(adjDocumentos)?adjDocumentos:[];
-  let adjuntos=[];
-  if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'){
-    try{adjuntos=await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null});}
-    catch(errAdj){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica adj:',errAdj);}
-  }
   const tAct=(opts.t)||(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
     ||(typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null);
   const por=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'');
-  let soporteReg=null;
-  if(typeof registrarSoporteEnvioCorreoNotif==='function'){
+  prog(75,'Preparando adjuntos…');
+  let adjuntos=[];
+  if(typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'){
     try{
-      soporteReg=await registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
-        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
-      },adjuntos);
+      adjuntos=await _pqrsAwaitConTimeout(
+        pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:tAct}),
+        60000,
+        'Descarga de adjuntos'
+      );
+    }catch(errAdj){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica adj:',errAdj);}
+  }
+  // Generar PDF de soporte y adjuntarlo al correo ANTES de subir a Drive (la subida no debe bloquear el envío).
+  prog(80,'Generando soporte de envío…');
+  let pdfBlob=null;
+  try{
+    if(typeof generarPdfSoporteNotificacionActividad==='function'){
+      pdfBlob=await _pqrsAwaitConTimeout(
+        generarPdfSoporteNotificacionActividad(e,tAct,{
+          para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por
+        }),
+        30000,
+        'Generación del PDF de soporte'
+      );
+    }
+  }catch(errP){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica pdf:',errP);}
+  if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
+  const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
+  if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
+  prog(88,'Enviando correo al ciudadano…');
+  const sent=await _pqrsAwaitConTimeout(
+    pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
+      cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
+    }),
+    90000,
+    'Envío de correo'
+  );
+  if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
+  // Tras el envío: registrar PDF en Drive / expediente (con tope de tiempo; si falla, el correo ya salió).
+  prog(94,'Registrando soporte en Drive…');
+  let soporteReg={pdfBlob:pdfBlob,up:null};
+  if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
+    try{
+      soporteReg=await _pqrsAwaitConTimeout(
+        registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
+          para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+          skipAttach:true,pdfBlob:pdfBlob
+        },adjuntos),
+        45000,
+        'Registro de soporte en Drive'
+      );
     }catch(errSop){console.warn('pqrsEntregaDirectaEnviarCorreoSiAplica soporte:',errSop);}
   }
-  // Incluir el PDF de soporte en los documentos de cierre / visor 🔍
   if(soporteReg&&soporteReg.up&&(soporteReg.up.driveLink||soporteReg.up.fileId||soporteReg.up.driveFileId)&&Array.isArray(adjDocumentos)){
     const up=soporteReg.up;
     const link=up.driveLink||up.previewLink||'';
@@ -2116,12 +2176,6 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       });
     }
   }
-  const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
-  if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
-  const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
-    cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
-  });
-  if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
     registrarNotificacionCiudadanoPqrs(e,{
@@ -7856,16 +7910,20 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
   mailOpts=mailOpts||{};
   const por=mailOpts.por||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')||'';
   const fechaC=typeof hoy==='function'?hoy():'';
-  let pdfBlob=null,up=null;
-  try{
-    if(typeof generarPdfSoporteNotificacionActividad==='function')
-      pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
-        para:mailOpts.para||'',cc:mailOpts.cc||'',bcc:mailOpts.bcc||'',
-        asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',por:por
-      });
-  }catch(errP){console.warn('registrarSoporteEnvioCorreoNotif pdf:',errP);}
-  if(pdfBlob&&Array.isArray(adjuntosArr))
-    adjuntosArr.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
+  let pdfBlob=mailOpts.pdfBlob||null,up=null;
+  if(!pdfBlob){
+    try{
+      if(typeof generarPdfSoporteNotificacionActividad==='function')
+        pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
+          para:mailOpts.para||'',cc:mailOpts.cc||'',bcc:mailOpts.bcc||'',
+          asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',por:por
+        });
+    }catch(errP){console.warn('registrarSoporteEnvioCorreoNotif pdf:',errP);}
+  }
+  if(pdfBlob&&Array.isArray(adjuntosArr)&&!mailOpts.skipAttach){
+    const ya=adjuntosArr.some(function(f){return f&&String(f.name||'').toLowerCase().indexOf('soporte_envio')>=0;});
+    if(!ya)adjuntosArr.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
+  }
   if(pdfBlob&&typeof taskReviewSubirSoporteNotificacion==='function'){
     try{up=await taskReviewSubirSoporteNotificacion(e,t,expId||(e&&e._exp)||(t&&(t.exp||t.codigo)),pdfBlob);}catch(errU){console.warn('registrarSoporteEnvioCorreoNotif upload:',errU);}
   }
@@ -21670,7 +21728,6 @@ function openCrearActLibreModal(){
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-prior"> ⚡ Actividad prioritaria</label>'+
     '</div>'+
     '<div id="act-libre-pqrs-wrap" style="display:none">'+
-      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:#faf8ff;border:1px solid #d4c7f0;border-radius:var(--r)">Migración: cree la PQRSD ya radicada fuera de la app. Oficina: <strong>NCA DEGUV</strong>. Asigne un responsable para dejarla en Por ejecutar, o responda usted aquí para dejarla en Atendidas.</div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Buscar si ya existe</label>'+
         '<div style="position:relative">'+
           '<input type="text" id="act-libre-pqrs-exp" placeholder="Digite N° PQRSD…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
@@ -21688,7 +21745,6 @@ function openCrearActLibreModal(){
               return '<option value="'+escAttr(n)+'">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' (encargado)':'')+'</option>';
             }).join('')+
           '</select>'+
-          '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Si elige responsable, la PQRSD queda en <strong>Por ejecutar</strong> de esa persona. Si no, diligencie la respuesta al ciudadano y queda en <strong>Atendidas</strong>.</div>'+
         '</div>'+
         '<div id="act-libre-pqrs-entrega-host" style="margin-top:10px"></div>'+
         '<textarea id="act-libre-pqrs-cmt" placeholder="Comentario u observaciones (opcional)…" style="min-height:56px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;width:100%;margin-top:8px;box-sizing:border-box"></textarea>'+
@@ -27234,7 +27290,16 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos,opts){
   // Preferir colección unificada si se pasó e/t
   let docs=Array.isArray(documentos)?documentos:[];
   if(opts.e||opts.t){
-    docs=collectDocsParaNotificacionCorreo(opts.e||null,opts.t||null);
+    const fromWf=collectDocsParaNotificacionCorreo(opts.e||null,opts.t||null);
+    // Crear+atender: los archivos recién subidos aún no están en el workflow — usar documentos pasados.
+    if(fromWf&&fromWf.length)docs=fromWf;
+    else if(Array.isArray(documentos)&&documentos.length){
+      docs=documentos.filter(function(d){
+        return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url)
+          &&d.tipo!=='notificacion_soporte'&&d.tipo!=='soporte_notificacion'
+          &&!(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d));
+      });
+    }else docs=fromWf||[];
   }else{
     docs=docs.filter(function(d){
       return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url)

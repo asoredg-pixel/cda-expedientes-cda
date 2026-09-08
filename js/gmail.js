@@ -3976,13 +3976,20 @@ async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
         ? (typeof gmailGetToken === 'function' ? gmailGetToken() : '')
         : gmailOfiGetToken();
       if (tok) {
-        conectado = await _gmailFetchProfileEmail(tok);
+        const profileP = _gmailFetchProfileEmail(tok);
+        conectado = await Promise.race([
+          profileP,
+          new Promise(function(_, reject) {
+            setTimeout(function() { reject(new Error('No se pudo verificar la cuenta de correo (tiempo agotado)')); }, 15000);
+          })
+        ]);
         if (conectado) {
           try { sessionStorage.setItem(GMAIL_OFI_ACCOUNT_KEY, conectado); } catch (eS) {}
         }
       }
     } catch (err) {
       console.warn('gmailOfiAsegurarCuentaOficinaParaEnvio profile:', err);
+      if (err && /tiempo agotado/i.test(String(err.message || err))) throw err;
     }
   }
   if (gmailOfiSesionEsAdmin()) {
