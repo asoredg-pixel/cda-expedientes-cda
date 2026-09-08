@@ -2639,7 +2639,6 @@ function openEntregaOficinaFirmaModal(){
       '</div>'+
     '</div></div>'+
     '<div id="ofi-doc-pqrs-wrap" style="display:none">'+
-      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:#faf8ff;border:1px solid #d4c7f0;border-radius:var(--r)">Migración: busque la PQRSD ya radicada. Si no está, créela y adjunte la respuesta o informativa (queda <strong>atendida</strong>).</div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Buscar PQRSD</label>'+
         '<div style="position:relative">'+
           '<input type="text" id="ofi-doc-pqrs-exp" placeholder="Digite N° PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
@@ -2689,7 +2688,7 @@ function ofiDocModoChange(){
   if(libreW)libreW.style.display=pqrs?'none':'';
   if(pqrsW)pqrsW.style.display=pqrs?'':'none';
   if(cmt)cmt.style.display=pqrs?'':'none';
-  if(btn)btn.textContent=pqrs?'📤 Crear / registrar PQRSD':'📤 Registrar';
+  if(btn)btn.textContent=pqrs?'📤 Crear y atender PQRSD':'📤 Registrar';
   if(pqrs){
     const ofiSel=document.getElementById('er-pqrs-oficina');
     const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
@@ -2723,8 +2722,7 @@ function ofiDocPqrsFiltrarSug(inp){
   if(q.length>=2&&!hasExact){
     const qEsc=String(q).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     html+='<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();ofiDocPqrsPickCrear(\''+qEsc+'\')">'+
-      '<span style="color:#6d3fa8;font-weight:600">✚ Crear PQRSD</span> · <strong>'+escAttr(q)+'</strong>'+
-      '<div style="font-size:11px;color:var(--tx3);margin-top:2px;font-weight:400">Ya radicada fuera de la app — complete el formulario y adjunte la respuesta</div></button>';
+      '<span style="color:#6d3fa8;font-weight:600">✚ Crear PQRSD</span> · <strong>'+escAttr(q)+'</strong></button>';
   }
   if(!html){portal.style.display='none';portal.innerHTML='';return;}
   portal.innerHTML=html;
@@ -2742,8 +2740,7 @@ function ofiDocPqrsPickExp(expNum){
   const e=typeof getExpById==='function'?getExpById(expNum):null;
   const hint=document.getElementById('ofi-doc-pqrs-hint');
   if(hint&&e){
-    hint.innerHTML='Seleccionada: <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(typeof getNom==='function'?getNom(e):'')+
-      ' · '+escAttr(e._estado||'')+' — complete la respuesta abajo.';
+    hint.innerHTML='Seleccionada: <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(typeof getNom==='function'?getNom(e):'');
   }
   ofiDocPqrsShowEntrega(e);
 }
@@ -2763,7 +2760,7 @@ function ofiDocPqrsPickCrear(expNum){
   if(ofiSel&&ofi)ofiSel.value=ofi;
   if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
   const hint=document.getElementById('ofi-doc-pqrs-hint');
-  if(hint)hint.textContent='Complete el alta y la respuesta (informativa / mensaje / oficio).';
+  if(hint)hint.textContent='';
   ofiDocPqrsShowEntrega(null);
 }
 function ofiDocPqrsShowEntrega(e){
@@ -2774,9 +2771,13 @@ function ofiDocPqrsShowEntrega(e){
   host.innerHTML=typeof renderPqrsEntregaCamposHtml==='function'?renderPqrsEntregaCamposHtml(stub):'';
   const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
+  // Si la PQRSD aún no existe (alta nueva), no subir a Drive hasta el submit
+  // (driveUploadPqrsExpediente exige el expediente creado).
   const getCtx=function(){
-    const ex=typeof getExpById==='function'?getExpById(window._ofiDocPqrsExpId||''):e;
-    return{esPqrs:true,expId:window._ofiDocPqrsExpId||'',e:ex||null,t:null};
+    const id=String(window._ofiDocPqrsExpId||'').trim();
+    const ex=(e&&e._exp)?e:(typeof getExpById==='function'?getExpById(id):null);
+    if(!ex||(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(ex)))return null;
+    return{esPqrs:true,expId:String(ex._exp||id).trim(),e:ex,eDrive:ex,t:{id:'_staging_',actividad:'Respuesta PQRSD'},driveEstado:'cerrado'};
   };
   if(typeof sstFileRegisterPick==='function'){
     sstFileRegisterPick('enviar-adj-file',{ctxKey:ctxKey,listId:'pqrs-entrega-att-list',multi:false,getUploadCtx:getCtx});

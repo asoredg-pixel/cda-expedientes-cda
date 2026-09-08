@@ -9278,7 +9278,7 @@ function renderPqrsEntregaCamposHtml(e){
     '</div>';
   h+='<div id="pqrs-entrega-otro-medio-row" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:4px">Notificado por otro medio</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px" id="pqrs-entrega-otro-medio-hint">No se enviará correo. Elija el medio (presencial / WhatsApp / aviso).</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;display:none" id="pqrs-entrega-otro-medio-hint"></div>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-bottom:8px" id="pqrs-entrega-otro-canal-btns">'+
       '<button type="button" class="btn bsm canal-resp-btn on" data-val="presencial" onclick="pqrsEntregaSetOtroCanal(\'presencial\')">🤝 Presencial</button>'+
       '<button type="button" class="btn bsm canal-resp-btn" data-val="whatsapp" onclick="pqrsEntregaSetOtroCanal(\'whatsapp\')">💬 WhatsApp</button>'+
@@ -9495,8 +9495,9 @@ function pqrsEntregaRefreshUi(){
   if(notifRow)notifRow.style.display=isOficio?'':'none';
   if(otroMedioRow)otroMedioRow.style.display=(isOficio&&!notifCorreoOficio)?'':'none';
   const otroHint=document.getElementById('pqrs-entrega-otro-medio-hint');
-  if(otroHint&&isOficio&&!notifCorreoOficio){
-    otroHint.innerHTML='No se enviará correo. Elija el medio (presencial / WhatsApp / aviso) y la PQRSD quedará <strong>atendida</strong>.';
+  if(otroHint){
+    otroHint.textContent='';
+    otroHint.style.display='none';
   }
   if(isOficio&&!notifCorreoOficio&&typeof pqrsEntregaSetOtroCanal==='function'){
     const cOtro=String((canalHid&&canalHid.value)||'presencial').trim().toLowerCase();
