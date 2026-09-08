@@ -2486,6 +2486,8 @@ function ciudadanoEventoLabel(h){
 }
 function ciudadanoNotaPublica(h,nota){
   if(h&&h.tipo==='asignacion_oficina')return'';
+  // Radicación: no mostrar notas internas de alta/migración
+  if(h&&h.tipo==='radicacion')return'';
   nota=anonimizarParaCiudadano(String(nota||'').trim());
   if(!nota)return'';
   if(h&&h.tipo==='traslado_oficina'){
@@ -2493,6 +2495,7 @@ function ciudadanoNotaPublica(h,nota){
     return m?m[1].trim():(/motivo/i.test(nota)?nota:'');
   }
   if(/^(traslad|asign|aprob|recib|actividad)/i.test(nota)&&nota.length<90)return'';
+  if(/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))return'';
   return nota;
 }
 function ciudadanoTaskEventoLabel(h){

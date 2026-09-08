@@ -298,7 +298,7 @@ function htmlEntregaRespPqrsAltaBox(){
       '<input type="text" id="er-pqrs-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label>'+
       '<textarea id="er-pqrs-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif"></textarea></div>'+
-    '<div class="fld" style="margin-bottom:4px"><label>Oficina <span style="color:var(--rd)">*</span></label>'+
+    '<div class="fld" id="er-pqrs-oficina-fld" style="margin-bottom:4px"><label>Oficina <span style="color:var(--rd)">*</span></label>'+
       '<select id="er-pqrs-oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+erPqrsOficinaOptsHtml(ofiDef)+'</select></div>';
 }
 function setErPqrsMedioNotificacion(val,userPick){
@@ -2506,8 +2506,8 @@ function crearStubPqrsEntregaResp(datos,opts){
   const origenLbl=origenAlta==='oficina'?'oficina':(origenAlta==='nca'?'encargado NCA':'responsable');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:por,fecha:fecha}]):'[]';
   const hist=[
-    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Alta PQRSD por '+origenLbl+' ('+por+') — transición (ya radicada fuera de la app)',oficina:''},
-    {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente al crear desde migración/entrega',oficina:oficina,oficinaAnterior:'secretaria',por:por}
+    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Radicado',oficina:''},
+    {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:por}
   ];
   const tipoRadicacion=typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
   const skipRevAlta=!!opts.skipRevisionAlta||origenAlta==='oficina'||origenAlta==='nca';

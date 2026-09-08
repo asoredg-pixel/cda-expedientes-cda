@@ -2690,10 +2690,9 @@ function ofiDocModoChange(){
   if(cmt)cmt.style.display=pqrs?'':'none';
   if(btn)btn.textContent=pqrs?'📤 Crear y atender PQRSD':'📤 Registrar';
   if(pqrs){
-    const ofiSel=document.getElementById('er-pqrs-oficina');
-    const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
-    if(ofiSel&&ofi)ofiSel.value=ofi;
+    ofiDocPqrsFijarOficinaActiva();
     if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+    ofiDocPqrsFijarOficinaActiva();
   }
 }
 function ofiDocPqrsExpInput(inp){
@@ -2755,24 +2754,98 @@ function ofiDocPqrsPickCrear(expNum){
   if(alta)alta.style.display='';
   const numEl=document.getElementById('er-pqrs-exp');
   if(numEl)numEl.value=expNum;
-  const ofiSel=document.getElementById('er-pqrs-oficina');
-  const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
-  if(ofiSel&&ofi)ofiSel.value=ofi;
+  ofiDocPqrsFijarOficinaActiva();
   if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+  ofiDocPqrsFijarOficinaActiva();
   const hint=document.getElementById('ofi-doc-pqrs-hint');
   if(hint)hint.textContent='';
   ofiDocPqrsShowEntrega(null);
+  ofiDocPqrsBindAltaCorreoPrefill();
+}
+function ofiDocPqrsCorreoDesdeAltaOExp(e){
+  const ids=['er-pqrs-pn-correo','er-pqrs-pj-correo','er-pqrs-pj-ofi-correo','er-pqrs-anon-correo'];
+  for(let i=0;i<ids.length;i++){
+    const v=String((document.getElementById(ids[i])||{}).value||'').trim().toLowerCase();
+    if(v&&v.includes('@'))return v;
+  }
+  if(e){
+    const cands=[
+      e._pn_correo,e._qd_correo,e._pj_correo,e._pj_ofi_correo,
+      e._pqrs_anon_correo
+    ];
+    for(let j=0;j<cands.length;j++){
+      const v=String(cands[j]||'').trim().toLowerCase();
+      if(v&&v.includes('@'))return v;
+    }
+    if(typeof pqrsCorreoCiudadano==='function'){
+      const c=String(pqrsCorreoCiudadano(e)||'').trim().toLowerCase();
+      if(c&&c.includes('@'))return c;
+    }
+  }
+  return'';
+}
+function ofiDocPqrsPrefillEmailTo(e,force){
+  const toEl=document.getElementById('pqrs-entrega-email-to');
+  if(!toEl)return;
+  const cur=String(toEl.value||'').trim().toLowerCase();
+  const mail=ofiDocPqrsCorreoDesdeAltaOExp(e);
+  if(!mail)return;
+  const prevAuto=String(window._ofiDocEmailPrefill||'').trim().toLowerCase();
+  // Vacío, o sigue siendo el auto-precargado (usuario aún no lo cambió a otro)
+  if(force||!cur||(prevAuto&&cur===prevAuto)){
+    toEl.value=mail;
+    window._ofiDocEmailPrefill=mail;
+  }
+}
+function ofiDocPqrsBindAltaCorreoPrefill(){
+  const ids=['er-pqrs-pn-correo','er-pqrs-pj-correo','er-pqrs-pj-ofi-correo','er-pqrs-anon-correo'];
+  ids.forEach(function(id){
+    const el=document.getElementById(id);
+    if(!el||el._ofiPrefillBound)return;
+    el._ofiPrefillBound=true;
+    el.addEventListener('input',function(){
+      ofiDocPqrsPrefillEmailTo(null,false);
+    });
+    el.addEventListener('change',function(){
+      ofiDocPqrsPrefillEmailTo(null,false);
+    });
+  });
+}
+function ofiDocPqrsFijarOficinaActiva(){
+  const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
+  const ofiSel=document.getElementById('er-pqrs-oficina');
+  if(ofiSel&&ofi)ofiSel.value=ofi;
+  const fld=document.getElementById('er-pqrs-oficina-fld');
+  if(fld)fld.style.display='none';
+  else if(ofiSel){
+    const wrap=ofiSel.closest?ofiSel.closest('.fld'):null;
+    if(wrap)wrap.style.display='none';
+  }
 }
 function ofiDocPqrsShowEntrega(e){
   const host=document.getElementById('ofi-doc-pqrs-entrega-host');
   if(!host)return;
   host.style.display='';
   const stub=e||{_exp:window._ofiDocPqrsExpId||'',_tipo_solicitud:'solicitud PQRSD'};
+  // Precargar correo del alta en el stub para renderPqrsEntregaCamposHtml
+  const mailPref=ofiDocPqrsCorreoDesdeAltaOExp(e);
+  if(mailPref&&!stub._pn_correo&&!stub._qd_correo){
+    stub._pn_correo=mailPref;
+    stub._qd_correo=mailPref;
+  }
+  if(mailPref){
+    stub._pqrs_workflow=stub._pqrs_workflow||{};
+    try{
+      const wf=typeof stub._pqrs_workflow==='string'?JSON.parse(stub._pqrs_workflow):(stub._pqrs_workflow||{});
+      if(!wf.email_to)wf.email_to=mailPref;
+      stub._pqrs_workflow=wf;
+    }catch(errW){}
+  }
   host.innerHTML=typeof renderPqrsEntregaCamposHtml==='function'?renderPqrsEntregaCamposHtml(stub):'';
+  ofiDocPqrsPrefillEmailTo(e||stub,true);
   const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
   // Si la PQRSD aún no existe (alta nueva), no subir a Drive hasta el submit
-  // (driveUploadPqrsExpediente exige el expediente creado).
   const getCtx=function(){
     const id=String(window._ofiDocPqrsExpId||'').trim();
     const ex=(e&&e._exp)?e:(typeof getExpById==='function'?getExpById(id):null);
@@ -2788,6 +2861,23 @@ function ofiDocPqrsShowEntrega(e){
     sstFileRegisterList('pqrs-entrega-anexos-list',ctxKey,'anexos');
   }
   if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+  ofiDocPqrsPrefillEmailTo(e||stub,true);
+  ofiDocPqrsBindAltaCorreoPrefill();
+  // Al marcar «notificar por correo» / mensaje, volver a precargar si Para quedó vacío
+  const notifCb=document.getElementById('pqrs-entrega-notif-correo');
+  if(notifCb&&!notifCb._ofiPrefillBound){
+    notifCb._ofiPrefillBound=true;
+    notifCb.addEventListener('change',function(){
+      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,false);},30);
+    });
+  }
+  document.querySelectorAll('#pqrs-resp-tipo-btns .tipo-resp-btn').forEach(function(b){
+    if(b._ofiPrefillBound)return;
+    b._ofiPrefillBound=true;
+    b.addEventListener('click',function(){
+      setTimeout(function(){ofiDocPqrsPrefillEmailTo(e||stub,false);},40);
+    });
+  });
 }
 function submitEntregaOficinaFirmaOrPqrs(){
   if(!!((document.getElementById('ofi-doc-modo-pqrs')||{}).checked))
@@ -2815,9 +2905,11 @@ async function submitEntregaOficinaPqrsMigracion(){
         notif('No se pudo cargar el formulario de alta PQRSD','err');restoreBtn();return;
       }
       const datos=collectEntregaRespPqrsAlta();
+      if(!datos.oficina)datos.oficina=ofi;
+      ofiDocPqrsFijarOficinaActiva();
+      if(!datos.oficina)datos.oficina=String((document.getElementById('er-pqrs-oficina')||{}).value||ofi||'').trim();
       const err=validateEntregaRespPqrsAlta(datos);
       if(err){notif(err,'err');restoreBtn();return;}
-      if(!datos.oficina)datos.oficina=ofi;
       expId=String(datos.expId||expId).trim();
       // Si ya se creó en un intento anterior, reutilizar (evita «Ya existe…» al 2.º clic)
       const ya=typeof getExpById==='function'?getExpById(expId):null;
@@ -2961,7 +3053,31 @@ async function submitEntregaOficinaPqrsMigracion(){
       });
     });
 
+    // Mensaje / oficio con correo: notificar ANTES de cerrar
+    const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
+    const TIPO_OFI_SEND=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
+    const necesitaCorreo=(pq.tipo===TIPO_MSG)||(pq.tipo===TIPO_OFI_SEND&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
+    if(necesitaCorreo){
+      try{
+        if(typeof sstCargaShow==='function'){
+          sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:70,sub:expId});
+        }
+        if(typeof pqrsEntregaDirectaEnviarCorreoSiAplica!=='function')
+          throw new Error('Envío de correo no disponible');
+        await pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{registrarHist:true});
+      }catch(errMail){
+        console.warn('submitEntregaOficinaPqrsMigracion correo:',errMail);
+        if(typeof sstCargaHide==='function')sstCargaHide();
+        notif('No se pudo enviar el correo: '+String(errMail.message||errMail).slice(0,110)+'. La PQRSD quedó en Por ejecutar; reintente la atención.','err');
+        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+        if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+        restoreBtn();
+        return;
+      }
+    }
+
     if(typeof aplicarPqrsEntregaDirecta==='function')aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,t.id,cmt);
+
     try{
       if(typeof mutateTask==='function'){
         mutateTask(expId,t.id,function(tk){
@@ -2992,9 +3108,13 @@ async function submitEntregaOficinaPqrsMigracion(){
     let msgOk='✅ PQRSD '+expId+' atendida';
     if(pq.tipo===TIPO_INFO)msgOk='ℹ️ PQRSD '+expId+' informativa cerrada';
     else if(pq.tipo===TIPO_OFI){
-      msgOk=(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&!pqrsEsCanalCorreo(pq.canal))
-        ?('✅ Oficio notificado — PQRSD '+expId+' atendida')
-        :('✅ Oficio registrado — PQRSD '+expId+' atendida');
+      msgOk=(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal))
+        ?('📬 Oficio notificado por correo — PQRSD '+expId+' atendida')
+        :(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&!pqrsEsCanalCorreo(pq.canal)
+          ?('✅ Oficio notificado — PQRSD '+expId+' atendida')
+          :('✅ Oficio registrado — PQRSD '+expId+' atendida'));
+    }else if(pq.tipo===TIPO_MSG||necesitaCorreo){
+      msgOk='📬 Mensaje enviado por correo — PQRSD '+expId+' atendida';
     }
     notif(msgOk,'ok');
     if(typeof closeTaskModal==='function')closeTaskModal();
