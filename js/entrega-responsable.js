@@ -237,7 +237,7 @@ function htmlEntregaRespPqrsAltaBox(){
   return '<div style="font-size:12px;font-weight:600;color:#6d3fa8;margin:0 0 8px">✚ Crear PQRSD (1ª entrega)</div>'+
     '<div class="fg" style="margin-bottom:8px">'+
       '<div class="fld"><label>N° PQRSD <span style="color:var(--rd)">*</span></label>'+
-        '<input type="text" id="er-pqrs-exp" placeholder="N° radicado (sistema actual)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+        '<input type="text" id="er-pqrs-exp" placeholder="N° radicado (ej. QR260001)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
       '<div class="fld"><label>Fecha de solicitud <span style="color:var(--rd)">*</span></label>'+
         '<input type="date" id="er-pqrs-fecha-solicitud" value="" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
       '<div class="fld"><label>Tipo de solicitud <span style="color:var(--rd)">*</span></label>'+

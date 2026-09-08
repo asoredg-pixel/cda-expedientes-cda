@@ -1,5 +1,5 @@
 // =============================================================================
-// pqrs-matriz-sheets.js — Consecutivo PQRSD (AAMMNNN) y helpers legacy Sheets API.
+// pqrs-matriz-sheets.js — Consecutivo PQRSD (LL + AA + NNNN) y helpers legacy Sheets API.
 // Al guardar PQRSD: la matriz oficial se descarga desde Consulta (📊 Matriz PQRSD).
 // =============================================================================
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -260,94 +260,110 @@ async function pqrsMatrizCrearHojaNativa() {
 window.pqrsMatrizCrearHojaNativa = pqrsMatrizCrearHojaNativa;
 window.pqrsMatrizActiveSheetId = pqrsMatrizActiveSheetId;
 
-/** Formato oficial: AA + MM + NNN (7 dígitos). Ej. 26 + 02 + 010 → 2602010 */
-function pqrsFormatNumeroRadicado(aa, mm, seq) {
-  return String(aa).padStart(2, '0') + String(mm).padStart(2, '0') + String(seq).padStart(3, '0');
+/** Formato oficial: LL + AA + NNNN. Ej. QR + 26 + 0001 → QR260001
+ * Las 2 letras aleatorias dificultan adivinar radicados en consulta ciudadana.
+ * El consecutivo NNNN es anual (reinicia cada 1 de enero). */
+function pqrsGenerarLetrasAleatorias(){
+  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ'; // sin I/O para evitar confusión con 1/0
+  let s='';
+  for(let i=0;i<2;i++)s+=alphabet.charAt(Math.floor(Math.random()*alphabet.length));
+  return s;
 }
-
-function pqrsParseNumeroRadicado(val) {
-  const digits = String(val || '').replace(/\D/g, '');
-  if (digits.length === 7) {
-    const aa = digits.slice(0, 2);
-    const mm = digits.slice(2, 4);
-    const seq = parseInt(digits.slice(4), 10);
-    if (isNaN(seq)) return null;
-    return { aa: aa, mm: mm, seq: seq };
+function pqrsFormatNumeroRadicado(letras,aa,seq){
+  const ll=String(letras||pqrsGenerarLetrasAleatorias()).toUpperCase().replace(/[^A-Z]/g,'').slice(0,2);
+  const padLl=(ll+'XX').slice(0,2);
+  return padLl+String(aa).padStart(2,'0')+String(seq).padStart(4,'0');
+}
+function pqrsParseNumeroRadicado(val){
+  const raw=String(val||'').trim().toUpperCase();
+  // Nuevo: LL + AA + NNNN (ej. QR260001)
+  const mNew=raw.match(/^([A-Z]{2})(\d{2})(\d{4})$/);
+  if(mNew){
+    return{letras:mNew[1],aa:mNew[2],mm:'',seq:parseInt(mNew[3],10),formato:'nuevo'};
   }
-  // Compatibilidad con formato anterior (6 dígitos: AA + NNNN)
-  if (digits.length >= 6) {
-    const aa = digits.slice(0, 2);
-    const seq = parseInt(digits.slice(2), 10);
-    if (!isNaN(seq)) return { aa: aa, mm: '', seq: seq, legacy: true };
+  const digits=raw.replace(/\D/g,'');
+  // Legacy oficial anterior: AA + MM + NNN (7 dígitos). Ej. 2602010
+  if(digits.length===7&&/^\d{7}$/.test(digits)&&!/[A-Z]/.test(raw)){
+    const aa=digits.slice(0,2);
+    const mm=digits.slice(2,4);
+    const seq=parseInt(digits.slice(4),10);
+    if(isNaN(seq))return null;
+    return{letras:'',aa:aa,mm:mm,seq:seq,formato:'legacy7',legacy:true};
+  }
+  // Compatibilidad muy antigua (6 dígitos: AA + NNNN)
+  if(digits.length===6&&/^\d{6}$/.test(digits)&&!/[A-Z]/.test(raw)){
+    const aa=digits.slice(0,2);
+    const seq=parseInt(digits.slice(2),10);
+    if(isNaN(seq))return null;
+    return{letras:'',aa:aa,mm:'',seq:seq,formato:'legacy6',legacy:true};
   }
   return null;
 }
-
-function pqrsMesDesdeFecha(fechaRef) {
-  const f = String(fechaRef || (typeof hoy === 'function' ? hoy() : '') || '');
-  const m = f.slice(5, 7);
-  if (m && /^\d{2}$/.test(m)) return m;
-  return String(new Date().getMonth() + 1).padStart(2, '0');
+function pqrsMesDesdeFecha(fechaRef){
+  const f=String(fechaRef||(typeof hoy==='function'?hoy():'')||'');
+  const m=f.slice(5,7);
+  if(m&&/^\d{2}$/.test(m))return m;
+  return String(new Date().getMonth()+1).padStart(2,'0');
 }
-
-function pqrsAnioCortoDesdeFecha(fechaRef) {
-  const f = String(fechaRef || (typeof hoy === 'function' ? hoy() : '') || '');
-  const y = f.slice(0, 4);
-  if (y && /^\d{4}$/.test(y)) return y.slice(-2);
+function pqrsAnioCortoDesdeFecha(fechaRef){
+  const f=String(fechaRef||(typeof hoy==='function'?hoy():'')||'');
+  const y=f.slice(0,4);
+  if(y&&/^\d{4}$/.test(y))return y.slice(-2);
   return String(new Date().getFullYear()).slice(-2);
 }
-
-function pqrsFechaRadicacionRef() {
-  const puedeEdit = typeof puedeEditarFechaRadicacionPqrs === 'function' && puedeEditarFechaRadicacionPqrs();
-  if (puedeEdit) {
-    const f = String((document.getElementById('sec-fecha') || {}).value || '').trim();
-    if (f) return f;
+function pqrsFechaRadicacionRef(){
+  const puedeEdit=typeof puedeEditarFechaRadicacionPqrs==='function'&&puedeEditarFechaRadicacionPqrs();
+  if(puedeEdit){
+    const f=String((document.getElementById('sec-fecha')||{}).value||'').trim();
+    if(f)return f;
   }
-  return typeof hoy === 'function' ? hoy() : '';
+  return typeof hoy==='function'?hoy():'';
 }
-
-function pqrsValidarNumeroRadicado(val, fechaRadicacion) {
-  const digits = String(val || '').replace(/\D/g, '');
-  if (digits.length !== 7) {
-    return { ok: false, msg: 'Use 7 dígitos: AA + MM + NNN (ej. 2607001 = jul. 2026, consecutivo 001).' };
+function pqrsValidarNumeroRadicado(val,fechaRadicacion){
+  const p=pqrsParseNumeroRadicado(val);
+  if(!p){
+    return{ok:false,msg:'Formato: 2 letras + año (2) + consecutivo (4). Ej. QR260001. Use ↻ Sugerir.'};
   }
-  const p = pqrsParseNumeroRadicado(val);
-  if (!p || p.legacy) {
-    return { ok: false, msg: 'Formato inválido. Ejemplo: 2607001 (año 26, mes de radicación 07, consecutivo 001).' };
+  // Nuevas radicaciones: solo formato LL+AA+NNNN. Los legacy siguen consultables.
+  if(p.formato!=='nuevo'){
+    return{ok:false,msg:'Use el formato nuevo: 2 letras + AA + NNNN (ej. QR260001). Pulse ↻ Sugerir para generarlo.'};
   }
-  const aa = pqrsAnioCortoDesdeFecha(fechaRadicacion);
-  if (p.aa !== aa) {
-    return { ok: false, msg: 'El año del número (' + p.aa + ') no coincide con la fecha de radicación (20' + aa + ').' };
+  const aa=pqrsAnioCortoDesdeFecha(fechaRadicacion);
+  if(p.aa!==aa){
+    return{ok:false,msg:'El año del número ('+p.aa+') no coincide con la fecha de radicación (20'+aa+').'};
   }
-  if (p.mm !== '00' && p.mm !== pqrsMesDesdeFecha(fechaRadicacion)) {
-    return { ok: false, msg: 'El mes del número (' + p.mm + ') no coincide con el mes de radicación (' + pqrsMesDesdeFecha(fechaRadicacion) + ').' };
+  if(p.seq<1||p.seq>9999){
+    return{ok:false,msg:'El consecutivo debe estar entre 0001 y 9999.'};
   }
-  if (p.seq < 1 || p.seq > 999) {
-    return { ok: false, msg: 'El consecutivo debe estar entre 001 y 999.' };
+  if(!/^[A-Z]{2}$/.test(p.letras||'')){
+    return{ok:false,msg:'Las dos primeras posiciones deben ser letras (A–Z).'};
   }
-  return { ok: true, parsed: p };
+  return{ok:true,parsed:p};
 }
-
-function pqrsMatrizRegistrarRadicadoEnMax(raw, aa, mm, maxRef) {
-  const p = pqrsParseNumeroRadicado(raw);
-  if (!p || p.legacy) return;
-  if (p.aa !== aa || p.mm !== mm) return;
-  if (p.seq > maxRef.v) maxRef.v = p.seq;
+function pqrsMatrizRegistrarRadicadoEnMax(raw,aa,maxRef){
+  const p=pqrsParseNumeroRadicado(raw);
+  if(!p||p.formato!=='nuevo')return;
+  if(p.aa!==aa)return;
+  if(p.seq>maxRef.v)maxRef.v=p.seq;
 }
-
-function pqrsMatrizMaxConsecutivoMes(aa, mm) {
-  const maxRef = { v: 0 };
-  if (typeof exps !== 'undefined' && Array.isArray(exps)) {
-    exps.forEach(function(e) {
-      if (!e) return;
-      const esPqrs = e._es_pqrs || e._radicado_secretaria
-        || (typeof esTramitePqrs === 'function' && esTramitePqrs(e._tramite))
-        || (typeof esPqrsSecretaria === 'function' && esPqrsSecretaria(e));
-      if (!esPqrs) return;
-      pqrsMatrizRegistrarRadicadoEnMax(e._exp, aa, mm, maxRef);
+/** Máximo consecutivo NNNN del año (solo formato nuevo LL+AA+NNNN). */
+function pqrsMatrizMaxConsecutivoAnio(aa){
+  const maxRef={v:0};
+  if(typeof exps!=='undefined'&&Array.isArray(exps)){
+    exps.forEach(function(e){
+      if(!e)return;
+      const esPqrs=e._es_pqrs||e._radicado_secretaria
+        ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))
+        ||(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
+      if(!esPqrs)return;
+      pqrsMatrizRegistrarRadicadoEnMax(e._exp,aa,maxRef);
     });
   }
   return maxRef.v;
+}
+/** @deprecated Usar pqrsMatrizMaxConsecutivoAnio — el consecutivo ya no es por mes. */
+function pqrsMatrizMaxConsecutivoMes(aa,_mm){
+  return pqrsMatrizMaxConsecutivoAnio(aa);
 }
 
 async function _pqrsSheetsApi(method, path, body) {
@@ -486,9 +502,20 @@ async function pqrsMatrizLeerRadicadosSheetTabs() {
 
 async function pqrsMatrizSiguienteNumero(fechaRef) {
   const aa = pqrsAnioCortoDesdeFecha(fechaRef);
-  const mm = pqrsMesDesdeFecha(fechaRef);
-  const maxSeq = pqrsMatrizMaxConsecutivoMes(aa, mm);
-  return pqrsFormatNumeroRadicado(aa, mm, maxSeq + 1);
+  const maxSeq = pqrsMatrizMaxConsecutivoAnio(aa);
+  let seq = maxSeq + 1;
+  let letras = pqrsGenerarLetrasAleatorias();
+  let num = pqrsFormatNumeroRadicado(letras, aa, seq);
+  // Evitar colisión exacta (muy improbable; regenera letras)
+  let guard = 0;
+  while (typeof exps !== 'undefined' && Array.isArray(exps)
+    && exps.some(function(e) { return String(e && e._exp || '').toUpperCase() === num; })
+    && guard < 20) {
+    letras = pqrsGenerarLetrasAleatorias();
+    num = pqrsFormatNumeroRadicado(letras, aa, seq);
+    guard++;
+  }
+  return num;
 }
 
 function pqrsMatrizFechaCelda(iso) {
@@ -525,6 +552,15 @@ function pqrsMatrizBuildRec(e, itemNum) {
 }
 
 function pqrsCompareRadicado(a, b) {
+  const pa = typeof pqrsParseNumeroRadicado === 'function' ? pqrsParseNumeroRadicado(a) : null;
+  const pb = typeof pqrsParseNumeroRadicado === 'function' ? pqrsParseNumeroRadicado(b) : null;
+  if (pa && pb) {
+    const ya = parseInt(pa.aa, 10) || 0;
+    const yb = parseInt(pb.aa, 10) || 0;
+    if (ya !== yb) return ya - yb;
+    if (pa.seq !== pb.seq) return pa.seq - pb.seq;
+    return String(pa.letras || '').localeCompare(String(pb.letras || ''));
+  }
   const da = parseInt(String(a || '').replace(/\D/g, ''), 10) || 0;
   const db = parseInt(String(b || '').replace(/\D/g, ''), 10) || 0;
   return da - db;

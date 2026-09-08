@@ -21086,7 +21086,7 @@ function updateDeptoUI(){
   const chatFab=document.getElementById('chat-fab');
   if(chatFab)chatFab.style.display=(ciudadano||!document.body.classList.contains('sesion-activa'))?'none':'';
   const qTxt=document.getElementById('q-txt');
-  if(qTxt)qTxt.placeholder=ciudadano?'N° de expediente o PQRSD (Ej. 2602010)':'Nombre, expediente, resolución, NIT, ciudad…';
+  if(qTxt)qTxt.placeholder=ciudadano?'N° completo de PQRSD (Ej. QR260001)':'Nombre, expediente, resolución, NIT, ciudad…';
   if(ciudadano){
     const pgCiu=document.getElementById('pg-ciudadano');
     if(pgCiu&&!pgCiu.classList.contains('on'))showTab('ciudadano');
@@ -27457,7 +27457,7 @@ function pqrsCorreoHtmlPieInstitucional(){
   // No incluir «NO RESPONDER» ni sedes aquí: Secretaría sí recibe peticiones en su correo,
   // y la firma de Gmail del encargado ya lleva ese aviso (evitar duplicidad).
   return'<div style="margin-top:18px;padding-top:12px;border-top:1px solid #e5e5e5">'+
-    '<p style="font-size:11px;color:#888;line-height:1.5;margin:0">Este mensaje es informativo. Conserve el número de radicado para consultar el estado de su solicitud.</p>'+
+    '<p style="font-size:11px;color:#888;line-height:1.5;margin:0">Este mensaje es informativo. Conserve el número de radicado completo (incluye las dos letras) para consultar el estado de su solicitud.</p>'+
     '</div>';
 }
 function pqrsCorreoHtmlBloqueConsulta(expId){
@@ -27465,7 +27465,7 @@ function pqrsCorreoHtmlBloqueConsulta(expId){
   const num=String(expId||'').trim();
   return'<div style="margin:20px 0;padding:16px 18px;background:#f6f8fb;border:1px solid #e2e8f0;border-radius:8px">'+
     '<p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#1a365d">Consulta ciudadana</p>'+
-    '<p style="margin:0 0 14px;font-size:13px;color:#4a5568;line-height:1.45">Puede consultar el estado de su solicitud en cualquier momento'+(num?' con el radicado <strong>'+escAttr(num)+'</strong>':'')+'.</p>'+
+    '<p style="margin:0 0 14px;font-size:13px;color:#4a5568;line-height:1.45">Puede consultar el estado de su solicitud en cualquier momento'+(num?' con el radicado completo <strong>'+escAttr(num)+'</strong> (incluidas las dos letras)':'')+'.</p>'+
     '<a href="'+escAttr(url)+'" style="display:inline-block;padding:11px 22px;background:#1a5f9e;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600">Consultar aquí</a>'+
     '</div>';
 }

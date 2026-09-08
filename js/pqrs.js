@@ -433,9 +433,16 @@ async function guardarPqrsSecretaria(modo){
   const medioNotif=interna?'':medioNotificacionNorm((document.getElementById('sec-medio-notif')||{}).value||'');
   let prioritaria=!!((document.getElementById('sec-prioritaria')||{}).checked);
   if(!expId){notif('Indique el número de PQRSD','err');return;}
+  expId=String(expId).trim().toUpperCase();
+  const secExpInp=document.getElementById('sec-exp');
+  if(secExpInp)secExpInp.value=expId;
   if(typeof pqrsValidarNumeroRadicado==='function'){
     const valNum=pqrsValidarNumeroRadicado(expId,fecha);
     if(!valNum.ok){notif(valNum.msg,'err');return;}
+  }
+  if(exps.some(function(x){return String(x._exp||'').trim().toUpperCase()===expId;})){
+    notif('Ya existe una PQRSD con el número «'+expId+'». Pulse ↻ Sugerir para otro.','err');
+    return;
   }
   if(!secGmailRadicacionConectada()){
     notif('Conecte la bandeja Gmail (cdaguaviare1) para radicar. Use el botón en el formulario.','err');
@@ -2643,16 +2650,17 @@ async function buscarExpCiudadano(){
   const q=String((document.getElementById('ciudadano-exp')||{}).value||'').trim();
   const box=document.getElementById('ciudadano-resultado');
   if(!box)return;
-  if(!q){box.innerHTML='<div style="color:var(--tx3);font-size:12px">Ingrese el número de su trámite o PQRSD.</div>';return;}
+  if(!q){box.innerHTML='<div style="color:var(--tx3);font-size:12px">Ingrese el número completo de su PQRSD (ej. QR260001), tal como aparece en el correo de radicación.</div>';return;}
   window._ciudadanoUltExp=q;
-  let e=exps.find(x=>String(x._exp||'').trim().toLowerCase()===q.toLowerCase());
+  const qNorm=q.toUpperCase();
+  let e=exps.find(x=>String(x._exp||'').trim().toUpperCase()===qNorm);
   if(!e){
     box.innerHTML='<div style="padding:12px;color:var(--tx2);font-size:13px">⏳ Buscando en el sistema…</div>';
     if(typeof fetchExpedientePorNumero==='function'){
       try{
-        e=await fetchExpedientePorNumero(q);
+        e=await fetchExpedientePorNumero(qNorm);
         if(e){
-          const idx=exps.findIndex(x=>String(x._exp||'').trim().toLowerCase()===String(e._exp||'').trim().toLowerCase());
+          const idx=exps.findIndex(x=>String(x._exp||'').trim().toUpperCase()===String(e._exp||'').trim().toUpperCase());
           if(idx>=0)exps[idx]=e;else exps.push(e);
         }
       }catch(err){

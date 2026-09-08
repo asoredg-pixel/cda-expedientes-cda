@@ -20,14 +20,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260908t"></script>
+<script src="js/constants.js?v=20260908u"></script>
 <script src="js/utils.js?v=20260906a"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260908n"></script>
 <script src="js/roles.js?v=20260908t"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260908t"></script>
+<script src="js/core.js?v=20260908u"></script>
 <script src="js/formulario.js?v=20260903a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260903a"></script>
@@ -36,13 +36,13 @@
 <script src="js/export.js?v=20260702t"></script>
 <script src="js/chat.js?v=20260907c"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
-<script src="js/pqrs-matriz-sheets.js?v=20260730a"></script>
+<script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="js/gmail.js?v=20260908j"></script>
 <script src="js/sst-file-upload.js?v=20260908n"></script>
-<script src="js/pqrs.js?v=20260908t"></script>
+<script src="js/pqrs.js?v=20260908u"></script>
 <script src="js/consulta.js?v=20260908q"></script>
-<script src="js/entrega-responsable.js?v=20260908k"></script>
+<script src="js/entrega-responsable.js?v=20260908u"></script>
 <script src="js/tramite-firma.js?v=20260908s"></script>
 <script src="js/papelera.js?v=20260806b"></script>
 <script src="js/recursos.js?v=20260907w"></script>
@@ -790,8 +790,8 @@
       <div class="fg" style="margin-bottom:10px">
         <div class="fld"><label>N° PQRSD<span class="req-star">*</span></label>
           <div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">
-            <input type="text" id="sec-exp" placeholder="Ej. 2607001 (mes/año de radicación + consecutivo)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
-            <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo del mes" onclick="refrescarSugerenciaNumeroPqrsSec()">↻ Sugerir</button>
+            <input type="text" id="sec-exp" placeholder="Ej. QR260001 (letras + año + consecutivo)" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
+            <button type="button" class="btn bsm" title="Sugerir siguiente consecutivo del año (con letras al azar)" onclick="refrescarSugerenciaNumeroPqrsSec()">↻ Sugerir</button>
           </div>
         </div>
         <div class="fld"><label>Fecha de solicitud<span class="req-star">*</span></label><input type="date" id="sec-fecha-solicitud" required title="Fecha en que se presentó la solicitud (puede ser anterior a la radicación)"></div>
@@ -1028,10 +1028,11 @@
   <div class="modulo-banner ciudadano" style="display:none"></div>
   <div class="card" style="border-left:4px solid var(--gn);max-width:960px">
     <div class="slbl">Buscar trámite</div>
-    <div class="fx" style="gap:8px;flex-wrap:wrap;margin-bottom:1rem">
-      <input type="text" id="ciudadano-exp" placeholder="N° de expediente o PQRSD (Ej. 2602010)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px" onkeydown="if(event.key==='Enter')buscarExpCiudadano()">
+    <div class="fx" style="gap:8px;flex-wrap:wrap;margin-bottom:.5rem">
+      <input type="text" id="ciudadano-exp" placeholder="N° completo de PQRSD (Ej. QR260001)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px" onkeydown="if(event.key==='Enter')buscarExpCiudadano()">
       <button type="button" class="btn bp" onclick="buscarExpCiudadano()">Consultar</button>
     </div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:1rem;line-height:1.45">Ingrese el <strong>número completo</strong> que aparece en su correo de radicación (incluye las dos letras). Sin ese código no es posible consultar el expediente de otra persona.</div>
     <div id="ciudadano-resultado"></div>
     <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--bd)">
       <button type="button" class="btn bsm" onclick="SST.volverPantallaPrincipal()">← Volver al inicio</button>
