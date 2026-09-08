@@ -1010,8 +1010,16 @@ function matchActLibre(t,q){
   if(!ql)return true;
   const cod=String(t.codigo||'').toLowerCase().trim();
   if(cod===ql)return true;
-  const parts=[t.actividad,t.desc,t.detalle,t.interesadoNombre,t.interesadoEmpresa,t.interesadoCorreo,t.interesadoTelefono];
+  const parts=[t.actividad,t.desc,t.detalle,t.interesadoNombre,t.interesadoEmpresa,t.interesadoCorreo,t.interesadoTelefono,t.oficina,t.origen];
   (t.comentarios||[]).forEach(function(c){parts.push(c.texto);});
+  (t.historial||[]).forEach(function(h){if(h){parts.push(h.nota);parts.push(h.tipo);parts.push(h.por);}});
+  const wf=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
+  parts.push(wf.cuerpo,wf.email_body,wf.email_to,wf.email_cc,wf.email_bcc,wf.email_subject,wf.oficio,wf.canal);
+  if(wf.notificacion){
+    parts.push(wf.notificacion.a,wf.notificacion.obs,wf.notificacion.por,wf.notificacion.canal,wf.notificacion.fecha);
+  }
+  (wf.documentos||[]).forEach(function(d){if(d)parts.push(d.nombre,d.tipo);});
+  (t.soportes||[]).forEach(function(s){if(s)parts.push(s.nombre,s.label,s.driveFilename);});
   if(parts.some(function(v){return String(v||'').toLowerCase().includes(ql);}))return true;
   return false;
 }
@@ -1616,6 +1624,52 @@ function shouldIncludeActLibresEnConsulta(){
   if(typeof esModoCiudadano==='function'&&esModoCiudadano())return false;
   return true;
 }
+/** Documento/comunicado (oficina_firma): visible en Consulta al buscar texto, para todos los roles de staff. */
+function collectConsultaOficinaDocComunicados(q,qi,qact){
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano())return[];
+  const ql=String(q||'').trim();
+  if(ql.length<2)return[];
+  const raw=(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres))?actividadesLibres:[];
+  let acts=raw.map(function(t){return typeof normalizeActLibre==='function'?normalizeActLibre(t):t;})
+    .filter(function(t){return t&&!t.eliminada&&t.origen==='oficina_firma'&&String(t.codigo||'').trim();});
+  const verTodas=!!(
+    (typeof esAdministrador==='function'&&esAdministrador())
+    ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
+    ||(typeof esJurisdiccional==='function'&&esJurisdiccional())
+    ||(typeof esModoResponsable==='function'&&esModoResponsable())
+  );
+  if(!verTodas){
+    let ofi='';
+    if(typeof esSecretaria==='function'&&esSecretaria())ofi='secretaria';
+    else if(typeof getPqrsOficinaActiva==='function')ofi=String(getPqrsOficinaActiva()||'').trim();
+    else if(typeof getOficinaActiva==='function')ofi=String(getOficinaActiva()||'').trim();
+    else if(typeof deptoActivo!=='undefined')ofi=String(deptoActivo||'').trim();
+    if(ofi&&ofi!=='guaviare'&&ofi!=='ds_deguv'&&ofi!=='responsables'){
+      acts=acts.filter(function(t){
+        const ofiT=typeof tramiteFirmaOficinaId==='function'?tramiteFirmaOficinaId(t):String(t.oficina||'');
+        return ofiT===ofi;
+      });
+    }
+  }
+  return acts.filter(function(t){
+    if(typeof matchActLibre==='function'&&!matchActLibre(t,ql))return false;
+    if(qi){
+      const ok=typeof taskUsuarioEsAsignado==='function'?taskUsuarioEsAsignado(t,qi)
+        :(String(t.responsable||'')===qi||(Array.isArray(t.asignados)&&t.asignados.indexOf(qi)>=0));
+      if(!ok)return false;
+    }
+    if(qact){
+      const stub={tasks:[t]};
+      if(typeof matchActividadFiltro==='function'&&!matchActividadFiltro(stub,qact))return false;
+    }
+    return true;
+  }).map(function(t){
+    const stub=actLibreAsConsultaStub(t);
+    stub._oficina_doc_comunicado=true;
+    return stub;
+  });
+}
+window.collectConsultaOficinaDocComunicados=collectConsultaOficinaDocComunicados;
 function actLibresAmbitoConsulta(){
   const raw=(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres))?actividadesLibres:[];
   let acts=raw.map(function(t){return typeof normalizeActLibre==='function'?normalizeActLibre(t):t;})
@@ -1629,10 +1683,14 @@ function actLibresAmbitoConsulta(){
   });
 }
 function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
-  if(!shouldIncludeActLibresEnConsulta())return[];
-  // Filtros propios de expediente/PQRSD: no mezclar stubs libres
-  if(qt||qe||qf)return[];
-  return actLibresAmbitoConsulta().filter(function(t){
+  const ofiDocs=collectConsultaOficinaDocComunicados(q,qi,qact);
+  if(!shouldIncludeActLibresEnConsulta())return ofiDocs;
+  // Filtros propios de expediente/PQRSD: no mezclar stubs libres (salvo docs/comunicados ya filtrados por texto)
+  if(qt||qe||qf)return ofiDocs;
+  const seen={};
+  ofiDocs.forEach(function(s){seen[String(s._act_id||s._exp||'')]=true;});
+  const otras=actLibresAmbitoConsulta().filter(function(t){
+    if(t.origen==='oficina_firma'&&seen[String(t.id||'')])return false;
     if(typeof matchActLibre==='function'&&!matchActLibre(t,q))return false;
     if(qi){
       const ok=typeof taskUsuarioEsAsignado==='function'?taskUsuarioEsAsignado(t,qi)
@@ -1645,6 +1703,7 @@ function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
     }
     return true;
   }).map(actLibreAsConsultaStub);
+  return ofiDocs.concat(otras);
 }
 function conConsultaActLibreCard(stub){
   const t=stub._act_libre_task||(stub.tasks&&stub.tasks[0]);
@@ -1652,31 +1711,39 @@ function conConsultaActLibreCard(stub){
   const qs=_conConsultaPag.qs||'';
   const cod=String(stub._exp||t.codigo||'').trim();
   const tid=String(stub._act_id||t.id||'').trim();
-  const nom=typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(t):(t.interesadoNombre||'—');
+  const esOfiDoc=!!(stub._oficina_doc_comunicado||t.origen==='oficina_firma');
+  const nom=esOfiDoc
+    ?(typeof labelOficina==='function'?labelOficina(typeof tramiteFirmaOficinaId==='function'?tramiteFirmaOficinaId(t):t.oficina):(t.oficina||'Oficina'))
+    :(typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(t):(t.interesadoNombre||'—'));
   const est=typeof estadoTask==='function'?estadoTask(t):(t.estado||'');
-  const lbl=typeof estadoTaskLabel==='function'?estadoTaskLabel(t):est;
+  const lbl=esOfiDoc&&est==='Atendida'?'✓ Atendida':(typeof estadoTaskLabel==='function'?estadoTaskLabel(t):est);
   const st=typeof taskEstadoStyle==='function'?taskEstadoStyle(est,t):{bg:'var(--sf2)',fg:'var(--tx)'};
   const depto=stub._depto||t.depto||'';
   const actNom=t.actividad||t.desc||'Actividad';
-  const abrirFn="event.stopPropagation();reviewAsocVerConsulta('"+jsStr(cod)+"','"+jsStr(tid)+"','act')";
+  const abrirFn=esOfiDoc
+    ?("event.stopPropagation();"+(typeof openOficinaDocRespondida==='function'?"openOficinaDocRespondida('"+jsStr(cod)+"','"+jsStr(tid)+"')":"reviewAsocVerConsulta('"+jsStr(cod)+"','"+jsStr(tid)+"','act')"))
+    :("event.stopPropagation();reviewAsocVerConsulta('"+jsStr(cod)+"','"+jsStr(tid)+"','act')");
   const archFn="event.stopPropagation();openConsultaArchivos('"+jsStr(cod)+"','"+jsStr(tid)+"',{forceModal:true,libre:true})";
   const tkHtml=typeof renderTaskConsultaItem==='function'
     ?renderTaskConsultaItem({_exp:cod,_act_libre:true,sinExpediente:true},t,qs)
     :'<div style="font-size:12px;padding:5px">'+escAttr(actNom)+'</div>';
+  const tipoBdg=esOfiDoc
+    ?'<span class="bdg" style="font-size:10px;background:var(--gnl);color:var(--gn)">Documento / comunicado</span>'
+    :'<span class="bdg" style="font-size:10px;background:var(--pul);color:var(--pu)">Sin expediente</span>';
   return '<details class="ec-fold">'+
     '<summary class="ec">'+
     '<div class="ech">'+
       '<div class="ech-left">'+
         '<div class="eid"><span class="ec-fold-ico"></span>'+
           '<span class="bdg" style="font-family:\'DM Mono\',monospace;font-size:12px;background:var(--pul);color:var(--pu);padding:2px 8px;border-radius:4px">'+hl(cod,qs)+'</span>'+
-          ' <span class="bdg" style="font-size:10px;background:var(--pul);color:var(--pu)">Sin expediente</span>'+
+          ' '+tipoBdg+
         '</div>'+
         '<div class="enm">'+hl(nom||'—',qs)+'</div>'+
         '<div class="emta">'+hl(actNom,qs)+(typeof badgeDepto==='function'?badgeDepto(depto):'')+'</div>'+
       '</div>'+
       '<div class="ech-right">'+
         '<div class="fx" style="flex-wrap:wrap;gap:4px">'+
-          '<span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+escAttr(lbl)+'</span> '+
+          '<span class="bdg" style="background:'+(esOfiDoc?'var(--gnl)':st.bg)+';color:'+(esOfiDoc?'var(--gn)':st.fg)+'">'+escAttr(lbl)+'</span> '+
           '<button type="button" class="btn bsm" onclick="'+abrirFn+'">Abrir</button> '+
           '<button type="button" class="btn bsm" onclick="'+archFn+'" title="Ver adjuntos">📁</button>'+
         '</div>'+
@@ -1686,7 +1753,7 @@ function conConsultaActLibreCard(stub){
     '<div class="ecb">'+
       '<div class="tc"><div>'+
         '<details class="con-fold con-act-fold" open>'+
-        '<summary class="slbl" style="cursor:pointer;margin-bottom:0">Actividad sin expediente</summary>'+
+        '<summary class="slbl" style="cursor:pointer;margin-bottom:0">'+(esOfiDoc?'Documento / comunicado':'Actividad sin expediente')+'</summary>'+
         '<div class="item-fold-body" style="padding-top:.5rem">'+tkHtml+'</div></details>'+
       '</div></div>'+
     '</div>'+
@@ -1827,7 +1894,7 @@ function renderConsulta(){
     const mEst=basPqrs?matchPqrsEstadoConsulta(e,qe):(!qe||e._estado===qe);
     return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&(!qi||(e.tasks||[]).some(t=>t.responsable===qi))&&(basPqrs||matchActividadFiltro(e,qact))&&mf;
   }),'q');
-  const listLibres=basPqrs?[]:filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
+  const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=listExps.concat(listLibres);
   const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?' — todas las PQRSD radicadas':esSecretaria()?' — PQRSD radicadas':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
@@ -1835,13 +1902,14 @@ function renderConsulta(){
   if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';
   const nLib=listLibres.length;
   const cntBase=listExps.length?(esOficinaPqrsBasica()?listExps.length+' solicitud(es) PQRSD'+ambitoLbl:listExps.length+' expediente(s)'+ambitoLbl):'';
-  const cntLib=nLib?(nLib+' actividad(es) sin expediente'):'';
+  const cntLib=nLib?(nLib+' documento(s)/actividad(es) sin expediente'):'';
   document.getElementById('q-cnt').textContent=list.length?([cntBase,cntLib].filter(Boolean).join(' · ')+(prLbl?' · '+prLbl:'')):"";
   window._conExportList=listExps;
   const c=document.getElementById('con-list');
   if(!list.length){
     const nAmb=baseList.length;
-    const nLibAmb=shouldIncludeActLibresEnConsulta()?actLibresAmbitoConsulta().length:0;
+    const nLibAmb=(shouldIncludeActLibresEnConsulta()?actLibresAmbitoConsulta().length:0)
+      +(String(q||'').trim().length>=2?collectConsultaOficinaDocComunicados(q,'','').length:0);
     let msg='Sin resultados con los filtros actuales.';
     if(!nAmb&&!nLibAmb)msg=esJurisdiccional()?'No hay expedientes registrados en ningún departamento.':esOficinaPqrsBasica()?'No hay PQRSD radicadas.':'No hay expedientes en '+labelDepto(deptoActivo)+'. Verifique el departamento seleccionado arriba.';
     else if(q.trim()&&exps.some(x=>String(x._exp||'').trim()===q.trim()&&x._depto&&x._depto!==deptoActivo&&!esJurisdiccional()&&!esModoOficinaDeguv()&&!esSecretaria()))msg='El expediente existe en otro departamento. Cambie el selector superior o use vista Jurisdiccional.';

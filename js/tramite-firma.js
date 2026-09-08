@@ -2140,7 +2140,17 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
     }else{
       notif('No hay envío de correo disponible','err');return false;
     }
-    if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(refId,taskId,{canal:'correo'});
+    if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(refId,taskId,{
+      canal:'correo',
+      email_enviado_en:new Date().toISOString(),
+      notificacion:{
+        canal:'correo',
+        fecha:(typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10)),
+        por:por,
+        en:new Date().toISOString(),
+        a:destinos.join(', ')
+      }
+    });
     // Persistir soportes (incl. soporte de envío) antes del cierre
     if(t&&t.soportes&&typeof mutateTask==='function'){
       mutateTask(refId,taskId,function(tk){tk.soportes=(t.soportes||[]).slice();});
@@ -3776,6 +3786,11 @@ async function submitEntregaOficinaFirma(){
       });
       if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
       correoEnviado=true;
+      const enviadoEn=new Date().toISOString();
+      if(!t.firmaWf||typeof t.firmaWf!=='object')t.firmaWf={};
+      t.firmaWf.email_enviado_en=enviadoEn;
+      if(!t.firmaWf.notificacion||typeof t.firmaWf.notificacion!=='object')t.firmaWf.notificacion={};
+      t.firmaWf.notificacion.en=enviadoEn;
       if(typeof sstCargaProgress==='function')sstCargaProgress(90,'Guardando actividad…');
     }
     // Quitar blobs / data-URL enormes antes de Firestore

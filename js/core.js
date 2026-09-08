@@ -7134,9 +7134,10 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
     const esPqrsRail=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
     const esOfiBasicaRail=typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica()&&!esNcaRail;
     // Oficinas: sin ✏️ editar expediente ni 🔄 trasladar/asignar en PQRSD (NCA sí)
-    if(t.sinExpediente)
+    // Documento/comunicado: sin ✏️ editar actividad
+    if(t.sinExpediente&&t.origen!=='oficina_firma')
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Editar actividad" onclick="closeTaskModal();abrirPanelActLibre(\''+jsStr(refExp)+'\',\''+jsStr(taskId)+'\')">✏️</button>';
-    else if(!esOfiBasicaRail&&(!esPqrsRail||esNcaRail)&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel())
+    else if(!t.sinExpediente&&!esOfiBasicaRail&&(!esPqrsRail||esNcaRail)&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel())
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='edit'?' on':'')+'" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
     if(!t.sinExpediente&&!esOfiBasicaRail)
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar oficina o asignar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
@@ -16079,11 +16080,21 @@ function renderOficinaDocCorreoReadonlyHtml(t){
   const tipo=String(wf.tipo||'').trim();
   const tipoLbl=tipo===TIPO_MSG||tipo==='mensaje'?'Mensaje / comunicado':'Oficio oficina';
   const canal=String((wf.notificacion&&wf.notificacion.canal)||wf.canal||'').trim();
+  const enviadoIso=String(wf.email_enviado_en||(wf.notificacion&&wf.notificacion.en)||wf.cerrado_en||'').trim();
+  let fechaHoraLbl='';
+  if(enviadoIso){
+    const d=new Date(enviadoIso);
+    fechaHoraLbl=!isNaN(d.getTime())
+      ?d.toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})
+      :enviadoIso;
+  }
   let h='<div class="task-review-side-scroll task-review-pqrs-correo">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Correo enviado</div>';
-  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Documento / comunicado · vista de solo lectura.</div>';
+  h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Documento / comunicado · use la fecha/hora para localizar el mensaje en <strong>Enviados</strong> del correo institucional.</div>';
   h+='<div style="padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
   h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Tipo: <strong style="color:var(--tx)">'+escAttr(tipoLbl)+'</strong>'+(canal?' · Canal: <strong style="color:var(--tx)">'+escAttr(canal)+'</strong>':'')+'</div>';
+  h+='<div class="fld" style="margin-bottom:8px"><label>Fecha y hora de envío</label>'+
+    '<div style="font-size:13px;font-weight:600;padding:8px 10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--gnl);color:var(--gn);font-family:\'DM Mono\',monospace">'+(fechaHoraLbl?escAttr(fechaHoraLbl):'<span style="color:var(--tx3);font-weight:400;font-family:inherit">No registrada</span>')+'</div></div>';
   h+='<div class="fld" style="margin-bottom:8px"><label>Para</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+(emailTo?escAttr(emailTo):'<span style="color:var(--tx3)">—</span>')+'</div></div>';
   if(emailCc)h+='<div class="fld" style="margin-bottom:8px"><label>Cc</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailCc)+'</div></div>';
   if(emailBcc)h+='<div class="fld" style="margin-bottom:8px"><label>Cco</label><div style="font-size:12px;padding:7px 8px;border:1px solid var(--bd);border-radius:var(--r);background:#fff;word-break:break-word">'+escAttr(emailBcc)+'</div></div>';
