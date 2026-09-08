@@ -1958,7 +1958,7 @@ function pqrsEsEntregaDirectaCtx(e){
   return false;
 }
 /**
- * Aplica entrega directa de oficina/NCA (mensaje/informativa cierra; oficio firmado → por notificar).
+ * Aplica entrega directa de oficina/NCA (mensaje/informativa/oficio → atendida; no «Por notificar»).
  */
 function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
   if(!e||!pq)return false;
@@ -1968,7 +1968,7 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
     return Object.assign({},a,{
       nombre:esAnexo?(a.nombre||('Anexo '+(a.anexo_n||(i+1)))):(a.nombre&&!/^Proyecci/i.test(a.nombre)?a.nombre:'Oficio firmado'),
       tipo:esAnexo?'anexo_respuesta':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(a.tipo||'drive')),
-      driveEstado:pq.tipo===PQRS_WF_TIPO.OFICIO?'por_notificar':(a.driveEstado||'cerrado')
+      driveEstado:'cerrado'
     });
   });
   if(pq.tipo===PQRS_WF_TIPO.INFORMATIVA){
@@ -1998,11 +1998,11 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
     });
     return true;
   }
-  // Oficio firmado: oficinas sin paleta «Por notificar» → cierran; NCA → por notificar
-  const ofiCierraOficio=typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif();
-  if(pq.tipo===PQRS_WF_TIPO.OFICIO&&ofiCierraOficio){
+  // Oficio firmado en entrega directa (NCA + oficinas): siempre atendida
+  // (correo notificado aquí, o ya notificado presencial/WhatsApp/aviso — no «Por notificar»).
+  if(pq.tipo===PQRS_WF_TIPO.OFICIO){
     const docsCierre=docs.map(function(d){
-      return Object.assign({},d,{driveEstado:d.es_anexo||d.tipo==='anexo_respuesta'?d.driveEstado:'cerrado'});
+      return Object.assign({},d,{driveEstado:d.es_anexo||d.tipo==='anexo_respuesta'?'cerrado':'cerrado'});
     });
     const canalCierre=pq.canal||PQRS_WF_CANAL.CORREO;
     const esOtroMedio=canalCierre&&!pqrsEsCanalCorreo(canalCierre);
@@ -2020,6 +2020,7 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       email_to:pq.emailTo||'',email_cc:pq.emailCc||'',email_bcc:pq.emailBcc||'',email_subject:pq.emailSubject||'',
       cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim(),
       firma_fisica:(typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}).firma_fisica||{por:por,en:new Date().toISOString(),modo:'fisico'},
+      revision_nca:{aprobado:true,tipo:'oficio',comentario:'Entrega directa — PQRSD atendida',por:por,en:new Date().toISOString(),entrega_directa:true},
       notificacion:esOtroMedio?{
         canal:canalCierre,
         fecha:pq.notifFecha||pq.fechaResp||hoy(),
@@ -2027,61 +2028,33 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
         por:por,
         en:new Date().toISOString(),
         atajo_entrega:true
-      }:undefined
+      }:(pqrsEsCanalCorreo(canalCierre)?{
+        canal:canalCierre,
+        fecha:pq.notifFecha||pq.fechaResp||hoy(),
+        obs:pq.notifObs||'',
+        por:por,
+        en:new Date().toISOString(),
+        correo_entrega_directa:true
+      }:undefined)
     });
-    if(esOtroMedio){
-      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-      e._pqrs_historial.push({
-        tipo:'notif_otro_medio_entrega',
-        fecha:pq.notifFecha||hoy(),
-        nota:'Oficio notificado por '+(medioLbl||canalCierre)+(pq.notifObs?' · '+pq.notifObs:'')+' — '+pqrsComentarioAutor(),
-        oficina:e._pqrs_oficina||deptoActivo,
-        por:por
-      });
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({
+      tipo:esOtroMedio?'notif_otro_medio_entrega':'entrega_directa_oficina',
+      fecha:pq.notifFecha||hoy(),
+      nota:esOtroMedio
+        ?('Oficio notificado por '+(medioLbl||canalCierre)+(pq.notifObs?' · '+pq.notifObs:'')+' — '+pqrsComentarioAutor())
+        :('Oficio firmado registrado y PQRSD atendida'+(pq.oficioExt?' · Oficio '+pq.oficioExt:'')+(pqrsEsCanalCorreo(canalCierre)?' · Notificación por correo':'')+' — '+pqrsComentarioAutor()),
+      oficina:e._pqrs_oficina||deptoActivo,
+      por:por
+    });
+    if(esOtroMedio||pqrsEsCanalCorreo(canalCierre)){
       e._pqrs_respuesta_medio=canalCierre;
       e._medio_notificacion=canalCierre;
     }
+    e._pendiente_revision_alta=false;
     return true;
   }
-  // Oficio firmado (NCA / con paleta notificar): listo para notificar
-  let notifPor=pq.notificarPor||responsableActivo||'';
-  if(typeof pqrsAsegurarNotificadorSegunOficina==='function')
-    notifPor=pqrsAsegurarNotificadorSegunOficina(e,notifPor||responsableActivo||'');
-  const canal=pq.canal||PQRS_WF_CANAL.CORREO;
-  setPqrsWorkflow(e,{
-    fase:PQRS_WF.PENDIENTE_NOTIF,
-    tipo:PQRS_WF_TIPO.OFICIO,
-    canal:canal,
-    cuerpo:pq.cuerpo||('Oficio '+(pq.oficioExt||'')+' listo para notificar'),
-    oficio:pq.oficioExt||'',
-    fecha_respuesta:pq.fechaResp,
-    documentos:docs,
-    email_to:pq.emailTo||'',
-    email_cc:pq.emailCc||'',
-    email_bcc:pq.emailBcc||'',
-    email_subject:pq.emailSubject||'',
-    notificar_por:notifPor,
-    notificar_por_propuesto:notifPor,
-    revision_nca:{aprobado:true,tipo:'oficio',comentario:'Entrega directa oficina/NCA (oficio firmado)',por:por,en:new Date().toISOString(),entrega_directa:true},
-    firma_director:{en:new Date().toISOString(),por:por,atajo_oficina:true},
-    entrega_n:1,
-    entregado_por:por,
-    entregado_en:new Date().toISOString(),
-    task_id:String(taskId||'').trim()
-  });
-  e._pqrs_respuesta_oficio=pq.oficioExt||'';
-  e._pqrs_respuesta_fecha=pq.fechaResp;
-  e._pqrs_respuesta_nota=pq.cuerpo||'';
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({
-    tipo:'entrega_directa_oficina',
-    fecha:hoy(),
-    nota:'Oficio firmado cargado para notificar'+(pq.oficioExt?' · Oficio '+pq.oficioExt:'')+(notifPor?' · Notificará: '+notifPor:'')+' — '+pqrsComentarioAutor(),
-    oficina:e._pqrs_oficina||deptoActivo,
-    por:por
-  });
-  if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
-  return true;
+  return false;
 }
 window.aplicarPqrsEntregaDirecta=aplicarPqrsEntregaDirecta;
 function puedeGestionarPqrsAsociacion(e){
@@ -9523,10 +9496,7 @@ function pqrsEntregaRefreshUi(){
   if(otroMedioRow)otroMedioRow.style.display=(isOficio&&!notifCorreoOficio)?'':'none';
   const otroHint=document.getElementById('pqrs-entrega-otro-medio-hint');
   if(otroHint&&isOficio&&!notifCorreoOficio){
-    const cierra=typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif();
-    otroHint.innerHTML=cierra
-      ?'No se enviará correo. Elija el medio y la PQRSD quedará <strong>atendida</strong>.'
-      :'No se enviará correo ahora. Indique el medio previsto de notificación (presencial / WhatsApp / aviso).';
+    otroHint.innerHTML='No se enviará correo. Elija el medio (presencial / WhatsApp / aviso) y la PQRSD quedará <strong>atendida</strong>.';
   }
   if(isOficio&&!notifCorreoOficio&&typeof pqrsEntregaSetOtroCanal==='function'){
     const cOtro=String((canalHid&&canalHid.value)||'presencial').trim().toLowerCase();
@@ -9598,10 +9568,16 @@ function collectPqrsEntregaDatos(expId){
   let tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
   const esAltaEnc=typeof pqrsEsAltaPorEncargado==='function'?pqrsEsAltaPorEncargado(e):!!e._alta_por_responsable;
   if(!tipo&&esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
-  let canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim();
+  let canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim().toLowerCase();
   const notifCorreoOficio=tipo===PQRS_WF_TIPO.OFICIO&&pqrsEntregaOficioNotifCorreo();
-  if(tipo===PQRS_WF_TIPO.OFICIO)canal=notifCorreoOficio?PQRS_WF_CANAL.CORREO:PQRS_WF_CANAL.PRESENCIAL;
-  else if(tipo===PQRS_WF_TIPO.MENSAJE)canal=PQRS_WF_CANAL.CORREO;
+  if(tipo===PQRS_WF_TIPO.OFICIO){
+    if(notifCorreoOficio)canal=PQRS_WF_CANAL.CORREO;
+    else{
+      if(canal==='whatsapp'||canal===(PQRS_WF_CANAL.WHATSAPP||'whatsapp'))canal=PQRS_WF_CANAL.WHATSAPP;
+      else if(canal==='aviso'||canal==='avisos'||canal===(PQRS_WF_CANAL.AVISO||'aviso'))canal=PQRS_WF_CANAL.AVISO;
+      else canal=PQRS_WF_CANAL.PRESENCIAL;
+    }
+  }else if(tipo===PQRS_WF_TIPO.MENSAJE)canal=PQRS_WF_CANAL.CORREO;
   if(!tipo||![PQRS_WF_TIPO.MENSAJE,PQRS_WF_TIPO.OFICIO,PQRS_WF_TIPO.INFORMATIVA].includes(tipo)){
     if(esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
     else{
@@ -14449,7 +14425,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             es_anexo:esAnexo,
             anexo_n:esAnexo?(da.anexo_n||null):null,
             driveFilename:da.driveFilename||da.nombre||'',
-            driveEstado:pq.tipo===PQRS_WF_TIPO.OFICIO?'por_notificar':'cerrado'
+            driveEstado:'cerrado'
           });
         }
       });
@@ -14460,15 +14436,10 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           normalizeTask(tk);
           const hoyStr=hoy();
           tk.fechaReportada=hoyStr;
-          if(pq.tipo===PQRS_WF_TIPO.OFICIO
-            &&!(typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif())){
-            tk.estado='En ejecución';
-            tk.fechaAtendida='';
-          }else{
-            tk.fechaAtendida=hoyStr;
-            tk.estado='Atendida';
-            tk.verificadoPor=taskComentarioAutor()+' · entrega directa oficina/NCA';
-          }
+          // Entrega directa siempre cierra la atención (correo o ya notificado por otro medio)
+          tk.fechaAtendida=hoyStr;
+          tk.estado='Atendida';
+          tk.verificadoPor=taskComentarioAutor()+' · entrega directa oficina/NCA';
           if(!Array.isArray(tk.historial))tk.historial=[];
           tk.historial.push({tipo:'entrega_directa_pqrs',fecha:hoyStr,ts:Date.now(),por:taskComentarioAutor(),nota:cmt||('Entrega directa · '+pq.tipo)});
         });
@@ -14480,11 +14451,9 @@ function submitEnviarSoporteVerificacion(expId,taskId){
       const msgOk=pq.tipo===PQRS_WF_TIPO.INFORMATIVA
         ?'ℹ️ PQRSD informativa cerrada'
         :(pq.tipo===PQRS_WF_TIPO.OFICIO
-          ?((typeof pqrsOficinaSinPaletasFirmadosNotif==='function'&&pqrsOficinaSinPaletasFirmadosNotif())
-            ?(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&!pqrsEsCanalCorreo(pq.canal)
-              ?('✅ Oficio notificado por '+(typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(pq.canal):pq.canal)+' — PQRSD atendida')
-              :'✅ Oficio firmado registrado — PQRSD atendida')
-            :'📤 Oficio firmado listo para notificar')
+          ?(pq.canal&&typeof pqrsEsCanalCorreo==='function'&&!pqrsEsCanalCorreo(pq.canal)
+            ?('✅ Oficio notificado por '+(typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(pq.canal):pq.canal)+' — PQRSD atendida')
+            :'✅ Oficio firmado registrado — PQRSD atendida')
           :'✅ Respuesta enviada y PQRSD atendida');
       notif(msgOk,'ok');
       if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()){
@@ -21561,28 +21530,165 @@ function openCrearActLibreModal(){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Nueva actividad sin expediente';
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  if(tit)tit.textContent='Nueva actividad / PQRSD';
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only','task-modal-wide');}
   const respSel=document.getElementById('act-dept-resp-sel');
   const defResp=respSel&&respSel.value?respSel.value:responsableActivo;
   const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoActivo):getContratistasAsignables(deptoActivo);
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
   const defCheck=defResp||encNom;
   const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(defCheck)||(!defCheck&&names.length===1)?' checked':'')+' onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
+  const altaPqrsHtml=typeof htmlEntregaRespPqrsAltaBox==='function'?htmlEntregaRespPqrsAltaBox():'';
+  const puedePqrs=typeof esNcaDeguv==='function'&&esNcaDeguv()||typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()||(typeof deptoActivo!=='undefined'&&deptoActivo==='guaviare');
   body.innerHTML=
+    (puedePqrs
+      ?('<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
+        '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-modo-tipo" id="act-libre-modo-act" checked onchange="actLibreModoTipoChange()"> Actividad sin expediente</label>'+
+        '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-modo-tipo" id="act-libre-modo-pqrs" onchange="actLibreModoTipoChange()"> Crear PQRSD</label>'+
+      '</div>')
+      :'')+
+    '<div id="act-libre-act-wrap">'+
     '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
     '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual">Individual — cada uno entrega por aparte</option><option value="unificada">Unificada — con una entrega se cierra para todos</option></select></div>'+
     actLibrePlazoFieldsHtml(null)+
     '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-prior"> ⚡ Actividad prioritaria</label>'+
-    '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitCrearActLibre()">Crear actividad</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
+    '</div>'+
+    '<div id="act-libre-pqrs-wrap" style="display:none">'+
+      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:#faf8ff;border:1px solid #d4c7f0;border-radius:var(--r)">Migración: cree la PQRSD ya radicada fuera de la app. Luego puede atenderla con 📤 en Por ejecutar / Prioritaria.</div>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Buscar si ya existe</label>'+
+        '<div style="position:relative">'+
+          '<input type="text" id="act-libre-pqrs-exp" placeholder="Digite N° PQRSD…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+            'oninput="actLibrePqrsExpInput(this)" onfocus="actLibrePqrsFiltrarSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'act-libre-pqrs-sug\');if(p)p.style.display=\'none\';},180)">'+
+          '<div id="act-libre-pqrs-sug" class="entrega-resp-sug" style="display:none"></div>'+
+        '</div>'+
+        '<div id="act-libre-pqrs-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Si no existe, elija crear en la lista.</div>'+
+      '</div>'+
+      '<div id="act-libre-pqrs-alta-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #d4c7f0;border-radius:var(--r);background:#faf8ff">'+altaPqrsHtml+'</div>'+
+    '</div>'+
+    '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" id="act-libre-submit-btn" onclick="submitCrearActLibreOrPqrs()">Crear actividad</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'crearActLibre'};
+  window._actLibrePqrsCrear=false;
   toggleActLibreModo();
   if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
+  if(puedePqrs)actLibreModoTipoChange();
   setTimeout(()=>{const inp=document.getElementById('act-libre-nombre');if(inp)inp.focus();},80);
 }
+function actLibreModoTipoChange(){
+  const pqrs=!!((document.getElementById('act-libre-modo-pqrs')||{}).checked);
+  const actW=document.getElementById('act-libre-act-wrap');
+  const pqrsW=document.getElementById('act-libre-pqrs-wrap');
+  const btn=document.getElementById('act-libre-submit-btn');
+  if(actW)actW.style.display=pqrs?'none':'';
+  if(pqrsW)pqrsW.style.display=pqrs?'':'none';
+  if(btn)btn.textContent=pqrs?'✚ Crear PQRSD':'Crear actividad';
+  if(pqrs){
+    const ofiSel=document.getElementById('er-pqrs-oficina');
+    if(ofiSel)ofiSel.value='guaviare';
+    if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+  }
+}
+function actLibrePqrsExpInput(inp){
+  window._actLibrePqrsCrear=false;
+  const alta=document.getElementById('act-libre-pqrs-alta-box');
+  if(alta)alta.style.display='none';
+  actLibrePqrsFiltrarSug(inp);
+}
+function actLibrePqrsFiltrarSug(inp){
+  const portal=document.getElementById('act-libre-pqrs-sug');
+  if(!portal||!inp)return;
+  const q=String(inp.value||'').trim();
+  const list=(typeof buscarExpedientesEntregaResp==='function'?buscarExpedientesEntregaResp(q,12):[]).filter(function(e){
+    return e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite)));
+  });
+  const ql=q.toLowerCase();
+  const exact=q&&typeof getExpById==='function'?getExpById(q):null;
+  const hasExact=!!(exact&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exact))
+    ||list.some(function(e){return String(e._exp||'').trim().toLowerCase()===ql;});
+  let html=list.map(function(e){
+    const nom=typeof getNom==='function'?getNom(e):'';
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();actLibrePqrsPickExistente(\''+
+      String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
+      '<span style="color:#6d3fa8;font-weight:600">Ya existe</span> · <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(nom)+'</button>';
+  }).join('');
+  if(q.length>=2&&!hasExact){
+    const qEsc=String(q).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html+='<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();actLibrePqrsPickCrear(\''+qEsc+'\')">'+
+      '<span style="color:#6d3fa8;font-weight:600">✚ Crear PQRSD</span> · <strong>'+escAttr(q)+'</strong></button>';
+  }
+  if(!html){portal.style.display='none';portal.innerHTML='';return;}
+  portal.innerHTML=html;
+  portal.style.display='block';
+}
+function actLibrePqrsPickExistente(expNum){
+  window._actLibrePqrsCrear=false;
+  const inp=document.getElementById('act-libre-pqrs-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('act-libre-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const alta=document.getElementById('act-libre-pqrs-alta-box');
+  if(alta)alta.style.display='none';
+  const hint=document.getElementById('act-libre-pqrs-hint');
+  if(hint)hint.innerHTML='Ya existe <strong>'+escAttr(expNum)+'</strong>. Ciérrelo y ábrala desde la bandeja PQRSD.';
+  notif('Esa PQRSD ya está en el sistema — ábrala desde la bandeja','ok');
+}
+function actLibrePqrsPickCrear(expNum){
+  window._actLibrePqrsCrear=true;
+  const inp=document.getElementById('act-libre-pqrs-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('act-libre-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const alta=document.getElementById('act-libre-pqrs-alta-box');
+  if(alta)alta.style.display='';
+  const numEl=document.getElementById('er-pqrs-exp');
+  if(numEl)numEl.value=expNum;
+  const ofiSel=document.getElementById('er-pqrs-oficina');
+  if(ofiSel)ofiSel.value='guaviare';
+  if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+  const hint=document.getElementById('act-libre-pqrs-hint');
+  if(hint)hint.textContent='Complete el formulario de alta.';
+}
+function submitCrearActLibreOrPqrs(){
+  if(!!((document.getElementById('act-libre-modo-pqrs')||{}).checked))
+    return submitCrearPqrsDesdeActLibre();
+  return submitCrearActLibre();
+}
+function submitCrearPqrsDesdeActLibre(){
+  if(!window._actLibrePqrsCrear){
+    notif('Busque el número y elija «Crear PQRSD» en la lista','err');
+    return;
+  }
+  if(typeof collectEntregaRespPqrsAlta!=='function'||typeof validateEntregaRespPqrsAlta!=='function'||typeof crearStubPqrsEntregaResp!=='function'){
+    notif('No se pudo cargar el formulario de alta PQRSD','err');return;
+  }
+  const datos=collectEntregaRespPqrsAlta();
+  if(!datos.oficina)datos.oficina='guaviare';
+  const err=validateEntregaRespPqrsAlta(datos);
+  if(err){notif(err,'err');return;}
+  const e=crearStubPqrsEntregaResp(datos,{
+    origen:'nca',
+    skipRevisionAlta:true,
+    por:responsableActivo||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'NCA')
+  });
+  if(!e)return;
+  try{
+    if(typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+  }catch(errE){}
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+  closeTaskModal();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function')renderActividades();
+  notif('PQRSD '+e._exp+' creada — aparece en Por ejecutar','ok');
+}
+window.actLibreModoTipoChange=actLibreModoTipoChange;
+window.actLibrePqrsExpInput=actLibrePqrsExpInput;
+window.actLibrePqrsFiltrarSug=actLibrePqrsFiltrarSug;
+window.actLibrePqrsPickExistente=actLibrePqrsPickExistente;
+window.actLibrePqrsPickCrear=actLibrePqrsPickCrear;
+window.submitCrearActLibreOrPqrs=submitCrearActLibreOrPqrs;
+window.submitCrearPqrsDesdeActLibre=submitCrearPqrsDesdeActLibre;
 function actLibrePlazoFieldsHtml(t){
   const vence=t&&t.vence?String(t.vence).slice(0,10):'';
   let plazo=t&&t.plazoDias!=null&&t.plazoDias!==''?String(t.plazoDias):'';

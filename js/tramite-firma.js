@@ -2536,7 +2536,7 @@ function genCodigoActOficinaFirma(ofi){
   return pref+'-'+String(n).padStart(4,'0');
 }
 
-/** Modal oficinas: comunicado / oficio (no PQRSD) — mensaje, firma Director o ya notificado. */
+/** Modal oficinas: Documento/comunicado (ACT) o migrar/crear PQRSD con respuesta. */
 function openEntregaOficinaFirmaModal(){
   if(!puedeEntregarOficinaParaFirma()){
     notif('Solo oficinas RN, OAP, Admin o Secretaría pueden registrar documentos / comunicados','err');
@@ -2552,13 +2552,19 @@ function openEntregaOficinaFirmaModal(){
   if(tit)tit.textContent='Documento / comunicado · '+ofiLbl;
   if(modal){
     modal.classList.remove('task-modal-wide','task-modal-review','task-modal-resp-ver','task-modal-review-wa-side','task-modal-archivos','task-modal-chat');
-    modal.classList.add('enviar-modal-only');
+    modal.classList.add('enviar-modal-only','task-modal-wide');
   }
   const notifDef=typeof pqrsDefaultNotificadorOficina==='function'?pqrsDefaultNotificadorOficina(ofi):'';
   const hoyStr=typeof hoy==='function'?hoy():'';
   const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
   const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
+  const altaPqrsHtml=typeof htmlEntregaRespPqrsAltaBox==='function'?htmlEntregaRespPqrsAltaBox():'';
   body.innerHTML=
+    '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="ofi-doc-modo" id="ofi-doc-modo-libre" checked onchange="ofiDocModoChange()"> Documento / comunicado</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="ofi-doc-modo" id="ofi-doc-modo-pqrs" onchange="ofiDocModoChange()"> PQRSD (buscar o crear)</label>'+
+    '</div>'+
+    '<div id="ofi-doc-libre-wrap">'+
     '<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Tipo de salida</div>'+
       '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-bottom:10px" id="ofi-doc-tipo-btns">'+
@@ -2631,13 +2637,29 @@ function openEntregaOficinaFirmaModal(){
         '<div class="fld" id="ofi-doc-notif-por-wrap" style="margin-bottom:12px;display:none"><label>Quién notificará <span style="font-weight:400;color:var(--tx3)">(tras firma)</span></label>'+
           '<input type="text" id="entrega-ofi-firma-notif" value="'+escAttr(notifDef)+'" placeholder="Encargado de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box"></div>'+
       '</div>'+
+    '</div></div>'+
+    '<div id="ofi-doc-pqrs-wrap" style="display:none">'+
+      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:#faf8ff;border:1px solid #d4c7f0;border-radius:var(--r)">Migración: busque la PQRSD ya radicada. Si no está, créela y adjunte la respuesta o informativa (queda <strong>atendida</strong>).</div>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Buscar PQRSD</label>'+
+        '<div style="position:relative">'+
+          '<input type="text" id="ofi-doc-pqrs-exp" placeholder="Digite N° PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+            'oninput="ofiDocPqrsExpInput(this)" onfocus="ofiDocPqrsFiltrarSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'ofi-doc-pqrs-sug\');if(p)p.style.display=\'none\';},180)">'+
+          '<div id="ofi-doc-pqrs-sug" class="entrega-resp-sug" style="display:none"></div>'+
+        '</div>'+
+        '<div id="ofi-doc-pqrs-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Si el número no existe, elija crear PQRSD en la lista.</div>'+
+      '</div>'+
+      '<div id="ofi-doc-pqrs-alta-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #d4c7f0;border-radius:var(--r);background:#faf8ff">'+altaPqrsHtml+'</div>'+
+      '<div id="ofi-doc-pqrs-entrega-host" style="display:none"></div>'+
+      '<textarea id="enviar-cmt-opcional" placeholder="Comentario u observaciones (opcional)…" style="display:none;min-height:56px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;width:100%;margin-bottom:8px"></textarea>'+
     '</div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+
-      '<button type="button" class="btn bsm bp" id="entrega-ofi-firma-btn" onclick="submitEntregaOficinaFirma()">📤 Registrar</button>'+
+      '<button type="button" class="btn bsm bp" id="entrega-ofi-firma-btn" onclick="submitEntregaOficinaFirmaOrPqrs()">📤 Registrar</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'entregaOficinaFirma',oficina:ofi};
+  window._ofiDocPqrsCrear=false;
+  window._ofiDocPqrsExpId='';
   window._entregaOfiFirmaCodigo=typeof genCodigoActOficinaFirma==='function'?genCodigoActOficinaFirma(ofi):('ACT-'+Date.now());
   const ctxKeyOfi='entrega-ofi-firma:'+ofi;
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKeyOfi);
@@ -2655,8 +2677,168 @@ function openEntregaOficinaFirmaModal(){
     sstFileInitPick('entrega-ofi-firma-anexos');
   }
   ofiDocRefreshUi();
+  ofiDocModoChange();
   setTimeout(function(){const a=document.getElementById('ofi-doc-asunto');if(a)a.focus();},80);
 }
+function ofiDocModoChange(){
+  const pqrs=!!((document.getElementById('ofi-doc-modo-pqrs')||{}).checked);
+  const libreW=document.getElementById('ofi-doc-libre-wrap');
+  const pqrsW=document.getElementById('ofi-doc-pqrs-wrap');
+  const btn=document.getElementById('entrega-ofi-firma-btn');
+  const cmt=document.getElementById('enviar-cmt-opcional');
+  if(libreW)libreW.style.display=pqrs?'none':'';
+  if(pqrsW)pqrsW.style.display=pqrs?'':'none';
+  if(cmt)cmt.style.display=pqrs?'':'none';
+  if(btn)btn.textContent=pqrs?'📤 Crear / registrar PQRSD':'📤 Registrar';
+  if(pqrs){
+    const ofiSel=document.getElementById('er-pqrs-oficina');
+    const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
+    if(ofiSel&&ofi)ofiSel.value=ofi;
+    if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+  }
+}
+function ofiDocPqrsExpInput(inp){
+  window._ofiDocPqrsCrear=false;
+  const alta=document.getElementById('ofi-doc-pqrs-alta-box');
+  if(alta)alta.style.display='none';
+  ofiDocPqrsFiltrarSug(inp);
+}
+function ofiDocPqrsFiltrarSug(inp){
+  const portal=document.getElementById('ofi-doc-pqrs-sug');
+  if(!portal||!inp)return;
+  const q=String(inp.value||'').trim();
+  const list=(typeof buscarExpedientesEntregaResp==='function'?buscarExpedientesEntregaResp(q,12):[]).filter(function(e){
+    return e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite)));
+  });
+  const ql=q.toLowerCase();
+  const exact=q&&typeof getExpById==='function'?getExpById(q):null;
+  const hasExact=!!(exact&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exact))||(typeof esTramitePqrs==='function'&&esTramitePqrs(exact._tramite))))
+    ||list.some(function(e){return String(e._exp||'').trim().toLowerCase()===ql;});
+  let html=list.map(function(e){
+    const nom=typeof getNom==='function'?getNom(e):'';
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();ofiDocPqrsPickExp(\''+
+      String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
+      '<span style="color:#6d3fa8;font-weight:600">PQRSD</span> · <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(nom)+'</button>';
+  }).join('');
+  if(q.length>=2&&!hasExact){
+    const qEsc=String(q).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html+='<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();ofiDocPqrsPickCrear(\''+qEsc+'\')">'+
+      '<span style="color:#6d3fa8;font-weight:600">✚ Crear PQRSD</span> · <strong>'+escAttr(q)+'</strong>'+
+      '<div style="font-size:11px;color:var(--tx3);margin-top:2px;font-weight:400">Ya radicada fuera de la app — complete el formulario y adjunte la respuesta</div></button>';
+  }
+  if(!html){portal.style.display='none';portal.innerHTML='';return;}
+  portal.innerHTML=html;
+  portal.style.display='block';
+}
+function ofiDocPqrsPickExp(expNum){
+  window._ofiDocPqrsCrear=false;
+  window._ofiDocPqrsExpId=String(expNum||'').trim();
+  const inp=document.getElementById('ofi-doc-pqrs-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('ofi-doc-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const alta=document.getElementById('ofi-doc-pqrs-alta-box');
+  if(alta)alta.style.display='none';
+  const e=typeof getExpById==='function'?getExpById(expNum):null;
+  const hint=document.getElementById('ofi-doc-pqrs-hint');
+  if(hint&&e){
+    hint.innerHTML='Seleccionada: <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(typeof getNom==='function'?getNom(e):'')+
+      ' · '+escAttr(e._estado||'')+' — complete la respuesta abajo.';
+  }
+  ofiDocPqrsShowEntrega(e);
+}
+function ofiDocPqrsPickCrear(expNum){
+  window._ofiDocPqrsCrear=true;
+  window._ofiDocPqrsExpId=String(expNum||'').trim();
+  const inp=document.getElementById('ofi-doc-pqrs-exp');
+  if(inp)inp.value=expNum;
+  const portal=document.getElementById('ofi-doc-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const alta=document.getElementById('ofi-doc-pqrs-alta-box');
+  if(alta)alta.style.display='';
+  const numEl=document.getElementById('er-pqrs-exp');
+  if(numEl)numEl.value=expNum;
+  const ofiSel=document.getElementById('er-pqrs-oficina');
+  const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
+  if(ofiSel&&ofi)ofiSel.value=ofi;
+  if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
+  const hint=document.getElementById('ofi-doc-pqrs-hint');
+  if(hint)hint.textContent='Complete el alta y la respuesta (informativa / mensaje / oficio).';
+  ofiDocPqrsShowEntrega(null);
+}
+function ofiDocPqrsShowEntrega(e){
+  const host=document.getElementById('ofi-doc-pqrs-entrega-host');
+  if(!host)return;
+  host.style.display='';
+  const stub=e||{_exp:window._ofiDocPqrsExpId||'',_tipo_solicitud:'solicitud PQRSD'};
+  host.innerHTML=typeof renderPqrsEntregaCamposHtml==='function'?renderPqrsEntregaCamposHtml(stub):'';
+  const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
+  if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
+  const getCtx=function(){
+    const ex=typeof getExpById==='function'?getExpById(window._ofiDocPqrsExpId||''):e;
+    return{esPqrs:true,expId:window._ofiDocPqrsExpId||'',e:ex||null,t:null};
+  };
+  if(typeof sstFileRegisterPick==='function'){
+    sstFileRegisterPick('enviar-adj-file',{ctxKey:ctxKey,listId:'pqrs-entrega-att-list',multi:false,getUploadCtx:getCtx});
+    sstFileRegisterPick('enviar-anexos-file',{ctxKey:ctxKey,listId:'pqrs-entrega-anexos-list',multi:true,getUploadCtx:getCtx});
+  }
+  if(typeof sstFileRegisterList==='function'){
+    sstFileRegisterList('pqrs-entrega-att-list',ctxKey,'main');
+    sstFileRegisterList('pqrs-entrega-anexos-list',ctxKey,'anexos');
+  }
+  if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+}
+function submitEntregaOficinaFirmaOrPqrs(){
+  if(!!((document.getElementById('ofi-doc-modo-pqrs')||{}).checked))
+    return submitEntregaOficinaPqrsMigracion();
+  return submitEntregaOficinaFirma();
+}
+async function submitEntregaOficinaPqrsMigracion(){
+  if(!puedeEntregarOficinaParaFirma()){notif('No autorizado','err');return;}
+  const ofi=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'';
+  const crear=!!window._ofiDocPqrsCrear;
+  let e=null;
+  let expId=String(window._ofiDocPqrsExpId||(document.getElementById('ofi-doc-pqrs-exp')||{}).value||'').trim();
+  if(crear){
+    if(typeof collectEntregaRespPqrsAlta!=='function'||typeof validateEntregaRespPqrsAlta!=='function'||typeof crearStubPqrsEntregaResp!=='function'){
+      notif('No se pudo cargar el formulario de alta PQRSD','err');return;
+    }
+    const datos=collectEntregaRespPqrsAlta();
+    const err=validateEntregaRespPqrsAlta(datos);
+    if(err){notif(err,'err');return;}
+    if(!datos.oficina)datos.oficina=ofi;
+    e=crearStubPqrsEntregaResp(datos,{origen:'oficina',skipRevisionAlta:true,por:typeof labelOficina==='function'?labelOficina(ofi):ofi});
+    if(!e)return;
+    expId=e._exp;
+  }else{
+    if(!expId){notif('Busque y seleccione una PQRSD, o créela','err');return;}
+    e=typeof getExpById==='function'?getExpById(expId):null;
+    if(!e){notif('PQRSD no encontrada','err');return;}
+    if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(e)){notif('El registro seleccionado no es una PQRSD','err');return;}
+  }
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){notif('La PQRSD ya está atendida','err');return;}
+  try{
+    if(ofi==='guaviare'&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+    else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
+  }catch(err){}
+  let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+  if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  if(!t||!t.id){notif('No se pudo preparar la actividad de atención','err');return;}
+  window._ofiDocPqrsExpId=expId;
+  window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{
+    expId:expId,taskId:t.id,entregaDirectaPqrs:true,mode:'enviar',actLibre:false
+  });
+  if(typeof submitEnviarSoporteVerificacion==='function')
+    submitEnviarSoporteVerificacion(expId,t.id);
+  else notif('No se pudo registrar la entrega','err');
+}
+window.ofiDocModoChange=ofiDocModoChange;
+window.ofiDocPqrsExpInput=ofiDocPqrsExpInput;
+window.ofiDocPqrsFiltrarSug=ofiDocPqrsFiltrarSug;
+window.ofiDocPqrsPickExp=ofiDocPqrsPickExp;
+window.ofiDocPqrsPickCrear=ofiDocPqrsPickCrear;
+window.submitEntregaOficinaFirmaOrPqrs=submitEntregaOficinaFirmaOrPqrs;
+window.submitEntregaOficinaPqrsMigracion=submitEntregaOficinaPqrsMigracion;
 function ofiDocSetTipo(val){
   const hid=document.getElementById('ofi-doc-tipo');
   if(hid)hid.value=String(val||'');

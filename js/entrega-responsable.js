@@ -42,6 +42,7 @@ function buscarExpedientesEntregaResp(q,lim){
   });
   return out.slice(0,lim||12);
 }
+window.buscarExpedientesEntregaResp=buscarExpedientesEntregaResp;
 
 function filtrarExpEntregaRespSug(inp){
   const portal=document.getElementById('entrega-resp-exp-sug');
@@ -2443,8 +2444,9 @@ function validateEntregaRespPqrsAlta(d){
   if(!d.oficina)return'Seleccione la oficina';
   return'';
 }
-function crearStubPqrsEntregaResp(datos){
+function crearStubPqrsEntregaResp(datos,opts){
   datos=datos||{};
+  opts=opts||{};
   const expId=String(datos.expId||'').trim();
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
   const fechaSol=String(datos.fechaSol||hoyStr).trim()||hoyStr;
@@ -2491,13 +2493,16 @@ function crearStubPqrsEntregaResp(datos){
     correo=datos.pn&&datos.pn.correo||'';
     tel=datos.pn&&datos.pn.tel||'';
   }
-  const por=responsableActivo||'Responsable';
+  const origenAlta=String(opts.origen||'responsable').trim()||'responsable';
+  const por=opts.por||responsableActivo||(typeof labelOficina==='function'?labelOficina(oficina):'')||rolSesion||'Usuario';
+  const origenLbl=origenAlta==='oficina'?'oficina':(origenAlta==='nca'?'encargado NCA':'responsable');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:por,fecha:fecha}]):'[]';
   const hist=[
-    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Alta PQRSD por responsable ('+por+') — transición (ya radicada fuera de la app)',oficina:''},
-    {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente al crear desde entrega',oficina:oficina,oficinaAnterior:'secretaria',por:por}
+    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Alta PQRSD por '+origenLbl+' ('+por+') — transición (ya radicada fuera de la app)',oficina:''},
+    {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente al crear desde migración/entrega',oficina:oficina,oficinaAnterior:'secretaria',por:por}
   ];
   const tipoRadicacion=typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
+  const skipRevAlta=!!opts.skipRevisionAlta||origenAlta==='oficina'||origenAlta==='nca';
   const raw={
     _depto:'guaviare',_tramite:tramId,_exp:expId,_estado:'En trámite',_fecha:fecha,_fecha_solicitud:fechaSol,_pqrs_fecha_termino:'',
     _fechas_estado:JSON.stringify({Solicitud:fechaSol,'En trámite':fecha}),
@@ -2528,12 +2533,14 @@ function crearStubPqrsEntregaResp(datos){
     _pqrs_historial:hist,tasks:[],
     _gmail_message_id:null,_pqrs_gmail_attachments:null,_gmail_email_data:null,
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion}),
-    _alta_por_responsable:true,
+    _alta_por_responsable:origenAlta==='responsable',
+    _alta_por_oficina:origenAlta==='oficina',
+    _alta_por_nca:origenAlta==='nca',
     _alta_por:por,
     _alta_fecha:fecha,
-    _pendiente_revision_alta:true,
-    _alta_revisada_en:'',
-    _alta_revisada_por:''
+    _pendiente_revision_alta:!skipRevAlta,
+    _alta_revisada_en:skipRevAlta?fecha:'',
+    _alta_revisada_por:skipRevAlta?por:''
   };
   const data=typeof normalizePqrsOficinaFields==='function'?normalizePqrsOficinaFields(raw):raw;
   if(!Array.isArray(exps))exps=[];
@@ -2542,9 +2549,12 @@ function crearStubPqrsEntregaResp(datos){
   if(!interna&&!anon&&typeof upsertPersonaCatalog==='function')upsertPersonaCatalog(data);
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
-  if(typeof logAudit==='function')logAudit('Alta PQRSD por responsable ['+expId+']','pqrsd',expId);
+  if(typeof logAudit==='function')logAudit('Alta PQRSD por '+origenLbl+' ['+expId+']','pqrsd',expId);
   return data;
 }
+window.crearStubPqrsEntregaResp=crearStubPqrsEntregaResp;
+window.collectEntregaRespPqrsAlta=collectEntregaRespPqrsAlta;
+window.validateEntregaRespPqrsAlta=validateEntregaRespPqrsAlta;
 
 function crearStubExpedienteEntregaResp(opts){
   opts=opts||{};
