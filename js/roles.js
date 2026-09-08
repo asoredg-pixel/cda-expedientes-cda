@@ -1346,6 +1346,12 @@ function aplicarVisibilidadTabsSesion(){
     if(!show)el.classList.remove('on','tab-selected');
     el.style.display='';
   });
+  // Secretaría: icono PQRSD del menú vertical 📌 (oficinas DEGUV conservan 📥)
+  const tabPqrs=document.getElementById('tab-pqrs-ofi');
+  if(tabPqrs){
+    const ico=tabPqrs.querySelector('.tab-ico');
+    if(ico)ico.textContent=(typeof esSecretaria==='function'&&esSecretaria())?'📌':'📥';
+  }
   const tasksNav=document.getElementById('nav-tasks');
   if(tasksNav){
     const showTasks=puedeVerNavTasks();

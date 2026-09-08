@@ -307,7 +307,7 @@ const ROLES_INGRESO=[
   {id:'rn_deguv',titulo:'RN DEGUV',desc:'Bandeja PQRSD y seguimiento de solicitudes trasladadas.',icon:'📌',cls:'rol-ofi'},
   {id:'admin_deguv',titulo:'ADMIN DEGUV',desc:'Bandeja PQRSD sin apoyo de actividades internas.',icon:'📌',cls:'rol-ofi'},
   {id:'ds_deguv',titulo:'DS DEGUV',desc:'Bandeja PQRSD y comunicación con otras oficinas.',icon:'📌',cls:'rol-ofi'},
-  {id:'secretaria',titulo:'Secretaría DEGUV',desc:'Radicación y traslado de PQRSD a oficinas.',icon:'📥',cls:'rol-sec'},
+  {id:'secretaria',titulo:'Secretaría DEGUV',desc:'Radicación y traslado de PQRSD a oficinas.',icon:'📌',cls:'rol-sec'},
   {id:'guainia',titulo:'Guainía',desc:'Departamento regional — registro, actividades y consulta.',icon:'🌿',cls:'rol-dep'},
   {id:'vaupes',titulo:'Vaupés',desc:'Departamento regional — registro, actividades y consulta.',icon:'🌿',cls:'rol-dep'},
   {id:'jurisdiccional',titulo:'Jurisdiccional',desc:'Consulta y consolidado de todos los departamentos.',icon:'⚖️',cls:'rol-juris'},

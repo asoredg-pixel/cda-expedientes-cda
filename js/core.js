@@ -3928,12 +3928,46 @@ function pqrsFindDriveAtt(driveAtts,nombre,idx,solicitudLink){
 }
 function puedeEliminarPqrsEnVisor(e){
   if(!e||!esPqrsSecretaria(e))return false;
+  // Secretaría / Admin: eliminar desde el rail del visor (revisar / correo y solicitud)
+  if(typeof puedeEliminarPqrs==='function'&&puedeEliminarPqrs(e))return true;
   if(!e._alta_por_responsable)return false;
   if(typeof expPendienteRevisionAlta!=='function'||!expPendienteRevisionAlta(e))return false;
   if(esModoResponsable())return true;
   if(typeof puedeRevisarAltaExpediente==='function'&&puedeRevisarAltaExpediente(e))return true;
   return false;
 }
+/**
+ * Secretaría: abre el visor PQRSD con rail vertical (correo / solicitud / eliminar),
+ * mismo patrón que «Ver PQRSD: correo y solicitud».
+ */
+function openPqrsRevisarOrigen(expId){
+  expId=String(expId||'').trim();
+  if(!expId)return;
+  const e=typeof getExpById==='function'?getExpById(expId):(exps||[]).find(function(x){return String(x._exp||'').trim()===expId;});
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e)){
+    notif('PQRSD no encontrado','err');
+    return;
+  }
+  const ofi=String(e._pqrs_oficina||'').trim();
+  let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+  if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  if(!t){
+    try{
+      if(ofi==='guaviare'&&typeof ensureTareaPqrsNca==='function')ensureTareaPqrsNca(e);
+      else if(ofi&&typeof ensureTareaPqrsOficina==='function')ensureTareaPqrsOficina(e,ofi);
+    }catch(err){}
+    t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
+    if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  }
+  if(!t||!t.id){
+    if(typeof openPqrsSidePanel==='function')openPqrsSidePanel(expId);
+    else notif('No hay actividad de atención para revisar','err');
+    return;
+  }
+  if(typeof openTaskVerDocumentoResp==='function')openTaskVerDocumentoResp(expId,String(t.id));
+  else if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,String(t.id),{verDocumento:true});
+}
+window.openPqrsRevisarOrigen=openPqrsRevisarOrigen;
 function cerrarPqrsOrigenAttInline(){
   const el=document.getElementById('pqrs-origen-att-inline');
   const body=document.getElementById('pqrs-origen-att-inline-body');
@@ -7108,6 +7142,8 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   }
   if(typeof openBibGuardarModal==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
+  if(e&&typeof puedeEliminarPqrsEnVisor==='function'&&puedeEliminarPqrsEnVisor(e))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar PQRSD" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   return h+'</nav>';
 }
 /** Rail mínimo «Por firmar»: ver docs/anexos de la última entrega + marcar impreso. */
@@ -8301,9 +8337,17 @@ function initTaskReviewEditSide(expId,taskId,t,focusActividades){
 }
 function renderTaskReviewEliminarPqrsSideHtml(expId){
   const eid=escAttr(expId);
+  const e=typeof getExpById==='function'?getExpById(expId):(exps||[]).find(function(x){return String(x._exp||'').trim()===String(expId||'').trim();});
+  const esSecOAdmin=(typeof esSecretaria==='function'&&esSecretaria())||(typeof esAdministrador==='function'&&esAdministrador());
+  const esAltaPend=!!(e&&e._alta_por_responsable&&typeof expPendienteRevisionAlta==='function'&&expPendienteRevisionAlta(e));
+  const detalle=esSecOAdmin
+    ?'La PQRSD se moverá a la papelera (90 días para restaurar). Indique el motivo al confirmar.'
+    :(esAltaPend
+      ?'Solo aplica a altas creadas por el responsable y aún pendientes de revisión del encargado.'
+      :'No tiene permiso para eliminar esta PQRSD.');
   return '<div class="task-review-side-form">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">Eliminar PQRSD</div>'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">Solo aplica a altas creadas por el responsable y aún pendientes de revisión del encargado.</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+detalle+'</div>'+
     '<button type="button" class="btn bsm bd2" onclick="eliminarPqrs(\''+eid+'\');if(typeof taskReviewCloseSidePanel===\'function\')taskReviewCloseSidePanel();if(typeof closeTaskModal===\'function\')closeTaskModal();">🗑 Eliminar PQRSD</button>'+
     '</div>';
 }
