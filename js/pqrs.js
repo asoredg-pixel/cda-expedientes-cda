@@ -382,7 +382,7 @@ async function guardarPqrsSecretaria(modo){
     return;
   }
   const soloRadicar=false;
-  const expId=String((document.getElementById('sec-exp')||{}).value||'').trim();
+  let expId=String((document.getElementById('sec-exp')||{}).value||'').trim();
   const fecha=puedeEditarFechaRadicacionPqrs()?((document.getElementById('sec-fecha')||{}).value||hoy()):hoy();
   const fechaSol=String((document.getElementById('sec-fecha-solicitud')||{}).value||'').trim();
   const fechaTermino=String((document.getElementById('sec-fecha-termino')||{}).value||'').trim();
