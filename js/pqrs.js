@@ -1181,10 +1181,12 @@ function getPqrsOficinaList(oficinaId,filtro){
     return listFd.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
   }
   let list=exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===oficinaId&&!pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
-  // «Por ejecutar»: solo pendientes de respuesta (sin mezclar Por firmar / Por notificar / revisión)
-  if(filtro==='pend'){
+  // «Por ejecutar» / «Vencidas»: solo pendientes de respuesta (sin Por firmar / notificar / revisión).
+  // Vencidas = mismo recorte + plazo vencido (✍️ = enviar a firma, no marcar firmado).
+  if(filtro==='pend'||filtro==='atras'){
     list=list.filter(function(e){
       if(pqrsEstaCerrada(e))return false;
+      if(filtro==='atras'&&!pqrsEstaAtrasada(e))return false;
       const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
       if(f===PQRS_WF.POR_FIRMAR||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO)return false;
       if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION)return false;
@@ -1192,7 +1194,6 @@ function getPqrsOficinaList(oficinaId,filtro){
       return f===PQRS_WF.SIN_RESPUESTA||f===PQRS_WF.RECHAZADA||!f;
     });
   }
-  else if(filtro==='atras')list=list.filter(e=>pqrsEstaAtrasada(e));
   else if(filtro==='cerr')list=list.filter(e=>pqrsEstaCerrada(e));
   else if(filtro==='revision')list=list.filter(e=>{
     const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
@@ -1373,7 +1374,7 @@ function pqrsAccionesTablaHtml(e){
     ||(typeof esAdministrador==='function'&&esAdministrador())
     ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
     ||(typeof esNcaDeguv==='function'&&esNcaDeguv());
-  // Vencidas: mismas opciones que Por ejecutar (cualquier fase pendiente de respuesta / firma)
+  // Vencidas: mismas acciones que Por ejecutar (es un recorte por demora)
   if(esOfiToolbar&&filtroOfi==='atras'&&!e._tramite_firma_task)
     return pqrsOficinaPorEjecutarAccionesHtml(e);
   if(esOfiToolbar&&filtroOfi==='pend'&&!e._tramite_firma_task){
@@ -1663,7 +1664,7 @@ function renderPqrsOficinaInbox(){
   if(mets){
     // Por ejecutar = pendientes de respuesta (no incluye Por firmar / Por notificar)
     const porEjec=getPqrsOficinaList(getPqrsOficinaActiva(),'pend').length;
-    const vencidas=listAll.filter(e=>pqrsEstaAtrasada(e)).length;
+    const vencidas=getPqrsOficinaList(getPqrsOficinaActiva(),'atras').length;
     const cerr=listAll.filter(e=>pqrsEstaCerrada(e)).length;
     const showPorFirmarCard=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
     const showParaImprimirCard=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
