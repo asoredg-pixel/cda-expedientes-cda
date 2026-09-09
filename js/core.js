@@ -1522,9 +1522,11 @@ function _pqrsDocEsAnexoRespuesta(d){
   if(!d)return false;
   // Anexos de radicación (ventanilla/correo) no son anexos de la respuesta
   if(d.es_radicacion||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud')return false;
-  const nom=String(d.nombre||d.driveFilename||d.label||'');
-  if(/^anexo\s+pqrsd\b/i.test(nom)||/^solicitud_pqrsd/i.test(nom))return false;
   if(d.tipo==='anexo_respuesta'||d.es_anexo===true)return true;
+  const nom=String(d.nombre||d.driveFilename||d.label||'');
+  if(/^anexo\s+pqrsd\b/i.test(nom)||/^solicitud_pqrsd/i.test(nom)||/_SOL\./i.test(nom))return false;
+  // {exp}_A01… = anexo de radicación (nombre corto); sin metadata no es anexo de respuesta
+  if(/_A\d{1,3}([_.]|$)/i.test(nom))return false;
   if(/^anexo[-_\s]?\d*/i.test(nom))return true;
   // Tras renombre Drive (revision-anexo1-… / por_firmar-anexo2-…)
   if(/(^|[-_])anexo[-_\s]?\d*/i.test(nom))return true;
@@ -1533,11 +1535,18 @@ function _pqrsDocEsAnexoRespuesta(d){
 /** Nombre típico del PDF institucional de radicación. */
 function _pqrsEsNombreSoporteRadicacion(nom){
   const n=String(nom||'').trim();
-  return /^solicitud_pqrsd/i.test(n)||/^soporte\s+de\s+solicitud/i.test(n)||/^soporte\s+de\s+radicaci/i.test(n);
+  return /^solicitud_pqrsd/i.test(n)
+    ||/^soporte\s+de\s+solicitud/i.test(n)
+    ||/^soporte\s+de\s+radicaci/i.test(n)
+    ||/_SOL\./i.test(n)
+    ||/^[^\\/]+_SOL\./i.test(n);
 }
 /** Nombre típico de anexo subido al radicar (ventanilla/correo). */
 function _pqrsEsNombreAnexoRadicacion(nom){
-  return /^anexo\s+pqrsd\b/i.test(String(nom||'').trim());
+  const n=String(nom||'').trim();
+  return /^anexo\s+pqrsd\b/i.test(n)
+    ||/_A\d{1,3}([_.]|$)/i.test(n)
+    ||/^A\d{1,3}[-_]/i.test(n);
 }
 /**
  * Documentos de la radicación: PDF soporte institucional + anexos de ventanilla/correo.
@@ -1554,8 +1563,14 @@ function _pqrsCollectDocsRadicacion(e){
   const labelAnexo=function(nom){
     const n=String(nom||'').trim();
     if(!n)return'Anexo radicado';
-    const stripped=n.replace(/^ANEXO\s+PQRSD\s+\S+\s+/i,'').trim();
-    return stripped&&stripped!==n?('Anexo radicado: '+stripped):(_pqrsEsNombreAnexoRadicacion(n)?'Anexo radicado':n);
+    const stripped=n
+      .replace(/^ANEXO\s+PQRSD\s+\S+\s+/i,'')
+      .replace(/^[^\\/]+_A\d{1,3}_/i,'')
+      .replace(/^[^\\/]+_A\d{1,3}\./i,'')
+      .trim();
+    return stripped&&stripped!==n&&!/\.(pdf|docx?|png|jpe?g)$/i.test(stripped)
+      ?('Anexo radicado: '+stripped)
+      :(_pqrsEsNombreAnexoRadicacion(n)?'Anexo radicado':n);
   };
   const push=function(url,nombre,fileId,tipoHint){
     if(!url)return;
@@ -3714,9 +3729,13 @@ async function submitPqrsRespuestaParaFirma(expId){
         if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round(15+(i/allUp.length)*70),'Usando «'+(res.nombre||res.driveFilename||'archivo')+'» en Drive…');
       }else{
         const file=item.file;
-        const pref=esAnexo
-          ?('por_firmar-anexo-'+anexoSeq+'-'+file.name)
-          :('por_firmar-'+file.name);
+        const pref=(typeof window.pqrsBuildDriveFilename==='function')
+          ?(esAnexo
+            ?window.pqrsBuildDriveFilename('ANX',expId,{origName:file.name,n:anexoSeq})
+            :window.pqrsBuildDriveFilename('FIR',expId,{origName:file.name}))
+          :(esAnexo
+            ?('por_firmar-anexo-'+anexoSeq+'-'+file.name)
+            :('por_firmar-'+file.name));
         if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round(15+(i/allUp.length)*70),'Subiendo «'+file.name+'»…');
         res=await driveUploadInstitutional(file,pref,file.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
       }

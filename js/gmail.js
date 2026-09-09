@@ -1726,20 +1726,53 @@ function _driveSafeFolderName(s, maxLen) {
     .slice(0, maxLen || 30) || 'sin-nombre';
 }
 
-const _DRIVE_API_QS = '&supportsAllDrives=true&includeItemsFromAllDrives=true';
-
-function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
-  const exp = String(e && e._exp || '').trim().replace(/\s/g, '');
-  const act = _driveSlug(task && (task.desc || task.actividad) || 'actividad', 25);
-  const resp = _driveSlug(responsable, 20);
-  const fecha = (typeof hoy === 'function' ? hoy() : new Date().toISOString().slice(0, 10)).replace(/-/g, '');
-  const extMatch = String(origName || '').match(/\.([a-zA-Z0-9]{1,8})$/);
-  const ext = extMatch ? extMatch[1].toLowerCase() : 'pdf';
-  const pref = estado === 'guia_correccion' ? 'guia' : (estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' || estado === 'acorregir' ? 'acorregir' : (estado === 'por_firmar' ? 'por_firmar' : (estado === 'por_firma' ? 'por_firma' : (estado === 'por_notificar' ? 'por_notificar' : 'revision')))));
-  const anexoM = String(origName || '').match(/^anexo[-_\s]?(\d+)/i);
-  const anexoPref = anexoM ? ('anexo' + anexoM[1] + '-') : (/^anexo[-_\s]/i.test(String(origName || '')) ? 'anexo-' : '');
-  return anexoPref + pref + '-' + exp + '-' + act + '-' + fecha + '-' + resp + '.' + ext;
+function _driveFileExt(origName, fallback) {
+  const m = String(origName || '').match(/\.([a-zA-Z0-9]{1,8})$/);
+  return m ? m[1].toLowerCase() : (fallback || 'pdf');
 }
+
+/**
+ * Nombre corto en Drive para soportes de expediente/actividad.
+ * Sin fecha ni responsable (ya están en el sistema / se filtran ahí).
+ * Formato: [anexoN-]{estado}-{exp}-{actividad}.{ext}
+ */
+function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
+  const exp = String(e && e._exp || '').trim().replace(/\s/g, '') || 'EXP';
+  const act = _driveSlug(task && (task.desc || task.actividad) || 'act', 16);
+  const ext = _driveFileExt(origName, 'pdf');
+  const pref = estado === 'guia_correccion' ? 'guia' : (estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' || estado === 'acorregir' ? 'acorregir' : (estado === 'por_firmar' ? 'por_firmar' : (estado === 'por_firma' ? 'por_firma' : (estado === 'por_notificar' ? 'por_notificar' : 'revision')))));
+  const anexoM = String(origName || '').match(/(?:^|[-_\s])anexo[-_\s]?(\d+)/i) || String(origName || '').match(/(?:^|[-_])A(\d+)(?:[-_.]|$)/i);
+  const anexoPref = anexoM ? ('anexo' + anexoM[1] + '-') : (/anexo[-_\s]/i.test(String(origName || '')) ? 'anexo-' : '');
+  return anexoPref + pref + '-' + exp + '-' + act + '.' + ext;
+}
+
+/** Nombre corto PQRSD: {exp}_SOL.pdf | {exp}_A01.pdf | {exp}_OFC.pdf | {exp}_FIR.pdf */
+function pqrsBuildDriveFilename(kind, expId, opts) {
+  opts = opts || {};
+  const exp = String(expId || '').trim().replace(/\s/g, '') || 'PQRSD';
+  const ext = _driveFileExt(opts.origName || opts.filename, opts.ext || 'pdf');
+  const n = Math.max(1, parseInt(opts.n, 10) || 1);
+  const nn = String(n).padStart(2, '0');
+  const k = String(kind || 'DOC').toUpperCase();
+  if (k === 'SOL' || k === 'SOLICITUD') return exp + '_SOL.' + ext;
+  if (k === 'ANX' || k === 'ANEXO') {
+    const slug = _driveSlug(opts.origName || opts.label || '', 18);
+    // Si el slug es genérico (extension-only residual), omitirlo
+    const base = exp + '_A' + nn;
+    if (!slug || slug === 'doc' || slug === ext) return base + '.' + ext;
+    return base + '_' + slug + '.' + ext;
+  }
+  if (k === 'OFC' || k === 'OFICIO') return exp + '_OFC.' + ext;
+  if (k === 'FIR' || k === 'FIRMAR') return exp + '_FIR.' + ext;
+  if (k === 'RSP' || k === 'RESPUESTA') return exp + '_RSP.' + ext;
+  if (k === 'NOT' || k === 'NOTIF') return exp + '_NOT.' + ext;
+  const tag = _driveSlug(k, 8).toUpperCase() || 'DOC';
+  return exp + '_' + tag + '.' + ext;
+}
+window.pqrsBuildDriveFilename = pqrsBuildDriveFilename;
+window.buildExpedienteDriveFilename = buildExpedienteDriveFilename;
+
+const _DRIVE_API_QS = '&supportsAllDrives=true&includeItemsFromAllDrives=true';
 
 async function driveEnsureExpedienteFolder(e) {
   // Seguridad: PQRSD nunca debe crear carpetas EXP- en el árbol de expedientes
@@ -2785,9 +2818,17 @@ async function driveUploadPqrsExpediente(blob, filename, mimeType, e, opts) {
   const nombreCarpeta = pqrsExpDriveNombreCarpeta(e);
   const tipo = opts.tipo || pqrsExpDriveTipoRadicacion(e);
   const fechaRef = opts.fechaRef || pqrsExpDriveFechaRef(e);
-  const safeLabel = String(opts.label || filename || 'Documento').replace(/[<>:"/\\|?*]/g, '_').slice(0, 80);
+  const safeLabel = String(opts.label || '').replace(/[<>:"/\\|?*]/g, '_').trim();
   const safeFile = String(filename || 'archivo').replace(/[<>:"/\\|?*]/g, '_');
-  const driveName = opts.driveName || (safeLabel + ' PQRSD ' + expId + ' ' + safeFile).slice(0, 180);
+  let driveName = opts.driveName;
+  if (!driveName) {
+    if (typeof pqrsBuildDriveFilename === 'function') {
+      const kind = opts.kind || (opts.uploadTarget === 'solicitud' ? 'SOL' : 'RSP');
+      driveName = pqrsBuildDriveFilename(kind, expId, { origName: safeFile || safeLabel, n: opts.anexoN || 1 });
+    } else {
+      driveName = (expId + '_' + (safeLabel || safeFile)).slice(0, 120);
+    }
+  }
   return driveUploadInstitutional(blob, driveName, mimeType || 'application/octet-stream', tipo, expId, nombreCarpeta, fechaRef, {
     expediente: e,
     uploadTarget: opts.uploadTarget || 'respuesta'
@@ -3330,10 +3371,12 @@ async function subirSoporteRadicacionManual(opts) {
     if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
     const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
     if (pdfBlob) {
-      const asuntoSlug = String(opts.asunto || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
+      const solName = typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('SOL', expId, { ext: 'pdf' })
+        : ('Solicitud_PQRSD-' + expId + '.pdf');
       soporte = await driveUploadInstitutional(
         pdfBlob,
-        'Solicitud_PQRSD-' + expId + '_' + asuntoSlug + '.pdf',
+        solName,
         'application/pdf',
         tipoRad,
         expId,
@@ -3342,7 +3385,7 @@ async function subirSoporteRadicacionManual(opts) {
         uploadOpts
       );
       if (soporte) {
-        soporte.nombre = soporte.nombre || ('Solicitud_PQRSD-' + expId + '_' + asuntoSlug + '.pdf');
+        soporte.nombre = soporte.nombre || solName;
         soporte.tipo = soporte.tipo || 'soporte_radicacion';
       }
       uploaded.push(soporte);
@@ -3353,8 +3396,9 @@ async function subirSoporteRadicacionManual(opts) {
     for (let i = 0; i < anexosFiles.length; i++) {
       const file = anexosFiles[i];
       const origName = file.name || ('anexo-' + (i + 1));
-      const safeName = origName.replace(/[<>:"/\\|?*]/g, '_');
-      const driveName = 'ANEXO PQRSD ' + expId + ' ' + safeName;
+      const driveName = typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('ANX', expId, { origName: origName, n: i + 1 })
+        : ('ANEXO PQRSD ' + expId + ' ' + origName.replace(/[<>:"/\\|?*]/g, '_'));
       const up = await driveUploadInstitutional(
         file,
         driveName,
@@ -3425,21 +3469,26 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
       uploadTarget: 'solicitud'
     };
     notif('🖨️ Generando PDF de la solicitud y subiéndolo al Drive…', 'info');
-    const asunto = ((ed && ed.asunto) || 'solicitud').replace(/[<>:"/\\|?*]/g, '_').slice(0, 50);
     let soporte = null;
 
     // 1) Intentar PDF (soporte preferido).
     const pdfBlob = await generarPdfSolicitudCorreo(ed || {}, expIdHint);
     if (pdfBlob) {
+      const solName = typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('SOL', expIdHint || '', { ext: 'pdf' })
+        : ('Solicitud_PQRSD-' + (expIdHint || '') + '.pdf');
       soporte = await driveUploadInstitutional(
-        pdfBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.pdf',
+        pdfBlob, solName,
         'application/pdf', 'radicacion_correo', expIdHint || '', nombreHint || '', typeof hoy === 'function' ? hoy() : '', uploadOpts
       );
     } else if (ed && ed.cuerpoHtml) {
       // 2) Respaldo: subir el cuerpo como HTML si jsPDF no está disponible.
       const htmlBlob = new Blob([ed.cuerpoHtml], { type: 'text/html' });
+      const htmlName = typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('SOL', expIdHint || '', { ext: 'html' })
+        : ('Solicitud_PQRSD-' + (expIdHint || '') + '.html');
       soporte = await driveUploadInstitutional(
-        htmlBlob, 'Solicitud_PQRSD-' + (expIdHint || '') + '_' + asunto + '.html',
+        htmlBlob, htmlName,
         'text/html', 'radicacion_correo', expIdHint || '', nombreHint || '', typeof hoy === 'function' ? hoy() : '', uploadOpts
       );
     }
@@ -3468,7 +3517,10 @@ async function subirAdjuntosEmailADrive(msg, expIdHint, nombreHint) {
       let file;
       if (_driveEsGuaviare()) {
         // Use institutional Drive with correct folder type
-        file = await driveUploadInstitutionalB64(att.filename, att.mimeType || 'application/octet-stream', data, 'radicacion_correo', pqrsNum, nombreCarpeta);
+        const driveName = (typeof pqrsBuildDriveFilename === 'function' && pqrsNum)
+          ? pqrsBuildDriveFilename('ANX', pqrsNum, { origName: att.filename, n: results.length + 1 })
+          : att.filename;
+        file = await driveUploadInstitutionalB64(driveName, att.mimeType || 'application/octet-stream', data, 'radicacion_correo', pqrsNum, nombreCarpeta);
       } else {
         file = await driveUploadFile(att.filename, att.mimeType, data);
       }
@@ -5490,13 +5542,16 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
       const file = adjFiles[i];
       if (!file) continue;
       try {
+        const driveName = (typeof pqrsBuildDriveFilename === 'function')
+          ? pqrsBuildDriveFilename(i === 0 ? 'RSP' : 'ANX', expId, { origName: file.name, n: i })
+          : file.name;
         const res = await driveUploadInstitutional(
-          file, file.name, file.type || 'application/octet-stream',
+          file, driveName, file.type || 'application/octet-stream',
           'respuesta_aprobada', expId, nombreCarpeta, fechaExp,
           { expediente: e, uploadTarget: 'respuesta' }
         );
         documentos.push({
-          nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink || '',
+          nombre: driveName, driveLink: res.driveLink, previewLink: res.previewLink || '',
           fileId: res.fileId || '', tipo: 'archivo', mime: file.type || ''
         });
       } catch (err) {
@@ -5913,10 +5968,14 @@ async function submitPqrsRespuestaGmailVinculo() {
       const statusEl = item.statusEl;
       try {
         if (statusEl) statusEl.textContent = '⬆ Subiendo…';
-        const res = await driveUploadInstitutional(file, file.name, file.type || 'application/octet-stream', 'respuesta_aprobada', expId, nombreCarpeta, e._fecha || e._fecha_solicitud || '', { expediente: e, uploadTarget: 'respuesta' });
+        const kind = (tipoResp === PQRS_WF_TIPO.OFICIO && idxFile === 0) ? 'OFC' : (idxFile === 0 ? 'RSP' : 'ANX');
+        const driveName = (typeof pqrsBuildDriveFilename === 'function')
+          ? pqrsBuildDriveFilename(kind, expId, { origName: file.name, n: Math.max(1, idxFile) })
+          : file.name;
+        const res = await driveUploadInstitutional(file, driveName, file.type || 'application/octet-stream', 'respuesta_aprobada', expId, nombreCarpeta, e._fecha || e._fecha_solicitud || '', { expediente: e, uploadTarget: 'respuesta' });
         if (statusEl) statusEl.textContent = '✅ Subido';
         documentos.push({
-          nombre: file.name, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId,
+          nombre: driveName, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId,
           tipo: (tipoResp === PQRS_WF_TIPO.OFICIO && idxFile === 0) ? 'oficio_firmado' : 'archivo',
           mime: file.type || ''
         });

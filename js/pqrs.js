@@ -2175,8 +2175,11 @@ async function submitEditPqrsSecretaria(expId){
       const fechaRef=e._fecha||e._fecha_solicitud||'';
       for(const f of nuevosFiles){
         try{
-          const up=await driveUploadInstitutional(f,'ANEXO PQRSD '+expId+' '+f.name,f.type||'application/octet-stream','radicacion_ventanilla',expId,nombreCarpeta,fechaRef,{expediente:e,uploadTarget:'solicitud'});
-          attsRestantes.push({nombre:f.name,driveLink:up.driveLink,previewLink:up.previewLink||'',fileId:up.fileId||'',tipo:'archivo',mime:f.type||''});
+          const driveName=(typeof pqrsBuildDriveFilename==='function')
+            ?pqrsBuildDriveFilename('ANX',expId,{origName:f.name,n:attsRestantes.length+1})
+            :('ANEXO PQRSD '+expId+' '+f.name);
+          const up=await driveUploadInstitutional(f,driveName,f.type||'application/octet-stream','radicacion_ventanilla',expId,nombreCarpeta,fechaRef,{expediente:e,uploadTarget:'solicitud'});
+          attsRestantes.push({nombre:driveName,driveLink:up.driveLink,previewLink:up.previewLink||'',fileId:up.fileId||'',tipo:'archivo',mime:f.type||''});
         }catch(err){notif('No se pudo subir '+f.name+': '+String(err.message||err).slice(0,60),'warn');}
       }
       }
