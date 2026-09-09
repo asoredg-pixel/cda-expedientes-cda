@@ -1021,12 +1021,42 @@ function gmailExtractParts(payload) {
 
 function gmailParseFrom(fromHeader) {
   if (!fromHeader) return { name: '', email: '' };
-  const m = fromHeader.match(/^(.*?)\s*<([^>]+)>/);
-  if (m) return { name: m[1].trim().replace(/^"|"$/g, ''), email: m[2].trim().toLowerCase() };
-  const atIdx = fromHeader.indexOf('@');
-  if (atIdx > -1) return { name: '', email: fromHeader.trim().toLowerCase() };
-  return { name: fromHeader.trim(), email: '' };
+  const raw = String(fromHeader).replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const angle = raw.match(/^(.*?)\s*<([^<>\s]+@[^<>\s]+)>/);
+  if (angle) {
+    return {
+      name: String(angle[1] || '').trim().replace(/^"|"$/g, ''),
+      email: String(angle[2] || '').trim().toLowerCase()
+    };
+  }
+  const bare = raw.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
+  if (bare) {
+    const email = bare[0].toLowerCase();
+    const name = raw.replace(bare[0], '').replace(/[<>]/g, '').trim();
+    return { name: name, email: email };
+  }
+  return { name: raw, email: '' };
 }
+/** Extrae dirección de correo de un header From / Reply-To (soporta pliegues y sin < >). */
+function gmailExtractEmailAddress(headerVal) {
+  const s = String(headerVal || '').replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  const angle = s.match(/<([^<>\s]+@[^<>\s]+)>/);
+  if (angle) return String(angle[1] || '').trim().toLowerCase();
+  const bare = s.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
+  return bare ? bare[0].toLowerCase() : '';
+}
+/** Remitente para prediligenciar radicación: Reply-To si existe, si no From. */
+function gmailRemitenteParaRadicar(msg) {
+  const headers = (msg && msg.payload && msg.payload.headers) || [];
+  const fromHdr = gmailGetHeader(headers, 'from');
+  const replyHdr = gmailGetHeader(headers, 'reply-to');
+  const parsed = gmailParseFrom(fromHdr);
+  const email = gmailExtractEmailAddress(replyHdr) || gmailExtractEmailAddress(fromHdr) || parsed.email || '';
+  return { name: parsed.name || '', email: email };
+}
+window.gmailExtractEmailAddress = gmailExtractEmailAddress;
+window.gmailRemitenteParaRadicar = gmailRemitenteParaRadicar;
 
 function gmailFmtDate(dateStr) {
   if (!dateStr) return '';
@@ -3673,10 +3703,24 @@ function renderGmailMessageView(msg) {
 function prePopularFormDesdeEmail(msg) {
   if (!msg) return;
   const headers = (msg.payload && msg.payload.headers) || [];
-  const from = gmailParseFrom(gmailGetHeader(headers, 'from'));
+  const from = typeof gmailRemitenteParaRadicar === 'function'
+    ? gmailRemitenteParaRadicar(msg)
+    : gmailParseFrom(gmailGetHeader(headers, 'from'));
   const subject = gmailGetHeader(headers, 'subject') || '';
   const parts = gmailExtractParts(msg.payload);
   const snippet = msg.snippet || parts.textPlain.slice(0, 300) || '';
+
+  // Asegurar formulario de ciudadano visible (no interna / no anónimo)
+  const internaEl = document.getElementById('sec-interna');
+  if (internaEl && internaEl.checked) {
+    internaEl.checked = false;
+    if (typeof toggleSecInterna === 'function') toggleSecInterna();
+  }
+  const anonEl = document.getElementById('sec-anonimo');
+  if (anonEl && anonEl.checked) {
+    anonEl.checked = false;
+    if (typeof toggleSecAnonimo === 'function') toggleSecAnonimo();
+  }
 
   // Switch to natural person
   const tipoEl = document.getElementById('sec-tipo-persona');
@@ -3692,10 +3736,13 @@ function prePopularFormDesdeEmail(msg) {
   }
   const setv = function(id, val) {
     const el = document.getElementById(id);
-    if (el && val) el.value = val;
+    if (!el) return;
+    const v = String(val || '').trim();
+    if (!v) return;
+    el.disabled = false;
+    el.value = v;
   };
   setv('sec-pn-nombre', from.name || '');
-  setv('sec-pn-correo', from.email || '');
   setv('sec-asunto', subject);
   if (snippet) setv('sec-detalle', snippet.slice(0, 300));
   // Auto-fill fecha de solicitud desde la fecha del correo
@@ -3712,6 +3759,13 @@ function prePopularFormDesdeEmail(msg) {
     } catch (e) {}
   }
 
+  // Correo del mensaje (From / Reply-To): al final, tras toggles de UI
+  const correoEl = document.getElementById('sec-pn-correo');
+  if (correoEl) {
+    correoEl.disabled = false;
+    correoEl.value = from.email || '';
+  }
+
   // Store message ID for saving with the expediente
   window._gmailPendingMsgId = msg.id;
   window._gmailPendingAttachments = window._gmailPendingAttachments || null;
@@ -3719,7 +3773,9 @@ function prePopularFormDesdeEmail(msg) {
   // Capture email metadata + body so offices can view it without needing Gmail OAuth
   try {
     const _h = (msg.payload && msg.payload.headers) || [];
-    const _from = gmailParseFrom(gmailGetHeader(_h, 'from'));
+    const _from = typeof gmailRemitenteParaRadicar === 'function'
+      ? gmailRemitenteParaRadicar(msg)
+      : gmailParseFrom(gmailGetHeader(_h, 'from'));
     const _parts = gmailExtractParts(msg.payload);
     const _rawHtml = _parts.textHtml || '';
     const _rawTxt = _parts.textPlain || '';
@@ -3755,7 +3811,18 @@ function gmailPreRadicarPqrs() {
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
   activarSplitRadicacionEmail(_gmailCurrentMsg);
-  notif('Formulario pre-llenado. Revise el correo a la izquierda y copie los datos al formulario.', 'ok');
+  // Reafirmar correo tras abrir el split (evita que toggles/UI lo dejen vacío)
+  try {
+    var rem = typeof gmailRemitenteParaRadicar === 'function'
+      ? gmailRemitenteParaRadicar(_gmailCurrentMsg)
+      : null;
+    var correoEl = document.getElementById('sec-pn-correo');
+    if (correoEl && rem && rem.email) {
+      correoEl.disabled = false;
+      correoEl.value = rem.email;
+    }
+  } catch (errMail) {}
+  notif('Formulario pre-llenado. Revise el correo a la izquierda y complete los datos faltantes.', 'ok');
 }
 
 // Abre el visor inline de adjuntos dentro del panel izquierdo del split
