@@ -2640,30 +2640,74 @@ function openCiudadanoDocViewer(url,label,externalUrl){
   const raw=String(url||'').trim();
   const isLocal=/^(blob:|data:)/i.test(raw);
   const parsed=isLocal?{url:raw,preview:raw,valid:true,local:true}:parseDrivePreviewUrl(raw);
-  const previewUrl=parsed.preview||parsed.url||raw||'';
   const openUrl=externalUrl||parsed.url||raw||'';
   const ov=document.getElementById('ciudadano-doc-overlay');
   const ifr=document.getElementById('ciudadano-doc-iframe');
   const tit=document.getElementById('ciudadano-doc-tit');
   const foot=document.getElementById('ciudadano-doc-foot');
   if(tit)tit.textContent=label||'Documento';
-  if(ifr){
-    // Sandbox estricto rompe el visor PDF de Chrome con blob:/data:
-    if(isLocal||parsed.local)ifr.removeAttribute('sandbox');
-    else ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
-    ifr.src=previewUrl;
-  }
-  if(foot){
-    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">'+(isLocal
+  const setFoot=function(previewHint){
+    if(!foot)return;
+    foot.innerHTML='<span style="font-size:11px;color:var(--tx2);flex:1">'+(previewHint||(isLocal
       ?'Vista previa del archivo cargado.'
-      :'Si la vista previa pide acceso, abra el documento en una ventana emergente.')+'</span>'+
+      :'Si la vista previa no carga, abra el documento en una ventana emergente.'))+'</span>'+
       (openUrl?'<button type="button" class="btn bsm bp" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana emergente</button>':'');
-  }
+  };
+  setFoot('');
   if(ov){
     if(typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(ov);
     ov.classList.add('on');
     ov.setAttribute('aria-hidden','false');
   }
+  if(!ifr)return;
+  // blob/data: sin sandbox (el visor PDF de Chrome lo necesita)
+  if(isLocal||parsed.local){
+    ifr.removeAttribute('sandbox');
+    ifr.src=parsed.preview||raw;
+    return;
+  }
+  // Drive embebido (/preview) suele fallar en iframe; preferir blob vía API autenticada
+  const fileId=String(parsed.id||'').trim();
+  if(fileId&&typeof driveFetchFileBlob==='function'){
+    ifr.removeAttribute('sandbox');
+    ifr.src='about:blank';
+    setFoot('Cargando vista previa…');
+    driveFetchFileBlob(fileId).then(function(blob){
+      if(!blob){
+        // Fallback: intentar /preview sin sandbox estricto
+        ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+        ifr.src=parsed.preview||parsed.url||raw;
+        setFoot('Si la vista previa no carga, use la ventana emergente.');
+        return;
+      }
+      let mime=blob.type||'';
+      if(!mime||mime==='application/octet-stream'){
+        const n=String(label||'').toLowerCase();
+        if(/\.(png|jpe?g|gif|webp)$/i.test(n))mime='image/'+(n.match(/png|jpe?g|gif|webp/i)[0].replace('jpg','jpeg'));
+        else mime='application/pdf';
+      }
+      const typed=(mime&&blob.type!==mime)?new Blob([blob],{type:mime}):blob;
+      const objUrl=URL.createObjectURL(typed);
+      // No revocar en onload: el visor PDF de Chrome sigue leyendo el blob
+      try{
+        if(ifr._sstBlobUrl)URL.revokeObjectURL(ifr._sstBlobUrl);
+      }catch(eOld){}
+      ifr._sstBlobUrl=objUrl;
+      ifr.src=objUrl;
+      setFoot('Vista previa del documento.');
+    }).catch(function(){
+      ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+      ifr.src=parsed.preview||parsed.url||raw;
+      setFoot('Si la vista previa no carga, use la ventana emergente.');
+    });
+    return;
+  }
+  ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+  ifr.src=parsed.preview||parsed.url||raw;
+}
+function openPqrsDocViewer(url,label){
+  const p=parseDrivePreviewUrl(url);
+  openCiudadanoDocViewer(p.preview||p.url,label||'Documento PQRSD',p.url||url);
 }
 function closeCiudadanoDocViewer(){
   const ov=document.getElementById('ciudadano-doc-overlay');
@@ -2675,6 +2719,7 @@ function closeCiudadanoDocViewer(){
     if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
   }
   if(ifr){
+    try{if(ifr._sstBlobUrl){URL.revokeObjectURL(ifr._sstBlobUrl);ifr._sstBlobUrl='';}}catch(eB){}
     ifr.src='';
     ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');
   }

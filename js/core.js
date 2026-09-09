@@ -2153,13 +2153,14 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&x.size===f.size;}))return;
     adjuntos.push(f);
   });
-  // Si ya estan en Drive, enviar con enlaces (evita empaquetar PDFs en base64 1-5+ min).
+  // Si ya están en Drive O el peso local es alto: solo enlaces (MIME base64 → Failed to fetch en NCA/oficinas).
   const docsConLink=docsAdj.filter(function(d){
-    return d&&d.driveLink&&d.tipo!=='soporte_notificacion'&&d.tipo!=='link';
+    return d&&(d.driveLink||d.previewLink||d.fileId||d.driveFileId)&&d.tipo!=='soporte_notificacion';
   });
   let totalLocal=0;
   adjuntos.forEach(function(f){totalLocal+=(f&&f.size)||0;});
-  const MAX_ATTACH=1.5*1024*1024;
+  const MAX_ATTACH=800*1024;
+  // NCA/oficinas: con docs en Drive nunca embeber PDF en el MIME del correo
   if(docsConLink.length>0||totalLocal>MAX_ATTACH){
     adjuntos=[];
     prog(progBase+1,docsConLink.length?'Enviando con enlaces Drive…':'Enviando correo…');
@@ -2167,10 +2168,31 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
   prog(Math.min(97,progBase+3),'Enviando correo al ciudadano…');
-  const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
-    cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')
-  });
-  if(!sent)throw new Error('No se pudo enviar el correo. Verifique la cuenta de la oficina.');
+  const ofiEnvio=String(e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim()||'guaviare';
+  let sent=null;
+  try{
+    sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
+      cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
+    });
+  }catch(errSend){
+    const msg=String(errSend&&errSend.message||errSend||'');
+    // Reintento sin adjuntos (enlaces en HTML) — típico Failed to fetch con MIME grande / NCA
+    if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
+      prog(Math.min(98,progBase+4),'Reintentando envío sin adjuntos embebidos…');
+      sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
+        cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
+      });
+    }else if(/failed to fetch|network/i.test(msg)){
+      prog(Math.min(98,progBase+4),'Reintentando envío…');
+      await new Promise(function(r){setTimeout(r,600);});
+      sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
+        cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
+      });
+    }else{
+      throw errSend;
+    }
+  }
+  if(!sent)throw new Error('No se pudo enviar el correo. Conecte el correo de NCA/oficina en la pestaña Correos e intente de nuevo.');
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
     registrarNotificacionCiudadanoPqrs(e,{
@@ -27738,12 +27760,19 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
     let res=null,cuenta='';
     if(preferOfi){
       if(!tokenOfiOk()){
+        // NCA/oficinas: pedir conexión antes de fallar (mismo flujo que oficinas)
+        if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+          const okG=await sstSolicitarGmailParaAdjuntar({force:true});
+          if(!okG&&!tokenOfiOk())throw new Error('Conecte el correo autorizado de la oficina/NCA en la pestaña Correos.');
+        }
+      }
+      if(!tokenOfiOk()&&!(typeof _driveGetBestToken==='function'&&_driveGetBestToken())){
         throw new Error('Conecte el correo autorizado de la oficina. El aviso al ciudadano no puede salir del correo personal.');
       }
       if(files.length&&typeof gmailOfiSendHtmlWithAttachments==='function'){
         res=await gmailOfiSendHtmlWithAttachments(para,subject,htmlBody,files,{cc:opts.cc||'',bcc:opts.bcc||''});
       }else if(typeof gmailOfiSendMessage==='function'){
-        res=await gmailOfiSendMessage(para,subject,htmlBody);
+        res=await gmailOfiSendMessage(para,subject,htmlBody,{cc:opts.cc||'',bcc:opts.bcc||''});
       }else{
         throw new Error('Envío de oficina no disponible');
       }
@@ -27758,7 +27787,7 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
       if(files.length&&typeof gmailOfiSendHtmlWithAttachments==='function'){
         res=await gmailOfiSendHtmlWithAttachments(para,subject,htmlBody,files,{cc:opts.cc||'',bcc:opts.bcc||''});
       }else{
-        res=await gmailOfiSendMessage(para,subject,htmlBody);
+        res=await gmailOfiSendMessage(para,subject,htmlBody,{cc:opts.cc||'',bcc:opts.bcc||''});
       }
       const em2=typeof gmailOfiCuentaConectadaParaEnvio==='function'?gmailOfiCuentaConectadaParaEnvio():'';
       cuenta=em2||'oficina';

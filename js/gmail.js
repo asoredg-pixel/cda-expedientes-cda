@@ -4160,9 +4160,10 @@ async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
   if (!ofiId || ofiId === 'responsables' || ofiId === 'ds_deguv') ofiId = 'guaviare';
   const tokenOk = (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid())
     || (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid())
-    || (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid());
+    || (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid())
+    || !!(typeof _driveGetBestToken === 'function' && _driveGetBestToken());
   if (!tokenOk) {
-    throw new Error('Conecte el correo de la oficina en la pestaña Correos.');
+    throw new Error('Conecte el correo de la oficina/NCA en la pestaña Correos.');
   }
   let conectado = gmailOfiCuentaConectadaParaEnvio();
   if (!conectado) {
@@ -4425,38 +4426,58 @@ function _updateGmailOfiBtn() {
 async function _gmailOfiApi(method, url, body, optsApi) {
   optsApi = optsApi || {};
   // Secretary reuses her primary token; other roles use the OFI token
-  const token = _gmailOfiIsSecretaria()
+  let token = _gmailOfiIsSecretaria()
     ? (sessionStorage.getItem(GMAIL_TOKEN_KEY) || '')
     : gmailOfiGetToken();
+  // NCA / oficinas: si el token OFI no está pero sí hay sesión Drive/Gmail válida, usar el mejor token
+  if (!token && !_gmailOfiIsSecretaria() && typeof _driveGetBestToken === 'function') {
+    token = _driveGetBestToken() || '';
+  }
   if (!token) { notif('⚠️ Reconecte su correo para continuar.', 'err'); throw new Error('Sin token.'); }
-  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const ms = optsApi.timeoutMs != null ? optsApi.timeoutMs : 45000;
-  let timer = null;
-  if (ctrl) timer = setTimeout(function() { try { ctrl.abort(); } catch (eA) {} }, ms);
-  const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
-  if (body) opts.body = JSON.stringify(body);
-  if (ctrl) opts.signal = ctrl.signal;
-  try {
-    const res = await fetch(url, opts);
-    if (res.status === 401) {
-      if (_gmailOfiIsSecretaria()) {
-        gmailSetToken('', 0); // Clear primary token
-      } else {
-        gmailOfiSetToken('');
+  const doFetch = async function() {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    let timer = null;
+    if (ctrl) timer = setTimeout(function() { try { ctrl.abort(); } catch (eA) {} }, ms);
+    const opts = { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    if (ctrl) opts.signal = ctrl.signal;
+    try {
+      const res = await fetch(url, opts);
+      if (res.status === 401) {
+        if (_gmailOfiIsSecretaria()) {
+          gmailSetToken('', 0);
+        } else {
+          gmailOfiSetToken('');
+        }
+        _updateGmailOfiBtn();
+        notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
+        throw new Error('Token expirado.');
       }
-      _updateGmailOfiBtn();
-      notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
-      throw new Error('Token expirado.');
+      if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
+      return res.json();
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
-    return res.json();
+  };
+  try {
+    return await doFetch();
   } catch (err) {
     if (err && (err.name === 'AbortError' || /aborted/i.test(String(err.message || '')))) {
       throw new Error('El envío de correo no respondió a tiempo. Verifique la conexión Gmail e intente de nuevo.');
     }
+    if (err && /failed to fetch|networkerror|load failed/i.test(String(err.message || err))) {
+      try {
+        await new Promise(function(r) { setTimeout(r, 500); });
+        return await doFetch();
+      } catch (err2) {
+        if (err2 && (err2.name === 'AbortError' || /aborted/i.test(String(err2.message || '')))) {
+          throw new Error('El envío de correo no respondió a tiempo. Verifique la conexión Gmail e intente de nuevo.');
+        }
+        throw new Error('No se pudo contactar Gmail (Failed to fetch). Reconecte Correos (NCA/oficina) y reintente. Si el PDF es muy grande, el correo saldrá con enlace Drive.');
+      }
+    }
     throw err;
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }
 
@@ -5200,16 +5221,23 @@ function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
 }
 
 // Alias used by core.js workflow — sends a plain HTML email using the office token
-async function gmailOfiSendMessage(to, subject, htmlBody) {
+async function gmailOfiSendMessage(to, subject, htmlBody, opts) {
+  opts = opts || {};
   try { await _gmailOfiLoadSignature(false); } catch (eSig) { console.warn('gmailOfiSendMessage signature:', eSig); }
+  // Si hay Cc/Bcc, reutilizar el builder con adjuntos vacíos (soporta esos headers)
+  if ((opts.cc || opts.bcc) && typeof _gmailOfiBuildHtmlMimeWithAttachments === 'function') {
+    const mimeCc = await _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, [], opts.cc || '', opts.bcc || '');
+    return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mimeCc }, { timeoutMs: 60000 });
+  }
   const mime = _gmailOfiBuildHtmlMime(to, subject, htmlBody);
-  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 45000 });
+  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
 }
 
 /** MIME HTML institucional con adjuntos reales (oficio / anexos de notificación PQRSD). */
 async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, files, cc, bcc) {
   files = files || [];
-  if (!files.length) return _gmailOfiBuildHtmlMime(to, subject, htmlBody);
+  // Sin adjuntos pero con Cc/Bcc: construir MIME con esos headers (no degradar a MIME simple)
+  if (!files.length && !(cc || bcc)) return _gmailOfiBuildHtmlMime(to, subject, htmlBody);
   const altBoundary = 'sst_ofihtml_alt_' + Date.now();
   const mixBoundary = 'sst_ofihtml_mix_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject || ''))) + '?=';
@@ -5269,7 +5297,7 @@ async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opt
   try { await _gmailOfiLoadSignature(false); } catch (eSig) { console.warn('gmailOfiSendHtmlWithAttachments signature:', eSig); }
   const list = Array.isArray(files) ? files.filter(Boolean) : [];
   if (!list.length) {
-    return gmailOfiSendMessage(to, subject, htmlBody);
+    return gmailOfiSendMessage(to, subject, htmlBody, opts);
   }
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
     to, subject, htmlBody, list, opts.cc || '', opts.bcc || ''

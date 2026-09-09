@@ -127,19 +127,55 @@ function sstFilePreview(ctxKey, itemId) {
   const hit = sstFileFindItem(ctx, itemId);
   if (!hit || !hit.item) return;
   const it = hit.item;
-  // Preferir blob local: el iframe de Drive /preview suele fallar; la ventana emergente sí abre.
-  if (it.blobUrl) {
-    if (typeof openCiudadanoDocViewer === 'function') {
-      openCiudadanoDocViewer(it.blobUrl, it.nombre || 'Vista previa', it.driveLink || it.previewLink || it.blobUrl);
+  const openExt = it.driveLink || it.previewLink || '';
+  // Preferir blob local con MIME correcto (Drive /preview en iframe suele fallar; popup sí abre).
+  if (it.blob || it.blobUrl) {
+    let previewUrl = '';
+    try {
+      if (it.blob) {
+        let mime = it.tipo || it.blob.type || '';
+        if (!mime || mime === 'application/octet-stream') {
+          if (/\.pdf$/i.test(it.nombre || '')) mime = 'application/pdf';
+          else if (/\.(png|jpe?g|gif|webp)$/i.test(it.nombre || '')) {
+            const ext = (it.nombre.match(/\.(png|jpe?g|gif|webp)$/i) || [])[1] || 'png';
+            mime = 'image/' + String(ext).toLowerCase().replace('jpg', 'jpeg');
+          }
+        }
+        const typed = (mime && it.blob.type !== mime) ? new Blob([it.blob], { type: mime }) : it.blob;
+        previewUrl = URL.createObjectURL(typed);
+        // Mantener blobUrl usable para reabrir
+        try {
+          if (it.blobUrl) URL.revokeObjectURL(it.blobUrl);
+        } catch (eR) {}
+        it.blobUrl = previewUrl;
+      } else {
+        previewUrl = it.blobUrl || '';
+      }
+    } catch (eB) { previewUrl = it.blobUrl || ''; }
+    if (previewUrl && typeof openCiudadanoDocViewer === 'function') {
+      openCiudadanoDocViewer(previewUrl, it.nombre || 'Vista previa', openExt || previewUrl);
       return;
     }
-    window.open(it.blobUrl, '_blank', 'noopener');
+    if (previewUrl) { window.open(previewUrl, '_blank', 'noopener'); return; }
+  }
+  // Sin blob: abrir por fileId/Drive (openCiudadanoDocViewer descarga con token OFI/NCA)
+  const url = it.previewLink || it.driveLink || '';
+  const fid = String(it.driveFileId || (it.uploaded && (it.uploaded.driveFileId || it.uploaded.fileId)) || '').trim();
+  if (fid && typeof openCiudadanoDocViewer === 'function') {
+    openCiudadanoDocViewer(
+      url || ('https://drive.google.com/file/d/' + fid + '/view'),
+      it.nombre || 'Documento',
+      url || ('https://drive.google.com/file/d/' + fid + '/view')
+    );
     return;
   }
-  const url = it.previewLink || it.driveLink;
   if (!url) return;
   if (typeof openPqrsDocViewer === 'function') {
     openPqrsDocViewer(url, it.nombre || 'Documento');
+    return;
+  }
+  if (typeof openCiudadanoDocViewer === 'function') {
+    openCiudadanoDocViewer(url, it.nombre || 'Documento', url);
     return;
   }
   window.open(url, '_blank', 'noopener');
@@ -342,6 +378,16 @@ function sstFileCollect(ctxKey) {
     if (it.state === 'uploaded' && it.uploaded) {
       const up = Object.assign({}, it.uploaded);
       up.esAnexo = !!asAnexo;
+      // Conservar blob local para preview/correo sin re-descargar (NCA/oficinas)
+      if (it.blob && !up.localBlob) {
+        up.localBlob = it.blob;
+        up.localNombre = it.nombre || up.nombre || '';
+        up.localMime = it.tipo || (it.blob && it.blob.type) || '';
+      }
+      if (!up.driveFileId && it.driveFileId) up.driveFileId = it.driveFileId;
+      if (!up.fileId && (it.driveFileId || up.driveFileId)) up.fileId = it.driveFileId || up.driveFileId;
+      if (!up.driveLink && it.driveLink) up.driveLink = it.driveLink;
+      if (!up.previewLink && it.previewLink) up.previewLink = it.previewLink;
       preUploaded.push(up);
       return;
     }
