@@ -24001,6 +24001,11 @@ function filtrarActividadesPorEstado(list,filtro){
         return false;
       });
     }
+    // Vista depto con filtro de responsable: no mezclar entregas de otros
+    if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()){
+      const rf=typeof getActDeptRespFilterSafe==='function'?getActDeptRespFilterSafe():null;
+      if(rf)out=(out||[]).filter(function(t){return typeof actividadPerteneceARespFilter==='function'&&actividadPerteneceARespFilter(t,rf);});
+    }
     return out;
   }
   if(filtro==='venc'){
@@ -24116,9 +24121,6 @@ function renderActividades(){
   }
   const q=(document.getElementById('s-act')?document.getElementById('s-act').value:'').toLowerCase();
   let listRespFilter=respFilter;
-  if(deptView&&filtroAct==='porver')listRespFilter=null;
-  if(deptView&&filtroAct==='revisados'&&filterIsEnc)listRespFilter=null;
-  else if(deptView&&filtroAct==='revisados'&&respFilter&&!filterIsEnc)listRespFilter=respFilter;
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   // Heal anticipado: PQRSD ya aprobada (firma/notif/cerrada) no debe quedar en «Por revisar»
@@ -24145,14 +24147,14 @@ function renderActividades(){
     }catch(errH){}
   });
   list=filtrarActividadesPorEstado(list,filtroAct);
-  // Seguridad: con responsable seleccionado, «Por notificar» / merges de notif no deben colar ítems ajenos
-  if(deptView&&respFilter&&(filtroAct==='pornotif'||filtroAct==='venc'||filtroAct==='pend')){
+  // Seguridad: con responsable seleccionado, no colar ítems ajenos (porver/porfirma traen merges globales)
+  if(deptView&&respFilter){
     if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
-    else list=(list||[]).filter(t=>{
+    else list=(list||[]).filter(function(t){
       const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
       const enNotif=eN&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eN);
       const tramNotif=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
-      if(enNotif||tramNotif)return actividadNotifEsDeResp(t,respFilter);
+      if(filtroAct==='pornotif'||enNotif||tramNotif)return actividadNotifEsDeResp(t,respFilter);
       return actividadPerteneceARespFilter(t,respFilter);
     });
   }
@@ -24192,21 +24194,26 @@ function renderActividades(){
   const porEjec=deudaBase.length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
-  const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(null):getTareasResponsableActivo(),'act');
+  const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo(),'act');
   const porrevisar=filtrarActividadesPorEstado(porverBase,'porver').length;
   const nRevisados=deptView?filtrarActividadesPorEstado(porverBase,'revisados').length:0;
   const done=filtrarActividadesPorEstado(all,'done').length;
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
-  const nPorFirma=filtrarActividadesPorEstado([],'porfirma').length;
-  const nNotif=notifAll.length;
+  let nPorFirmaList=filtrarActividadesPorEstado(all,'porfirma');
+  if(deptView&&respFilter)nPorFirmaList=(nPorFirmaList||[]).filter(function(t){return actividadPerteneceARespFilter(t,respFilter);});
+  const nPorFirma=nPorFirmaList.length;
+  let nNotif=notifAll.length;
+  if(deptView&&respFilter)nNotif=(notifAll||[]).filter(function(t){return actividadNotifEsDeResp(t,respFilter);}).length;
   const colSpan=deptView?9:8;
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
     if(filtroAct==='pend')sub.textContent='';
     else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
-    else if(filtroAct==='pornotif')sub.textContent='Por notificar: con plazo de 5 días hábiles si hay notificador asignado. Correo por VITAL/encargado: sin autoasignación ni plazo de 5 días.';
+    else if(filtroAct==='pornotif')sub.textContent=deptView
+      ?'Por notificar: con plazo de 5 días hábiles si hay notificador asignado. Correo por VITAL/encargado: sin autoasignación ni plazo de 5 días.'
+      :'';
     else if(filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados')
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
