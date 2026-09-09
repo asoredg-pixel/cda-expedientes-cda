@@ -629,8 +629,16 @@ function actLibreKeepLocalOnly(t){
   if(!at)return true;
   return (Date.now()-at)<15*60*1000;
 }
+/** Remoto vacío = limpieza intencional: no resucitar desde localStorage / pestañas viejas. */
+function clearActividadesLibresLocalCache(){
+  actividadesLibres=[];
+  window._pendingActLibreEntrega=null;
+  try{localStorage.removeItem('sst_act_libres');}catch(e){}
+  return [];
+}
 function upsertActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
+  if(!rem.length)return clearActividadesLibresLocalCache();
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
   rem.forEach(function(t){
@@ -1220,6 +1228,8 @@ function suscribirCfgSync(deptoId){
 }
 function mergeActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
+  // Wipe / lista vacía en Firestore: limpiar caché local y no resucitar
+  if(!rem.length)return clearActividadesLibresLocalCache();
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
   const score=typeof scoreActividadLibreMerge==='function'?scoreActividadLibreMerge:function(t){
