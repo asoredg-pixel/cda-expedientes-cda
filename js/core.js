@@ -19195,6 +19195,8 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-firma');
       modal.classList.remove('task-modal-firma-fisica');
       modal.classList.remove('enviar-modal-only');
+      modal.classList.remove('entrega-resp-modal');
+      modal.classList.remove('pqrs-entrega-modal');
       modal.classList.remove('task-modal-chat');
       modal.classList.remove('task-modal-notas');
       modal.classList.remove('task-modal-compare-expand');

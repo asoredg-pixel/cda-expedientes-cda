@@ -1254,6 +1254,7 @@ function openEntregaResponsableModal(){
   if(modal){
     modal.classList.add('task-modal-wide');
     modal.classList.add('enviar-modal-only');
+    modal.classList.add('entrega-resp-modal');
   }
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+

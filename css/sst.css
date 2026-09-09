@@ -625,7 +625,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .confirm-prec-foot{padding:.85rem 1.25rem;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--bd);background:var(--sf2)}
 .soporte-annot-wrap.annot-navigable .soporte-annot-overlay{pointer-events:none!important}
 .soporte-annot-wrap.annot-navigable .soporte-annot-overlay.marking{pointer-events:auto!important}
-.task-modal{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);box-shadow:var(--shm);width:min(520px,96vw);max-height:85vh;display:flex;flex-direction:column}
+.task-modal{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);box-shadow:var(--shm);width:min(520px,96vw);max-height:85vh;display:flex;flex-direction:column;overflow:hidden;min-height:0}
 .task-modal.task-modal-wide{width:min(1100px,98vw)}
 .task-modal.task-modal-firma{width:min(1100px,98vw);max-height:94vh}
 .task-modal.task-modal-firma .task-modal-body{padding:.75rem 1rem}
@@ -638,10 +638,10 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
   margin-top:12px;padding-top:10px;border-top:1px solid var(--bd);
   display:flex;gap:8px;flex-wrap:wrap
 }
-.task-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--bd);font-weight:600;font-size:14px}
+.task-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--bd);font-weight:600;font-size:14px;flex-shrink:0}
 .task-modal-hdr-actions{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:8px}
 .task-modal-hdr-open{min-width:32px}
-.task-modal-body{padding:1rem;overflow:auto;flex:1}
+.task-modal-body{padding:1rem;overflow:auto;flex:1;min-height:0;-webkit-overflow-scrolling:touch}
 .soporte-split{display:grid;grid-template-columns:1fr;gap:10px;margin:.5rem 0;position:relative;align-items:stretch}
 .soporte-split.soporte-split-obs-open{grid-template-columns:minmax(0,1fr) minmax(280px,380px)}
 .soporte-doc-col{position:relative;min-width:0;display:flex;flex-direction:column;min-height:0}
@@ -3051,6 +3051,16 @@ body.compare-docs-expanded #task-modal-overlay .task-modal,
 body.task-doc-viewport-expanded #task-modal-overlay .task-modal{margin:0 auto}
 .enviar-modal-only .task-modal-body{padding:1rem 1.1rem}
 .task-modal.enviar-modal-only.pqrs-entrega-modal{width:min(760px,96vw);max-height:90vh}
+/* Entregar documento (responsable): formulario largo al crear exp/PQRSD */
+.task-modal.enviar-modal-only.entrega-resp-modal{
+  width:min(720px,96vw);
+  max-height:min(92vh,900px);
+}
+.task-modal.enviar-modal-only.entrega-resp-modal .task-modal-body{
+  overflow:auto;
+  min-height:0;
+  overscroll-behavior:contain;
+}
 .soporte-preview{margin:.6rem 0}
 .soporte-preview iframe{width:100%;height:min(420px,50vh);border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)}
 .soporte-ver-list{display:flex;flex-direction:column;gap:4px;margin:.5rem 0}
