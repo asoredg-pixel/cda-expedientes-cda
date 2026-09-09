@@ -524,7 +524,8 @@ async function guardarPqrsSecretaria(modo){
     _gmail_message_id:gmailMsgId||null,
     _pqrs_gmail_attachments:null,
     _gmail_email_data:gmailEmailData,
-    _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion})
+    _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion}),
+    updatedAt:new Date().toISOString()
   });
   // Conservar correos para la notificación: el spread de pjFields puede dejar
   // _qd_correo vacío si quien oficia no tiene email pero sí la entidad.
@@ -557,8 +558,13 @@ async function guardarPqrsSecretaria(modo){
     window._gmailPendingEmailData=null;
     limpiarFormSecretaria();
     renderBandejaDepto();
+    window._secAsignadasShown=10;
+    window._secHighlightExp=expId;
+    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
     renderSecretariaPqrs();
     if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    window._secHighlightExp=expId;
+    renderSecretariaPqrs();
     const extraLocal=textoResultadoNotifRadicacion(notifResLocal);
     notificarResultadoRadicacionPqrs({
       title:'PQRSD radicada (local)',
@@ -698,6 +704,10 @@ async function guardarPqrsSecretaria(modo){
     message:msgPrincipal
   });
   limpiarFormSecretaria();
+  // Listado «PQRSD asignadas»: mostrar la recién radicada de primero
+  window._secAsignadasShown=10;
+  window._secHighlightExp=expId;
+  if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
   renderSecretariaPqrs();
   // Refresco final tras Drive/metadatos para que anexos y tasks se vean al instante
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
@@ -706,6 +716,9 @@ async function guardarPqrsSecretaria(modo){
     if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
     if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
   }
+  // Reafirmar listado tras refresh remoto (evita que un snapshot parcial oculte la nueva)
+  window._secHighlightExp=expId;
+  renderSecretariaPqrs();
   }catch(err){
     console.warn('guardarPqrsSecretaria:',err);
     if(typeof closeConfirmExito==='function')closeConfirmExito();
@@ -1056,19 +1069,29 @@ function pqrsSortByNumDesc(a,b){
   const nb=parseInt(String(b._exp||'').replace(/\D/g,''),10)||0;
   return nb-na;
 }
+/** Más reciente primero: fecha/hora de radicación, luego consecutivo. */
+function pqrsSortRecientePrimero(a,b){
+  const ta=String((a&&(a.updatedAt||a._fecha||a._pqrs_traslado_fecha))||'');
+  const tb=String((b&&(b.updatedAt||b._fecha||b._pqrs_traslado_fecha))||'');
+  if(ta&&tb&&ta!==tb)return tb.localeCompare(ta);
+  if(tb&&!ta)return 1;
+  if(ta&&!tb)return -1;
+  return pqrsSortByNumDesc(a,b);
+}
+window.pqrsSortRecientePrimero=pqrsSortRecientePrimero;
 function getPqrsPendientesTrasladoList(skipPeriodo){
   let list=exps.filter(e=>esPqrsSecretaria(e)&&pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
   if(!skipPeriodo)list=filterExpsPeriodo(list,'pqrs-ofi');
-  return list.sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
+  return list.sort(pqrsSortRecientePrimero);
 }
 function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
-  const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortByNumDesc);
-  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortByNumDesc);
+  const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortRecientePrimero);
+  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortRecientePrimero);
   const atendidas=all.filter(e=>pqrsEstaCerrada(e));
   const SEC_PQRS_PAGE=10;
-  const SEC_PQRS_MAX=30;
+  const SEC_PQRS_MAX=50;
   if(window._secPendTraslShown==null)window._secPendTraslShown=SEC_PQRS_PAGE;
   if(window._secAsignadasShown==null)window._secAsignadasShown=SEC_PQRS_PAGE;
   const mets=document.getElementById('sec-pqrs-mets');
@@ -1089,6 +1112,7 @@ function renderSecretariaPqrs(){
   }
   const tb=document.getElementById('tbl-sec-pqrs');
   const asigMore=document.getElementById('sec-asignadas-more');
+  const highlightExp=String(window._secHighlightExp||'').trim().toUpperCase();
   if(tb){
     if(!asignadas.length){
       tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
@@ -1099,7 +1123,9 @@ function renderSecretariaPqrs(){
       tb.innerHTML=slice.map(e=>{
         const asunto=e.f_f1||e._pqrs_detalle||'—';
         const ofiLbl=e._pqrs_oficina?labelOficina(e._pqrs_oficina):'Sin oficina (registro anterior)';
-        return '<tr><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(ofiLbl)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
+        const expKey=String(e._exp||'').trim().toUpperCase();
+        const hi=highlightExp&&expKey===highlightExp?' style="background:color-mix(in srgb,var(--gn) 14%,transparent)"':'';
+        return '<tr'+hi+' data-exp="'+escAttr(e._exp||'')+'"><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(e._tipo_solicitud||'PQRSD')+'</td><td>'+escAttr(asunto)+'</td><td>'+escAttr(ofiLbl)+'</td><td>'+pqrsEstadoConsultaBadge(e)+'</td><td>'+fmtF(e._fecha)+'</td>'+
           '<td>'+pqrsAccionesTablaHtml(e)+'</td></tr>';
       }).join('');
       if(asigMore){
@@ -1111,14 +1137,22 @@ function renderSecretariaPqrs(){
       }
     }
   }
+  if(highlightExp){
+    window._secHighlightExp='';
+    setTimeout(function(){
+      const row=tb&&tb.querySelector('tr[data-exp]');
+      const wrap=document.getElementById('sec-pqrs-mets')||tb;
+      if(wrap&&typeof wrap.scrollIntoView==='function')wrap.scrollIntoView({behavior:'smooth',block:'start'});
+    },80);
+  }
   renderSecretariaPqrsDetalle();
 }
 function secPqrsVerMasPendientes(){
-  window._secPendTraslShown=Math.min((window._secPendTraslShown||10)+10,30);
+  window._secPendTraslShown=Math.min((window._secPendTraslShown||10)+10,50);
   renderSecretariaPqrs();
 }
 function secPqrsVerMasAsignadas(){
-  window._secAsignadasShown=Math.min((window._secAsignadasShown||10)+10,30);
+  window._secAsignadasShown=Math.min((window._secAsignadasShown||10)+10,50);
   renderSecretariaPqrs();
 }
 window.secPqrsVerMasPendientes=secPqrsVerMasPendientes;

@@ -4484,7 +4484,9 @@ function getSecretariaPqrsAll(){
     if(!esPqrsSecretaria(e))return false;
     if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return false;
     return true;
-  }).map(normalizePqrsOficinaFields).sort((a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
+  }).map(normalizePqrsOficinaFields).sort(typeof pqrsSortRecientePrimero==='function'
+    ?pqrsSortRecientePrimero
+    :(a,b)=>String(b._fecha||'').localeCompare(String(a._fecha||'')));
 }
 function openSecretariaPqrsDetalle(expId){
   openPqrsSidePanel(expId);

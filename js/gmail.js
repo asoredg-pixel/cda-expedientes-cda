@@ -1046,16 +1046,98 @@ function gmailExtractEmailAddress(headerVal) {
   const bare = s.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
   return bare ? bare[0].toLowerCase() : '';
 }
-/** Remitente para prediligenciar radicación: Reply-To si existe, si no From. */
+/** Correos de la entidad / bandeja — no sirven como correo del solicitante. */
+function gmailEsCorreoInstitucional(email) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e || e.indexOf('@') < 0) return false;
+  const known = [
+    'cdaguaviare1@gmail.com',
+    'cdaguaviare@gmail.com',
+    typeof ADMIN_GMAIL !== 'undefined' ? String(ADMIN_GMAIL).toLowerCase() : 'ncacdaguaviare@gmail.com'
+  ];
+  if (known.indexOf(e) >= 0) return true;
+  if (/^cda(guaviare|guainia|vaupes)/i.test(e.split('@')[0] || '')) return true;
+  return false;
+}
+/** Nombre de display institucional (From de la bandeja propia). */
+function gmailEsNombreInstitucional(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return false;
+  return /corporaci[oó]n\s+cda|cda\s*dsgv|cdaguaviare|secretaria\s+general/.test(n);
+}
+/** Lista de correos únicos en un texto (cuerpo / firma). */
+function gmailExtractEmailsFromText(text) {
+  const s = String(text || '');
+  if (!s) return [];
+  const re = /[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/gi;
+  const out = [];
+  const seen = {};
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const e = String(m[0] || '').toLowerCase();
+    if (!e || seen[e]) continue;
+    seen[e] = true;
+    out.push(e);
+  }
+  return out;
+}
+/** Teléfono colombiano típico en firma (7–10 dígitos, con o sin espacios). */
+function gmailExtractPhoneFromText(text) {
+  const s = String(text || '').replace(/\u00a0/g, ' ');
+  if (!s) return '';
+  const m = s.match(/(?:^|[^\d])((?:3\d{2}|60\d|1\d{2})\s*\d{3}\s*\d{4})(?:[^\d]|$)/);
+  if (!m) return '';
+  return String(m[1] || '').replace(/\s+/g, '').trim();
+}
+/**
+ * Remitente para prediligenciar radicación.
+ * Prioridad correo: Reply-To (no institucional) → From (no institucional) → primer correo del cuerpo/firma.
+ * No usa la bandeja institucional (cdaguaviare1) como correo del ciudadano.
+ */
 function gmailRemitenteParaRadicar(msg) {
   const headers = (msg && msg.payload && msg.payload.headers) || [];
   const fromHdr = gmailGetHeader(headers, 'from');
   const replyHdr = gmailGetHeader(headers, 'reply-to');
   const parsed = gmailParseFrom(fromHdr);
-  const email = gmailExtractEmailAddress(replyHdr) || gmailExtractEmailAddress(fromHdr) || parsed.email || '';
-  return { name: parsed.name || '', email: email };
+  const replyEmail = gmailExtractEmailAddress(replyHdr);
+  const fromEmail = gmailExtractEmailAddress(fromHdr) || parsed.email || '';
+
+  let email = '';
+  if (replyEmail && !gmailEsCorreoInstitucional(replyEmail)) email = replyEmail;
+  else if (fromEmail && !gmailEsCorreoInstitucional(fromEmail)) email = fromEmail;
+  else {
+    const parts = typeof gmailExtractParts === 'function' ? gmailExtractParts(msg.payload) : {};
+    const blob = [
+      parts.textPlain || '',
+      String(parts.textHtml || '').replace(/<[^>]+>/g, ' '),
+      msg && msg.snippet ? msg.snippet : ''
+    ].join('\n');
+    const found = gmailExtractEmailsFromText(blob);
+    for (let i = 0; i < found.length; i++) {
+      if (!gmailEsCorreoInstitucional(found[i])) {
+        email = found[i];
+        break;
+      }
+    }
+  }
+
+  let name = parsed.name || '';
+  if (gmailEsNombreInstitucional(name) || (fromEmail && gmailEsCorreoInstitucional(fromEmail) && !replyEmail)) {
+    // From es la entidad: no usar "Corporación CDA…" como solicitante
+    name = '';
+  }
+
+  let phone = '';
+  try {
+    const parts2 = typeof gmailExtractParts === 'function' ? gmailExtractParts(msg.payload) : {};
+    const blob2 = (parts2.textPlain || '') + '\n' + String(parts2.textHtml || '').replace(/<[^>]+>/g, ' ');
+    phone = gmailExtractPhoneFromText(blob2);
+  } catch (ePh) {}
+
+  return { name: name, email: email, phone: phone };
 }
 window.gmailExtractEmailAddress = gmailExtractEmailAddress;
+window.gmailEsCorreoInstitucional = gmailEsCorreoInstitucional;
 window.gmailRemitenteParaRadicar = gmailRemitenteParaRadicar;
 
 function gmailFmtDate(dateStr) {
@@ -3742,6 +3824,14 @@ function prePopularFormDesdeEmail(msg) {
     el.disabled = false;
     el.value = v;
   };
+  // Limpiar solicitante previo para no mezclar con otro correo / catálogo
+  ['sec-pn-nombre', 'sec-pn-correo', 'sec-pn-telefono'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.disabled = false;
+      el.value = '';
+    }
+  });
   setv('sec-pn-nombre', from.name || '');
   setv('sec-asunto', subject);
   if (snippet) setv('sec-detalle', snippet.slice(0, 300));
@@ -3759,12 +3849,13 @@ function prePopularFormDesdeEmail(msg) {
     } catch (e) {}
   }
 
-  // Correo del mensaje (From / Reply-To): al final, tras toggles de UI
+  // Correo del ciudadano (From/Reply-To o firma del cuerpo); nunca la bandeja institucional
   const correoEl = document.getElementById('sec-pn-correo');
   if (correoEl) {
     correoEl.disabled = false;
     correoEl.value = from.email || '';
   }
+  if (from.phone) setv('sec-pn-telefono', from.phone);
 
   // Store message ID for saving with the expediente
   window._gmailPendingMsgId = msg.id;
@@ -3811,7 +3902,7 @@ function gmailPreRadicarPqrs() {
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
   activarSplitRadicacionEmail(_gmailCurrentMsg);
-  // Reafirmar correo tras abrir el split (evita que toggles/UI lo dejen vacío)
+  // Reafirmar correo/tel tras abrir el split (evita que toggles/UI lo dejen vacío)
   try {
     var rem = typeof gmailRemitenteParaRadicar === 'function'
       ? gmailRemitenteParaRadicar(_gmailCurrentMsg)
@@ -3820,6 +3911,13 @@ function gmailPreRadicarPqrs() {
     if (correoEl && rem && rem.email) {
       correoEl.disabled = false;
       correoEl.value = rem.email;
+    }
+    if (rem && rem.phone) {
+      var telEl = document.getElementById('sec-pn-telefono');
+      if (telEl && !String(telEl.value || '').trim()) {
+        telEl.disabled = false;
+        telEl.value = rem.phone;
+      }
     }
   } catch (errMail) {}
   notif('Formulario pre-llenado. Revise el correo a la izquierda y complete los datos faltantes.', 'ok');
