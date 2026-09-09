@@ -1145,7 +1145,7 @@ function validateEntregaRespInteresado(datos){
     return'Seleccione '+lbl;
   }
   if(esSanc){
-    if(!datos._qd_anonimo&&!datos._qd_nombre)return'Indique el nombre del quejoso / denunciante (o márquelo anónimo)';
+    // Quejoso / denunciante es opcional (puede no existir o diligenciarse después en Registro)
     try{
       const arr=typeof datos._presuntos_infractores==='string'?JSON.parse(datos._presuntos_infractores||'[]'):(datos._presuntos_infractores||[]);
       const first=arr[0]||{};
