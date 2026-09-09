@@ -1492,6 +1492,9 @@ function renderConSidePanel(){
     syncCfgToStore();
     setCfgPtr(e._depto||getDeptoOperativo());
     editId=e._exp;
+    // Evitar IDs duplicados (fld__exp etc.) que hacen que guardar lea otro expediente del #form-area
+    const formArea=document.getElementById('form-area');
+    if(formArea)formArea.innerHTML='<div style="text-align:center;padding:2rem;color:var(--tx3);background:var(--sf);border:1px dashed var(--bd);border-radius:var(--rl)">Edición en ventana — use el panel</div>';
     const pqrsExtras=esPqrsSecretaria(e)?renderConPanelPqrsExtras(e):'';
     body.innerHTML=tabs+lockBanner+altaBanner+toolbar+taskBar+archivosBlock+pqrsExtras+'<div id="con-side-form-wrap" class="con-panel-form-wrap"></div>';
     renderFormulario(e._tramite,e,'con-side-form-wrap');

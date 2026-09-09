@@ -78,7 +78,23 @@ function calcVenceConUnidad(desde,dias,unidad){
 }
 
 // ── DOM / Inputs ──────────────────────────────────────────────────────────────
-function gv(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+/** Lee un input preferiendo el formulario activo (panel de edición vs #form-area). Evita IDs duplicados. */
+function gv(id){
+  id=String(id||'');
+  if(!id)return'';
+  let root=null;
+  try{
+    if(typeof getFormRootSel==='function')root=document.querySelector(getFormRootSel());
+  }catch(err){}
+  if(!root&&window._conPanelEditMode)root=document.getElementById('con-side-form-wrap');
+  if(!root)root=document.getElementById('form-area');
+  let e=null;
+  if(root){
+    try{e=root.querySelector('#'+CSS.escape(id));}catch(err2){e=root.querySelector('[id="'+id.replace(/"/g,'')+'"]');}
+  }
+  if(!e)e=document.getElementById(id);
+  return e?String(e.value||'').trim():'';
+}
 function onlyNums(inp){inp.value=inp.value.replace(/\D/g,'');}
 function numAttrs(){return ' inputmode="numeric" pattern="[0-9]*" oninput="onlyNums(this)"';}
 function emailValido(v){return !v||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}

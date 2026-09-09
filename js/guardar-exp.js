@@ -185,7 +185,14 @@ function guardarExpCore(stayOnForm){
   }
   const t=getTram(tid,deptoSave);
   if(!t){notif('Tipo de trámite no encontrado en la configuración del departamento','err');return;}
-  const expId=gv('fld__exp');
+  let expId=gv('fld__exp');
+  // Panel: si quedó un fld__exp fantasma en #form-area, priorizar el del panel / editId
+  if(window._conPanelEditMode&&editId){
+    const wrap=document.getElementById('con-side-form-wrap');
+    const el=wrap&&wrap.querySelector('#fld__exp');
+    const fromPanel=el?String(el.value||'').trim():'';
+    expId=fromPanel||String(editId);
+  }
   if(!expId){notif('Complete N° Expediente','err');return;}
   const fechaCollect=collectFechasEstado();
   if(!fechaCollect._fecha&&stayOnForm){

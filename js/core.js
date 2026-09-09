@@ -25265,16 +25265,22 @@ function expNumeroDuplicado(expId,opts){
 function alertRegistroDuplicado(expId,tipo,existente){
   const esPqrs=tipo==='pqrs';
   let deptoNota='';
+  const existNum=existente?String(existente._exp||'').trim():'';
   if(existente){
     const d=existente._depto||'guaviare';
     deptoNota=' Está registrado en '+labelDepto(d)+'.';
   }
+  const intento=String(expId||'').trim();
+  // Mostrar el número en conflicto (existente); si difiere del intento, aclarar ambos
+  let detail=existNum||intento;
+  if(existNum&&intento&&existNum.toLowerCase()!==intento.toLowerCase())
+    detail='Intentó guardar: '+intento+'\nYa existe: '+existNum;
   confirmPrecaucion({
     title:esPqrs?'PQRSD ya registrada':'Expediente ya registrado',
     message:esPqrs
       ? 'Ya existe una PQRSD con este número en el sistema.'+deptoNota+' Verifique el dato o consulte el registro existente; no se permite radicar de nuevo.'
       : 'Ya existe un trámite con este número en el sistema (Guaviare, Guainía o Vaupés).'+deptoNota+' Verifique el dato o edite el expediente existente; no se permite registrar de nuevo.',
-    detail:expId||'',
+    detail:detail,
     confirmLabel:'Entendido',
     tone:'warn'
   },function(){});
