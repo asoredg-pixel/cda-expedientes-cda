@@ -1602,7 +1602,14 @@ function abrirConsultaExpPanel(expId,opts){
   if(opts.soloExp)window._conPanelExps=[id];
   else window._conPanelExps=hasAsoc?getConPanelExpGroup(id):[id];
   window._conPanelActive=id;
+  // PQRSD: responsable/oficina solo consulta en el panel (edición por flujo PQRSD)
   if(esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv())&&!esVistaActividadesDepto())opts.edit=false;
+  // Responsable con secciones en Configuración: abrir siempre en edición (igual alta vía Entregar o alta del encargado)
+  else if(opts.forceReadOnly!==true
+    &&(esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))
+    &&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()){
+    opts.edit=true;
+  }
   if(esVistaActividadesDepto())window._conPanelPqrsNcaEdit=false;
   const wantEdit=opts.edit!==false&&(opts.edit===true||puedeEditarExpPanel());
   if(wantEdit){

@@ -139,7 +139,7 @@ function abrirConsultaExpPanelDesdeAct(expId,taskId){
   }
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:!!edit});
 }
-/** Desde columna Ref. en Actividades: vista consulta (solo lectura), sin cambiar de módulo. */
+/** Desde columna Ref. en Actividades: panel del expediente (edición si el responsable tiene facultades). */
 function abrirConsultaRefDesdeActividad(expId,taskId){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
@@ -157,7 +157,8 @@ function abrirConsultaRefDesdeActividad(expId,taskId){
   const e=exps.find(x=>String(x._exp||'').trim()===expId);
   if(!e){notif('Expediente «'+expId+'» no encontrado','err');return;}
   window._conPanelPqrsNcaEdit=false;
-  abrirConsultaExpPanel(expId,{allowSingle:true,edit:false,desdeActividades:true});
+  const edit=typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel();
+  abrirConsultaExpPanel(expId,{allowSingle:true,edit:!!edit,desdeActividades:true});
 }
 function guardarExp(stayOnForm){
   try{guardarExpCore(stayOnForm);}
