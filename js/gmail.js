@@ -1762,7 +1762,19 @@ async function driveEnsureExpedienteFolder(e) {
   const esActLibre = !!(e._sin_expediente || /^ACT[-_]/i.test(expNum));
   const carpNom = (esActLibre ? '' : 'EXP-') + expNum.replace(/\s/g, '') + (nomSlug ? '-' + nomSlug : '');
   let parent = DRIVE_ROOT_EXPEDIENTES_ID;
-  parent = await _driveEnsureFolder(token, anio, parent);
+  // Persistir ID de carpeta año para no recrear "2026 (1)" entre sesiones
+  const yearLsKey = 'sst_drive_exp_year_' + anio;
+  try {
+    const storedYear = localStorage.getItem(yearLsKey) || '';
+    if (storedYear && await _driveVerifyFolderId(token, storedYear)) {
+      parent = storedYear;
+    } else {
+      parent = await _driveEnsureFolder(token, anio, DRIVE_ROOT_EXPEDIENTES_ID);
+      try { localStorage.setItem(yearLsKey, parent); } catch (eY) {}
+    }
+  } catch (eY2) {
+    parent = await _driveEnsureFolder(token, anio, DRIVE_ROOT_EXPEDIENTES_ID);
+  }
   const folderId = await _driveEnsureFolder(token, carpNom, parent);
   const folderLink = 'https://drive.google.com/drive/folders/' + folderId;
   e._drive_folder_id = folderId;
@@ -2170,48 +2182,154 @@ async function _driveVerifyFolderId(token, folderId) {
   }
 }
 
+/** ¿El nombre de Drive coincide con el deseado o es un duplicado "Nombre (1)"? */
+function _driveFolderNameMatchesWanted(candidate, wanted) {
+  const c = String(candidate || '').trim();
+  const w = String(wanted || '').trim();
+  if (!c || !w) return false;
+  if (c === w) return true;
+  // Drive añade " (N)" cuando se crea otra carpeta con el mismo nombre
+  const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('^' + esc + ' \\(\\d+\\)$').test(c);
+}
+
+/** Entre varias carpetas homónimas, preferir el nombre exacto y la más antigua. */
+function _drivePickBestFolderMatch(files, wanted) {
+  const list = (files || []).filter(function(f) {
+    return f && f.id && _driveFolderNameMatchesWanted(f.name, wanted);
+  });
+  if (!list.length) return null;
+  list.sort(function(a, b) {
+    const aExact = String(a.name || '') === wanted ? 0 : 1;
+    const bExact = String(b.name || '') === wanted ? 0 : 1;
+    if (aExact !== bExact) return aExact - bExact;
+    return String(a.createdTime || '').localeCompare(String(b.createdTime || ''));
+  });
+  return list[0];
+}
+
+/** Lista carpetas hijas del padre (fallback si la búsqueda q= falla o hay carrera). */
+async function _driveListChildFolders(token, parentId) {
+  if (!token || !parentId) return [];
+  const q = "'" + parentId + "' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  let url = DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+    '&fields=files(id,name,createdTime),nextPageToken&pageSize=200' + _DRIVE_API_QS;
+  const out = [];
+  try {
+    while (url) {
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) break;
+      const data = await res.json();
+      (data.files || []).forEach(function(f) {
+        if (f && f.id) out.push(f);
+      });
+      url = data.nextPageToken
+        ? (DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+          '&fields=files(id,name,createdTime),nextPageToken&pageSize=200&pageToken=' +
+          encodeURIComponent(data.nextPageToken) + _DRIVE_API_QS)
+        : null;
+    }
+  } catch (e) {
+    console.warn('_driveListChildFolders:', e);
+  }
+  return out;
+}
+
+async function _driveFindFolderInParent(token, folderName, parentId) {
+  folderName = String(folderName || '').trim();
+  if (!folderName || !parentId) return null;
+  // 1) Búsqueda por query (rápida)
+  const q = 'name="' + folderName.replace(/"/g, '\\"') +
+    '" and mimeType="application/vnd.google-apps.folder"' +
+    ' and "' + parentId + '" in parents and trashed=false';
+  try {
+    const res = await fetch(DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
+      '&fields=files(id,name,createdTime)&orderBy=createdTime&pageSize=20' + _DRIVE_API_QS, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json().catch(function() { return {}; });
+    if (res.ok && data.files && data.files.length) {
+      const best = _drivePickBestFolderMatch(data.files, folderName);
+      if (best) return best;
+    }
+  } catch (e) {
+    console.warn('_driveFindFolderInParent query:', e);
+  }
+  // 2) Fallback: listar hijos y emparejar nombre exacto o "Nombre (N)"
+  const children = await _driveListChildFolders(token, parentId);
+  return _drivePickBestFolderMatch(children, folderName);
+}
+
+/**
+ * Crea o reutiliza una carpeta bajo parentId.
+ * Evita duplicados tipo "2026 (1)" / "Radicacion (1)" / "NCA (1)" con:
+ * - candado in-flight (carreras paralelas)
+ * - búsqueda + listado de hijos (incl. sufijos " (N)")
+ * - re-chequeo justo antes de crear
+ */
 async function _driveEnsureFolder(token, folderName, parentId) {
   folderName = String(folderName || '').trim();
   if (!folderName) throw new Error('Nombre de carpeta Drive vacío');
-  const cacheKey = 'sst_df_' + (parentId || 'root') + '_' + folderName.replace(/\s/g, '_');
-  try {
-    const c = sessionStorage.getItem(cacheKey);
-    if (c) {
-      if (await _driveVerifyFolderId(token, c)) return c;
-      sessionStorage.removeItem(cacheKey);
+  if (!parentId) throw new Error('Carpeta padre Drive no definida');
+  const cacheKey = 'sst_df_' + parentId + '_' + folderName.replace(/\s/g, '_');
+  const lockKey = parentId + '\0' + folderName.toLowerCase();
+
+  window._driveEnsureLocks = window._driveEnsureLocks || {};
+  if (window._driveEnsureLocks[lockKey]) {
+    return window._driveEnsureLocks[lockKey];
+  }
+
+  const run = (async function() {
+    try {
+      const c = sessionStorage.getItem(cacheKey);
+      if (c && await _driveVerifyFolderId(token, c)) return c;
+      if (c) sessionStorage.removeItem(cacheKey);
+    } catch (e) {}
+
+    let found = await _driveFindFolderInParent(token, folderName, parentId);
+    if (found && found.id) {
+      try { sessionStorage.setItem(cacheKey, found.id); } catch (e) {}
+      return found.id;
     }
-  } catch (e) {}
-  const q = 'name="' + folderName.replace(/"/g, '\\"') +
-            '" and mimeType="application/vnd.google-apps.folder"' +
-            (parentId ? ' and "' + parentId + '" in parents' : '') +
-            ' and trashed=false';
-  const res = await fetch(DRIVE_API_BASE + '/files?q=' + encodeURIComponent(q) +
-    '&fields=files(id,name)' + _DRIVE_API_QS, {
-    headers: { Authorization: 'Bearer ' + token }
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = data && data.error && data.error.message ? data.error.message : ('HTTP ' + res.status);
-    throw new Error('Error buscando carpeta "' + folderName + '": ' + msg);
+
+    // Re-chequeo inmediato (otra pestaña/llamada pudo crear mientras buscábamos)
+    found = await _driveFindFolderInParent(token, folderName, parentId);
+    if (found && found.id) {
+      try { sessionStorage.setItem(cacheKey, found.id); } catch (e) {}
+      return found.id;
+    }
+
+    const body = { name: folderName, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] };
+    const cr = await fetch(DRIVE_API_BASE + '/files' + _DRIVE_API_QS.replace('&', '?'), {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const folder = await cr.json().catch(function() { return {}; });
+    if (!cr.ok || !folder.id) {
+      // Si falló el create, otra carrera pudo ganar: reutilizar
+      found = await _driveFindFolderInParent(token, folderName, parentId);
+      if (found && found.id) {
+        try { sessionStorage.setItem(cacheKey, found.id); } catch (e) {}
+        return found.id;
+      }
+      const msg = folder && folder.error && folder.error.message ? folder.error.message : ('HTTP ' + cr.status);
+      throw new Error('No se pudo crear carpeta "' + folderName + '": ' + msg);
+    }
+
+    // Tras crear, si ya había homónimas (carrera), preferir la más antigua / nombre exacto
+    found = await _driveFindFolderInParent(token, folderName, parentId);
+    const useId = (found && found.id) ? found.id : folder.id;
+    try { sessionStorage.setItem(cacheKey, useId); } catch (e) {}
+    return useId;
+  })();
+
+  window._driveEnsureLocks[lockKey] = run;
+  try {
+    return await run;
+  } finally {
+    if (window._driveEnsureLocks[lockKey] === run) delete window._driveEnsureLocks[lockKey];
   }
-  if (data.files && data.files.length > 0) {
-    try { sessionStorage.setItem(cacheKey, data.files[0].id); } catch (e) {}
-    return data.files[0].id;
-  }
-  const body = { name: folderName, mimeType: 'application/vnd.google-apps.folder' };
-  if (parentId) body.parents = [parentId];
-  const cr = await fetch(DRIVE_API_BASE + '/files' + _DRIVE_API_QS.replace('&', '?'), {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const folder = await cr.json();
-  if (!cr.ok || !folder.id) {
-    const msg = folder && folder.error && folder.error.message ? folder.error.message : ('HTTP ' + cr.status);
-    throw new Error('No se pudo crear carpeta "' + folderName + '": ' + msg);
-  }
-  try { sessionStorage.setItem(cacheKey, folder.id); } catch (e) {}
-  return folder.id;
 }
 
 function _drivePqrsFechaRefAnioMes(fechaRef) {
@@ -2239,6 +2357,7 @@ async function _driveGetPqrsRadicacionParent(token, pqrsRoot) {
     const stored = localStorage.getItem(_DRIVE_LS_RADICACION_ID) || '';
     if (stored && await _driveVerifyFolderId(token, stored)) return stored;
   } catch (e) {}
+  // Reutiliza "Radicacion" o "Radicacion (N)" existente bajo la raíz PQRSD
   const id = await _driveEnsureFolder(token, DRIVE_PQRSD_FOLDER_RADICACION, pqrsRoot);
   try { localStorage.setItem(_DRIVE_LS_RADICACION_ID, id); } catch (e) {}
   return id;
@@ -2350,7 +2469,18 @@ async function driveEnsurePqrsExpedienteFolders(tipo, pqrsNum, nombreCarpeta, fe
   const pathParts = [];
   let parent = await _driveGetPqrsRadicacionParent(token, pqrsRoot);
   pathParts.push(DRIVE_PQRSD_FOLDER_RADICACION);
-  parent = await _driveEnsureFolder(token, ym.anio, parent);
+  const yearLsKey = 'sst_drive_pqrs_year_' + ym.anio;
+  try {
+    const storedY = localStorage.getItem(yearLsKey) || '';
+    if (storedY && await _driveVerifyFolderId(token, storedY)) {
+      parent = storedY;
+    } else {
+      parent = await _driveEnsureFolder(token, ym.anio, parent);
+      try { localStorage.setItem(yearLsKey, parent); } catch (eY) {}
+    }
+  } catch (eY2) {
+    parent = await _driveEnsureFolder(token, ym.anio, parent);
+  }
   pathParts.push(ym.anio);
   parent = await _driveEnsureFolder(token, ym.mes, parent);
   pathParts.push(ym.mes);
@@ -2435,29 +2565,22 @@ async function driveListFolderContents(folderId, pageToken) {
   return { nextPageToken: attempt.data.nextPageToken || '', files: mapFiles(attempt.data) };
 }
 
-/** Crea una carpeta nueva bajo parentId (nombre exacto; no reutiliza otra existente con el mismo nombre). */
+/** Crea o reutiliza carpeta bajo parentId (mismo nombre → no genera "Nombre (1)"). */
 async function driveCreateFolder(name, parentId) {
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
   const nom = String(name || '').trim().slice(0, 120);
   if (!nom) throw new Error('Nombre de carpeta vacío');
   if (!parentId) throw new Error('Carpeta padre no definida');
-  const body = {
-    name: nom,
-    mimeType: 'application/vnd.google-apps.folder',
-    parents: [parentId]
+  const before = await _driveFindFolderInParent(token, nom, parentId);
+  const folderId = await _driveEnsureFolder(token, nom, parentId);
+  const reused = !!(before && before.id && before.id === folderId);
+  return {
+    folderId: folderId,
+    name: (before && before.id === folderId ? before.name : nom) || nom,
+    link: 'https://drive.google.com/drive/folders/' + folderId,
+    reused: reused
   };
-  const cr = await fetch(DRIVE_API_BASE + '/files' + (_DRIVE_API_QS || '').replace('&', '?'), {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  const folder = await cr.json();
-  if (!cr.ok || !folder.id) {
-    const msg = folder && folder.error && folder.error.message ? folder.error.message : ('HTTP ' + cr.status);
-    throw new Error('No se pudo crear la carpeta: ' + msg);
-  }
-  return { folderId: folder.id, name: folder.name || nom, link: 'https://drive.google.com/drive/folders/' + folder.id };
 }
 
 /** Elimina archivo o carpeta (carpetas: borrado recursivo del contenido). */
@@ -2478,7 +2601,15 @@ async function driveEnsureBibliotecaOficinaFolder(oficinaId) {
   const ofi = (typeof OFICINAS_DEGUV !== 'undefined' ? OFICINAS_DEGUV : []).find(o => o.id === oficinaId);
   const cod = ofi ? (ofi.codigo || ofi.id) : String(oficinaId || 'Oficina');
   const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+  const lsKey = 'sst_drive_rec_ofi_' + String(cod || '').replace(/\s/g, '_');
+  try {
+    const stored = localStorage.getItem(lsKey) || '';
+    if (stored && await _driveVerifyFolderId(token, stored)) {
+      return { folderId: stored, link: 'https://drive.google.com/drive/folders/' + stored };
+    }
+  } catch (e) {}
   const folderId = await _driveEnsureFolder(token, cod, rootId);
+  try { localStorage.setItem(lsKey, folderId); } catch (e2) {}
   return { folderId: folderId, link: 'https://drive.google.com/drive/folders/' + folderId };
 }
 

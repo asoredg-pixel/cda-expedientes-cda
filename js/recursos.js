@@ -1238,9 +1238,9 @@ async function recExpNuevaCarpeta() {
   const folderId = recExpCurrentFolderId();
   try {
     const fn = typeof driveCreateFolder === 'function' ? driveCreateFolder : window.driveCreateFolder;
-    await fn(name, folderId);
-    notif('Carpeta creada', 'ok');
-    if (typeof logAudit === 'function') logAudit('Creó carpeta en biblioteca', 'recursos', null, name);
+    const created = await fn(name, folderId);
+    notif(created && created.reused ? 'Carpeta ya existía — se reutilizó' : 'Carpeta creada', 'ok');
+    if (typeof logAudit === 'function') logAudit(created && created.reused ? 'Reutilizó carpeta en biblioteca' : 'Creó carpeta en biblioteca', 'recursos', null, name);
     cargarRecursosRepoArchivos();
   } catch (err) {
     notif(err.message || 'No se pudo crear la carpeta', 'err');
