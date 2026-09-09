@@ -2793,9 +2793,22 @@ async function buscarExpCiudadano(){
   const docsPqrs=getDocsPqrsRespuestaCiudadano(e);
   const docsTram=getDocsTramiteCiudadano(e);
   const docs=[...docsPqrsSol];
-  docsPqrs.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
-  docsTram.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
-  docsTask.forEach(d=>{if(!docs.some(x=>(x.url||x.preview)===(d.url||d.preview)))docs.push(d);});
+  const docKey=function(d){
+    if(!d)return '';
+    if(typeof _pqrsDocKey==='function')return _pqrsDocKey({driveLink:d.url||d.preview,url:d.url||d.preview,fileId:d.fileId});
+    return String(d.url||d.preview||'').trim().toLowerCase();
+  };
+  const pushUnique=function(d){
+    if(!d||!(d.url||d.preview))return;
+    if(/^link\s*drive$/i.test(String(d.label||'').trim()))return;
+    const k=docKey(d);
+    if(k&&docs.some(function(x){return docKey(x)===k;}))return;
+    if(!k&&docs.some(function(x){return (x.url||x.preview)===(d.url||d.preview);}))return;
+    docs.push(d);
+  };
+  docsPqrs.forEach(pushUnique);
+  docsTram.forEach(pushUnique);
+  docsTask.forEach(pushUnique);
   // Documentos de PQRSD / expedientes vinculados (asociación bidireccional)
   if(typeof getExpAsociadosAll==='function'){
     getExpAsociadosAll(e).forEach(function(num){
@@ -2812,8 +2825,8 @@ async function buscarExpCiudadano(){
       );
       asocDocs.forEach(function(d){
         if(!d||!(d.url||d.preview))return;
-        if(docs.some(function(x){return (x.url||x.preview)===(d.url||d.preview);}))return;
-        docs.push({url:d.url,preview:d.preview||d.url,label:d.label||'Documento',tipo:tag+' · '+(d.tipo||'Documento'),mime:d.mime||'',fecha:d.fecha||''});
+        if(/^link\s*drive$/i.test(String(d.label||'').trim()))return;
+        pushUnique({url:d.url,preview:d.preview||d.url,label:d.label||'Documento',tipo:tag+' · '+(d.tipo||'Documento'),mime:d.mime||'',fecha:d.fecha||''});
       });
     });
   }

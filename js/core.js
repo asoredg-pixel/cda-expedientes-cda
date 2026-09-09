@@ -1541,8 +1541,107 @@ function _pqrsDocEsRevisionActual(d){
   return !est||est==='revision'||est==='drive'||est==='archivo'||est==='oficio_firmado'||est==='link';
 }
 function _pqrsDocKey(d){
-  return String((d&&(d.fileId||d.driveFileId||d.driveLink||d.previewLink||d.url))||'').trim().toLowerCase();
+  if(!d)return '';
+  const fid=String(d.fileId||d.driveFileId||'').trim();
+  if(fid)return 'id:'+fid.toLowerCase();
+  const raw=String(d.driveLink||d.previewLink||d.url||d.preview||'').trim();
+  if(!raw)return '';
+  if(typeof parseDrivePreviewUrl==='function'){
+    const p=parseDrivePreviewUrl(raw);
+    if(p&&p.id)return 'id:'+String(p.id).toLowerCase();
+  }
+  const m=raw.match(/\/(?:file|document|spreadsheets|presentation)\/d\/([^/?#]+)/i)||raw.match(/[?&]id=([^&]+)/i);
+  if(m)return 'id:'+String(m[1]).toLowerCase();
+  return raw.toLowerCase();
 }
+/** Entrada genérica «Link Drive» (no es un doc real de respuesta). */
+function _pqrsDocEsLinkDriveGenerico(d){
+  if(!d)return false;
+  if(d.tipo==='link')return true;
+  return /^link\s*drive$/i.test(String(d.nombre||d.label||d.driveFilename||'').trim());
+}
+/**
+ * Quita «Link Drive» redundantes (mismo archivo que oficio/soporte/respuesta)
+ * y deduplica por fileId/URL. Aplica a NCA y oficinas.
+ */
+function _pqrsDeduplicarDocumentosRespuesta(docs){
+  const list=Array.isArray(docs)?docs.filter(Boolean):[];
+  if(!list.length)return [];
+  const byKey=new Map();
+  list.forEach(function(d){
+    const k=_pqrsDocKey(d);
+    if(!k){
+      byKey.set('row_'+byKey.size,d);
+      return;
+    }
+    const prev=byKey.get(k);
+    if(!prev){byKey.set(k,d);return;}
+    // Preferir el que no sea Link Drive genérico
+    const prevLink=_pqrsDocEsLinkDriveGenerico(prev);
+    const curLink=_pqrsDocEsLinkDriveGenerico(d);
+    if(prevLink&&!curLink){byKey.set(k,d);return;}
+    if(!prevLink&&curLink)return;
+    // Preferir soporte/oficio con tipo más específico
+    const score=function(x){
+      if(!x)return 0;
+      if(x.tipo==='soporte_notificacion'||x.tipo==='soporte_respuesta')return 5;
+      if(x.tipo==='oficio_firmado')return 4;
+      if(x.tipo==='anexo_respuesta'||x.es_anexo)return 3;
+      if(x.tipo==='drive'||x.tipo==='archivo')return 2;
+      if(_pqrsDocEsLinkDriveGenerico(x))return 0;
+      return 1;
+    };
+    if(score(d)>score(prev))byKey.set(k,d);
+  });
+  // Si queda un Link Drive solo y hay otros docs de respuesta, descartarlo
+  const out=Array.from(byKey.values());
+  const hasReal=out.some(function(d){return !_pqrsDocEsLinkDriveGenerico(d);});
+  if(hasReal)return out.filter(function(d){return !_pqrsDocEsLinkDriveGenerico(d);});
+  return out;
+}
+/** Arma lista de docs de entrega directa: archivos subidos primero; links solo si no duplican. */
+function _pqrsBuildAdjDocumentosEntrega(pq,driveArchivos,opts){
+  opts=opts||{};
+  const adjDocumentos=[];
+  const seen=new Set();
+  const pushDoc=function(d){
+    if(!d)return;
+    const k=_pqrsDocKey(d);
+    if(k&&seen.has(k))return;
+    if(k)seen.add(k);
+    adjDocumentos.push(d);
+  };
+  (driveArchivos||[]).forEach(function(da){
+    if(!da||!(da.driveLink||da.fileId||da.driveFileId||da.localBlob))return;
+    const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+    const esOficio=pq&&pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado');
+    pushDoc({
+      nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(esOficio?'Oficio firmado':'Documento de respuesta'),
+      driveLink:da.driveLink||'',
+      previewLink:da.previewLink||da.driveLink||'',
+      fileId:da.fileId||da.driveFileId||'',
+      driveFileId:da.driveFileId||da.fileId||'',
+      tipo:esAnexo?'anexo_respuesta':(esOficio?'oficio_firmado':'drive'),
+      es_anexo:esAnexo,
+      anexo_n:esAnexo?(da.anexo_n||null):null,
+      driveFilename:da.driveFilename||da.nombre||'',
+      driveEstado:opts.driveEstado||'cerrado',
+      localBlob:da.localBlob||null,
+      localNombre:da.localNombre||da.nombre||'',
+      localMime:da.localMime||''
+    });
+  });
+  // Links manuales del usuario (no «activo» automático) — solo si no duplican un archivo
+  ((pq&&pq.adj&&pq.adj.links)||[]).forEach(function(lnk){
+    const u=String(lnk||'').trim();
+    if(!u)return;
+    pushDoc({nombre:'Enlace Drive',driveLink:u,previewLink:u,tipo:'link',driveEstado:opts.driveEstado||'cerrado'});
+  });
+  return _pqrsDeduplicarDocumentosRespuesta(adjDocumentos);
+}
+window._pqrsDocEsLinkDriveGenerico=_pqrsDocEsLinkDriveGenerico;
+window._pqrsDeduplicarDocumentosRespuesta=_pqrsDeduplicarDocumentosRespuesta;
+window._pqrsBuildAdjDocumentosEntrega=_pqrsBuildAdjDocumentosEntrega;
 /**
  * Conserva historial de versiones «por corregir» y agrega la nueva entrega.
  * Al aprobar se limpian las versiones viejas (_pqrsLimpiarVersionesCorreccionWf).
@@ -1629,6 +1728,9 @@ function _pqrsDocEsBorradorInterno(d){
 function _pqrsDocEsVisibleCiudadano(d,e,opts){
   opts=opts||{};
   if(!d)return false;
+  // «Link Drive» genérico no es un documento real (duplicaba oficio/soporte)
+  if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return false;
+  if(/^link\s*drive$/i.test(String(d.nombre||d.label||d.driveFilename||'').trim()))return false;
   const url=d.driveLink||d.url||d.preview||d.previewLink||'';
   if(esUrlCarpetaDrive(url))return false;
   if(_pqrsDocEsBorradorInterno(d))return false;
@@ -1975,7 +2077,7 @@ function _pqrsSanitizeDocParaWf(a){
 function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
   if(!e||!pq)return false;
   const por=responsableActivo||(typeof labelOficina==='function'?labelOficina(deptoActivo):'')||rolSesion||'';
-  const docs=(adjDocumentos||[]).map(function(a,i){
+  const docs=_pqrsDeduplicarDocumentosRespuesta((adjDocumentos||[]).map(function(a,i){
     const base=_pqrsSanitizeDocParaWf(a)||{};
     const esAnexo=!!(base.es_anexo||base.esAnexo||base.tipo==='anexo_respuesta');
     const esSoporte=base.tipo==='soporte_notificacion'||base.tipo==='soporte_respuesta'||base.notificado===true
@@ -1983,12 +2085,12 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
     return Object.assign({},base,{
       nombre:esAnexo?(base.nombre||('Anexo '+(base.anexo_n||(i+1))))
         :(esSoporte?(base.nombre||'Soporte de envío (correo)')
-        :(base.nombre&&!/^Proyecci/i.test(base.nombre)?base.nombre:'Oficio firmado')),
-      tipo:esAnexo?'anexo_respuesta':(esSoporte?'soporte_notificacion':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(base.tipo||'drive'))),
+        :(base.nombre&&!/^Proyecci/i.test(base.nombre)&&!/^link\s*drive$/i.test(base.nombre)?base.nombre:'Oficio firmado')),
+      tipo:esAnexo?'anexo_respuesta':(esSoporte?'soporte_notificacion':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':(base.tipo==='link'?'drive':(base.tipo||'drive')))),
       driveEstado:esSoporte?'notificado':(base.driveEstado==='revision'?'cerrado':(base.driveEstado||'cerrado')),
       notificado:esSoporte?true:!!base.notificado
     });
-  }).filter(function(d){return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url);});
+  }).filter(function(d){return d&&(d.driveLink||d.fileId||d.driveFileId||d.previewLink||d.url);}));
   if(pq.tipo===PQRS_WF_TIPO.INFORMATIVA){
     e._pqrs_informativa=true;
     guardarPqrsRespuestaDatos(e,{
@@ -3671,7 +3773,20 @@ async function submitPqrsRespuesta(expId){
     }
     if(typeof sstCargaProgress==='function'&&window._confirmRadicacionLoading)sstCargaProgress(92,'Finalizando registro…');
   }
-  adj.links.forEach(lnk=>documentos.push({nombre:'Link Drive',driveLink:lnk,tipo:'link'}));
+  adj.links.forEach(function(lnk){
+    const u=String(lnk||'').trim();
+    if(!u)return;
+    const already=documentos.some(function(d){
+      return typeof _pqrsDocKey==='function'&&_pqrsDocKey(d)===_pqrsDocKey({driveLink:u});
+    });
+    if(already)return;
+    documentos.push({nombre:'Enlace Drive',driveLink:u,tipo:'link'});
+  });
+  if(typeof _pqrsDeduplicarDocumentosRespuesta==='function'){
+    const dedup=_pqrsDeduplicarDocumentosRespuesta(documentos);
+    documentos.length=0;
+    dedup.forEach(function(d){documentos.push(d);});
+  }
 
   const histNotaCanal=isPersonal
     ?('Notificación '+medioNotificacionRespLabel(canal)+' el '+fechaResp+(oficioExt?' · Oficio '+oficioExt:''))
@@ -9275,14 +9390,21 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
   else if((nota||cuerpo)&&opts.esNotaPublica!==false)e._pqrs_respuesta_nota=nota||cuerpo;
   if(archivos.length){
     const mapSop=function(a,i,ver){
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(a))return null;
+      if(/^link\s*drive$/i.test(String(a.nombre||a.name||a.label||'').trim()))return null;
       const url=a.driveLink||a.url||a.data||a.previewLink||'';
       const preview=a.previewLink||a.preview||a.driveLink||a.url||a.data||'';
-      const baseLbl=a.nombre||a.name||a.label||('Respuesta '+(i+1));
+      const baseLbl=(typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(a):'')||a.nombre||a.name||a.label||('Respuesta '+(i+1));
       const estTag=_pqrsDocEsPorCorregir(a)?' · por corregir':(ver?' · entrega v'+ver:'');
-      return {label:baseLbl+estTag,url:url,mime:a.mime||'',preview:preview,version:ver||a.entrega_n||null,activo:!_pqrsDocEsPorCorregir(a),driveEstado:a.driveEstado||''};
+      return {label:baseLbl+estTag,url:url,mime:a.mime||'',preview:preview,version:ver||a.entrega_n||null,activo:!_pqrsDocEsPorCorregir(a),driveEstado:a.driveEstado||'',fileId:a.fileId||a.driveFileId||'',tipo:a.tipo||''};
     };
     if(cerrar){
-      e._pqrs_respuesta_soportes=archivos.map(function(a,i){return mapSop(a,i,null);});
+      const mapped=archivos.map(function(a,i){return mapSop(a,i,null);}).filter(Boolean);
+      e._pqrs_respuesta_soportes=typeof _pqrsDeduplicarDocumentosRespuesta==='function'
+        ?_pqrsDeduplicarDocumentosRespuesta(mapped.map(function(s){return Object.assign({},s,{driveLink:s.url,nombre:s.label});})).map(function(d){
+          return {label:d.label||d.nombre,url:d.url||d.driveLink,mime:d.mime||'',preview:d.preview||d.previewLink||d.url||d.driveLink,version:d.version||null,activo:d.activo!==false,driveEstado:d.driveEstado||'',fileId:d.fileId||d.driveFileId||'',tipo:d.tipo||''};
+        })
+        :mapped;
     }else if(opts.reemplazarRevision){
       const prev=(Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes:[]).filter(function(s){
         return s&&_pqrsDocEsPorCorregir(s);
@@ -9290,7 +9412,7 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
       prev.forEach(function(s){if(s)s.activo=false;});
       const wfPrev=getPqrsWorkflow(e);
       const entregaN=(Number(wfPrev.entrega_n)||0)+1;
-      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);});
+      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);}).filter(Boolean);
       e._pqrs_respuesta_soportes=prev.concat(nuevos);
     }else{
       // Conservar soportes de versiones anteriores (por corregir) para comparar
@@ -9298,15 +9420,15 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
       prev.forEach(function(s){if(s)s.activo=false;});
       const wfPrev=getPqrsWorkflow(e);
       const entregaN=(Number(wfPrev.entrega_n)||prev.filter(function(s){return s&&s.activo!==false;}).length||0)+1;
-      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);});
-      const seen=new Set(prev.map(function(s){return String((s&&(s.url||s.preview))||'').toLowerCase();}).filter(Boolean));
+      const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);}).filter(Boolean);
+      const seen=new Set(prev.map(function(s){return typeof _pqrsDocKey==='function'?_pqrsDocKey({driveLink:s.url,url:s.url,fileId:s.fileId}):String((s&&(s.url||s.preview))||'').toLowerCase();}).filter(Boolean));
       nuevos.forEach(function(s){
-        const k=String((s.url||s.preview)||'').toLowerCase();
+        const k=typeof _pqrsDocKey==='function'?_pqrsDocKey({driveLink:s.url,url:s.url,fileId:s.fileId}):String((s.url||s.preview)||'').toLowerCase();
         if(k&&seen.has(k))return;
         if(k)seen.add(k);
         prev.push(s);
       });
-      e._pqrs_respuesta_soportes=prev;
+      e._pqrs_respuesta_soportes=prev.filter(function(s){return s&&!/^link\s*drive$/i.test(String(s.label||'').trim());});
     }
   }else{
     if(adj.links.length)e._pqrs_respuesta_link=adj.links[0];
@@ -9419,7 +9541,13 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
   if(!t||!docs||!docs.length)return;
   const rep=(wf&&(wf.entregado_por||wf.cerrado_por))||'';
   const ver=(wf&&wf.entrega_n)||1;
-  t.soportes=docs.map(function(d,i){
+  let list=docs.slice();
+  if(typeof _pqrsDeduplicarDocumentosRespuesta==='function')list=_pqrsDeduplicarDocumentosRespuesta(list);
+  list=list.filter(function(d){
+    return d&&!(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d));
+  });
+  if(!list.length)return;
+  t.soportes=list.map(function(d,i){
     const url=d.driveLink||d.previewLink||d.url||'';
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
     const esAn=typeof _pqrsDocEsAnexoRespuesta==='function'?_pqrsDocEsAnexoRespuesta(d):false;
@@ -9433,7 +9561,7 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
       ||String(d.driveEstado||'').toLowerCase()==='firmado'
       ||/^oficio firmado/i.test(String(d.nombre||d.label||''))
       ||/^por[_-]?notificar/i.test(String(d.nombre||d.label||'')));
-    const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,docs):(esNot?'Documento notificado':(esFirm?'Oficio firmado':'Documento'));
+    const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,list):(esNot?'Documento notificado':(esFirm?'Oficio firmado':'Documento'));
     return{
       id:'pqrs_wf_'+(d.fileId||d.driveFileId||i)+'_'+i,
       label:lbl,
@@ -10008,46 +10136,68 @@ function getDocsPqrsRespuestaCiudadano(e){
   if(typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e))return[];
   const docs=[];
   const seen=new Set();
-  const push=(url,preview,label,mime,fecha,tipo)=>{
+  const keyOf=function(url,meta){
+    if(typeof _pqrsDocKey==='function'){
+      return _pqrsDocKey(Object.assign({},meta||{},{driveLink:url,url:url,preview:url}))||'';
+    }
+    return String(url||'').trim().toLowerCase();
+  };
+  const push=(url,preview,label,mime,fecha,tipo,meta)=>{
     if(!url&&!preview)return;
-    const key=String(url||preview||'').trim().toLowerCase();
+    // No publicar «Link Drive» genérico (mismo archivo que oficio/soporte)
+    if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(meta||{nombre:label,label:label}))return;
+    if(/^link\s*drive$/i.test(String(label||'').trim()))return;
+    if(typeof _pqrsDocEsVisibleCiudadano==='function'&&meta&&!_pqrsDocEsVisibleCiudadano(meta,e,{tipo:'respuesta'}))return;
+    const key=keyOf(url||preview,meta);
     if(!key||seen.has(key))return;
     if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url||preview))return;
     seen.add(key);
     docs.push({url:url||preview,preview:preview||url,label:label||'Respuesta PQRSD',tipo:tipo||'Respuesta oficial PQRSD',mime:mime||'',fecha:fecha||e._pqrs_respuesta_fecha||''});
   };
-  (e._pqrs_respuesta_soportes||[]).forEach(s=>{
+  let soportes=(e._pqrs_respuesta_soportes||[]).slice();
+  if(typeof _pqrsDeduplicarDocumentosRespuesta==='function'){
+    soportes=_pqrsDeduplicarDocumentosRespuesta(soportes.map(function(s){
+      return Object.assign({},s,{driveLink:s.url||s.preview,nombre:s.label||s.nombre,previewLink:s.preview||s.url});
+    }));
+  }
+  soportes.forEach(function(s){
     if(!s)return;
+    if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
+    if(/^link\s*drive$/i.test(String(s.label||s.nombre||'').trim()))return;
     if(typeof _pqrsDocEsBorradorInterno==='function'&&_pqrsDocEsBorradorInterno(s)&&!_pqrsDocEsAnexoRespuesta(s))return;
-    const lbl=_pqrsDocEsAnexoRespuesta(s)?('Anexo: '+(s.label||s.nombre||'documento')):(s.label||'Respuesta');
-    push(s.url,s.preview||s.url,lbl,s.mime||'',e._pqrs_respuesta_fecha,_pqrsDocEsAnexoRespuesta(s)?'Anexo de respuesta':'Respuesta oficial PQRSD');
+    const lbl=_pqrsDocEsAnexoRespuesta(s)?('Anexo: '+(s.label||s.nombre||'documento'))
+      :(typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(s):(s.label||'Respuesta'));
+    if(/^link\s*drive$/i.test(String(lbl||'').trim()))return;
+    push(s.url||s.driveLink,s.preview||s.previewLink||s.url||s.driveLink,lbl,s.mime||'',e._pqrs_respuesta_fecha,_pqrsDocEsAnexoRespuesta(s)?'Anexo de respuesta':'Respuesta oficial PQRSD',s);
   });
   if(typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
-    if(wf&&Array.isArray(wf.documentos)){
-      wf.documentos.forEach((d,i)=>{
-        if(!d)return;
-        if(typeof _pqrsDocEsDefinitivoCierre==='function'){
-          if(!_pqrsDocEsDefinitivoCierre(d))return;
-        }else if(_pqrsDocEsBorradorInterno(d)&&!_pqrsDocEsAnexoRespuesta(d))return;
-        const raw=d.driveLink||d.previewLink||d.url||d.data||'';
-        if(!raw)return;
-        const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):{url:raw,preview:raw};
-        const esAnexo=_pqrsDocEsAnexoRespuesta(d);
-        const lbl=esAnexo?(_pqrsEtiquetaDocWf(d)||('Anexo '+(i+1))):
-                   d.tipo==='oficio_firmado'?'Oficio de respuesta notificado':
-                   d.tipo==='soporte_notificacion'?'Soporte de notificación':
-                   d.tipo==='correo'?'Soporte de envío por correo':
-                   d.nombre||d.name||d.label||('Documento '+(i+1));
-        push(d.driveLink||p.url||raw,d.previewLink||p.preview||raw,lbl,d.mime||'',wf.fecha_respuesta||e._pqrs_respuesta_fecha||'',esAnexo?'Anexo de respuesta':'Respuesta oficial PQRSD');
-      });
-    }
+    let wfDocs=(wf&&Array.isArray(wf.documentos)?wf.documentos:[]).slice();
+    if(typeof _pqrsDeduplicarDocumentosRespuesta==='function')wfDocs=_pqrsDeduplicarDocumentosRespuesta(wfDocs);
+    wfDocs.forEach(function(d,i){
+      if(!d)return;
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
+      if(typeof _pqrsDocEsDefinitivoCierre==='function'){
+        if(!_pqrsDocEsDefinitivoCierre(d))return;
+      }else if(_pqrsDocEsBorradorInterno(d)&&!_pqrsDocEsAnexoRespuesta(d))return;
+      const raw=d.driveLink||d.previewLink||d.url||d.data||'';
+      if(!raw)return;
+      const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):{url:raw,preview:raw};
+      const esAnexo=_pqrsDocEsAnexoRespuesta(d);
+      const lbl=esAnexo?(_pqrsEtiquetaDocWf(d,wfDocs)||('Anexo '+(i+1))):
+                 d.tipo==='oficio_firmado'?'Oficio de respuesta notificado':
+                 d.tipo==='soporte_notificacion'||d.tipo==='soporte_respuesta'?'Soporte de envío (correo)':
+                 d.tipo==='correo'?'Soporte de envío por correo':
+                 (typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,wfDocs):null)||d.nombre||d.name||d.label||('Documento '+(i+1));
+      if(/^link\s*drive$/i.test(String(lbl||'').trim()))return;
+      push(d.driveLink||p.url||raw,d.previewLink||p.preview||raw,lbl,d.mime||'',wf.fecha_respuesta||e._pqrs_respuesta_fecha||'',esAnexo?'Anexo de respuesta':'Respuesta oficial PQRSD',d);
+    });
   }
   if(e._pqrs_respuesta_link&&!_pqrsDocEsBorradorInterno({url:e._pqrs_respuesta_link,label:'',driveEstado:''}))
-    push(e._pqrs_respuesta_link,e._pqrs_respuesta_link,'Respuesta PQRSD','',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD');
-  (e._pqrs_respuesta_links||[]).forEach((u,i)=>{
+    push(e._pqrs_respuesta_link,e._pqrs_respuesta_link,'Respuesta PQRSD','',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD',{url:e._pqrs_respuesta_link,tipo:'drive'});
+  (e._pqrs_respuesta_links||[]).forEach(function(u,i){
     if(u&&!_pqrsDocEsBorradorInterno({url:u,label:'',driveEstado:''}))
-      push(u,u,'Respuesta '+(i+1),'',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD');
+      push(u,u,'Respuesta '+(i+1),'',e._pqrs_respuesta_fecha,'Respuesta oficial PQRSD',{url:u,tipo:'drive'});
   });
   return docs;
 }
@@ -13031,6 +13181,7 @@ function collectDocsComparables(e,taskId,tDirect,opts){
   opts=opts||{};
   const docs=[],seen=new Set();
   const docUrlKey=function(d){
+    if(typeof _pqrsDocKey==='function')return _pqrsDocKey(d);
     return String((d&&(d.url||d.preview||d.driveLink||d.previewLink))||'').trim().toLowerCase();
   };
   const add=(d)=>{
@@ -13074,6 +13225,7 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       const wf=getPqrsWorkflow(exp);
       (wf.documentos||[]).forEach(function(d,i){
         if(!d)return;
+        if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
         const url=d.driveLink||d.previewLink||d.url||'';
         if(!url)return;
         const lbl=_pqrsEtiquetaDocWf(d,wf.documentos||[]);
@@ -13081,7 +13233,8 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         const esNot=d.tipo==='notificacion_soporte'||d.tipo==='soporte_notificacion'||d.tipo==='soporte_respuesta'
           ||d.notificado===true
           ||String(d.driveEstado||'').toLowerCase()==='revision_final'
-          ||/^documento notificado/i.test(String(d.nombre||d.label||''));
+          ||/^documento notificado/i.test(String(d.nombre||d.label||''))
+          ||/^soporte de env/i.test(String(d.nombre||d.label||''));
         const esFirm=!esNot&&(d.tipo==='oficio_firmado'
           ||String(d.driveEstado||'').toLowerCase()==='por_notificar'
           ||String(d.driveEstado||'').toLowerCase()==='firmado');
@@ -13145,6 +13298,8 @@ function collectDocsComparables(e,taskId,tDirect,opts){
     const pushSopComparable=function(s){
       const url=soporteUrlComparable(s);
       if(!url&&!s.local)return;
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
+      if(/^link\s*drive$/i.test(String(s.label||s.nombre||'').trim()))return;
       const esCorr=soporteEsPorCorregir(s);
       const esAn=soporteEsAnexoEntrega(s);
       const entregaActual=ultEntregaIds.has(s.id)&&!esCorr;
@@ -14696,31 +14851,30 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   }
   const runSubmit=function(driveArchivos){
     if(entregaDirecta&&esPqrs&&pq){
-      if(!pq.adj.links.length){
-        const t2=getTaskFromExp(e,taskId)||t;
-        const activo=getSoporteActivo(t2);
-        if(activo&&(activo.url||activo.preview)&&!activo.local)pq.adj.links=[activo.url||activo.preview];
-      }
-      const adjDocumentos=pq.adj.links.map(lnk=>({nombre:'Link Drive',driveLink:lnk,tipo:'link'}));
-      (driveArchivos||[]).forEach(function(da){
-        if(da&&da.driveLink&&!adjDocumentos.find(function(x){return x.driveLink===da.driveLink;})){
-          const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
-          adjDocumentos.push({
-            nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':'Documento de respuesta'),
-            driveLink:da.driveLink,
-            previewLink:da.previewLink||da.driveLink||'',
-            fileId:da.fileId||da.driveFileId||'',
-            tipo:esAnexo?'anexo_respuesta':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':'drive'),
-            es_anexo:esAnexo,
-            anexo_n:esAnexo?(da.anexo_n||null):null,
-            driveFilename:da.driveFilename||da.nombre||'',
-            driveEstado:'cerrado',
-            localBlob:da.localBlob||null,
-            localNombre:da.localNombre||da.nombre||'',
-            localMime:da.localMime||''
+      // No inventar «Link Drive» desde el soporte activo: eso duplicaba oficio/soporte en el rail y en archivos.
+      const adjDocumentos=typeof _pqrsBuildAdjDocumentosEntrega==='function'
+        ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos||[],{driveEstado:'cerrado'})
+        :(function(){
+          const out=[];
+          (driveArchivos||[]).forEach(function(da){
+            if(!da||!da.driveLink)return;
+            const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+            out.push({
+              nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':'Documento de respuesta'),
+              driveLink:da.driveLink,previewLink:da.previewLink||da.driveLink||'',
+              fileId:da.fileId||da.driveFileId||'',tipo:esAnexo?'anexo_respuesta':(pq.tipo===PQRS_WF_TIPO.OFICIO?'oficio_firmado':'drive'),
+              es_anexo:esAnexo,anexo_n:esAnexo?(da.anexo_n||null):null,driveFilename:da.driveFilename||da.nombre||'',
+              driveEstado:'cerrado',localBlob:da.localBlob||null,localNombre:da.localNombre||da.nombre||'',localMime:da.localMime||''
+            });
           });
-        }
-      });
+          return out;
+        })();
+      if(!adjDocumentos.length&&(pq.adj.links||[]).length){
+        (pq.adj.links||[]).forEach(function(lnk){
+          const u=String(lnk||'').trim();
+          if(u)adjDocumentos.push({nombre:'Enlace Drive',driveLink:u,tipo:'link',driveEstado:'cerrado'});
+        });
+      }
       const runCierreUi=function(){
         if(typeof aplicarPqrsEntregaDirecta==='function')aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt);
         try{
@@ -14774,29 +14928,32 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     }
     if(!enviarTaskPorVerificar(expId,taskId,adj.links,cmt,requiereLink,driveArchivos||[]))return;
     if(esPqrs&&pq){
-      if(!pq.adj.links.length){
-        const t2=getTaskFromExp(e,taskId)||t;
-        const activo=getSoporteActivo(t2);
-        if(activo&&(activo.url||activo.preview)&&!activo.local)pq.adj.links=[activo.url||activo.preview];
-      }
-      const adjDocumentos=pq.adj.links.map(lnk=>({nombre:'Link Drive',driveLink:lnk,tipo:'link'}));
-      // Include Drive-uploaded files with fileId for later renaming by NCA
-      (driveArchivos||[]).forEach(function(da){
-        if(da&&da.driveLink&&!adjDocumentos.find(function(x){return x.driveLink===da.driveLink;})){
-          const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
-          adjDocumentos.push({
-            nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):('Proyección de respuesta'),
-            driveLink:da.driveLink,
-            previewLink:da.previewLink||da.driveLink||'',
-            fileId:da.fileId||da.driveFileId||'',
-            tipo:esAnexo?'anexo_respuesta':'drive',
-            es_anexo:esAnexo,
-            anexo_n:esAnexo?(da.anexo_n||null):null,
-            driveFilename:da.driveFilename||da.nombre||'',
-            driveEstado:da.driveEstado||'revision'
+      // Misma regla: no crear «Link Drive» fantasma desde el soporte activo
+      const adjDocumentos=typeof _pqrsBuildAdjDocumentosEntrega==='function'
+        ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos||[],{driveEstado:'revision'})
+        :(function(){
+          const out=[];
+          (driveArchivos||[]).forEach(function(da){
+            if(!da||!da.driveLink)return;
+            const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+            out.push({
+              nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):'Proyección de respuesta',
+              driveLink:da.driveLink,previewLink:da.previewLink||da.driveLink||'',
+              fileId:da.fileId||da.driveFileId||'',tipo:esAnexo?'anexo_respuesta':'drive',
+              es_anexo:esAnexo,anexo_n:esAnexo?(da.anexo_n||null):null,driveFilename:da.driveFilename||da.nombre||'',
+              driveEstado:'revision',localBlob:da.localBlob||null,localNombre:da.localNombre||da.nombre||'',localMime:da.localMime||''
+            });
           });
-        }
-      });
+          return out;
+        })();
+      if(!adjDocumentos.length&&(pq.adj.links||[]).length){
+        (pq.adj.links||[]).forEach(function(lnk){
+          const u=String(lnk||'').trim();
+          if(u)adjDocumentos.push({nombre:'Enlace Drive',driveLink:u,tipo:'link',driveEstado:'revision'});
+        });
+      }
+      // Include Drive-uploaded files with fileId for later renaming by NCA
+      // (ya incluidos arriba vía _pqrsBuildAdjDocumentosEntrega)
       const canalFinal=pq.tipo===PQRS_WF_TIPO.INFORMATIVA?'':pq.canal;
       guardarPqrsRespuestaDatos(e,{fechaResp:pq.fechaResp,oficioExt:pq.oficioExt,cuerpo:pq.cuerpo,tipo:pq.tipo,canal:canalFinal,nota:cmt,adj:pq.adj,archivos:adjDocumentos,emailTo:pq.emailTo,emailCc:pq.emailCc,emailBcc:pq.emailBcc,emailSubject:pq.emailSubject,notificarPor:pq.notificarPor,reemplazarRevision:reemplazarPqrsEntrega,taskId:taskId},false);
       window._taskReviewReemplazarEntrega=false;
@@ -22428,26 +22585,23 @@ async function submitCrearPqrsDesdeActLibre(){
       }
     }
 
-    const adjDocumentos=(adj.links||[]).map(function(lnk){return{nombre:'Link Drive',driveLink:lnk,tipo:'link'};});
-    driveArchivos.forEach(function(da){
-      if(!da||!(da.driveLink||da.localBlob))return;
-      if(da.driveLink&&adjDocumentos.find(function(x){return x.driveLink===da.driveLink;}))return;
-      const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
-      adjDocumentos.push({
-        nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta'),
-        driveLink:da.driveLink||'',
-        previewLink:da.previewLink||da.driveLink||'',
-        fileId:da.fileId||da.driveFileId||'',
-        tipo:esAnexo?'anexo_respuesta':(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'oficio_firmado':'drive'),
-        es_anexo:esAnexo,
-        anexo_n:esAnexo?(da.anexo_n||null):null,
-        driveFilename:da.driveFilename||da.nombre||'',
-        driveEstado:'cerrado',
-        localBlob:da.localBlob||null,
-        localNombre:da.localNombre||da.nombre||'',
-        localMime:da.localMime||''
-      });
-    });
+    const adjDocumentos=typeof _pqrsBuildAdjDocumentosEntrega==='function'
+      ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos,{driveEstado:'cerrado'})
+      :(function(){
+        const out=[];
+        driveArchivos.forEach(function(da){
+          if(!da||!(da.driveLink||da.localBlob))return;
+          const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+          out.push({
+            nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta'),
+            driveLink:da.driveLink||'',previewLink:da.previewLink||da.driveLink||'',
+            fileId:da.fileId||da.driveFileId||'',tipo:esAnexo?'anexo_respuesta':(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'oficio_firmado':'drive'),
+            es_anexo:esAnexo,anexo_n:esAnexo?(da.anexo_n||null):null,driveFilename:da.driveFilename||da.nombre||'',
+            driveEstado:'cerrado',localBlob:da.localBlob||null,localNombre:da.localNombre||da.nombre||'',localMime:da.localMime||''
+          });
+        });
+        return out;
+      })();
 
     const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
     const TIPO_OFI_SEND=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';

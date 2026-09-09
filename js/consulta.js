@@ -390,15 +390,26 @@ function collectArchivosPqrsLinks(e){
   if(!e||!esPqrsSecretaria(e))return items;
   const soloPublico=typeof esModoCiudadano==='function'&&esModoCiudadano();
   const seen=new Set();
+  const keyOf=function(url){
+    const raw=String(url||'').trim();
+    if(!raw)return '';
+    if(typeof _pqrsDocKey==='function')return _pqrsDocKey({driveLink:raw,url:raw});
+    const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(raw):null;
+    return String((p&&(p.id||p.url))||raw).trim().toLowerCase();
+  };
   const push=(url,label,fecha,meta)=>{
     if(!url)return;
     if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url))return;
+    // Ocultar «Link Drive» genérico (duplicaba oficio/soporte)
+    if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(meta||{nombre:label,label:label,tipo:(meta&&meta.tipo)||''})){
+      if(meta&&meta.tipo==='link')return;
+      if(/^link\s*drive$/i.test(String(label||'').trim()))return;
+    }
     if(soloPublico&&meta&&typeof _pqrsDocEsVisibleCiudadano==='function'&&!_pqrsDocEsVisibleCiudadano(meta,e,{tipo:meta._tipoPub||'respuesta'}))return;
-    const p=parseDrivePreviewUrl(url);
-    const key=String(p.url||url||'').trim();
+    const key=keyOf(url);
     if(!key||seen.has(key))return;
     seen.add(key);
-    items.push({exp:e._exp,taskId:'',taskDesc:'PQRSD',label:label||'Documento PQRSD',url:p.url||url,local:false,mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||'',version:''});
+    items.push({exp:e._exp,taskId:'',taskDesc:'PQRSD',label:label||'Documento PQRSD',url:(typeof parseDrivePreviewUrl==='function'?(parseDrivePreviewUrl(url).url||url):url),local:false,mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||'',version:''});
   };
   push(e._pqrs_solicitud_link,'Solicitud PQRSD',e._fecha_solicitud||e._fecha,{_tipoPub:'solicitud'});
   (e._pqrs_gmail_attachments||[]).forEach(function(att){
@@ -411,9 +422,10 @@ function collectArchivosPqrsLinks(e){
     (e._pqrs_respuesta_soportes||[]).forEach((s,i)=>{
       if(soloPublico&&typeof _pqrsDocEsVisibleCiudadano==='function'&&!_pqrsDocEsVisibleCiudadano(s,e,{tipo:'respuesta'}))return;
       if(!soloPublico&&typeof _pqrsDocEsBorradorInterno==='function'&&typeof esUrlCarpetaDrive==='function'){
-        // staff: still skip folder links only
         if(esUrlCarpetaDrive(s.url||s.preview))return;
       }
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
+      if(/^link\s*drive$/i.test(String(s.label||'').trim()))return;
       const lbl=soloPublico?String(s.label||('Respuesta '+(i+1))).replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim():(s.label||('Respuesta '+(i+1)));
       push(s.url||s.preview,lbl||('Respuesta '+(i+1)),e._pqrs_respuesta_fecha,Object.assign({},s,{_tipoPub:'respuesta'}));
     });
@@ -428,18 +440,24 @@ function collectArchivosPqrsLinks(e){
   }
   // Workflow docs: solo para staff (comparar versiones); ciudadano no ve borradores de corrección/firma
   if(!soloPublico&&typeof getPqrsWorkflow==='function'){
+    let wfDocs=(getPqrsWorkflow(e).documentos||[]).slice();
+    if(typeof _pqrsDeduplicarDocumentosRespuesta==='function')wfDocs=_pqrsDeduplicarDocumentosRespuesta(wfDocs);
     const wf=getPqrsWorkflow(e);
-    (wf.documentos||[]).forEach(function(d,i){
+    wfDocs.forEach(function(d,i){
       if(!d)return;
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
       const url=d.driveLink||d.previewLink||'';
       if(!url||(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url)))return;
-      const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d):(d.nombre||('Documento '+(i+1)));
+      const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,wfDocs):(d.nombre||('Documento '+(i+1)));
       push(url,lbl,d.entregado_en||wf.fecha_respuesta||e._pqrs_respuesta_fecha,d);
     });
   }else if(soloPublico&&typeof getPqrsWorkflow==='function'&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){
     const wf=getPqrsWorkflow(e);
-    (wf.documentos||[]).forEach(function(d,i){
+    let wfDocs=(wf.documentos||[]).slice();
+    if(typeof _pqrsDeduplicarDocumentosRespuesta==='function')wfDocs=_pqrsDeduplicarDocumentosRespuesta(wfDocs);
+    wfDocs.forEach(function(d,i){
       if(!d||typeof _pqrsDocEsVisibleCiudadano!=='function'||!_pqrsDocEsVisibleCiudadano(d,e,{tipo:'respuesta'}))return;
+      if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
       const url=d.driveLink||d.previewLink||'';
       push(url,d.nombre||('Respuesta '+(i+1)),wf.fecha_respuesta||e._pqrs_respuesta_fecha,Object.assign({},d,{_tipoPub:'respuesta'}));
     });

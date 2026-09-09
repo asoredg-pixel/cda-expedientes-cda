@@ -3206,26 +3206,23 @@ async function submitEntregaOficinaPqrsMigracion(){
       }
     }
 
-    const adjDocumentos=(adj.links||[]).map(function(lnk){return{nombre:'Link Drive',driveLink:lnk,tipo:'link'};});
-    driveArchivos.forEach(function(da){
-      if(!da||!(da.driveLink||da.localBlob))return;
-      if(da.driveLink&&adjDocumentos.find(function(x){return x.driveLink===da.driveLink;}))return;
-      const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
-      adjDocumentos.push({
-        nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta'),
-        driveLink:da.driveLink||'',
-        previewLink:da.previewLink||da.driveLink||'',
-        fileId:da.fileId||da.driveFileId||'',
-        tipo:esAnexo?'anexo_respuesta':(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'oficio_firmado':'drive'),
-        es_anexo:esAnexo,
-        anexo_n:esAnexo?(da.anexo_n||null):null,
-        driveFilename:da.driveFilename||da.nombre||'',
-        driveEstado:'cerrado',
-        localBlob:da.localBlob||null,
-        localNombre:da.localNombre||da.nombre||'',
-        localMime:da.localMime||''
-      });
-    });
+    const adjDocumentos=typeof _pqrsBuildAdjDocumentosEntrega==='function'
+      ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos,{driveEstado:'cerrado'})
+      :(function(){
+        const out=[];
+        driveArchivos.forEach(function(da){
+          if(!da||!(da.driveLink||da.localBlob))return;
+          const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
+          out.push({
+            nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'Oficio firmado':'Documento de respuesta'),
+            driveLink:da.driveLink||'',previewLink:da.previewLink||da.driveLink||'',
+            fileId:da.fileId||da.driveFileId||'',tipo:esAnexo?'anexo_respuesta':(pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado')?'oficio_firmado':'drive'),
+            es_anexo:esAnexo,anexo_n:esAnexo?(da.anexo_n||null):null,driveFilename:da.driveFilename||da.nombre||'',
+            driveEstado:'cerrado',localBlob:da.localBlob||null,localNombre:da.localNombre||da.nombre||'',localMime:da.localMime||''
+          });
+        });
+        return out;
+      })();
 
     // Mensaje / oficio con correo: notificar ANTES de cerrar
     const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';

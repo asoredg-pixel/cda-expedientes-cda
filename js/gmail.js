@@ -5792,9 +5792,19 @@ async function submitPqrsRespuestaGmailVinculo() {
     }
   }
   (adj.links || []).forEach(function(lnk) {
-    documentos.push({ nombre: 'Link Drive', driveLink: lnk, tipo: 'link' });
+    const u = String(lnk || '').trim();
+    if (!u) return;
+    const already = documentos.some(function(d) {
+      return typeof _pqrsDocKey === 'function' && _pqrsDocKey(d) === _pqrsDocKey({ driveLink: u });
+    });
+    if (already) return;
+    documentos.push({ nombre: 'Enlace Drive', driveLink: u, tipo: 'link' });
   });
-
+  if (typeof _pqrsDeduplicarDocumentosRespuesta === 'function') {
+    const dedup = _pqrsDeduplicarDocumentosRespuesta(documentos);
+    documentos.length = 0;
+    dedup.forEach(function(d) { documentos.push(d); });
+  }
   if (btn) btn.textContent = 'Generando soporte…';
   const soporteRes = typeof _pqrsSubirSoporteRespuesta === 'function'
     ? await _pqrsSubirSoporteRespuesta(e, { fechaResp: fecha, cuerpo, documentos })
