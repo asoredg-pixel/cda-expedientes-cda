@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260909a"></script>
+<script src="js/constants.js?v=20260909b"></script>
 <script src="js/utils.js?v=20260906a"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260908n"></script>
@@ -38,7 +38,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260909a"></script>
+<script src="js/gmail.js?v=20260909b"></script>
 <script src="js/sst-file-upload.js?v=20260909a"></script>
 <script src="js/pqrs.js?v=20260909a"></script>
 <script src="js/consulta.js?v=20260908q"></script>
@@ -821,7 +821,7 @@
         <div class="fg" style="margin-bottom:10px">
           <div class="fld"><label>Nombre del solicitante<span class="req-star">*</span></label><input type="text" id="sec-pn-nombre" placeholder="Buscar por nombre…" oninput="filtrarPersonasSug(this,'sec-pn','nombre')" onfocus="filtrarPersonasSug(this,'sec-pn','nombre')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
           <div class="fld"><label>Identificación</label><input type="text" id="sec-pn-identificacion" placeholder="Buscar por identificación…" inputmode="numeric" oninput="onIdentMilesInput(this);filtrarPersonasSug(this,'sec-pn','identificacion')" onfocus="filtrarPersonasSug(this,'sec-pn','identificacion')" onblur="setTimeout(()=>hidePersonSug(),180)"></div>
-          <div class="fld"><label>Correo</label><input type="text" id="sec-pn-correo" inputmode="email" autocomplete="email" placeholder="correo@ejemplo.com"></div>
+          <div class="fld"><label>Correo</label><input type="email" id="sec-pn-correo" placeholder="correo@ejemplo.com" autocomplete="email"></div>
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pn-telefono"></div>
         </div>
       </div>

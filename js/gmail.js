@@ -3830,14 +3830,20 @@ function prePopularFormDesdeEmail(msg) {
     el.disabled = false;
     el.value = v;
   };
-  // Limpiar solicitante previo para no mezclar con otro correo / catálogo
+  // Limpiar solicitante previo para no mezclar con otro correo / catálogo.
+  // Correo NO se prediligencia: el de recepción suele no ser el de respuesta;
+  // la secretaría debe digitarlo (campo estilo chips Gmail).
   ['sec-pn-nombre', 'sec-pn-correo', 'sec-pn-telefono'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) {
       el.disabled = false;
       el.value = '';
+      if (id === 'sec-pn-correo' && typeof sstEmailChipsRefresh === 'function') {
+        try { sstEmailChipsRefresh(el); } catch (eCh) {}
+      }
     }
   });
+  window._gmailPrefillCorreo = '';
   setv('sec-pn-nombre', from.name || '');
   setv('sec-asunto', subject);
   if (snippet) setv('sec-detalle', snippet.slice(0, 300));
@@ -3855,14 +3861,6 @@ function prePopularFormDesdeEmail(msg) {
     } catch (e) {}
   }
 
-  // Correo del remitente con el que llegó a la bandeja (From → Reply-To → firma)
-  let correoPrefill = from.email || '';
-  if (!correoPrefill) {
-    const fromDetalle = gmailExtractEmailsFromText(snippet || (document.getElementById('sec-detalle') || {}).value || '');
-    if (fromDetalle.length) correoPrefill = fromDetalle[0];
-  }
-  gmailSetSecPnCorreo(correoPrefill);
-  window._gmailPrefillCorreo = correoPrefill;
   if (from.phone) setv('sec-pn-telefono', from.phone);
 
   // Store message ID for saving with the expediente
@@ -3889,7 +3887,7 @@ function prePopularFormDesdeEmail(msg) {
       attachmentId: a.attachmentId || ''
     }));
     window._gmailPendingEmailData = {
-      remitente: _from.name ? (_from.name + ' <' + _from.email + '>') : (_from.email || correoPrefill || ''),
+      remitente: _from.name ? (_from.name + ' <' + (_from.email || '') + '>') : (_from.email || ''),
       fecha: gmailGetHeader(_h, 'date') || '',
       asunto: gmailGetHeader(_h, 'subject') || '',
       cuerpoHtml: _bodyHtml,
@@ -3901,23 +3899,9 @@ function prePopularFormDesdeEmail(msg) {
   }
 }
 
-function gmailReafirmarCorreoRadicacion() {
-  var correo = String(window._gmailPrefillCorreo || '').trim();
-  if (!correo && _gmailCurrentMsg && typeof gmailRemitenteParaRadicar === 'function') {
-    var rem0 = gmailRemitenteParaRadicar(_gmailCurrentMsg);
-    correo = rem0 && rem0.email ? rem0.email : '';
-  }
-  if (!correo) {
-    var det = document.getElementById('sec-detalle');
-    var found = gmailExtractEmailsFromText(det ? det.value : '');
-    if (found.length) correo = found[0];
-  }
-  if (correo) gmailSetSecPnCorreo(correo);
-}
-
 async function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
-  // Asegurar mensaje completo (From + cuerpo) antes de prediligenciar
+  // Asegurar mensaje completo (nombre/asunto/cuerpo) antes de prediligenciar
   try {
     var needsFull = !_gmailCurrentMsg.payload || !(_gmailCurrentMsg.payload.headers || []).length;
     if (!needsFull) {
@@ -3936,21 +3920,30 @@ async function gmailPreRadicarPqrs() {
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
   activarSplitRadicacionEmail(_gmailCurrentMsg);
-  // Reafirmar correo tras toggles/split (antes se vaciaba por carrera con la UI)
-  gmailReafirmarCorreoRadicacion();
-  setTimeout(gmailReafirmarCorreoRadicacion, 0);
-  setTimeout(gmailReafirmarCorreoRadicacion, 120);
-  if (window._gmailPrefillCorreo || (document.getElementById('sec-pn-telefono') || {}).value) {
-    var rem = typeof gmailRemitenteParaRadicar === 'function' ? gmailRemitenteParaRadicar(_gmailCurrentMsg) : null;
-    if (rem && rem.phone) {
-      var telEl = document.getElementById('sec-pn-telefono');
-      if (telEl && !String(telEl.value || '').trim()) {
-        telEl.disabled = false;
-        telEl.value = rem.phone;
-      }
+  // Correo queda vacío a propósito: digitar el de respuesta (no el de recepción)
+  setTimeout(function() {
+    var correoEl = document.getElementById('sec-pn-correo');
+    if (!correoEl) return;
+    correoEl.disabled = false;
+    correoEl.value = '';
+    if (typeof sstEmailChipsRefresh === 'function') {
+      try { sstEmailChipsRefresh(correoEl); } catch (eC) {}
+    }
+    try {
+      var wrap = correoEl.closest && correoEl.closest('.email-chips');
+      if (wrap && wrap._sstChips && wrap._sstChips.edit) wrap._sstChips.edit.focus();
+      else correoEl.focus();
+    } catch (eF) {}
+  }, 80);
+  var rem = typeof gmailRemitenteParaRadicar === 'function' ? gmailRemitenteParaRadicar(_gmailCurrentMsg) : null;
+  if (rem && rem.phone) {
+    var telEl = document.getElementById('sec-pn-telefono');
+    if (telEl && !String(telEl.value || '').trim()) {
+      telEl.disabled = false;
+      telEl.value = rem.phone;
     }
   }
-  notif('Formulario pre-llenado. Revise el correo a la izquierda y complete los datos faltantes.', 'ok');
+  notif('Formulario pre-llenado. Digite el correo de respuesta del solicitante (no se prediligencia).', 'ok');
 }
 
 // Abre el visor inline de adjuntos dentro del panel izquierdo del split
