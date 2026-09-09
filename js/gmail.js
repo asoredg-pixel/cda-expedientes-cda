@@ -1046,24 +1046,11 @@ function gmailExtractEmailAddress(headerVal) {
   const bare = s.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
   return bare ? bare[0].toLowerCase() : '';
 }
-/** Correos de la entidad / bandeja — no sirven como correo del solicitante. */
-function gmailEsCorreoInstitucional(email) {
+/** Correo de la bandeja propia (cdaguaviare1) — no es el del solicitante. */
+function gmailEsCorreoBandejaPropia(email) {
   const e = String(email || '').trim().toLowerCase();
-  if (!e || e.indexOf('@') < 0) return false;
-  const known = [
-    'cdaguaviare1@gmail.com',
-    'cdaguaviare@gmail.com',
-    typeof ADMIN_GMAIL !== 'undefined' ? String(ADMIN_GMAIL).toLowerCase() : 'ncacdaguaviare@gmail.com'
-  ];
-  if (known.indexOf(e) >= 0) return true;
-  if (/^cda(guaviare|guainia|vaupes)/i.test(e.split('@')[0] || '')) return true;
-  return false;
-}
-/** Nombre de display institucional (From de la bandeja propia). */
-function gmailEsNombreInstitucional(name) {
-  const n = String(name || '').trim().toLowerCase();
-  if (!n) return false;
-  return /corporaci[oó]n\s+cda|cda\s*dsgv|cdaguaviare|secretaria\s+general/.test(n);
+  if (!e) return false;
+  return e === 'cdaguaviare1@gmail.com' || e === 'cdaguaviare@gmail.com';
 }
 /** Lista de correos únicos en un texto (cuerpo / firma). */
 function gmailExtractEmailsFromText(text) {
@@ -1075,13 +1062,12 @@ function gmailExtractEmailsFromText(text) {
   let m;
   while ((m = re.exec(s)) !== null) {
     const e = String(m[0] || '').toLowerCase();
-    if (!e || seen[e]) continue;
+    if (!e || seen[e] || gmailEsCorreoBandejaPropia(e)) continue;
     seen[e] = true;
     out.push(e);
   }
   return out;
 }
-/** Teléfono colombiano típico en firma (7–10 dígitos, con o sin espacios). */
 function gmailExtractPhoneFromText(text) {
   const s = String(text || '').replace(/\u00a0/g, ' ');
   if (!s) return '';
@@ -1091,21 +1077,32 @@ function gmailExtractPhoneFromText(text) {
 }
 /**
  * Remitente para prediligenciar radicación.
- * Prioridad correo: Reply-To (no institucional) → From (no institucional) → primer correo del cuerpo/firma.
- * No usa la bandeja institucional (cdaguaviare1) como correo del ciudadano.
+ * Usa el correo con el que llegó el mensaje a la bandeja (From), luego Reply-To / Sender,
+ * y si falta (o es la bandeja propia) el primer correo del cuerpo/firma.
+ * La secretaría puede ajustarlo después en el formulario.
  */
 function gmailRemitenteParaRadicar(msg) {
   const headers = (msg && msg.payload && msg.payload.headers) || [];
   const fromHdr = gmailGetHeader(headers, 'from');
   const replyHdr = gmailGetHeader(headers, 'reply-to');
+  const senderHdr = gmailGetHeader(headers, 'sender');
+  const returnHdr = gmailGetHeader(headers, 'return-path');
   const parsed = gmailParseFrom(fromHdr);
-  const replyEmail = gmailExtractEmailAddress(replyHdr);
   const fromEmail = gmailExtractEmailAddress(fromHdr) || parsed.email || '';
+  const replyEmail = gmailExtractEmailAddress(replyHdr);
+  const senderEmail = gmailExtractEmailAddress(senderHdr);
+  const returnEmail = gmailExtractEmailAddress(returnHdr);
 
-  let email = '';
-  if (replyEmail && !gmailEsCorreoInstitucional(replyEmail)) email = replyEmail;
-  else if (fromEmail && !gmailEsCorreoInstitucional(fromEmail)) email = fromEmail;
-  else {
+  function pickUsable(em) {
+    const e = String(em || '').trim().toLowerCase();
+    if (!e || e.indexOf('@') < 0) return '';
+    if (gmailEsCorreoBandejaPropia(e)) return '';
+    return e;
+  }
+
+  let email = pickUsable(fromEmail) || pickUsable(replyEmail) || pickUsable(senderEmail) || pickUsable(returnEmail);
+
+  if (!email) {
     const parts = typeof gmailExtractParts === 'function' ? gmailExtractParts(msg.payload) : {};
     const blob = [
       parts.textPlain || '',
@@ -1113,17 +1110,11 @@ function gmailRemitenteParaRadicar(msg) {
       msg && msg.snippet ? msg.snippet : ''
     ].join('\n');
     const found = gmailExtractEmailsFromText(blob);
-    for (let i = 0; i < found.length; i++) {
-      if (!gmailEsCorreoInstitucional(found[i])) {
-        email = found[i];
-        break;
-      }
-    }
+    if (found.length) email = found[0];
   }
 
   let name = parsed.name || '';
-  if (gmailEsNombreInstitucional(name) || (fromEmail && gmailEsCorreoInstitucional(fromEmail) && !replyEmail)) {
-    // From es la entidad: no usar "Corporación CDA…" como solicitante
+  if (gmailEsCorreoBandejaPropia(fromEmail) || /corporaci[oó]n\s+cda|cda\s*dsgv/i.test(name)) {
     name = '';
   }
 
@@ -1136,9 +1127,24 @@ function gmailRemitenteParaRadicar(msg) {
 
   return { name: name, email: email, phone: phone };
 }
+/** Escribe el correo en el formulario de radicación (campo editable). */
+function gmailSetSecPnCorreo(email) {
+  const el = document.getElementById('sec-pn-correo');
+  if (!el) return false;
+  const v = String(email || '').trim().toLowerCase();
+  el.disabled = false;
+  el.readOnly = false;
+  el.value = v;
+  try {
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  } catch (eEv) {}
+  return !!v;
+}
 window.gmailExtractEmailAddress = gmailExtractEmailAddress;
-window.gmailEsCorreoInstitucional = gmailEsCorreoInstitucional;
+window.gmailEsCorreoBandejaPropia = gmailEsCorreoBandejaPropia;
 window.gmailRemitenteParaRadicar = gmailRemitenteParaRadicar;
+window.gmailSetSecPnCorreo = gmailSetSecPnCorreo;
 
 function gmailFmtDate(dateStr) {
   if (!dateStr) return '';
@@ -3849,12 +3855,14 @@ function prePopularFormDesdeEmail(msg) {
     } catch (e) {}
   }
 
-  // Correo del ciudadano (From/Reply-To o firma del cuerpo); nunca la bandeja institucional
-  const correoEl = document.getElementById('sec-pn-correo');
-  if (correoEl) {
-    correoEl.disabled = false;
-    correoEl.value = from.email || '';
+  // Correo del remitente con el que llegó a la bandeja (From → Reply-To → firma)
+  let correoPrefill = from.email || '';
+  if (!correoPrefill) {
+    const fromDetalle = gmailExtractEmailsFromText(snippet || (document.getElementById('sec-detalle') || {}).value || '');
+    if (fromDetalle.length) correoPrefill = fromDetalle[0];
   }
+  gmailSetSecPnCorreo(correoPrefill);
+  window._gmailPrefillCorreo = correoPrefill;
   if (from.phone) setv('sec-pn-telefono', from.phone);
 
   // Store message ID for saving with the expediente
@@ -3881,7 +3889,7 @@ function prePopularFormDesdeEmail(msg) {
       attachmentId: a.attachmentId || ''
     }));
     window._gmailPendingEmailData = {
-      remitente: _from.name ? (_from.name + ' <' + _from.email + '>') : (_from.email || ''),
+      remitente: _from.name ? (_from.name + ' <' + _from.email + '>') : (_from.email || correoPrefill || ''),
       fecha: gmailGetHeader(_h, 'date') || '',
       asunto: gmailGetHeader(_h, 'subject') || '',
       cuerpoHtml: _bodyHtml,
@@ -3893,8 +3901,34 @@ function prePopularFormDesdeEmail(msg) {
   }
 }
 
-function gmailPreRadicarPqrs() {
+function gmailReafirmarCorreoRadicacion() {
+  var correo = String(window._gmailPrefillCorreo || '').trim();
+  if (!correo && _gmailCurrentMsg && typeof gmailRemitenteParaRadicar === 'function') {
+    var rem0 = gmailRemitenteParaRadicar(_gmailCurrentMsg);
+    correo = rem0 && rem0.email ? rem0.email : '';
+  }
+  if (!correo) {
+    var det = document.getElementById('sec-detalle');
+    var found = gmailExtractEmailsFromText(det ? det.value : '');
+    if (found.length) correo = found[0];
+  }
+  if (correo) gmailSetSecPnCorreo(correo);
+}
+
+async function gmailPreRadicarPqrs() {
   if (!_gmailCurrentMsg) return;
+  // Asegurar mensaje completo (From + cuerpo) antes de prediligenciar
+  try {
+    var needsFull = !_gmailCurrentMsg.payload || !(_gmailCurrentMsg.payload.headers || []).length;
+    if (!needsFull) {
+      var partsChk = typeof gmailExtractParts === 'function' ? gmailExtractParts(_gmailCurrentMsg.payload) : {};
+      if (!partsChk.textPlain && !partsChk.textHtml && !_gmailCurrentMsg.snippet) needsFull = true;
+    }
+    if (needsFull && typeof _gmailFetchMessageFull === 'function') {
+      var fullMsg = await _gmailFetchMessageFull(_gmailCurrentMsg.id);
+      if (fullMsg) _gmailCurrentMsg = fullMsg;
+    }
+  } catch (eFull) {}
   prePopularFormDesdeEmail(_gmailCurrentMsg);
   if (typeof gmailCloseAttViewer === 'function') gmailCloseAttViewer();
   var panelBody = document.getElementById('gmail-panel-body');
@@ -3902,16 +3936,12 @@ function gmailPreRadicarPqrs() {
   if (panelBody) panelBody.style.display = 'none';
   if (toggleBtn) toggleBtn.textContent = 'Ver bandeja';
   activarSplitRadicacionEmail(_gmailCurrentMsg);
-  // Reafirmar correo/tel tras abrir el split (evita que toggles/UI lo dejen vacío)
-  try {
-    var rem = typeof gmailRemitenteParaRadicar === 'function'
-      ? gmailRemitenteParaRadicar(_gmailCurrentMsg)
-      : null;
-    var correoEl = document.getElementById('sec-pn-correo');
-    if (correoEl && rem && rem.email) {
-      correoEl.disabled = false;
-      correoEl.value = rem.email;
-    }
+  // Reafirmar correo tras toggles/split (antes se vaciaba por carrera con la UI)
+  gmailReafirmarCorreoRadicacion();
+  setTimeout(gmailReafirmarCorreoRadicacion, 0);
+  setTimeout(gmailReafirmarCorreoRadicacion, 120);
+  if (window._gmailPrefillCorreo || (document.getElementById('sec-pn-telefono') || {}).value) {
+    var rem = typeof gmailRemitenteParaRadicar === 'function' ? gmailRemitenteParaRadicar(_gmailCurrentMsg) : null;
     if (rem && rem.phone) {
       var telEl = document.getElementById('sec-pn-telefono');
       if (telEl && !String(telEl.value || '').trim()) {
@@ -3919,7 +3949,7 @@ function gmailPreRadicarPqrs() {
         telEl.value = rem.phone;
       }
     }
-  } catch (errMail) {}
+  }
   notif('Formulario pre-llenado. Revise el correo a la izquierda y complete los datos faltantes.', 'ok');
 }
 
