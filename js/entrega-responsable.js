@@ -679,6 +679,16 @@ function syncEntregaLibreInteresadoUi(){
   }
   window._entregaLibreTipoPrev=entregaLibreIntTipo();
 }
+function entregaLibreCorreoOnInput(){
+  const cb=document.getElementById('entrega-notif-correo');
+  if(!(cb&&cb.checked))return;
+  const toEl=document.getElementById('entrega-notif-email-to');
+  if(!toEl||String(toEl.value||'').trim())return;
+  if(typeof entregaNotifCorreosDefault==='function'){
+    toEl.value=entregaNotifCorreosDefault(null,{sinExpediente:true})||'';
+    if(typeof sstEmailChipsRefresh==='function')sstEmailChipsRefresh(toEl);
+  }
+}
 
 function setEntregaLibreIntTipo(tipo){
   const val=tipo==='juridica'?'juridica':'natural';
@@ -788,7 +798,7 @@ function htmlEntregaLibreInteresadoBox(){
       '<div class="fld"><label>Nombre <span style="color:var(--rd)">*</span></label><div style="position:relative">'+
         '<input type="text" id="entrega-libre-int-nombre"'+sugNom+' placeholder="Buscar por nombre…" style="'+inpStyle+'">'+
         '<div id="entrega-libre-int-nombre-sug" class="entrega-resp-sug" style="display:none"></div></div></div>'+
-      '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo" style="'+inpStyle+'"></div>'+
+      '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo" style="'+inpStyle+'" oninput="entregaLibreCorreoOnInput()"></div>'+
       '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono" style="'+inpStyle+'"></div>'+
     '</div></div>'+
     '<div id="entrega-libre-jur-box" style="display:none">'+
@@ -797,7 +807,7 @@ function htmlEntregaLibreInteresadoBox(){
           '<input type="text" id="entrega-libre-int-empresa"'+sugEmp+' placeholder="Buscar entidad…" style="'+inpStyle+'">'+
           '<div id="entrega-libre-int-empresa-sug" class="entrega-resp-sug" style="display:none"></div></div></div>'+
         '<div class="fld"><label>NIT</label>'+(typeof htmlNitConDvField==='function'?htmlNitConDvField('entrega-libre-int-nit',{style:inpStyle,placeholder:'NIT'}):'<input type="text" id="entrega-libre-int-nit" style="'+inpStyle+'">')+'</div>'+
-        '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo-j" style="'+inpStyle+'"></div>'+
+        '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo-j" style="'+inpStyle+'" oninput="entregaLibreCorreoOnInput()"></div>'+
         '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono-j" style="'+inpStyle+'"></div>'+
       '</div>'+
       '<div class="slbl" style="margin:10px 0 6px">Persona a quien va dirigido el oficio</div><div class="fg">'+
@@ -861,16 +871,24 @@ function applyEntregaLibreInteresadoToTask(t,datos){
     const emp=String(datos._pj_empresa||'').trim();
     const rep=String(datos._pj_rep_nombre||'').trim();
     t.interesadoNombre=emp?(rep?(emp+' · '+rep):emp):rep;
+    t.interesadoCorreo=String(datos._pj_correo||'').trim();
     return;
   }
   t.interesadoNombre=String(datos._pn_nombre||'').trim();
+  t.interesadoCorreo=String(datos._pn_correo||'').trim();
 }
 
 function resolveActividadRequiereOficio(nombreAct,deptoId){
   const nom=String(nombreAct||'').trim();
   if(!nom)return false;
   const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(deptoId):(typeof cfgFor==='function'?cfgFor(deptoId):null);
-  return !!(cfgAct&&cfgAct.actOficioMap&&cfgAct.actOficioMap[nom]);
+  const map=cfgAct&&cfgAct.actOficioMap;
+  if(!map||typeof map!=='object')return false;
+  if(map[nom])return true;
+  const low=nom.toLowerCase();
+  return Object.keys(map).some(function(k){
+    return String(k||'').trim().toLowerCase()===low&&!!map[k];
+  });
 }
 
 function entregaRespClearOficioError(){
@@ -930,10 +948,10 @@ function syncEntregaRespOficioUi(){
   const wrap=document.getElementById('entrega-resp-oficio-wrap');
   if(!wrap)return;
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
-  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const esPqrs=!!document.getElementById('pqrs-entrega-resp-oficio');
-  // Evitar duplicar N° oficio cuando el formulario de Oficio de requerimiento ya lo pide
-  const show=resolveActividadRequiereOficio(act)&&!esPqrs&&!esActividadOficioRequerimiento(act);
+  // Evitar duplicar N° oficio solo si el bloque de Oficio de requerimiento ya está en el DOM
+  const ofiReqUi=!!document.getElementById('entrega-ofi-req-oficio');
+  const show=resolveActividadRequiereOficio(act)&&!esPqrs&&!ofiReqUi;
   wrap.style.display=show?'':'none';
   const req=document.getElementById('entrega-resp-oficio-req');
   if(req)req.style.display=show?'':'none';
@@ -945,6 +963,7 @@ function syncEntregaRespLibreUi(){
   if(box)box.style.display=libre?'':'none';
   if(libre&&typeof syncEntregaLibreInteresadoUi==='function')syncEntregaLibreInteresadoUi();
   syncEntregaRespOficioUi();
+  if(typeof syncEntregaRespNotifCorreoUi==='function')syncEntregaRespNotifCorreoUi();
 }
 
 function syncEntregaRespInfractorCard(idx){
@@ -1455,11 +1474,12 @@ function syncEntregaRespNotifCorreoUi(){
   const esPqrs=pqrsNuevo||(typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs());
   if(esPqrs){box.style.display='none';box.innerHTML='';return;}
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
-  if(typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(act)){
+  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  // Con expediente, Oficio de requerimiento trae su propio checkbox; en libre usamos el genérico
+  if(!libre&&typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(act)){
     box.style.display='none';box.innerHTML='';
     return;
   }
-  const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
   const eSel=!libre&&!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
@@ -3030,6 +3050,7 @@ window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
 window.syncEntregaRespAltaFormPorTramite=syncEntregaRespAltaFormPorTramite;
 window.syncEntregaRespLibreUi=syncEntregaRespLibreUi;
 window.syncEntregaLibreInteresadoUi=syncEntregaLibreInteresadoUi;
+window.entregaLibreCorreoOnInput=entregaLibreCorreoOnInput;
 window.setEntregaLibreIntTipo=setEntregaLibreIntTipo;
 window.entregaLibreIntTipo=entregaLibreIntTipo;
 window.syncEntregaRespOficioUi=syncEntregaRespOficioUi;

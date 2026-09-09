@@ -16715,6 +16715,37 @@ function renderNcaDecisionFormHtml(expId,e,wf,opts){
     '<button type="button" class="btn bsm bd2" onclick="ncaRechazarRespuesta(\''+escAttr(expId)+'\')">↩ Devolver</button>'+
     '</div>';
 }
+/** Por revisar · actividad sin expediente: N° oficio + correo prediligenciado en la entrega. */
+function renderActLibreNotifPrediligenciadaHtml(t){
+  if(!t||!t.sinExpediente)return'';
+  const wf=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
+  const oficio=String(t.oficio||t.nro_oficio||t._oficio||t.oficioNumero||'').trim();
+  const canal=String(wf.canal||'').trim().toLowerCase();
+  const notifOn=t.notifCorreoEntrega===true||wf.notif_correo_entrega===true
+    ||canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO)
+    ||!!String(wf.email_to||'').trim();
+  if(!oficio&&!notifOn)return'';
+  let h='<div style="margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
+  h+='<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px">Prediligenciado en la entrega</div>';
+  if(oficio)h+='<div style="font-size:12px;margin-bottom:6px">N° de oficio: <strong>'+escAttr(oficio)+'</strong></div>';
+  if(notifOn){
+    h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Se notificará por correo electrónico</div>';
+    const to=String(wf.email_to||'').trim();
+    const cc=String(wf.email_cc||'').trim();
+    const bcc=String(wf.email_bcc||'').trim();
+    const subj=String(wf.email_subject||wf.asunto||'').trim();
+    const cuerpo=String(wf.cuerpo||wf.email_body||'').trim();
+    if(to)h+='<div style="font-size:12px;margin-bottom:4px"><span style="color:var(--tx3)">Para:</span> '+escAttr(to)+'</div>';
+    if(cc)h+='<div style="font-size:12px;margin-bottom:4px"><span style="color:var(--tx3)">Cc:</span> '+escAttr(cc)+'</div>';
+    if(bcc)h+='<div style="font-size:12px;margin-bottom:4px"><span style="color:var(--tx3)">Cco:</span> '+escAttr(bcc)+'</div>';
+    if(subj)h+='<div style="font-size:12px;margin-bottom:4px"><span style="color:var(--tx3)">Asunto:</span> '+escAttr(subj)+'</div>';
+    if(cuerpo)h+='<div style="font-size:12px;white-space:pre-wrap;padding:6px 8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);max-height:160px;overflow:auto;margin-top:4px;line-height:1.45">'+escAttr(cuerpo)+'</div>';
+    else if(!to)h+='<div style="font-size:11px;color:var(--or)">Marcado para notificar por correo (sin destinatarios aún).</div>';
+  }
+  h+='</div>';
+  return h;
+}
+window.renderActLibreNotifPrediligenciadaHtml=renderActLibreNotifPrediligenciadaHtml;
 function renderTaskVerifyBarHtml(expId,taskId,t){
   const e=getExpById(expId);
   const sol=getTaskSolicitudPendiente(t);
@@ -16833,6 +16864,8 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
     const wfLibre=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
     h+=_pqrsOpcionesNotificadorHtml(eStub,wfLibre,wfLibre.notificar_por||wfLibre.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:eStub._depto||t.depto});
   }
+  if(esLibre&&pendVer&&typeof renderActLibreNotifPrediligenciadaHtml==='function')
+    h+=renderActLibreNotifPrediligenciadaHtml(t);
   if(typeof renderTramiteFirmaVerifyExtrasHtml==='function')
     h+=renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t);
   const enFirmaTram=typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t);
