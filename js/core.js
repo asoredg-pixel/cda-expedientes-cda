@@ -8069,6 +8069,10 @@ function taskReviewNumeroDocumentoAct(e,t){
     const hitA=findActoByAdminId(e,t.actoAdminId);
     if(hitA&&hitA.item&&hitA.item.numero)return String(hitA.item.numero).trim();
   }
+  const facUi=typeof collectEntregaFacRefsUi==='function'?collectEntregaFacRefsUi():[];
+  if(facUi.length)return facUi.join(', ');
+  const facRefs=String((t&&(t.facturaRefs||t.facturaRef))||'').trim();
+  if(facRefs)return facRefs;
   const fromT=String((t&&(t.concepto||t.oficio||t.nro_oficio||t._oficio||t.oficioNumero))||'').trim();
   if(fromT)return fromT;
   if(e&&t&&t.conceptoReqId&&typeof findConceptoByReqId==='function'){
@@ -8087,6 +8091,22 @@ function taskReviewNumeroDocumentoAct(e,t){
         if(arr[i]&&arr[i].concepto&&(!tid||String(arr[i].taskId||'')===tid))
           return String(arr[i].concepto).trim();
       }
+    }
+    if(tipo==='factura'&&typeof facturasData==='function'){
+      const facs=facturasData(e._facturas_extra)||[];
+      const tid=String(t.id||'');
+      const refs=[];
+      facs.forEach(function(f){
+        if(!f||!f.ref)return;
+        if(tid&&String(f.taskId||'')&&String(f.taskId)!==tid)return;
+        refs.push(String(f.ref).trim());
+      });
+      if(refs.length)return refs.join(', ');
+      // Sin taskId: última(s) pendiente(s) de aprobación recientes
+      for(let i=facs.length-1;i>=0;i--){
+        if(facs[i]&&facs[i].ref){refs.push(String(facs[i].ref).trim());break;}
+      }
+      if(refs.length)return refs.join(', ');
     }
     if(tipo==='acto'&&typeof actosAdminData==='function'){
       const actos=actosAdminData(e._actos_admin)||[];
@@ -8120,8 +8140,10 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
   const numTxt=num||'XXXXX';
   if(tipo==='concepto'||/concepto/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
-  if(tipo==='factura'||/factura|liquidaci[oó]n|tasa|multa|tcaf/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite la factura No. '+numTxt+' correspondiente a «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+  if(tipo==='factura'||/factura|liquidaci[oó]n|tasa|multa|tcaf/i.test(act)){
+    const varias=num&&String(num).indexOf(',')>=0;
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite'+(varias?'n las facturas Nos. ':' la factura No. ')+numTxt+' correspondiente'+(varias?'s':'')+' a «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+  }
   if(tipo==='acto'||/acto|resoluci[oó]n/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el acto administrativo No. '+numTxt+' («'+(tipoDoc||act)+'»)'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
   if(/oficio\s+de\s+requerimiento/i.test(act))
@@ -15318,19 +15340,23 @@ function htmlEntregaNotifCorreoCheck(opts){
   const expLbl=String(opts.expId||(e&&e._exp)||(t&&!t.sinExpediente&&(t.exp||t.codigo))||(t&&t.codigo)||'').trim();
   const wf=(t&&t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
   const stubT=t||{actividad:act,desc:act,sinExpediente:!!opts.sinExpediente};
-  // Preferir lo digitado en el formulario de entrega (acto/concepto/oficio)
+  // Preferir lo digitado en el formulario de entrega (acto/concepto/oficio/factura)
   const actoNumUi=String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim();
   const actoTipoUi=String((document.getElementById('entrega-reg-acto-tipo')||{}).value||'').trim();
   const conceptoUi=String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim();
   const oficioUi=String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim()
     ||String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim();
+  const facRefsUi=typeof collectEntregaFacRefsUi==='function'?collectEntregaFacRefsUi():[];
+  const facRefsStr=facRefsUi.join(', ');
   if(actoNumUi){stubT.actoNumero=actoNumUi;stubT.actoTipo=actoTipoUi||stubT.actoTipo||'';}
   if(conceptoUi)stubT.concepto=conceptoUi;
   if(oficioUi){stubT.oficio=oficioUi;stubT.nro_oficio=oficioUi;}
+  if(facRefsStr){stubT.facturaRefs=facRefsStr;stubT.facturaRef=facRefsUi[0]||'';}
   const emailTo=String(opts.emailTo!=null?opts.emailTo:(wf.email_to||'')).trim()||entregaNotifCorreosDefault(e,stubT,opts);
   const emailCc=String(opts.emailCc!=null?opts.emailCc:(wf.email_cc||'')).trim();
   const emailBcc=String(opts.emailBcc!=null?opts.emailBcc:(wf.email_bcc||'')).trim();
-  const asuntoDef='Notificación — '+(actoTipoUi||act||'actividad')+(actoNumUi?' No. '+actoNumUi:'')+(expLbl?' — '+expLbl:'');
+  const numAsunto=actoNumUi||conceptoUi||oficioUi||facRefsStr||'';
+  const asuntoDef='Notificación — '+(actoTipoUi||act||'actividad')+(numAsunto?' No. '+numAsunto:'')+(expLbl?' — '+expLbl:'');
   const asunto=String(opts.emailSubject!=null?opts.emailSubject:(wf.email_subject||wf.asunto||'')).trim()
     ||asuntoDef;
   const cuerpo=String(opts.cuerpo!=null?opts.cuerpo:(wf.cuerpo||wf.email_body||'')).trim()
@@ -15375,6 +15401,8 @@ function entregaNotifCorreoToggleUi(cbId){
   if(actoNum){stubT.actoNumero=actoNum;stubT.actoTipo=actoTipo;}
   if(conceptoNum)stubT.concepto=conceptoNum;
   if(oficioNum){stubT.oficio=oficioNum;stubT.nro_oficio=oficioNum;}
+  const facRefs=typeof collectEntregaFacRefsUi==='function'?collectEntregaFacRefsUi():[];
+  if(facRefs.length){stubT.facturaRefs=facRefs.join(', ');stubT.facturaRef=facRefs[0];}
   const expLbl=libre?'':(nuevo?expNuevo:expNum);
   const toEl=document.getElementById('entrega-notif-email-to');
   if(toEl&&!String(toEl.value||'').trim()){
@@ -15382,8 +15410,9 @@ function entregaNotifCorreoToggleUi(cbId){
     if(typeof sstEmailChipsRefresh==='function')sstEmailChipsRefresh(toEl);
   }
   const subjEl=document.getElementById('entrega-notif-email-subject');
-  if(subjEl&&!String(subjEl.value||'').trim())
-    subjEl.value='Notificación — '+(actoTipo||act||'actividad')+(actoNum?' No. '+actoNum:'')+(expLbl?' — '+expLbl:'');
+  const numAsunto=actoNum||conceptoNum||oficioNum||(facRefs.length?facRefs.join(', '):'');
+  if(subjEl&&(!String(subjEl.value||'').trim()||/^Notificación\s*—/i.test(String(subjEl.value||''))))
+    subjEl.value='Notificación — '+(actoTipo||act||'actividad')+(numAsunto?' No. '+numAsunto:'')+(expLbl?' — '+expLbl:'');
   const cuerpoEl=document.getElementById('entrega-notif-email-cuerpo');
   if(cuerpoEl&&(!String(cuerpoEl.value||'').trim()||typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')){
     if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
@@ -15501,6 +15530,10 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       }else if(regTipo==='concepto'&&typeof htmlEntregaRegConceptoBlock==='function'){
         h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
         h+=htmlEntregaRegConceptoBlock(eExp,{actividad:actNom});
+        h+='</div>';
+      }else if(regTipo==='factura'&&typeof htmlEntregaRegFacturaBlock==='function'){
+        h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
+        h+=htmlEntregaRegFacturaBlock();
         h+='</div>';
       }else if(regTipo==='acto'&&typeof htmlEntregaRegActoBlock==='function'){
         h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';

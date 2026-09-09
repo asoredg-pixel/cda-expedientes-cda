@@ -1558,16 +1558,8 @@ function syncEntregaRespRegistroUi(){
       if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview('entrega-reg-concepto-coord');
     },0);
   }else if(tipo==='factura'){
-    const tipos=(cfgAct.tiposFactura||['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'])
-      .map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
-    box.innerHTML='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Información contable · Factura</div>'+
-      '<div class="fg">'+
-      '<div class="fld"><label>Tipo de factura <span style="color:var(--rd)">*</span></label><select id="entrega-reg-fac-tipo" style="'+inp+'"><option value="">— Seleccione (Evaluación, TCAF…) —</option>'+tipos+'</select></div>'+
-      '<div class="fld"><label>Valor (pesos)</label>'+moneyInputHtml('entrega-reg-fac-valor','','','entrega-reg-fac-valor')+'</div>'+
-      '<div class="fld"><label>Referencia / N°</label><input type="text" id="entrega-reg-fac-ref" placeholder="N° / ref." style="'+inp+'"></div>'+
-      '<div class="fld"><label>Fecha vencimiento</label><input type="date" id="entrega-reg-fac-venc" style="'+inp+'"></div>'+
-      '<div class="fld"><label>Fecha pago (si ya pagó)</label><input type="date" id="entrega-reg-fac-pago" style="'+inp+'"></div>'+
-      '</div>';
+    box.innerHTML=typeof htmlEntregaRegFacturaBlock==='function'?htmlEntregaRegFacturaBlock():'';
+    if(typeof entregaFacSyncRemoveBtns==='function')entregaFacSyncRemoveBtns();
   }else if(tipo==='acto'){
     box.innerHTML=typeof htmlEntregaRegActoBlock==='function'?htmlEntregaRegActoBlock():'';
   }
@@ -1588,6 +1580,118 @@ function htmlEntregaRegActoBlock(){
     '<div class="fld"><label>N° acto administrativo <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-reg-acto-num" placeholder="Número" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()" onblur="entregaRegActoNumBlur()"></div>'+
     '<div class="fld"><label>Fecha del acto</label><input type="date" id="entrega-reg-acto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
     '</div>';
+}
+function _entregaFacTiposOptionsHtml(){
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
+  const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
+  return (cfgAct.tiposFactura||['Evaluación','Publicación','Seguimiento','TCAF','Multa','Visita adicional','Tasa retributiva'])
+    .map(function(t){return '<option value="'+escAttr(t)+'">'+escAttr(t)+'</option>';}).join('');
+}
+function htmlEntregaFacRow(uid){
+  uid=String(uid||('f'+Date.now().toString(36)));
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const tipos=_entregaFacTiposOptionsHtml();
+  const idBase='entrega-reg-fac-'+uid;
+  const moneyHtml=typeof moneyInputHtml==='function'
+    ?moneyInputHtml('entrega-reg-fac-valor','','',idBase+'-valor')
+    :'<input type="text" id="'+escAttr(idBase+'-valor')+'" class="entrega-reg-fac-valor" style="'+inp+'">';
+  return '<div class="entrega-fac-row" data-fac-uid="'+escAttr(uid)+'" style="margin-bottom:10px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px">'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2)">Factura</div>'+
+    '<button type="button" class="btn bsm bic" title="Quitar factura" onclick="entregaFacRemoveRow(this)">✕</button></div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Tipo de factura <span style="color:var(--rd)">*</span></label><select class="entrega-reg-fac-tipo" id="'+escAttr(idBase+'-tipo')+'" style="'+inp+'"><option value="">— Seleccione (Evaluación, TCAF…) —</option>'+tipos+'</select></div>'+
+    '<div class="fld"><label>Valor (pesos)</label>'+moneyHtml+'</div>'+
+    '<div class="fld"><label>Referencia / N°</label><input type="text" class="entrega-reg-fac-ref" id="'+escAttr(idBase+'-ref')+'" placeholder="N° / ref." style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
+    '<div class="fld"><label>Fecha vencimiento</label><input type="date" class="entrega-reg-fac-venc" id="'+escAttr(idBase+'-venc')+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label>Fecha pago (si ya pagó)</label><input type="date" class="entrega-reg-fac-pago" id="'+escAttr(idBase+'-pago')+'" style="'+inp+'"></div>'+
+    '</div></div>';
+}
+function htmlEntregaRegFacturaBlock(){
+  return '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">Información contable · Factura</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">Puede registrar varias facturas. Un solo PDF con todas unidas basta en Documento.</div>'+
+    '<div id="entrega-fac-rows">'+htmlEntregaFacRow('1')+'</div>'+
+    '<button type="button" class="btn bsm" style="margin-top:2px" onclick="entregaFacAddRow()">+ Añadir factura</button>';
+}
+function entregaFacAddRow(){
+  const wrap=document.getElementById('entrega-fac-rows');
+  if(!wrap)return;
+  const uid=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,5);
+  const tmp=document.createElement('div');
+  tmp.innerHTML=htmlEntregaFacRow(uid);
+  wrap.appendChild(tmp.firstElementChild);
+  entregaFacSyncRemoveBtns();
+  if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
+}
+function entregaFacRemoveRow(btn){
+  const wrap=document.getElementById('entrega-fac-rows');
+  if(!wrap)return;
+  const row=btn&&btn.closest?btn.closest('.entrega-fac-row'):null;
+  if(!row)return;
+  if(wrap.querySelectorAll('.entrega-fac-row').length<=1){
+    row.querySelectorAll('input,select').forEach(function(el){if(el)el.value='';});
+    if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
+    return;
+  }
+  row.remove();
+  entregaFacSyncRemoveBtns();
+  if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
+}
+function entregaFacSyncRemoveBtns(){
+  const wrap=document.getElementById('entrega-fac-rows');
+  if(!wrap)return;
+  const rows=wrap.querySelectorAll('.entrega-fac-row');
+  rows.forEach(function(row){
+    const btn=row.querySelector('button[onclick*="entregaFacRemoveRow"]');
+    if(btn)btn.style.visibility=rows.length>1?'':'hidden';
+  });
+}
+function collectEntregaFacRefsUi(){
+  const refs=[];
+  document.querySelectorAll('#entrega-fac-rows .entrega-fac-row, .entrega-fac-row').forEach(function(row){
+    const ref=String((row.querySelector('.entrega-reg-fac-ref')||{}).value||'').trim();
+    if(ref)refs.push(ref);
+  });
+  // Compat: campo único legacy
+  if(!refs.length){
+    const legacy=String((document.getElementById('entrega-reg-fac-ref')||{}).value||'').trim();
+    if(legacy)refs.push(legacy);
+  }
+  return refs;
+}
+function collectEntregaFacItemsUi(){
+  const rows=document.querySelectorAll('#entrega-fac-rows .entrega-fac-row');
+  const items=[];
+  if(rows.length){
+    rows.forEach(function(row){
+      const tipo=String((row.querySelector('.entrega-reg-fac-tipo')||{}).value||'').trim();
+      const valorEl=row.querySelector('.entrega-reg-fac-valor')||row.querySelector('input[id$="-valor"]');
+      const valorRaw=typeof moneyRaw==='function'
+        ?moneyRaw(String((valorEl||{}).value||''))
+        :String((valorEl||{}).value||'').trim();
+      const ref=String((row.querySelector('.entrega-reg-fac-ref')||{}).value||'').trim();
+      const venc=String((row.querySelector('.entrega-reg-fac-venc')||{}).value||'');
+      const pago=String((row.querySelector('.entrega-reg-fac-pago')||{}).value||'');
+      if(!tipo&&!ref&&!valorRaw&&!venc&&!pago)return;
+      items.push({tipo:tipo,valor:valorRaw,ref:ref,venc:venc,pago:pago,persVenc:'',coacFecha:'',acuerdoPago:false});
+    });
+    return items;
+  }
+  // Compat legacy ids
+  if(document.getElementById('entrega-reg-fac-tipo')||document.getElementById('entrega-reg-fac-ref')){
+    const valorRaw=typeof moneyRaw==='function'
+      ?moneyRaw(String((document.getElementById('entrega-reg-fac-valor')||{}).value||''))
+      :String((document.getElementById('entrega-reg-fac-valor')||{}).value||'').trim();
+    items.push({
+      tipo:String((document.getElementById('entrega-reg-fac-tipo')||{}).value||'').trim(),
+      valor:valorRaw,
+      ref:String((document.getElementById('entrega-reg-fac-ref')||{}).value||'').trim(),
+      venc:String((document.getElementById('entrega-reg-fac-venc')||{}).value||''),
+      pago:String((document.getElementById('entrega-reg-fac-pago')||{}).value||''),
+      persVenc:'',coacFecha:'',acuerdoPago:false
+    });
+  }
+  return items;
 }
 function entregaRegActoNumBlur(){
   const num=String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim();
@@ -1622,17 +1726,20 @@ function entregaNotifRefreshCuerpoDesdeRegistro(){
     oficio:String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim()
       ||String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim(),
     oficioNumero:String((document.getElementById('entrega-ofi-req-oficio')||{}).value||'').trim(),
-    nro_oficio:String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim()
+    nro_oficio:String((document.getElementById('entrega-resp-oficio')||{}).value||'').trim(),
+    facturaRefs:(typeof collectEntregaFacRefsUi==='function'?collectEntregaFacRefsUi():[]).join(', ')
   };
+  if(stubT.facturaRefs)stubT.facturaRef=stubT.facturaRefs.split(',')[0].trim();
   if(cuerpoEl&&typeof taskReviewCuerpoNotifPredeterminado==='function')
     cuerpoEl.value=taskReviewCuerpoNotifPredeterminado(e,stubT)||'';
   if(subjEl){
     const expLbl=libre?'':(nuevo?expNuevo:expNum);
     const tipoLbl=stubT.actoTipo||act||'actividad';
+    const numDoc=stubT.actoNumero||stubT.concepto||stubT.oficio||stubT.facturaRefs||'';
     const cur=String(subjEl.value||'');
     if(!cur||/^Notificación\s*—/i.test(cur)){
       subjEl.value='Notificación — '+tipoLbl
-        +(stubT.actoNumero?' No. '+stubT.actoNumero:(stubT.concepto?' No. '+stubT.concepto:(stubT.oficio?' No. '+stubT.oficio:'')))
+        +(numDoc?' No. '+numDoc:'')
         +(expLbl?' — '+expLbl:'');
     }
   }
@@ -1794,17 +1901,19 @@ function collectEntregaRespRegistroPayload(actividad){
     }};
   }
   if(tipo==='factura'){
-    const valorRaw=typeof moneyRaw==='function'
-      ?moneyRaw(String((document.getElementById('entrega-reg-fac-valor')||{}).value||''))
-      :String((document.getElementById('entrega-reg-fac-valor')||{}).value||'').trim();
-    return{tipo:'factura',item:{
-      tipo:String((document.getElementById('entrega-reg-fac-tipo')||{}).value||'').trim(),
-      valor:valorRaw,
-      ref:String((document.getElementById('entrega-reg-fac-ref')||{}).value||'').trim(),
-      venc:String((document.getElementById('entrega-reg-fac-venc')||{}).value||''),
-      pago:String((document.getElementById('entrega-reg-fac-pago')||{}).value||''),
-      persVenc:'',coacFecha:'',acuerdoPago:false
-    }};
+    if(!document.querySelector('.entrega-fac-row')&&!document.getElementById('entrega-reg-fac-tipo'))return null;
+    const items=typeof collectEntregaFacItemsUi==='function'?collectEntregaFacItemsUi():[];
+    if(!items.length){
+      notif('Diligencie al menos una factura (tipo obligatorio)','err');
+      return false;
+    }
+    for(let i=0;i<items.length;i++){
+      if(!items[i].tipo){
+        notif('Seleccione el tipo de factura en la fila '+(i+1)+' (Evaluación, TCAF, etc.)','err');
+        return false;
+      }
+    }
+    return{tipo:'factura',item:items[0],items:items};
   }
   if(tipo==='acto'){
     if(!document.getElementById('entrega-reg-acto-tipo'))return null;
@@ -1825,11 +1934,11 @@ function collectEntregaRespRegistroPayload(actividad){
   return null;
 }
 function appendRegistroDesdeEntrega(e,payload,taskOpt){
-  if(!e||!payload||!payload.item)return false;
-  const item=payload.item;
+  if(!e||!payload||(!payload.item&&!(payload.items&&payload.items.length)))return false;
+  const item=payload.item||(payload.items&&payload.items[0])||null;
   const t=taskOpt||null;
   const tid=t?String(t.id||'').trim():String((window._taskModalCtx||{}).taskId||'').trim();
-  if(tid)item.taskId=tid;
+  if(item&&tid)item.taskId=tid;
   if(payload.tipo==='concepto'){
     const arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
     if(!item.concepto&&!item.observaciones&&!item.coordenadas&&!item.tipoConcepto)return false;
@@ -1856,10 +1965,25 @@ function appendRegistroDesdeEntrega(e,payload,taskOpt){
     return true;
   }
   if(payload.tipo==='factura'){
+    const items=Array.isArray(payload.items)&&payload.items.length
+      ?payload.items
+      :(payload.item?[payload.item]:[]);
+    if(!items.length)return false;
     const arr=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
-    if(!item.tipo&&!item.ref&&!item.valor)return false;
-    arr.push(item);
+    const refs=[];
+    items.forEach(function(it){
+      if(!it||(!it.tipo&&!it.ref&&!it.valor))return;
+      const copy=Object.assign({},it);
+      if(tid)copy.taskId=tid;
+      if(copy.pendienteAprobacion!==false)copy.pendienteAprobacion=true;
+      arr.push(copy);
+      if(copy.ref)refs.push(String(copy.ref).trim());
+    });
     e._facturas_extra=JSON.stringify(arr);
+    if(t){
+      t.facturaRefs=refs.join(', ');
+      t.facturaRef=refs[0]||'';
+    }
     return true;
   }
   if(payload.tipo==='acto'){
@@ -2285,9 +2409,30 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
   if(regPayload.tipo==='oficio_requerimiento'){
     return applyEntregaOficioRequerimiento(e,taskOpt||null,regPayload.item);
   }
-  if(regPayload.tipo==='factura'&&!regPayload.item.tipo){
-    notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
-    return false;
+  if(regPayload.tipo==='factura'){
+    const facItems=Array.isArray(regPayload.items)&&regPayload.items.length
+      ?regPayload.items
+      :(regPayload.item?[regPayload.item]:[]);
+    if(!facItems.length||!facItems.some(function(it){return it&&it.tipo;})){
+      notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
+      return false;
+    }
+    for(let i=0;i<facItems.length;i++){
+      if(!facItems[i].tipo){
+        notif('Seleccione el tipo de factura en la fila '+(i+1),'err');
+        return false;
+      }
+      if(facItems[i].ref&&typeof validarNumeroFacturaDisponible==='function'){
+        if(!validarNumeroFacturaDisponible(facItems[i].ref,null,null))return false;
+      }
+    }
+    const seen={};
+    for(let j=0;j<facItems.length;j++){
+      const r=String(facItems[j].ref||'').trim().toLowerCase();
+      if(!r)continue;
+      if(seen[r]){notif('Referencia de factura duplicada en la entrega: '+facItems[j].ref,'err');return false;}
+      seen[r]=true;
+    }
   }
   if(regPayload.tipo==='acto'&&!regPayload.item.tipo){
     notif('Seleccione el tipo de acto / resolución','err');
@@ -2296,9 +2441,6 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
   if(regPayload.tipo==='acto'&&!regPayload.item.numero){
     notif('Indique el N° de acto administrativo','err');
     return false;
-  }
-  if(regPayload.tipo==='factura'&&regPayload.item.ref&&typeof validarNumeroFacturaDisponible==='function'){
-    if(!validarNumeroFacturaDisponible(regPayload.item.ref,null,null))return false;
   }
   if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
     if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return false;
@@ -2331,7 +2473,8 @@ function trySaveEntregaRegistroFromPanel(e,actividad){
     }
     return applyEntregaOficioRequerimiento(e,t,payload.item);
   }
-  if(!document.getElementById('entrega-reg-concepto')&&!document.getElementById('entrega-reg-acto-tipo'))return true;
+  if(!document.getElementById('entrega-reg-concepto')&&!document.getElementById('entrega-reg-acto-tipo')
+    &&!document.querySelector('.entrega-fac-row')&&!document.getElementById('entrega-reg-fac-tipo'))return true;
   const regPayload=collectEntregaRespRegistroPayload(actividad);
   if(regPayload===false)return false;
   if(!regPayload)return true;
@@ -2847,6 +2990,12 @@ window.syncEntregaRespNotifCorreoUi=syncEntregaRespNotifCorreoUi;
 window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
 window.htmlEntregaRegActoBlock=htmlEntregaRegActoBlock;
+window.htmlEntregaRegFacturaBlock=htmlEntregaRegFacturaBlock;
+window.entregaFacAddRow=entregaFacAddRow;
+window.entregaFacRemoveRow=entregaFacRemoveRow;
+window.entregaFacSyncRemoveBtns=entregaFacSyncRemoveBtns;
+window.collectEntregaFacRefsUi=collectEntregaFacRefsUi;
+window.collectEntregaFacItemsUi=collectEntregaFacItemsUi;
 window.entregaRegActoNumBlur=entregaRegActoNumBlur;
 window.entregaRegConceptoNumBlur=entregaRegConceptoNumBlur;
 window.entregaNotifRefreshCuerpoDesdeRegistro=entregaNotifRefreshCuerpoDesdeRegistro;
