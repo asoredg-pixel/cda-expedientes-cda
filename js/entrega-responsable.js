@@ -2947,16 +2947,14 @@ function submitEntregaResponsable(){
   }
   const pack=ensureExpTaskEntregaResponsable();
   if(!pack)return;
-  // Reutilizar el envío a verificación ya implementado (Drive + Por verificar / flujo PQRSD)
+  // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»
+  // solo se activa al terminar OK (ver enviarTaskPorVerificar / entregaResponsable).
   if(typeof submitEnviarSoporteVerificacion==='function'){
     window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente};
     if(pack.sinExpediente&&pack.t){
       window._pendingActLibreEntrega={id:pack.taskId,codigo:pack.expId,t:pack.t};
     }
     submitEnviarSoporteVerificacion(pack.expId,pack.taskId);
-    if(typeof setActFiltro==='function'){
-      try{setActFiltro('porver');}catch(err){}
-    }
     return;
   }
   notif('No se pudo completar el envío a verificación','err');

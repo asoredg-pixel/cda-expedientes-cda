@@ -14371,8 +14371,13 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       })();
     }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
-    const fAct=document.getElementById('f-act-est');
-    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&fAct&&['pend','prior','porcorr'].includes(fAct.value))setActFiltro('porver');
+    const ctxEr=window._taskModalCtx||{};
+    if(ctxEr.entregaResponsable&&typeof setActFiltro==='function'){
+      try{setActFiltro('porver');}catch(errF){}
+    }else{
+      const fAct=document.getElementById('f-act-est');
+      if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&fAct&&['pend','prior','porcorr'].includes(fAct.value))setActFiltro('porver');
+    }
   }
   return ok;
 }
@@ -15041,9 +15046,49 @@ async function syncDriveRevokeTrasUsuarioAutorizado(email,opts){
     console.warn('syncDriveRevokeTrasUsuarioAutorizado:',err);
   }
 }
+/** Si no hay Documento principal, el primer anexo pasa a documento de la entrega (revisión / Por verificar). */
+function _entregaPromoverAnexoAPrincipal(adj){
+  adj=adj||{links:[],files:[],anexos:[],preUploaded:[]};
+  const files=Array.isArray(adj.files)?adj.files.slice():[];
+  const anexos=Array.isArray(adj.anexos)?adj.anexos.slice():[];
+  const pre=Array.isArray(adj.preUploaded)?adj.preUploaded.slice():[];
+  const hasMainFile=files.some(function(f){return f&&!f.esAnexo;});
+  const hasMainPre=pre.some(function(u){return u&&!u.esAnexo&&!u.es_anexo&&u.tipo!=='anexo_respuesta';});
+  if(hasMainFile||hasMainPre){
+    return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
+  }
+  if(files.length){
+    // files[] suele ser el slot principal; si vinieron marcados como anexo, limpiar flag
+    files[0].esAnexo=false;
+    return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
+  }
+  if(anexos.length){
+    const first=anexos.shift();
+    first.esAnexo=false;
+    files.push(first);
+    return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
+  }
+  if(pre.length){
+    const idx=pre.findIndex(function(u){return u&&(u.esAnexo||u.es_anexo||u.tipo==='anexo_respuesta');});
+    const i=idx>=0?idx:0;
+    const first=pre[i];
+    if(first){
+      first.esAnexo=false;
+      first.es_anexo=false;
+      if(first.tipo==='anexo_respuesta')first.tipo='drive';
+      first.labelProyeccion=first.labelProyeccion||first.nombre||'Documento de entrega';
+      first.nombre=first.nombre||'Documento de entrega';
+    }
+    return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
+  }
+  return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
+}
+window._entregaPromoverAnexoAPrincipal=_entregaPromoverAnexoAPrincipal;
 function submitEnviarSoporteVerificacion(expId,taskId){
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
-  const adj=collectEnviarAdjuntos();
+  let adj=collectEnviarAdjuntos();
+  // Si solo hay anexos (sin Documento principal), el primero pasa a documento de la entrega
+  if(typeof _entregaPromoverAnexoAPrincipal==='function')adj=_entregaPromoverAnexoAPrincipal(adj);
   const reqEl=document.getElementById('enviar-requiere-link');
   const requiereLink=reqEl&&reqEl.value==='1';
   let e=getExpById(expId);
@@ -15209,7 +15254,10 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   }
   if(allUpload.length&&(canUploadPqrs||canUploadExp)){
     (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true)).then(function(ok){
-      if(!ok)return;
+      if(!ok){
+        notif('Conecte Gmail/Drive para subir el documento y completar la entrega a Por revisar','err');
+        return;
+      }
       const rep=responsableActivo||taskComentarioAutor();
       const total=allUpload.length;
       if(typeof sstCargaShow==='function'){
@@ -15233,10 +15281,12 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs)await drivePurgeTaskInstitutionalSoportes(t);
         const uploaded=[];
         let anexoSeq=0;
+        const hasExplicitMain=allUpload.some(function(x){return x&&!x.esAnexo;});
         for(let i=0;i<allUpload.length;i++){
           const f=allUpload[i];
           let pref=f.nombre;
-          if(f.esAnexo){
+          const asAnexo=!!f.esAnexo&&(hasExplicitMain||i>0);
+          if(asAnexo){
             anexoSeq++;
             pref='anexo-'+anexoSeq+'-'+(f.nombre||'doc');
           }
@@ -15246,7 +15296,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           // PQRSD → árbol PQRSD; trámites / sin expediente → Drive expedientes (ACT- o EXP-)
           const up=esPqrs
             ?await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
-                label:f.esAnexo?('Anexo '+anexoSeq):'Respuesta',
+                label:asAnexo?('Anexo '+anexoSeq):'Respuesta',
                 uploadTarget:'respuesta',
                 driveName:undefined
               })
@@ -15256,8 +15306,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             if(!up.driveFilename&&up.nombre)up.driveFilename=up.nombre;
             if(!up.driveEstado)up.driveEstado='revision';
             if(up.driveInstitutional==null)up.driveInstitutional=true;
-            up.esAnexo=!!f.esAnexo;
-            if(f.esAnexo){
+            up.esAnexo=asAnexo;
+            if(asAnexo){
               up.tipo='anexo_respuesta';
               up.es_anexo=true;
               up.anexo_n=anexoSeq;
@@ -15287,6 +15337,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         console.warn('submitEnviarSoporteVerificacion drive:',err);
         if(typeof sstCargaHide==='function')sstCargaHide();
         alertErrorDriveAdjunto(err);
+        if((window._taskModalCtx||{}).entregaResponsable)
+          notif('No se completó la entrega a Por revisar. Reintente con Gmail/Drive conectado.','err');
       }
     })();
     });
@@ -15295,7 +15347,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   if(allUpload.length){
     notif(esPqrs
       ?'No se pudo subir a la carpeta PQRSD. Conecte Gmail/Drive e intente de nuevo.'
-      :'La subida automática al Drive solo aplica en Guaviare. Use enlace manual o comentario.','warn');
+      :'No se pudo subir al Drive de expedientes. Conecte Gmail/Drive (Guaviare) e intente de nuevo.','err');
     return;
   }
   runSubmit([]);
