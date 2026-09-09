@@ -8035,6 +8035,17 @@ window.confirmarCierreTaskReview=confirmarCierreTaskReview;
 window.taskReviewDecidirImprimir=taskReviewDecidirImprimir;
 window.taskReviewDecidirFirma=taskReviewDecidirFirma;
 window.taskReviewAbrirAtajoFirmado=taskReviewAbrirAtajoFirmado;
+/** Wf de notificación: prioriza t.firmaWf (entrega) sobre _pqrs_workflow vacío del expediente. */
+function taskReviewNotifWfFuente(e,t){
+  const wfT=(t&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t&&t.firmaWf))||{};
+  const tieneEntrega=!!(wfT.notif_correo_entrega
+    ||String(wfT.email_to||'').trim()
+    ||String(wfT.cuerpo||wfT.email_body||'').trim()
+    ||String(wfT.email_subject||wfT.asunto||'').trim());
+  if(tieneEntrega)return wfT;
+  if(e&&typeof getPqrsWorkflow==='function')return getPqrsWorkflow(e)||{};
+  return wfT;
+}
 function taskReviewCorreosNotificacion(e,t){
   const valida=function(em){
     const v=String(em||'').trim().toLowerCase();
@@ -8044,8 +8055,7 @@ function taskReviewCorreosNotificacion(e,t){
   const add=function(em){const v=valida(em);if(v)set.add(v);};
   // Solo digitados en entrega / actividad — no auto-mezclar menú registro
   const src=t||{};
-  const wf=(e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):null)
-    ||(t&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):null)||{};
+  const wf=taskReviewNotifWfFuente(e,t);
   if(wf.email_to)String(wf.email_to).split(/[,;]+/).forEach(add);
   add(src._qd_correo);add(src._pn_correo);add(src._pj_correo);add(src._pj_rep_correo);
   add(src._apo_correo);add(src._aut_correo);add(src._ec_correo);add(src.interesadoCorreo);
@@ -8123,8 +8133,7 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
   return 'Cordial saludo,\n\nPor medio de la presente, se remite la documentación de la actividad «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
 }
 function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
-  const wf=(e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):null)
-    ||(t&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{})||{};
+  const wf=taskReviewNotifWfFuente(e,t);
   const destWf=String(wf.email_to||'').trim();
   const dest=destWf||taskReviewCorreosNotificacion(e,t).join(', ');
   const emailCc=String(wf.email_cc||'').trim();
@@ -8408,63 +8417,65 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG){if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}return;}
     }
+    const esPqrsNotif=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+      &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
     const adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e);
     let pdfBlob=null,up=null;
-    if(typeof registrarSoporteEnvioCorreoNotif==='function'){
-      const reg=await registrarSoporteEnvioCorreoNotif(e,t,expId,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por},adjuntos);
-      pdfBlob=reg&&reg.pdfBlob;up=reg&&reg.up;
-    }else{
-      try{pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});}catch(errP){console.warn('pdf soporte notif:',errP);}
+    // PDF soporte de envío: solo PQRSD. Trámites/factura: adjuntos de la entrega, sin PDF extra.
+    if(esPqrsNotif){
+      try{
+        if(typeof generarPdfSoporteNotificacionActividad==='function')
+          pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});
+      }catch(errP){console.warn('pdf soporte notif:',errP);}
       if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
-      if(pdfBlob){
-        try{up=await taskReviewSubirSoporteNotificacion(e,t,expId,pdfBlob);}catch(errU){console.warn('subir soporte envío:',errU);}
-      }
     }
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){notif('No hay envío de correo disponible','err');if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}return;}
     const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
+    // Enviar primero: no registrar soporte ni cerrar si Gmail falla
     await pqrsEnviarCorreoCiudadano(destinos,asunto||('Notificación — '+(t.actividad||'actividad')),htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
     const fechaC=hoy();
     const refId=t.sinExpediente?(t.codigo||expId):expId;
-    if(up&&(up.driveLink||up.fileId||up.driveFileId)&&!(typeof registrarSoporteEnvioCorreoNotif==='function')){
-      mutateTask(refId,taskId,function(tk){
-        if(!Array.isArray(tk.soportes))tk.soportes=[];
-        tk.soportes.push({
-          id:'sop_envio_'+Date.now(),
-          label:'Soporte de envío',
-          nombre:up.nombre||'Soporte de envío.pdf',
-          driveFileId:up.fileId||up.driveFileId||'',
-          driveLink:up.driveLink||'',
-          previewLink:up.previewLink||up.driveLink||'',
-          url:up.driveLink||up.previewLink||'',
-          preview:up.previewLink||up.driveLink||'',
-          driveInstitutional:true,
-          driveEstado:'atendido',
-          tipo:'soporte_notificacion',
-          notificado:true,
-          autor:por,
-          fecha:fechaC,
-          mime:'application/pdf'
+    if(esPqrsNotif&&pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
+      try{
+        const reg=await registrarSoporteEnvioCorreoNotif(e,t,expId,{
+          para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,
+          pdfBlob:pdfBlob,skipAttach:true
+        },[]);
+        up=reg&&reg.up;
+      }catch(errR){console.warn('registrar soporte tras envío:',errR);}
+      if(t&&typeof mutateTask==='function'){
+        mutateTask(refId,taskId,function(tk){
+          if(t.soportes&&(!tk.soportes||tk.soportes.length<(t.soportes||[]).length))
+            tk.soportes=(t.soportes||[]).slice();
         });
-      });
-    }else if(t&&typeof mutateTask==='function'){
-      // Persistir soportes ya añadidos por registrarSoporteEnvioCorreoNotif
-      mutateTask(refId,taskId,function(tk){
-        if(t.soportes&&(!tk.soportes||tk.soportes.length<t.soportes.length))
-          tk.soportes=t.soportes.slice();
-      });
-    }
-    if(e&&up&&(up.driveLink||up.previewLink)){
-      if(!Array.isArray(e._docs_tramite))e._docs_tramite=[];
-      if(typeof docsTramiteData==='function'){
-        const cur=docsTramiteData(e._docs_tramite);
-        cur.push({id:'dt_envio_'+Date.now().toString(36),label:'Soporte de envío — '+(t.actividad||'actividad'),url:up.driveLink||up.previewLink,preview:up.previewLink||up.driveLink,fecha:fechaC,por:por,tipo:'soporte_notificacion'});
-        e._docs_tramite=cur;
-      }else{
-        e._docs_tramite.push({id:'dt_envio_'+Date.now().toString(36),label:'Soporte de envío',url:up.driveLink,preview:up.previewLink||up.driveLink,fecha:fechaC,por:por});
+      }
+    }else if(esPqrsNotif&&pdfBlob&&typeof taskReviewSubirSoporteNotificacion==='function'){
+      try{up=await taskReviewSubirSoporteNotificacion(e,t,expId,pdfBlob);}catch(errU){console.warn('subir soporte envío:',errU);}
+      if(up&&(up.driveLink||up.fileId||up.driveFileId)&&typeof mutateTask==='function'){
+        mutateTask(refId,taskId,function(tk){
+          if(!Array.isArray(tk.soportes))tk.soportes=[];
+          tk.soportes.push({
+            id:'sop_envio_'+Date.now(),
+            label:'Soporte de envío',
+            nombre:up.nombre||'Soporte de envío.pdf',
+            driveFileId:up.fileId||up.driveFileId||'',
+            driveLink:up.driveLink||'',
+            previewLink:up.previewLink||up.driveLink||'',
+            url:up.driveLink||up.previewLink||'',
+            preview:up.previewLink||up.driveLink||'',
+            driveInstitutional:true,
+            driveEstado:'atendido',
+            tipo:'soporte_notificacion',
+            notificado:true,
+            autor:por,
+            fecha:fechaC,
+            mime:'application/pdf'
+          });
+        });
       }
     }
     window._taskReviewAprobarNotificar=false;
-    const soporteDoc=up?{
+    const soporteDoc=(esPqrsNotif&&up)?{
       nombre:'Soporte de envío',
       driveLink:up.driveLink||'',
       previewLink:up.previewLink||up.driveLink||'',
@@ -8472,9 +8483,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       tipo:'soporte_respuesta',
       driveEstado:'atendido'
     }:null;
-    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
-      &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
-      &&typeof taskReviewCerrarPqrsAtendida==='function'){
+    if(esPqrsNotif&&typeof taskReviewCerrarPqrsAtendida==='function'){
       taskReviewCerrarPqrsAtendida(e,{
         fecha:fechaC,por:por,cuerpo:cuerpo,notificada:true,
         para:destinos.join(', '),soporteDoc:soporteDoc,
