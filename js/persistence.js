@@ -320,7 +320,7 @@ async function loadLS(){
       if(result.status==='fulfilled'&&result.value.exists()){
         const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
-        if(Array.isArray(data.actividadesLibres)&&data.actividadesLibres.length){
+        if(Array.isArray(data.actividadesLibres)){
           actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
             ?upsertActividadesLibresFromRemote(data.actividadesLibres)
             :mergeActividadesLibresFromRemote(data.actividadesLibres);
@@ -621,23 +621,38 @@ function pickMejorActLibre(a,b){
   if(fb&&!fa)return b;
   return b;
 }
+function actLibreKeepLocalOnly(t){
+  if(!t||!t.id||t.eliminada)return false;
+  if(!t._pending_fs_sync)return false;
+  const at=Number(t._pending_fs_at)||0;
+  // Solo conservar huérfanos locales con sync pendiente reciente (evita resucitar borrados remotos)
+  if(!at)return true;
+  return (Date.now()-at)<15*60*1000;
+}
 function upsertActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const byId=new Map();
-  local.forEach(function(t){
-    if(t&&t.id)byId.set(String(t.id),t);
-  });
   rem.forEach(function(t){
     if(!t||!t.id)return;
+    byId.set(String(t.id),t);
+  });
+  local.forEach(function(t){
+    if(!t||!t.id)return;
     const id=String(t.id);
-    const cur=byId.get(id);
-    if(!cur){byId.set(id,t);return;}
-    if(cur._pending_fs_sync&&scoreActividadLibreMerge(cur)>=scoreActividadLibreMerge(t)){
-      // Remoto sin firmaWf: no pisar el flujo local
-      if(cur.firmaWf&&cur.firmaWf.fase&&!(t.firmaWf&&t.firmaWf.fase))return;
+    const remT=byId.get(id);
+    if(!remT){
+      if(actLibreKeepLocalOnly(t))byId.set(id,t);
+      return;
     }
-    byId.set(id,pickMejorActLibre(cur,t));
+    // Remoto gana salvo sync local pendiente con firma más avanzada
+    if(t._pending_fs_sync&&scoreActividadLibreMerge(t)>=scoreActividadLibreMerge(remT)){
+      if(t.firmaWf&&t.firmaWf.fase&&!(remT.firmaWf&&remT.firmaWf.fase)){
+        byId.set(id,t);
+        return;
+      }
+    }
+    byId.set(id,pickMejorActLibre(remT,t));
   });
   return Array.from(byId.values()).map(function(t){
     if(typeof normalizeActLibre==='function'){
@@ -1222,14 +1237,12 @@ function mergeActividadesLibresFromRemote(remote){
     if(!t||!t.id)return;
     byId.set(String(t.id),t);
   });
-  // Conservar actividades locales aún no reflejadas en el snapshot (entrega en curso / race)
+  // Solo conservar locales ausentes en remoto si hay sync pendiente reciente (no resucitar borrados)
   local.forEach(function(t){
     if(!t||!t.id)return;
     const id=String(t.id);
     if(!byId.has(id)){
-      if(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||(t.soportes||[]).length||(t.firmaWf&&t.firmaWf.fase)){
-        byId.set(id,t);
-      }
+      if(actLibreKeepLocalOnly(t))byId.set(id,t);
       return;
     }
     const remT=byId.get(id);
@@ -1255,16 +1268,9 @@ async function syncPendingActividadesLibresToFirestore(){
   const local=Array.isArray(actividadesLibres)?actividadesLibres:[];
   const need=local.some(function(t){
     if(!t||t.eliminada)return false;
-    return !!(t._pending_fs_sync||t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada);
+    return !!t._pending_fs_sync;
   });
   if(!need)return false;
-  local.forEach(function(t){
-    if(!t||t.eliminada)return;
-    if(t.origen==='responsable'||t.autoAsignadaPorResponsable||t.fechaReportada||t._pending_fs_sync){
-      t._pending_fs_sync=true;
-      t._pending_fs_at=t._pending_fs_at||Date.now();
-    }
-  });
   const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:saveGlobalFirestore;
   if(typeof persistFn!=='function')return false;
   const ok=await persistFn();
