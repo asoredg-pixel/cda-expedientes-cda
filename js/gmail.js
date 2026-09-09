@@ -3210,6 +3210,10 @@ async function subirSoporteRadicacionManual(opts) {
         fechaRef,
         uploadOpts
       );
+      if (soporte) {
+        soporte.nombre = soporte.nombre || ('Solicitud_PQRSD-' + expId + '_' + asuntoSlug + '.pdf');
+        soporte.tipo = soporte.tipo || 'soporte_radicacion';
+      }
       uploaded.push(soporte);
     } else if (!silentNotif) {
       notif('⚠️ No se pudo generar el PDF (jsPDF no disponible).', 'warn');
@@ -3231,6 +3235,7 @@ async function subirSoporteRadicacionManual(opts) {
         uploadOpts
       );
       up.nombre = driveName;
+      up.tipo = up.tipo || 'anexo_radicacion';
       uploaded.push(up);
     }
 

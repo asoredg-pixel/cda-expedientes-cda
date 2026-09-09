@@ -1520,13 +1520,133 @@ function pqrsSincronizarParticipacionPostAprobacion(e){
 /** Documento anexo de la respuesta (aparte del oficio). */
 function _pqrsDocEsAnexoRespuesta(d){
   if(!d)return false;
-  if(d.tipo==='anexo_respuesta'||d.es_anexo===true)return true;
+  // Anexos de radicación (ventanilla/correo) no son anexos de la respuesta
+  if(d.es_radicacion||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud')return false;
   const nom=String(d.nombre||d.driveFilename||d.label||'');
+  if(/^anexo\s+pqrsd\b/i.test(nom)||/^solicitud_pqrsd/i.test(nom))return false;
+  if(d.tipo==='anexo_respuesta'||d.es_anexo===true)return true;
   if(/^anexo[-_\s]?\d*/i.test(nom))return true;
   // Tras renombre Drive (revision-anexo1-… / por_firmar-anexo2-…)
   if(/(^|[-_])anexo[-_\s]?\d*/i.test(nom))return true;
   return false;
 }
+/** Nombre típico del PDF institucional de radicación. */
+function _pqrsEsNombreSoporteRadicacion(nom){
+  const n=String(nom||'').trim();
+  return /^solicitud_pqrsd/i.test(n)||/^soporte\s+de\s+solicitud/i.test(n)||/^soporte\s+de\s+radicaci/i.test(n);
+}
+/** Nombre típico de anexo subido al radicar (ventanilla/correo). */
+function _pqrsEsNombreAnexoRadicacion(nom){
+  return /^anexo\s+pqrsd\b/i.test(String(nom||'').trim());
+}
+/**
+ * Documentos de la radicación: PDF soporte institucional + anexos de ventanilla/correo.
+ * Usado en rail atendidas, comparar y consulta ciudadana.
+ */
+function _pqrsCollectDocsRadicacion(e){
+  if(!e||typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(e))return[];
+  const out=[];
+  const seen=new Set();
+  const keyOf=function(url,meta){
+    if(typeof _pqrsDocKey==='function')return _pqrsDocKey(Object.assign({},meta||{},{driveLink:url,url:url}));
+    return String(url||'').trim().toLowerCase();
+  };
+  const labelAnexo=function(nom){
+    const n=String(nom||'').trim();
+    if(!n)return'Anexo radicado';
+    const stripped=n.replace(/^ANEXO\s+PQRSD\s+\S+\s+/i,'').trim();
+    return stripped&&stripped!==n?('Anexo radicado: '+stripped):(_pqrsEsNombreAnexoRadicacion(n)?'Anexo radicado':n);
+  };
+  const push=function(url,nombre,fileId,tipoHint){
+    if(!url)return;
+    if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url))return;
+    const k=keyOf(url,{fileId:fileId});
+    if(!k||seen.has(k))return;
+    seen.add(k);
+    const nom=String(nombre||'').trim();
+    let tipo=tipoHint||'';
+    if(!tipo){
+      if(_pqrsEsNombreSoporteRadicacion(nom))tipo='soporte_radicacion';
+      else if(_pqrsEsNombreAnexoRadicacion(nom))tipo='anexo_radicacion';
+      else tipo='anexo_radicacion';
+    }
+    out.push({
+      driveLink:url,url:url,previewLink:url,
+      nombre:nom,fileId:fileId||'',driveFileId:fileId||'',
+      tipo:tipo,
+      label:tipo==='soporte_radicacion'?'Soporte de radicación (PDF)':labelAnexo(nom),
+      es_radicacion:true,
+      es_anexo:tipo==='anexo_radicacion'
+    });
+  };
+  const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
+  if(atts.length){
+    atts.forEach(function(att,i){
+      if(!att||!(att.driveLink||att.url||att.previewLink))return;
+      const url=att.driveLink||att.url||att.previewLink;
+      const nom=att.nombre||att.name||att.driveFilename||'';
+      let tipo='';
+      const matchSol=e._pqrs_solicitud_link&&typeof pqrsDriveUrlsMatch==='function'
+        ?pqrsDriveUrlsMatch(url,e._pqrs_solicitud_link)
+        :(e._pqrs_solicitud_link&&String(url)===String(e._pqrs_solicitud_link));
+      if(_pqrsEsNombreSoporteRadicacion(nom)||(matchSol&&!_pqrsEsNombreAnexoRadicacion(nom))||(i===0&&matchSol))
+        tipo='soporte_radicacion';
+      else if(_pqrsEsNombreAnexoRadicacion(nom)||i>0||!matchSol)
+        tipo='anexo_radicacion';
+      else tipo='soporte_radicacion';
+      push(url,nom,att.fileId||att.driveFileId||'',tipo);
+    });
+  }else if(e._pqrs_solicitud_link){
+    const nomArch=String(e._pqrs_solicitud_archivo||'').trim();
+    // Si _pqrs_solicitud_archivo son solo nombres de anexos (legacy), no usarlo como título del PDF
+    const nomPdf=_pqrsEsNombreSoporteRadicacion(nomArch)?nomArch
+      :(nomArch&&!/;/.test(nomArch)&&!_pqrsEsNombreAnexoRadicacion(nomArch)&&nomArch.indexOf('.')>0?nomArch:'Soporte de radicación');
+    push(e._pqrs_solicitud_link,nomPdf,'','soporte_radicacion');
+  }
+  return out;
+}
+function _pqrsBuildSoportesRadicacion(e){
+  const docs=_pqrsCollectDocsRadicacion(e);
+  if(!docs.length)return[];
+  const fecha=(e&&(e._fecha_solicitud||e._fecha))||(typeof hoy==='function'?hoy():'');
+  return docs.map(function(d,i){
+    const url=d.driveLink||d.url||'';
+    const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
+    const esAnexo=d.tipo==='anexo_radicacion';
+    return{
+      id:'pqrs_rad_'+(d.fileId||i)+'_'+i,
+      label:d.label||(esAnexo?'Anexo radicado':'Soporte de radicación'),
+      url:p.url||url,
+      preview:p.preview||url,
+      version:1,
+      fecha:fecha,
+      driveFileId:d.fileId||d.driveFileId||'',
+      fileId:d.fileId||d.driveFileId||'',
+      es_anexo:false,
+      es_radicacion:true,
+      es_proyeccion:false,
+      es_firmado:false,
+      notificado:false,
+      tipo:d.tipo||(esAnexo?'anexo_radicacion':'soporte_radicacion'),
+      activo:true,
+      autor:'',
+      reportadoPor:'',
+      local:false,
+      driveInstitutional:true,
+      driveEstado:'solicitud',
+      loteEntrega:'radicacion',
+      driveFilename:d.nombre||''
+    };
+  });
+}
+function soporteEsDocRadicacion(s){
+  if(!s)return false;
+  if(s.es_radicacion===true)return true;
+  const t=String(s.tipo||'');
+  return t==='soporte_radicacion'||t==='anexo_radicacion'||t==='anexo_solicitud';
+}
+window._pqrsCollectDocsRadicacion=_pqrsCollectDocsRadicacion;
+window.soporteEsDocRadicacion=soporteEsDocRadicacion;
 /** Documento marcado / nombrado como versión enviada a corrección (hay que conservarlo para comparar). */
 function _pqrsDocEsPorCorregir(d){
   if(!d)return false;
@@ -4329,27 +4449,18 @@ function pqrsAnexoChipHtml(e,a,drv,idx){
 function collectPqrsOrigenDocs(e){
   if(!e)return[];
   const docs=[];
-  const seen=new Set();
-  function push(id,url,label,shortLbl){
+  const rad=typeof _pqrsCollectDocsRadicacion==='function'?_pqrsCollectDocsRadicacion(e):[];
+  rad.forEach(function(d,i){
+    const url=d.driveLink||d.url||'';
     if(!url)return;
-    const k=String(url).trim().toLowerCase();
-    if(!k||seen.has(k))return;
-    seen.add(k);
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{preview:url,url:url};
+    const full=d.label||(d.tipo==='soporte_radicacion'?'Soporte de radicación':'Anexo radicado');
+    const short=full.length>36?full.slice(0,34)+'…':full;
     docs.push({
-      id:id,url:url,preview:p.preview||p.url||url,
-      label:shortLbl||label||'Documento',fullLabel:label||shortLbl||'Documento'
+      id:d.tipo==='soporte_radicacion'&&i===0?'pqrs_sol':('pqrs_att_'+i),
+      url:url,preview:p.preview||p.url||url,
+      label:short,fullLabel:full
     });
-  }
-  if(e._pqrs_solicitud_link){
-    push('pqrs_sol',e._pqrs_solicitud_link,e._pqrs_solicitud_archivo||'Soporte de radicación','Soporte radicación');
-  }
-  (e._pqrs_gmail_attachments||[]).forEach(function(att,i){
-    if(!att||!att.driveLink)return;
-    if(e._pqrs_solicitud_link&&pqrsDriveUrlsMatch(att.driveLink,e._pqrs_solicitud_link))return;
-    const nom=att.nombre||att.name||('Anexo '+(i+1));
-    const short=nom.length>36?nom.slice(0,34)+'…':nom;
-    push('pqrs_att_'+i,att.driveLink,nom,short);
   });
   return docs;
 }
@@ -4832,16 +4943,23 @@ function getDocsPqrsSolicitudCiudadano(e){
   const push=function(url,label,tipo,fecha){
     if(!url)return;
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
-    const key=String(p.url||url||'').trim().toLowerCase();
+    const key=typeof _pqrsDocKey==='function'
+      ?_pqrsDocKey({driveLink:p.url||url,url:p.url||url})
+      :String(p.url||url||'').trim().toLowerCase();
     if(!key||seen.has(key))return;
     seen.add(key);
     docs.push({url:p.url||url,preview:p.preview||p.url||url,label:label||'Documento',tipo:tipo||'Documento de solicitud',mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||''});
   };
-  push(e._pqrs_solicitud_link,'Solicitud PQRSD','Documento de solicitud',e._fecha_solicitud||e._fecha);
-  (e._pqrs_gmail_attachments||[]).forEach(function(att){
-    if(!att||!att.driveLink)return;
-    push(att.driveLink,att.nombre||'Anexo de la solicitud','Anexo de la solicitud',e._fecha_solicitud||e._fecha);
-  });
+  const rad=typeof _pqrsCollectDocsRadicacion==='function'?_pqrsCollectDocsRadicacion(e):[];
+  if(rad.length){
+    rad.forEach(function(d){
+      const esSop=d.tipo==='soporte_radicacion';
+      push(d.driveLink||d.url,d.label||(esSop?'Soporte de radicación (PDF)':'Anexo radicado'),
+        esSop?'Soporte de radicación':'Anexo de la solicitud',e._fecha_solicitud||e._fecha);
+    });
+  }else{
+    push(e._pqrs_solicitud_link,'Soporte de radicación (PDF)','Soporte de radicación',e._fecha_solicitud||e._fecha);
+  }
   return docs;
 }
 function docsTramiteData(v){
@@ -9533,7 +9651,12 @@ function ensurePqrsSoportesAprobadosOnTask(t,e){
   const docs=(wf.documentos||[]).filter(function(d){
     return d&&(d.driveLink||d.previewLink||d.url)&&!_pqrsDocEsPorCorregir(d);
   });
-  if(!docs.length)return;
+  if(!docs.length){
+    // Sin docs de respuesta aún: al menos mostrar radicación (PDF + anexos ventanilla)
+    const rad=typeof _pqrsBuildSoportesRadicacion==='function'?_pqrsBuildSoportesRadicacion(e):[];
+    if(rad.length)t.soportes=rad;
+    return;
+  }
   // Preferir docs del workflow (p. ej. PDF firmado cargado en Por firmar) sobre solicitud
   _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf);
 }
@@ -9547,7 +9670,8 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
     return d&&!(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d));
   });
   if(!list.length)return;
-  t.soportes=list.map(function(d,i){
+  const rad=typeof _pqrsBuildSoportesRadicacion==='function'?_pqrsBuildSoportesRadicacion(e):[];
+  const wfSops=list.map(function(d,i){
     const url=d.driveLink||d.previewLink||d.url||'';
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):{url:url,preview:url};
     const esAn=typeof _pqrsDocEsAnexoRespuesta==='function'?_pqrsDocEsAnexoRespuesta(d):false;
@@ -9590,6 +9714,8 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
         :('wf_aprob_'+String((wf&&wf.entrega_n)||1)))
     };
   });
+  // Trazabilidad: PDF/anexos de radicación + proyección/notificación de respuesta
+  t.soportes=rad.concat(wfSops);
 }
 window.ensurePqrsSoportesAprobadosOnTask=ensurePqrsSoportesAprobadosOnTask;
 /** Borra del Drive los documentos de la entrega actual en revisión (reemplazo sin volver a Por ejecutar). */
@@ -10116,12 +10242,19 @@ function renderPqrsSolRespCompareShell(e,t){
 function renderPqrsSolRespCompareStack(e,t){
   const stack=document.getElementById('pqrs-sol-resp-compare-stack');
   if(!stack||!e)return;
-  const solUrl=e._pqrs_solicitud_link;
+  const origen=typeof collectPqrsOrigenDocs==='function'?collectPqrsOrigenDocs(e):[];
+  const solDoc=origen[0]||null;
+  const solUrl=solDoc?solDoc.url:(e._pqrs_solicitud_link||'');
   const solP=solUrl?parseDrivePreviewUrl(solUrl):null;
+  const solTit=solDoc?(solDoc.fullLabel||solDoc.label||'◀ Solicitud / radicación')
+    :'◀ Solicitud del ciudadano';
+  const anexosExtra=origen.length>1
+    ?(' · +'+(origen.length-1)+' anexo(s) de radicación')
+    :'';
   const resp=getPqrsRespuestaDocPreview(e,t);
   const respMeta=[e._pqrs_respuesta_fecha?fmtF(e._pqrs_respuesta_fecha):'',e._pqrs_respuesta_oficio?'Oficio '+e._pqrs_respuesta_oficio:''].filter(Boolean).join(' · ');
   stack.innerHTML=
-    renderComparePqrsDocBlock('◀ Solicitud del ciudadano',solP?(solP.preview||solP.url):null,solP?(solP.url||solUrl):null)+
+    renderComparePqrsDocBlock(solTit,solP?(solP.preview||solP.url):null,solP?(solP.url||solUrl):null,anexosExtra.trim()||undefined)+
     renderComparePqrsDocBlock('Respuesta al ciudadano ▶',resp?resp.preview:null,resp?resp.url:null,respMeta);
 }
 function initPqrsSolRespCompareTab(){
@@ -12678,43 +12811,50 @@ function soportesVisiblesParaVista(t,opts){
     const hasFirma=list.some(function(s){return typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s);});
     const hasNotif=list.some(function(s){return typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s);});
     const keepStage=function(s){
+      if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return true;
       if(soporteEsAnexoEntrega(s))return true;
       if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return true;
       if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s))return true;
       return false;
     };
     if((cerrada||hasNotif)&&hasFirma){
-      // Notificado con firma: Firma. + Not. (sin Proy.)
+      // Notificado con firma: Radicación + Firma. + Not. (sin Proy.)
       list=list.filter(keepStage);
     }else if((cerrada||hasNotif)&&!hasFirma){
-      // Cerrado sin firma o solo notificado: Proy. + Not. (si hay)
+      // Cerrado sin firma o solo notificado: Radicación + Proy. + Not. (si hay)
       list=list.filter(function(s){
+        if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return true;
         if(soporteEsAnexoEntrega(s))return true;
         if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return true;
         return !soporteEsDocumentoFirmado(s);
       });
     }else if(enNotif||hasFirma){
-      // Por notificar: Proy. + Firma.
+      // Por notificar: Radicación + Proy. + Firma.
       list=list.filter(function(s){
+        if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return true;
         if(soporteEsAnexoEntrega(s))return true;
         if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s))return true;
         if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return false;
         return true;
       });
     }else{
-      // Solo proyección / última entrega aprobada
+      // Solo proyección / última entrega aprobada (+ docs de radicación)
       const lotes=[...new Set(list.map(function(x){return x.loteEntrega;}).filter(Boolean))];
       if(lotes.length){
         const lastLote=lotes[lotes.length-1];
-        list=list.filter(function(x){return x.loteEntrega===lastLote;});
+        list=list.filter(function(x){
+          if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(x))return true;
+          return x.loteEntrega===lastLote;
+        });
       }else{
-        const mains=list.filter(function(s){return !soporteEsAnexoEntrega(s);});
+        const mains=list.filter(function(s){return !soporteEsAnexoEntrega(s)&&!(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s));});
         const lastMain=mains.length?mains[mains.length-1]:null;
         if(lastMain){
           const ver=lastMain.version;
           const f=(lastMain.fecha||'').slice(0,10);
           const lote=lastMain.loteEntrega;
           list=list.filter(function(s){
+            if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return true;
             if(s===lastMain)return true;
             if(!soporteEsAnexoEntrega(s))return false;
             if(lote&&s.loteEntrega===lote)return true;
@@ -12780,6 +12920,7 @@ function openPqrsNotificarDesdeAct(expId,taskId){
 window.openPqrsNotificarDesdeAct=openPqrsNotificarDesdeAct;
 function soporteEsAnexoEntrega(s){
   if(!s)return false;
+  if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return false;
   if(s.es_anexo===true||s.tipo==='anexo_respuesta')return true;
   if(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s))return true;
   return /^anexo\b/i.test(String(s.label||s.driveFilename||''));
@@ -12810,6 +12951,17 @@ function soporteUrlComparable(s){
 }
 function soporteTabLabel(s,idx,soportes){
   const list=soportes||[];
+  if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
+    if(s.tipo==='soporte_radicacion'||(!s.es_anexo&&s.tipo!=='anexo_radicacion'&&!/^anexo\b/i.test(String(s.label||'')))){
+      return 'Rad. · PDF';
+    }
+    const anexos=list.filter(function(x){
+      return x&&typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(x)
+        &&(x.tipo==='anexo_radicacion'||/^anexo\b/i.test(String(x.label||'')));
+    });
+    const n=anexos.indexOf(s)+1;
+    return 'Anexo rad. '+(n>0?n:1);
+  }
   if(soporteEsAnexoEntrega(s)){
     const anexos=list.filter(soporteEsAnexoEntrega);
     const n=anexos.indexOf(s)+1;
@@ -12916,7 +13068,9 @@ function getDefaultSoporteSel(t){
     if(esModoResponsable()&&(miEst==='Atendida'||est==='Atendida'
       ||(typeof taskRespParticipacionAtendida==='function'&&taskRespParticipacionAtendida(t,responsableActivo)))){
       const ap=soportesVisiblesParaVista(t,{soloAprobados:true});
-      const mainA=ap.filter(function(s){return s&&!soporteEsAnexoEntrega(s);});
+      const mainA=ap.filter(function(s){
+        return s&&!soporteEsAnexoEntrega(s)&&!(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s));
+      });
       if(mainA.length)return mainA[mainA.length-1].id;
       if(ap.length)return ap[ap.length-1].id;
     }
@@ -13220,7 +13374,26 @@ function collectDocsComparables(e,taskId,tDirect,opts){
   const pushExpDocs=function(exp,origenPrefix){
     if(!exp)return;
     const pref=origenPrefix?origenPrefix+' · ':'';
-    if(esPqrsSecretaria(exp)&&exp._pqrs_solicitud_link)pushUrl('pqrs_sol_'+exp._exp,pref+'PQRSD','Solicitud PQRSD',exp._pqrs_solicitud_link,exp._fecha_solicitud||exp._fecha);
+    if(esPqrsSecretaria(exp)){
+      const radDocs=typeof _pqrsCollectDocsRadicacion==='function'?_pqrsCollectDocsRadicacion(exp):[];
+      if(radDocs.length){
+        radDocs.forEach(function(d,i){
+          const url=d.driveLink||d.url||'';
+          if(!url)return;
+          const esSop=d.tipo==='soporte_radicacion';
+          pushUrl(
+            'pqrs_rad_'+exp._exp+'_'+i,
+            pref+'PQRSD',
+            d.label||(esSop?'Soporte de radicación (PDF)':'Anexo radicado'),
+            url,
+            exp._fecha_solicitud||exp._fecha,
+            esSop?'radicación':'anexo ventanilla'
+          );
+        });
+      }else if(exp._pqrs_solicitud_link){
+        pushUrl('pqrs_sol_'+exp._exp,pref+'PQRSD','Soporte de radicación (PDF)',exp._pqrs_solicitud_link,exp._fecha_solicitud||exp._fecha);
+      }
+    }
     if(esPqrsSecretaria(exp)&&typeof getPqrsWorkflow==='function'){
       const wf=getPqrsWorkflow(exp);
       (wf.documentos||[]).forEach(function(d,i){
@@ -13312,6 +13485,15 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       }else if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
         lab='📎 Anexo '+n;
+      }else if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
+        lab=s.tipo==='soporte_radicacion'||/^soporte de radicaci/i.test(String(s.label||''))
+          ?'Rad. · PDF'
+          :('Anexo rad. '+(s.anexo_n||''));
+        if(!lab||lab==='Anexo rad. '){
+          const anexosRad=(t.soportes||[]).filter(function(x){return x&&soporteEsDocRadicacion(x)&&(x.tipo==='anexo_radicacion'||/^anexo\b/i.test(String(x.label||'')));});
+          const n=anexosRad.indexOf(s)+1;
+          lab='Anexo rad. '+(n>0?n:1);
+        }
       }else if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s)){
         lab='Not. v'+(s.version||1)+(s.activo?' · activa':'');
       }else if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s)){

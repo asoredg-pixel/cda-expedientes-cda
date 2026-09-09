@@ -411,11 +411,20 @@ function collectArchivosPqrsLinks(e){
     seen.add(key);
     items.push({exp:e._exp,taskId:'',taskDesc:'PQRSD',label:label||'Documento PQRSD',url:(typeof parseDrivePreviewUrl==='function'?(parseDrivePreviewUrl(url).url||url):url),local:false,mime:'',fecha:fecha||e._fecha_solicitud||e._fecha||'',version:''});
   };
-  push(e._pqrs_solicitud_link,'Solicitud PQRSD',e._fecha_solicitud||e._fecha,{_tipoPub:'solicitud'});
+  push(e._pqrs_solicitud_link,'Soporte de radicación (PDF)',e._fecha_solicitud||e._fecha,{_tipoPub:'solicitud'});
   (e._pqrs_gmail_attachments||[]).forEach(function(att){
-    if(!att||!att.driveLink||att.driveLink===e._pqrs_solicitud_link)return;
+    if(!att||!att.driveLink)return;
+    const sameSol=e._pqrs_solicitud_link&&(
+      (typeof pqrsDriveUrlsMatch==='function'&&pqrsDriveUrlsMatch(att.driveLink,e._pqrs_solicitud_link))
+      ||att.driveLink===e._pqrs_solicitud_link
+    );
+    if(sameSol)return;
     if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(att.driveLink))return;
-    push(att.driveLink,att.nombre||'Anexo PQRSD',e._fecha_solicitud||e._fecha,{_tipoPub:'solicitud'});
+    const nom=att.nombre||att.name||'Anexo radicado';
+    const lbl=typeof _pqrsEsNombreAnexoRadicacion==='function'&&_pqrsEsNombreAnexoRadicacion(nom)
+      ?('Anexo radicado: '+String(nom).replace(/^ANEXO\s+PQRSD\s+\S+\s+/i,'').trim())
+      :nom;
+    push(att.driveLink,lbl||'Anexo radicado',e._fecha_solicitud||e._fecha,{_tipoPub:'solicitud'});
   });
   const tieneSoportesResp=Array.isArray(e._pqrs_respuesta_soportes)&&e._pqrs_respuesta_soportes.length>0;
   if(tieneSoportesResp){

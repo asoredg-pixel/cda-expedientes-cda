@@ -628,12 +628,13 @@ async function guardarPqrsSecretaria(modo){
   let manualDriveFolderLink='';
   let driveFolderMeta={};
   let archivoFinal='';
+  let manualRes=null;
   if(gmailMsgId&&typeof gmailAutoUploadPendingAttachments==='function'){
     try{await gmailAutoUploadPendingAttachments(expId,nombre);}catch(e){console.warn('auto-upload soporte:',e);}
   }
   if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
     try{
-      const manualRes=await subirSoporteRadicacionManual({
+      manualRes=await subirSoporteRadicacionManual({
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
         asunto,detalle,tipoPersona,
         pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
@@ -675,12 +676,18 @@ async function guardarPqrsSecretaria(modo){
     };
   }
   window._gmailPendingPqrsFolders=null;
-  const linkFinal=(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
+  const linkFinal=(manualRes&&manualRes.link)
+    ||(gmailAtts&&gmailAtts[0]?gmailAtts[0].driveLink:'')
+    ||(manualDriveAtts&&manualDriveAtts[0]?manualDriveAtts[0].driveLink:'');
   const folderLinkFinal=manualDriveFolderLink||driveFolderMeta.pqrsFolderLink||(gmailAtts&&gmailAtts[0]&&gmailAtts[0].folderLink)||'';
   const hayMetadrive=!!(linkFinal||folderLinkFinal||driveFolderMeta.pqrsFolderId||(gmailAtts&&gmailAtts.length));
   if(hayMetadrive){
     data._pqrs_solicitud_link=linkFinal;
-    data._pqrs_solicitud_archivo=archivoFinal;
+    // Guardar nombre del PDF de radicación (no solo nombres de anexos)
+    const soporteNom=(manualRes&&manualRes.soporte&&(manualRes.soporte.nombre||manualRes.soporte.name))
+      ||(gmailAtts&&gmailAtts[0]&&(gmailAtts[0].nombre||gmailAtts[0].name))
+      ||'';
+    data._pqrs_solicitud_archivo=soporteNom||archivoFinal||'';
     data._pqrs_drive_folder_link=folderLinkFinal;
     data._pqrs_drive_folder_id=driveFolderMeta.pqrsFolderId||'';
     data._pqrs_drive_solicitud_folder_id=driveFolderMeta.solicitudFolderId||'';
