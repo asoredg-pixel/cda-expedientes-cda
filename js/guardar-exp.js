@@ -131,7 +131,12 @@ function abrirConsultaExpPanelDesdeAct(expId,taskId){
   const pqrsRead=esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv());
   window._conPanelPqrsNcaEdit=!!(esPqrsNcaAct&&!esVistaActividadesDepto());
   const editDept=esVistaActividadesDepto()&&puedeEditarExpPanel();
-  const edit=!esModoResponsable()&&(editDept||(esPqrsNcaAct?puedeEditarExpPanel():false)||(!pqrsRead&&esVistaActividadesDepto()&&puedeEditarExpPanel()));
+  let edit=false;
+  if(esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista())){
+    edit=puedeEditarExpPanel()&&!pqrsRead;
+  }else{
+    edit=editDept||(esPqrsNcaAct?puedeEditarExpPanel():false)||(!pqrsRead&&esVistaActividadesDepto()&&puedeEditarExpPanel());
+  }
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:!!edit});
 }
 /** Desde columna Ref. en Actividades: vista consulta (solo lectura), sin cambiar de módulo. */
@@ -434,12 +439,14 @@ function guardarExpCore(stayOnForm){
   if(!data._sancionatorio)data._exp_sancionatorio='';
   let idx=editId?exps.findIndex(e=>e._exp===editId):-1;
   if(idx<0)idx=exps.findIndex(e=>e._exp===expId);
-  if(esModoResponsable()&&responsableActivo){
+  if((esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))&&responsableActivo){
     const secs=getRegSeccionesResponsableActivo();
-    if(idx<0&&!secs.includes('control')){notif('No tiene permiso para crear nuevos expedientes','err');return;}
+    if(idx<0&&!(secs&&secs.includes('control'))){
+      notif('No tiene permiso para crear nuevos expedientes','err');
+      return;
+    }
     if(idx>=0){
-      const prevMerge=exps[idx]||{};
-      data=mergeExpDataPorSecciones(data,prevMerge,secs);
+      data=mergeExpDataPorSecciones(data,exps[idx]||{},secs);
     }
   }
   if(idx>=0){
@@ -533,7 +540,10 @@ function guardarExpCore(stayOnForm){
 }
 function nuevoExp(){
   if(esSoloLectura()){notif('En este modo solo puede consultar','err');return;}
-  if(esModoResponsable()&&!responsablePuedeEditarSec('control')){notif('No tiene permiso para crear nuevos expedientes','err');return;}
+  if(typeof puedeCrearExpedienteRegistro==='function'?!puedeCrearExpedienteRegistro():(esModoResponsable()&&!responsablePuedeEditarSec('control'))){
+    notif('No tiene permiso para crear nuevos expedientes','err');
+    return;
+  }
   limpiarForm();showTab('reg');window.scrollTo(0,0);
 }
 function limpiarForm(){
@@ -557,13 +567,17 @@ function editarExp(expId){
   window._conPanelPqrsNcaEdit=!!(e&&esPqrsSecretaria(e)&&esOficinaPqrsNca()&&!esVistaActividadesDepto());
   abrirConsultaExpPanel(expId,{allowSingle:true,edit:true});
 }
-/** ✏️ desde Actividades: misma ventana que Registro. Solo encargados. */
+/** ✏️ desde Actividades: misma ventana que Registro (encargado o responsable con secciones editables). */
 function editarExpDesdeAct(expId,taskId){
-  if(typeof esModoResponsable==='function'&&esModoResponsable()){
-    notif('Solo el encargado del departamento puede editar','err');
-    return;
-  }
-  if(typeof puedeGestionarActividadesDepto==='function'&&!puedeGestionarActividadesDepto()&&typeof puedeEditarExpPanel==='function'&&!puedeEditarExpPanel()){
+  const esResp=typeof esModoResponsable==='function'&&esModoResponsable()
+    ||(typeof esModoContratista==='function'&&esModoContratista());
+  if(esResp){
+    if(typeof puedeEditarExpPanel!=='function'||!puedeEditarExpPanel()){
+      notif('No tiene permiso para editar en Registro. Verifique secciones habilitadas en Configuración','err');
+      return;
+    }
+  }else if(typeof puedeGestionarActividadesDepto==='function'&&!puedeGestionarActividadesDepto()
+    &&(typeof puedeEditarExpPanel!=='function'||!puedeEditarExpPanel())){
     notif('No tiene permiso para editar','err');
     return;
   }

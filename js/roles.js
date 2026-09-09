@@ -370,6 +370,14 @@ function responsablePuedeEditarSec(key){
   const secs=getRegSeccionesResponsableActivo();
   return Array.isArray(secs)&&secs.includes(key);
 }
+/** Crear desde Registro: encargado/admin, o responsable con facultad «Control del trámite». */
+function puedeCrearExpedienteRegistro(){
+  if(typeof esSoloLectura==='function'&&esSoloLectura())return false;
+  if(esJurisdiccional())return false;
+  if(esModoResponsable()||esModoContratista())return !!responsablePuedeEditarSec('control');
+  return true;
+}
+window.puedeCrearExpedienteRegistro=puedeCrearExpedienteRegistro;
 function regSecHtml(key,html){
   if(!html)return '';
   if((esModoResponsable()||esModoContratista())&&!responsablePuedeEditarSec(key))return '';

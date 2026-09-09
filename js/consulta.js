@@ -36,10 +36,12 @@ function renderTabla(){
     const ter=calcTerminos(e);
     const myPend=esModoResponsable()&&responsableActivo?(e.tasks||[]).filter(t=>t.responsable===responsableActivo&&estadoTask(t)!=='Atendida'):[];
     const pendHtml=myPend.length?'<div style="font-size:11px;color:var(--pu)">'+myPend.length+' actividad(es) suya(s) pendiente(s)</div>':'';
-    const acts=soloLec||esUsuarioContratista()?'<button type="button" class="btn bsm bic" data-exp-view="'+escAttr(e._exp)+'" onclick="verCon(this.getAttribute(\'data-exp-view\'))" title="Ver">🔍</button>':
-      expBtnEditHtml(e._exp,{title:'Editar expediente'})+
-      '<button type="button" class="btn bsm bic" data-exp-view="'+escAttr(e._exp)+'" onclick="verCon(this.getAttribute(\'data-exp-view\'))" title="Ver">🔍</button>'+
-      '<button type="button" class="btn bsm bic bd2" data-exp-del="'+escAttr(e._exp)+'" onclick="eliminarExp(this.getAttribute(\'data-exp-del\'))" title="Eliminar">🗑</button>';
+    const btnVer='<button type="button" class="btn bsm bic" data-exp-view="'+escAttr(e._exp)+'" onclick="verCon(this.getAttribute(\'data-exp-view\'))" title="Ver">🔍</button>';
+    const canEditReg=!soloLec&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel();
+    const canDel=!soloLec&&!(typeof esUsuarioContratista==='function'&&esUsuarioContratista());
+    let acts=btnVer;
+    if(canEditReg)acts=expBtnEditHtml(e._exp,{title:'Editar expediente'})+btnVer;
+    if(canDel)acts+='<button type="button" class="btn bsm bic bd2" data-exp-del="'+escAttr(e._exp)+'" onclick="eliminarExp(this.getAttribute(\'data-exp-del\'))" title="Eliminar">🗑</button>';
     return '<tr>'+
       '<td style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:500;color:var(--bl)">'+escAttr(e._exp)+expLockIconHtml(e._exp)+'</td>'+
       '<td>'+badgeTram(e._tramite,e)+badgeDepto(e._depto)+'</td>'+

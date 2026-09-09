@@ -21533,7 +21533,8 @@ function updateDeptoUI(){
   if(typeof aplicarVisibilidadTabsSesion==='function')aplicarVisibilidadTabsSesion();
   if(typeof initSstNav==='function')initSstNav();
   document.querySelectorAll('.hacts-juris-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||resp||sec||ciudadano||ofi));
-  document.querySelectorAll('.hacts-nuevo-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||(resp&&(!responsableActivo||!responsablePuedeEditarSec('control')))||sec||ciudadano||ofi));
+  // «+ Nuevo expediente»: responsables solo si tienen facultad Control del trámite
+  document.querySelectorAll('.hacts-nuevo-hide').forEach(el=>el.classList.toggle('hacts-juris-off',juris||(resp&&(!responsableActivo||!(typeof puedeCrearExpedienteRegistro==='function'?puedeCrearExpedienteRegistro():responsablePuedeEditarSec('control'))))||sec||ciudadano||ofi));
   const optPqrsRec=document.getElementById('f-act-opt-pqrsrec');
   if(optPqrsRec)optPqrsRec.style.display='none';
   const tramSel=document.getElementById('tram-selector-wrap');
@@ -21995,10 +21996,14 @@ function renderActRowToolbarHtml(t,expAct){
   const esRevisadaEnc=esVistaActividadesDepto()&&!esModoResponsable()
     &&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,expAct)&&!pendienteRev;
   // ✏️ / 🗑️ en fila: no en «Por revisar» ni «Revisados» (van en el rail de 🧐)
-  if(puedeGestionarActividadesDepto()&&!pendienteRev&&!esRevisadaEnc){
-    if(t.sinExpediente)
-      acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
-    else
+  const canEditExpDesdeAct=puedeGestionarActividadesDepto()
+    ||((esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))
+      &&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel());
+  if(canEditExpDesdeAct&&!pendienteRev&&!esRevisadaEnc){
+    if(t.sinExpediente){
+      if(puedeGestionarActividadesDepto())
+        acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
+    }else
       acts+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(t.exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button>';
   }
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&(pendienteRev||esRevisadaEnc)

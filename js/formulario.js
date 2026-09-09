@@ -247,7 +247,12 @@ function poblarFiltrosCon(){
 // FORMULARIO DINÁMICO
 // ================================================================
 function onTramiteChange(){
-  if(esModoResponsable()){notif('En modo responsable no puede crear ni editar expedientes','err');return;}
+  // Alta nueva en Registro: responsable necesita facultad «control». La edición de existentes va por el panel (✏️).
+  if((esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))
+    &&!(typeof puedeCrearExpedienteRegistro==='function'&&puedeCrearExpedienteRegistro())){
+    notif('No tiene permiso para crear nuevos expedientes','err');
+    return;
+  }
   const tid=document.getElementById('r_tramite').value;
   if(!tid){document.getElementById('form-area').innerHTML='<div style="text-align:center;padding:2rem;color:var(--tx3);background:var(--sf);border:1px dashed var(--bd);border-radius:var(--rl)">Seleccione un tipo de trámite</div>';return;}
   renderFormulario(tid,null);
