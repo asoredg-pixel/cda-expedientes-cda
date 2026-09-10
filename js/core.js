@@ -22216,6 +22216,8 @@ function updateActEstFilterForEnc(forEnc){
   let cv=sel.value;
   if(cv==='parafirma'||cv==='porimprimir'||cv==='porfirmar'||cv==='firmados')cv='porfirma';
   const deptView=esVistaActividadesDepto();
+  // Encargado/depto: navega por clic en las tarjetas de paleta; el <select> sobra
+  sel.style.display=deptView?'none':'';
   const isVital=typeof esCargoVital==='function'&&esCargoVital();
   const isResp=!deptView&&esModoResponsable();
   const isDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
@@ -24001,10 +24003,14 @@ function filtrarActividadesPorEstado(list,filtro){
         return false;
       });
     }
-    // Vista depto con filtro de responsable: no mezclar entregas de otros
+    // Vista depto: con otro responsable filtrar; con encargado/Todos = bandeja de revisión de todos
     if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()){
       const rf=typeof getActDeptRespFilterSafe==='function'?getActDeptRespFilterSafe():null;
-      if(rf)out=(out||[]).filter(function(t){return typeof actividadPerteneceARespFilter==='function'&&actividadPerteneceARespFilter(t,rf);});
+      if(rf){
+        const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
+        const esBandejaEnc=!encNom||rf===encNom;
+        if(!esBandejaEnc)out=(out||[]).filter(function(t){return typeof actividadPerteneceARespFilter==='function'&&actividadPerteneceARespFilter(t,rf);});
+      }
     }
     return out;
   }
@@ -24120,7 +24126,10 @@ function renderActividades(){
     if(selMig)selMig.value='porfirma';
   }
   const q=(document.getElementById('s-act')?document.getElementById('s-act').value:'').toLowerCase();
+  // Encargado / «Todos»: bandeja «Por revisar» = entregas de todos. Otro responsable: solo las suyas.
+  const bandejaRevDepto=deptView&&(!respFilter||filterIsEnc);
   let listRespFilter=respFilter;
+  if(deptView&&bandejaRevDepto&&(filtroAct==='porver'||filtroAct==='revisados'))listRespFilter=null;
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   // Heal anticipado: PQRSD ya aprobada (firma/notif/cerrada) no debe quedar en «Por revisar»
@@ -24147,8 +24156,8 @@ function renderActividades(){
     }catch(errH){}
   });
   list=filtrarActividadesPorEstado(list,filtroAct);
-  // Seguridad: con responsable seleccionado, no colar ítems ajenos (porver/porfirma traen merges globales)
-  if(deptView&&respFilter){
+  // Con otro responsable: no colar ítems ajenos (merges globales de porver/porfirma/notif)
+  if(deptView&&respFilter&&!filterIsEnc){
     if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
     else list=(list||[]).filter(function(t){
       const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
@@ -24194,17 +24203,19 @@ function renderActividades(){
   const porEjec=deudaBase.length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
   const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
-  const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo(),'act');
+  // Contadores Por revisar / Revisados: bandeja del encargado = todos; otro responsable = filtrado
+  const porverScope=deptView?(bandejaRevDepto?null:respFilter):null;
+  const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(porverScope):getTareasResponsableActivo(),'act');
   const porrevisar=filtrarActividadesPorEstado(porverBase,'porver').length;
   const nRevisados=deptView?filtrarActividadesPorEstado(porverBase,'revisados').length:0;
   const done=filtrarActividadesPorEstado(all,'done').length;
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
-  let nPorFirmaList=filtrarActividadesPorEstado(all,'porfirma');
-  if(deptView&&respFilter)nPorFirmaList=(nPorFirmaList||[]).filter(function(t){return actividadPerteneceARespFilter(t,respFilter);});
+  let nPorFirmaList=filtrarActividadesPorEstado(bandejaRevDepto?[]:all,'porfirma');
+  if(deptView&&respFilter&&!filterIsEnc)nPorFirmaList=(nPorFirmaList||[]).filter(function(t){return actividadPerteneceARespFilter(t,respFilter);});
   const nPorFirma=nPorFirmaList.length;
   let nNotif=notifAll.length;
-  if(deptView&&respFilter)nNotif=(notifAll||[]).filter(function(t){return actividadNotifEsDeResp(t,respFilter);}).length;
+  if(deptView&&respFilter&&!filterIsEnc)nNotif=(notifAll||[]).filter(function(t){return actividadNotifEsDeResp(t,respFilter);}).length;
   const colSpan=deptView?9:8;
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
