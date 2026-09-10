@@ -8693,12 +8693,16 @@ function renderTaskReviewEliminarPqrsSideHtml(expId){
 }
 function renderTaskReviewEliminarSideHtml(expId,taskId){
   const eid=escAttr(expId),tid=escAttr(taskId);
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   return '<div class="task-review-side-form">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+(esAuto
+      ?'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar la entrega se <strong>anula la actividad</strong> y no quedará en Por ejecutar.'
+      :'La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.')+'</div>'+
     '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
-    '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
-    '<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>'+
+    '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>'+
+    (esAuto?'':'<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>')+
     '</div></div>';
 }
 function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
@@ -15956,7 +15960,12 @@ function devolverTaskAlResponsable(expId,taskId,nota){
   return false;
 }
 
-/** Quién puede borrar la entrega (vuelve a Por ejecutar como si no hubiera entregado). */
+/** Quién puede borrar la entrega (vuelve a Por ejecutar como si no hubiera entregado).
+ *  En autoentrega (📤 Entregar documento) la actividad se anula por completo — no queda en Por ejecutar. */
+function esAutoentregaResponsable(t){
+  return !!(t&&(t.autoAsignadaPorResponsable||t.origen==='responsable'));
+}
+window.esAutoentregaResponsable=esAutoentregaResponsable;
 function puedeEliminarEntregaActividad(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t||t.eliminada)return false;
@@ -15984,17 +15993,24 @@ function eliminarEntregaActividadConfirm(expId,taskId){
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return;}
   const t=getTaskAny(expId,taskId);
   const lbl=(t&&(t.desc||t.actividad))||'actividad';
+  const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   const fn=function(){eliminarEntregaActividad(expId,taskId);};
   if(typeof confirmEliminar==='function'){
     confirmEliminar({
-      title:'Eliminar entrega',
-      message:'¿Eliminar la entrega de «'+lbl+'»?',
-      detail:'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
-      confirmLabel:'Sí, eliminar entrega'
+      title:esAuto?'Cancelar autoentrega':'Eliminar entrega',
+      message:esAuto
+        ?('¿Cancelar la autoentrega de «'+lbl+'»?')
+        :('¿Eliminar la entrega de «'+lbl+'»?'),
+      detail:esAuto
+        ?'Como la actividad se creó al entregar (📤 Entregar documento), se anula por completo: no quedará en Por ejecutar. Se borrarán del Drive los documentos y anexos, y se liberarán los N° de registro de esta entrega.'
+        :'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
+      confirmLabel:esAuto?'Sí, cancelar autoentrega':'Sí, eliminar entrega'
     },fn);
     return;
   }
-  if(confirm('¿Eliminar esta entrega? La actividad volverá a Por ejecutar y se borrarán los documentos de Drive.'))fn();
+  if(confirm(esAuto
+    ?'¿Cancelar esta autoentrega? La actividad no quedará en Por ejecutar y se borrarán los documentos de Drive.'
+    :'¿Eliminar esta entrega? La actividad volverá a Por ejecutar y se borrarán los documentos de Drive.'))fn();
 }
 async function eliminarEntregaActividad(expId,taskId){
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return false;}
@@ -16002,6 +16018,7 @@ async function eliminarEntregaActividad(expId,taskId){
   if(!t){notif('Actividad no encontrada','err');return false;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
   const e=t.sinExpediente?null:getExpById(refId);
+  const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   // Liberar N° de concepto/acto/factura/oficio de esta entrega (si no, no se pueden reutilizar al volver a entregar)
   if(typeof retirarRegistroPendienteDeEntrega==='function'){
     try{
@@ -16059,13 +16076,31 @@ async function eliminarEntregaActividad(expId,taskId){
         a.estado='pendiente';
       }
     });
+    if(!Array.isArray(tk.historial))tk.historial=[];
+    if(esAuto){
+      // Autoentrega (Entregar documento): anular la actividad — no debe quedar en Por ejecutar
+      tk.eliminada=true;
+      tk.eliminadaEn=new Date().toISOString();
+      tk.eliminadaPor=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+      tk.eliminadaMotivo='Autoentrega cancelada — eliminó la entrega antes de revisión';
+      tk.estado='En ejecución';
+      tk.historial.push({
+        tipo:'eliminacion',
+        fecha:hoy(),
+        ts:Date.now(),
+        por:tk.eliminadaPor,
+        nota:tk.eliminadaMotivo,
+        papelera:true,
+        autoentrega:true
+      });
+      return;
+    }
     tk.estado='En ejecución';
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
     // Si sync dejó algo raro, forzar ejecución sin reporte
     if(tk.fechaReportada)tk.fechaReportada='';
     if(tk.fechaAtendida)tk.fechaAtendida='';
     if(tk.estado==='Por verificar'||tk.estado==='Por corregir'||tk.estado==='Atendida')tk.estado='En ejecución';
-    if(!Array.isArray(tk.historial))tk.historial=[];
     tk.historial.push({
       tipo:'eliminar_entrega',
       fecha:hoy(),
@@ -16087,7 +16122,13 @@ async function eliminarEntregaActividad(expId,taskId){
       oficio:''
     });
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'eliminar_entrega',fecha:hoy(),nota:'Entrega eliminada — pendiente nueva entrega',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
+    e._pqrs_historial.push({
+      tipo:esAuto?'cancelar_autoentrega':'eliminar_entrega',
+      fecha:hoy(),
+      nota:esAuto?'Autoentrega cancelada — actividad anulada':'Entrega eliminada — pendiente nueva entrega',
+      oficina:e._pqrs_oficina||'guaviare',
+      por:responsableActivo||''
+    });
     try{persistExpedienteGranular(e);}catch(err){console.warn('eliminarEntrega pqrs:',err);}
   }
   if(fileIds.length&&typeof driveDeleteInstitutional==='function'){
@@ -16095,9 +16136,13 @@ async function eliminarEntregaActividad(expId,taskId){
       try{await driveDeleteInstitutional(fileIds[i]);}catch(err){console.warn('eliminarEntrega drive:',err);}
     }
   }
-  notif('🗑 Entrega eliminada — la actividad vuelve a Por ejecutar','ok');
+  notif(esAuto
+    ?'🗑 Autoentrega cancelada — la actividad no queda en Por ejecutar'
+    :'🗑 Entrega eliminada — la actividad vuelve a Por ejecutar','ok');
   closeTaskModal();
-  try{if(typeof setActFiltro==='function')setActFiltro('pend');}catch(err){}
+  if(!esAuto){
+    try{if(typeof setActFiltro==='function')setActFiltro('pend');}catch(err){}
+  }
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderBandejaDepto==='function')renderBandejaDepto();
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
@@ -22049,12 +22094,15 @@ function renderActRowToolbarHtml(t,expAct){
   }
   const esPqrsAtender=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
   const esPqrsRev=esPqrsAtender&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct);
-  // Responsable en «Por revisar»: 🔍 ver entrega, 🗑 eliminar entrega (vuelve a Por ejecutar), chat/notas
+  // Responsable en «Por revisar»: 🔍 ver entrega, 🗑 eliminar entrega, chat/notas
   if(enPorRevisarResp){
     let actsR='<span class="sst-act-toolbar">';
     actsR+='<button type="button" class="btn bsm bic act-ico" title="'+(esPqrsRev?'Ver entrega y solicitud PQRSD':'Ver entrega enviada')+'" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>';
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
-      actsR+='<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
+      const esAutoDel=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
+      actsR+='<button type="button" class="btn bsm bic act-ico" title="'+(esAutoDel
+        ?'Cancelar autoentrega: anula la actividad (no queda en Por ejecutar) y borra documentos de Drive'
+        :'Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive')+'" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
     actsR+=taskChatBtnHtml(t.exp,t.id,t);
     actsR+=taskNotasInternasBtnHtml(t.exp,t.id);
