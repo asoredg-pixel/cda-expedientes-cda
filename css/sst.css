@@ -662,17 +662,36 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .soporte-split.soporte-split-obs-open .soporte-obs-toggle{right:-1px;border-right:1px solid var(--bd);border-left:0;border-radius:0 var(--r) var(--r) 0;box-shadow:2px 0 8px rgba(0,0,0,.06)}
 .task-exp-panel-full{max-height:min(68vh,640px);overflow:auto;padding-right:4px}
 .task-exp-panel-full .con-fold{margin-bottom:8px}
-/* Revisar entrega: visor amplio estilo Drive */
+/* Revisar entrega: visor amplio estilo Drive — se adapta al viewport (portátil y monitor grande) */
 body.task-review-doc-mode #task-modal-overlay{
   padding:.15rem .25rem;
   align-items:stretch;
   box-sizing:border-box;
 }
 .task-modal.task-modal-review{
-  width:min(99vw,1400px)!important;
-  max-width:99vw;
-  max-height:98vh;
-  height:min(98vh,960px);
+  /* Sin tope fijo 1400/960: en portátil ~98vw; en monitor grande usa casi toda la pantalla */
+  width:min(98vw,100%)!important;
+  max-width:98vw;
+  max-height:97vh;
+  height:97vh;
+}
+@media (min-width:1600px){
+  body.task-review-doc-mode #task-modal-overlay{padding:.2rem .35rem;}
+  .task-modal.task-modal-review{
+    width:min(97vw,100%)!important;
+    max-width:97vw;
+    max-height:96.5vh;
+    height:96.5vh;
+  }
+}
+@media (min-width:2000px){
+  body.task-review-doc-mode #task-modal-overlay{padding:.25rem .45rem;}
+  .task-modal.task-modal-review{
+    width:min(96vw,100%)!important;
+    max-width:96vw;
+    max-height:96vh;
+    height:96vh;
+  }
 }
 .task-modal.task-modal-review .task-modal-hdr{
   padding:.4rem .65rem;
