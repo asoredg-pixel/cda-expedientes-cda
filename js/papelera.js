@@ -188,6 +188,7 @@ async function softDeleteActividad(expId,taskId,motivo,opts){
     tk.eliminadaEn=cuando;
     tk.eliminadaPor=por;
     tk.eliminadaMotivo=nota;
+    tk._firma_proyeccion_atendida=false;
     if(tk.firmaWf&&typeof tk.firmaWf==='object'){
       tk.firmaWf=Object.assign({},tk.firmaWf,{fase:'',cerrada_por_eliminacion:true});
     }

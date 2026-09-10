@@ -26,16 +26,79 @@ function setTaskFirmaWf(expId,taskId,patch){
   return mutateTask(expId,taskId,function(t){
     const prev=getTaskFirmaWf(t);
     t.firmaWf=Object.assign({},prev,patch);
-    if(patch.fase)t.firmaWf.fase=patch.fase;
+    // Permitir limpiar fase ('' / null) — antes `if(patch.fase)` no aplicaba string vacío
+    if(Object.prototype.hasOwnProperty.call(patch,'fase'))
+      t.firmaWf.fase=patch.fase==null?'':String(patch.fase);
     if(!Array.isArray(t.historial))t.historial=[];
+    const faseNota=Object.prototype.hasOwnProperty.call(patch,'fase')
+      ?(patch.fase?String(patch.fase):'(cancelado)')
+      :(prev.fase||'');
     t.historial.push({
       tipo:'firma_wf',
       fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
-      nota:'Firma trámite → '+(patch.fase||prev.fase||'')
+      nota:'Firma trámite → '+faseNota
     });
   });
 }
+/** Encargado puede devolver a corregir si está en Por imprimir / Por firmar (antes de notificar). */
+function tramitePuedeDevolverDesdeFirma(t){
+  if(!t||t.eliminada)return false;
+  if(!taskEnFlujoFirmaTramite(t))return false;
+  if(taskFirmaEnPorNotificar(t))return false;
+  if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
+  return taskFirmaEnParaFirma(t)||taskFirmaEnPorFirmar(t);
+}
+/**
+ * Devolver desde Por imprimir / Por firmar → Por corregir.
+ * Sale de firma (Director ya no la ve), encargado en Revisados (✓ Revisada · X Corregir),
+ * responsable sale de Atendidas → Por ejecutar / corregir.
+ */
+function tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota){
+  nota=String(nota||'').trim()||'Devuelta para corregir (impresión/firma)';
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'Encargado');
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){if(typeof notif==='function')notif('No se encontró la actividad','err');return false;}
+  if(!tramitePuedeDevolverDesdeFirma(t)){
+    if(typeof devolverTaskAlResponsable==='function')return devolverTaskAlResponsable(expId,taskId,nota);
+    return false;
+  }
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const ok=typeof mutateTask==='function'&&mutateTask(refId,taskId,function(tk){
+    if(!tk)return;
+    const prev=getTaskFirmaWf(tk);
+    tk.firmaWf=Object.assign({},prev,{
+      fase:'',
+      firma_fisica:null,
+      firma_director:null,
+      listo_firma:null,
+      impreso:null,
+      notificacion_reportada:null,
+      devolucion_encargado:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:prev.fase||''}
+    });
+    tk._firma_proyeccion_atendida=false;
+    if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(tk,nota);
+    else{
+      tk.fechaReportada='';
+      tk.fechaAtendida='';
+      tk.estado='Por corregir';
+    }
+    if(!Array.isArray(tk.historial))tk.historial=[];
+    tk.historial.push({tipo:'devolver_desde_firma',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:por,nota:nota});
+  });
+  if(!ok){if(typeof notif==='function')notif('No se pudo devolver la actividad','err');return false;}
+  if(typeof driveRenombrarSoporteActivoExp==='function'){
+    driveRenombrarSoporteActivoExp(refId,taskId,'corregir').catch(function(err){console.warn('devolver firma rename:',err);});
+  }
+  if(typeof closeTaskModal==='function')closeTaskModal();
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof notif==='function')notif('↩ Devuelta — ✓ Revisada · X Corregir','ok');
+  return true;
+}
+window.tramitePuedeDevolverDesdeFirma=tramitePuedeDevolverDesdeFirma;
+window.tramiteDevolverDesdeFirmaACorregir=tramiteDevolverDesdeFirmaACorregir;
 function taskFirmaFase(t){
   const wf=getTaskFirmaWf(t);
   return String(wf.fase||'').trim();
@@ -1649,16 +1712,18 @@ function tramiteDirectorDevolver(expId,taskId){
     return;
   }
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'DS DEGUV';
-  setTaskFirmaWf(expId,taskId,{
-    fase:'',
-    firma_fisica:null,
-    firma_director:null,
-    listo_firma:null,
-    impreso:null,
-    devolucion_director:{por:por,en:new Date().toISOString(),motivo:motivo}
-  });
   mutateTask(expId,taskId,function(tk){
     if(!tk)return;
+    const prev=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(tk):(tk.firmaWf||{}))||{};
+    tk.firmaWf=Object.assign({},prev,{
+      fase:'',
+      firma_fisica:null,
+      firma_director:null,
+      listo_firma:null,
+      impreso:null,
+      devolucion_director:{por:por,en:new Date().toISOString(),motivo:motivo,fase_prev:prev.fase||''}
+    });
+    tk._firma_proyeccion_atendida=false;
     if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(tk,motivo);
     else{
       tk.fechaAtendida='';

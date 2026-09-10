@@ -7479,6 +7479,9 @@ function taskReviewPorFirmarRailHtml(ref,taskId,t,e){
   h+=typeof taskReviewImpresoRailBtnHtml==='function'?taskReviewImpresoRailBtnHtml(refExp,taskId,t,e):'';
   if(cargarFirmado||(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar()))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&side==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+  if(!esModoResponsable()&&!esJurisdiccional()
+    &&typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(refExp,taskId))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar entrega o actividad" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   h+='</nav>';
   return h;
 }
@@ -7715,9 +7718,12 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const canAnnot=canDeptMarcarEnSoporte(t,sel);
   const ctx=window._taskModalCtx||{};
   const deptWa=!!ctx.isDeptReviewWa||!!ctx.directorRevisarPorFirmar;
-  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa);
+  const canDevolverFirma=!esModoResponsable()&&!esJurisdiccional()
+    &&typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t);
+  const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa||canDevolverFirma);
+  const canShowDevolver=canReviewSop||canDevolverFirma;
   const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
-  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery;
+  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma;
   const eid=escAttr(expId),tid=escAttr(taskId);
   const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
   let h='<div class="task-review-chat-side'+(useWaLayout?' task-review-chat-side-wa':'')+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
@@ -7746,7 +7752,7 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
     const composer=renderTaskChatComposerHtml(expId,taskId,t);
     if(composer)h+='<div class="task-review-chat-compose-foot" id="task-chat-compose-foot">'+composer+'</div>';
   }
-  if(canReviewSop)
+  if(canShowDevolver)
     h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
   h+='</div>';
   return h;
@@ -8697,17 +8703,29 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   const eSide=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
   const tieneExp=!!eSide;
+  const enFirma=!!(t&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
+    &&!(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)));
+  const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
+  const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
+  let detalle='La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.';
+  if(enFirma){
+    detalle='La actividad ya fue aprobada y está en impresión/firma. Puede <strong>devolver a corregir</strong> desde el chat, o <strong>eliminar la actividad</strong> (papelera): saldrá de Por firmar y el Director dejará de verla.';
+  }else if(esAuto){
+    detalle=tieneExp
+      ?'Autoentrega con expediente/PQRSD: se cancelan documentos y N° de la entrega; <strong>se conservan los datos del registro</strong> para una nueva entrega. No queda en Por ejecutar.'
+      :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.';
+  }
+  let btns='';
+  if(pe&&!enFirma)
+    btns+='<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>';
+  if((pa&&!esAuto)||enFirma)
+    btns+='<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>';
+  if(!btns)
+    btns='<div style="font-size:12px;color:var(--rd)">No hay acciones de eliminación disponibles en este estado.</div>';
   return '<div class="task-review-side-form">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+(esAuto
-      ?(tieneExp
-        ?'Autoentrega con expediente/PQRSD: se cancelan documentos y N° de la entrega; <strong>se conservan los datos del registro</strong> para una nueva entrega. No queda en Por ejecutar.'
-        :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.')
-      :'La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.')+'</div>'+
-    '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
-    '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>'+
-    (esAuto?'':'<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>')+
-    '</div></div>';
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+detalle+'</div>'+
+    '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+btns+'</div></div>';
 }
 function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   expId=String(expId||'').trim();
@@ -17145,6 +17163,12 @@ function devolverTaskUnificado(expId,taskId){
     devolverNotificacionRevisionFinal(expId,taskId,nota);
     return;
   }
+  // Ya aprobada en Por imprimir / Por firmar: cancelar firma y pasar a corregir
+  if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
+    &&typeof tramiteDevolverDesdeFirmaACorregir==='function'){
+    tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
+    return;
+  }
   devolverTaskAlResponsable(expId,taskId,nota);
 }
 /**
@@ -17297,19 +17321,19 @@ function directorDevolverDesdePorFirmar(expId,taskId,nota){
     return;
   }
 
-  // Trámite / oficio / actividad libre
-  if(typeof setTaskFirmaWf==='function'){
-    setTaskFirmaWf(expId,taskId,{
+  // Trámite / oficio / actividad libre — un solo mutate (limpia firma + por corregir)
+  mutateTask(expId,taskId,function(tk){
+    if(!tk)return;
+    const prev=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(tk):(tk.firmaWf||{}))||{};
+    tk.firmaWf=Object.assign({},prev,{
       fase:'',
       firma_fisica:null,
       firma_director:null,
       listo_firma:null,
       impreso:null,
-      devolucion_director:{por:por,en:new Date().toISOString(),motivo:nota}
+      devolucion_director:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:prev.fase||''}
     });
-  }
-  mutateTask(expId,taskId,function(tk){
-    if(!tk)return;
+    tk._firma_proyeccion_atendida=false;
     resetTaskPorCorregir(tk,nota);
     if(!Array.isArray(tk.comentarios))tk.comentarios=[];
     tk.comentarios.push({autor:por,fecha:new Date().toISOString(),texto:'[Devolución Director — por firmar] '+nota,rol:'asignador',incluidoEnReporte:false});
@@ -24242,7 +24266,10 @@ function filtrarActividadesPorEstado(list,filtro){
       }
       // Quien entregó y NO es el notificador: permanece en Atendidas (✓ Revisada · X Firmar / X Notificar)
       if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoResp)){
-        if(typeof estadoTaskForAsignado==='function'&&estadoTaskForAsignado(t,yoResp)==='Atendida')return true;
+        const stAsig=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,yoResp):estadoTask(t);
+        // Tras devolver desde firma: Por corregir → Por ejecutar, no Atendidas
+        if(stAsig==='Por corregir'||estadoTask(t)==='Por corregir')return false;
+        if(stAsig==='Atendida')return true;
         if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)){
           if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eD))return true;
           if(t._pqrs_proyeccion_atendida)return true;
