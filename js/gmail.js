@@ -1701,10 +1701,20 @@ function _drivePqrsExpTieneCarpetas(expRef) {
 // Devuelve true si el depto activo es Guaviare (usa Drive institucional).
 function _driveEsGuaviare() {
   const d = typeof deptoActivo !== 'undefined' ? deptoActivo : '';
-  return d === 'guaviare' || d === 'secretaria' || d === 'oap_deguv' ||
-         d === 'rn_deguv' || d === 'admin_deguv' || d === 'ds_deguv' ||
-         (typeof rolSesion !== 'undefined' && rolSesion === 'responsables' &&
-          typeof deptoCfg !== 'undefined' && deptoCfg === 'guaviare');
+  if (d === 'guaviare' || d === 'secretaria' || d === 'oap_deguv' ||
+      d === 'rn_deguv' || d === 'admin_deguv' || d === 'ds_deguv') return true;
+  // Módulo Responsables: cuenta real O admin eligiendo rol/nombre en el selector.
+  // Antes solo rolSesion==='responsables'; admin queda en rolSesion=admin y
+  // deptoActivo=responsables → no se mostraba 📎 Seleccionar archivo / Anexos.
+  const modoResp = d === 'responsables'
+    || (typeof esModoResponsable === 'function' && esModoResponsable())
+    || (typeof rolSesion !== 'undefined' && rolSesion === 'responsables');
+  if (!modoResp) return false;
+  let op = '';
+  if (typeof getDeptoOperativo === 'function') op = String(getDeptoOperativo() || '').trim();
+  if (!op && typeof deptoCfg !== 'undefined') op = String(deptoCfg || '').trim();
+  if (op === 'guainia' || op === 'vaupes') return false;
+  return !op || op === 'guaviare';
 }
 
 // Expedientes Guaviare (excluye Guainía y Vaupés).

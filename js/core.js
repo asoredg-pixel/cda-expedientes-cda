@@ -2893,6 +2893,7 @@ function buscarUsosNumeroOficio(oficio,excludeExpId){
     if(Array.isArray(actos)){
       actos.forEach(function(a,i){
         if(!a)return;
+        if(a.pendienteAprobacion&&typeof registroEntregaPendienteHuerfano==='function'&&registroEntregaPendienteHuerfano(e,a.taskId))return;
         const num=pqrsNormOficioNum(a.numero||a.oficio||'');
         if(num&&num===needle){
           hits.push({
@@ -2909,6 +2910,8 @@ function buscarUsosNumeroOficio(oficio,excludeExpId){
       if(!t||t.eliminada)return;
       const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||t.oficioNumero||'');
       if(tofi&&tofi===needle){
+        // Entrega eliminada: no bloquear reutilización del mismo N°
+        if(typeof registroEntregaPendienteHuerfano==='function'&&registroEntregaPendienteHuerfano(e,t.id))return;
         hits.push({
           expId:id,
           contexto:'Actividad',
@@ -2924,6 +2927,8 @@ function buscarUsosNumeroOficio(oficio,excludeExpId){
         if(!t||t.eliminada)return;
         const tofi=pqrsNormOficioNum(t.oficio||t.nro_oficio||t._oficio||t.oficioNumero||'');
         if(tofi&&tofi===needle){
+          // Entrega eliminada en libre: sin reporte ni soportes
+          if(!t.fechaReportada&&!t.fechaAtendida&&!(t.soportes||[]).length)return;
           hits.push({
             expId:String(t.codigo||t.id||'—'),
             contexto:'Actividad libre',
@@ -2986,6 +2991,7 @@ function buscarUsosNumeroActo(numero,excludeExpId,excludeActoAdminId){
       actos.forEach(function(a){
         if(!a)return;
         if(exclActo&&String(a.actoAdminId||'')===exclActo)return;
+        if(a.pendienteAprobacion&&registroEntregaPendienteHuerfano(e,a.taskId))return;
         const num=typeof pqrsNormOficioNum==='function'?pqrsNormOficioNum(a.numero||a.oficio||''):String(a.numero||'').trim().toUpperCase();
         if(num&&num===needle){
           pushHit({
@@ -3029,6 +3035,20 @@ window.validarNumeroActoDisponible=validarNumeroActoDisponible;
 function normContableRefNum(s){
   return String(s||'').trim().toUpperCase().replace(/\s+/g,'');
 }
+/** Registro pendiente ligado a una entrega ya eliminada (tarea sin reporte / sin soportes). */
+function registroEntregaPendienteHuerfano(e,taskId){
+  const tid=String(taskId||'').trim();
+  if(!tid)return false;
+  if(!e||!Array.isArray(e.tasks))return true;
+  const t=e.tasks.find(function(x){return x&&String(x.id||'')===tid;});
+  if(!t||t.eliminada)return true;
+  if(t.fechaReportada||t.fechaAtendida)return false;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  if(est==='Por verificar'||est==='Por corregir'||est==='Atendida')return false;
+  const sops=t.soportes||[];
+  return !sops.length;
+}
+window.registroEntregaPendienteHuerfano=registroEntregaPendienteHuerfano;
 /**
  * Busca usos previos del N° de factura (referencia).
  * @param {string} excludeExpId — expediente a ignorar (al editar el mismo)
@@ -3049,6 +3069,7 @@ function buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex){
     facs.forEach(function(f,i){
       if(!f)return;
       if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      if(f.pendienteAprobacion&&registroEntregaPendienteHuerfano(e,f.taskId))return;
       const r=normContableRefNum(f.ref);
       if(r&&r===needle){
         hits.push({
@@ -3076,6 +3097,7 @@ function buscarUsosNumeroConcepto(concepto,excludeExpId,excludeIndex){
     arr.forEach(function(c,i){
       if(!c)return;
       if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      if(c.pendienteAprobacion&&registroEntregaPendienteHuerfano(e,c.taskId))return;
       const n=normContableRefNum(c.concepto);
       if(n&&n===needle){
         hits.push({
@@ -3137,6 +3159,7 @@ function buscarUsosNumeroRequerimiento(reqNum,excludeExpId,excludeIndex){
     arr.forEach(function(c,i){
       if(!c)return;
       if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
+      if((c.pendienteAprobacion||c.reqPendienteAprobacion)&&typeof registroEntregaPendienteHuerfano==='function'&&registroEntregaPendienteHuerfano(e,c.taskId))return;
       const n=normContableRefNum(c.reqNum);
       if(n&&n===needle){
         hits.push({
@@ -15607,7 +15630,12 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   }
   if(!sol){
     const esLibreEnv=!!(t&&t.sinExpediente);
+    // Drive UI: expediente Guaviare (sesión o depto del exp) o actividad libre institucional
+    const expDeptoOk=eExp&&typeof DRIVE_INST_DEPTOS!=='undefined'
+      &&DRIVE_INST_DEPTOS.has(String(eExp._depto||'guaviare').toLowerCase())
+      &&!/^(guainia|vaupes)$/i.test(String(eExp._depto||''));
     const showDriveUp=(eExp&&typeof _driveExpedienteEsGuaviare==='function'&&_driveExpedienteEsGuaviare(eExp))
+      ||!!expDeptoOk
       ||(esLibreEnv&&typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(String(t.depto||'guaviare')));
     if(showDriveUp&&!esPqrsEntrega){
       const envCtx=typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):('enviar-soporte:'+expId+':'+taskId);
@@ -15974,6 +16002,16 @@ async function eliminarEntregaActividad(expId,taskId){
   if(!t){notif('Actividad no encontrada','err');return false;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
   const e=t.sinExpediente?null:getExpById(refId);
+  // Liberar N° de concepto/acto/factura/oficio de esta entrega (si no, no se pueden reutilizar al volver a entregar)
+  if(typeof retirarRegistroPendienteDeEntrega==='function'){
+    try{
+      const liberado=retirarRegistroPendienteDeEntrega(e,t,{forceAll:true});
+      if(liberado){
+        if(e&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+        else if(typeof persistExpLocal==='function')persistExpLocal();
+      }
+    }catch(errRet){console.warn('eliminarEntrega registro:',errRet);}
+  }
   const fileIds=[];
   const pushFid=function(id){
     const fid=String(id||'').trim();
@@ -15995,6 +16033,14 @@ async function eliminarEntregaActividad(expId,taskId){
   const ok=mutateTask(refId,taskId,function(tk){
     normalizeTask(tk);
     migrateLegacyAsignados(tk);
+    // Campos de registro ya limpios en retirarRegistro; asegurar en la copia mutada
+    ['oficio','nro_oficio','_oficio','oficioNumero','concepto','conceptoTipo','actoNumero','actoTipo'].forEach(function(k){
+      if(tk[k])tk[k]='';
+    });
+    if(tk.oficioPendienteAprobacion)delete tk.oficioPendienteAprobacion;
+    if(tk.conceptoReqId)delete tk.conceptoReqId;
+    if(tk.actoAdminId)delete tk.actoAdminId;
+    if(tk.esActoAdmin)delete tk.esActoAdmin;
     tk.soportes=[];
     tk.notasDoc=[];
     tk.fechaReportada='';
@@ -16025,7 +16071,7 @@ async function eliminarEntregaActividad(expId,taskId){
       fecha:hoy(),
       ts:Date.now(),
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||''),
-      nota:'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos de la entrega)'
+      nota:'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos ni N° de registro de la entrega)'
     });
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
@@ -16037,7 +16083,8 @@ async function eliminarEntregaActividad(expId,taskId){
       entregado_por:'',
       revision_nca:null,
       fecha_respuesta:'',
-      devolucion_director:null
+      devolucion_director:null,
+      oficio:''
     });
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({tipo:'eliminar_entrega',fecha:hoy(),nota:'Entrega eliminada — pendiente nueva entrega',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
@@ -18194,7 +18241,10 @@ async function respMarcarPorVerificar(expId,taskId){
   if(esModoResponsable()&&!taskUsuarioEsAsignado(t,responsableActivo)){notif('Actividad no asignada a usted','err');return;}
   if(esModoResponsable()&&!puedeReportarTask(t,responsableActivo)&&estadoTaskForAsignado(t,responsableActivo)!=='Por verificar'){notif('No puede reportar esta actividad en su estado actual','err');return;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está finalizada','err');return;}
-  const usaDriveInst=typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(deptoActivo||deptoCfg||'');
+  // Admin en módulo Responsables: deptoActivo='responsables' no está en DRIVE_INST_DEPTOS
+  const usaDriveInst=(typeof _driveEsGuaviare==='function'&&_driveEsGuaviare())
+    ||(typeof DRIVE_INST_DEPTOS!=='undefined'&&DRIVE_INST_DEPTOS.has(
+      (typeof getDeptoOperativo==='function'?getDeptoOperativo():'')||deptoCfg||deptoActivo||''));
   if(usaDriveInst){
     const ePqrs=getExpById(expId);
     const tPqrs=ePqrs?getTaskFromExp(ePqrs,taskId):t;

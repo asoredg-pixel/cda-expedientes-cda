@@ -2033,9 +2033,13 @@ function appendRegistroDesdeEntrega(e,payload,taskOpt){
   }
   return false;
 }
-/** Al devolver para corregir: quita N° pendientes (acto/concepto/oficio/req) para que se vuelvan a digitar. */
-function retirarRegistroPendienteDeEntrega(e,t){
+/** Al devolver para corregir o eliminar entrega: quita N° pendientes (acto/concepto/factura/oficio/req)
+ *  vinculados a la tarea para que se puedan volver a digitar.
+ *  opts.forceAll — al eliminar la entrega, libera todos los registros de esa tarea (no solo pendienteAprobacion). */
+function retirarRegistroPendienteDeEntrega(e,t,opts){
   if(!t)return false;
+  opts=opts||{};
+  const forceAll=!!opts.forceAll;
   const tid=String(t.id||'').trim();
   let changed=false;
   ['oficio','nro_oficio','_oficio','oficioNumero'].forEach(function(k){
@@ -2044,6 +2048,7 @@ function retirarRegistroPendienteDeEntrega(e,t){
   if(t.oficioPendienteAprobacion){delete t.oficioPendienteAprobacion;changed=true;}
   if(t.concepto){t.concepto='';changed=true;}
   if(t.conceptoTipo){t.conceptoTipo='';changed=true;}
+  if(t.conceptoReqId){delete t.conceptoReqId;changed=true;}
   if(t.actoNumero){t.actoNumero='';changed=true;}
   if(t.actoTipo){t.actoTipo='';changed=true;}
   if(!e){
@@ -2085,7 +2090,7 @@ function retirarRegistroPendienteDeEntrega(e,t){
     for(let i=0;i<carr.length;i++){
       const c=carr[i];
       if(!c)continue;
-      if(tid&&String(c.taskId||'')===tid&&c.pendienteAprobacion){cChanged=true;continue;}
+      if(tid&&String(c.taskId||'')===tid&&(forceAll||c.pendienteAprobacion)){cChanged=true;continue;}
       if(t.esOficioRequerimiento&&t.conceptoReqId&&String(c.conceptoReqId||'')===String(t.conceptoReqId)){
         if(c.reqOficio||c.reqNum||c.reqPendienteAprobacion){
           c.reqOficio='';c.reqNum='';c.reqDias='';c.reqMedio='';c.reqNotif='';c.reqVence='';
@@ -2096,6 +2101,18 @@ function retirarRegistroPendienteDeEntrega(e,t){
       nextC.push(c);
     }
     if(cChanged){e._conceptos_seg=JSON.stringify(nextC);changed=true;}
+  }catch(err){}
+  try{
+    const farr=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
+    let fChanged=false;
+    const nextF=[];
+    for(let i=0;i<farr.length;i++){
+      const f=farr[i];
+      if(!f)continue;
+      if(tid&&String(f.taskId||'')===tid&&(forceAll||f.pendienteAprobacion)){fChanged=true;continue;}
+      nextF.push(f);
+    }
+    if(fChanged){e._facturas_extra=JSON.stringify(nextF);changed=true;}
   }catch(err){}
   return changed;
 }
