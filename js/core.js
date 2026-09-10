@@ -8472,23 +8472,21 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
     const adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e);
     let pdfBlob=null,up=null;
-    // PDF soporte de envío: solo PQRSD. Trámites/factura: adjuntos de la entrega, sin PDF extra.
-    if(esPqrsNotif){
-      try{
-        if(typeof generarPdfSoporteNotificacionActividad==='function')
-          pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});
-      }catch(errP){console.warn('pdf soporte notif:',errP);}
-      if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
-    }
+    // PDF soporte de envío: PQRSD y trámites/expedientes (aprobar y notificar)
+    try{
+      if(typeof generarPdfSoporteNotificacionActividad==='function')
+        pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});
+    }catch(errP){console.warn('pdf soporte notif:',errP);}
+    if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){notif('No hay envío de correo disponible','err');if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}return;}
     const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
     // Enviar primero: no registrar soporte ni cerrar si Gmail falla
     await pqrsEnviarCorreoCiudadano(destinos,asunto||('Notificación — '+(t.actividad||'actividad')),htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
     const fechaC=hoy();
     const refId=t.sinExpediente?(t.codigo||expId):expId;
-    if(esPqrsNotif&&pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
+    if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
       try{
-        const reg=await registrarSoporteEnvioCorreoNotif(e,t,expId,{
+        const reg=await registrarSoporteEnvioCorreoNotif(e,t,e&&e._exp?e._exp:refId,{
           para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,
           pdfBlob:pdfBlob,skipAttach:true
         },[]);
@@ -8500,8 +8498,8 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
             tk.soportes=(t.soportes||[]).slice();
         });
       }
-    }else if(esPqrsNotif&&pdfBlob&&typeof taskReviewSubirSoporteNotificacion==='function'){
-      try{up=await taskReviewSubirSoporteNotificacion(e,t,expId,pdfBlob);}catch(errU){console.warn('subir soporte envío:',errU);}
+    }else if(pdfBlob&&typeof taskReviewSubirSoporteNotificacion==='function'){
+      try{up=await taskReviewSubirSoporteNotificacion(e,t,e&&e._exp?e._exp:refId,pdfBlob);}catch(errU){console.warn('subir soporte envío:',errU);}
       if(up&&(up.driveLink||up.fileId||up.driveFileId)&&typeof mutateTask==='function'){
         mutateTask(refId,taskId,function(tk){
           if(!Array.isArray(tk.soportes))tk.soportes=[];
@@ -8526,7 +8524,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       }
     }
     window._taskReviewAprobarNotificar=false;
-    const soporteDoc=(esPqrsNotif&&up)?{
+    const soporteDoc=up?{
       nombre:'Soporte de envío',
       driveLink:up.driveLink||'',
       previewLink:up.previewLink||up.driveLink||'',
