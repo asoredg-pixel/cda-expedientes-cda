@@ -745,8 +745,8 @@ function openTramiteNotificarModal(expId,taskId){
     ?('Documento aprobado — '+(t.actividad||t.desc||t.codigo||'actividad'))
     :('Documento aprobado — expediente '+((e&&e._exp)||'')));
   const cuerpoDef=String(wf.cuerpo||wf.email_body||'').trim()||(t.sinExpediente
-    ?('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» ha sido aprobado y notificado.\n\nCordialmente.')
-    :('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» del expediente '+((e&&e._exp)||'')+' ha sido aprobado y notificado.\n\nPuede consultarlo en la consulta ciudadana de la Corporación CDA.\n\nCordialmente.'));
+    ?('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» ha sido aprobado y notificado.')
+    :('Estimado(a),\n\nLe informamos que el documento de la actividad «'+(t.actividad||t.desc||'')+'» del expediente '+((e&&e._exp)||'')+' ha sido aprobado y notificado.\n\nPuede consultarlo en la consulta ciudadana de la Corporación CDA.'));
   const isCorreo=canal==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
   const docsNotif=typeof collectDocsParaNotificacionCorreo==='function'?collectDocsParaNotificacionCorreo(e&&!e._sin_expediente?e:null,t):[];
   let canalBtns='';
@@ -1252,9 +1252,8 @@ async function notificarCiudadanoTrasVerificarTramite(expId,taskId){
     cuerpo='Estimado(a),\n\nLe informamos que el Concepto de seguimiento del expediente '+expLbl+' ha sido aprobado.\n\n';
     if(linkDoc)cuerpo+='Puede consultar el documento en el siguiente enlace:\n'+linkDoc+'\n\n';
     else cuerpo+='Puede consultarlo en la consulta ciudadana de la Corporación CDA.\n\n';
-    cuerpo+='Cordialmente.';
   }else{
-    cuerpo='Estimado(a),\n\nLe informamos que se aprobó el documento de la actividad «'+actNom+'» del expediente '+expLbl+'.\n\nPuede consultarlo en la consulta ciudadana.\n\nCordialmente.';
+    cuerpo='Estimado(a),\n\nLe informamos que se aprobó el documento de la actividad «'+actNom+'» del expediente '+expLbl+'.\n\nPuede consultarlo en la consulta ciudadana.\n\n';
   }
   const html='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>';
   try{

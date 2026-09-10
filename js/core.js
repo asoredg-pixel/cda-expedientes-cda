@@ -2446,7 +2446,8 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     prog(98,'Cerrando atención…');
     Promise.resolve().then(function(){
       return registrarSoporteEnvioCorreoNotif(e,tAct,e._exp,{
-        para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+        para:destinos.join(', '),cc:ccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+        documentos:docsAdj||docsConLink||null,
         skipAttach:true
       },[]);
     }).then(function(soporteReg){
@@ -8167,21 +8168,22 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
   const tipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(act):'';
   const refExp=expLbl?' del expediente '+expLbl:'';
   const numTxt=num||'XXXXX';
+  // Sin «Cordialmente»: la firma de Gmail del remitente ya la incluye.
   if(tipo==='concepto'||/concepto/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.';
   if(tipo==='factura'||/factura|liquidaci[oó]n|tasa|multa|tcaf/i.test(act)){
     const varias=num&&String(num).indexOf(',')>=0;
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite'+(varias?'n las facturas Nos. ':' la factura No. ')+numTxt+' correspondiente'+(varias?'s':'')+' a «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite'+(varias?'n las facturas Nos. ':' la factura No. ')+numTxt+' correspondiente'+(varias?'s':'')+' a «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.';
   }
   if(tipo==='acto'||/acto|resoluci[oó]n/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el acto administrativo No. '+numTxt+' («'+(tipoDoc||act)+'»)'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el acto administrativo No. '+numTxt+' («'+(tipoDoc||act)+'»)'+refExp+' para su conocimiento y fines pertinentes.';
   if(/oficio\s+de\s+requerimiento/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el oficio de requerimiento No. '+numTxt+' para su conocimiento y cumplimiento.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el oficio de requerimiento No. '+numTxt+' para su conocimiento y cumplimiento.';
   if(/oficio/i.test(act)||num)
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el oficio No. '+numTxt+' («'+act+'»)'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el oficio No. '+numTxt+' («'+act+'»)'+refExp+' para su conocimiento y fines pertinentes.';
   if(/informe/i.test(act))
-    return 'Cordial saludo,\n\nPor medio de la presente, se remite el informe de «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
-  return 'Cordial saludo,\n\nPor medio de la presente, se remite la documentación de la actividad «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.\n\nCordialmente.';
+    return 'Cordial saludo,\n\nPor medio de la presente, se remite el informe de «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.';
+  return 'Cordial saludo,\n\nPor medio de la presente, se remite la documentación de la actividad «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.';
 }
 function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
   const wf=taskReviewNotifWfFuente(e,t);
@@ -8271,7 +8273,7 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     ['Canal:','Correo electrónico'],
     ['Para:',opts.para||''],
     ['Cc:',opts.cc||''],
-    ['Cco:',opts.bcc||''],
+    // Cco no se imprime en el soporte: es copia oculta.
     ['Asunto:',opts.asunto||''],
     ['Enviado por:',opts.por||'']
   ];
@@ -8293,6 +8295,57 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     const linesC=doc.splitTextToSize(cuerpo,maxW);
     if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesC,margin,y,lineH,pageH,margin);
     else{doc.text(linesC,margin,y);y+=lineH*linesC.length;}
+  }
+  // Documentos / anexos enviados (mismos que en el correo como enlace Drive)
+  let docsEnv=Array.isArray(opts.documentos)?opts.documentos:(Array.isArray(opts.docs)?opts.docs:null);
+  if(!docsEnv||!docsEnv.length){
+    if(typeof collectDocsParaNotificacionCorreo==='function')
+      docsEnv=collectDocsParaNotificacionCorreo(e||null,t)||[];
+    else docsEnv=[];
+  }
+  const docsPdf=(docsEnv||[]).filter(function(d){
+    return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId||d.nombre||d.label)
+      &&d.tipo!=='soporte_notificacion'&&d.tipo!=='soporte_respuesta'&&d.tipo!=='notificacion_soporte';
+  });
+  if(docsPdf.length){
+    y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+    doc.setFont('helvetica','bold');doc.setFontSize(10);
+    doc.text('Documentos enviados (enlace Drive):',margin,y);y+=16;
+    doc.setFont('helvetica','normal');
+    docsPdf.forEach(function(d,idx){
+      let href=String(d.driveLink||d.previewLink||d.url||'').trim();
+      if(!href&&(d.fileId||d.driveFileId))
+        href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
+      const nom=String(d.nombre||d.label||d.driveFilename||('Documento '+(idx+1))).trim();
+      const rol=d._notif_rol==='anexo'||/anexo/i.test(String(d.tipo||''))
+        ?('Anexo'+(d.anexo_n?' '+d.anexo_n:''))
+        :(d._notif_rol==='documento'?'Documento':'');
+      const linea='- '+(rol?rol+': ':'')+nom;
+      const linesN=doc.splitTextToSize(linea,maxW);
+      if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesN,margin,y,lineH,pageH,margin);
+      else{doc.text(linesN,margin,y);y+=lineH*linesN.length;}
+      if(href){
+        doc.setTextColor(40,80,160);
+        const linesU=doc.splitTextToSize(href,maxW-12);
+        if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesU,margin+12,y,lineH,pageH,margin);
+        else{doc.text(linesU,margin+12,y);y+=lineH*linesU.length;}
+        doc.setTextColor(0);
+      }
+      y+=4;
+    });
+  }
+  const adjNombres=Array.isArray(opts.adjuntosNombres)?opts.adjuntosNombres.filter(Boolean):[];
+  if(adjNombres.length){
+    y+=6;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    doc.setFont('helvetica','bold');doc.setFontSize(10);
+    doc.text('Archivos adjuntos al correo:',margin,y);y+=14;
+    doc.setFont('helvetica','normal');
+    adjNombres.forEach(function(n){
+      const linesA=doc.splitTextToSize('- '+String(n),maxW);
+      if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesA,margin,y,lineH,pageH,margin);
+      else{doc.text(linesA,margin,y);y+=lineH*linesA.length;}
+    });
   }
   if(typeof cdaPdfDrawFooterAllPages==='function')cdaPdfDrawFooterAllPages(doc);
   else{
@@ -8334,7 +8387,9 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
       if(typeof generarPdfSoporteNotificacionActividad==='function')
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
           para:mailOpts.para||'',cc:mailOpts.cc||'',bcc:mailOpts.bcc||'',
-          asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',por:por
+          asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',por:por,
+          documentos:mailOpts.documentos||mailOpts.docs||null,
+          adjuntosNombres:mailOpts.adjuntosNombres||null
         });
     }catch(errP){console.warn('registrarSoporteEnvioCorreoNotif pdf:',errP);}
   }
@@ -8506,7 +8561,10 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     let pdfBlob=null,up=null;
     try{
       if(typeof generarPdfSoporteNotificacionActividad==='function')
-        pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});
+        pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
+          para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,
+          documentos:docsConLink
+        });
     }catch(errP){console.warn('pdf soporte notif:',errP);}
     // Solo adjuntar el soporte (liviano). Los docs de entrega van por enlace Drive.
     let adjuntos=[];
@@ -18867,8 +18925,8 @@ function verificarTaskExp(expId,taskId,fecha,opts){
             const nom=String(s.driveFilename||s.label||'');
             return /^revision[-_]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
           });
-          if(still&&typeof notif==='function')
-            notif('No se pudo renombrar el documento en Drive (sigue como revision-). Verifique la conexión a Google y vuelva a intentar.','warn');
+          // Solo aviso silencioso en consola: el cierre/notif ya pudo ser exitoso (p.ej. docs con enlace Drive).
+          if(still)console.warn('verificarTaskExp: quedó algún archivo con prefijo revision- en metadatos (Drive puede estar al día).');
         }catch(errW){}
       }
       doVerify();
@@ -27951,7 +28009,10 @@ async function pqrsConfirmarNotificacionOficio(expId){
           :[];
         const tActN=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
         if(typeof registrarSoporteEnvioCorreoNotif==='function')
-          await registrarSoporteEnvioCorreoNotif(e,tActN,expId,{para:destinos.join(', '),cc:ccRaw,bcc:bccRaw,asunto:asunto,cuerpo:cuerpo,por:por},adjuntos);
+          await registrarSoporteEnvioCorreoNotif(e,tActN,expId,{
+            para:destinos.join(', '),cc:ccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+            documentos:docsAdj
+          },adjuntos);
         if(btn)btn.textContent='Enviando correo…';
         const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+escAttr(cuerpo)+'</p>');
         const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
@@ -28344,24 +28405,66 @@ async function generarPdfRespuestaPqrs(e,opts){
   });
 
   const cuerpoText=String(wf.cuerpo||e._pqrs_respuesta_nota||opts.cuerpo||'').trim();
+  const canalLc=String(canal||'').toLowerCase();
+  const esCorreo=canalLc==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  if(esCorreo){
+    const emailMeta=[
+      ['Para:',opts.para||wf.email_to||''],
+      ['Cc:',opts.cc||wf.email_cc||''],
+      // Cco no se imprime: es copia oculta.
+      ['Asunto:',opts.asunto||wf.email_subject||'']
+    ];
+    emailMeta.forEach(function(row){
+      if(!row[1])return;
+      doc.setFont('helvetica','bold');doc.text(row[0],margin,y);
+      doc.setFont('helvetica','normal');
+      const lines=doc.splitTextToSize(String(row[1]),maxW-100);
+      y=_pdfWriteLines(doc,lines,margin+100,y,14,pageH,margin);y+=2;
+    });
+  }
   if(cuerpoText){
     y+=4;doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
-    doc.setFont('helvetica','bold');doc.text('Resumen de la respuesta:',margin,y);y+=14;
+    doc.setFont('helvetica','bold');
+    doc.text(esCorreo?'Cuerpo del correo:':'Resumen de la respuesta:',margin,y);y+=14;
     doc.setFont('helvetica','normal');
     y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoText,maxW),margin,y,lineH,pageH,margin);
   }
-  const docs=Array.isArray(opts.documentos)?opts.documentos:(wf.documentos||[]);
+  let docs=Array.isArray(opts.documentos)?opts.documentos:null;
+  if(!docs||!docs.length){
+    if(typeof collectDocsParaNotificacionCorreo==='function')
+      docs=collectDocsParaNotificacionCorreo(e,null)||[];
+    if(!docs||!docs.length)docs=wf.documentos||[];
+  }
+  const docsPdf=(docs||[]).filter(function(d){
+    return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId||d.nombre||d.label)
+      &&d.tipo!=='soporte_notificacion'&&d.tipo!=='soporte_respuesta'&&d.tipo!=='notificacion_soporte';
+  });
   const bottomY=typeof cdaPdfContentBottomY==='function'?cdaPdfContentBottomY(doc,margin):(pageH-margin);
-  if(docs.length){
-    y+=6;if(y>bottomY){doc.addPage();y=margin;}
+  if(docsPdf.length){
+    y+=10;if(y>bottomY){doc.addPage();y=margin;}
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=16;
-    doc.setFont('helvetica','bold');doc.text('Documentos de respuesta ('+docs.length+'):',margin,y);y+=14;
-    doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90);
-    docs.forEach(d=>{
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(0);
+    doc.text('Documentos enviados (enlace Drive):',margin,y);y+=14;
+    doc.setFont('helvetica','normal');
+    docsPdf.forEach(function(d,idx){
       if(y>bottomY){doc.addPage();y=margin;}
-      doc.text('• '+(d.nombre||d.driveLink||'Documento'),margin+6,y);y+=12;
+      let href=String(d.driveLink||d.previewLink||d.url||'').trim();
+      if(!href&&(d.fileId||d.driveFileId))
+        href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
+      const nom=String(d.nombre||d.label||d.driveFilename||('Documento '+(idx+1))).trim();
+      const rol=d._notif_rol==='anexo'||/anexo/i.test(String(d.tipo||''))
+        ?('Anexo'+(d.anexo_n?' '+d.anexo_n:''))
+        :(d._notif_rol==='documento'?'Documento':'');
+      const linea='- '+(rol?rol+': ':'')+nom;
+      y=_pdfWriteLines(doc,doc.splitTextToSize(linea,maxW),margin,y,lineH,pageH,margin);
+      if(href){
+        doc.setTextColor(40,80,160);
+        y=_pdfWriteLines(doc,doc.splitTextToSize(href,maxW-12),margin+12,y,lineH,pageH,margin);
+        doc.setTextColor(0);
+      }
+      y+=4;
     });
-    doc.setTextColor(0);doc.setFontSize(10);
+    doc.setFontSize(10);
   }
   if(typeof cdaPdfDrawFooterAllPages==='function')cdaPdfDrawFooterAllPages(doc);
   else{
