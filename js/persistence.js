@@ -594,6 +594,8 @@ function scoreActividadLibreMerge(t){
   if(t.fechaAtendida||t.estado==='Atendida')s+=3;
   if(t._pending_fs_sync)s+=5;
   if(t.origen==='responsable'||t.autoAsignadaPorResponsable)s+=1;
+  if((t.notasDoc||[]).length)s+=2+(t.notasDoc.length||0);
+  if((t.comentarios||[]).length)s+=2+(t.comentarios.length||0);
   const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
   if(f){
     s+=20;
@@ -653,12 +655,10 @@ function upsertActividadesLibresFromRemote(remote){
       if(actLibreKeepLocalOnly(t))byId.set(id,t);
       return;
     }
-    // Remoto gana salvo sync local pendiente con firma más avanzada
+    // Remoto gana salvo sync local pendiente (marcadores / entrega reciente)
     if(t._pending_fs_sync&&scoreActividadLibreMerge(t)>=scoreActividadLibreMerge(remT)){
-      if(t.firmaWf&&t.firmaWf.fase&&!(remT.firmaWf&&remT.firmaWf.fase)){
-        byId.set(id,t);
-        return;
-      }
+      byId.set(id,t);
+      return;
     }
     byId.set(id,pickMejorActLibre(remT,t));
   });
@@ -680,14 +680,14 @@ async function saveActividadesLibresDeptoFirestore(deptoId){
     const list=actividadesLibresForDepto(d).map(function(t){
       return sanitizeActLibreForFirestore(t);
     }).filter(Boolean);
-    await window._fsSetDoc(window._fsDoc(db,'departamentos',d),{
-      actividadesLibres:list,
-      updatedAt:new Date().toISOString()
-    },{merge:true});
+    const payload=typeof _fsStripUndefinedDeep==='function'
+      ?_fsStripUndefinedDeep({actividadesLibres:list,updatedAt:new Date().toISOString()})
+      :{actividadesLibres:list,updatedAt:new Date().toISOString()};
+    await window._fsSetDoc(window._fsDoc(db,'departamentos',d),payload,{merge:true});
     return true;
   }catch(err){
     console.error('saveActividadesLibresDeptoFirestore:',d,err);
-    if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Depto '+d+': '+(err&&err.message||'Error')};
+    window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Depto '+d+': '+(err&&err.message||'Error')};
     return false;
   }
 }
@@ -723,30 +723,48 @@ function sanitizeActLibreForFirestore(t){
 window.sanitizeActLibreForFirestore=sanitizeActLibreForFirestore;
 
 /**
- * Persiste actividadesLibres: primero por departamento (fiable para responsable→encargado),
- * luego intenta sistema/global. OK si al menos un canal funciona.
+ * Persiste actividadesLibres: prioriza sistema/global (encargado NCA / marcadores),
+ * luego departamentos/{id} solo si el rol puede escribir ese depto.
+ * OK si al menos un canal funciona.
  */
 async function persistActividadesLibresFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
+  if(typeof ensureFirestoreAuthReady==='function'){
+    const authOk=await ensureFirestoreAuthReady();
+    if(!authOk||!authOk.ok)return false;
+  }
   _localSaving=true;
   window._lastFsSaveError=null;
+  let globalOk=false;
+  let globalErr=null;
+  try{
+    globalOk=!!(await saveGlobalFirestore());
+    if(!globalOk)globalErr=window._lastFsSaveError;
+  }catch(err){
+    console.warn('persistActividadesLibresFirestore global:',err);
+    globalErr={code:err&&err.code||'unknown',msg:'Global: '+(err&&err.message||'Error')};
+  }
+  const writable=new Set(
+    typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare']
+  );
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if(rol==='admin'){
+    (typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare','guainia','vaupes']).forEach(function(d){writable.add(d);});
+  }
   const deptos=new Set();
   (actividadesLibres||[]).forEach(function(t){
     if(!t||t.eliminada)return;
     const d=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre(t.depto):(t.depto||'guaviare');
-    if(d&&d!=='responsables')deptos.add(d);
+    if(d&&d!=='responsables'&&writable.has(d))deptos.add(d);
   });
-  if(!deptos.size)deptos.add(typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():'guaviare');
+  if(!deptos.size&&writable.has('guaviare'))deptos.add('guaviare');
   let deptoOk=false;
+  let deptoErr=null;
   for(const d of deptos){
+    window._lastFsSaveError=null;
     if(await saveActividadesLibresDeptoFirestore(d))deptoOk=true;
-  }
-  let globalOk=false;
-  try{
-    globalOk=!!(await saveGlobalFirestore());
-  }catch(err){
-    console.warn('persistActividadesLibresFirestore global:',err);
+    else if(!deptoErr&&window._lastFsSaveError)deptoErr=window._lastFsSaveError;
   }
   const ok=deptoOk||globalOk;
   if(ok){
@@ -756,8 +774,8 @@ async function persistActividadesLibresFirestore(){
     });
     if(window._pendingActLibreEntrega)window._pendingActLibreEntrega=null;
     try{persistExpLocal();}catch(e){}
-  }else if(!window._lastFsSaveError){
-    window._lastFsSaveError={code:'permission-denied',msg:'No se pudo guardar en departamento ni en global'};
+  }else{
+    window._lastFsSaveError=globalErr||deptoErr||{code:'permission-denied',msg:'No se pudo guardar en global ni en departamento'};
   }
   setTimeout(function(){_localSaving=false;},1800);
   return ok;
@@ -769,9 +787,14 @@ window.upsertActividadesLibresFromRemote=upsertActividadesLibresFromRemote;
 async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
+  const auth=window._firebaseAuth;
+  if(!auth||!auth.currentUser){
+    window._lastFsSaveError={code:'unauthenticated',msg:'Sin sesión Firebase'};
+    return false;
+  }
   _localSaving=true;
   try{
-    const payload={
+    let payload={
       personas:personas||[],
       actividadesLibres:(actividadesLibres||[]).map(function(t){
         return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
@@ -795,6 +818,7 @@ async function saveGlobalFirestore(){
         deptoResponsable:String(u.deptoResponsable||'').trim()
       }));
     }
+    if(typeof _fsStripUndefinedDeep==='function')payload=_fsStripUndefinedDeep(payload);
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
     // Ya sincronizado: limpiar flags pendientes locales
     (actividadesLibres||[]).forEach(function(t){
@@ -804,7 +828,7 @@ async function saveGlobalFirestore(){
     return true;
   }catch(err){
     console.error('saveGlobalFirestore:',err);
-    if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Global: '+(err&&err.message||'Error desconocido')};
+    window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Global: '+(err&&err.message||'Error desconocido')};
     return false;
   }finally{
     setTimeout(function(){_localSaving=false;},1800);
