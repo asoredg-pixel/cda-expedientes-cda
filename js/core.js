@@ -15932,21 +15932,36 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   if(!e)return false;
   normalizeTask(t);
   const rep=getUltimoReportadoPor(t)||'';
-  const list=(t.soportes||[]).filter(function(s){
-    if(!s||!s.driveFileId||s.driveInstitutional===false)return false;
+  let list=(t.soportes||[]).filter(function(s){
+    if(!s)return false;
+    const fid=String(s.driveFileId||s.fileId||'').trim();
+    if(!fid||s.driveInstitutional===false)return false;
     const est=String(s.driveEstado||'').toLowerCase();
+    const nom=String(s.driveFilename||s.label||s.nombre||'');
     // Renombrar borradores internos; no tocar ya aprobados/por notificar si el destino es el mismo
-    if(newEstado==='aprobado')return !est||est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir'||est==='corregir';
+    if(newEstado==='aprobado'){
+      // No renombrar versiones «por corregir» (se eliminan al cerrar)
+      if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
+      if(/^revision[-_]/i.test(nom)||/(?:^|[-_])revision[-_]/i.test(nom))return true;
+      return !est||est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir'||est==='corregir';
+    }
     return true;
   });
+  if(newEstado==='aprobado'&&list.length>1){
+    const activos=list.filter(function(s){return s.activo!==false&&!s.version_historial;});
+    if(activos.length)list=activos;
+  }
   if(!list.length){
     const activo=getSoporteActivo(t);
-    if(activo&&activo.driveFileId)list.push(activo);
+    if(activo&&(activo.driveFileId||activo.fileId)
+      &&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(activo)))
+      list.push(activo);
   }
   let any=false;
+  const uniqueByVersion=newEstado==='aprobado'&&list.length>1;
   for(let i=0;i<list.length;i++){
     const s=list[i];
-    const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'');
+    const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'',{uniqueByVersion:uniqueByVersion});
     if(ok)any=true;
   }
   if(any){
@@ -18780,7 +18795,21 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     }
   };
   if(typeof driveRenombrarSoporteActivoExp==='function'){
-    driveRenombrarSoporteActivoExp(expId,taskId,'aprobado').then(function(){doVerify();}).catch(function(){doVerify();});
+    driveRenombrarSoporteActivoExp(expId,taskId,'aprobado').then(function(ok){
+      if(!ok){
+        try{
+          const tChk=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+          const still=(tChk&&tChk.soportes||[]).some(function(s){
+            if(!s||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)))return false;
+            const nom=String(s.driveFilename||s.label||'');
+            return /^revision[-_]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
+          });
+          if(still&&typeof notif==='function')
+            notif('No se pudo renombrar el documento en Drive (sigue como revision-). Verifique la conexión a Google y vuelva a intentar.','warn');
+        }catch(errW){}
+      }
+      doVerify();
+    }).catch(function(){doVerify();});
   }else doVerify();
 }
 function addTaskComentario(expId,taskId,texto,opts){

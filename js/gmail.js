@@ -2131,14 +2131,28 @@ window.driveListFolderFileIds = driveListFolderFileIds;
 window.driveMigrateActLibreSoportesAlVincular = driveMigrateActLibreSoportesAlVincular;
 window.driveResolveDestFolderActLibreVinculo = driveResolveDestFolderActLibreVinculo;
 
-async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable) {
-  if (!soporte || !soporte.driveFileId || soporte.driveInstitutional === false) return false;
-  const origName = soporte.driveFilename || soporte.label || '';
-  const newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName);
-  const ok = await driveRenameInstitutional(soporte.driveFileId, newName);
+async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable, opts) {
+  opts = opts || {};
+  if (!soporte || soporte.driveInstitutional === false) return false;
+  const fid = String(soporte.driveFileId || soporte.fileId || '').trim();
+  if (!fid) return false;
+  if (!soporte.driveFileId && soporte.fileId) soporte.driveFileId = fid;
+  const origName = soporte.driveFilename || soporte.label || soporte.nombre || '';
+  let newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName);
+  // Evitar colisión si hay varias versiones a renombrar al mismo estado
+  const ver = opts.versionSuffix != null ? opts.versionSuffix : (opts.uniqueByVersion && soporte.version != null ? soporte.version : null);
+  if (ver != null && ver !== '') {
+    newName = String(newName).replace(/(\.[a-zA-Z0-9]{1,8})$/, '-v' + ver + '$1');
+  }
+  const ok = await driveRenameInstitutional(fid, newName);
   if (ok) {
+    const prevLabel = String(soporte.label || '');
+    const isDriveName = /^(anexo\d*-)?(revision|aprobado|acorregir|corregir|por_firmar|por_firma|por_notificar|guia|atendido)[-_]/i.test(prevLabel)
+      || prevLabel === String(soporte.driveFilename || '')
+      || prevLabel === String(origName || '');
     soporte.driveFilename = newName;
-    soporte.label = newName;
+    // Si el label era el nombre de Drive (p.ej. revision-…), actualizarlo; si era «Proyección…», conservarlo
+    if (!prevLabel || isDriveName) soporte.label = newName;
     soporte.driveEstado = newEstado;
   }
   return ok;
