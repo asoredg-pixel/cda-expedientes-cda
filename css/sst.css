@@ -4452,6 +4452,7 @@ body:not(.sesion-activa) #pg-login{
   display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:34px;
   padding:4px 8px;border:1px solid var(--bd);border-radius:var(--r,8px);
   background:var(--sf,#fff);box-sizing:border-box;width:100%;cursor:text;
+  position:relative;
 }
 .email-chips:focus-within{border-color:var(--bl,#185fa5);box-shadow:0 0 0 3px rgba(24,95,165,.1)}
 .email-chips--inline{
@@ -4488,5 +4489,20 @@ body:not(.sesion-activa) #pg-login{
 .email-chips-value{display:none!important}
 .gm-compose-field .email-chips{width:auto}
 .fld .email-chips{margin-top:2px}
+.email-chips-sug{
+  position:absolute;left:0;right:0;top:calc(100% + 2px);z-index:80;
+  background:var(--sf,#fff);border:1px solid var(--bl,#185fa5);border-radius:var(--r,8px);
+  box-shadow:0 8px 20px rgba(0,0,0,.12);max-height:220px;overflow:auto;
+}
+.email-chips-sug-btn{
+  display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
+  border:0;border-bottom:1px solid var(--bd);background:transparent;text-align:left;
+  padding:8px 10px;font-size:12px;font-family:'DM Sans',sans-serif;color:var(--tx);cursor:pointer;
+}
+.email-chips-sug-btn:last-child{border-bottom:0}
+.email-chips-sug-btn:hover,.email-chips-sug-btn.on{background:var(--bll,#e8f1fb);color:var(--bl,#185fa5)}
+.email-chips-sug-em{font-weight:600;word-break:break-all}
+.email-chips-sug-nom{font-size:11px;color:var(--tx3);font-weight:400}
+#task-modal-overlay .email-chips-sug{z-index:90;max-height:min(240px,40vh)}
 
 /* ─── END MOBILE APP SHELL ─── */

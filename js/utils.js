@@ -467,9 +467,72 @@ function sstMountEmailChips(inputEl,opts){
   wrap.appendChild(pills);
   wrap.appendChild(edit);
   wrap.appendChild(inputEl);
+  const sugBox=document.createElement('div');
+  sugBox.className='email-chips-sug';
+  sugBox.style.display='none';
+  sugBox.setAttribute('role','listbox');
+  wrap.appendChild(sugBox);
+  let sugItems=[];
+  let sugIdx=-1;
+  let sugHideTimer=null;
   inputEl.dataset.emailChipsMounted='1';
   inputEl.classList.add('email-chips-value');
   if(inputEl.type==='email'||inputEl.type==='text')inputEl.type='hidden';
+  function hideSug(){
+    sugBox.style.display='none';
+    sugBox.innerHTML='';
+    sugItems=[];
+    sugIdx=-1;
+  }
+  function renderSug(){
+    sugBox.innerHTML='';
+    if(!sugItems.length){sugBox.style.display='none';return;}
+    sugItems.forEach(function(it,i){
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.className='email-chips-sug-btn'+(i===sugIdx?' on':'');
+      btn.setAttribute('role','option');
+      const emSp=document.createElement('span');
+      emSp.className='email-chips-sug-em';
+      emSp.textContent=String(it.correo||'');
+      btn.appendChild(emSp);
+      if(it.nombre){
+        const nomSp=document.createElement('span');
+        nomSp.className='email-chips-sug-nom';
+        nomSp.textContent=String(it.nombre);
+        btn.appendChild(nomSp);
+      }
+      btn.addEventListener('mousedown',function(ev){
+        ev.preventDefault();
+        pickSug(it.correo);
+      });
+      sugBox.appendChild(btn);
+    });
+    sugBox.style.display='block';
+  }
+  function pickSug(correo){
+    if(sugHideTimer){clearTimeout(sugHideTimer);sugHideTimer=null;}
+    hideSug();
+    edit.value='';
+    commitToken(correo);
+    edit.focus();
+  }
+  function updateSug(){
+    const q=String(edit.value||'').trim().toLowerCase();
+    if(q.length<1){hideSug();return;}
+    const pool=typeof window.collectCorreosSistemaRegistrados==='function'
+      ?window.collectCorreosSistemaRegistrados()
+      :(typeof collectCorreosSistemaRegistrados==='function'?collectCorreosSistemaRegistrados():[]);
+    const exclude=new Set(emails);
+    sugItems=(pool||[]).filter(function(it){
+      if(!it||!it.correo||exclude.has(it.correo))return false;
+      if(it.correo.indexOf(q)>=0)return true;
+      if(it.nombre&&String(it.nombre).toLowerCase().indexOf(q)>=0)return true;
+      return false;
+    }).slice(0,12);
+    sugIdx=sugItems.length?0:-1;
+    renderSug();
+  }
   function syncHidden(){
     inputEl.value=emails.join(', ');
     try{inputEl.dispatchEvent(new Event('input',{bubbles:true}));}catch(e0){}
@@ -531,14 +594,40 @@ function sstMountEmailChips(inputEl,opts){
     if(ok)edit.value='';
   }
   edit.addEventListener('keydown',function(ev){
+    if(sugBox.style.display!=='none'&&sugItems.length){
+      if(ev.key==='ArrowDown'){
+        ev.preventDefault();
+        sugIdx=Math.min(sugItems.length-1,sugIdx+1);
+        renderSug();
+        return;
+      }
+      if(ev.key==='ArrowUp'){
+        ev.preventDefault();
+        sugIdx=Math.max(0,sugIdx-1);
+        renderSug();
+        return;
+      }
+      if(ev.key==='Escape'){
+        ev.preventDefault();
+        hideSug();
+        return;
+      }
+      if((ev.key==='Enter'||ev.key==='Tab')&&sugIdx>=0&&sugItems[sugIdx]){
+        ev.preventDefault();
+        pickSug(sugItems[sugIdx].correo);
+        return;
+      }
+    }
     if(ev.key==='Enter'||ev.key===','||ev.key===';'){
       if(String(edit.value||'').trim()){
         ev.preventDefault();
+        hideSug();
         commitBuffer();
       }
       return;
     }
     if(ev.key==='Tab'&&String(edit.value||'').trim()){
+      hideSug();
       commitBuffer();
       return;
     }
@@ -552,18 +641,29 @@ function sstMountEmailChips(inputEl,opts){
     const v=edit.value;
     if(/[,;]\s*$/.test(v)){
       edit.value=v.replace(/[,;]\s*$/,'');
+      hideSug();
       commitBuffer();
     }else if(/\s$/.test(v)&&sstEmailLooksValid(v.trim())){
       edit.value=v.trim();
+      hideSug();
       commitBuffer();
+    }else{
+      updateSug();
     }
     edit.classList.toggle('is-invalid',!!edit.value&&edit.value.indexOf('@')>0&&!sstEmailLooksValid(edit.value.trim()));
   });
-  edit.addEventListener('blur',function(){commitBuffer();});
+  edit.addEventListener('focus',function(){updateSug();});
+  edit.addEventListener('blur',function(){
+    sugHideTimer=setTimeout(function(){
+      hideSug();
+      commitBuffer();
+    },160);
+  });
   edit.addEventListener('paste',function(ev){
     const txt=(ev.clipboardData||window.clipboardData||{}).getData('text')||'';
     if(txt&&/[,;\s]/.test(txt)){
       ev.preventDefault();
+      hideSug();
       edit.value=(edit.value||'')+txt;
       commitBuffer();
     }
@@ -576,9 +676,10 @@ function sstMountEmailChips(inputEl,opts){
     if(max===1&&emails.length>1)emails=emails.slice(0,1);
     edit.value='';
     edit.classList.remove('is-invalid');
+    hideSug();
     render();
   }
-  wrap._sstChips={setFromValue:setFromValue,max:max,edit:edit};
+  wrap._sstChips={setFromValue:setFromValue,max:max,edit:edit,hideSug:hideSug};
   render();
   return wrap;
 }

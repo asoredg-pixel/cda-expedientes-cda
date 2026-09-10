@@ -28082,6 +28082,92 @@ function pqrsCorreosSugeridosDetalle(e,t){
   }
   return out;
 }
+/** Correos ya registrados en el sistema (expedientes, PQRSD, actividades, notificaciones, usuarios). */
+let _correosSistemaCache=null,_correosSistemaCacheAt=0;
+function collectCorreosSistemaRegistrados(force){
+  const now=Date.now();
+  if(!force&&_correosSistemaCache&&(now-_correosSistemaCacheAt)<25000)return _correosSistemaCache;
+  const map=new Map();
+  const valida=function(em){
+    const v=String(em||'').trim().toLowerCase();
+    if(!v||v.indexOf('@')<0)return'';
+    if(typeof emailValido==='function'&&!emailValido(v))return'';
+    if(typeof sstEmailLooksValid==='function'&&!sstEmailLooksValid(v))return'';
+    return v;
+  };
+  const add=function(correo,nombre,fuente){
+    const em=valida(correo);
+    if(!em)return;
+    const nom=String(nombre||'').trim();
+    if(!map.has(em))map.set(em,{correo:em,nombre:nom,fuente:fuente||''});
+    else if(nom&&!map.get(em).nombre)map.get(em).nombre=nom;
+  };
+  const addList=function(raw,nombre,fuente){
+    String(raw||'').split(/[,;]+/).forEach(function(p){add(p,nombre,fuente);});
+  };
+  const KEYS=['_pn_correo','_qd_correo','_pj_correo','_pj_rep_correo','_pj_ofi_correo','_apo_correo','_aut_correo','_ec_correo','_pi_correo','_pi_rep_correo','_pi_correo_emp'];
+  const scanTask=function(t,fallbackNom){
+    if(!t||t.eliminada)return;
+    const nom=t.interesadoNombre||t._pn_nombre||t._qd_nombre||t._pj_empresa||fallbackNom||'';
+    add(t.interesadoCorreo,nom,'actividad');
+    KEYS.forEach(function(k){add(t[k],nom,'actividad');});
+    const fw=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):null)||t.firmaWf||{};
+    addList(fw.email_to,nom,'notif');
+    addList(fw.email_cc,nom,'notif');
+    addList(fw.email_bcc,nom,'notif');
+  };
+  const list=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
+  for(let i=0;i<list.length;i++){
+    const e=list[i];
+    if(!e||e._eliminado||(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(e)))continue;
+    const nom=e._pn_nombre||e._qd_nombre||e._pj_empresa||e._exp||'';
+    KEYS.forEach(function(k){add(e[k],nom,'expediente');});
+    if(typeof getPqrsWorkflow==='function'){
+      const wf=getPqrsWorkflow(e)||{};
+      addList(wf.email_to,nom,'notif');
+      addList(wf.email_cc,nom,'notif');
+      addList(wf.email_bcc,nom,'notif');
+    }
+    (e.tasks||[]).forEach(function(t){scanTask(t,nom);});
+  }
+  const libres=(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres))?actividadesLibres:[];
+  for(let j=0;j<libres.length;j++)scanTask(libres[j],libres[j]&&libres[j].codigo);
+  try{
+    const us=(typeof _usuariosCache!=='undefined'&&Array.isArray(_usuariosCache))?_usuariosCache:[];
+    us.forEach(function(u){
+      if(!u)return;
+      add(u.email||u.correo,u.nombre||'','usuario');
+    });
+  }catch(errU){}
+  try{
+    if(typeof getInstructoresCfg==='function'){
+      const deptos=['guaviare','guainia','vaupes'];
+      deptos.forEach(function(d){
+        (getInstructoresCfg(d)||[]).forEach(function(ins){
+          if(!ins)return;
+          add(ins.email||ins.correo,ins.nombre||'','usuario');
+        });
+      });
+    }
+  }catch(errI){}
+  try{
+    if(typeof encargadosGlobal==='object'&&encargadosGlobal){
+      ['departamentos','oficinas'].forEach(function(grupo){
+        const g=encargadosGlobal[grupo]||{};
+        Object.keys(g).forEach(function(id){
+          const row=g[id];
+          if(row)add(row.email,row.nombre||id,'encargado');
+        });
+      });
+      if(encargadosGlobal.secretaria)add(encargadosGlobal.secretaria.email,encargadosGlobal.secretaria.nombre||'Secretaría','encargado');
+    }
+  }catch(errE){}
+  const arr=Array.from(map.values()).sort(function(a,b){return String(a.correo).localeCompare(String(b.correo));});
+  _correosSistemaCache=arr;
+  _correosSistemaCacheAt=now;
+  return arr;
+}
+window.collectCorreosSistemaRegistrados=collectCorreosSistemaRegistrados;
 /** Texto compacto: «Rol (Nombre): correo · …». Clic en el correo lo copia. */
 function htmlCorreosSugeridosNotificacion(e,t,opts){
   opts=opts||{};
