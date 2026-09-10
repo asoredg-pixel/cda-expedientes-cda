@@ -17345,9 +17345,10 @@ function confirmarCierreTask(expId,taskId,opts){
   verificarTaskExp(expId,taskId,fechaCierre,opts);
 }
 function estadoTaskLabel(t){
-  // Responsable: tras aprobación, proyección unificada (✓ Aprobada / Not: … / Por firmar)
-  if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
-    const estP=estadoTaskForAsignado(t,responsableActivo);
+  // Proyección del responsable (o encargado viendo ese responsable): ✓ Revisada · X Firmar / etc.
+  const yoLab=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
+  if(yoLab&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoLab)){
+    const estP=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,yoLab):'';
     if(estP==='Atendida'){
       const eExp=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
       let uiR=null;
@@ -17401,9 +17402,10 @@ function taskEstadoBadgeHtml(t){
     }
     return '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>';
   }
-  // Responsable con participación atendida: misma proyección (✓ Revisada / X Firma · X Notificar)
-  if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)
-    &&typeof estadoTaskForAsignado==='function'&&estadoTaskForAsignado(t,responsableActivo)==='Atendida'){
+  // Responsable (o encargado viendo ese responsable) con participación atendida: misma proyección
+  const yoBadge=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
+  if(yoBadge&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoBadge)
+    &&typeof estadoTaskForAsignado==='function'&&estadoTaskForAsignado(t,yoBadge)==='Atendida'){
     let uiR=null;
     if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&typeof pqrsEstadoActividadUi==='function')
       uiR=pqrsEstadoActividadUi(eExp);
@@ -23467,6 +23469,25 @@ function getActDeptRespFilterSafe(){
   }
   return typeof getEncargadoDepto==='function'?(getEncargadoDepto(deptoActivo)||null):null;
 }
+/**
+ * Responsable cuya proyección de «Atendidas» se está viendo:
+ * modo responsable → él; encargado filtrando un responsable concreto → ese nombre.
+ * null = bandeja del encargado / Todos (no espejar proyección individual).
+ */
+function getActProyeccionResponsableNombre(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&typeof responsableActivo!=='undefined'&&responsableActivo)
+    return String(responsableActivo).trim()||null;
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()){
+    const rf=typeof getActDeptRespFilterSafe==='function'?getActDeptRespFilterSafe():null;
+    if(!rf)return null;
+    const enc=typeof getEncargadoDepto==='function'
+      ?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
+    if(enc&&rf===enc)return null;
+    return rf;
+  }
+  return null;
+}
+window.getActProyeccionResponsableNombre=getActProyeccionResponsableNombre;
 function getTareasNotifVisiblesAct(){
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
   const respFilter=deptView?getActDeptRespFilterSafe():null;
@@ -24203,18 +24224,25 @@ function filtrarActividadesPorEstado(list,filtro){
   }
   if(filtro==='porcorr')return list.filter(t=>estadoTask(t)==='Por corregir');
   if(filtro==='done')return list.filter(t=>{
-    if(esModoResponsable()&&responsableActivo){
+    const yoResp=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
+    if(yoResp){
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
       // Designado a notificar (mismo o distinto): solo Por notificar / Por ejecutar — no Atendidas
       if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eD))return false;
       if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)
         &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eD)
-        &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eD))return false;
-      if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)
-        &&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))return false;
-      // Quien entregó y NO es el notificador: permanece en Atendidas (✓ Firmada · X Notificar)
-      if(taskUsuarioEsAsignado(t,responsableActivo)){
-        if(estadoTaskForAsignado(t,responsableActivo)==='Atendida')return true;
+        &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eD)
+        &&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(eD,yoResp))return false;
+      if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+        const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
+        if(nPor&&typeof agendaNorm==='function'&&agendaNorm(nPor)===agendaNorm(yoResp))return false;
+        if(typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t)
+          &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoResp)
+          &&(!nPor||agendaNorm(nPor)===agendaNorm(yoResp)))return false;
+      }
+      // Quien entregó y NO es el notificador: permanece en Atendidas (✓ Revisada · X Firmar / X Notificar)
+      if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoResp)){
+        if(typeof estadoTaskForAsignado==='function'&&estadoTaskForAsignado(t,yoResp)==='Atendida')return true;
         if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)){
           if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eD))return true;
           if(t._pqrs_proyeccion_atendida)return true;
@@ -24226,7 +24254,7 @@ function filtrarActividadesPorEstado(list,filtro){
       }
       return false;
     }
-    // Encargado / depto: Atendidas incluye PQRSD ya cerrada (✓ Revisada ✓ Notificada)
+    // Encargado / Todos: Atendidas incluye PQRSD ya cerrada (✓ Revisada ✓ Notificada)
     const eEnc=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
     if(eEnc&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eEnc)
       &&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eEnc))return true;
