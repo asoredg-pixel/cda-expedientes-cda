@@ -8460,30 +8460,89 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   const btn=document.getElementById('task-rev-notif-btn');
   if(btn){btn.disabled=true;btn.textContent='Enviando…';}
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
-  const htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>'+
-    (e&&e._exp&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(e._exp):'')+
-    (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
+  const expSub=(e&&e._exp)||(t&&(t.exp||t.codigo))||expId||'';
+  const prog=function(p,msg){
+    if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
+  };
   try{
+    if(typeof sstCargaShow==='function')
+      sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:8,sub:expSub});
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+      prog(12,'Verificando conexión Gmail…');
       const okG=await sstSolicitarGmailParaAdjuntar();
-      if(!okG){if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}return;}
+      if(!okG){
+        if(typeof sstCargaHide==='function')sstCargaHide();
+        if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
+        return;
+      }
     }
     const esPqrsNotif=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
-    const adjuntos=await taskReviewAdjuntosDesdeSoportes(t,e);
+    // Documentos de la entrega: enlaces Drive en el HTML (no embeber PDF grandes → timeout Gmail)
+    prog(20,'Preparando documentos…');
+    const docsNotif=typeof collectDocsParaNotificacionCorreo==='function'
+      ?collectDocsParaNotificacionCorreo(e||null,t):[];
+    let linksHtml='';
+    const docsConLink=(docsNotif||[]).filter(function(d){
+      return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId)
+        &&d.tipo!=='soporte_notificacion'&&d.tipo!=='soporte_respuesta';
+    });
+    if(docsConLink.length){
+      linksHtml='<hr><p><strong>Documentos</strong> (enlace Drive):</p>';
+      docsConLink.forEach(function(d){
+        let href=String(d.driveLink||d.previewLink||d.url||'').trim();
+        if(!href&&(d.fileId||d.driveFileId))
+          href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
+        if(!href)return;
+        const nom=escAttr(d.nombre||d.label||d.driveFilename||'Documento');
+        linksHtml+='<p>📎 <a href="'+escAttr(href)+'">'+nom+'</a></p>';
+      });
+    }
+    let htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>'+
+      linksHtml+
+      (e&&e._exp&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(e._exp):'')+
+      (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
+    prog(35,'Generando soporte de envío…');
     let pdfBlob=null,up=null;
-    // PDF soporte de envío: PQRSD y trámites/expedientes (aprobar y notificar)
     try{
       if(typeof generarPdfSoporteNotificacionActividad==='function')
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por});
     }catch(errP){console.warn('pdf soporte notif:',errP);}
-    if(pdfBlob)adjuntos.unshift(new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'}));
-    if(typeof pqrsEnviarCorreoCiudadano!=='function'){notif('No hay envío de correo disponible','err');if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}return;}
+    // Solo adjuntar el soporte (liviano). Los docs de entrega van por enlace Drive.
+    let adjuntos=[];
+    if(pdfBlob){
+      const sopFile=new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'});
+      if((sopFile.size||0)<=800*1024)adjuntos=[sopFile];
+    }
+    if(typeof pqrsEnviarCorreoCiudadano!=='function'){
+      if(typeof sstCargaHide==='function')sstCargaHide();
+      notif('No hay envío de correo disponible','err');
+      if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
+      return;
+    }
     const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
-    // Enviar primero: no registrar soporte ni cerrar si Gmail falla
-    await pqrsEnviarCorreoCiudadano(destinos,asunto||('Notificación — '+(t.actividad||'actividad')),htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
+    const asuntoFinal=asunto||('Notificación — '+(t.actividad||'actividad'));
+    prog(55,'Enviando correo al ciudadano…');
+    let sent=null;
+    try{
+      sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
+    }catch(errSend){
+      const msg=String(errSend&&errSend.message||errSend||'');
+      if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
+        prog(70,'Reintentando envío sin adjuntos embebidos…');
+        sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,[],{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
+      }else if(/failed to fetch|network/i.test(msg)){
+        prog(70,'Reintentando envío…');
+        await new Promise(function(r){setTimeout(r,600);});
+        sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,[],{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
+      }else{
+        throw errSend;
+      }
+    }
+    if(!sent)throw new Error('No se pudo enviar el correo. Conecte Gmail/NCA e intente de nuevo.');
     const fechaC=hoy();
     const refId=t.sinExpediente?(t.codigo||expId):expId;
+    prog(85,'Registrando soporte de envío…');
     if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
       try{
         const reg=await registrarSoporteEnvioCorreoNotif(e,t,e&&e._exp?e._exp:refId,{
@@ -8532,6 +8591,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       tipo:'soporte_respuesta',
       driveEstado:'atendido'
     }:null;
+    prog(95,'Cerrando actividad…');
     if(esPqrsNotif&&typeof taskReviewCerrarPqrsAtendida==='function'){
       taskReviewCerrarPqrsAtendida(e,{
         fecha:fechaC,por:por,cuerpo:cuerpo,notificada:true,
@@ -8546,6 +8606,8 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       else verificarTaskExp(refId,taskId,fechaC,{notificada:true,skipAutoMail:true,silent:true,forceClosePqrs:true});
       try{if(typeof setActFiltro==='function')setActFiltro('revisados');}catch(errF){}
       if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
+      if(typeof sstCargaDone==='function')sstCargaDone({title:'Notificación enviada',message:'PQRSD notificada y atendida',autoCloseMs:2200});
+      else if(typeof sstCargaHide==='function')sstCargaHide();
       closeTaskModal();
       if(typeof renderActividades==='function')renderActividades();
       if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
@@ -8558,9 +8620,12 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     verificarTaskExp(refId,taskId,fechaC,{notificada:true,skipAutoMail:true,silent:true});
     if(e&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
     if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+    if(typeof sstCargaDone==='function')sstCargaDone({title:'Notificación enviada',message:'Actividad revisada, notificada y cerrada',autoCloseMs:2200});
+    else if(typeof sstCargaHide==='function')sstCargaHide();
     notif('✅ Actividad revisada, notificada y cerrada','ok');
   }catch(err){
     console.warn('taskReviewConfirmarYNotificar:',err);
+    if(typeof sstCargaHide==='function')sstCargaHide();
     notif('No se pudo enviar el correo: '+String(err.message||err).slice(0,120),'err');
     if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
   }
