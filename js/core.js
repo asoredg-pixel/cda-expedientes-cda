@@ -13776,6 +13776,12 @@ function refreshTaskReviewSoporteInPlace(expId,taskId,sopId,t){
   const ctx=window._taskModalCtx||{};
   if(ctx.isRespVerCorr&&typeof syncTaskModalHdrOpenBtn==='function')
     syncTaskModalHdrOpenBtn(selObj.url||selObj.preview||'');
+  const openDocBtn=document.querySelector('.task-review-doc-tools .task-review-doc-open');
+  if(openDocBtn){
+    const u=String(selObj.url||selObj.preview||'').trim();
+    openDocBtn.style.display=u?'':'none';
+    openDocBtn.onclick=u?function(){openDriveVentanaEmergente(u);}:null;
+  }
   return true;
 }
 function selectTaskSoporte(expId,taskId,sopId){
@@ -16153,7 +16159,8 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     h+='<div class="task-review-doc-bar">';
     if(hasSop&&sel){
       let docToolsBtns='';
-      if(!opts.isRespVerCorr&&(!opts.isReviewWaSide||opts.porFirmarVista||opts.showImprimirDoc)){
+      // ↗ también en 🧐 revisión (isReviewWaSide): antes se omitía y solo salía en 🔍 ver documento
+      if(!opts.isRespVerCorr){
         docToolsBtns='<button type="button" class="btn bsm bsm-ico task-review-doc-close" id="btn-review-side-close" onclick="taskReviewCloseSidePanel()" title="Cerrar panel" aria-hidden="true" style="display:none">✕</button>'+
           '<span class="task-review-doc-tools-spacer" aria-hidden="true"></span>';
         if(sel.url||sel.preview){
@@ -16163,7 +16170,7 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
           if(porImp&&!esDirRev){
             docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="imprimirSoporteSeleccionadoTask(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')" title="Imprimir documento seleccionado">🖨️</button>';
           }else if(!porImp&&!esDirRev){
-            docToolsBtns+='<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
+            docToolsBtns+='<button type="button" class="btn bsm bsm-ico task-review-doc-open" onclick="openDriveVentanaEmergente(\''+escAttr(sel.url||sel.preview)+'\')" title="Abrir en ventana emergente">↗</button>';
           }
         }
       }
