@@ -399,7 +399,19 @@ async function iniciarLoginGoogle(){
 function initFirebaseAuthListener(){
   if(!window._authOnStateChanged||!window._firebaseAuth)return;
   window._authOnStateChanged(window._firebaseAuth,user=>{
-    if(document.body.classList.contains('sesion-activa'))return;
+    if(document.body.classList.contains('sesion-activa')){
+      if(user){authUsuario=user;return;}
+      // No borrar la UI: el contador Drive es otro OAuth. Aviso si Auth no vuelve.
+      authUsuario=null;
+      clearTimeout(window._authLostTimer);
+      window._authLostTimer=setTimeout(function(){
+        if(!document.body.classList.contains('sesion-activa'))return;
+        if(window._firebaseAuth&&window._firebaseAuth.currentUser){authUsuario=window._firebaseAuth.currentUser;return;}
+        console.warn('Firebase Auth ausente con sesión UI activa (Drive puede seguir conectado)');
+        if(typeof notif==='function')notif('Sesión Firebase interrumpida. Si no puede guardar, cierre sesión y vuelva a ingresar (el tiempo de Drive no aplica).','warn');
+      },2800);
+      return;
+    }
     // Prioridad al deep-link de consulta ciudadana (?consulta=…)
     if(typeof leerConsultaCiudadanaDesdeUrl==='function'&&leerConsultaCiudadanaDesdeUrl())return;
     if(user&&!window._usuarioActual&&!window._authVerifying){

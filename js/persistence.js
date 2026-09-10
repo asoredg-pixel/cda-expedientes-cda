@@ -898,20 +898,66 @@ function mergePendingExpBackup(){
     if(!remoteAt||pendingAt>remoteAt)exps[idx]=exp;
   });
 }
+/** Expira el JWT de Firebase (ms epoch) o 0 si no se puede leer. */
+function _firebaseIdTokenExpMs(jwt){
+  try{
+    const part=String(jwt||'').split('.')[1];
+    if(!part)return 0;
+    const b64=part.replace(/-/g,'+').replace(/_/g,'/');
+    const pad=b64.length%4===0?'':'===='.slice(b64.length%4);
+    const json=JSON.parse(atob(b64+pad));
+    return(Number(json.exp)||0)*1000;
+  }catch(e){return 0;}
+}
+/** true si el token vence antes de skewSec segundos. */
+function _firebaseIdTokenExpiring(jwt,skewSec){
+  const exp=_firebaseIdTokenExpMs(jwt);
+  if(!exp)return true;
+  return Date.now()>=(exp-(Number(skewSec)||0)*1000);
+}
+/**
+ * Asegura sesión Firebase usable para escribir en Firestore.
+ * No exige refresco forzado si el token en caché sigue vigente (Drive OAuth
+ * puede seguir activo aunque falle un getIdToken(true) por red).
+ */
 async function ensureFirestoreAuthReady(){
   const auth=window._firebaseAuth;
-  if(!auth||!auth.currentUser){
+  let user=auth&&auth.currentUser;
+  if(!user){
+    // Persistencia IndexedDB a veces tarda un instante tras foco/pestaña
+    await new Promise(function(r){setTimeout(r,350);});
+    user=auth&&auth.currentUser;
+  }
+  if(!user){
     window._lastFsSaveError={code:'unauthenticated',msg:'Sin sesión Firebase activa'};
     return{ok:false,code:'unauthenticated'};
   }
+  let cached='';
+  try{cached=await user.getIdToken(false);}catch(errSoft){
+    console.warn('ensureFirestoreAuthReady getIdToken(false):',errSoft);
+  }
+  const cachedOk=!!(cached&&!_firebaseIdTokenExpiring(cached,45));
+  if(cachedOk){
+    // Refresco en segundo plano si queda <5 min; no bloquea el guardado
+    if(_firebaseIdTokenExpiring(cached,5*60)){
+      user.getIdToken(true).catch(function(e){console.warn('ensureFirestoreAuthReady bg refresh:',e);});
+    }
+    return{ok:true,email:user.email||''};
+  }
   try{
-    await auth.currentUser.getIdToken(true);
-    return{ok:true,email:auth.currentUser.email||''};
+    await user.getIdToken(true);
+    return{ok:true,email:user.email||''};
   }catch(err){
+    // Red inestable: si aún hay token no vencido, permitir el guardado
+    if(cached&&!_firebaseIdTokenExpiring(cached,0)){
+      console.warn('ensureFirestoreAuthReady: force falló, se usa token en caché',err);
+      return{ok:true,email:user.email||'',stale:true};
+    }
     window._lastFsSaveError={code:'unauthenticated',msg:err&&err.message||'Token expirado'};
     return{ok:false,code:'unauthenticated'};
   }
 }
+window.ensureFirestoreAuthReady=ensureFirestoreAuthReady;
 async function syncPendingExpedientesToFirestore(){
   const pending=_pendingExpBackupList();
   if(!pending.length)return 0;
@@ -943,13 +989,9 @@ function _firestoreSaveErrorMessage(errCode){
   let msg='⚠️ No se pudo guardar en Firestore.';
   if(errCode==='permission-denied'){
     msg+=' Sin permisos para "'+email+'" (rol: '+rol+').';
-    if(rol==='secretaria'||rol==='admin'){
-      msg+=' Revise que la cuenta esté activa en Configuración → Usuarios y vuelva a iniciar sesión.';
-    }else{
-      msg+=' Ingrese con una cuenta Secretaría o Administrador autorizada.';
-    }
+    msg+=' Verifique que su cuenta esté activa y vuelva a iniciar sesión si el problema continúa.';
   }else if(errCode==='unauthenticated'){
-    msg+=' Sesión de Google expirada — cierre sesión y vuelva a ingresar con su cuenta institucional.';
+    msg+=' Sesión de Firebase no disponible (el contador de Drive es independiente). Cierre sesión y vuelva a ingresar con su cuenta institucional.';
   }else if(errCode==='invalid-argument'){
     msg+=' Datos del expediente demasiado grandes o inválidos. Intente sin adjuntos pesados en el cuerpo del correo.';
   }else if(errCode&&errCode!=='unknown'){
@@ -958,6 +1000,12 @@ function _firestoreSaveErrorMessage(errCode){
     msg+=' Verifique conexión o permisos.';
   }
   return msg;
+}
+function _persistLocalBackupHint(exp){
+  const esPqrs=!!(exp&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp));
+  return esPqrs
+    ?' La PQRSD quedó guardada localmente y se sincronizará al reconectar.'
+    :' El expediente quedó guardado localmente y se sincronizará al reconectar.';
 }
 async function persistExpedienteGranular(exp,withGlobal){
   return persistExpedienteGranularAsync(exp,withGlobal);
@@ -972,7 +1020,7 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
   if(!authOk.ok){
     persistExpLocalBackup(exp);
     updateSyncIndicator('error');
-    if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+' La PQRSD quedó guardada localmente y se sincronizará al reconectar.','err');
+    if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+_persistLocalBackupHint(exp),'err');
     return false;
   }
   // Evita que el listener ignore el snapshot del propio guardado (y el de otras pestañas
@@ -984,7 +1032,10 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
     removeExpLocalBackup(expedienteDocId(exp));
     mergeExpIntoExpsCache(exp);
     updateSyncIndicator('synced');
-    if(!globalOk&&typeof notif==='function')notif('⚠️ PQRSD guardada, pero no se actualizó el índice global.','warn');
+    if(!globalOk&&typeof notif==='function'){
+      const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp);
+      notif(esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.','warn');
+    }
     return true;
   }
   persistExpLocalBackup(exp);
@@ -992,7 +1043,7 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
   const lastErr=window._lastFsSaveError||null;
   const errCode=lastErr&&lastErr.code||'unknown';
   console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
-  if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+' La PQRSD quedó guardada localmente y se reintentará al sincronizar.','err');
+  if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+_persistLocalBackupHint(exp),'err');
   return false;
 }
 window.persistExpedienteGranularAsync=persistExpedienteGranularAsync;
