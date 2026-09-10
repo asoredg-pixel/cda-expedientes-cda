@@ -2809,6 +2809,8 @@ input.fld-invalid,textarea.fld-invalid{border-color:var(--rd)!important;backgrou
 body.modo-ciudadano .hdr-logout-btn,
 body.modo-ciudadano .hdr-user-bar-mobile .btn,
 body.modo-ciudadano .hdr-more-menu{display:none!important}
+body.modo-ciudadano .sst-nav,
+body.modo-ciudadano #sst-nav{display:none!important}
 .export-reminder-box{background:#fff;border-radius:var(--r);padding:1.25rem;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .export-reminder-btns{display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap}
 .chat-contact-info{flex:1;min-width:0}

@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260910m">
+<link rel="stylesheet" href="css/sst.css?v=20260910n">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,14 +20,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260910l"></script>
+<script src="js/constants.js?v=20260910n"></script>
 <script src="js/utils.js?v=20260909p"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260910i"></script>
 <script src="js/roles.js?v=20260909n"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260910l"></script>
+<script src="js/core.js?v=20260910n"></script>
 <script src="js/formulario.js?v=20260909n"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260909p"></script>
@@ -1032,7 +1032,7 @@
       <input type="text" id="ciudadano-exp" placeholder="N° completo de PQRSD (Ej. QR260001)" style="flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);font-size:14px" onkeydown="if(event.key==='Enter')buscarExpCiudadano()">
       <button type="button" class="btn bp" onclick="buscarExpCiudadano()">Consultar</button>
     </div>
-    <div style="font-size:12px;color:var(--tx2);margin-bottom:1rem;line-height:1.45">Ingrese el <strong>número completo</strong> que aparece en su correo de radicación (incluye las dos letras). Sin ese código no es posible consultar el expediente de otra persona.</div>
+    <div style="font-size:12px;color:var(--tx2);margin-bottom:1rem;line-height:1.45">Ingrese el número completo de expediente o PQRSD para consultar el estado de su solicitud.</div>
     <div id="ciudadano-resultado"></div>
     <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--bd)">
       <button type="button" class="btn bsm" onclick="SST.volverPantallaPrincipal()">← Volver al inicio</button>
