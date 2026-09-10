@@ -8695,10 +8695,14 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   const eid=escAttr(expId),tid=escAttr(taskId);
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
+  const eSide=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
+  const tieneExp=!!eSide;
   return '<div class="task-review-side-form">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+(esAuto
-      ?'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar la entrega se <strong>anula la actividad</strong> y no quedará en Por ejecutar.'
+      ?(tieneExp
+        ?'Autoentrega con expediente/PQRSD: se cancelan documentos y N° de la entrega; <strong>se conservan los datos del registro</strong> para una nueva entrega. No queda en Por ejecutar.'
+        :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.')
       :'La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.')+'</div>'+
     '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+
     '<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>'+
@@ -15994,6 +15998,9 @@ function eliminarEntregaActividadConfirm(expId,taskId){
   const t=getTaskAny(expId,taskId);
   const lbl=(t&&(t.desc||t.actividad))||'actividad';
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
+  const eConf=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(t.exp||expId):null):null;
+  const tieneExp=!!eConf;
+  const esPqrsConf=!!(eConf&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eConf));
   const fn=function(){eliminarEntregaActividad(expId,taskId);};
   if(typeof confirmEliminar==='function'){
     confirmEliminar({
@@ -16002,16 +16009,51 @@ function eliminarEntregaActividadConfirm(expId,taskId){
         ?('¿Cancelar la autoentrega de «'+lbl+'»?')
         :('¿Eliminar la entrega de «'+lbl+'»?'),
       detail:esAuto
-        ?'Como la actividad se creó al entregar (📤 Entregar documento), se anula por completo: no quedará en Por ejecutar. Se borrarán del Drive los documentos y anexos, y se liberarán los N° de registro de esta entrega.'
+        ?(tieneExp
+          ?('Se eliminan documentos/anexos de Drive y se liberan N° de factura, oficio, concepto o acto. El '+(esPqrsConf?'PQRSD':'expediente')+' y sus datos de registro (interesado, radicación, etc.) se conservan para no volver a digitarlos. La actividad de entrega no quedará en Por ejecutar.')
+          :'Como la actividad se creó al entregar (📤 Entregar documento), se anula por completo: no quedará en Por ejecutar. Se borrarán del Drive los documentos y anexos.')
         :'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
       confirmLabel:esAuto?'Sí, cancelar autoentrega':'Sí, eliminar entrega'
     },fn);
     return;
   }
   if(confirm(esAuto
-    ?'¿Cancelar esta autoentrega? La actividad no quedará en Por ejecutar y se borrarán los documentos de Drive.'
+    ?(tieneExp
+      ?'¿Cancelar autoentrega? Se conservan los datos del '+(esPqrsConf?'PQRSD':'expediente')+'; se borran documentos y se liberan N° de la entrega.'
+      :'¿Cancelar esta autoentrega? La actividad no quedará en Por ejecutar y se borrarán los documentos de Drive.')
     :'¿Eliminar esta entrega? La actividad volverá a Por ejecutar y se borrarán los documentos de Drive.'))fn();
 }
+/** Limpia solo datos de la respuesta/entrega; conserva alta, interesado y radicación del expediente/PQRSD. */
+function limpiarRespuestaEntregaConservandoAlta(e){
+  if(!e)return;
+  e._pqrs_respuesta_oficio='';
+  e._pqrs_respuesta_fecha='';
+  e._pqrs_respuesta_nota='';
+  e._pqrs_respuesta_medio='';
+  e._pqrs_respuesta_link='';
+  e._pqrs_respuesta_links=[];
+  e._pqrs_respuesta_soportes=[];
+  if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof setPqrsWorkflow==='function'){
+    setPqrsWorkflow(e,{
+      fase:PQRS_WF.SIN_RESPUESTA,
+      documentos:[],
+      cuerpo:'',
+      entregado_por:'',
+      revision_nca:null,
+      fecha_respuesta:'',
+      devolucion_director:null,
+      oficio:'',
+      tipo:'',
+      canal:'',
+      email_to:'',
+      email_cc:'',
+      email_bcc:'',
+      email_subject:'',
+      task_id:''
+    });
+  }
+}
+window.limpiarRespuestaEntregaConservandoAlta=limpiarRespuestaEntregaConservandoAlta;
 async function eliminarEntregaActividad(expId,taskId){
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return false;}
   let t=getTaskAny(expId,taskId);
@@ -16019,7 +16061,8 @@ async function eliminarEntregaActividad(expId,taskId){
   const refId=t.sinExpediente?(t.codigo||expId):expId;
   const e=t.sinExpediente?null:getExpById(refId);
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
-  // Liberar N° de concepto/acto/factura/oficio de esta entrega (si no, no se pueden reutilizar al volver a entregar)
+  const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
+  // Liberar N° de concepto/acto/factura/oficio de esta entrega
   if(typeof retirarRegistroPendienteDeEntrega==='function'){
     try{
       const liberado=retirarRegistroPendienteDeEntrega(e,t,{forceAll:true});
@@ -16038,19 +16081,62 @@ async function eliminarEntregaActividad(expId,taskId){
     if(!s)return;
     pushFid(s.driveFileId||s.fileId);
   });
-  let wfDocsCleared=false;
   if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
     (wf.documentos||[]).forEach(function(d){
       if(!d)return;
       pushFid(d.fileId||d.driveFileId);
     });
-    wfDocsCleared=true;
   }
+
+  // Autoentrega sobre expediente/PQRSD: quitar solo la actividad de entrega;
+  // conservar el registro (interesado, radicación, alta pendiente, etc.).
+  if(esAuto&&e){
+    const tid=String(taskId||t.id||'').trim();
+    if(typeof limpiarRespuestaEntregaConservandoAlta==='function')limpiarRespuestaEntregaConservandoAlta(e);
+    e.tasks=Array.isArray(e.tasks)?e.tasks.filter(function(x){return !x||String(x.id||'')!==tid;}):[];
+    if(!Array.isArray(e.historial))e.historial=[];
+    e.historial.push({
+      estado:e._estado||'En trámite',
+      fecha:hoy(),
+      nota:'Autoentrega cancelada — se conservó el '+(esPqrs?'PQRSD':'expediente')+' y se liberaron documentos/N° de la entrega',
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'')
+    });
+    if(esPqrs){
+      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+      e._pqrs_historial.push({
+        tipo:'cancelar_autoentrega',
+        fecha:hoy(),
+        nota:'Autoentrega cancelada — se conserva la PQRSD (datos de registro); se liberaron N° y documentos de la entrega',
+        oficina:e._pqrs_oficina||'guaviare',
+        por:responsableActivo||''
+      });
+    }
+    // Asegurar que el alta por responsable siga pendiente de revisión si aplica
+    if(e._alta_por_responsable&&e._alta_revisada_en==null){
+      if(e._pendiente_revision_alta!==false)e._pendiente_revision_alta=true;
+    }
+    try{
+      if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      else if(typeof persistExpLocal==='function')persistExpLocal();
+    }catch(errP){console.warn('eliminarEntrega auto exp:',errP);}
+    if(fileIds.length&&typeof driveDeleteInstitutional==='function'){
+      for(let i=0;i<fileIds.length;i++){
+        try{await driveDeleteInstitutional(fileIds[i]);}catch(err){console.warn('eliminarEntrega drive:',err);}
+      }
+    }
+    notif('🗑 Autoentrega cancelada — se conserva el '+(esPqrs?'PQRSD':'expediente')+' para una nueva entrega','ok');
+    closeTaskModal();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+    return true;
+  }
+
   const ok=mutateTask(refId,taskId,function(tk){
     normalizeTask(tk);
     migrateLegacyAsignados(tk);
-    // Campos de registro ya limpios en retirarRegistro; asegurar en la copia mutada
     ['oficio','nro_oficio','_oficio','oficioNumero','concepto','conceptoTipo','actoNumero','actoTipo'].forEach(function(k){
       if(tk[k])tk[k]='';
     });
@@ -16066,7 +16152,6 @@ async function eliminarEntregaActividad(expId,taskId){
     tk.ultimaRevisionDepto=null;
     tk._pqrs_proyeccion_atendida=false;
     tk._firma_proyeccion_atendida=false;
-    // Quitar comentarios incluidos solo en la entrega (no el chat)
     tk.comentarios=(tk.comentarios||[]).filter(function(c){return c&&!c.incluidoEnReporte;});
     (tk.asignados||[]).forEach(function(a){
       if(!a)return;
@@ -16078,7 +16163,7 @@ async function eliminarEntregaActividad(expId,taskId){
     });
     if(!Array.isArray(tk.historial))tk.historial=[];
     if(esAuto){
-      // Autoentrega (Entregar documento): anular la actividad — no debe quedar en Por ejecutar
+      // Autoentrega libre (sin expediente): anular la actividad
       tk.eliminada=true;
       tk.eliminadaEn=new Date().toISOString();
       tk.eliminadaPor=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
@@ -16097,7 +16182,6 @@ async function eliminarEntregaActividad(expId,taskId){
     }
     tk.estado='En ejecución';
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
-    // Si sync dejó algo raro, forzar ejecución sin reporte
     if(tk.fechaReportada)tk.fechaReportada='';
     if(tk.fechaAtendida)tk.fechaAtendida='';
     if(tk.estado==='Por verificar'||tk.estado==='Por corregir'||tk.estado==='Atendida')tk.estado='En ejecución';
@@ -16110,22 +16194,13 @@ async function eliminarEntregaActividad(expId,taskId){
     });
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
-  if(wfDocsCleared&&e&&typeof setPqrsWorkflow==='function'){
-    setPqrsWorkflow(e,{
-      fase:PQRS_WF.SIN_RESPUESTA,
-      documentos:[],
-      cuerpo:'',
-      entregado_por:'',
-      revision_nca:null,
-      fecha_respuesta:'',
-      devolucion_director:null,
-      oficio:''
-    });
+  if(e&&esPqrs&&typeof limpiarRespuestaEntregaConservandoAlta==='function'){
+    limpiarRespuestaEntregaConservandoAlta(e);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({
-      tipo:esAuto?'cancelar_autoentrega':'eliminar_entrega',
+      tipo:'eliminar_entrega',
       fecha:hoy(),
-      nota:esAuto?'Autoentrega cancelada — actividad anulada':'Entrega eliminada — pendiente nueva entrega',
+      nota:'Entrega eliminada — pendiente nueva entrega',
       oficina:e._pqrs_oficina||'guaviare',
       por:responsableActivo||''
     });
@@ -22101,7 +22176,7 @@ function renderActRowToolbarHtml(t,expAct){
     if(typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)){
       const esAutoDel=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
       actsR+='<button type="button" class="btn bsm bic act-ico" title="'+(esAutoDel
-        ?'Cancelar autoentrega: anula la actividad (no queda en Por ejecutar) y borra documentos de Drive'
+        ?'Cancelar autoentrega: conserva expediente/PQRSD; libera N° y borra documentos (no queda en Por ejecutar)'
         :'Eliminar entrega: vuelve a Por ejecutar y borra documentos de Drive')+'" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>';
     }
     actsR+=taskChatBtnHtml(t.exp,t.id,t);
