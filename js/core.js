@@ -7470,7 +7470,9 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   }
   if(typeof openBibGuardarModal==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
-  if(e&&typeof puedeEliminarPqrsEnVisor==='function'&&puedeEliminarPqrsEnVisor(e))
+  if(esEnc&&typeof puedeMostrarBtnEliminarActOEntrega==='function'&&puedeMostrarBtnEliminarActOEntrega(refExp,taskId))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar entrega o actividad" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
+  else if(e&&typeof puedeEliminarPqrsEnVisor==='function'&&puedeEliminarPqrsEnVisor(e))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar PQRSD" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   return h+'</nav>';
 }
@@ -8872,7 +8874,11 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
   const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
   let detalle='La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.';
-  if(enFirma){
+  if(esAuto&&pe){
+    detalle=tieneExp
+      ?'Autoentrega con expediente/PQRSD: se cancelan documentos y N° de la entrega; <strong>se conservan los datos del registro</strong> para una nueva entrega. No queda en Por ejecutar.'
+      :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.';
+  }else if(enFirma){
     detalle='La actividad ya fue aprobada y está en impresión/firma. Puede <strong>devolver a corregir</strong> desde el chat, o <strong>eliminar la actividad</strong> (papelera): saldrá de Por firmar y el Director dejará de verla.';
   }else if(esAuto){
     detalle=tieneExp
@@ -8880,9 +8886,10 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
       :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.';
   }
   let btns='';
-  if(pe&&!enFirma)
+  // Encargado: cancelar entrega/autoentrega también en Revisados (por corregir / por firmar)
+  if(pe)
     btns+='<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>';
-  if((pa&&!esAuto)||enFirma)
+  if((pa&&!esAuto)||(enFirma&&!pe)||(pa&&esAuto&&!pe))
     btns+='<button type="button" class="btn bsm" onclick="eliminarActTaskConfirm(\''+eid+'\',\''+tid+'\')">🗑 Eliminar actividad (papelera)</button>';
   if(!btns)
     btns='<div style="font-size:12px;color:var(--rd)">No hay acciones de eliminación disponibles en este estado.</div>';
@@ -16191,10 +16198,28 @@ window.esAutoentregaResponsable=esAutoentregaResponsable;
 function puedeEliminarEntregaActividad(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t||t.eliminada)return false;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const esEnc=typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()
+    &&!(typeof esModoResponsable==='function'&&esModoResponsable());
+  // Encargado: Por revisar + Revisados (por corregir / por firmar, antes de notificar)
+  if(esEnc){
+    if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+      &&typeof puedeEliminarTaskPqrs==='function'&&!puedeEliminarTaskPqrs(expId,taskId))return false;
+    const estEnc=estadoTask(t);
+    const esPqrsRevEnc=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+      &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
+    if(estEnc==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))||esPqrsRevEnc)
+      return true;
+    if(estEnc==='Por corregir')return true;
+    if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
+      &&!(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)))
+      return true;
+    return false;
+  }
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
   if(typeof getTaskRevisionDepto==='function'&&getTaskRevisionDepto(t))return false;
-  const e=typeof getExpById==='function'?getExpById(expId):null;
   const esPqrsRev=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
   const est=estadoTask(t);
@@ -16206,7 +16231,6 @@ function puedeEliminarEntregaActividad(expId,taskId){
       if(!(typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)))return false;
     }
   }
-  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
   if(!(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
   if(esPqrsRev&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
   return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
