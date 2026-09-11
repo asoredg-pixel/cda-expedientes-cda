@@ -28074,6 +28074,7 @@ async function pqrsConfirmarNotificacionOficio(expId){
     }
     if(!res)throw new Error('Sin documento');
     const nomDoc=res.nombre||(fileSop?fileSop.name:(itSop&&itSop.nombre))||'documento-notificado';
+    const cierraDirecto=typeof tramiteEncargadoNotificaCierraDirecto==='function'&&tramiteEncargadoNotificaCierraDirecto();
     const docs=(getPqrsWorkflow(e).documentos||[]).slice();
     docs.push({
       nombre:'Documento notificado '+canal+' — '+nomDoc,
@@ -28081,10 +28082,45 @@ async function pqrsConfirmarNotificacionOficio(expId){
       previewLink:res.driveLink,
       fileId:res.fileId||'',
       tipo:'notificacion_soporte',
-      driveEstado:'revision_final',
+      driveEstado:cierraDirecto?'atendido':'revision_final',
       canal:canal,
       notificado:true
     });
+    if(cierraDirecto){
+      setPqrsWorkflow(e,{
+        fase:PQRS_WF.CERRADA,
+        canal:canal,
+        documentos:docs,
+        notificacion_devuelta:null,
+        _notif_devuelta_corregir:false,
+        cerrado_por:por,
+        cerrado_en:new Date().toISOString(),
+        notificacion:{canal:canal,fecha:fechaN,obs:obs,por:por,en:new Date().toISOString()},
+        notificacion_reportada:{fecha:fechaN,obs:obs,por:por,en:new Date().toISOString(),soporteLink:res.driveLink,soporteFileId:res.fileId||'',soporteNombre:nomDoc}
+      });
+      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+      e._pqrs_historial.push({tipo:'notif_encargado_cierre',fecha:hoy(),nota:'Notificación '+canal+' por encargado — PQRSD atendida'+(obs?' · '+obs:''),por:por});
+      if(typeof _pqrsRenombrarDocsDriveWf==='function')await _pqrsRenombrarDocsDriveWf(getPqrsWorkflow(e),'atendido');
+      if(typeof _pqrsAplicarCierrePqrsYLimpiarDocs==='function')
+        await _pqrsAplicarCierrePqrsYLimpiarDocs(e,fechaN,'PQRSD cerrada — notificada por '+canal);
+      if(typeof registrarNotificacionCiudadanoPqrs==='function'){
+        registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:canal,enviado:true,por:por,histTipo:'notificacion_'+canal,histNota:'Notificación '+canal+' por encargado'});
+      }
+      window._pqrsNotifSoporteFile=null;
+      window._pqrsNotifOficioFile=null;
+      if(typeof sstFileStagingReset==='function'){
+        sstFileStagingReset(ctxDoc);
+        sstFileStagingReset(ctxSop);
+        sstFileStagingReset(ctxOfi);
+      }
+      persistExpedienteGranular(e);
+      closeTaskModal();
+      renderPqrsOficinaInbox();
+      if(typeof renderActividades==='function')renderActividades();
+      const ml=typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(canal):canal;
+      notif('✅ Notificado por '+ml+' — PQRSD atendida','ok');
+      return;
+    }
     setPqrsWorkflow(e,{
       fase:PQRS_WF.REVISION_FINAL,
       canal:canal,
