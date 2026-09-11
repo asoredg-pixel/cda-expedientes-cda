@@ -1054,9 +1054,19 @@ function pqrsEstadoActividadUi(e){
   if(f===PQRS_WF.SIN_RESPUESTA||!f)
     return{lbl:'X Ejecutar',bg:'#fef9c3',fg:'#a16207'};
   if(f===PQRS_WF.PENDIENTE_REVISION){
+    const tPend=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
+    // Defensa: tarea ya en Por corregir pero workflow aún no pasó a RECHAZADA
+    if(tPend&&typeof estadoTask==='function'&&estadoTask(tPend)==='Por corregir')
+      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tPend):0});
     const devDir=!!(wf.devolucion_director&&wf.devolucion_director.motivo);
     if(devDir)return{lbl:'↩ Devuelto Director · Por revisar',bg:'var(--orl)',fg:'var(--or)'};
     return Object.assign({lbl:'✓ Entregada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'));
+  }
+  if(f===PQRS_WF.RECHAZADA){
+    const tRech=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
+    if(tRech&&typeof estadoTask==='function'&&estadoTask(tRech)==='Por corregir')
+      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tRech):0});
+    return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'));
   }
   if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR){
     const firmFis=!!(wf.firma_fisica&&wf.firma_fisica.en);
@@ -16143,6 +16153,15 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
 }
 function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
+  const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const e0=t0&&!t0.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  // PQRSD en revisión NCA: misma vía que ncaRechazarRespuesta (fase RECHAZADA + Por corregir)
+  if(e0&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t0,e0)
+    &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e0)
+    &&typeof ncaRechazarRespuesta==='function'){
+    ncaRechazarRespuesta(expId,nota||'Devuelta al responsable');
+    return true;
+  }
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   if(solicitarAjusteSoporte(expId,taskId,nota||'Devuelta al responsable')){
     if(typeof driveRenombrarSoporteActivoExp==='function'){
@@ -17342,6 +17361,13 @@ function devolverTaskUnificado(expId,taskId){
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eDev)
     &&typeof devolverNotificacionRevisionFinal==='function'){
     devolverNotificacionRevisionFinal(expId,taskId,nota);
+    return;
+  }
+  // PQRSD en revisión NCA: fase → RECHAZADA + Por corregir (misma vía del panel NCA)
+  if(eDev&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eDev)
+    &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(eDev)
+    &&typeof ncaRechazarRespuesta==='function'){
+    ncaRechazarRespuesta(expId,nota);
     return;
   }
   // Ya aprobada en Por imprimir / Por firmar: cancelar firma y pasar a corregir
@@ -22033,8 +22059,10 @@ function getTaskRevisionDepto(t){
   if(!t||t.eliminada||esTareaDelEncargado(t))return null;
   if(estadoTask(t)==='Por verificar')return null;
   // Devolución Director / en revisión NCA: no mostrar «✓ Aprobada»
+  // Si ya está Por corregir, sí exponer la revisión (↩ A corregir) aunque la fase PQRSD aún diga pendiente
   const eRev=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-  if(eRev&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(eRev))return null;
+  if(eRev&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(eRev)
+    &&estadoTask(t)!=='Por corregir')return null;
   migrarRevisionDeptoTask(t);
   if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo){
     if(estadoTask(t)==='Atendida'&&t.ultimaRevisionDepto.tipo==='aprobada')return t.ultimaRevisionDepto;
@@ -22118,6 +22146,35 @@ function pqrsHealTaskTrasDevolucionDirector(e,t){
   }
   return true;
 }
+/**
+ * Heal: devolución desde rail unificado dejó la tarea en Por corregir
+ * pero el workflow PQRSD siguió en PENDIENTE_REVISION → encargado atrapado en Por revisar.
+ */
+function pqrsHealTrasDevolucionCorregirPendiente(e,t){
+  if(!e||!t||t.eliminada)return false;
+  if(typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return false;
+  if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.PENDIENTE_REVISION)return false;
+  if(typeof estadoTask!=='function'||estadoTask(t)!=='Por corregir')return false;
+  const rev=t.ultimaRevisionDepto;
+  const histOk=(t.historial||[]).some(function(h){
+    return h&&(h.tipo==='ajuste_soporte'||h.tipo==='revision_nca_rechazado');
+  });
+  if(!(rev&&rev.tipo==='corregir')&&!histOk)return false;
+  if(typeof setPqrsWorkflow!=='function')return false;
+  const por=(rev&&rev.por)||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')||'NCA';
+  const nota=(rev&&rev.nota)||'Devuelta para corregir';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.RECHAZADA,
+    documentos:(wf&&wf.documentos)||[],
+    revision_nca:{aprobado:false,comentario:nota,por:por,en:new Date().toISOString(),heal:'devolucion_corregir'}
+  });
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  const ya=e._pqrs_historial.some(function(h){return h&&h.tipo==='revision_nca_rechazado'&&String(h.nota||'').indexOf(nota)>=0;});
+  if(!ya)e._pqrs_historial.push({tipo:'revision_nca_rechazado',fecha:hoy(),nota:'NCA devolvió la respuesta (sincronizado): '+nota,oficina:'guaviare',por:por});
+  return true;
+}
+window.pqrsHealTrasDevolucionCorregirPendiente=pqrsHealTrasDevolucionCorregirPendiente;
 /** Botón 🖨️ con ✓ a la derecha cuando ya está marcado impreso (mismo estilo que otros iconos). */
 function actImpresoCheckBtnHtml(impresoObj,onclickJs,opts){
   opts=opts||{};
@@ -22555,6 +22612,17 @@ function renderActividadesRowHtml(t){
       if(!window._pqrsHealDevDirPersist.has(hk)){
         window._pqrsHealDevDirPersist.add(hk);
         try{persistExpedienteGranular(expActPre);}catch(err){console.warn('heal devolucion director:',err);}
+      }
+    }
+    // Heal: Por corregir + workflow aún en PENDIENTE_REVISION (devolver desde rail unificado)
+    if(realT&&typeof pqrsHealTrasDevolucionCorregirPendiente==='function'
+      &&pqrsHealTrasDevolucionCorregirPendiente(expActPre,realT)){
+      Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
+      if(!window._pqrsHealCorrPendPersist)window._pqrsHealCorrPendPersist=new Set();
+      const hkC=String(expActPre._exp||'')+'|'+String(realT.id||'')+'|corr';
+      if(!window._pqrsHealCorrPendPersist.has(hkC)){
+        window._pqrsHealCorrPendPersist.add(hkC);
+        try{persistExpedienteGranular(expActPre);}catch(errC){console.warn('heal devolucion corregir:',errC);}
       }
     }
     // Heal: ya aprobada (firma/notif/cerrada) pero la actividad quedó en «Por verificar»
@@ -23609,7 +23677,11 @@ function esActividadPorEjecutar(t){
     return typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eExp);
   }
   // Revisión NCA (incl. devolución Director): va a «Por revisar», no a «Por ejecutar»
-  if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION)return false;
+  // Excepción: ya en Por corregir (devolución hecha) → deuda del responsable / por ejecutar
+  if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION){
+    const estPend=typeof estadoTask==='function'?estadoTask(t):'';
+    if(estPend!=='Por corregir')return false;
+  }
   if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
     const est=estadoTaskForAsignado(t,responsableActivo);
     if(est==='Atendida'||est==='Eliminada'||est==='Por verificar')return false;
@@ -24310,7 +24382,11 @@ function actividadCuentaComoPorRevisar(t){
       }
       const fPv=pqrsWorkflowFase(ePv);
       // Solo «Por revisar» mientras el encargado no ha decidido (pendiente de revisión)
-      if(fPv===PQRS_WF.PENDIENTE_REVISION)return true;
+      if(fPv===PQRS_WF.PENDIENTE_REVISION){
+        // Defensa: ya devolvió a corregir (tarea) aunque el workflow no haya pasado a RECHAZADA
+        if(typeof estadoTask==='function'&&estadoTask(src)==='Por corregir')return false;
+        return true;
+      }
       // Revisión final de notificación: solo mientras sigue pendiente (no si ya se devolvió a corregir)
       if(fPv===PQRS_WF.REVISION_FINAL){
         if(typeof estadoTask==='function'&&estadoTask(src)==='Por corregir')return false;
