@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260911c">
+<link rel="stylesheet" href="css/sst.css?v=20260911f">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260911e"></script>
+<script src="js/constants.js?v=20260911f"></script>
 <script src="js/utils.js?v=20260910o"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260910i"></script>
@@ -34,7 +34,7 @@
 <script src="js/consolidado.js?v=20260805i"></script>
 <script src="js/configuracion.js?v=20260903a"></script>
 <script src="js/export.js?v=20260702t"></script>
-<script src="js/chat.js?v=20260907c"></script>
+<script src="js/chat.js?v=20260911f"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
@@ -625,6 +625,7 @@
     <div id="chat-contacts" class="chat-contacts"></div>
     <div id="chat-main" class="chat-main hidden">
       <div id="chat-msgs" class="chat-msgs"></div>
+      <div id="chat-reply-bar" class="chat-reply-bar" style="display:none" aria-live="polite"></div>
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div class="chat-compose chat-compose-wa">
         <div class="chat-wa-field has-attach">

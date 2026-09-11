@@ -1087,6 +1087,7 @@ function chatVolverContactos(){
   window._chatActiveContactKey=null;
   window._chatVista='contactos';
   window._chatContactsCollapsed=false;
+  chatClearReplyTo();
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent='Chat interno';
@@ -1168,6 +1169,7 @@ async function chatAbrirConv(contactKey){
   window._chatVista='chat';
   // Primer clic: abrir conversación con contactos siempre a la vista
   window._chatContactsCollapsed=false;
+  chatClearReplyTo();
   const c=chatContactFromKey(contactKey);
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
@@ -1228,6 +1230,90 @@ function chatLinkifyText(text){
   out+=escAttr(s.slice(last));
   return out.replace(/\n/g,'<br>');
 }
+function chatMsgPreviewText(m){
+  if(!m)return'';
+  const t=String(m.text||'').replace(/\s+/g,' ').trim();
+  if(t)return t.length>90?t.slice(0,87)+'…':t;
+  return chatMsgDrivePreview(m)||'Mensaje';
+}
+function chatReplyPayloadFromMsg(m){
+  if(!m||!m.id)return null;
+  return{
+    id:String(m.id),
+    fromLabel:String((typeof chatFromLabel==='function'?chatFromLabel(m):'')||m.fromLabel||'').trim(),
+    text:chatMsgPreviewText(m)
+  };
+}
+function chatFindMsgById(msgId){
+  msgId=String(msgId||'');
+  if(!msgId)return null;
+  const list=(typeof chatMsgsForActiveConv==='function'?chatMsgsForActiveConv():[])||[];
+  return list.find(function(m){return m&&String(m.id)===msgId;})||null;
+}
+function chatRenderReplyBar(){
+  const bar=document.getElementById('chat-reply-bar');
+  if(!bar)return;
+  const r=window._chatReplyTo;
+  if(!r||!r.id){
+    bar.style.display='none';
+    bar.innerHTML='';
+    return;
+  }
+  const who=r.fromLabel||'Mensaje';
+  bar.style.display='flex';
+  bar.innerHTML=
+    '<div class="chat-reply-bar-main">'+
+      '<div class="chat-reply-bar-lbl">↩ Respondiendo a</div>'+
+      '<div class="chat-reply-bar-author">'+escAttr(who)+'</div>'+
+      '<div class="chat-reply-bar-text">'+escAttr(r.text||'')+'</div>'+
+    '</div>'+
+    '<button type="button" class="chat-reply-bar-x" title="Cancelar respuesta" aria-label="Cancelar respuesta" onclick="chatClearReplyTo()">✕</button>';
+}
+function chatClearReplyTo(){
+  window._chatReplyTo=null;
+  chatRenderReplyBar();
+}
+function chatSetReplyTo(msgId){
+  const m=chatFindMsgById(msgId);
+  const payload=chatReplyPayloadFromMsg(m);
+  if(!payload)return;
+  window._chatReplyTo=payload;
+  chatRenderReplyBar();
+  const inp=document.getElementById('chat-inp');
+  if(inp){try{inp.focus();}catch(e){}}
+}
+function chatConsumeReplyTo(){
+  const r=window._chatReplyTo&&window._chatReplyTo.id?{
+    id:String(window._chatReplyTo.id),
+    fromLabel:String(window._chatReplyTo.fromLabel||'').trim(),
+    text:String(window._chatReplyTo.text||'').trim()
+  }:null;
+  chatClearReplyTo();
+  return r;
+}
+function chatScrollToMsg(msgId){
+  msgId=String(msgId||'');
+  if(!msgId)return;
+  const wrap=document.getElementById('chat-msgs');
+  if(!wrap)return;
+  let el=null;
+  const nodes=wrap.querySelectorAll('.chat-msg[data-msg-id]');
+  for(let i=0;i<nodes.length;i++){
+    if(nodes[i].getAttribute('data-msg-id')===msgId){el=nodes[i];break;}
+  }
+  if(!el)return;
+  try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){el.scrollIntoView();}
+  el.classList.add('flash-reply');
+  setTimeout(function(){el.classList.remove('flash-reply');},1200);
+}
+function chatQuoteHtml(replyTo){
+  if(!replyTo||!replyTo.id)return'';
+  const who=String(replyTo.fromLabel||'Mensaje').trim()||'Mensaje';
+  const txt=String(replyTo.text||'').trim()||'…';
+  return '<div class="chat-msg-quote" role="button" tabindex="0" title="Ver mensaje original" onclick="event.stopPropagation();chatScrollToMsg(\''+jsStr(replyTo.id)+'\')">'+
+    '<div class="chat-msg-quote-author">'+escAttr(who)+'</div>'+
+    '<div class="chat-msg-quote-text">'+escAttr(txt)+'</div></div>';
+}
 function renderChatMessages(){
   const el=document.getElementById('chat-msgs');
   const convId=window._chatConvActiva;
@@ -1238,7 +1324,9 @@ function renderChatMessages(){
   el.innerHTML=msgs.map(m=>{
     const mine=chatEsMio(m);
     const sender=chatFromLabel(m);
+    const mid=escAttr(String(m.id||''));
     let body='';
+    if(m.replyTo&&m.replyTo.id)body+=chatQuoteHtml(m.replyTo);
     if(!mine&&sender)body+='<div style="font-size:10px;font-weight:700;color:var(--bl);margin-bottom:3px">'+escAttr(sender)+'</div>';
     if(m.text)body+=chatLinkifyText(m.text);
     const driveUrl=chatMsgDriveUrl(m);
@@ -1248,7 +1336,10 @@ function renderChatMessages(){
       body+=(body?'<br>':'')+'<a class="chat-drive-chip" href="'+escAttr(driveUrl)+'" target="_blank" rel="noopener">'+chipLbl+'</a>'+chipNote;
     }
     const t=m.ts?new Date(m.ts).toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
-    return '<div class="chat-msg '+(mine?'me':'them')+'">'+body+'<div class="chat-msg-time">'+t+'</div></div>';
+    const replyBtn=m.id
+      ?'<button type="button" class="chat-msg-reply-btn" title="Responder" aria-label="Responder a este mensaje" onclick="event.stopPropagation();chatSetReplyTo(\''+jsStr(m.id)+'\')">↩</button>'
+      :'';
+    return '<div class="chat-msg '+(mine?'me':'them')+'" data-msg-id="'+mid+'">'+replyBtn+body+'<div class="chat-msg-time">'+t+'</div></div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
@@ -1262,6 +1353,7 @@ async function chatEnviarTexto(){
   if(!contactKey)return;
   const route=chatPickSendRoute(me,contactKey);
   window._chatConvActiva=route.convId;
+  const replyTo=chatConsumeReplyTo();
   const msg={
     id:'msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
     convId:route.convId,
@@ -1271,6 +1363,7 @@ async function chatEnviarTexto(){
     ts:new Date().toISOString(),
     readBy:getMyChatKeys()
   };
+  if(replyTo)msg.replyTo=replyTo;
   if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
   else{inp.value='';if(typeof sstWaComposerGrow==='function')sstWaComposerGrow(inp);}
   chatMensajes.push(msg);
@@ -1574,6 +1667,8 @@ async function chatEnviarArchivo(fileArg){
       ts:new Date().toISOString(),
       readBy:getMyChatKeys()
     };
+    const replyTo=chatConsumeReplyTo();
+    if(replyTo)msg.replyTo=replyTo;
     if(inp)inp.value='';
     chatMensajes.push(msg);
     renderChatMessages();
@@ -1608,6 +1703,9 @@ async function chatEnviarArchivo(fileArg){
 }
 window.chatEnviarArchivo=chatEnviarArchivo;
 window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
+window.chatSetReplyTo=chatSetReplyTo;
+window.chatClearReplyTo=chatClearReplyTo;
+window.chatScrollToMsg=chatScrollToMsg;
 if(!window._chatNotifyFirebaseHook){
   window._chatNotifyFirebaseHook=true;
   chatInitUnreadButtonGuard();
