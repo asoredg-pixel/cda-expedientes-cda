@@ -467,7 +467,6 @@ function syncEntregaRespPqrsUi(){
   const esPqrsFlujo=esPqrsExistente||pqrsNuevo;
   const box=document.getElementById('entrega-resp-pqrs-box');
   const tramFiles=document.getElementById('entrega-resp-tramite-files');
-  const regBox=document.getElementById('entrega-resp-registro-box');
   if(tramFiles&&!tramFiles._tramiteFilesHtmlBackup)
     tramFiles._tramiteFilesHtmlBackup=tramFiles.innerHTML;
   if(box){
@@ -476,10 +475,10 @@ function syncEntregaRespPqrsUi(){
       const eRender=esPqrsExistente?e:{_alta_por_responsable:true};
       box.innerHTML=renderPqrsEntregaCamposHtml(eRender);
       box.style.display='';
-      if(regBox){regBox.style.display='none';regBox.innerHTML='';}
       setTimeout(function(){
         if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
         if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+        if(typeof syncEntregaRespRegistroUi==='function')syncEntregaRespRegistroUi();
       },40);
     }else{
       box.innerHTML='';
@@ -879,12 +878,14 @@ function applyEntregaLibreInteresadoToTask(t,datos){
 }
 
 function resolveActividadRequiereOficio(nombreAct,deptoId){
-  const nom=String(nombreAct||'').trim();
+  const nom=actividadPredBaseNombre(nombreAct);
   if(!nom)return false;
   const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(deptoId):(typeof cfgFor==='function'?cfgFor(deptoId):null);
   const map=cfgAct&&cfgAct.actOficioMap;
   if(!map||typeof map!=='object')return false;
   if(map[nom])return true;
+  const raw=String(nombreAct||'').trim();
+  if(raw&&raw!==nom&&map[raw])return true;
   const low=nom.toLowerCase();
   return Object.keys(map).some(function(k){
     return String(k||'').trim().toLowerCase()===low&&!!map[k];
@@ -946,15 +947,18 @@ function applyEntregaRespOficioToTask(t,actividad){
 
 function syncEntregaRespOficioUi(){
   const wrap=document.getElementById('entrega-resp-oficio-wrap');
-  if(!wrap)return;
   const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
   const esPqrs=!!document.getElementById('pqrs-entrega-resp-oficio');
   // Evitar duplicar N° oficio solo si el bloque de Oficio de requerimiento ya está en el DOM
   const ofiReqUi=!!document.getElementById('entrega-ofi-req-oficio');
   const show=resolveActividadRequiereOficio(act)&&!esPqrs&&!ofiReqUi;
-  wrap.style.display=show?'':'none';
-  const req=document.getElementById('entrega-resp-oficio-req');
-  if(req)req.style.display=show?'':'none';
+  if(wrap){
+    wrap.style.display=show?'':'none';
+    const req=document.getElementById('entrega-resp-oficio-req');
+    if(req)req.style.display=show?'':'none';
+  }
+  // Asterisco / «(si aplica)» del N° oficio en bloque Respuesta al ciudadano
+  if(esPqrs&&typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
 }
 
 function syncEntregaRespLibreUi(){
@@ -1447,13 +1451,23 @@ function pickActEntregaResp(val){
   syncEntregaRespLibreUi();
 }
 
+/** Quita prefijo «Atender PQRSD — …» para mapear la actividad predeterminada real. */
+function actividadPredBaseNombre(nombreAct){
+  const nom=String(nombreAct||'').trim();
+  if(!nom)return'';
+  const m=nom.match(/^Atender PQRSD\s*[—–\-]\s*(.+)$/i);
+  return m?String(m[1]||'').trim():nom;
+}
 /** Tipo de Registro asociado a la actividad (concepto | factura | acto | ninguno | ''). */
 function resolveActividadRegistroTipo(nombreAct,deptoId){
-  const nom=String(nombreAct||'').trim();
+  const nom=actividadPredBaseNombre(nombreAct);
   if(!nom)return'';
   const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(deptoId):(typeof cfgFor==='function'?cfgFor(deptoId):null);
   const map=(cfgAct&&cfgAct.actRegistroMap)||{};
   if(map[nom]!=null&&map[nom]!=='')return String(map[nom]);
+  // Clave exacta con prefijo PQRSD (por si quedó guardada así en config)
+  const raw=String(nombreAct||'').trim();
+  if(raw&&raw!==nom&&map[raw]!=null&&map[raw]!=='')return String(map[raw]);
   const s=nom.toLowerCase();
   if(/concepto/.test(s))return'concepto';
   if(/factura|liquidaci[oó]n|tasa|multa|tcaf/.test(s))return'factura';
@@ -1522,24 +1536,11 @@ function syncEntregaRespRegistroUi(){
     syncEntregaRespNotifCorreoUi();
     return;
   }
-  // PQRSD: no mini-form de Registro (concepto/factura/acto) — solo sobre PQRSD existente
   const expNum=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
-  if(pqrsNuevo||typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs()){
-    if(hint)hint.textContent='';
-    if(box){box.style.display='none';box.innerHTML='';}
-    syncEntregaRespOficioUi();
-    syncEntregaRespNotifCorreoUi();
-    return;
-  }
-  const eSel=!nuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
-  if(eSel&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eSel))||(typeof esTramitePqrs==='function'&&esTramitePqrs(eSel._tramite)))){
-    if(hint)hint.textContent='';
-    if(box){box.style.display='none';box.innerHTML='';}
-    syncEntregaRespNotifCorreoUi();
-    return;
-  }
+  // Expediente o PQRSD (nueva/existente): mismo mini-form según tipo Registro de la actividad
+  const eSel=!nuevo&&!pqrsNuevo&&expNum&&typeof getExpById==='function'?getExpById(expNum):null;
   const tipo=resolveActividadRegistroTipo(act);
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfgAct=typeof cfgFor==='function'?cfgFor(depto):{};
@@ -1556,7 +1557,14 @@ function syncEntregaRespRegistroUi(){
   }
   syncEntregaRespOficioUi();
   if(!box){syncEntregaRespNotifCorreoUi();return;}
+  const esPqrsFlujo=pqrsNuevo||(typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs());
   if(esActividadOficioRequerimiento(act)&&actividadPredEntregaExiste(act)){
+    // En PQRSD el N° oficio / respuesta van en «Respuesta al ciudadano»
+    if(esPqrsFlujo){
+      box.style.display='none';box.innerHTML='';
+      syncEntregaRespNotifCorreoUi();
+      return;
+    }
     box.style.display='';
     const tExist=eSel?((eSel.tasks||[]).map(function(x){return typeof normalizeTask==='function'?normalizeTask(x):x;}).find(function(x){
       return x&&!x.eliminada&&esActividadOficioRequerimiento(x.actividad||'');
@@ -2944,12 +2952,11 @@ function ensureExpTaskEntregaResponsable(){
   if(!validateEntregaRespOficioRequerido(actFinalCheck,e._exp))return null;
   applyEntregaRespOficioToTask(t,actFinalCheck);
   let regPayload=null;
-  if(!esPqrs){
-    if(esActividadOficioRequerimiento(actFinalCheck)){
-      regPayload=collectEntregaOficioRequerimientoPayload();
-    }else{
-      regPayload=collectEntregaRespRegistroPayload(actFinalCheck);
-    }
+  // Oficio de requerimiento: formulario propio solo en expediente (en PQRSD va Respuesta al ciudadano)
+  if(esActividadOficioRequerimiento(actFinalCheck)){
+    if(!esPqrs)regPayload=collectEntregaOficioRequerimientoPayload();
+  }else{
+    regPayload=collectEntregaRespRegistroPayload(actFinalCheck);
   }
   if(regPayload===false)return null;
   if(regPayload){

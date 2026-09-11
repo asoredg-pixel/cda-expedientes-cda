@@ -10191,6 +10191,14 @@ function pqrsEntregaClearAnexos(){
 function onPqrsEntregaOficioInput(){
   // Oficio: no inyectar plantilla de correo en la entrega del responsable
 }
+/** En Entregar documento: respeta checkbox admin «N° oficio» de la actividad pred. */
+function pqrsEntregaOficioEsRequerido(){
+  const act=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim();
+  if(act&&typeof resolveActividadRequiereOficio==='function')
+    return !!resolveActividadRequiereOficio(act);
+  // Flujo PQRSD clásico (sin actividad pred. en el modal): oficio firmado exige N°
+  return true;
+}
 function onPqrsEntregaOficioBlur(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
   const oficio=String((document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
@@ -10292,10 +10300,11 @@ function pqrsEntregaRefreshUi(){
     correoNote.textContent='';
   }
   if(oficioRow)oficioRow.style.display=isInfo?'none':'';
-  if(oficioReq)oficioReq.style.display=isOficio?'':'none';
+  const oficioOblig=isOficio&&pqrsEntregaOficioEsRequerido();
+  if(oficioReq)oficioReq.style.display=oficioOblig?'':'none';
   if(oficioHint){
-    oficioHint.style.display=isOficio?'none':'';
-    oficioHint.textContent=isOficio?'':' (si aplica)';
+    oficioHint.style.display=oficioOblig?'none':'';
+    oficioHint.textContent=oficioOblig?'':' (si aplica)';
   }
   if(emailCompose)emailCompose.style.display=(isMensaje||notifCorreoOficio)?'':'none';
   if(adjWrap)adjWrap.style.display=isInfo?'none':'';
@@ -10412,18 +10421,21 @@ function collectPqrsEntregaDatos(expId,eOpt){
   }
   if(tipo===PQRS_WF_TIPO.OFICIO){
     if(!oficioExt){
-      const el=document.getElementById('pqrs-entrega-resp-oficio');
-      const errOf=document.getElementById('pqrs-entrega-oficio-err');
-      if(el){el.focus();el.classList.add('fld-invalid');}
-      if(errOf){errOf.style.display='';errOf.textContent='Diligencie el N° de oficio del documento firmado.';}
-      notif('Para oficio firmado debe diligenciar el N° de oficio','err');
-      return null;
-    }
-    const errOfClear=document.getElementById('pqrs-entrega-oficio-err');
-    if(errOfClear){errOfClear.style.display='none';errOfClear.textContent='';}
-    if(typeof validarNumeroOficioDisponible==='function'){
-      const expExcl=String(expId||(e&&e._exp)||'').trim();
-      if(!validarNumeroOficioDisponible(oficioExt,expExcl))return null;
+      if(pqrsEntregaOficioEsRequerido()){
+        const el=document.getElementById('pqrs-entrega-resp-oficio');
+        const errOf=document.getElementById('pqrs-entrega-oficio-err');
+        if(el){el.focus();el.classList.add('fld-invalid');}
+        if(errOf){errOf.style.display='';errOf.textContent='Diligencie el N° de oficio del documento firmado.';}
+        notif('Para oficio firmado debe diligenciar el N° de oficio','err');
+        return null;
+      }
+    }else{
+      const errOfClear=document.getElementById('pqrs-entrega-oficio-err');
+      if(errOfClear){errOfClear.style.display='none';errOfClear.textContent='';}
+      if(typeof validarNumeroOficioDisponible==='function'){
+        const expExcl=String(expId||(e&&e._exp)||'').trim();
+        if(!validarNumeroOficioDisponible(oficioExt,expExcl))return null;
+      }
     }
   }else if(oficioExt&&typeof validarNumeroOficioDisponible==='function'){
     const expExcl=String(expId||(e&&e._exp)||'').trim();
