@@ -16202,19 +16202,28 @@ function puedeEliminarEntregaActividad(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const esEnc=typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()
     &&!(typeof esModoResponsable==='function'&&esModoResponsable());
-  // Encargado: Por revisar + Revisados (por corregir / por firmar, antes de notificar)
+  // Encargado/NCA: Por revisar + Revisados (por corregir / por firmar).
+  // Incluye PQRSD creadas por responsables (autoentrega): cancelar entrega/autoentrega.
+  // Si ya está revisada, el responsable NO puede eliminar (rama de abajo); el encargado sí.
+  // Borrar la actividad a papelera en PQRSD sigue restringido a Secretaría (puedeEliminarActividadRevision).
   if(esEnc){
-    if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
-      &&typeof puedeEliminarTaskPqrs==='function'&&!puedeEliminarTaskPqrs(expId,taskId))return false;
     const estEnc=estadoTask(t);
-    const esPqrsRevEnc=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
-      &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
+    const esPqrsT=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
+    const esPqrsRevEnc=!!(esPqrsT&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
     if(estEnc==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))||esPqrsRevEnc)
       return true;
     if(estEnc==='Por corregir')return true;
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
       &&!(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)))
       return true;
+    // PQRSD en Revisados (por firmar / para firma / post-revisión, aún no notificada ni cerrada)
+    if(esPqrsT&&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))
+      &&!(typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e))){
+      if((typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e))
+        ||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))
+        ||(typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,e)))
+        return true;
+    }
     return false;
   }
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
