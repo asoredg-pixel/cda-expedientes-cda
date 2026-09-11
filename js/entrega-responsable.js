@@ -218,12 +218,13 @@ function erPqrsOficinaOptsHtml(sel){
     return '<option value="'+escAttr(o.id)+'"'+(sel===o.id?' selected':'')+'>'+escAttr(o.nombre)+'</option>';
   }).join('');
 }
-function erPqrsRemitenteOptsHtml(sel){
+function erPqrsRemitenteOptsHtml(sel,placeholder){
   sel=String(sel||'');
   const list=(typeof PQRS_OFICINAS_REMITENTES_INTERNAS!=='undefined'&&Array.isArray(PQRS_OFICINAS_REMITENTES_INTERNAS))
     ?PQRS_OFICINAS_REMITENTES_INTERNAS
     :['Dirección General','Secretaría General','NCA DEGUV'];
-  return '<option value="">— Seleccione oficina remitente —</option>'+list.map(function(n){
+  const ph=String(placeholder||'— Seleccione oficina remitente —');
+  return '<option value="">'+escAttr(ph)+'</option>'+list.map(function(n){
     return '<option value="'+escAttr(n)+'"'+(sel===n?' selected':'')+'>'+escAttr(n)+'</option>';
   }).join('');
 }
@@ -661,15 +662,33 @@ function _personSugLibrePortalId(field){
   return'entrega-libre-int-nombre-sug';
 }
 
+function entregaLibreEsComunicacionInterna(){
+  return !!((document.getElementById('entrega-libre-com-interna')||{}).checked);
+}
+
 function entregaLibreIntTipo(){
+  if(entregaLibreEsComunicacionInterna())return'interna';
   const r=document.querySelector('input[name="entrega-libre-int-tipo"]:checked');
   return r&&r.value==='juridica'?'juridica':'natural';
 }
 
 function syncEntregaLibreInteresadoUi(){
-  const jur=entregaLibreIntTipo()==='juridica';
+  const interna=entregaLibreEsComunicacionInterna();
+  const tipoWrap=document.getElementById('entrega-libre-tipo-wrap');
+  const intBox=document.getElementById('entrega-libre-int-box');
   const natBox=document.getElementById('entrega-libre-nat-box');
   const jurBox=document.getElementById('entrega-libre-jur-box');
+  if(tipoWrap)tipoWrap.style.display=interna?'none':'';
+  if(intBox)intBox.style.display=interna?'':'none';
+  if(interna){
+    if(natBox)natBox.style.display='none';
+    if(jurBox)jurBox.style.display='none';
+    hidePersonasSugLibre();
+    setEntregaLibrePersonaRef(null);
+    window._entregaLibreTipoPrev='interna';
+    return;
+  }
+  const jur=entregaLibreIntTipo()==='juridica';
   if(natBox)natBox.style.display=jur?'none':'';
   if(jurBox)jurBox.style.display=jur?'':'none';
   hidePersonasSugLibre();
@@ -678,6 +697,12 @@ function syncEntregaLibreInteresadoUi(){
   }
   window._entregaLibreTipoPrev=entregaLibreIntTipo();
 }
+
+function toggleEntregaLibreComunicacionInterna(){
+  syncEntregaLibreInteresadoUi();
+  entregaLibreCorreoOnInput();
+}
+
 function entregaLibreCorreoOnInput(){
   const cb=document.getElementById('entrega-notif-correo');
   if(!(cb&&cb.checked))return;
@@ -789,7 +814,17 @@ function htmlEntregaLibreInteresadoBox(){
   return '<div style="margin-top:4px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
     '<input type="hidden" id="entrega-libre-int-persona-id" value="">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Datos del interesado (a quien se oficia)</div>'+
-    '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px;cursor:pointer">'+
+      '<input type="checkbox" id="entrega-libre-com-interna" onchange="toggleEntregaLibreComunicacionInterna()"> Comunicación interna</label>'+
+    '<div id="entrega-libre-int-box" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">'+
+      '<div class="fg">'+
+        '<div class="fld" style="grid-column:1/-1"><label>Oficina a quien va dirigido <span style="color:var(--rd)">*</span></label>'+
+          '<select id="entrega-libre-int-oficina" style="'+inpStyle+'" onchange="entregaLibreCorreoOnInput()">'+
+            erPqrsRemitenteOptsHtml('','— Seleccione oficina destino —')+'</select></div>'+
+        '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo-i" style="'+inpStyle+'" oninput="entregaLibreCorreoOnInput()"></div>'+
+        '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono-i" style="'+inpStyle+'"></div>'+
+      '</div></div>'+
+    '<div id="entrega-libre-tipo-wrap" class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-libre-int-tipo" value="natural" checked onchange="syncEntregaLibreInteresadoUi()"> Persona natural</label>'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-libre-int-tipo" value="juridica" onchange="syncEntregaLibreInteresadoUi()"> Persona jurídica</label>'+
     '</div>'+
@@ -823,6 +858,20 @@ function _entregaLibreIntVal(id){
 }
 
 function collectEntregaLibreInteresado(){
+  if(entregaLibreEsComunicacionInterna()){
+    const oficina=_entregaLibreIntVal('entrega-libre-int-oficina');
+    const correo=_entregaLibreIntVal('entrega-libre-int-correo-i');
+    const telefono=_entregaLibreIntVal('entrega-libre-int-telefono-i');
+    return{
+      _comunicacion_interna:true,
+      _oficina_dirigida:oficina,
+      _tipo_persona:'interna',
+      _pn_nombre:oficina,
+      _pn_correo:correo,
+      _pn_telefono:telefono,
+      _persona_catalog_id:''
+    };
+  }
   const personaId=_entregaLibreIntVal('entrega-libre-int-persona-id')||window._entregaLibrePersonaId||'';
   if(entregaLibreIntTipo()==='juridica'){
     const empresa=_entregaLibreIntVal('entrega-libre-int-empresa');
@@ -831,6 +880,8 @@ function collectEntregaLibreInteresado(){
     const telefono=_entregaLibreIntVal('entrega-libre-int-telefono-j');
     const dirigido=_entregaLibreIntVal('entrega-libre-int-dirigido');
     return{
+      _comunicacion_interna:false,
+      _oficina_dirigida:'',
       _tipo_persona:'juridica',
       _pj_empresa:empresa,
       _pj_nit:typeof formatNitDisplay==='function'?formatNitDisplay(nit):nit,
@@ -844,6 +895,8 @@ function collectEntregaLibreInteresado(){
   const correo=_entregaLibreIntVal('entrega-libre-int-correo');
   const telefono=_entregaLibreIntVal('entrega-libre-int-telefono');
   return{
+    _comunicacion_interna:false,
+    _oficina_dirigida:'',
     _tipo_persona:'natural',
     _pn_nombre:nombre,
     _pn_correo:correo,
@@ -854,6 +907,10 @@ function collectEntregaLibreInteresado(){
 
 function validateEntregaLibreInteresado(datos){
   if(!datos)return'Indique los datos del interesado';
+  if(datos._comunicacion_interna||datos._tipo_persona==='interna'){
+    if(!String(datos._oficina_dirigida||'').trim())return'Seleccione la oficina a quien va dirigido';
+    return'';
+  }
   if(datos._tipo_persona==='juridica'){
     if(!datos._pj_empresa)return'Indique la razón social de la entidad';
     if(!datos._pj_rep_nombre)return'Indique a quien va dirigido el oficio';
@@ -866,6 +923,16 @@ function validateEntregaLibreInteresado(datos){
 function applyEntregaLibreInteresadoToTask(t,datos){
   if(!t||!datos)return;
   Object.keys(datos).forEach(function(k){t[k]=datos[k];});
+  if(datos._comunicacion_interna||datos._tipo_persona==='interna'){
+    const ofi=String(datos._oficina_dirigida||datos._pn_nombre||'').trim();
+    t._comunicacion_interna=true;
+    t._oficina_dirigida=ofi;
+    t.interesadoNombre=ofi;
+    t.interesadoCorreo=String(datos._pn_correo||'').trim();
+    return;
+  }
+  t._comunicacion_interna=false;
+  t._oficina_dirigida='';
   if(datos._tipo_persona==='juridica'){
     const emp=String(datos._pj_empresa||'').trim();
     const rep=String(datos._pj_rep_nombre||'').trim();
@@ -3074,6 +3141,8 @@ window.syncEntregaRespInteresadoUi=syncEntregaRespInteresadoUi;
 window.syncEntregaRespAltaFormPorTramite=syncEntregaRespAltaFormPorTramite;
 window.syncEntregaRespLibreUi=syncEntregaRespLibreUi;
 window.syncEntregaLibreInteresadoUi=syncEntregaLibreInteresadoUi;
+window.toggleEntregaLibreComunicacionInterna=toggleEntregaLibreComunicacionInterna;
+window.entregaLibreEsComunicacionInterna=entregaLibreEsComunicacionInterna;
 window.entregaLibreCorreoOnInput=entregaLibreCorreoOnInput;
 window.setEntregaLibreIntTipo=setEntregaLibreIntTipo;
 window.entregaLibreIntTipo=entregaLibreIntTipo;
