@@ -2276,7 +2276,7 @@ body.task-review-doc-mode #task-modal-overlay{
 .act-ico-badge-blu{background:var(--bl,#185fa5)}
 .act-ico-badge-yel{background:#eab308;color:#422006}
 .act-agenda-check{
-  position:absolute;top:-4px;left:-4px;z-index:1;
+  position:absolute;top:-4px;left:auto;right:-4px;z-index:1;
   width:13px;height:13px;border-radius:50%;
   background:var(--gn);color:#fff;font-size:8px;line-height:13px;
   text-align:center;font-weight:800;pointer-events:none;
