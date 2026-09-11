@@ -819,10 +819,10 @@ function htmlEntregaLibreInteresadoBox(){
     '<div id="entrega-libre-int-box" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">'+
       '<div class="fg">'+
         '<div class="fld" style="grid-column:1/-1"><label>Oficina a quien va dirigido <span style="color:var(--rd)">*</span></label>'+
-          '<select id="entrega-libre-int-oficina" style="'+inpStyle+'" onchange="entregaLibreCorreoOnInput()">'+
+          '<select id="entrega-libre-int-oficina" style="'+inpStyle+'">'+
             erPqrsRemitenteOptsHtml('','— Seleccione oficina destino —')+'</select></div>'+
-        '<div class="fld"><label>Correo</label><input type="email" id="entrega-libre-int-correo-i" style="'+inpStyle+'" oninput="entregaLibreCorreoOnInput()"></div>'+
-        '<div class="fld"><label>Teléfono</label><input type="tel" id="entrega-libre-int-telefono-i" style="'+inpStyle+'"></div>'+
+        '<div class="fld" style="grid-column:1/-1"><label>Nombre de la persona <span style="color:var(--rd)">*</span></label>'+
+          '<input type="text" id="entrega-libre-int-dirigido-i" placeholder="A quien se dirige la comunicación" style="'+inpStyle+'"></div>'+
       '</div></div>'+
     '<div id="entrega-libre-tipo-wrap" class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-libre-int-tipo" value="natural" checked onchange="syncEntregaLibreInteresadoUi()"> Persona natural</label>'+
@@ -860,15 +860,14 @@ function _entregaLibreIntVal(id){
 function collectEntregaLibreInteresado(){
   if(entregaLibreEsComunicacionInterna()){
     const oficina=_entregaLibreIntVal('entrega-libre-int-oficina');
-    const correo=_entregaLibreIntVal('entrega-libre-int-correo-i');
-    const telefono=_entregaLibreIntVal('entrega-libre-int-telefono-i');
+    const dirigido=_entregaLibreIntVal('entrega-libre-int-dirigido-i');
     return{
       _comunicacion_interna:true,
       _oficina_dirigida:oficina,
       _tipo_persona:'interna',
-      _pn_nombre:oficina,
-      _pn_correo:correo,
-      _pn_telefono:telefono,
+      _pn_nombre:dirigido,
+      _pn_correo:'',
+      _pn_telefono:'',
       _persona_catalog_id:''
     };
   }
@@ -909,6 +908,7 @@ function validateEntregaLibreInteresado(datos){
   if(!datos)return'Indique los datos del interesado';
   if(datos._comunicacion_interna||datos._tipo_persona==='interna'){
     if(!String(datos._oficina_dirigida||'').trim())return'Seleccione la oficina a quien va dirigido';
+    if(!String(datos._pn_nombre||'').trim())return'Indique el nombre de la persona a quien se dirige';
     return'';
   }
   if(datos._tipo_persona==='juridica'){
@@ -924,11 +924,12 @@ function applyEntregaLibreInteresadoToTask(t,datos){
   if(!t||!datos)return;
   Object.keys(datos).forEach(function(k){t[k]=datos[k];});
   if(datos._comunicacion_interna||datos._tipo_persona==='interna'){
-    const ofi=String(datos._oficina_dirigida||datos._pn_nombre||'').trim();
+    const ofi=String(datos._oficina_dirigida||'').trim();
+    const nom=String(datos._pn_nombre||'').trim();
     t._comunicacion_interna=true;
     t._oficina_dirigida=ofi;
-    t.interesadoNombre=ofi;
-    t.interesadoCorreo=String(datos._pn_correo||'').trim();
+    t.interesadoNombre=ofi?(nom?(ofi+' · '+nom):ofi):nom;
+    t.interesadoCorreo='';
     return;
   }
   t._comunicacion_interna=false;

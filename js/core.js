@@ -15599,7 +15599,7 @@ function entregaNotifCorreosDefault(e,t,opts){
   if(opts.emailTo)String(opts.emailTo).split(/[,;]+/).forEach(add);
   // Formulario 📤 Entregar documento (libre / alta expediente)
   [
-    'entrega-libre-int-correo','entrega-libre-int-correo-j','entrega-libre-int-correo-i',
+    'entrega-libre-int-correo','entrega-libre-int-correo-j',
     'entrega-int-pn-correo','entrega-int-pj-correo','entrega-int-pj-rep-correo',
     'entrega-int-qd-correo','entrega-int-ec-correo','entrega-int-apo-correo','entrega-int-aut-correo',
     'er-pqrs-anon-correo'
