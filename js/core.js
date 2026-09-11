@@ -17870,15 +17870,15 @@ function purgeBandejaLeidasAntiguas(){
   const eliminados=new Set(getBandejaEliminados());
   let ch=false;
   items.forEach(it=>{
-    const key=bandejaItemKey(it);
-    if(!leidos.includes(key)||eliminados.has(key))return;
+    if(!bandejaItemIsLeido(it,leidos)||bandejaItemIsEliminado(it,eliminados))return;
     if(diasDesdeIso(it.fecha)>=RETENCION_LEIDOS_DIAS){
-      eliminados.add(key);
+      bandejaItemKeys(it).forEach(function(k){eliminados.add(k);});
       ch=true;
     }
   });
   if(ch){
-    try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify([...eliminados]));}catch(e){}
+    _bandejaWriteList('eliminados',[...eliminados]);
+    schedulePersistBandejaEstado();
   }
   return ch;
 }
@@ -17892,25 +17892,164 @@ function purgeRetencionDatosLeidos(){
   }
   return ch;
 }
-function getBandejaLeidos(){try{return JSON.parse(localStorage.getItem('sst_bandeja_leidos')||'[]');}catch(e){return[];}}
-function getBandejaEliminados(){try{return JSON.parse(localStorage.getItem('sst_bandeja_eliminados')||'[]');}catch(e){return[];}}
+/** Scope de leídos/eliminados de campanita: por correo (no compartido entre usuarios). */
+function bandejaUsuarioScope(){
+  let email='';
+  try{
+    if(typeof getAuthEmailNorm==='function')email=String(getAuthEmailNorm()||'').trim().toLowerCase();
+  }catch(e){}
+  if(!email&&window._usuarioActual)email=String(window._usuarioActual.email||'').trim().toLowerCase();
+  if(!email){
+    try{
+      const au=window._firebaseAuth&&window._firebaseAuth.currentUser;
+      if(au&&au.email)email=String(au.email).trim().toLowerCase();
+    }catch(e2){}
+  }
+  return email;
+}
+function _bandejaLsRawKey(kind,scope){
+  scope=scope!=null?scope:bandejaUsuarioScope();
+  const base=kind==='eliminados'?'sst_bandeja_eliminados':'sst_bandeja_leidos';
+  return scope?(base+'__'+scope):base;
+}
+function _bandejaReadList(kind){
+  const scope=bandejaUsuarioScope();
+  const out=new Set();
+  function addFrom(lsKey){
+    try{
+      const arr=JSON.parse(localStorage.getItem(lsKey)||'[]');
+      if(Array.isArray(arr))arr.forEach(function(k){if(k)out.add(String(k));});
+    }catch(e){}
+  }
+  if(scope)addFrom(_bandejaLsRawKey(kind,scope));
+  // Legacy global (mismo navegador, antes del scope por usuario)
+  addFrom(kind==='eliminados'?'sst_bandeja_eliminados':'sst_bandeja_leidos');
+  return [...out];
+}
+function _bandejaWriteList(kind,arr){
+  const scope=bandejaUsuarioScope();
+  const lsKey=_bandejaLsRawKey(kind,scope);
+  try{localStorage.setItem(lsKey,JSON.stringify(arr||[]));}catch(e){}
+  // Mantener legacy solo si aún no hay sesión (evita mezclar usuarios en la clave vieja)
+  if(!scope){
+    try{localStorage.setItem(kind==='eliminados'?'sst_bandeja_eliminados':'sst_bandeja_leidos',JSON.stringify(arr||[]));}catch(e2){}
+  }
+}
+function getBandejaLeidos(){return _bandejaReadList('leidos');}
+function getBandejaEliminados(){return _bandejaReadList('eliminados');}
+function schedulePersistBandejaEstado(){
+  if(window._bandejaPersistTimer)clearTimeout(window._bandejaPersistTimer);
+  window._bandejaPersistTimer=setTimeout(function(){
+    window._bandejaPersistTimer=null;
+    if(typeof saveGlobalFirestore==='function'){
+      saveGlobalFirestore().catch(function(err){console.warn('persist bandeja campanita:',err);});
+    }
+  },700);
+}
 function markBandejaLeido(key){
-  const s=new Set(getBandejaLeidos());s.add(key);
-  try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify([...s]));}catch(e){}
+  if(!key)return;
+  const s=new Set(getBandejaLeidos());s.add(String(key));
+  _bandejaWriteList('leidos',[...s]);
+  schedulePersistBandejaEstado();
 }
 function markBandejaNoLeido(key){
-  const s=new Set(getBandejaLeidos());s.delete(key);
-  try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify([...s]));}catch(e){}
+  if(!key)return;
+  const s=new Set(getBandejaLeidos());s.delete(String(key));
+  _bandejaWriteList('leidos',[...s]);
+  schedulePersistBandejaEstado();
 }
 function markBandejaEliminado(key){
-  const s=new Set(getBandejaEliminados());s.add(key);
-  try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify([...s]));}catch(e){}
+  if(!key)return;
+  const s=new Set(getBandejaEliminados());s.add(String(key));
+  _bandejaWriteList('eliminados',[...s]);
+  schedulePersistBandejaEstado();
+}
+function markBandejaItemLeido(it){
+  if(!it)return;
+  const s=new Set(getBandejaLeidos());
+  bandejaItemKeys(it).forEach(function(k){s.add(k);});
+  _bandejaWriteList('leidos',[...s]);
+  schedulePersistBandejaEstado();
+}
+function markBandejaItemNoLeido(it){
+  if(!it)return;
+  const s=new Set(getBandejaLeidos());
+  bandejaItemKeys(it).forEach(function(k){s.delete(k);});
+  _bandejaWriteList('leidos',[...s]);
+  schedulePersistBandejaEstado();
+}
+function markBandejaItemEliminado(it){
+  if(!it)return;
+  const s=new Set(getBandejaEliminados());
+  bandejaItemKeys(it).forEach(function(k){s.add(k);});
+  _bandejaWriteList('eliminados',[...s]);
+  schedulePersistBandejaEstado();
+}
+/**
+ * Aplica leídos/eliminados remotos (merge ∪ local; por usuario).
+ * Evita que un loadFS pise marcas locales aún no subidas.
+ */
+function applyBandejaEstadoFromRemote(g){
+  if(!g||typeof g!=='object')return;
+  if(!window._bandejaLeidosByUserCache||typeof window._bandejaLeidosByUserCache!=='object')
+    window._bandejaLeidosByUserCache={};
+  if(!window._bandejaEliminadosByUserCache||typeof window._bandejaEliminadosByUserCache!=='object')
+    window._bandejaEliminadosByUserCache={};
+  if(g.bandejaLeidosByUser&&typeof g.bandejaLeidosByUser==='object'){
+    Object.keys(g.bandejaLeidosByUser).forEach(function(k){
+      const v=g.bandejaLeidosByUser[k];
+      if(Array.isArray(v))window._bandejaLeidosByUserCache[k]=v.slice();
+    });
+  }
+  if(g.bandejaEliminadosByUser&&typeof g.bandejaEliminadosByUser==='object'){
+    Object.keys(g.bandejaEliminadosByUser).forEach(function(k){
+      const v=g.bandejaEliminadosByUser[k];
+      if(Array.isArray(v))window._bandejaEliminadosByUserCache[k]=v.slice();
+    });
+  }
+  const scope=bandejaUsuarioScope();
+  const localL=new Set(getBandejaLeidos());
+  const localE=new Set(getBandejaEliminados());
+  function unionInto(set,arr){
+    if(!Array.isArray(arr))return;
+    arr.forEach(function(k){if(k)set.add(String(k));});
+  }
+  if(scope&&window._bandejaLeidosByUserCache[scope])unionInto(localL,window._bandejaLeidosByUserCache[scope]);
+  if(scope&&window._bandejaEliminadosByUserCache[scope])unionInto(localE,window._bandejaEliminadosByUserCache[scope]);
+  // Legacy compartido: solo como respaldo de migración (no sobrescribe)
+  unionInto(localL,g.bandejaLeidos);
+  unionInto(localE,g.bandejaEliminados);
+  _bandejaWriteList('leidos',[...localL]);
+  _bandejaWriteList('eliminados',[...localE]);
+  if(scope){
+    window._bandejaLeidosByUserCache[scope]=[...localL];
+    window._bandejaEliminadosByUserCache[scope]=[...localE];
+  }
+}
+function buildBandejaEstadoPayloadForSave(){
+  const scope=bandejaUsuarioScope();
+  const leidos=getBandejaLeidos();
+  const eliminados=getBandejaEliminados();
+  if(!window._bandejaLeidosByUserCache||typeof window._bandejaLeidosByUserCache!=='object')
+    window._bandejaLeidosByUserCache={};
+  if(!window._bandejaEliminadosByUserCache||typeof window._bandejaEliminadosByUserCache!=='object')
+    window._bandejaEliminadosByUserCache={};
+  if(scope){
+    window._bandejaLeidosByUserCache[scope]=leidos.slice();
+    window._bandejaEliminadosByUserCache[scope]=eliminados.slice();
+  }
+  return{
+    bandejaLeidos:leidos,
+    bandejaEliminados:eliminados,
+    bandejaLeidosByUser:Object.assign({},window._bandejaLeidosByUserCache),
+    bandejaEliminadosByUser:Object.assign({},window._bandejaEliminadosByUserCache)
+  };
 }
 function eliminarBandejaItemIdx(idx,ev){
   if(ev)ev.stopPropagation();
   const it=(window._bandejaItems||[])[idx];if(!it)return;
   confirmEliminar({message:'¿Eliminar este aviso de la bandeja?',detail:it.titulo||it.texto||''},()=>{
-    markBandejaEliminado(bandejaItemKey(it));
+    markBandejaItemEliminado(it);
     renderBandejaDepto();
   });
 }
@@ -17930,8 +18069,16 @@ function bandejaItemDesktopText(it){
   const txt=it.tipo==='porverificar'?(it.texto||it.desc):it.texto;
   return String(tit||'').trim()+(txt?(' — '+String(txt).slice(0,100)):'');
 }
+function bandejaComentarioStableSuffix(it){
+  const fecha=String(it&&it.fecha||'').trim();
+  const autor=String(it&&it.autor||'').trim().toLowerCase();
+  const txt=String(it&&it.texto||'').replace(/\s+/g,' ').trim().slice(0,80).toLowerCase();
+  return fecha+'|'+autor+'|'+txt;
+}
+/** Clave canónica (estable). Chat: sin índice de array. */
 function bandejaItemKey(it){
-  if(it.tipo==='comentario')return 'c|'+it.exp+'|'+it.taskId+'|'+it.cidx+'|'+(it.fecha||'');
+  if(!it)return'';
+  if(it.tipo==='comentario')return 'c2|'+it.exp+'|'+it.taskId+'|'+bandejaComentarioStableSuffix(it);
   if(it.tipo==='obsdocumento')return 'ndall|'+it.exp+'|'+it.taskId+'|'+(it.batch||'');
   if(it.tipo==='notadoc')return 'nd|'+it.exp+'|'+it.taskId+'|'+it.nidx+'|'+(it.fecha||'');
   if(it.tipo==='devolucion')return 'dv|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'');
@@ -17948,6 +18095,31 @@ function bandejaItemKey(it){
   if(it.tipo==='pqrs_aviso')return 'pa|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   return 'p|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'');
 }
+/** Claves canónica + legacy (p. ej. chat con cidx) para no perder marcas antiguas. */
+function bandejaItemKeys(it){
+  const keys=[];
+  if(!it)return keys;
+  const primary=bandejaItemKey(it);
+  if(primary)keys.push(primary);
+  if(it.tipo==='comentario'){
+    const legacy='c|'+it.exp+'|'+it.taskId+'|'+it.cidx+'|'+(it.fecha||'');
+    if(legacy!==primary)keys.push(legacy);
+  }
+  return keys;
+}
+function bandejaItemIsLeido(it,leidosOpt){
+  const set=leidosOpt instanceof Set?leidosOpt:new Set(leidosOpt||getBandejaLeidos());
+  return bandejaItemKeys(it).some(function(k){return set.has(k);});
+}
+function bandejaItemIsEliminado(it,elimOpt){
+  const set=elimOpt instanceof Set?elimOpt:new Set(elimOpt||getBandejaEliminados());
+  return bandejaItemKeys(it).some(function(k){return set.has(k);});
+}
+window.applyBandejaEstadoFromRemote=applyBandejaEstadoFromRemote;
+window.buildBandejaEstadoPayloadForSave=buildBandejaEstadoPayloadForSave;
+window.schedulePersistBandejaEstado=schedulePersistBandejaEstado;
+window.bandejaItemKeys=bandejaItemKeys;
+window.bandejaItemIsLeido=bandejaItemIsLeido;
 function collectAgendaReminderItems(){
   const items=[];
   const manana=addDaysDate(hoy(),1);
@@ -18167,19 +18339,18 @@ function setBandejaVista(v){
 function marcarBandejaLeidoIdx(idx,ev){
   if(ev)ev.stopPropagation();
   const it=(window._bandejaItems||[])[idx];if(!it)return;
-  markBandejaLeido(bandejaItemKey(it));
+  markBandejaItemLeido(it);
   renderBandejaDepto();
 }
 function marcarBandejaNoLeidoIdx(idx,ev){
   if(ev)ev.stopPropagation();
   const it=(window._bandejaItems||[])[idx];if(!it)return;
-  markBandejaNoLeido(bandejaItemKey(it));
+  markBandejaItemNoLeido(it);
   window._bandejaVista='pending';
   renderBandejaDepto();
 }
 function renderBandejaItemHtml(it,i,leidos,modoVista){
-  const key=bandejaItemKey(it);
-  const isUnread=!leidos.includes(key);
+  const isUnread=!bandejaItemIsLeido(it,leidos);
   const tag=it.tipo==='comentario'?'<span class="inbox-item-tag inbox-tag-cmt">Chat actividad</span>':
     it.tipo==='agenda'?'<span class="inbox-item-tag inbox-tag-cmt" style="background:var(--bll);color:var(--bl)">Agenda</span>':
     it.tipo==='agenda_recordatorio'?'<span class="inbox-item-tag inbox-tag-cmt" style="background:var(--gnl);color:var(--gn)">Agenda mañana</span>':
@@ -18230,10 +18401,10 @@ function renderBandejaDepto(){
   wrap.style.display=show?'':'none';
   if(!show)return;
   if(hdr)hdr.textContent=esModoResponsable()?'Notificaciones del departamento':(esModoOficinaDeguv()||esOficinaPqrsNca()||esNcaDeguv())?'Notificaciones PQRSD':'Chat y solicitudes';
-  const items=collectBandejaItems().filter(it=>!getBandejaEliminados().includes(bandejaItemKey(it)));
+  const items=collectBandejaItems().filter(it=>!bandejaItemIsEliminado(it));
   const leidos=getBandejaLeidos();
-  const unreadItems=items.filter(it=>!leidos.includes(bandejaItemKey(it)));
-  const readItems=items.filter(it=>leidos.includes(bandejaItemKey(it)));
+  const unreadItems=items.filter(it=>!bandejaItemIsLeido(it,leidos));
+  const readItems=items.filter(it=>bandejaItemIsLeido(it,leidos));
   const unread=unreadItems.length;
   const unreadKeys=unreadItems.map(bandejaItemKey);
   if(!window._bandejaNotifySeeded){
@@ -18527,7 +18698,7 @@ function openTaskDesdeBandejaComentario(expId,taskId){
 }
 function irDesdeBandeja(idx){
   const it=(window._bandejaItems||[])[idx];if(!it)return;
-  markBandejaLeido(bandejaItemKey(it));
+  markBandejaItemLeido(it);
   closeBandejaDepto();
   if(it.tipo==='agenda'||it.tipo==='agenda_recordatorio'){
     if(typeof marcarAgendaLeido==='function')marcarAgendaLeido(it.agendaId);

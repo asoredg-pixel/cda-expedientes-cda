@@ -60,8 +60,10 @@ function buildExportBundle(){
     agendaEventos:JSON.parse(JSON.stringify(agendaEventos||[])),
     chatMensajes:JSON.parse(JSON.stringify(chatMensajes||[])),
     encargadosGlobal:JSON.parse(JSON.stringify(normalizeEncargadosGlobal(encargadosGlobal))),
-    bandejaLeidos:getBandejaLeidos(),
-    bandejaEliminados:getBandejaEliminados()
+    ...(typeof buildBandejaEstadoPayloadForSave==='function'?buildBandejaEstadoPayloadForSave():{
+      bandejaLeidos:getBandejaLeidos(),
+      bandejaEliminados:getBandejaEliminados()
+    })
   };
 }
 function exportarRespaldoCompleto(){
@@ -215,8 +217,11 @@ function aplicarImportJSON(data){
     else if(data.deptoActivo==='jurisdiccional'||data.deptoActivo==='responsables')deptoActivo=data.deptoActivo;
     if(data.deptoCfg&&DEPTOS.some(d=>d.id===data.deptoCfg))deptoCfg=data.deptoCfg;
     if(data.responsableActivo!==undefined)responsableActivo=String(data.responsableActivo||'');
-    if(Array.isArray(data.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(data.bandejaLeidos));}catch(e){}
-    if(Array.isArray(data.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(data.bandejaEliminados));}catch(e){}
+    if(typeof applyBandejaEstadoFromRemote==='function')applyBandejaEstadoFromRemote(data);
+    else{
+      if(Array.isArray(data.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(data.bandejaLeidos));}catch(e){}
+      if(Array.isArray(data.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(data.bandejaEliminados));}catch(e){}
+    }
     normalizarDatosTrasImport();
     logAudit('Importó datos al sistema','configuracion',null,nExp+' expediente(s)');
     // Persistir en localStorage

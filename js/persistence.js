@@ -285,8 +285,11 @@ async function loadLS(){
       // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
-      if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
-      if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
+      if(typeof applyBandejaEstadoFromRemote==='function')applyBandejaEstadoFromRemote(g);
+      else{
+        if(Array.isArray(g.bandejaLeidos))try{localStorage.setItem('sst_bandeja_leidos',JSON.stringify(g.bandejaLeidos));}catch(x){}
+        if(Array.isArray(g.bandejaEliminados))try{localStorage.setItem('sst_bandeja_eliminados',JSON.stringify(g.bandejaEliminados));}catch(x){}
+      }
       if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
       if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
@@ -794,14 +797,20 @@ async function saveGlobalFirestore(){
   }
   _localSaving=true;
   try{
+    const bandejaPay=typeof buildBandejaEstadoPayloadForSave==='function'?buildBandejaEstadoPayloadForSave():{
+      bandejaLeidos:typeof getBandejaLeidos==='function'?getBandejaLeidos():[],
+      bandejaEliminados:typeof getBandejaEliminados==='function'?getBandejaEliminados():[]
+    };
     let payload={
       personas:personas||[],
       actividadesLibres:(actividadesLibres||[]).map(function(t){
         return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
       }).filter(Boolean),
       agendaEventos:agendaEventos||[],
-      bandejaLeidos:getBandejaLeidos(),
-      bandejaEliminados:getBandejaEliminados(),
+      bandejaLeidos:bandejaPay.bandejaLeidos||[],
+      bandejaEliminados:bandejaPay.bandejaEliminados||[],
+      bandejaLeidosByUser:bandejaPay.bandejaLeidosByUser||{},
+      bandejaEliminadosByUser:bandejaPay.bandejaEliminadosByUser||{},
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
       mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
       updatedAt:new Date().toISOString()
@@ -1131,12 +1140,18 @@ async function saveFirestore(){
   updateSyncIndicator('syncing');
   try{
     syncCfgToStore();
+    const bandejaPay=typeof buildBandejaEstadoPayloadForSave==='function'?buildBandejaEstadoPayloadForSave():{
+      bandejaLeidos:typeof getBandejaLeidos==='function'?getBandejaLeidos():[],
+      bandejaEliminados:typeof getBandejaEliminados==='function'?getBandejaEliminados():[]
+    };
     const payload={
       personas:personas||[],
       actividadesLibres:actividadesLibres||[],
       agendaEventos:agendaEventos||[],
-      bandejaLeidos:getBandejaLeidos(),
-      bandejaEliminados:getBandejaEliminados(),
+      bandejaLeidos:bandejaPay.bandejaLeidos||[],
+      bandejaEliminados:bandejaPay.bandejaEliminados||[],
+      bandejaLeidosByUser:bandejaPay.bandejaLeidosByUser||{},
+      bandejaEliminadosByUser:bandejaPay.bandejaEliminadosByUser||{},
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
       mantenimiento:typeof normalizeMantenimiento==='function'?normalizeMantenimiento(mantenimientoEstado):mantenimientoEstado||{activo:false},
       updatedAt:new Date().toISOString()
