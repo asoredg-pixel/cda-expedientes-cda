@@ -18622,14 +18622,17 @@ function bandejaResolveTask(it){
 }
 /**
  * Paleta de Actividades según rol + estado actual + tipo de aviso.
- * Encargado no tiene «Por corregir» propia → usa «Por ejecutar» (pend).
+ * «Por corregir» es paleta propia (responsable y encargado).
  */
 function bandejaActFiltroParaTask(t,it){
   it=it||{};
   const tipo=String(it.tipo||'');
   const isResp=!!esModoResponsable();
+  const isDept=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+  const isVital=typeof esCargoVital==='function'&&esCargoVital();
+  const tienePorCorr=isResp||isDept||isVital;
   if(tipo==='sol_traslado'||tipo==='sol_eliminacion'||tipo==='porverificar')return'porver';
-  if(tipo==='devolucion'||tipo==='obsdocumento'||tipo==='notadoc')return isResp?'porcorr':'pend';
+  if(tipo==='devolucion'||tipo==='obsdocumento'||tipo==='notadoc')return tienePorCorr?'porcorr':'pend';
   if(tipo==='pqrs_traslado'||tipo==='pqrs_fecha_sol'||tipo==='pqrs_aviso')return'pend';
   if(!t){
     if(tipo==='auto_venc1'||tipo==='auto_venc3')return'pend';
@@ -18637,7 +18640,7 @@ function bandejaActFiltroParaTask(t,it){
   }
   if(tipo==='auto_venc1'||tipo==='auto_venc3'){
     const estV=estadoTaskParaBandejaUsuario(t);
-    if(estV==='Por corregir')return isResp?'porcorr':'pend';
+    if(estV==='Por corregir')return tienePorCorr?'porcorr':'pend';
     return'pend';
   }
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo||it.exp):null;
@@ -18650,7 +18653,7 @@ function bandejaActFiltroParaTask(t,it){
   if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return'pornotif';
   if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return'porver';
   const est=estadoTaskParaBandejaUsuario(t);
-  if(est==='Por corregir')return isResp?'porcorr':'pend';
+  if(est==='Por corregir')return tienePorCorr?'porcorr':'pend';
   if(est==='Por verificar')return'porver';
   if(est==='Atendida')return'done';
   if(typeof esActividadPorEjecutar==='function'&&esActividadPorEjecutar(t))return'pend';
@@ -22967,7 +22970,7 @@ function updateActEstFilterForEnc(forEnc){
   const optPorFirma=sel.querySelector('option[value="porfirma"]');
   const optNotif=sel.querySelector('option[value="pornotif"]');
   const optVenc=sel.querySelector('option[value="venc"]');
-  if(optCorr)optCorr.hidden=deptView;
+  if(optCorr)optCorr.hidden=false;
   if(optVer){optVer.hidden=false;optVer.textContent='Por revisar';}
   if(optRev){optRev.hidden=!deptView;optRev.textContent='Revisados';}
   if(optPorFirma){
@@ -22978,8 +22981,9 @@ function updateActEstFilterForEnc(forEnc){
   if(optVenc){optVenc.hidden=false;optVenc.textContent='Vencidas';}
   // Director sigue el seguimiento en «Por firma», no actúa en Por notificar
   if(isDir&&optNotif)optNotif.hidden=true;
+  if(isDir&&optCorr)optCorr.hidden=true;
   const order=deptView
-    ?['pend','prior','venc','porver','revisados','porfirma','pornotif','done','all']
+    ?['pend','prior','venc','porver','revisados','porcorr','porfirma','pornotif','done','all']
     :(isVital
       ?['pend','prior','venc','porver','porcorr','porfirma','pornotif','done','all']
       :(isDir
@@ -22991,8 +22995,7 @@ function updateActEstFilterForEnc(forEnc){
     const o=sel.querySelector('option[value="'+v+'"]');
     if(o)sel.appendChild(o);
   });
-  if(forEnc&&cv==='porcorr')sel.value='pend';
-  else if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
+  if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
   else if(cv==='porfirma'&&optPorFirma&&optPorFirma.hidden)sel.value='pend';
 }
 function exportarActividadesExcel(){
@@ -23943,20 +23946,16 @@ function esActividadPorEjecutar(t){
     if(typeof esAdministrador==='function'&&esAdministrador())return true;
     return typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eExp);
   }
-  // Revisión NCA (incl. devolución Director): va a «Por revisar», no a «Por ejecutar»
-  // Excepción: ya en Por corregir (devolución hecha) → deuda del responsable / por ejecutar
-  if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION){
-    const estPend=typeof estadoTask==='function'?estadoTask(t):'';
-    if(estPend!=='Por corregir')return false;
-  }
+  // Revisión NCA (incl. devolución Director): va a «Por revisar»; Por corregir tiene paleta propia
+  if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION)return false;
   if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
     const est=estadoTaskForAsignado(t,responsableActivo);
-    if(est==='Atendida'||est==='Eliminada'||est==='Por verificar')return false;
-    return['En ejecución','Vencida','Por corregir','Parcial'].includes(est)||taskActividadVencida(t);
+    if(est==='Atendida'||est==='Eliminada'||est==='Por verificar'||est==='Por corregir')return false;
+    return['En ejecución','Vencida','Parcial'].includes(est)||taskActividadVencida(t);
   }
   const est=estadoTask(t);
-  if(est==='Atendida'||est==='Eliminada'||est==='Por verificar')return false;
-  return['En ejecución','Vencida','Parcial','Por corregir'].includes(est)||taskActividadVencida(t);
+  if(est==='Atendida'||est==='Eliminada'||est==='Por verificar'||est==='Por corregir')return false;
+  return['En ejecución','Vencida','Parcial'].includes(est)||taskActividadVencida(t);
 }
 function mergeActividadLists(base,extra){
   const out=Array.isArray(base)?base.slice():[];
@@ -24778,9 +24777,9 @@ function filtrarActividadesPorEstado(list,filtro){
     return out;
   }
   if(filtro==='venc'){
-    let out=(list||[]).filter(t=>taskActividadVencida(t));
+    let out=(list||[]).filter(t=>taskActividadVencida(t)&&estadoTask(t)!=='Por corregir');
     if(esModoResponsable()||(typeof esCargoVital==='function'&&esCargoVital())||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())){
-      out=mergeActividadLists(out,getTareasNotifVisiblesAct().filter(t=>taskActividadVencida(t)));
+      out=mergeActividadLists(out,getTareasNotifVisiblesAct().filter(t=>taskActividadVencida(t)&&estadoTask(t)!=='Por corregir'));
     }
     return out;
   }
@@ -24805,7 +24804,7 @@ function filtrarActividadesPorEstado(list,filtro){
       // Quien entregó y NO es el notificador: permanece en Atendidas (✓ Revisada · X Firmar / X Notificar)
       if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoResp)){
         const stAsig=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,yoResp):estadoTask(t);
-        // Tras devolver desde firma: Por corregir → Por ejecutar, no Atendidas
+        // Tras devolver desde firma: Por corregir (no Atendidas)
         if(stAsig==='Por corregir'||estadoTask(t)==='Por corregir')return false;
         if(stAsig==='Atendida')return true;
         if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)){
@@ -24902,7 +24901,7 @@ function renderActividades(){
   // Encargado / «Todos»: bandeja «Por revisar» = entregas de todos. Otro responsable: solo las suyas.
   const bandejaRevDepto=deptView&&(!respFilter||filterIsEnc);
   let listRespFilter=respFilter;
-  if(deptView&&bandejaRevDepto&&(filtroAct==='porver'||filtroAct==='revisados'))listRespFilter=null;
+  if(deptView&&bandejaRevDepto&&(filtroAct==='porver'||filtroAct==='revisados'||filtroAct==='porcorr'))listRespFilter=null;
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   // Heal anticipado: PQRSD ya aprobada (firma/notif/cerrada) no debe quedar en «Por revisar»
@@ -24975,12 +24974,12 @@ function renderActividades(){
   const deudaBase=mergeActividadLists(all.filter(t=>esActividadPorEjecutar(t)),notifDeuda);
   const porEjec=deudaBase.length;
   const prior=all.filter(t=>esActividadPrioritariaPendiente(t)).length;
-  const porcorr=deptView?0:all.filter(t=>estadoTask(t)==='Por corregir').length;
-  // Contadores Por revisar / Revisados: bandeja del encargado = todos; otro responsable = filtrado
+  // Contadores Por revisar / Revisados / Por corregir: bandeja del encargado = todos; otro responsable = filtrado
   const porverScope=deptView?(bandejaRevDepto?null:respFilter):null;
   const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(porverScope):getTareasResponsableActivo(),'act');
   const porrevisar=filtrarActividadesPorEstado(porverBase,'porver').length;
   const nRevisados=deptView?filtrarActividadesPorEstado(porverBase,'revisados').length:0;
+  const porcorr=(deptView?porverBase:all).filter(t=>estadoTask(t)==='Por corregir').length;
   const done=filtrarActividadesPorEstado(all,'done').length;
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
@@ -24994,7 +24993,7 @@ function renderActividades(){
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
     if(filtroAct==='pend')sub.textContent='';
-    else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas). Incluye por corregir vencidas.';
+    else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas).';
     else if(filtroAct==='pornotif')sub.textContent=deptView
       ?'Por notificar: con plazo de 5 días hábiles si hay notificador asignado. Correo por VITAL/encargado: sin autoasignación ni plazo de 5 días.'
       :'';
@@ -25002,7 +25001,7 @@ function renderActividades(){
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='porcorr')sub.textContent='Por corregir: también aparecen en «Por ejecutar» según estén en término o vencidas.';
+    else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. No se mezclan con «Por ejecutar».';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
@@ -25013,7 +25012,7 @@ function renderActividades(){
     actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)')+
     actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
   if(deptView)metsHtml+=actMetCard('revisados','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+nRevisados+'</div><div class="l">Revisados</div>','var(--gn)');
-  if(isResp||isVital)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
+  if(isResp||isVital||deptView)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedePorFirmaMets){
     metsHtml+=actMetCard('porfirma','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirma+'</div><div class="l">Por firma</div>','#0d5c2e');
   }

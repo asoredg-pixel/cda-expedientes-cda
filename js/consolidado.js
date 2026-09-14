@@ -22,7 +22,7 @@ function renderConsolidadoResponsable(){
       if(t.responsable===responsableActivo)myTasks.push({...t,exp:e._exp,nombre:getNom(e),depto:e._depto});
     });
   });
-  const pend=sortTasksByUrgency(myTasks.filter(t=>['En ejecución','Vencida','Por corregir'].includes(estadoTask(t))));
+  const pend=sortTasksByUrgency(myTasks.filter(t=>['En ejecución','Vencida'].includes(estadoTask(t))));
   const porver=myTasks.filter(t=>estadoTask(t)==='Por verificar').length;
   const porcorr=myTasks.filter(t=>estadoTask(t)==='Por corregir').length;
   const venc=pend.filter(t=>estadoTask(t)==='Vencida').length;
