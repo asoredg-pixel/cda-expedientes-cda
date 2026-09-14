@@ -7507,6 +7507,22 @@ function taskReviewPorFirmarRailHtml(ref,taskId,t,e){
   return h;
 }
 window.taskReviewPorFirmarRailHtml=taskReviewPorFirmarRailHtml;
+/** Rail mínimo para Consulta: solo documento + comparar (sin acciones operativas). */
+function taskReviewConsultaVistaRailHtml(ref,taskId,t,e){
+  if(!t)return'';
+  e=e||(typeof getExpById==='function'?getExpById(ref):null);
+  const refExp=t.sinExpediente?(t.codigo||ref):ref;
+  const r=escAttr(refExp),tid=escAttr(taskId);
+  const side=String(window._taskReviewSideMode||'doc');
+  const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
+  const showCompare=(docsCompare.length>=2)||((t.soportes||[]).length>=2);
+  let h='<nav class="task-review-rail-nav task-review-rail-views" aria-label="Consulta — documentos">';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Documentos de la actividad" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">📄</button>';
+  if(showCompare)
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar documentos" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
+  return h+'</nav>';
+}
+window.taskReviewConsultaVistaRailHtml=taskReviewConsultaVistaRailHtml;
 function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   if(!t)return'';
   e=e||(typeof getExpById==='function'?getExpById(ref):null);
@@ -8815,7 +8831,7 @@ function initTaskReviewNotasSide(expId,taskId){
 function taskReviewRefreshModal(expId,taskId,sideMode){
   const ctx=window._taskModalCtx||{};
   if(typeof taskModalIsReviewOpen!=='function'||!taskModalIsReviewOpen())return false;
-  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
+  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc||!!ctx.consultaVista,consultaVista:!!ctx.consultaVista});
   if(sideMode&&sideMode!=='doc'&&typeof taskReviewOpenSidePanel==='function')
     setTimeout(function(){taskReviewOpenSidePanel(sideMode,expId,taskId);},100);
   return true;
@@ -14102,7 +14118,7 @@ function selectTaskSoporte(expId,taskId,sopId){
     const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
     if(typeof refreshTaskReviewSoporteInPlace==='function'&&refreshTaskReviewSoporteInPlace(expId,taskId,sopId,t))return;
   }
-  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc});
+  openTaskCommentsModal(expId,taskId,{keepStack:true,verDocumento:!!ctx.verDocumento||!!ctx.isRespVerDoc||!!ctx.consultaVista,consultaVista:!!ctx.consultaVista});
 }
 function verConDesdeTaskModal(expId){
   closeTaskModal();
@@ -19704,6 +19720,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const hasSop=(t.soportes||[]).length>0;
   const pendVer=taskPendienteVerificacion(t);
   const verDocumento=!!opts.verDocumento;
+  const isConsultaVista=!!opts.consultaVista;
   const verRevisado=!!opts.verRevisado;
   const ofiFaseOpen=String((t.firmaWf&&t.firmaWf.fase)||(typeof taskFirmaFase==='function'?taskFirmaFase(t):'')||'').trim();
   const isOficinaDocRespondida=!!opts.oficinaDocRespondida||(!!verDocumento&&t.origen==='oficina_firma'&&(
@@ -19730,7 +19747,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   // Documento/comunicado Respondidas: siempre rail depto (Secretaría / oficinas / DS)
   const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista||isOficinaDocRespondida;
   const isDeptVerDoc=isDeptVerDocBase&&!opts.porNotificarVista;
-  const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista;
+  const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista||isConsultaVista;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
   const isRespVerCorr=isRespVerDoc&&(miEstResp==='Por corregir'||est==='Por corregir');
   const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
@@ -19741,7 +19758,8 @@ function openTaskCommentsModal(expId,taskId,opts){
   );
   const isRespVerPorNotificar=!!opts.porNotificarVista||!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
   // Respondidas oficina: mostrar todos los soportes (no filtrar «aprobados»)
-  const forceSoloAprobados=!isOficinaDocRespondida&&(!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar);
+  // Consulta: todos los documentos de la actividad (no solo aprobados)
+  const forceSoloAprobados=!isOficinaDocRespondida&&!isConsultaVista&&(!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar);
   const pqrsPostAprobVista=!!(e&&(
     (typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))
     ||(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))
@@ -19754,7 +19772,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))
     ||(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
   ));
-  const isPqrsOrigenView=isVerDocMode&&e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+  const isPqrsOrigenView=!isConsultaVista&&isVerDocMode&&e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
     &&!forceSoloAprobados
     &&!isRespVerCorr
     &&!isRespVerEntregaPendiente
@@ -19784,8 +19802,8 @@ function openTaskCommentsModal(expId,taskId,opts){
     const uniWide=false;
     modal.classList.toggle('task-modal-wide',!chatOnly&&!soloGestion&&(hasSop||canDeptVerificarCierre(t)||pqrsReviewWide||docsWide.length>=2||isReviewDelivery));
     modal.classList.toggle('task-modal-review',!!isReviewDelivery);
-    modal.classList.toggle('task-modal-resp-ver',!!(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isPqrsOrigenView||isDeptVerDoc));
-    modal.classList.toggle('task-modal-review-wa-side',!!(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc));
+    modal.classList.toggle('task-modal-resp-ver',!!(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isPqrsOrigenView||isDeptVerDoc||isConsultaVista));
+    modal.classList.toggle('task-modal-review-wa-side',!!(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc||isConsultaVista));
     modal.classList.toggle('enviar-modal-only',chatOnly||soloGestion);
     modal.classList.toggle('task-modal-chat',!!(chatOnly&&chatUnificado));
     modal.classList.remove('task-modal-archivos');
@@ -19840,7 +19858,9 @@ function openTaskCommentsModal(expId,taskId,opts){
       else if(isVerDocMode&&!hasSop)window._taskReviewSideMode='exp';
       else window._taskReviewSideMode='doc';
     }
-    const railNav=directorRevisarPorFirmar&&typeof taskReviewDirectorPorFirmarRailHtml==='function'
+    const railNav=isConsultaVista&&typeof taskReviewConsultaVistaRailHtml==='function'
+      ?taskReviewConsultaVistaRailHtml(refAct,taskId,t,e)
+      :(directorRevisarPorFirmar&&typeof taskReviewDirectorPorFirmarRailHtml==='function'
       ?taskReviewDirectorPorFirmarRailHtml(refAct,taskId,t,{hideCargarFirmado:!!directorFirmadosVista})
       :(forcePorFirmarVista&&typeof taskReviewPorFirmarRailHtml==='function'
       ?taskReviewPorFirmarRailHtml(refAct,taskId,t,e)
@@ -19855,9 +19875,9 @@ function openTaskCommentsModal(expId,taskId,opts){
     const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(isOficinaDocRespondida?'Documento / comunicado':(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión'))))))+' · '+(t.codigo||expId);
+    if(tit)tit.textContent=(isConsultaVista?'Documentos de la actividad':(isOficinaDocRespondida?'Documento / comunicado':(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))))))+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
-      '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc?' task-review-layout-resp':'')+'">'+
+      '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc||isConsultaVista?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
         (railNav?'<aside class="task-review-rail" aria-label="Acciones">'+railNav+'</aside>':'')+
       '</div>';
@@ -19880,7 +19900,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     }
     const soportes=t.soportes||[];
     const activo=getSoporteActivo(t);
-    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,oficinaDocRespondida:!!isOficinaDocRespondida,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosVista:!!directorFirmadosVista,directorFirmadosSopIds:(opts.directorFirmadosSopIds!=null?opts.directorFirmadosSopIds:((window._taskModalCtx||{}).directorFirmadosSopIds))||null,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar,entregaDirectaPqrs:!!((window._taskModalCtx||{}).entregaDirectaPqrs||opts.entregaDirectaPqrs)};
+    window._taskModalCtx={expId,taskId,actLibre:!!t.sinExpediente,isReviewDelivery:!!isReviewDelivery,verDocumento:!!opts.verDocumento,consultaVista:!!isConsultaVista,oficinaDocRespondida:!!isOficinaDocRespondida,isRespVerDoc:!!isRespVerDoc,isRespVerEntregaPendiente:!!isRespVerEntregaPendiente,isDeptVerDoc:!!isDeptVerDoc,isPqrsOrigenView:!!isPqrsOrigenView,isRespVerCorr:!!isRespVerCorr,isDeptReviewWa:!!isDeptReviewWa,porFirmarVista:!!forcePorFirmarVista,directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosVista:!!directorFirmadosVista,directorFirmadosSopIds:(opts.directorFirmadosSopIds!=null?opts.directorFirmadosSopIds:((window._taskModalCtx||{}).directorFirmadosSopIds))||null,cargarFirmadoVista:!!cargarFirmadoVista,isRespVerPorNotificar:!!isRespVerPorNotificar,porNotificarVista:!!opts.porNotificarVista,openNotificar:!!opts.openNotificar,entregaDirectaPqrs:!!((window._taskModalCtx||{}).entregaDirectaPqrs||opts.entregaDirectaPqrs)};
     window._soportePaginaActual=1;
     window._soportePaginaFiltro='all';
     const selSop=window._taskSopSel;
@@ -20149,7 +20169,7 @@ function renderTaskConsultaItem(e,t,qs){
   const coBtn=ciu?'':taskCoEjecutorBtnHtml(expId,t.id);
   const respLbl=ciu?'':taskEsMultiAsignada(t)?taskResponsablesLabel(t,false):(t.responsable||'');
   const cmtBtn=ciu?'':taskChatBtnHtml(expId,t.id,t);
-  const sopBtn=(!ciu&&ns)?'<button type="button" class="btn bsm bic" title="'+ns+' documento(s)" onclick="openTaskCommentsModal(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\')">📎</button>':'';
+  const sopBtn=(!ciu&&ns)?'<button type="button" class="btn bsm bic" title="'+ns+' documento(s) de la actividad" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\',{consultaVista:true})">📎</button>':'';
   const agBtn=ciu?'':taskAgendaBtnHtml(expId,t.id);
   return '<div class="tkv" style="'+del+'">'+
     '<div class="tvd '+dc+'"></div>'+
