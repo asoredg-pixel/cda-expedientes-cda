@@ -14777,12 +14777,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
       const a=ensureAsignado(t,rep);
       a.fechaReportada=hoyRep;
+      a.fechaAtendida='';
       a.estado='por_verificar';
+      // Si no quedan otros en por_corregir, la agregada pasa a Por verificar
+      t.fechaAtendida='';
     }else{
       t.fechaReportada=hoyRep;
       t.estado='Por verificar';
       (t.asignados||[]).forEach(a=>{
-        if(a.estado!=='atendido'){a.fechaReportada=hoyRep;a.estado='por_verificar';}
+        if(a.estado!=='atendido'){a.fechaReportada=hoyRep;a.fechaAtendida='';a.estado='por_verificar';}
       });
     }
     t.fechaAtendida='';
@@ -14792,6 +14795,11 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     t.historial.push({tipo:'reenvio_verificacion',fecha:hoyRep,ts:Date.now(),por:rep,reportadoPor:rep,version:v,nota:cmt||''});
     if(typeof applyEntregaNotifCorreoToTask==='function')applyEntregaNotifCorreoToTask(t);
     syncTaskAggregateState(t);
+    // Defensa: tras corrección no debe quedar «Por corregir» si ya hay entrega pendiente de revisión
+    if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir'&&(t.fechaReportada||(t.asignados||[]).some(function(a){return a&&a.estado==='por_verificar';}))){
+      t.estado='Por verificar';
+      if(!t.fechaReportada)t.fechaReportada=hoyRep;
+    }
   });
   if(ok){
     const toDel=(window._soportesDriveABorrar||[]).slice();
@@ -24834,6 +24842,17 @@ function actividadCuentaComoPorRevisar(t){
     return true;
   return estadoTask(src)==='Por verificar';
 }
+/** Deuda de corrección: solo mientras NO esté ya reentregada / en «Por revisar». */
+function actividadCuentaComoPorCorregir(t){
+  if(!t||t.eliminada)return false;
+  if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return false;
+  if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return false;
+  const est=typeof estadoTaskParaBandejaUsuario==='function'?estadoTaskParaBandejaUsuario(t)
+    :(typeof estadoTask==='function'?estadoTask(t):'');
+  if(est==='Por verificar'||est==='Atendida'||est==='Eliminada')return false;
+  return est==='Por corregir';
+}
+window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
 function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='porfirma'){
     return mergeActividadLists(
@@ -24935,7 +24954,9 @@ function filtrarActividadesPorEstado(list,filtro){
     }
     return out;
   }
-  if(filtro==='porcorr')return list.filter(t=>estadoTask(t)==='Por corregir');
+  if(filtro==='porcorr')return(list||[]).filter(function(t){
+    return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
+  });
   if(filtro==='done')return list.filter(t=>{
     const yoResp=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
     if(yoResp){
@@ -25131,7 +25152,9 @@ function renderActividades(){
   const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(porverScope):getTareasResponsableActivo(),'act');
   const porrevisar=filtrarActividadesPorEstado(porverBase,'porver').length;
   const nRevisados=deptView?filtrarActividadesPorEstado(porverBase,'revisados').length:0;
-  const porcorr=(deptView?porverBase:all).filter(t=>estadoTask(t)==='Por corregir').length;
+  const porcorr=(deptView?porverBase:all).filter(function(t){
+    return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
+  }).length;
   const done=filtrarActividadesPorEstado(all,'done').length;
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
@@ -25153,7 +25176,7 @@ function renderActividades(){
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. No se mezclan con «Por ejecutar».';
+    else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. Al reentregar pasan a «Por revisar».';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
@@ -26622,7 +26645,7 @@ function matchActividadFiltro(e,qact){
   if(qact==='ate')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Atendida');
   if(qact==='venc')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Vencida');
   if(qact==='porver')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Por verificar');
-  if(qact==='porcorr')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Por corregir');
+  if(qact==='porcorr')return tasks.some(t=>!t.eliminada&&(typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir'));
   return true;
 }
 function depOpts(v){return '<option value="">-- Departamento --</option>'+Object.keys(MUN_DEP).map(d=>'<option value="'+d+'"'+(v===d?' selected':'')+'>'+d+'</option>').join('');}
