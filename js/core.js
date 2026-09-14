@@ -19858,16 +19858,20 @@ function openTaskCommentsModal(expId,taskId,opts){
       else if(isVerDocMode&&!hasSop)window._taskReviewSideMode='exp';
       else window._taskReviewSideMode='doc';
     }
-    const railNav=isConsultaVista&&typeof taskReviewConsultaVistaRailHtml==='function'
-      ?taskReviewConsultaVistaRailHtml(refAct,taskId,t,e)
-      :(directorRevisarPorFirmar&&typeof taskReviewDirectorPorFirmarRailHtml==='function'
-      ?taskReviewDirectorPorFirmarRailHtml(refAct,taskId,t,{hideCargarFirmado:!!directorFirmadosVista})
-      :(forcePorFirmarVista&&typeof taskReviewPorFirmarRailHtml==='function'
-      ?taskReviewPorFirmarRailHtml(refAct,taskId,t,e)
-      :(isPqrsOrigenView?taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e)
-      :(isRespVerPorNotificar&&typeof taskReviewRespPorNotificarRailHtml==='function'
-      ?taskReviewRespPorNotificarRailHtml(refAct,taskId,t)
-      :(isRespVerEntregaPendiente?taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t):(isRespVerCorr||isRespVerDoc?taskReviewRespVerRailHtml(refAct,taskId,t):(isDeptVerDoc?(pqrsPendRevVista?taskReviewFullRailHtml(refAct,taskId,t):taskReviewActividadVerRailHtml(refAct,taskId,t,e)):taskReviewFullRailHtml(refAct,taskId,t)))))));
+    let railNav='';
+    if(isConsultaVista&&typeof taskReviewConsultaVistaRailHtml==='function')
+      railNav=taskReviewConsultaVistaRailHtml(refAct,taskId,t,e);
+    else if(directorRevisarPorFirmar&&typeof taskReviewDirectorPorFirmarRailHtml==='function')
+      railNav=taskReviewDirectorPorFirmarRailHtml(refAct,taskId,t,{hideCargarFirmado:!!directorFirmadosVista});
+    else if(forcePorFirmarVista&&typeof taskReviewPorFirmarRailHtml==='function')
+      railNav=taskReviewPorFirmarRailHtml(refAct,taskId,t,e);
+    else if(isPqrsOrigenView)railNav=taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e);
+    else if(isRespVerPorNotificar&&typeof taskReviewRespPorNotificarRailHtml==='function')
+      railNav=taskReviewRespPorNotificarRailHtml(refAct,taskId,t);
+    else if(isRespVerEntregaPendiente)railNav=taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t);
+    else if(isRespVerCorr||isRespVerDoc)railNav=taskReviewRespVerRailHtml(refAct,taskId,t);
+    else if(isDeptVerDoc)railNav=pqrsPendRevVista?taskReviewFullRailHtml(refAct,taskId,t):taskReviewActividadVerRailHtml(refAct,taskId,t,e);
+    else railNav=taskReviewFullRailHtml(refAct,taskId,t);
     const pqrsRespBanner='';
     const reviewMainInner=pqrsRespBanner+sopPanel;
     // Origen PQRSD no trae split/side-panel: envolver. El resto (isReview) ya incluye
@@ -19875,7 +19879,19 @@ function openTaskCommentsModal(expId,taskId,opts){
     const reviewWorkspaceInner=isPqrsOrigenView
       ?wrapTaskReviewMainWithSidePanel(reviewMainInner)
       :('<div class="task-review-main">'+reviewMainInner+'</div>');
-    if(tit)tit.textContent=(isConsultaVista?'Documentos de la actividad':(isOficinaDocRespondida?'Documento / comunicado':(directorRevisarPorFirmar?(directorFirmadosVista?'Ver documento':'Revisión Director · por firmar'):(isPqrsOrigenView?'PQRSD · correo y solicitud':(isRespVerPorNotificar?'Documento a notificar':(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente?'Revisión':(isVerDocMode?(isRespVerCorr?'Documento devuelto · observaciones':(isRespVerEntregaPendiente?'Entrega enviada':(t.sinExpediente?'Actividad asignada':'Documento y observaciones'))):'Revisión')))))))+' · '+(t.codigo||expId);
+    let titReview='Revisión';
+    if(isConsultaVista)titReview='Documentos de la actividad';
+    else if(isOficinaDocRespondida)titReview='Documento / comunicado';
+    else if(directorRevisarPorFirmar)titReview=directorFirmadosVista?'Ver documento':'Revisión Director · por firmar';
+    else if(isPqrsOrigenView)titReview='PQRSD · correo y solicitud';
+    else if(isRespVerPorNotificar)titReview='Documento a notificar';
+    else if(isDeptReviewWa&&!isRespVerCorr&&!isRespVerEntregaPendiente)titReview='Revisión';
+    else if(isVerDocMode){
+      if(isRespVerCorr)titReview='Documento devuelto · observaciones';
+      else if(isRespVerEntregaPendiente)titReview='Entrega enviada';
+      else titReview=t.sinExpediente?'Actividad asignada':'Documento y observaciones';
+    }
+    if(tit)tit.textContent=titReview+' · '+(t.codigo||expId);
     body.innerHTML=statusRow+
       '<div class="task-review-layout'+(isRespVerCorr||isRespVerEntregaPendiente||isRespVerPorNotificar||isDeptReviewWa||isPqrsOrigenView||isDeptVerDoc||isConsultaVista?' task-review-layout-resp':'')+'">'+
         '<div class="task-review-workspace">'+reviewWorkspaceInner+'</div>'+
