@@ -5299,7 +5299,7 @@ function applyActAgendaDockSide(side,showCal,opts){
       dock.style.left='auto';
     }
   }
-  if(toggle)toggle.style.display='';
+  if(toggle)toggle.style.display='flex';
   if(wasOn)dock.classList.add('on');
   updateActAgendaCalToggleUi(!!showCal);
 }
@@ -5458,7 +5458,7 @@ function buildMiDiaTasksPrintSection(resp){
 function buildAgendaPrintHtml(resp){
   const mesRef=window._agendaMes||new Date();
   const diaSel=window._agendaDiaSel||hoy();
-  const eventos=getAgendaEventosResponsable(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
+  const eventos=getAgendaEventosParaCalendario(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
   const now=new Date().toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
   const ws=agendaSemanaInicio(mesRef,diaSel);
   const we=new Date(ws);we.setDate(ws.getDate()+6);
@@ -5655,6 +5655,23 @@ function getAgendaEventosResponsable(nombre,deptoId){
     return agendaEventoVisible(ev);
   });
 }
+/** Calendario del usuario activo: eventos propios + (encargado) lo asignado a responsables, 1 por batch. */
+function getAgendaEventosParaCalendario(nombre,deptoId){
+  const list=getAgendaEventosResponsable(nombre,deptoId).slice();
+  if(!(esVistaActividadesDepto()&&!esModoResponsable()))return list;
+  const byId=new Set(list.map(ev=>ev.id));
+  const batchSeen=new Set(list.filter(ev=>ev.batch).map(ev=>ev.batch));
+  getAgendaEventosCreadosPorEncargado().forEach(ev=>{
+    if(byId.has(ev.id))return;
+    const k=ev.batch||ev.id;
+    if(ev.batch&&batchSeen.has(ev.batch))return;
+    if(batchSeen.has(k))return;
+    batchSeen.add(k);
+    byId.add(ev.id);
+    list.push(ev);
+  });
+  return list;
+}
 function marcarAgendaLeido(id){
   const ev=(agendaEventos||[]).find(x=>x.id===id);
   if(ev){ev.leido=true;saveLS();renderBandejaDepto();}
@@ -5681,7 +5698,7 @@ function crearAgendaEvento(data){
   agendaEventos.push(ev);
   saveLS();
   renderBandejaDepto();
-  if(document.getElementById('pg-agenda').classList.contains('on'))renderAgenda();
+  if(typeof renderAgenda==='function')renderAgenda();
   const syncGcal=data.syncGcal!==false&&(data.syncGcal===true||(document.getElementById('agenda-f-gcal')&&document.getElementById('agenda-f-gcal').checked));
   if(syncGcal&&(ev.tipo==='personal'||ev.tipo==='desde_actividad')&&typeof gmailCalendarCreateEvent==='function'&&typeof gmailHasCalendarScope==='function'&&gmailHasCalendarScope()&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
     gmailCalendarCreateEvent(ev).then(function(gEv){
@@ -5935,7 +5952,7 @@ function renderAgenda(){
   }
   const mesRef=window._agendaMes||new Date();
   const diaSel=window._agendaDiaSel||hoy();
-  const sstEv=getAgendaEventosResponsable(resp);
+  const sstEv=getAgendaEventosParaCalendario(resp);
   const gcalEv=Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[];
   const eventos=sstEv.concat(gcalEv);
   const vista=window._agendaVista||'mes';
@@ -6037,7 +6054,7 @@ function _renderAgendaPaintOnly(){
   if(!resp)return;
   const mesRef=window._agendaMes||new Date();
   const diaSel=window._agendaDiaSel||hoy();
-  const eventos=getAgendaEventosResponsable(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
+  const eventos=getAgendaEventosParaCalendario(resp).concat(Array.isArray(window._agendaGcalEvents)?window._agendaGcalEvents:[]);
   const vista=window._agendaVista||'mes';
   const wrap=agendaEl('cal-wrap');
   const grid=agendaEl('cal-grid');
@@ -6067,7 +6084,7 @@ function openAgendaAsignarModal(){
   if(tit)tit.textContent='Evento para responsables del departamento';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const chk=names.map(n=>'<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px"><input type="checkbox" class="agenda-asig-chk" value="'+escAttr(n)+'"> '+escAttr(n)+'</label>').join('');
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado y en su campanita 🔔.</div>'+
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado, en su campanita 🔔 y en el calendario del encargado.</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Título</label><input type="text" id="agenda-asig-titulo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><textarea id="agenda-asig-detalle" style="width:100%;min-height:52px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif"></textarea></div>'+
     '<div class="fg" style="margin-bottom:8px"><div class="fld"><label>Fecha</label><input type="date" id="agenda-asig-fecha" value="'+hoy()+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -6090,6 +6107,7 @@ function submitAgendaAsignar(){
   const nombres=Array.from(document.querySelectorAll('.agenda-asig-chk:checked')).map(c=>c.value);
   if(crearAgendaEventosAsignados({titulo:tit,detalle:det,fecha,hora,depto:deptoActivo,creadoPor:getEncargadoDepto(deptoActivo)},nombres)){
     closeTaskModal();
+    if(window._actAgendaShowCal&&typeof renderAgenda==='function')renderAgenda();
   }
 }
 function getAgendaEventosForTask(expId,taskId){
@@ -6717,6 +6735,8 @@ function cerrarActAgendaPanel(){
     }
     const btnCal=document.getElementById('btn-tasks-calendario');
     if(btnCal)btnCal.style.display='none';
+    const toggle=document.getElementById('act-agenda-cal-toggle');
+    if(toggle)toggle.style.display='none';
     updateActAgendaCalToggleUi(false);
     void dock.offsetWidth;
     dock.style.transition='';
