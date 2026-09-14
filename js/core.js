@@ -20561,27 +20561,91 @@ function sortTasksByUrgency(tasks){
     return (a.vence||'9999').localeCompare(b.vence||'9999');
   });
 }
-function sortTasksRevisadas(tasks){
-  function rank(t){
-    const rev=getTaskRevisionDepto(t);
-    const est=estadoTask(t);
-    if((rev&&rev.tipo==='corregir')||est==='Por corregir')return 0;
-    if(!!t.prioritaria&&!(typeof taskPrioridadMarcadoresResueltos==='function'?taskPrioridadMarcadoresResueltos(t):est==='Atendida'))return 1;
-    if(est==='Vencida')return 2;
-    if(est!=='Atendida')return 3;
-    return 4;
+/** Normaliza fecha/ts a ISO comparable (vacío = desconocido). */
+function agendaSortTsKey(v){
+  if(v==null||v==='')return '';
+  if(typeof v==='number'&&isFinite(v)){
+    const d=new Date(v<1e12?v*1000:v);
+    return isNaN(d.getTime())?'':d.toISOString();
   }
-  return [...tasks].sort((a,b)=>{
-    const ra=rank(a),rb=rank(b);
-    if(ra!==rb)return ra-rb;
-    const pa=!!a.prioritaria,pb=!!b.prioritaria;
-    if(pa!==pb)return pa?-1:1;
-    const revA=getTaskRevisionDepto(a),revB=getTaskRevisionDepto(b);
-    const fa=(revA&&revA.fecha)||a.vence||'';
-    const fb=(revB&&revB.fecha)||b.vence||'';
-    if(fa!==fb)return fb.localeCompare(fa);
-    return (a.vence||'9999').localeCompare(b.vence||'9999');
+  const s=String(v).trim();
+  if(!s)return '';
+  if(/^\d{10,13}$/.test(s)){
+    const n=+s;
+    const d=new Date(n<1e12?n*1000:n);
+    return isNaN(d.getTime())?'':d.toISOString();
+  }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s+'T00:00:00.000Z';
+  const d=new Date(s);
+  return isNaN(d.getTime())?s:d.toISOString();
+}
+function taskHistUltimoTs(t,tipos){
+  const hist=(t&&t.historial)||[];
+  const set=tipos instanceof Set?tipos:new Set(tipos||[]);
+  for(let i=hist.length-1;i>=0;i--){
+    const h=hist[i];
+    if(!h||!set.has(h.tipo))continue;
+    if(h.ts!=null&&h.ts!=='')return agendaSortTsKey(h.ts);
+    if(h.fecha)return agendaSortTsKey(h.fecha);
+  }
+  return '';
+}
+/** Fecha en que entró a «Revisados» (última revisión / envío a firma / proyección). */
+function taskFechaEntradaRevisadosKey(t){
+  if(!t)return '';
+  const rev=typeof getTaskRevisionDepto==='function'?getTaskRevisionDepto(t):null;
+  if(rev&&rev.fecha)return agendaSortTsKey(rev.fecha);
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.fecha)return agendaSortTsKey(t.ultimaRevisionDepto.fecha);
+  const fromHist=taskHistUltimoTs(t,['verificacion','ajuste_soporte','enviar_firma','atajo_firmado_revision','pqrs_proyeccion_atendida','cierre_pqrs','notif_devuelta_corregir','revision_nca_aprobado','revision_nca_aprobado_oficio','revision_nca_rechazado']);
+  if(fromHist)return fromHist;
+  return agendaSortTsKey(t.fechaAtendida||t.fechaReportada||'');
+}
+/** Fecha en que pasó a flujo de firma. */
+function taskFechaEntradaPorFirmaKey(t){
+  if(!t)return '';
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  const wfT=t.firmaWf||{};
+  const wfE=e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const iso=wfT.enviado_firma_en||wfE.enviado_firma_en||wfT.para_firma_en||wfE.para_firma_en||'';
+  if(iso)return agendaSortTsKey(iso);
+  const fromHist=taskHistUltimoTs(t,['enviar_firma','atajo_firmado_revision','oficina_a_por_firmar']);
+  if(fromHist)return fromHist;
+  return taskFechaEntradaRevisadosKey(t);
+}
+/** Fecha de cierre / entrada a «Atendidas». */
+function taskFechaEntradaAtendidaKey(t){
+  if(!t)return '';
+  if(t.fechaAtendida)return agendaSortTsKey(t.fechaAtendida);
+  const fromHist=taskHistUltimoTs(t,['verificacion','cierre_pqrs','pqrs_proyeccion_atendida']);
+  if(fromHist)return fromHist;
+  return '';
+}
+function sortTasksByFechaEntradaDesc(tasks,keyFn){
+  return [...(tasks||[])].sort(function(a,b){
+    const fa=keyFn(a)||'';
+    const fb=keyFn(b)||'';
+    if(fa!==fb){
+      if(!fa)return 1;
+      if(!fb)return -1;
+      return fb.localeCompare(fa);
+    }
+    const ea=String(a&&(a.exp||a.codigo)||'');
+    const eb=String(b&&(b.exp||b.codigo)||'');
+    if(ea!==eb)return ea.localeCompare(eb);
+    return String(a&&a.id||'').localeCompare(String(b&&b.id||''));
   });
+}
+/** Revisados: más reciente revisado / pasado a la paleta primero. */
+function sortTasksRevisadas(tasks){
+  return sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaRevisadosKey);
+}
+/** Por firmar: más reciente enviado a firma primero. */
+function sortTasksPorFirma(tasks){
+  return sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaPorFirmaKey);
+}
+/** Atendidas: más reciente cerrado primero. */
+function sortTasksAtendidas(tasks){
+  return sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaAtendidaKey);
 }
 function minTaskVenceExp(e,resp){
   const ts=(e.tasks||[]).filter(t=>(!resp||t.responsable===resp)&&estadoTask(t)!=='Atendida');
@@ -25171,7 +25235,9 @@ function renderActividades(){
   if(q)list=list.filter(t=>matchActividadSearch(t,q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
     (filtroAct==='porver'?sortTasksPorRevisar(list):
-    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):sortTasksByUrgency(list)));
+    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):
+    (filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados'?sortTasksPorFirma(list):
+    (filtroAct==='done'?sortTasksAtendidas(list):sortTasksByUrgency(list)))));
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
