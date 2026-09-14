@@ -5655,21 +5655,27 @@ function getAgendaEventosResponsable(nombre,deptoId){
     return agendaEventoVisible(ev);
   });
 }
-/** Calendario del usuario activo: eventos propios + (encargado) lo asignado a responsables, 1 por batch. */
+/** Agrupa eventos asignados del mismo envío (batch) o, si falta, título+fecha+hora+creador. */
+function agendaAsignadoGroupKey(ev){
+  if(!ev)return '';
+  if(ev.batch)return 'batch:'+ev.batch;
+  return 'asig:'+agendaNorm(ev.creadoPor||'')+'|'+(ev.fecha||'').slice(0,10)+'|'+(ev.hora||'')+'|'+agendaNorm(ev.titulo||'')+'|'+(ev.depto||'');
+}
+/** Calendario del usuario activo: eventos propios + (encargado) lo asignado a responsables, 1 por envío. */
 function getAgendaEventosParaCalendario(nombre,deptoId){
-  const list=getAgendaEventosResponsable(nombre,deptoId).slice();
-  if(!(esVistaActividadesDepto()&&!esModoResponsable()))return list;
-  const byId=new Set(list.map(ev=>ev.id));
-  const batchSeen=new Set(list.filter(ev=>ev.batch).map(ev=>ev.batch));
-  getAgendaEventosCreadosPorEncargado().forEach(ev=>{
-    if(byId.has(ev.id))return;
-    const k=ev.batch||ev.id;
-    if(ev.batch&&batchSeen.has(ev.batch))return;
-    if(batchSeen.has(k))return;
-    batchSeen.add(k);
-    byId.add(ev.id);
+  const own=getAgendaEventosResponsable(nombre,deptoId);
+  if(!(esVistaActividadesDepto()&&!esModoResponsable()))return own;
+  const list=[];
+  const seen=new Set();
+  const pushOnce=function(ev){
+    if(!ev)return;
+    const k=ev.tipo==='asignado'?agendaAsignadoGroupKey(ev):('id:'+ev.id);
+    if(!k||seen.has(k))return;
+    seen.add(k);
     list.push(ev);
-  });
+  };
+  own.forEach(pushOnce);
+  getAgendaEventosCreadosPorEncargado().forEach(pushOnce);
   return list;
 }
 function marcarAgendaLeido(id){
@@ -5687,6 +5693,7 @@ function crearAgendaEvento(data){
     depto:data.depto||deptoActivo,
     creadoPor:data.creadoPor||getAgendaResponsableActivo()||taskComentarioAutor(),
     tipo:data.tipo||'personal',
+    batch:data.batch||null,
     taskRef:data.taskRef||null,
     criterio:String(data.criterio||'').trim(),
     notas:String(data.notas||'').trim(),
@@ -6084,7 +6091,7 @@ function openAgendaAsignarModal(){
   if(tit)tit.textContent='Evento para responsables del departamento';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const chk=names.map(n=>'<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px"><input type="checkbox" class="agenda-asig-chk" value="'+escAttr(n)+'"> '+escAttr(n)+'</label>').join('');
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado, en su campanita 🔔 y en el calendario del encargado.</div>'+
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado, en su campanita 🔔 y en el calendario del encargado (una sola vez).</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Título</label><input type="text" id="agenda-asig-titulo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><textarea id="agenda-asig-detalle" style="width:100%;min-height:52px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif"></textarea></div>'+
     '<div class="fg" style="margin-bottom:8px"><div class="fld"><label>Fecha</label><input type="date" id="agenda-asig-fecha" value="'+hoy()+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -6094,6 +6101,15 @@ function openAgendaAsignarModal(){
     '<div id="agenda-asig-chks" style="max-height:160px;overflow:auto;border:1px solid var(--bd);border-radius:var(--r);padding:8px;background:var(--sf2)">'+chk+'</div></div>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="submitAgendaAsignar()">Enviar a responsables</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
+  // Tasks dock suele quedar elevado: el modal debe quedar por encima
+  let zModal=typeof SST_Z_TASK_MODAL!=='undefined'?SST_Z_TASK_MODAL:99999;
+  [document.getElementById('act-agenda-dock'),document.getElementById('act-agenda-overlay')].forEach(function(el){
+    if(!el||!el.classList.contains('on'))return;
+    const raw=el.style.zIndex||(window.getComputedStyle?window.getComputedStyle(el).zIndex:'');
+    const dz=parseInt(String(raw||''),10);
+    if(dz&&dz>=zModal)zModal=dz+20;
+  });
+  if(typeof elevateOverlayAboveModals==='function')elevateOverlayAboveModals(ov,zModal);
 }
 function toggleAgendaAsigTodos(){
   const all=document.getElementById('agenda-asig-todos');

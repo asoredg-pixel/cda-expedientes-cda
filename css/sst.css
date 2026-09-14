@@ -2206,7 +2206,7 @@ body.task-review-doc-mode #task-modal-overlay{
   border-right:1px solid var(--bd)!important;
   border-radius:0!important;
   box-shadow:none!important;
-  z-index:2;
+  z-index:1;
 }
 #act-agenda-panel .act-agenda-panel-hdr,
 #act-agenda-panel .con-side-panel-hdr{
@@ -2226,7 +2226,7 @@ body.task-review-doc-mode #task-modal-overlay{
   display:none;align-items:center;justify-content:center;
   border:0;border-left:1px solid rgba(0,0,0,.08);border-right:1px solid rgba(0,0,0,.08);
   background:#ebe8e0;color:#5f6368;cursor:pointer;
-  font-size:20px;line-height:1;padding:0;z-index:5;
+  font-size:20px;line-height:1;padding:0;z-index:5;position:relative;
   font-family:inherit;touch-action:manipulation;
 }
 .act-agenda-dock.act-agenda-dock-left .act-agenda-cal-toggle,
