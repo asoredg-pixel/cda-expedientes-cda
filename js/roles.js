@@ -790,7 +790,8 @@ async function aplicarSyncUsuariosAutorizados(opts){
   if(!opts.skipSave&&window._db&&window._fsSetDoc){
     try{await saveFirestore();}catch(err){console.error('Error sincronizando encargados/responsables:',err);}
   }
-  if(!opts.silent&&(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')))renderListasCfg();
+  if(opts.silent)return;
+  if((document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on')))renderListasCfg();
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
 }
 function findInstructorByEmail(email){

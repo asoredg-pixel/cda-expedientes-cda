@@ -1404,7 +1404,8 @@ function initRealtimeGlobalSync(){
       const partial=typeof _usuariosCachePartial!=='undefined'&&_usuariosCachePartial;
       if(!cur||g.usuariosIndex.length>=cur||partial){
         aplicarUsuariosIndex(g.usuariosIndex);
-        if(typeof paintUsuariosCfgTable==='function')paintUsuariosCfgTable();
+        if(typeof schedulePaintUsuariosCfgTable==='function')schedulePaintUsuariosCfgTable();
+        else if(typeof paintUsuariosCfgTable==='function')paintUsuariosCfgTable();
         changed=true;
       }
     }

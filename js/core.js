@@ -12262,13 +12262,34 @@ function exportarAuditLogCompleto(){
   notif('Log de auditoría exportado ('+entries.length+' entradas)','ok');
 }
 function rolesFirestoreOpts(selected){
+  selected=String(selected||'');
   const excluir=new Set(['ciudadano','contratista']);
   const seen=new Set();
   const opts=[];
-  ROLES_INGRESO.forEach(r=>{if(!seen.has(r.id)&&!excluir.has(r.id)){seen.add(r.id);opts.push(r);}});
+  const list=(typeof ROLES_INGRESO!=='undefined'&&Array.isArray(ROLES_INGRESO))?ROLES_INGRESO:[];
+  list.forEach(function(r){
+    if(!r||!r.id||seen.has(r.id)||excluir.has(r.id))return;
+    seen.add(r.id);
+    opts.push(r);
+  });
   let h=selected?'':'<option value="">— Seleccione rol —</option>';
-  h+=opts.map(r=>'<option value="'+escAttr(r.id)+'"'+(selected===r.id?' selected':'')+'>'+escAttr(r.titulo)+'</option>').join('');
+  h+=opts.map(function(r){
+    return '<option value="'+escAttr(r.id)+'"'+(selected===r.id?' selected':'')+'>'+escAttr(r.titulo||r.id)+'</option>';
+  }).join('');
   return h;
+}
+/** Rellena el select de rol si quedó vacío o incompleto (p. ej. tras repintes del listener). */
+function ensureUsuariosRolSelectOpts(selected){
+  const rol=document.getElementById('usu-fs-rol');
+  if(!rol||rol.tagName!=='SELECT')return;
+  const cur=selected!=null&&selected!==''?String(selected):String(rol.value||'');
+  const hasReal=Array.prototype.some.call(rol.options||[],function(o){return o&&String(o.value||'').trim();});
+  if(hasReal&&rol.options.length>1){
+    if(cur)try{rol.value=cur;}catch(_e){}
+    return;
+  }
+  rol.innerHTML=rolesFirestoreOpts(cur);
+  if(cur)try{rol.value=cur;}catch(_e2){}
 }
 function tituloRolFirestore(rolId){
   if(rolId==='contratista')return 'Responsables';
@@ -12342,6 +12363,9 @@ let _usuariosFsUnsub=null;
 let _usuariosToggleBusy=false;
 let _usuariosPaintTimer=null;
 let _usuariosListasTimer=null;
+let _usuariosLastPaintSig='';
+let _usuariosIndexPersistTimer=null;
+let _usuariosSnapSyncTimer=null;
 function sortUsuariosCache(){
   _usuariosCache.sort((a,b)=>String(a.nombre||a.email).localeCompare(String(b.nombre||b.email),'es'));
 }
@@ -12480,16 +12504,18 @@ function startUsuariosFirestoreListener(){
       }else{
         aplicarUsuariosIndex(list);
         _usuariosCachePartial=false;
-        persistUsuariosIndexGlobal().catch(()=>{});
       }
     }else{
       mergeUsuariosColeccionEnCache(list);
       _usuariosCacheLoaded=true;
       try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
     }
+    // Solo pintar tabla (debounce). Persistir índice / sync encargados: aparte y sin refrescar toda la UI
+    // (evitar bucle snapshot → global → paint que vacía el select de rol y hace titilar Editar).
     schedulePaintUsuariosCfgTable();
     if(isAdminVista&&!_usuariosCachePartial){
-      aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
+      schedulePersistUsuariosIndexFromSnap();
+      scheduleSyncUsuariosFromSnap();
     }else{
       if(typeof syncEncargadosDesdeUsuariosAutorizados==='function'){
         syncEncargadosDesdeUsuariosAutorizados({preserveMissing:true});
@@ -12505,12 +12531,42 @@ function startUsuariosFirestoreListener(){
     if(!_usuariosToggleBusy)refreshUsuariosAutorizadosUi();
   });
 }
+function schedulePersistUsuariosIndexFromSnap(){
+  if(!(typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta()))return;
+  if(_usuariosIndexPersistTimer)clearTimeout(_usuariosIndexPersistTimer);
+  _usuariosIndexPersistTimer=setTimeout(function(){
+    _usuariosIndexPersistTimer=null;
+    if(_usuariosToggleBusy)return;
+    persistUsuariosIndexGlobal().catch(function(){});
+  },1800);
+}
+function scheduleSyncUsuariosFromSnap(){
+  if(_usuariosSnapSyncTimer)clearTimeout(_usuariosSnapSyncTimer);
+  _usuariosSnapSyncTimer=setTimeout(function(){
+    _usuariosSnapSyncTimer=null;
+    if(_usuariosToggleBusy)return;
+    if(typeof aplicarSyncUsuariosAutorizados==='function'){
+      aplicarSyncUsuariosAutorizados({skipSave:true,silent:true});
+    }
+  },900);
+}
+function usuariosFormIsOpen(){
+  const w=document.getElementById('usuario-form-wrap');
+  return !!(w&&w.style.display!=='none');
+}
 function schedulePaintUsuariosCfgTable(){
   if(_usuariosPaintTimer)clearTimeout(_usuariosPaintTimer);
+  const delay=usuariosFormIsOpen()?350:200;
   _usuariosPaintTimer=setTimeout(function(){
     _usuariosPaintTimer=null;
+    // Con el formulario abierto no reescribir el tbody: rompe el <select> de rol nativo.
+    if(usuariosFormIsOpen()){
+      const cnt=document.getElementById('usuarios-fs-count');
+      if(cnt)cnt.textContent=String(usuariosAutorizadosVisibles().length);
+      return;
+    }
     paintUsuariosCfgTable();
-  },80);
+  },delay);
 }
 function scheduleRenderListasCfgFromUsuarios(){
   try{
@@ -12534,7 +12590,7 @@ function paintUsuariosCfgTable(){
   const list=usuariosAutorizadosVisibles();
   const puedeEliminar=puedeEliminarUsuariosAutorizados();
   if(cnt)cnt.textContent=String(list.length);
-  tbody.innerHTML=list.length?list.map(u=>{
+  const html=list.length?list.map(u=>{
     const act=u.activo!==false;
     const em=jsStr(u.email);
     return '<tr>'+
@@ -12550,6 +12606,10 @@ function paintUsuariosCfgTable(){
       (puedeEliminar?('<button type="button" class="btn bsm bd2" '+(_usuariosToggleBusy?'disabled ':'')+'onclick="SST.eliminarUsuarioFirestore(\''+em+'\')">Eliminar</button>'):'')+
       '</td></tr>';
   }).join(''):'<tr><td colspan="7" class="emp">No hay usuarios registrados.</td></tr>';
+  const sig=_usuariosToggleBusy?'busy|':'ok|'+html;
+  if(sig===_usuariosLastPaintSig)return;
+  _usuariosLastPaintSig=sig;
+  tbody.innerHTML=html;
 }
 function buildUsuariosCfgShell(){
   const encDepto=esEncargadoDepartamentalUsuarios();
@@ -12562,7 +12622,7 @@ function buildUsuariosCfgShell(){
     ?('<input type="hidden" id="usu-fs-rol" value="responsables">'+
       '<div class="fld"><label>Rol</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Responsables</div></div>'+
       '<div class="fld"><label>Departamento</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);font-weight:600">'+escAttr(labelDepartamento(deptoEnc))+'</div><input type="hidden" id="usu-fs-depto" value="'+escAttr(deptoEnc)+'"></div>')
-    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onchange="SST.toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
+    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onfocus="SST.ensureUsuariosRolSelectOpts()" onchange="SST.toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
       '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>');
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
@@ -12572,9 +12632,9 @@ function buildUsuariosCfgShell(){
     '<button type="button" class="btn bsm" onclick="SST.sincronizarUsuariosAutorizados()" title="Recargar lista desde Firestore">↻ Actualizar lista</button></div>'+
     '<div id="usuario-form-wrap" style="display:none;margin-bottom:12px;padding:12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px" id="usuario-form-tit">Nuevo usuario</div>'+
-    '<div class="fg">'+
+    '<div class="fg" style="align-items:start">'+
     '<div class="fld"><label>Nombre completo</label><input type="text" id="usu-fs-nombre"></div>'+
-    '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" placeholder="usuario@gmail.com"></div>'+
+    '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" data-no-email-chips="1" placeholder="usuario@gmail.com" autocomplete="off"></div>'+
     rolField+
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
     '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option></select></div>'+
@@ -12763,6 +12823,7 @@ function mostrarFormUsuarioFirestore(){
   const rol=document.getElementById('usu-fs-rol');
   if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts('');
   else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  if(typeof ensureUsuariosRolSelectOpts==='function')ensureUsuariosRolSelectOpts('');
   const depto=document.getElementById('usu-fs-depto');
   if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoEnc||'guaviare');
   else if(depto&&depto.tagName==='INPUT')depto.value=deptoEnc||'';
@@ -12785,6 +12846,7 @@ function editarUsuarioFirestore(email){
   const rol=document.getElementById('usu-fs-rol');
   if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts(u.rol||'');
   else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  if(typeof ensureUsuariosRolSelectOpts==='function')ensureUsuariosRolSelectOpts(u.rol||'');
   const depto=document.getElementById('usu-fs-depto');
   const deptoVal=u.deptoResponsable||getDeptoGestionUsuariosAutorizados()||'';
   if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoVal);
@@ -13032,6 +13094,7 @@ async function renderUsuariosCfg(forceRebuild){
   if(needsShell){
     stopUsuariosFirestoreListener();
     el.innerHTML=buildUsuariosCfgShell();
+    _usuariosLastPaintSig='';
     const tb=document.getElementById('usuarios-fs-tbody');
     if(tb)tb.dataset.mode=modeKey;
   }
