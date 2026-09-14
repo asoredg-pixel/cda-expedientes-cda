@@ -4271,7 +4271,41 @@ body.sesion-activa .hdr-logout-btn:hover{background:rgba(255,255,255,.18)!import
 .depto-sel option,.depto-sel optgroup{background:#fff!important;color:#1a1a1a!important}
 .depto-sel optgroup{font-weight:700!important;color:#1a4a2e!important}
 /* Formularios (.fld): en Windows el desplegable nativo queda en blanco si option hereda mal el color */
+.fld select{
+  color-scheme:light;
+  background:#fff!important;
+  color:#1a1a1a!important;
+}
 .fld select option,.fld select optgroup{background:#fff!important;color:#1a1a1a!important}
+/* Select de rol (usuarios autorizados): picker propio — el <select> nativo sale en blanco en Chrome/Windows */
+.usu-rol-picker-wrap{position:relative;z-index:2}
+.usu-rol-picker-btn{
+  width:100%;box-sizing:border-box;text-align:left;padding:7px 10px;border:1px solid var(--bd);
+  border-radius:var(--r);font-size:13px;font-family:'DM Sans',sans-serif;background:#fff;color:#1a1a1a;
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;
+}
+.usu-rol-picker-btn:hover,.usu-rol-picker-btn:focus{border-color:var(--bl);outline:none;box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+.usu-rol-picker-caret{color:var(--tx3);font-size:11px;flex-shrink:0}
+.usu-rol-picker-menu{
+  position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;
+  max-height:min(280px,50vh);overflow:auto;background:#fff;border:1px solid var(--bd);
+  border-radius:var(--r);box-shadow:0 10px 28px rgba(15,23,42,.16);padding:4px;
+}
+.usu-rol-picker-item{
+  display:block;width:100%;text-align:left;border:0;background:transparent;color:#1a1a1a;
+  padding:8px 10px;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;
+}
+.usu-rol-picker-item:hover,.usu-rol-picker-item.on{background:var(--bll,#e8f1fb);color:var(--bl,#185fa5)}
+.usu-rol-picker-empty{padding:10px;font-size:12px;color:var(--tx3)}
+#usu-fs-rol{
+  color-scheme:light!important;
+  background:#fff!important;
+  color:#1a1a1a!important;
+}
+#usu-fs-rol option,#usu-fs-rol optgroup{
+  background:#fff!important;
+  color:#1a1a1a!important;
+}
 /* Actividades filter: light bar — must override .depto-sel dark styles if class reused */
 #act-dept-resp-bar label{color:#1a1a1a!important}
 #act-dept-resp-sel,

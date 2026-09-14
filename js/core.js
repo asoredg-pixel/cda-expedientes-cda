@@ -12294,19 +12294,118 @@ function rolesFirestoreOpts(selected){
   }).join('');
   return h;
 }
-/** Rellena el select de rol si quedó vacío o incompleto (p. ej. tras repintes del listener). */
+/** Rellena el selector de rol (picker propio: el <select> nativo queda en blanco en Chrome/Windows). */
 function ensureUsuariosRolSelectOpts(selected){
   const rol=document.getElementById('usu-fs-rol');
-  if(!rol||rol.tagName!=='SELECT')return;
+  if(!rol)return;
   const cur=selected!=null&&selected!==''?String(selected):String(rol.value||'');
-  const hasReal=Array.prototype.some.call(rol.options||[],function(o){return o&&String(o.value||'').trim();});
-  if(hasReal&&rol.options.length>1){
-    if(cur)try{rol.value=cur;}catch(_e){}
+  if(rol.tagName==='SELECT'){
+    const need=expectedUsuariosRolOptionCount();
+    const hasReal=Array.prototype.some.call(rol.options||[],function(o){return o&&String(o.value||'').trim();});
+    if(hasReal&&rol.options.length>=need){
+      if(cur)try{rol.value=cur;}catch(_e){}
+      return;
+    }
+    fillUsuariosRolSelect(rol,cur);
     return;
   }
-  rol.innerHTML=rolesFirestoreOpts(cur);
-  if(cur)try{rol.value=cur;}catch(_e2){}
+  fillUsuariosRolPicker(cur);
 }
+function expectedUsuariosRolOptionCount(){
+  return usuariosRolOptionsList().length+1;
+}
+function usuariosRolOptionsList(){
+  const excluir=new Set(['ciudadano','contratista']);
+  const seen=new Set();
+  const out=[];
+  const list=(typeof ROLES_INGRESO!=='undefined'&&Array.isArray(ROLES_INGRESO))?ROLES_INGRESO:[];
+  list.forEach(function(r){
+    if(!r||!r.id||seen.has(r.id)||excluir.has(r.id))return;
+    seen.add(r.id);
+    out.push({id:r.id,titulo:r.titulo||r.id});
+  });
+  return out;
+}
+/** Fallback si aún hay <select>; el formulario admin usa picker HTML. */
+function fillUsuariosRolSelect(rolEl,selected){
+  if(!rolEl)return;
+  if(rolEl.tagName!=='SELECT'){
+    fillUsuariosRolPicker(selected);
+    return;
+  }
+  selected=String(selected||'');
+  rolEl.innerHTML='';
+  if(!selected){
+    const ph=document.createElement('option');
+    ph.value='';
+    ph.textContent='— Seleccione rol —';
+    rolEl.appendChild(ph);
+  }
+  usuariosRolOptionsList().forEach(function(r){
+    const o=document.createElement('option');
+    o.value=r.id;
+    o.textContent=r.titulo;
+    if(selected===r.id)o.selected=true;
+    rolEl.appendChild(o);
+  });
+  if(selected)try{rolEl.value=selected;}catch(_e){}
+}
+function usuariosRolLabel(rolId){
+  rolId=String(rolId||'').trim();
+  if(!rolId)return'— Seleccione rol —';
+  const hit=usuariosRolOptionsList().find(function(r){return r.id===rolId;});
+  return hit?hit.titulo:(typeof tituloRolFirestore==='function'?tituloRolFirestore(rolId):rolId);
+}
+function fillUsuariosRolPicker(selected){
+  const hid=document.getElementById('usu-fs-rol');
+  const btn=document.getElementById('usu-fs-rol-btn');
+  const menu=document.getElementById('usu-fs-rol-menu');
+  if(!hid||!btn||!menu)return;
+  selected=String(selected!=null?selected:(hid.value||''));
+  hid.value=selected;
+  btn.innerHTML=escAttr(usuariosRolLabel(selected))+' <span class="usu-rol-picker-caret">▾</span>';
+  btn.setAttribute('aria-expanded','false');
+  menu.hidden=true;
+  menu.innerHTML=usuariosRolOptionsList().map(function(r){
+    const on=selected===r.id?' on':'';
+    return '<button type="button" class="usu-rol-picker-item'+on+'" role="option" aria-selected="'+(selected===r.id?'true':'false')+'" data-rol="'+escAttr(r.id)+'" onclick="event.stopPropagation();SST.selectUsuariosRol(\''+jsStr(r.id)+'\')">'+escAttr(r.titulo)+'</button>';
+  }).join('')||'<div class="usu-rol-picker-empty">No hay roles disponibles</div>';
+}
+function toggleUsuariosRolPicker(forceOpen){
+  const btn=document.getElementById('usu-fs-rol-btn');
+  const menu=document.getElementById('usu-fs-rol-menu');
+  if(!btn||!menu)return;
+  const open=forceOpen===true?true:(forceOpen===false?false:!!menu.hidden);
+  if(open){
+    if(!menu.children.length)fillUsuariosRolPicker(document.getElementById('usu-fs-rol')&&document.getElementById('usu-fs-rol').value);
+    menu.hidden=false;
+    btn.setAttribute('aria-expanded','true');
+    setTimeout(function(){
+      document.addEventListener('click',closeUsuariosRolPickerOnOutside,{once:true});
+    },0);
+  }else{
+    menu.hidden=true;
+    btn.setAttribute('aria-expanded','false');
+  }
+}
+function closeUsuariosRolPickerOnOutside(ev){
+  const wrap=document.querySelector('.usu-rol-picker-wrap');
+  if(wrap&&ev&&wrap.contains(ev.target)){
+    document.addEventListener('click',closeUsuariosRolPickerOnOutside,{once:true});
+    return;
+  }
+  toggleUsuariosRolPicker(false);
+}
+function selectUsuariosRol(rolId){
+  const hid=document.getElementById('usu-fs-rol');
+  if(hid)hid.value=String(rolId||'');
+  fillUsuariosRolPicker(rolId);
+  toggleUsuariosRolPicker(false);
+  if(typeof toggleUsuarioDeptoResponsableField==='function')toggleUsuarioDeptoResponsableField();
+}
+window.toggleUsuariosRolPicker=toggleUsuariosRolPicker;
+window.selectUsuariosRol=selectUsuariosRol;
+window.fillUsuariosRolPicker=fillUsuariosRolPicker;
 function tituloRolFirestore(rolId){
   if(rolId==='contratista')return 'Responsables';
   const r=ROLES_INGRESO.find(x=>x.id===rolId);
@@ -12638,7 +12737,10 @@ function buildUsuariosCfgShell(){
     ?('<input type="hidden" id="usu-fs-rol" value="responsables">'+
       '<div class="fld"><label>Rol</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">Responsables</div></div>'+
       '<div class="fld"><label>Departamento</label><div style="padding:6px 8px;font-size:12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);font-weight:600">'+escAttr(labelDepartamento(deptoEnc))+'</div><input type="hidden" id="usu-fs-depto" value="'+escAttr(deptoEnc)+'"></div>')
-    :('<div class="fld"><label>Rol</label><select id="usu-fs-rol" onfocus="SST.ensureUsuariosRolSelectOpts()" onchange="SST.toggleUsuarioDeptoResponsableField()">'+rolesFirestoreOpts('')+'</select></div>'+
+    :('<div class="fld usu-rol-picker-wrap"><label>Rol</label>'+
+      '<input type="hidden" id="usu-fs-rol" value="">'+
+      '<button type="button" id="usu-fs-rol-btn" class="usu-rol-picker-btn" aria-haspopup="listbox" aria-expanded="false" onclick="event.stopPropagation();SST.toggleUsuariosRolPicker()">— Seleccione rol — <span class="usu-rol-picker-caret">▾</span></button>'+
+      '<div id="usu-fs-rol-menu" class="usu-rol-picker-menu" role="listbox" hidden></div></div>'+
       '<div class="fld" id="usu-fs-depto-wrap" style="display:none"><label>Departamento (rol Responsables)</label><select id="usu-fs-depto">'+deptoResponsableOptsHtml('')+'</select></div>');
   return '<div class="card">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
@@ -12837,8 +12939,15 @@ function mostrarFormUsuarioFirestore(){
   ['usu-fs-nombre','usu-fs-email','usu-fs-codigo'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.readOnly=false;}});
   const deptoEnc=getDeptoGestionUsuariosAutorizados();
   const rol=document.getElementById('usu-fs-rol');
-  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts('');
-  else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  if(rol&&rol.tagName==='SELECT'){
+    if(typeof fillUsuariosRolSelect==='function')fillUsuariosRolSelect(rol,'');
+    else rol.innerHTML=rolesFirestoreOpts('');
+  }else if(rol&&rol.tagName==='INPUT'){
+    if(document.getElementById('usu-fs-rol-btn')){
+      rol.value='';
+      if(typeof fillUsuariosRolPicker==='function')fillUsuariosRolPicker('');
+    }else rol.value='responsables';
+  }
   if(typeof ensureUsuariosRolSelectOpts==='function')ensureUsuariosRolSelectOpts('');
   const depto=document.getElementById('usu-fs-depto');
   if(depto&&depto.tagName==='SELECT')depto.innerHTML=deptoResponsableOptsHtml(deptoEnc||'guaviare');
@@ -12860,8 +12969,15 @@ function editarUsuarioFirestore(email){
   const nom=document.getElementById('usu-fs-nombre');if(nom)nom.value=u.nombre||'';
   const em=document.getElementById('usu-fs-email');if(em){em.value=u.email||'';em.readOnly=true;}
   const rol=document.getElementById('usu-fs-rol');
-  if(rol&&rol.tagName==='SELECT')rol.innerHTML=rolesFirestoreOpts(u.rol||'');
-  else if(rol&&rol.tagName==='INPUT')rol.value='responsables';
+  if(rol&&rol.tagName==='SELECT'){
+    if(typeof fillUsuariosRolSelect==='function')fillUsuariosRolSelect(rol,u.rol||'');
+    else rol.innerHTML=rolesFirestoreOpts(u.rol||'');
+  }else if(rol&&rol.tagName==='INPUT'){
+    if(document.getElementById('usu-fs-rol-btn')){
+      rol.value=u.rol||'';
+      if(typeof fillUsuariosRolPicker==='function')fillUsuariosRolPicker(u.rol||'');
+    }else rol.value='responsables';
+  }
   if(typeof ensureUsuariosRolSelectOpts==='function')ensureUsuariosRolSelectOpts(u.rol||'');
   const depto=document.getElementById('usu-fs-depto');
   const deptoVal=u.deptoResponsable||getDeptoGestionUsuariosAutorizados()||'';
