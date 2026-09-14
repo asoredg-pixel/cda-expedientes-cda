@@ -2863,11 +2863,11 @@ body.modo-ciudadano #sst-nav{display:none!important}
   position:absolute;top:2px;right:2px;z-index:2;
   width:22px;height:22px;padding:0;border:0;border-radius:50%;
   background:rgba(255,255,255,.92);color:var(--tx2);font-size:13px;line-height:1;
-  cursor:pointer;opacity:0;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;opacity:0;pointer-events:none;display:flex;align-items:center;justify-content:center;
   box-shadow:0 0 0 1px rgba(0,0,0,.08);
   transition:opacity .12s,background .12s,color .12s;
 }
-.chat-msg:hover .chat-msg-reply-btn,.chat-msg:focus-within .chat-msg-reply-btn{opacity:1}
+.chat-msg:hover .chat-msg-reply-btn,.chat-msg:focus-within .chat-msg-reply-btn{opacity:1;pointer-events:auto}
 .chat-msg-reply-btn:hover{background:var(--bll);color:var(--bl)}
 .chat-msg.flash-reply{box-shadow:0 0 0 2px var(--bl);transition:box-shadow .2s}
 .chat-msg-quote{

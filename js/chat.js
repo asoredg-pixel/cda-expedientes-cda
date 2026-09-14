@@ -457,7 +457,10 @@ function chatAvRegionClass(c){
 }
 function chatRefreshContactsIfOpen(){
   const w=document.getElementById('chat-window');
-  if(w&&w.classList.contains('on'))renderChatContacts();
+  if(w&&w.classList.contains('on')){
+    if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:250,messages:false});
+    else renderChatContacts();
+  }
 }
 function chatConvId(keyA,keyB){
   const a=chatCanonicalKey(keyA);
@@ -512,15 +515,24 @@ function initChatSync(convId){
       }
       if(change.type==='added')chatTryDesktopNotify(msg);
     });
-    renderChatMessages();
     renderChatBadge();
+    if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:120,contacts:false});
+    else renderChatMessages();
   });
 }
 let _chatNotifyUnsubs=[];
 let _chatNotifySyncTimer=null;
+let _chatNotifyUiTimer=null;
+let _chatNotifySettleTimer=null;
+let _chatNotifySettling=false;
+let _chatContactsPaintSig='';
+let _chatMessagesPaintSig='';
 function stopChatNotifySync(){
   _chatNotifyUnsubs.forEach(function(fn){try{fn();}catch(e){}});
   _chatNotifyUnsubs=[];
+  clearTimeout(_chatNotifyUiTimer);_chatNotifyUiTimer=null;
+  clearTimeout(_chatNotifySettleTimer);_chatNotifySettleTimer=null;
+  _chatNotifySettling=false;
 }
 function scheduleChatNotifySync(){
   clearTimeout(_chatNotifySyncTimer);
@@ -528,6 +540,38 @@ function scheduleChatNotifySync(){
     _chatNotifySyncTimer=null;
     initChatNotifySync();
   },350);
+}
+/** Evita reescribir contactos/mensajes en cada tick del collectionGroup (titileo / clics fallidos). */
+function scheduleChatOpenUiRefresh(opts){
+  opts=opts||{};
+  if(window._chatAbrirConvBusy)return;
+  const chatWin=document.getElementById('chat-window');
+  if(!(chatWin&&chatWin.classList.contains('on')))return;
+  clearTimeout(_chatNotifyUiTimer);
+  _chatNotifyUiTimer=setTimeout(function(){
+    _chatNotifyUiTimer=null;
+    if(window._chatAbrirConvBusy)return;
+    const w=document.getElementById('chat-window');
+    if(!(w&&w.classList.contains('on')))return;
+    if(opts.contacts!==false)renderChatContacts();
+    if(opts.messages!==false&&window._chatConvActiva)renderChatMessages();
+  },opts.delay!=null?opts.delay:220);
+}
+function chatNotifyMarkSettling(){
+  _chatNotifySettling=true;
+  clearTimeout(_chatNotifySettleTimer);
+  _chatNotifySettleTimer=setTimeout(function(){
+    _chatNotifySettling=false;
+    scheduleChatOpenUiRefresh({delay:40});
+  },900);
+}
+function chatNotifyShouldSkipDomPaint(isInitialBatch){
+  if(window._chatAbrirConvBusy)return true;
+  if(isInitialBatch||_chatNotifySettling){
+    chatNotifyMarkSettling();
+    return true;
+  }
+  return false;
 }
 function chatNotifyConvIds(){
   const me=chatEffectiveIdentity();
@@ -610,7 +654,6 @@ function initChatNotifySync(){
   const unsub=window._fsOnSnapshot(window._fsCollectionGroup(db,'mensajes'),function(snap){
     const initial=!primed;
     primed=true;
-    let incoming=false;
     snap.docChanges().forEach(function(change){
       if(change.type==='removed'){
         const msg={id:change.doc.id,...change.doc.data()};
@@ -622,17 +665,15 @@ function initChatNotifySync(){
       if(!chatMsgParticipa(msg))return;
       chatMergeIncomingMsg(msg);
       if(!initial&&change.type==='added'&&!chatEsMio(msg)){
-        incoming=true;
         chatTryDesktopNotify(msg);
       }
     });
     renderChatBadge();
     const chatWin=document.getElementById('chat-window');
-    if(chatWin&&chatWin.classList.contains('on')){
-      renderChatContacts();
-      if(window._chatConvActiva)renderChatMessages();
-      chatSyncLayout();
-    }
+    if(!(chatWin&&chatWin.classList.contains('on')))return;
+    // Descarga inicial / ráfagas: solo badge. Re-pintar DOM rompe clics y hover (~10s).
+    if(chatNotifyShouldSkipDomPaint(initial))return;
+    scheduleChatOpenUiRefresh({delay:200});
   },function(err){
     console.error('initChatNotifySync collectionGroup:',err);
     stopChatNotifySync();
@@ -662,11 +703,9 @@ function chatNotifyConvIdsFallback(){
         if(!initial&&change.type==='added'&&!chatEsMio(msg))chatTryDesktopNotify(msg);
       });
       renderChatBadge();
-      if(document.getElementById('chat-window')?.classList.contains('on')){
-        renderChatContacts();
-        if(window._chatConvActiva)renderChatMessages();
-        chatSyncLayout();
-      }
+      if(!(document.getElementById('chat-window')&&document.getElementById('chat-window').classList.contains('on')))return;
+      if(chatNotifyShouldSkipDomPaint(initial))return;
+      scheduleChatOpenUiRefresh({delay:200});
     });
     _chatNotifyUnsubs.push(unsub);
   });
@@ -992,6 +1031,8 @@ function toggleChatWindow(force){
     window._chatActiveContactKey=null;
     window._chatVista='contactos';
     window._chatContactsCollapsed=false;
+    _chatContactsPaintSig='';
+    _chatMessagesPaintSig='';
     chatInvalidateContactsCache();
     const sub=document.getElementById('chat-hdr-sub');
     if(sub)sub.textContent='Seleccione un contacto';
@@ -1004,8 +1045,8 @@ function toggleChatWindow(force){
       void chatPurgeExpiredDriveFiles().then(function(ok){
         if(ok){
           if(window._chatConvActiva)renderChatMessages();
-          renderChatContacts();
-          chatSyncLayout();
+          if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:100});
+          else{renderChatContacts();chatSyncLayout();}
         }
       });
     }
@@ -1123,7 +1164,7 @@ function renderChatContacts(){
       if(ua!==ub)return ub-ua;
       return String(a.label||'').localeCompare(String(b.label||''),'es');
     });
-    el.innerHTML=contacts.map(function(c){
+    const html=contacts.map(function(c){
       const convId=chatConvId(me.key,c.key);
       let msgs=[],last=null,prev='Sin mensajes',unread=0;
       try{
@@ -1142,9 +1183,14 @@ function renderChatContacts(){
         (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
         '</div>';
     }).join('');
+    const sig=(window._chatActiveContactKey||'')+'|'+html;
+    if(sig===_chatContactsPaintSig){chatSyncLayout();return;}
+    _chatContactsPaintSig=sig;
+    el.innerHTML=html;
   }catch(err){
     console.error('renderChatContacts:',err);
     el.innerHTML='<div style="padding:14px;font-size:12px;color:#b42318">No se pudo cargar la lista de contactos. Recargue con Ctrl+F5.</div>';
+    _chatContactsPaintSig='';
   }
   chatSyncLayout();
 }
@@ -1320,8 +1366,15 @@ function renderChatMessages(){
   if(!el||!convId)return;
   const me=getChatIdentity();
   const msgs=chatMsgsForActiveConv();
-  if(!msgs.length){el.innerHTML='<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin mensajes. Escriba abajo para iniciar la conversación.</div>';return;}
-  el.innerHTML=msgs.map(m=>{
+  if(!msgs.length){
+    const empty='<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin mensajes. Escriba abajo para iniciar la conversación.</div>';
+    if(_chatMessagesPaintSig!=='empty|'+convId){
+      _chatMessagesPaintSig='empty|'+convId;
+      el.innerHTML=empty;
+    }
+    return;
+  }
+  const html=msgs.map(m=>{
     const mine=chatEsMio(m);
     const sender=chatFromLabel(m);
     const mid=escAttr(String(m.id||''));
@@ -1341,7 +1394,12 @@ function renderChatMessages(){
       :'';
     return '<div class="chat-msg '+(mine?'me':'them')+'" data-msg-id="'+mid+'">'+replyBtn+body+'<div class="chat-msg-time">'+t+'</div></div>';
   }).join('');
-  el.scrollTop=el.scrollHeight;
+  const sig=convId+'|'+msgs.map(function(m){return String(m.id||'')+':'+(m.ts||'')+':'+(m.text||'').length;}).join(',');
+  if(sig===_chatMessagesPaintSig)return;
+  const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
+  _chatMessagesPaintSig=sig;
+  el.innerHTML=html;
+  if(nearBottom)el.scrollTop=el.scrollHeight;
 }
 async function chatEnviarTexto(){
   const inp=document.getElementById('chat-inp');
