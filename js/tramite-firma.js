@@ -2837,7 +2837,7 @@ function openEntregaOficinaFirmaModal(){
     '<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)">'+
       '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Tipo de salida</div>'+
       '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-bottom:10px" id="ofi-doc-tipo-btns">'+
-        '<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(TIPO_MSG)+'" onclick="ofiDocSetTipo(\''+jsStr(TIPO_MSG)+'\')">Mensaje simple</button>'+
+        '<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(TIPO_MSG)+'" onclick="ofiDocSetTipo(\''+jsStr(TIPO_MSG)+'\')">Mensaje por correo</button>'+
         '<button type="button" class="btn bsm tipo-resp-btn" data-val="'+escAttr(TIPO_OFI)+'" onclick="ofiDocSetTipo(\''+jsStr(TIPO_OFI)+'\')">📄 Oficio firmado</button>'+
       '</div>'+
       '<input type="hidden" id="ofi-doc-tipo" value="">'+
@@ -3656,7 +3656,7 @@ async function submitEntregaOficinaFirma(){
   const TIPO_MSG=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje';
   const TIPO_OFI=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
   const tipo=String((document.getElementById('ofi-doc-tipo')||{}).value||'').trim();
-  if(!tipo){notif('Seleccione el tipo de salida (mensaje simple u oficio firmado)','err');return;}
+  if(!tipo){notif('Seleccione el tipo de salida (mensaje por correo u oficio firmado)','err');return;}
   const destino=String((document.getElementById('ofi-doc-destino')||{}).value||'firma').trim()||'firma';
   const notifCorreo=!!((document.getElementById('ofi-doc-notif-correo')||{}).checked);
   const asuntoDesc=String((document.getElementById('ofi-doc-asunto')||{}).value||'').trim();
@@ -3748,7 +3748,7 @@ async function submitEntregaOficinaFirma(){
         nota:modoFirma
           ?'Documento enviado a firma del Director'
           :(modoEmail
-            ?((isMsg?'Mensaje simple':'Oficio')+' notificado por correo')
+            ?((isMsg?'Mensaje por correo':'Oficio')+' notificado por correo')
             :('Notificado por '+(typeof medioNotificacionRespLabel==='function'?medioNotificacionRespLabel(canalOtro):canalOtro)+(notifObs?' · '+notifObs:'')))
       }],
       soportes:[],

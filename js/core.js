@@ -2704,7 +2704,7 @@ async function openPqrsRespuestaModal(expId,opts){
   ):(
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">📋 '+escAttr((e&&e.f_f1)||(e&&e._pqrs_detalle)||expLabel)+'</div>'
   );
-  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje simple')+mkTipo(PQRS_WF_TIPO.OFICIO,tipOficioLbl)+
+  const tipoBtns=mkTipo(PQRS_WF_TIPO.MENSAJE,'✉️ Mensaje por correo')+mkTipo(PQRS_WF_TIPO.OFICIO,tipOficioLbl)+
     (fromGmail||modoFirma?'':mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa'));
   const cuerpoVal=(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'');
   const emailCiu=fromGmail?(ciudEmail||''):ciudEmail;
@@ -10100,7 +10100,7 @@ function renderPqrsEntregaCamposHtml(e){
   }else{
     h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
       '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
-      mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje simple')+
+      mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
       mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
       mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
       '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>'+
@@ -10447,7 +10447,7 @@ function collectPqrsEntregaDatos(expId,eOpt){
   if(!tipo||![PQRS_WF_TIPO.MENSAJE,PQRS_WF_TIPO.OFICIO,PQRS_WF_TIPO.INFORMATIVA].includes(tipo)){
     if(esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
     else{
-      notif('Seleccione el tipo de respuesta (mensaje simple, oficio firmado o informativa)','err');
+      notif('Seleccione el tipo de respuesta (mensaje por correo, oficio firmado o informativa)','err');
       const hint=document.getElementById('pqrs-entrega-tipo-hint');
       if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
       return null;
@@ -17264,7 +17264,7 @@ function renderRespPqrsCorreoReadonlyHtml(expId,e,wf){
   const asunto=String(wf.email_subject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
   const cuerpo=String(wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
   const tipo=wf.tipo||PQRS_WF_TIPO.MENSAJE;
-  const tipoLbl=tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':(tipo===PQRS_WF_TIPO.INFORMATIVA?'Informativa':'Mensaje simple');
+  const tipoLbl=tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':(tipo===PQRS_WF_TIPO.INFORMATIVA?'Informativa':'Mensaje por correo');
   let h='<div style="padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">';
   h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Tipo: <strong style="color:var(--tx)">'+escAttr(tipoLbl)+'</strong></div>';
   if(typeof htmlCorreosSugeridosNotificacion==='function')h+=htmlCorreosSugeridosNotificacion(e);
@@ -17342,9 +17342,9 @@ function renderNcaDecisionFormHtml(expId,e,wf,opts){
   }else if(esOficio){
     if(puedeImprimir||puedeAtajoFirma)
       btnsDecision+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')" title="Aprobar → Por firmar (imprimir y firma del Director)">✍️ Imprimir y firmar</button>';
-    btnsDecision+='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Cambiar a mensaje simple</button>';
+    btnsDecision+='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">✅ Cambiar a mensaje por correo</button>';
   }else{
-    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">'+(emailInSide?'✅ Aprobar y enviar':'✅ Aprobar — Mensaje simple')+'</button>';
+    btnsDecision='<button type="button" class="btn bsm" style="background:var(--gn);color:#fff" onclick="ncaAprobarMensajeSimple(\''+escAttr(expId)+'\')">'+(emailInSide?'✅ Aprobar y enviar':'✅ Aprobar — Mensaje por correo')+'</button>';
     if(puedeImprimir||puedeAtajoFirma)
       btnsDecision+='<button type="button" class="btn bsm" style="background:#0d5c2e;color:#fff" onclick="ncaAprobarOficioFirmado(\''+escAttr(expId)+'\')">✍️ Imprimir y firmar</button>';
   }
@@ -17356,7 +17356,7 @@ function renderNcaDecisionFormHtml(expId,e,wf,opts){
       :'')+
     '<div style="padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd);margin-bottom:10px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Tipo propuesto</div>'+
-    '<div style="font-size:12px">'+escAttr(esOficio?'📄 Oficio firmado':esInfo?'ℹ️ Informativa':'✉️ Mensaje simple')+'</div>'+
+    '<div style="font-size:12px">'+escAttr(esOficio?'📄 Oficio firmado':esInfo?'ℹ️ Informativa':'✉️ Mensaje por correo')+'</div>'+
     (esInfo?'':('<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Canal propuesto</div>'+
     '<div style="font-size:12px">'+escAttr(canalLbl)+'</div>'))+
     (esInfo
@@ -17439,7 +17439,7 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
   if(esPqrs&&e&&!pqrsEstaCerrada(e)){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const fase=pqrsWorkflowFase(e);
-    const tipoLbl=wf.tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':wf.tipo===PQRS_WF_TIPO.INFORMATIVA?'Informativa':'Mensaje simple';
+    const tipoLbl=wf.tipo===PQRS_WF_TIPO.OFICIO?'Oficio firmado':wf.tipo===PQRS_WF_TIPO.INFORMATIVA?'Informativa':'Mensaje por correo';
     let titulo='📋 Gestión PQRSD';
     let hint='';
     let btns='';
@@ -27054,7 +27054,7 @@ async function ncaAprobarMensajeSimple(expId){
     notif_vence:(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(hoy(),5):hoy()),
     notif_plazo_dias:5
   },d,wf));
-  e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje simple)'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+  e._pqrs_historial.push({tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje por correo)'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
   pqrsSincronizarParticipacionPostAprobacion(e);
   persistExpedienteGranular(e);
   closeTaskModal();
@@ -29062,7 +29062,7 @@ async function generarPdfRespuestaPqrs(e,opts){
   const canal=wf.canal||e._pqrs_respuesta_medio||'';
   const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial',fisica:'Correo físico',aviso:'Por aviso'}[canal]||canal||'—';
   const tipo=wf.tipo||PQRS_WF_TIPO&&PQRS_WF_TIPO.MENSAJE||'';
-  const tipoLabel={mensaje:'Mensaje simple',oficio_firmado:'Oficio firmado',informativa:'Informativa'}[tipo]||tipo||'—';
+  const tipoLabel={mensaje:'Mensaje por correo',oficio_firmado:'Oficio firmado',informativa:'Informativa'}[tipo]||tipo||'—';
   const meta=[
     ['Tipo solicitud:',e._tipo_solicitud||'PQRSD'],
     ['Asunto:',e.f_f1||e._pqrs_detalle||''],
