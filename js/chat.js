@@ -398,7 +398,7 @@ function getChatContacts(){
   function push(c){chatPushContact(seen,out,me,c);}
   // Todos (excepto Admin) ven el contacto «Admin» para recibir avisos
   if(!(typeof esAdministrador==='function'&&esAdministrador())){
-    push({key:CHAT_ADMIN_KEY,kind:'admin',label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema · solo lectura',region:'admin'});
+    push({key:CHAT_ADMIN_KEY,kind:'admin',label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema',region:'admin'});
   }
   const jurisU=(_usuariosCache||[]).find(function(u){return u&&u.activo!==false&&u.rol==='jurisdiccional'&&String(u.nombre||'').trim();});
   push({
@@ -739,7 +739,7 @@ function chatConvMessages(convId){
 function chatContactFromKey(key){
   key=String(key||'');
   if(chatNormKey(key).startsWith('admin:')||chatKeysMatch(key,CHAT_ADMIN_KEY))
-    return{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema · solo lectura',region:'admin'};
+    return{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema',region:'admin'};
   const found=getChatContactsList().find(function(c){return chatKeysMatch(c.key,key);});
   if(found)return found;
   if(key.startsWith('juris:'))return{kind:'juris',key,label:CHAT_LABEL_SUBDIRECCION,meta:'Subdirección · Jurisdiccional',region:'juris'};
