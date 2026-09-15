@@ -1575,11 +1575,11 @@ function pqrsAccionesTablaHtml(e){
       h+=actPorFirmarPrintOpenBtnHtml(wfF.impreso,openJs)+' ';
     }
     if(!esDir&&typeof actPorFirmarFirmaFisicaBtnHtml==='function')
-      h+=actPorFirmarFirmaFisicaBtnHtml(wfF.firma_fisica)+' ';
+      h+=actPorFirmarFirmaFisicaBtnHtml(wfF.firma_fisica,e._exp,tidPf)+' ';
+    if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Asignar notificador → Por notificar (sin PDF)">📬</button> ';
     if(firmFis&&typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar()&&tidPf)
       h+=(typeof actPorFirmarCargarBtnHtml==='function'?actPorFirmarCargarBtnHtml(e._exp,tidPf):'')+' ';
-    else if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
-      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Gestionar firmado">📬</button> ';
     else if(!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
       h+='<button type="button" class="btn bsm act-ico" style="background:#15803d;color:#fff" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Ya firmado">✓</button> ';
   }

@@ -7604,10 +7604,17 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   const enFirmaOrigen=typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e);
   if(enFirmaOrigen){
     h+=typeof taskReviewImpresoRailBtnHtml==='function'?taskReviewImpresoRailBtnHtml(refExp,taskId,t,e):'';
-    if(e&&!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
-      const wfOri=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
-      const firmBtn=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(wfOri.firma_fisica):'';
-      if(firmBtn)h+=String(firmBtn).replace('class="btn bsm bic act-ico','class="btn bsm bic act-ico task-review-rail-btn').replace('class="btn bsm act-ico','class="btn bsm bic act-ico task-review-rail-btn');
+    if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
+      const esPqrsRail=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
+      let firmObj=null;
+      if(esPqrsRail){
+        const wfOri=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+        firmObj=wfOri.firma_fisica;
+      }else if(typeof getTaskFirmaWf==='function'){
+        firmObj=(getTaskFirmaWf(t)||{}).firma_fisica;
+      }
+      const firmBtn=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(firmObj,refExp,taskId):'';
+      if(firmBtn)h+=String(firmBtn).replace(/class="btn bsm bic act-ico/g,'class="btn bsm bic act-ico task-review-rail-btn').replace(/class="btn bsm act-ico/g,'class="btn bsm bic act-ico task-review-rail-btn');
     }
   }
   const esNcaEdit=typeof esNcaDeguv==='function'&&esNcaDeguv()||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
@@ -22733,19 +22740,116 @@ function actPorFirmarPrintOpenBtnHtml(impresoObj,openOnclickJs){
   }
   return '<button type="button" class="btn bsm bic act-ico act-impreso-btn" title="'+escAttr(tip)+'" onclick="event.stopPropagation();'+openOnclickJs+'">🖨️</button>';
 }
-/** ✍️ en «Por firmar» (VITAL/encargado): ✓ cuando el Director ya firmó en físico. */
-function actPorFirmarFirmaFisicaBtnHtml(firmaFisicaObj){
+/** ✍️ en «Por firmar» (VITAL/encargado/NCA): marcar/desmarcar firma física (como 🖨️). */
+function actPorFirmarFirmaFisicaBtnHtml(firmaFisicaObj,expId,taskId){
   const firm=!!(firmaFisicaObj&&firmaFisicaObj.en);
   const cuando=firm?String(firmaFisicaObj.en||'').slice(0,10):'';
   const tip=firm
-    ?('Firma física del Director'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(firmaFisicaObj&&firmaFisicaObj.por?' · '+firmaFisicaObj.por:'')+' — cargue el escaneado con 📤')
-    :'Pendiente de firma física del Director';
+    ?('Firma física del Director'+(cuando&&typeof fmtF==='function'?' '+fmtF(cuando):(cuando?' '+cuando:''))+(firmaFisicaObj&&firmaFisicaObj.por?' · '+firmaFisicaObj.por:'')+' — clic para desmarcar · luego 📬 asignar notificador (sin PDF)')
+    :'Marcar firma física del Director (sin cargar PDF) — clic para marcar';
+  const eid=jsStr(expId||''),tid=jsStr(taskId||'');
+  const onclick=eid
+    ?('event.stopPropagation();actPorFirmarToggleFirmaFisica(\''+eid+'\',\''+tid+'\')')
+    :'event.stopPropagation()';
   if(firm){
-    return '<span class="btn bsm bic act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="'+escAttr(tip)+'"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span>';
+    return '<button type="button" class="btn bsm bic act-ico act-impreso-btn act-impreso-on" title="'+escAttr(tip)+'" onclick="'+onclick+'"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</button>';
   }
-  return '<span class="btn bsm bic act-ico" style="cursor:default;opacity:.55" title="'+escAttr(tip)+'">✍️</span>';
+  return '<button type="button" class="btn bsm bic act-ico" title="'+escAttr(tip)+'" onclick="'+onclick+'">✍️</button>';
+}
+/**
+ * Toggle firma física desde paleta «Por firmar» (PQRSD o trámite).
+ * Al marcar, abre asignación de notificador sin exigir PDF.
+ */
+function actPorFirmarToggleFirmaFisica(expId,taskId){
+  if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  if(!expId){notif('Expediente no indicado','err');return;}
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  let t=taskId&&typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t&&e&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e)||null;
+  const esPqrs=!!(e&&((t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))
+    ||(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))));
+  if(esPqrs){
+    const wf0=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const before=!!(wf0.firma_fisica&&wf0.firma_fisica.en);
+    if(typeof pqrsOficinaToggleFirmaFisica==='function')pqrsOficinaToggleFirmaFisica(expId);
+    else{notif('No disponible','err');return;}
+    const e2=typeof getExpById==='function'?getExpById(expId):e;
+    const wf1=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e2):{};
+    const after=!!(wf1.firma_fisica&&wf1.firma_fisica.en);
+    if(!before&&after&&typeof openPqrsDirectorFirmarModal==='function'
+      &&(typeof pqrsPuedeAsignarPorNotificar==='function'?pqrsPuedeAsignarPorNotificar(e2):true)){
+      openPqrsDirectorFirmarModal(expId);
+    }
+    return;
+  }
+  if(!taskId&&t)taskId=String(t.id||'').trim();
+  if(!taskId){notif('Actividad no encontrada','err');return;}
+  const wfT0=t&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
+  const beforeT=!!(wfT0.firma_fisica&&wfT0.firma_fisica.en);
+  if(typeof tramiteOficinaToggleFirmaFisica==='function')tramiteOficinaToggleFirmaFisica(expId,taskId);
+  else{notif('No disponible','err');return;}
+  const t2=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const wfT1=t2&&typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t2):{};
+  const afterT=!!(wfT1.firma_fisica&&wfT1.firma_fisica.en);
+  if(!beforeT&&afterT&&typeof openActAsignarNotificadorFirmaFisica==='function')
+    openActAsignarNotificadorFirmaFisica(expId,taskId);
+}
+/** Modal compacto: elegir quién notifica → Por notificar (trámite, sin PDF). */
+function openActAsignarNotificadorFirmaFisica(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{};
+  if(!(wf.firma_fisica&&wf.firma_fisica.en)){notif('Marque primero la firma física','err');return;}
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const ov=document.getElementById('task-modal-overlay');
+  const tit=document.getElementById('task-modal-title');
+  const body=document.getElementById('task-modal-body');
+  const modal=ov?ov.querySelector('.task-modal'):null;
+  if(!ov||!body){
+    if(typeof tramitePasarAPorNotificar==='function')tramitePasarAPorNotificar(expId,taskId);
+    return;
+  }
+  if(modal){
+    modal.classList.remove('task-modal-wide','task-modal-firma');
+    modal.classList.add('enviar-modal-only');
+  }
+  if(tit)tit.textContent='Asignar notificador — '+(t.sinExpediente?(t.codigo||expId):expId);
+  let selNotif='';
+  if(typeof _pqrsOpcionesNotificadorHtml==='function'){
+    selNotif=_pqrsOpcionesNotificadorHtml(e||{_depto:t.depto},wf,wf.notificar_por||wf.notificar_por_propuesto||'',{
+      modo:'firma',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:(e&&e._depto)||t.depto
+    });
+  }
+  const eid=escAttr(expId),tid=escAttr(taskId);
+  body.innerHTML=
+    '<div style="font-size:13px;font-weight:600;margin-bottom:.35rem">✓ Firma física registrada</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Elija quién notificará. No es necesario cargar el PDF firmado.</div>'+
+    (selNotif?'<div style="margin-bottom:12px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+selNotif+'</div>':'')+
+    '<div class="pqrs-firma-actions">'+
+    '<button type="button" class="btn bsm bp" onclick="actConfirmarNotificadorFirmaFisica(\''+eid+'\',\''+tid+'\')">📬 Confirmar → Por notificar</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cerrar</button></div>';
+  ov.classList.add('on');
+  window._taskModalCtx={mode:'asignarNotifFirmaFisica',expId,taskId};
+}
+function actConfirmarNotificadorFirmaFisica(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const sel=document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
+  const quien=sel?String(sel.value||'').trim():'';
+  if(quien&&typeof setTaskFirmaWf==='function'){
+    setTaskFirmaWf(expId,taskId,{notificar_por:quien,notificar_por_propuesto:quien});
+  }
+  if(typeof tramitePasarAPorNotificar==='function')tramitePasarAPorNotificar(expId,taskId);
+  if(typeof closeTaskModal==='function')closeTaskModal();
 }
 window.actPorFirmarFirmaFisicaBtnHtml=actPorFirmarFirmaFisicaBtnHtml;
+window.actPorFirmarToggleFirmaFisica=actPorFirmarToggleFirmaFisica;
+window.openActAsignarNotificadorFirmaFisica=openActAsignarNotificadorFirmaFisica;
+window.actConfirmarNotificadorFirmaFisica=actConfirmarNotificadorFirmaFisica;
 function openActPorFirmarDocs(expId,taskId){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
@@ -23074,11 +23178,11 @@ function renderActRowToolbarHtml(t,expAct){
       if(puedeImp)
         acts+=actPorFirmarPrintOpenBtnHtml(wfT.impreso,"openActPorFirmarDocs('"+eidT+"','"+tidT+"')");
       if(!(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()))
-        acts+=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(wfT.firma_fisica):'';
+        acts+=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(wfT.firma_fisica,t.exp,t.id):'';
       const firmPend=typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t);
-      if(firmPend&&!actPuedeCargarFirmadoPorFirmar())
-        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();tramitePasarAPorNotificar(\''+eidT+'\',\''+tidT+'\')" title="Por notificar">📬</button>';
-      else if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
+      if(firmPend)
+        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openActAsignarNotificadorFirmaFisica(\''+eidT+'\',\''+tidT+'\')" title="Asignar notificador → Por notificar (sin PDF)">📬</button>';
+      if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
         acts+=actPorFirmarCargarBtnHtml(t.exp,t.id,t,expAct);
     }
     if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
@@ -23103,13 +23207,17 @@ function renderActRowToolbarHtml(t,expAct){
       const firmFis=!!(wfRow.firma_fisica&&wfRow.firma_fisica.en);
       const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
       if(!esDir)
-        acts+=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(wfRow.firma_fisica):'';
+        acts+=typeof actPorFirmarFirmaFisicaBtnHtml==='function'?actPorFirmarFirmaFisicaBtnHtml(wfRow.firma_fisica,peid,tid):'';
       if(firmFis&&esDir)
         acts+='<span class="btn bsm bic act-ico act-impreso-btn act-impreso-on" style="cursor:default" title="Firma física registrada"><span class="act-agenda-check" aria-hidden="true">✓</span>✍️</span>';
-      else if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
-        acts+=actPorFirmarCargarBtnHtml(expAct._exp||t.exp,t.id,t,expAct);
-      else if(esDir)
-        acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+peid+'\')" title="Cargar documento firmado">📤</button>';
+      else{
+        if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(expAct))
+          acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+peid+'\')" title="Asignar notificador → Por notificar (sin PDF)">📬</button>';
+        if(typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar())
+          acts+=actPorFirmarCargarBtnHtml(expAct._exp||t.exp,t.id,t,expAct);
+        else if(esDir)
+          acts+='<button type="button" class="btn bsm bic act-ico" onclick="event.stopPropagation();openDirectorCargarFirmado(\''+peid+'\')" title="Cargar documento firmado">📤</button>';
+      }
     }
     if((faseWf===PQRS_WF.PENDIENTE_NOTIF||faseWf===PQRS_WF.LISTA_ENVIO)
       &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(expAct))
