@@ -10,7 +10,7 @@ function chatNormKey(k){return String(k||'').trim().toLowerCase();}
 function chatCanonicalKey(key){
   key=chatNormKey(key);
   if(key==='ofi:guaviare')return 'depto:guaviare';
-  if(key==='admin:admin'||key==='admin:')return chatNormKey(CHAT_ADMIN_KEY);
+  if(key.startsWith('admin:'))return chatNormKey(CHAT_ADMIN_KEY);
   return key;
 }
 function chatKeysMatch(a,b){
@@ -21,6 +21,12 @@ function chatKeyAliases(key){
   const c=chatCanonicalKey(key);
   const set=new Set([key,c]);
   if(c==='depto:guaviare'){set.add('ofi:guaviare');}
+  if(c===chatNormKey(CHAT_ADMIN_KEY)||key.startsWith('admin:')){
+    set.add(chatNormKey(CHAT_ADMIN_KEY));
+    set.add(chatNormKey(typeof CHAT_ADMIN_KEY_LEGACY!=='undefined'?CHAT_ADMIN_KEY_LEGACY:'admin:Admin'));
+    set.add('admin:soporte');
+    set.add('admin:admin');
+  }
   return [...set];
 }
 function chatActividadIconHtml(sz){
@@ -357,7 +363,7 @@ function chatUsuarioToContact(u){
   const rol=String(u.rol||'').trim();
   const nom=String(u.nombre||'').trim();
   if(!nom||rol==='ciudadano')return null;
-  // Admin no aparece como contacto personal; se inyecta como «Admin» (avisos)
+  // Admin no aparece como contacto personal; se inyecta como «Soporte» (avisos)
   if(rol==='admin')return null;
   if(rol==='jurisdiccional'){
     return{key:'juris:jurisdiccional',kind:'juris',label:nom,meta:'Subdirección · Jurisdiccional',region:'juris'};
@@ -396,7 +402,7 @@ function getChatContacts(){
   if(typeof ensureUsuariosFirestoreCache==='function')void ensureUsuariosFirestoreCache();
   const seen=new Set(),out=[];
   function push(c){chatPushContact(seen,out,me,c);}
-  // Todos (excepto Admin) ven el contacto «Admin» para recibir avisos
+  // Todos (excepto Admin) ven el contacto «Soporte» para recibir avisos
   if(!(typeof esAdministrador==='function'&&esAdministrador())){
     push({key:CHAT_ADMIN_KEY,kind:'admin',label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema',region:'admin'});
   }
@@ -1356,7 +1362,7 @@ function chatClearReplyTo(){
 }
 function chatSetReplyTo(msgId){
   if(!chatPuedeResponderAContacto(window._chatActiveContactKey||'')){
-    if(typeof notif==='function')notif('No se puede responder a Admin','warn');
+    if(typeof notif==='function')notif('No se puede responder a Soporte','warn');
     return;
   }
   const m=chatFindMsgById(msgId);
@@ -1408,7 +1414,7 @@ function renderChatMessages(){
   if(!msgs.length){
     const ro=!chatPuedeResponderAContacto(window._chatActiveContactKey||'');
     const empty=ro
-      ?'<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin avisos de Admin todavía.</div>'
+      ?'<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin avisos de Soporte todavía.</div>'
       :'<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin mensajes. Escriba abajo para iniciar la conversación.</div>';
     if(_chatMessagesPaintSig!=='empty|'+convId+'|'+(ro?'ro':'rw')){
       _chatMessagesPaintSig='empty|'+convId+'|'+(ro?'ro':'rw');
@@ -1564,8 +1570,8 @@ function chatAdminAbrirBroadcast(){
   chatClearReplyTo();
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
-  if(tit)tit.textContent='Avisos del sistema';
-  if(sub)sub.textContent='Enviar como Admin (solo lectura para destinatarios)';
+  if(tit)tit.textContent='Avisos de Soporte';
+  if(sub)sub.textContent='Enviar como Soporte (los destinatarios no pueden responder)';
   chatSyncLayout();
   renderChatContacts();
   renderChatAdminBroadcast();
@@ -1599,7 +1605,7 @@ function renderChatAdminBroadcast(){
       '<span><strong>'+escAttr(c.label)+'</strong><br><span class="chat-admin-tgt-meta">'+escAttr(c.meta||'')+'</span></span></label>';
   }).join('')||'<div style="padding:10px;font-size:12px;color:var(--tx3)">Sin destinatarios en este grupo.</div>';
   el.innerHTML='<div class="chat-admin-broadcast">'+
-    '<div class="chat-admin-broadcast-hint">El mensaje llegará como <strong>Admin</strong>. Los destinatarios podrán leerlo pero <strong>no responder</strong>.</div>'+
+    '<div class="chat-admin-broadcast-hint">El mensaje llegará como <strong>Soporte</strong>. Los destinatarios podrán leerlo pero <strong>no responder</strong>.</div>'+
     '<div class="chat-admin-scope fx" style="gap:6px;flex-wrap:wrap;margin:8px 0">'+scopeBtns+'</div>'+
     '<label class="chat-admin-tgt chat-admin-tgt-all"><input type="checkbox" id="chat-admin-tgt-all" checked onchange="chatAdminToggleBroadcastTodos(this)"> <strong>Todos de este grupo ('+targets.length+')</strong></label>'+
     '<div class="chat-admin-tgt-list">'+list+'</div>'+
@@ -1682,7 +1688,7 @@ async function chatEnviarTexto(){
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!contactKey)return;
   if(!chatPuedeResponderAContacto(contactKey)){
-    notif('No se puede responder a Admin. Los avisos son solo de lectura.','warn');
+    notif('No se puede responder a Soporte. Los avisos son solo de lectura.','warn');
     return;
   }
   const route=chatPickSendRoute(me,contactKey);
@@ -1743,8 +1749,8 @@ function chatAdjuntarArchivoClick(){
   if(!chatPuedeResponderAContacto(window._chatActiveContactKey||chatActiveContactKey()||'')){
     chatModalAlert({
       title:'Solo lectura',
-      message:'No se pueden adjuntar archivos en avisos de Admin.',
-      detail:'Los mensajes de Admin son solo de lectura.',
+      message:'No se pueden adjuntar archivos en avisos de Soporte.',
+      detail:'Los mensajes de Soporte son solo de lectura.',
       tone:'warn'
     });
     return;
