@@ -471,6 +471,7 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 #pg-act #act-table-wrap tbody tr.prioritaria:hover > td,
 #pg-act #act-table-wrap tbody tr.prioritaria-crit:hover > td{background:transparent!important}
 #pg-act #act-table-wrap .act-col-resp{max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+#pg-act #act-table-wrap .act-col-notif{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:500}
 #pg-act #act-table-wrap .act-col-acciones{white-space:nowrap;padding:4px 6px}
 #pg-act #act-table-wrap .act-row-actions,
 #pg-act #act-table-wrap .act-row-actions .sst-act-toolbar{

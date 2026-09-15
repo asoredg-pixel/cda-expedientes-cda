@@ -11190,6 +11190,41 @@ function taskResponsablesLabel(t,html){
     return html?(icon+' '+escAttr(n)):(icon+' '+n);
   }).join(html?'<br>':' · ');
 }
+/** Filtro activo de paleta Actividades (normalizado). */
+function actFiltroActivoNorm(){
+  const raw=document.getElementById('f-act-est')?document.getElementById('f-act-est').value:'pend';
+  if(raw==='parafirma'||raw==='porimprimir'||raw==='porfirmar'||raw==='firmados')return'porfirma';
+  return String(raw||'pend');
+}
+/** Quién está designado a notificar (PQRSD o trámite en Por notificar). */
+function actNotificadorPorLabel(t,html){
+  if(!t)return html?'—':'—';
+  let quien='';
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    quien=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  }else if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+    const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+    quien=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  }else{
+    const nx=typeof taskNotifUrgenteCtx==='function'?taskNotifUrgenteCtx(t):null;
+    if(nx&&nx.enNotif)quien=String(nx.notifPor||'').trim();
+  }
+  if(!quien)return html?'<span style="color:var(--tx3)">Sin designar</span>':'Sin designar';
+  return html?escAttr(quien):quien;
+}
+/** VITAL / encargado NCA en «Por notificar»: columna de quién notifica. */
+function actMuestraColNotificadorPor(){
+  if(actFiltroActivoNorm()!=='pornotif')return false;
+  if(typeof esCargoVital==='function'&&esCargoVital())return true;
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  return false;
+}
+window.actNotificadorPorLabel=actNotificadorPorLabel;
+window.actMuestraColNotificadorPor=actMuestraColNotificadorPor;
 function taskAsignadoEstadoIcon(st){
   if(st==='Atendida')return'✓';
   if(st==='Por verificar')return'📤';
@@ -23393,6 +23428,9 @@ function renderActividadesRowHtml(t){
   const expAct=getExpById(t.exp);
   const acts=renderActRowToolbarHtml(t,expAct);
   const respCol=esVistaActividadesDepto()?('<td class="act-col-resp" style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
+  const notifCol=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor()
+    ?('<td class="act-col-notif" style="font-size:12px;color:var(--tx2)" title="Responsable designado a notificar">'+actNotificadorPorLabel(t,true)+'</td>')
+    :'';
   const priorAbierta=typeof taskPrioridadMarcadoresResueltos==='function'?!taskPrioridadMarcadoresResueltos(t):(est!=='Atendida');
   const esCrit=priorAbierta&&taskEsPrioridadCriticaVencimiento(t);
   const rowStyle=[
@@ -23406,6 +23444,7 @@ function renderActividadesRowHtml(t){
     '<td class="act-col-tram">'+escAttr(t.tram)+badgeDepto(t.depto)+'</td>'+
     '<td class="act-col-inter">'+actInteresadoCellHtml(t)+'</td><td class="act-col-desc">'+escAttr(actActividadLabelDisplay(t,expAct))+'</td>'+
     respCol+
+    notifCol+
     '<td class="act-col-vence" style="color:'+(vencE?'var(--rd)':'var(--tx)')+'">'+fmtF(venceShow)+'</td>'+
     '<td class="act-col-cierre" style="font-size:12px">'+cierreHtml+'</td>'+
     '<td class="act-col-acciones"><div class="act-row-actions">'+acts+'</div></td></tr>';
@@ -23462,14 +23501,17 @@ function exportarActividadesExcel(){
   const list=window._actExportList||[];
   if(!list.length){notif('Sin actividades para exportar en este filtro','err');return;}
   const deptView=esVistaActividadesDepto();
+  const colNotif=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
   const hdr=['Estado','Ref.','Trámite','Interesado','Actividad'];
   if(deptView)hdr.push('Responsable');
+  if(colNotif)hdr.push('Notifica');
   if(deptView)hdr.push('Resultado revisión');
   hdr.push('Vence','Cierre / reporte');
   const rows=list.map(t=>{
     const rev=deptView?getTaskRevisionDepto(t):null;
     const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.tram||'',t.nombre||'',t.desc||t.actividad||''];
     if(deptView)r.push(taskResponsablesLabel(t,false));
+    if(colNotif)r.push(typeof actNotificadorPorLabel==='function'?actNotificadorPorLabel(t,false):'');
     if(deptView)r.push(rev?(rev.tipo==='aprobada'?'Aprobada':'Enviada a corregir'):'');
     r.push(fmtF(t.vence),estadoTask(t)==='Atendida'?fmtF(t.fechaAtendida):t.fechaReportada?fmtF(t.fechaReportada):'');
     return r;
@@ -25337,7 +25379,12 @@ function renderActividades(){
   const thead=document.querySelector('#pg-act table thead tr');
   if(thead){
     const base='<th class="act-col-estado">Estado</th><th class="act-col-ref">Ref.</th><th class="act-col-tram">Trámite</th><th class="act-col-inter">Interesado</th><th class="act-col-desc">Actividad</th>';
-    thead.innerHTML=deptView?base+'<th class="act-col-resp">Responsable</th><th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>':base+'<th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>';
+    const colNotif=(typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor())
+      ?'<th class="act-col-notif" title="Responsable designado a notificar">Notifica</th>'
+      :'';
+    thead.innerHTML=deptView
+      ?base+'<th class="act-col-resp">Responsable</th>'+colNotif+'<th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>'
+      :base+colNotif+'<th class="act-col-vence">Vence</th><th class="act-col-cierre">Cierre</th><th class="act-col-acciones">Acciones</th>';
   }
   if(!deptView&&!responsableActivo){
     if(esResponsableIdentidadFija())fijarResponsableSesion();
@@ -25463,7 +25510,8 @@ function renderActividades(){
   const nPorFirma=nPorFirmaList.length;
   let nNotif=notifAll.length;
   if(deptView&&respFilter&&!filterIsEnc)nNotif=(notifAll||[]).filter(function(t){return actividadNotifEsDeResp(t,respFilter);}).length;
-  const colSpan=deptView?9:8;
+  const muestraNotifCol=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
+  const colSpan=(deptView?9:8)+(muestraNotifCol?1:0);
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
   if(sub){
