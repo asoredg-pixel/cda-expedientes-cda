@@ -18372,6 +18372,7 @@ function bandejaItemKey(it){
   if(it.tipo==='pqrs_traslado')return 'pt|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   if(it.tipo==='pqrs_fecha_sol')return 'pfs|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   if(it.tipo==='pqrs_aviso')return 'pa|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
+  if(it.tipo==='firmado_atendida')return 'fa|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
   return 'p|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'');
 }
 /** Claves canónica + legacy (p. ej. chat con cidx) para no perder marcas antiguas. */
@@ -18531,6 +18532,38 @@ function collectBandejaItems(){
         }
       });
     });
+    // Firmado sin notificar → campanita al responsable destinatario (aunque no sea el responsable principal del filtro)
+    (function collectFirmadoAtendidaAvisos(){
+      const yo=String(responsableActivo||'').trim();
+      if(!yo)return;
+      function pushFromTask(t,expRef){
+        if(!t||t.eliminada)return;
+        (t.historial||[]).forEach(function(h,hi){
+          if(!h||h.tipo!=='firmado_atendida_sin_notif')return;
+          const para=String(h.para||h.reportadoPor||'').trim();
+          const matchPara=para&&typeof agendaNorm==='function'&&agendaNorm(para)===agendaNorm(yo);
+          const matchResp=!para&&typeof agendaNorm==='function'&&agendaNorm(String(t.responsable||''))===agendaNorm(yo);
+          const matchAsig=!para&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yo);
+          if(!(matchPara||matchResp||matchAsig))return;
+          const dup=items.some(function(it){return it.tipo==='firmado_atendida'&&it.exp===expRef&&it.taskId===t.id&&it.hidx===hi;});
+          if(dup)return;
+          items.push({
+            modo:'resp',tipo:'firmado_atendida',exp:expRef,taskId:t.id,hidx:hi,
+            fecha:String(h.fecha||'').slice(0,10)||hoy(),
+            autor:h.por||'VITAL / Encargado',
+            texto:'✅ Documento firmado — actividad atendida (sin notificar). Abra para ver el documento firmado.',
+            desc:t.desc||t.actividad||'',responsable:t.responsable||''
+          });
+        });
+      }
+      exps.forEach(function(e){
+        (e.tasks||[]).forEach(function(t){pushFromTask(normalizeTask(t),e._exp);});
+      });
+      (actividadesLibres||[]).forEach(function(t){
+        t=normalizeActLibre(t);
+        pushFromTask(t,t.codigo);
+      });
+    })();
     (actividadesLibres||[]).forEach(t=>{
       t=normalizeActLibre(t);
       if(t.eliminada||t.responsable!==responsableActivo)return;
@@ -18644,6 +18677,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='pqrs_traslado'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--pul);color:var(--pu)">PQRSD trasladada</span>':
     it.tipo==='pqrs_fecha_sol'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--bll);color:var(--bl)">Fecha solicitud</span>':
     it.tipo==='pqrs_aviso'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--bll);color:var(--bl)">Aviso PQRSD</span>':
+    it.tipo==='firmado_atendida'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--gnl);color:var(--gn)">Firmado · Atendida</span>':
     '<span class="inbox-item-tag inbox-tag-ver">Reporte</span>';
   const tit=it.tipo==='comentario'?(it.autor+' · '+it.exp):
     it.tipo==='agenda'?(it.autor+' · Agenda'):
@@ -18655,6 +18689,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='devolucion'?('Departamento · '+it.exp):
     it.tipo==='sol_traslado'||it.tipo==='sol_eliminacion'?('Solicitud · '+it.exp):
     it.tipo==='pqrs_traslado'||it.tipo==='pqrs_fecha_sol'||it.tipo==='pqrs_aviso'?('PQRSD · '+it.exp):
+    it.tipo==='firmado_atendida'?((it.autor||'VITAL / Encargado')+' · '+it.exp):
     (it.responsable+' · '+it.exp);
   const txt=it.tipo==='porverificar'?(it.texto||it.desc):it.texto;
   const toggle=modoVista==='read'
@@ -18817,6 +18852,7 @@ function bandejaActFiltroParaTask(t,it){
   if(tipo==='sol_traslado'||tipo==='sol_eliminacion'||tipo==='porverificar')return'porver';
   if(tipo==='devolucion'||tipo==='obsdocumento'||tipo==='notadoc')return tienePorCorr?'porcorr':'pend';
   if(tipo==='pqrs_traslado'||tipo==='pqrs_fecha_sol'||tipo==='pqrs_aviso')return'pend';
+  if(tipo==='firmado_atendida')return'done';
   if(!t){
     if(tipo==='auto_venc1'||tipo==='auto_venc3')return'pend';
     return'pend';
@@ -18917,6 +18953,13 @@ function abrirActividadDesdeBandeja(it,resolved,filtro){
     }
     if(tipo==='porverificar'||filtro==='porver'){
       if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,taskId,{revisarEntrega:true});
+      return;
+    }
+    if(tipo==='firmado_atendida'){
+      if(typeof openTaskVerDocumentoResp==='function')
+        openTaskVerDocumentoResp(expId,taskId,{soloAprobados:true});
+      else if(typeof openTaskCommentsModal==='function')
+        openTaskCommentsModal(expId,taskId,{verDocumento:true,soloAprobados:true});
       return;
     }
     if(filtro==='porcorr'&&typeof openTaskVerDocumentoResp==='function'){
