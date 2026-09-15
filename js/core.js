@@ -24543,7 +24543,14 @@ function getActProyeccionResponsableNombre(){
 window.getActProyeccionResponsableNombre=getActProyeccionResponsableNombre;
 function getTareasNotifVisiblesAct(){
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
-  const respFilter=deptView?getActDeptRespFilterSafe():null;
+  let respFilter=deptView?getActDeptRespFilterSafe():null;
+  // Encargado con su propio nombre en el selector: ver «Por notificar» de todos (como VITAL).
+  // Si elige otro responsable, se filtra solo ese.
+  if(deptView&&respFilter){
+    const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
+    if(enc&&typeof agendaNorm==='function'&&agendaNorm(respFilter)===agendaNorm(enc))respFilter=null;
+    else if(enc&&respFilter===enc)respFilter=null;
+  }
   const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
     if(!pqrsEnFaseNotificacion(e))return false;
     // Notificación devuelta a corregir: solo «Por corregir» / «Revisados», no «Por notificar»
@@ -24569,7 +24576,10 @@ function getTareasNotifVisiblesAct(){
     if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return false;
     const fw=t.firmaWf||{};
     if((fw.notificacion_devuelta||fw._notif_devuelta_corregir)&&estadoTask(t)==='Por corregir')return false;
-    if(deptView)return true;
+    if(deptView){
+      if(respFilter)return typeof actividadNotifEsDeResp==='function'?actividadNotifEsDeResp(t,respFilter):true;
+      return true;
+    }
     if(typeof esCargoVital==='function'&&esCargoVital())return true;
     if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
     if(typeof esAdministrador==='function'&&esAdministrador())return true;
@@ -25403,7 +25413,10 @@ function renderActividades(){
   }
   const respFilter=deptView?getActDeptRespFilterSafe():null;
   const enc=getEncargadoDepto(deptoActivo);
-  const filterIsEnc=!!respFilter&&respFilter===enc;
+  const filterIsEnc=!!respFilter&&!!enc&&(
+    respFilter===enc||
+    (typeof agendaNorm==='function'&&agendaNorm(respFilter)===agendaNorm(enc))
+  );
   updateActEstFilterForEnc(filterIsEnc);
   if(tit){
     tit.textContent=deptView?(esVistaActividadesOficinaPqrs()?('Actividades PQRSD · '+labelOficina(deptoActivo)+(respFilter?' · '+respFilter:' · Todos los responsables')):('Actividades · '+labelDepto(deptoActivo)+(respFilter?' · '+respFilter:' · Todos los responsables'))):('Actividades de '+responsableActivo);
@@ -25518,7 +25531,7 @@ function renderActividades(){
     if(filtroAct==='pend')sub.textContent='';
     else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas).';
     else if(filtroAct==='pornotif')sub.textContent=deptView
-      ?'Por notificar: plazo de 5 días hábiles (Colombia) al asignar. Si vence sin reportar, aparece también en Prioritarias. No se muestra en Por ejecutar.'
+      ?'Por notificar: con el encargado en el selector se ven todas; con otro responsable, solo las suyas. Plazo 5 días hábiles; si vence sin reportar, también en Prioritarias. No aparece en Por ejecutar.'
       :'Por notificar: plazo de 5 días hábiles. Si vence sin reportar, pasa a Prioritarias como vencida.';
     else if(filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados')
       sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
