@@ -706,13 +706,15 @@ function tramitePasarAPorNotificar(expId,taskId){
   const wf=getTaskFirmaWf(t);
   if(!(wf.firma_fisica&&wf.firma_fisica.en)){notif('Marque primero como firmado','err');return;}
   const inicio=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
-  const notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
-  // Si hay notificador designado (aunque sea el encargado/VITAL), siempre plazo 5 días
+  let notifPor=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  const sel=document.getElementById('pqrs-notif-por-sel')||document.getElementById('tramite-notif-por-sel');
+  if(sel&&String(sel.value||'').trim())notifPor=String(sel.value||'').trim();
+  // Con notificador designado: siempre plazo 5 días hábiles (CO). Sin designar + correo: sin plazo.
   const sinPlazo=!notifPor&&(String(wf.canal||'').trim().toLowerCase()==='correo'||wf.notif_correo_entrega===true);
   let vence='';
   if(!sinPlazo){
-    if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
-    else if(typeof addDiasHabilesCO==='function')vence=addDiasHabilesCO(inicio,5);
+    if(typeof addDiasHabilesCO==='function')vence=addDiasHabilesCO(inicio,5);
+    else if(typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
     else{
       const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
     }

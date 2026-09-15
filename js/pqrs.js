@@ -1577,7 +1577,7 @@ function pqrsAccionesTablaHtml(e){
     if(!esDir&&typeof actPorFirmarFirmaFisicaBtnHtml==='function')
       h+=actPorFirmarFirmaFisicaBtnHtml(wfF.firma_fisica,e._exp,tidPf)+' ';
     if(firmFis&&typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
-      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Asignar notificador → Por notificar (sin PDF)">📬</button> ';
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openActAsignarNotificadorFirmaFisica(\''+id+'\',\''+(tidPf?jsStr(tidPf):'')+'\')" title="Asignar notificador → Por notificar (sin PDF)">📬</button> ';
     if(firmFis&&typeof actPuedeCargarFirmadoPorFirmar==='function'&&actPuedeCargarFirmadoPorFirmar()&&tidPf)
       h+=(typeof actPorFirmarCargarBtnHtml==='function'?actPorFirmarCargarBtnHtml(e._exp,tidPf):'')+' ';
     else if(!firmFis&&typeof pqrsPuedeMarcarFirmadoSinCargar==='function'&&pqrsPuedeMarcarFirmadoSinCargar(e))
@@ -1587,7 +1587,7 @@ function pqrsAccionesTablaHtml(e){
     if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())
       return pqrsDirectorFirmadosAccionesHtml(e);
     else if(typeof pqrsPuedeAsignarPorNotificar==='function'&&pqrsPuedeAsignarPorNotificar(e))
-      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openPqrsDirectorFirmarModal(\''+id+'\')" title="Gestionar firmado">📬</button> ';
+      h+='<button type="button" class="btn bsm act-ico bp" onclick="event.stopPropagation();openActAsignarNotificadorFirmaFisica(\''+id+'\')" title="Asignar notificador → Por notificar">📬</button> ';
   }
   if((fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO)){
     const wfN=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
