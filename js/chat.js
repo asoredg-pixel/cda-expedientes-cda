@@ -1190,9 +1190,6 @@ function renderChatContacts(){
       return;
     }
     contacts=contacts.slice().sort(function(a,b){
-      const aAdmin=a&&a.kind==='admin'?1:0;
-      const bAdmin=b&&b.kind==='admin'?1:0;
-      if(aAdmin!==bAdmin)return bAdmin-aAdmin;
       let ta='',tb='';
       try{ta=chatContactLastTs(me,a.key);tb=chatContactLastTs(me,b.key);}catch(e){}
       if(ta!==tb)return tb.localeCompare(ta);
