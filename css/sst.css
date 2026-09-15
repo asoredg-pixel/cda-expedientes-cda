@@ -2748,10 +2748,27 @@ html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:1000
 .chat-contact-av.chat-region-guainia{background:#1a7a4a}
 .chat-contact-av.chat-region-vaupes{background:#6d3fa8}
 .chat-contact-av.chat-region-juris{background:#b87d0a}
+.chat-contact-av.chat-region-admin{background:#0f766e}
 .chat-contact.on .chat-contact-av.chat-region-guaviare{box-shadow:0 0 0 2px #185FA544}
 .chat-contact.on .chat-contact-av.chat-region-guainia{box-shadow:0 0 0 2px #1a7a4a44}
 .chat-contact.on .chat-contact-av.chat-region-vaupes{box-shadow:0 0 0 2px #6d3fa844}
 .chat-contact.on .chat-contact-av.chat-region-juris{box-shadow:0 0 0 2px #b87d0a44}
+.chat-contact.on .chat-contact-av.chat-region-admin{box-shadow:0 0 0 2px #0f766e44}
+.chat-contact-admin .chat-contact-name{color:#0f766e}
+.chat-admin-tools{padding:10px 12px;border-bottom:1px solid var(--bd);background:#ecfdf5}
+.chat-admin-bcast-btn{width:100%;justify-content:center}
+.chat-admin-broadcast{padding:12px;font-size:13px;color:var(--tx)}
+.chat-admin-broadcast-hint{font-size:12px;color:var(--tx2);background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:8px 10px;margin-bottom:6px;line-height:1.35}
+.chat-admin-tgt-list{max-height:180px;overflow:auto;border:1px solid var(--bd);border-radius:8px;padding:6px;background:var(--sf2)}
+.chat-admin-tgt{display:flex;align-items:flex-start;gap:8px;font-size:12px;padding:6px 4px;border-bottom:1px solid rgba(0,0,0,.05)}
+.chat-admin-tgt:last-child{border-bottom:0}
+.chat-admin-tgt-all{padding:8px 4px;margin-bottom:4px}
+.chat-admin-tgt-meta{font-size:10px;color:var(--tx3)}
+.chat-readonly-banner{
+  flex-shrink:0;padding:8px 12px;font-size:12px;font-weight:600;color:#0f766e;
+  background:#ecfdf5;border-top:1px solid #99f6e4;text-align:center;
+}
+.chat-msg-broadcast{border-left:3px solid #0f766e}
 .storage-full-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:30000;background:#b91c1c;color:#fff;padding:10px 44px 10px 16px;font-size:13px;font-weight:600;line-height:1.45;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .storage-full-banner.on{display:block}
 .storage-full-banner-close{position:absolute;top:50%;right:10px;transform:translateY(-50%);background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;padding:4px 8px;line-height:1}

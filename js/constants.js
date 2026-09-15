@@ -196,6 +196,9 @@ const CHAT_DRIVE_MAX_BYTES=25*1024*1024;
 // Carpeta raíz chat interno (cdaguaviare1@gmail.com, retención 30 días)
 const CHAT_DRIVE_FOLDER_ID='1xkB43Cay54_Qxu0EvJYcHiyHqJpF_bSU';
 const CHAT_DRIVE_FOLDER_URL='https://drive.google.com/drive/folders/'+CHAT_DRIVE_FOLDER_ID;
+/** Identidad fija del Administrador en chat interno (avisos one-way). */
+const CHAT_ADMIN_KEY='admin:Admin';
+const CHAT_ADMIN_LABEL='Admin';
 
 // LocalStorage
 const SST_LAST_EXPORT_KEY='sst_last_exportacion';
@@ -219,7 +222,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260914l';
+const SST_BUILD_ID = '20260915a';
 
 // Carpeta PQRSD institucional — matriz XLSX + Radicacion/año/mes/PQRSD-xxx (cdaguaviare1)
 // https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS

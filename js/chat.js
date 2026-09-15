@@ -10,6 +10,7 @@ function chatNormKey(k){return String(k||'').trim().toLowerCase();}
 function chatCanonicalKey(key){
   key=chatNormKey(key);
   if(key==='ofi:guaviare')return 'depto:guaviare';
+  if(key==='admin:admin'||key==='admin:')return chatNormKey(CHAT_ADMIN_KEY);
   return key;
 }
 function chatKeysMatch(a,b){
@@ -79,6 +80,8 @@ function addChatResponsablesOficinaPropia(add,oficinaId){
   });
 }
 function getChatIdentity(){
+  if(typeof esAdministrador==='function'&&esAdministrador())
+    return{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL};
   if(esJurisdiccional())return{kind:'juris',key:'juris:jurisdiccional',label:CHAT_LABEL_SUBDIRECCION};
   if(esModoOficinaDeguv())return{kind:'ofi',key:'ofi:'+deptoActivo,label:labelOficina(deptoActivo),oficinaId:deptoActivo};
   if(esSecretaria())return{kind:'ofi',key:'ofi:secretaria',label:'Secretaría DEGUV',oficinaId:'secretaria'};
@@ -109,6 +112,8 @@ function getChatIdentity(){
   return chatSessionUserContact();
 }
 function chatEffectiveIdentity(){
+  if(typeof esAdministrador==='function'&&esAdministrador())
+    return{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL};
   let me=getChatIdentity();
   if(me)return me;
   const ses=chatSessionUserContact();
@@ -139,6 +144,10 @@ function getChatContactsList(){
 function chatIdentityKeysForKey(key){
   key=chatNormKey(key);
   const set=new Set([key]);
+  if(key.startsWith('admin:')||key===chatNormKey(CHAT_ADMIN_KEY)){
+    set.add(chatNormKey(CHAT_ADMIN_KEY));
+    return[...set];
+  }
   if(key.startsWith('depto:')){
     const id=key.slice(6);
     const enc=getEncargadoDepto(id);
@@ -185,6 +194,10 @@ function chatPersonKeysFor(key){
   key=chatNormKey(key);
   const set=new Set([key]);
   chatKeyAliases(key).forEach(function(a){set.add(chatNormKey(a));});
+  if(key.startsWith('admin:')||key===chatNormKey(CHAT_ADMIN_KEY)){
+    set.add(chatNormKey(CHAT_ADMIN_KEY));
+    return set;
+  }
   if(key.startsWith('resp:')){
     const nm=key.slice(5);
     DEPTOS.forEach(function(d){
@@ -343,7 +356,9 @@ function chatUsuarioToContact(u){
   if(!u||u.activo===false)return null;
   const rol=String(u.rol||'').trim();
   const nom=String(u.nombre||'').trim();
-  if(!nom||rol==='ciudadano'||rol==='admin')return null;
+  if(!nom||rol==='ciudadano')return null;
+  // Admin no aparece como contacto personal; se inyecta como «Admin» (avisos)
+  if(rol==='admin')return null;
   if(rol==='jurisdiccional'){
     return{key:'juris:jurisdiccional',kind:'juris',label:nom,meta:'Subdirección · Jurisdiccional',region:'juris'};
   }
@@ -381,6 +396,10 @@ function getChatContacts(){
   if(typeof ensureUsuariosFirestoreCache==='function')void ensureUsuariosFirestoreCache();
   const seen=new Set(),out=[];
   function push(c){chatPushContact(seen,out,me,c);}
+  // Todos (excepto Admin) ven el contacto «Admin» para recibir avisos
+  if(!(typeof esAdministrador==='function'&&esAdministrador())){
+    push({key:CHAT_ADMIN_KEY,kind:'admin',label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema · solo lectura',region:'admin'});
+  }
   const jurisU=(_usuariosCache||[]).find(function(u){return u&&u.activo!==false&&u.rol==='jurisdiccional'&&String(u.nombre||'').trim();});
   push({
     key:'juris:jurisdiccional',
@@ -452,7 +471,7 @@ function chatContactLastTs(me,contactKey){
   return last&&last.ts?String(last.ts):'';
 }
 function chatAvRegionClass(c){
-  const r=(c&&c.region)||'guaviare';
+  const r=(c&&c.region)||((c&&c.kind==='admin')?'admin':'guaviare');
   return ' chat-region-'+r;
 }
 function chatRefreshContactsIfOpen(){
@@ -719,6 +738,8 @@ function chatConvMessages(convId){
 }
 function chatContactFromKey(key){
   key=String(key||'');
+  if(chatNormKey(key).startsWith('admin:')||chatKeysMatch(key,CHAT_ADMIN_KEY))
+    return{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL,meta:'Avisos del sistema · solo lectura',region:'admin'};
   const found=getChatContactsList().find(function(c){return chatKeysMatch(c.key,key);});
   if(found)return found;
   if(key.startsWith('juris:'))return{kind:'juris',key,label:CHAT_LABEL_SUBDIRECCION,meta:'Subdirección · Jurisdiccional',region:'juris'};
@@ -727,7 +748,7 @@ function chatContactFromKey(key){
   if(key.startsWith('resp:'))return{kind:'resp',key,label:key.slice(5),meta:'Responsable',region:'guaviare'};
   return{kind:'resp',key,label:key,meta:'',region:'guaviare'};
 }
-function chatAvClass(kind){return kind==='depto'?' depto':kind==='juris'?' juris':kind==='ofi'?' ofi':kind==='enc_ofi'?' enc_ofi':kind==='resp'?' resp':'';}
+function chatAvClass(kind){return kind==='admin'?' admin':kind==='depto'?' depto':kind==='juris'?' juris':kind==='ofi'?' ofi':kind==='enc_ofi'?' enc_ofi':kind==='resp'?' resp':'';}
 function chatAvLetter(label){return String(label||'?').trim().charAt(0).toUpperCase();}
 function chatEsMio(m){
   if(!m||!m.fromKey)return false;
@@ -745,6 +766,7 @@ function chatPreviewMsg(m,me){
 function chatPersonLabelFromKey(key){
   key=chatNormKey(key);
   if(!key)return'';
+  if(key.startsWith('admin:')||key===chatNormKey(CHAT_ADMIN_KEY))return CHAT_ADMIN_LABEL;
   if(key.startsWith('resp:'))return key.slice(5);
   if(key.startsWith('depto:')){
     const id=key.slice(6);
@@ -767,6 +789,7 @@ function chatPersonLabelFromKey(key){
 }
 function chatSendFromLabel(me){
   if(!me)return'';
+  if(me.kind==='admin'||chatKeysMatch(me.key,CHAT_ADMIN_KEY))return CHAT_ADMIN_LABEL;
   const ses=chatSessionUserContact();
   if(ses&&ses.label)return ses.label;
   const lbl=chatPersonLabelFromKey(chatPreferSendKey(me)||me.key);
@@ -797,6 +820,7 @@ function chatMyKeysCanon(){
 }
 function chatPreferSendKey(me){
   if(!me)return'';
+  if(me.kind==='admin'||chatKeysMatch(me.key,CHAT_ADMIN_KEY))return CHAT_ADMIN_KEY;
   const ses=chatSessionUserContact();
   if(ses&&ses.key.startsWith('resp:'))return ses.key;
   if(me.key.startsWith('resp:'))return me.key;
@@ -1093,7 +1117,7 @@ function chatSyncLayout(){
   const main=document.getElementById('chat-main');
   const back=document.getElementById('chat-back-btn');
   const toggleBtn=document.getElementById('chat-toggle-contacts-btn');
-  const conv=window._chatConvActiva;
+  const conv=window._chatConvActiva||window._chatVista==='admin_broadcast';
   window._chatContactsCollapsed=false;
   if(contacts){
     // Lista siempre visible: ancha al elegir contacto; al lado al conversar
@@ -1133,6 +1157,10 @@ function chatVolverContactos(){
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent='Chat interno';
   if(sub)sub.textContent='Seleccione un contacto';
+  const compose=document.querySelector('#chat-main .chat-compose');
+  if(compose)compose.style.display='';
+  const banner=document.getElementById('chat-readonly-banner');
+  if(banner){banner.hidden=true;banner.style.display='none';}
   chatSyncLayout();
   renderChatContacts();
 }
@@ -1156,6 +1184,9 @@ function renderChatContacts(){
       return;
     }
     contacts=contacts.slice().sort(function(a,b){
+      const aAdmin=a&&a.kind==='admin'?1:0;
+      const bAdmin=b&&b.kind==='admin'?1:0;
+      if(aAdmin!==bAdmin)return bAdmin-aAdmin;
       let ta='',tb='';
       try{ta=chatContactLastTs(me,a.key);tb=chatContactLastTs(me,b.key);}catch(e){}
       if(ta!==tb)return tb.localeCompare(ta);
@@ -1175,7 +1206,7 @@ function renderChatContacts(){
       }catch(e){}
       const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
       const meta=c.meta||c.sub||'';
-      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+'" role="button" tabindex="0" data-chat-key="'+escAttr(c.key)+'">'+
+      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+(c.kind==='admin'?' chat-contact-admin':'')+'" role="button" tabindex="0" data-chat-key="'+escAttr(c.key)+'">'+
         '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
@@ -1183,10 +1214,13 @@ function renderChatContacts(){
         (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
         '</div>';
     }).join('');
-    const sig=(window._chatActiveContactKey||'')+'|'+html;
+    const adminTools=(typeof esAdministrador==='function'&&esAdministrador())
+      ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
+      :'';
+    const sig=(window._chatActiveContactKey||'')+'|'+(window._chatVista||'')+'|'+adminTools+html;
     if(sig===_chatContactsPaintSig){chatSyncLayout();return;}
     _chatContactsPaintSig=sig;
-    el.innerHTML=html;
+    el.innerHTML=adminTools+html;
   }catch(err){
     console.error('renderChatContacts:',err);
     el.innerHTML='<div style="padding:14px;font-size:12px;color:#b42318">No se pudo cargar la lista de contactos. Recargue con Ctrl+F5.</div>';
@@ -1226,9 +1260,10 @@ async function chatAbrirConv(contactKey){
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
+  chatSyncComposeReadonly();
   setTimeout(function(){
     const inp=document.getElementById('chat-inp');
-    if(inp){try{inp.focus();}catch(e){}}
+    if(inp&&chatPuedeResponderAContacto(contactKey)){try{inp.focus();}catch(e){}}
     if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('chat-main')||document);
   },30);
   try{
@@ -1320,6 +1355,10 @@ function chatClearReplyTo(){
   chatRenderReplyBar();
 }
 function chatSetReplyTo(msgId){
+  if(!chatPuedeResponderAContacto(window._chatActiveContactKey||'')){
+    if(typeof notif==='function')notif('No se puede responder a Admin','warn');
+    return;
+  }
   const m=chatFindMsgById(msgId);
   const payload=chatReplyPayloadFromMsg(m);
   if(!payload)return;
@@ -1367,11 +1406,15 @@ function renderChatMessages(){
   const me=getChatIdentity();
   const msgs=chatMsgsForActiveConv();
   if(!msgs.length){
-    const empty='<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin mensajes. Escriba abajo para iniciar la conversación.</div>';
-    if(_chatMessagesPaintSig!=='empty|'+convId){
-      _chatMessagesPaintSig='empty|'+convId;
+    const ro=!chatPuedeResponderAContacto(window._chatActiveContactKey||'');
+    const empty=ro
+      ?'<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin avisos de Admin todavía.</div>'
+      :'<div style="text-align:center;font-size:12px;color:var(--tx3);padding:2rem 1rem">Sin mensajes. Escriba abajo para iniciar la conversación.</div>';
+    if(_chatMessagesPaintSig!=='empty|'+convId+'|'+(ro?'ro':'rw')){
+      _chatMessagesPaintSig='empty|'+convId+'|'+(ro?'ro':'rw');
       el.innerHTML=empty;
     }
+    chatSyncComposeReadonly();
     return;
   }
   const html=msgs.map(m=>{
@@ -1389,18 +1432,247 @@ function renderChatMessages(){
       body+=(body?'<br>':'')+'<a class="chat-drive-chip" href="'+escAttr(driveUrl)+'" target="_blank" rel="noopener">'+chipLbl+'</a>'+chipNote;
     }
     const t=m.ts?new Date(m.ts).toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'';
-    const replyBtn=m.id
+    const canReply=chatPuedeResponderAContacto(window._chatActiveContactKey||'');
+    const replyBtn=(m.id&&canReply)
       ?'<button type="button" class="chat-msg-reply-btn" title="Responder" aria-label="Responder a este mensaje" onclick="event.stopPropagation();chatSetReplyTo(\''+jsStr(m.id)+'\')">↩</button>'
       :'';
-    return '<div class="chat-msg '+(mine?'me':'them')+'" data-msg-id="'+mid+'">'+replyBtn+body+'<div class="chat-msg-time">'+t+'</div></div>';
+    return '<div class="chat-msg '+(mine?'me':'them')+(m.broadcast||m.noReply?' chat-msg-broadcast':'')+'" data-msg-id="'+mid+'">'+replyBtn+body+'<div class="chat-msg-time">'+t+'</div></div>';
   }).join('');
-  const sig=convId+'|'+msgs.map(function(m){return String(m.id||'')+':'+(m.ts||'')+':'+(m.text||'').length;}).join(',');
+  const sig=convId+'|'+msgs.map(function(m){return String(m.id||'')+':'+(m.ts||'')+':'+(m.text||'').length;}).join(',')+'|'+(chatPuedeResponderAContacto(window._chatActiveContactKey||'')?'rw':'ro');
   if(sig===_chatMessagesPaintSig)return;
   const nearBottom=el.scrollHeight-el.scrollTop-el.clientHeight<80;
   _chatMessagesPaintSig=sig;
   el.innerHTML=html;
   if(nearBottom)el.scrollTop=el.scrollHeight;
+  chatSyncComposeReadonly();
 }
+function chatIsAdminKey(key){
+  return chatKeysMatch(key,CHAT_ADMIN_KEY)||chatNormKey(key).startsWith('admin:');
+}
+function chatPuedeResponderAContacto(contactKey){
+  if(typeof esAdministrador==='function'&&esAdministrador())return true;
+  if(chatIsAdminKey(contactKey))return false;
+  return true;
+}
+function chatSyncComposeReadonly(){
+  const compose=document.querySelector('#chat-main .chat-compose');
+  const replyBar=document.getElementById('chat-reply-bar');
+  const banner=document.getElementById('chat-readonly-banner');
+  const fileInp=document.getElementById('chat-file-inp');
+  const contactKey=window._chatActiveContactKey||'';
+  const inChat=window._chatVista==='chat'&&!!contactKey&&window._chatVista!=='admin_broadcast';
+  const readonly=inChat&&!chatPuedeResponderAContacto(contactKey);
+  if(compose)compose.style.display=readonly?'none':'';
+  if(replyBar&&readonly){replyBar.style.display='none';chatClearReplyTo();}
+  if(banner){
+    banner.hidden=!readonly;
+    banner.style.display=readonly?'block':'none';
+  }
+  if(fileInp&&readonly)fileInp.disabled=true;
+  else if(fileInp)fileInp.disabled=false;
+}
+function chatAdminPushTarget(seen,out,c){
+  if(!c||!c.key)return;
+  const k=chatNormKey(c.key);
+  if(seen.has(k)||chatIsAdminKey(c.key))return;
+  seen.add(k);
+  out.push(c);
+}
+/** Oficinas DEGUV + NCA + Secretaría (sin ciudadanos). */
+function chatAdminTargetsOficinas(){
+  const seen=new Set(),out=[];
+  const encNca=typeof getEncargadoDepto==='function'?getEncargadoDepto('guaviare'):'';
+  if(encNca)chatAdminPushTarget(seen,out,{key:'resp:'+encNca,kind:'enc_depto',label:encNca,meta:'NCA DEGUV · Encargado',region:'guaviare',deptoId:'guaviare',oficinaId:'guaviare',group:'oficinas'});
+  else chatAdminPushTarget(seen,out,{key:'depto:guaviare',kind:'depto',label:labelDepto('guaviare'),meta:'NCA DEGUV',region:'guaviare',deptoId:'guaviare',group:'oficinas'});
+  (typeof OFICINAS_DEGUV!=='undefined'?OFICINAS_DEGUV:[]).forEach(function(o){
+    if(!o||o.id==='guaviare')return;
+    const enc=typeof getEncargadoOficina==='function'?getEncargadoOficina(o.id):'';
+    const lbl=typeof labelOficina==='function'?labelOficina(o.id):(o.nombre||o.id);
+    if(enc)chatAdminPushTarget(seen,out,{key:'resp:'+enc,kind:'enc_ofi',label:enc,meta:lbl+' · Encargado',region:'guaviare',oficinaId:o.id,group:'oficinas'});
+    else chatAdminPushTarget(seen,out,{key:'ofi:'+o.id,kind:'ofi',label:lbl,meta:lbl+' · Oficina',region:'guaviare',oficinaId:o.id,group:'oficinas'});
+  });
+  return out;
+}
+/** Departamentos regionales (Guaviare, Guainía, Vaupés). */
+function chatAdminTargetsDeptos(){
+  const seen=new Set(),out=[];
+  (typeof DEPTOS!=='undefined'?DEPTOS:[]).forEach(function(d){
+    if(!d||!d.id)return;
+    const enc=typeof getEncargadoDepto==='function'?getEncargadoDepto(d.id):'';
+    const region=typeof chatRegionForDepto==='function'?chatRegionForDepto(d.id):d.id;
+    if(enc)chatAdminPushTarget(seen,out,{key:'resp:'+enc,kind:'enc_depto',label:enc,meta:labelDepto(d.id)+' · Encargado',region:region,deptoId:d.id,group:'deptos'});
+    else chatAdminPushTarget(seen,out,{key:'depto:'+d.id,kind:'depto',label:labelDepto(d.id),meta:labelDepto(d.id)+' · Departamento',region:region,deptoId:d.id,group:'deptos'});
+  });
+  return out;
+}
+/** Responsables / contratistas + Jurisdiccional (sin encargados de depto/oficina). */
+function chatAdminTargetsResponsables(){
+  const seen=new Set(),out=[];
+  const jurisU=(_usuariosCache||[]).find(function(u){return u&&u.activo!==false&&u.rol==='jurisdiccional'&&String(u.nombre||'').trim();});
+  chatAdminPushTarget(seen,out,{
+    key:'juris:jurisdiccional',kind:'juris',
+    label:jurisU?String(jurisU.nombre).trim():CHAT_LABEL_SUBDIRECCION,
+    meta:'Subdirección · Jurisdiccional',region:'juris',group:'responsables'
+  });
+  (typeof DEPTOS!=='undefined'?DEPTOS:[]).forEach(function(d){
+    const enc=typeof getEncargadoDepto==='function'?getEncargadoDepto(d.id):'';
+    (typeof getInstructoresActivos==='function'?getInstructoresActivos(d.id):[]).forEach(function(ins){
+      if(!ins||!ins.nombre||ins.rol==='encargado_depto'||ins.rol==='encargado_oficina')return;
+      if(enc&&chatNombresIguales(ins.nombre,enc))return;
+      chatAdminPushTarget(seen,out,{
+        key:'resp:'+ins.nombre,kind:'resp',label:ins.nombre,
+        meta:labelDepto(d.id)+' · Responsable',region:chatRegionForDepto(d.id),deptoId:d.id,group:'responsables'
+      });
+    });
+  });
+  (typeof OFICINAS_DEGUV!=='undefined'?OFICINAS_DEGUV:[]).forEach(function(o){
+    if(!o||o.id==='guaviare')return;
+    const enc=typeof getEncargadoOficina==='function'?getEncargadoOficina(o.id):'';
+    (typeof getInstructoresOficina==='function'?getInstructoresOficina(o.id):[]).forEach(function(ins){
+      if(!ins||!ins.nombre||ins.rol==='encargado_oficina')return;
+      if(enc&&chatNombresIguales(ins.nombre,enc))return;
+      chatAdminPushTarget(seen,out,{
+        key:'resp:'+ins.nombre,kind:'resp',label:ins.nombre,
+        meta:labelOficina(o.id)+' · Responsable',region:'guaviare',oficinaId:o.id,group:'responsables'
+      });
+    });
+  });
+  return out;
+}
+function chatAdminTargetsTodos(){
+  const seen=new Set(),out=[];
+  chatAdminTargetsOficinas().concat(chatAdminTargetsDeptos()).concat(chatAdminTargetsResponsables()).forEach(function(c){
+    chatAdminPushTarget(seen,out,Object.assign({},c,{group:'todos'}));
+  });
+  return out;
+}
+function chatAdminTargetsForScope(scope){
+  if(scope==='oficinas')return chatAdminTargetsOficinas();
+  if(scope==='deptos')return chatAdminTargetsDeptos();
+  if(scope==='responsables')return chatAdminTargetsResponsables();
+  return chatAdminTargetsTodos();
+}
+function chatAdminAbrirBroadcast(){
+  if(!(typeof esAdministrador==='function'&&esAdministrador())){
+    if(typeof notif==='function')notif('Solo el Administrador puede enviar avisos','err');
+    return;
+  }
+  window._chatVista='admin_broadcast';
+  window._chatActiveContactKey=null;
+  window._chatConvActiva=null;
+  window._chatAdminBroadcastScope=window._chatAdminBroadcastScope||'todos';
+  chatClearReplyTo();
+  const tit=document.getElementById('chat-hdr-tit');
+  const sub=document.getElementById('chat-hdr-sub');
+  if(tit)tit.textContent='Avisos del sistema';
+  if(sub)sub.textContent='Enviar como Admin (solo lectura para destinatarios)';
+  chatSyncLayout();
+  renderChatContacts();
+  renderChatAdminBroadcast();
+  chatSyncComposeReadonly();
+}
+function chatAdminSetBroadcastScope(scope){
+  window._chatAdminBroadcastScope=scope||'todos';
+  renderChatAdminBroadcast();
+}
+function chatAdminToggleBroadcastTodos(chk){
+  const on=!!(chk&&chk.checked);
+  document.querySelectorAll('.chat-admin-tgt-chk').forEach(function(c){c.checked=on;});
+}
+function renderChatAdminBroadcast(){
+  const el=document.getElementById('chat-msgs');
+  const main=document.getElementById('chat-main');
+  if(!el||!main)return;
+  if(main.classList.contains('hidden'))main.classList.remove('hidden');
+  const scope=window._chatAdminBroadcastScope||'todos';
+  const targets=chatAdminTargetsForScope(scope);
+  const scopeBtns=[
+    {id:'todos',lbl:'Todos los grupos'},
+    {id:'oficinas',lbl:'Oficinas'},
+    {id:'deptos',lbl:'Departamentos'},
+    {id:'responsables',lbl:'Responsables'}
+  ].map(function(s){
+    return '<button type="button" class="btn bsm'+(scope===s.id?' bp':'')+'" onclick="chatAdminSetBroadcastScope(\''+s.id+'\')">'+escAttr(s.lbl)+'</button>';
+  }).join('');
+  const list=targets.map(function(c){
+    return '<label class="chat-admin-tgt"><input type="checkbox" class="chat-admin-tgt-chk" value="'+escAttr(c.key)+'" checked> '+
+      '<span><strong>'+escAttr(c.label)+'</strong><br><span class="chat-admin-tgt-meta">'+escAttr(c.meta||'')+'</span></span></label>';
+  }).join('')||'<div style="padding:10px;font-size:12px;color:var(--tx3)">Sin destinatarios en este grupo.</div>';
+  el.innerHTML='<div class="chat-admin-broadcast">'+
+    '<div class="chat-admin-broadcast-hint">El mensaje llegará como <strong>Admin</strong>. Los destinatarios podrán leerlo pero <strong>no responder</strong>.</div>'+
+    '<div class="chat-admin-scope fx" style="gap:6px;flex-wrap:wrap;margin:8px 0">'+scopeBtns+'</div>'+
+    '<label class="chat-admin-tgt chat-admin-tgt-all"><input type="checkbox" id="chat-admin-tgt-all" checked onchange="chatAdminToggleBroadcastTodos(this)"> <strong>Todos de este grupo ('+targets.length+')</strong></label>'+
+    '<div class="chat-admin-tgt-list">'+list+'</div>'+
+    '<div class="fld" style="margin-top:10px"><label>Mensaje del aviso</label>'+
+    '<textarea id="chat-admin-broadcast-text" rows="4" placeholder="Ej. Actualización del sistema: se corrigió el orden de Revisados…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:inherit;resize:vertical"></textarea></div>'+
+    '<div class="fx" style="gap:8px;margin-top:10px">'+
+    '<button type="button" class="btn bp" onclick="chatAdminEnviarBroadcast()">📢 Enviar aviso</button>'+
+    '<button type="button" class="btn bsm" onclick="chatVolverContactos()">Cancelar</button></div>'+
+    '</div>';
+  _chatMessagesPaintSig='admin_broadcast|'+scope+'|'+targets.length;
+  const compose=document.querySelector('#chat-main .chat-compose');
+  if(compose)compose.style.display='none';
+  const banner=document.getElementById('chat-readonly-banner');
+  if(banner){banner.hidden=true;banner.style.display='none';}
+}
+async function chatAdminEnviarBroadcast(){
+  if(!(typeof esAdministrador==='function'&&esAdministrador())){notif('Solo el Administrador puede enviar avisos','err');return;}
+  const ta=document.getElementById('chat-admin-broadcast-text');
+  const text=(ta&&ta.value||'').trim();
+  if(!text){notif('Escriba el mensaje del aviso','err');return;}
+  const keys=Array.from(document.querySelectorAll('.chat-admin-tgt-chk:checked')).map(function(c){return c.value;}).filter(Boolean);
+  if(!keys.length){notif('Seleccione al menos un destinatario','err');return;}
+  const unique=[];
+  const seen=new Set();
+  keys.forEach(function(k){
+    const nk=chatNormKey(k);
+    if(seen.has(nk)||chatIsAdminKey(k))return;
+    seen.add(nk);
+    unique.push(k);
+  });
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc){notif('No hay conexión con Firestore','err');return;}
+  const batchId='bcast_'+Date.now();
+  let ok=0,fail=0;
+  for(let i=0;i<unique.length;i++){
+    const toKey=unique[i];
+    const to=chatContactFromKey(toKey);
+    const convId=chatConvId(CHAT_ADMIN_KEY,to.key);
+    const msg={
+      id:'msg_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2,5),
+      convId:convId,
+      fromKey:CHAT_ADMIN_KEY,
+      fromLabel:CHAT_ADMIN_LABEL,
+      toKey:to.key,
+      toLabel:to.label||'',
+      text:text,
+      ts:new Date().toISOString(),
+      readBy:[chatNormKey(CHAT_ADMIN_KEY)],
+      broadcast:true,
+      noReply:true,
+      broadcastId:batchId
+    };
+    chatMensajes.push(msg);
+    try{
+      await window._fsSetDoc(window._fsDoc(db,'chats',chatConvFirestoreId(convId),'mensajes',msg.id),msg,{merge:true});
+      ok++;
+    }catch(err){
+      console.error('chatAdminEnviarBroadcast:',convId,err);
+      chatMensajes=(chatMensajes||[]).filter(function(m){return m.id!==msg.id;});
+      fail++;
+    }
+  }
+  if(ta)ta.value='';
+  renderChatBadge();
+  renderChatContacts();
+  if(ok)notif('Aviso enviado a '+ok+' destinatario(s)'+(fail?' · '+fail+' fallaron':''),'ok');
+  else notif('No se pudo enviar el aviso','err');
+  if(ok)chatVolverContactos();
+}
+window.chatAdminAbrirBroadcast=chatAdminAbrirBroadcast;
+window.chatAdminSetBroadcastScope=chatAdminSetBroadcastScope;
+window.chatAdminToggleBroadcastTodos=chatAdminToggleBroadcastTodos;
+window.chatAdminEnviarBroadcast=chatAdminEnviarBroadcast;
 async function chatEnviarTexto(){
   const inp=document.getElementById('chat-inp');
   const me=chatEffectiveIdentity();
@@ -1409,6 +1681,10 @@ async function chatEnviarTexto(){
   if(!text)return;
   const contactKey=window._chatActiveContactKey||chatActiveContactKey();
   if(!contactKey)return;
+  if(!chatPuedeResponderAContacto(contactKey)){
+    notif('No se puede responder a Admin. Los avisos son solo de lectura.','warn');
+    return;
+  }
   const route=chatPickSendRoute(me,contactKey);
   window._chatConvActiva=route.convId;
   const replyTo=chatConsumeReplyTo();
@@ -1464,6 +1740,15 @@ function chatDriveConectado(){
 function chatAdjuntarArchivoClick(){
   const inp=document.getElementById('chat-file-inp');
   if(!inp)return;
+  if(!chatPuedeResponderAContacto(window._chatActiveContactKey||chatActiveContactKey()||'')){
+    chatModalAlert({
+      title:'Solo lectura',
+      message:'No se pueden adjuntar archivos en avisos de Admin.',
+      detail:'Los mensajes de Admin son solo de lectura.',
+      tone:'warn'
+    });
+    return;
+  }
   if(!window._chatActiveContactKey&&!chatActiveContactKey()){
     chatModalAlert({
       title:'Seleccione un contacto',
