@@ -20251,6 +20251,13 @@ function closeTaskModal(){
   if(ctx.expId&&(ctx.gestionAsignados||ctx.soloCoEj))syncTkRowsFromExp(ctx.expId,ctx.taskId);
   if(formRow)refreshTkCoEjPanel(formRow);
 }
+/** Clic en el fondo del overlay: no cierra formularios largos (p. ej. Entregar documento). */
+function taskModalTryCloseOutside(){
+  const ctx=window._taskModalCtx||{};
+  if(ctx.noCloseOnOutside||ctx.mode==='entregaResponsable'||ctx.entregaResponsable)return;
+  closeTaskModal();
+}
+window.taskModalTryCloseOutside=taskModalTryCloseOutside;
 async function submitTaskComment(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
   if(!inp)return;

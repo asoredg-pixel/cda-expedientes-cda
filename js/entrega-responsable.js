@@ -1420,7 +1420,7 @@ function openEntregaResponsableModal(){
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   ov.classList.add('on');
-  window._taskModalCtx={mode:'entregaResponsable'};
+  window._taskModalCtx={mode:'entregaResponsable',noCloseOnOutside:true};
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(entregaRespFileCtxKey());
   if(typeof sstFileRegisterList==='function'){
     sstFileRegisterList('entrega-resp-file-list',entregaRespFileCtxKey(),'main');
@@ -3062,7 +3062,7 @@ function submitEntregaResponsable(){
   // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»
   // solo se activa al terminar OK (ver enviarTaskPorVerificar / entregaResponsable).
   if(typeof submitEnviarSoporteVerificacion==='function'){
-    window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente};
+    window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente,noCloseOnOutside:true};
     if(pack.sinExpediente&&pack.t){
       window._pendingActLibreEntrega={id:pack.taskId,codigo:pack.expId,t:pack.t};
     }
