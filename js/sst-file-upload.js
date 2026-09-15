@@ -434,7 +434,7 @@ function sstFilePickBlock(opts) {
   const listId = opts.listId || (inputId + '-list');
   const ctxKey = opts.ctxKey || inputId;
   const multi = !!opts.multi;
-  const accept = opts.accept || '.pdf,.doc,.docx,image/*,video/*';
+  const accept = opts.accept || (typeof SST_FILE_ACCEPT_ANEXOS!=='undefined'?SST_FILE_ACCEPT_ANEXOS:'.pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip');
   const label = opts.label != null ? opts.label : (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
   const btnCls = opts.btnClass || (multi ? 'btn bsm' : 'btn bsm bp');
   const title = opts.title || (label ? String(label) : 'Subir');

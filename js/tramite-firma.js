@@ -2895,8 +2895,8 @@ function openEntregaOficinaFirmaModal(){
           '<div class="sst-file-pick-row" style="margin-top:6px">'+
             '<button type="button" class="btn bsm" onclick="sstFilePickByInputId(\'entrega-ofi-firma-file\')">📎 Seleccionar archivo</button>'+
             '<button type="button" class="btn bsm" onclick="sstFilePickByInputId(\'entrega-ofi-firma-anexos\')">Anexos +</button>'+
-            '<input type="file" id="entrega-ofi-firma-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-            '<input type="file" id="entrega-ofi-firma-anexos" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+            '<input type="file" id="entrega-ofi-firma-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+            '<input type="file" id="entrega-ofi-firma-anexos" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
           '</div>'+
           '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="ofi-doc-main-lbl">Principal</div>'+
           '<div id="entrega-ofi-firma-file-list" class="sst-file-slot-list"></div>'+

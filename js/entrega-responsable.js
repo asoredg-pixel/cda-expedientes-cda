@@ -1401,8 +1401,8 @@ function openEntregaResponsableModal(){
       '<div class="sst-file-pick-row">'+
         '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
         '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
-        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
-        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
+        '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
+        '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
       '</div>'+
       '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
       '<div id="entrega-resp-file-list" class="sst-file-slot-list"></div>'+

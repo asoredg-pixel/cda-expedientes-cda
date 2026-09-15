@@ -2715,7 +2715,7 @@ async function openPqrsRespuestaModal(expId,opts){
     ?sstFilePickBlock({inputId:'pqrs-resp-adj-file',listId:'pqrs-resp-adj-list',ctxKey:respAdjCtx,label:'Adjuntar archivo',getUploadCtx:pqrsRespUploadCtx})
     :'';
   const pqrsRespAnexPick=usaDriveInst&&typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'pqrs-resp-anexos-file',listId:'pqrs-resp-anexos-list',ctxKey:respAnexCtx,multi:true,label:'Cargar anexos',accept:'.pdf,.doc,.docx,image/*,video/*',btnClass:'btn bsm bd2',getUploadCtx:pqrsRespUploadCtx})
+    ?sstFilePickBlock({inputId:'pqrs-resp-anexos-file',listId:'pqrs-resp-anexos-list',ctxKey:respAnexCtx,multi:true,label:'Cargar anexos',accept:'.pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip',btnClass:'btn bsm bd2',getUploadCtx:pqrsRespUploadCtx})
     :'';
   body.innerHTML=pqrsSelHtml+
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Tipo de respuesta</label>'+
@@ -2774,7 +2774,7 @@ async function openPqrsRespuestaModal(expId,opts){
         '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
         '<button type="button" class="btn bsm bd2" onclick="pqrsRespAddAnexos()">📎 Cargar anexos</button>'+
         '</div>'+
-        '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
+        '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
         '<div id="pqrs-resp-anexos-list" style="margin-top:4px"></div>')+
     '</div>'+
     '</div>'+
@@ -10156,8 +10156,8 @@ function renderPqrsEntregaCamposHtml(e){
     '<div class="sst-file-pick-row" style="margin-top:6px">'+
       '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
       '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
-      '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-      '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+      '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+      '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
     '</div>'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="pqrs-entrega-main-lbl">Principal</div>'+
     '<div id="pqrs-entrega-att-list" class="sst-file-slot-list"></div>'+
@@ -16091,8 +16091,8 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
         '<div class="sst-file-pick-row">'+
           '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
           '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
-          '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-          '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+          '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+          '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
         '</div>'+
         '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
         '<div id="enviar-adj-file-list" class="sst-file-slot-list"></div>'+
