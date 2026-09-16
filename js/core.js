@@ -14695,6 +14695,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   if((esModoResponsable()||esVistaActividadesDepto())&&!taskUsuarioEsAsignado(t,responsableActivo)){notif('Actividad no asignada a usted','err');return false;}
   if(!puedeReportarTask(t,responsableActivo)){notif('No puede reportar esta actividad en su estado actual','err');return false;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está verificada y cerrada','err');return false;}
+  // Defensa: no reenviar sobre una actividad ya en firma (pisaría docs y no entraría a Por revisar)
+  if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t)){
+    notif('Esta actividad ya está en firma. Para una corrección use 📤 Entregar documento: se creará una actividad nueva y la de firma no se modifica.','err');
+    return false;
+  }
+  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
+    notif('Esta actividad ya está en flujo de firma. Entregue de nuevo con 📤: se separará en una actividad nueva.','err');
+    return false;
+  }
   if(typeof collectEntregaNotifCorreoDatos==='function'){
     const ndPre=collectEntregaNotifCorreoDatos();
     if(ndPre===false)return false;

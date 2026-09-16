@@ -2604,14 +2604,37 @@ function trySaveEntregaRegistroFromPanel(e,actividad){
   return ok;
 }
 
+/** true si la actividad ya no debe reutilizarse en 📤 Entregar documento (nueva entrega = nueva actividad). */
+function taskEntregaRespNoReutilizar(t,e){
+  if(!t||t.eliminada)return true;
+  const est=typeof estadoTask==='function'?estadoTask(t):(t.estado||'');
+  if(est==='Atendida'||est==='Eliminada')return true;
+  // Misma actividad puede repetirse (visitas, etc.): no reusar si ya fue enviada / revisada / en firma
+  if(est==='Por verificar')return true;
+  if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return true;
+  if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return true;
+  if(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida)return true;
+  const rev=t.ultimaRevisionDepto;
+  if(rev&&(rev.tipo==='aprobada'||rev.tipo==='firma'||rev.tipo==='ok'))return true;
+  if(e&&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,e))return true;
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+    if(typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))return true;
+    if(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))return true;
+  }
+  return false;
+}
+window.taskEntregaRespNoReutilizar=taskEntregaRespNoReutilizar;
+
 function findTaskEntregaRespDedupe(e,actividad,responsable){
   if(!e||!actividad||!responsable)return null;
   const actN=String(actividad).trim().toLowerCase();
   const respN=typeof agendaNorm==='function'?agendaNorm(responsable):String(responsable).toLowerCase();
   return (e.tasks||[]).map(function(t){return typeof normalizeTask==='function'?normalizeTask(t):t;}).find(function(t){
     if(!t||t.eliminada)return false;
+    if(typeof taskEntregaRespNoReutilizar==='function'&&taskEntregaRespNoReutilizar(t,e))return false;
     const est=typeof estadoTask==='function'?estadoTask(t):t.estado;
-    if(est==='Atendida')return false;
+    // Solo reutilizar deuda abierta aún no enviada / por corregir (no pisar entregas ya hechas)
+    if(est&&!['En ejecución','Vencida','Por corregir','Parcial'].includes(est))return false;
     const sameAct=String(t.actividad||t.desc||'').trim().toLowerCase()===actN
       ||String(t.actividad||'').trim().toLowerCase()===actN;
     if(!sameAct)return false;
@@ -3000,8 +3023,9 @@ function ensureExpTaskEntregaResponsable(){
     t=(e.tasks||[]).map(function(x){return typeof normalizeTask==='function'?normalizeTask(x):x;}).find(function(x){
       if(!x||x.eliminada)return false;
       if(typeof taskEsAtenderPqrs==='function'&&!taskEsAtenderPqrs(x,e))return false;
+      if(typeof taskEntregaRespNoReutilizar==='function'&&taskEntregaRespNoReutilizar(x,e))return false;
       const est=typeof estadoTask==='function'?estadoTask(x):x.estado;
-      if(est==='Atendida')return false;
+      if(est&&!['En ejecución','Vencida','Por corregir','Parcial'].includes(est))return false;
       if(typeof taskUsuarioEsAsignado==='function')return taskUsuarioEsAsignado(x,responsableActivo);
       return true;
     })||null;
