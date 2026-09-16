@@ -1458,7 +1458,7 @@ function pqrsEsNotificadorDesignado(e,nombre){
 }
 /**
  * Marca como atendida la participación de quienes proyectaron,
- * excepto quien esté designado para notificar (sigue abierta → Por ejecutar / Por notificar).
+ * excepto quien esté designado para notificar (deuda solo en «Por notificar»).
  * Quien entregó y NO notifica permanece en Atendidas (✓ Firmada · X Notificar).
  * La PQRSD no se cierra hasta la notificación final.
  */
@@ -24446,11 +24446,22 @@ function esNotifAsignadaVencida(t){
 window.esNotifAsignadaVencida=esNotifAsignadaVencida;
 function esActividadPorEjecutar(t){
   if(!t||t.eliminada)return false;
+  // Defensa temprana: deuda de notificar → solo paleta «Por notificar» (nunca «Por ejecutar»)
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return false;
+  const eNotif=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(eNotif&&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eNotif))
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eNotif)){
+    if(typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eNotif))return false;
+    if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+      &&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(eNotif,responsableActivo))
+      return false;
+    if(typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eNotif))return false;
+  }
   // Personal del responsable: si su participación ya está atendida, no es deuda
   if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
     if(estadoTaskForAsignado(t,responsableActivo)==='Atendida')return false;
   }
-  const eExp=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  const eExp=eNotif||(typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
   const esPqrs=eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)&&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eExp));
   const fase=esPqrs?pqrsWorkflowFase(eExp):'';
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
@@ -25294,7 +25305,14 @@ function filtrarActividadesPorEstado(list,filtro){
   }
   if(filtro==='pend'){
     // Solo por ejecutar: notificaciones van a la paleta «Por notificar»
-    return (list||[]).filter(t=>esActividadPorEjecutar(t));
+    return (list||[]).filter(function(t){
+      if(!esActividadPorEjecutar(t))return false;
+      if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return false;
+      const eP=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      if(eP&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eP)
+        &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eP))return false;
+      return true;
+    });
   }
   if(filtro==='porver'){
     let out=(list||[]).filter(actividadCuentaComoPorRevisar);
