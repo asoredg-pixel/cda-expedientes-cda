@@ -10,7 +10,7 @@
 <title>Sistema de Trazabilidad y Consulta — CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260916b">
+<link rel="stylesheet" href="css/sst.css?v=20260916c">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260916b"></script>
+<script src="js/constants.js?v=20260916c"></script>
 <script src="js/utils.js?v=20260910o"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260916b"></script>
@@ -34,7 +34,7 @@
 <script src="js/consolidado.js?v=20260914c"></script>
 <script src="js/configuracion.js?v=20260903a"></script>
 <script src="js/export.js?v=20260911h"></script>
-<script src="js/chat.js?v=20260915d"></script>
+<script src="js/chat.js?v=20260916c"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
@@ -618,8 +618,16 @@
       </div>
     </div>
     <div class="chat-hdr-actions">
+      <button type="button" id="chat-search-btn" class="chat-hdr-btn chat-hdr-search-btn" onclick="chatToggleContactSearch()" title="Buscar contacto" aria-label="Buscar contacto">🔍</button>
       <button type="button" id="chat-toggle-contacts-btn" class="chat-hdr-btn" style="display:none" onclick="chatToggleContactos()" title="Mostrar u ocultar contactos" hidden aria-hidden="true">☰</button>
       <button type="button" class="chat-hdr-btn" onclick="toggleChatWindow(false)" title="Cerrar">✕</button>
+    </div>
+  </div>
+  <div id="chat-search-bar" class="chat-search-bar" style="display:none" hidden>
+    <div class="chat-search-field">
+      <span class="chat-search-ico" aria-hidden="true">🔍</span>
+      <input type="search" id="chat-contact-q" class="chat-search-inp" placeholder="Buscar contacto…" autocomplete="off" enterkeyhint="search" oninput="chatOnContactSearchInput()">
+      <button type="button" class="chat-search-clear" id="chat-search-clear" onclick="chatClearContactSearch()" title="Cerrar búsqueda" aria-label="Cerrar búsqueda">✕</button>
     </div>
   </div>
   <div class="chat-layout">

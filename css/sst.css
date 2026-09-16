@@ -2733,6 +2733,32 @@ html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:1000
 .chat-hdr-actions{display:flex;gap:4px;align-items:center;flex-shrink:0}
 .chat-hdr-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.88);font-size:11px;cursor:pointer;padding:4px 9px;border-radius:8px;white-space:nowrap;transition:background .15s}
 .chat-hdr-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.chat-hdr-search-btn{font-size:14px;min-width:32px;min-height:32px;padding:4px 8px;display:inline-flex;align-items:center;justify-content:center}
+.chat-hdr-search-btn.is-on{background:rgba(255,255,255,.22);color:#fff;border-color:rgba(255,255,255,.35)}
+.chat-search-bar{
+  display:none;flex-shrink:0;padding:8px 10px;position:relative;z-index:2;
+  background:linear-gradient(180deg,#122a1c 0%,#0f2418 100%);
+  border-bottom:1px solid rgba(52,211,153,.14);
+}
+.chat-search-bar.is-open{display:block}
+.chat-search-field{
+  display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);
+  border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:4px 8px 4px 10px;
+}
+.chat-search-ico{font-size:12px;opacity:.75;flex-shrink:0;line-height:1}
+.chat-search-inp{
+  flex:1;min-width:0;border:none;outline:none;background:transparent;color:#fff;
+  font-size:13px;padding:6px 2px;font-family:inherit;
+}
+.chat-search-inp::placeholder{color:rgba(255,255,255,.45)}
+.chat-search-inp::-webkit-search-cancel-button{-webkit-appearance:none}
+.chat-search-clear{
+  flex-shrink:0;border:none;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;
+  width:24px;height:24px;border-radius:50%;font-size:11px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;padding:0;
+}
+.chat-search-clear:hover{background:rgba(255,255,255,.28)}
+.chat-contacts-empty-search{padding:18px 14px;font-size:12px;color:var(--tx3);text-align:center;line-height:1.4}
 #chat-unread-btn,[onclick*="chatMarcarNoLeido"]{display:none!important;visibility:hidden!important;width:0!important;height:0!important;padding:0!important;margin:0!important;border:0!important;pointer-events:none!important;overflow:hidden!important}
 .chat-layout{display:flex;flex:1;min-height:0;overflow:hidden;position:relative;z-index:2}
 .chat-contacts{width:36%;min-width:120px;max-width:200px;border-right:1px solid rgba(0,0,0,.06);overflow:auto;background:linear-gradient(180deg,#f4f6f8 0%,#eef1f4 100%);flex-shrink:0;transition:width .2s,margin .2s}

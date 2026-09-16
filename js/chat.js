@@ -1061,11 +1061,14 @@ function toggleChatWindow(force){
     window._chatActiveContactKey=null;
     window._chatVista='contactos';
     window._chatContactsCollapsed=false;
+    window._chatSearchOpen=false;
+    window._chatContactQ='';
     _chatContactsPaintSig='';
     _chatMessagesPaintSig='';
     chatInvalidateContactsCache();
     const sub=document.getElementById('chat-hdr-sub');
     if(sub)sub.textContent='Seleccione un contacto';
+    chatSyncSearchBarUi();
     chatSyncLayout();
     renderChatContacts();
     renderChatBadge();
@@ -1081,7 +1084,7 @@ function toggleChatWindow(force){
       });
     }
   }
-  else{window._chatConvActiva=null;window._chatActiveContactKey=null;window._chatVista='contactos';window._chatContactsCollapsed=false;_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncLayout();}
+  else{window._chatConvActiva=null;window._chatActiveContactKey=null;window._chatVista='contactos';window._chatContactsCollapsed=false;window._chatSearchOpen=false;window._chatContactQ='';_chatFileUploading=false;chatUploadOverlayHide();stopChatActiveSync();chatSyncSearchBarUi();chatSyncLayout();}
 }
 function chatPurgeUnreadButton(){
   document.querySelectorAll('#chat-unread-btn,[onclick*="chatMarcarNoLeido"],[title*="Marcar como no leído"],[title*="no leído"]').forEach(function(el){el.remove();});
@@ -1102,6 +1105,60 @@ function chatToggleContactos(force){
   window._chatContactsCollapsed=false;
   chatSyncLayout();
 }
+/** Normaliza texto para buscar contactos (sin acentos). */
+function chatNormSearch(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+function chatContactMatchesQuery(c,qNorm){
+  if(!qNorm)return true;
+  if(!c)return false;
+  const blob=chatNormSearch([c.label,c.meta,c.sub,c.email,c.nombre,c.key].filter(Boolean).join(' '));
+  return blob.includes(qNorm);
+}
+function chatSyncSearchBarUi(){
+  const open=!!window._chatSearchOpen;
+  const bar=document.getElementById('chat-search-bar');
+  const btn=document.getElementById('chat-search-btn');
+  const inp=document.getElementById('chat-contact-q');
+  if(bar){
+    bar.hidden=!open;
+    bar.style.display=open?'block':'none';
+    bar.classList.toggle('is-open',open);
+  }
+  if(btn){
+    btn.classList.toggle('is-on',open);
+    btn.setAttribute('aria-pressed',open?'true':'false');
+  }
+  if(open&&inp){
+    if(typeof window._chatContactQ==='string'&&inp.value!==window._chatContactQ)inp.value=window._chatContactQ;
+    setTimeout(function(){try{inp.focus();}catch(e){}},30);
+  }
+}
+function chatToggleContactSearch(force){
+  const next=force===true?true:force===false?false:!window._chatSearchOpen;
+  window._chatSearchOpen=next;
+  if(!next){
+    window._chatContactQ='';
+    const inp=document.getElementById('chat-contact-q');
+    if(inp)inp.value='';
+  }
+  chatSyncSearchBarUi();
+  _chatContactsPaintSig='';
+  renderChatContacts();
+}
+function chatOnContactSearchInput(){
+  const inp=document.getElementById('chat-contact-q');
+  window._chatContactQ=inp?String(inp.value||''):'';
+  window._chatSearchOpen=true;
+  _chatContactsPaintSig='';
+  renderChatContacts();
+}
+function chatClearContactSearch(){
+  chatToggleContactSearch(false);
+}
+window.chatToggleContactSearch=chatToggleContactSearch;
+window.chatOnContactSearchInput=chatOnContactSearchInput;
+window.chatClearContactSearch=chatClearContactSearch;
 function chatInitContactsClicks(){
   const el=document.getElementById('chat-contacts');
   if(!el||el.dataset.chatClickBound==='1')return;
@@ -1198,6 +1255,22 @@ function renderChatContacts(){
       if(ua!==ub)return ub-ua;
       return String(a.label||'').localeCompare(String(b.label||''),'es');
     });
+    const qRaw=String(window._chatContactQ||'').trim();
+    const qNorm=chatNormSearch(qRaw);
+    if(qNorm)contacts=contacts.filter(function(c){return chatContactMatchesQuery(c,qNorm);});
+    chatSyncSearchBarUi();
+    if(!contacts.length){
+      const adminToolsEmpty=(typeof esAdministrador==='function'&&esAdministrador())
+        ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
+        :'';
+      const emptyMsg=qNorm
+        ?('<div class="chat-contacts-empty-search">Sin contactos para «'+escAttr(qRaw)+'»</div>')
+        :'<div style="padding:14px;font-size:12px;color:var(--tx3)">Sin contactos disponibles.</div>';
+      el.innerHTML=adminToolsEmpty+emptyMsg;
+      _chatContactsPaintSig='';
+      chatSyncLayout();
+      return;
+    }
     const html=contacts.map(function(c){
       const convId=chatConvId(me.key,c.key);
       let msgs=[],last=null,prev='Sin mensajes',unread=0;
@@ -1220,7 +1293,7 @@ function renderChatContacts(){
     const adminTools=(typeof esAdministrador==='function'&&esAdministrador())
       ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
       :'';
-    const sig=(window._chatActiveContactKey||'')+'|'+(window._chatVista||'')+'|'+adminTools+html;
+    const sig=(window._chatActiveContactKey||'')+'|'+(window._chatVista||'')+'|q:'+qNorm+'|'+adminTools+html;
     if(sig===_chatContactsPaintSig){chatSyncLayout();return;}
     _chatContactsPaintSig=sig;
     el.innerHTML=adminTools+html;
