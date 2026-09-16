@@ -507,10 +507,13 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
     if(enc&&typeof agendaNorm==='function'&&agendaNorm(usuario)===agendaNorm(enc))return true;
     return false;
   }
+  if(!usuario)return true;
+  // Asignado a la tarea: siempre visible (antes del gate de _pqrs_responsable_oficina;
+  // ese campo a veces queda vacío tras cancelar autoentrega y ocultaba «Por revisar» al responsable).
+  if(taskUsuarioEsAsignado(t,usuario))return true;
   const ofi=e._pqrs_oficina||'';
   const respOfi=String(e._pqrs_responsable_oficina||'').trim();
   if(!respOfi&&ofi!=='guaviare')return false;
-  if(!usuario)return true;
   // Notificador designado / quien reportó la notificación: visible en Por notificar y Por revisar
   const faseVis=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
   const wfVis=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
@@ -520,11 +523,7 @@ function pqrsTaskVisibleEnActividades(t,e,usuario){
     ||(notifRepVis&&typeof agendaNorm==='function'&&agendaNorm(notifRepVis)===agendaNorm(usuario));
   if(esNotifVis&&(faseVis===PQRS_WF.PENDIENTE_NOTIF||faseVis===PQRS_WF.LISTA_ENVIO||faseVis===PQRS_WF.REVISION_FINAL))
     return true;
-  // Encargado y responsables: solo las asignadas a ellos.
-  // Para ver todas use el filtro «Todos los responsables» (usuario=null).
-  if(!taskUsuarioEsAsignado(t,usuario))return false;
-  if(respOfi)return agendaNorm(respOfi)===agendaNorm(usuario);
-  return ofi==='guaviare';
+  return false;
 }
 function syncPqrsResponsableDesdeTask(expId,taskId,nuevoResp){
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -7418,6 +7417,10 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
   }
+  // Autoentrega / entrega propia en observaciones (por corregir): eliminar entrega en el rail
+  const puedeElimObs=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(refExp,taskId);
+  if(puedeElimObs&&(miEst==='Por corregir'||est==='Por corregir'))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar entrega / cancelar autoentrega" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   return h+'</nav>';
 }
 function taskReviewRespEntregaPendienteRailHtml(ref,taskId,t){
@@ -16509,6 +16512,15 @@ function puedeEliminarEntregaActividad(expId,taskId){
   }
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
+  // Autoentrega del responsable: puede cancelar si está por verificar o por corregir
+  const esAutoResp=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
+  if(esAutoResp&&typeof esModoResponsable==='function'&&esModoResponsable()
+    &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
+    const estAuto=estadoTask(t);
+    if(estAuto==='Por corregir'||estAuto==='Por verificar'
+      ||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t)))
+      return true;
+  }
   if(typeof getTaskRevisionDepto==='function'&&getTaskRevisionDepto(t))return false;
   const esPqrsRev=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e));
@@ -16625,7 +16637,27 @@ async function eliminarEntregaActividad(expId,taskId){
   // conservar el registro (interesado, radicación, alta pendiente, etc.).
   if(esAuto&&e){
     const tid=String(taskId||t.id||'').trim();
-    if(typeof limpiarRespuestaEntregaConservandoAlta==='function')limpiarRespuestaEntregaConservandoAlta(e);
+    // Otras entregas pendientes en el mismo expediente/PQRSD (antes de quitar esta)
+    const otrasPendList=(e.tasks||[]).filter(function(x){
+      if(!x||x.eliminada||String(x.id||'')===tid)return false;
+      const estO=typeof estadoTask==='function'?estadoTask(x):'';
+      if(estO==='Por verificar'||estO==='Por corregir')return true;
+      return typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(x);
+    });
+    const otraPend=otrasPendList[0]||null;
+    // Solo resetear workflow PQRSD si no quedan otras entregas pendientes de revisión
+    if(!otraPend&&typeof limpiarRespuestaEntregaConservandoAlta==='function')
+      limpiarRespuestaEntregaConservandoAlta(e);
+    else if(otraPend&&esPqrs&&typeof getPqrsWorkflow==='function'&&typeof setPqrsWorkflow==='function'){
+      const wfCur=getPqrsWorkflow(e)||{};
+      if(String(wfCur.task_id||'')===tid||!String(wfCur.task_id||'').trim()){
+        const patch={task_id:String(otraPend.id||'').trim()};
+        const estOtra=typeof estadoTask==='function'?estadoTask(otraPend):'';
+        if(estOtra==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(otraPend)))
+          patch.fase=PQRS_WF.PENDIENTE_REVISION;
+        setPqrsWorkflow(e,patch);
+      }
+    }
     e.tasks=Array.isArray(e.tasks)?e.tasks.filter(function(x){return !x||String(x.id||'')!==tid;}):[];
     if(!Array.isArray(e.historial))e.historial=[];
     e.historial.push({
@@ -16643,6 +16675,18 @@ async function eliminarEntregaActividad(expId,taskId){
         oficina:e._pqrs_oficina||'guaviare',
         por:responsableActivo||''
       });
+      // Mantener al creador/asignado como responsable de oficina para que siga viendo la PQRSD en Actividades
+      const porAlta=String(
+        e._alta_por
+        ||(t.responsables&&t.responsables[0])
+        ||t.responsable
+        ||(otraPend&&(otraPend.responsable||(otraPend.responsables&&otraPend.responsables[0])))
+        ||''
+      ).trim();
+      if(porAlta){
+        e._pqrs_responsable_oficina=porAlta;
+        e._pqrs_estado_oficina='asignado';
+      }
     }
     // Asegurar que el alta por responsable siga pendiente de revisión si aplica
     if(e._alta_por_responsable&&e._alta_revisada_en==null){
@@ -16727,16 +16771,25 @@ async function eliminarEntregaActividad(expId,taskId){
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
   if(e&&esPqrs&&typeof limpiarRespuestaEntregaConservandoAlta==='function'){
-    limpiarRespuestaEntregaConservandoAlta(e);
-    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({
-      tipo:'eliminar_entrega',
-      fecha:hoy(),
-      nota:'Entrega eliminada — pendiente nueva entrega',
-      oficina:e._pqrs_oficina||'guaviare',
-      por:responsableActivo||''
+    const tidLim=String(taskId||t.id||'').trim();
+    const otrasTrasElim=(e.tasks||[]).some(function(x){
+      if(!x||x.eliminada||String(x.id||'')===tidLim)return false;
+      const estO=typeof estadoTask==='function'?estadoTask(x):'';
+      if(estO==='Por verificar'||estO==='Por corregir')return true;
+      return typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(x);
     });
-    try{persistExpedienteGranular(e);}catch(err){console.warn('eliminarEntrega pqrs:',err);}
+    if(!otrasTrasElim){
+      limpiarRespuestaEntregaConservandoAlta(e);
+      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+      e._pqrs_historial.push({
+        tipo:'eliminar_entrega',
+        fecha:hoy(),
+        nota:'Entrega eliminada — pendiente nueva entrega',
+        oficina:e._pqrs_oficina||'guaviare',
+        por:responsableActivo||''
+      });
+      try{persistExpedienteGranular(e);}catch(err){console.warn('eliminarEntrega pqrs:',err);}
+    }
   }
   if(fileIds.length&&typeof driveDeleteInstitutional==='function'){
     for(let i=0;i<fileIds.length;i++){
@@ -18499,22 +18552,9 @@ function collectAutoAlertItems(){
     });
     return items;
   }
-  if(esJurisdiccional())return [];
-  exps.filter(e=>(e._depto||'guaviare')===deptoActivo).forEach(e=>{
-    if(!expEnTramiteActivo(e))return;
-    const ter=calcTerminos(e);
-    if(!ter||ter.isFin)return;
-    const tram=getTram(e._tramite,e);
-    const alerta=Number(tram&&tram.alerta)||80;
-    if(ter.pct>=alerta){
-      items.push({
-        modo:'depto',tipo:'auto_exp80',exp:e._exp,taskId:'',fecha:hoyStr,pct:ter.pct,
-        responsable:'',desc:e._nombre||e._interesado||e._exp||'',
-        texto:'⏰ Expediente '+e._exp+' al '+ter.pct+'% del plazo ('+ter.d+'/'+ter.plazo+' días) sin atender — '+(e._nombre||e._interesado||'')
-      });
-    }
-  });
-  return items;
+  // Encargado / depto / oficinas: sin alertas automáticas de plazo en campanita
+  // (por vencer, vencidas o expediente al 80%). Esas se ven en Actividades.
+  return [];
 }
 function obsDocBatchId(t){
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
