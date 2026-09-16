@@ -23069,39 +23069,37 @@ function actPuedeCargarFirmadoPorFirmar(){
   if(typeof esSecretaria==='function'&&esSecretaria()&&!esModoResponsable())return true;
   return false;
 }
-function pqrsMarcarImpreso(expId){
+async function pqrsMarcarImpreso(expId){
   if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
-  const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
+  const eid=String(expId||'').trim();
+  const e=(typeof getExpById==='function'?getExpById(eid):null)
+    ||(exps||[]).find(function(x){return String(x._exp||'').trim()===eid;});
   if(!e||!(typeof pqrsPuedeMarcarImpreso==='function'&&pqrsPuedeMarcarImpreso(e))){
     notif('No puede marcar impreso','err');return;
   }
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  if(wf.impreso&&wf.impreso.en){
+  const desmarcar=!!(wf.impreso&&wf.impreso.en);
+  if(desmarcar){
     setPqrsWorkflow(e,{impreso:null});
     e._pqrs_historial.push({tipo:'impreso_oficio_desmarcar',fecha:hoy(),nota:'Se desmarcó impreso',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
-    try{persistExpedienteGranular(e);}catch(err){console.warn('pqrsMarcarImpreso:',err);}
-    if(typeof renderActividades==='function')renderActividades();
-    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
-    if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewRefreshModal==='function'){
-      const ctx=window._taskModalCtx||{};
-      const tid=ctx.taskId||((typeof getPqrsTaskActiva==='function'&&getPqrsTaskActiva(e))||{}).id||'';
-      if(tid)taskReviewRefreshModal(expId,tid,ctx.sideMode||window._taskReviewSideMode||'doc');
-    }
-    notif('Impreso desmarcado','ok');
-    return;
+  }else{
+    setPqrsWorkflow(e,{impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}});
+    e._pqrs_historial.push({tipo:'impreso_oficio',fecha:hoy(),nota:'Marcado como impreso',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
   }
-  setPqrsWorkflow(e,{impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}});
-  e._pqrs_historial.push({tipo:'impreso_oficio',fecha:hoy(),nota:'Marcado como impreso',oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
-  try{persistExpedienteGranular(e);}catch(err){console.warn('pqrsMarcarImpreso:',err);}
+  let ok=true;
+  try{
+    if(typeof persistExpedienteGranularAsync==='function')ok=!!(await persistExpedienteGranularAsync(e));
+    else if(typeof persistExpedienteGranular==='function')ok=!!(await persistExpedienteGranular(e));
+  }catch(err){console.warn('pqrsMarcarImpreso:',err);ok=false;}
   if(typeof renderActividades==='function')renderActividades();
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
   if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewRefreshModal==='function'){
     const ctx=window._taskModalCtx||{};
     const tid=ctx.taskId||((typeof getPqrsTaskActiva==='function'&&getPqrsTaskActiva(e))||{}).id||'';
-    if(tid)taskReviewRefreshModal(expId,tid,ctx.sideMode||window._taskReviewSideMode||'doc');
+    if(tid)taskReviewRefreshModal(eid,tid,ctx.sideMode||window._taskReviewSideMode||'doc');
   }
-  notif('✓ Marcado como impreso','ok');
+  if(ok)notif(desmarcar?'Impreso desmarcado':'✓ Marcado como impreso','ok');
 }
 window.pqrsMarcarImpreso=pqrsMarcarImpreso;
 window.actImpresoCheckBtnHtml=actImpresoCheckBtnHtml;

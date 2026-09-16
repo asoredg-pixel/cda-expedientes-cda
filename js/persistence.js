@@ -928,14 +928,19 @@ function _firebaseIdTokenExpiring(jwt,skewSec){
  * Asegura sesión Firebase usable para escribir en Firestore.
  * No exige refresco forzado si el token en caché sigue vigente (Drive OAuth
  * puede seguir activo aunque falle un getIdToken(true) por red).
+ * Si hay currentUser, no bloquea el guardado: el SDK de Firestore refresca solo.
  */
 async function ensureFirestoreAuthReady(){
   const auth=window._firebaseAuth;
   let user=auth&&auth.currentUser;
   if(!user){
-    // Persistencia IndexedDB a veces tarda un instante tras foco/pestaña
-    await new Promise(function(r){setTimeout(r,350);});
-    user=auth&&auth.currentUser;
+    // Persistencia IndexedDB / restauración tras foco: reintentar unos segundos
+    for(let i=0;i<8&&!user;i++){
+      await new Promise(function(r){setTimeout(r,250);});
+      user=auth&&auth.currentUser;
+      if(!user&&typeof authUsuario!=='undefined'&&authUsuario&&authUsuario.uid)
+        user=authUsuario;
+    }
   }
   if(!user){
     window._lastFsSaveError={code:'unauthenticated',msg:'Sin sesión Firebase activa'};
@@ -962,8 +967,9 @@ async function ensureFirestoreAuthReady(){
       console.warn('ensureFirestoreAuthReady: force falló, se usa token en caché',err);
       return{ok:true,email:user.email||'',stale:true};
     }
-    window._lastFsSaveError={code:'unauthenticated',msg:err&&err.message||'Token expirado'};
-    return{ok:false,code:'unauthenticated'};
+    // currentUser sigue vivo: dejar que Firestore use su propio refresh
+    console.warn('ensureFirestoreAuthReady: token check falló; se intenta guardar con currentUser',err);
+    return{ok:true,email:user.email||'',stale:true};
   }
 }
 window.ensureFirestoreAuthReady=ensureFirestoreAuthReady;
