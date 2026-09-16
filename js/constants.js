@@ -225,7 +225,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260916a';
+const SST_BUILD_ID = '20260916b';
 
 // Carpeta PQRSD institucional — matriz XLSX + Radicacion/año/mes/PQRSD-xxx (cdaguaviare1)
 // https://drive.google.com/drive/folders/16nxEPrSheDDG5NWtWHCdgBbjg0-UL8sS
@@ -292,6 +292,8 @@ const PERSONA_ROLES={interesado:'Interesado',peticionario:'Quejoso / peticionari
 
 // Paginación consulta
 const CON_CONSULTA_PAGE=30;
+// Paginación paleta «Revisados» (Actividades · encargado / NCA)
+const ACT_REVISADOS_PAGE=30;
 
 // Paneles de configuración
 const CFG_PANELS=[

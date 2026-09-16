@@ -24606,8 +24606,17 @@ function setActFiltro(v){
   const sel=document.getElementById('f-act-est');
   if(sel)sel.value=v||'pend';
   window._actFiltroSticky=true;
+  window._actRevisadosShown=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
+  window._actRevisadosFilterKey='';
   renderActividades();
 }
+/** Cargar el siguiente lote de 30 en paleta «Revisados». */
+function actRevisadosVerMas(){
+  const page=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
+  window._actRevisadosShown=(window._actRevisadosShown||page)+page;
+  renderActividades();
+}
+window.actRevisadosVerMas=actRevisadosVerMas;
 window._actVista=window._actVista||'tabla';
 function setActVista(v){
   window._actVista=v==='gantt'?'gantt':'tabla';
@@ -25570,6 +25579,7 @@ function renderActividades(){
   const vistaToggle=document.getElementById('act-vista-toggle');
   const tableWrap=document.getElementById('act-table-wrap');
   const ganttWrap=document.getElementById('act-gantt-wrap');
+  const moreRev=document.getElementById('act-revisados-more');
   if(vistaToggle)vistaToggle.style.display=deptView?'flex':'none';
   const useGantt=deptView&&window._actVista==='gantt';
   if(tableWrap)tableWrap.style.display=useGantt?'none':'';
@@ -25577,7 +25587,30 @@ function renderActividades(){
     ganttWrap.style.display=useGantt?'block':'none';
     if(useGantt)renderActGantt(list);
   }
-  if(tb&&!useGantt)tb.innerHTML=list.length?list.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
+  // «Revisados» (encargado/NCA): corte de 30 + «Cargar otras 30 más» (como Consulta / bandeja oficina)
+  const pageRev=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
+  const paginarRevisados=deptView&&filtroAct==='revisados'&&!useGantt;
+  let listRender=list;
+  if(paginarRevisados){
+    const filterKey=[filtroAct,q||'',respFilter||'',labelActPeriodo?labelActPeriodo():'',deptoActivo||''].join('|');
+    if(window._actRevisadosFilterKey!==filterKey){
+      window._actRevisadosShown=pageRev;
+      window._actRevisadosFilterKey=filterKey;
+    }
+    if(window._actRevisadosShown==null||window._actRevisadosShown<pageRev)window._actRevisadosShown=pageRev;
+    const shown=Math.min(window._actRevisadosShown,list.length);
+    listRender=list.slice(0,shown);
+    if(moreRev){
+      const rest=list.length-shown;
+      if(rest>0){
+        moreRev.style.display='block';
+        moreRev.textContent='Cargar otras '+pageRev+' más (quedan '+rest+')';
+      }else moreRev.style.display='none';
+    }
+  }else if(moreRev){
+    moreRev.style.display='none';
+  }
+  if(tb&&!useGantt)tb.innerHTML=listRender.length?listRender.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
 }
 // PERSONA_ROLES → js/constants.js
 function personaBusquedaTexto(p){
