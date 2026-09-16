@@ -18527,8 +18527,40 @@ function collectAgendaReminderItems(){
   });
   return items;
 }
+/** Encargado/NCA/oficina (o responsable que es encargado): sin alertas auto de plazo en campanita. */
+function sesionSinAlertasPlazoCampanita(){
+  if(typeof esModoResponsable==='function'&&!esModoResponsable())return true;
+  const yo=String(typeof responsableActivo!=='undefined'?responsableActivo:'').trim();
+  if(!yo)return false;
+  const match=function(nom){
+    const s=String(nom||'').trim();
+    if(!s)return false;
+    return typeof agendaNorm==='function'?agendaNorm(s)===agendaNorm(yo):s===yo;
+  };
+  if(typeof DEPTOS!=='undefined'&&Array.isArray(DEPTOS)){
+    for(let i=0;i<DEPTOS.length;i++){
+      const id=DEPTOS[i]&&DEPTOS[i].id;
+      if(id&&typeof getEncargadoDepto==='function'&&match(getEncargadoDepto(id)))return true;
+    }
+  }
+  if(typeof OFICINAS_DEGUV!=='undefined'&&Array.isArray(OFICINAS_DEGUV)){
+    for(let i=0;i<OFICINAS_DEGUV.length;i++){
+      const id=OFICINAS_DEGUV[i]&&OFICINAS_DEGUV[i].id;
+      if(id&&typeof getEncargadoOficina==='function'&&match(getEncargadoOficina(id)))return true;
+    }
+  }
+  if(typeof getEncargadoOficina==='function'&&match(getEncargadoOficina('guaviare')))return true;
+  if(typeof getEncargadoDepto==='function'&&match(getEncargadoDepto('guaviare')))return true;
+  return false;
+}
+window.sesionSinAlertasPlazoCampanita=sesionSinAlertasPlazoCampanita;
 function collectAutoAlertItems(){
   const items=[];
+  // Encargado / depto / oficinas / NCA: sin alertas de plazo en campanita
+  // (por vencer, vencidas o PQRSD asignada al encargado). Esas se ven en Actividades.
+  if(typeof sesionSinAlertasPlazoCampanita==='function'?sesionSinAlertasPlazoCampanita():!esModoResponsable())
+    return [];
+  if(!esModoResponsable()||!responsableActivo)return [];
   const hoyStr=hoy();
   function pushTaskAlerts(t,expRef,modo){
     t=normalizeTask(t);
@@ -18545,25 +18577,23 @@ function collectAutoAlertItems(){
       items.push({modo,tipo:'auto_venc3',exp:expRef,taskId:t.id,fecha:hoyStr,responsable:t.responsable||'',desc,texto:'🔴 Vencida hace '+diasVenc+' día(s) sin atender — '+desc});
     }
   }
-  if(esModoResponsable()){
-    if(!responsableActivo)return [];
-    exps.forEach(e=>{
-      (e.tasks||[]).forEach(t=>{
-        t=normalizeTask(t);
-        if(t.responsable!==responsableActivo)return;
-        pushTaskAlerts(t,e._exp,'resp');
-      });
+  exps.forEach(e=>{
+    (e.tasks||[]).forEach(t=>{
+      t=normalizeTask(t);
+      if(typeof taskUsuarioEsAsignado==='function'){
+        if(!taskUsuarioEsAsignado(t,responsableActivo))return;
+      }else if(t.responsable!==responsableActivo)return;
+      pushTaskAlerts(t,e._exp,'resp');
     });
-    (actividadesLibres||[]).forEach(t=>{
-      t=normalizeActLibre(t);
-      if(t.responsable!==responsableActivo)return;
-      pushTaskAlerts(t,t.codigo,'resp');
-    });
-    return items;
-  }
-  // Encargado / depto / oficinas: sin alertas automáticas de plazo en campanita
-  // (por vencer, vencidas o expediente al 80%). Esas se ven en Actividades.
-  return [];
+  });
+  (actividadesLibres||[]).forEach(t=>{
+    t=normalizeActLibre(t);
+    if(typeof taskUsuarioEsAsignado==='function'){
+      if(!taskUsuarioEsAsignado(t,responsableActivo))return;
+    }else if(t.responsable!==responsableActivo)return;
+    pushTaskAlerts(t,t.codigo,'resp');
+  });
+  return items;
 }
 function obsDocBatchId(t){
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
@@ -18799,7 +18829,14 @@ function renderBandejaDepto(){
   wrap.style.display=show?'':'none';
   if(!show)return;
   if(hdr)hdr.textContent=esModoResponsable()?'Notificaciones del departamento':(esModoOficinaDeguv()||esOficinaPqrsNca()||esNcaDeguv())?'Notificaciones PQRSD':'Chat y solicitudes';
-  const items=collectBandejaItems().filter(it=>!bandejaItemIsEliminado(it));
+  const items=collectBandejaItems().filter(function(it){
+    if(bandejaItemIsEliminado(it))return false;
+    // Defensa: nunca mostrar alertas auto de plazo al encargado / depto
+    if(it&&(it.tipo==='auto_venc1'||it.tipo==='auto_venc3'||it.tipo==='auto_exp80')
+      &&(typeof sesionSinAlertasPlazoCampanita==='function'?sesionSinAlertasPlazoCampanita():!esModoResponsable()))
+      return false;
+    return true;
+  });
   const leidos=getBandejaLeidos();
   const unreadItems=items.filter(it=>!bandejaItemIsLeido(it,leidos));
   const readItems=items.filter(it=>bandejaItemIsLeido(it,leidos));
