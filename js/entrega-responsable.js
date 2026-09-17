@@ -390,6 +390,24 @@ function initEntregaRespPqrsAltaUi(){
     btns.innerHTML=htmlMedioNotificacionBtns('','er-pqrs','setErPqrsMedioNotificacion');
   toggleErPqrsInterna();
   onErPqrsMedioRecepcionChange();
+  if(typeof ofiDocPqrsBindAltaCorreoPrefill==='function')ofiDocPqrsBindAltaCorreoPrefill();
+  const expEl=document.getElementById('er-pqrs-exp');
+  if(expEl&&!expEl._pqrsPlantillaBound){
+    expEl._pqrsPlantillaBound=true;
+    const refreshPlantilla=function(){
+      if(typeof pqrsAplicarPlantillaSegunTipo!=='function')return;
+      const cuerpoEl=document.getElementById('pqrs-entrega-resp-cuerpo');
+      if(!cuerpoEl)return;
+      if(typeof _pqrsEsPlantillaRespuesta==='function'&&!_pqrsEsPlantillaRespuesta(cuerpoEl.value)&&String(cuerpoEl.value||'').trim())return;
+      const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
+      const notif=!!(document.getElementById('pqrs-entrega-notif-correo')&&document.getElementById('pqrs-entrega-notif-correo').checked);
+      const isMensaje=tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
+      if(notif||isMensaje)pqrsAplicarPlantillaSegunTipo(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje',true);
+      else if(tipo)pqrsAplicarPlantillaSegunTipo(tipo,true);
+    };
+    expEl.addEventListener('input',refreshPlantilla);
+    expEl.addEventListener('change',refreshPlantilla);
+  }
 }
 window.setErPqrsMedioNotificacion=setErPqrsMedioNotificacion;
 window.onErPqrsMedioRecepcionChange=onErPqrsMedioRecepcionChange;
@@ -479,6 +497,8 @@ function syncEntregaRespPqrsUi(){
       setTimeout(function(){
         if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
         if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+        if(typeof pqrsEntregaPrefillDesdeAlta==='function')pqrsEntregaPrefillDesdeAlta();
+        else if(typeof ofiDocPqrsBindAltaCorreoPrefill==='function')ofiDocPqrsBindAltaCorreoPrefill();
         if(typeof syncEntregaRespRegistroUi==='function')syncEntregaRespRegistroUi();
       },40);
     }else{
@@ -1837,6 +1857,17 @@ function entregaNotifRefreshCuerpoDesdeRegistro(){
       subjEl.value='Notificación — '+tipoLbl
         +(numDoc?' No. '+numDoc:'')
         +(expLbl?' — '+expLbl:'');
+    }
+  }
+  const pqrsCuerpo=document.getElementById('pqrs-entrega-resp-cuerpo');
+  if(pqrsCuerpo&&typeof pqrsAplicarPlantillaSegunTipo==='function'){
+    const still=typeof _pqrsEsPlantillaRespuesta==='function'?_pqrsEsPlantillaRespuesta(pqrsCuerpo.value):!String(pqrsCuerpo.value||'').trim();
+    if(still){
+      const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'');
+      const notif=!!(document.getElementById('pqrs-entrega-notif-correo')&&document.getElementById('pqrs-entrega-notif-correo').checked);
+      const isMensaje=tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
+      if(notif||isMensaje)pqrsAplicarPlantillaSegunTipo(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje',true);
+      else if(tipo)pqrsAplicarPlantillaSegunTipo(tipo,true);
     }
   }
 }

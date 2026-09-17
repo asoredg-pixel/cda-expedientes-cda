@@ -3259,17 +3259,61 @@ function pqrsValidateAdjuntosPorCanal(tipoResp,canal,opts){
   }
   return true;
 }
-function pqrsPlantillaMensajeSimple(expId){
+/** N° PQRSD desde el alta / búsqueda (aún sin expediente en memoria). */
+function pqrsNumeroDesdeUiAltaOCtx(){
+  const ids=['gmail-resp-pqrs-hid','er-pqrs-exp','act-libre-pqrs-exp','ofi-doc-pqrs-exp'];
+  for(let i=0;i<ids.length;i++){
+    const v=String((document.getElementById(ids[i])||{}).value||'').trim();
+    if(v)return v;
+  }
+  const flags=[window._actLibrePqrsExpId,window._ofiDocPqrsExpId];
+  for(let j=0;j<flags.length;j++){
+    const v=String(flags[j]||'').trim();
+    if(v)return v;
+  }
+  const ctx=window._taskModalCtx||{};
+  const ctxExp=String(ctx.expId||'').trim();
+  if(ctxExp&&!/^ACT[-_]/i.test(ctxExp))return ctxExp;
+  const expBuscar=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
+  if(expBuscar)return expBuscar;
+  return'';
+}
+function pqrsRefsDocumentoDesdeUi(){
+  const fac=typeof collectEntregaFacRefsUi==='function'?collectEntregaFacRefsUi():[];
+  return{
+    facturaRefs:fac.join(', '),
+    actoNumero:String((document.getElementById('entrega-reg-acto-num')||{}).value||'').trim(),
+    concepto:String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim(),
+    actividad:String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim()
+  };
+}
+function pqrsFraseFacturaPlantilla(opts){
+  opts=opts||{};
+  const fac=String(opts.facturaRefs||'').trim();
+  if(!fac)return'';
+  const act=String(opts.actividad||'').trim();
+  const varias=fac.indexOf(',')>=0;
+  return 'Por medio de la presente, se remite'+(varias?'n las facturas Nos. ':' la factura No. ')+fac
+    +(act?' correspondiente'+(varias?'s':'')+' a «'+act+'»':'')
+    +' para su conocimiento y fines pertinentes.';
+}
+function pqrsPlantillaMensajeSimple(expId,opts){
+  opts=opts||{};
   const num=String(expId||'').trim()||'XXXXXXX';
+  const facTxt=pqrsFraseFacturaPlantilla(opts);
+  const cuerpo=facTxt||'[Indique aquí la respuesta al ciudadano]';
   return 'Cordial saludo,\n\n'+
     'Conforme a su solicitud radicada bajo el número de PQRSD '+num+', nos permitimos informarle lo siguiente:\n\n'+
-    '[Indique aquí la respuesta al ciudadano]\n\n'+
+    cuerpo+'\n\n'+
     'Quedamos atentos a cualquier inquietud adicional.';
 }
-function pqrsPlantillaOficioFirmado(expId,oficio){
+function pqrsPlantillaOficioFirmado(expId,oficio,opts){
+  opts=opts||{};
   const num=String(expId||'').trim()||'XXXXXXX';
   const ofi=String(oficio||'').trim()||'DSGV-E________';
-  return 'Cordial saludo,\n\nEn atención a su comunicación identificada con el No. '+num+', esta Dirección Seccional, en ejercicio de sus competencias legales y reglamentarias, se permite dar respuesta de fondo a su solicitud mediante el oficio '+ofi+'.\n\nEl detalle completo de la respuesta, con el análisis correspondiente, se encuentra en el oficio adjunto al presente correo electrónico.\n\nQuedamos atentos a cualquier inquietud adicional.';
+  const facTxt=pqrsFraseFacturaPlantilla(opts);
+  const extra=facTxt?('\n\n'+facTxt):'';
+  return 'Cordial saludo,\n\nEn atención a su comunicación identificada con el No. '+num+', esta Dirección Seccional, en ejercicio de sus competencias legales y reglamentarias, se permite dar respuesta de fondo a su solicitud mediante el oficio '+ofi+'.\n\nEl detalle completo de la respuesta, con el análisis correspondiente, se encuentra en el oficio adjunto al presente correo electrónico.'+extra+'\n\nQuedamos atentos a cualquier inquietud adicional.';
 }
 function _pqrsEsPlantillaRespuesta(txt){
   const cur=String(txt||'').trim();
@@ -3291,15 +3335,17 @@ function pqrsAplicarPlantillaOficioSiCorresponde(force){
 }
 function pqrsAplicarPlantillaSegunTipo(tipo,force){
   tipo=String(tipo||(document.getElementById('pqrs-resp-tipo')||{}).value||'');
-  const expId=String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
+  const expId=typeof pqrsNumeroDesdeUiAltaOCtx==='function'?pqrsNumeroDesdeUiAltaOCtx()
+    :String((document.getElementById('gmail-resp-pqrs-hid')||{}).value||(window._taskModalCtx||{}).expId||'').trim();
   const oficio=String((document.getElementById('pqrs-resp-oficio')||document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
+  const refs=typeof pqrsRefsDocumentoDesdeUi==='function'?pqrsRefsDocumentoDesdeUi():{};
   let plantilla='';
   if(tipo===PQRS_WF_TIPO.OFICIO){
-    plantilla=pqrsPlantillaOficioFirmado(expId,oficio);
+    plantilla=pqrsPlantillaOficioFirmado(expId,oficio,refs);
     window._pqrsUltimaPlantillaOficio=plantilla;
     window._pqrsUltimaPlantillaMensaje='';
   }else if(tipo===PQRS_WF_TIPO.MENSAJE){
-    plantilla=pqrsPlantillaMensajeSimple(expId);
+    plantilla=pqrsPlantillaMensajeSimple(expId,refs);
     window._pqrsUltimaPlantillaMensaje=plantilla;
     window._pqrsUltimaPlantillaOficio='';
   }else{
@@ -3326,6 +3372,10 @@ function pqrsAplicarPlantillaSegunTipo(tipo,force){
     });
   }
 }
+window.pqrsNumeroDesdeUiAltaOCtx=pqrsNumeroDesdeUiAltaOCtx;
+window.pqrsRefsDocumentoDesdeUi=pqrsRefsDocumentoDesdeUi;
+window.pqrsPlantillaMensajeSimple=pqrsPlantillaMensajeSimple;
+window.pqrsPlantillaOficioFirmado=pqrsPlantillaOficioFirmado;
 function pqrsRespRefreshModalUiGmail(){
   const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||PQRS_WF_TIPO.MENSAJE);
   const cuerpoWrap=document.getElementById('pqrs-resp-cuerpo-wrap');
@@ -8256,7 +8306,7 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
   const tipoDoc=taskReviewTipoDocumentoAct(e,t);
   const tipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(act):'';
   const refExp=expLbl?' del expediente '+expLbl:'';
-  const numTxt=num||'XXXXX';
+  const numTxt=num||expLbl||'XXXXX';
   // Sin «Cordialmente»: la firma de Gmail del remitente ya la incluye.
   if(tipo==='concepto'||/concepto/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.';
@@ -10310,11 +10360,21 @@ function pqrsEntregaSetOtroCanal(val){
   });
 }
 window.pqrsEntregaSetOtroCanal=pqrsEntregaSetOtroCanal;
+function pqrsEntregaPrefillDesdeAlta(){
+  if(typeof ofiDocPqrsBindAltaCorreoPrefill==='function')ofiDocPqrsBindAltaCorreoPrefill();
+  if(typeof ofiDocPqrsPrefillEmailTo==='function')ofiDocPqrsPrefillEmailTo(null,true);
+  const host=document.getElementById('pqrs-entrega-email-compose')
+    ||document.getElementById('pqrs-entrega-campos')
+    ||document.getElementById('entrega-resp-pqrs-box');
+  if(host&&typeof sstInitEmailChipsIn==='function')sstInitEmailChipsIn(host);
+}
+window.pqrsEntregaPrefillDesdeAlta=pqrsEntregaPrefillDesdeAlta;
 function pqrsEntregaToggleNotifCorreo(){
   if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
-  if(typeof ofiDocPqrsPrefillEmailTo==='function'){
-    setTimeout(function(){ofiDocPqrsPrefillEmailTo(null,true);},20);
-  }
+  setTimeout(function(){
+    if(typeof pqrsEntregaPrefillDesdeAlta==='function')pqrsEntregaPrefillDesdeAlta();
+    else if(typeof ofiDocPqrsPrefillEmailTo==='function')ofiDocPqrsPrefillEmailTo(null,true);
+  },20);
 }
 function pqrsEntregaRefreshUi(){
   if(!document.getElementById('pqrs-entrega-resp-cuerpo'))return;
@@ -15925,7 +15985,7 @@ function entregaNotifCorreosDefault(e,t,opts){
     'entrega-libre-int-correo','entrega-libre-int-correo-j',
     'entrega-int-pn-correo','entrega-int-pj-correo','entrega-int-pj-rep-correo',
     'entrega-int-qd-correo','entrega-int-ec-correo','entrega-int-apo-correo','entrega-int-aut-correo',
-    'er-pqrs-anon-correo'
+    'er-pqrs-pn-correo','er-pqrs-pj-correo','er-pqrs-pj-ofi-correo','er-pqrs-anon-correo'
   ].forEach(function(id){
     const el=document.getElementById(id);
     if(el)add(el.value);
