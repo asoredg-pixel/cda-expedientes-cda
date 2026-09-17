@@ -3341,6 +3341,16 @@ async function generarPdfSolicitudManual(opts) {
   doc.setFont('helvetica', 'normal');
   if (opts.anon) {
     y = _pdfWriteLines(doc, ['Solicitud anónima'], margin, y, lineH, pageH, margin);
+    const anonContact = [];
+    if (opts.correo) anonContact.push(['Correo (notificación):', opts.correo]);
+    if (opts.tel) anonContact.push(['Teléfono (notificación):', opts.tel]);
+    anonContact.forEach(function(row) {
+      doc.setFont('helvetica', 'bold'); doc.text(row[0], margin, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(String(row[1]), maxW - 150);
+      y = _pdfWriteLines(doc, lines, margin + 150, y, 14, pageH, margin);
+      y += 2;
+    });
   } else {
     const inter = [
       ['Nombre / entidad:', opts.nombre || ''],
@@ -3390,21 +3400,23 @@ async function generarPdfSolicitudManual(opts) {
   return doc.output('blob');
 }
 
-// Radicación manual: genera PDF soporte + sube anexos al Drive institucional (misma carpeta PQRSD).
+// Radicación manual: genera PDF de solicitud + sube anexos al Drive (misma carpeta PQRSD).
+// El PDF se genera siempre, también sin anexos (es el documento de solicitud, como en correo).
 async function subirSoporteRadicacionManual(opts) {
   opts = opts || {};
   const expId = String(opts.expId || '').trim();
   const tipoRad = opts.tipoRadicacion || tipoRadicacionDesdeMedioPqrs(opts.medio);
   const fechaRef = opts.fecha || '';
-  const nombreCarpeta = String(opts.nombreCarpeta || opts.nombre || opts.asunto || '').trim();
-  const anexosFiles = Array.isArray(opts.anexosFiles) ? opts.anexosFiles.filter(Boolean) : [];
+  const nombreCarpeta = String(opts.nombreCarpeta || opts.nombre || (opts.anon ? 'Anonimo' : opts.asunto) || '').trim();
+  const anexosRaw = Array.isArray(opts.anexosFiles) ? opts.anexosFiles : (Array.isArray(opts.anexos) ? opts.anexos : []);
+  const anexosFiles = anexosRaw.filter(Boolean);
   const anexosNombres = anexosFiles.map(function(f) { return f.name || 'anexo'; });
 
+  if (!_driveGetBestToken() && typeof sstSolicitarDriveParaPqrs === 'function') {
+    await sstSolicitarDriveParaPqrs(opts.expediente || null);
+  }
   if (!_driveGetBestToken()) {
-    if (anexosFiles.length) {
-      throw new Error('Sin token Gmail/Drive para subir anexos.');
-    }
-    return { soporte: null, anexos: [], all: [], link: '' };
+    throw new Error('Sin token Gmail/Drive para subir el PDF de solicitud.');
   }
 
   const uploaded = [];
@@ -3413,37 +3425,38 @@ async function subirSoporteRadicacionManual(opts) {
   const silentNotif = !!opts.silentNotif;
   try {
     driveResetPqrsRadicacionCaches();
-    pqrsFolder = await driveEnsurePqrsExpedienteFolders(tipoRad, expId, nombreCarpeta, fechaRef);
+    pqrsFolder = await driveEnsurePqrsExpedienteFolders(tipoRad, expId, nombreCarpeta, fechaRef, opts.expediente || null);
     const uploadOpts = {
       folderId: pqrsFolder.solicitudFolderId,
       folderLink: pqrsFolder.solicitudFolderLink,
       pqrsFolders: pqrsFolder,
-      uploadTarget: 'solicitud'
+      uploadTarget: 'solicitud',
+      expediente: opts.expediente || null
     };
     if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
     const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
-    if (pdfBlob) {
-      const solName = typeof pqrsBuildDriveFilename === 'function'
-        ? pqrsBuildDriveFilename('SOL', expId, { ext: 'pdf' })
-        : ('Solicitud_PQRSD-' + expId + '.pdf');
-      soporte = await driveUploadInstitutional(
-        pdfBlob,
-        solName,
-        'application/pdf',
-        tipoRad,
-        expId,
-        nombreCarpeta,
-        fechaRef,
-        uploadOpts
-      );
-      if (soporte) {
-        soporte.nombre = soporte.nombre || solName;
-        soporte.tipo = soporte.tipo || 'soporte_radicacion';
-      }
-      uploaded.push(soporte);
-    } else if (!silentNotif) {
-      notif('⚠️ No se pudo generar el PDF (jsPDF no disponible).', 'warn');
+    if (!pdfBlob) {
+      throw new Error('No se pudo generar el PDF de solicitud (jsPDF no disponible).');
     }
+    const solName = typeof pqrsBuildDriveFilename === 'function'
+      ? pqrsBuildDriveFilename('SOL', expId, { ext: 'pdf' })
+      : ('Solicitud_PQRSD-' + expId + '.pdf');
+    soporte = await driveUploadInstitutional(
+      pdfBlob,
+      solName,
+      'application/pdf',
+      tipoRad,
+      expId,
+      nombreCarpeta,
+      fechaRef,
+      uploadOpts
+    );
+    if (!soporte || !soporte.driveLink) {
+      throw new Error('No se pudo subir el PDF de solicitud a Drive.');
+    }
+    soporte.nombre = soporte.nombre || solName;
+    soporte.tipo = 'soporte_radicacion';
+    uploaded.push(soporte);
 
     for (let i = 0; i < anexosFiles.length; i++) {
       const file = anexosFiles[i];

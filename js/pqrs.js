@@ -634,28 +634,38 @@ async function guardarPqrsSecretaria(modo){
   }
   if(!gmailMsgId&&typeof subirSoporteRadicacionManual==='function'){
     try{
+      if(typeof sstSolicitarDriveParaPqrs==='function'&&typeof _driveGetBestToken==='function'&&!_driveGetBestToken()){
+        await sstSolicitarDriveParaPqrs(data);
+      }
       manualRes=await subirSoporteRadicacionManual({
         expId,fecha,fechaSol,fechaTermino,tipo,medio,medioNotif,anon,nombre,ident,correo,tel,
         asunto,detalle,tipoPersona,
         pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
-        tipoRadicacion,nombreCarpeta:nombre||asunto,anexosFiles:anexoFiles,
+        pjCorreo:pjFields._pj_correo||'',pjTel:pjFields._pj_telefono||'',
+        tipoRadicacion,nombreCarpeta:nombre||(anon?'Anonimo':asunto),anexosFiles:anexoFiles,
+        expediente:data,
         silentNotif:true
       });
+      if(!(manualRes&&(manualRes.soporte||manualRes.link))){
+        notif('PQRSD radicada, pero no quedó el PDF de solicitud en Drive. Reintente adjuntarlo desde Editar.','warn');
+      }
       if(anexoFiles.length){
-        const subidos=(manualRes.anexos&&manualRes.anexos.length)||0;
+        const subidos=(manualRes&&manualRes.anexos&&manualRes.anexos.length)||0;
         if(subidos<anexoFiles.length){
           notif('No se pudo subir algún anexo al Drive. La PQRSD ya quedó radicada — adjunte el archivo manualmente luego.','warn');
         }
       }
-      if(manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
-      manualDriveFolderLink=manualRes.folderLink||manualRes.pqrsFolderLink||'';
-      driveFolderMeta={
-        pqrsFolderId:manualRes.pqrsFolderId||'',
-        pqrsFolderLink:manualRes.folderLink||manualRes.pqrsFolderLink||'',
-        solicitudFolderId:manualRes.solicitudFolderId||'',
-        respuestaFolderId:manualRes.respuestaFolderId||'',
-        pathLabel:manualRes.pathLabel||''
-      };
+      if(manualRes&&manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
+      manualDriveFolderLink=(manualRes&&(manualRes.folderLink||manualRes.pqrsFolderLink))||'';
+      if(manualRes){
+        driveFolderMeta={
+          pqrsFolderId:manualRes.pqrsFolderId||'',
+          pqrsFolderLink:manualRes.folderLink||manualRes.pqrsFolderLink||'',
+          solicitudFolderId:manualRes.solicitudFolderId||'',
+          respuestaFolderId:manualRes.respuestaFolderId||'',
+          pathLabel:manualRes.pathLabel||''
+        };
+      }
       if(anexoFiles.length)archivoFinal=anexoFiles.map(f=>f.name).join('; ');
     }catch(e){
       console.warn('soporte manual drive:',e);
