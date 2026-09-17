@@ -8465,7 +8465,8 @@ window.etiquetaSoporteEnvioActividad=etiquetaSoporteEnvioActividad;
 window.esSoporteEnvioCorreoItem=esSoporteEnvioCorreoItem;
 async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
   if(!blob)return null;
-  const fileName='Soporte_Envio_'+(expId||'actividad')+'_'+hoy()+'.pdf';
+  const lbl=(typeof etiquetaSoporteEnvioActividad==='function'?etiquetaSoporteEnvioActividad(e,t):'Soporte envío').replace(/\.pdf$/i,'');
+  const fileName=lbl+'.pdf';
   const file=new File([blob],fileName,{type:'application/pdf'});
   const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
   const ctx=e||{_exp:expId,_sin_expediente:!!(t&&t.sinExpediente)};
@@ -8473,7 +8474,7 @@ async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
     return await driveUploadInstitutional(blob,fileName,'application/pdf','respuesta_aprobada',e._exp||expId,e._qd_nombre||e._pn_nombre||e._pj_empresa||expId,e._fecha||'',{expediente:e,uploadTarget:'respuesta'});
   }
   if(typeof driveUploadExpedienteActividad==='function'){
-    return await driveUploadExpedienteActividad(file,fileName,'application/pdf',ctx,t,autor,'atendido');
+    return await driveUploadExpedienteActividad(file,fileName,'application/pdf',ctx,t,autor,'notificado',{keepName:true});
   }
   if(e&&typeof driveUploadInstitutional==='function'){
     return await driveUploadInstitutional(blob,fileName,'application/pdf','respuesta_aprobada',e._exp||expId,e._qd_nombre||e._pn_nombre||e._pj_empresa||expId,e._fecha||'',{expediente:e,uploadTarget:'respuesta'});
@@ -8514,6 +8515,7 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
       id:'sop_envio_'+Date.now(),
       label:lblSop,
       nombre:up.nombre||(lblSop+'.pdf'),
+      driveFilename:up.driveFilename||up.nombre||(lblSop+'.pdf'),
       actividad:actNom,
       driveFileId:up.fileId||up.driveFileId||'',
       fileId:up.fileId||up.driveFileId||'',
@@ -16429,14 +16431,16 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   if(!e)return false;
   normalizeTask(t);
   const rep=getUltimoReportadoPor(t)||'';
+  const aOk=newEstado==='aprobado'||newEstado==='ok'||newEstado==='atendido'||newEstado==='cerrado';
   let list=(t.soportes||[]).filter(function(s){
     if(!s)return false;
+    if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
     const fid=String(s.driveFileId||s.fileId||'').trim();
     if(!fid||s.driveInstitutional===false)return false;
     const est=String(s.driveEstado||'').toLowerCase();
     const nom=String(s.driveFilename||s.label||s.nombre||'');
     // Renombrar borradores internos; no tocar ya aprobados/por notificar si el destino es el mismo
-    if(newEstado==='aprobado'){
+    if(aOk){
       // No renombrar versiones «por corregir» (se eliminan al cerrar)
       if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
       if(/^revision[-_]/i.test(nom)||/(?:^|[-_])revision[-_]/i.test(nom))return true;
@@ -16444,18 +16448,19 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
     }
     return true;
   });
-  if(newEstado==='aprobado'&&list.length>1){
+  if(aOk&&list.length>1){
     const activos=list.filter(function(s){return s.activo!==false&&!s.version_historial;});
     if(activos.length)list=activos;
   }
   if(!list.length){
     const activo=getSoporteActivo(t);
     if(activo&&(activo.driveFileId||activo.fileId)
-      &&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(activo)))
+      &&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(activo))
+      &&!(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(activo)))
       list.push(activo);
   }
   let any=false;
-  const uniqueByVersion=newEstado==='aprobado'&&list.length>1;
+  const uniqueByVersion=aOk&&list.length>1;
   for(let i=0;i<list.length;i++){
     const s=list[i];
     const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'',{uniqueByVersion:uniqueByVersion});

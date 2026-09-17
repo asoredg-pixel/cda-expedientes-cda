@@ -1736,6 +1736,19 @@ function _driveSafeFolderName(s, maxLen) {
     .slice(0, maxLen || 30) || 'sin-nombre';
 }
 
+/** Nombre de archivo Drive: conserva espacios/acentos; quita solo caracteres ilegales. */
+function _driveSafeFileName(s, maxLen) {
+  maxLen = maxLen || 180;
+  let name = String(s || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+  if (!name) name = 'doc';
+  const m = name.match(/\.([a-zA-Z0-9]{1,8})$/);
+  const ext = m ? m[1] : '';
+  const base = ext ? name.slice(0, -(ext.length + 1)).trim() : name;
+  const room = Math.max(8, maxLen - (ext ? ext.length + 1 : 0));
+  const safeBase = (base || 'doc').slice(0, room);
+  return ext ? (safeBase + '.' + ext) : safeBase;
+}
+
 function _driveFileExt(origName, fallback) {
   const m = String(origName || '').match(/\.([a-zA-Z0-9]{1,8})$/);
   return m ? m[1].toLowerCase() : (fallback || 'pdf');
@@ -1745,12 +1758,19 @@ function _driveFileExt(origName, fallback) {
  * Nombre corto en Drive para soportes de expediente/actividad.
  * Sin fecha ni responsable (ya están en el sistema / se filtran ahí).
  * Formato: [anexoN-]{estado}-{exp}-{actividad}.{ext}
+ * Prefijo Ok = aprobado / atendido / cerrado (con o sin notificación).
  */
 function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
   const exp = String(e && e._exp || '').trim().replace(/\s/g, '') || 'EXP';
   const act = _driveSlug(task && (task.desc || task.actividad) || 'act', 16);
   const ext = _driveFileExt(origName, 'pdf');
-  const pref = estado === 'guia_correccion' ? 'guia' : (estado === 'aprobado' ? 'aprobado' : (estado === 'corregir' || estado === 'acorregir' ? 'acorregir' : (estado === 'por_firmar' ? 'por_firmar' : (estado === 'por_firma' ? 'por_firma' : (estado === 'por_notificar' ? 'por_notificar' : 'revision')))));
+  const est = String(estado || '').toLowerCase();
+  const pref = (est === 'guia_correccion' || est === 'guia') ? 'guia'
+    : ((est === 'aprobado' || est === 'ok' || est === 'atendido' || est === 'cerrado') ? 'Ok'
+    : ((est === 'corregir' || est === 'acorregir') ? 'acorregir'
+    : (est === 'por_firmar' ? 'por_firmar'
+    : (est === 'por_firma' ? 'por_firma'
+    : (est === 'por_notificar' ? 'por_notificar' : 'revision')))));
   const anexoM = String(origName || '').match(/(?:^|[-_\s])anexo[-_\s]?(\d+)/i) || String(origName || '').match(/(?:^|[-_])A(\d+)(?:[-_.]|$)/i);
   const anexoPref = anexoM ? ('anexo' + anexoM[1] + '-') : (/anexo[-_\s]/i.test(String(origName || '')) ? 'anexo-' : '');
   return anexoPref + pref + '-' + exp + '-' + act + '.' + ext;
@@ -2134,6 +2154,7 @@ window.driveResolveDestFolderActLibreVinculo = driveResolveDestFolderActLibreVin
 async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable, opts) {
   opts = opts || {};
   if (!soporte || soporte.driveInstitutional === false) return false;
+  if (typeof esSoporteEnvioCorreoItem === 'function' && esSoporteEnvioCorreoItem(soporte)) return false;
   const fid = String(soporte.driveFileId || soporte.fileId || '').trim();
   if (!fid) return false;
   if (!soporte.driveFileId && soporte.fileId) soporte.driveFileId = fid;
@@ -2147,7 +2168,7 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   const ok = await driveRenameInstitutional(fid, newName);
   if (ok) {
     const prevLabel = String(soporte.label || '');
-    const isDriveName = /^(anexo\d*-)?(revision|aprobado|acorregir|corregir|por_firmar|por_firma|por_notificar|guia|atendido)[-_]/i.test(prevLabel)
+    const isDriveName = /^(anexo\d*-)?(revision|aprobado|ok|acorregir|corregir|por_firmar|por_firma|por_notificar|guia|atendido)[-_]/i.test(prevLabel)
       || prevLabel === String(soporte.driveFilename || '')
       || prevLabel === String(origName || '');
     soporte.driveFilename = newName;
@@ -2158,11 +2179,18 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   return ok;
 }
 
-async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task, responsable, estado) {
+async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task, responsable, estado, opts) {
+  opts = opts || {};
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
   const folder = await driveEnsureExpedienteFolder(e);
-  const filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName);
+  let filename;
+  if (opts.keepName || opts.keepOrigName) {
+    filename = _driveSafeFileName(origName, 180);
+    if (!/\.[a-zA-Z0-9]{1,8}$/.test(filename)) filename += '.' + _driveFileExt(origName, 'pdf');
+  } else {
+    filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName);
+  }
   const form = new FormData();
   const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folder.folderId] };
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
