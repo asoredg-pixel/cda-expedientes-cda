@@ -8385,6 +8385,30 @@ async function taskReviewAdjuntosDesdeSoportes(t,e){
   }
   return files;
 }
+/** Correo de la cuenta que envía (oficina/NCA/Secretaría). Nunca el nombre de la persona. */
+function correoEmisorSoporteEnvio(opts,e,t){
+  opts=opts||{};
+  const pick=function(v){
+    const s=String(v||'').trim().toLowerCase();
+    return s.indexOf('@')>0?s:'';
+  };
+  let em=pick(opts.cuenta)||pick(opts.from)||pick(opts.enviadoDesde)||pick(opts.enviado_por)||pick(opts.por);
+  if(em)return em;
+  if(typeof gmailOfiCuentaConectadaParaEnvio==='function')em=pick(gmailOfiCuentaConectadaParaEnvio());
+  if(em)return em;
+  if(typeof gmailOfiGetAccountEmail==='function')em=pick(gmailOfiGetAccountEmail());
+  if(em)return em;
+  let ofi='';
+  if(typeof getOficinaParaEnvioCorreoPqrs==='function')ofi=String(getOficinaParaEnvioCorreoPqrs(e)||'').trim();
+  if(!ofi)ofi=String((e&&(e._pqrs_oficina||e._depto))||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim();
+  if(ofi==='responsables'||ofi==='ds_deguv')ofi='guaviare';
+  if(typeof getCorreoAutorizadoOficina==='function'){
+    em=pick(getCorreoAutorizadoOficina(ofi));
+    if(!em&&typeof esSecretaria==='function'&&esSecretaria())em=pick(getCorreoAutorizadoOficina('secretaria'));
+  }
+  return em;
+}
+window.correoEmisorSoporteEnvio=correoEmisorSoporteEnvio;
 async function generarPdfSoporteNotificacionActividad(e,t,opts){
   const jsPDFCtor=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||null;
   if(!jsPDFCtor)return null;
@@ -8419,7 +8443,7 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     ['Cc:',opts.cc||''],
     // Cco no se imprime en el soporte: es copia oculta.
     ['Asunto:',opts.asunto||''],
-    ['Enviado por:',opts.por||'']
+    ['Enviado por:',correoEmisorSoporteEnvio(opts,e,t)]
   ];
   doc.setFontSize(10);
   meta.forEach(function(row){
