@@ -491,7 +491,7 @@ function syncEntregaRespPqrsUi(){
   if(box){
     if(esPqrsFlujo&&typeof renderPqrsEntregaCamposHtml==='function'){
       if(tramFiles){tramFiles.innerHTML='';tramFiles.style.display='none';}
-      const eRender=esPqrsExistente?e:{_alta_por_responsable:true};
+      const eRender=esPqrsExistente?e:{_tipo_solicitud:'solicitud PQRSD'};
       box.innerHTML=renderPqrsEntregaCamposHtml(eRender);
       box.style.display='';
       setTimeout(function(){

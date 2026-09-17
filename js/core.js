@@ -8934,7 +8934,7 @@ function renderTaskReviewEntregaSideHtml(expId,taskId,t){
 }
 function initTaskReviewEntregaSide(expId,taskId,t){
   const e=typeof getExpById==='function'?getExpById(expId):null;
-  const esPqrs=e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+  const esPqrs=!!(e&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,e));
   if(esPqrs)initPqrsEntregaArchivosPick();
   else initEnviarArchivosPick(expId,taskId);
   if(esPqrs){
@@ -9800,6 +9800,11 @@ function taskEsAtenderPqrs(t,e){
   const act=String(t.actividad||t.desc||'');
   return act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act);
 }
+/** Entrega de actividad sobre un expediente PQRSD: misma ventana que Secretaría → NCA → responsable. */
+function taskUsaEntregaPqrsUi(t,e){
+  const exp=e||(t&&typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
+  return !!(exp&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp));
+}
 function pqrsActividadNombreDefault(){
   return 'Oficio de respuesta';
 }
@@ -10170,8 +10175,7 @@ async function purgePqrsRevisionDocsForReplace(e,t){
 function renderPqrsEntregaCamposHtml(e){
   e=e||{};
   const wf=getPqrsWorkflow(e);
-  const esAltaEnc=typeof pqrsEsAltaPorEncargado==='function'?pqrsEsAltaPorEncargado(e):!!e._alta_por_responsable;
-  const tipoActual=esAltaEnc?PQRS_WF_TIPO.OFICIO:String(wf.tipo||'').trim();
+  const tipoActual=String(wf.tipo||'').trim();
   const canalDef=(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO);
   const canalActual=wf.canal||e._pqrs_respuesta_medio||canalDef;
   const emailTo=String(wf.email_to||'').trim()
@@ -10192,18 +10196,13 @@ function renderPqrsEntregaCamposHtml(e){
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoActual===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   let h='<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)" id="pqrs-entrega-campos">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
-  if(esAltaEnc){
-    h+='<input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(PQRS_WF_TIPO.OFICIO)+'">'+
-      '<div id="pqrs-resp-tipo-btns" style="display:none"></div>';
-  }else{
-    h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
-      '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
-      mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
-      mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
-      mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
-      '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>'+
-      '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
-  }
+  h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
+    '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
+    mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
+    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
+    mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
+    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>'+
+    '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
   h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoActual?'block':'none')+'">';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" id="pqrs-entrega-fecha-row"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
@@ -10540,8 +10539,6 @@ function collectPqrsEntregaDatos(expId,eOpt){
   const oficioExt=String((document.getElementById('pqrs-entrega-resp-oficio')||{}).value||'').trim();
   const cuerpo=String((document.getElementById('pqrs-entrega-resp-cuerpo')||{}).value||'').trim();
   let tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
-  const esAltaEnc=typeof pqrsEsAltaPorEncargado==='function'?pqrsEsAltaPorEncargado(e):!!e._alta_por_responsable;
-  if(!tipo&&esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
   let canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim().toLowerCase();
   const notifCorreoOficio=tipo===PQRS_WF_TIPO.OFICIO&&pqrsEntregaOficioNotifCorreo();
   if(tipo===PQRS_WF_TIPO.OFICIO){
@@ -10553,13 +10550,10 @@ function collectPqrsEntregaDatos(expId,eOpt){
     }
   }else if(tipo===PQRS_WF_TIPO.MENSAJE)canal=PQRS_WF_CANAL.CORREO;
   if(!tipo||![PQRS_WF_TIPO.MENSAJE,PQRS_WF_TIPO.OFICIO,PQRS_WF_TIPO.INFORMATIVA].includes(tipo)){
-    if(esAltaEnc)tipo=PQRS_WF_TIPO.OFICIO;
-    else{
-      notif('Seleccione el tipo de respuesta (mensaje por correo, oficio firmado o informativa)','err');
-      const hint=document.getElementById('pqrs-entrega-tipo-hint');
-      if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
-      return null;
-    }
+    notif('Seleccione el tipo de respuesta (mensaje por correo, oficio firmado o informativa)','err');
+    const hint=document.getElementById('pqrs-entrega-tipo-hint');
+    if(hint)hint.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return null;
   }
   const emailTo=String((document.getElementById('pqrs-entrega-email-to')||{}).value||'').trim();
   const emailCc=String((document.getElementById('pqrs-entrega-email-cc')||{}).value||'').trim();
@@ -16190,7 +16184,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   const finalizarEnc=modo==='finalizarEncargado';
   const autoEnc=modo==='autoentregaEncargado';
   const eExp=getExpById(expId);
-  const esPqrsEntrega=eExp&&taskEsAtenderPqrs(t,eExp);
+  const esPqrsEntrega=!!(eExp&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,eExp));
   const entregaDirectaUi=esPqrsEntrega&&eExp&&typeof pqrsEsEntregaDirectaCtx==='function'&&pqrsEsEntregaDirectaCtx(eExp);
   const corrVoluntaria=typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
   const sol=getTaskSolicitudPendiente(t);
@@ -16303,7 +16297,7 @@ function openEnviarSoporteModal(expId,taskId,modo){
   if(!ov||!body)return;
   if(tit)tit.textContent=(modo==='nuevaEntrega'?'Nueva entrega':modo==='reporteTrasladado'?'Reportar actividad trasladada':'Entrega')+' · '+(t.codigo||expId);
   const eExp=e||getExpById(expId);
-  const esPqrsEntrega=eExp&&taskEsAtenderPqrs(t,eExp);
+  const esPqrsEntrega=!!(eExp&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,eExp));
   if(modal){
     modal.classList.remove('task-modal-wide','pqrs-entrega-modal');
     modal.classList.add('enviar-modal-only');
@@ -19596,7 +19590,13 @@ function openAutoentregaEncargadoModal(expId,taskId){
     renderEnviarPanelHtml(expId,taskId,t,'autoentregaEncargado');
   ov.classList.add('on');
   window._taskModalCtx={expId,taskId,mode:'autoentregaEnc',actLibre:!!t.sinExpediente};
-  try{addEnviarAdjuntoRow();}catch(e){}
+  const eExp=typeof getExpById==='function'?getExpById(expId):null;
+  if(eExp&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,eExp)){
+    if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();
+    setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
+  }else{
+    try{addEnviarAdjuntoRow();}catch(errEnc){}
+  }
 }
 /**
  * Guarda soportes de autoentrega del encargado sin pasar por «Por verificar».
@@ -19725,7 +19725,7 @@ function submitFinalizarEncargado(expId,taskId){
   const e=getExpById(expId);
   const t=getTaskFromExp(e,taskId);
   let pqrsOpts=null;
-  if(e&&t&&taskEsAtenderPqrs(t,e)){
+  if(e&&t&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,e)){
     pqrsOpts=collectPqrsEntregaDatos(expId);
     if(!pqrsOpts)return;
   }
