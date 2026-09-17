@@ -10485,7 +10485,7 @@ function pqrsEntregaRefreshUi(){
   }
   if(emailCompose)emailCompose.style.display=(isMensaje||notifCorreoOficio)?'':'none';
   if(adjWrap)adjWrap.style.display=isInfo?'none':'';
-  if(adjLabel)adjLabel.textContent=isOficio?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
+  if(adjLabel)adjLabel.textContent=oficioOblig?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
   if(adjHint)adjHint.textContent='';
   const mainLbl=document.getElementById('pqrs-entrega-main-lbl');
   const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
@@ -10621,7 +10621,7 @@ function collectPqrsEntregaDatos(expId,eOpt){
   const adj=collectEnviarAdjuntos();
   const tieneAdjOficio=(adj.files&&adj.files.length)||(adj.links&&adj.links.length)
     ||(adj.preUploaded&&adj.preUploaded.length)||(adj.anexos&&adj.anexos.length);
-  if(tipo===PQRS_WF_TIPO.OFICIO&&!tieneAdjOficio){
+  if(tipo===PQRS_WF_TIPO.OFICIO&&!tieneAdjOficio&&pqrsEntregaOficioEsRequerido()){
     notif('Para oficio firmado debe adjuntar el documento del oficio','err');
     const err=document.getElementById('pqrs-entrega-adj-err');
     if(err){err.style.display='';err.textContent='Adjunte el PDF del oficio firmado.';}
