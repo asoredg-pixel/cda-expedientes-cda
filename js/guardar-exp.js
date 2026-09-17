@@ -322,7 +322,8 @@ function guardarExpCore(stayOnForm){
     ...collectDetalleNotas(),
     _es_pqrs:esCaso,_es_queja:esCaso,
     _tipo_solicitud:esPqrs?gv('fld__tipo_solicitud'):'',
-    _tipo_sancionatorio:esSanc?gv('fld__tipo_sancionatorio'):'',
+    // Conducta/caso: ya no hay campo en interesado; usar Infracción (_subclase) del control del trámite
+    _tipo_sancionatorio:esSanc?(gv('fld__subclase')||gv('fld__tipo_sancionatorio')||''):'',
     _subclase:gv('fld__subclase')||'',
     _usar_exp_asociados:document.getElementById('fld__usar_exp_asociados')?document.getElementById('fld__usar_exp_asociados').checked:false,
     _expedientes_asociados:gv('fld__expedientes_asociados')||'[]',

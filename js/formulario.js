@@ -323,16 +323,13 @@ function renderFormulario(tid,ed,targetId){
   const esSanc=esTramiteSancionatorio(tid);
   const esCaso=esPqrs||esSanc;
   const tipoSol=ev._tipo_solicitud||'PQRS';
-  const tipoSanc=ev._tipo_sancionatorio||((cfg.tiposSancionatorio||[])[0]||'Deforestación');
   const qdAnon=!!ev._qd_anonimo;
   const esQuejaDen=esPqrs&&(tipoSol==='Queja'||tipoSol==='Denuncia');
   const personaHtml='<details class="form-section" id="sec-persona"><summary class="form-section-hdr">Datos del interesado</summary><div class="form-section-body">'+
     '<div id="pqrs-tipo-box" style="'+(esPqrs?'':'display:none')+';margin-bottom:.7rem"><div class="fld"><label>Tipo de solicitud</label><select id="fld__tipo_solicitud" onchange="toggleCasoEspecialMode()">'+
     ['PQRS','Petición','Queja','Denuncia','Reclamo','Sugerencia','Reunión','Audiencia'].map(t=>'<option'+(tipoSol===t?' selected':'')+'>'+t+'</option>').join('')+
     '</select></div></div>'+
-    '<div id="sanc-tipo-box" style="'+(esSanc?'':'display:none')+';margin-bottom:.7rem"><div class="fld"><label>Tipo de conducta / caso</label><select id="fld__tipo_sancionatorio" onchange="toggleCasoEspecialMode()">'+
-    (cfg.tiposSancionatorio||['Deforestación']).map(t=>'<option'+(tipoSanc===t?' selected':'')+'>'+t+'</option>').join('')+
-    '</select></div></div>'+
+    // Tipo de conducta / caso retirado: se diligencia en Control del trámite → Infracción (_subclase)
     '<div id="bloque-interesado" style="'+(esCaso?'display:none':'')+'">'+
     '<div class="fg">'+
     '<div class="fld"><label>Tipo de persona</label><select id="fld__tipo_persona" onchange="togglePersona()"><option value="natural"'+(tipoPersona==='natural'?' selected':'')+'>Persona natural</option><option value="juridica"'+(tipoPersona==='juridica'?' selected':'')+'>Persona jurídica</option></select></div>'+
@@ -434,11 +431,9 @@ function toggleCasoEspecialMode(){
   const bi=document.getElementById('bloque-interesado');
   const bq=document.getElementById('bloque-queja');
   const tb=document.getElementById('pqrs-tipo-box');
-  const ts=document.getElementById('sanc-tipo-box');
   if(bi)bi.style.display=es?'none':'';
   if(bq)bq.style.display=es?'':'none';
   if(tb)tb.style.display=esP?'':'none';
-  if(ts)ts.style.display=esS?'':'none';
   const tipo=document.getElementById('fld__tipo_solicitud')?document.getElementById('fld__tipo_solicitud').value:'PQRS';
   const esQD=esP&&(tipo==='Queja'||tipo==='Denuncia');
   const ls=document.getElementById('lbl-solicitante-pqrs');
