@@ -8390,7 +8390,9 @@ function correoEmisorSoporteEnvio(opts,e,t){
   opts=opts||{};
   const pick=function(v){
     const s=String(v||'').trim().toLowerCase();
-    return s.indexOf('@')>0?s:'';
+    if(s.indexOf('@')<1)return '';
+    const m=s.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i);
+    return m?m[0].toLowerCase():'';
   };
   let em=pick(opts.cuenta)||pick(opts.from)||pick(opts.enviadoDesde)||pick(opts.enviado_por)||pick(opts.por);
   if(em)return em;
@@ -8401,14 +8403,38 @@ function correoEmisorSoporteEnvio(opts,e,t){
   let ofi='';
   if(typeof getOficinaParaEnvioCorreoPqrs==='function')ofi=String(getOficinaParaEnvioCorreoPqrs(e)||'').trim();
   if(!ofi)ofi=String((e&&(e._pqrs_oficina||e._depto))||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim();
-  if(ofi==='responsables'||ofi==='ds_deguv')ofi='guaviare';
+  if(ofi==='responsables'||ofi==='ds_deguv'||!ofi)ofi='guaviare';
   if(typeof getCorreoAutorizadoOficina==='function'){
     em=pick(getCorreoAutorizadoOficina(ofi));
-    if(!em&&typeof esSecretaria==='function'&&esSecretaria())em=pick(getCorreoAutorizadoOficina('secretaria'));
+    if(em)return em;
+    if(typeof esSecretaria==='function'&&esSecretaria())em=pick(getCorreoAutorizadoOficina('secretaria'));
+    if(em)return em;
+    if(ofi!=='guaviare')em=pick(getCorreoAutorizadoOficina('guaviare'));
   }
-  return em;
+  return em||'';
 }
 window.correoEmisorSoporteEnvio=correoEmisorSoporteEnvio;
+/** Fija la cuenta Gmail de envío y devuelve solo el correo (para el PDF de soporte). */
+async function resolverCuentaEmisoraSoporteEnvio(e,t,opts){
+  opts=opts||{};
+  let ofi=String((e&&(e._pqrs_oficina||e._depto))||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim();
+  if(typeof getOficinaParaEnvioCorreoPqrs==='function'){
+    const o=String(getOficinaParaEnvioCorreoPqrs(e)||'').trim();
+    if(o)ofi=o;
+  }
+  if(ofi==='responsables'||ofi==='ds_deguv'||!ofi)ofi='guaviare';
+  try{
+    if(typeof gmailOfiAsegurarCuentaOficinaParaEnvio==='function'){
+      const r=await gmailOfiAsegurarCuentaOficinaParaEnvio(ofi);
+      const c=String((r&&r.conectado)||'').trim().toLowerCase();
+      if(c.indexOf('@')>0)opts=Object.assign({},opts,{cuenta:c});
+    }
+  }catch(err){
+    console.warn('resolverCuentaEmisoraSoporteEnvio:',err);
+  }
+  return correoEmisorSoporteEnvio(opts,e,t);
+}
+window.resolverCuentaEmisoraSoporteEnvio=resolverCuentaEmisoraSoporteEnvio;
 async function generarPdfSoporteNotificacionActividad(e,t,opts){
   const jsPDFCtor=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||null;
   if(!jsPDFCtor)return null;
@@ -8443,7 +8469,10 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     ['Cc:',opts.cc||''],
     // Cco no se imprime en el soporte: es copia oculta.
     ['Asunto:',opts.asunto||''],
-    ['Enviado por:',correoEmisorSoporteEnvio(opts,e,t)]
+    ['Enviado por:',(function(){
+      const em=correoEmisorSoporteEnvio(opts,e,t);
+      return em&&em.indexOf('@')>0?em:'';
+    })()]
   ];
   doc.setFontSize(10);
   meta.forEach(function(row){
@@ -8571,13 +8600,18 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
   let pdfBlob=mailOpts.pdfBlob||null,up=null;
   if(!pdfBlob){
     try{
-      if(typeof generarPdfSoporteNotificacionActividad==='function')
+      if(typeof generarPdfSoporteNotificacionActividad==='function'){
+        const cuenta=mailOpts.cuenta
+          ||(typeof resolverCuentaEmisoraSoporteEnvio==='function'
+            ?await resolverCuentaEmisoraSoporteEnvio(e,t,mailOpts)
+            :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio(mailOpts,e,t):''));
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
           para:mailOpts.para||'',cc:mailOpts.cc||'',bcc:mailOpts.bcc||'',
-          asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',por:por,
+          asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',cuenta:cuenta,
           documentos:mailOpts.documentos||mailOpts.docs||null,
           adjuntosNombres:mailOpts.adjuntosNombres||null
         });
+      }
     }catch(errP){console.warn('registrarSoporteEnvioCorreoNotif pdf:',errP);}
   }
   if(pdfBlob&&Array.isArray(adjuntosArr)&&!mailOpts.skipAttach){
@@ -8752,10 +8786,14 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
     prog(35,'Generando soporte de envío…');
     let pdfBlob=null,up=null;
+    const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
     try{
+      const cuenta=(typeof resolverCuentaEmisoraSoporteEnvio==='function'
+        ?await resolverCuentaEmisoraSoporteEnvio(e,t,{})
+        :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio({},e,t):''));
       if(typeof generarPdfSoporteNotificacionActividad==='function')
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
-          para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,
+          para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,cuenta:cuenta,
           documentos:docsConLink
         });
     }catch(errP){console.warn('pdf soporte notif:',errP);}
@@ -8771,7 +8809,6 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
       return;
     }
-    const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
     const asuntoFinal=asunto||('Notificación — '+(t.actividad||'actividad'));
     prog(55,'Enviando correo al ciudadano…');
     let sent=null;
@@ -9386,7 +9423,7 @@ function renderTaskReviewCompareEmbedHtml(doc){
   if(soporteTieneVista(sopLike)||doc.preview||doc.url){
     return soporteEsImagen(sopLike)
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
-      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
   }
   return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
 }
@@ -10660,7 +10697,7 @@ function renderComparePqrsDocBlock(titulo,previewUrl,openUrl,meta){
     const imgMax=expanded?'max-height:88vh':'max-height:min(360px,42vh)';
     h+=isImg
       ?('<img src="'+escAttr(previewUrl)+'" alt="'+escAttr(titulo)+'" style="width:100%;'+imgMax+';object-fit:contain;display:block">')
-      :('<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>');
+      :('<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(previewUrl)+'" title="'+escAttr(titulo)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>');
     if(openUrl&&openUrl!==previewUrl)h+='<div style="padding:4px 8px;font-size:11px;border-top:1px solid var(--bd)"><button type="button" class="btn bsm" style="font-size:11px;padding:2px 8px" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl)+'\')">↗ Abrir en ventana</button></div>';
   }else{
     h+='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin documento adjunto para comparar.</div>';
@@ -12130,6 +12167,12 @@ function parseDrivePreviewUrl(url){
   if(/^https?:\/\//i.test(u))return{url:u,preview:u,valid:true,id:''};
   return{url:u,preview:'',valid:false,id:''};
 }
+function driveIframeSandbox(){
+  return (typeof DRIVE_IFRAME_SANDBOX==='string'&&DRIVE_IFRAME_SANDBOX)
+    ?DRIVE_IFRAME_SANDBOX
+    :'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
+}
+window.driveIframeSandbox=driveIframeSandbox;
 /** Abre documento Drive/URL en ventana emergente (no pestaña). */
 function openDriveVentanaEmergente(url){
   const raw=String(url||'').trim();
@@ -13765,9 +13808,9 @@ function renderSoporteEmbedHtml(sel){
   if(soporteEsWord(sel)||soporteEsExcel(sel)){
     const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(sel.url||src):{preview:src};
     const emb=p.preview||src;
-    return '<iframe id="soporte-iframe" sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(emb)+'" title="Vista previa documento" style="width:100%;height:100%;border:0"></iframe>';
+    return '<iframe id="soporte-iframe" sandbox="'+driveIframeSandbox()+'" src="'+escAttr(emb)+'" title="Vista previa documento" style="width:100%;height:100%;border:0"></iframe>';
   }
-  return '<iframe id="soporte-iframe" sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(src)+'" title="Vista previa documento"></iframe>';
+  return '<iframe id="soporte-iframe" sandbox="'+driveIframeSandbox()+'" src="'+escAttr(src)+'" title="Vista previa documento"></iframe>';
 }
 function addSoporteArchivoLocal(expId,taskId,archivo){
   if(!archivo||!archivo.data)return false;
@@ -16428,7 +16471,7 @@ function renderCompareDocSideHtml(doc,sideLbl,t){
   if(soporteTieneVista(sopLike)){
     vista=soporteEsImagen(sopLike)
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;'+(expanded?'max-height:88vh':'max-height:420px')+';object-fit:contain;display:block">'
-      :'<iframe sandbox="allow-scripts allow-same-origin allow-popups" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
+      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
   }

@@ -2695,7 +2695,7 @@ function openCiudadanoDocViewer(url,label,externalUrl){
     driveFetchFileBlob(fileId).then(function(blob){
       if(!blob){
         // Fallback: intentar /preview sin sandbox estricto
-        ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+        ifr.setAttribute('sandbox',typeof driveIframeSandbox==='function'?driveIframeSandbox():DRIVE_IFRAME_SANDBOX);
         ifr.src=parsed.preview||parsed.url||raw;
         setFoot('Si la vista previa no carga, use la ventana emergente.');
         return;
@@ -2716,13 +2716,13 @@ function openCiudadanoDocViewer(url,label,externalUrl){
       ifr.src=objUrl;
       setFoot('Vista previa del documento.');
     }).catch(function(){
-      ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+      ifr.setAttribute('sandbox',typeof driveIframeSandbox==='function'?driveIframeSandbox():DRIVE_IFRAME_SANDBOX);
       ifr.src=parsed.preview||parsed.url||raw;
       setFoot('Si la vista previa no carga, use la ventana emergente.');
     });
     return;
   }
-  ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups allow-forms allow-downloads');
+  ifr.setAttribute('sandbox',typeof driveIframeSandbox==='function'?driveIframeSandbox():DRIVE_IFRAME_SANDBOX);
   ifr.src=parsed.preview||parsed.url||raw;
 }
 function openPqrsDocViewer(url,label){
@@ -2741,7 +2741,7 @@ function closeCiudadanoDocViewer(){
   if(ifr){
     try{if(ifr._sstBlobUrl){URL.revokeObjectURL(ifr._sstBlobUrl);ifr._sstBlobUrl='';}}catch(eB){}
     ifr.src='';
-    ifr.setAttribute('sandbox','allow-scripts allow-same-origin allow-popups');
+    ifr.setAttribute('sandbox',typeof driveIframeSandbox==='function'?driveIframeSandbox():DRIVE_IFRAME_SANDBOX);
   }
   if(foot)foot.innerHTML='';
 }
