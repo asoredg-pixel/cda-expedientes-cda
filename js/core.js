@@ -1068,6 +1068,9 @@ function pqrsEstadoActividadUi(e){
     return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'));
   }
   if(f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR){
+    const tFirma=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
+    if(tFirma&&typeof estadoTask==='function'&&estadoTask(tFirma)==='Por corregir')
+      return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tFirma):0});
     const firmFis=!!(wf.firma_fisica&&wf.firma_fisica.en);
     if(firmFis){
       // Firmado: pendiente de notificación
@@ -1472,6 +1475,9 @@ function pqrsSincronizarParticipacionPostAprobacion(e){
   if(!t)return;
   normalizeTask(t);
   migrateLegacyAsignados(t);
+  // No re-atender si el encargado ya devolvió a corregir (estado o última revisión)
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return;
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='corregir')return;
   const wf=getPqrsWorkflow(e);
   const hoyStr=hoy();
   const enNotif=fase===PQRS_WF.PENDIENTE_NOTIF||fase===PQRS_WF.LISTA_ENVIO;
@@ -7802,7 +7808,8 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const ctx=window._taskModalCtx||{};
   const deptWa=!!ctx.isDeptReviewWa||!!ctx.directorRevisarPorFirmar;
   const canDevolverFirma=!esModoResponsable()&&!esJurisdiccional()
-    &&typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t);
+    &&((typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t))
+      ||(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)));
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa||canDevolverFirma);
   const canShowDevolver=canReviewSop||canDevolverFirma;
   const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
@@ -13749,7 +13756,13 @@ function getMarcadoresRonda(t){
 function canDeptMarcarEnSoporte(t,selSop){
   if(esModoResponsable()||esJurisdiccional())return false;
   const ctx=window._taskModalCtx||{};
-  if(!taskPendienteVerificacion(t)&&!ctx.directorRevisarPorFirmar)return false;
+  // Por revisar, Revisados / Por firma (devolver a corregir) y Director en Por firmar
+  const puedeMarcar=!!taskPendienteVerificacion(t)
+    ||!!ctx.directorRevisarPorFirmar
+    ||!!ctx.isDeptReviewWa
+    ||(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t))
+    ||(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t));
+  if(!puedeMarcar)return false;
   const sel=selSop||getSoporteActivo(t);
   if(!sel||!sel.id)return false;
   return (t.soportes||[]).some(s=>s.id===sel.id);
@@ -14657,7 +14670,15 @@ function devolverDocumentoConObservaciones(expId,taskId){
   const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
   const obs=(t.notasDoc||[]).filter(function(n){return n.rol==='revisor'&&String(n.soporteId||'')===String(sopId||'');});
   const nuevas=ultDev?obs.filter(n=>(n.fecha||'')>(ultDev.fecha||'')):obs;
-  devolverTaskAlResponsable(expId,taskId,'Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento');
+  const nota='Devuelto con '+(nuevas.length||obs.length)+' observación(es) en documento';
+  // Misma vía unificada (Por revisar / Revisados / Por firma)
+  if(typeof devolverTaskUnificado==='function'){
+    const inp=document.getElementById('task-cmt-input');
+    if(inp&&!String(inp.value||'').trim())inp.value=nota;
+    devolverTaskUnificado(expId,taskId);
+    return;
+  }
+  devolverTaskAlResponsable(expId,taskId,nota);
 }
 function resolveModoEnviar(t,modoHint){
   if(modoHint)return modoHint;
@@ -16455,12 +16476,51 @@ function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
   const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e0=t0&&!t0.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  // Ya en Por firma / Revisados: cancelar firma y pasar a Por corregir (igual que desde Por revisar)
+  if(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t0)
+    &&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
+    return encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota||'Devuelta al responsable');
+  }
+  if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t0)
+    &&typeof tramiteDevolverDesdeFirmaACorregir==='function'){
+    return tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota||'Devuelta al responsable');
+  }
   // PQRSD en revisión NCA: misma vía que ncaRechazarRespuesta (fase RECHAZADA + Por corregir)
   if(e0&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t0,e0)
     &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e0)
     &&typeof ncaRechazarRespuesta==='function'){
     ncaRechazarRespuesta(expId,nota||'Devuelta al responsable');
     return true;
+  }
+  // Defensa: firmaWf activo pero no detectado por helpers → limpiar y pasar a Por corregir
+  if(t0&&typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t0)){
+    const refId=t0.sinExpediente?(t0.codigo||expId):expId;
+    const okFirma=mutateTask(refId,taskId,function(tk){
+      if(!tk)return;
+      const prev=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(tk):(tk.firmaWf||{}))||{};
+      tk.firmaWf=Object.assign({},prev,{
+        fase:'',
+        firma_fisica:null,
+        firma_director:null,
+        listo_firma:null,
+        impreso:null,
+        notificacion_reportada:null,
+        devolucion_encargado:{por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',en:new Date().toISOString(),motivo:nota||'Devuelta al responsable',fase_prev:prev.fase||''}
+      });
+      tk._firma_proyeccion_atendida=false;
+      resetTaskPorCorregir(tk,nota||'Devuelta al responsable');
+    });
+    if(okFirma){
+      if(typeof driveRenombrarSoporteActivoExp==='function'){
+        driveRenombrarSoporteActivoExp(refId,taskId,'corregir').catch(function(err){console.warn('drive rename corregir:',err);});
+      }
+      if(!(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()))
+        notif('Actividad devuelta — queda por corregir','ok');
+      closeTaskModal();
+      renderBandejaDepto();
+      if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+      return true;
+    }
   }
   const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
   if(solicitarAjusteSoporte(expId,taskId,nota||'Devuelta al responsable')){
@@ -17715,6 +17775,106 @@ function aplicarPlazoRevisionTask(expId,taskId){
   }
   return ok;
 }
+/** Encargado puede devolver a corregir desde Revisados / Por firma (trámite o PQRSD, antes de notificar). */
+function encargadoPuedeDevolverDesdeFirma(t){
+  if(!t||t.eliminada)return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t))return true;
+  const e=(!t.sinExpediente&&typeof getExpById==='function')?getExpById(t.exp||t.codigo):null;
+  if(!e||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return false;
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
+  if(typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e))return false;
+  if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))return false;
+  if(typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)===PQRS_WF.REVISION_FINAL)return false;
+  return (typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e))
+    ||(typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(e));
+}
+/**
+ * Devolver desde Por firma / Revisados → Por corregir.
+ * PQRSD: fase RECHAZADA (sale de Por firma). Trámite: limpia firmaWf.
+ * Encargado ve ✓ Revisada · X Corregir en «Por corregir»; responsable debe reentregar.
+ */
+function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota){
+  nota=String(nota||'').trim()||'Devuelta para corregir (impresión/firma)';
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'Encargado');
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){if(typeof notif==='function')notif('No se encontró la actividad','err');return false;}
+  if(!encargadoPuedeDevolverDesdeFirma(t)){
+    if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
+      &&typeof tramiteDevolverDesdeFirmaACorregir==='function')
+      return tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
+    return false;
+  }
+  // Trámite / actividad libre con firmaWf
+  if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
+    &&typeof tramiteDevolverDesdeFirmaACorregir==='function')
+    return tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
+
+  const e=(!t.sinExpediente&&typeof getExpById==='function')?getExpById(expId||t.exp||t.codigo):null;
+  if(!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof getPqrsWorkflow==='function'&&typeof setPqrsWorkflow==='function')){
+    if(typeof notif==='function')notif('No se pudo devolver la actividad','err');
+    return false;
+  }
+  const wf=getPqrsWorkflow(e)||{};
+  const run=async function(){
+    try{
+      if(typeof _pqrsRenombrarDocsDriveWf==='function')
+        await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']});
+    }catch(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);}
+    if(Array.isArray(t.soportes)){
+      t.soportes.forEach(function(s){
+        if(!s||!s.activo)return;
+        s.driveEstado='acorregir';
+        if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+        s.activo=false;
+      });
+    }
+    if(Array.isArray(e._pqrs_respuesta_soportes)){
+      e._pqrs_respuesta_soportes.forEach(function(s){
+        if(!s||s.activo===false)return;
+        s.activo=false;
+        s.driveEstado='acorregir';
+        if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+      });
+    }
+    setPqrsWorkflow(e,{
+      fase:PQRS_WF.RECHAZADA,
+      documentos:wf.documentos||[],
+      revision_nca:{aprobado:false,comentario:nota,por:por,en:new Date().toISOString(),origen:'devolver_desde_firma'},
+      devolucion_encargado:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:wf.fase||''},
+      impreso:null,
+      listo_firma:null,
+      firma_director:null,
+      firma_fisica:null
+    });
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({tipo:'devolver_desde_firma',fecha:hoy(),nota:'Encargado devolvió desde firma: '+nota,oficina:e._depto||'guaviare',por:por});
+    normalizeTask(t);
+    migrateLegacyAsignados(t);
+    t._pqrs_proyeccion_atendida=false;
+    if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(t,nota);
+    else{
+      t.fechaReportada='';
+      t.fechaAtendida='';
+      t.estado='Por corregir';
+    }
+    if(!Array.isArray(t.historial))t.historial=[];
+    t.historial.push({tipo:'devolver_desde_firma',fecha:hoy(),ts:Date.now(),por:por,nota:nota});
+    persistExpedienteGranular(e);
+    closeTaskModal();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+    if(typeof notif==='function')notif('↩ Devuelta — ✓ Revisada · X Corregir','ok');
+  };
+  run();
+  return true;
+}
+window.encargadoPuedeDevolverDesdeFirma=encargadoPuedeDevolverDesdeFirma;
+window.encargadoDevolverDesdeFirmaACorregir=encargadoDevolverDesdeFirmaACorregir;
 /** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o nota genérica. */
 function devolverTaskUnificado(expId,taskId){
   const t=getTaskAny(expId,taskId);
@@ -17746,7 +17906,12 @@ function devolverTaskUnificado(expId,taskId){
     ncaRechazarRespuesta(expId,nota);
     return;
   }
-  // Ya aprobada en Por imprimir / Por firmar: cancelar firma y pasar a corregir
+  // Ya aprobada en Por imprimir / Por firmar / Revisados: cancelar firma y pasar a corregir
+  if(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t)
+    &&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
+    encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota);
+    return;
+  }
   if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
     &&typeof tramiteDevolverDesdeFirmaACorregir==='function'){
     tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
@@ -25553,6 +25718,9 @@ function renderActividades(){
     if(!eH||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(row,eH))return;
     const live=typeof getTaskAny==='function'?getTaskAny(row.exp||row.codigo,row.id):null;
     if(!live)return;
+    // No re-aprobar si ya está por corregir (p. ej. devolución desde Por firma / Revisados)
+    if(typeof estadoTask==='function'&&estadoTask(live)==='Por corregir')return;
+    if(live.ultimaRevisionDepto&&live.ultimaRevisionDepto.tipo==='corregir')return;
     const postOk=(typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(eH))
       ||(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eH));
     if(!postOk)return;
