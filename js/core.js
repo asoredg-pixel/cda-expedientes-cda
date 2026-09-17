@@ -6198,6 +6198,11 @@ function taskAgendaResumen(expId,taskId){
 function puedeAgendarTask(t){
   if(!t)return false;
   if(!puedeVerTabAgenda())return false;
+  // Encargado NCA: sin 📅 en paletas Revisados / Por firma (columna Acciones)
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv()&&!esModoResponsable()){
+    const pal=typeof actFiltroActivoNorm==='function'?actFiltroActivoNorm():'';
+    if(pal==='revisados'||pal==='porfirma')return false;
+  }
   // VITAL (y vista por firmar): agenda aunque la actividad esté proyectada como Atendida
   const eAg=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
   const esPqrsAg=eAg&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eAg);
