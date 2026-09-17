@@ -10,7 +10,7 @@
 <title>GEMA — Gestión de Expedientes y Módulos Ambientales · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260916c">
+<link rel="stylesheet" href="css/sst.css?v=20260917b">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260917a"></script>
+<script src="js/constants.js?v=20260917b"></script>
 <script src="js/utils.js?v=20260910o"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260916b"></script>
@@ -211,15 +211,19 @@
   <div class="login-card">
     <!-- LEFT: Brand -->
     <div class="login-panel-brand">
-      <div class="lpb-rings" aria-hidden="true">
-        <div class="lpb-ring lpb-r1"></div>
-        <div class="lpb-ring lpb-r2"></div>
-        <div class="lpb-ring lpb-r3"></div>
+      <div class="lpb-brand-stack">
+        <div class="lpb-logo-stage">
+          <div class="lpb-rings" aria-hidden="true">
+            <div class="lpb-ring lpb-r1"></div>
+            <div class="lpb-ring lpb-r2"></div>
+            <div class="lpb-ring lpb-r3"></div>
+          </div>
+          <div class="lpb-logo-wrap">
+            <img src="assets/logo-cda-icon.png" alt="CDA" class="lpb-logo">
+          </div>
+        </div>
+        <h1 class="lpb-title">GEMA</h1>
       </div>
-      <div class="lpb-logo-wrap">
-        <img src="assets/logo-cda-icon.png" alt="CDA" class="lpb-logo">
-      </div>
-      <h1 class="lpb-title">GEMA<br>Gestión de Expedientes<br>y Módulos Ambientales</h1>
       <p class="lpb-org">Corporación para el Desarrollo Sostenible del Norte y el Oriente Amazónico</p>
       <div class="lpb-badge">Seccional Guaviare</div>
       <svg class="lpb-leaf" viewBox="0 0 110 170" aria-hidden="true">
