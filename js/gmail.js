@@ -4383,6 +4383,31 @@ function gmailOfiCuentaConectadaParaEnvio() {
   }
   return gmailOfiGetAccountEmail();
 }
+/** Correo institucional NCA (envíos al ciudadano). */
+function gmailCorreoAutorizadoNca() {
+  let em = '';
+  if (typeof getCorreoAutorizadoOficina === 'function')
+    em = String(getCorreoAutorizadoOficina('guaviare') || '').trim().toLowerCase();
+  if (!em && typeof ADMIN_GMAIL !== 'undefined') em = String(ADMIN_GMAIL || '').trim().toLowerCase();
+  return em;
+}
+function gmailEsCuentaNca(email) {
+  const em = String(email || '').trim().toLowerCase();
+  const nca = gmailCorreoAutorizadoNca();
+  return !!(em && nca && em === nca);
+}
+/** VITAL puede conectar su Gmail de ingreso o la bandeja NCA (una a la vez). */
+function gmailVitalPuedeConectarEmail(email) {
+  if (typeof esCargoVital !== 'function' || !esCargoVital()) return false;
+  const em = String(email || '').trim().toLowerCase();
+  if (!em) return false;
+  const own = String((window._usuarioActual && window._usuarioActual.email) || '').trim().toLowerCase();
+  if (own && em === own) return true;
+  return gmailEsCuentaNca(em);
+}
+window.gmailCorreoAutorizadoNca = gmailCorreoAutorizadoNca;
+window.gmailEsCuentaNca = gmailEsCuentaNca;
+window.gmailVitalPuedeConectarEmail = gmailVitalPuedeConectarEmail;
 /**
  * Verifica que la cuenta conectada sea el correo autorizado de la oficina
  * (encargado RN/OAP/Admin/Secretaría o encargado NCA).
@@ -4403,6 +4428,7 @@ function gmailOfiVerificarCuentaOficina(ofiId) {
  */
 async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
   ofiId = String(ofiId || '').trim();
+  if (typeof esCargoVital === 'function' && esCargoVital()) ofiId = 'guaviare';
   if (!ofiId || ofiId === 'responsables' || ofiId === 'ds_deguv') ofiId = 'guaviare';
   const tokenOk = (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid())
     || (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid())
@@ -4444,10 +4470,13 @@ async function gmailOfiAsegurarCuentaOficinaParaEnvio(ofiId) {
     return { ok: true, sinConfig: true, conectado: conectado, esperado: '', oficina: ofiId };
   }
   if (!conectado || conectado !== esperado) {
+    const vitalHint = (typeof esCargoVital === 'function' && esCargoVital())
+      ? ' En Correos pulse Desconectar y, en Google, elija la cuenta NCA.'
+      : ' Desconecte y conecte esa cuenta en Correos.';
     throw new Error(
       'El correo al ciudadano debe salir de la cuenta autorizada de ' + lbl + ' (' + esperado + '). ' +
-      (conectado ? 'Ahora está conectado: ' + conectado + '. ' : '') +
-      'Desconecte y conecte esa cuenta en Correos.'
+      (conectado ? 'Ahora está conectado: ' + conectado + '.' : '') +
+      vitalHint
     );
   }
   return { ok: true, sinConfig: false, conectado: conectado, esperado: esperado, oficina: ofiId };
@@ -4478,20 +4507,27 @@ async function _gmailOfiValidarYGuardarToken(tok, expiresInSec) {
     (window._usuarioActual && window._usuarioActual.email) || ''
   ).trim().toLowerCase();
   if (usuarioEmail && email && email !== usuarioEmail) {
-    if (typeof confirmPrecaucion === 'function') {
-      confirmPrecaucion({
-        title: '⛔ Cuenta de Gmail no autorizada',
-        message: 'No puede conectar la cuenta "' + email + '" a este perfil.',
-        detail: 'Su cuenta autorizada en el sistema es "' + usuarioEmail + '".\n' +
-                'Cierre sesión en Google y vuelva a conectar con su cuenta institucional.',
-        confirmLabel: 'Entendido',
-        hideCancel: true,
-        tone: 'delete'
-      }, function() {});
+    if (typeof gmailVitalPuedeConectarEmail === 'function' && gmailVitalPuedeConectarEmail(email)) {
+      /* VITAL: permite la bandeja NCA además de su correo de ingreso */
     } else {
-      notif('⛔ No puede conectar "' + email + '". Su cuenta autorizada es "' + usuarioEmail + '".', 'err');
+      const nca = typeof gmailCorreoAutorizadoNca === 'function' ? gmailCorreoAutorizadoNca() : '';
+      const vitalHint = (typeof esCargoVital === 'function' && esCargoVital() && nca)
+        ? ('\nComo VITAL también puede conectar la cuenta NCA: ' + nca + '.')
+        : '\nCierre sesión en Google y vuelva a conectar con su cuenta institucional.';
+      if (typeof confirmPrecaucion === 'function') {
+        confirmPrecaucion({
+          title: '⛔ Cuenta de Gmail no autorizada',
+          message: 'No puede conectar la cuenta "' + email + '" a este perfil.',
+          detail: 'Su cuenta autorizada en el sistema es "' + usuarioEmail + '".' + vitalHint,
+          confirmLabel: 'Entendido',
+          hideCancel: true,
+          tone: 'delete'
+        }, function() {});
+      } else {
+        notif('⛔ No puede conectar "' + email + '". Su cuenta autorizada es "' + usuarioEmail + '".', 'err');
+      }
+      return false;
     }
-    return false;
   }
   // Responsables / contratistas: basta con el correo de ingreso (ya validado arriba).
   // No exigir el correo del encargado NCA/oficina — ese control aplica a encargados de módulo.
@@ -4638,25 +4674,44 @@ function _updateGmailOfiBtn() {
   }
   if (st) {
     const ofiId = String((typeof deptoActivo !== 'undefined' ? deptoActivo : '') || '').trim();
+    const esVital = typeof esCargoVital === 'function' && esCargoVital();
     const esResp = (typeof esModoResponsable === 'function' && esModoResponsable())
       || ofiId === 'responsables'
       || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'responsables'
       || String((window._usuarioActual && window._usuarioActual.rol) || '').trim() === 'contratista';
     const usuarioEmail = String((window._usuarioActual && window._usuarioActual.email) || '').trim().toLowerCase();
     const ofiEff = (ofiId === 'responsables' || ofiId === 'ds_deguv') ? 'guaviare' : ofiId;
-    const esperado = esResp ? usuarioEmail : (typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiEff) : '');
+    const ncaMail = typeof gmailCorreoAutorizadoNca === 'function' ? gmailCorreoAutorizadoNca() : '';
+    const esperado = esVital ? ncaMail : (esResp ? usuarioEmail : (typeof getCorreoAutorizadoOficina === 'function' ? getCorreoAutorizadoOficina(ofiEff) : ''));
     const conectado = gmailOfiCuentaConectadaParaEnvio();
-    const lbl = esResp ? 'su cuenta' : (typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff);
+    const lbl = esVital ? 'NCA DEGUV' : (esResp ? 'su cuenta' : (typeof labelOficina === 'function' ? labelOficina(ofiEff) : ofiEff));
     if (valid && conectado) {
       const adminOk = typeof gmailOfiSesionEsAdmin === 'function' && gmailOfiSesionEsAdmin();
-      const ok = adminOk || esResp || !esperado || conectado === esperado;
-      st.style.color = ok ? 'var(--gn)' : 'var(--or)';
-      st.textContent = ok
-        ? ('✅ ' + conectado + (adminOk ? ' · Admin' : (esResp ? ' · Responsable' : (esperado ? ' · ' + lbl : ''))))
-        : ('⚠️ ' + conectado + ' ≠ ' + esperado);
-      st.title = ok
-        ? (esResp ? ('Drive y correo con ' + conectado) : ('Envíos PQRSD saldrán de ' + conectado))
-        : ('Debe conectar el correo autorizado de ' + lbl + ': ' + esperado);
+      const ncaOk = esVital && typeof gmailEsCuentaNca === 'function' && gmailEsCuentaNca(conectado);
+      const ok = adminOk || ncaOk || (esResp && !esVital) || !esperado || conectado === esperado;
+      st.style.color = (esVital && !ncaOk && ok) ? 'var(--or)' : (ok ? 'var(--gn)' : 'var(--or)');
+      if (esVital && ncaOk) {
+        st.textContent = '✅ ' + conectado + ' · NCA (envíos al ciudadano)';
+        st.title = 'Los correos al ciudadano saldrán de esta bandeja';
+      } else if (esVital) {
+        st.textContent = '✅ ' + conectado + (ncaMail ? (' · para notificar: ' + ncaMail) : '');
+        st.title = ncaMail
+          ? ('Bandeja actual: ' + conectado + '. Para notificar al ciudadano, desconecte y elija ' + ncaMail)
+          : ('Drive y correo con ' + conectado);
+      } else {
+        st.textContent = ok
+          ? ('✅ ' + conectado + (adminOk ? ' · Admin' : (esResp ? ' · Responsable' : (esperado ? ' · ' + lbl : ''))))
+          : ('⚠️ ' + conectado + ' ≠ ' + esperado);
+        st.title = ok
+          ? (esResp ? ('Drive y correo con ' + conectado) : ('Envíos PQRSD saldrán de ' + conectado))
+          : ('Debe conectar el correo autorizado de ' + lbl + ': ' + esperado);
+      }
+    } else if (esVital && (usuarioEmail || ncaMail)) {
+      st.style.color = 'var(--or)';
+      st.textContent = ncaMail ? ('Conecte su correo o NCA (' + ncaMail + ')') : ('Conecte: ' + usuarioEmail);
+      st.title = ncaMail
+        ? ('Su correo de ingreso o la cuenta NCA para notificar al ciudadano: ' + ncaMail)
+        : 'Conecte el mismo correo con el que ingresó';
     } else if (esperado) {
       st.style.color = 'var(--or)';
       st.textContent = 'Conecte: ' + esperado;
