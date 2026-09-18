@@ -214,8 +214,9 @@ function archivosBibliotecaCompartidosVisibles() {
   const out = [];
   normalizeBibliotecaReposList(bibliotecaRepos).forEach(function(r) {
     if (r.activo === false) return;
+    const veRepo = typeof recursosItemVisibleParaSesion === 'function' && recursosItemVisibleParaSesion(r);
     archivosRepoCompartidosConmigo(r).forEach(function(a) {
-      if (recursosItemVisiblePorScope(r)) return;
+      if (veRepo) return;
       out.push({ repo: r, archivo: a });
     });
   });
@@ -894,6 +895,7 @@ function renderRecExpToolbar(canManage, canUpload) {
         iconOnly: true,
         title: 'Subir',
         btnClass: 'btn bsm bic act-ico',
+        accept: '*/*',
         getUploadCtx: typeof sstFileUploadCtxForBiblioteca === 'function'
           ? sstFileUploadCtxForBiblioteca(function () { return recExpCurrentFolderId(); })
           : null
@@ -1062,6 +1064,9 @@ async function cargarRecursosRepoArchivos(pageToken) {
       files = files.concat(data.files || []);
       token = data.nextPageToken || '';
     } while (token);
+    if (typeof archivoRecursoVisibleEnExplorador === 'function') {
+      files = files.filter(function(f) { return archivoRecursoVisibleEnExplorador(r, f); });
+    }
     cur.files = files;
     cur.selection = (cur.selection || []).filter(function(id) {
       return files.some(function(f) { return f.id === id; });

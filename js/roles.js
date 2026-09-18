@@ -1074,18 +1074,32 @@ function recursosItemVisiblePorScope(item){
   const n=normalizeRecursosScopeItem(item);
   return recursosScopeVisibleParaSesion(n.scope,n.scopeId);
 }
-function recursosItemCompartidoVisible(item){
-  const comp=Array.isArray(item&&item.compartidoCon)?item.compartidoCon:[];
-  if(!comp.length)return false;
+/** true si hay destinatarios r:correo concretos (no «Todos los responsables»). */
+function recursosCompDestinaPersonas(comp){
+  const arr=Array.isArray(comp)?comp:[];
+  if(!arr.length)return false;
+  if(arr.includes('r:*'))return false;
+  return arr.some(function(id){return String(id||'').indexOf('r:')===0;});
+}
+function recursosCompVisibleParaSesion(comp){
+  const arr=Array.isArray(comp)?comp:[];
+  if(!arr.length)return false;
   const vis=getRecursosOficinasVisiblesSesion();
-  if(comp.some(function(id){return vis.includes(id);}))return true;
-  if(comp.includes('r:*')&&(esModoResponsable()||esModoContratista()))return true;
+  if(arr.some(function(id){return vis.includes(id);}))return true;
+  if(arr.includes('r:*')&&(esModoResponsable()||esModoContratista()))return true;
   const email=getAuthEmailNorm();
-  if(email&&comp.includes('r:'+email))return true;
+  if(email&&arr.includes('r:'+email))return true;
   return false;
+}
+function recursosItemCompartidoVisible(item){
+  return recursosCompVisibleParaSesion(item&&item.compartidoCon);
 }
 function recursosItemVisibleParaSesion(item){
   if(!item||item.activo===false)return false;
+  /* Destinatarios concretos: el contratista no hereda el ámbito de oficina. */
+  if(recursosCompDestinaPersonas(item.compartidoCon)&&(esModoResponsable()||esModoContratista())){
+    return recursosItemCompartidoVisible(item);
+  }
   if(recursosItemVisiblePorScope(item))return true;
   return recursosItemCompartidoVisible(item);
 }
@@ -1126,16 +1140,19 @@ function labelRecursosCompartidoCon(ids){
   }).join(', ');
 }
 function archivosRepoCompartidosConmigo(repo){
-  const vis=getRecursosOficinasVisiblesSesion();
-  const email=getAuthEmailNorm();
-  const soyResp=esModoResponsable()||esModoContratista();
   return (repo&&repo.archivosCompartidos||[]).filter(function(a){
-    const comp=a.compartidoCon||[];
-    if(comp.some(function(id){return vis.includes(id);}))return true;
-    if(soyResp&&comp.includes('r:*'))return true;
-    if(email&&comp.includes('r:'+email))return true;
-    return false;
+    return recursosCompVisibleParaSesion(a&&a.compartidoCon);
   });
+}
+/** En el explorador Drive: ocultar archivo/subcarpeta con destinatarios concretos a quien no está en la lista. */
+function archivoRecursoVisibleEnExplorador(repo,file){
+  if(!file)return true;
+  if(!(esModoResponsable()||esModoContratista()))return true;
+  if(repo&&typeof puedeGestionarBibliotecaRepo==='function'&&puedeGestionarBibliotecaRepo(repo))return true;
+  const fileId=file.id||file.fileId;
+  const arch=(repo&&repo.archivosCompartidos||[]).find(function(a){return a&&a.fileId===fileId;});
+  if(!arch||!recursosCompDestinaPersonas(arch.compartidoCon))return true;
+  return recursosCompVisibleParaSesion(arch.compartidoCon);
 }
 function getRecursosScopeAutoSesion(){
   if(esModoOficinaDeguv())return {scope:'oficina',scopeId:deptoActivo};
