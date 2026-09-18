@@ -5159,8 +5159,17 @@ function puedeVerTabAgenda(){
     ||(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica())
     ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
 }
-/** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés), no oficinas RN/OAP/DS/Admin. */
+/** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés) o cargo Coordinador. */
+function getDeptoAgendaAsignacion(){
+  if(typeof esCargoCoordinador==='function'&&esCargoCoordinador()){
+    const d=String(window._usuarioActual&&window._usuarioActual.deptoResponsable||'').trim();
+    if(d&&DEPTOS.some(function(x){return x.id===d;}))return d;
+    return 'guaviare';
+  }
+  return deptoActivo;
+}
 function puedeAsignarEventoAgendaResponsables(){
+  if(typeof esCargoCoordinador==='function'&&esCargoCoordinador())return true;
   if(!esVistaActividadesDepto()||esModoResponsable())return false;
   if(['oap_deguv','rn_deguv','admin_deguv','ds_deguv'].includes(deptoActivo))return false;
   if(typeof esVistaActividadesOficinaPqrs==='function'&&esVistaActividadesOficinaPqrs())return false;
@@ -5254,6 +5263,10 @@ function puedeEditarAgendaEvento(ev){
   const resp=getAgendaResponsableActivo();
   if(esModoResponsable()){
     const r=String(responsableActivo||'').trim();
+    if(typeof esCargoCoordinador==='function'&&esCargoCoordinador()&&ev.tipo==='asignado'){
+      const yo=r||resp;
+      return !!(yo&&agendaNorm(ev.creadoPor)===agendaNorm(yo));
+    }
     if(!r||agendaNorm(ev.responsable)!==agendaNorm(r))return false;
     if(ev.tipo==='asignado')return false;
     return ev.tipo==='personal';
@@ -5270,6 +5283,7 @@ function puedeEliminarAgendaEvento(ev){
   ev=normalizeAgendaEvento(ev);
   if(ev.tipo==='gcal')return false;
   if(esModoResponsable()){
+    if(typeof esCargoCoordinador==='function'&&esCargoCoordinador())return puedeEditarAgendaEvento(ev);
     const r=String(responsableActivo||'').trim();
     if(!r||agendaNorm(ev.responsable)!==agendaNorm(r))return false;
     return ev.tipo==='personal';
@@ -5719,7 +5733,9 @@ function agendaAsignadoGroupKey(ev){
 /** Calendario del usuario activo: eventos propios + (encargado) lo asignado a responsables, 1 por envío. */
 function getAgendaEventosParaCalendario(nombre,deptoId){
   const own=getAgendaEventosResponsable(nombre,deptoId);
-  if(!(esVistaActividadesDepto()&&!esModoResponsable()))return own;
+  const veAsignados=(esVistaActividadesDepto()&&!esModoResponsable())
+    ||(typeof esCargoCoordinador==='function'&&esCargoCoordinador());
+  if(!veAsignados)return own;
   const list=[];
   const seen=new Set();
   const pushOnce=function(ev){
@@ -5922,10 +5938,16 @@ function renderAgendaListaHtml(eventos,diaSel){
   }).join('');
 }
 function getAgendaEventosCreadosPorEncargado(){
-  const enc=getEncargadoDepto(deptoActivo);
+  let enc='',depto=deptoActivo;
+  if(typeof esCargoCoordinador==='function'&&esCargoCoordinador()){
+    enc=getAgendaResponsableActivo()||String(window._usuarioActual&&window._usuarioActual.nombre||'').trim();
+    depto=typeof getDeptoAgendaAsignacion==='function'?getDeptoAgendaAsignacion():'guaviare';
+  }else{
+    enc=getEncargadoDepto(deptoActivo);
+  }
   if(!enc)return [];
   return (agendaEventos||[]).map(normalizeAgendaEvento).filter(ev=>
-    ev.tipo==='asignado'&&agendaNorm(ev.creadoPor)===agendaNorm(enc)&&(ev.depto||deptoActivo)===deptoActivo
+    ev.tipo==='asignado'&&agendaNorm(ev.creadoPor)===agendaNorm(enc)&&(ev.depto||depto)===depto
   ).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
 }
 function renderAgendaAsignadosGestHtml(){
@@ -6052,7 +6074,7 @@ function renderAgenda(){
   }
   const gest=document.getElementById('agenda-asig-gest');
   if(gest&&window._agendaRenderTarget!=='modal'&&window._agendaRenderTarget!=='dock'){
-    if(esVistaActividadesDepto()){
+    if(puedeAsignarEventoAgendaResponsables()){
       gest.style.display='';
       gest.innerHTML='<details class="con-fold"><summary>Eventos asignados a responsables (editar)</summary><div class="item-fold-body">'+renderAgendaAsignadosGestHtml()+'</div></details>';
     }else gest.style.display='none';
@@ -6136,8 +6158,9 @@ function submitAgendaEventoPersonal(){
   agendaGuardarForm();
 }
 function openAgendaAsignarModal(){
-  if(!puedeAsignarEventoAgendaResponsables()){notif('Solo el encargado del departamento regional puede asignar eventos a responsables','err');return;}
-  const names=getContratistasAsignables(deptoActivo);
+  if(!puedeAsignarEventoAgendaResponsables()){notif('Solo el encargado del departamento o el Coordinador pueden asignar eventos a responsables','err');return;}
+  const deptoAsig=typeof getDeptoAgendaAsignacion==='function'?getDeptoAgendaAsignacion():deptoActivo;
+  const names=getContratistasAsignables(deptoAsig);
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
@@ -6146,7 +6169,7 @@ function openAgendaAsignarModal(){
   if(tit)tit.textContent='Evento para responsables del departamento';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const chk=names.map(n=>'<label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px"><input type="checkbox" class="agenda-asig-chk" value="'+escAttr(n)+'"> '+escAttr(n)+'</label>').join('');
-  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado, en su campanita 🔔 y en el calendario del encargado (una sola vez).</div>'+
+  body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">El evento aparecerá en la agenda de cada responsable seleccionado, en su campanita 🔔 y en su calendario (una sola vez).</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Título</label><input type="text" id="agenda-asig-titulo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><textarea id="agenda-asig-detalle" style="width:100%;min-height:52px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif"></textarea></div>'+
     '<div class="fg" style="margin-bottom:8px"><div class="fld"><label>Fecha</label><input type="date" id="agenda-asig-fecha" value="'+hoy()+'" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
@@ -6176,7 +6199,11 @@ function submitAgendaAsignar(){
   const fecha=(document.getElementById('agenda-asig-fecha')||{}).value;
   const hora=(document.getElementById('agenda-asig-hora')||{}).value;
   const nombres=Array.from(document.querySelectorAll('.agenda-asig-chk:checked')).map(c=>c.value);
-  if(crearAgendaEventosAsignados({titulo:tit,detalle:det,fecha,hora,depto:deptoActivo,creadoPor:getEncargadoDepto(deptoActivo)},nombres)){
+  const deptoAsig=typeof getDeptoAgendaAsignacion==='function'?getDeptoAgendaAsignacion():deptoActivo;
+  const creadoPor=getAgendaResponsableActivo()
+    ||(typeof esCargoCoordinador==='function'&&esCargoCoordinador()?String(window._usuarioActual&&window._usuarioActual.nombre||responsableActivo||'').trim():'')
+    ||getEncargadoDepto(deptoAsig);
+  if(crearAgendaEventosAsignados({titulo:tit,detalle:det,fecha,hora,depto:deptoAsig,creadoPor:creadoPor},nombres)){
     closeTaskModal();
     if(window._actAgendaShowCal&&typeof renderAgenda==='function')renderAgenda();
   }
@@ -7971,6 +7998,8 @@ function marcarActividadTrasNotifReportada(t,por,fechaN){
 window.marcarActividadTrasNotifReportada=marcarActividadTrasNotifReportada;
 function taskReviewCanShowDecisionRail(t,expId){
   if(!t||esModoResponsable()||esJurisdiccional())return false;
+  // Por corregir: falta reentrega; no Aprobar hasta que vuelva a Por revisar
+  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return false;
   const e=typeof getExpById==='function'?getExpById(expId):null;
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))return true;
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))return true;
@@ -8133,6 +8162,10 @@ function taskReviewConfirmarDecision(expId,taskId){
 function taskReviewDecidirAprobar(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(t&&typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t)){
+    notif('La actividad está por corregir. Espere la nueva entrega (volverá a Por revisar).','err');
+    return;
+  }
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e)){
     if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
       &&typeof tramiteAprobarRevisionFinalNotif==='function'){
@@ -12929,7 +12962,7 @@ function paintUsuariosCfgTable(){
       '<td style="font-size:12px">'+escAttr(u.email)+'</td>'+
       '<td>'+escAttr(tituloRolFirestore(u.rol))+'</td>'+
       '<td>'+escAttr(labelDeptoResponsableUsuario(u))+'</td>'+
-      '<td>'+escAttr(u.codigo||'—')+(u.cargo==='vital'?' <span class="bdg" style="background:#6d3fa8;color:#fff;font-size:10px">VITAL</span>':'')+'</td>'+
+      '<td>'+escAttr(u.codigo||'—')+(u.cargo==='vital'?' <span class="bdg" style="background:#6d3fa8;color:#fff;font-size:10px">VITAL</span>':'')+(u.cargo==='coordinador'?' <span class="bdg" style="background:#0f766e;color:#fff;font-size:10px">Coordinador</span>':'')+'</td>'+
       '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm" '+(_usuariosToggleBusy?'disabled ':'')+'onclick="SST.editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
@@ -12971,7 +13004,7 @@ function buildUsuariosCfgShell(){
     '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="email" id="usu-fs-email" data-no-email-chips="1" placeholder="usuario@gmail.com" autocomplete="off"></div>'+
     rolField+
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
-    '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option></select></div>'+
+    '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option><option value="coordinador">Coordinador (eventos a responsables en Tasks)</option></select></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
     '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="SST.guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="SST.ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
@@ -13111,7 +13144,7 @@ function toggleUsuarioDeptoResponsableField(){
   if(rol==='responsables'&&depto&&depto.tagName==='SELECT'&&!depto.value){
     depto.innerHTML=deptoResponsableOptsHtml(getDeptoGestionUsuariosAutorizados()||'guaviare');
   }
-  // Show cargo field only for responsables (VITAL is a cargo on responsable)
+  // Show cargo field only for responsables (VITAL / Coordinador)
   const cargoWrap=document.getElementById('usu-fs-cargo-wrap');
   if(cargoWrap)cargoWrap.style.display=(rol==='responsables')?'':'none';
 }
@@ -16928,7 +16961,7 @@ async function eliminarEntregaActividad(expId,taskId){
     tk.ultimaRevisionDepto=null;
     tk._pqrs_proyeccion_atendida=false;
     tk._firma_proyeccion_atendida=false;
-    tk.comentarios=(tk.comentarios||[]).filter(function(c){return c&&!c.incluidoEnReporte;});
+    tk.comentarios=[];
     (tk.asignados||[]).forEach(function(a){
       if(!a)return;
       if(a.estado==='por_verificar'||a.estado==='por_corregir'||a.fechaReportada){
@@ -19844,7 +19877,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     const fechaC=fecha||hoy();
     const repPend=getUltimoReportadoPor(t);
     if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
-      (t.asignados||[]).filter(a=>a.estado==='por_verificar').forEach(a=>{
+      (t.asignados||[]).filter(a=>a.estado==='por_verificar'||a.estado==='por_corregir').forEach(a=>{
         a.estado='atendido';
         a.fechaAtendida=fechaC;
       });

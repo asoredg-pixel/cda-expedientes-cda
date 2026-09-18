@@ -312,11 +312,9 @@ function esModoResponsable(){return deptoActivo==='responsables'||rolSesion==='r
 
 // ── VITAL (cargo especial sobre contratista de NCA) ──────────────────────────
 // El cargo 'vital' se guarda en el campo 'cargo' del usuario autorizado.
-function esCargoVital(){
-  if(!esModoResponsable())return false;
-  // Sesión: el doc usuarios/{email} trae cargo al login (independiente del índice global)
-  if(String(window._usuarioActual&&window._usuarioActual.cargo||'').toLowerCase()==='vital')return true;
-  // Preferir el usuario de la sesión (email) — evita fallar por nombre distinto al del select
+function usuarioCargoSesion(){
+  const ses=String(window._usuarioActual&&window._usuarioActual.cargo||'').trim().toLowerCase();
+  if(ses)return ses;
   const email=String(window._usuarioActual&&window._usuarioActual.email||'').trim().toLowerCase();
   let u=null;
   if(email&&typeof getUsuarioAutorizadoByEmail==='function')u=getUsuarioAutorizadoByEmail(email);
@@ -325,8 +323,17 @@ function esCargoVital(){
       ? getUsuarioAutorizadoByNombre(responsableActivo)
       : (_usuariosCache||[]).find(x=>agendaNorm(x.nombre||'')===agendaNorm(responsableActivo));
   }
-  return !!(u&&String(u.cargo||'').toLowerCase()==='vital');
+  return String(u&&u.cargo||'').trim().toLowerCase();
 }
+function esCargoVital(){
+  if(!esModoResponsable())return false;
+  return usuarioCargoSesion()==='vital';
+}
+function esCargoCoordinador(){
+  if(!esModoResponsable())return false;
+  return usuarioCargoSesion()==='coordinador';
+}
+window.esCargoCoordinador=esCargoCoordinador;
 // Retorna true si el usuario VITAL puede actuar sobre la PQRSD indicada
 // (puede enviar correo aunque no tenga la PQRSD asignada)
 function vitalPuedeActuar(e){
