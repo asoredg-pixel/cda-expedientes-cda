@@ -586,12 +586,59 @@ function actividadesLibresForDepto(deptoId){
 /**
  * Upsert sin borrar libres de otros departamentos (snapshot parcial depto).
  * Conserva locales con _pending_fs_sync si el remoto es más pobre.
- * Prioriza siempre la versión con firmaWf más avanzada.
+ * Prioriza la versión más reciente (devolución a corregir no debe perder contra «Por verificar» viejo).
  */
+function actLibreEventTs(t){
+  if(!t)return 0;
+  let ts=0;
+  const add=function(v){
+    if(v==null||v==='')return;
+    if(typeof v==='number'&&isFinite(v)){
+      ts=Math.max(ts,v<1e12?v*1000:v);
+      return;
+    }
+    const s=String(v).trim();
+    if(!s)return;
+    if(/^\d{10,13}$/.test(s)){
+      const n=+s;
+      if(isFinite(n))ts=Math.max(ts,n<1e12?n*1000:n);
+      return;
+    }
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+      const d=new Date(s+'T00:00:00');
+      if(!isNaN(d.getTime()))ts=Math.max(ts,d.getTime());
+      return;
+    }
+    const d=new Date(s);
+    if(!isNaN(d.getTime()))ts=Math.max(ts,d.getTime());
+  };
+  if(t.ultimaRevisionDepto){
+    add(t.ultimaRevisionDepto.ts);
+    add(t.ultimaRevisionDepto.en);
+    add(t.ultimaRevisionDepto.fecha);
+  }
+  (t.historial||[]).forEach(function(h){
+    if(!h)return;
+    add(h.ts);add(h.en);add(h.fecha);
+  });
+  add(t.updatedAt);
+  add(t.fechaReportada);
+  add(t.fechaAtendida);
+  return ts;
+}
+function actLibreEsPorCorregirMerge(t){
+  if(!t||t.eliminada)return false;
+  if(String(t.estado||'')==='Por corregir')return true;
+  if(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='corregir')return true;
+  return (t.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';});
+}
 function scoreActividadLibreMerge(t){
   if(!t)return 0;
   let s=0;
   if(t.eliminada)s+=50; // nunca revivir eliminadas
+  if(actLibreEsPorCorregirMerge(t))s+=12;
+  const nAj=(t.historial||[]).filter(function(h){return h&&h.tipo==='ajuste_soporte';}).length;
+  if(nAj)s+=4+Math.min(nAj,4);
   if(t.fechaReportada||t.estado==='Por verificar')s+=4;
   if((t.soportes||[]).length)s+=2;
   if(t.fechaAtendida||t.estado==='Atendida')s+=3;
@@ -617,9 +664,14 @@ function pickMejorActLibre(a,b){
   // Preferir siempre eliminada=true (no revivir)
   if(a.eliminada&&!b.eliminada)return a;
   if(b.eliminada&&!a.eliminada)return b;
+  const ta=actLibreEventTs(a),tb=actLibreEventTs(b);
+  if(ta!==tb)return ta>tb?a:b;
   const sa=scoreActividadLibreMerge(a),sb=scoreActividadLibreMerge(b);
   if(sa>sb)return a;
   if(sb>sa)return b;
+  const ca=actLibreEsPorCorregirMerge(a),cb=actLibreEsPorCorregirMerge(b);
+  if(ca&&!cb)return a;
+  if(cb&&!ca)return b;
   // Empate: conservar firmaWf si solo una lo tiene
   const fa=!!(a.firmaWf&&a.firmaWf.fase),fb=!!(b.firmaWf&&b.firmaWf.fase);
   if(fa&&!fb)return a;
@@ -1331,6 +1383,8 @@ function mergeActividadesLibresFromRemote(remote){
   const score=typeof scoreActividadLibreMerge==='function'?scoreActividadLibreMerge:function(t){
     if(!t)return 0;
     let s=0;
+    if(t.eliminada)s+=50;
+    if(String(t.estado||'')==='Por corregir')s+=12;
     if(t.fechaReportada||t.estado==='Por verificar')s+=4;
     if((t.soportes||[]).length)s+=2;
     if(t.fechaAtendida||t.estado==='Atendida')s+=3;
