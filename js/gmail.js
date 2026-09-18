@@ -3053,6 +3053,87 @@ async function chatPurgeExpiredDriveFiles() {
   return purged;
 }
 
+// HTML del correo → texto de impresión (sin *negritas* ni letras sueltas de Outlook).
+function _gmailHtmlToPdfText(html) {
+  const raw = String(html || '').trim();
+  if (!raw) return '';
+  let safe = raw;
+  if (typeof DOMPurify !== 'undefined') {
+    try { safe = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } }); } catch (eP) { safe = raw; }
+  }
+  const wrap = document.createElement('div');
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:2400px;white-space:normal;font:13px/1.4 sans-serif;';
+  wrap.innerHTML = safe;
+  const kill = wrap.querySelectorAll('script,style,noscript,svg');
+  for (let i = 0; i < kill.length; i++) {
+    if (kill[i].parentNode) kill[i].parentNode.removeChild(kill[i]);
+  }
+  const brs = wrap.querySelectorAll('br');
+  for (let i = 0; i < brs.length; i++) {
+    if (brs[i].parentNode) brs[i].parentNode.replaceChild(document.createTextNode('\n'), brs[i]);
+  }
+  let t = '';
+  try {
+    document.body.appendChild(wrap);
+    t = String(wrap.innerText || wrap.textContent || '').replace(/\r/g, '');
+  } finally {
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+  }
+  t = t.replace(/\u00a0/g, ' ');
+  t = t.replace(/[ \t]+\n/g, '\n');
+  t = t.replace(/\n{3,}/g, '\n\n');
+  return t.trim();
+}
+function _gmailStripPdfEmphasis(s) {
+  s = String(s || '');
+  s = s.replace(/\*{1,2}([^*\n]{1,240})\*{1,2}/g, '$1');
+  s = s.replace(/(^|[\s(«"'])\*+(?=[A-ZÁÉÍÓÚÑ0-9])/g, '$1');
+  s = s.replace(/([A-ZÁÉÍÓÚÑ0-9.,;:])\*+(?=[\s)»"']|$)/g, '$1');
+  return s;
+}
+function _gmailCollapseSpacedLetters(s) {
+  return String(s || '').split('\n').map(function(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    const words = trimmed.split(/[ ]+/);
+    let one = 0;
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].length <= 1) one++;
+    }
+    if (words.length >= 4 && one >= words.length * 0.65) {
+      return trimmed.replace(/(\S)\s+(?=\S)/g, '$1').replace(/\s{2,}/g, ' ');
+    }
+    return line.replace(/((?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]\s){2,}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])/g, function(seq) {
+      return seq.replace(/\s+/g, '');
+    });
+  }).join('\n');
+}
+function _gmailUnwrapPdfLines(txt) {
+  const headerRe = /^(De|From|Para|To|Cc|Cco|Bcc|Asunto|Subject|Fecha|Date|Enviado|Sent|Destinatario)\s*:/i;
+  const lines = String(txt || '').replace(/\r/g, '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/[ \t]+$/g, '');
+    const t = line.trim();
+    if (!out.length) { out.push(line); continue; }
+    if (!t) { out.push(''); continue; }
+    const p = String(out[out.length - 1] || '').trim();
+    if (!p) { out.push(line); continue; }
+    if (headerRe.test(t) || headerRe.test(p) || /^[-_]{5,}/.test(t) || /^[-_]{5,}/.test(p)) {
+      out.push(line);
+      continue;
+    }
+    const nextLower = /^[a-záéíóúüñ]/.test(t);
+    const prevSoft = /[,;:]$/.test(p) || (p.length >= 52 && !/[.!?…]$/.test(p));
+    if (p.length >= 48 && (nextLower || prevSoft) && !/^[•\-–]/.test(t)) {
+      out[out.length - 1] = p + ' ' + t;
+    } else {
+      out.push(line);
+    }
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 // Limpia el cuerpo de un correo para el PDF: elimina citas (líneas con >) y bloques "escribió:".
 function _gmailCleanBodyForPdf(txt) {
   const raw = String(txt || '').replace(/\r/g, '');
@@ -3081,11 +3162,41 @@ function _gmailCleanBodyForPdf(txt) {
       }
     }
     const cleaned = line.replace(/^>+\s?/g, '').trimEnd();
-    if (cleaned.trim()) out.push(cleaned);
+    out.push(cleaned);
   }
   let result = out.join('\n').trim();
   result = result.replace(/\n{3,}/g, '\n\n');
   return result;
+}
+function _gmailBodyTextForPdf(ed) {
+  ed = ed || {};
+  let t = _gmailHtmlToPdfText(ed.cuerpoHtml);
+  if (!t) t = String(ed.cuerpoTxt || '');
+  t = _gmailStripPdfEmphasis(t);
+  t = _gmailCollapseSpacedLetters(t);
+  t = _gmailCleanBodyForPdf(t);
+  t = _gmailUnwrapPdfLines(t);
+  return t.trim();
+}
+function _pdfWriteCuerpoSolicitud(doc, text, x, y, maxW, lineH, margin) {
+  const bottom = typeof cdaPdfContentBottomY === 'function'
+    ? cdaPdfContentBottomY(doc, margin)
+    : (doc.internal.pageSize.getHeight() - margin);
+  const rows = String(text || '').split('\n');
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!String(row || '').trim()) {
+      y += Math.round(lineH * 0.55);
+      continue;
+    }
+    const lines = doc.splitTextToSize(String(row).trim(), maxW);
+    for (let j = 0; j < lines.length; j++) {
+      if (y > bottom) { doc.addPage(); y = margin; }
+      doc.text(lines[j], x, y);
+      y += lineH;
+    }
+  }
+  return y;
 }
 
 // Genera un PDF (soporte de solicitud) a partir del contenido del correo.
@@ -3136,15 +3247,10 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
   doc.text('Contenido de la solicitud:', margin, y); y += 16;
   doc.setFont('helvetica', 'normal');
-  const cuerpoRaw = String(ed.cuerpoTxt || ed.asunto || '').replace(/\r/g, '');
-  const cuerpo = _gmailCleanBodyForPdf(cuerpoRaw) || String(ed.asunto || '(sin contenido de texto)').trim();
-  const bodyLines = doc.splitTextToSize(cuerpo, maxW);
+  const cuerpo = _gmailBodyTextForPdf(ed) || String(ed.asunto || '(sin contenido de texto)').trim();
   const lineH = 13;
   const bottomY = typeof cdaPdfContentBottomY === 'function' ? cdaPdfContentBottomY(doc, margin) : (pageH - margin);
-  for (let i = 0; i < bodyLines.length; i++) {
-    if (y > bottomY) { doc.addPage(); y = margin; }
-    doc.text(bodyLines[i], margin, y); y += lineH;
-  }
+  y = _pdfWriteCuerpoSolicitud(doc, cuerpo, margin, y, maxW, lineH, margin);
 
   // Nota de anexos (no se suben al Drive; llegan al correo de la oficina).
   if (ed.adjuntosInfo && ed.adjuntosInfo.length) {
