@@ -1628,7 +1628,11 @@ async function reloadRecursosFirestore(){
     if(snap.exists()){
       const g=snap.data();
       if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
-      if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
+      if(Array.isArray(g.bibliotecaRepos)){
+        const rawLen=g.bibliotecaRepos.length;
+        bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
+        if(bibliotecaRepos.length<rawLen)saveRecursosFirestore();
+      }
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
     }
     return true;

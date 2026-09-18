@@ -1032,12 +1032,66 @@ function bibNormalizeVinculosList(arr){
     };
   }).filter(Boolean);
 }
+function recursosRepoDriveKey(r){
+  if(!r||typeof r!=='object')return '';
+  const id=String(r.driveFolderId||'').trim();
+  if(id)return id;
+  const link=String(r.driveFolderLink||'');
+  const m=link.match(/\/folders\/([^/?#]+)/);
+  return m?m[1]:'';
+}
+function mergeRecursosRepoDup(keep,extra){
+  if(!keep||!extra||keep===extra)return keep;
+  const share=function(a){return Array.isArray(a)?a.slice():[];};
+  const seen=new Set(share(keep.compartidoCon).map(String));
+  share(extra.compartidoCon).forEach(function(id){
+    const s=String(id||'');
+    if(s&&!seen.has(s)){seen.add(s);keep.compartidoCon=share(keep.compartidoCon).concat([s]);}
+  });
+  if(!Array.isArray(keep.archivosCompartidos))keep.archivosCompartidos=[];
+  (extra.archivosCompartidos||[]).forEach(function(a){
+    if(!a||!a.fileId)return;
+    if(!keep.archivosCompartidos.some(function(x){return x&&x.fileId===a.fileId;}))keep.archivosCompartidos.push(a);
+  });
+  if(!Array.isArray(keep.vinculados))keep.vinculados=[];
+  const vk=new Set(keep.vinculados.map(function(v){return v?[v.tipo,v.id,v.taskId||''].join('|'):'';}));
+  (extra.vinculados||[]).forEach(function(v){
+    if(!v)return;
+    const k=[v.tipo,v.id,v.taskId||''].join('|');
+    if(!vk.has(k)){vk.add(k);keep.vinculados.push(v);}
+  });
+  if(!keep.driveFolderId&&extra.driveFolderId)keep.driveFolderId=extra.driveFolderId;
+  if(!keep.driveFolderLink&&extra.driveFolderLink)keep.driveFolderLink=extra.driveFolderLink;
+  return keep;
+}
+function dedupeBibliotecaReposList(arr){
+  const all=(Array.isArray(arr)?arr:[]).filter(Boolean).slice().sort(function(a,b){
+    return String(a.createdAt||'').localeCompare(String(b.createdAt||''));
+  });
+  const byId=new Map();
+  all.forEach(function(r){
+    const id=String(r.id||'').trim();
+    const key=id||('tmp_'+byId.size);
+    if(!byId.has(key))byId.set(key,r);
+    else mergeRecursosRepoDup(byId.get(key),r);
+  });
+  const byDrive=new Map();
+  const noDrive=[];
+  Array.from(byId.values()).forEach(function(r){
+    const dk=recursosRepoDriveKey(r);
+    if(!dk){noDrive.push(r);return;}
+    if(!byDrive.has(dk))byDrive.set(dk,r);
+    else mergeRecursosRepoDup(byDrive.get(dk),r);
+  });
+  return Array.from(byDrive.values()).concat(noDrive);
+}
 function normalizeBibliotecaReposList(arr){
-  return(Array.isArray(arr)?arr:[]).map(function(item){
+  const mapped=(Array.isArray(arr)?arr:[]).map(function(item){
     const n=normalizeRecursosScopeItem(item);
     if(n&&typeof n==='object')n.vinculados=bibNormalizeVinculosList(n.vinculados);
     return n;
-  });
+  }).filter(Boolean);
+  return dedupeBibliotecaReposList(mapped);
 }
 function getOficinasAsignadasSesion(){
   const set=new Set();

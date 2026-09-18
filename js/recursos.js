@@ -194,8 +194,19 @@ function enlacesVisiblesAdminTodos() {
 }
 
 function reposBibliotecaVisibles() {
-  return normalizeBibliotecaReposList(bibliotecaRepos).filter(function(r) {
-    return recursosItemVisibleParaSesion(r);
+  const list = typeof normalizeBibliotecaReposList === 'function'
+    ? normalizeBibliotecaReposList(bibliotecaRepos)
+    : (bibliotecaRepos || []);
+  const seen = new Set();
+  return list.filter(function(r) {
+    if (!r || r.activo === false) return false;
+    if (typeof recursosItemVisibleParaSesion === 'function' && !recursosItemVisibleParaSesion(r)) return false;
+    const id = String(r.id || '').trim();
+    const dk = typeof recursosRepoDriveKey === 'function' ? recursosRepoDriveKey(r) : String(r.driveFolderId || '').trim();
+    const key = dk ? ('d:' + dk) : ('i:' + id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
@@ -2020,6 +2031,9 @@ function recRepoFormScopePickChange() {
 }
 
 async function guardarRecursosRepo(editId) {
+  if (window._recRepoGuardarBusy) return;
+  window._recRepoGuardarBusy = true;
+  try {
   const scopeEl = document.getElementById('rec-repo-scope');
   const scopeIdEl = document.getElementById('rec-repo-scope-id');
   const scope = scopeEl ? scopeEl.value : 'oficina';
@@ -2078,20 +2092,40 @@ async function guardarRecursosRepo(editId) {
         return;
       }
     }
-    bibliotecaRepos.push({
-      id: 'repo' + Date.now(),
-      titulo: titulo, tematica: tematica, descripcion: descripcion,
-      scope: scope, scopeId: scopeId,
-      oficinaId: scope === 'oficina' ? scopeId : '',
-      driveFolderId: driveFolderId, driveFolderLink: driveFolderLink,
-      activo: true, createdByAdmin: byAdmin,
-      compartidoCon: [],
-      archivosCompartidos: [],
-      vinculados: [],
-      createdAt: new Date().toISOString(), createdBy: email,
-      updatedAt: new Date().toISOString()
+    const dup = driveFolderId && (bibliotecaRepos || []).find(function(r) {
+      if (!r || r.activo === false) return false;
+      const dk = typeof recursosRepoDriveKey === 'function' ? recursosRepoDriveKey(r) : String(r.driveFolderId || '').trim();
+      return dk && dk === driveFolderId;
     });
+    if (dup) {
+      const idxDup = bibliotecaRepos.findIndex(function(r) { return r && r.id === dup.id; });
+      if (idxDup >= 0) {
+        bibliotecaRepos[idxDup] = Object.assign({}, bibliotecaRepos[idxDup], {
+          titulo: titulo, tematica: tematica, descripcion: descripcion,
+          scope: scope, scopeId: scopeId,
+          oficinaId: scope === 'oficina' ? scopeId : '',
+          driveFolderId: driveFolderId,
+          driveFolderLink: driveFolderLink || bibliotecaRepos[idxDup].driveFolderLink,
+          updatedAt: new Date().toISOString(), updatedBy: email
+        });
+      }
+    } else {
+      bibliotecaRepos.push({
+        id: 'repo' + Date.now(),
+        titulo: titulo, tematica: tematica, descripcion: descripcion,
+        scope: scope, scopeId: scopeId,
+        oficinaId: scope === 'oficina' ? scopeId : '',
+        driveFolderId: driveFolderId, driveFolderLink: driveFolderLink,
+        activo: true, createdByAdmin: byAdmin,
+        compartidoCon: [],
+        archivosCompartidos: [],
+        vinculados: [],
+        createdAt: new Date().toISOString(), createdBy: email,
+        updatedAt: new Date().toISOString()
+      });
+    }
   }
+  if (typeof normalizeBibliotecaReposList === 'function') bibliotecaRepos = normalizeBibliotecaReposList(bibliotecaRepos);
   window._recursosRepoForm = null;
   window._recursosCfgForm = null;
   const ok = await saveRecursosFirestore();
@@ -2101,6 +2135,9 @@ async function guardarRecursosRepo(editId) {
     renderRecursosPanel();
     if (typeof renderListasCfg === 'function') renderListasCfg();
   } else notif('Error al guardar', 'err');
+  } finally {
+    window._recRepoGuardarBusy = false;
+  }
 }
 
 async function eliminarRecursosRepo(id) {
@@ -2837,6 +2874,9 @@ function bibCollectAdjuntosPqrs() {
 }
 
 async function bibCreateRepoQuick(titulo, tematica, descripcion) {
+  if (window._recRepoGuardarBusy) throw new Error('Ya se está creando una carpeta');
+  window._recRepoGuardarBusy = true;
+  try {
   const auto = typeof getRecursosScopeAutoSesion === 'function' ? getRecursosScopeAutoSesion() : { scope: 'departamento', scopeId: deptoActivo || 'guaviare' };
   const scope = auto.scope;
   const scopeId = auto.scopeId;
@@ -2854,6 +2894,25 @@ async function bibCreateRepoQuick(titulo, tematica, descripcion) {
   driveFolderLink = created.link;
   const email = typeof getAuthEmailNorm === 'function' ? getAuthEmailNorm() : '';
   const byAdmin = typeof esAdministrador === 'function' && esAdministrador();
+  const dup = driveFolderId && (bibliotecaRepos || []).find(function(r) {
+    if (!r || r.activo === false) return false;
+    const dk = typeof recursosRepoDriveKey === 'function' ? recursosRepoDriveKey(r) : String(r.driveFolderId || '').trim();
+    return dk && dk === driveFolderId;
+  });
+  if (dup) {
+    const idxDup = bibliotecaRepos.findIndex(function(r) { return r && r.id === dup.id; });
+    if (idxDup >= 0) {
+      bibliotecaRepos[idxDup] = Object.assign({}, bibliotecaRepos[idxDup], {
+        titulo: titulo,
+        tematica: tematica || bibliotecaRepos[idxDup].tematica || '',
+        descripcion: descripcion || bibliotecaRepos[idxDup].descripcion || '',
+        updatedAt: new Date().toISOString()
+      });
+    }
+    const okUp = await saveRecursosFirestore();
+    if (!okUp) throw new Error('No se pudo guardar el tema');
+    return bibliotecaRepos[idxDup] || dup;
+  }
   const repo = {
     id: 'repo' + Date.now(),
     titulo: titulo,
@@ -2880,6 +2939,9 @@ async function bibCreateRepoQuick(titulo, tematica, descripcion) {
     throw new Error('No se pudo guardar el tema');
   }
   return repo;
+  } finally {
+    window._recRepoGuardarBusy = false;
+  }
 }
 
 function closeBibGuardarModal() {
