@@ -8,6 +8,95 @@
 function hoy(){return new Date().toISOString().split('T')[0];}
 function dias(f){return Math.floor((new Date()-new Date(f))/86400000);}
 function fmtF(f){if(!f||f==='—')return'-';const p=String(f).split('-');if(p.length!==3||isNaN(+p[0])||isNaN(+p[1])||isNaN(+p[2]))return'-';return p[2]+'/'+p[1]+'/'+p[0];}
+/** dd/mm/aaaa hh:mm en hora local (soportes PDF de correo). */
+function fmtFechaHora(v){
+  let dt;
+  if(v==null||v==='')dt=new Date();
+  else if(v instanceof Date)dt=v;
+  else{
+    const s=String(v).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)){
+      if(s===(typeof hoy==='function'?hoy():''))dt=new Date();
+      else{
+        const p=s.split('-');
+        return p[2]+'/'+p[1]+'/'+p[0];
+      }
+    }else dt=new Date(s);
+  }
+  if(!dt||isNaN(dt.getTime()))return String(v||'');
+  const dd=String(dt.getDate()).padStart(2,'0');
+  const mm=String(dt.getMonth()+1).padStart(2,'0');
+  const hh=String(dt.getHours()).padStart(2,'0');
+  const mi=String(dt.getMinutes()).padStart(2,'0');
+  return dd+'/'+mm+'/'+dt.getFullYear()+' '+hh+':'+mi;
+}
+function sstPdfSafeWinAnsi(s){
+  s=String(s||'');
+  s=s.replace(/[\u2018\u2019\u02BC]/g,"'");
+  s=s.replace(/[\u201C\u201D]/g,'"');
+  s=s.replace(/[\u2013\u2014\u2212]/g,'-');
+  s=s.replace(/\u2026/g,'...');
+  s=s.replace(/[\u2022\u25CF\u25E6\u2219\u00B7\u2043\u25AA\u25AB]/g,'-');
+  s=s.replace(/[\u2713\u2714\u2610\u2611\u2612\u2705\u274C\u274E]/g,'-');
+  s=s.replace(/[\u00A0\u202F\u2007\u2009]/g,' ');
+  s=s.replace(/[\u200B\u200C\u200D\uFEFF]/g,'');
+  s=s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g,'-');
+  s=s.replace(/ð[^\sA-Za-z0-9ÁÉÍÓÚÑáéíóúñ]{0,4}/g,'- ');
+  return s;
+}
+function sstPdfStripEmphasis(s){
+  s=String(s||'');
+  s=s.replace(/\*{1,2}([^*\n]{1,240})\*{1,2}/g,'$1');
+  s=s.replace(/(^|[\s(«"'])\*+(?=[A-ZÁÉÍÓÚÑ0-9])/g,'$1');
+  s=s.replace(/([A-ZÁÉÍÓÚÑ0-9.,;:])\*+(?=[\s)»"']|$)/g,'$1');
+  return s;
+}
+function sstPdfCollapseSpacedLetters(s){
+  return String(s||'').split('\n').map(function(line){
+    const trimmed=line.trim();
+    if(!trimmed)return line;
+    const words=trimmed.split(/[ ]+/);
+    let one=0;
+    for(let i=0;i<words.length;i++){if(words[i].length<=1)one++;}
+    if(words.length>=4&&one>=words.length*0.65){
+      return trimmed.replace(/(\S)\s+(?=\S)/g,'$1').replace(/\s{2,}/g,' ');
+    }
+    return line.replace(/((?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]\s){2,}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])/g,function(seq){
+      return seq.replace(/\s+/g,'');
+    });
+  }).join('\n');
+}
+function sstPdfUnwrapLines(txt){
+  const headerRe=/^(De|From|Para|To|Cc|Cco|Bcc|Asunto|Subject|Fecha|Date|Enviado|Sent|Destinatario)\s*:/i;
+  const lines=String(txt||'').replace(/\r/g,'').split('\n');
+  const out=[];
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i].replace(/[ \t]+$/g,'');
+    const t=line.trim();
+    if(!out.length){out.push(line);continue;}
+    if(!t){out.push('');continue;}
+    const p=String(out[out.length-1]||'').trim();
+    if(!p){out.push(line);continue;}
+    if(headerRe.test(t)||headerRe.test(p)||/^[-_]{5,}/.test(t)||/^[-_]{5,}/.test(p)){
+      out.push(line);continue;
+    }
+    const nextLower=/^[a-záéíóúüñ]/.test(t);
+    const prevSoft=/[,;:]$/.test(p)||(p.length>=52&&!/[.!?…]$/.test(p));
+    if(p.length>=48&&(nextLower||prevSoft)&&!/^[•\-–]/.test(t)){
+      out[out.length-1]=p+' '+t;
+    }else out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+function sstPdfPlainForPrint(txt){
+  let t=String(txt||'').replace(/\r/g,'');
+  t=sstPdfSafeWinAnsi(t);
+  t=sstPdfStripEmphasis(t);
+  t=sstPdfCollapseSpacedLetters(t);
+  t=sstPdfUnwrapLines(t);
+  t=sstPdfSafeWinAnsi(t);
+  return t.trim();
+}
 function diffDias(fecha){if(!fecha)return'';const a=new Date(hoy()+'T00:00:00');const b=new Date(fecha+'T00:00:00');return Math.round((b-a)/86400000);}
 function _isoDateLocal(d){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');

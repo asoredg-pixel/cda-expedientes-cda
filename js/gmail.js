@@ -3086,53 +3086,13 @@ function _gmailHtmlToPdfText(html) {
   return t.trim();
 }
 function _gmailStripPdfEmphasis(s) {
-  s = String(s || '');
-  s = s.replace(/\*{1,2}([^*\n]{1,240})\*{1,2}/g, '$1');
-  s = s.replace(/(^|[\s(«"'])\*+(?=[A-ZÁÉÍÓÚÑ0-9])/g, '$1');
-  s = s.replace(/([A-ZÁÉÍÓÚÑ0-9.,;:])\*+(?=[\s)»"']|$)/g, '$1');
-  return s;
+  return typeof sstPdfStripEmphasis === 'function' ? sstPdfStripEmphasis(s) : String(s || '');
 }
 function _gmailCollapseSpacedLetters(s) {
-  return String(s || '').split('\n').map(function(line) {
-    const trimmed = line.trim();
-    if (!trimmed) return line;
-    const words = trimmed.split(/[ ]+/);
-    let one = 0;
-    for (let i = 0; i < words.length; i++) {
-      if (words[i].length <= 1) one++;
-    }
-    if (words.length >= 4 && one >= words.length * 0.65) {
-      return trimmed.replace(/(\S)\s+(?=\S)/g, '$1').replace(/\s{2,}/g, ' ');
-    }
-    return line.replace(/((?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]\s){2,}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])/g, function(seq) {
-      return seq.replace(/\s+/g, '');
-    });
-  }).join('\n');
+  return typeof sstPdfCollapseSpacedLetters === 'function' ? sstPdfCollapseSpacedLetters(s) : String(s || '');
 }
 function _gmailUnwrapPdfLines(txt) {
-  const headerRe = /^(De|From|Para|To|Cc|Cco|Bcc|Asunto|Subject|Fecha|Date|Enviado|Sent|Destinatario)\s*:/i;
-  const lines = String(txt || '').replace(/\r/g, '').split('\n');
-  const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].replace(/[ \t]+$/g, '');
-    const t = line.trim();
-    if (!out.length) { out.push(line); continue; }
-    if (!t) { out.push(''); continue; }
-    const p = String(out[out.length - 1] || '').trim();
-    if (!p) { out.push(line); continue; }
-    if (headerRe.test(t) || headerRe.test(p) || /^[-_]{5,}/.test(t) || /^[-_]{5,}/.test(p)) {
-      out.push(line);
-      continue;
-    }
-    const nextLower = /^[a-záéíóúüñ]/.test(t);
-    const prevSoft = /[,;:]$/.test(p) || (p.length >= 52 && !/[.!?…]$/.test(p));
-    if (p.length >= 48 && (nextLower || prevSoft) && !/^[•\-–]/.test(t)) {
-      out[out.length - 1] = p + ' ' + t;
-    } else {
-      out.push(line);
-    }
-  }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return typeof sstPdfUnwrapLines === 'function' ? sstPdfUnwrapLines(txt) : String(txt || '');
 }
 // Limpia el cuerpo de un correo para el PDF: elimina citas (líneas con >) y bloques "escribió:".
 function _gmailCleanBodyForPdf(txt) {
@@ -3172,8 +3132,12 @@ function _gmailBodyTextForPdf(ed) {
   ed = ed || {};
   let t = _gmailHtmlToPdfText(ed.cuerpoHtml);
   if (!t) t = String(ed.cuerpoTxt || '');
-  t = _gmailStripPdfEmphasis(t);
-  t = _gmailCollapseSpacedLetters(t);
+  if (typeof sstPdfPlainForPrint === 'function') t = sstPdfPlainForPrint(t);
+  else {
+    t = _gmailStripPdfEmphasis(t);
+    t = _gmailCollapseSpacedLetters(t);
+    t = _gmailUnwrapPdfLines(t);
+  }
   t = _gmailCleanBodyForPdf(t);
   t = _gmailUnwrapPdfLines(t);
   return t.trim();
@@ -3229,9 +3193,12 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
     doc.text('Radicado: PQRSD #' + expId, margin, y); y += 14;
   }
 
+  const fechaMsg = (typeof fmtFechaHora === 'function' ? fmtFechaHora(ed.fecha) : '') || ed.fecha || '';
+  const fechaRad = typeof fmtFechaHora === 'function' ? fmtFechaHora(new Date()) : '';
   const meta = [
     ['Remitente:', ed.remitente || ''],
-    ['Fecha:', ed.fecha || ''],
+    ['Fecha del mensaje:', fechaMsg],
+    ['Fecha de radicación:', fechaRad],
     ['Asunto:', ed.asunto || '']
   ];
   doc.setFontSize(10);
@@ -3394,6 +3361,7 @@ window.cdaPdfDrawHeader = cdaPdfDrawHeader;
 window.cdaPdfDrawFooter = cdaPdfDrawFooter;
 window.cdaPdfDrawFooterAllPages = cdaPdfDrawFooterAllPages;
 window.cdaPdfContentBottomY = cdaPdfContentBottomY;
+window._pdfWriteCuerpoSolicitud = _pdfWriteCuerpoSolicitud;
 
 // PDF soporte para radicación manual (ventanilla, teléfono, web, etc.).
 async function generarPdfSolicitudManual(opts) {
@@ -3427,7 +3395,7 @@ async function generarPdfSolicitudManual(opts) {
     ['Tipo:', opts.tipo || 'Petición'],
     ['Medio recepción:', typeof normMedioRecepcionPqrs === 'function' ? normMedioRecepcionPqrs(medio) : medio],
     ['Fecha solicitud:', typeof fmtF === 'function' ? fmtF(opts.fechaSol || '') : (opts.fechaSol || '')],
-    ['Fecha radicación:', typeof fmtF === 'function' ? fmtF(opts.fecha || '') : (opts.fecha || '')]
+    ['Fecha radicación:', typeof fmtFechaHora === 'function' ? fmtFechaHora(opts.fecha || new Date()) : (typeof fmtF === 'function' ? fmtF(opts.fecha || '') : (opts.fecha || ''))]
   ];
   if (opts.fechaTermino) meta.push(['Fecha término:', typeof fmtF === 'function' ? fmtF(opts.fechaTermino) : opts.fechaTermino]);
   if (typeof medioNotificacionLabel === 'function' && opts.medioNotif) {
@@ -3486,7 +3454,7 @@ async function generarPdfSolicitudManual(opts) {
   doc.setFont('helvetica', 'bold'); doc.text('Detalle de la solicitud:', margin, y); y += 14;
   doc.setFont('helvetica', 'normal');
   const detRaw = String(opts.detalle || '').trim();
-  const detalle = (detRaw || '(sin detalle adicional)').replace(/\r/g, '');
+  const detalle = ((typeof sstPdfPlainForPrint === 'function' ? sstPdfPlainForPrint(detRaw) : detRaw.replace(/\r/g, '')) || '(sin detalle adicional)');
   y = _pdfWriteLines(doc, doc.splitTextToSize(detalle, maxW), margin, y, lineH, pageH, margin);
 
   const anexosNombres = opts.anexosNombres || [];

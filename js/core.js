@@ -8494,9 +8494,12 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     doc.setFont('helvetica','bold');doc.text((e?'Expediente: ':'Actividad: ')+expId,margin,y);y+=16;
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
   }
+  const fechaEnvio=typeof fmtFechaHora==='function'
+    ?fmtFechaHora(opts.fechaEnvio||opts.enviadoEn||new Date())
+    :(typeof fmtF==='function'?fmtF(hoy()):hoy());
   const meta=[
     ['Actividad:',act],
-    ['Fecha envío:',(typeof fmtF==='function'?fmtF(hoy()):hoy())],
+    ['Fecha envío:',fechaEnvio],
     ['Canal:','Correo electrónico'],
     ['Para:',opts.para||''],
     ['Cc:',opts.cc||''],
@@ -8518,13 +8521,16 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     y+=2;
   });
   const cuerpo=String(opts.cuerpo||'').trim();
+  const bottomY=typeof cdaPdfContentBottomY==='function'?cdaPdfContentBottomY(doc,margin):(pageH-margin);
   if(cuerpo){
-    y+=4;doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
+    y+=4;if(y>bottomY){doc.addPage();y=margin;}
+    doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
     doc.setFont('helvetica','bold');doc.text('Cuerpo del correo:',margin,y);y+=14;
     doc.setFont('helvetica','normal');
-    const linesC=doc.splitTextToSize(cuerpo,maxW);
-    if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesC,margin,y,lineH,pageH,margin);
-    else{doc.text(linesC,margin,y);y+=lineH*linesC.length;}
+    const cuerpoPrint=typeof sstPdfPlainForPrint==='function'?sstPdfPlainForPrint(cuerpo):cuerpo;
+    if(typeof _pdfWriteCuerpoSolicitud==='function')y=_pdfWriteCuerpoSolicitud(doc,cuerpoPrint,margin,y,maxW,lineH,margin);
+    else if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoPrint,maxW),margin,y,lineH,pageH,margin);
+    else{doc.text(doc.splitTextToSize(cuerpoPrint,maxW),margin,y);y+=lineH;}
   }
   // Documentos / anexos enviados (mismos que en el correo como enlace Drive)
   let docsEnv=Array.isArray(opts.documentos)?opts.documentos:(Array.isArray(opts.docs)?opts.docs:null);
@@ -8538,7 +8544,7 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
       &&d.tipo!=='soporte_notificacion'&&d.tipo!=='soporte_respuesta'&&d.tipo!=='notificacion_soporte';
   });
   if(docsPdf.length){
-    y+=10;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    y+=10;if(y>bottomY){doc.addPage();y=margin;}
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
     doc.setFont('helvetica','bold');doc.setFontSize(10);
     doc.text('Documentos enviados (enlace Drive):',margin,y);y+=16;
@@ -8567,7 +8573,7 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
   }
   const adjNombres=Array.isArray(opts.adjuntosNombres)?opts.adjuntosNombres.filter(Boolean):[];
   if(adjNombres.length){
-    y+=6;if(y>pageH-margin*2){doc.addPage();y=margin;}
+    y+=6;if(y>bottomY){doc.addPage();y=margin;}
     doc.setFont('helvetica','bold');doc.setFontSize(10);
     doc.text('Archivos adjuntos al correo:',margin,y);y+=14;
     doc.setFont('helvetica','normal');
@@ -29826,11 +29832,14 @@ async function generarPdfRespuestaPqrs(e,opts){
   const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial',fisica:'Correo físico',aviso:'Por aviso'}[canal]||canal||'—';
   const tipo=wf.tipo||PQRS_WF_TIPO&&PQRS_WF_TIPO.MENSAJE||'';
   const tipoLabel={mensaje:'Mensaje por correo',oficio_firmado:'Oficio firmado',informativa:'Informativa'}[tipo]||tipo||'—';
+  const fechaResp=typeof fmtFechaHora==='function'
+    ?fmtFechaHora(opts.fechaResp||wf.email_enviado_en||(wf.notificacion&&wf.notificacion.en)||wf.cerrado_en||e._pqrs_respuesta_fecha||new Date())
+    :fmt(wf.fecha_respuesta||e._pqrs_respuesta_fecha||opts.fechaResp||hoy());
   const meta=[
     ['Tipo solicitud:',e._tipo_solicitud||'PQRSD'],
     ['Asunto:',e.f_f1||e._pqrs_detalle||''],
     ['Fecha solicitud:',fmt(e._fecha||e._fecha_solicitud||'')],
-    ['Fecha respuesta:',fmt(wf.fecha_respuesta||e._pqrs_respuesta_fecha||opts.fechaResp||hoy())],
+    ['Fecha respuesta:',fechaResp],
     ['Tipo respuesta:',tipoLabel],
     ['Canal notificación:',canalLabel],
   ];
@@ -29894,7 +29903,9 @@ async function generarPdfRespuestaPqrs(e,opts){
     doc.setFont('helvetica','bold');
     doc.text(esCorreo?'Cuerpo del correo:':'Resumen de la respuesta:',margin,y);y+=14;
     doc.setFont('helvetica','normal');
-    y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoText,maxW),margin,y,lineH,pageH,margin);
+    const cuerpoPrint=typeof sstPdfPlainForPrint==='function'?sstPdfPlainForPrint(cuerpoText):cuerpoText;
+    if(typeof _pdfWriteCuerpoSolicitud==='function')y=_pdfWriteCuerpoSolicitud(doc,cuerpoPrint,margin,y,maxW,lineH,margin);
+    else y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoPrint,maxW),margin,y,lineH,pageH,margin);
   }
   let docs=Array.isArray(opts.documentos)?opts.documentos:null;
   if(!docs||!docs.length){
