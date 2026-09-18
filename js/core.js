@@ -24912,6 +24912,21 @@ function actividadPerteneceARespFilter(t,respFilter){
   if(np2&&typeof agendaNorm==='function'&&agendaNorm(np2)===agendaNorm(rf))return true;
   return false;
 }
+function actividadUsuarioEsNotificadorRevision(t,nombre){
+  nombre=String(nombre||'').trim();
+  if(!t||!nombre)return false;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(e,nombre))return true;
+  const wfE=e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):null;
+  const wfT=(t&&t.firmaWf)||{};
+  const wf=wfE||wfT;
+  const rep=String((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.por)||'').trim();
+  if(rep&&typeof agendaNorm==='function'&&agendaNorm(rep)===agendaNorm(nombre))return true;
+  const nPor=String(wfT.notificar_por||wfT.notificar_por_propuesto||(wfE&&wfE.notificar_por)||'').trim();
+  if(nPor&&typeof agendaNorm==='function'&&agendaNorm(nPor)===agendaNorm(nombre))return true;
+  return false;
+}
+window.actividadUsuarioEsNotificadorRevision=actividadUsuarioEsNotificadorRevision;
 /**
  * Criterio estricto para bandeja «Por notificar» con filtro de responsable:
  * solo si esa persona es quien debe notificar, o (sin notificador) está asignada a la actividad.
@@ -25601,6 +25616,9 @@ function actividadCuentaComoPorRevisar(t){
       // Revisión final de notificación: solo mientras sigue pendiente (no si ya se devolvió a corregir)
       if(fPv===PQRS_WF.REVISION_FINAL){
         if(typeof estadoTask==='function'&&estadoTask(src)==='Por corregir')return false;
+        if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+          &&typeof actividadUsuarioEsNotificadorRevision==='function'
+          &&!actividadUsuarioEsNotificadorRevision(src,responsableActivo))return false;
         return true;
       }
       // Ya aprobada / en firma / notif / cerrada: no pertenece a «Por revisar»
@@ -25614,6 +25632,9 @@ function actividadCuentaComoPorRevisar(t){
   }
   if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(src)){
     if(typeof estadoTask==='function'&&estadoTask(src)==='Por corregir')return false;
+    if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+      &&typeof actividadUsuarioEsNotificadorRevision==='function'
+      &&!actividadUsuarioEsNotificadorRevision(src,responsableActivo))return false;
     return true;
   }
   if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
@@ -25713,16 +25734,18 @@ function filtrarActividadesPorEstado(list,filtro){
     if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
       out=(out||[]).filter(function(t){
         if(!t)return false;
-        if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
         const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+        const esRevFinal=(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
+          ||(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t));
+        if(esRevFinal){
+          return typeof actividadUsuarioEsNotificadorRevision==='function'
+            &&actividadUsuarioEsNotificadorRevision(t,responsableActivo);
+        }
+        if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
         if(e&&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(e,responsableActivo))return true;
         const wf=e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(t.firmaWf||{});
         const rep=String((wf&&wf.notificacion_reportada&&wf.notificacion_reportada.por)||'').trim();
         if(rep&&typeof agendaNorm==='function'&&agendaNorm(rep)===agendaNorm(responsableActivo))return true;
-        if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)){
-          const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
-          if(nPor&&typeof agendaNorm==='function'&&agendaNorm(nPor)===agendaNorm(responsableActivo))return true;
-        }
         return false;
       });
     }
@@ -25752,7 +25775,15 @@ function filtrarActividadesPorEstado(list,filtro){
     if(yoResp){
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
       // Designado a notificar: solo «Por notificar» (y prioritarias si vence) — no Atendidas
-      if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eD))return false;
+      if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eD)){
+        if(typeof actividadUsuarioEsNotificadorRevision==='function'&&actividadUsuarioEsNotificadorRevision(t,yoResp))return false;
+        if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoResp)){
+          const stRf=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,yoResp):estadoTask(t);
+          if(stRf==='Por corregir'||estadoTask(t)==='Por corregir')return false;
+          return true;
+        }
+        return false;
+      }
       if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)
         &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eD)
         &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(eD)
