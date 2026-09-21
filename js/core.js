@@ -8115,6 +8115,24 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
     h+='</div>';
     return h;
   }
+  const esInfoRev=typeof taskReviewEsInformativaRevision==='function'&&taskReviewEsInformativaRevision(e);
+  if(mode==='aprobar'&&esInfoRev){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const motivo=String(wf.cuerpo||'').trim();
+    window._taskReviewAprobarNotificar=false;
+    h+='<div style="padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--r);margin-bottom:10px;font-size:12px"><strong>ℹ️ Respuesta informativa</strong> — el responsable solicita cerrar sin enviar correo al ciudadano.</div>';
+    h+=renderTaskReviewAprobarAccHtml(1,'Aprobar y cerrar',
+      '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Cierra como informativa. Queda <strong>✓ Revisada</strong> · sin correo ni firma.</p>'+
+      '<div class="fld" style="margin-bottom:10px"><label>Motivo / descripción del responsable <span style="font-weight:400;color:var(--tx3)">(visible en consulta ciudadana)</span></label>'+
+      '<textarea id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(motivo)+'</textarea></div>'+
+      '<div class="fld" style="margin-bottom:10px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(solo en sistema)</span></label>'+
+      '<input type="text" id="nca-rev-comentario" placeholder="Ej: Aprobado como informativa." style="margin-top:4px;width:100%;box-sizing:border-box"></div>'+
+      '<input type="hidden" id="nca-rev-fecha" value="'+escAttr(hoy())+'">'+
+      '<button type="button" class="btn bsm bp" style="background:#6c757d;border-color:#6c757d" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">ℹ️ Aprobar y cerrar (informativa)</button>',
+      true);
+    h+='</div>';
+    return h;
+  }
   if(mode==='aprobar'){
     const esRevFinal=typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e);
     if(esRevFinal){
@@ -17568,6 +17586,14 @@ function taskReviewEsMensajeSimpleRevision(e){
   const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
   return tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
 }
+/** Informativa en «Por revisar»: solo Aprobar y cerrar (sin correo ni imprimir). */
+function taskReviewEsInformativaRevision(e){
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
+  if(typeof pqrsEnRevisionNca!=='function'||!pqrsEnRevisionNca(e))return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const tipo=wf.tipo||'';
+  return tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')||tipo==='informativa';
+}
 /** Rail ✉️: solo el responsable (encargado supervisa el correo en ✅ Aprobar y cerrar). */
 function taskReviewShouldShowPqrsCorreo(e,t){
   if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
@@ -17586,6 +17612,7 @@ function taskReviewShouldShowOficinaDocCorreo(t){
 }
 window.taskReviewShouldShowOficinaDocCorreo=taskReviewShouldShowOficinaDocCorreo;
 window.taskReviewEsMensajeSimpleRevision=taskReviewEsMensajeSimpleRevision;
+window.taskReviewEsInformativaRevision=taskReviewEsInformativaRevision;
 window.taskReviewShouldShowPqrsCorreo=taskReviewShouldShowPqrsCorreo;
 function renderNcaRevisionEmailBlockHtml(expId,e,wf){
   e=e||exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -20790,6 +20817,11 @@ function openTaskCommentsModal(expId,taskId,opts){
         }else if(isPqrsOrigenView||isRespVerAtendida||isRespVerPorNotificar){
           taskReviewCloseSidePanel();
           if(isPqrsOrigenView&&typeof initPqrsOrigenDocViewer==='function')initPqrsOrigenDocViewer(e);
+        }else if(canReviewSop&&e&&typeof taskReviewEsInformativaRevision==='function'&&taskReviewEsInformativaRevision(e)){
+          window._taskReviewAprobarNotificar=false;
+          window._taskReviewDecisionMode='aprobar';
+          if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
+          else taskReviewOpenSidePanel('decision',expId,taskId);
         }else if(canReviewSop&&e&&typeof taskReviewEsMensajeSimpleRevision==='function'&&taskReviewEsMensajeSimpleRevision(e)){
           window._taskReviewDecisionMode='aprobar';
           if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
@@ -20800,6 +20832,11 @@ function openTaskCommentsModal(expId,taskId,opts){
           if(isOficinaDocRespondida&&typeof taskReviewShouldShowOficinaDocCorreo==='function'&&taskReviewShouldShowOficinaDocCorreo(t)){
             if(!hasSop)taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
             else taskReviewCloseSidePanel();
+          }else if(e&&typeof taskReviewEsInformativaRevision==='function'&&taskReviewEsInformativaRevision(e)){
+            window._taskReviewAprobarNotificar=false;
+            window._taskReviewDecisionMode='aprobar';
+            if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
+            else taskReviewOpenSidePanel('decision',expId,taskId);
           }else if(e&&typeof taskReviewEsMensajeSimpleRevision==='function'&&taskReviewEsMensajeSimpleRevision(e)){
             window._taskReviewDecisionMode='aprobar';
             if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
@@ -28083,7 +28120,6 @@ async function ncaAprobarOficioFirmado(expId){
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(err){}
   if(typeof renderActividades==='function')renderActividades();
   notif('🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir)'+(notifPor?' · Notificará: '+notifPor:'')+'. Marque 🖨️ cuando esté impreso.','ok');
 }
@@ -28134,7 +28170,6 @@ async function ncaAprobarOficioParaFirmaDirecto(expId){
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
-  try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(err){}
   if(typeof renderActividades==='function')renderActividades();
   notif('🖊 Oficio aprobado — queda en «Por firma» (firmar)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
 }
