@@ -257,12 +257,14 @@ function tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo){
   let linksHtml='';
   if(docsConLink.length){
     linksHtml='<hr><p><strong>Documentos</strong> (enlace Drive):</p>';
-    docsConLink.forEach(function(d){
+    docsConLink.forEach(function(d,di){
       let href=String(d.driveLink||d.previewLink||d.url||'').trim();
       if(!href&&(d.fileId||d.driveFileId))
         href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
       if(!href)return;
-      const nom=escAttr(d.nombre||d.label||d.driveFilename||'Documento');
+      const nom=escAttr(typeof etiquetaDocNotifPublica==='function'
+        ?etiquetaDocNotifPublica(d,di)
+        :(d.nombre||d.label||d.driveFilename||'Documento'));
       linksHtml+='<p>📎 <a href="'+escAttr(href)+'">'+nom+'</a></p>';
     });
   }
@@ -1054,6 +1056,8 @@ async function submitTramiteNotificar(expId,taskId){
       if(typeof registrarSoporteEnvioCorreoNotif==='function'){
         await registrarSoporteEnvioCorreoNotif(e&&!e._sin_expediente?e:null,t,refId,{
           para:destinos.join(', '),cc:emailCc,asunto:asunto,cuerpo:cuerpo,por:por,
+          cuenta:(sent&&(sent.cuenta||sent.from))||'',
+          enviadoEn:new Date().toISOString(),
           documentos:docsConLink,skipAttach:true
         },[]);
       }
@@ -2452,6 +2456,8 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
     if(typeof registrarSoporteEnvioCorreoNotif==='function')
       await registrarSoporteEnvioCorreoNotif(e&&!e._sin_expediente?e:null,t,refId,{
         para:destinos.join(', '),cc:emailCc,asunto:asunto,cuerpo:cuerpo,por:por,
+        cuenta:(sent&&(sent.cuenta||sent.from))||'',
+        enviadoEn:new Date().toISOString(),
         documentos:docsConLink,skipAttach:true
       },[]);
     if(typeof setTaskFirmaWf==='function')setTaskFirmaWf(refId,taskId,{
@@ -2524,6 +2530,8 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
     if(typeof registrarSoporteEnvioCorreoNotif==='function')
       await registrarSoporteEnvioCorreoNotif(e,tAct,expId,{
         para:destinos.join(', '),cc:ccRaw,asunto:asunto,cuerpo:cuerpo,por:por,
+        cuenta:(sent&&(sent.cuenta||sent.from))||'',
+        enviadoEn:new Date().toISOString(),
         documentos:docsAdj,skipAttach:true
       },[]);
     if(typeof registrarNotificacionCiudadanoPqrs==='function'){
@@ -3956,7 +3964,10 @@ async function submitEntregaOficinaFirma(){
       else if(blobOrItem&&blobOrItem.driveLink&&!blob)up=blobOrItem;
       else if(blob&&typeof driveUploadExpedienteActividad==='function'){
         try{
-          up=await driveUploadExpedienteActividad(blob,nm,tp,ctx,t,autor,driveEstado);
+          up=await driveUploadExpedienteActividad(blob,nm,tp,ctx,t,autor,driveEstado,{
+            esAnexo:!!esAnexo,
+            anexoN:esAnexo?(anexoN||null):null
+          });
         }catch(errUp){
           console.warn('ofi-doc uploadOne Drive:',errUp);
           up=null;

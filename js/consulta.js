@@ -437,7 +437,10 @@ function collectArchivosPqrsLinks(e){
       }
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
       if(/^link\s*drive$/i.test(String(s.label||'').trim()))return;
-      const lbl=soloPublico?String(s.label||('Respuesta '+(i+1))).replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim():(s.label||('Respuesta '+(i+1)));
+      const lblRaw=soloPublico?String(s.label||s.driveFilename||s.nombre||('Respuesta '+(i+1))).replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim():(s.label||('Respuesta '+(i+1)));
+      const lbl=(soloPublico&&typeof etiquetaDocNotifPublica==='function')
+        ?etiquetaDocNotifPublica(Object.assign({},s,{label:lblRaw,nombre:s.driveFilename||s.nombre||lblRaw}))
+        :lblRaw;
       push(s.url||s.preview,lbl||('Respuesta '+(i+1)),e._pqrs_respuesta_fecha,Object.assign({},s,{_tipoPub:'respuesta'}));
     });
   }else if(!soloPublico||(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))){
@@ -472,7 +475,10 @@ function collectArchivosPqrsLinks(e){
       if(!d||typeof _pqrsDocEsVisibleCiudadano!=='function'||!_pqrsDocEsVisibleCiudadano(d,e,{tipo:'respuesta'}))return;
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
       const url=d.driveLink||d.previewLink||'';
-      push(url,d.nombre||('Respuesta '+(i+1)),wf.fecha_respuesta||e._pqrs_respuesta_fecha,Object.assign({},d,{_tipoPub:'respuesta'}));
+      const lblPub=(typeof etiquetaDocNotifPublica==='function')
+        ?etiquetaDocNotifPublica(d,i)
+        :(d.nombre||('Respuesta '+(i+1)));
+      push(url,lblPub,wf.fecha_respuesta||e._pqrs_respuesta_fecha,Object.assign({},d,{_tipoPub:'respuesta'}));
     });
   }
   return items;
@@ -495,7 +501,9 @@ function collectArchivosExp(e,taskIdFilter){
         exp:e._exp,taskId:t.id,taskDesc:t.desc||t.actividad||'Actividad',
         label:(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s)&&typeof etiquetaSoporteEnvioActividad==='function')
           ?etiquetaSoporteEnvioActividad(e,t,s)
-          :(s.label||('Documento v'+(s.version||'?'))),
+          :(soloPublico&&typeof etiquetaDocNotifPublica==='function'
+            ?etiquetaDocNotifPublica(s)
+            :(s.label||('Documento v'+(s.version||'?')))),
         url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',version:s.version||''
       });
     });

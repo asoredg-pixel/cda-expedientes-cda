@@ -8427,7 +8427,9 @@ function correoEmisorSoporteEnvio(opts,e,t){
     const m=s.match(/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i);
     return m?m[0].toLowerCase():'';
   };
-  let em=pick(opts.cuenta)||pick(opts.from)||pick(opts.enviadoDesde)||pick(opts.enviado_por)||pick(opts.por);
+  // No usar opts.por: suele ser el nombre del encargado, no el correo de salida.
+  let em=pick(opts.cuenta)||pick(opts.from)||pick(opts.enviadoDesde)||pick(opts.enviado_por)
+    ||pick(opts.cuenta_emisora)||pick(opts.accountEmail);
   if(em)return em;
   if(typeof gmailOfiCuentaConectadaParaEnvio==='function')em=pick(gmailOfiCuentaConectadaParaEnvio());
   if(em)return em;
@@ -8494,8 +8496,9 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     doc.setFont('helvetica','bold');doc.text((e?'Expediente: ':'Actividad: ')+expId,margin,y);y+=16;
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
   }
+  const fechaEnvioIso=opts.fechaEnvio||opts.enviadoEn||opts.enviado_en||new Date().toISOString();
   const fechaEnvio=typeof fmtFechaHora==='function'
-    ?fmtFechaHora(opts.fechaEnvio||opts.enviadoEn||new Date())
+    ?fmtFechaHora(fechaEnvioIso)
     :(typeof fmtF==='function'?fmtF(hoy()):hoy());
   const meta=[
     ['Actividad:',act],
@@ -8553,11 +8556,9 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
       let href=String(d.driveLink||d.previewLink||d.url||'').trim();
       if(!href&&(d.fileId||d.driveFileId))
         href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
-      const nom=String(d.nombre||d.label||d.driveFilename||('Documento '+(idx+1))).trim();
-      const rol=d._notif_rol==='anexo'||/anexo/i.test(String(d.tipo||''))
-        ?('Anexo'+(d.anexo_n?' '+d.anexo_n:''))
-        :(d._notif_rol==='documento'?'Documento':'');
-      const linea='- '+(rol?rol+': ':'')+nom;
+      const linea='- '+(typeof etiquetaDocNotifPublica==='function'
+        ?etiquetaDocNotifPublica(d,idx)
+        :String(d.nombre||d.label||d.driveFilename||('Documento '+(idx+1))).trim());
       const linesN=doc.splitTextToSize(linea,maxW);
       if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,linesN,margin,y,lineH,pageH,margin);
       else{doc.text(linesN,margin,y);y+=lineH*linesN.length;}
@@ -8640,13 +8641,15 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
   if(!pdfBlob){
     try{
       if(typeof generarPdfSoporteNotificacionActividad==='function'){
-        const cuenta=mailOpts.cuenta
+        const enviadoEn=mailOpts.enviadoEn||mailOpts.enviado_en||mailOpts.fechaEnvio||new Date().toISOString();
+        const cuenta=mailOpts.cuenta||mailOpts.cuenta_emisora
           ||(typeof resolverCuentaEmisoraSoporteEnvio==='function'
             ?await resolverCuentaEmisoraSoporteEnvio(e,t,mailOpts)
             :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio(mailOpts,e,t):''));
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
           para:mailOpts.para||'',cc:mailOpts.cc||'',bcc:mailOpts.bcc||'',
           asunto:mailOpts.asunto||'',cuerpo:mailOpts.cuerpo||'',cuenta:cuenta,
+          enviadoEn:enviadoEn,fechaEnvio:enviadoEn,
           documentos:mailOpts.documentos||mailOpts.docs||null,
           adjuntosNombres:mailOpts.adjuntosNombres||null
         });
@@ -8810,12 +8813,14 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     });
     if(docsConLink.length){
       linksHtml='<hr><p><strong>Documentos</strong> (enlace Drive):</p>';
-      docsConLink.forEach(function(d){
+      docsConLink.forEach(function(d,di){
         let href=String(d.driveLink||d.previewLink||d.url||'').trim();
         if(!href&&(d.fileId||d.driveFileId))
           href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
         if(!href)return;
-        const nom=escAttr(d.nombre||d.label||d.driveFilename||'Documento');
+        const nom=escAttr(typeof etiquetaDocNotifPublica==='function'
+          ?etiquetaDocNotifPublica(d,di)
+          :(d.nombre||d.label||d.driveFilename||'Documento'));
         linksHtml+='<p>📎 <a href="'+escAttr(href)+'">'+nom+'</a></p>';
       });
     }
@@ -8827,12 +8832,14 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     let pdfBlob=null,up=null;
     const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
     try{
+      const enviadoEnIso=new Date().toISOString();
       const cuenta=(typeof resolverCuentaEmisoraSoporteEnvio==='function'
         ?await resolverCuentaEmisoraSoporteEnvio(e,t,{})
         :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio({},e,t):''));
       if(typeof generarPdfSoporteNotificacionActividad==='function')
         pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
           para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,cuenta:cuenta,
+          enviadoEn:enviadoEnIso,fechaEnvio:enviadoEnIso,
           documentos:docsConLink
         });
     }catch(errP){console.warn('pdf soporte notif:',errP);}
@@ -8874,6 +8881,8 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       try{
         const reg=await registrarSoporteEnvioCorreoNotif(e,t,e&&e._exp?e._exp:refId,{
           para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,
+          cuenta:(sent&&(sent.cuenta||sent.from))||'',
+          enviadoEn:new Date().toISOString(),
           pdfBlob:pdfBlob,skipAttach:true
         },[]);
         up=reg&&reg.up;
@@ -10810,10 +10819,15 @@ function getDocsPqrsRespuestaCiudadano(e){
     if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
     if(/^link\s*drive$/i.test(String(s.label||s.nombre||'').trim()))return;
     if(typeof _pqrsDocEsBorradorInterno==='function'&&_pqrsDocEsBorradorInterno(s)&&!_pqrsDocEsAnexoRespuesta(s))return;
-    const lbl=_pqrsDocEsAnexoRespuesta(s)?('Anexo: '+(s.label||s.nombre||'documento'))
+    const lbl=_pqrsDocEsAnexoRespuesta(s)
+      ?(typeof etiquetaDocNotifPublica==='function'?etiquetaDocNotifPublica(Object.assign({},s,{_notif_rol:'anexo'}))
+        :('Anexo: '+(s.label||s.nombre||'documento')))
       :(typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(s):(s.label||'Respuesta'));
-    if(/^link\s*drive$/i.test(String(lbl||'').trim()))return;
-    push(s.url||s.driveLink,s.preview||s.previewLink||s.url||s.driveLink,lbl,s.mime||'',e._pqrs_respuesta_fecha,_pqrsDocEsAnexoRespuesta(s)?'Anexo de respuesta':'Respuesta oficial PQRSD',s);
+    const lblPub=/^proyecci/i.test(String(lbl||''))
+      ?'Documento principal'
+      :(/^link\s*drive$/i.test(String(lbl||'').trim())?'':lbl);
+    if(!lblPub||/^link\s*drive$/i.test(String(lblPub).trim()))return;
+    push(s.url||s.driveLink,s.preview||s.previewLink||s.url||s.driveLink,lblPub,s.mime||'',e._pqrs_respuesta_fecha,_pqrsDocEsAnexoRespuesta(s)?'Anexo de respuesta':'Respuesta oficial PQRSD',s);
   });
   if(typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
@@ -15049,12 +15063,14 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
         const esAnexo=!!(archivoOpt.esAnexo||archivoOpt.tipo==='anexo_respuesta'||archivoOpt.es_anexo);
         const lbl=esAnexo
           ?(archivoOpt.labelAnexo||archivoOpt.nombre||('Anexo '+(archivoOpt.anexo_n||'')))
-          :(archivoOpt.labelProyeccion||'Proyección de respuesta');
+          :(archivoOpt.labelPrincipal||archivoOpt.labelProyeccion||'Documento principal');
+        // No usar «Proyección» en label público (correo / consulta ciudadana)
+        const lblPub=/^proyecci/i.test(String(lbl||''))?'Documento principal':lbl;
         t.soportes.push({
           id:'sop_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
           url:archivoOpt.driveLink,
           preview:archivoOpt.previewLink||archivoOpt.driveLink,
-          label:lbl,
+          label:lblPub,
           fecha:new Date().toISOString(),
           autor:rep,
           reportadoPor:rep,
@@ -15068,7 +15084,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           es_proyeccion:!esAnexo,
           anexo_n:esAnexo?(archivoOpt.anexo_n||null):null
         });
-        t.historial.push({tipo:'soporte',fecha:hoy(),version,url:archivoOpt.driveLink,por:rep,reportadoPor:rep,nota:esAnexo?'Anexo Drive':'Proyección Drive'});
+        t.historial.push({tipo:'soporte',fecha:hoy(),version,url:archivoOpt.driveLink,por:rep,reportadoPor:rep,nota:esAnexo?'Anexo Drive':'Documento principal Drive'});
         return;
       }
       if(!archivoOpt.data)return;
@@ -16676,9 +16692,19 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   }
   let any=false;
   const uniqueByVersion=aOk&&list.length>1;
+  let anexoSeqRename=0;
   for(let i=0;i<list.length;i++){
     const s=list[i];
-    const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'',{uniqueByVersion:uniqueByVersion});
+    const esAn=!!(s&&(s.es_anexo||s.esAnexo||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))));
+    if(esAn){
+      anexoSeqRename++;
+      if(!s.anexo_n)s.anexo_n=anexoSeqRename;
+    }
+    const ok=await driveRenameExpedienteSoporte(s,newEstado,e,t,rep||s.autor||'',{
+      uniqueByVersion:uniqueByVersion,
+      esAnexo:esAn,
+      anexoN:esAn?(s.anexo_n||anexoSeqRename):null
+    });
     if(ok)any=true;
   }
   if(any){
@@ -30192,6 +30218,28 @@ async function pqrsDriveDocToFile(doc){
  * Si un archivo falla, se omite (el HTML sigue con enlaces Drive).
  */
 /**
+ * Etiqueta pública para documento/anexo en correo, PDF y consulta.
+ * No usar «Proyección» (sugiere que el documento no está aprobado).
+ */
+function etiquetaDocNotifPublica(d,idx){
+  if(!d)return 'Documento';
+  const esAn=d._notif_rol==='anexo'
+    ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(d))
+    ||(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d))
+    ||!!(d.es_anexo||d.esAnexo);
+  const n=parseInt(d.anexo_n||d.anexoN||(idx!=null?idx+1:1),10)||1;
+  let nom=String(d.driveFilename||d.nombre||d.label||'').trim();
+  if(/^proyecci/i.test(nom)||nom==='Proyección de respuesta')nom='';
+  if(/^docprincipal[-_]/i.test(nom)||/^anexo\d*[-_]/i.test(nom)){
+    // Mantener nombre Drive discriminado
+  }else if(/^Documento principal$/i.test(nom)||/^Anexo\s+\d+$/i.test(nom)){
+    nom='';
+  }
+  if(esAn)return nom?('Anexo '+n+': '+nom):('Anexo '+n);
+  return nom?('Documento principal: '+nom):'Documento principal';
+}
+window.etiquetaDocNotifPublica=etiquetaDocNotifPublica;
+/**
  * Documentos vigentes a adjuntar al notificar por correo:
  * documento principal (oficio firmado / última proyección aprobada) + anexos de la última entrega.
  * Excluye versiones «por corregir» y duplicados antiguos de anexos.
@@ -30251,9 +30299,15 @@ function collectDocsParaNotificacionCorreo(e,t){
       return est==='por_notificar'||est==='firmado'||est==='aprobado'||est==='notificado'||s.notificado===true;
     });
     const main=firm.length?firm[firm.length-1]:(mains.length?mains[mains.length-1]:null);
-    if(main)push(Object.assign({},main,{_notif_rol:'documento',nombre:main.label||main.nombre||'Documento'}));
+    if(main){
+      const nomMain=main.driveFilename||main.nombre||main.label||'Documento principal';
+      const lblMain=/^proyecci/i.test(String(nomMain))?'Documento principal':nomMain;
+      push(Object.assign({},main,{_notif_rol:'documento',nombre:lblMain,label:lblMain}));
+    }
     anex.forEach(function(s,i){
-      push(Object.assign({},s,{_notif_rol:'anexo',anexo_n:s.anexo_n||(i+1),nombre:s.label||s.nombre||('Anexo '+(i+1))}));
+      const n=s.anexo_n||(i+1);
+      const nomAn=s.driveFilename||s.nombre||s.label||('Anexo '+n);
+      push(Object.assign({},s,{_notif_rol:'anexo',anexo_n:n,nombre:nomAn,label:nomAn}));
     });
   }
   return out;

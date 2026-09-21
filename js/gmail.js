@@ -1757,23 +1757,36 @@ function _driveFileExt(origName, fallback) {
 /**
  * Nombre corto en Drive para soportes de expediente/actividad.
  * Sin fecha ni responsable (ya están en el sistema / se filtran ahí).
- * Formato: [anexoN-]{estado}-{exp}-{actividad}.{ext}
+ * Formato: {docprincipal|anexoN}-{estado}-{exp}-{actividad}.{ext}
+ * No usar «proyeccion» en el nombre público (confunde: parece no aprobada).
  * Prefijo Ok = aprobado / atendido / cerrado (con o sin notificación).
+ * opts: { esAnexo, anexoN, soporte }
  */
-function buildExpedienteDriveFilename(estado, e, task, responsable, origName) {
+function buildExpedienteDriveFilename(estado, e, task, responsable, origName, opts) {
+  opts = opts || {};
   const exp = String(e && e._exp || '').trim().replace(/\s/g, '') || 'EXP';
   const act = _driveSlug(task && (task.desc || task.actividad) || 'act', 16);
   const ext = _driveFileExt(origName, 'pdf');
   const est = String(estado || '').toLowerCase();
   const pref = (est === 'guia_correccion' || est === 'guia') ? 'guia'
-    : ((est === 'aprobado' || est === 'ok' || est === 'atendido' || est === 'cerrado') ? 'Ok'
+    : ((est === 'aprobado' || est === 'ok' || est === 'atendido' || est === 'cerrado' || est === 'notificado') ? 'Ok'
     : ((est === 'corregir' || est === 'acorregir') ? 'acorregir'
     : (est === 'por_firmar' ? 'por_firmar'
     : (est === 'por_firma' ? 'por_firma'
     : (est === 'por_notificar' ? 'por_notificar' : 'revision')))));
-  const anexoM = String(origName || '').match(/(?:^|[-_\s])anexo[-_\s]?(\d+)/i) || String(origName || '').match(/(?:^|[-_])A(\d+)(?:[-_.]|$)/i);
-  const anexoPref = anexoM ? ('anexo' + anexoM[1] + '-') : (/anexo[-_\s]/i.test(String(origName || '')) ? 'anexo-' : '');
-  return anexoPref + pref + '-' + exp + '-' + act + '.' + ext;
+  const sop = opts.soporte || null;
+  let anexoN = parseInt(opts.anexoN != null ? opts.anexoN : (sop && (sop.anexo_n || sop.anexoN)), 10) || 0;
+  const esAnexo = !!(opts.esAnexo || opts.es_anexo || (sop && (sop.es_anexo || sop.esAnexo))
+    || anexoN > 0
+    || /(?:^|[-_\s])anexo[-_\s]?\d*/i.test(String(origName || ''))
+    || /(?:^|[-_])A\d{1,3}(?:[-_.]|$)/i.test(String(origName || '')));
+  if (esAnexo && anexoN < 1) {
+    const m = String(origName || '').match(/(?:^|[-_\s])anexo[-_\s]?(\d+)/i)
+      || String(origName || '').match(/(?:^|[-_])A(\d+)(?:[-_.]|$)/i);
+    anexoN = m ? (parseInt(m[1], 10) || 1) : 1;
+  }
+  const rolPref = esAnexo ? ('anexo' + anexoN + '-') : 'docprincipal-';
+  return rolPref + pref + '-' + exp + '-' + act + '.' + ext;
 }
 
 /** Nombre corto PQRSD: {exp}_SOL.pdf | {exp}_A01.pdf | {exp}_OFC.pdf | {exp}_FIR.pdf */
@@ -2159,7 +2172,12 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   if (!fid) return false;
   if (!soporte.driveFileId && soporte.fileId) soporte.driveFileId = fid;
   const origName = soporte.driveFilename || soporte.label || soporte.nombre || '';
-  let newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName);
+  const nameOpts = {
+    soporte: soporte,
+    esAnexo: !!(soporte.es_anexo || soporte.esAnexo || opts.esAnexo),
+    anexoN: soporte.anexo_n || soporte.anexoN || opts.anexoN || null
+  };
+  let newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName, nameOpts);
   // Evitar colisión si hay varias versiones a renombrar al mismo estado
   const ver = opts.versionSuffix != null ? opts.versionSuffix : (opts.uniqueByVersion && soporte.version != null ? soporte.version : null);
   if (ver != null && ver !== '') {
@@ -2168,12 +2186,21 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   const ok = await driveRenameInstitutional(fid, newName);
   if (ok) {
     const prevLabel = String(soporte.label || '');
-    const isDriveName = /^(anexo\d*-)?(revision|aprobado|ok|acorregir|corregir|por_firmar|por_firma|por_notificar|guia|atendido)[-_]/i.test(prevLabel)
+    const isDriveName = /^(docprincipal-|anexo\d*-)?(revision|aprobado|ok|acorregir|corregir|por_firmar|por_firma|por_notificar|guia|atendido|notificado)[-_]/i.test(prevLabel)
+      || /^(revision|aprobado|ok|acorregir|por_firmar|por_firma|por_notificar|guia)[-_]/i.test(prevLabel)
+      || /^proyecci/i.test(prevLabel)
       || prevLabel === String(soporte.driveFilename || '')
       || prevLabel === String(origName || '');
     soporte.driveFilename = newName;
-    // Si el label era el nombre de Drive (p.ej. revision-…), actualizarlo; si era «Proyección…», conservarlo
-    if (!prevLabel || isDriveName) soporte.label = newName;
+    // Si el label era nombre Drive / «Proyección…», pasar a etiqueta pública (no «proyección»)
+    if (!prevLabel || isDriveName) {
+      if (nameOpts.esAnexo) {
+        const n = parseInt(nameOpts.anexoN, 10) || 1;
+        soporte.label = 'Anexo ' + n;
+      } else {
+        soporte.label = 'Documento principal';
+      }
+    }
     soporte.driveEstado = newEstado;
   }
   return ok;
@@ -2189,7 +2216,11 @@ async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task,
     filename = _driveSafeFileName(origName, 180);
     if (!/\.[a-zA-Z0-9]{1,8}$/.test(filename)) filename += '.' + _driveFileExt(origName, 'pdf');
   } else {
-    filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName);
+    filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName, {
+      esAnexo: !!(opts.esAnexo || opts.es_anexo),
+      anexoN: opts.anexoN || opts.anexo_n || null,
+      soporte: opts.soporte || null
+    });
   }
   const form = new FormData();
   const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folder.folderId] };

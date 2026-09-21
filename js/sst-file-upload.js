@@ -244,7 +244,10 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
   }
   const eDrive = uploadCtx.eDrive || uploadCtx.e;
   if (eDrive && typeof driveUploadExpedienteActividad === 'function') {
-    const up = await driveUploadExpedienteActividad(f, nombre, tipo, eDrive, uploadCtx.t, rep, driveEstado);
+    const up = await driveUploadExpedienteActividad(f, nombre, tipo, eDrive, uploadCtx.t, rep, driveEstado, {
+      esAnexo: !!it.esAnexo,
+      anexoN: it.anexo_n || it.anexoN || null
+    });
     if (onPct) onPct(100);
     return up;
   }
@@ -271,9 +274,15 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
       uploadCtx.description = det;
     }
   }
+  let anexoSeq = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     if (!it || it.state === 'uploaded' || !it.blob) continue;
+    if (it.esAnexo) {
+      anexoSeq++;
+      it.anexo_n = it.anexo_n || anexoSeq;
+      it.anexoN = it.anexo_n;
+    }
     it.state = 'uploading';
     it.pct = 0;
     sstFileRefreshCtxLists(ctxKey, listId);
