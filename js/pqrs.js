@@ -2612,6 +2612,7 @@ function ciudadanoEventoLabel(h){
   if(h.tipo==='revision_nca_aprobado_oficio'||h.tipo==='revision_nca_aprobado')return 'Respuesta aprobada — en proceso de notificación';
   if(h.tipo==='revision_nca_rechazado')return '';
   if(h.tipo==='notificacion_correo')return 'Respuesta notificada al ciudadano por correo';
+  if(h.tipo==='traslado_interno_correo')return 'Traslado interno para atención';
   if(h.tipo==='notificacion_radicacion')return 'Radicación notificada al ciudadano por correo';
   if(h.tipo==='notificacion_excepcion')return 'Notificación por correo — excepción registrada';
   if(h.tipo==='revision_final_aprobada'||h.tipo==='revision_nca_canal_fisico')return 'Respuesta notificada — solicitud atendida';
@@ -2622,7 +2623,7 @@ function ciudadanoEventoLabel(h){
 function ciudadanoNotaPublica(h,nota){
   if(h&&h.tipo==='asignacion_oficina')return'';
   // Radicación / respuesta: sin notas internas (cuerpo, oficio, canal, autor)
-  if(h&&(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||h.tipo==='entrega_directa_oficina'||h.tipo==='notif_otro_medio_entrega'))return'';
+  if(h&&(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||h.tipo==='entrega_directa_oficina'||h.tipo==='notif_otro_medio_entrega'||h.tipo==='traslado_interno_correo'))return'';
   nota=anonimizarParaCiudadano(String(nota||'').trim());
   if(!nota)return'';
   if(h&&h.tipo==='traslado_oficina'){
