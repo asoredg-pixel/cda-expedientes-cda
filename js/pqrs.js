@@ -2400,6 +2400,13 @@ async function submitAsignarPqrsOficina(expId,taskId){
   if(existIdx>=0){
     const prev=normalizeTask(e.tasks[existIdx]);
     const actKeep=String(prev.actividad||'').trim()||actNombre;
+    const prevResps=(typeof getTaskResponsables==='function'?getTaskResponsables(prev):(prev.responsables||[])).map(function(n){return typeof agendaNorm==='function'?agendaNorm(n):String(n||'').trim().toLowerCase();}).filter(Boolean).sort();
+    const newResps=responsables.map(function(n){return typeof agendaNorm==='function'?agendaNorm(n):String(n||'').trim().toLowerCase();}).filter(Boolean).sort();
+    const cambioResp=prevResps.length!==newResps.length||prevResps.some(function(n,i){return n!==newResps[i];});
+    const fase=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+    const enRev=String(prev.estado||'')==='Por verificar'||String(prev.estado||'')==='Por corregir'
+      ||!!prev.fechaReportada
+      ||fase===PQRS_WF.PENDIENTE_REVISION||fase===PQRS_WF.RECHAZADA;
     e.tasks[existIdx]=normalizeTask({
       ...prev,
       actividad:actKeep,
@@ -2413,8 +2420,17 @@ async function submitAsignarPqrsOficina(expId,taskId){
       prioritaria:prior,
       vence:vence,
       plazoDias:plazoDias,
+      fechaReportada:cambioResp&&enRev?'':(prev.fechaReportada||''),
+      fechaAtendida:cambioResp&&enRev?'':(prev.fechaAtendida||''),
+      estado:cambioResp&&enRev?'En ejecución':prev.estado,
+      _pqrs_proyeccion_atendida:cambioResp&&enRev?false:prev._pqrs_proyeccion_atendida,
       historial:(prev.historial||[]).concat([histAsig])
     });
+    if(cambioResp&&enRev){
+      if(typeof resetEntregaAlReasignarTask==='function')
+        resetEntregaAlReasignarTask(e.tasks[existIdx],{nota:'Reasignada — la entrega anterior queda como referencia; el nuevo responsable debe entregar de nuevo'});
+      if(typeof resetPqrsWorkflowTrasReasignar==='function')resetPqrsWorkflowTrasReasignar(e);
+    }
   }else{
     e.tasks.push(normalizeTask({
       id:genTaskId(),actividad:actNombre,detalle:detalle,desc:actNombre+(detalle?' — '+detalle:''),

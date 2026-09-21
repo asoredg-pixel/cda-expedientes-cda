@@ -225,7 +225,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260918j';
+const SST_BUILD_ID = '20260918k';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 

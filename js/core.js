@@ -11275,9 +11275,14 @@ function syncTaskAggregateState(t){
     if(a){
       t.fechaReportada=a.fechaReportada||'';
       t.fechaAtendida=a.fechaAtendida||'';
-      if(a.estado==='atendido')t.estado='Atendida';
-      else if(a.estado==='por_verificar')t.estado='Por verificar';
+      if(a.estado==='atendido'||a.fechaAtendida)t.estado='Atendida';
+      else if(a.estado==='por_verificar'||(a.fechaReportada&&a.estado!=='por_corregir'))t.estado='Por verificar';
       else if(a.estado==='por_corregir')t.estado='Por corregir';
+      else t.estado=(t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
+    }else{
+      t.fechaReportada='';
+      t.fechaAtendida='';
+      t.estado=(t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
     }
     return;
   }
@@ -19986,6 +19991,66 @@ function addTaskComentario(expId,taskId,texto,opts){
     }
   });
 }
+function resetEntregaAlReasignarTask(t,opts){
+  opts=opts||{};
+  if(!t)return t;
+  t.fechaReportada='';
+  t.fechaAtendida='';
+  t.verificadoPor='';
+  t.estado='En ejecución';
+  t._pqrs_proyeccion_atendida=false;
+  t._firma_proyeccion_atendida=false;
+  t.ultimaRevisionDepto=null;
+  t.reporteTrasladado=true;
+  (t.asignados||[]).forEach(function(a){
+    if(!a||a.estado==='atendido')return;
+    a.fechaReportada='';
+    a.fechaAtendida='';
+    a.estado='pendiente';
+  });
+  (t.soportes||[]).forEach(function(s){
+    if(!s)return;
+    s.activo=false;
+    s.version_historial=true;
+    if(!s.driveEstado||s.driveEstado==='revision'||s.driveEstado==='por_verificar')s.driveEstado='acorregir';
+  });
+  if(!Array.isArray(t.historial))t.historial=[];
+  if(opts.nota){
+    t.historial.push({
+      tipo:'traslado_entrega_reset',fecha:hoy(),ts:Date.now(),
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+      nota:opts.nota
+    });
+  }
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  return t;
+}
+function resetPqrsWorkflowTrasReasignar(e){
+  if(!e||typeof pqrsWorkflowFase!=='function'||typeof setPqrsWorkflow!=='function')return false;
+  const f=pqrsWorkflowFase(e);
+  if(f!==PQRS_WF.PENDIENTE_REVISION&&f!==PQRS_WF.RECHAZADA)return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const docs=(wf.documentos||[]).map(function(d){
+    if(!d||typeof d!=='object')return d;
+    return Object.assign({},d,{activo:false,version_historial:true,driveEstado:d.driveEstado||'acorregir'});
+  });
+  setPqrsWorkflow(e,{
+    fase:PQRS_WF.SIN_RESPUESTA,
+    entregado_por:'',
+    revision_nca:null,
+    documentos:docs
+  });
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({
+    tipo:'reasignacion_sin_entrega',fecha:hoy(),
+    nota:'Reasignada en revisión — la proyección anterior queda de referencia; el nuevo responsable debe entregar',
+    oficina:e._pqrs_oficina||e._depto||'',
+    por:typeof taskComentarioAutor==='function'?taskComentarioAutor():''
+  });
+  return true;
+}
+window.resetEntregaAlReasignarTask=resetEntregaAlReasignarTask;
+window.resetPqrsWorkflowTrasReasignar=resetPqrsWorkflowTrasReasignar;
 function trasladarTaskExp(expId,taskId,nuevoResp,opts){
   opts=opts||{};
   const nr=String(nuevoResp||'').trim();if(!nr)return false;
@@ -20011,18 +20076,15 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
       }
       t.historial.push({tipo:'traslado',fecha:hoy(),de:anterior,a:nr,por:taskComentarioAutor()});
     }
-    if(estadoTask(t)==='Por verificar'||estadoTask(t)==='Por corregir'){
-      t.fechaReportada='';
-      (t.asignados||[]).forEach(a=>{
-        if(a.estado==='por_verificar'||a.estado==='por_corregir'){a.fechaReportada='';a.estado='pendiente';}
+    const enRev=estadoTask(t)==='Por verificar'||estadoTask(t)==='Por corregir'||!!t.fechaReportada
+      ||(t.asignados||[]).some(function(a){return a&&(a.estado==='por_verificar'||a.estado==='por_corregir'||a.fechaReportada);});
+    if(!opts.anadir&&enRev){
+      resetEntregaAlReasignarTask(t,{
+        nota:'Traslado — la entrega anterior queda como referencia; el nuevo responsable debe entregar de nuevo'
       });
-      if((t.soportes||[]).length){
-        t.reporteTrasladado=true;
-        const ref=getSoporteActivo(t)||t.soportes[t.soportes.length-1];
-        if(ref)t.soportes.forEach(s=>{s.activo=!!(s.id&&ref.id&&s.id===ref.id);});
-        if(!t.historial.some(h=>h.tipo==='traslado_entrega_ref'&&h.fecha===hoy()))
-          t.historial.push({tipo:'traslado_entrega_ref',fecha:hoy(),por:taskComentarioAutor(),nota:'Se conserva la entrega anterior con observaciones para referencia del nuevo responsable.'});
-      }
+      const eTr=typeof getExpById==='function'?getExpById(expId):null;
+      if(eTr&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eTr))
+        resetPqrsWorkflowTrasReasignar(eTr);
     }
     syncTaskAggregateState(t);
   });
@@ -20116,7 +20178,7 @@ function submitTrasladoTaskModal(expId,taskId){
     if(e&&t&&taskEsAtenderPqrs(t,e)&&typeof pqrsTryReenvioCorreoNuevosResponsables==='function'){
       pqrsTryReenvioCorreoNuevosResponsables(expId,[v],{silent:false});
     }
-    notif('Actividad trasladada a '+v+'. El nuevo responsable verá la entrega anterior y podrá reportar una nueva.','ok');
+    notif('Actividad trasladada a '+v+'. El nuevo responsable debe entregar de nuevo (queda en Por ejecutar).','ok');
     const hadReview=(window._taskModalStack||[]).length>0;
     window._taskModalStack=[];
     closeTaskModal();
