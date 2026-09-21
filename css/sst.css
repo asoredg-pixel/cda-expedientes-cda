@@ -4330,6 +4330,10 @@ body.sesion-activa .hdr-logout-btn:hover{background:rgba(255,255,255,.18)!import
   cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;
 }
 .usu-rol-picker-btn:hover,.usu-rol-picker-btn:focus{border-color:var(--bl);outline:none;box-shadow:0 0 0 3px rgba(24,95,165,.1)}
+.usu-rol-picker-wrap.is-invalid .usu-rol-picker-btn{
+  border-color:var(--rd,#c0392b)!important;
+  box-shadow:0 0 0 3px rgba(192,57,43,.12);
+}
 .usu-rol-picker-caret{color:var(--tx3);font-size:11px;flex-shrink:0}
 .usu-rol-picker-menu{
   position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;

@@ -12661,7 +12661,17 @@ function selectUsuariosRol(rolId){
   if(hid)hid.value=String(rolId||'');
   fillUsuariosRolPicker(rolId);
   toggleUsuariosRolPicker(false);
+  const wrap=document.querySelector('.usu-rol-picker-wrap');
+  if(wrap)wrap.classList.remove('is-invalid');
   if(typeof toggleUsuarioDeptoResponsableField==='function')toggleUsuarioDeptoResponsableField();
+}
+function markUsuariosRolPickerInvalid(on){
+  const wrap=document.querySelector('.usu-rol-picker-wrap');
+  if(wrap)wrap.classList.toggle('is-invalid',!!on);
+  if(on){
+    const btn=document.getElementById('usu-fs-rol-btn');
+    if(btn)try{btn.focus();}catch(_e){}
+  }
 }
 window.toggleUsuariosRolPicker=toggleUsuariosRolPicker;
 window.selectUsuariosRol=selectUsuariosRol;
@@ -12736,6 +12746,7 @@ let _usuariosCachePartial=false;
 let _usuariosEditEmail='';
 let _usuariosFsUnsub=null;
 let _usuariosToggleBusy=false;
+let _usuariosSaveBusy=false;
 let _usuariosPaintTimer=null;
 let _usuariosListasTimer=null;
 let _usuariosLastPaintSig='';
@@ -12864,8 +12875,8 @@ function startUsuariosFirestoreListener(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   _usuariosFsUnsub=window._fsOnSnapshot(window._fsCollection(db,'usuarios'),snap=>{
-    // Evitar bucles de repintado mientras se activa/desactiva un usuario.
-    if(_usuariosToggleBusy)return;
+    // Evitar bucles de repintado mientras se activa/desactiva o se guarda un usuario.
+    if(_usuariosToggleBusy||_usuariosSaveBusy)return;
     const isAdminVista=typeof esVistaUsuariosAdminCompleta==='function'&&esVistaUsuariosAdminCompleta();
     const list=[];
     if(snap&&!snap.empty){
@@ -13018,7 +13029,7 @@ function buildUsuariosCfgShell(){
     '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option><option value="coordinador">Coordinador (eventos a responsables en Tasks)</option></select></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
-    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" class="btn bsm bp" onclick="SST.guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="SST.ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
+    '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" id="usu-fs-guardar" class="btn bsm bp" onclick="SST.guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="SST.ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
     '</div>'+
     '<div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Departamento</th><th>Código</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="usuarios-fs-tbody"></tbody></table></div></div>';
 }
@@ -13311,7 +13322,9 @@ function ocultarFormUsuarioFirestore(){
   const em=document.getElementById('usu-fs-email');if(em)em.readOnly=false;
 }
 async function guardarUsuarioFirestore(){
+  if(_usuariosSaveBusy)return;
   if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
+  if(typeof toggleUsuariosRolPicker==='function')toggleUsuariosRolPicker(false);
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc){notif('Firestore no disponible','err');return;}
   const nombre=String(document.getElementById('usu-fs-nombre')?.value||'').trim();
@@ -13333,7 +13346,12 @@ async function guardarUsuarioFirestore(){
     if(dup){alertarCorreoYaAutorizado(dup);return;}
   }
   if(!esVistaUsuariosAdminCompleta()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
-  if(!nombre||!email||!rol){notif('Complete nombre, correo y rol','err');return;}
+  if(!nombre||!email||!rol){
+    if(typeof markUsuariosRolPickerInvalid==='function')markUsuariosRolPickerInvalid(!rol);
+    notif('Complete nombre, correo y rol','err');
+    return;
+  }
+  if(typeof markUsuariosRolPickerInvalid==='function')markUsuariosRolPickerInvalid(false);
   if(rol==='responsables'&&!deptoResponsable){notif('Indique el departamento del responsable','err');return;}
   if(rol==='ciudadano'||rol==='contratista'){notif('Use el rol Responsables para contratistas. La consulta ciudadana no requiere cuenta Google.','err');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){notif('Correo inválido','err');return;}
@@ -13341,46 +13359,73 @@ async function guardarUsuarioFirestore(){
   if(rol==='responsables'){payload.deptoResponsable=deptoResponsable;if(cargo)payload.cargo=cargo;else payload.cargo='';}
   else{payload.deptoResponsable='';payload.cargo='';}
   if(!_usuariosEditEmail)payload.creadoEn=new Date().toISOString();
+  const eraEdicion=!!_usuariosEditEmail;
+  const saveBtn=document.getElementById('usu-fs-guardar');
+  const saveBtnLabel=saveBtn?String(saveBtn.textContent||'Guardar'):'Guardar';
+  const liberarUiGuardar=function(){
+    _usuariosSaveBusy=false;
+    _usuariosToggleBusy=false;
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
+    if(typeof sstCargaHide==='function')sstCargaHide();
+  };
+  _usuariosSaveBusy=true;
+  _usuariosToggleBusy=true;
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Guardando…';}
+  if(typeof sstCargaShow==='function')sstCargaShow({title:'Guardando',message:'Registrando usuario autorizado…',sub:'Espere un momento…',pct:null});
   try{
     await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
   }catch(err){
     console.error(err);
+    liberarUiGuardar();
     notif(mensajeErrorFirestoreUsuario(err),'err');
     return;
   }
-  logAudit((_usuariosEditEmail?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
+  logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
   mergeUsuarioEnCache({email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
   paintUsuariosCfgTable();
-  let syncParcial=false;
-  try{
-    if(rol==='responsables'){
-      upsertInstructorFromUsuario({email,nombre,rol,deptoResponsable,activo});
-      syncCfgToStore();
-    }
-    if(esVistaUsuariosAdminCompleta()){
-      await persistUsuariosIndexGlobal();
-      await aplicarSyncUsuariosAutorizados();
-    }else{
-      syncResponsablesDesdeUsuariosAutorizados();
-      syncCfgToStore();
-      _saveLSLocal();
-      try{
-        if(rol==='responsables')await saveDepartamentoCfgFirestore(deptoResponsable);
-        else await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());
-      }catch(depErr){console.warn(depErr);syncParcial=true;}
-    }
-  }catch(syncErr){
-    console.warn(syncErr);
-    syncParcial=true;
-  }
-  notif('Usuario guardado'+(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''))+(syncParcial?' (sincronización parcial)':''),'ok');
+  const detalleOk=(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''));
+  if(typeof sstCargaHide==='function')sstCargaHide();
+  notif('Usuario guardado'+detalleOk,'ok');
   ocultarFormUsuarioFirestore();
-  invalidateUsuariosCache();
-  await refreshUsuariosAutorizadosUi();
-  if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
-  else await syncDriveRevokeTrasUsuarioAutorizado(email);
-  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-  if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
+  _usuariosSaveBusy=false;
+  _usuariosToggleBusy=false;
+  // Sync pesada + Drive en segundo plano (no bloquear el botón Guardar)
+  (async function(){
+    let syncParcial=false;
+    try{
+      if(rol==='responsables'){
+        upsertInstructorFromUsuario({email,nombre,rol,deptoResponsable,activo});
+        syncCfgToStore();
+      }
+      if(esVistaUsuariosAdminCompleta()){
+        await persistUsuariosIndexGlobal();
+        await aplicarSyncUsuariosAutorizados();
+      }else{
+        syncResponsablesDesdeUsuariosAutorizados();
+        syncCfgToStore();
+        _saveLSLocal();
+        try{
+          if(rol==='responsables')await saveDepartamentoCfgFirestore(deptoResponsable);
+          else await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());
+        }catch(depErr){console.warn(depErr);syncParcial=true;}
+      }
+    }catch(syncErr){
+      console.warn(syncErr);
+      syncParcial=true;
+    }
+    try{
+      invalidateUsuariosCache();
+      await refreshUsuariosAutorizadosUi();
+    }catch(refErr){console.warn(refErr);syncParcial=true;}
+    try{
+      if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
+      else await syncDriveRevokeTrasUsuarioAutorizado(email);
+    }catch(drvErr){console.warn(drvErr);syncParcial=true;}
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+    if(syncParcial)notif('Usuario guardado con sincronización parcial','warn');
+  })();
 }
 async function setUsuarioFirestoreActivo(email,activo,opts){
   opts=opts||{};
