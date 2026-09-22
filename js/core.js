@@ -28220,6 +28220,7 @@ async function ncaAprobarMensajeSimple(expId){
 }
 
 async function ncaAprobarOficioFirmado(expId){
+  if(window._ncaAprobarOficioFirmadoBusy)return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
   const d=_ncaRevisionDatos();
@@ -28241,26 +28242,50 @@ async function ncaAprobarOficioFirmado(expId){
   }
   let notifPor=_pqrsLeerNotifPorSel()||String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
   notifPor=pqrsAplicarReglaNotificadorCanal(e,patchWf.canal||wf.canal||PQRS_WF_CANAL.CORREO,notifPor);
-  // Un solo archivo vigente: limpiar versiones por corregir y renombrar entrega actual → por_firma
-  await _pqrsLimpiarVersionesCorreccionWf(e,wf);
-  await _pqrsRenombrarDocsDriveWf(wf,'por_firma',{onlyEstados:['revision','']});
-  if(notifPor){
-    patchWf.notificar_por=notifPor;
-    patchWf.notificar_por_propuesto=notifPor;
+  const okMsg='🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir)'+(notifPor?' · Notificará: '+notifPor:'')+'. Marque 🖨️ cuando esté impreso.';
+  window._ncaAprobarOficioFirmadoBusy=true;
+  try{
+    if(typeof sstCargaShow==='function'){
+      sstCargaShow({
+        title:'Procesando aprobación',
+        message:'Aprobando y pasando a Por firmar…',
+        sub:'Actualizando documentos en Drive…',
+        pct:null
+      });
+    }
+    await _pqrsLimpiarVersionesCorreccionWf(e,wf);
+    if(typeof sstCargaProgress==='function')sstCargaProgress(55,'Renombrando oficio en Drive…');
+    await _pqrsRenombrarDocsDriveWf(wf,'por_firma',{onlyEstados:['revision','']});
+    if(notifPor){
+      patchWf.notificar_por=notifPor;
+      patchWf.notificar_por_propuesto=notifPor;
+    }
+    if(typeof sstCargaProgress==='function')sstCargaProgress(85,'Guardando estado…');
+    setPqrsWorkflow(e,patchWf);
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por firmar»'+(notifPor?' · Notificará: '+notifPor:'')+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
+    pqrsSincronizarParticipacionPostAprobacion(e);
+    const tOf=getPqrsTaskActiva(e,patchWf.task_id||wf.task_id);
+    if(tOf)_ncaMarcarTaskRevisadaAprobada(expId,tOf.id,{fecha:d.fecha||wf.fecha_respuesta||hoy(),nota:'Aprobada — pasa a firma'+(notifPor?' · Not: '+notifPor:''),por:responsableActivo||'NCA',reportadoPor:wf.entregado_por||''});
+    if(typeof clearAltaResponsableAlAprobarDocumento==='function')clearAltaResponsableAlAprobarDocumento(expId,{force:true});
+    persistExpedienteGranular(e);
+    closeTaskModal();
+    renderPqrsOficinaInbox();
+    renderSecretariaPqrs();
+    if(typeof renderActividades==='function')renderActividades();
+    if(typeof sstCargaDone==='function'){
+      sstCargaDone({title:'Listo',message:okMsg,autoCloseMs:2200,holdMs:280});
+    }else notif(okMsg,'ok');
+  }catch(err){
+    console.warn('ncaAprobarOficioFirmado:',err);
+    if(typeof sstCargaError==='function')sstCargaError('No se pudo aprobar el oficio',String(err&&err.message||err).slice(0,160));
+    else{
+      if(typeof sstCargaHide==='function')sstCargaHide();
+      notif('Error al aprobar oficio: '+String(err&&err.message||err).slice(0,100),'err');
+    }
+  }finally{
+    window._ncaAprobarOficioFirmadoBusy=false;
   }
-  setPqrsWorkflow(e,patchWf);
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por firmar»'+(notifPor?' · Notificará: '+notifPor:'')+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
-  pqrsSincronizarParticipacionPostAprobacion(e);
-  const tOf=getPqrsTaskActiva(e,patchWf.task_id||wf.task_id);
-  if(tOf)_ncaMarcarTaskRevisadaAprobada(expId,tOf.id,{fecha:d.fecha||wf.fecha_respuesta||hoy(),nota:'Aprobada — pasa a firma'+(notifPor?' · Not: '+notifPor:''),por:responsableActivo||'NCA',reportadoPor:wf.entregado_por||''});
-  if(typeof clearAltaResponsableAlAprobarDocumento==='function')clearAltaResponsableAlAprobarDocumento(expId,{force:true});
-  persistExpedienteGranular(e);
-  closeTaskModal();
-  renderPqrsOficinaInbox();
-  renderSecretariaPqrs();
-  if(typeof renderActividades==='function')renderActividades();
-  notif('🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir)'+(notifPor?' · Notificará: '+notifPor:'')+'. Marque 🖨️ cuando esté impreso.','ok');
 }
 
 /** Atajo NCA: aprobar oficio y enviar directo a «Por firmar» (firma digital, sin impresión). */

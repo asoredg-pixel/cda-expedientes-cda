@@ -508,6 +508,7 @@ function renderTramiteFirmaGestionHtml(expId,taskId,t){
 
 async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   opts=opts||{};
+  if(window._tramiteEnviarFirmaBusy)return;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
   const e=tramiteFirmaExpCtx(t,expId);
@@ -523,9 +524,21 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   const esImprimir=modo==='imprimir'||modo==='para_firma'||modo==='por_imprimir';
   const esFirmaAtajo=modo==='firma'||modo==='por_firmar'||modo==='atajo';
   const faseDest=(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar');
+  window._tramiteEnviarFirmaBusy=true;
+  const okMsg='🖨️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:'');
+  try{
+  if(typeof sstCargaShow==='function'){
+    sstCargaShow({
+      title:'Procesando aprobación',
+      message:esImprimir?'Aprobando y pasando a Por firmar…':'Enviando a Por firmar…',
+      sub:'Renombrando documento en Drive…',
+      pct:null
+    });
+  }
   if(typeof driveRenombrarSoporteActivoExp==='function'){
     try{await driveRenombrarSoporteActivoExp(refId,taskId,'por_firmar');}catch(err){console.warn('tramite firma rename:',err);}
   }
+  if(typeof sstCargaProgress==='function')sstCargaProgress(72,'Actualizando actividad…');
   const ok=mutateTask(refId,taskId,function(tk){
     tk.requiereFirma=true;
     try{
@@ -563,7 +576,9 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   if(ok){
     if(typeof clearAltaResponsableAlAprobarDocumento==='function'&&!t.sinExpediente)
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
-    notif('🖨️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+    if(typeof sstCargaDone==='function'){
+      sstCargaDone({title:'Listo',message:okMsg,autoCloseMs:2000,holdMs:260});
+    }else notif(okMsg,'ok');
     if(opts.keepOpen&&typeof taskReviewRefreshModal==='function'){
       if(opts.closeSide&&typeof taskReviewCloseSidePanel==='function')taskReviewCloseSidePanel();
       taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
@@ -573,6 +588,19 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
     }
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  }else{
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    notif('No se pudo actualizar la actividad','err');
+  }
+  }catch(err){
+    console.warn('tramiteEnviarAFirmaDesdeRevision:',err);
+    if(typeof sstCargaError==='function')sstCargaError('No se pudo completar la aprobación',String(err&&err.message||err).slice(0,160));
+    else{
+      if(typeof sstCargaHide==='function')sstCargaHide();
+      notif('Error al aprobar: '+String(err&&err.message||err).slice(0,100),'err');
+    }
+  }finally{
+    window._tramiteEnviarFirmaBusy=false;
   }
 }
 
