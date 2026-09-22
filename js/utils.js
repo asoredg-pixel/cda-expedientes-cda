@@ -503,6 +503,25 @@ function sstEmailLooksValid(em){
   if(typeof emailValido==='function')return !!emailValido(v);
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 }
+/** Valor efectivo de un campo email (incluye texto pendiente en chips sin blur). */
+function sstEmailFieldCommittedValue(elOrId){
+  const el=typeof elOrId==='string'?document.getElementById(elOrId):elOrId;
+  if(!el)return '';
+  if(el.dataset&&el.dataset.emailChipsMounted==='1'){
+    const wrap=el.closest&&el.closest('.email-chips');
+    const edit=wrap&&wrap._sstChips&&wrap._sstChips.edit;
+    let list=sstParseEmailList(el.value).filter(sstEmailLooksValid);
+    const max=wrap&&wrap._sstChips&&wrap._sstChips.max!=null?wrap._sstChips.max:0;
+    const pending=edit?String(edit.value||'').trim().toLowerCase():'';
+    if(pending&&sstEmailLooksValid(pending)){
+      if(max===1)list=[pending];
+      else if(list.indexOf(pending)<0)list.push(pending);
+    }
+    return list[0]||'';
+  }
+  return String(el.value||'').trim().toLowerCase();
+}
+window.sstEmailFieldCommittedValue=sstEmailFieldCommittedValue;
 function sstEmailChipsIsMultiId(id){
   const s=String(id||'');
   return /(^|[_-])(to|cc|bcc|para)$/i.test(s)
