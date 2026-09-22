@@ -514,18 +514,22 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   const e=tramiteFirmaExpCtx(t,expId);
   if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){notif('Use el flujo PQRSD','err');return;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
-  let notifPor='';
-  const sel=document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
-  if(sel)notifPor=String(sel.value||'').trim();
-  if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
-    notifPor=pqrsResolverNotificadorCorreo((e&&e._depto)||t.depto||'guaviare','');
   // opts.modo: 'imprimir' | 'firma' — ambos van a «Por firmar» (impreso se marca con 🖨️ en paleta)
   const modo=String(opts.modo||opts.fase||'').trim().toLowerCase();
   const esImprimir=modo==='imprimir'||modo==='para_firma'||modo==='por_imprimir';
   const esFirmaAtajo=modo==='firma'||modo==='por_firmar'||modo==='atajo';
+  const omitNotifEnAprobacion=!!opts.omitNotificadorEnAprobacion||esImprimir;
+  let notifPor='';
+  if(!omitNotifEnAprobacion){
+    const sel=document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
+    if(sel)notifPor=String(sel.value||'').trim();
+    if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
+      notifPor=pqrsResolverNotificadorCorreo((e&&e._depto)||t.depto||'guaviare','');
+  }
   const faseDest=(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar');
   window._tramiteEnviarFirmaBusy=true;
-  const okMsg='🖨️ En «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:'');
+  const okMsg='🖨️ En «Por firmar» — marque 🖨️ cuando esté impreso'
+    +(omitNotifEnAprobacion?'':(notifPor?' · Notificará: '+notifPor:''));
   try{
   if(typeof sstCargaShow==='function'){
     sstCargaShow({
@@ -550,8 +554,8 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
     const prev=getTaskFirmaWf(tk);
     const patch={
       fase:faseDest,
-      notificar_por:notifPor||prev.notificar_por||'',
-      notificar_por_propuesto:notifPor||prev.notificar_por_propuesto||'',
+      notificar_por:omitNotifEnAprobacion?'':(notifPor||prev.notificar_por||''),
+      notificar_por_propuesto:omitNotifEnAprobacion?(prev.notificar_por_propuesto||''):(notifPor||prev.notificar_por_propuesto||''),
       canal:prev.canal||(prev.notif_correo_entrega===false?'presencial':(tk.notifCorreoEntrega===false?'presencial':'correo')),
       enviado_firma_en:new Date().toISOString(),
       enviado_firma_por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
@@ -584,7 +588,11 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
     }else{
       closeTaskModal();
-      try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
+      if(opts.mantenerPaletaPorRevisar){
+        try{if(typeof setActFiltro==='function')setActFiltro('porver');}catch(e){}
+      }else{
+        try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
+      }
     }
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();

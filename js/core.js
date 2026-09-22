@@ -8149,8 +8149,8 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
       '<button type="button" class="btn bsm bp" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Aprobar y cerrar</button>',
       false);
     h+=renderTaskReviewAprobarAccHtml(2,'Aprobar y pasar para Imprimir',
-      renderTaskReviewDecisionNotifSel(expId,taskId,t)+
-      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;margin-top:8px" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">🖨️ Aprobar y pasar para Imprimir</button>',
+      '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Pasa a <strong>Por firmar</strong> (impresión y firma). Quién notificará se asigna al cargar el documento firmado.</p>'+
+      '<button type="button" class="btn bsm bp" style="background:#0d5c2e;border-color:#0d5c2e;margin-top:4px" onclick="taskReviewDecidirImprimir(\''+eid+'\',\''+tid+'\')">🖨️ Aprobar y pasar para Imprimir</button>',
       false);
     h+=renderTaskReviewAprobarAccHtml(3,'Aprobar y notificar',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Notifica por correo y cierra. Queda <strong>✓ Revisada · ✓ Notificada</strong>.</p>'+
@@ -8236,16 +8236,17 @@ function taskReviewDecidirImprimir(expId,taskId){
   // Aprobar → Por firmar (pendiente impresión). Badge: ✓ Revisada · X Imprimir.
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const revOpts={omitNotificadorEnAprobacion:true,mantenerPaletaPorRevisar:true};
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioFirmado==='function'){
-    ncaAprobarOficioFirmado(expId);return;
+    ncaAprobarOficioFirmado(expId,revOpts);return;
   }
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof ncaAprobarOficioFirmado==='function'
     &&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e)){
-    ncaAprobarOficioFirmado(expId);return;
+    ncaAprobarOficioFirmado(expId,revOpts);return;
   }
   if(typeof tramiteLibreParaImprimir==='function')
-    tramiteLibreParaImprimir(expId,taskId,{keepOpen:false,modo:'imprimir'});
+    tramiteLibreParaImprimir(expId,taskId,Object.assign({keepOpen:false,modo:'imprimir'},revOpts));
 }
 function taskReviewDecidirFirma(expId,taskId){
   // Compat: unificado en «Aprobar y pasar para Imprimir»
@@ -28219,7 +28220,9 @@ async function ncaAprobarMensajeSimple(expId){
   }
 }
 
-async function ncaAprobarOficioFirmado(expId){
+async function ncaAprobarOficioFirmado(expId,opts){
+  opts=opts||{};
+  const omitNotif=opts.omitNotificadorEnAprobacion!==false;
   if(window._ncaAprobarOficioFirmadoBusy)return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
   if(!e){notif('PQRSD no encontrada','err');return;}
@@ -28234,15 +28237,20 @@ async function ncaAprobarOficioFirmado(expId){
     revision_nca:{aprobado:true,tipo:'oficio',comentario:d.comentario,por:responsableActivo||'NCA',en:new Date().toISOString()},
     impreso:null,
     firma_fisica:null,
-    firma_director:null
+    firma_director:null,
+    notificar_por:omitNotif?'':undefined
   },d,wf);
   if(d.notifCorreo){
     const toList=_ncaRevisionCorreosDestino(d,wf,e);
     if(!toList.length){notif('Verifique el correo de destino (Para)','err');return;}
   }
-  let notifPor=_pqrsLeerNotifPorSel()||String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
-  notifPor=pqrsAplicarReglaNotificadorCanal(e,patchWf.canal||wf.canal||PQRS_WF_CANAL.CORREO,notifPor);
-  const okMsg='🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir)'+(notifPor?' · Notificará: '+notifPor:'')+'. Marque 🖨️ cuando esté impreso.';
+  let notifPor='';
+  if(!omitNotif){
+    notifPor=_pqrsLeerNotifPorSel()||String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+    notifPor=pqrsAplicarReglaNotificadorCanal(e,patchWf.canal||wf.canal||PQRS_WF_CANAL.CORREO,notifPor);
+  }
+  const okMsg='🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir). Marque 🖨️ cuando esté impreso.'
+    +(omitNotif?'':' · Notificará: '+notifPor);
   window._ncaAprobarOficioFirmadoBusy=true;
   try{
     if(typeof sstCargaShow==='function'){
@@ -28256,14 +28264,16 @@ async function ncaAprobarOficioFirmado(expId){
     await _pqrsLimpiarVersionesCorreccionWf(e,wf);
     if(typeof sstCargaProgress==='function')sstCargaProgress(55,'Renombrando oficio en Drive…');
     await _pqrsRenombrarDocsDriveWf(wf,'por_firma',{onlyEstados:['revision','']});
-    if(notifPor){
+    if(omitNotif){
+      patchWf.notificar_por='';
+    }else if(notifPor){
       patchWf.notificar_por=notifPor;
       patchWf.notificar_por_propuesto=notifPor;
     }
     if(typeof sstCargaProgress==='function')sstCargaProgress(85,'Guardando estado…');
     setPqrsWorkflow(e,patchWf);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por firmar»'+(notifPor?' · Notificará: '+notifPor:'')+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
+    e._pqrs_historial.push({tipo:'revision_nca_aprobado_oficio',fecha:hoy(),nota:'NCA aprobó oficio — pasa a «Por firmar»'+(omitNotif?' (notificador pendiente)':(notifPor?' · Notificará: '+notifPor:''))+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:responsableActivo||'NCA'});
     pqrsSincronizarParticipacionPostAprobacion(e);
     const tOf=getPqrsTaskActiva(e,patchWf.task_id||wf.task_id);
     if(tOf)_ncaMarcarTaskRevisadaAprobada(expId,tOf.id,{fecha:d.fecha||wf.fecha_respuesta||hoy(),nota:'Aprobada — pasa a firma'+(notifPor?' · Not: '+notifPor:''),por:responsableActivo||'NCA',reportadoPor:wf.entregado_por||''});
@@ -28273,6 +28283,9 @@ async function ncaAprobarOficioFirmado(expId){
     renderPqrsOficinaInbox();
     renderSecretariaPqrs();
     if(typeof renderActividades==='function')renderActividades();
+    if(opts.mantenerPaletaPorRevisar&&typeof setActFiltro==='function'){
+      try{setActFiltro('porver');}catch(eF){}
+    }
     if(typeof sstCargaDone==='function'){
       sstCargaDone({title:'Listo',message:okMsg,autoCloseMs:2200,holdMs:280});
     }else notif(okMsg,'ok');
