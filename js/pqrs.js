@@ -342,6 +342,63 @@ function notificarResultadoRadicacionPqrs(opts){
     notif(msg,'ok');
   }
 }
+/** Progreso unificado al asignar responsable (NCA / oficina): asignación y, si aplica, reenvío de correo. */
+function mostrarAsignacionPqrsProgreso(opts){
+  opts=opts||{};
+  const conCorreo=!!opts.conCorreo;
+  const titulo=opts.title||'Asignando PQRSD';
+  const msg=opts.message||(conCorreo?'Registrando asignación al responsable…':'Registrando asignación…');
+  const sub=opts.sub||(conCorreo?'Después se enviará el correo con la solicitud y anexos':'Espere mientras se completa la asignación');
+  if(typeof sstCargaShow==='function'){
+    sstCargaShow({title:titulo,message:msg,sub:sub,pct:null});
+    return;
+  }
+  if(typeof confirmExito==='function'){
+    confirmExito({title:titulo,message:msg,tone:'radicacion',loading:true,hideFooter:true});
+  }
+}
+function finalizarAsignacionPqrsProgreso(opts){
+  opts=opts||{};
+  const nomList=String(opts.nomList||'').trim();
+  let msg='PQRSD asignada'+(nomList?' a '+nomList:'')+'.';
+  let title='Asignación completa';
+  if(opts.enviaraCorreo){
+    if(opts.correoOk){
+      const quien=(opts.pendientes||[]).map(function(p){return p.nombre;}).filter(Boolean).join(', ');
+      msg+=' Correo reenviado al responsable'+(quien?(' ('+quien+')'):'')+'.';
+    }else{
+      title='Asignada — revise el correo';
+      msg+=' No se pudo reenviar el correo con anexos. Revise Gmail conectado y el correo del responsable.';
+    }
+  }
+  if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
+    sstCargaDone({
+      title:title,
+      message:msg,
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000,
+      holdMs:240
+    });
+    return;
+  }
+  if(typeof confirmExito==='function'){
+    confirmExito({
+      title:title,
+      message:msg,
+      tone:opts.enviaraCorreo&&!opts.correoOk?'warn':'success',
+      hideFooter:false,
+      confirmLabel:'Entendido',
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000
+    });
+  }else if(typeof notif==='function'){
+    notif(msg,opts.enviaraCorreo&&!opts.correoOk?'warn':'ok');
+  }
+}
+function _pqrsAsignarUiBusy(busy){
+  document.querySelectorAll('button').forEach(function(b){
+    const oc=String(b.getAttribute('onclick')||'');
+    if(oc.indexOf('submitAsignarPqrsOficina')>=0)b.disabled=!!busy;
+  });
+}
 async function tryEnviarNotifRadicacionAlRadicar(data,opts){
   if(!data||data._pqrs_interna)return{skipped:true,reason:'interna'};
   if(typeof enviarNotificacionRadicacionPqrsAuto!=='function'){
@@ -2366,12 +2423,25 @@ async function submitAsignarPqrsOficina(expId,taskId){
   if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
   const e=exps.find(x=>x._exp===expId);
   if(!e){notif('Expediente no encontrado','err');return;}
+  if(window._pqrsAsignarSubmitBusy){
+    notif('Ya se está procesando la asignación. Espere…','warn');
+    return;
+  }
   // Si viene de correo y no hay token: redirigir a conectar (a menos que el usuario eligió asignar sin correo)
   if(!window._pqrsAsignarForzarSinCorreo&&_pqrsNecesitaCorreoParaAsignar(e)&&!_pqrsTokOk()){
     notif('Conecte el correo para reenviar al responsable los anexos de la PQRSD, o use "Asignar sin reenviar correo".','warn');
     return;
   }
+  const forzarSinCorreo=!!window._pqrsAsignarForzarSinCorreo;
   window._pqrsAsignarForzarSinCorreo=false;
+  const pendientesCorreo=forzarSinCorreo||!_pqrsNecesitaCorreoParaAsignar(e)?[]:pqrsNombresPendientesReenvioCorreo(e,responsables);
+  const enviaraCorreo=pendientesCorreo.length>0&&_pqrsTokOk();
+  window._pqrsAsignarSubmitBusy=true;
+  _pqrsAsignarUiBusy(true);
+  mostrarAsignacionPqrsProgreso({conCorreo:enviaraCorreo});
+  let refreshedSide=false;
+  let nomList='';
+  try{
   const modoEl=document.getElementById('pqrs-asig-modo');
   const entregaModo=(modoEl&&responsables.length>1)?(modoEl.value==='unificada'?'unificada':'individual'):'individual';
   // Observaciones legacy: ya no hay textarea; las indicaciones van por el chat de la actividad.
@@ -2384,7 +2454,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   if(obs)e._pqrs_asig_observaciones=obs;
   else if(e._pqrs_asig_observaciones==null)e._pqrs_asig_observaciones='';
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  const nomList=responsables.join(', ');
+  nomList=responsables.join(', ');
   e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   const prior=!!e._pqrs_prioritaria;
@@ -2443,23 +2513,38 @@ async function submitAsignarPqrsOficina(expId,taskId){
   const tkFinal=e.tasks[existIdx];
   if(typeof dedupePqrsAtencionTasks==='function')dedupePqrsAtencionTasks(e);
   persistExpedienteGranular(e);
+  if(typeof sstCargaProgress==='function')sstCargaProgress(40,'Registrando asignación…');
   const refreshId=String(taskId||(tkFinal&&tkFinal.id)||'').trim();
-  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,refreshId)){
-    notif('PQRSD asignado a '+nomList,'ok');
-  }else{
-    closeTaskModal();
-    notif('PQRSD asignado a '+nomList,'ok');
+  if(typeof pqrsRefreshAfterSideAction==='function'){
+    refreshedSide=!!pqrsRefreshAfterSideAction(expId,refreshId);
   }
-  // Reenviar correo a los responsables que aún no lo han recibido
-  if(typeof tryReenvioPqrsCorreoAResponsables==='function'){
-    await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:false});
+  let correoOk=true;
+  if(enviaraCorreo&&typeof tryReenvioPqrsCorreoAResponsables==='function'){
+    if(typeof sstCargaProgress==='function')sstCargaProgress(65,'Enviando correo al responsable…');
+    correoOk=await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:true});
     if(e._pqrs_correo_reenviado_a&&e._pqrs_correo_reenviado_a.length)persistExpedienteGranular(e);
+  }else if(typeof sstCargaProgress==='function'){
+    sstCargaProgress(85,'Finalizando asignación…');
   }
   renderPqrsOficinaInbox();
   if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
   if(document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
   refreshPqrsDetalleViews(expId);
   if(typeof isFormExpVisible==='function'&&isFormExpVisible(expId)&&typeof syncTkRowsFromExp==='function')syncTkRowsFromExp(expId,(tkFinal&&tkFinal.id)||'');
+  finalizarAsignacionPqrsProgreso({nomList:nomList,enviaraCorreo:enviaraCorreo,correoOk:correoOk,pendientes:pendientesCorreo});
+  if(!refreshedSide)closeTaskModal();
+  }catch(err){
+    console.error('submitAsignarPqrsOficina:',err);
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    if(typeof sstCargaError==='function'){
+      sstCargaError('No se pudo completar la asignación',String(err&&err.message||'error inesperado'));
+    }else if(typeof notif==='function'){
+      notif('Error al asignar: '+String(err&&err.message||'error inesperado'),'err');
+    }
+  }finally{
+    window._pqrsAsignarSubmitBusy=false;
+    _pqrsAsignarUiBusy(false);
+  }
 }
 function openTrasladoPqrsInicialModal(expId){
   const e=exps.find(x=>x._exp===expId);
