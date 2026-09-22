@@ -225,7 +225,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20260922n';
+const SST_BUILD_ID = '20260922o';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 
@@ -295,7 +295,9 @@ const PERSONA_ROLES={interesado:'Interesado',peticionario:'Quejoso / peticionari
 // Paginación consulta
 const CON_CONSULTA_PAGE=30;
 // Paginación paleta «Revisados» (Actividades · encargado / NCA)
-const ACT_REVISADOS_PAGE=30;
+/** Filas visibles por paleta en Actividades (encargado / responsables); «Cargar más» suma otro lote igual. */
+const ACT_LIST_PAGE=30;
+const ACT_REVISADOS_PAGE=ACT_LIST_PAGE;
 
 // Paneles de configuración
 const CFG_PANELS=[

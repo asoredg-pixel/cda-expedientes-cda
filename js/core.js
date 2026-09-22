@@ -25403,17 +25403,38 @@ function setActFiltro(v){
   const sel=document.getElementById('f-act-est');
   if(sel)sel.value=v||'pend';
   window._actFiltroSticky=true;
-  window._actRevisadosShown=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
-  window._actRevisadosFilterKey='';
+  actPaletaResetShown();
   renderActividades();
 }
-/** Cargar el siguiente lote de 30 en paleta «Revisados». */
-function actRevisadosVerMas(){
-  const page=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
-  window._actRevisadosShown=(window._actRevisadosShown||page)+page;
+function actPaletaPageSize(){
+  if(typeof ACT_LIST_PAGE==='number')return ACT_LIST_PAGE;
+  if(typeof ACT_REVISADOS_PAGE==='number')return ACT_REVISADOS_PAGE;
+  return 30;
+}
+function actPaletaResetShown(){
+  const page=actPaletaPageSize();
+  window._actListShown=page;
+  window._actListFilterKey='';
+}
+function actPaletaFilterKey(filtroAct,q,respFilter){
+  return [
+    filtroAct||'',
+    q||'',
+    respFilter||'',
+    typeof labelActPeriodo==='function'?labelActPeriodo():'',
+    typeof deptoActivo!=='undefined'?deptoActivo:'',
+    esVistaActividadesDepto&&esVistaActividadesDepto()?'dept':'resp',
+    typeof responsableActivo!=='undefined'?responsableActivo:''
+  ].join('|');
+}
+/** Cargar el siguiente lote en la paleta de actividades activa. */
+function actPaletaVerMas(){
+  const page=actPaletaPageSize();
+  window._actListShown=(window._actListShown||page)+page;
   renderActividades();
 }
-window.actRevisadosVerMas=actRevisadosVerMas;
+window.actPaletaVerMas=actPaletaVerMas;
+window.actRevisadosVerMas=actPaletaVerMas;
 window._actVista=window._actVista||'tabla';
 function setActVista(v){
   window._actVista=v==='gantt'?'gantt':'tabla';
@@ -26406,32 +26427,27 @@ function renderActividades(){
   if(vistaToggle)vistaToggle.style.display=deptView?'flex':'none';
   const useGantt=deptView&&window._actVista==='gantt';
   if(tableWrap)tableWrap.style.display=useGantt?'none':'';
+  const pageSize=actPaletaPageSize();
+  let listRender=list;
+  const filterKey=actPaletaFilterKey(filtroAct,q,respFilter);
+  if(window._actListFilterKey!==filterKey){
+    window._actListShown=pageSize;
+    window._actListFilterKey=filterKey;
+  }
+  if(window._actListShown==null||window._actListShown<pageSize)window._actListShown=pageSize;
+  const shown=Math.min(window._actListShown,list.length);
+  listRender=list.slice(0,shown);
+  if(moreRev){
+    const rest=list.length-shown;
+    if(rest>0){
+      moreRev.style.display='block';
+      const nextBatch=Math.min(rest,pageSize);
+      moreRev.textContent='Cargar más ('+nextBatch+' · '+rest+' restantes)';
+    }else moreRev.style.display='none';
+  }
   if(ganttWrap){
     ganttWrap.style.display=useGantt?'block':'none';
-    if(useGantt)renderActGantt(list);
-  }
-  // «Revisados» (encargado/NCA): corte de 30 + «Cargar otras 30 más» (como Consulta / bandeja oficina)
-  const pageRev=typeof ACT_REVISADOS_PAGE==='number'?ACT_REVISADOS_PAGE:30;
-  const paginarRevisados=deptView&&filtroAct==='revisados'&&!useGantt;
-  let listRender=list;
-  if(paginarRevisados){
-    const filterKey=[filtroAct,q||'',respFilter||'',labelActPeriodo?labelActPeriodo():'',deptoActivo||''].join('|');
-    if(window._actRevisadosFilterKey!==filterKey){
-      window._actRevisadosShown=pageRev;
-      window._actRevisadosFilterKey=filterKey;
-    }
-    if(window._actRevisadosShown==null||window._actRevisadosShown<pageRev)window._actRevisadosShown=pageRev;
-    const shown=Math.min(window._actRevisadosShown,list.length);
-    listRender=list.slice(0,shown);
-    if(moreRev){
-      const rest=list.length-shown;
-      if(rest>0){
-        moreRev.style.display='block';
-        moreRev.textContent='Cargar otras '+pageRev+' más (quedan '+rest+')';
-      }else moreRev.style.display='none';
-    }
-  }else if(moreRev){
-    moreRev.style.display='none';
+    if(useGantt)renderActGantt(listRender);
   }
   if(tb&&!useGantt)tb.innerHTML=listRender.length?listRender.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
 }
