@@ -13446,10 +13446,16 @@ async function guardarUsuarioFirestore(){
   if(!_usuariosEditEmail)payload.creadoEn=new Date().toISOString();
   if(typeof _fsStripUndefinedDeep==='function')payload=_fsStripUndefinedDeep(payload);
   const eraEdicion=!!_usuariosEditEmail;
+  if(!(window._firebaseAuth&&window._firebaseAuth.currentUser)){
+    notif('Sesión Google/Firebase no activa. Cierre sesión e ingrese de nuevo.','err');
+    return;
+  }
   const saveBtn=document.getElementById('usu-fs-guardar');
-  const saveBtnLabel=saveBtn?String(saveBtn.textContent||'Guardar'):'Guardar';
+  const saveBtnLabel='Guardar';
+  let saveUiWatchdog=null;
   const liberarUiGuardar=function(){
     _usuariosSaveBusy=false;
+    if(saveUiWatchdog){clearTimeout(saveUiWatchdog);saveUiWatchdog=null;}
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
     try{window._confirmRadicacionLoading=false;}catch(_e){}
     if(typeof closeConfirmExito==='function')closeConfirmExito();
@@ -13457,15 +13463,24 @@ async function guardarUsuarioFirestore(){
   };
   _usuariosSaveBusy=true;
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Guardando…';}
+  saveUiWatchdog=setTimeout(function(){
+    if(!_usuariosSaveBusy)return;
+    liberarUiGuardar();
+    notif('El guardado tardó demasiado. Verifique la conexión e intente de nuevo.','err');
+  },22000);
   try{
-    const authOk=typeof ensureFirestoreAuthReady==='function'
-      ?await ensureFirestoreAuthReady()
-      :{ok:!!(window._firebaseAuth&&window._firebaseAuth.currentUser)};
-    if(!authOk||!authOk.ok){
-      notif('Sesión Firebase no disponible. Cierre sesión y vuelva a entrar con Google.','err');
-      return;
-    }
-    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    const usuRef=window._fsDoc(db,'usuarios',email);
+    const setDocP=window._fsSetDoc(usuRef,payload,{merge:true});
+    await Promise.race([
+      setDocP,
+      new Promise(function(_,rej){
+        setTimeout(function(){
+          const e=new Error('timeout');
+          e.code='timeout';
+          rej(e);
+        },18000);
+      })
+    ]);
     logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
     mergeUsuarioEnCache({email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
     paintUsuariosCfgTable();
