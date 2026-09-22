@@ -44,37 +44,78 @@ function _gmailGetClientId() {
 function _gmailGisReady() {
   return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
 }
+let _gmailConnectingWatchdog = null;
+const GMAIL_OAUTH_CONNECTING_MS = 90000;
+function _gmailResetSesionConnectBtn() {
+  const gBtn = document.getElementById('gmail-sesion-connect-btn');
+  if (gBtn) { gBtn.disabled = false; gBtn.textContent = 'Conectar Gmail / Drive'; }
+}
+function _gmailArmConnectingWatchdog() {
+  if (_gmailConnectingWatchdog) clearTimeout(_gmailConnectingWatchdog);
+  _gmailConnectingWatchdog = setTimeout(function() {
+    _gmailConnectingWatchdog = null;
+    if (!_gmailConnecting) return;
+    console.warn('Gmail OAuth: watchdog liberó conexión colgada');
+    _gmailConnecting = false;
+    window._sstGmailReconnectPendingCb = null;
+    updateGmailConnectBtn();
+    if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
+    _gmailResetSesionConnectBtn();
+    if (typeof notif === 'function') {
+      notif('La conexión con Google tardó demasiado o se canceló. Intente de nuevo.', 'warn');
+    }
+  }, GMAIL_OAUTH_CONNECTING_MS);
+}
 function _gmailOAuthDone() {
+  if (_gmailConnectingWatchdog) { clearTimeout(_gmailConnectingWatchdog); _gmailConnectingWatchdog = null; }
   _gmailConnecting = false;
   updateGmailConnectBtn();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
   if (typeof renderSecGmailBloqueoRadicacion === 'function') renderSecGmailBloqueoRadicacion();
   if (typeof renderSstGmailSesionBloqueo === 'function') renderSstGmailSesionBloqueo();
-  const gBtn = document.getElementById('gmail-sesion-connect-btn');
-  if (gBtn) { gBtn.disabled = false; gBtn.textContent = 'Conectar correo Gmail'; }
+  _gmailResetSesionConnectBtn();
 }
+function _gmailOAuthFinishToken(onToken, accessToken, expiresIn) {
+  let ret;
+  try { ret = onToken(accessToken, expiresIn); } catch (err) {
+    console.error('Gmail OAuth onToken:', err);
+    if (typeof notif === 'function') notif('Error tras conectar: ' + String(err.message || err), 'err');
+    _gmailOAuthDone();
+    return;
+  }
+  if (ret && typeof ret.then === 'function') {
+    ret.then(function() { _gmailOAuthDone(); }).catch(function(err) {
+      console.error('Gmail OAuth onToken async:', err);
+      if (typeof notif === 'function') notif('Error tras conectar: ' + String(err.message || err), 'err');
+      _gmailOAuthDone();
+    });
+    return;
+  }
+  _gmailOAuthDone();
+}
+/** @returns {boolean} true si se abrió el flujo OAuth */
 function _gmailStartOAuth(scope, onToken, promptOpt) {
   if (_gmailConnecting) {
     notif('Ya hay una conexión en curso. Si no aparece Google, espere unos segundos e intente de nuevo.', 'warn');
-    return;
+    return false;
   }
   const clientId = _gmailGetClientId();
   if (!clientId || clientId.includes('TU_CLIENT_ID')) {
     notif('Falta configurar el Client ID OAuth.', 'err');
-    return;
+    return false;
   }
   if (!_gmailGisReady()) {
     notif('Google Identity Services aún no cargó. Espere 5 segundos y pulse Conectar de nuevo.', 'warn');
-    return;
+    return false;
   }
   _gmailConnecting = true;
+  _gmailArmConnectingWatchdog();
   updateGmailConnectBtn();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
   const tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: scope,
     callback: function(response) {
-      _gmailOAuthDone();
       if (response.error) {
         console.error('Gmail OAuth error:', response);
         if (window._sstGmailReconnectPendingCb) {
@@ -83,6 +124,7 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
           failCb(false);
         }
         notif('Error al conectar: ' + (response.error_description || response.error), 'err');
+        _gmailOAuthDone();
         return;
       }
       if (!response.access_token) {
@@ -92,30 +134,33 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
           failCb(false);
         }
         notif('Google no devolvió un token. Intente de nuevo.', 'err');
+        _gmailOAuthDone();
         return;
       }
       if (window._sstGmailReconnectPendingCb) window._sstGmailReconnectPendingCb = null;
-      onToken(response.access_token, response.expires_in);
+      _gmailOAuthFinishToken(onToken, response.access_token, response.expires_in);
     },
     error_callback: function(err) {
       console.error('Gmail OAuth error_callback:', err);
-      _gmailOAuthDone();
       if (window._sstGmailReconnectPendingCb) {
         const failCb = window._sstGmailReconnectPendingCb;
         window._sstGmailReconnectPendingCb = null;
         failCb(false);
       }
       notif('No se completó la conexión. Permita ventanas emergentes e intente de nuevo.', 'err');
+      _gmailOAuthDone();
     }
   });
   try {
     // promptOpt==='' → renovación silenciosa (sin popup); undefined/null → 'select_account'
     const promptVal = (promptOpt === '' || promptOpt === 'none') ? '' : (promptOpt || 'select_account');
     tokenClient.requestAccessToken({ prompt: promptVal });
+    return true;
   } catch (err) {
     console.error('requestAccessToken:', err);
     _gmailOAuthDone();
     notif('No se pudo abrir Google: ' + (err.message || err), 'err');
+    return false;
   }
 }
 
@@ -524,19 +569,19 @@ function sstConectarGmailObligatorio(doneCb) {
   const btn = document.getElementById('gmail-sesion-connect-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
   const finish = function() {
-    if (btn) { btn.disabled = false; btn.textContent = 'Conectar Gmail / Drive'; }
+    _gmailResetSesionConnectBtn();
     sstFinalizeGmailConnect();
     if (doneCb) doneCb(sstGmailSesionActiva());
   };
+  let started = false;
   if (typeof esSecretaria === 'function' && esSecretaria()) {
-    gmailConnect(finish);
-    return;
+    started = gmailConnect(finish) !== false;
+  } else if (typeof gmailOfiConnect === 'function') {
+    started = gmailOfiConnect(finish) !== false;
+  } else {
+    started = gmailConnect(finish) !== false;
   }
-  if (typeof gmailOfiConnect === 'function') {
-    gmailOfiConnect(finish);
-    return;
-  }
-  gmailConnect(finish);
+  if (!started) finish();
 }
 let _sstGmailAutoConnectPending = false;
 function sstIniciarGmailObligatorio() {
@@ -572,15 +617,17 @@ function gmailIsTokenValid() {
 // OAuth — GIS initTokenClient
 // ----------------------------------------------------------------
 function gmailConnect(callback) {
-  _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
+  const started = _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp, GMAIL_SCOPES);
     _gmailSecSignatureLoaded = false;
-    gmailLoadSecSignature(true).catch(function(){});
-    notif('Bandeja conectada correctamente.', 'ok');
     if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
     if (typeof callback === 'function') callback();
-    else gmailLoadInbox();
+    else setTimeout(function() { gmailLoadInbox(); }, 0);
+    setTimeout(function() { gmailLoadSecSignature(true).catch(function(){}); }, 0);
+    notif('Bandeja conectada correctamente.', 'ok');
   });
+  if (!started && typeof callback === 'function') callback();
+  return started;
 }
 function gmailReconnectForMatriz(callback) {
   _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
@@ -4681,28 +4728,33 @@ function gmailOfiIsTokenValid() {
 }
 
 // ---- Connect / disconnect ----
+function _gmailOfiCargarBandejaEnSegundoPlano() {
+  setTimeout(function() {
+    try {
+      gmailOfiFolder('INBOX');
+      gmailOfiLoadLabels();
+      _gmailOfiLoadSignature();
+    } catch (e) { console.warn('gmailOfi carga bandeja:', e); }
+  }, 0);
+}
 function gmailOfiConnect(callback) {
   if (_gmailOfiIsSecretaria()) {
     if (gmailIsTokenValid()) {
       _updateGmailOfiBtn();
-      gmailOfiFolder('INBOX');
-      gmailOfiLoadLabels();
-      if (!_gmailOfiSignature) _gmailOfiLoadSignature();
       if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
       if (callback) callback();
-      return;
+      _gmailOfiCargarBandejaEnSegundoPlano();
+      return true;
     }
-    gmailConnect(function() {
+    const started = gmailConnect(function() {
       _updateGmailOfiBtn();
-      gmailOfiFolder('INBOX');
-      gmailOfiLoadLabels();
-      _gmailOfiLoadSignature();
       if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
       if (callback) callback();
+      _gmailOfiCargarBandejaEnSegundoPlano();
     });
-    return;
+    return !!started;
   }
-  _gmailStartOAuth(GMAIL_OFI_SCOPES, async function(tok, exp) {
+  const started = _gmailStartOAuth(GMAIL_OFI_SCOPES, async function(tok, exp) {
     const ok = await _gmailOfiValidarYGuardarToken(tok, exp);
     if (!ok) {
       _updateGmailOfiBtn();
@@ -4710,13 +4762,13 @@ function gmailOfiConnect(callback) {
       return;
     }
     _updateGmailOfiBtn();
-    notif('✅ Correo conectado.', 'ok');
-    gmailOfiFolder('INBOX');
-    gmailOfiLoadLabels();
-    _gmailOfiLoadSignature();
     if (typeof sstFinalizeGmailConnect === 'function') sstFinalizeGmailConnect();
     if (callback) callback();
+    notif('✅ Correo conectado.', 'ok');
+    _gmailOfiCargarBandejaEnSegundoPlano();
   });
+  if (!started && callback) callback();
+  return !!started;
 }
 window.gmailOfiConnect = gmailOfiConnect;
 
