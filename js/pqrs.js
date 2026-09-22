@@ -393,6 +393,141 @@ function finalizarAsignacionPqrsProgreso(opts){
     notif(msg,opts.enviaraCorreo&&!opts.correoOk?'warn':'ok');
   }
 }
+/** Progreso al trasladar PQRSD a otra oficina (NCA / encargado): registro y, si radicó por correo, reenvío a la oficina. */
+function mostrarTrasladoPqrsProgreso(opts){
+  opts=opts||{};
+  const dest=String(opts.destino||'oficina destino').trim();
+  const conCorreo=!!opts.conCorreo;
+  const titulo=opts.title||'Trasladando PQRSD';
+  const msg=opts.message||(conCorreo?'Registrando traslado a '+dest+'…':'Registrando traslado a '+dest+'…');
+  const sub=conCorreo
+    ?'Después se reenviará el correo de radicación con anexos a la bandeja de la oficina'
+    :'Radicación en ventanilla u otro medio: no requiere reenvío de correo';
+  if(typeof sstCargaShow==='function'){
+    sstCargaShow({title:titulo,message:msg,sub:sub,pct:null});
+    return;
+  }
+  if(typeof confirmExito==='function'){
+    confirmExito({title:titulo,message:msg,tone:'radicacion',loading:true,hideFooter:true});
+  }
+}
+function finalizarTrasladoPqrsProgreso(opts){
+  opts=opts||{};
+  const dest=String(opts.destino||'').trim();
+  let title='Traslado completo';
+  let msg='PQRSD trasladada'+(dest?' a '+dest:'')+'. La oficina destino verá el aviso en su bandeja.';
+  const necesita=!!opts.necesitaCorreo;
+  const envio=!!opts.enviaraCorreo;
+  if(necesita){
+    if(envio&&opts.correoOk){
+      msg+=' Correo de radicación reenviado a la oficina.';
+    }else if(envio&&!opts.correoOk){
+      title='Trasladada — revise el correo';
+      msg+=' No se pudo reenviar el correo con anexos. Conecte Gmail e intente reenviar desde la bandeja.';
+    }else{
+      msg+=' No se reenvió correo (Gmail no conectado). Conecte la bandeja para enviar el radicado por correo.';
+    }
+  }
+  if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
+    sstCargaDone({
+      title:title,
+      message:msg,
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000,
+      holdMs:260
+    });
+    return;
+  }
+  if(typeof confirmExito==='function'){
+    confirmExito({
+      title:title,
+      message:msg,
+      tone:necesita&&envio&&!opts.correoOk?'warn':'success',
+      hideFooter:false,
+      confirmLabel:'Entendido',
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000
+    });
+  }else if(typeof notif==='function'){
+    notif(msg,necesita&&(!envio||!opts.correoOk)?'warn':'ok');
+  }
+}
+function _pqrsTrasladoUiBusy(busy){
+  document.querySelectorAll('button').forEach(function(b){
+    const oc=String(b.getAttribute('onclick')||'');
+    if(oc.indexOf('submitTrasladoPqrsInicial')>=0||oc.indexOf('submitTrasladoPqrsInterOficina')>=0)b.disabled=!!busy;
+  });
+}
+function _pqrsNecesitaCorreoParaTraslado(e){
+  return typeof _pqrsNecesitaCorreoParaAsignar==='function'&&_pqrsNecesitaCorreoParaAsignar(e);
+}
+function _pqrsRefreshViewsTrasTraslado(){
+  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+  else{
+    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on')&&typeof renderConsulta==='function')renderConsulta();
+    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on')&&typeof renderActividades==='function')renderActividades();
+    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&typeof renderConSidePanel==='function')renderConSidePanel();
+  }
+}
+async function _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,applyExpState){
+  if(window._pqrsTrasladoSubmitBusy){
+    if(typeof notif==='function')notif('Ya se está procesando un traslado. Espere…','warn');
+    return;
+  }
+  const e=exps.find(function(x){return x._exp===expId;});
+  if(!e){
+    if(typeof notif==='function')notif('Expediente no encontrado','err');
+    return;
+  }
+  const destLbl=typeof labelOficina==='function'?labelOficina(nuevaOfi):nuevaOfi;
+  const necesitaCorreo=_pqrsNecesitaCorreoParaTraslado(e);
+  const enviaraCorreo=necesitaCorreo&&_pqrsTokOk();
+  window._pqrsTrasladoSubmitBusy=true;
+  _pqrsTrasladoUiBusy(true);
+  mostrarTrasladoPqrsProgreso({conCorreo:enviaraCorreo,destino:destLbl});
+  let correoOk=true;
+  let refreshedSide=false;
+  try{
+    applyExpState(e);
+    if(typeof sstCargaProgress==='function')sstCargaProgress(28,'Registrando traslado a '+destLbl+'…');
+    if(typeof syncPqrsTareaTrasTraslado!=='function')throw new Error('Flujo de traslado no disponible');
+    syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
+    if(typeof sstCargaProgress==='function'){
+      sstCargaProgress(48,enviaraCorreo?'Preparando reenvío de correo a la oficina…':'Guardando traslado…');
+    }
+    if(enviaraCorreo){
+      if(typeof sstCargaProgress==='function')sstCargaProgress(62,'Enviando correo a '+destLbl+'…');
+      correoOk=await reenviarCorreoRadicacionPqrsAOficina(e,nuevaOfi,expId);
+    }else if(necesitaCorreo){
+      correoOk=false;
+    }
+    if(typeof sstCargaProgress==='function')sstCargaProgress(82,'Guardando en el sistema…');
+    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
+    await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
+    if(typeof sstCargaProgress==='function')sstCargaProgress(92,'Actualizando bandejas…');
+    if(typeof pqrsRefreshAfterSideAction==='function')refreshedSide=!!pqrsRefreshAfterSideAction(expId,taskId);
+    _pqrsRefreshViewsTrasTraslado();
+    finalizarTrasladoPqrsProgreso({
+      destino:destLbl,
+      necesitaCorreo:necesitaCorreo,
+      enviaraCorreo:enviaraCorreo,
+      correoOk:correoOk
+    });
+    if(!refreshedSide&&typeof closeTaskModal==='function')closeTaskModal();
+  }catch(err){
+    console.error('_pqrsEjecutarTrasladoOficina:',err);
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    if(typeof sstCargaError==='function'){
+      sstCargaError('No se pudo completar el traslado',String(err&&err.message||err).slice(0,160));
+    }else if(typeof notif==='function'){
+      notif('Error al trasladar: '+String(err&&err.message||err).slice(0,120),'err');
+    }
+  }finally{
+    window._pqrsTrasladoSubmitBusy=false;
+    _pqrsTrasladoUiBusy(false);
+  }
+}
 function _pqrsAsignarUiBusy(busy){
   document.querySelectorAll('button').forEach(function(b){
     const oc=String(b.getAttribute('onclick')||'');
@@ -853,17 +988,23 @@ async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMs
     return false;
   }
 }
-async function tryReenvioPqrsCorreoTraslado(e,oficina,expId){
-  if(!e||!oficina)return;
+async function tryReenvioPqrsCorreoTraslado(e,oficina,expId,opts){
+  opts=opts||{};
+  const silent=!!opts.silent;
+  if(!e||!oficina)return false;
+  if(!pqrsFueRadicadaPorCorreo(e)||!(e._gmail_message_id||''))return true;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk){
-    notif('⚠️ PQRSD trasladada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja y reenvíe manualmente.','warn');
-    return;
+    if(!silent&&typeof notif==='function'){
+      notif('⚠️ PQRSD trasladada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja y reenvíe manualmente.','warn');
+    }
+    return false;
   }
   const ok=await reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId);
-  if(!ok&&pqrsFueRadicadaPorCorreo(e)&&(e._gmail_message_id||'')){
+  if(!ok&&!silent&&typeof notif==='function'){
     notif('⚠️ Traslado registrado, pero falló el reenvío del correo a '+labelOficina(oficina)+'.','warn');
   }
+  return !!ok;
 }
 function getEmailResponsablePqrs(nombre){
   const n=String(nombre||'').trim();
@@ -2583,33 +2724,16 @@ async function submitTrasladoPqrsInicial(expId,taskId){
   if(!e){notif('Expediente no encontrado','err');return;}
   if(!puedeTrasladarPqrsInicial(e)){notif('No puede trasladar esta PQRSD','err');return;}
   const por=esSecretaria()?'Secretaría DEGUV':(esDirectorDsDeguv()?'DS DEGUV':'Administrador');
-  e._pqrs_pendiente_traslado=false;
-  e._pqrs_oficina=nuevaOfi;
-  e._pqrs_traslado_fecha=hoy();
-  e._pqrs_traslado_por=por;
-  e._pqrs_responsable_oficina=typeof getEncargadoOficina==='function'?getEncargadoOficina(nuevaOfi):'';
-  e._pqrs_estado_oficina='pendiente';
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
-  syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  await tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId);
-  if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
-  await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
-  if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
-    notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
-  }else{
-    closeTaskModal();
-    notif('PQRSD trasladada a '+labelOficina(nuevaOfi),'ok');
-  }
-  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-  else{
-    renderBandejaDepto();
-    renderPqrsOficinaInbox();
-    renderSecretariaPqrs();
-    if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-    if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-    if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
-  }
+  await _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,function(exp){
+    exp._pqrs_pendiente_traslado=false;
+    exp._pqrs_oficina=nuevaOfi;
+    exp._pqrs_traslado_fecha=hoy();
+    exp._pqrs_traslado_por=por;
+    exp._pqrs_responsable_oficina=typeof getEncargadoOficina==='function'?getEncargadoOficina(nuevaOfi):'';
+    exp._pqrs_estado_oficina='pendiente';
+    if(!Array.isArray(exp._pqrs_historial))exp._pqrs_historial=[];
+    exp._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
+  });
 }
 function openTrasladoPqrsInterOficinaModal(expId){
   const e=exps.find(x=>x._exp===expId);
@@ -2637,7 +2761,7 @@ function openTrasladoPqrsInterOficinaModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'trasladoPqrsOfi',expId};
 }
-function submitTrasladoPqrsInterOficina(expId,taskId){
+async function submitTrasladoPqrsInterOficina(expId,taskId){
   const sel=document.getElementById('pqrs-trasl-ofi-sel');
   const nuevaOfi=sel?sel.value:'';
   const motivo=String((document.getElementById('pqrs-trasl-motivo')||{}).value||'').trim();
@@ -2647,30 +2771,13 @@ function submitTrasladoPqrsInterOficina(expId,taskId){
   if(!puedeTrasladarPqrs(e)){notif('No puede trasladar este PQRSD. Solo la oficina que lo tiene asignado puede reasignarlo.','err');return;}
   const anterior=e._pqrs_oficina||'';
   if(nuevaOfi===anterior){notif('Seleccione una oficina diferente','err');return;}
-  e._pqrs_oficina=nuevaOfi;
-  e._pqrs_traslado_fecha=hoy();
-  e._pqrs_traslado_por=esSecretaria()?'Secretaría DEGUV':(labelOficina(getPqrsOficinaActiva())||'Oficina');
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:e._pqrs_traslado_por});
-  syncPqrsTareaTrasTraslado(e,nuevaOfi,motivo);
-  tryReenvioPqrsCorreoTraslado(e,nuevaOfi,expId).then(async function(){
-    if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(e);
-    await (typeof persistExpedienteGranularAsync==='function'?persistExpedienteGranularAsync(e,false):persistExpedienteGranular(e));
-    if(typeof pqrsRefreshAfterSideAction==='function'&&pqrsRefreshAfterSideAction(expId,taskId)){
-      notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
-    }else{
-      closeTaskModal();
-      notif('PQRSD trasladado a '+labelOficina(nuevaOfi),'ok');
-    }
-    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-    else{
-      renderBandejaDepto();
-      renderPqrsOficinaInbox();
-      renderSecretariaPqrs();
-      if(document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-      if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-      if(document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'))renderConSidePanel();
-    }
+  const porTrasl=esSecretaria()?'Secretaría DEGUV':(labelOficina(getPqrsOficinaActiva())||'Oficina');
+  await _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,function(exp){
+    exp._pqrs_oficina=nuevaOfi;
+    exp._pqrs_traslado_fecha=hoy();
+    exp._pqrs_traslado_por=porTrasl;
+    if(!Array.isArray(exp._pqrs_historial))exp._pqrs_historial=[];
+    exp._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:porTrasl});
   });
 }
 function anonimizarParaCiudadano(txt){
