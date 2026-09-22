@@ -13408,6 +13408,10 @@ async function guardarUsuarioFirestore(){
   if(_usuariosEditEmail){
     const prev=getUsuarioAutorizadoByEmail(_usuariosEditEmail);
     if(!usuarioEditablePorEncargado(prev)){notif('No puede editar este usuario','err');return;}
+  }else{
+    // Solo caché local (sin getDoc): evita colgar la UI si Firestore no responde.
+    const dup=getUsuarioAutorizadoByEmail(email);
+    if(dup){alertarCorreoYaAutorizado(dup);return;}
   }
   if(!esVistaUsuariosAdminCompleta()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
   if(!nombre||!email||!rol){
@@ -13435,35 +13439,30 @@ async function guardarUsuarioFirestore(){
     _usuariosSaveBusy=false;
     _usuariosToggleBusy=false;
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
-    if(typeof sstCargaHide==='function')sstCargaHide();
+    // Forzar cierre del modal de carga (puede quedar de un intento anterior).
+    try{window._confirmRadicacionLoading=false;}catch(_e){}
+    if(typeof closeConfirmExito==='function')closeConfirmExito();
+    else if(typeof sstCargaHide==='function')sstCargaHide();
   };
   _usuariosSaveBusy=true;
   _usuariosToggleBusy=true;
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Guardando…';}
-  if(typeof sstCargaShow==='function')sstCargaShow({title:'Guardando',message:'Registrando usuario autorizado…',sub:'Espere un momento…',pct:null});
+  // Sin sstCargaShow: el modal bloqueaba toda la pantalla si Firestore se demora.
   saveWatchdog=setTimeout(function(){
     if(!_usuariosSaveBusy)return;
     liberarUiGuardar();
     notif('El guardado tardó demasiado. Verifique la conexión e intente de nuevo.','err');
-  },25000);
+  },10000);
   try{
-    if(!eraEdicion){
-      const dup=await buscarUsuarioAutorizadoPorEmail(email);
-      if(dup){
-        liberarUiGuardar();
-        alertarCorreoYaAutorizado(dup);
-        return;
-      }
-    }
-    const setDocP=window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    // Ruta crítica: solo escribir usuarios/{email}. Índice, sync y Drive van aparte.
     await Promise.race([
-      setDocP,
+      window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true}),
       new Promise(function(_,rej){
         setTimeout(function(){
           const e=new Error('timeout');
           e.code='timeout';
           rej(e);
-        },22000);
+        },8000);
       })
     ]);
     try{
@@ -13475,7 +13474,6 @@ async function guardarUsuarioFirestore(){
     liberarUiGuardar();
     notif('Usuario guardado'+detalleOk,'ok');
     ocultarFormUsuarioFirestore();
-    // Sync pesada + Drive en segundo plano (no bloquear el botón Guardar)
     (async function(){
       let syncParcial=false;
       try{
@@ -13485,7 +13483,7 @@ async function guardarUsuarioFirestore(){
         }
         if(esVistaUsuariosAdminCompleta()){
           await persistUsuariosIndexGlobal();
-          await aplicarSyncUsuariosAutorizados();
+          await aplicarSyncUsuariosAutorizados({silent:true});
         }else{
           syncResponsablesDesdeUsuariosAutorizados();
           syncCfgToStore();
@@ -13504,8 +13502,8 @@ async function guardarUsuarioFirestore(){
         await refreshUsuariosAutorizadosUi();
       }catch(refErr){console.warn(refErr);syncParcial=true;}
       try{
-        if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
-        else await syncDriveRevokeTrasUsuarioAutorizado(email);
+        if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable},{silent:true});
+        else await syncDriveRevokeTrasUsuarioAutorizado(email,{silent:true});
       }catch(drvErr){console.warn(drvErr);syncParcial=true;}
       if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
