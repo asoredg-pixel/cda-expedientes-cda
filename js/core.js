@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // core.js - Nucleo de logica de negocio SST
 // Contiene: PQRS helpers, Agenda, Tareas core, Locks/Audit, Usuarios,
 //           Soportes/Documentos, Bandeja, Expediente display, Gantt,
@@ -10164,6 +10164,9 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
     }
     setPqrsWorkflow(e,wfPatch);
     e._pqrs_historial.push({tipo:'entrega_respuesta_nca',fecha:fechaResp,nota:'Entrega de respuesta para revisión NCA (v'+entregaN+')'+(oficioExt?' · Oficio '+oficioExt:'')+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,responsable:responsableActivo||''});
+    const tidSync=String(wfPatch.task_id||opts.taskId||'').trim();
+    if(tidSync&&typeof pqrsSincronizarTaskTrasReentrega==='function')
+      pqrsSincronizarTaskTrasReentrega(e,tidSync,{fechaReportada:fechaResp});
   }
 }
 function registrarPqrsRespuestaCore(e,opts){
@@ -11339,7 +11342,13 @@ function syncTaskAggregateState(t){
       t.fechaAtendida=a.fechaAtendida||'';
       if(a.estado==='atendido'||a.fechaAtendida)t.estado='Atendida';
       else if(a.estado==='por_verificar'||(a.fechaReportada&&a.estado!=='por_corregir'))t.estado='Por verificar';
-      else if(a.estado==='por_corregir')t.estado='Por corregir';
+      else if(a.estado==='por_corregir'){
+        if(t.fechaReportada&&!t.fechaAtendida){
+          a.estado='por_verificar';
+          a.fechaReportada=a.fechaReportada||t.fechaReportada;
+          t.estado='Por verificar';
+        }else t.estado='Por corregir';
+      }else if(t.fechaReportada&&!t.fechaAtendida)t.estado='Por verificar';
       else t.estado=(t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
     }else{
       t.fechaReportada='';
@@ -15230,6 +15239,9 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir'&&(t.fechaReportada||(t.asignados||[]).some(function(a){return a&&a.estado==='por_verificar';}))){
       t.estado='Por verificar';
       if(!t.fechaReportada)t.fechaReportada=hoyRep;
+      (t.asignados||[]).forEach(function(a){
+        if(a&&a.estado==='por_corregir'){a.estado='por_verificar';a.fechaReportada=a.fechaReportada||hoyRep;}
+      });
     }
   });
   if(ok){
@@ -23438,6 +23450,84 @@ function pqrsHealTaskTrasDevolucionDirector(e,t){
   }
   return true;
 }
+function _pqrsUltimaMarcaHistorialTask(t,tipos){
+  const set=new Set(Array.isArray(tipos)?tipos:[tipos]);
+  let bestTs=0;
+  let bestFecha='';
+  (t&&t.historial||[]).forEach(function(h){
+    if(!h||!set.has(h.tipo))return;
+    const ts=Number(h.ts)||0||Date.parse(String(h.fecha||'')+'T12:00:00')||0;
+    if(ts>=bestTs){bestTs=ts;bestFecha=String(h.fecha||'').slice(0,10);}
+  });
+  return{ts:bestTs,fecha:bestFecha};
+}
+/** Tras reentrega NCA: alinear tarea Por verificar con workflow en PENDIENTE_REVISION. */
+function pqrsSincronizarTaskTrasReentrega(e,taskId,opts){
+  opts=opts||{};
+  if(!e||!taskId)return false;
+  const tid=String(taskId||'').trim();
+  if(!tid)return false;
+  if(typeof pqrsWorkflowFase==='function'&&pqrsWorkflowFase(e)!==PQRS_WF.PENDIENTE_REVISION&&!opts.forceFase)return false;
+  let t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&String(x.id||'')===tid;});
+  if(!t&&typeof getTaskFromExp==='function')t=getTaskFromExp(e,tid);
+  if(!t||t.eliminada||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const wfTid=String(wf.task_id||'').trim();
+  if(wfTid&&wfTid!==tid&&!opts.forceTaskId)return false;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  if(est==='Atendida')return false;
+  if(est==='Por verificar'&&t.fechaReportada&&!opts.force)return false;
+  const hoyRep=String(opts.fechaReportada||wf.fecha_respuesta||hoy()).slice(0,10);
+  const rep=String(opts.por||wf.entregado_por||responsableActivo||'').trim();
+  normalizeTask(t);
+  migrateLegacyAsignados(t);
+  t.fechaReportada=hoyRep;
+  t.fechaAtendida='';
+  t.estado='Por verificar';
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='corregir')t.ultimaRevisionDepto=null;
+  (t.asignados||[]).forEach(function(a){
+    if(!a||a.estado==='atendido')return;
+    a.fechaReportada=hoyRep;
+    a.fechaAtendida='';
+    a.estado='por_verificar';
+  });
+  if(rep&&typeof ensureAsignado==='function')ensureAsignado(t,rep);
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir'&&t.fechaReportada){
+    t.estado='Por verificar';
+    (t.asignados||[]).forEach(function(a){
+      if(a&&a.estado==='por_corregir'){a.estado='por_verificar';a.fechaReportada=a.fechaReportada||hoyRep;}
+    });
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  }
+  const idx=(e.tasks||[]).findIndex(function(x){return x&&String(x.id||'')===tid;});
+  if(idx>=0)e.tasks[idx]=t;
+  return true;
+}
+window.pqrsSincronizarTaskTrasReentrega=pqrsSincronizarTaskTrasReentrega;
+/**
+ * Heal: reentrega dejó workflow en PENDIENTE_REVISION pero la tarea siguió en Por corregir
+ * (paleta Por corregir / encargado sin Por revisar).
+ */
+function pqrsHealTrasReentregaCorregirPendiente(e,t){
+  if(!e||!t||t.eliminada)return false;
+  if(typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return false;
+  if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.PENDIENTE_REVISION)return false;
+  if(typeof estadoTask!=='function'||estadoTask(t)!=='Por corregir')return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const wfTid=String(wf.task_id||'').trim();
+  if(wfTid&&String(t.id||'')&&wfTid!==String(t.id||''))return false;
+  const ultReenv=_pqrsUltimaMarcaHistorialTask(t,'reenvio_verificacion');
+  const ultDev=_pqrsUltimaMarcaHistorialTask(t,['ajuste_soporte','revision_nca_rechazado','devolver_desde_firma','notif_devuelta_corregir']);
+  const wfEntTs=wf.entregado_en?Date.parse(String(wf.entregado_en)):0;
+  const entregaOk=ultReenv.ts>0||(wfEntTs>0&&(!ultDev.ts||wfEntTs>=ultDev.ts));
+  if(!entregaOk)return false;
+  if(ultDev.ts&&ultReenv.ts&&ultDev.ts>ultReenv.ts)return false;
+  if(ultDev.ts&&wfEntTs&&ultDev.ts>wfEntTs&&!ultReenv.ts)return false;
+  const fecha=ultReenv.fecha||String(wf.fecha_respuesta||'').slice(0,10)||hoy();
+  return pqrsSincronizarTaskTrasReentrega(e,t.id,{force:true,forceFase:true,fechaReportada:fecha,por:wf.entregado_por||''});
+}
+window.pqrsHealTrasReentregaCorregirPendiente=pqrsHealTrasReentregaCorregirPendiente;
 /**
  * Heal: devolución desde rail unificado dejó la tarea en Por corregir
  * pero el workflow PQRSD siguió en PENDIENTE_REVISION → encargado atrapado en Por revisar.
@@ -24056,6 +24146,16 @@ function renderActividadesRowHtml(t){
       if(!window._pqrsHealCorrPendPersist.has(hkC)){
         window._pqrsHealCorrPendPersist.add(hkC);
         try{persistExpedienteGranular(expActPre);}catch(errC){console.warn('heal devolucion corregir:',errC);}
+      }
+    }
+    if(realT&&typeof pqrsHealTrasReentregaCorregirPendiente==='function'
+      &&pqrsHealTrasReentregaCorregirPendiente(expActPre,realT)){
+      Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
+      if(!window._pqrsHealReentregaPersist)window._pqrsHealReentregaPersist=new Set();
+      const hkR=String(expActPre._exp||'')+'|'+String(realT.id||'')+'|reent';
+      if(!window._pqrsHealReentregaPersist.has(hkR)){
+        window._pqrsHealReentregaPersist.add(hkR);
+        try{persistExpedienteGranular(expActPre);}catch(errR){console.warn('heal reentrega corregir:',errR);}
       }
     }
     // Heal: ya aprobada (firma/notif/cerrada) pero la actividad quedó en «Por verificar»
