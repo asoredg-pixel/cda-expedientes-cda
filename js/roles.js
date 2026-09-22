@@ -1108,11 +1108,28 @@ function getOficinasAsignadasSesion(){
   }
   return Array.from(set);
 }
+function esEncargadoRecursosSesion(){
+  if(typeof DEPTOS!=='undefined'&&DEPTOS.some(function(d){return esEncargadoDeptoUsuario(d.id);}))return true;
+  if(typeof OFICINAS_DEGUV!=='undefined'&&Array.isArray(OFICINAS_DEGUV)){
+    return OFICINAS_DEGUV.some(function(o){return esEncargadoOficinaUsuario(o.id);});
+  }
+  return false;
+}
 function getRecursosOficinasVisiblesSesion(){
   const set=new Set();
   if(esModoOficinaDeguv())set.add(deptoActivo);
   if(esSecretaria())set.add('secretaria');
   if(esNcaDeguv())set.add('guaviare');
+  if(esEncargadoDeptoUsuario('guaviare'))set.add('guaviare');
+  if(typeof OFICINAS_DEGUV!=='undefined'&&Array.isArray(OFICINAS_DEGUV)){
+    OFICINAS_DEGUV.forEach(function(o){
+      if(esEncargadoOficinaUsuario(o.id))set.add(o.id);
+    });
+  }
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()&&!esModoResponsable()&&!esModoContratista()){
+    if(deptoActivo==='guaviare')set.add('guaviare');
+    if(typeof esModuloOficina==='function'&&esModuloOficina(deptoActivo))set.add(deptoActivo);
+  }
   if(esAdministrador()){
     const o=getRecursosOficinaActiva();
     if(o)set.add(o);
@@ -1126,7 +1143,10 @@ function getRecursosOficinasVisiblesSesion(){
 }
 function recursosScopeVisibleParaSesion(scope,scopeId){
   if(scope==='sistema')return true;
-  if(scope==='departamento')return scopeId===getRecursosDeptoContext();
+  if(scope==='departamento'){
+    if(scopeId===getRecursosDeptoContext())return true;
+    return esEncargadoDeptoUsuario(scopeId);
+  }
   if(scope==='oficina')return getRecursosOficinasVisiblesSesion().includes(scopeId);
   return false;
 }
@@ -1157,11 +1177,13 @@ function recursosItemCompartidoVisible(item){
 }
 function recursosItemVisibleParaSesion(item){
   if(!item||item.activo===false)return false;
+  if(recursosItemVisiblePorScope(item))return true;
   /* Destinatarios concretos: el contratista no hereda el ámbito de oficina. */
   if(recursosCompDestinaPersonas(item.compartidoCon)&&(esModoResponsable()||esModoContratista())){
     return recursosItemCompartidoVisible(item);
   }
-  if(recursosItemVisiblePorScope(item))return true;
+  const email=getAuthEmailNorm();
+  if(email&&String(item.createdBy||'').trim().toLowerCase()===email&&esEncargadoRecursosSesion())return true;
   return recursosItemCompartidoVisible(item);
 }
 function getRecursosOficinasParaCompartir(item){
