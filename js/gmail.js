@@ -3754,7 +3754,11 @@ async function subirAdjuntosEmailADrive(msg, expIdHint, nombreHint) {
 // Gmail API — enviar correos (RFC 2822 en base64url)
 // ----------------------------------------------------------------
 function _buildMimeEmail(to, subject, htmlBody) {
-  const subjectEncoded = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  const subjectPlain = typeof _normalizeEmailSubjectText === 'function'
+    ? _normalizeEmailSubjectText(subject) : subject;
+  const subjectEncoded = typeof _encodeEmailSubject === 'function'
+    ? _encodeEmailSubject(subjectPlain)
+    : ('=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subjectPlain))) + '?=');
   const bodyB64 = btoa(unescape(encodeURIComponent(htmlBody)));
   const boundary = 'sst_' + Date.now();
   const lines = [
@@ -3817,27 +3821,71 @@ async function gmailSendMessage(to, subject, htmlBody) {
   return gmailSend(to, subject, htmlBody);
 }
 
+// Repara texto UTF-8 leído erróneamente como Latin-1 (ej. "RemisiÃ³n" → "Remisión").
+function _repairUtf8Mojibake(str) {
+  if (!str || typeof str !== 'string') return str;
+  if (!/[\u0080-\u00ff]/.test(str)) return str;
+  try {
+    var bytes = new Uint8Array(str.length);
+    for (var i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+    var decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    if (!decoded || decoded === str) return str;
+    var badBefore = (str.match(/Ã|Â|ƒ|\uFFFD/g) || []).length;
+    var badAfter = (decoded.match(/Ã|Â|ƒ|\uFFFD/g) || []).length;
+    if (badAfter < badBefore || (badBefore > 0 && badAfter === 0)) return decoded;
+    if (badBefore > 0 && !/Ãƒ/.test(decoded)) return decoded;
+  } catch (e) {}
+  return str;
+}
+
+// Asunto legible: RFC 2047 + corrección de mojibake (una o varias capas).
+function _normalizeEmailSubjectText(str) {
+  var s = String(str || '').trim();
+  if (!s) return s;
+  for (var pass = 0; pass < 4; pass++) {
+    var next = _decodeEmailHeaderRfc2047(s);
+    next = _repairUtf8Mojibake(next);
+    if (next === s) break;
+    s = next;
+  }
+  return s.trim();
+}
+
 // Decodifica encoded-words RFC 2047 (=?charset?B/Q?text?=) en cabeceras de correo.
 // Necesario para limpiar asuntos como "=?UTF-8?B?[base64 de 'Fwd: PQRSD #... asunto']?="
 // antes de aplicar el regex que elimina prefijos duplicados.
 function _decodeEmailHeaderRfc2047(str) {
   if (!str || str.indexOf('=?') < 0) return str;
-  return str.replace(/=\?([A-Za-z0-9\-]+)\?(B|Q)\?([^?]*)\?=/gi, function(match, charset, enc, text) {
-    try {
-      var bytes;
-      if (enc.toUpperCase() === 'B') {
-        var bin = atob(text.replace(/\s/g, ''));
-        bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      } else {
-        var qp = text.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, function(_, h) {
-          return String.fromCharCode(parseInt(h, 16));
-        });
-        bytes = new TextEncoder().encode(qp);
-      }
-      return new TextDecoder(charset || 'utf-8').decode(bytes);
-    } catch (e) { return match; }
-  });
+  var prev;
+  var s = str;
+  var guard = 0;
+  do {
+    prev = s;
+    s = s.replace(/=\?([A-Za-z0-9\-]+)\?(B|Q)\?([^?]*)\?=/gi, function(match, charset, enc, text) {
+      try {
+        var bytes;
+        if (enc.toUpperCase() === 'B') {
+          var bin = atob(text.replace(/\s/g, ''));
+          bytes = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        } else {
+          var qp = text.replace(/_/g, ' ');
+          var out = [];
+          for (var qi = 0; qi < qp.length; qi++) {
+            if (qp.charAt(qi) === '=' && qi + 2 < qp.length) {
+              out.push(parseInt(qp.substr(qi + 1, 2), 16));
+              qi += 2;
+            } else {
+              out.push(qp.charCodeAt(qi) & 0xff);
+            }
+          }
+          bytes = new Uint8Array(out);
+        }
+        return new TextDecoder(charset || 'utf-8').decode(bytes);
+      } catch (e) { return match; }
+    });
+  } while (s !== prev && s.indexOf('=?') >= 0 && ++guard < 20);
+  return s.replace(/\s+/g, ' ').trim();
 }
 // Codifica un subject con caracteres no-ASCII como encoded-word UTF-8 base64.
 function _encodeEmailSubject(subj) {
@@ -3868,8 +3916,7 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   if (sepPos < 0) throw new Error('Estructura del correo no reconocida');
   var headerBytes = bytes.slice(0, sepPos);
   var bodyBytes = bytes.slice(sepPos + sepLen);
-  var headerText = '';
-  for (var hi = 0; hi < headerBytes.length; hi++) headerText += String.fromCharCode(headerBytes[hi]);
+  var headerText = new TextDecoder('utf-8', { fatal: false }).decode(headerBytes);
   var lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
   var headerLines = headerText.split(lb);
   // Headers que deben eliminarse del mensaje original al reenviar desde una cuenta diferente.
@@ -3887,16 +3934,18 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
     }
     if (/^Subject:/i.test(hline)) {
       var origSubj = hline.replace(/^Subject:\s*/i, '');
-      // Decodificar RFC 2047 para que el regex pueda limpiar prefijos aunque estén base64/QP
-      var decodedSubj = _decodeEmailHeaderRfc2047(origSubj.trim());
+      hj++;
+      while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) {
+        origSubj += headerLines[hj].replace(/^[\s\t]+/, '');
+        hj++;
+      }
+      var decodedSubj = _normalizeEmailSubjectText(origSubj);
       var cleanSubj = decodedSubj
         .replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '')
         .trim();
       var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
       var newSubj = 'Fwd: ' + expTag + cleanSubj;
       newHeaderLines.push('Subject: ' + _encodeEmailSubject(newSubj));
-      hj++;
-      while (hj < headerLines.length && /^[ \t]/.test(headerLines[hj])) hj++;
       continue;
     }
     newHeaderLines.push(hline);

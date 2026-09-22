@@ -975,7 +975,9 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
   if(!destinatarios||!destinatarios.length)return false;
   if(typeof _gmailApiBest!=='function'&&typeof gmailSend!=='function')return false;
   const num=expId||e._exp||'';
-  const asunto='Fwd: PQRSD #'+num+' '+((e.f_f1||e._tipo_solicitud||'Solicitud').slice(0,80));
+  const tituloRaw=String(e.f_f1||e._tipo_solicitud||'Solicitud').slice(0,80);
+  const titulo=typeof _normalizeEmailSubjectText==='function'?_normalizeEmailSubjectText(tituloRaw):tituloRaw;
+  const asunto='Fwd: PQRSD #'+num+' '+titulo;
   const list=destinatarios.map(function(d){
     if(typeof d==='string')return{email:String(d||'').trim(),nombre:''};
     return{email:String(d&&d.email||'').trim(),nombre:String(d&&d.nombre||'').trim()};
