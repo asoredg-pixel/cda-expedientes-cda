@@ -484,7 +484,9 @@ async function guardarPqrsSecretaria(modo){
       tel=String((document.getElementById('sec-pn-telefono')||{}).value||'').trim();
     }
   }
-  const asunto=String((document.getElementById('sec-asunto')||{}).value||'').trim();
+  const asuntoRaw=String((document.getElementById('sec-asunto')||{}).value||'').trim();
+  const asunto=typeof pqrsAsuntoFromEmailSubject==='function'?pqrsAsuntoFromEmailSubject(asuntoRaw)
+    :(typeof _normalizeEmailSubjectText==='function'?_normalizeEmailSubjectText(asuntoRaw):asuntoRaw);
   const detalle=String((document.getElementById('sec-detalle')||{}).value||'').trim();
   let oficina=(document.getElementById('sec-oficina')||{}).value||'';
   const medioNotif=interna?'':medioNotificacionNorm((document.getElementById('sec-medio-notif')||{}).value||'');
@@ -976,7 +978,8 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
   if(typeof _gmailApiBest!=='function'&&typeof gmailSend!=='function')return false;
   const num=expId||e._exp||'';
   const tituloRaw=String(e.f_f1||e._tipo_solicitud||'Solicitud').slice(0,80);
-  const titulo=typeof _normalizeEmailSubjectText==='function'?_normalizeEmailSubjectText(tituloRaw):tituloRaw;
+  const titulo=typeof pqrsAsuntoFromEmailSubject==='function'?pqrsAsuntoFromEmailSubject(tituloRaw).slice(0,80)
+    :(typeof _normalizeEmailSubjectText==='function'?_normalizeEmailSubjectText(tituloRaw):tituloRaw);
   const asunto='Fwd: PQRSD #'+num+' '+titulo;
   const list=destinatarios.map(function(d){
     if(typeof d==='string')return{email:String(d||'').trim(),nombre:''};

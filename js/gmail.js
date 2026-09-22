@@ -3821,21 +3821,32 @@ async function gmailSendMessage(to, subject, htmlBody) {
   return gmailSend(to, subject, htmlBody);
 }
 
-// Repara texto UTF-8 leído erróneamente como Latin-1 (ej. "RemisiÃ³n" → "Remisión").
+// Repara texto UTF-8 leído erróneamente como Latin-1 (ej. "PETICIÃ"N" → "PETICIÓN").
 function _repairUtf8Mojibake(str) {
   if (!str || typeof str !== 'string') return str;
-  if (!/[\u0080-\u00ff]/.test(str)) return str;
+  var s = str;
+  var badCount = function(t) { return (String(t || '').match(/Ã|Â|ƒ|\uFFFD/g) || []).length; };
   try {
-    var bytes = new Uint8Array(str.length);
-    for (var i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
-    var decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-    if (!decoded || decoded === str) return str;
-    var badBefore = (str.match(/Ã|Â|ƒ|\uFFFD/g) || []).length;
-    var badAfter = (decoded.match(/Ã|Â|ƒ|\uFFFD/g) || []).length;
-    if (badAfter < badBefore || (badBefore > 0 && badAfter === 0)) return decoded;
-    if (badBefore > 0 && !/Ãƒ/.test(decoded)) return decoded;
-  } catch (e) {}
-  return str;
+    if (/[\u0080-\u00ff]/.test(s)) {
+      var viaEscape = decodeURIComponent(escape(s));
+      if (viaEscape && viaEscape !== s && badCount(viaEscape) <= badCount(s)) s = viaEscape;
+    }
+  } catch (e1) {}
+  for (var pass = 0; pass < 3; pass++) {
+    if (!/[\u0080-\u00ff]/.test(s)) break;
+    try {
+      var bytes = new Uint8Array(s.length);
+      for (var i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i) & 0xff;
+      var decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      if (!decoded || decoded === s) break;
+      var badBefore = badCount(s);
+      var badAfter = badCount(decoded);
+      if (badAfter < badBefore || (badBefore > 0 && badAfter === 0)) s = decoded;
+      else if (badBefore > 0 && !/Ãƒ/.test(decoded)) s = decoded;
+      else break;
+    } catch (e2) { break; }
+  }
+  return s;
 }
 
 // Asunto legible: RFC 2047 + corrección de mojibake (una o varias capas).
@@ -3850,6 +3861,23 @@ function _normalizeEmailSubjectText(str) {
   }
   return s.trim();
 }
+
+/** Asunto de cabecera Gmail/API → texto UTF-8 legible (RFC 2047 + mojibake). */
+function gmailGetSubjectHeader(headers) {
+  var raw = gmailGetHeader(headers, 'subject') || '';
+  return _normalizeEmailSubjectText(raw);
+}
+
+/** Asunto para guardar en PQRSD (radicación): normalizado y sin Fwd/Re. */
+function pqrsAsuntoFromEmailSubject(subj) {
+  var s = _normalizeEmailSubjectText(subj);
+  s = s.replace(/^(\s*(Fwd?|Re|RV|AW|RES):\s*)+/gi, '').trim();
+  return s;
+}
+
+window._normalizeEmailSubjectText = _normalizeEmailSubjectText;
+window.gmailGetSubjectHeader = gmailGetSubjectHeader;
+window.pqrsAsuntoFromEmailSubject = pqrsAsuntoFromEmailSubject;
 
 // Decodifica encoded-words RFC 2047 (=?charset?B/Q?text?=) en cabeceras de correo.
 // Necesario para limpiar asuntos como "=?UTF-8?B?[base64 de 'Fwd: PQRSD #... asunto']?="
@@ -3940,7 +3968,9 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
         hj++;
       }
       var decodedSubj = _normalizeEmailSubjectText(origSubj);
-      var cleanSubj = decodedSubj
+      var cleanSubj = (typeof pqrsAsuntoFromEmailSubject === 'function'
+        ? pqrsAsuntoFromEmailSubject(decodedSubj)
+        : decodedSubj)
         .replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '')
         .trim();
       var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
@@ -4248,7 +4278,9 @@ function prePopularFormDesdeEmail(msg) {
   const from = typeof gmailRemitenteParaRadicar === 'function'
     ? gmailRemitenteParaRadicar(msg)
     : gmailParseFrom(gmailGetHeader(headers, 'from'));
-  const subject = gmailGetHeader(headers, 'subject') || '';
+  const subject = typeof pqrsAsuntoFromEmailSubject === 'function'
+    ? pqrsAsuntoFromEmailSubject(gmailGetHeader(headers, 'subject') || '')
+    : (typeof gmailGetSubjectHeader === 'function' ? gmailGetSubjectHeader(headers) : (gmailGetHeader(headers, 'subject') || ''));
   const parts = gmailExtractParts(msg.payload);
   const snippet = msg.snippet || parts.textPlain.slice(0, 300) || '';
 
@@ -4343,7 +4375,9 @@ function prePopularFormDesdeEmail(msg) {
     window._gmailPendingEmailData = {
       remitente: _from.name ? (_from.name + ' <' + (_from.email || '') + '>') : (_from.email || ''),
       fecha: gmailGetHeader(_h, 'date') || '',
-      asunto: gmailGetHeader(_h, 'subject') || '',
+      asunto: typeof pqrsAsuntoFromEmailSubject === 'function'
+        ? pqrsAsuntoFromEmailSubject(gmailGetHeader(_h, 'subject') || '')
+        : (typeof gmailGetSubjectHeader === 'function' ? gmailGetSubjectHeader(_h) : (gmailGetHeader(_h, 'subject') || '')),
       cuerpoHtml: _bodyHtml,
       cuerpoTxt: _bodyTxt,
       adjuntosInfo: _atts
