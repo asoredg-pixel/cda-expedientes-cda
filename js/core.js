@@ -13376,6 +13376,8 @@ function alertarCorreoYaAutorizado(u){
 function mensajeErrorFirestoreUsuario(err){
   const code=err&&err.code;
   if(code==='permission-denied')return 'Permiso denegado en Firestore. Verifique las reglas de seguridad o contacte al administrador.';
+  if(code==='timeout'||/timeout|tard[oó] demasiado/i.test(String(err&&err.message||'')))
+    return 'El guardado tardó demasiado. Verifique la conexión e intente de nuevo.';
   return 'Error al guardar: '+String(err&&err.message||'desconocido');
 }
 function ocultarFormUsuarioFirestore(){
@@ -13384,7 +13386,10 @@ function ocultarFormUsuarioFirestore(){
   const em=document.getElementById('usu-fs-email');if(em)em.readOnly=false;
 }
 async function guardarUsuarioFirestore(){
-  if(_usuariosSaveBusy)return;
+  if(_usuariosSaveBusy){
+    notif('Ya se está guardando un usuario. Espere un momento…','warn');
+    return;
+  }
   if(!puedeGestionarUsuariosAutorizados()){notif('No tiene permiso','err');return;}
   if(typeof toggleUsuariosRolPicker==='function')toggleUsuariosRolPicker(false);
   const db=window._db;
@@ -13403,9 +13408,6 @@ async function guardarUsuarioFirestore(){
   if(_usuariosEditEmail){
     const prev=getUsuarioAutorizadoByEmail(_usuariosEditEmail);
     if(!usuarioEditablePorEncargado(prev)){notif('No puede editar este usuario','err');return;}
-  }else{
-    const dup=await buscarUsuarioAutorizadoPorEmail(email);
-    if(dup){alertarCorreoYaAutorizado(dup);return;}
   }
   if(!esVistaUsuariosAdminCompleta()&&rol!=='responsables'){notif('Solo puede registrar usuarios con rol Responsables','err');return;}
   if(!nombre||!email||!rol){
@@ -13424,7 +13426,12 @@ async function guardarUsuarioFirestore(){
   const eraEdicion=!!_usuariosEditEmail;
   const saveBtn=document.getElementById('usu-fs-guardar');
   const saveBtnLabel=saveBtn?String(saveBtn.textContent||'Guardar'):'Guardar';
+  let saveWatchdog=null;
+  let uiLiberada=false;
   const liberarUiGuardar=function(){
+    if(uiLiberada)return;
+    uiLiberada=true;
+    if(saveWatchdog){clearTimeout(saveWatchdog);saveWatchdog=null;}
     _usuariosSaveBusy=false;
     _usuariosToggleBusy=false;
     if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
@@ -13434,60 +13441,83 @@ async function guardarUsuarioFirestore(){
   _usuariosToggleBusy=true;
   if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Guardando…';}
   if(typeof sstCargaShow==='function')sstCargaShow({title:'Guardando',message:'Registrando usuario autorizado…',sub:'Espere un momento…',pct:null});
+  saveWatchdog=setTimeout(function(){
+    if(!_usuariosSaveBusy)return;
+    liberarUiGuardar();
+    notif('El guardado tardó demasiado. Verifique la conexión e intente de nuevo.','err');
+  },25000);
   try{
-    await window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    if(!eraEdicion){
+      const dup=await buscarUsuarioAutorizadoPorEmail(email);
+      if(dup){
+        liberarUiGuardar();
+        alertarCorreoYaAutorizado(dup);
+        return;
+      }
+    }
+    const setDocP=window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true});
+    await Promise.race([
+      setDocP,
+      new Promise(function(_,rej){
+        setTimeout(function(){
+          const e=new Error('timeout');
+          e.code='timeout';
+          rej(e);
+        },22000);
+      })
+    ]);
+    try{
+      logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
+      mergeUsuarioEnCache({email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
+      paintUsuariosCfgTable();
+    }catch(uiErr){console.warn('guardarUsuarioFirestore UI post-save:',uiErr);}
+    const detalleOk=(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''));
+    liberarUiGuardar();
+    notif('Usuario guardado'+detalleOk,'ok');
+    ocultarFormUsuarioFirestore();
+    // Sync pesada + Drive en segundo plano (no bloquear el botón Guardar)
+    (async function(){
+      let syncParcial=false;
+      try{
+        if(rol==='responsables'){
+          upsertInstructorFromUsuario({email,nombre,rol,deptoResponsable,activo});
+          syncCfgToStore();
+        }
+        if(esVistaUsuariosAdminCompleta()){
+          await persistUsuariosIndexGlobal();
+          await aplicarSyncUsuariosAutorizados();
+        }else{
+          syncResponsablesDesdeUsuariosAutorizados();
+          syncCfgToStore();
+          _saveLSLocal();
+          try{
+            if(rol==='responsables')await saveDepartamentoCfgFirestore(deptoResponsable);
+            else await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());
+          }catch(depErr){console.warn(depErr);syncParcial=true;}
+        }
+      }catch(syncErr){
+        console.warn(syncErr);
+        syncParcial=true;
+      }
+      try{
+        invalidateUsuariosCache();
+        await refreshUsuariosAutorizadosUi();
+      }catch(refErr){console.warn(refErr);syncParcial=true;}
+      try{
+        if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
+        else await syncDriveRevokeTrasUsuarioAutorizado(email);
+      }catch(drvErr){console.warn(drvErr);syncParcial=true;}
+      if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+      if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
+      if(syncParcial)notif('Usuario guardado con sincronización parcial','warn');
+    })();
   }catch(err){
     console.error(err);
     liberarUiGuardar();
     notif(mensajeErrorFirestoreUsuario(err),'err');
-    return;
+  }finally{
+    liberarUiGuardar();
   }
-  logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
-  mergeUsuarioEnCache({email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
-  paintUsuariosCfgTable();
-  const detalleOk=(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''));
-  if(typeof sstCargaHide==='function')sstCargaHide();
-  notif('Usuario guardado'+detalleOk,'ok');
-  ocultarFormUsuarioFirestore();
-  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
-  _usuariosSaveBusy=false;
-  _usuariosToggleBusy=false;
-  // Sync pesada + Drive en segundo plano (no bloquear el botón Guardar)
-  (async function(){
-    let syncParcial=false;
-    try{
-      if(rol==='responsables'){
-        upsertInstructorFromUsuario({email,nombre,rol,deptoResponsable,activo});
-        syncCfgToStore();
-      }
-      if(esVistaUsuariosAdminCompleta()){
-        await persistUsuariosIndexGlobal();
-        await aplicarSyncUsuariosAutorizados();
-      }else{
-        syncResponsablesDesdeUsuariosAutorizados();
-        syncCfgToStore();
-        _saveLSLocal();
-        try{
-          if(rol==='responsables')await saveDepartamentoCfgFirestore(deptoResponsable);
-          else await saveDepartamentoCfgFirestore(getDeptoGestionUsuariosAutorizados());
-        }catch(depErr){console.warn(depErr);syncParcial=true;}
-      }
-    }catch(syncErr){
-      console.warn(syncErr);
-      syncParcial=true;
-    }
-    try{
-      invalidateUsuariosCache();
-      await refreshUsuariosAutorizadosUi();
-    }catch(refErr){console.warn(refErr);syncParcial=true;}
-    try{
-      if(activo)await syncDriveEditorTrasUsuarioAutorizado(email,{email:email,nombre:nombre,rol:rol,activo:true,deptoResponsable:deptoResponsable});
-      else await syncDriveRevokeTrasUsuarioAutorizado(email);
-    }catch(drvErr){console.warn(drvErr);syncParcial=true;}
-    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-    if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
-    if(syncParcial)notif('Usuario guardado con sincronización parcial','warn');
-  })();
 }
 async function setUsuarioFirestoreActivo(email,activo,opts){
   opts=opts||{};
