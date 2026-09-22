@@ -292,6 +292,7 @@ async function loadLS(){
       }
       if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
       if(Array.isArray(g.bibliotecaRepos))bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
+      if(Array.isArray(g.recursosEnlaces)||Array.isArray(g.bibliotecaRepos))window._recursosHydratedFromRemote=true;
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
       if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function')setMantenimientoEstadoLocal(g.mantenimiento);
       else if(typeof setMantenimientoEstadoLocal==='function')setMantenimientoEstadoLocal({activo:false});
@@ -1656,21 +1657,105 @@ async function migrarLocalStorageAFirestore(){
   }
 }
 
+/** IDs eliminados en esta sesión (evita que un guardado con memoria incompleta borre Firestore). */
+function recursosEnsureExplicitDeletesBag(){
+  if(!window._recursosExplicitDeletes)window._recursosExplicitDeletes={repos:[],enlaces:[]};
+  return window._recursosExplicitDeletes;
+}
+function recursosRegisterExplicitDelete(kind,id){
+  const s=String(id||'').trim();
+  if(!s)return;
+  const bag=recursosEnsureExplicitDeletesBag();
+  const key=kind==='enlace'?'enlaces':'repos';
+  if(!bag[key].includes(s))bag[key].push(s);
+}
+window.recursosRegisterExplicitDelete=recursosRegisterExplicitDelete;
+
+/** Une remoto + local por id (local gana). Respeta eliminaciones explícitas. */
+function mergeRecursosArraysForSave(remoteArr,localArr,deletedIds){
+  const del=new Set((deletedIds||[]).map(String));
+  const byId=new Map();
+  (Array.isArray(remoteArr)?remoteArr:[]).forEach(function(item){
+    if(!item||typeof item!=='object')return;
+    const id=String(item.id||'').trim();
+    if(!id||del.has(id))return;
+    byId.set(id,item);
+  });
+  (Array.isArray(localArr)?localArr:[]).forEach(function(item){
+    if(!item||typeof item!=='object')return;
+    const id=String(item.id||'').trim();
+    if(!id||del.has(id))return;
+    const prev=byId.get(id);
+    byId.set(id,prev?Object.assign({},prev,item):item);
+  });
+  return Array.from(byId.values());
+}
+
 async function saveRecursosFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
+  if(window._recursosSaveBusy){
+    try{await window._recursosSaveBusy;}catch(e){}
+  }
+  let resolveBusy;
+  window._recursosSaveBusy=new Promise(function(r){resolveBusy=r;});
   try{
+    const bag=recursosEnsureExplicitDeletesBag();
+    const localRepos=(bibliotecaRepos||[]).slice();
+    const localEnlaces=(recursosEnlaces||[]).slice();
+    const localIdsRepos=new Set(localRepos.map(function(r){return String(r&&r.id||'').trim();}).filter(Boolean));
+    const localIdsEnlaces=new Set(localEnlaces.map(function(l){return String(l&&l.id||'').trim();}).filter(Boolean));
+    let remoteRepos=[];
+    let remoteEnlaces=[];
+    try{
+      const snap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+      if(snap.exists()){
+        const g=snap.data()||{};
+        if(Array.isArray(g.bibliotecaRepos))remoteRepos=g.bibliotecaRepos;
+        if(Array.isArray(g.recursosEnlaces))remoteEnlaces=g.recursosEnlaces;
+      }
+    }catch(readErr){
+      console.warn('saveRecursosFirestore: no se pudo leer remoto antes de guardar',readErr);
+    }
+    let mergedRepos=mergeRecursosArraysForSave(remoteRepos,localRepos,bag.repos);
+    let mergedEnlaces=mergeRecursosArraysForSave(remoteEnlaces,localEnlaces,bag.enlaces);
+    if(typeof normalizeBibliotecaReposList==='function')mergedRepos=normalizeBibliotecaReposList(mergedRepos);
+    else if(typeof normalizeRecursosScopeItem==='function')mergedRepos=mergedRepos.map(normalizeRecursosScopeItem);
+    if(typeof normalizeRecursosEnlacesList==='function')mergedEnlaces=normalizeRecursosEnlacesList(mergedEnlaces);
+    else if(typeof normalizeRecursosScopeItem==='function')mergedEnlaces=mergedEnlaces.map(normalizeRecursosScopeItem);
+    const remoteOnlyRepos=remoteRepos.filter(function(r){
+      const id=String(r&&r.id||'').trim();
+      return id&&!localIdsRepos.has(id)&&!bag.repos.includes(id);
+    });
+    const remoteOnlyEnlaces=remoteEnlaces.filter(function(l){
+      const id=String(l&&l.id||'').trim();
+      return id&&!localIdsEnlaces.has(id)&&!bag.enlaces.includes(id);
+    });
+    if(remoteOnlyRepos.length||remoteOnlyEnlaces.length){
+      console.warn(
+        'saveRecursosFirestore: se conservaron registros remotos ausentes en memoria local',
+        {repos:remoteOnlyRepos.length,enlaces:remoteOnlyEnlaces.length}
+      );
+    }
+    bibliotecaRepos=mergedRepos;
+    recursosEnlaces=mergedEnlaces;
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{
-      recursosEnlaces:recursosEnlaces||[],
-      bibliotecaRepos:bibliotecaRepos||[],
+      recursosEnlaces:mergedEnlaces,
+      bibliotecaRepos:mergedRepos,
       recursosConfig:recursosConfig||{guainiaDriveRoot:'',vaupesDriveRoot:''},
       updatedAt:new Date().toISOString()
     },{merge:true});
+    bag.repos=[];
+    bag.enlaces=[];
+    window._recursosHydratedFromRemote=true;
     return true;
   }catch(err){
     console.error('saveRecursosFirestore:',err);
     if(!window._lastFsSaveError)window._lastFsSaveError={code:err&&err.code||'unknown',msg:'Recursos: '+(err&&err.message||'Error')};
     return false;
+  }finally{
+    if(resolveBusy)resolveBusy();
+    window._recursosSaveBusy=null;
   }
 }
 
@@ -1683,10 +1768,9 @@ async function reloadRecursosFirestore(){
       const g=snap.data();
       if(Array.isArray(g.recursosEnlaces))recursosEnlaces=normalizeRecursosEnlacesList(g.recursosEnlaces);
       if(Array.isArray(g.bibliotecaRepos)){
-        const rawLen=g.bibliotecaRepos.length;
         bibliotecaRepos=normalizeBibliotecaReposList(g.bibliotecaRepos);
-        if(bibliotecaRepos.length<rawLen)saveRecursosFirestore();
       }
+      window._recursosHydratedFromRemote=true;
       if(g.recursosConfig&&typeof g.recursosConfig==='object')recursosConfig={...recursosConfig,...g.recursosConfig};
     }
     return true;

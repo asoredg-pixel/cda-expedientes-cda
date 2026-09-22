@@ -1947,6 +1947,7 @@ async function eliminarRecursosEnlace(id) {
     return;
   }
   const run = async function() {
+    if (typeof recursosRegisterExplicitDelete === 'function') recursosRegisterExplicitDelete('enlace', id);
     recursosEnlaces = recursosEnlaces.filter(function(x) { return x.id !== id; });
     const ok = await saveRecursosFirestore();
     if (ok) { notif('Enlace eliminado', 'ok'); renderRecursosPanel(); if (typeof renderListasCfg === 'function') renderListasCfg(); }
@@ -2148,6 +2149,7 @@ async function eliminarRecursosRepo(id) {
   }
   const run = async function() {
     const vinc = bibNormalizeVinculosList(r.vinculados);
+    if (typeof recursosRegisterExplicitDelete === 'function') recursosRegisterExplicitDelete('repo', id);
     bibliotecaRepos = bibliotecaRepos.filter(function(x) { return x.id !== id; });
     vinc.forEach(function(v) { bibRemoveRepoIdFromEntidad(v, id); });
     const ok = await saveRecursosFirestore();
