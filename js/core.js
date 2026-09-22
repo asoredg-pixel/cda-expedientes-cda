@@ -8426,7 +8426,7 @@ async function taskReviewAdjuntosDesdeSoportes(t,e){
       const d=docs[i];
       if(!d)continue;
       if(typeof pqrsDriveDocToFile!=='function')continue;
-      try{const f=await pqrsDriveDocToFile(d);if(f)files.push(f);}catch(err){console.warn('adjunto notif actividad:',err);}
+      try{const f=await pqrsDriveDocToFile(d,e&&e._exp);if(f)files.push(f);}catch(err){console.warn('adjunto notif actividad:',err);}
     }
     return files;
   }
@@ -8438,7 +8438,7 @@ async function taskReviewAdjuntosDesdeSoportes(t,e){
     if(!s)continue;
     if(typeof _pqrsDocEsBorradorInterno==='function'&&_pqrsDocEsBorradorInterno(s))continue;
     if(typeof pqrsDriveDocToFile!=='function')continue;
-    try{const f=await pqrsDriveDocToFile(s);if(f)files.push(f);}catch(err){console.warn('adjunto notif actividad:',err);}
+    try{const f=await pqrsDriveDocToFile(s,e&&e._exp);if(f)files.push(f);}catch(err){console.warn('adjunto notif actividad:',err);}
   }
   return files;
 }
@@ -30492,7 +30492,16 @@ function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos,opts){
   const wf=getPqrsWorkflow(e);
   const oficio=wf.oficio||e._pqrs_respuesta_oficio||'';
   const docs=Array.isArray(documentos)?documentos:[];
-  const linksHtml=docs.filter(d=>d&&d.driveLink).map(d=>'<p>📎 <a href="'+escAttr(d.driveLink)+'">'+escAttr(d.nombre||d.driveLink)+'</a></p>').join('');
+  const linksHtml=docs.filter(function(d){return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId);}).map(function(d,di){
+    let href=String(d.driveLink||d.previewLink||d.url||'').trim();
+    if(!href&&(d.fileId||d.driveFileId))
+      href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
+    if(!href)return'';
+    const nom=typeof pqrsNombreEnlaceCorreo==='function'
+      ?pqrsNombreEnlaceCorreo(d,di,expId)
+      :String(d.nombre||d.label||d.driveFilename||href);
+    return'<p>📎 <a href="'+escAttr(href)+'">'+escAttr(nom)+'</a></p>';
+  }).filter(Boolean).join('');
   const cuerpoHtml=cuerpo?('<p>'+escAttr(cuerpo).replace(/\n/g,'</p><p>')+'</p>'):'';
   let h='<p>Estimado/a <strong>'+escAttr(nombre)+'</strong>,</p>'+
     '<p>Su solicitud <strong>'+escAttr(expId)+'</strong> ('+escAttr(tipo)+') ha sido <strong>atendida</strong>.</p>';
@@ -30503,12 +30512,18 @@ function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos,opts){
   return h;
 }
 /** Descarga un doc del workflow desde Drive como File (para adjuntar al correo). */
-async function pqrsDriveDocToFile(doc){
+async function pqrsDriveDocToFile(doc,expIdOpt){
   if(!doc)return null;
+  const expId=String(expIdOpt||doc._expId||doc.expId||'').trim();
+  const nombrePublico=function(d){
+    if(typeof pqrsNombreEnlaceCorreo==='function')return pqrsNombreEnlaceCorreo(d,null,expId);
+    return String(d.localNombre||d.nombre||d.label||d.driveFilename||'adjunto.pdf')
+      .replace(/^(por_notificar|atendido|por_firma|por_firmar|revision)-/i,'');
+  };
   // Preferir blob local (acabado de seleccionar/subir) — evita fallos al re-descargar de Drive.
   const localBlob=doc.localBlob||doc._localBlob||doc.blob||null;
   if(localBlob){
-    let nombre=String(doc.localNombre||doc.nombre||doc.label||doc.driveFilename||'adjunto.pdf').replace(/^(por_notificar|atendido|por_firma|por_firmar|revision)-/i,'');
+    let nombre=nombrePublico(doc);
     if(!nombre||nombre==='.')nombre='adjunto.pdf';
     const mime=doc.localMime||doc.mimeType||doc.mime||(localBlob.type)||'application/pdf';
     return localBlob instanceof File?localBlob:new File([localBlob],nombre,{type:mime});
@@ -30539,7 +30554,7 @@ async function pqrsDriveDocToFile(doc){
         continue;
       }
       const blob=await r.blob();
-      let nombre=String(doc.nombre||doc.label||doc.driveFilename||'adjunto.pdf').replace(/^(por_notificar|atendido|por_firma|por_firmar|revision)-/i,'');
+      let nombre=nombrePublico(doc);
       if(!nombre||nombre==='.')nombre='adjunto.pdf';
       const mime=blob.type||doc.mimeType||doc.mime||'application/pdf';
       return new File([blob],nombre,{type:mime});
@@ -30551,6 +30566,41 @@ async function pqrsDriveDocToFile(doc){
  * Prepara oficio firmado + anexos como Files para el correo de notificación.
  * Si un archivo falla, se omite (el HTML sigue con enlaces Drive).
  */
+/** Quita prefijos internos de Drive (por_firmar-, revision-, v2-, etc.) del nombre de archivo. */
+function pqrsStripPrefijoInternoDrive(n){
+  let s=String(n||'').trim();
+  if(!s)return '';
+  for(let i=0;i<8;i++){
+    const prev=s;
+    s=s.replace(/^(docprincipal|anexo\d*)[-_]?(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido|notificado|vital_gestion|ok|guia|corregir)[-_]/i,'');
+    s=s.replace(/^v\d+-/i,'');
+    s=s.replace(/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido|notificado|guia|corregir)[-_]/i,'');
+    if(s===prev)break;
+  }
+  return s.trim();
+}
+window.pqrsStripPrefijoInternoDrive=pqrsStripPrefijoInternoDrive;
+/** Nombre presentable en enlaces/adjuntos de correo al ciudadano (p. ej. respuesta-RAD 20261606.pdf). */
+function pqrsNombreEnlaceCorreo(d,idx,expId){
+  if(!d)return 'respuesta.pdf';
+  const esAn=d._notif_rol==='anexo'
+    ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(d))
+    ||(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d))
+    ||!!(d.es_anexo||d.esAnexo);
+  let clean=pqrsStripPrefijoInternoDrive(d.driveFilename||d.nombre||d.label||'');
+  if(!clean||clean==='.'){
+    const rad=String(expId||'').trim();
+    clean=rad?('RAD '+rad.replace(/^RAD\s*/i,'').trim()+'.pdf'):'documento.pdf';
+  }
+  if(esAn){
+    const n=parseInt(d.anexo_n||d.anexoN||(idx!=null?idx+1:1),10)||1;
+    if(!/^anexo/i.test(clean))clean='anexo'+n+'-'+clean;
+    return clean;
+  }
+  if(!/^respuesta[-_]/i.test(clean))clean='respuesta-'+clean;
+  return clean;
+}
+window.pqrsNombreEnlaceCorreo=pqrsNombreEnlaceCorreo;
 /**
  * Etiqueta pública para documento/anexo en correo, PDF y consulta.
  * No usar «Proyección» (sugiere que el documento no está aprobado).
@@ -30562,15 +30612,13 @@ function etiquetaDocNotifPublica(d,idx){
     ||(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d))
     ||!!(d.es_anexo||d.esAnexo);
   const n=parseInt(d.anexo_n||d.anexoN||(idx!=null?idx+1:1),10)||1;
-  let nom=String(d.driveFilename||d.nombre||d.label||'').trim();
+  let nom=pqrsStripPrefijoInternoDrive(String(d.driveFilename||d.nombre||d.label||'').trim());
   if(/^proyecci/i.test(nom)||nom==='Proyección de respuesta')nom='';
-  if(/^docprincipal[-_]/i.test(nom)||/^anexo\d*[-_]/i.test(nom)){
-    // Mantener nombre Drive discriminado
-  }else if(/^Documento principal$/i.test(nom)||/^Anexo\s+\d+$/i.test(nom)){
-    nom='';
-  }
+  if(/^Documento principal$/i.test(nom)||/^Anexo\s+\d+$/i.test(nom))nom='';
   if(esAn)return nom?('Anexo '+n+': '+nom):('Anexo '+n);
-  return nom?('Documento principal: '+nom):'Documento principal';
+  const archivo=typeof pqrsNombreEnlaceCorreo==='function'?pqrsNombreEnlaceCorreo(d,idx,null):nom;
+  const nomVis=archivo.replace(/^respuesta[-_]/i,'')||nom;
+  return nomVis?('Documento principal: '+nomVis):'Documento principal';
 }
 window.etiquetaDocNotifPublica=etiquetaDocNotifPublica;
 /**
@@ -30720,7 +30768,8 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos,opts){
     if(seen.has(key))continue;
     seen.add(key);
     try{
-      const f=typeof pqrsDriveDocToFile==='function'?await pqrsDriveDocToFile(d):null;
+      const expAdj=opts.e&&opts.e._exp;
+      const f=typeof pqrsDriveDocToFile==='function'?await pqrsDriveDocToFile(d,expAdj):null;
       if(f)files.push(f);
       else fallos.push(String(d.nombre||d.label||'doc'));
     }catch(err){
