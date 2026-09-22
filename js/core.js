@@ -10313,6 +10313,7 @@ function renderPqrsEntregaCamposHtml(e){
   e=e||{};
   const wf=getPqrsWorkflow(e);
   const tipoActual=String(wf.tipo||'').trim();
+  const tipoInicial=tipoActual||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio');
   const canalDef=(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO);
   const canalActual=wf.canal||e._pqrs_respuesta_medio||canalDef;
   const emailTo=String(wf.email_to||'').trim()
@@ -10330,17 +10331,17 @@ function renderPqrsEntregaCamposHtml(e){
       if(av&&av.includes('@')){emailToEff=av;break;}
     }
   }
-  const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoActual===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
+  const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoInicial===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   let h='<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)" id="pqrs-entrega-campos">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
   h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
     mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
-    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio firmado')+
+    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio para revisión / firma')+
     mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
-    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoActual)+'"></div>'+
-    '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
-  h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoActual?'block':'none')+'">';
+    '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoInicial)+'"></div>'+
+    '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);display:'+(tipoInicial?'none':'')+'">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
+  h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoInicial?'block':'none')+'">';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" id="pqrs-entrega-fecha-row"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
     '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span id="pqrs-entrega-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-entrega-oficio-hint" style="font-weight:400;color:var(--tx3)"> (si aplica)</span></label>'+
@@ -17630,11 +17631,40 @@ function pqrsRevisionMuestraCorreo(e,wf){
     return pqrsEsCanalCorreo(wf.canal||'')||!!String(wf.email_to||'').trim();
   return false;
 }
+/** Entrega en revisión que debe usar imprimir / firma / notificar (no solo «Aprobar y enviar»). */
+function pqrsRevisionEntregaRequiereFlujoFirma(e,wf){
+  if(!e)return false;
+  wf=wf||(typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{});
+  const T=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO:{OFICIO:'oficio',MENSAJE:'mensaje',INFORMATIVA:'informativa'};
+  const tipo=String(wf.tipo||'').trim();
+  if(tipo===T.OFICIO||tipo==='oficio'||tipo==='oficio_firmado')return true;
+  if(tipo===T.INFORMATIVA||tipo==='informativa')return false;
+  if(String(wf.oficio||'').trim())return true;
+  const docs=(wf.documentos||[]).filter(function(d){
+    return d&&!(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d));
+  });
+  const mains=docs.filter(function(d){
+    return !(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d));
+  });
+  return mains.some(function(d){
+    const tp=String(d.tipo||'').toLowerCase();
+    if(tp==='oficio_firmado'||tp==='drive'||tp==='pdf')return true;
+    if(tp==='link'||tp==='soporte_notificacion')return false;
+    const hasFile=!!(d.fileId||d.driveFileId||d.driveLink||d.previewLink||d.url);
+    if(!hasFile)return false;
+    const nm=String(d.nombre||d.driveFilename||d.label||'').toLowerCase();
+    if(/proyecci|oficio|respuesta/.test(nm))return true;
+    const est=String(d.driveEstado||'').toLowerCase();
+    return est==='revision'||est==='por_firmar'||est==='por_firma';
+  });
+}
+window.pqrsRevisionEntregaRequiereFlujoFirma=pqrsRevisionEntregaRequiereFlujoFirma;
 /** Mensaje simple PQRSD en «Por revisar» del encargado: el correo vive en ✅, no en ✉️. */
 function taskReviewEsMensajeSimpleRevision(e){
   if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
   if(typeof pqrsEnRevisionNca!=='function'||!pqrsEnRevisionNca(e))return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  if(typeof pqrsRevisionEntregaRequiereFlujoFirma==='function'&&pqrsRevisionEntregaRequiereFlujoFirma(e,wf))return false;
   const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
   return tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
 }
