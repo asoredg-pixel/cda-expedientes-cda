@@ -3280,12 +3280,20 @@ async function generarPdfSolicitudCorreo(emailData, expId) {
     ['Asunto:', ed.asunto || '']
   ];
   doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  let metaLabelW = 0;
+  meta.forEach(function(row) {
+    const w = doc.getTextWidth(row[0]);
+    if (w > metaLabelW) metaLabelW = w;
+  });
+  const metaValueX = margin + Math.ceil(metaLabelW) + 12;
+  const metaValueMaxW = Math.max(80, pageW - margin - metaValueX);
   meta.forEach(function(row) {
     doc.setFont('helvetica', 'bold'); doc.text(row[0], margin, y);
     doc.setFont('helvetica', 'normal');
-    const lines = doc.splitTextToSize(String(row[1] || ''), maxW - 70);
-    doc.text(lines, margin + 70, y);
-    y += Math.max(15, lines.length * 14);
+    const lines = doc.splitTextToSize(String(row[1] || ''), metaValueMaxW);
+    y = _pdfWriteLines(doc, lines, metaValueX, y, 14, pageH, margin);
+    y += 2;
   });
   y += 6; doc.setDrawColor(190); doc.line(margin, y, pageW - margin, y); y += 18;
 
