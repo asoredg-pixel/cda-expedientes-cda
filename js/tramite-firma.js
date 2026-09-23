@@ -442,18 +442,14 @@ function renderTramiteFirmaVerifyExtrasHtml(expId,taskId,t){
   }
   // Libres: la decisión (imprimir / firma / cerrar) va en renderTaskVerifyBarHtml
   if(t.sinExpediente)return'';
-  const req=taskRequiereFirmaEffective(t,expId);
   const wf=getTaskFirmaWf(t);
   let selNotif='';
   if(typeof _pqrsOpcionesNotificadorHtml==='function'&&e){
     selNotif=_pqrsOpcionesNotificadorHtml(e,wf,wf.notificar_por||wf.notificar_por_propuesto||'',{modo:'revision',id:'tramite-notif-por-sel',todosResponsables:true,deptoId:e._depto});
   }
+  if(!selNotif)return'';
   return '<div style="margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
-    '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
-      '<input type="checkbox" id="task-rev-requiere-firma"'+(req?' checked':'')+' style="width:15px;height:15px;accent-color:var(--bl)"> '+
-      '<span><strong>Requiere firma del Director</strong> — al aprobar pasa a Por firmar (imprimir → firma → notificar). Si no, se cierra y se notifica al ciudadano.</span>'+
-    '</label>'+
-    (selNotif?'<div style="margin-top:8px">'+selNotif+'</div>':'')+
+    selNotif+
     '</div>';
 }
 
@@ -1387,19 +1383,8 @@ async function notificarCiudadanoTrasVerificarTramite(expId,taskId){
   }
 }
 
-/** Confirmar cierre: si requiere firma → flujo firma; si no → verificar + publicar + correo. */
+/** «Aprobar y cerrar» no manda a Por firmar. Ese paso es solo «Aprobar y pasar para Imprimir». */
 function confirmarCierreTaskTramiteAware(expId,taskId){
-  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-  const e=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
-  if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return false;
-  const chk=document.getElementById('task-rev-requiere-firma');
-  // Sin expediente: «Confirmar y cerrar» no fuerza firma (use botones Para imprimir / Para firma)
-  if(t&&t.sinExpediente&&!chk)return false;
-  const quiereFirma=chk?!!chk.checked:taskRequiereFirmaEffective(t,expId);
-  if(quiereFirma){
-    tramiteEnviarAFirmaDesdeRevision(expId,taskId);
-    return true;
-  }
   return false;
 }
 

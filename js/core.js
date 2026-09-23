@@ -18542,7 +18542,7 @@ function confirmarCierreTask(expId,taskId,opts){
     notif('Gestione esta PQRSD desde el flujo de revisión / firma / notificación (no como cierre de actividad)','warn');
     return;
   }
-  // Trámite con firma: checkbox o botón «Enviar a firma»
+  // «Aprobar y cerrar» cierra. Por firmar solo sale de «Aprobar y pasar para Imprimir».
   if(typeof confirmarCierreTaskTramiteAware==='function'&&confirmarCierreTaskTramiteAware(expId,taskId))return;
   verificarTaskExp(expId,taskId,fechaCierre,opts);
 }
@@ -20141,6 +20141,15 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       if(fid)trashIds.push(fid);
     });
     const fechaC=fecha||hoy();
+    // Cierre real: si quedó en Por firmar / Para firma, sale de esa paleta (sin «X Imprimir»).
+    if((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))
+      ||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))){
+      t.requiereFirma=false;
+      const prevWf=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
+      t.firmaWf=Object.assign({},prevWf,{fase:''});
+      if(!Array.isArray(t.historial))t.historial=[];
+      t.historial.push({tipo:'firma_wf',fecha:fechaC,ts:Date.now(),por:taskComentarioAutor(),nota:'Cierre sin firma — sale de Por firmar'});
+    }
     const repPend=getUltimoReportadoPor(t);
     if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
       (t.asignados||[]).filter(a=>a.estado==='por_verificar'||a.estado==='por_corregir').forEach(a=>{
