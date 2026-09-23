@@ -7602,6 +7602,14 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar entrega o actividad" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   else if(e&&typeof puedeEliminarPqrsEnVisor==='function'&&puedeEliminarPqrsEnVisor(e))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar PQRSD" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
+  // Por revisar: mismos ✅ / 📤 que el rail de «Revisar entrega», sin duplicar el de Por firmar.
+  if(!enPorFirmar&&typeof taskReviewDecisionRailHtml==='function'){
+    const enPorRevisarRail=(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))
+      ||(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))
+      ||(typeof estadoTask==='function'&&estadoTask(t)==='Por verificar')
+      ||(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e));
+    if(enPorRevisarRail)h+=taskReviewDecisionRailHtml(refExp,taskId,t);
+  }
   return h+'</nav>';
 }
 /** Rail mínimo «Por firmar»: ver docs/anexos de la última entrega + marcar impreso. */
@@ -24028,7 +24036,7 @@ function renderActRowToolbarHtml(t,expAct){
     return actsE;
   }
   let acts='<span class="sst-act-toolbar">';
-  // 🧐 Revisar: «Por revisar» y «Revisados» (gestionar / devolver / firma)
+  // 🧐 solo en «Revisados». En «Por revisar» el 🔍 trae ✅ y 📤.
   const esRevFinalNotif=typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,expAct);
   const pendienteRev=taskPendienteVerificacion(t)
     ||(expAct&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct))
@@ -24049,15 +24057,19 @@ function renderActRowToolbarHtml(t,expAct){
   }
   const canRevisarDept=esVistaActividadesDepto()&&!esModoResponsable()&&(pendienteRev||esRevisadaEnc)
     &&!(expAct&&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(expAct)&&!pendienteRev&&!esRevisadaEnc);
-  if((pendienteRev||esRevisadaEnc)&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
-    const revOpts=esRevisadaEnc?'{verRevisado:true}':(esRevFinalNotif?'{revisarEntrega:true}':'');
-    const titRev=esRevFinalNotif?'Revisar entrega':(esPqrsRev?'Revisar respuesta enviada':(esRevisadaEnc?'Ver revisión y gestionar':'Revisar entrega'));
-    acts+='<button type="button" class="btn bsm bic act-ico" title="'+titRev+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\''+(revOpts?','+revOpts:'')+')">🧐</button>';
-  }
-  const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   const enPorFirmarVista=(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)
       &&((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))))
     ||(esPqrs&&expAct&&((typeof pqrsEnPorFirmar==='function'&&pqrsEnPorFirmar(expAct))||(typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(expAct))));
+  const verActDeptHtml=(!esModoResponsable()&&!enPorFirmarVista&&typeof actBtnVerPqrsOrigenDeptHtml==='function')
+    ?actBtnVerPqrsOrigenDeptHtml(t.exp,t.id,t,expAct):'';
+  if((pendienteRev||esRevisadaEnc)&&(canRevisarDept||puedeGestionarActividadesDepto()||(esPqrs&&(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador())))){
+    if(!(pendienteRev&&verActDeptHtml)){
+      const revOpts=esRevisadaEnc?'{verRevisado:true}':(esRevFinalNotif?'{revisarEntrega:true}':'');
+      const titRev=esRevFinalNotif?'Revisar entrega':(esPqrsRev?'Revisar respuesta enviada':(esRevisadaEnc?'Ver revisión y gestionar':'Revisar entrega'));
+      acts+='<button type="button" class="btn bsm bic act-ico" title="'+titRev+'" onclick="event.stopPropagation();openTaskCommentsModal(\''+eid+'\',\''+tid+'\''+(revOpts?','+revOpts:'')+')">🧐</button>';
+    }
+  }
+  const showChat=(!esModoResponsable())||(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo));
   const isVitalRow=typeof esCargoVital==='function'&&esCargoVital();
   // VITAL / encargado en «Por firmar»: chat, notas y organizar día (también PQRSD)
   const showVitalPorFirmaActs=enPorFirmarVista&&(isVitalRow||esVistaActividadesDepto());
@@ -24080,8 +24092,8 @@ function renderActRowToolbarHtml(t,expAct){
   // En «Por firmar» la vista de docs es 🖨️ (no duplicar 🔍)
   if(esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo)&&!enPorFirmarVista)
     acts+=actBtnVerDocumentoRespHtml(t.exp,t.id,t,expAct);
-  else if(!esModoResponsable()&&!enPorFirmarVista)
-    acts+=actBtnVerPqrsOrigenDeptHtml(t.exp,t.id,t,expAct);
+  else if(verActDeptHtml)
+    acts+=verActDeptHtml;
   // Firma / notificar solo si NO hay solicitud de traslado o eliminación pendiente
   // Paleta «Por firmar»: 🖨️ (docs + marcar impreso) y 📤 cargar firmado (VITAL y encargado)
   if(!sol&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
