@@ -7607,7 +7607,8 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
     const enPorRevisarRail=(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))
       ||(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))
       ||(typeof estadoTask==='function'&&estadoTask(t)==='Por verificar')
-      ||(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e));
+      ||(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
+      ||(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t));
     if(enPorRevisarRail)h+=taskReviewDecisionRailHtml(refExp,taskId,t);
   }
   return h+'</nav>';
@@ -8005,10 +8006,39 @@ function marcarActividadTrasNotifReportada(t,por,fechaN){
   if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
 }
 window.marcarActividadTrasNotifReportada=marcarActividadTrasNotifReportada;
+/** Devolución que el encargado decide aprobar igual: queda como entrega en revisión. */
+function liberarPorCorregirParaAprobacion(expId,taskId){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t0||typeof actividadCuentaComoPorCorregir!=='function'||!actividadCuentaComoPorCorregir(t0))return false;
+  const refId=t0.sinExpediente?(t0.codigo||expId):expId;
+  const tid=String(t0.id||taskId||'').trim();
+  if(typeof mutateTask!=='function'||!tid)return false;
+  mutateTask(refId,tid,function(tk){
+    if(!tk)return;
+    if(typeof normalizeTask==='function')normalizeTask(tk);
+    const fecha=tk.fechaReportada||(typeof hoy==='function'?hoy():'');
+    (tk.asignados||[]).forEach(function(a){
+      if(!a||a.estado!=='por_corregir')return;
+      a.estado='por_verificar';
+      if(!a.fechaReportada)a.fechaReportada=fecha;
+      a.fechaAtendida='';
+    });
+    if(!tk.fechaReportada)tk.fechaReportada=fecha;
+    tk.fechaAtendida='';
+    tk.estado='Por verificar';
+    if(tk.ultimaRevisionDepto&&tk.ultimaRevisionDepto.tipo==='corregir')tk.ultimaRevisionDepto=null;
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+  });
+  return true;
+}
+window.liberarPorCorregirParaAprobacion=liberarPorCorregirParaAprobacion;
 function taskReviewCanShowDecisionRail(t,expId){
   if(!t||esModoResponsable()||esJurisdiccional())return false;
-  // Por corregir: falta reentrega; no Aprobar hasta que vuelva a Por revisar
-  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return false;
+  // Por corregir: el encargado puede aprobar con el mismo flujo de Por revisar
+  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))
+    return typeof canDeptVerificarCierre==='function'&&canDeptVerificarCierre(t);
   const e=typeof getExpById==='function'?getExpById(expId):null;
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))return true;
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))return true;
@@ -8189,10 +8219,7 @@ function taskReviewConfirmarDecision(expId,taskId){
 function taskReviewDecidirAprobar(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-  if(t&&typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t)){
-    notif('La actividad está por corregir. Espere la nueva entrega (volverá a Por revisar).','err');
-    return;
-  }
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e)){
     if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
       &&typeof tramiteAprobarRevisionFinalNotif==='function'){
@@ -8202,7 +8229,9 @@ function taskReviewDecidirAprobar(expId,taskId){
       ncaAprobarRevisionFinalNotif(expId);return;
     }
   }
-  if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)){
+  const faseDec=e&&typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  const enDecisionPqrs=!!(e&&((typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))||faseDec===PQRS_WF.RECHAZADA));
+  if(enDecisionPqrs){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
     const canal=String(wf.canal||'').trim();
@@ -8245,6 +8274,7 @@ function taskReviewDecidirImprimir(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const revOpts={omitNotificadorEnAprobacion:true,mantenerPaletaPorRevisar:true};
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioFirmado==='function'){
     ncaAprobarOficioFirmado(expId,revOpts);return;
   }
@@ -8983,6 +9013,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       driveEstado:'atendido'
     }:null;
     prog(95,'Cerrando actividad…');
+    if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(e&&e._exp?e._exp:refId,(t&&t.id)||taskId);
     if(esPqrsNotif&&typeof taskReviewCerrarPqrsAtendida==='function'){
       taskReviewCerrarPqrsAtendida(e,{
         fecha:fechaC,por:por,cuerpo:cuerpo,notificada:true,
@@ -17670,7 +17701,8 @@ window.pqrsRevisionEntregaRequiereFlujoFirma=pqrsRevisionEntregaRequiereFlujoFir
 /** Mensaje simple PQRSD en «Por revisar» del encargado: el correo vive en ✅, no en ✉️. */
 function taskReviewEsMensajeSimpleRevision(e){
   if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
-  if(typeof pqrsEnRevisionNca!=='function'||!pqrsEnRevisionNca(e))return false;
+  const faseMsg=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  if(!((typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))||faseMsg===PQRS_WF.RECHAZADA))return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   if(typeof pqrsRevisionEntregaRequiereFlujoFirma==='function'&&pqrsRevisionEntregaRequiereFlujoFirma(e,wf))return false;
   const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
@@ -17679,7 +17711,8 @@ function taskReviewEsMensajeSimpleRevision(e){
 /** Informativa en «Por revisar»: solo Aprobar y cerrar (sin correo ni imprimir). */
 function taskReviewEsInformativaRevision(e){
   if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
-  if(typeof pqrsEnRevisionNca!=='function'||!pqrsEnRevisionNca(e))return false;
+  const faseInfo=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  if(!((typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))||faseInfo===PQRS_WF.RECHAZADA))return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
   const tipo=wf.tipo||'';
   return tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')||tipo==='informativa';
@@ -28148,6 +28181,7 @@ async function ncaAprobarMensajeSimple(expId){
     if(!toList.length){notif('Verifique el correo de destino (Para)','err');return;}
   }
   window._ncaAprobarMensajeBusy=true;
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskIdFinal);
   const btnAprobar=document.getElementById('nca-aprobar-mensaje-btn');
   const btnLabel=btnAprobar?String(btnAprobar.textContent||''):'';
   if(btnAprobar){btnAprobar.disabled=true;btnAprobar.textContent='Enviando…';}
@@ -28310,6 +28344,8 @@ async function ncaAprobarOficioFirmado(expId,opts){
   const okMsg='🖨️ Oficio aprobado — quedó en «Por firmar» (X Imprimir). Marque 🖨️ cuando esté impreso.'
     +(omitNotif?'':' · Notificará: '+notifPor);
   window._ncaAprobarOficioFirmadoBusy=true;
+  const tLibOf=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e,wf.task_id):null;
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,tLibOf&&tLibOf.id);
   try{
     if(typeof sstCargaShow==='function'){
       sstCargaShow({
@@ -28738,6 +28774,8 @@ async function ncaAprobarInformativa(expId){
   const wf=getPqrsWorkflow(e);
   const cuerpoFinal=d.cuerpo||wf.cuerpo;
   if(!cuerpoFinal){notif('Escriba la descripción informativa antes de aprobar','err');return;}
+  const tLibInfo=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e,wf.task_id):null;
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,tLibInfo&&tLibInfo.id);
   const cerradoPor=responsableActivo||'NCA';
   const fechaResp=wf.fecha_respuesta||hoy();
   await _pqrsLimpiarVersionesCorreccionWf(e,wf);
@@ -28784,6 +28822,8 @@ async function ncaAprobarCanalFisico(expId){
   const cerradoPor=responsableActivo||'NCA';
   const fechaResp=d.fecha||wf.fecha_respuesta||hoy();
   const canal=wf.canal||'aviso';
+  const tLibCan=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e,wf.task_id):null;
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,tLibCan&&tLibCan.id);
   await _pqrsLimpiarVersionesCorreccionWf(e,wf);
   await _pqrsRenombrarDocsDriveWf(wf,'aprobado',{onlyEstados:['revision','']});
   const wfPatch={

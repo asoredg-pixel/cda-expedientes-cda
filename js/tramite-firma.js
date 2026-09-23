@@ -514,6 +514,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   const e=tramiteFirmaExpCtx(t,expId);
   if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){notif('Use el flujo PQRSD','err');return;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(refId,taskId);
   // opts.modo: 'imprimir' | 'firma' — ambos van a «Por firmar» (impreso se marca con 🖨️ en paleta)
   const modo=String(opts.modo||opts.fase||'').trim().toLowerCase();
   const esImprimir=modo==='imprimir'||modo==='para_firma'||modo==='por_imprimir';
@@ -2792,6 +2793,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
   const refId=t.sinExpediente?(t.codigo||expId):expId;
   const file=tramiteAtajoFirmadoGetPdfBlob(refId,taskId);
   if(!sinPdf&&!file){notif('Seleccione el PDF firmado o use «Cerrar sin PDF»','err');return;}
+  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(t.sinExpediente?(t.codigo||expId):expId,taskId);
   let notifPor='';
   const sel=document.getElementById('tramite-atajo-notif-por-sel')||document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
   if(sel)notifPor=String(sel.value||'').trim();
