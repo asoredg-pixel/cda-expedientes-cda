@@ -12871,6 +12871,7 @@ let _usuariosEditEmail='';
 let _usuariosFsUnsub=null;
 let _usuariosToggleBusy=false;
 let _usuariosSaveBusy=false;
+let _usuariosSavePendientes={};
 let _usuariosPaintTimer=null;
 let _usuariosListasTimer=null;
 let _usuariosLastPaintSig='';
@@ -12937,8 +12938,26 @@ function aplicarUsuariosIndex(arr){
   sortUsuariosCache();
   _usuariosCacheLoaded=true;
   _usuariosCachePartial=false;
+  conservarUsuariosSavePendientes();
   try{localStorage.setItem('sst_usuarios_index',JSON.stringify(_usuariosCache));}catch(e){}
   return _usuariosCache.length>0;
+}
+function marcarUsuarioSavePendiente(row){
+  const em=String(row&&row.email||'').trim().toLowerCase();
+  if(!em)return;
+  _usuariosSavePendientes[em]=Object.assign({},row,{email:em});
+}
+function soltarUsuarioSavePendiente(email){
+  delete _usuariosSavePendientes[String(email||'').trim().toLowerCase()];
+}
+/** Un listado que llegue antes de confirmar el alta no borra la fila recién agregada. */
+function conservarUsuariosSavePendientes(){
+  Object.keys(_usuariosSavePendientes).forEach(function(em){
+    const row=_usuariosSavePendientes[em];
+    if(!row)return;
+    const ya=(_usuariosCache||[]).some(function(u){return String(u.email||'').trim().toLowerCase()===em;});
+    if(!ya)mergeUsuarioEnCache(row);
+  });
 }
 /** Fusiona documentos visibles sin eliminar usuarios que las rules no dejan listar. */
 function mergeUsuariosColeccionEnCache(list){
@@ -13512,43 +13531,23 @@ async function guardarUsuarioFirestore(){
     notif('Sesión Google/Firebase no activa. Cierre sesión e ingrese de nuevo.','err');
     return;
   }
-  const saveBtn=document.getElementById('usu-fs-guardar');
-  const saveBtnLabel='Guardar';
-  let saveUiWatchdog=null;
-  const liberarUiGuardar=function(){
-    _usuariosSaveBusy=false;
-    if(saveUiWatchdog){clearTimeout(saveUiWatchdog);saveUiWatchdog=null;}
-    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=saveBtnLabel;}
-    try{window._confirmRadicacionLoading=false;}catch(_e){}
-    if(typeof closeConfirmExito==='function')closeConfirmExito();
-    else if(typeof sstCargaHide==='function')sstCargaHide();
-  };
-  _usuariosSaveBusy=true;
-  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Guardando…';}
-  saveUiWatchdog=setTimeout(function(){
-    if(!_usuariosSaveBusy)return;
-    liberarUiGuardar();
-    notif('El guardado tardó demasiado. Verifique la conexión e intente de nuevo.','err');
-  },22000);
-  try{
-    const usuRef=window._fsDoc(db,'usuarios',email);
-    const setDocP=window._fsSetDoc(usuRef,payload,{merge:true});
-    await Promise.race([
-      setDocP,
-      new Promise(function(_,rej){
-        setTimeout(function(){
-          const e=new Error('timeout');
-          e.code='timeout';
-          rej(e);
-        },18000);
-      })
-    ]);
-    logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
-    mergeUsuarioEnCache({email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''});
+  const filaPrevia=getUsuarioAutorizadoByEmail(email);
+  const filaNueva={email,nombre,rol,codigo,cargo:cargo||'',activo,deptoResponsable:rol==='responsables'?deptoResponsable:''};
+  marcarUsuarioSavePendiente(filaNueva);
+  mergeUsuarioEnCache(filaNueva);
+  paintUsuariosCfgTable();
+  const detalleOk=(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''));
+  notif('Usuario guardado'+detalleOk,'ok');
+  ocultarFormUsuarioFirestore();
+  const revertirFila=function(){
+    soltarUsuarioSavePendiente(email);
+    if(eraEdicion&&filaPrevia)mergeUsuarioEnCache(filaPrevia);
+    else removeUsuarioDeCache(email);
     paintUsuariosCfgTable();
-    const detalleOk=(rol==='responsables'?' · '+labelDepartamento(deptoResponsable):(rolEsEncargadoModulo(rol)?' · encargado de '+tituloRolFirestore(rol):''));
-    notif('Usuario guardado'+detalleOk,'ok');
-    ocultarFormUsuarioFirestore();
+  };
+  window._fsSetDoc(window._fsDoc(db,'usuarios',email),payload,{merge:true}).then(function(){
+    soltarUsuarioSavePendiente(email);
+    logAudit((eraEdicion?'Actualizó':'Registró')+' usuario autorizado '+email,'configuracion',null,nombre);
     (async function(){
       let syncParcial=false;
       try{
@@ -13583,12 +13582,11 @@ async function guardarUsuarioFirestore(){
       if(document.getElementById('cpg-listas')&&document.getElementById('cpg-listas').classList.contains('on'))renderListasCfg();
       if(syncParcial)notif('Usuario guardado con sincronización parcial','warn');
     })();
-  }catch(err){
+  }).catch(function(err){
     console.error(err);
+    revertirFila();
     notif(mensajeErrorFirestoreUsuario(err),'err');
-  }finally{
-    liberarUiGuardar();
-  }
+  });
 }
 async function setUsuarioFirestoreActivo(email,activo,opts){
   opts=opts||{};
