@@ -8102,8 +8102,8 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
 }
 function taskReviewOpenDecisionPanel(mode,expId,taskId){
   mode=String(mode||'aprobar').trim();
-  if(mode!=='aprobar'||String(window._taskReviewDecisionMode||'')!=='aprobar')
-    window._taskReviewAprobarNotificar=false;
+  // Al entrar en Aprobar, los acordeones nacen cerrados. El encargado elige.
+  window._taskReviewAprobarNotificar=false;
   window._taskReviewDecisionMode=mode;
   if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('decision',expId,taskId);
 }
@@ -8179,7 +8179,7 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
       '<input type="text" id="nca-rev-comentario" placeholder="Ej: Aprobado como informativa." style="margin-top:4px;width:100%;box-sizing:border-box"></div>'+
       '<input type="hidden" id="nca-rev-fecha" value="'+escAttr(hoy())+'">'+
       '<button type="button" class="btn bsm bp" style="background:#6c757d;border-color:#6c757d" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">ℹ️ Aprobar y cerrar (informativa)</button>',
-      true);
+      false);
     h+='</div>';
     return h;
   }
