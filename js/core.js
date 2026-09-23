@@ -998,6 +998,17 @@ function taskCountDevolucionesNotifCorreccion(t){
   if(!t)return 0;
   return (t.historial||[]).filter(function(h){return h&&h.tipo==='notif_devuelta_corregir';}).length;
 }
+/** Número de entrega en Por revisar tras corrección (2 = segunda). 0 si no hubo devolución. */
+function taskCountEntregasParaRevisar(t){
+  if(!t)return 0;
+  const hist=t.historial||[];
+  const ajustes=hist.filter(function(h){
+    return h&&(h.tipo==='ajuste_soporte'||h.tipo==='revision_nca_rechazado'||h.tipo==='devolver_desde_firma');
+  }).length;
+  if(!ajustes)return 0;
+  const reenvios=hist.filter(function(h){return h&&h.tipo==='reenvio_verificacion';}).length;
+  return Math.max(reenvios,ajustes+1);
+}
 /** Badge dual: ✓ Entregada · X Revisar / ✓ Revisada · X Corregir / ✓ Notificada · X Corregir. */
 function taskEntregaRevisionEstadoUi(t){
   if(!t||t.eliminada)return null;
@@ -1022,7 +1033,8 @@ function taskEntregaRevisionEstadoUi(t){
   }
   if(taskEnPipelineFirmaNotifAbierta(t)&&!notifDev)return null;
   if(est==='Por verificar'||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t)&&est!=='Por corregir'&&est!=='Atendida')){
-    return Object.assign({lbl:'✓ Entregada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'));
+    const nRev=taskCountEntregasParaRevisar(t);
+    return Object.assign({lbl:'✓ Entregada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'),{subCount:nRev});
   }
   if(est==='Por corregir'){
     const n=taskCountDevolucionesCorreccion(t);
@@ -1059,7 +1071,7 @@ function pqrsEstadoActividadUi(e){
       return Object.assign({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Corregir'),{subCount:typeof taskCountDevolucionesCorreccion==='function'?taskCountDevolucionesCorreccion(tPend):0});
     const devDir=!!(wf.devolucion_director&&wf.devolucion_director.motivo);
     if(devDir)return{lbl:'↩ Devuelto Director · Por revisar',bg:'var(--orl)',fg:'var(--or)'};
-    return Object.assign({lbl:'✓ Entregada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'));
+    return Object.assign({lbl:'✓ Entregada',bg:'var(--gnl)',fg:'var(--gn)'},_actEstSubPendienteUi('X Revisar'),{subCount:typeof taskCountEntregasParaRevisar==='function'?taskCountEntregasParaRevisar(tPend):0});
   }
   if(f===PQRS_WF.RECHAZADA){
     const tRech=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
