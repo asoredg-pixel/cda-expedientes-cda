@@ -28166,7 +28166,7 @@ async function ncaAprobarMensajeSimple(expId){
       let docsAprob=(wf.documentos||[]).slice();
       try{
         const soporteRes=typeof _pqrsSubirSoporteRespuesta==='function'
-          ?await _pqrsSubirSoporteRespuesta(e,{fechaResp:fechaResp,cuerpo:cuerpoFinal,documentos:docsAprob,cerradoPor:cerradoPor})
+          ?await _pqrsSubirSoporteRespuesta(e,{fechaResp:fechaResp,cuerpo:cuerpoFinal,documentos:docsAprob,cerradoPor:cerradoPor,canal:canal,cuenta:String((sent&&(sent.cuenta||sent.from))||'').trim()})
           :null;
         if(soporteRes&&soporteRes.driveLink&&!docsAprob.some(function(x){return x&&x.tipo==='soporte_respuesta';})){
           docsAprob.push({
@@ -30297,7 +30297,7 @@ async function generarPdfRespuestaPqrs(e,opts){
     doc.setDrawColor(190);doc.line(margin,y,pageW-margin,y);y+=18;
   }
 
-  const canal=wf.canal||e._pqrs_respuesta_medio||'';
+  const canal=opts.canal||wf.canal||e._pqrs_respuesta_medio||'';
   const canalLabel={correo:'Correo electrónico',whatsapp:'WhatsApp',presencial:'Presencial',fisica:'Correo físico',aviso:'Por aviso'}[canal]||canal||'—';
   const tipo=wf.tipo||PQRS_WF_TIPO&&PQRS_WF_TIPO.MENSAJE||'';
   const tipoLabel={mensaje:'Mensaje por correo',oficio_firmado:'Oficio firmado',informativa:'Informativa'}[tipo]||tipo||'—';
@@ -30313,8 +30313,15 @@ async function generarPdfRespuestaPqrs(e,opts){
     ['Canal notificación:',canalLabel],
   ];
   if(wf.oficio||e._pqrs_respuesta_oficio)meta.push(['N° oficio:',wf.oficio||e._pqrs_respuesta_oficio]);
-  const cerradoPor=wf.cerrado_por||opts.cerradoPor||'';
-  if(cerradoPor)meta.push(['Atendido por:',cerradoPor]);
+  const canalLc=String(canal||'').toLowerCase();
+  const esCorreo=canalLc==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
+  if(esCorreo){
+    const em=typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio(opts,e):'';
+    if(em)meta.push(['Enviado por:',em]);
+  }else{
+    const cerradoPor=wf.cerrado_por||opts.cerradoPor||'';
+    if(cerradoPor)meta.push(['Atendido por:',cerradoPor]);
+  }
   doc.setFontSize(10);
   meta.forEach(row=>{
     if(!row[1])return;
@@ -30350,8 +30357,6 @@ async function generarPdfRespuestaPqrs(e,opts){
   });
 
   const cuerpoText=String(wf.cuerpo||e._pqrs_respuesta_nota||opts.cuerpo||'').trim();
-  const canalLc=String(canal||'').toLowerCase();
-  const esCorreo=canalLc==='correo'||(typeof PQRS_WF_CANAL!=='undefined'&&canal===PQRS_WF_CANAL.CORREO);
   if(esCorreo){
     const emailMeta=[
       ['Para:',opts.para||wf.email_to||''],
