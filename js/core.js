@@ -1141,6 +1141,53 @@ function pqrsPuedeFlujoPorFirmarBandeja(){
   if(typeof esSecretaria==='function'&&esSecretaria())return true;
   return false;
 }
+/** Oficina dueña del ítem en paleta «Por firmar» (PQRSD u oficio). */
+function pqrsOficinaCtxPorFirmar(e,t){
+  if(e&&String(e._pqrs_oficina||'').trim())return String(e._pqrs_oficina).trim();
+  if(e&&String(e._oficina_firma||'').trim())return String(e._oficina_firma).trim();
+  if(t&&typeof tramiteFirmaOficinaId==='function'){
+    const o=tramiteFirmaOficinaId(t);
+    if(o)return o;
+  }
+  if(t&&String(t.oficina||'').trim())return String(t.oficina).trim();
+  return'';
+}
+/** Secretaría: consolidado transversal en «Por firmar». */
+function pqrsSesionConsolidaPorFirmarTodasOficinas(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  return typeof esSecretaria==='function'&&esSecretaria();
+}
+/** NCA / VITAL / encargado depto: solo flujo propio (Guaviare), no OAP/RN/Admin ajeno. */
+function pqrsSesionSoloPorFirmarPropioGuaviare(){
+  if(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())return false;
+  if(pqrsSesionConsolidaPorFirmarTodasOficinas())return false;
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return false;
+  if(typeof esCargoVital==='function'&&esCargoVital())return true;
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  if(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())return true;
+  if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
+  if(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto())return true;
+  if(typeof esEncargadoActivo==='function'&&esEncargadoActivo())return true;
+  return false;
+}
+/** ¿Este expediente/actividad debe listarse en «Por firmar» para la sesión actual? */
+function pqrsVisiblePaletaPorFirmar(e,t){
+  if(!e&&!t)return false;
+  const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
+  if(esDir)return true;
+  if(pqrsSesionConsolidaPorFirmarTodasOficinas())return true;
+  const ofiExp=pqrsOficinaCtxPorFirmar(e,t);
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&!(typeof esModoResponsable==='function'&&esModoResponsable())){
+    const ofiAct=typeof getPqrsOficinaActiva==='function'?String(getPqrsOficinaActiva()||'').trim():'';
+    return ofiExp===ofiAct;
+  }
+  if(pqrsSesionSoloPorFirmarPropioGuaviare())return ofiExp==='guaviare'||!ofiExp;
+  const ofiAct=typeof getPqrsOficinaActiva==='function'?String(getPqrsOficinaActiva()||'').trim():'';
+  return ofiExp===ofiAct||(ofiAct==='guaviare'&&ofiExp==='guaviare');
+}
+window.pqrsOficinaCtxPorFirmar=pqrsOficinaCtxPorFirmar;
+window.pqrsSesionConsolidaPorFirmarTodasOficinas=pqrsSesionConsolidaPorFirmarTodasOficinas;
+window.pqrsVisiblePaletaPorFirmar=pqrsVisiblePaletaPorFirmar;
 /** Oficinas sin cola de impresión: pasan directo a «Por firmar» (atajo). */
 function pqrsPuedeAtajoParaFirma(){
   if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
@@ -26146,12 +26193,18 @@ function filtrarActividadesPorEstado(list,filtro){
       // Director: firmados físicos van a «Firmados». VITAL/encargado: siguen aquí (✍️✓ + 📤).
       if(esDirPf&&typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e))return false;
       return true;
+    }).filter(function(t){
+      const ePf=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      return typeof pqrsVisiblePaletaPorFirmar!=='function'||pqrsVisiblePaletaPorFirmar(ePf,t);
     });
-    const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
+    const tram=(typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
       if(typeof taskFirmaEnPorFirmar!=='function'||!taskFirmaEnPorFirmar(t))return false;
       if(esDirPf&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
       return true;
-    }):[];
+    }):[]).filter(function(t){
+      const ePf=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      return typeof pqrsVisiblePaletaPorFirmar!=='function'||pqrsVisiblePaletaPorFirmar(ePf,t);
+    });
     return mergeActividadLists(pqrs,tram);
   }
   if(filtro==='firmados'){

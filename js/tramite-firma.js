@@ -1526,9 +1526,18 @@ function openOficinaDocRespondida(expId,taskId){
 }
 window.openOficinaDocRespondida=openOficinaDocRespondida;
 /** Filtra filas de trámite-firma por oficina (Director ve todas). */
-function filterTramiteFirmaRowsPorOficina(rows,oficinaId,esDir){
+function filterTramiteFirmaRowsPorOficina(rows,oficinaId,esDir,opts){
   rows=Array.isArray(rows)?rows:[];
+  opts=opts&&typeof opts==='object'?opts:{};
   if(esDir)return rows;
+  if(opts.paletaPorFirmar){
+    if(typeof pqrsSesionConsolidaPorFirmarTodasOficinas==='function'&&pqrsSesionConsolidaPorFirmarTodasOficinas())return rows;
+    if(typeof pqrsVisiblePaletaPorFirmar==='function')
+      return rows.filter(function(r){
+        const t=r&&r._taskId&&typeof getTaskAny==='function'?getTaskAny(r._exp,r._taskId):null;
+        return pqrsVisiblePaletaPorFirmar(r,t);
+      });
+  }
   const ofi=String(oficinaId||'').trim();
   if(!ofi)return rows;
   return rows.filter(function(r){return String(r._pqrs_oficina||'')===ofi;});
