@@ -24793,9 +24793,16 @@ function exportarExpedientesExcel(list,suffix){
 }
 function exportarConsultaExcel(){
   const list=window._conExportList||[];
+  const qi=window._conExportQi||'';
+  let qact=window._conExportQact||'';
+  if(['ejec','venc','porcorr'].includes(qact))qact='poreje';
   const pack=buildExpedientesExportRows(list);
   const sheets=[];
   if(pack&&pack.rows&&pack.rows.length)sheets.push({title:'Expedientes',hdr:pack.hdr,rows:pack.rows});
+  if(typeof buildConsultaActividadesExportRows==='function'){
+    const acts=buildConsultaActividadesExportRows(list,qi,qact);
+    if(acts.rows&&acts.rows.length)sheets.push({title:'Actividades',hdr:acts.hdr,rows:acts.rows});
+  }
   if(typeof collectNotasInternasParaExport==='function'){
     const notas=collectNotasInternasParaExport(list);
     if(notas.rows&&notas.rows.length)sheets.push({title:'Mis notas internas',hdr:notas.hdr,rows:notas.rows});
@@ -28161,17 +28168,152 @@ function validarInfoTecnicaExp(deptoOrExp){
   }
   return true;
 }
-function matchActividadFiltro(e,qact){
+function consultaTaskMatchResponsable(t,qi){
+  qi=String(qi||'').trim();
+  if(!qi)return true;
+  if(!t||t.eliminada)return false;
+  if(typeof taskUsuarioEsAsignado==='function')return taskUsuarioEsAsignado(t,qi);
+  return String(t.responsable||'')===qi;
+}
+window.consultaTaskMatchResponsable=consultaTaskMatchResponsable;
+function taskCuentaConsultaPorEjecutarUnificado(t){
+  if(!t||t.eliminada)return false;
+  if(typeof filtrarActividadesPorEstado==='function'){
+    const one=[t];
+    return !!(filtrarActividadesPorEstado(one,'pend').length
+      ||filtrarActividadesPorEstado(one,'prior').length
+      ||filtrarActividadesPorEstado(one,'porcorr').length);
+  }
+  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return true;
+  if(typeof esActividadPrioritariaPendiente==='function'&&esActividadPrioritariaPendiente(t))return true;
+  return typeof esActividadPorEjecutar==='function'?esActividadPorEjecutar(t):(['En ejecución','Vencida','Parcial'].includes(estadoTask(t)));
+}
+window.taskCuentaConsultaPorEjecutarUnificado=taskCuentaConsultaPorEjecutarUnificado;
+function matchActividadTask(t,qact){
   if(!qact)return true;
-  const tasks=e.tasks||[];
-  if(!tasks.length)return false;
-  if(qact==='ejec')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='En ejecución');
-  if(qact==='ate')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Atendida');
-  if(qact==='venc')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Vencida');
-  if(qact==='porver')return tasks.some(t=>!t.eliminada&&estadoTask(t)==='Por verificar');
-  if(qact==='porcorr')return tasks.some(t=>!t.eliminada&&(typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir'));
+  if(!t||t.eliminada)return false;
+  if(qact==='poreje'||qact==='ejec'||qact==='venc'||qact==='porcorr'){
+    return taskCuentaConsultaPorEjecutarUnificado(t);
+  }
+  if(qact==='ate')return estadoTask(t)==='Atendida';
+  if(qact==='porver'){
+    return typeof actividadCuentaComoPorRevisar==='function'?actividadCuentaComoPorRevisar(t):estadoTask(t)==='Por verificar';
+  }
   return true;
 }
+function matchActividadFiltroExp(e,qact,qi){
+  qi=String(qi||'').trim();
+  qact=String(qact||'').trim();
+  if(['ejec','venc','porcorr'].includes(qact))qact='poreje';
+  if(!qact&&!qi)return true;
+  const tasks=(e&&e.tasks||[]).filter(function(t){return t&&!t.eliminada;});
+  const lib=e&&e._act_libre_task&&!e._act_libre_task.eliminada?[e._act_libre_task]:[];
+  const pool=tasks.concat(lib);
+  const scoped=qi?pool.filter(function(t){return consultaTaskMatchResponsable(t,qi);}):pool;
+  if(qi&&!scoped.length)return false;
+  if(!qact)return scoped.length>0;
+  if(!scoped.length)return false;
+  return scoped.some(function(t){return matchActividadTask(t,qact);});
+}
+function matchActividadFiltro(e,qact){
+  return matchActividadFiltroExp(e,qact,'');
+}
+function consultaPlazoActividadLabel(t){
+  if(!t||t.eliminada)return'';
+  if(typeof taskActividadVencida==='function'&&taskActividadVencida(t))return'Vencida';
+  const v=typeof taskVenceEfectivo==='function'?taskVenceEfectivo(t):String(t.vence||'').slice(0,10);
+  if(v&&typeof dias==='function'){
+    const d=dias(v);
+    const h=typeof hoy==='function'?hoy():'';
+    if(h&&v>=h&&d<=15)return'Próximo a vencer';
+  }
+  return'En término';
+}
+function consultaBandejaActividadLabel(t){
+  if(!t||t.eliminada)return'';
+  const tags=[];
+  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))tags.push('Por corregir');
+  if(typeof esActividadPrioritariaPendiente==='function'&&esActividadPrioritariaPendiente(t))tags.push('Prioritaria');
+  if(typeof esActividadPorEjecutar==='function'&&esActividadPorEjecutar(t))tags.push('Por ejecutar');
+  const uniq=[];
+  tags.forEach(function(x){if(uniq.indexOf(x)<0)uniq.push(x);});
+  return uniq.join(' · ');
+}
+function consultaExportEstadoActividad(t,e){
+  if(!t)return'';
+  e=e||(typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
+  if(e&&e._pqrs_informativa&&(typeof pqrsEstaCerrada!=='function'||pqrsEstaCerrada(e)))return'Revisada · informativa (cerrada)';
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof pqrsEstadoActividadUi==='function'){
+    const ui=pqrsEstadoActividadUi(e);
+    if(ui&&ui.lbl){
+      let s=String(ui.lbl).replace(/^[✓✔]\s*/,'').trim();
+      if(ui.sub)s+=' · '+String(ui.sub).replace(/^X\s*/,'').trim();
+      return s;
+    }
+  }
+  if(typeof taskFirmaEstadoUi==='function'){
+    const uiT=taskFirmaEstadoUi(t);
+    if(uiT&&uiT.lbl){
+      let s=String(uiT.lbl).replace(/^[✓✔]\s*/,'').trim();
+      if(uiT.sub)s+=' · '+String(uiT.sub).replace(/^X\s*/,'').trim();
+      return s;
+    }
+  }
+  if(typeof taskEntregaRevisionEstadoUi==='function'){
+    const uiE=taskEntregaRevisionEstadoUi(t);
+    if(uiE&&uiE.lbl){
+      let s=String(uiE.lbl).trim();
+      if(uiE.sub)s+=' · '+String(uiE.sub).trim();
+      return s;
+    }
+  }
+  if(typeof estadoTaskLabel==='function'){
+    return String(estadoTaskLabel(t)||'').replace(/^[✓✔ℹ️🖨✍️📬]\s*/g,'').trim()||estadoTask(t)||'';
+  }
+  return estadoTask(t)||'';
+}
+function buildConsultaActividadesExportRows(list,qi,qact){
+  qi=String(qi||'').trim();
+  qact=String(qact||'').trim();
+  if(['ejec','venc','porcorr'].includes(qact))qact='poreje';
+  const hdr=['Expediente / código','Departamento','Trámite','Responsable(s)','Actividad','Vence','Bandeja (por ejecutar)','Plazo','Estado actividad'];
+  const rows=[];
+  const seen=new Set();
+  (list||[]).forEach(function(e){
+    if(!e)return;
+    const expId=String(e._exp||'').trim();
+    const depto=typeof labelDepto==='function'?labelDepto(e._depto||''):(e._depto||'');
+    const tram=typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:(e._tramite||'');
+    const tasks=[];
+    if(e._act_libre_task)tasks.push(e._act_libre_task);
+    else (e.tasks||[]).forEach(function(t){tasks.push(t);});
+    tasks.forEach(function(t){
+      if(!t||t.eliminada)return;
+      if(qi&&!consultaTaskMatchResponsable(t,qi))return;
+      if(qact&&!matchActividadTask(t,qact))return;
+      const kid=expId+'|'+String(t.id||'');
+      if(seen.has(kid))return;
+      seen.add(kid);
+      const expRef=e._act_libre_task?null:(typeof getExpById==='function'?getExpById(expId):e);
+      const resp=typeof taskResponsablesLabel==='function'?taskResponsablesLabel(t,false):String(t.responsable||'');
+      const actNom=String(t.actividad||t.desc||'').trim();
+      const vence=typeof fmtF==='function'?fmtF(typeof taskVenceEfectivo==='function'?taskVenceEfectivo(t):t.vence):(t.vence||'');
+      rows.push([
+        expId,
+        depto,
+        tram,
+        resp,
+        actNom,
+        vence,
+        consultaBandejaActividadLabel(t),
+        consultaPlazoActividadLabel(t),
+        consultaExportEstadoActividad(t,expRef||e)
+      ]);
+    });
+  });
+  return{hdr:hdr,rows:rows};
+}
+window.buildConsultaActividadesExportRows=buildConsultaActividadesExportRows;
 function depOpts(v){return '<option value="">-- Departamento --</option>'+Object.keys(MUN_DEP).map(d=>'<option value="'+d+'"'+(v===d?' selected':'')+'>'+d+'</option>').join('');}
 function munOpts(dep,v){return '<option value="">-- Municipio --</option>'+((MUN_DEP[dep]||[]).map(m=>'<option value="'+m+'"'+(v===m?' selected':'')+'>'+m+'</option>').join(''));}
 function dirHtml(prefix,ev){

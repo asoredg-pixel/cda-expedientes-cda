@@ -27,7 +27,7 @@
 <script src="js/roles.js?v=20260922k"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260924k"></script>
+<script src="js/core.js?v=20260924r"></script>
 <script src="js/formulario.js?v=20260917a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260917a"></script>
@@ -41,7 +41,7 @@
 <script src="js/gmail.js?v=20260924q"></script>
 <script src="js/sst-file-upload.js?v=20260921b"></script>
 <script src="js/pqrs.js?v=20260924k"></script>
-<script src="js/consulta.js?v=20260921b"></script>
+<script src="js/consulta.js?v=20260924r"></script>
 <script src="js/entrega-responsable.js?v=20260917k"></script>
 <script src="js/tramite-firma.js?v=20260924g"></script>
 <script src="js/papelera.js?v=20260910k"></script>
@@ -477,11 +477,9 @@
       <select id="q-inst" onchange="renderConsulta()"><option value="">Todos los responsables</option></select>
       <select id="q-act" onchange="renderConsulta()">
         <option value="">Actividades (todas)</option>
-        <option value="ejec">Con actividades en trámite</option>
+        <option value="poreje">Actividades por ejecutar</option>
         <option value="ate">Con actividades atendidas</option>
-        <option value="venc">Con actividades vencidas</option>
         <option value="porver">Con actividades por revisar</option>
-        <option value="porcorr">Con actividades por corregir</option>
       </select>
       <select id="q-fl" onchange="renderConsulta()">
         <option value="">Sin filtro especial</option>

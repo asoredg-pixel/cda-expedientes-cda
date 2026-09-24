@@ -1714,10 +1714,7 @@ function collectConsultaOficinaDocComunicados(q,qi,qact){
         :(String(t.responsable||'')===qi||(Array.isArray(t.asignados)&&t.asignados.indexOf(qi)>=0));
       if(!ok)return false;
     }
-    if(qact){
-      const stub={tasks:[t]};
-      if(typeof matchActividadFiltro==='function'&&!matchActividadFiltro(stub,qact))return false;
-    }
+    if(qact&&typeof matchActividadTask==='function'&&!matchActividadTask(t,qact))return false;
     return true;
   }).map(function(t){
     const stub=actLibreAsConsultaStub(t);
@@ -1753,10 +1750,7 @@ function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
         :(String(t.responsable||'')===qi||(Array.isArray(t.asignados)&&t.asignados.indexOf(qi)>=0));
       if(!ok)return false;
     }
-    if(qact){
-      const stub={tasks:[t]};
-      if(typeof matchActividadFiltro==='function'&&!matchActividadFiltro(stub,qact))return false;
-    }
+    if(qact&&typeof matchActividadTask==='function'&&!matchActividadTask(t,qact))return false;
     return true;
   }).map(actLibreAsConsultaStub);
   return ofiDocs.concat(otras);
@@ -1934,7 +1928,12 @@ function renderConsulta(){
   const qe=document.getElementById('q-est').value;
   const qi=document.getElementById('q-inst').value;
   const qf=document.getElementById('q-fl').value;
-  const qact=document.getElementById('q-act')?document.getElementById('q-act').value:'';
+  let qact=document.getElementById('q-act')?document.getElementById('q-act').value:'';
+  if(['ejec','venc','porcorr'].includes(qact)){
+    qact='poreje';
+    const qActEl=document.getElementById('q-act');
+    if(qActEl)qActEl.value='poreje';
+  }
   const basPqrs=esModoOficinaDeguv()||esSecretaria();
   // Oficinas: en Consulta ven todas las PQRSD radicadas (no solo las asignadas a su oficina)
   let baseList=esModoOficinaDeguv()
@@ -1948,7 +1947,8 @@ function renderConsulta(){
     const ac=acctStatus(e);
     const mf=basPqrs?true:(!qf||(qf==='mp'&&e._medida_prev)||(qf==='sus'&&e._suspendido)||(qf==='san'&&e._sancionatorio)||(qf==='mora'&&ac.mora)||(qf==='pers'&&ac.persuasivo)||(qf==='coa'&&ac.coactivo)||(qf==='acu'&&ac.acuerdo)||(qf==='seg'&&e._estado==='Seguimiento'));
     const mEst=basPqrs?matchPqrsEstadoConsulta(e,qe):(!qe||e._estado===qe);
-    return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&(!qi||(e.tasks||[]).some(t=>t.responsable===qi))&&(basPqrs||matchActividadFiltro(e,qact))&&mf;
+    const mAct=basPqrs?true:(typeof matchActividadFiltroExp==='function'?matchActividadFiltroExp(e,qact,qi):matchActividadFiltro(e,qact));
+    return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&mAct&&mf;
   }),'q');
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=listExps.concat(listLibres);
@@ -1960,7 +1960,9 @@ function renderConsulta(){
   const cntBase=listExps.length?(esOficinaPqrsBasica()?listExps.length+' solicitud(es) PQRSD'+ambitoLbl:listExps.length+' expediente(s)'+ambitoLbl):'';
   const cntLib=nLib?(nLib+' documento(s)/actividad(es) sin expediente'):'';
   document.getElementById('q-cnt').textContent=list.length?([cntBase,cntLib].filter(Boolean).join(' · ')+(prLbl?' · '+prLbl:'')):"";
-  window._conExportList=listExps;
+  window._conExportList=list;
+  window._conExportQi=qi;
+  window._conExportQact=qact;
   const c=document.getElementById('con-list');
   if(!list.length){
     const nAmb=baseList.length;
