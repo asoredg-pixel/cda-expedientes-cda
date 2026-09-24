@@ -1294,10 +1294,19 @@ function pqrsSortByNumDesc(a,b){
   const nb=parseInt(String(b._exp||'').replace(/\D/g,''),10)||0;
   return nb-na;
 }
-/** Más reciente primero: fecha/hora de radicación, luego consecutivo. */
+/** Más reciente primero: traslado/radicación en plataforma (no updatedAt ni fecha solicitud retroactiva). */
+function pqrsFechaOrdenRadicacionSecretaria(e){
+  if(!e)return'';
+  const tr=String(e._pqrs_traslado_fecha||'').trim();
+  if(tr)return tr;
+  const hist=Array.isArray(e._pqrs_historial)?e._pqrs_historial:[];
+  const rad=hist.find(function(h){return h&&h.tipo==='radicacion';});
+  if(rad&&rad.fecha)return String(rad.fecha).trim();
+  return String(e._fecha||'').trim();
+}
 function pqrsSortRecientePrimero(a,b){
-  const ta=String((a&&(a.updatedAt||a._fecha||a._pqrs_traslado_fecha))||'');
-  const tb=String((b&&(b.updatedAt||b._fecha||b._pqrs_traslado_fecha))||'');
+  const ta=pqrsFechaOrdenRadicacionSecretaria(a);
+  const tb=pqrsFechaOrdenRadicacionSecretaria(b);
   if(ta&&tb&&ta!==tb)return tb.localeCompare(ta);
   if(tb&&!ta)return 1;
   if(ta&&!tb)return -1;
