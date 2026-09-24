@@ -2457,6 +2457,11 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const ccRaw=String(pq.emailCc||'').trim();
   const bccRaw=String(pq.emailBcc||'').trim();
   const esInterna=!!(pq.comunicacionInterna||(typeof pqrsEsComunicacionInternaEnvio==='function'&&pqrsEsComunicacionInternaEnvio(e,{interna:!!pq.comunicacionInterna})));
+  if(esInterna&&typeof mostrarEntregaRespuestaPqrsProgreso==='function'){
+    const ov=document.getElementById('confirm-prec-overlay');
+    if(!window._confirmRadicacionLoading||!ov||!ov.classList.contains('on'))
+      mostrarEntregaRespuestaPqrsProgreso({interna:true,conCorreo:true,fase:'correo'});
+  }
   let asunto=String(pq.emailSubject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
   if(esInterna&&(!pq.emailSubject||/^Respuesta a su/i.test(asunto)))
     asunto='Traslado interno — '+(e._tipo_solicitud||'PQRSD')+' — '+(e._exp||'');
@@ -2475,7 +2480,9 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       if(typeof sstCargaHide==='function')sstCargaHide();
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
-      if(typeof sstCargaShow==='function')
+      if(typeof mostrarEntregaRespuestaPqrsProgreso==='function')
+        mostrarEntregaRespuestaPqrsProgreso({interna:esInterna,conCorreo:true,fase:'correo',pct:progBase});
+      else if(typeof sstCargaShow==='function')
         sstCargaShow({title:'Notificando por correo',message:esInterna?'Enviando comunicación interna…':'Enviando respuesta al ciudadano…',pct:progBase,sub:expSub});
     }
   }
@@ -2540,8 +2547,14 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     });
   }catch(errSend){
     const msg=String(errSend&&errSend.message||errSend||'');
-    // Reintento sin adjuntos (enlaces en HTML) — típico Failed to fetch con MIME grande / NCA
-    if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
+    if(esInterna&&adjuntos.length&&/invalid value|message\.raw|400/i.test(msg)){
+      prog(Math.min(98,progBase+4),'Reintentando envío (historial en cuerpo, sin adjuntos embebidos)…');
+      try{
+        sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
+          cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
+        });
+      }catch(errRetry){throw errRetry;}
+    }else if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
       prog(Math.min(98,progBase+4),'Reintentando envío sin adjuntos embebidos…');
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
         cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
@@ -16278,10 +16291,36 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         const tMail=getTaskFromExp(e,taskId)||t;
         const localUpload=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{files:[],anexos:[]};
         const localFiles=[].concat(localUpload.files||[],localUpload.anexos||[]);
-        if(typeof sstCargaProgress==='function')sstCargaProgress(96,'Enviando respuesta al ciudadano…');
+        const esInternaEnt=!!pq.comunicacionInterna;
+        if(typeof mostrarEntregaRespuestaPqrsProgreso==='function'){
+          const ov=document.getElementById('confirm-prec-overlay');
+          if(!window._confirmRadicacionLoading||!ov||!ov.classList.contains('on'))
+            mostrarEntregaRespuestaPqrsProgreso({interna:esInternaEnt,conCorreo:true,fase:'correo'});
+        }else if(typeof sstCargaShow==='function'){
+          const ov2=document.getElementById('confirm-prec-overlay');
+          if(!window._confirmRadicacionLoading||!ov2||!ov2.classList.contains('on')){
+            sstCargaShow({
+              title:esInternaEnt?'Enviando traslado interno':'Notificando por correo',
+              message:esInternaEnt?'Preparando correo con solicitud original…':'Enviando respuesta al ciudadano…',
+              sub:expId||e._exp||'',
+              pct:null
+            });
+          }
+        }
+        if(typeof sstCargaProgress==='function')sstCargaProgress(12,esInternaEnt?'Incluyendo correo original…':'Preparando envío…');
         return pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,{
-          t:tMail,allUpload:localFiles,progBase:96
+          t:tMail,allUpload:localFiles,progBase:40
         }).then(function(){
+          if(typeof finalizarEntregaRespuestaPqrsProgreso==='function'){
+            finalizarEntregaRespuestaPqrsProgreso({
+              interna:esInternaEnt,
+              ok:true,
+              expId:expId||e._exp,
+              skipNotif:true
+            });
+          }else if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
+            sstCargaDone({holdMs:200});
+          }
           runCierreUi();
         }).catch(function(errMail){
           console.warn('entrega directa correo:',errMail);
@@ -30803,7 +30842,7 @@ function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,opts){
   if(incluir&&tieneDatos&&typeof gmailBuildPqrsReenvioHtml==='function'){
     const sep='<hr style="margin:18px 0;border:none;border-top:1px solid #ddd">'+
       '<p style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin:0 0 8px"><strong>Correo original de la solicitud</strong></p>';
-    return gmailBuildPqrsReenvioHtml(opts.fullMsg||null,e,{introHtml:introHtml+sep});
+    return gmailBuildPqrsReenvioHtml(opts.fullMsg||null,e,{introHtml:introHtml+sep,preferPlainBody:true});
   }
   return introHtml||'<p></p>';
 }

@@ -357,6 +357,50 @@ function mostrarAsignacionPqrsProgreso(opts){
     confirmExito({title:titulo,message:msg,tone:'radicacion',loading:true,hideFooter:true});
   }
 }
+/** Progreso al enviar respuesta / traslado interno desde Entregar respuesta (misma ventana que asignación). */
+function mostrarEntregaRespuestaPqrsProgreso(opts){
+  opts=opts||{};
+  const interna=!!opts.interna;
+  const titulo=interna?'Enviando traslado interno':'Enviando respuesta';
+  const msg=interna
+    ?(opts.fase==='correo'?'Preparando correo con la solicitud original…':'Registrando traslado interno…')
+    :'Enviando notificación al ciudadano…';
+  const sub=interna
+    ?'Incluye historial y adjuntos del radicado cuando aplique · no cierre esta ventana'
+    :'Espere mientras se envía el correo institucional';
+  if(typeof sstCargaShow==='function'){
+    sstCargaShow({title:titulo,message:msg,sub:sub,pct:opts.pct!=null?opts.pct:null});
+    return;
+  }
+  if(typeof confirmExito==='function'){
+    confirmExito({title:titulo,message:msg,tone:'radicacion',loading:true,hideFooter:true});
+  }
+}
+window.mostrarEntregaRespuestaPqrsProgreso=mostrarEntregaRespuestaPqrsProgreso;
+function finalizarEntregaRespuestaPqrsProgreso(opts){
+  opts=opts||{};
+  const interna=!!opts.interna;
+  let title=interna?'Traslado interno enviado':'Respuesta enviada';
+  let msg=interna
+    ?('Traslado interno registrado y correo enviado'+(opts.expId?' — '+opts.expId:''))
+    :('Respuesta notificada por correo'+(opts.expId?' — '+opts.expId:''));
+  if(opts.ok===false){
+    title=interna?'Traslado no enviado':'Correo no enviado';
+    msg=opts.message||'No se pudo completar el envío por correo.';
+  }
+  if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
+    sstCargaDone({
+      title:title,
+      message:msg,
+      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000,
+      holdMs:240
+    });
+    if(!opts.skipNotif&&typeof notif==='function')notif(msg.replace(/\.$/,''),opts.ok===false?'warn':'ok');
+    return;
+  }
+  if(!opts.skipNotif&&typeof notif==='function')notif(msg,opts.ok===false?'warn':'ok');
+}
+window.finalizarEntregaRespuestaPqrsProgreso=finalizarEntregaRespuestaPqrsProgreso;
 function finalizarAsignacionPqrsProgreso(opts){
   opts=opts||{};
   const nomList=String(opts.nomList||'').trim();

@@ -4004,6 +4004,43 @@ function _b64urlToStdB64(data) {
   return b + '='.repeat((4 - b.length % 4) % 4);
 }
 
+/** Base64 estándar UTF-8 por bloques (evita URIError con HTML largo de reenvíos). */
+function _gmailUtf8StringToBase64(str) {
+  str = String(str || '');
+  try {
+    if (typeof TextEncoder !== 'undefined') {
+      var bytes = new TextEncoder().encode(str);
+      var CHUNK = 0x8000;
+      var b64 = '';
+      for (var i = 0; i < bytes.length; i += CHUNK) {
+        var slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+        var bin = '';
+        for (var k = 0; k < slice.length; k++) bin += String.fromCharCode(slice[k]);
+        b64 += btoa(bin);
+      }
+      return b64;
+    }
+  } catch (eUtf) { console.warn('_gmailUtf8StringToBase64:', eUtf); }
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+/** RFC 2045: líneas base64 en MIME ≤ 76 caracteres (Gmail API rechaza raw si no). */
+function _gmailMimeFoldBase64(b64) {
+  b64 = String(b64 || '').replace(/\s/g, '');
+  if (!b64) return '';
+  var lineLen = 76;
+  var out = [];
+  for (var i = 0; i < b64.length; i += lineLen) out.push(b64.slice(i, i + lineLen));
+  return out.join('\r\n');
+}
+
+function _gmailHtmlToPlainSnippet(html, maxLen) {
+  var s = String(html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n');
+  s = s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (maxLen && s.length > maxLen) s = s.slice(0, maxLen) + '…';
+  return s;
+}
+
 function gmailForwardHistorialBlockHtml(block) {
   block = block || {};
   var esc = typeof escAttr === 'function' ? escAttr : function(s) { return String(s || ''); };
@@ -4017,8 +4054,13 @@ function gmailForwardHistorialBlockHtml(block) {
   if (block.cc) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Cc:</td><td style="padding:2px 8px">' + esc(block.cc) + '</td></tr>';
   if (block.subject) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Asunto:</td><td style="padding:2px 8px">' + esc(block.subject) + '</td></tr>';
   h += '</table>';
-  var body = block.bodyHtml || '';
-  if (!body && block.bodyTxt) {
+  var body = '';
+  if (block.preferPlain && (block.bodyTxt || block.bodyHtml)) {
+    var plain = block.bodyTxt || _gmailHtmlToPlainSnippet(block.bodyHtml, 24000);
+    body = '<pre style="white-space:pre-wrap;font-size:12px;margin:8px 0 0;font-family:Consolas,monospace">' + esc(plain) + '</pre>';
+  } else if (block.bodyHtml) {
+    body = block.bodyHtml;
+  } else if (block.bodyTxt) {
     body = '<pre style="white-space:pre-wrap;font-size:12px;margin:8px 0 0;font-family:Consolas,monospace">' + esc(block.bodyTxt) + '</pre>';
   }
   h += '<div style="margin-top:10px;font-size:12px;color:#222">' + (body || '<em style="color:#666">Sin cuerpo visible en el mensaje.</em>') + '</div></div>';
@@ -4093,7 +4135,11 @@ function gmailBuildPqrsReenvioHtml(fullMsg, exp, opts) {
       bodyTxt: partsF.textPlain || ''
     });
   }
-  blocks.forEach(function(b) { html += gmailForwardHistorialBlockHtml(b); });
+  var preferPlain = !!opts.preferPlainBody;
+  blocks.forEach(function(b) {
+    if (preferPlain) b.preferPlain = true;
+    html += gmailForwardHistorialBlockHtml(b);
+  });
   html += '<p style="font-size:11px;color:#888;font-family:Arial,sans-serif">Reenvío automático — Sistema de Seguimiento de Trámites CDA DEGUV.</p>';
   return html;
 }
@@ -4109,8 +4155,8 @@ function _buildMimeEmailForwardPqrs(to, subject, htmlBody, attachments) {
   var boundaryMix = 'sst_mix_' + Date.now();
   var boundaryAlt = 'sst_alt_' + Date.now();
   var plain = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 12000);
-  var htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
-  var plainB64 = btoa(unescape(encodeURIComponent(plain)));
+  var htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(htmlBody || ''));
+  var plainB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(plain));
   var lines = [
     'MIME-Version: 1.0',
     'To: ' + to,
@@ -4143,12 +4189,13 @@ function _buildMimeEmailForwardPqrs(to, subject, htmlBody, attachments) {
     lines.push('Content-Disposition: attachment; filename="' + fn + '"');
     lines.push('Content-Transfer-Encoding: base64');
     lines.push('');
-    lines.push(_b64urlToStdB64(att.dataB64));
+    lines.push(_gmailMimeFoldBase64(_b64urlToStdB64(att.dataB64)));
     lines.push('');
   });
   lines.push('--' + boundaryMix + '--');
-  var raw = btoa(unescape(encodeURIComponent(lines.join('\r\n'))));
-  return raw.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return typeof _gmailOfiMimeToRawB64 === 'function'
+    ? _gmailOfiMimeToRawB64(lines.join('\r\n'))
+    : btoa(unescape(encodeURIComponent(lines.join('\r\n')))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 async function _gmailCollectMsgAttachmentsForForward(msg) {
@@ -5891,7 +5938,7 @@ async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inRe
   const sigHtml = _gmailOfiSignatureHtml
     ? '<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">' + _gmailOfiSignatureHtml + '</div></div>'
     : '';
-  const htmlB64 = btoa(unescape(encodeURIComponent(userHtml + sigHtml)));
+  const htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(userHtml + sigHtml));
   const altPart = [
     '--' + altBoundary,
     'Content-Type: text/plain; charset=utf-8',
@@ -5917,7 +5964,7 @@ async function _gmailOfiBuildMimeWithAttachments(to, cc, subject, userText, inRe
       'Content-Disposition: attachment; filename="' + fnameEnc + '"',
       'Content-Transfer-Encoding: base64',
       '',
-      b64.replace(/\s/g, '')
+      _gmailMimeFoldBase64(b64.replace(/\s/g, ''))
     );
   }
   const lines = [
@@ -5952,7 +5999,7 @@ function _gmailOfiBuildMime(to, cc, subject, userText, inReplyTo, bcc) {
     ? '<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">' + _gmailOfiSignatureHtml + '</div></div>'
     : '';
   const htmlBody = userHtml + sigHtml;
-  const htmlB64 = btoa(unescape(encodeURIComponent(htmlBody)));
+  const htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(htmlBody));
 
   const lines = [
     'To: ' + to,
@@ -6019,7 +6066,7 @@ function _gmailOfiBuildHtmlMime(to, subject, htmlBody) {
   const boundary = 'sst_ofihtml_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
   const htmlFull=_gmailOfiAppendSignatureHtml(htmlBody);
-  const htmlB64 = btoa(unescape(encodeURIComponent(htmlFull || '')));
+  const htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(htmlFull || ''));
   const plainAlt = String(htmlFull || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
   const lines = [
     'To: ' + to,
@@ -6065,7 +6112,7 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
   const mixBoundary = 'sst_ofihtml_mix_' + Date.now();
   const subjectEnc = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject || ''))) + '?=';
   const htmlFull=_gmailOfiAppendSignatureHtml(htmlBody);
-  const htmlB64 = btoa(unescape(encodeURIComponent(htmlFull || '')));
+  const htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(htmlFull || ''));
   const plainAlt = String(htmlFull || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 800);
   const altPart = [
     '--' + altBoundary,
@@ -6093,7 +6140,7 @@ async function _gmailOfiBuildHtmlMimeWithAttachments(to, subject, htmlBody, file
       'Content-Disposition: attachment; filename="' + fnameEnc + '"',
       'Content-Transfer-Encoding: base64',
       '',
-      b64.replace(/\s/g, '')
+      _gmailMimeFoldBase64(b64.replace(/\s/g, ''))
     );
   }
   const lines = [
