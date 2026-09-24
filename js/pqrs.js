@@ -720,6 +720,8 @@ async function guardarPqrsSecretaria(modo){
     _pqrs_gmail_attachments:null,
     _gmail_email_data:gmailEmailData,
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion}),
+    _pqrs_radicado_menu_secretaria:true,
+    _pqrs_radicado_menu_en:new Date().toISOString(),
     updatedAt:new Date().toISOString()
   });
   // Conservar correos para la notificación: el spread de pjFields puede dejar
@@ -1313,6 +1315,33 @@ function pqrsSortRecientePrimero(a,b){
   return pqrsSortByNumDesc(a,b);
 }
 window.pqrsSortRecientePrimero=pqrsSortRecientePrimero;
+/** Solo PQRSD radicadas en menú Radicación (no autoentrega / alta responsable). */
+function pqrsEsRadicadoMenuSecretaria(e){
+  if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return false;
+  if(e._alta_por_responsable||e._alta_por_oficina||e._alta_por_nca)return false;
+  if(e._pqrs_radicado_menu_secretaria)return true;
+  const hist=Array.isArray(e._pqrs_historial)?e._pqrs_historial:[];
+  if(hist.some(function(h){
+    return h&&h.tipo==='radicacion'&&/Radicado por Secretaría DEGUV|Radicado sin traslado/i.test(String(h.nota||''));
+  }))return true;
+  return String(e._pqrs_traslado_por||'').trim()==='Secretaría DEGUV';
+}
+function pqrsExpSufijoNumerico(e){
+  const s=String((e&&e._exp)||'').trim().toUpperCase();
+  const m=s.match(/(\d+)$/);
+  return m?parseInt(m[1],10)||0:0;
+}
+/** Orden fijo al radicar en plataforma; traslados posteriores no reordenan. */
+function pqrsSortMenuSecretariaAsignadas(a,b){
+  const ta=String((a&&a._pqrs_radicado_menu_en)||'').trim();
+  const tb=String((b&&b._pqrs_radicado_menu_en)||'').trim();
+  if(ta&&tb&&ta!==tb)return tb.localeCompare(ta);
+  if(tb&&!ta)return 1;
+  if(ta&&!tb)return -1;
+  return pqrsExpSufijoNumerico(b)-pqrsExpSufijoNumerico(a);
+}
+window.pqrsEsRadicadoMenuSecretaria=pqrsEsRadicadoMenuSecretaria;
+window.pqrsSortMenuSecretariaAsignadas=pqrsSortMenuSecretariaAsignadas;
 function getPqrsPendientesTrasladoList(skipPeriodo){
   let list=exps.filter(e=>esPqrsSecretaria(e)&&pqrsPendienteTraslado(e)).map(normalizePqrsOficinaFields);
   if(!skipPeriodo)list=filterExpsPeriodo(list,'pqrs-ofi');
@@ -1321,16 +1350,17 @@ function getPqrsPendientesTrasladoList(skipPeriodo){
 function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
+  const menuRad=all.filter(pqrsEsRadicadoMenuSecretaria);
   const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortRecientePrimero);
-  const asignadas=all.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortRecientePrimero);
-  const atendidas=all.filter(e=>pqrsEstaCerrada(e));
+  const asignadas=menuRad.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortMenuSecretariaAsignadas);
+  const atendidas=menuRad.filter(e=>pqrsEstaCerrada(e));
   const SEC_PQRS_PAGE=10;
   const SEC_PQRS_MAX=50;
   if(window._secPendTraslShown==null)window._secPendTraslShown=SEC_PQRS_PAGE;
   if(window._secAsignadasShown==null)window._secAsignadasShown=SEC_PQRS_PAGE;
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
-    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+all.length+'</div><div class="l">Radicadas</div></div>'+
+    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+menuRad.length+'</div><div class="l">Radicadas</div></div>'+
     '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
     '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
