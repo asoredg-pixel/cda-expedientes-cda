@@ -25455,10 +25455,20 @@ function conActCoEjSummaryHtml(tasks){
   const co=(tasks||[]).filter(t=>!t.eliminada&&taskEsMultiAsignada(t)).length;
   return co?(' <span title="'+co+' actividad(es) con co-ejecutores" style="font-size:11px;margin-left:4px">👥 '+co+'</span>'):'';
 }
+/** Tras entregar o devolver: la deuda vive en Por revisar / Por corregir, no en la paleta ⚡. */
+function actividadExcluidaDePaletaPrioritaria(t){
+  if(!t||t.eliminada)return false;
+  if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return true;
+  if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return true;
+  return false;
+}
+window.actividadExcluidaDePaletaPrioritaria=actividadExcluidaDePaletaPrioritaria;
 function esActividadPrioritariaPendiente(t){
+  if(!t||t.eliminada)return false;
+  if(actividadExcluidaDePaletaPrioritaria(t))return false;
   if(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t))return true;
   if(taskEsPrioridadCriticaVencimiento(t))return true;
-  if(!t||t.eliminada||!t.prioritaria)return false;
+  if(!t.prioritaria)return false;
   return !taskPrioridadMarcadoresResueltos(t);
 }
 /** Notificación asignada con plazo 5 días hábiles ya vencido (sin reportar). */
