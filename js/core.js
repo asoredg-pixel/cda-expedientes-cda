@@ -2354,9 +2354,10 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       fase:PQRS_WF.CERRADA,tipo:PQRS_WF_TIPO.MENSAJE,canal:pq.canal||PQRS_WF_CANAL.CORREO,
       cuerpo:pq.cuerpo||'',oficio:pq.oficioExt||'',fecha_respuesta:pq.fechaResp,documentos:docs,
       email_to:pq.emailTo||'',email_cc:pq.emailCc||'',email_bcc:pq.emailBcc||'',email_subject:pq.emailSubject||'',
+      comunicacion_interna:!!pq.comunicacionInterna,traslado_interno:!!pq.comunicacionInterna,notif_interna:!!pq.comunicacionInterna,
       cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim()
     });
-    if(typeof _pqrsAplicarCierrePqrs==='function')_pqrsAplicarCierrePqrs(e,pq.fechaResp||hoy(),'PQRSD cerrada — mensaje notificado');
+    if(typeof _pqrsAplicarCierrePqrs==='function')_pqrsAplicarCierrePqrs(e,pq.fechaResp||hoy(),pq.comunicacionInterna?'PQRSD cerrada — traslado/comunicación interna enviada':'PQRSD cerrada — mensaje notificado');
     return true;
   }
   // Oficio firmado en entrega directa (NCA + oficinas): siempre atendida
@@ -2378,6 +2379,7 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
       cuerpo:pq.cuerpo||('Oficio '+(pq.oficioExt||'')),oficio:pq.oficioExt||'',fecha_respuesta:pq.fechaResp,
       documentos:docsCierre,
       email_to:pq.emailTo||'',email_cc:pq.emailCc||'',email_bcc:pq.emailBcc||'',email_subject:pq.emailSubject||'',
+      comunicacion_interna:!!pq.comunicacionInterna,traslado_interno:!!pq.comunicacionInterna,notif_interna:!!pq.comunicacionInterna,
       cerrado_por:por,cerrado_en:new Date().toISOString(),task_id:String(taskId||'').trim(),
       firma_fisica:(typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{}).firma_fisica||{por:por,en:new Date().toISOString(),modo:'fisico'},
       revision_nca:{aprobado:true,tipo:'oficio',comentario:'Entrega directa — PQRSD atendida',por:por,en:new Date().toISOString(),entrega_directa:true},
@@ -2454,7 +2456,10 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   if(!destinos.length)throw new Error('Indique al menos un correo en Para');
   const ccRaw=String(pq.emailCc||'').trim();
   const bccRaw=String(pq.emailBcc||'').trim();
-  const asunto=String(pq.emailSubject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
+  const esInterna=!!(pq.comunicacionInterna||(typeof pqrsEsComunicacionInternaEnvio==='function'&&pqrsEsComunicacionInternaEnvio(e,{interna:!!pq.comunicacionInterna})));
+  let asunto=String(pq.emailSubject||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''))).trim();
+  if(esInterna&&(!pq.emailSubject||/^Respuesta a su/i.test(asunto)))
+    asunto='Traslado interno — '+(e._tipo_solicitud||'PQRSD')+' — '+(e._exp||'');
   const cuerpo=String(pq.cuerpo||'').trim();
   if(!cuerpo)throw new Error('Indique el cuerpo del correo');
   const expSub=String(e._exp||'').trim();
@@ -2471,7 +2476,7 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG)throw new Error('Conecte Gmail para enviar la notificación');
       if(typeof sstCargaShow==='function')
-        sstCargaShow({title:'Notificando por correo',message:'Enviando respuesta al ciudadano…',pct:progBase,sub:expSub});
+        sstCargaShow({title:'Notificando por correo',message:esInterna?'Enviando comunicación interna…':'Enviando respuesta al ciudadano…',pct:progBase,sub:expSub});
     }
   }
   const docsAdj=Array.isArray(adjDocumentos)?adjDocumentos:[];
@@ -2506,9 +2511,11 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     adjuntos=[];
     prog(progBase+1,docsConLink.length?'Enviando con enlaces Drive…':'Enviando correo…');
   }
-  const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
+  const html=typeof pqrsCorreoHtmlRespuesta==='function'
+    ?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,{interna:esInterna,comunicacionInterna:esInterna})
+    :('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
-  prog(Math.min(97,progBase+3),'Enviando correo al ciudadano…');
+  prog(Math.min(97,progBase+3),esInterna?'Enviando correo interno…':'Enviando correo al ciudadano…');
   const ofiEnvio=String(e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim()||'guaviare';
   let sent=null;
   try{
@@ -2537,12 +2544,14 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
     registrarNotificacionCiudadanoPqrs(e,{
-      tipo:'respuesta',medio:'correo',enviado:true,
+      tipo:esInterna?'traslado_interno':'respuesta',medio:'correo',enviado:true,
       a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),
       cuenta_emisora:(sent&&sent.cuenta)||'oficina',
       gmail_message_id:(sent&&sent.messageId)||'',
-      por:por,histTipo:'notificacion_correo',
-      histNota:(isMsg?'Mensaje':'Oficio firmado')+' notificado por correo ('+ofiLbl+') a '+destinos.join(', ')
+      por:por,histTipo:esInterna?'traslado_interno_correo':'notificacion_correo',
+      histNota:esInterna
+        ?('Traslado interno para atención enviado por correo ('+ofiLbl+') a '+destinos.join(', '))
+        :((isMsg?'Mensaje':'Oficio firmado')+' notificado por correo ('+ofiLbl+') a '+destinos.join(', '))
     });
   }
   // Soporte PDF en segundo plano: no bloquear el cierre a Atendidas.
@@ -10456,6 +10465,7 @@ function renderPqrsEntregaCamposHtml(e){
   const emailCc=String(wf.email_cc||'').trim();
   const emailBcc=String(wf.email_bcc||'').trim();
   const asuntoMail='Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||'');
+  const internaDef=!!(e._pqrs_interna)||!!(wf&&(wf.comunicacion_interna||wf.traslado_interno||wf.notif_interna));
   const sugEnt=typeof htmlCorreosSugeridosNotificacion==='function'?htmlCorreosSugeridosNotificacion(e):'';
   // También sugerir correo digitado en alta PQRSD (aún sin expediente)
   const altaMailIds=['er-pqrs-pn-correo','er-pqrs-pj-correo','er-pqrs-pj-ofi-correo','er-pqrs-anon-correo'];
@@ -10468,7 +10478,7 @@ function renderPqrsEntregaCamposHtml(e){
   }
   const mkTipo=(v,lbl)=>'<button type="button" class="btn bsm tipo-resp-btn'+(tipoInicial===v?' on':'')+'" data-val="'+escAttr(v)+'" onclick="setPqrsRespTipo(\''+jsStr(v)+'\')">'+escAttr(lbl)+'</button>';
   let h='<div style="margin-bottom:10px;padding:10px;background:var(--bll);border:1px solid var(--bl);border-radius:var(--r)" id="pqrs-entrega-campos">';
-  h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📋 Respuesta al ciudadano</div>';
+  h+='<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)" id="pqrs-entrega-panel-title">📋 Respuesta al ciudadano</div>';
   h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
     mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
@@ -10506,6 +10516,9 @@ function renderPqrsEntregaCamposHtml(e){
   // Correo: verificar Para + CC + BCC (mismo criterio que oficinas)
   h+='<div id="pqrs-entrega-email-compose" style="display:none;margin-bottom:10px;padding:8px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
+    '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<input type="checkbox" id="pqrs-entrega-notif-interna"'+(internaDef?' checked':'')+' onchange="pqrsEntregaToggleComInterna()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>'+
     sugEnt+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="pqrs-entrega-email-to" class="sst-email-chips" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailToEff)+'" style="width:100%;box-sizing:border-box"></div>'+
@@ -10677,6 +10690,16 @@ function pqrsEntregaToggleNotifCorreo(){
     else if(typeof ofiDocPqrsPrefillEmailTo==='function')ofiDocPqrsPrefillEmailTo(null,true);
   },20);
 }
+function pqrsEntregaToggleComInterna(){
+  if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+  setTimeout(function(){
+    const cb=document.getElementById('pqrs-entrega-notif-interna');
+    if(cb&&cb.checked)return;
+    if(typeof pqrsEntregaPrefillDesdeAlta==='function')pqrsEntregaPrefillDesdeAlta();
+    else if(typeof ofiDocPqrsPrefillEmailTo==='function')ofiDocPqrsPrefillEmailTo(null,true);
+  },20);
+}
+window.pqrsEntregaToggleComInterna=pqrsEntregaToggleComInterna;
 function pqrsEntregaRefreshUi(){
   if(!document.getElementById('pqrs-entrega-resp-cuerpo'))return;
   const tipoHid=document.getElementById('pqrs-resp-tipo');
@@ -10712,6 +10735,10 @@ function pqrsEntregaRefreshUi(){
   }else if(!isInfo&&canalHid&&!canalHid.value)canalHid.value=PQRS_WF_CANAL.CORREO;
   const canal=String((canalHid&&canalHid.value)||'').trim();
   const isCorreo=!isInfo&&(isMensaje||notifCorreoOficio)&&pqrsEsCanalCorreo(canal);
+  const cbInt=document.getElementById('pqrs-entrega-notif-interna');
+  const esInterna=!!(cbInt&&cbInt.checked);
+  const panelTitle=document.getElementById('pqrs-entrega-panel-title');
+  if(panelTitle)panelTitle.textContent=esInterna?'📋 Comunicación interna (oficina CDA)':'📋 Respuesta al ciudadano';
   const notifRow=document.getElementById('pqrs-entrega-oficio-notif-row');
   const otroMedioRow=document.getElementById('pqrs-entrega-otro-medio-row');
   const cuerpoWrap=document.getElementById('pqrs-entrega-cuerpo-wrap');
@@ -10786,21 +10813,33 @@ function pqrsEntregaRefreshUi(){
       cuerpoTxt.style.minHeight='64px';
       cuerpoTxt.style.display='';
     }else if(isCorreo){
-      cuerpoTxt.placeholder='Plantilla de respuesta al ciudadano…';
+      cuerpoTxt.placeholder=esInterna
+        ?'Comunicación a oficina interna (sin enlace de consulta ciudadana)…'
+        :'Plantilla de respuesta al ciudadano…';
       cuerpoTxt.style.minHeight='180px';
       cuerpoTxt.style.display='';
+      if(esInterna&&_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
     }else{
       cuerpoTxt.placeholder='Describa brevemente la respuesta elaborada…';
       cuerpoTxt.style.minHeight='180px';
       cuerpoTxt.style.display='';
     }
   }
-  if(isCorreo&&isMensaje)pqrsAplicarPlantillaSegunTipo(tipo,false);
-  else if(isOficio&&notifCorreoOficio){
+  if(isCorreo&&isMensaje&&!esInterna)pqrsAplicarPlantillaSegunTipo(tipo,false);
+  else if(isOficio&&notifCorreoOficio&&!esInterna){
     const vacio=!cuerpoTxt||!String(cuerpoTxt.value||'').trim();
     pqrsAplicarPlantillaSegunTipo(PQRS_WF_TIPO.MENSAJE,vacio||_pqrsEsPlantillaRespuesta(cuerpoTxt.value));
   }else if(isOficio&&cuerpoTxt&&(_pqrsEsPlantillaRespuesta(cuerpoTxt.value)||(window._pqrsUltimaPlantillaMensaje&&cuerpoTxt.value===window._pqrsUltimaPlantillaMensaje)))cuerpoTxt.value='';
-  if(typeof ofiDocPqrsPrefillEmailTo==='function'&&(isMensaje||notifCorreoOficio)){
+  const toEl=document.getElementById('pqrs-entrega-email-to');
+  if(toEl){
+    toEl.placeholder=esInterna?'correo@oficina-interna.cda.gov.co':'ciudadano@ejemplo.com';
+    if(esInterna&&typeof pqrsCorreoCiudadano==='function'){
+      const ciu=String(pqrsCorreoCiudadano(e)||'').trim().toLowerCase();
+      const cur=String(toEl.value||'').trim().toLowerCase();
+      if(ciu&&cur===ciu)toEl.value='';
+    }
+  }
+  if(typeof ofiDocPqrsPrefillEmailTo==='function'&&(isMensaje||notifCorreoOficio)&&!esInterna){
     ofiDocPqrsPrefillEmailTo(null,false);
   }
 }
@@ -10914,7 +10953,9 @@ function collectPqrsEntregaDatos(expId,eOpt){
       return null;
     }
   }
-  return{fechaResp:fechaRespFinal,oficioExt,cuerpo:cuerpoFinal||cuerpo,tipo,canal,adj,emailTo,emailCc,emailBcc,emailSubject,notificarPor,notifFecha,notifObs};
+  const cbIntEnt=document.getElementById('pqrs-entrega-notif-interna');
+  const comunicacionInterna=cbIntEnt?!!cbIntEnt.checked:false;
+  return{fechaResp:fechaRespFinal,oficioExt,cuerpo:cuerpoFinal||cuerpo,tipo,canal,adj,emailTo,emailCc,emailBcc,emailSubject,notificarPor,notifFecha,notifObs,comunicacionInterna};
 }
 function htmlPqrsRespuestaDatosReadonly(e){
   if(!e||(!e._pqrs_respuesta_fecha&&!e._pqrs_respuesta_oficio))return'';
@@ -30638,7 +30679,8 @@ function pqrsEsComunicacionInternaEnvio(e,opts){
   if(opts.interna===true||opts.comunicacionInterna===true||opts.trasladoInterno===true)return true;
   if(opts.interna===false)return false;
   try{
-    const cb=document.getElementById('nca-rev-notif-interna')||document.getElementById('task-rev-notif-interna');
+    const cb=document.getElementById('nca-rev-notif-interna')||document.getElementById('task-rev-notif-interna')
+      ||document.getElementById('pqrs-entrega-notif-interna')||document.getElementById('pqrs-compose-interna');
     if(cb&&cb.checked)return true;
   }catch(_e){}
   if(e&&e._pqrs_interna)return true;
