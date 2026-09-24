@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
-<script src="js/constants.js?v=20260923g"></script>
+<script src="js/constants.js?v=20260924a"></script>
 <script src="js/utils.js?v=20260922i"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260922k"></script>
@@ -38,14 +38,14 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260922i"></script>
+<script src="js/gmail.js?v=20260924a"></script>
 <script src="js/sst-file-upload.js?v=20260921b"></script>
 <script src="js/pqrs.js?v=20260922p"></script>
 <script src="js/consulta.js?v=20260921b"></script>
 <script src="js/entrega-responsable.js?v=20260917k"></script>
 <script src="js/tramite-firma.js?v=20260923d"></script>
 <script src="js/papelera.js?v=20260910k"></script>
-<script src="js/recursos.js?v=20260922k"></script>
+<script src="js/recursos.js?v=20260924a"></script>
 <script src="js/ingreso.js?v=20260910i"></script>
 </head>
 <body>
@@ -1192,6 +1192,7 @@
     <div class="task-modal-hdr"><span id="rec-prompt-title">Nueva carpeta</span><button type="button" class="btn bsm bic act-ico" title="Cerrar" onclick="recExpCerrarPrompt(false)">✕</button></div>
     <div class="task-modal-body">
       <div class="fld"><label id="rec-prompt-label" for="rec-prompt-inp">Nombre</label><input type="text" id="rec-prompt-inp" class="rec-inp" style="max-width:none;width:100%" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();recExpCerrarPrompt(true)}else if(event.key==='Escape'){event.preventDefault();recExpCerrarPrompt(false)}"></div>
+      <div class="fld" id="rec-prompt-link-wrap" style="display:none"><label for="rec-prompt-link">Vincular carpeta Drive existente (opcional)</label><input type="url" id="rec-prompt-link" class="rec-inp" style="max-width:none;width:100%" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();recExpCerrarPrompt(true)}else if(event.key==='Escape'){event.preventDefault();recExpCerrarPrompt(false)}"><span class="rec-form-hint">Si se deja vacío, se crea una carpeta nueva.</span></div>
     </div>
     <div class="rec-form-foot" style="padding:0 1rem 1rem;margin:0;border:0;justify-content:flex-end">
       <button type="button" class="btn bsm bp" id="rec-prompt-ok" onclick="recExpCerrarPrompt(true)">Crear</button>

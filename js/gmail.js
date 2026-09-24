@@ -2746,6 +2746,49 @@ async function driveCreateFolder(name, parentId) {
   };
 }
 
+/** Acceso directo a una carpeta Drive ya existente, dentro de la carpeta actual. No la mueve. */
+async function driveCreateFolderShortcut(name, parentId, targetFolderId) {
+  const token = _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo en la pestaña Correos.');
+  const nom = String(name || '').trim().slice(0, 120);
+  const parent = String(parentId || '').trim();
+  let target = String(targetFolderId || '').trim();
+  if (!nom) throw new Error('Nombre de carpeta vacío');
+  if (!parent) throw new Error('Carpeta padre no definida');
+  if (!target) throw new Error('Carpeta Drive no válida');
+  const meta = await driveGetFileMeta(target);
+  if (meta && meta.mimeType === 'application/vnd.google-apps.shortcut' &&
+      meta.shortcutDetails && meta.shortcutDetails.targetMimeType === 'application/vnd.google-apps.folder' &&
+      meta.shortcutDetails.targetId) {
+    target = meta.shortcutDetails.targetId;
+  } else if (meta && meta.mimeType && meta.mimeType !== 'application/vnd.google-apps.folder') {
+    throw new Error('El enlace no es una carpeta de Drive');
+  }
+  if (target === parent) throw new Error('Esa carpeta ya es la ubicación actual');
+  const body = {
+    name: nom,
+    mimeType: 'application/vnd.google-apps.shortcut',
+    parents: [parent],
+    shortcutDetails: { targetId: target }
+  };
+  const cr = await fetch(DRIVE_API_BASE + '/files' + _DRIVE_API_QS.replace('&', '?'), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const created = await cr.json().catch(function() { return {}; });
+  if (!cr.ok || !created.id) {
+    const msg = created && created.error && created.error.message ? created.error.message : ('HTTP ' + cr.status);
+    throw new Error('No se pudo vincular la carpeta: ' + msg);
+  }
+  return {
+    folderId: target,
+    shortcutId: created.id,
+    name: nom,
+    link: 'https://drive.google.com/drive/folders/' + target
+  };
+}
+
 /** Elimina archivo o carpeta (carpetas: borrado recursivo del contenido). */
 async function driveDeleteBibliotecaItem(fileId, isFolder) {
   if (!fileId) return false;
@@ -2807,6 +2850,7 @@ if (typeof window !== 'undefined') {
   window.driveListFolderContents = driveListFolderContents;
   window.driveUploadBiblioteca = driveUploadBiblioteca;
   window.driveCreateFolder = driveCreateFolder;
+  window.driveCreateFolderShortcut = driveCreateFolderShortcut;
   window.driveDeleteBibliotecaItem = driveDeleteBibliotecaItem;
   window.driveRenameInstitutional = driveRenameInstitutional;
   window.driveMoveFileToFolder = driveMoveFileToFolder;

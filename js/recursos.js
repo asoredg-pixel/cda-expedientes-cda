@@ -1241,22 +1241,35 @@ function recExpKeyDown(ev) {
 async function recExpNuevaCarpeta() {
   if (!recExpCanCreateFolder()) return;
   if (!recursosDriveConectado()) { recursosModalCorreoRequerido('crear carpetas en el repositorio'); return; }
-  const nom = await recExpAskText({
+  const ans = await recExpAskText({
     title: 'Nueva carpeta',
     label: 'Nombre de la carpeta',
     placeholder: 'Ej. Conceptos 2026',
     okLabel: 'Crear',
-    required: true
+    required: true,
+    showDriveLink: true
   });
-  if (nom === null) return;
-  const name = String(nom).trim();
+  if (ans === null) return;
+  const name = String(ans && ans.name != null ? ans.name : ans).trim();
+  const manualLink = String(ans && ans.driveLink || '').trim();
   if (!name) { notif('Nombre inválido', 'err'); return; }
   const folderId = recExpCurrentFolderId();
   try {
-    const fn = typeof driveCreateFolder === 'function' ? driveCreateFolder : window.driveCreateFolder;
-    const created = await fn(name, folderId);
-    notif(created && created.reused ? 'Carpeta ya existía — se reutilizó' : 'Carpeta creada', 'ok');
-    if (typeof logAudit === 'function') logAudit(created && created.reused ? 'Reutilizó carpeta en biblioteca' : 'Creó carpeta en biblioteca', 'recursos', null, name);
+    if (manualLink) {
+      const targetId = parseDriveFolderId(manualLink);
+      if (!targetId) { notif('Enlace de carpeta Drive no válido', 'err'); return; }
+      if (targetId === folderId) { notif('Esa carpeta ya es la ubicación actual', 'err'); return; }
+      const linkFn = typeof driveCreateFolderShortcut === 'function' ? driveCreateFolderShortcut : window.driveCreateFolderShortcut;
+      if (!linkFn) { notif('No se cargó el módulo Drive. Recargue la página (Ctrl+F5).', 'err'); return; }
+      await linkFn(name, folderId, targetId);
+      notif('Carpeta vinculada', 'ok');
+      if (typeof logAudit === 'function') logAudit('Vinculó carpeta Drive en biblioteca', 'recursos', null, name);
+    } else {
+      const fn = typeof driveCreateFolder === 'function' ? driveCreateFolder : window.driveCreateFolder;
+      const created = await fn(name, folderId);
+      notif(created && created.reused ? 'Carpeta ya existía — se reutilizó' : 'Carpeta creada', 'ok');
+      if (typeof logAudit === 'function') logAudit(created && created.reused ? 'Reutilizó carpeta en biblioteca' : 'Creó carpeta en biblioteca', 'recursos', null, name);
+    }
     cargarRecursosRepoArchivos();
   } catch (err) {
     notif(err.message || 'No se pudo crear la carpeta', 'err');
@@ -1279,11 +1292,16 @@ function recExpAskText(opts) {
     }
     window._recPromptResolve = resolve;
     window._recPromptRequired = !!opts.required;
+    window._recPromptShowDriveLink = !!opts.showDriveLink;
     if (tit) tit.textContent = opts.title || 'Recursos';
     if (lbl) lbl.textContent = opts.label || 'Nombre';
     if (okBtn) okBtn.textContent = opts.okLabel || 'Aceptar';
     inp.value = opts.value != null ? String(opts.value) : '';
     inp.placeholder = opts.placeholder || '';
+    const linkWrap = document.getElementById('rec-prompt-link-wrap');
+    const linkInp = document.getElementById('rec-prompt-link');
+    if (linkInp) linkInp.value = '';
+    if (linkWrap) linkWrap.style.display = opts.showDriveLink ? '' : 'none';
     ov.classList.add('on');
     ov.setAttribute('aria-hidden', 'false');
     if (typeof elevateOverlayAboveModals === 'function') elevateOverlayAboveModals(ov);
@@ -1307,6 +1325,7 @@ function recExpCerrarPrompt(ok) {
   }
   if (!ok) {
     window._recPromptResolve = null;
+    window._recPromptShowDriveLink = false;
     if (ov) {
       ov.classList.remove('on');
       ov.setAttribute('aria-hidden', 'true');
@@ -1321,13 +1340,17 @@ function recExpCerrarPrompt(ok) {
     if (inp) try { inp.focus(); } catch (e) {}
     return;
   }
+  const showLink = !!window._recPromptShowDriveLink;
+  const linkInp = document.getElementById('rec-prompt-link');
+  const driveLink = showLink ? String(linkInp && linkInp.value || '').trim() : '';
   window._recPromptResolve = null;
+  window._recPromptShowDriveLink = false;
   if (ov) {
     ov.classList.remove('on');
     ov.setAttribute('aria-hidden', 'true');
     if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
   }
-  resolve(val);
+  resolve(showLink ? { name: val, driveLink: driveLink } : val);
 }
 
 async function recExpSubirDesdeInput(ev) {
