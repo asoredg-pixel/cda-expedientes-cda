@@ -3998,6 +3998,185 @@ function _encodeEmailSubject(subj) {
   } catch (e) { return subj; }
 }
 
+function _b64urlToStdB64(data) {
+  if (!data) return '';
+  var b = String(data).replace(/-/g, '+').replace(/_/g, '/');
+  return b + '='.repeat((4 - b.length % 4) % 4);
+}
+
+function gmailForwardHistorialBlockHtml(block) {
+  block = block || {};
+  var esc = typeof escAttr === 'function' ? escAttr : function(s) { return String(s || ''); };
+  var tit = block.titulo || 'Mensaje reenviado';
+  var h = '<div style="margin:16px 0;padding:12px;border:1px solid #d0d0d0;border-left:4px solid #0d5c2e;background:#fafafa;font-family:Arial,sans-serif">';
+  h += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;color:#0d5c2e">' + esc(tit) + '</div>';
+  h += '<table style="font-size:12px;border-collapse:collapse;width:100%">';
+  if (block.from) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top;width:72px">De:</td><td style="padding:2px 8px">' + esc(block.from) + '</td></tr>';
+  if (block.date) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Fecha:</td><td style="padding:2px 8px">' + esc(block.date) + '</td></tr>';
+  if (block.to) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Para:</td><td style="padding:2px 8px">' + esc(block.to) + '</td></tr>';
+  if (block.cc) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Cc:</td><td style="padding:2px 8px">' + esc(block.cc) + '</td></tr>';
+  if (block.subject) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Asunto:</td><td style="padding:2px 8px">' + esc(block.subject) + '</td></tr>';
+  h += '</table>';
+  var body = block.bodyHtml || '';
+  if (!body && block.bodyTxt) {
+    body = '<pre style="white-space:pre-wrap;font-size:12px;margin:8px 0 0;font-family:Consolas,monospace">' + esc(block.bodyTxt) + '</pre>';
+  }
+  h += '<div style="margin-top:10px;font-size:12px;color:#222">' + (body || '<em style="color:#666">Sin cuerpo visible en el mensaje.</em>') + '</div></div>';
+  return h;
+}
+
+/** HTML de reenvío PQRSD: correo original en Secretaría (Para/Cc) + cadena si aplica. */
+function gmailBuildPqrsReenvioHtml(fullMsg, exp, opts) {
+  opts = opts || {};
+  var html = opts.introHtml || '<p style="font-family:Arial,sans-serif;font-size:13px">Se reenvía la solicitud PQRSD para su atención. A continuación el historial del correo recibido.</p>';
+  var blocks = [];
+  var origMsgId = exp && String(exp._gmail_message_id || '').trim();
+  if (fullMsg && fullMsg.payload && origMsgId && fullMsg.id === origMsgId) {
+    var h0 = (fullMsg.payload.headers) || [];
+    var d0 = (exp && exp._gmail_email_data) || {};
+    blocks.push({
+      titulo: 'Correo original recibido en Secretaría DEGUV',
+      from: d0.remitente || gmailGetHeader(h0, 'from'),
+      date: d0.fecha || gmailGetHeader(h0, 'date'),
+      to: d0.para || d0.to || gmailGetHeader(h0, 'to'),
+      cc: d0.cc || gmailGetHeader(h0, 'cc'),
+      subject: d0.asunto || gmailGetHeader(h0, 'subject'),
+      bodyHtml: d0.cuerpoHtml || '',
+      bodyTxt: d0.cuerpoTxt || ''
+    });
+    if (!blocks[0].bodyHtml && !blocks[0].bodyTxt) {
+      var p0 = gmailExtractParts(fullMsg.payload);
+      blocks[0].bodyHtml = p0.textHtml || '';
+      blocks[0].bodyTxt = p0.textPlain || '';
+    }
+  } else if (exp && exp._gmail_email_data && typeof exp._gmail_email_data === 'object') {
+    var d = exp._gmail_email_data;
+    blocks.push({
+      titulo: 'Correo original recibido en Secretaría DEGUV',
+      from: d.remitente || '',
+      date: d.fecha || '',
+      to: d.para || d.to || '',
+      cc: d.cc || '',
+      subject: d.asunto || '',
+      bodyHtml: d.cuerpoHtml || '',
+      bodyTxt: d.cuerpoTxt || ''
+    });
+  }
+  if (fullMsg && fullMsg.payload) {
+    var headers = fullMsg.payload.headers || [];
+    var isOrig = origMsgId && String(fullMsg.id || '') === origMsgId;
+    if (!isOrig) {
+      var parts = gmailExtractParts(fullMsg.payload);
+      blocks.push({
+        titulo: 'Último reenvío en la cadena',
+        from: gmailGetHeader(headers, 'from'),
+        date: gmailGetHeader(headers, 'date'),
+        to: gmailGetHeader(headers, 'to'),
+        cc: gmailGetHeader(headers, 'cc'),
+        subject: gmailGetHeader(headers, 'subject'),
+        bodyHtml: parts.textHtml || '',
+        bodyTxt: parts.textPlain || ''
+      });
+    }
+  }
+  if (!blocks.length && fullMsg && fullMsg.payload) {
+    var headersF = fullMsg.payload.headers || [];
+    var partsF = gmailExtractParts(fullMsg.payload);
+    blocks.push({
+      titulo: 'Correo reenviado',
+      from: gmailGetHeader(headersF, 'from'),
+      date: gmailGetHeader(headersF, 'date'),
+      to: gmailGetHeader(headersF, 'to'),
+      cc: gmailGetHeader(headersF, 'cc'),
+      subject: gmailGetHeader(headersF, 'subject'),
+      bodyHtml: partsF.textHtml || '',
+      bodyTxt: partsF.textPlain || ''
+    });
+  }
+  blocks.forEach(function(b) { html += gmailForwardHistorialBlockHtml(b); });
+  html += '<p style="font-size:11px;color:#888;font-family:Arial,sans-serif">Reenvío automático — Sistema de Seguimiento de Trámites CDA DEGUV.</p>';
+  return html;
+}
+window.gmailBuildPqrsReenvioHtml = gmailBuildPqrsReenvioHtml;
+
+function _buildMimeEmailForwardPqrs(to, subject, htmlBody, attachments) {
+  attachments = attachments || [];
+  var subjectPlain = typeof _normalizeEmailSubjectText === 'function'
+    ? _normalizeEmailSubjectText(subject) : subject;
+  var subjectEncoded = typeof _encodeEmailSubject === 'function'
+    ? _encodeEmailSubject(subjectPlain)
+    : subjectPlain;
+  var boundaryMix = 'sst_mix_' + Date.now();
+  var boundaryAlt = 'sst_alt_' + Date.now();
+  var plain = String(htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 12000);
+  var htmlB64 = btoa(unescape(encodeURIComponent(htmlBody || '')));
+  var plainB64 = btoa(unescape(encodeURIComponent(plain)));
+  var lines = [
+    'MIME-Version: 1.0',
+    'To: ' + to,
+    'Subject: ' + subjectEncoded,
+    'Content-Type: multipart/mixed; boundary="' + boundaryMix + '"',
+    '',
+    '--' + boundaryMix,
+    'Content-Type: multipart/alternative; boundary="' + boundaryAlt + '"',
+    '',
+    '--' + boundaryAlt,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    plainB64,
+    '',
+    '--' + boundaryAlt,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + boundaryAlt + '--'
+  ];
+  attachments.forEach(function(att) {
+    if (!att || !att.dataB64) return;
+    var fn = String(att.filename || 'adjunto').replace(/[\r\n"]/g, '_');
+    var mime = att.mimeType || 'application/octet-stream';
+    lines.push('--' + boundaryMix);
+    lines.push('Content-Type: ' + mime + '; name="' + fn + '"');
+    lines.push('Content-Disposition: attachment; filename="' + fn + '"');
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push('');
+    lines.push(_b64urlToStdB64(att.dataB64));
+    lines.push('');
+  });
+  lines.push('--' + boundaryMix + '--');
+  var raw = btoa(unescape(encodeURIComponent(lines.join('\r\n'))));
+  return raw.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function _gmailCollectMsgAttachmentsForForward(msg) {
+  if (!msg || !msg.payload) return [];
+  var parts = gmailExtractParts(msg.payload);
+  var out = [];
+  var list = parts.attachments || [];
+  for (var i = 0; i < list.length; i++) {
+    var att = list[i];
+    if (!att || !att.attachmentId) continue;
+    try {
+      var data = typeof _gmailGetAttachmentAny === 'function'
+        ? await _gmailGetAttachmentAny(msg.id, att.attachmentId)
+        : await gmailGetAttachment(msg.id, att.attachmentId);
+      if (data) {
+        out.push({
+          filename: att.filename || ('adjunto-' + (i + 1)),
+          mimeType: att.mimeType || 'application/octet-stream',
+          dataB64: data
+        });
+      }
+    } catch (err) {
+      console.warn('adjunto reenvío:', att.filename, err);
+    }
+  }
+  return out;
+}
+
 function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
   const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -4075,7 +4254,36 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
     if (!opts.silent) notif('Sin correo destino configurado', 'warn');
     return false;
   }
+  const exp = opts.exp || (typeof getExpById === 'function' ? getExpById(expId) : null);
+  const useHistorial = opts.pqrsHistorial !== false;
   try {
+    var fullMsg = msg;
+    if (!fullMsg.payload && fullMsg.id && typeof _gmailFetchMessageFull === 'function') {
+      fullMsg = await _gmailFetchMessageFull(fullMsg.id) || fullMsg;
+    }
+    if (useHistorial && typeof gmailBuildPqrsReenvioHtml === 'function') {
+      var headers = (fullMsg.payload && fullMsg.payload.headers) || [];
+      var origSubj = gmailGetHeader(headers, 'subject') || (exp && exp._gmail_email_data && exp._gmail_email_data.asunto) || '';
+      var cleanSubj = typeof pqrsSubjectSinPrefijoRadicado === 'function'
+        ? pqrsSubjectSinPrefijoRadicado(origSubj, expId)
+        : origSubj;
+      var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
+      var fwdSubj = 'Fwd: ' + expTag + cleanSubj;
+      var intro = opts.introHtml || '';
+      var attachments = await _gmailCollectMsgAttachmentsForForward(fullMsg);
+      var okHist = 0;
+      for (var hi = 0; hi < uniq.length; hi++) {
+        var htmlBody = gmailBuildPqrsReenvioHtml(fullMsg, exp, { introHtml: intro });
+        var rawFwd = _buildMimeEmailForwardPqrs(uniq[hi], fwdSubj, htmlBody, attachments);
+        await _gmailApiBest('POST', GMAIL_API_BASE + '/messages/send', { raw: rawFwd });
+        okHist++;
+      }
+      if (!opts.silent && okHist) {
+        const lbl = opts.label || uniq.join(', ');
+        notif('Correo reenviado con historial y adjuntos a ' + lbl, 'ok');
+      }
+      return okHist > 0;
+    }
     const rawData = await _gmailApiBest('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
     var okCount = 0;
     for (var ri = 0; ri < uniq.length; ri++) {
@@ -4108,7 +4316,8 @@ async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
     return false;
   }
   return reenviarEmailRawARecipientes(msg, [ofiEmail], expId, Object.assign({}, opts, {
-    label: ofiLabel + ' (' + ofiEmail + ')'
+    label: ofiLabel + ' (' + ofiEmail + ')',
+    introHtml: opts.introHtml || '<p style="font-family:Arial,sans-serif;font-size:13px">La <strong>Secretaría DEGUV</strong> traslada esta PQRSD a su oficina. Debajo encontrará el correo original recibido en Secretaría (remitente, destinatarios y copia).</p>'
   }));
 }
 
@@ -4446,6 +4655,8 @@ function prePopularFormDesdeEmail(msg) {
     window._gmailPendingEmailData = {
       remitente: _from.name ? (_from.name + ' <' + (_from.email || '') + '>') : (_from.email || ''),
       fecha: gmailGetHeader(_h, 'date') || '',
+      para: gmailGetHeader(_h, 'to') || '',
+      cc: gmailGetHeader(_h, 'cc') || '',
       asunto: typeof pqrsAsuntoFromEmailSubject === 'function'
         ? pqrsAsuntoFromEmailSubject(gmailGetHeader(_h, 'subject') || '')
         : (typeof gmailGetSubjectHeader === 'function' ? gmailGetSubjectHeader(_h) : (gmailGetHeader(_h, 'subject') || '')),

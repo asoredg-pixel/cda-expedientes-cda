@@ -4790,8 +4790,15 @@ function renderPqrsCorreoPaneInnerHtml(e,opts){
     :'';
   const bodyHtml=d.cuerpoHtml||(d.cuerpoTxt?'<pre style="white-space:pre-wrap;font-size:12px;margin:0">'+escAttr(d.cuerpoTxt)+'</pre>':'');
   const fechaStr=d.fecha?' · '+escAttr(d.fecha):'';
+  const paraCc=(d.para||d.to||d.cc)
+    ?('<div style="font-size:11px;color:var(--tx2);margin-bottom:3px;line-height:1.45">'+
+      (d.para||d.to?'<div>Para: <strong>'+escAttr(d.para||d.to)+'</strong></div>':'')+
+      (d.cc?'<div>Cc: <strong>'+escAttr(d.cc)+'</strong></div>':'')+
+      '</div>')
+    :'';
   const inner=
     (d.remitente||d.fecha?'<div style="font-size:11px;color:var(--tx2);margin-bottom:3px">De: <strong>'+escAttr(d.remitente||'')+fechaStr+'</strong></div>':'')+
+    paraCc+
     (d.asunto?'<div style="font-size:12px;font-weight:600;margin-bottom:6px">'+escAttr(d.asunto)+'</div>':'')+
     (attsHtml?'<div class="gmail-att-chips" style="margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px">'+attsHtml+'</div>':'')+
     notaAnexos+

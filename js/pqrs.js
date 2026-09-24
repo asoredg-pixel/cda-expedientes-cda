@@ -987,7 +987,7 @@ async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMs
   }
   if(!msg||typeof reenviarEmailAOficina!=='function')return false;
   try{
-    const ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true});
+    const ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true,exp:e});
     if(ok&&typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
     return ok;
   }catch(err){
@@ -1137,7 +1137,12 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
   const okEmails=[];
   for(let i=0;i<list.length;i++){
     const dest=list[i];
-    const body=_pqrsHtmlNotifAsignacion(e,num,dest.nombre||e._pqrs_responsable_oficina||'');
+    let body=_pqrsHtmlNotifAsignacion(e,num,dest.nombre||e._pqrs_responsable_oficina||'');
+    if(typeof gmailBuildPqrsReenvioHtml==='function'){
+      body=gmailBuildPqrsReenvioHtml(null,e,{
+        introHtml:'<p style="font-family:Arial,sans-serif;font-size:13px">Se le asigna esta PQRSD para su atención.</p>'
+      })+body;
+    }
     try{
       const raw=typeof _buildMimeEmail==='function'?_buildMimeEmail(dest.email,asunto,body):null;
       if(raw){
@@ -1171,7 +1176,11 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
   if(msg&&typeof reenviarEmailRawARecipientes==='function'){
     const emails=pendientes.map(function(p){return p.email;});
     try{
-      const rawOk=await reenviarEmailRawARecipientes(msg,emails,expId,{silent:true});
+      const rawOk=await reenviarEmailRawARecipientes(msg,emails,expId,{
+        silent:true,
+        exp:e,
+        introHtml:'<p style="font-family:Arial,sans-serif;font-size:13px">Se le asigna esta PQRSD. A continuación el historial del correo de solicitud recibido en Secretaría (Para, Cc y cuerpo del mensaje).</p>'
+      });
       if(rawOk)okEmails=emails.slice();
     }catch(err){console.warn('reenvio raw responsable:',err);}
   }
