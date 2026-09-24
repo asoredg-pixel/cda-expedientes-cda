@@ -2503,17 +2503,33 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   const docsConLink=docsAdj.filter(function(d){
     return d&&(d.driveLink||d.previewLink||d.fileId||d.driveFileId)&&d.tipo!=='soporte_notificacion';
   });
+  let html;
+  if(esInterna&&typeof pqrsArmarEnvioTrasladoInterno==='function'){
+    prog(progBase+1,'Incluyendo correo original…');
+    const pack=await pqrsArmarEnvioTrasladoInterno(e,cuerpo,docsAdj,{});
+    html=pack.html;
+    (pack.origenFiles||[]).forEach(function(f){
+      if(!f)return;
+      const key=String(f.name||'').toLowerCase();
+      if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&x.size===f.size;}))return;
+      adjuntos.push(f);
+    });
+  }else{
+    html=typeof pqrsCorreoHtmlRespuesta==='function'
+      ?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,{interna:esInterna,comunicacionInterna:esInterna})
+      :('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
+  }
   let totalLocal=0;
   adjuntos.forEach(function(f){totalLocal+=(f&&f.size)||0;});
   const MAX_ATTACH=800*1024;
-  // NCA/oficinas: con docs en Drive nunca embeber PDF en el MIME del correo
-  if(docsConLink.length>0||totalLocal>MAX_ATTACH){
+  // NCA/oficinas: con docs en Drive nunca embeber PDF en el MIME del correo (salvo traslado interno: conservar adjuntos del correo origen)
+  if(!esInterna&&(docsConLink.length>0||totalLocal>MAX_ATTACH)){
     adjuntos=[];
     prog(progBase+1,docsConLink.length?'Enviando con enlaces Drive…':'Enviando correo…');
+  }else if(esInterna&&totalLocal>MAX_ATTACH){
+    prog(progBase+1,'Adjuntos muy pesados — se envía con historial en el cuerpo…');
+    adjuntos=[];
   }
-  const html=typeof pqrsCorreoHtmlRespuesta==='function'
-    ?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,{interna:esInterna,comunicacionInterna:esInterna})
-    :('<p>'+String(cuerpo).replace(/\n/g,'<br>')+'</p>');
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
   prog(Math.min(97,progBase+3),esInterna?'Enviando correo interno…':'Enviando correo al ciudadano…');
   const ofiEnvio=String(e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim()||'guaviare';
@@ -9005,7 +9021,12 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       });
     }
     let htmlBody;
-    if(esInterna&&typeof pqrsCorreoHtmlComunicacionInterna==='function'){
+    let adjuntosOrigenInterna=[];
+    if(esInterna&&typeof pqrsArmarEnvioTrasladoInterno==='function'){
+      const pack=await pqrsArmarEnvioTrasladoInterno(e,cuerpo,docsConLink,{});
+      htmlBody=pack.html;
+      adjuntosOrigenInterna=pack.origenFiles||[];
+    }else if(esInterna&&typeof pqrsCorreoHtmlComunicacionInterna==='function'){
       htmlBody=pqrsCorreoHtmlComunicacionInterna(e,cuerpo,docsConLink);
     }else{
       htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>'+
@@ -9033,6 +9054,14 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     if(pdfBlob){
       const sopFile=new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'});
       if((sopFile.size||0)<=800*1024)adjuntos=[sopFile];
+    }
+    if(esInterna&&adjuntosOrigenInterna.length){
+      adjuntosOrigenInterna.forEach(function(f){
+        if(!f)return;
+        const key=String(f.name||'').toLowerCase();
+        if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key;}))return;
+        adjuntos.push(f);
+      });
     }
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){
       if(typeof sstCargaHide==='function')sstCargaHide();
@@ -28351,13 +28380,25 @@ async function ncaAprobarMensajeSimple(expId){
       ?(d.emailSubject||('Traslado interno — '+(e._tipo_solicitud||'PQRSD')+' — '+expId))
       :(d.emailSubject||('Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+expId));
     const asunto=asuntoDef;
-    const htmlResp=typeof pqrsCorreoHtmlRespuesta==='function'
-      ?pqrsCorreoHtmlRespuesta(e,cuerpoFinal,wf.documentos||[],{interna:esInterna})
-      :('<p>'+escAttr(cuerpoFinal)+'</p>');
+    let htmlResp;
+    let adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
+      ?await pqrsPrepararAdjuntosNotificacionCorreo(wf.documentos||[],{tipo:wf.tipo,e:e,t:tAct})
+      :[];
+    if(esInterna&&typeof pqrsArmarEnvioTrasladoInterno==='function'){
+      const pack=await pqrsArmarEnvioTrasladoInterno(e,cuerpoFinal,wf.documentos||[],{});
+      htmlResp=pack.html;
+      (pack.origenFiles||[]).forEach(function(f){
+        if(!f)return;
+        const key=String(f.name||'').toLowerCase();
+        if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key;}))return;
+        adjuntos.push(f);
+      });
+    }else{
+      htmlResp=typeof pqrsCorreoHtmlRespuesta==='function'
+        ?pqrsCorreoHtmlRespuesta(e,cuerpoFinal,wf.documentos||[],{interna:esInterna})
+        :('<p>'+escAttr(cuerpoFinal)+'</p>');
+    }
     try{
-      const adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
-        ?await pqrsPrepararAdjuntosNotificacionCorreo(wf.documentos||[],{tipo:wf.tipo,e:e,t:tAct})
-        :[];
       const sent=await pqrsEnviarCorreoCiudadano(correos,asunto,htmlResp,true,adjuntos,{expediente:e,oficinaId:'guaviare',cc:emailCc,bcc:emailBcc});
       let docsAprob=(wf.documentos||[]).slice();
       try{
@@ -30689,11 +30730,58 @@ function pqrsEsComunicacionInternaEnvio(e,opts){
   return false;
 }
 window.pqrsEsComunicacionInternaEnvio=pqrsEsComunicacionInternaEnvio;
+function pqrsTieneCorreoOrigenPqrs(e){
+  if(!e)return false;
+  if(e._gmail_message_id||e._gmail_email_data)return true;
+  if(typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e))return true;
+  return false;
+}
+window.pqrsTieneCorreoOrigenPqrs=pqrsTieneCorreoOrigenPqrs;
+function pqrsGmailDataB64AttachmentsToFiles(rawAtts){
+  const files=[];
+  (rawAtts||[]).forEach(function(a){
+    if(!a||!a.dataB64)return;
+    try{
+      const std=typeof _b64urlToStdB64==='function'?_b64urlToStdB64(a.dataB64):String(a.dataB64).replace(/-/g,'+').replace(/_/g,'/');
+      const padded=std+'='.repeat((4-std.length%4)%4);
+      const bin=atob(padded);
+      const bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      const mime=a.mimeType||'application/octet-stream';
+      const name=String(a.filename||'adjunto').replace(/[\r\n"]/g,'_')||'adjunto';
+      files.push(new File([bytes],name,{type:mime}));
+    }catch(err){console.warn('pqrsGmailDataB64AttachmentsToFiles:',a.filename,err);}
+  });
+  return files;
+}
+window.pqrsGmailDataB64AttachmentsToFiles=pqrsGmailDataB64AttachmentsToFiles;
+/** HTML + adjuntos del correo Gmail origen para traslado interno (mismo criterio que reenvío Secretaría→NCA). */
+async function pqrsArmarEnvioTrasladoInterno(e,cuerpo,documentos,opts){
+  opts=opts||{};
+  let fullMsg=opts.fullMsg||null;
+  const incluir=opts.incluirHistorial!==false;
+  const tieneOrigen=typeof pqrsTieneCorreoOrigenPqrs==='function'&&pqrsTieneCorreoOrigenPqrs(e);
+  if(incluir&&tieneOrigen&&!fullMsg&&typeof pqrsFetchGmailMsgForExp==='function')
+    fullMsg=await pqrsFetchGmailMsgForExp(e);
+  const html=typeof pqrsCorreoHtmlComunicacionInterna==='function'
+    ?pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,{fullMsg:fullMsg,incluirHistorial:incluir})
+    :('<p>'+escAttr(cuerpo||'')+'</p>');
+  let origenFiles=[];
+  if(fullMsg&&typeof _gmailCollectMsgAttachmentsForForward==='function'){
+    try{
+      const raw=await _gmailCollectMsgAttachmentsForForward(fullMsg);
+      origenFiles=typeof pqrsGmailDataB64AttachmentsToFiles==='function'?pqrsGmailDataB64AttachmentsToFiles(raw):[];
+    }catch(errAtt){console.warn('pqrsArmarEnvioTrasladoInterno adjuntos:',errAtt);}
+  }
+  return{html:html,origenFiles:origenFiles,fullMsg:fullMsg};
+}
+window.pqrsArmarEnvioTrasladoInterno=pqrsArmarEnvioTrasladoInterno;
 /**
- * Correo de traslado / comunicación interna: solo cuerpo diligenciado + documentos.
+ * Correo de traslado / comunicación interna: cuerpo + documentos + historial del correo recibido.
  * Sin saludo de ciudadano ni botón de consulta ciudadana.
  */
-function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos){
+function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,opts){
+  opts=opts||{};
   const docs=Array.isArray(documentos)?documentos:[];
   const linksHtml=docs.filter(function(d){return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId);}).map(function(d,di){
     let href=String(d.driveLink||d.previewLink||d.url||'').trim();
@@ -30708,9 +30796,16 @@ function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos){
   const cuerpoHtml=cuerpo
     ?('<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>')
     :'';
-  let h=cuerpoHtml;
-  if(linksHtml)h+='<hr><p><strong>Documentos</strong> (enlace Drive):</p>'+linksHtml;
-  return h||'<p></p>';
+  let introHtml=cuerpoHtml;
+  if(linksHtml)introHtml+='<hr><p><strong>Documentos</strong> (enlace Drive):</p>'+linksHtml;
+  const incluir=opts.incluirHistorial!==false;
+  const tieneDatos=!!(e&&(e._gmail_message_id||e._gmail_email_data||opts.fullMsg));
+  if(incluir&&tieneDatos&&typeof gmailBuildPqrsReenvioHtml==='function'){
+    const sep='<hr style="margin:18px 0;border:none;border-top:1px solid #ddd">'+
+      '<p style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin:0 0 8px"><strong>Correo original de la solicitud</strong></p>';
+    return gmailBuildPqrsReenvioHtml(opts.fullMsg||null,e,{introHtml:introHtml+sep});
+  }
+  return introHtml||'<p></p>';
 }
 window.pqrsCorreoHtmlComunicacionInterna=pqrsCorreoHtmlComunicacionInterna;
 function pqrsCorreoHtmlRadicacion(e){
@@ -30738,7 +30833,7 @@ function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos,opts){
   opts=opts||{};
   if(typeof pqrsEsComunicacionInternaEnvio==='function'&&pqrsEsComunicacionInternaEnvio(e,opts))
     return typeof pqrsCorreoHtmlComunicacionInterna==='function'
-      ?pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos)
+      ?pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,opts)
       :('<p>'+escAttr(cuerpo||'')+'</p>');
   const expId=e._exp||'';
   const nombre=e._qd_nombre||e._pn_nombre||'ciudadano/a';
