@@ -1177,6 +1177,18 @@ function recursosItemCompartidoVisible(item){
 }
 function recursosItemVisibleParaSesion(item){
   if(!item||item.activo===false)return false;
+  /* Carpetas Drive: responsables/contratistas solo las ven si se compartieron explícitamente. */
+  if(typeof esBibliotecaRepoItem==='function'&&esBibliotecaRepoItem(item)){
+    if(typeof puedeGestionarBibliotecaRepo==='function'&&puedeGestionarBibliotecaRepo(item))return true;
+    if(esAdministrador()||esAdminFirestore())return true;
+    if(esModoResponsable()||esModoContratista()){
+      return recursosCompVisibleParaSesion(item.compartidoCon);
+    }
+    if(recursosItemVisiblePorScope(item))return true;
+    const email=getAuthEmailNorm();
+    if(email&&String(item.createdBy||'').trim().toLowerCase()===email&&esEncargadoRecursosSesion())return true;
+    return recursosCompVisibleParaSesion(item.compartidoCon);
+  }
   if(recursosItemVisiblePorScope(item))return true;
   /* Destinatarios concretos: el contratista no hereda el ámbito de oficina. */
   if(recursosCompDestinaPersonas(item.compartidoCon)&&(esModoResponsable()||esModoContratista())){
