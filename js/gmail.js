@@ -4001,7 +4001,8 @@ function _encodeEmailSubject(subj) {
 function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
   const b64std = rawData.raw.replace(/-/g, '+').replace(/_/g, '/');
-  const binaryStr = atob(b64std);
+  const padded = b64std + '='.repeat((4 - b64std.length % 4) % 4);
+  const binaryStr = atob(padded);
   const bytes = new Uint8Array(binaryStr.length);
   for (var bi = 0; bi < binaryStr.length; bi++) bytes[bi] = binaryStr.charCodeAt(bi);
   var sepPos = -1, sepLen = 4;
@@ -4096,8 +4097,11 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
 
 async function reenviarEmailAOficina(msg, ofiId, expId, opts) {
   opts = opts || {};
-  const ofiData = (encargadosGlobal && encargadosGlobal.oficinas && encargadosGlobal.oficinas[ofiId]) || {};
-  const ofiEmail = (ofiData.email || '').trim();
+  let ofiEmail = typeof getCorreoAutorizadoOficina === 'function' ? String(getCorreoAutorizadoOficina(ofiId) || '').trim() : '';
+  if (!ofiEmail) {
+    const ofiData = (encargadosGlobal && encargadosGlobal.oficinas && encargadosGlobal.oficinas[ofiId]) || {};
+    ofiEmail = (ofiData.email || '').trim();
+  }
   const ofiLabel = typeof labelOficina === 'function' ? labelOficina(ofiId) : ofiId;
   if (!ofiEmail) {
     notif('La oficina ' + ofiLabel + ' no tiene correo configurado en Encargados.', 'warn');

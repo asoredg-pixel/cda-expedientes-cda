@@ -326,7 +326,7 @@ function notificarResultadoRadicacionPqrs(opts){
   const msg=opts.message||'';
   if(!msg){if(typeof notif==='function')notif('Operación completada','ok');return;}
   if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading){
-    sstCargaDone({title:opts.title||'PQRSD radicada',message:msg,autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000,holdMs:220});
+    sstCargaDone({title:opts.title||'PQRSD radicada',message:msg,autoCloseMs:opts.autoCloseMs!=null?opts.autoCloseMs:(typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000),holdMs:220});
     return;
   }
   if(typeof confirmExito==='function'){
@@ -336,7 +336,7 @@ function notificarResultadoRadicacionPqrs(opts){
       tone:'radicacion',
       hideFooter:false,
       confirmLabel:'Entendido',
-      autoCloseMs:typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000
+      autoCloseMs:opts.autoCloseMs!=null?opts.autoCloseMs:(typeof SST_MSG_AUTO_MS!=='undefined'?SST_MSG_AUTO_MS:1000)
     });
   }else if(typeof notif==='function'){
     notif(msg,'ok');
@@ -688,6 +688,7 @@ async function guardarPqrsSecretaria(modo){
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=typeof secAnexoCollectFiles==='function'?secAnexoCollectFiles():(Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[]);
   let reenvioOficinaOk=false;
+  let reenvioAvisoOficinaOk=false;
   let reenvioDsOk=false;
   // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
@@ -797,22 +798,18 @@ async function guardarPqrsSecretaria(modo){
     }else if(!soloRadicar){
       const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
       reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio||null);
-      // Fallback: si el reenvío raw falló, enviar notificación estructurada al correo de la oficina
+      // Si el original no salió, avisar a la oficina. No cuenta como reenvío del correo de la solicitud.
       if(!reenvioOficinaOk&&_tokOk&&typeof _pqrsEnviarNotifAsignacion==='function'){
-        const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
-        const _ofiEmail=(_ofiData.email||'').trim();
+        let _ofiEmail=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(oficina)||'').trim():'';
+        if(!_ofiEmail){
+          const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
+          _ofiEmail=(_ofiData.email||'').trim();
+        }
         if(_ofiEmail){
           try{
-            reenvioOficinaOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId);
-            if(reenvioOficinaOk)console.log('reenvio oficina: notificación de respaldo enviada a',oficina,_ofiEmail);
+            const avisoOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId);
+            if(avisoOk)reenvioAvisoOficinaOk=true;
           }catch(_fe){console.warn('reenvio oficina fallback:',_fe);}
-        }
-      }
-      if(!reenvioOficinaOk){
-        if(!_tokOk){
-          notif('⚠️ La PQRSD se radicó, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+' porque la sesión Gmail expiró. Reconecte el correo y reenvíe manualmente con ↪ Reenviar.','warn');
-        }else{
-          notif('⚠️ La PQRSD se radicó, pero NO se pudo reenviar el correo a '+labelOficina(oficina)+'. Reenvíe manualmente desde Correos.','warn');
         }
       }
     }
@@ -909,10 +906,18 @@ async function guardarPqrsSecretaria(modo){
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
-  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina'+(reenvioDsOk?' · Correo reenviado a DS DEGUV':''):(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+(reenvioOficinaOk?' · Correo reenviado a la oficina':'')+textoResultadoNotifRadicacion(notifRes);
+  let correoTxt='';
+  if(!soloRadicar&&gmailMsgId&&oficina!=='secretaria'){
+    if(reenvioOficinaOk)correoTxt=' Correo de la solicitud reenviado a la oficina.';
+    else if(reenvioAvisoOficinaOk)correoTxt=' No se pudo reenviar el correo original con anexos. Se envió un aviso a la oficina; reenvíe el correo desde Correos.';
+    else correoTxt=' No se reenvió el correo de la solicitud a '+labelOficina(oficina)+'. Reenvíe desde Correos.';
+  }else if(soloRadicar&&reenvioDsOk)correoTxt=' Correo reenviado a DS DEGUV.';
+  const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+correoTxt+textoResultadoNotifRadicacion(notifRes);
+  const correoPendiente=!!(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk);
   notificarResultadoRadicacionPqrs({
-    title:soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada'),
-    message:msgPrincipal
+    title:correoPendiente?'Radicada — revise el correo':(soloRadicar?'PQRSD radicada':(oficina==='secretaria'?'PQRSD radicada en Secretaría':'PQRSD radicada y trasladada')),
+    message:msgPrincipal,
+    autoCloseMs:correoPendiente?0:undefined
   });
   limpiarFormSecretaria();
   // Listado «PQRSD asignadas»: mostrar la recién radicada de primero
