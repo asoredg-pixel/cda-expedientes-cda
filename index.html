@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260924n">
+<link rel="stylesheet" href="css/sst.css?v=20260924o">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -643,9 +643,9 @@
       <input type="file" id="chat-file-inp" class="chat-file-inp" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip" onchange="chatEnviarArchivo()">
       <div id="chat-emoji-panel" class="chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>
       <div class="chat-compose chat-compose-wa">
-        <button type="button" class="chat-wa-emoji-ico" id="chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="chatToggleEmojiPicker(event)">😊</button>
         <div class="chat-wa-field has-attach has-emoji">
           <textarea class="sst-wa-compose" id="chat-inp" rows="1" placeholder="Escriba un mensaje…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatEnviarTexto();}"></textarea>
+          <button type="button" class="chat-wa-emoji-ico" id="chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="chatToggleEmojiPicker(event)">😊</button>
           <button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="chatAdjuntarArchivoClick()">📎</button>
           <button type="button" class="chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="chatEnviarTexto()">➤</button>
         </div>
