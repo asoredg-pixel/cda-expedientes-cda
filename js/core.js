@@ -1175,7 +1175,11 @@ function pqrsVisiblePaletaPorFirmar(e,t){
   if(!e&&!t)return false;
   const esDir=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   if(esDir)return true;
-  if(pqrsSesionConsolidaPorFirmarTodasOficinas())return true;
+  if(pqrsSesionConsolidaPorFirmarTodasOficinas()){
+    let tSec=t;
+    if(!tSec&&e&&e._taskId&&typeof getTaskAny==='function')tSec=getTaskAny(e._exp,e._taskId);
+    return pqrsCuentaPorFirmarVistaSecretaria(e,tSec);
+  }
   const ofiExp=pqrsOficinaCtxPorFirmar(e,t);
   if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv()&&!(typeof esModoResponsable==='function'&&esModoResponsable())){
     const ofiAct=typeof getPqrsOficinaActiva==='function'?String(getPqrsOficinaActiva()||'').trim():'';
@@ -1185,9 +1189,35 @@ function pqrsVisiblePaletaPorFirmar(e,t){
   const ofiAct=typeof getPqrsOficinaActiva==='function'?String(getPqrsOficinaActiva()||'').trim():'';
   return ofiExp===ofiAct||(ofiAct==='guaviare'&&ofiExp==='guaviare');
 }
+/**
+ * Secretaría «Por firmar»: no «✓ Revisada · X Imprimir» (NCA/Guaviare sin 🖨️).
+ * Guaviare: solo «X Firmar» (impreso). Otras oficinas: en por firmar (pendiente firma Director).
+ */
+function pqrsCuentaPorFirmarVistaSecretaria(e,t){
+  if(e&&e._tramite_firma_task&&e._taskId&&typeof getTaskAny==='function')
+    t=t||getTaskAny(e._exp,e._taskId);
+  if(!t&&e&&typeof getPqrsAtencionTask==='function')t=getPqrsAtencionTask(e);
+  if(!t&&e&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
+  if(e&&e._tramite_firma_task&&t){
+    if(typeof taskFirmaEnPorFirmar==='function'&&!taskFirmaEnPorFirmar(t))return false;
+    if(typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
+    const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+    const ofiT=typeof pqrsOficinaCtxPorFirmar==='function'?pqrsOficinaCtxPorFirmar(e,t):String(e._pqrs_oficina||'');
+    if(ofiT==='guaviare')return!!(wfT.impreso&&wfT.impreso.en);
+    return true;
+  }
+  if(!e)return false;
+  if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  if(wf.firma_fisica&&wf.firma_fisica.en)return false;
+  const ofi=typeof pqrsOficinaCtxPorFirmar==='function'?pqrsOficinaCtxPorFirmar(e,t):String(e._pqrs_oficina||'');
+  if(ofi==='guaviare')return!!(wf.impreso&&wf.impreso.en);
+  return true;
+}
 window.pqrsOficinaCtxPorFirmar=pqrsOficinaCtxPorFirmar;
 window.pqrsSesionConsolidaPorFirmarTodasOficinas=pqrsSesionConsolidaPorFirmarTodasOficinas;
 window.pqrsVisiblePaletaPorFirmar=pqrsVisiblePaletaPorFirmar;
+window.pqrsCuentaPorFirmarVistaSecretaria=pqrsCuentaPorFirmarVistaSecretaria;
 /** Oficinas sin cola de impresión: pasan directo a «Por firmar» (atajo). */
 function pqrsPuedeAtajoParaFirma(){
   if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
