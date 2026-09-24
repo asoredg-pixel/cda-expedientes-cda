@@ -171,7 +171,53 @@ let _gmailConnecting = false;
 let _gmailNextPageToken = null;
 let _gmailFilter = 'all'; // 'all' | 'unread' | 'read'
 let _gmailSearchMode = false; // true when showing search results
+let _gmailOfiListFetchCache = { key: '', ts: 0, msgs: [], nextPageToken: '' };
+let _gmailOfiReadFilterTimer = null;
+let _gmailOfiSearchDebounceTimer = null;
+const GMAIL_LIST_CACHE_MS = 45000;
+const GMAIL_LIST_META_BATCH = 5;
+const GMAIL_LIST_BATCH_PAUSE_MS = 150;
 let _gmailRadicadoLabelId = ''; // ID of the "RAD APP" custom label, loaded on connect
+
+function _gmailQuotaFriendlyMessage(raw) {
+  const t = String(raw || '');
+  if (/quota exceeded|Total Query Cost|rateLimitExceeded|userRateLimit|Queries per minute/i.test(t)) {
+    return 'Gmail limitó las búsquedas por exceso de consultas en poco tiempo. Espere 1–2 minutos, use términos más concretos (ej. PQRSD #PT260187, from:correo@…) y evite pulsar varias veces seguidas.';
+  }
+  return '';
+}
+
+function _gmailOfiMsgNeedsFullFetch(msg) {
+  if (!msg || !msg.payload) return true;
+  if (typeof gmailExtractParts !== 'function') return true;
+  const parts = gmailExtractParts(msg.payload);
+  return !(parts.textHtml || parts.textPlain);
+}
+
+async function _gmailOfiFetchMessagesForList(ids) {
+  ids = (ids || []).filter(Boolean);
+  const results = [];
+  const metaSuffix = '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
+  for (let i = 0; i < ids.length; i += GMAIL_LIST_META_BATCH) {
+    const batch = ids.slice(i, i + GMAIL_LIST_META_BATCH);
+    const metas = await Promise.all(batch.map(function(id) {
+      return _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + metaSuffix).catch(function() { return null; });
+    }));
+    metas.forEach(function(m) { if (m) results.push(m); });
+    if (i + GMAIL_LIST_META_BATCH < ids.length) {
+      await new Promise(function(r) { setTimeout(r, GMAIL_LIST_BATCH_PAUSE_MS); });
+    }
+  }
+  return results;
+}
+
+function _gmailNormalizeSearchQueryForApi(q, opts) {
+  q = String(q || '').trim();
+  if (!q) return q;
+  if (opts && opts.skipInboxScope) return q;
+  if (/\b(in:|label:|from:|to:|subject:|is:|has:)/i.test(q)) return q;
+  return 'in:inbox ' + q;
+}
 const GMAIL_RADICADO_LABEL = 'RAD APP'; // Nombre de la etiqueta Gmail para correos radicados en la app
 
 // ----------------------------------------------------------------
@@ -690,6 +736,8 @@ async function gmailApiCall(method, url, body, callOpts) {
   }
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
+    const quotaMsg = _gmailQuotaFriendlyMessage(txt);
+    if (quotaMsg) throw new Error(quotaMsg);
     throw new Error('Gmail API ' + res.status + ': ' + txt.slice(0, 200));
   }
   return res.json();
@@ -877,9 +925,8 @@ async function gmailSearch(query) {
   _gmailSearchMode = true;
   updateGmailFilterBtns();
   try {
-    // Restringe la búsqueda a la bandeja de entrada (in:inbox)
-    const q = 'in:inbox ' + query;
-    const url = GMAIL_API_BASE + '/messages?maxResults=30&q=' + encodeURIComponent(q);
+    const q = _gmailNormalizeSearchQueryForApi(query);
+    const url = GMAIL_API_BASE + '/messages?maxResults=25&q=' + encodeURIComponent(q);
     const data = await gmailApiCall('GET', url);
     const ids = (data.messages || []).map(function(m) { return m.id; });
     if (!ids.length) {
@@ -887,20 +934,23 @@ async function gmailSearch(query) {
       return;
     }
     const results = [];
-    for (var i = 0; i < ids.length; i += 10) {
-      var batch = ids.slice(i, i + 10);
+    const metaSuffix = '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
+    for (var i = 0; i < ids.length; i += GMAIL_LIST_META_BATCH) {
+      var batch = ids.slice(i, i + GMAIL_LIST_META_BATCH);
       var metas = await Promise.all(batch.map(function(id) {
-        return gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + id +
-          '?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date');
+        return gmailApiCall('GET', GMAIL_API_BASE + '/messages/' + id + metaSuffix);
       }));
       results.push.apply(results, metas);
+      if (i + GMAIL_LIST_META_BATCH < ids.length) {
+        await new Promise(function(r) { setTimeout(r, GMAIL_LIST_BATCH_PAUSE_MS); });
+      }
     }
     renderGmailMessageList(results, true);
   } catch (e) {
     _gmailSearchMode = false;
     updateGmailFilterBtns();
     console.error('gmailSearch:', e);
-    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">Error al buscar: ' + escAttr(e.message) + '</div>';
+    if (listEl) listEl.innerHTML = '<div class="gmail-empty err">' + escAttr(e.message || 'Error al buscar') + '</div>';
   }
 }
 
@@ -5324,7 +5374,12 @@ async function _gmailOfiApi(method, url, body, optsApi) {
         notif('⚠️ Sesión de correo expirada. Reconecte.', 'err');
         throw new Error('Token expirado.');
       }
-      if (!res.ok) { const t = await res.text().catch(()=>''); throw new Error('API ' + res.status + ': ' + t.slice(0,200)); }
+      if (!res.ok) {
+        const t = await res.text().catch(function() { return ''; });
+        const quotaMsg = _gmailQuotaFriendlyMessage(t);
+        if (quotaMsg) throw new Error(quotaMsg);
+        throw new Error('API ' + res.status + ': ' + t.slice(0, 200));
+      }
       return res.json();
     } finally {
       if (timer) clearTimeout(timer);
@@ -5394,11 +5449,19 @@ function gmailOfiRefresh() {
 function gmailOfiSearch(query) {
   const q = String(query || '').trim();
   if (!q) { gmailOfiFolder('INBOX'); return; }
-  document.querySelectorAll('.gm-folder').forEach(el => el.classList.remove('gm-folder-active'));
-  const titleEl = document.getElementById('gm-list-title');
-  if (titleEl) titleEl.textContent = 'Búsqueda: ' + q;
-  gmailOfiCloseMessage();
-  _gmailOfiLoadMessages({ query: q, readFilter: _gmailOfiReadFilter || 'all' });
+  if (q.length < 2) {
+    notif('Escriba al menos 2 caracteres para buscar.', 'warn');
+    return;
+  }
+  if (_gmailOfiSearchDebounceTimer) clearTimeout(_gmailOfiSearchDebounceTimer);
+  _gmailOfiSearchDebounceTimer = setTimeout(function() {
+    _gmailOfiSearchDebounceTimer = null;
+    document.querySelectorAll('.gm-folder').forEach(function(el) { el.classList.remove('gm-folder-active'); });
+    const titleEl = document.getElementById('gm-list-title');
+    if (titleEl) titleEl.textContent = 'Búsqueda: ' + q;
+    gmailOfiCloseMessage();
+    _gmailOfiLoadMessages({ query: q, readFilter: _gmailOfiReadFilter || 'all' });
+  }, 280);
 }
 
 // Backward-compat alias
@@ -5418,15 +5481,18 @@ function gmailOfiSetReadFilter(filter) {
     b.classList.toggle('on', b.getAttribute('data-filter') === filter);
   });
   gmailOfiCloseMessage();
-  // Recargar carpeta/búsqueda activa con el filtro
-  if (_gmailOfiListOpts && _gmailOfiListOpts.query && !_gmailOfiListOpts._fromReadFilter) {
-    _gmailOfiLoadMessages(Object.assign({}, _gmailOfiListOpts, { readFilter: filter }));
-  } else {
-    _gmailOfiLoadMessages({
-      labelId: _gmailOfiActiveFolder || 'INBOX',
-      readFilter: filter
-    });
-  }
+  if (_gmailOfiReadFilterTimer) clearTimeout(_gmailOfiReadFilterTimer);
+  _gmailOfiReadFilterTimer = setTimeout(function() {
+    _gmailOfiReadFilterTimer = null;
+    if (_gmailOfiListOpts && _gmailOfiListOpts.query && !_gmailOfiListOpts._fromReadFilter) {
+      _gmailOfiLoadMessages(Object.assign({}, _gmailOfiListOpts, { readFilter: filter }));
+    } else {
+      _gmailOfiLoadMessages({
+        labelId: _gmailOfiActiveFolder || 'INBOX',
+        readFilter: filter
+      });
+    }
+  }, 320);
 }
 window.gmailOfiSetReadFilter = gmailOfiSetReadFilter;
 
@@ -5437,10 +5503,10 @@ function _gmailOfiBuildListUrl(opts, pageToken) {
   let url;
   if (opts.query && !opts._fromReadFilter) {
     // Búsqueda del usuario: combinar con filtro de lectura
-    let q = String(opts.query || '').trim();
+    let q = _gmailNormalizeSearchQueryForApi(String(opts.query || '').trim());
     if (filter === 'unread') q = (q + ' is:unread').trim();
     else if (filter === 'read') q = (q + ' is:read').trim();
-    url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=50';
+    url = GMAIL_API_BASE + '/messages?q=' + encodeURIComponent(q) + '&maxResults=25';
   } else if (filter === 'unread') {
     if (labelId === 'INBOX') {
       url = GMAIL_API_BASE + '/messages?labelIds=INBOX&labelIds=UNREAD&maxResults=50';
@@ -5477,6 +5543,24 @@ async function _gmailOfiLoadMessages(opts, append) {
   if (!append && countEl) countEl.textContent = '';
   const loadMoreBtn = document.getElementById('gm-load-more-btn');
   if (loadMoreBtn && append) { loadMoreBtn.disabled = true; loadMoreBtn.textContent = 'Cargando…'; }
+  const cacheKey = JSON.stringify({
+    q: opts.query || '',
+    label: opts.labelId || _gmailOfiActiveFolder || '',
+    filter: opts.readFilter || _gmailOfiReadFilter || 'all',
+    page: append ? _gmailOfiNextPageToken : ''
+  });
+  if (!append && _gmailOfiListFetchCache.key === cacheKey && (Date.now() - _gmailOfiListFetchCache.ts) < GMAIL_LIST_CACHE_MS) {
+    _gmailOfiMessages = (_gmailOfiListFetchCache.msgs || []).slice();
+    _gmailOfiNextPageToken = _gmailOfiListFetchCache.nextPageToken || '';
+    if (countEl) countEl.textContent = _gmailOfiMessages.length + ' mensaje' + (_gmailOfiMessages.length !== 1 ? 's' : '') + (_gmailOfiNextPageToken ? '+' : '');
+    _renderGmailOfiList();
+    if (loadMoreBtn) {
+      loadMoreBtn.disabled = false;
+      loadMoreBtn.style.display = _gmailOfiNextPageToken ? '' : 'none';
+      loadMoreBtn.textContent = 'Cargar más mensajes';
+    }
+    return;
+  }
   try {
     const url = _gmailOfiBuildListUrl(opts, append ? _gmailOfiNextPageToken : '');
     const data = await _gmailOfiApi('GET', url);
@@ -5489,16 +5573,12 @@ async function _gmailOfiLoadMessages(opts, append) {
       if (loadMoreBtn) loadMoreBtn.style.display = 'none';
       return;
     }
-    const msgs = [];
-    for (let i = 0; i < ids.length; i += 10) {
-      const batch = ids.slice(i, i + 10);
-      const res = await Promise.all(
-        batch.map(id => _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full').catch(() => null))
-      );
-      msgs.push(...res.filter(Boolean));
-    }
+    const msgs = await _gmailOfiFetchMessagesForList(ids);
     if (append) _gmailOfiMessages = _gmailOfiMessages.concat(msgs);
     else _gmailOfiMessages = msgs;
+    if (!append) {
+      _gmailOfiListFetchCache = { key: cacheKey, ts: Date.now(), msgs: msgs.slice(), nextPageToken: _gmailOfiNextPageToken || '' };
+    }
     if (countEl) countEl.textContent = _gmailOfiMessages.length + ' mensaje' + (_gmailOfiMessages.length !== 1 ? 's' : '') + (_gmailOfiNextPageToken ? '+' : '');
     _renderGmailOfiList();
     if (loadMoreBtn) {
@@ -5507,7 +5587,8 @@ async function _gmailOfiLoadMessages(opts, append) {
       loadMoreBtn.textContent = 'Cargar más mensajes';
     }
   } catch(e) {
-    if (!append) listEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div>' + escAttr(e.message) + '</div></div>';
+    const msg = String(e && e.message || e || 'Error al cargar');
+    if (!append) listEl.innerHTML = '<div class="gm-empty-state gm-err-state"><div class="gm-empty-ico">⚠️</div><div style="max-width:420px;line-height:1.45">' + escAttr(msg) + '</div></div>';
     if (loadMoreBtn) { loadMoreBtn.disabled = false; loadMoreBtn.textContent = 'Cargar más mensajes'; }
   }
 }
@@ -5666,7 +5747,11 @@ async function gmailOfiOpenMessage(id) {
   if (lp && window.innerWidth < 860) lp.style.display = 'none';
   try {
     let msg = _gmailOfiMessages.find(m => m.id === id) || null;
-    if (!msg) msg = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full');
+    if (!msg || _gmailOfiMsgNeedsFullFetch(msg)) {
+      msg = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + id + '?format=full');
+      const idx = _gmailOfiMessages.findIndex(function(m) { return m && m.id === id; });
+      if (idx >= 0) _gmailOfiMessages[idx] = msg;
+    }
     _gmailOfiCurrentMsg = msg;
     if (Array.isArray(msg.labelIds) && msg.labelIds.includes('UNREAD')) {
       _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/' + id + '/modify', { removeLabelIds: ['UNREAD'] })
