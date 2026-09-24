@@ -596,7 +596,88 @@ function chatConvId(keyA,keyB){
   return [a,b].sort().join('|');
 }
 function chatConvFirestoreId(convId){
-  return String(convId||'').replace(/\|/g,'__');
+  convId=String(convId||'').trim();
+  if(!convId||convId.indexOf('tmp|')===0)return'';
+  return convId.replace(/\|/g,'__').replace(/\//g,'_s_');
+}
+function chatPayloadForFirestore(msg){
+  function strip(v){
+    if(v===undefined)return undefined;
+    if(v===null)return null;
+    if(typeof v==='string'||typeof v==='number'||typeof v==='boolean')return v;
+    if(Array.isArray(v))return v.map(strip).filter(function(x){return x!==undefined;});
+    if(typeof v==='object'){
+      const o={};
+      Object.keys(v).forEach(function(k){
+        const x=strip(v[k]);
+        if(x!==undefined)o[k]=x;
+      });
+      return o;
+    }
+    return undefined;
+  }
+  return strip(msg)||{};
+}
+function chatNormalizeConvIdForSave(msg,me,contactKey){
+  let convId=String((msg&&msg.convId)||'').trim();
+  if(!convId||convId.indexOf('tmp|')===0){
+    if(me&&contactKey){
+      const route=chatPickSendRoute(me,contactKey);
+      convId=route.convId||chatConvId(msg.fromKey,msg.toKey);
+    }else{
+      convId=chatConvId(msg.fromKey,msg.toKey);
+    }
+  }
+  return convId;
+}
+function chatFirestoreSaveErrorText(err){
+  const code=err&&err.code||'unknown';
+  const email=(window._usuarioActual&&window._usuarioActual.email)||'?';
+  const rol=(window._usuarioActual&&window._usuarioActual.rol)||'?';
+  if(code==='permission-denied'){
+    return'No se pudo guardar el mensaje: sin permisos para «'+email+'» (rol: '+rol+'). Verifique que la cuenta esté activa y vuelva a iniciar sesión.';
+  }
+  if(code==='unauthenticated'){
+    return'No se pudo guardar el mensaje: sesión de Firebase expirada. Cierre sesión y vuelva a ingresar.';
+  }
+  if(code==='invalid-argument'){
+    return'No se pudo guardar el mensaje: datos o ruta de conversación inválidos. Recargue con Ctrl+F5 e intente de nuevo.';
+  }
+  if(code==='unavailable'||code==='failed-precondition'){
+    return'No se pudo guardar el mensaje: Firestore no disponible. Revise la conexión e intente otra vez.';
+  }
+  return'Error al guardar el mensaje en Firestore'+(code!=='unknown'?' ('+code+')':'');
+}
+async function chatWriteMensajeFirestore(msg,opts){
+  opts=opts||{};
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc){
+    const e=new Error('Firestore no disponible');
+    e.code='unavailable';
+    throw e;
+  }
+  if(typeof ensureFirestoreAuthReady==='function'){
+    const auth=await ensureFirestoreAuthReady();
+    if(!auth.ok){
+      const e=new Error('Sin sesión Firebase');
+      e.code=auth.code||'unauthenticated';
+      throw e;
+    }
+  }
+  const me=opts.me||chatEffectiveIdentity()||getChatIdentity();
+  const contactKey=opts.contactKey||window._chatActiveContactKey||chatActiveContactKey()||'';
+  msg.convId=chatNormalizeConvIdForSave(msg,me,contactKey);
+  const fsConvId=chatConvFirestoreId(msg.convId);
+  const msgId=String(msg.id||'').trim();
+  if(!fsConvId||!msgId){
+    const e=new Error('Ruta de chat inválida');
+    e.code='invalid-argument';
+    e.detail={convId:msg.convId,fsConvId:fsConvId,msgId:msgId};
+    throw e;
+  }
+  const payload=chatPayloadForFirestore(msg);
+  await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msgId),payload,{merge:true});
+  return{fsConvId:fsConvId,msgId:msgId};
 }
 async function loadChatMensajes(convId){
   convId=String(convId||'').trim();
@@ -970,7 +1051,10 @@ function chatPickSendRoute(me,contactKey){
     };
   }
   const last=msgs[msgs.length-1];
-  const convId=last.convId||chatConvId(last.fromKey,last.toKey);
+  let convId=last.convId||chatConvId(last.fromKey,last.toKey);
+  if(!convId||String(convId).indexOf('tmp|')===0){
+    convId=chatConvId(chatPreferSendKey(me),fallback.key);
+  }
   const keys=convId.split('|');
   let fromKey=chatPreferSendKey(me);
   keys.forEach(function(k){
@@ -1939,7 +2023,7 @@ async function chatAdminEnviarBroadcast(){
     chatMensajes.push(msg);
     chatMsgIndexUpsert(msg);
     try{
-      await window._fsSetDoc(window._fsDoc(db,'chats',chatConvFirestoreId(convId),'mensajes',msg.id),msg,{merge:true});
+      await chatWriteMensajeFirestore(msg,{me:{kind:'admin',key:CHAT_ADMIN_KEY,label:CHAT_ADMIN_LABEL},contactKey:to.key});
       ok++;
     }catch(err){
       console.error('chatAdminEnviarBroadcast:',convId,err);
@@ -2002,17 +2086,17 @@ async function chatEnviarTexto(){
     notif('No hay conexión con Firestore. El mensaje no se envió.','err');
     return;
   }
-  const fsConvId=chatConvFirestoreId(msg.convId);
   try{
-    await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+    await chatWriteMensajeFirestore(msg,{me:me,contactKey:contactKey});
+    window._chatConvActiva=msg.convId;
   }catch(err){
-    console.error('chatEnviarTexto:',fsConvId,msg.id,err);
+    console.error('chatEnviarTexto:',msg.convId,msg.id,err);
     chatMensajes=chatMensajes.filter(m=>m.id!==msg.id);
     chatMsgIndexRemove(msg.id);
     renderChatMessages();
     renderChatContacts();
     renderChatBadge();
-    notif('Error al guardar el mensaje en Firestore','err');
+    notif(chatFirestoreSaveErrorText(err),'err');
   }
 }
 const CHAT_EMOJI_RECENT_LS='sst_chat_emoji_recent';
@@ -2399,8 +2483,21 @@ async function chatEnviarArchivo(fileArg){
     renderChatBadge();
     const db=window._db;
     if(db&&window._fsSetDoc&&window._fsDoc){
-      const fsConvId=chatConvFirestoreId(msg.convId);
-      await window._fsSetDoc(window._fsDoc(db,'chats',fsConvId,'mensajes',msg.id),msg,{merge:true});
+      let fsConvId='';
+      try{
+        const wr=await chatWriteMensajeFirestore(msg,{me:me,contactKey:contactKey});
+        fsConvId=wr.fsConvId;
+        window._chatConvActiva=msg.convId;
+      }catch(saveErr){
+        console.error('chatEnviarArchivo firestore:',saveErr);
+        chatMensajes=chatMensajes.filter(function(m){return m.id!==msg.id;});
+        chatMsgIndexRemove(msg.id);
+        renderChatMessages();
+        renderChatContacts();
+        renderChatBadge();
+        chatUploadOverlayError(chatFirestoreSaveErrorText(saveErr),file.name);
+        return;
+      }
       if(typeof chatRegisterDrivePurge==='function'){
         try{
           await chatRegisterDrivePurge(uploaded.fileId,{
