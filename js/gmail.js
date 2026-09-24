@@ -3927,9 +3927,29 @@ function pqrsAsuntoFromEmailSubject(subj) {
   return s;
 }
 
+/** Quita Fwd/Re y el PQRSD # de este radicado, las veces que haga falta, antes de volver a anteponerlo. */
+function pqrsSubjectSinPrefijoRadicado(subj, expId) {
+  var s = _normalizeEmailSubjectText(subj);
+  var id = String(expId || '').trim();
+  var idRe = null;
+  if (id) {
+    var esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    idRe = new RegExp('^\\s*\\[?\\s*PQRSD\\s*#\\s*' + esc + '\\s*\\]?\\s*:?\\s*', 'i');
+  }
+  var guard = 0;
+  var prev;
+  do {
+    prev = s;
+    s = s.replace(/^(\s*(Fwd?|Re|RV|AW|RES):\s*)+/gi, '').trim();
+    if (idRe) s = s.replace(idRe, '').trim();
+  } while (s !== prev && ++guard < 6);
+  return s;
+}
+
 window._normalizeEmailSubjectText = _normalizeEmailSubjectText;
 window.gmailGetSubjectHeader = gmailGetSubjectHeader;
 window.pqrsAsuntoFromEmailSubject = pqrsAsuntoFromEmailSubject;
+window.pqrsSubjectSinPrefijoRadicado = pqrsSubjectSinPrefijoRadicado;
 
 // Decodifica encoded-words RFC 2047 (=?charset?B/Q?text?=) en cabeceras de correo.
 // Necesario para limpiar asuntos como "=?UTF-8?B?[base64 de 'Fwd: PQRSD #... asunto']?="
@@ -4019,12 +4039,7 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
         origSubj += headerLines[hj].replace(/^[\s\t]+/, '');
         hj++;
       }
-      var decodedSubj = _normalizeEmailSubjectText(origSubj);
-      var cleanSubj = (typeof pqrsAsuntoFromEmailSubject === 'function'
-        ? pqrsAsuntoFromEmailSubject(decodedSubj)
-        : decodedSubj)
-        .replace(/^(\s*(Fwd?|Re):\s*((\[?\s*)?PQRSD\s*#\s*[A-Za-z0-9\-]+\s*\]?\s*:?\s*)?)+/i, '')
-        .trim();
+      var cleanSubj = pqrsSubjectSinPrefijoRadicado(origSubj, expId);
       var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
       var newSubj = 'Fwd: ' + expTag + cleanSubj;
       newHeaderLines.push('Subject: ' + _encodeEmailSubject(newSubj));
