@@ -45,10 +45,55 @@ function _gmailGisReady() {
   return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
 }
 let _gmailConnectingWatchdog = null;
+let _gmailSesionProgTimer = null;
 const GMAIL_OAUTH_CONNECTING_MS = 90000;
+function sstGmailSesionModalOpen() {
+  const ov = document.getElementById('gmail-sesion-overlay');
+  return !!(ov && ov.classList.contains('on'));
+}
+function sstGmailSesionUiConnecting(active, hint) {
+  const wrap = document.getElementById('gmail-sesion-progress');
+  const btn = document.getElementById('gmail-sesion-connect-btn');
+  const txt = document.getElementById('gmail-sesion-progress-txt');
+  const steps = document.getElementById('gmail-sesion-steps');
+  if (_gmailSesionProgTimer) { clearInterval(_gmailSesionProgTimer); _gmailSesionProgTimer = null; }
+  if (!wrap || !btn) return;
+  if (active) {
+    wrap.hidden = false;
+    wrap.style.display = 'flex';
+    btn.style.display = 'none';
+    btn.disabled = true;
+    if (steps) steps.style.display = 'none';
+    const hints = [
+      hint || 'Abriendo la ventana de Google…',
+      'Seleccione su correo institucional…',
+      'Confirme los permisos de Gmail y Drive…',
+      'Finalizando la conexión, un momento…'
+    ];
+    let i = 0;
+    if (txt) txt.textContent = hints[0];
+    _gmailSesionProgTimer = setInterval(function() {
+      i = (i + 1) % hints.length;
+      if (txt) txt.textContent = hints[i];
+    }, 4200);
+    wrap.setAttribute('aria-busy', 'true');
+  } else {
+    wrap.hidden = true;
+    wrap.style.display = 'none';
+    wrap.removeAttribute('aria-busy');
+    btn.style.display = '';
+    btn.disabled = false;
+    btn.textContent = 'Conectar';
+    if (steps) steps.style.display = '';
+  }
+}
+window.sstGmailSesionUiConnecting = sstGmailSesionUiConnecting;
 function _gmailResetSesionConnectBtn() {
-  const gBtn = document.getElementById('gmail-sesion-connect-btn');
-  if (gBtn) { gBtn.disabled = false; gBtn.textContent = 'Conectar Gmail / Drive'; }
+  if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(false);
+  else {
+    const gBtn = document.getElementById('gmail-sesion-connect-btn');
+    if (gBtn) { gBtn.disabled = false; gBtn.textContent = 'Conectar'; }
+  }
 }
 function _gmailArmConnectingWatchdog() {
   if (_gmailConnectingWatchdog) clearTimeout(_gmailConnectingWatchdog);
@@ -112,6 +157,9 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
   _gmailArmConnectingWatchdog();
   updateGmailConnectBtn();
   if (typeof _updateGmailOfiBtn === 'function') _updateGmailOfiBtn();
+  if (typeof sstGmailSesionUiConnecting === 'function' && sstGmailSesionModalOpen()) {
+    sstGmailSesionUiConnecting(true);
+  }
   const tokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: scope,
@@ -504,34 +552,31 @@ function sstAbrirGmailDriveModal(opts) {
   opts = opts || {};
   const ov = document.getElementById('gmail-sesion-overlay');
   if (!ov) return;
-  const tit = ov.querySelector('.gmail-sesion-tit');
-  const txt = ov.querySelector('.gmail-sesion-txt');
-  const txtSm = ov.querySelector('.gmail-sesion-txt-sm');
-  const skipBtn = document.getElementById('gmail-sesion-skip-btn') || ov.querySelector('.gmail-sesion-btns .bs');
+  const tit = document.getElementById('gmail-sesion-tit');
+  const txt = document.getElementById('gmail-sesion-txt');
   const force = !!opts.force; // true solo cuando una acción requiere Drive (subir/adjuntar)
-  if (tit) tit.textContent = 'Conectar Gmail / Drive';
+  if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(false);
+  if (tit) tit.textContent = force ? 'Conectar para continuar' : 'Conectar con Google Drive';
   if (txt) {
     txt.innerHTML = force
-      ? 'Para <strong>cargar o adjuntar este documento</strong> debe autorizar su correo institucional (Gmail y Drive).'
-      : 'Autorice <strong>su correo institucional</strong> para adjuntar archivos, radicar con anexos o usar Drive. Puede cerrar y seguir navegando.';
-  }
-  if (txtSm) {
-    txtSm.textContent = 'La autorización de Google dura ~1 hora. Al vencer, el menú Drive mostrará «desconectado»; podrá seguir usando el sistema hasta que necesite subir un archivo.';
-  }
-  if (skipBtn) {
-    skipBtn.style.display = '';
-    skipBtn.textContent = force ? 'Cancelar' : 'Cerrar';
+      ? 'Para <strong>cargar o adjuntar este documento</strong> siga los pasos y autorice su correo institucional en Google.'
+      : 'Use su <strong>correo institucional</strong> para adjuntar archivos, usar la biblioteca Drive y enviar correos desde el sistema.';
   }
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
 }
 function sstCerrarGmailAttachModal(success) {
+  if (_gmailConnecting) {
+    if (typeof notif === 'function') {
+      notif('Conexión en curso. Complete el paso en Google o espere a que termine.', 'warn');
+    }
+    return;
+  }
   const ov = document.getElementById('gmail-sesion-overlay');
   if (ov) {
     ov.classList.remove('on');
     ov.setAttribute('aria-hidden', 'true');
-    const skipBtn = document.getElementById('gmail-sesion-skip-btn') || ov.querySelector('.gmail-sesion-btns .bs');
-    if (skipBtn) skipBtn.style.display = 'none';
+    if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(false);
   }
   document.body.classList.remove('gmail-sesion-bloqueado');
   window._sstGmailAttachForce = false;
@@ -612,8 +657,7 @@ function sstConectarGmailObligatorio(doneCb) {
     if (doneCb) doneCb(true);
     return;
   }
-  const btn = document.getElementById('gmail-sesion-connect-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Conectando…'; }
+  if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(true);
   const finish = function() {
     _gmailResetSesionConnectBtn();
     sstFinalizeGmailConnect();

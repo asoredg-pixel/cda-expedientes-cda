@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20260924o">
+<link rel="stylesheet" href="css/sst.css?v=20260924q">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -38,7 +38,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260924l"></script>
+<script src="js/gmail.js?v=20260924q"></script>
 <script src="js/sst-file-upload.js?v=20260921b"></script>
 <script src="js/pqrs.js?v=20260924k"></script>
 <script src="js/consulta.js?v=20260921b"></script>
@@ -63,15 +63,31 @@
     </div>
   </div>
 </div>
-<div id="gmail-sesion-overlay" class="gmail-sesion-overlay" aria-hidden="true">
-  <div class="gmail-sesion-box">
-    <div class="gmail-sesion-icon" aria-hidden="true">☁️</div>
-    <h2 class="gmail-sesion-tit">Conectar Gmail / Drive</h2>
-    <p class="gmail-sesion-txt">Autorice <strong>su correo institucional</strong> (Gmail y Drive) para adjuntar archivos o usar Drive.</p>
-    <p class="gmail-sesion-txt gmail-sesion-txt-sm">La autorización dura ~1 hora. Si se desconecta, puede seguir navegando; solo se pedirá de nuevo al cargar un documento (o desde el menú Drive).</p>
-    <div class="gmail-sesion-btns">
-      <button type="button" class="btn bp" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar Gmail / Drive</button>
-      <button type="button" class="btn bs" id="gmail-sesion-skip-btn" style="display:none" onclick="sstCerrarGmailAttachModal(false)">Cerrar</button>
+<div id="gmail-sesion-overlay" class="gmail-sesion-overlay" aria-hidden="true" onclick="if(event.target===this)sstCerrarGmailAttachModal(false)">
+  <div class="gmail-sesion-box" role="dialog" aria-modal="true" aria-labelledby="gmail-sesion-tit" onclick="event.stopPropagation()">
+    <button type="button" class="gmail-sesion-close" id="gmail-sesion-close-btn" title="Cerrar" aria-label="Cerrar" onclick="sstCerrarGmailAttachModal(false)">✕</button>
+    <div class="gmail-sesion-drive-logo" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="56" height="56" focusable="false">
+        <path fill="#0066DA" d="M8 32l8-14h16l8 14H8z"/>
+        <path fill="#00AC47" d="M24 4L8 32h16L24 4z"/>
+        <path fill="#EA4335" d="M24 4l16 28H24V4z"/>
+        <path fill="#FFBA00" d="M8 32l16 12 16-12H8z"/>
+      </svg>
+    </div>
+    <h2 class="gmail-sesion-tit" id="gmail-sesion-tit">Conectar con Google Drive</h2>
+    <p class="gmail-sesion-txt" id="gmail-sesion-txt">Use su <strong>correo institucional</strong> para adjuntar archivos, usar la biblioteca Drive y enviar correos desde el sistema.</p>
+    <ol class="gmail-sesion-steps" id="gmail-sesion-steps">
+      <li>Pulse <strong>Conectar</strong>.</li>
+      <li>En la ventana de Google, elija su cuenta institucional.</li>
+      <li>Acepte los permisos de Gmail y Drive.</li>
+    </ol>
+    <div class="gmail-sesion-actions">
+      <div id="gmail-sesion-progress" class="gmail-sesion-progress" hidden aria-live="polite">
+        <div class="gmail-sesion-spinner-ring" role="progressbar" aria-label="Conectando"></div>
+        <p class="gmail-sesion-progress-txt" id="gmail-sesion-progress-txt">Abriendo la ventana de Google…</p>
+        <div class="gmail-sesion-prog-bar" aria-hidden="true"><div class="gmail-sesion-prog-fill"></div></div>
+      </div>
+      <button type="button" class="btn bp gmail-sesion-connect-btn" id="gmail-sesion-connect-btn" onclick="sstConectarGmailObligatorio()">Conectar</button>
     </div>
   </div>
 </div>

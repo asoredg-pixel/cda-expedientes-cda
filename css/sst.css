@@ -2817,12 +2817,36 @@ body.gmail-sesion-bloqueado .chat-window{
 }
 body.gmail-sesion-bloqueado #gmail-sesion-overlay,
 body.gmail-sesion-bloqueado #gmail-sesion-overlay *{pointer-events:auto!important;filter:none}
-.gmail-sesion-box{background:var(--sf);border-radius:var(--rl);padding:28px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25);border:1px solid var(--bd)}
-.gmail-sesion-icon{font-size:2.4rem;line-height:1;margin-bottom:8px}
-.gmail-sesion-tit{font-size:17px;font-weight:700;color:var(--tx);margin:0 0 10px}
-.gmail-sesion-txt{font-size:13px;color:var(--tx2);line-height:1.5;margin:0 0 8px}
-.gmail-sesion-txt-sm{font-size:12px;color:var(--tx3)}
-.gmail-sesion-btns{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.gmail-sesion-box{position:relative;background:var(--sf);border-radius:var(--rl);padding:28px 24px 24px;max-width:400px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.25);border:1px solid var(--bd)}
+.gmail-sesion-close{
+  position:absolute;top:10px;right:10px;width:32px;height:32px;border:0;border-radius:50%;
+  background:transparent;color:var(--tx3);font-size:18px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;
+}
+.gmail-sesion-close:hover,.gmail-sesion-close:focus{background:rgba(0,0,0,.06);color:var(--tx);outline:none}
+.gmail-sesion-close:disabled{opacity:.45;cursor:not-allowed}
+.gmail-sesion-drive-logo{display:flex;align-items:center;justify-content:center;margin:4px auto 12px}
+.gmail-sesion-drive-logo svg{display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.12))}
+.gmail-sesion-tit{font-size:18px;font-weight:700;color:var(--tx);margin:0 0 8px}
+.gmail-sesion-txt{font-size:13px;color:var(--tx2);line-height:1.5;margin:0 0 12px;text-align:left}
+.gmail-sesion-steps{
+  margin:0 0 18px;padding:0 0 0 1.15rem;text-align:left;font-size:12px;color:var(--tx2);line-height:1.45;
+}
+.gmail-sesion-steps li{margin-bottom:6px}
+.gmail-sesion-steps li:last-child{margin-bottom:0}
+.gmail-sesion-actions{display:flex;flex-direction:column;align-items:stretch;gap:10px;min-height:44px}
+.gmail-sesion-connect-btn{width:100%;justify-content:center;padding:10px 16px;font-size:13px}
+.gmail-sesion-progress{display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 0 2px}
+.gmail-sesion-spinner-ring{
+  width:44px;height:44px;border-radius:50%;
+  border:3px solid rgba(0,102,218,.15);border-top-color:#0066DA;
+  animation:gmailSesionSpin .85s linear infinite;
+}
+.gmail-sesion-progress-txt{margin:0;font-size:12px;color:var(--tx2);line-height:1.4;text-align:center;min-height:2.8em}
+.gmail-sesion-prog-bar{width:100%;height:4px;border-radius:4px;background:rgba(0,0,0,.08);overflow:hidden}
+.gmail-sesion-prog-fill{height:100%;width:35%;border-radius:4px;background:linear-gradient(90deg,#0066DA,#00AC47);animation:gmailSesionProgIndet 1.6s ease-in-out infinite}
+@keyframes gmailSesionSpin{to{transform:rotate(360deg)}}
+@keyframes gmailSesionProgIndet{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}
 .sst-drive-status-btn{
   display:inline-flex;align-items:center;gap:7px;padding:6px 11px;margin-right:8px;
   border-radius:9px;font-size:11px;font-weight:600;line-height:1;cursor:pointer;
