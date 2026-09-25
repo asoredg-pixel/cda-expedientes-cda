@@ -10609,13 +10609,13 @@ function renderPqrsEntregaCamposHtml(e){
     '<input type="hidden" id="pqrs-entrega-oficio-modo" value="">'+
     '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">Seleccione una opción de entrega para diligenciar los campos.</div>';
   h+='<div id="pqrs-entrega-opciones-accs-wrap" style="margin-bottom:10px">'+
-    mkEntregaAcc(1,'1. Mensaje por correo',
+    mkEntregaAcc(1,'Mensaje por correo',
       '<p style="font-size:11px;color:var(--tx3);margin:0">Respuesta al ciudadano por correo electrónico. La PQRSD queda <strong>atendida</strong> al enviar.</p>')+
-    mkEntregaAcc(2,'2. Oficio para firma',
+    mkEntregaAcc(2,'Oficio para firma',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Suba el PDF de la <strong>proyección</strong>. La PQRSD pasa a <strong>Por firmar</strong> (✓ Revisada · X Imprimir); no queda atendida hasta completar firma y notificación.</p>')+
-    mkEntregaAcc(3,'3. Oficio firmado para notificar',
+    mkEntregaAcc(3,'Oficio firmado para notificar',
       '<p style="font-size:11px;color:var(--tx3);margin:0">El oficio ya está firmado. Notifique por correo u otro medio. La PQRSD queda <strong>atendida y cerrada</strong>.</p>')+
-    mkEntregaAcc(4,'4. Informativa',
+    mkEntregaAcc(4,'Informativa',
       '<p style="font-size:11px;color:var(--tx3);margin:0">Registro informativo visible en consulta ciudadana. La PQRSD queda <strong>cerrada</strong> sin notificación.</p>')+
     '</div>';
   h+='<div id="pqrs-entrega-tipo-detalles" style="display:none">';
