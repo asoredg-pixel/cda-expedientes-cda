@@ -500,10 +500,14 @@ function syncEntregaRespPqrsUi(){
         if(typeof pqrsEntregaPrefillDesdeAlta==='function')pqrsEntregaPrefillDesdeAlta();
         else if(typeof ofiDocPqrsBindAltaCorreoPrefill==='function')ofiDocPqrsBindAltaCorreoPrefill();
         if(typeof syncEntregaRespRegistroUi==='function')syncEntregaRespRegistroUi();
+        const cmtEl=document.getElementById('enviar-cmt-opcional');
+        if(cmtEl)cmtEl.style.display='none';
       },40);
     }else{
       box.innerHTML='';
       box.style.display='none';
+      const cmtEl2=document.getElementById('enviar-cmt-opcional');
+      if(cmtEl2)cmtEl2.style.display='';
       if(tramFiles){
         if(tramFiles._tramiteFilesHtmlBackup)tramFiles.innerHTML=tramFiles._tramiteFilesHtmlBackup;
         tramFiles.style.display='';

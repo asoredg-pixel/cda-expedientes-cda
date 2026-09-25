@@ -9420,6 +9420,7 @@ function initTaskReviewEntregaSide(expId,taskId,t){
   setTimeout(function(){
     const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
     if(esPqrs&&!tipo)return;
+    if(esPqrs)return;
     const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();
   },80);
 }
@@ -15668,7 +15669,8 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   const hasLocalFile=archivos.some(a=>a&&a.data);
   const esReporteTrasladado=!!(document.getElementById('enviar-modo-traslado')&&document.getElementById('enviar-modo-traslado').value==='1')||taskRecibidaPorTraslado(t);
   const esNuevaEntrega=!!(document.getElementById('enviar-modo-nueva')&&document.getElementById('enviar-modo-nueva').value==='1')||estadoTask(t)==='Por corregir';
-  if(!links.length&&!cmt&&!hasDriveUpload&&!hasLocalFile){
+  const omiteCmtAdj=typeof entregaModalOmiteComentarioEnvio==='function'&&entregaModalOmiteComentarioEnvio();
+  if(!links.length&&!cmt&&!hasDriveUpload&&!hasLocalFile&&!omiteCmtAdj){
     notif('Escriba un comentario y/o adjunte un archivo para enviar a verificación','err');
     return false;
   }
@@ -16707,6 +16709,16 @@ function _entregaPromoverAnexoAPrincipal(adj){
   return{links:adj.links||[],files:files,anexos:anexos,preUploaded:pre};
 }
 window._entregaPromoverAnexoAPrincipal=_entregaPromoverAnexoAPrincipal;
+/** Formulario de entrega con cuerpo/correo propio: no exigir «comentario u observaciones». */
+function entregaModalOmiteComentarioEnvio(){
+  if(document.getElementById('pqrs-entrega-campos'))return true;
+  const cb=document.getElementById('entrega-notif-correo');
+  if(cb&&cb.checked)return true;
+  const tipoPq=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
+  if(tipoPq===PQRS_WF_TIPO.MENSAJE)return true;
+  return false;
+}
+window.entregaModalOmiteComentarioEnvio=entregaModalOmiteComentarioEnvio;
 function submitEnviarSoporteVerificacion(expId,taskId){
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   let adj=collectEnviarAdjuntos();
@@ -17333,7 +17345,9 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       '</div>';
     }
     h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
-    h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':esPqrsEntrega?'Comentario u observaciones sobre esta entrega…':'Comentario sobre esta entrega (obligatorio si no adjunta archivo)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
+    if(!esPqrsEntrega){
+      h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':'Comentario sobre esta entrega (obligatorio si no adjunta archivo)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
+    }
     if(autoEnc){
       const eid=escAttr(expId),tid=escAttr(taskId);
       h+='<div style="font-size:12px;font-weight:600;margin:4px 0 6px">Tras la entrega, el flujo será:</div>'+
@@ -17399,8 +17413,7 @@ function openEnviarSoporteModal(expId,taskId,modo){
     },40);
   }
   setTimeout(function(){
-    const tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
-    if(esPqrsEntrega&&!tipo)return;
+    if(esPqrsEntrega)return;
     const inp=document.getElementById('enviar-cmt-opcional');if(inp)inp.focus();
   },80);
   setTimeout(function(){
@@ -20789,8 +20802,15 @@ async function submitAutoentregaEncargado(expId,taskId,destino){
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length);
   if(!hasAdj&&!cmt&&destino!=='cerrar'){
-    notif('Adjunte documento, link Drive y/o escriba un comentario','err');
-    return;
+    if(typeof entregaModalOmiteComentarioEnvio==='function'&&entregaModalOmiteComentarioEnvio()){
+      if(document.getElementById('pqrs-entrega-campos')&&typeof collectPqrsEntregaDatos==='function'){
+        const pqPre=collectPqrsEntregaDatos(expId);
+        if(!pqPre)return;
+      }
+    }else{
+      notif('Adjunte documento, link Drive y/o escriba un comentario','err');
+      return;
+    }
   }
   const run=async function(){
     const e=getExpById(expId);
