@@ -1565,6 +1565,72 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-cmt-form-wa.has-guia-attach .task-cmt-wa-field textarea.sst-wa-compose{
   padding-right:72px;
 }
+.task-cmt-form-wa-tools .task-cmt-wa-field.chat-wa-field.has-attach.has-emoji #task-cmt-input,
+.task-cmt-form-wa-tools .task-cmt-wa-field.chat-wa-field.has-attach.has-emoji textarea.sst-wa-compose{
+  padding-right:106px;
+}
+.task-cmt-form-wa-tools .task-cmt-wa-field .chat-wa-emoji-ico{
+  position:absolute;
+  right:68px;
+  bottom:5px;
+  z-index:2;
+}
+.task-cmt-form-wa-tools .task-cmt-wa-field .chat-wa-attach-ico{
+  position:absolute;
+  right:36px;
+  bottom:5px;
+  z-index:2;
+}
+.task-cmt-form-wa-tools .task-cmt-wa-field .task-cmt-send-ico{
+  right:4px;
+}
+.task-chat-attach-staging{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-bottom:6px;
+  max-height:140px;
+  overflow-y:auto;
+}
+.task-chat-staging-slot{
+  position:relative;
+  flex:0 0 auto;
+  max-width:120px;
+}
+.task-chat-staging-slot .chat-attach-wa{
+  max-width:120px;
+  margin:0;
+}
+.task-chat-staging-rm{
+  position:absolute;
+  top:2px;
+  right:2px;
+  width:22px;
+  height:22px;
+  border:0;
+  border-radius:50%;
+  background:rgba(0,0,0,.55);
+  color:#fff;
+  font-size:11px;
+  cursor:pointer;
+  line-height:1;
+  z-index:3;
+  padding:0;
+}
+.task-cmt-adjs-wa{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:6px;
+}
+.task-cmt-adjs-wa .chat-attach-wa{
+  max-width:140px;
+}
+.task-chat-emoji-panel.chat-emoji-panel{
+  margin-bottom:6px;
+  max-height:200px;
+  overflow-y:auto;
+}
 .task-cmt-wa-field .task-cmt-attach-ico{
   position:absolute;
   right:36px;

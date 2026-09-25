@@ -2119,22 +2119,28 @@ function chatEmojiRecentPush(emoji){
   r.unshift(emoji);
   try{localStorage.setItem(CHAT_EMOJI_RECENT_LS,JSON.stringify(r.slice(0,24)));}catch(e){}
 }
-function chatBuildEmojiPanelOnce(){
-  const panel=document.getElementById('chat-emoji-panel');
+function chatBuildEmojiPanelInto(panel,insertHandler){
   if(!panel)return;
+  insertHandler=String(insertHandler||'chatInsertEmoji').trim()||'chatInsertEmoji';
   const recent=chatEmojiRecentGet();
   let html='';
   if(recent.length){
     html+='<div class="chat-emoji-sect"><div class="chat-emoji-sect-lbl">Recientes</div><div class="chat-emoji-grid">'+recent.map(function(e){
-      return '<button type="button" class="chat-emoji-btn" data-emoji="'+escAttr(e)+'" onclick="chatInsertEmoji(this.dataset.emoji)" aria-label="Emoji">'+e+'</button>';
+      return '<button type="button" class="chat-emoji-btn" data-emoji="'+escAttr(e)+'" onclick="'+insertHandler+'(this.dataset.emoji)" aria-label="Emoji">'+e+'</button>';
     }).join('')+'</div></div>';
   }
   CHAT_EMOJI_PANEL.forEach(function(s){
     html+='<div class="chat-emoji-sect"><div class="chat-emoji-sect-lbl">'+escAttr(s.lbl)+'</div><div class="chat-emoji-grid">'+s.icons.map(function(e){
-      return '<button type="button" class="chat-emoji-btn" data-emoji="'+escAttr(e)+'" onclick="chatInsertEmoji(this.dataset.emoji)" aria-label="Emoji">'+e+'</button>';
+      return '<button type="button" class="chat-emoji-btn" data-emoji="'+escAttr(e)+'" onclick="'+insertHandler+'(this.dataset.emoji)" aria-label="Emoji">'+e+'</button>';
     }).join('')+'</div></div>';
   });
   panel.innerHTML=html;
+  panel.dataset.built='1';
+}
+function chatBuildEmojiPanelOnce(){
+  const panel=document.getElementById('chat-emoji-panel');
+  if(!panel)return;
+  chatBuildEmojiPanelInto(panel,'chatInsertEmoji');
   _chatEmojiPanelBuilt=true;
 }
 function chatCloseEmojiPicker(){
@@ -2165,10 +2171,10 @@ function chatToggleEmojiPicker(ev){
   panel.setAttribute('aria-hidden','false');
   if(btn)btn.setAttribute('aria-expanded','true');
 }
-function chatInsertEmoji(emoji){
+function chatInsertEmojiIntoInput(inputId,emoji){
   emoji=String(emoji||'').trim();
   if(!emoji)return;
-  const inp=document.getElementById('chat-inp');
+  const inp=document.getElementById(inputId||'chat-inp');
   if(!inp)return;
   chatEmojiRecentPush(emoji);
   const start=inp.selectionStart!=null?inp.selectionStart:inp.value.length;
@@ -2178,6 +2184,9 @@ function chatInsertEmoji(emoji){
   try{inp.setSelectionRange(pos,pos);}catch(e){}
   if(typeof sstWaComposerGrow==='function')sstWaComposerGrow(inp);
   try{inp.focus();}catch(e){}
+}
+function chatInsertEmoji(emoji){
+  chatInsertEmojiIntoInput('chat-inp',emoji);
   _chatEmojiPanelBuilt=false;
   chatBuildEmojiPanelOnce();
 }
@@ -2528,14 +2537,20 @@ window.chatClearReplyTo=chatClearReplyTo;
 window.chatScrollToMsg=chatScrollToMsg;
 window.chatToggleEmojiPicker=chatToggleEmojiPicker;
 window.chatInsertEmoji=chatInsertEmoji;
+window.chatInsertEmojiIntoInput=chatInsertEmojiIntoInput;
+window.chatBuildEmojiPanelInto=chatBuildEmojiPanelInto;
 window.chatLoadOlderMessages=chatLoadOlderMessages;
 window.chatCloseEmojiPicker=chatCloseEmojiPicker;
 window.chatAttachThumbFail=chatAttachThumbFail;
 if(!window._chatEmojiDocHook){
   window._chatEmojiDocHook=true;
   document.addEventListener('click',function(ev){
-    if(!window._chatEmojiOpen)return;
     const t=ev.target;
+    if(window._taskChatEmojiOpen&&typeof taskChatCloseEmojiPicker==='function'){
+      if(!(t&&t.closest&&(t.closest('#task-chat-emoji-panel')||t.closest('.task-chat-emoji-btn'))))
+        taskChatCloseEmojiPicker();
+    }
+    if(!window._chatEmojiOpen)return;
     if(t&&t.closest&&(t.closest('#chat-emoji-panel')||t.closest('#chat-emoji-btn')))return;
     chatCloseEmojiPicker();
   });

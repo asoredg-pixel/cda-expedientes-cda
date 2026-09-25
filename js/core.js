@@ -8113,7 +8113,7 @@ function initTaskReviewObsSide(expId,taskId,t){
   if(side)side.innerHTML=renderAnnotSidebarHtml(notas,expId,taskId,sid,canAnnot)+(canAnnot?renderAnnotSidebarFooter(expId,taskId,canAnnot):'');
   if(typeof applyTaskReviewChatSects==='function')applyTaskReviewChatSects();
   if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-review-side-body')||document);
-  if(!esModoResponsable()&&!esJurisdiccional()&&typeof initTaskChatGuiaComposer==='function')initTaskChatGuiaComposer(expId,taskId);
+  if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
 }
 function renderTaskReviewChatSideHtml(expId,taskId,t){
   const sel=t?getSoporteSeleccionado(t):null;
@@ -9721,6 +9721,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
       setTimeout(function(){
         if(typeof togglePqrsAsigModo==='function')togglePqrsAsigModo();
         if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
+        if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
       },0);
     }else{
       const canEdit=!esModoResponsable()&&!esJurisdiccional();
@@ -16073,8 +16074,31 @@ function setTaskChatUniTab(tab){
 function openTaskChatUnificado(expId,taskId){
   openTaskCommentsModal(expId,taskId,{chatOnly:true,chatUnificado:true});
 }
+function taskChatAdjMsgShape(a){
+  if(!a)return{};
+  const fid=String(a.driveFileId||a.fileId||'').trim();
+  const nom=String(a.nombre||a.driveFilename||a.origName||'Archivo').trim();
+  const mime=String(a.mime||a.tipo||a.localMime||'').trim();
+  return{
+    driveLink:a.driveLink||a.previewLink||'',
+    file:{
+      fileId:fid,
+      driveLink:a.driveLink||'',
+      nombre:a.driveFilename||nom,
+      origName:nom,
+      mime:mime,
+      expiresAt:a.expiresAt||''
+    }
+  };
+}
 function renderTaskChatAdjuntosHtml(adjuntos){
   if(!adjuntos||!adjuntos.length)return'';
+  if(typeof chatAttachmentHtml==='function'){
+    return '<div class="task-cmt-adjs task-cmt-adjs-wa">'+adjuntos.map(function(a){
+      if(!a)return'';
+      return chatAttachmentHtml(taskChatAdjMsgShape(a));
+    }).join('')+'</div>';
+  }
   return '<div class="task-cmt-adjs">'+adjuntos.map(function(a){
     if(!a)return'';
     const url=String(a.previewLink||a.driveLink||a.url||'').trim();
@@ -16086,59 +16110,163 @@ function renderTaskChatAdjuntosHtml(adjuntos){
     return '<span class="task-cmt-adj"><span class="task-cmt-adj-name" title="'+nom+'">📎 '+nom+'</span>'+acts+'</span>';
   }).join('')+'</div>';
 }
-function taskChatGuiaUploadCtx(expId,taskId){
-  const base=typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(expId,taskId):null;
-  if(!base)return null;
-  return function(){
-    const ctx=base();
-    if(!ctx)return null;
-    ctx.driveEstado='guia_correccion';
-    return ctx;
-  };
+function taskChatUploadCtx(){
+  return function(){return{chatDrive:true};};
 }
-function taskChatGuiaCollectAdjuntos(ctxKey){
+function taskChatCollectAdjuntos(ctxKey){
   if(typeof sstFileStagingCtx!=='function')return[];
   const ctx=sstFileStagingCtx(ctxKey);
   const out=[];
   function push(it){
-    if(!it||it.state!=='uploaded'||!it.driveFileId)return;
+    if(!it||it.state!=='uploaded'||!(it.driveFileId||it.driveLink))return;
     out.push({
       id:it.id,
       nombre:it.nombre||it.driveFilename||'Documento',
-      driveFileId:it.driveFileId,
+      driveFileId:it.driveFileId||'',
+      fileId:it.driveFileId||'',
       driveLink:it.driveLink||'',
       previewLink:it.previewLink||it.driveLink||'',
       driveFilename:it.driveFilename||it.nombre||'',
-      driveEstado:'guia_correccion',
-      provisional:true
+      mime:it.tipo||((it.blob&&it.blob.type)||''),
+      expiresAt:(it.uploaded&&it.uploaded.expiresAt)||it.expiresAt||'',
+      driveEstado:'chat_actividad',
+      chatDrive:true
     });
   }
   if(ctx.main)push(ctx.main);
   (ctx.anexos||[]).forEach(push);
   return out;
 }
-function taskChatGuiaPick(expId,taskId){
+function taskChatAttachStagingHtml(it,ctxKey,listId){
+  if(!it)return'';
+  let inner='';
+  if(it.state==='uploaded'&&(it.driveFileId||it.driveLink)&&typeof chatAttachmentHtml==='function'){
+    inner=chatAttachmentHtml(taskChatAdjMsgShape(it));
+  }else{
+    const mime=it.tipo||((it.blob&&it.blob.type)||'');
+    const name=it.nombre||'archivo';
+    const meta=it.state==='uploading'?'Subiendo…':(it.state==='error'?'Error':'Pendiente');
+    if(it.blob&&typeof chatIsImageMime==='function'&&chatIsImageMime(mime)){
+      if(!it.blobUrl){try{it.blobUrl=URL.createObjectURL(it.blob);}catch(eB){}}
+      inner='<div class="chat-attach-wa chat-attach-wa--image"><div class="chat-attach-wa-preview chat-attach-wa-preview--image">'+
+        '<img class="chat-attach-wa-thumb" src="'+escAttr(it.blobUrl||'')+'" alt=""></div>'+
+        '<div class="chat-attach-wa-foot"><span class="chat-attach-wa-name">'+escAttr(name)+'</span>'+
+        '<span class="chat-attach-wa-meta">'+escAttr(meta)+'</span></div></div>';
+    }else{
+      const kind=typeof chatAttachmentKind==='function'?chatAttachmentKind(mime,name):'file';
+      const badge=typeof chatAttachIconLabel==='function'?chatAttachIconLabel(kind):'📎';
+      inner='<div class="chat-attach-wa chat-attach-wa--'+escAttr(kind)+'"><div class="chat-attach-wa-preview chat-attach-wa-preview--icon">'+
+        '<span class="chat-attach-wa-type-badge">'+escAttr(badge)+'</span></div>'+
+        '<div class="chat-attach-wa-foot"><span class="chat-attach-wa-name">'+escAttr(name)+'</span>'+
+        '<span class="chat-attach-wa-meta">'+escAttr(meta)+'</span></div></div>';
+    }
+  }
+  return '<div class="task-chat-staging-slot">'+
+    inner+
+    '<button type="button" class="task-chat-staging-rm" title="Quitar" aria-label="Quitar adjunto" onclick="taskChatAttachRemove(\''+
+    jsStr(ctxKey)+'\',\''+jsStr(it.id)+'\',\''+jsStr(listId)+'\')">✕</button></div>';
+}
+function taskChatAttachRefreshList(ctxKey,listId){
+  listId=listId||'task-chat-attach-list';
+  const el=document.getElementById(listId);
+  if(!el||typeof sstFileStagingCtx!=='function')return;
+  const ctx=sstFileStagingCtx(ctxKey);
+  const items=[].concat(ctx.main?[ctx.main]:[],ctx.anexos||[]);
+  if(!items.length){el.innerHTML='';return;}
+  el.innerHTML=items.map(function(it){return taskChatAttachStagingHtml(it,ctxKey,listId);}).join('');
+}
+function taskChatAttachRemove(ctxKey,itemId,listId){
+  if(typeof sstFileRemove==='function')void sstFileRemove(ctxKey,itemId,listId);
+  else taskChatAttachRefreshList(ctxKey,listId);
+}
+function taskChatAttachPick(expId,taskId){
+  if(typeof chatDriveConectado==='function'&&!chatDriveConectado()){
+    if(typeof chatModalCorreoRequerido==='function')chatModalCorreoRequerido();
+    return;
+  }
   const run=function(){
-    const inp=document.getElementById('task-chat-guia-file');
-    if(inp)inp.click();
+    const inp=document.getElementById('task-chat-file-inp');
+    if(inp){inp.value='';inp.click();}
   };
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true))
     .then(function(ok){if(ok)run();});
 }
-function taskChatGuiaOnPick(expId,taskId,inputEl){
+function taskChatAttachOnPick(expId,taskId,inputEl){
+  if(!inputEl||!inputEl.files||!inputEl.files.length)return;
+  const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
+  const bad=Array.from(inputEl.files).find(function(f){return f&&f.size>maxBytes;});
+  if(bad){
+    if(typeof chatModalAlert==='function'){
+      chatModalAlert({title:'Archivo demasiado grande',message:'El archivo supera el límite de 25 MB del chat.',detail:bad.name,tone:'warn'});
+    }else if(typeof notif==='function')notif('Archivo demasiado grande (máx. 25 MB)','err');
+    inputEl.value='';
+    return;
+  }
   if(typeof sstFileOnAnexosPick!=='function')return;
   const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
   sstFileOnAnexosPick(inputEl,{
     ctxKey:ctxKey,
-    listId:'task-chat-guia-list',
-    getUploadCtx:taskChatGuiaUploadCtx(expId,taskId)
+    listId:'task-chat-attach-list',
+    getUploadCtx:null
   });
+  taskChatAttachRefreshList(ctxKey,'task-chat-attach-list');
+  inputEl.value='';
+}
+function taskChatCloseEmojiPicker(){
+  const panel=document.getElementById('task-chat-emoji-panel');
+  const btn=document.querySelector('.task-chat-emoji-btn');
+  if(panel){
+    panel.style.display='none';
+    panel.hidden=true;
+    panel.setAttribute('aria-hidden','true');
+  }
+  if(btn)btn.setAttribute('aria-expanded','false');
+  window._taskChatEmojiOpen=false;
+}
+function taskChatToggleEmojiPicker(ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  if(typeof chatCloseEmojiPicker==='function')chatCloseEmojiPicker();
+  const panel=document.getElementById('task-chat-emoji-panel');
+  const btn=document.querySelector('.task-chat-emoji-btn');
+  if(!panel)return;
+  if(window._taskChatEmojiOpen){taskChatCloseEmojiPicker();return;}
+  if(typeof chatBuildEmojiPanelInto==='function'&&panel.dataset.built!=='1')
+    chatBuildEmojiPanelInto(panel,'taskChatInsertEmoji');
+  window._taskChatEmojiOpen=true;
+  panel.hidden=false;
+  panel.style.display='block';
+  panel.setAttribute('aria-hidden','false');
+  if(btn)btn.setAttribute('aria-expanded','true');
+}
+function taskChatInsertEmoji(emoji){
+  if(typeof chatInsertEmojiIntoInput==='function')chatInsertEmojiIntoInput('task-cmt-input',emoji);
+  const panel=document.getElementById('task-chat-emoji-panel');
+  if(panel&&typeof chatBuildEmojiPanelInto==='function'){
+    panel.dataset.built='';
+    chatBuildEmojiPanelInto(panel,'taskChatInsertEmoji');
+  }
+}
+function initTaskChatComposer(expId,taskId){
+  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
+  if(typeof sstFileRegisterList==='function'){
+    sstFileRegisterList('task-chat-attach-list',ctxKey,'anexos',taskChatAttachRefreshList);
+  }
+  taskChatAttachRefreshList(ctxKey,'task-chat-attach-list');
 }
 function initTaskChatGuiaComposer(expId,taskId){
-  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
-  if(typeof sstFileRegisterList==='function')sstFileRegisterList('task-chat-guia-list',ctxKey,'anexos');
-  if(typeof sstFileRenderList==='function')sstFileRenderList('task-chat-guia-list',ctxKey);
+  initTaskChatComposer(expId,taskId);
 }
+function taskChatGuiaUploadCtx(){return taskChatUploadCtx();}
+function taskChatGuiaCollectAdjuntos(ctxKey){return taskChatCollectAdjuntos(ctxKey);}
+function taskChatGuiaPick(expId,taskId){taskChatAttachPick(expId,taskId);}
+function taskChatGuiaOnPick(expId,taskId,inputEl){taskChatAttachOnPick(expId,taskId,inputEl);}
+window.taskChatAttachPick=taskChatAttachPick;
+window.taskChatAttachOnPick=taskChatAttachOnPick;
+window.taskChatAttachRemove=taskChatAttachRemove;
+window.taskChatToggleEmojiPicker=taskChatToggleEmojiPicker;
+window.taskChatInsertEmoji=taskChatInsertEmoji;
+window.taskChatCloseEmojiPicker=taskChatCloseEmojiPicker;
+window.initTaskChatComposer=initTaskChatComposer;
 window.taskChatGuiaPick=taskChatGuiaPick;
 window.taskChatGuiaOnPick=taskChatGuiaOnPick;
 function renderTaskChatListHtml(t){
@@ -16188,20 +16316,16 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   const sol=getTaskSolicitudPendiente(t);
   const eid=escAttr(expId),tid=escAttr(taskId);
   const eidJs=jsStr(expId),tidJs=jsStr(taskId);
-  const mctx=window._taskModalCtx||{};
-  const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&!esModoResponsable()));
-  // allowGuiaAttach:true fuerza el clip aunque no esté en el rail de chat (p. ej. panel de asignación)
-  const canGuiaAttach=canWriteDept&&(opts.allowGuiaAttach===true||(!!inReviewChat&&opts.allowGuiaAttach!==false));
   if(opts.compact!==false){
-    let h='<div class="task-cmt-form task-cmt-form-wa'+(canGuiaAttach?' has-guia-attach':'')+'" id="task-chat-form">';
-    if(canGuiaAttach)h+='<div class="task-chat-guia-list sst-file-list" id="task-chat-guia-list"></div>';
-    h+='<div class="task-cmt-wa-field">'+
-      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}"></textarea>';
-    if(canGuiaAttach){
-      h+='<input type="file" id="task-chat-guia-file" style="display:none" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,image/*" onchange="taskChatGuiaOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
-        '<button type="button" class="task-cmt-attach-ico" title="Adjuntar guía de corrección" aria-label="Adjuntar documento guía" onclick="taskChatGuiaPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>';
-    }
-    h+='<button type="button" class="task-cmt-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
+    let h='<div class="task-cmt-form task-cmt-form-wa task-cmt-form-wa-tools" id="task-chat-form">';
+    h+='<div class="task-chat-attach-staging" id="task-chat-attach-list"></div>';
+    h+='<div id="task-chat-emoji-panel" class="chat-emoji-panel task-chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>';
+    h+='<div class="task-cmt-wa-field chat-wa-field has-attach has-emoji">'+
+      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Mensaje…" autocomplete="off" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();submitTaskComment(\''+eid+'\',\''+tid+'\');}"></textarea>'+
+      '<input type="file" id="task-chat-file-inp" style="display:none" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,application/pdf,image/*" onchange="taskChatAttachOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
+      '<button type="button" class="chat-wa-emoji-ico task-chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="taskChatToggleEmojiPicker(event)">😊</button>'+
+      '<button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
+      '<button type="button" class="task-cmt-send-ico chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
       '</div>'+
       (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
       '</div>';
@@ -20656,7 +20780,7 @@ function addTaskComentario(expId,taskId,texto,opts){
     };
     if(adj.length)cmt.adjuntos=adj.map(function(a){return Object.assign({},a);});
     t.comentarios.push(cmt);
-    if(adj.length){
+    if(adj.length&&opts.guiaCorreccion){
       if(!t.guiaCorreccionDocs)t.guiaCorreccionDocs=[];
       adj.forEach(function(a){
         t.guiaCorreccionDocs.push(Object.assign({},a,{cmtId:cmt.id,fecha:cmt.fecha}));
@@ -21414,6 +21538,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     const inp=document.getElementById('task-cmt-input');
     if(inp)inp.focus();
     if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('task-modal-body')||document);
+    if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
     if(chatUnificado&&typeof taskKeepInitTextareas==='function')taskKeepInitTextareas(document.getElementById('task-modal-body'));
   },120);
 }
@@ -21511,30 +21636,50 @@ window.taskModalTryCloseOutside=taskModalTryCloseOutside;
 async function submitTaskComment(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
   if(!inp)return;
-  const modePrev=(window._taskModalCtx||{}).mode;
-  const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
-  const mctx=window._taskModalCtx||{};
-  const inReviewChat=!!(mctx.isDeptReviewWa||mctx.isReviewDelivery||(inReview&&!esModoResponsable()));
-  const canGuiaAttach=!esModoResponsable()&&!esJurisdiccional()&&(inReviewChat||window._taskReviewSideMode==='trasladar'||modePrev==='asignarPqrsOfi');
   let adjuntos=[];
-  if(canGuiaAttach&&typeof sstFileChatGuiaCtxKey==='function'){
-    const ctxKey=sstFileChatGuiaCtxKey(expId,taskId);
-    const getCtx=typeof taskChatGuiaUploadCtx==='function'?taskChatGuiaUploadCtx(expId,taskId):null;
-    if(typeof sstFileTryUpload==='function'&&getCtx)await sstFileTryUpload(ctxKey,'task-chat-guia-list',getCtx);
-    if(typeof taskChatGuiaCollectAdjuntos==='function')adjuntos=taskChatGuiaCollectAdjuntos(ctxKey);
-    const txtDraft=String(inp.value||'').trim();
-    if(!txtDraft&&!adjuntos.length){
-      if(typeof notif==='function')notif('Escriba un mensaje o adjunte una guía','err');
+  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
+  const getCtx=typeof taskChatUploadCtx==='function'?taskChatUploadCtx():null;
+  const hasStaging=typeof sstFileStagingCtx==='function'?sstFileStagingCtx(ctxKey):null;
+  const pendingStaging=hasStaging&&([].concat(hasStaging.main?[hasStaging.main]:[],hasStaging.anexos||[]).some(function(it){
+    return it&&it.blob;
+  }));
+  if(pendingStaging){
+    if(typeof chatDriveConectado==='function'&&!chatDriveConectado()){
+      if(typeof chatModalCorreoRequerido==='function')chatModalCorreoRequerido();
       return;
     }
-    if(adjuntos.length&&adjuntos.some(function(a){return!a||!a.driveFileId;})){
+    if(typeof sstFileTryUpload==='function'&&getCtx){
+      await sstFileTryUpload(ctxKey,'task-chat-attach-list',getCtx);
+    }
+    if(typeof taskChatCollectAdjuntos==='function')adjuntos=taskChatCollectAdjuntos(ctxKey);
+    const txtDraft=String(inp.value||'').trim();
+    if(!txtDraft&&!adjuntos.length){
+      if(typeof notif==='function')notif('Escriba un mensaje o adjunte un archivo','err');
+      return;
+    }
+    if(adjuntos.length&&adjuntos.some(function(a){return!a||!(a.driveFileId||a.driveLink);})){
       if(typeof notif==='function')notif('Espere a que terminen de cargar los adjuntos','err');
       return;
     }
+    if(adjuntos.length&&typeof chatRegisterDrivePurge==='function'){
+      for(let ai=0;ai<adjuntos.length;ai++){
+        const a=adjuntos[ai];
+        if(!a||!a.driveFileId)continue;
+        try{
+          await chatRegisterDrivePurge(a.driveFileId,{
+            expiresAt:a.expiresAt||'',
+            msgId:'task_cmt_'+Date.now(),
+            fsConvId:'task:'+String(expId||'')+':'+String(taskId||''),
+            driveLink:a.driveLink||'',
+            nombre:a.nombre||''
+          });
+        }catch(errP){console.warn('taskChatRegisterDrivePurge:',errP);}
+      }
+    }
   }
   if(addTaskComentario(expId,taskId,inp.value,{adjuntos:adjuntos})){
-    if(canGuiaAttach&&typeof sstFileStagingReset==='function'&&typeof sstFileChatGuiaCtxKey==='function')
-      sstFileStagingReset(sstFileChatGuiaCtxKey(expId,taskId));
+    if(pendingStaging&&typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
+    if(typeof taskChatCloseEmojiPicker==='function')taskChatCloseEmojiPicker();
     if(!inReview)notif('Mensaje enviado','ok');
     if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
     if(isFormExpVisible(expId))syncTkRowsFromExp(expId,taskId);
@@ -21555,6 +21700,7 @@ async function submitTaskComment(expId,taskId){
           try{msgs.scrollTop=msgs.scrollHeight;}catch(err){}
         }
         if(typeof sstInitWaComposers==='function')sstInitWaComposers(document.getElementById('pqrs-asig-chat-compose')||document);
+        if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
       }else{
         taskReviewRefreshModal(expId,taskId,window._taskReviewSideMode||'chat');
       }

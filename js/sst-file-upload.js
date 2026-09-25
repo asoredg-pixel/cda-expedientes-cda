@@ -5,9 +5,13 @@
 window._sstFileStaging = window._sstFileStaging || {};
 window._sstFileListMeta = window._sstFileListMeta || {};
 
-function sstFileRegisterList(listId, ctxKey, slot) {
+function sstFileRegisterList(listId, ctxKey, slot, renderFn) {
   if (!listId) return;
-  window._sstFileListMeta[listId] = { ctxKey: ctxKey, slot: slot || 'all' };
+  window._sstFileListMeta[listId] = {
+    ctxKey: ctxKey,
+    slot: slot || 'all',
+    renderFn: typeof renderFn === 'function' ? renderFn : null
+  };
 }
 
 function sstFileListSlot(listId) {
@@ -102,6 +106,11 @@ function sstFileRenderItemRow(it, ctxKey, listId) {
 function sstFileRenderList(listId, ctxKey) {
   const el = sstFileListEl(listId);
   if (!el) return;
+  const meta = window._sstFileListMeta && window._sstFileListMeta[listId];
+  if (meta && typeof meta.renderFn === 'function') {
+    meta.renderFn(ctxKey, listId);
+    return;
+  }
   const ctx = sstFileStagingCtx(ctxKey);
   const slot = sstFileListSlot(listId);
   const items = [];
@@ -230,6 +239,20 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
       previewLink: up.previewLink || up.driveLink || '',
       driveFilename: up.nombre || nombre,
       nombre: up.nombre || nombre
+    };
+  }
+  if (uploadCtx.chatDrive && typeof driveUploadChat === 'function') {
+    const up = await driveUploadChat(f, nombre, tipo);
+    if (onPct) onPct(100);
+    return {
+      driveFileId: up.fileId || '',
+      fileId: up.fileId || '',
+      driveLink: up.driveLink || '',
+      previewLink: up.previewLink || up.driveLink || '',
+      driveFilename: up.nombre || nombre,
+      nombre: up.nombre || nombre,
+      mime: tipo,
+      expiresAt: up.expiresAt || ''
     };
   }
   const driveEstado = uploadCtx.driveEstado || 'revision';
