@@ -17564,11 +17564,25 @@ function resetTaskFirmaWfPorDevolucionCorregir(t){
 window.resetTaskFirmaWfPorDevolucionCorregir=resetTaskFirmaWfPorDevolucionCorregir;
 function taskParticipacionEsPorCorregir(t,nombre){
   if(!t||t.eliminada)return false;
-  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return true;
-  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='corregir')return true;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
   if(nombre&&typeof getAsignado==='function'){
     const a=getAsignado(t,nombre);
-    if(a&&a.estado==='por_corregir')return true;
+    if(a){
+      if(a.estado==='atendido'||!!String(a.fechaAtendida||'').trim())return false;
+      if(a.estado==='por_corregir')return true;
+      const mi=typeof estadoTaskRawFromAsignado==='function'?estadoTaskRawFromAsignado(a,t):'';
+      if(mi==='Atendida')return false;
+      if(mi==='Por corregir')return true;
+    }
+  }
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir'){
+    if(nombre&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,nombre)){
+      const a2=typeof getAsignado==='function'?getAsignado(t,nombre):null;
+      const mi2=typeof estadoTaskRawFromAsignado==='function'?estadoTaskRawFromAsignado(a2,t):'';
+      return mi2==='Por corregir';
+    }
+    return !nombre;
   }
   return false;
 }
@@ -27131,6 +27145,16 @@ function actividadCuentaComoPorCorregir(t){
   if(!t||t.eliminada)return false;
   if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return false;
   if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return false;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
+    &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
+    const a=typeof getAsignado==='function'?getAsignado(t,responsableActivo):null;
+    if(a&&(a.estado==='atendido'||!!String(a.fechaAtendida||'').trim()))return false;
+    const mi=typeof estadoTaskRawFromAsignado==='function'?estadoTaskRawFromAsignado(a,t):'';
+    if(mi==='Atendida')return false;
+    return mi==='Por corregir';
+  }
   const est=typeof estadoTaskParaBandejaUsuario==='function'?estadoTaskParaBandejaUsuario(t)
     :(typeof estadoTask==='function'?estadoTask(t):'');
   if(est==='Por verificar'||est==='Atendida'||est==='Eliminada')return false;
