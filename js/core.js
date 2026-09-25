@@ -11996,6 +11996,7 @@ function estadoTaskRawFromAsignado(a,t){
   return'En ejecución';
 }
 function estadoTaskForAsignado(t,nombre){
+  if(typeof taskParticipacionEsPorCorregir==='function'&&taskParticipacionEsPorCorregir(t,nombre))return'Por corregir';
   const eExp=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
   if(eExp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eExp)
     &&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eExp))
@@ -17531,7 +17532,49 @@ function renderCompareVerStack(t,e){
   const b=docs.find(x=>x.id===window._compareDocB)||docs[docs.length-1];
   stack.innerHTML=renderCompareDocSideHtml(a,'◀ Izquierda',t)+renderCompareDocSideHtml(b,'Derecha ▶',t);
 }
+/** Cancela impresión/firma tras devolver; conserva datos de notificación planificada si existían. */
+function resetTaskFirmaWfPorDevolucionCorregir(t){
+  if(!t)return;
+  t._firma_proyeccion_atendida=false;
+  t._pqrs_proyeccion_atendida=false;
+  const prev=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf&&typeof t.firmaWf==='object'?t.firmaWf:{}))||{};
+  t.firmaWf=Object.assign({},{
+    canal:prev.canal||'',
+    notif_correo_entrega:prev.notif_correo_entrega,
+    email_to:prev.email_to||'',
+    email_cc:prev.email_cc||'',
+    email_bcc:prev.email_bcc||'',
+    email_subject:prev.email_subject||'',
+    cuerpo:prev.cuerpo||prev.email_body||'',
+    email_body:prev.email_body||prev.cuerpo||'',
+    notificar_por:prev.notificar_por||'',
+    notificar_por_propuesto:prev.notificar_por_propuesto||'',
+    notif_vence:prev.notif_vence||'',
+    notif_sin_plazo:prev.notif_sin_plazo
+  },{
+    fase:'',
+    listo_firma:null,
+    impreso:null,
+    firma_fisica:null,
+    firma_director:null,
+    notificacion_reportada:null,
+    revision_nca:prev.revision_nca&&prev.revision_nca.origen==='devolver_desde_firma'?prev.revision_nca:null
+  });
+}
+window.resetTaskFirmaWfPorDevolucionCorregir=resetTaskFirmaWfPorDevolucionCorregir;
+function taskParticipacionEsPorCorregir(t,nombre){
+  if(!t||t.eliminada)return false;
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return true;
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='corregir')return true;
+  if(nombre&&typeof getAsignado==='function'){
+    const a=getAsignado(t,nombre);
+    if(a&&a.estado==='por_corregir')return true;
+  }
+  return false;
+}
+window.taskParticipacionEsPorCorregir=taskParticipacionEsPorCorregir;
 function resetTaskPorCorregir(t,nota,reportadoPor){
+  if(typeof resetTaskFirmaWfPorDevolucionCorregir==='function')resetTaskFirmaWfPorDevolucionCorregir(t);
   // Liberar N° de acto/concepto/oficio/requerimiento pendientes (no aprobados)
   try{
     if(typeof retirarRegistroPendienteDeEntrega==='function'){
@@ -24894,6 +24937,12 @@ function renderActRowToolbarHtml(t,expAct){
     return actsN;
   }
   // Atendidas: solo 🔍
+  if(esPorCorregir&&esRespAsignado){
+    let actsC='<span class="sst-act-toolbar">';
+    actsC+=actToolbarRespEjecCorrHtml(t,expAct,yo);
+    actsC+='</span>';
+    return actsC;
+  }
   if(!keepPorFirmaToolbar&&esRespAtendida){
     let actsA='<span class="sst-act-toolbar">';
     const esPqrsA=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
@@ -24903,12 +24952,6 @@ function renderActRowToolbarHtml(t,expAct){
       actsA+=taskAgendaBtnAtendidaHtml(t.exp,t.id);
     actsA+='</span>';
     return actsA;
-  }
-  if(esPorCorregir&&esRespAsignado){
-    let actsC='<span class="sst-act-toolbar">';
-    actsC+=actToolbarRespEjecCorrHtml(t,expAct,yo);
-    actsC+='</span>';
-    return actsC;
   }
   const esPqrsAtender=expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct);
   const esPqrsRev=esPqrsAtender&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(expAct);
@@ -27105,14 +27148,25 @@ function filtrarActividadesPorEstado(list,filtro){
     );
   }
   if(filtro==='parafirma'||filtro==='porimprimir'){
-    const pqrs=getTareasPqrsPorFaseWorkflow(function(e){return typeof pqrsEnParaFirma==='function'&&pqrsEnParaFirma(e);});
-    const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){return typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t);}):[];
+    const exclCorr=function(t){
+      return !(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t));
+    };
+    const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
+      if(typeof pqrsEnParaFirma!=='function'||!pqrsEnParaFirma(e))return false;
+      const tP=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+      return !tP||exclCorr(tP);
+    });
+    const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
+      return typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&exclCorr(t);
+    }):[];
     return mergeActividadLists(pqrs,tram);
   }
   if(filtro==='porfirmar'){
     const esDirPf=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
       if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
+      const tPq=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+      if(tPq&&typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(tPq))return false;
       // Director: firmados físicos van a «Firmados». VITAL/encargado: siguen aquí (✍️✓ + 📤).
       if(esDirPf&&typeof pqrsEsFirmadoPendienteGestion==='function'&&pqrsEsFirmadoPendienteGestion(e))return false;
       return true;
@@ -27121,6 +27175,7 @@ function filtrarActividadesPorEstado(list,filtro){
       return typeof pqrsVisiblePaletaPorFirmar!=='function'||pqrsVisiblePaletaPorFirmar(ePf,t);
     });
     const tram=(typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
+      if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return false;
       if(typeof taskFirmaEnPorFirmar!=='function'||!taskFirmaEnPorFirmar(t))return false;
       if(esDirPf&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
       return true;

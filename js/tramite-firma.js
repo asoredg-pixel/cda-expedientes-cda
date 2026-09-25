@@ -67,17 +67,10 @@ function tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota){
   const ok=typeof mutateTask==='function'&&mutateTask(refId,taskId,function(tk){
     if(!tk)return;
     const prev=getTaskFirmaWf(tk);
-    tk.firmaWf=Object.assign({},prev,{
-      fase:'',
-      firma_fisica:null,
-      firma_director:null,
-      listo_firma:null,
-      impreso:null,
-      notificacion_reportada:null,
-      devolucion_encargado:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:prev.fase||''}
-    });
-    tk._firma_proyeccion_atendida=false;
     if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(tk,nota);
+    if(tk.firmaWf&&typeof tk.firmaWf==='object'){
+      tk.firmaWf.devolucion_encargado={por:por,en:new Date().toISOString(),motivo:nota,fase_prev:prev.fase||''};
+    }
     else{
       tk.fechaReportada='';
       tk.fechaAtendida='';
