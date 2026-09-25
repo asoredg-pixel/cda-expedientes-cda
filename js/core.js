@@ -25613,9 +25613,45 @@ function actividadExcluidaDePaletaPrioritaria(t){
   return false;
 }
 window.actividadExcluidaDePaletaPrioritaria=actividadExcluidaDePaletaPrioritaria;
+/** Vista encargado (selector = él): prioritarias propias; no las de responsables en firma/notif. */
+function actividadPrioritariaVisibleVistaEncargado(t){
+  if(!t||t.eliminada)return true;
+  const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+  if(!deptView||(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
+  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
+  const filt=typeof getActDeptRespFilterSafe==='function'?String(getActDeptRespFilterSafe()||'').trim():'';
+  const esBandejaEnc=!!enc&&!!filt&&(typeof agendaNorm==='function'?agendaNorm(filt)===agendaNorm(enc):filt===enc);
+  if(!esBandejaEnc)return true;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(typeof taskEnPipelineFirmaNotifAbierta==='function'&&taskEnPipelineFirmaNotifAbierta(t))return false;
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return false;
+  if(e&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)){
+    if(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t)){
+      const nx=typeof taskNotifUrgenteCtx==='function'?taskNotifUrgenteCtx(t):null;
+      const np=nx&&nx.notifPor?String(nx.notifPor).trim():'';
+      if(np&&typeof agendaNorm==='function'&&agendaNorm(np)===agendaNorm(enc))return true;
+    }
+    return false;
+  }
+  if(e&&typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))return false;
+  if(enc){
+    const rs=typeof getTaskResponsables==='function'?getTaskResponsables(t):[];
+    const otros=(rs||[]).filter(function(n){
+      return n&&(typeof agendaNorm==='function'?agendaNorm(n)!==agendaNorm(enc):String(n)!==enc);
+    });
+    if(otros.length){
+      if(typeof taskUsuarioEsAsignado!=='function'||!taskUsuarioEsAsignado(t,enc))return false;
+      const stEnc=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,enc):'';
+      if(stEnc==='Atendida'||stEnc==='Por verificar'||stEnc==='Eliminada')return false;
+    }
+  }
+  return true;
+}
+window.actividadPrioritariaVisibleVistaEncargado=actividadPrioritariaVisibleVistaEncargado;
 function esActividadPrioritariaPendiente(t){
   if(!t||t.eliminada)return false;
   if(actividadExcluidaDePaletaPrioritaria(t))return false;
+  if(typeof actividadPrioritariaVisibleVistaEncargado==='function'&&!actividadPrioritariaVisibleVistaEncargado(t))return false;
   if(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t))return true;
   if(taskEsPrioridadCriticaVencimiento(t))return true;
   if(!t.prioritaria)return false;
