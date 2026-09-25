@@ -847,7 +847,7 @@ function taskVenceActividadBase(t){
 function taskEnPipelineFirmaNotifAbierta(t){
   if(!t||t.eliminada)return false;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
     &&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))
     &&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))return true;
   if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return true;
@@ -874,12 +874,20 @@ function taskPrioridadMarcadoresResueltos(t){
   return false;
 }
 /** Contexto de urgencia por plazo de notificación (5 días). */
+function pqrsExpedienteEsperaNotificacion(e){
+  if(!e)return false;
+  if(typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e))return true;
+  const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  return f===(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar')&&!!(wf.firma_fisica&&wf.firma_fisica.en);
+}
+window.pqrsExpedienteEsperaNotificacion=pqrsExpedienteEsperaNotificacion;
 function taskNotifUrgenteCtx(t){
   const out={enNotif:false,sinPlazo:false,notifPor:'',vence:''};
   if(!t)return out;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
-    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)){
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+    &&typeof pqrsExpedienteEsperaNotificacion==='function'&&pqrsExpedienteEsperaNotificacion(e)){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     out.enNotif=true;
     out.sinPlazo=!!(wf.notif_sin_plazo||(typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e)));
@@ -25661,19 +25669,64 @@ function actividadExcluidaDePaletaPrioritaria(t){
   return false;
 }
 window.actividadExcluidaDePaletaPrioritaria=actividadExcluidaDePaletaPrioritaria;
+/** Vista actividades del encargado (no modo responsable contratista). */
+function actividadVistaEsEncargadoGestion(){
+  if(typeof esVistaActividadesDepto!=='function'||!esVistaActividadesDepto())return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  return !!(typeof getEncargadoDepto==='function'&&String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim());
+}
+window.actividadVistaEsEncargadoGestion=actividadVistaEsEncargadoGestion;
+/** Encargado: no ver en ⚡ la deuda de notificar de otro responsable. */
+function actividadPrioritariaOcultarNotifAjenaEnc(t){
+  if(!t||t.eliminada)return false;
+  if(typeof actividadVistaEsEncargadoGestion!=='function'||!actividadVistaEsEncargadoGestion())return false;
+  const enc=String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim();
+  if(!enc)return false;
+  const normEq=function(a,b){
+    if(!a||!b)return false;
+    return typeof agendaNorm==='function'?agendaNorm(a)===agendaNorm(b):String(a)===String(b);
+  };
+  const nx=typeof taskNotifUrgenteCtx==='function'?taskNotifUrgenteCtx(t):null;
+  if(nx&&nx.enNotif&&nx.notifPor&&!normEq(nx.notifPor,enc))return true;
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+    const np=String((t.firmaWf||{}).notificar_por||'').trim();
+    if(np&&!normEq(np,enc))return true;
+  }
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+    &&typeof pqrsExpedienteEsperaNotificacion==='function'&&pqrsExpedienteEsperaNotificacion(e)
+    &&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    const np=String(wf.notificar_por||'').trim();
+    if(np&&!normEq(np,enc))return true;
+    if(!np){
+      const rs=typeof getTaskResponsables==='function'?getTaskResponsables(t):[];
+      const otros=(rs||[]).filter(function(n){return n&&!normEq(n,enc);});
+      if(otros.length&&!(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,enc)))return true;
+      if(otros.length&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,enc)){
+        const stEnc=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,enc):'';
+        if(stEnc==='Atendida'||stEnc==='Por verificar'||stEnc==='Eliminada')return true;
+      }
+    }
+  }
+  return false;
+}
+window.actividadPrioritariaOcultarNotifAjenaEnc=actividadPrioritariaOcultarNotifAjenaEnc;
 /** Vista encargado (selector = él): prioritarias propias; no las de responsables en firma/notif. */
 function actividadPrioritariaVisibleVistaEncargado(t){
   if(!t||t.eliminada)return true;
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
   if(!deptView||(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
+  if(typeof actividadPrioritariaOcultarNotifAjenaEnc==='function'&&actividadPrioritariaOcultarNotifAjenaEnc(t))return false;
   const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
   const filt=typeof getActDeptRespFilterSafe==='function'?String(getActDeptRespFilterSafe()||'').trim():'';
-  const esBandejaEnc=!!enc&&!!filt&&(typeof agendaNorm==='function'?agendaNorm(filt)===agendaNorm(enc):filt===enc);
+  const esBandejaEnc=!!enc&&(!!filt&&(typeof agendaNorm==='function'?agendaNorm(filt)===agendaNorm(enc):filt===enc)
+    ||(!filt&&typeof actividadVistaEsEncargadoGestion==='function'&&actividadVistaEsEncargadoGestion()));
   if(!esBandejaEnc)return true;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
   if(typeof taskEnPipelineFirmaNotifAbierta==='function'&&taskEnPipelineFirmaNotifAbierta(t))return false;
   if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return false;
-  if(e&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)){
+  if(e&&typeof pqrsExpedienteEsperaNotificacion==='function'&&pqrsExpedienteEsperaNotificacion(e)){
     if(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t)){
       const nx=typeof taskNotifUrgenteCtx==='function'?taskNotifUrgenteCtx(t):null;
       const np=nx&&nx.notifPor?String(nx.notifPor).trim():'';
@@ -25700,7 +25753,8 @@ function esActividadPrioritariaPendiente(t){
   if(!t||t.eliminada)return false;
   if(actividadExcluidaDePaletaPrioritaria(t))return false;
   if(typeof actividadPrioritariaVisibleVistaEncargado==='function'&&!actividadPrioritariaVisibleVistaEncargado(t))return false;
-  if(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t))return true;
+  if(typeof esNotifAsignadaPrioritariaParaSesion==='function'?esNotifAsignadaPrioritariaParaSesion(t)
+    :(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t)))return true;
   if(taskEsPrioridadCriticaVencimiento(t))return true;
   if(!t.prioritaria)return false;
   return !taskPrioridadMarcadoresResueltos(t);
@@ -25713,6 +25767,22 @@ function esNotifAsignadaVencida(t){
   return String(nx.vence).slice(0,10)<hoy();
 }
 window.esNotifAsignadaVencida=esNotifAsignadaVencida;
+/** Notif. vencida en ⚡ solo para quien debe notificar (encargado no hereda la deuda ajena). */
+function esNotifAsignadaPrioritariaParaSesion(t){
+  if(typeof esNotifAsignadaVencida!=='function'||!esNotifAsignadaVencida(t))return false;
+  if(typeof actividadPrioritariaOcultarNotifAjenaEnc==='function'&&actividadPrioritariaOcultarNotifAjenaEnc(t))return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return true;
+  const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
+  if(!deptView)return true;
+  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
+  const filt=typeof getActDeptRespFilterSafe==='function'?getActDeptRespFilterSafe():null;
+  if(filt&&enc&&(typeof agendaNorm==='function'?agendaNorm(String(filt))!==agendaNorm(enc):String(filt)!==enc)){
+    return typeof actividadNotifEsDeResp==='function'?actividadNotifEsDeResp(t,String(filt)):true;
+  }
+  if(enc&&typeof actividadNotifEsDeResp==='function')return actividadNotifEsDeResp(t,enc);
+  return true;
+}
+window.esNotifAsignadaPrioritariaParaSesion=esNotifAsignadaPrioritariaParaSesion;
 function esActividadPorEjecutar(t){
   if(!t||t.eliminada)return false;
   // Defensa temprana: deuda de notificar → solo paleta «Por notificar» (nunca «Por ejecutar»)
@@ -26743,7 +26813,11 @@ function filtrarActividadesPorEstado(list,filtro){
     let out=(list||[]).filter(t=>esActividadPrioritariaPendiente(t));
     // Notificaciones vencidas (5 días hábiles) → prioritarias aunque no estén en el listado base
     const notifVenc=(typeof getTareasNotifVisiblesAct==='function'?getTareasNotifVisiblesAct():[])
-      .filter(function(t){return typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t);});
+      .filter(function(t){
+        return typeof esNotifAsignadaPrioritariaParaSesion==='function'
+          ?esNotifAsignadaPrioritariaParaSesion(t)
+          :(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t));
+      });
     return mergeActividadLists(out,notifVenc);
   }
   if(filtro==='all')return list;
