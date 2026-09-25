@@ -857,6 +857,41 @@ function taskEnPipelineFirmaNotifAbierta(t){
   }
   return false;
 }
+/** Responsable (o filtro depto): ya entregó; firma/imprimir/notif es de encargado/VITAL/notificador. */
+function taskPrioridadEntregaResponsableCumplida(t){
+  if(!t||t.eliminada)return false;
+  let yo='';
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo)yo=String(responsableActivo).trim();
+  else if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto()
+    &&typeof getActDeptRespFilterSafe==='function'){
+    const rf=String(getActDeptRespFilterSafe()||'').trim();
+    if(rf)yo=rf;
+  }
+  if(!yo)return false;
+  const normEq=function(a,b){
+    if(!a||!b)return false;
+    return typeof agendaNorm==='function'?agendaNorm(a)===agendaNorm(b):String(a)===String(b);
+  };
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof pqrsEsNotificadorDesignado==='function'&&pqrsEsNotificadorDesignado(e,yo)
+    &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e))return false;
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+    const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
+    if(nPor&&normEq(nPor,yo))return false;
+    if(!nPor&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yo)
+      &&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t))return false;
+  }
+  if(typeof taskUsuarioEsAsignado!=='function'||!taskUsuarioEsAsignado(t,yo))return false;
+  const st=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,yo):'';
+  if(st==='Por corregir'||st==='Eliminada')return false;
+  if(st==='Atendida')return true;
+  if(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida)return true;
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))return true;
+  if(t._firma_proyeccion_atendida&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return true;
+  return false;
+}
+window.taskPrioridadEntregaResponsableCumplida=taskPrioridadEntregaResponsableCumplida;
 /** ⚡/🔥 resueltos: aceptada sin deuda de firma/notif, o ya notificada/cerrada. */
 function taskPrioridadMarcadoresResueltos(t){
   if(!t||t.eliminada)return true;
@@ -866,7 +901,10 @@ function taskPrioridadMarcadoresResueltos(t){
     const f=taskFirmaFase(t);
     if(f==='cerrada_atendida'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))return true;
   }
-  if(taskEnPipelineFirmaNotifAbierta(t))return false;
+  if(taskEnPipelineFirmaNotifAbierta(t)){
+    if(typeof taskPrioridadEntregaResponsableCumplida==='function'&&taskPrioridadEntregaResponsableCumplida(t))return true;
+    return false;
+  }
   if(typeof estadoTask==='function'&&estadoTask(t)==='Atendida')return true;
   if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo
     &&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)
