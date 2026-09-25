@@ -492,7 +492,7 @@ function syncEntregaRespPqrsUi(){
     if(esPqrsFlujo&&typeof renderPqrsEntregaCamposHtml==='function'){
       if(tramFiles){tramFiles.innerHTML='';tramFiles.style.display='none';}
       const eRender=esPqrsExistente?e:{_tipo_solicitud:'solicitud PQRSD'};
-      box.innerHTML=renderPqrsEntregaCamposHtml(eRender);
+      box.innerHTML=renderPqrsEntregaCamposHtml(eRender,{modo:'responsable'});
       box.style.display='';
       setTimeout(function(){
         if(typeof initPqrsEntregaArchivosPick==='function')initPqrsEntregaArchivosPick();

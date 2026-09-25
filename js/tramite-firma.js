@@ -3332,7 +3332,7 @@ function ofiDocPqrsShowEntrega(e,hostId){
       stub._pqrs_workflow=wf;
     }catch(errW){}
   }
-  host.innerHTML=typeof renderPqrsEntregaCamposHtml==='function'?renderPqrsEntregaCamposHtml(stub):'';
+  host.innerHTML=typeof renderPqrsEntregaCamposHtml==='function'?renderPqrsEntregaCamposHtml(stub,{modo:'responsable'}):'';
   ofiDocPqrsPrefillEmailTo(e||stub,true);
   const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
