@@ -1855,7 +1855,7 @@ function _pqrsBuildAdjDocumentosEntrega(pq,driveArchivos,opts){
     const esAnexo=!!(da.esAnexo||da.tipo==='anexo_respuesta');
     const esOficio=pq&&pq.tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado');
     pushDoc({
-      nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(esOficio?'Oficio firmado':'Documento de respuesta'),
+      nombre:esAnexo?('Anexo '+(da.anexo_n||da.nombre||'')):(esOficio?(opts.driveEstado==='por_firmar'?'Proyección oficio':'Oficio firmado'):'Documento de respuesta'),
       driveLink:da.driveLink||'',
       previewLink:da.previewLink||da.driveLink||'',
       fileId:da.fileId||da.driveFileId||'',
@@ -2420,6 +2420,78 @@ function aplicarPqrsEntregaDirecta(e,pq,adjDocumentos,taskId,cmt){
   return false;
 }
 window.aplicarPqrsEntregaDirecta=aplicarPqrsEntregaDirecta;
+/** Entrega directa NCA/oficina: proyección → Por firmar (mismo estado que aprobar «pasar para imprimir»). */
+async function pqrsEntregaDirectaAplicarFlujoFirma(e,pq,adjDocumentos,taskId,cmt,expId){
+  if(!e||!pq||!adjDocumentos||!adjDocumentos.length)return false;
+  if(!(typeof pqrsPuedeAtajoParaFirma==='function'&&pqrsPuedeAtajoParaFirma())){
+    notif('No puede enviar a firma del Director desde esta sesión','err');
+    return false;
+  }
+  expId=String(expId||e._exp||'').trim();
+  taskId=String(taskId||'').trim();
+  const por=responsableActivo||labelOficina(deptoActivo)||rolSesion||'';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const docsFinal=(adjDocumentos||[]).map(function(d){
+    return Object.assign({},d,{driveEstado:d.driveEstado||'por_firmar'});
+  });
+  let notifPor='';
+  if(typeof pqrsAsegurarNotificadorSegunOficina==='function'){
+    notifPor=pqrsAsegurarNotificadorSegunOficina(e,responsableActivo||'');
+  }
+  const patchWf={
+    fase:PQRS_WF.POR_FIRMAR,
+    tipo:PQRS_WF_TIPO.OFICIO,
+    canal:pq.canal||PQRS_WF_CANAL.PRESENCIAL,
+    cuerpo:pq.cuerpo||('Oficio '+(pq.oficioExt||'')),
+    oficio:pq.oficioExt||'',
+    fecha_respuesta:pq.fechaResp,
+    documentos:docsFinal,
+    task_id:taskId||String(wf.task_id||'').trim(),
+    revision_nca:{aprobado:true,tipo:'oficio',comentario:cmt||'Entrega directa — proyección a firma',por:por,en:new Date().toISOString(),atajo_firma:true,entrega_directa:true},
+    listo_firma:{por:por,en:new Date().toISOString(),atajo_digital:true},
+    impreso:null,
+    firma_fisica:null,
+    firma_director:null,
+    notificar_por:'',
+    notificar_por_propuesto:''
+  };
+  if(typeof _pqrsRenombrarDocsDriveWf==='function'){
+    try{await _pqrsRenombrarDocsDriveWf(Object.assign({},wf,{documentos:docsFinal}),'por_firmar');}catch(errR){console.warn('pqrsEntregaDirectaAplicarFlujoFirma rename:',errR);}
+  }
+  setPqrsWorkflow(e,patchWf);
+  e._pqrs_respuesta_oficio=pq.oficioExt||'';
+  e._pqrs_respuesta_fecha=pq.fechaResp||'';
+  e._pqrs_respuesta_nota=patchWf.cuerpo;
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({
+    tipo:'entrega_directa_proyeccion_firma',
+    fecha:hoy(),
+    nota:'Proyección enviada a «Por firmar»'+(pq.oficioExt?' · Oficio '+pq.oficioExt:'')+(cmt?' — '+cmt:''),
+    oficina:e._pqrs_oficina||deptoActivo,
+    por:por
+  });
+  if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
+  const tidAct=taskId||String(patchWf.task_id||'');
+  if(tidAct&&typeof _ncaMarcarTaskRevisadaAprobada==='function'){
+    _ncaMarcarTaskRevisadaAprobada(expId,tidAct,{
+      fecha:pq.fechaResp||hoy(),
+      nota:'Aprobada — pasa a firma (entrega directa)',
+      por:por,
+      reportadoPor:por
+    });
+  }
+  if(typeof clearAltaResponsableAlAprobarDocumento==='function')clearAltaResponsableAlAprobarDocumento(expId,{force:true});
+  persistExpedienteGranular(e);
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof refreshPqrsDetalleViews==='function')refreshPqrsDetalleViews(expId);
+  notif('🖨️ Proyección en «Por firmar» — ✓ Revisada · X Imprimir. Marque 🖨️ cuando esté impreso.','ok');
+  if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen())closeTaskModal();
+  else if(typeof closeTaskModal==='function')closeTaskModal();
+  return true;
+}
+window.pqrsEntregaDirectaAplicarFlujoFirma=pqrsEntregaDirectaAplicarFlujoFirma;
 /** Envía correo al ciudadano en entrega directa (mensaje u oficio con notificación por correo). */
 function _pqrsFileFromLocalAdj(item){
   if(!item)return null;
@@ -3698,9 +3770,13 @@ function setPqrsRespTipo(val){
       pqrsAplicarPlantillaSegunTipo(val,cambioTipo);
     }
   }else if(val===PQRS_WF_TIPO.OFICIO){
+    const hidOfModO=document.getElementById('pqrs-entrega-oficio-modo');
+    if(hidOfModO)hidOfModO.value='';
     // Sin plantilla en Responder/entrega: se limpia compose y se usa al notificar
     pqrsAplicarPlantillaSegunTipo(val,true);
   }else{
+    const hidOfMod=document.getElementById('pqrs-entrega-oficio-modo');
+    if(hidOfMod)hidOfMod.value='';
     pqrsClearRespOficioError();
     window._pqrsUltimaPlantillaOficio='';
     window._pqrsUltimaPlantillaMensaje='';
@@ -6454,6 +6530,11 @@ function taskReporteBtnHtml(expId,taskId,yo){
   if(esEncOwn){
     if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return '';
     if(est==='Atendida')return '';
+    const eOwn=typeof getExpById==='function'?getExpById(expId):null;
+    if(eOwn&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eOwn)
+      &&typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(eOwn)){
+      return '';
+    }
     return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Autoentrega (encargado): va a imprimir/firmar/notificar, sin Por revisar" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤</button>';
   }
   if(miEst==='Por verificar'||(est==='Por verificar'&&t.entregaModo==='unificada'&&taskUsuarioEsAsignado(t,usuario))){
@@ -10524,10 +10605,19 @@ function renderPqrsEntregaCamposHtml(e){
   h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
     '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
     mkTipo(PQRS_WF_TIPO.MENSAJE,'Mensaje por correo')+
-    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio para revisión / firma')+
+    mkTipo(PQRS_WF_TIPO.OFICIO,'📄 Oficio')+
     mkTipo(PQRS_WF_TIPO.INFORMATIVA,'ℹ️ Informativa')+
     '</div><input type="hidden" id="pqrs-resp-tipo" value="'+escAttr(tipoInicial)+'"></div>'+
     '<div id="pqrs-entrega-tipo-hint" style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);display:'+(tipoInicial?'none':'')+'">Seleccione el tipo de respuesta para diligenciar los campos.</div>';
+  h+='<div id="pqrs-entrega-oficio-accs-wrap" style="display:none;margin-bottom:10px">'+
+    renderTaskReviewAprobarAccHtml(1,'Pasar a flujo de firma (proyección)',
+      '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Suba el PDF de la proyección. La PQRSD pasa a <strong>Por firmar</strong> (✓ Revisada · X Imprimir) y sigue el flujo de impresión, firma del Director y VITAL.</p>',
+      false).replace('onclick="taskReviewToggleAprobarAcc(this)"','onclick="pqrsEntregaOnOficioAcc(this)"')+
+    renderTaskReviewAprobarAccHtml(2,'Oficio firmado / notificar ahora',
+      '<p style="font-size:11px;color:var(--tx3);margin:0">El oficio ya está firmado o se notificará de inmediato (correo u otro medio). La PQRSD queda <strong>atendida y cerrada</strong>.</p>',
+      false).replace('onclick="taskReviewToggleAprobarAcc(this)"','onclick="pqrsEntregaOnOficioAcc(this)"')+
+    '<input type="hidden" id="pqrs-entrega-oficio-modo" value="">'+
+    '</div>';
   h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoInicial?'block':'none')+'">';
   h+='<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" id="pqrs-entrega-fecha-row"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
@@ -10716,6 +10806,22 @@ function pqrsEntregaSetOtroCanal(val){
   });
 }
 window.pqrsEntregaSetOtroCanal=pqrsEntregaSetOtroCanal;
+function pqrsEntregaOficioModo(){
+  return String((document.getElementById('pqrs-entrega-oficio-modo')||{}).value||'').trim();
+}
+function pqrsEntregaOnOficioAcc(hdrBtn){
+  if(typeof taskReviewToggleAprobarAcc==='function')taskReviewToggleAprobarAcc(hdrBtn);
+  const acc=hdrBtn&&hdrBtn.closest?hdrBtn.closest('.task-decision-acc'):null;
+  const n=acc?String(acc.getAttribute('data-acc')||''):'';
+  const hid=document.getElementById('pqrs-entrega-oficio-modo');
+  if(hid){
+    if(n==='1')hid.value='flujo_firma';
+    else if(n==='2')hid.value='cerrar_notif';
+    else hid.value='';
+  }
+  if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+}
+window.pqrsEntregaOnOficioAcc=pqrsEntregaOnOficioAcc;
 function pqrsEntregaPrefillDesdeAlta(){
   if(typeof ofiDocPqrsBindAltaCorreoPrefill==='function')ofiDocPqrsBindAltaCorreoPrefill();
   if(typeof ofiDocPqrsPrefillEmailTo==='function')ofiDocPqrsPrefillEmailTo(null,true);
@@ -10762,7 +10868,16 @@ function pqrsEntregaRefreshUi(){
   const isInfo=tipo===PQRS_WF_TIPO.INFORMATIVA;
   const isOficio=tipo===PQRS_WF_TIPO.OFICIO;
   const isMensaje=tipo===PQRS_WF_TIPO.MENSAJE;
-  const notifCorreoOficio=isOficio&&pqrsEntregaOficioNotifCorreo();
+  const oficioModo=isOficio?pqrsEntregaOficioModo():'';
+  const oficioFlujoFirma=isOficio&&oficioModo==='flujo_firma';
+  const oficioCerrarNotif=isOficio&&oficioModo==='cerrar_notif';
+  const accsWrap=document.getElementById('pqrs-entrega-oficio-accs-wrap');
+  if(accsWrap)accsWrap.style.display=isOficio?'':'none';
+  if(!isOficio){
+    const hidModo=document.getElementById('pqrs-entrega-oficio-modo');
+    if(hidModo)hidModo.value='';
+  }
+  const notifCorreoOficio=isOficio&&oficioCerrarNotif&&pqrsEntregaOficioNotifCorreo();
   const canalHid=document.getElementById('pqrs-resp-canal');
   if(isMensaje&&canalHid)canalHid.value=PQRS_WF_CANAL.CORREO;
   else if(isOficio&&canalHid){
@@ -10795,8 +10910,8 @@ function pqrsEntregaRefreshUi(){
   const adjHint=document.getElementById('pqrs-entrega-adj-hint');
   const cuerpoLbl=document.getElementById('pqrs-entrega-cuerpo-label');
   const cuerpoTxt=document.getElementById('pqrs-entrega-resp-cuerpo');
-  if(notifRow)notifRow.style.display=isOficio?'':'none';
-  if(otroMedioRow)otroMedioRow.style.display=(isOficio&&!notifCorreoOficio)?'':'none';
+  if(notifRow)notifRow.style.display=(isOficio&&oficioCerrarNotif)?'':'none';
+  if(otroMedioRow)otroMedioRow.style.display=(isOficio&&oficioCerrarNotif&&!notifCorreoOficio)?'':'none';
   // Mensaje / correo: la fecha es la del envío (hoy); no pedirla al usuario
   if(fechaRow)fechaRow.style.display=(isMensaje||(isOficio&&notifCorreoOficio))?'none':'';
   if(isMensaje||(isOficio&&notifCorreoOficio)){
@@ -10812,7 +10927,7 @@ function pqrsEntregaRefreshUi(){
     const cOtro=String((canalHid&&canalHid.value)||'presencial').trim().toLowerCase();
     pqrsEntregaSetOtroCanal(cOtro==='correo'||cOtro==='electronica'?'presencial':cOtro);
   }
-  if(cuerpoWrap)cuerpoWrap.style.display=(isInfo||isMensaje||notifCorreoOficio)?'':'none';
+  if(cuerpoWrap)cuerpoWrap.style.display=(isInfo||isMensaje||notifCorreoOficio||(isOficio&&oficioFlujoFirma))?'':'none';
   if(correoNote){
     correoNote.style.display='none';
     correoNote.textContent='';
@@ -10825,8 +10940,11 @@ function pqrsEntregaRefreshUi(){
     oficioHint.textContent=oficioOblig?'':' (si aplica)';
   }
   if(emailCompose)emailCompose.style.display=(isMensaje||notifCorreoOficio)?'':'none';
-  if(adjWrap)adjWrap.style.display=isInfo?'none':'';
-  if(adjLabel)adjLabel.textContent=oficioOblig?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
+  if(adjWrap)adjWrap.style.display=(isInfo||(isOficio&&!oficioModo))?'none':'';
+  if(adjLabel){
+    if(oficioFlujoFirma)adjLabel.textContent='Proyección del oficio (PDF obligatorio)';
+    else adjLabel.textContent=oficioOblig?'Documento del oficio (obligatorio)':'Documentos adjuntos (opcional)';
+  }
   if(adjHint)adjHint.textContent='';
   const mainLbl=document.getElementById('pqrs-entrega-main-lbl');
   const anexosLbl=document.getElementById('pqrs-entrega-anexos-lbl');
@@ -10848,6 +10966,11 @@ function pqrsEntregaRefreshUi(){
     }else if(isOficio&&notifCorreoOficio){
       cuerpoTxt.placeholder='Plantilla de respuesta al ciudadano…';
       cuerpoTxt.style.minHeight='180px';
+      cuerpoTxt.style.display='';
+    }else if(isOficio&&oficioFlujoFirma){
+      if(_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
+      cuerpoTxt.placeholder='Opcional: nota interna sobre la proyección…';
+      cuerpoTxt.style.minHeight='64px';
       cuerpoTxt.style.display='';
     }else if(isOficio){
       if(_pqrsEsPlantillaRespuesta(cuerpoTxt.value))cuerpoTxt.value='';
@@ -10894,9 +11017,19 @@ function collectPqrsEntregaDatos(expId,eOpt){
   const cuerpo=String((document.getElementById('pqrs-entrega-resp-cuerpo')||{}).value||'').trim();
   let tipo=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
   let canal=String((document.getElementById('pqrs-resp-canal')||{}).value||'').trim().toLowerCase();
-  const notifCorreoOficio=tipo===PQRS_WF_TIPO.OFICIO&&pqrsEntregaOficioNotifCorreo();
+  const oficioModo=tipo===PQRS_WF_TIPO.OFICIO?pqrsEntregaOficioModo():'';
+  const oficioFlujoFirma=tipo===PQRS_WF_TIPO.OFICIO&&oficioModo==='flujo_firma';
+  const oficioCerrarNotif=tipo===PQRS_WF_TIPO.OFICIO&&oficioModo==='cerrar_notif';
+  if(tipo===PQRS_WF_TIPO.OFICIO&&!oficioModo){
+    notif('Seleccione cómo entregar el oficio (proyección a firma o firmado/notificar)','err');
+    const accWrap=document.getElementById('pqrs-entrega-oficio-accs-wrap');
+    if(accWrap)accWrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return null;
+  }
+  const notifCorreoOficio=oficioCerrarNotif&&pqrsEntregaOficioNotifCorreo();
   if(tipo===PQRS_WF_TIPO.OFICIO){
-    if(notifCorreoOficio)canal=PQRS_WF_CANAL.CORREO;
+    if(oficioFlujoFirma)canal=PQRS_WF_CANAL.PRESENCIAL;
+    else if(notifCorreoOficio)canal=PQRS_WF_CANAL.CORREO;
     else{
       if(canal==='whatsapp'||canal===(PQRS_WF_CANAL.WHATSAPP||'whatsapp'))canal=PQRS_WF_CANAL.WHATSAPP;
       else if(canal==='aviso'||canal==='avisos'||canal===(PQRS_WF_CANAL.AVISO||'aviso'))canal=PQRS_WF_CANAL.AVISO;
@@ -10969,10 +11102,13 @@ function collectPqrsEntregaDatos(expId,eOpt){
   const adj=collectEnviarAdjuntos();
   const tieneAdjOficio=(adj.files&&adj.files.length)||(adj.links&&adj.links.length)
     ||(adj.preUploaded&&adj.preUploaded.length)||(adj.anexos&&adj.anexos.length);
-  if(tipo===PQRS_WF_TIPO.OFICIO&&!tieneAdjOficio&&pqrsEntregaOficioEsRequerido()){
-    notif('Para oficio firmado debe adjuntar el documento del oficio','err');
+  if(tipo===PQRS_WF_TIPO.OFICIO&&(oficioFlujoFirma||pqrsEntregaOficioEsRequerido())&&!tieneAdjOficio){
+    notif(oficioFlujoFirma?'Adjunte el PDF de la proyección del oficio':'Para oficio firmado debe adjuntar el documento del oficio','err');
     const err=document.getElementById('pqrs-entrega-adj-err');
-    if(err){err.style.display='';err.textContent='Adjunte el PDF del oficio firmado.';}
+    if(err){
+      err.style.display='';
+      err.textContent=oficioFlujoFirma?'Adjunte el PDF de la proyección.':'Adjunte el PDF del oficio firmado.';
+    }
     return null;
   }
   if((tipo===PQRS_WF_TIPO.MENSAJE||notifCorreoOficio)&&pqrsEsCanalCorreo(canal)){
@@ -10985,7 +11121,7 @@ function collectPqrsEntregaDatos(expId,eOpt){
     }
   }
   let notifFecha='',notifObs='';
-  if(tipo===PQRS_WF_TIPO.OFICIO&&!notifCorreoOficio){
+  if(tipo===PQRS_WF_TIPO.OFICIO&&oficioCerrarNotif&&!notifCorreoOficio){
     notifFecha=String((document.getElementById('pqrs-entrega-notif-fecha')||{}).value||'').trim()||fechaRespFinal;
     notifObs=String((document.getElementById('pqrs-entrega-notif-obs')||{}).value||'').trim();
     if(!notifFecha){
@@ -10997,7 +11133,7 @@ function collectPqrsEntregaDatos(expId,eOpt){
   }
   const cbIntEnt=document.getElementById('pqrs-entrega-notif-interna');
   const comunicacionInterna=cbIntEnt?!!cbIntEnt.checked:false;
-  return{fechaResp:fechaRespFinal,oficioExt,cuerpo:cuerpoFinal||cuerpo,tipo,canal,adj,emailTo,emailCc,emailBcc,emailSubject,notificarPor,notifFecha,notifObs,comunicacionInterna};
+  return{fechaResp:fechaRespFinal,oficioExt,cuerpo:cuerpoFinal||cuerpo,tipo,canal,adj,emailTo,emailCc,emailBcc,emailSubject,notificarPor,notifFecha,notifObs,comunicacionInterna,oficioModo:oficioModo};
 }
 function htmlPqrsRespuestaDatosReadonly(e){
   if(!e||(!e._pqrs_respuesta_fecha&&!e._pqrs_respuesta_oficio))return'';
@@ -16230,6 +16366,20 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   }
   const runSubmit=function(driveArchivos){
     if(entregaDirecta&&esPqrs&&pq){
+      if(pq.tipo===PQRS_WF_TIPO.OFICIO&&pq.oficioModo==='flujo_firma'){
+        const adjFirma=typeof _pqrsBuildAdjDocumentosEntrega==='function'
+          ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos||[],{driveEstado:'por_firmar'})
+          :[];
+        if(!adjFirma.length){
+          notif('Adjunte el PDF de la proyección del oficio','err');
+          return;
+        }
+        return Promise.resolve(
+          typeof pqrsEntregaDirectaAplicarFlujoFirma==='function'
+            ?pqrsEntregaDirectaAplicarFlujoFirma(e,pq,adjFirma,taskId,cmt,expId)
+            :false
+        );
+      }
       // No inventar «Link Drive» desde el soporte activo: eso duplicaba oficio/soporte en el rail y en archivos.
       const adjDocumentos=typeof _pqrsBuildAdjDocumentosEntrega==='function'
         ?_pqrsBuildAdjDocumentosEntrega(pq,driveArchivos||[],{driveEstado:'cerrado'})
