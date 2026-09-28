@@ -1654,9 +1654,12 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   // 📤 Entregar respuesta (Por ejecutar y Por firmar)
   if(typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(e))
     h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar respuesta" onclick="event.stopPropagation();openPqrsEntregaDirecta(\''+id+'\')">📤</button> ';
-  // ✍️ Por firmar / marcar-desmarcar firma Director
+  // ✍️ Por firmar: marcar firma Director (enviar a firmar: rail del visor en oficinas DEGUV; NCA en tabla)
+  const omitEnviar=typeof pqrsSesionOficinaDeguvSinNca==='function'&&pqrsSesionOficinaDeguvSinNca();
   if(typeof pqrsOficinaFirmaFisicaBtnHtml==='function')
-    h+=pqrsOficinaFirmaFisicaBtnHtml(e)+' ';
+    h+=pqrsOficinaFirmaFisicaBtnHtml(e,{omitEnviar:omitEnviar})+' ';
+  if(typeof pqrsOficinaRegresarPorEjecutarBtnHtml==='function')
+    h+=pqrsOficinaRegresarPorEjecutarBtnHtml(e)+' ';
   if(t&&tid&&typeof taskAgendaBtnHtml==='function'){
     const agBtn=taskAgendaBtnHtml(e._exp,t.id);
     if(agBtn)h+=agBtn;
