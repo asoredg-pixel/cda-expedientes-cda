@@ -11326,8 +11326,21 @@ function pqrsEntregaRepositionDetallesAcc(){
 }
 window.pqrsEntregaRepositionDetallesAcc=pqrsEntregaRepositionDetallesAcc;
 function pqrsEntregaOnOpcionAcc(hdrBtn){
-  if(typeof taskReviewToggleAprobarAcc==='function')taskReviewToggleAprobarAcc(hdrBtn);
   const acc=hdrBtn&&hdrBtn.closest?hdrBtn.closest('.task-decision-acc'):null;
+  const wasOpen=!!(acc&&acc.classList.contains('is-open'));
+  if(typeof taskReviewToggleAprobarAcc==='function')taskReviewToggleAprobarAcc(hdrBtn);
+  const nowOpen=!!(acc&&acc.classList.contains('is-open'));
+  if(wasOpen&&!nowOpen){
+    const hidOp=document.getElementById('pqrs-entrega-opcion');
+    const hidTipo=document.getElementById('pqrs-resp-tipo');
+    const hidModo=document.getElementById('pqrs-entrega-oficio-modo');
+    if(hidOp)hidOp.value='';
+    if(hidTipo)hidTipo.value='';
+    if(hidModo)hidModo.value='';
+    if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();
+    return;
+  }
+  if(!nowOpen)return;
   const n=acc?String(acc.getAttribute('data-acc')||''):'';
   let opcion='';
   if(n==='1')opcion='mensaje';
