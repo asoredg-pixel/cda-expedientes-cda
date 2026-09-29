@@ -1583,12 +1583,37 @@ function getPqrsOficinaList(oficinaId,filtro){
   }
   list=filterExpsPeriodo(list,'pqrs-ofi');
   list=list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
-  if(filtro==='pend'&&typeof esNcaDeguv==='function'&&esNcaDeguv()&&typeof ordenarPqrsNcaPinsPrimero==='function')
+  if(filtro==='pend'&&typeof ordenarPqrsNcaPinsPrimero==='function')
     list=ordenarPqrsNcaPinsPrimero(list);
   return list;
 }
-/** Fijar PQRSD arriba en «Por ejecutar» (solo encargado NCA, visual local). */
+/** Fijar PQRSD arriba en «Por ejecutar» (encargado NCA / vista dept. Guaviare, visual local). */
 const NCA_PQRS_PIN_LS='sst_nca_pqrs_pin_por_ejecutar';
+function ncaEncargadoSesionPqrsPin(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano())return false;
+  if(String(typeof deptoActivo!=='undefined'?deptoActivo:'').trim()!=='guaviare')return false;
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return false;
+  if(typeof esSecretaria==='function'&&esSecretaria())return false;
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  if(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()
+    &&typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
+  return false;
+}
+function ncaPinReemplazaEditarExpPend(t,e){
+  if(!ncaEncargadoSesionPqrsPin())return false;
+  const filAct=document.getElementById('f-act-est');
+  const filPqrs=String(window._pqrsOfiFiltro||'pend');
+  const pgAct=document.getElementById('pg-act');
+  const pgPqrs=document.getElementById('pg-pqrs-ofi');
+  const enActPend=!!(pgAct&&pgAct.classList.contains('on')&&filAct&&String(filAct.value||'')==='pend');
+  const enPqrsPend=!!(pgPqrs&&pgPqrs.classList.contains('on')&&filPqrs==='pend');
+  if(!enActPend&&!enPqrsPend)return false;
+  const exp=e||(t&&typeof getExpById==='function'?getExpById(t.exp||t.codigo):null);
+  if(!exp||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,exp))return false;
+  return true;
+}
 function ncaPqrsPinUsuarioKey(){
   const u=String(typeof responsableActivo!=='undefined'?responsableActivo:'').trim();
   const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto('guaviare')||'').trim():'';
@@ -1614,6 +1639,7 @@ function ncaPqrsEstaFijada(expId){
   return ncaPqrsPinsLeer().indexOf(id)>=0;
 }
 function ordenarPqrsNcaPinsPrimero(list){
+  if(!ncaEncargadoSesionPqrsPin())return list||[];
   const pins=ncaPqrsPinsLeer();
   if(!pins.length)return list||[];
   const pinSet=new Set(pins);
@@ -1627,7 +1653,7 @@ function ordenarPqrsNcaPinsPrimero(list){
 }
 function toggleNcaPqrsPinPorEjecutar(expId,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
-  if(typeof esNcaDeguv==='function'&&!esNcaDeguv())return;
+  if(!ncaEncargadoSesionPqrsPin())return;
   const id=String(expId||'').trim();
   if(!id)return;
   let pins=ncaPqrsPinsLeer();
@@ -1636,18 +1662,36 @@ function toggleNcaPqrsPinPorEjecutar(expId,ev){
   else pins.unshift(id);
   ncaPqrsPinsGuardar(pins);
   if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))
+    renderActividades();
   if(typeof notif==='function')notif(idx>=0?'📌 PQRSD desfijada':'📌 PQRSD fijada — queda arriba en Por ejecutar','ok');
 }
+function ordenarActividadesNcaPinsPrimero(list){
+  if(!ncaEncargadoSesionPqrsPin())return list||[];
+  const pins=ncaPqrsPinsLeer();
+  if(!pins.length)return list||[];
+  const pinSet=new Set(pins);
+  const pinned=[];
+  pins.forEach(function(id){
+    const hit=(list||[]).find(function(t){return String(t.exp||t.codigo||'').trim()===id;});
+    if(hit)pinned.push(hit);
+  });
+  const rest=(list||[]).filter(function(t){return!pinSet.has(String(t.exp||t.codigo||'').trim());});
+  return pinned.concat(rest);
+}
 function ncaPqrsPinBtnHtml(e){
-  if(typeof esNcaDeguv!=='function'||!esNcaDeguv())return'';
+  if(!ncaEncargadoSesionPqrsPin())return'';
   const id=jsStr(e&&e._exp);
   if(!id)return'';
   const on=ncaPqrsEstaFijada(e._exp);
   return '<button type="button" class="btn bsm bic act-ico pqrs-nca-pin-btn'+(on?' on':'')+'" title="'+(on?'Desfijar':'Fijar arriba en Por ejecutar (solo para usted)')+'" onclick="event.stopPropagation();toggleNcaPqrsPinPorEjecutar(\''+id+'\',event)">📌</button> ';
 }
+window.ncaEncargadoSesionPqrsPin=ncaEncargadoSesionPqrsPin;
+window.ncaPinReemplazaEditarExpPend=ncaPinReemplazaEditarExpPend;
 window.ncaPqrsEstaFijada=ncaPqrsEstaFijada;
 window.toggleNcaPqrsPinPorEjecutar=toggleNcaPqrsPinPorEjecutar;
 window.ordenarPqrsNcaPinsPrimero=ordenarPqrsNcaPinsPrimero;
+window.ordenarActividadesNcaPinsPrimero=ordenarActividadesNcaPinsPrimero;
 /** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar»: 🧐 revisar · 📤 cargar firmado · ✍️ firma física. */
 function pqrsDirectorPorFirmarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
@@ -1693,9 +1737,9 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
   if(!id)return'';
   const filtroPe=String(window._pqrsOfiFiltro||'pend');
-  const esEncNca=typeof esNcaDeguv==='function'&&esNcaDeguv();
+  const pinEnPend=typeof ncaEncargadoSesionPqrsPin==='function'&&ncaEncargadoSesionPqrsPin()&&filtroPe==='pend';
   const ofi=String(e._pqrs_oficina||'').trim();
-  const esNca=esEncNca
+  const esNca=(typeof esNcaDeguv==='function'&&esNcaDeguv())
     ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
   let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
   if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
@@ -1709,7 +1753,7 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   }
   const tid=t?jsStr(t.id):'';
   let h='<span class="sst-act-toolbar">';
-  if(esEncNca&&filtroPe==='pend')
+  if(pinEnPend)
     h+=ncaPqrsPinBtnHtml(e);
   else if(esNca&&tid)
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(e._exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button> ';
@@ -2319,7 +2363,7 @@ function renderPqrsOficinaInbox(){
         :(e._tramite_firma_task
           ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
           :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')')));
-    const fijada=(filtro==='pend'&&typeof esNcaDeguv==='function'&&esNcaDeguv()&&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(e._exp));
+    const fijada=(filtro==='pend'&&typeof ncaEncargadoSesionPqrsPin==='function'&&ncaEncargadoSesionPqrsPin()&&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(e._exp));
     const pinLbl=fijada?' <span class="pqrs-nca-pin-lbl" title="Fijada en Por ejecutar">📌</span>':'';
     const rowCls=(esFilaFirma?'pqrs-ofi-row-static':'')+(fijada?' pqrs-nca-pinned':'');
     const rowStyle=esFilaFirma?'cursor:default':'cursor:pointer';

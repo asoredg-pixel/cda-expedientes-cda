@@ -25637,7 +25637,9 @@ function renderActRowToolbarHtml(t,expAct){
     ||((esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))
       &&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel());
   if(canEditExpDesdeAct&&!pendienteRev&&!esRevisadaEnc){
-    if(t.sinExpediente){
+    if(typeof ncaPinReemplazaEditarExpPend==='function'&&ncaPinReemplazaEditarExpPend(t,expAct))
+      acts+=typeof ncaPqrsPinBtnHtml==='function'?ncaPqrsPinBtnHtml(expAct):'';
+    else if(t.sinExpediente){
       if(puedeGestionarActividadesDepto())
         acts+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
     }else
@@ -25818,13 +25820,16 @@ function renderActividadesRowHtml(t){
   const revExtra=(revDepto&&revDepto.tipo!=='aprobada'&&!badgeYaCorregir)?taskRevisionDeptoLabel(revDepto):'';
   const cierre=est==='Atendida'?fmtF(t.fechaAtendida):esEncOwn&&est!=='Atendida'?'—':est==='Por verificar'?('Reportada '+fmtF(t.fechaReportada)):est==='Por corregir'?'Devuelta — corregir':'—';
   const cierreHtml=cierre;
-  const refLbl=actRefCellHtml(t);
+  const expAct=getExpById(t.exp);
+  const filActPin=document.getElementById('f-act-est');
+  const fijadaAct=!!(filActPin&&String(filActPin.value||'')==='pend'&&expAct&&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(expAct._exp||t.exp));
+  let refLbl=actRefCellHtml(t);
+  if(fijadaAct)refLbl='<span class="pqrs-nca-pin-lbl" title="Fijada en Por ejecutar">📌</span> '+refLbl;
   const priorBadge=taskPrioridadBadgeHtml(t);
   const bibBadge=typeof bibTaskReposBadgeHtml==='function'?bibTaskReposBadgeHtml(t):'';
   const altaBadge=(expActPre&&typeof expAltaResponsableBadgeHtml==='function')?expAltaResponsableBadgeHtml(expActPre):'';
   const sol=getTaskSolicitudPendiente(t);
   const solBadge=sol?('<span class="solicitud-pill" title="'+(sol.tipo==='traslado'?'Traslado':'Eliminación')+' solicitada por '+escAttr(sol.por)+'">⚠ Solicitud</span>'):'';
-  const expAct=getExpById(t.exp);
   const acts=renderActRowToolbarHtml(t,expAct);
   const respCol=esVistaActividadesDepto()?('<td class="act-col-resp" style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
   const notifCol=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor()
@@ -25833,10 +25838,11 @@ function renderActividadesRowHtml(t){
   const priorAbierta=typeof taskPrioridadMarcadoresResueltos==='function'?!taskPrioridadMarcadoresResueltos(t):(est!=='Atendida');
   const esCrit=priorAbierta&&taskEsPrioridadCriticaVencimiento(t);
   const rowStyle=[
+    fijadaAct?'background:color-mix(in srgb,var(--or) 6%,transparent);box-shadow:inset 3px 0 0 var(--or)':'',
     esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(priorAbierta&&t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
-  const rowCls=esCrit?'prioritaria-crit':(priorAbierta&&t.prioritaria?'prioritaria':'');
+  const rowCls=(fijadaAct?'pqrs-nca-pinned ':'')+(esCrit?'prioritaria-crit':(priorAbierta&&t.prioritaria?'prioritaria':''));
   const rowData=' data-act-exp="'+escAttr(String(t.exp||t.codigo||''))+'" data-act-task="'+escAttr(String(t.id||''))+'"';
   return '<tr'+(rowCls?' class="'+rowCls+'"':'')+rowData+(rowStyle?' style="'+rowStyle+'"':'')+'><td class="act-col-estado">'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+revExtra+'</td>'+
     '<td class="act-col-ref" style="font-family:\'DM Mono\',monospace;font-size:12px">'+refLbl+'</td>'+
@@ -28121,7 +28127,11 @@ function renderActividades(){
   if(q)list=list.filter(t=>matchActividadSearch(t,q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
     (filtroAct==='porver'?sortTasksPorRevisar(list):
-    (filtroAct==='pend'||filtroAct==='venc'?sortTasksPorEjecutar(list):
+    (filtroAct==='pend'||filtroAct==='venc'?(
+      typeof ordenarActividadesNcaPinsPrimero==='function'&&filtroAct==='pend'
+        ?ordenarActividadesNcaPinsPrimero(sortTasksPorEjecutar(list))
+        :sortTasksPorEjecutar(list)
+    ):
     (filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados'?sortTasksPorFirma(list):
     (filtroAct==='done'?sortTasksAtendidas(list):sortTasksByUrgency(list)))));
   window._actExportList=list;
