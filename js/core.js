@@ -8849,20 +8849,27 @@ function initTaskReviewDecisionSide(expId,taskId,t){
 }
 function taskReviewConfirmarDecision(expId,taskId){
   const mode=String(window._taskReviewDecisionMode||'aprobar').trim();
-  if(mode==='firma'||mode==='imprimir')taskReviewDecidirImprimir(expId,taskId);
-  else taskReviewDecidirAprobar(expId,taskId);
+  if(mode==='firma'||mode==='imprimir')return taskReviewDecidirImprimir(expId,taskId);
+  return taskReviewDecidirAprobar(expId,taskId);
 }
 function taskReviewDecidirAprobar(expId,taskId){
+  return sstEjecutarConProgresoUnico({
+    title:'Aprobando y cerrando',
+    message:'Registrando aprobación…',
+    errorTitle:'No se pudo completar la aprobación'
+  },function(){return _taskReviewDecidirAprobarRun(expId,taskId);});
+}
+function _taskReviewDecidirAprobarRun(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e)){
     if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
       &&typeof tramiteAprobarRevisionFinalNotif==='function'){
-      tramiteAprobarRevisionFinalNotif(expId,taskId);return;
+      return tramiteAprobarRevisionFinalNotif(expId,taskId);
     }
     if(e&&typeof ncaAprobarRevisionFinalNotif==='function'){
-      ncaAprobarRevisionFinalNotif(expId);return;
+      return ncaAprobarRevisionFinalNotif(expId);
     }
   }
   const faseDec=e&&typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
@@ -8871,9 +8878,9 @@ function taskReviewDecidirAprobar(expId,taskId){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     const tipo=wf.tipo||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje');
     const canal=String(wf.canal||'').trim();
-    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')&&typeof ncaAprobarInformativa==='function'){ncaAprobarInformativa(expId);return;}
-    if(['aviso','presencial','fisica'].includes(canal)&&tipo!==(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio')&&typeof ncaAprobarCanalFisico==='function'){ncaAprobarCanalFisico(expId);return;}
-    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje')&&typeof ncaAprobarMensajeSimple==='function'){ncaAprobarMensajeSimple(expId);return;}
+    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.INFORMATIVA:'informativa')&&typeof ncaAprobarInformativa==='function')return ncaAprobarInformativa(expId);
+    if(['aviso','presencial','fisica'].includes(canal)&&tipo!==(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio')&&typeof ncaAprobarCanalFisico==='function')return ncaAprobarCanalFisico(expId);
+    if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje')&&typeof ncaAprobarMensajeSimple==='function')return ncaAprobarMensajeSimple(expId);
     // Oficio u otro: cerrar como atendida sin firma (confirmación directa del encargado)
     if(typeof taskReviewCerrarPqrsAtendida==='function'){
       taskReviewCerrarPqrsAtendida(e,{fecha:hoy(),notificada:false,via:'confirmar_cerrar',cuerpo:wf.cuerpo||''});
@@ -8885,7 +8892,7 @@ function taskReviewDecidirAprobar(expId,taskId){
       notif('✅ PQRSD cerrada — atendida','ok');
       return;
     }
-    if(typeof ncaAprobarMensajeSimple==='function'){ncaAprobarMensajeSimple(expId);return;}
+    if(typeof ncaAprobarMensajeSimple==='function')return ncaAprobarMensajeSimple(expId);
     return;
   }
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
@@ -8906,21 +8913,28 @@ function confirmarCierreTaskReview(expId,taskId){
   confirmarCierreTask(expId,taskId,{keepOpen:false,showProgress:true});
 }
 function taskReviewDecidirImprimir(expId,taskId){
+  return sstEjecutarConProgresoUnico({
+    title:'Procesando aprobación',
+    message:'Aprobando y pasando a Por firmar…',
+    errorTitle:'No se pudo completar la aprobación'
+  },function(){return _taskReviewDecidirImprimirRun(expId,taskId);});
+}
+function _taskReviewDecidirImprimirRun(expId,taskId){
   // Aprobar → Por firmar (pendiente impresión). Badge: ✓ Revisada · X Imprimir.
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const revOpts={omitNotificadorEnAprobacion:true,mantenerPaletaPorRevisar:true};
   if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioFirmado==='function'){
-    ncaAprobarOficioFirmado(expId,revOpts);return;
+    return ncaAprobarOficioFirmado(expId,revOpts);
   }
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof ncaAprobarOficioFirmado==='function'
     &&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e)){
-    ncaAprobarOficioFirmado(expId,revOpts);return;
+    return ncaAprobarOficioFirmado(expId,revOpts);
   }
   if(typeof tramiteLibreParaImprimir==='function')
-    tramiteLibreParaImprimir(expId,taskId,Object.assign({keepOpen:false,modo:'imprimir'},revOpts));
+    return tramiteLibreParaImprimir(expId,taskId,Object.assign({keepOpen:false,modo:'imprimir'},revOpts));
 }
 function taskReviewDecidirFirma(expId,taskId){
   // Compat: unificado en «Aprobar y pasar para Imprimir»
@@ -9500,7 +9514,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   };
   try{
     if(typeof sstCargaShow==='function')
-      sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:8,sub:expSub});
+      sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:8,sub:expSub,unico:true});
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
       prog(12,'Verificando conexión Gmail…');
       const okG=await sstSolicitarGmailParaAdjuntar();
@@ -24451,6 +24465,11 @@ function _sstCargaUiApply(pct,sub){
 function sstCargaShow(opts){
   opts=opts||{};
   if(typeof confirmExito!=='function')return;
+  // opts.unico: los avisos de éxito intermedios se muestran dentro de esta misma ventana
+  if(opts.unico)window._sstProgresoUnico=true;
+  if(!window._confirmRadicacionLoading)window._sstCargaUltimoOk='';
+  window._sstCargaSeq=(window._sstCargaSeq||0)+1;
+  window._sstCargaDonePending=false;
   confirmExito({
     title:opts.title||'Cargando',
     message:opts.message||'Espere mientras se completa la carga…',
@@ -24469,30 +24488,81 @@ function sstCargaProgress(pct,sub){
     if(subEl)subEl.textContent=sub;
   }
 }
-/** Completa la barra y cierra; opcional mensaje breve de éxito. */
+/** Completa la barra; el mensaje de éxito reemplaza la carga en la misma ventana (sin cerrar y abrir otra). */
 function sstCargaDone(opts){
   opts=opts||{};
   _sstCargaUiApply(100,opts.sub||'Carga completada');
   const wrap=document.getElementById('confirm-prec-carga');
   if(wrap)wrap.classList.add('is-done');
+  const seq=window._sstCargaSeq;
+  const wasLoading=!!window._confirmRadicacionLoading;
+  window._sstCargaDonePending=true;
   setTimeout(function(){
-    if(typeof closeConfirmExito==='function')closeConfirmExito();
+    if(seq!==window._sstCargaSeq)return;
+    window._sstCargaDonePending=false;
+    window._sstProgresoUnico=false;
+    // Un error mostrado durante la espera ya reemplazó la carga: no taparlo con el éxito
+    if(wasLoading&&!window._confirmRadicacionLoading)return;
     if(opts.message&&typeof confirmExito==='function'){
+      const autoMs=opts.autoCloseMs!=null?opts.autoCloseMs:SST_MSG_AUTO_MS;
+      window._sstCargaFinalHasta=Date.now()+(autoMs||SST_MSG_AUTO_MS)+400;
       confirmExito({
         title:opts.title||'Listo',
         message:opts.message,
         tone:'success',
         hideFooter:false,
         confirmLabel:'Entendido',
-        autoCloseMs:opts.autoCloseMs!=null?opts.autoCloseMs:SST_MSG_AUTO_MS
+        autoCloseMs:autoMs
       });
-    }
+    }else if(typeof closeConfirmExito==='function')closeConfirmExito();
   },opts.holdMs!=null?opts.holdMs:280);
 }
 function sstCargaHide(){
+  window._sstProgresoUnico=false;
+  window._sstCargaDonePending=false;
   if(typeof closeConfirmExito==='function')closeConfirmExito();
 }
+/**
+ * Una sola ventana de progreso para toda la operación: los avisos de éxito intermedios
+ * se muestran como texto de la barra y al final queda un único mensaje.
+ */
+async function sstEjecutarConProgresoUnico(opts,runner){
+  opts=opts||{};
+  sstCargaShow({
+    title:opts.title||'Procesando aprobación',
+    message:opts.message||'Procesando…',
+    sub:opts.sub||'No cierre esta ventana',
+    pct:null,
+    unico:true
+  });
+  const seq0=window._sstCargaSeq;
+  let asincronoSinPromesa=false;
+  try{
+    const r=runner();
+    if(r&&typeof r.then==='function')await r;
+    else asincronoSinPromesa=true;
+  }catch(err){
+    console.warn('sstEjecutarConProgresoUnico:',err);
+    if(window._confirmRadicacionLoading){
+      sstCargaError(opts.errorTitle||'No se pudo completar la operación',String(err&&err.message||err).slice(0,160));
+    }
+    return;
+  }
+  if(window._sstCargaDonePending)return;
+  if(window._confirmRadicacionLoading){
+    // Flujo interno con su propia barra que sigue en curso (p. ej. verificarTaskExp): él la cierra.
+    if(asincronoSinPromesa&&window._sstCargaSeq!==seq0)return;
+    const msg=String(window._sstCargaUltimoOk||'').trim();
+    if(msg)sstCargaDone({title:opts.doneTitle||'Listo',message:msg,autoCloseMs:2000});
+    else sstCargaHide();
+    return;
+  }
+  window._sstProgresoUnico=false;
+}
+window.sstEjecutarConProgresoUnico=sstEjecutarConProgresoUnico;
 function sstCargaError(msg,detail){
+  window._sstProgresoUnico=false;
+  window._sstCargaDonePending=false;
   if(typeof confirmExito==='function'){
     confirmExito({
       title:'No se pudo cargar',
@@ -24509,6 +24579,20 @@ function notif(msg,tipo){
   const m=String(msg||'').trim();
   if(!m)return;
   tipo=tipo||'ok';
+  if((tipo==='ok'||tipo==='info')&&typeof confirmExito==='function'){
+    // Progreso de ventana única: el aviso va dentro de la barra en vez de abrir otra ventana
+    if(window._confirmRadicacionLoading&&(window._sstProgresoUnico||window._sstCargaDonePending)){
+      if(tipo==='ok')window._sstCargaUltimoOk=m;
+      if(!window._sstCargaDonePending){
+        const subEl=document.getElementById('confirm-prec-carga-sub');
+        if(subEl)subEl.textContent=m;
+      }
+      return;
+    }
+    const ovFin=document.getElementById('confirm-prec-overlay');
+    if(window._sstCargaFinalHasta&&Date.now()<window._sstCargaFinalHasta
+      &&window._confirmExitoMode&&ovFin&&ovFin.classList.contains('on'))return;
+  }
   // Ventanita central (duración 1 s; se puede cerrar con Entendido)
   if(typeof confirmExito==='function'){
     if(tipo==='info'){
@@ -24639,6 +24723,8 @@ function closeConfirmExito(){
   }
   window._confirmExitoMode=false;
   window._confirmRadicacionLoading=false;
+  window._sstProgresoUnico=false;
+  window._sstCargaFinalHasta=0;
   _sstCargaUiReset();
   if(cancel)cancel.style.display='';
   if(btn)btn.style.display='';
