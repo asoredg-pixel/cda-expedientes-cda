@@ -2346,7 +2346,7 @@ function htmlEntregaOficioRequerimientoBlock(e,t){
     '<div class="fg">'+
     '<div class="fld"><label>N° de oficio <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-oficio" value="'+escAttr(c.reqOficio||'')+'" placeholder="Ej. DSGV-E261485" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
     '<div class="fld"><label>N° requerimiento <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-num" value="'+escAttr(c.reqNum||'')+'" placeholder="N° requerimiento" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
-    '<div class="fld"><label>Días para cumplir <span style="color:var(--rd)">*</span></label><input type="number" id="entrega-ofi-req-dias" min="1" value="'+escAttr(c.reqDias||'')+'" placeholder="Ej. 10" style="'+inp+'"></div>'+
+    '<div class="fld"><label>Días hábiles para cumplir <span style="color:var(--rd)">*</span></label><input type="number" id="entrega-ofi-req-dias" min="1" value="'+escAttr(c.reqDias||'')+'" placeholder="Ej. 10" style="'+inp+'"></div>'+
     '</div>'+
     '<div style="margin-top:10px">'+notifHtml+'</div>';
 }
@@ -2399,9 +2399,10 @@ function applyEntregaOficioRequerimiento(e,t,item){
   hit.item.reqMedio=item.reqMedio||'';
   hit.item.aplicaReq=true;
   hit.item.reqPendienteAprobacion=true;
+  if(!hit.item.reqNotif)hit.item.reqUnidad='habiles';
   if(item.reqNotif){
     hit.item.reqNotif=item.reqNotif;
-    hit.item.reqVence=item.reqVence||(typeof calcReqVence==='function'?calcReqVence(item.reqNotif,item.reqDias):'');
+    hit.item.reqVence=item.reqVence||(typeof calcReqVence==='function'?calcReqVence(item.reqNotif,item.reqDias,hit.item.reqUnidad):'');
   }
   e._conceptos_seg=JSON.stringify(hit.arr);
   if(t){
@@ -2426,7 +2427,8 @@ function applyConceptoReqDesdeNotificacion(e,t,fechaNotif,canal){
   if(!fecha)return false;
   hit.item.reqNotif=fecha;
   hit.item.reqMedio=canal||hit.item.reqMedio||'correo';
-  hit.item.reqVence=typeof calcReqVence==='function'?calcReqVence(fecha,hit.item.reqDias):'';
+  if(!hit.item.reqUnidad)hit.item.reqUnidad='habiles';
+  hit.item.reqVence=typeof calcReqVence==='function'?calcReqVence(fecha,hit.item.reqDias,hit.item.reqUnidad):'';
   e._conceptos_seg=JSON.stringify(hit.arr);
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();

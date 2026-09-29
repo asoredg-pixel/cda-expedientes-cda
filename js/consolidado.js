@@ -110,6 +110,9 @@ function renderConsolidado(){
   document.getElementById('c-pers').innerHTML=mkList(amb.filter(e=>acctStatus(e).persuasivo),'pers','Persuasivo');
   document.getElementById('c-coa').innerHTML=mkList(amb.filter(e=>acctStatus(e).coactivo),'coa','Coactivo');
   document.getElementById('c-acu').innerHTML=mkList(amb.filter(e=>acctStatus(e).acuerdo),'acu','Acuerdo de pago');
+  if(typeof renderConsolidadoRequerimientosCard==='function'){
+    try{renderConsolidadoRequerimientosCard(amb);}catch(errReq){console.warn('Consolidado requerimientos:',errReq);}
+  }
   const ct={};
   amb.forEach(e=>{const t=getTram(e._tramite,e);if(t)ct[t.nombre]=(ct[t.nombre]||0)+1;});
   const ctE=Object.entries(ct).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);

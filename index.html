@@ -21,17 +21,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20260707i"></script>
 <script src="js/constants.js?v=20260925i"></script>
-<script src="js/utils.js?v=20260922i"></script>
+<script src="js/utils.js?v=20260930b"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20260922k"></script>
 <script src="js/roles.js?v=20260924s"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260930i"></script>
+<script src="js/core.js?v=20260930l"></script>
 <script src="js/formulario.js?v=20260917a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260929a"></script>
-<script src="js/consolidado.js?v=20260914c"></script>
+<script src="js/consolidado.js?v=20260930a"></script>
 <script src="js/configuracion.js?v=20260903a"></script>
 <script src="js/export.js?v=20260911h"></script>
 <script src="js/chat.js?v=20260925f"></script>
@@ -41,9 +41,10 @@
 <script src="js/gmail.js?v=20260930j"></script>
 <script src="js/sst-file-upload.js?v=20260925f"></script>
 <script src="js/pqrs.js?v=20260930i"></script>
-<script src="js/consulta.js?v=20260924r"></script>
-<script src="js/entrega-responsable.js?v=20260925l"></script>
-<script src="js/tramite-firma.js?v=20260925m"></script>
+<script src="js/consulta.js?v=20260930a"></script>
+<script src="js/entrega-responsable.js?v=20260930a"></script>
+<script src="js/tramite-firma.js?v=20260930a"></script>
+<script src="js/requerimientos.js?v=20260930c"></script>
 <script src="js/papelera.js?v=20260910k"></script>
 <script src="js/recursos.js?v=20260924a"></script>
 <script src="js/ingreso.js?v=20260910i"></script>
@@ -390,6 +391,7 @@
           <option value="porfirma">Por firma</option>
           <option value="pornotif">Por notificar</option>
           <option value="revisados">Revisadas</option>
+          <option value="req" hidden>Requerimientos</option>
           <option value="done">Atendidas</option>
           <option value="all">Todas las asignadas</option>
         </select>
@@ -718,6 +720,7 @@
     <div class="card" style="border-left:3px solid var(--am)"><div class="slbl" style="margin:0">📨 Persuasivo</div><div id="c-pers"></div></div>
     <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">🏛️ Coactivo</div><div id="c-coa"></div></div>
     <div class="card" style="border-left:3px solid var(--bl)"><div class="slbl" style="margin:0">🤝 Acuerdo de pago</div><div id="c-acu"></div></div>
+    <div class="card" style="border-left:3px solid var(--or)"><div class="slbl" style="margin:0">📋 Requerimientos</div><div id="c-req"></div></div>
   </div>
   <div class="cgr">
     <div class="card"><div class="slbl" style="margin:0">Por tipo de trámite</div><div class="bc" id="ch-tram"></div></div>
