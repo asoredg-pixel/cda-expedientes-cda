@@ -207,6 +207,17 @@ function guardarExpCore(stayOnForm){
   if(!fecha){notif('Complete la fecha de Solicitud en Control del trámite','err');return;}
   syncExpAsociados();
   const prevRec=exps.find(x=>x._exp===(editId||expId));
+  const prevT=prevRec&&prevRec.tasks?prevRec.tasks:[];
+  const formTasksPre=typeof getTasksSafe==='function'?getTasksSafe(prevT):[];
+  if(typeof taskSincronizarNotificadorTrasCambioResponsables==='function'){
+    formTasksPre.forEach(function(ft){
+      const p=prevT.find(function(x){return x&&x.id===ft.id;});
+      if(!p)return;
+      const prevRs=typeof getTaskResponsables==='function'?getTaskResponsables(p):[];
+      const newRs=typeof getTaskResponsables==='function'?getTaskResponsables(ft):[];
+      taskSincronizarNotificadorTrasCambioResponsables(expId,ft,prevRs,newRs);
+    });
+  }
   const prevAsoc=prevRec?getExpAsociadosDirectos(prevRec):[];
   if(document.getElementById('fld__usar_exp_asociados')&&document.getElementById('fld__usar_exp_asociados').checked){
     const asoc=expedientesAsociadosData(gv('fld__expedientes_asociados'));
@@ -307,7 +318,6 @@ function guardarExpCore(stayOnForm){
     const el=document.getElementById('fld_'+c.id);
     if(el)camposVals['f_'+c.id]=c.tipo==='checkbox'?el.checked:el.value.trim();
   });
-  const prevT=prevTasksForExp(expId);
   let data={
     _depto:deptoSave,_tramite:tid,_exp:expId,
     _usar_etapa:false,
@@ -345,7 +355,7 @@ function guardarExpCore(stayOnForm){
     _autorizado:document.getElementById('fld__autorizado')?document.getElementById('fld__autorizado').checked:false,
     _aut_nombre:gv('fld__aut_nombre'),_aut_identificacion:(typeof formatIdentDisplay==='function'?formatIdentDisplay(gv('fld__aut_identificacion')):gv('fld__aut_identificacion')),_aut_correo:gv('fld__aut_correo'),_aut_telefono:gv('fld__aut_telefono'),...getDir('aut'),
     _medio_notificacion:gv('fld__medio_notificacion')||'',
-    tasks:mergeTasksForSave(getTasksSafe(prevT),prevT),    ...collectContable(),...collectActosAdmin(),...collectConceptosSeg(),...collectInfoTecnicaExp(),...camposVals
+    tasks:mergeTasksForSave(formTasksPre,prevT),    ...collectContable(),...collectActosAdmin(),...collectConceptosSeg(),...collectInfoTecnicaExp(),...camposVals
   };
   if(document.getElementById('infractores-list')&&typeof collectPresuntosInfractores==='function'){
     let infrEarly=collectPresuntosInfractores();

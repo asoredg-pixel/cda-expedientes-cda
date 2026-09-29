@@ -1594,6 +1594,108 @@ function pqrsEsNotificadorDesignado(e,nombre){
   if(!notifPor)return false;
   return agendaNorm(notifPor)===agendaNorm(nombre);
 }
+function taskNormRespList(arr){
+  return (arr||[]).map(function(n){return String(n||'').trim();}).filter(Boolean);
+}
+function taskEnFaseNotificacionAsignada(e,t){
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&t
+    &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e))return true;
+  if(t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return true;
+  return false;
+}
+/** Tras quitar al notificador anterior: el primer co-ejecutor nuevo pasa a notificar. */
+function taskInferirNotificadorTrasCambioResponsables(prevRs,newRs,notifAnterior){
+  const notif=String(notifAnterior||'').trim();
+  if(!notif)return'';
+  const eq=typeof agendaNorm==='function'?agendaNorm:function(x){return String(x||'').trim().toLowerCase();};
+  if(newRs.some(function(n){return eq(n)===eq(notif);}))return notif;
+  const prevSet=new Set(prevRs.map(eq));
+  const nuevos=newRs.filter(function(n){return!prevSet.has(eq(n));});
+  if(nuevos.length)return nuevos[0];
+  const alt=newRs.find(function(n){return eq(n)!==eq(notif);});
+  return alt||'';
+}
+/**
+ * Tras cambiar responsables en fase «Por notificar»: actualiza notificar_por y re-sincroniza asignados.
+ * PQRSD (_pqrs_workflow) y trámite/actividad (firmaWf).
+ */
+function taskSincronizarNotificadorTrasCambioResponsables(expId,task,prevResponsables,newResponsables){
+  if(!task)return false;
+  const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
+  if(!taskEnFaseNotificacionAsignada(e,task))return false;
+  const prevR=taskNormRespList(prevResponsables);
+  const newR=taskNormRespList(newResponsables);
+  const eq=typeof agendaNorm==='function'?agendaNorm:function(x){return String(x||'').trim().toLowerCase();};
+  if(prevR.map(eq).sort().join('|')===newR.map(eq).sort().join('|'))return false;
+  const esPqrs=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(task,e));
+  let notifAnterior='';
+  if(esPqrs){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    notifAnterior=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  }else{
+    const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(task):(task.firmaWf||{});
+    notifAnterior=String(wfT.notificar_por||wfT.notificar_por_propuesto||'').trim();
+  }
+  if(!notifAnterior)return false;
+  const nuevo=taskInferirNotificadorTrasCambioResponsables(prevR,newR,notifAnterior);
+  if(!nuevo||eq(nuevo)===eq(notifAnterior))return false;
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  if(esPqrs&&e){
+    setPqrsWorkflow(e,{
+      notificar_por:nuevo,
+      notificar_por_propuesto:nuevo
+    });
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({
+      tipo:'reasignacion_notificador',
+      fecha:typeof hoy==='function'?hoy():'',
+      nota:'Notificador «'+notifAnterior+'» → «'+nuevo+'» (reasignación encargado)',
+      oficina:e._pqrs_oficina||e._depto||'',
+      por:por
+    });
+    if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
+    return true;
+  }
+  const prevFw=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(task):(task.firmaWf||{});
+  task.firmaWf=Object.assign({},prevFw,{
+    notificar_por:nuevo,
+    notificar_por_propuesto:nuevo
+  });
+  if(!Array.isArray(task.historial))task.historial=[];
+  task.historial.push({
+    tipo:'reasignacion_notificador',
+    fecha:typeof hoy==='function'?hoy():'',
+    por:por,
+    nota:'Notificador «'+notifAnterior+'» → «'+nuevo+'»'
+  });
+  if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+    tramiteSincronizarParticipacionPostAprobacionFirma(task);
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(task);
+  return true;
+}
+function taskNotifSyncDesdeCambioResponsables(expId,t,prevRs){
+  if(!t||!expId||typeof taskSincronizarNotificadorTrasCambioResponsables!=='function')return false;
+  return taskSincronizarNotificadorTrasCambioResponsables(expId,t,prevRs,getTaskResponsables(t));
+}
+window.taskSincronizarNotificadorTrasCambioResponsables=taskSincronizarNotificadorTrasCambioResponsables;
+window.taskNotifSyncDesdeCambioResponsables=taskNotifSyncDesdeCambioResponsables;
+/** ¿Este nombre ya entregó / proyectó antes del cambio de notificador? (evita ✓ falso a co-ejecutores nuevos). */
+function taskParticipacionCumplidaEnProyeccion(t,e,nombre){
+  if(!t||!nombre)return false;
+  const eq=typeof agendaNorm==='function'?function(a,b){return agendaNorm(a)===agendaNorm(b);}:function(a,b){return String(a||'').trim()===String(b||'').trim();};
+  const a=typeof getAsignado==='function'?getAsignado(t,nombre):null;
+  if(a&&(a.fechaReportada||a.fechaAtendida||a.estado==='atendido'||a.estado==='por_verificar'))return true;
+  if(e&&typeof getPqrsWorkflow==='function'){
+    const ent=String((getPqrsWorkflow(e)||{}).entregado_por||'').trim();
+    if(ent&&eq(ent,nombre))return true;
+  }
+  const wfT=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+  const entT=String(wfT.entregado_por||'').trim();
+  if(entT&&eq(entT,nombre))return true;
+  return false;
+}
+window.taskParticipacionCumplidaEnProyeccion=taskParticipacionCumplidaEnProyeccion;
 /**
  * Marca como atendida la participación de quienes proyectaron,
  * excepto quien esté designado para notificar (deuda solo en «Por notificar»).
@@ -12099,8 +12201,9 @@ function estadoTaskForAsignado(t,nombre){
       const raw=estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
       return raw==='Atendida'?'En ejecución':raw;
     }
-    // Quien proyectó (y no notifica aún / no es el notificador): participación atendida
-    return'Atendida';
+    if(typeof taskParticipacionCumplidaEnProyeccion==='function'&&taskParticipacionCumplidaEnProyeccion(t,eExp,nombre))
+      return'Atendida';
+    return estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
   }
   // Trámite / actividad libre en flujo de firma post-aprobación
   if(t&&typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
@@ -12111,7 +12214,10 @@ function estadoTaskForAsignado(t,nombre){
       const raw=estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
       return raw==='Atendida'?'En ejecución':raw;
     }
-    return'Atendida';
+    const eTr=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+    if(typeof taskParticipacionCumplidaEnProyeccion==='function'&&taskParticipacionCumplidaEnProyeccion(t,eTr,nombre))
+      return'Atendida';
+    return estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
   }
   return estadoTaskRawFromAsignado(getAsignado(t,nombre),t);
 }
@@ -12334,11 +12440,13 @@ function quitarResponsableTask(expId,taskId,nombre){
   const n=String(nombre||'').trim();if(!n)return false;
   const t=getTaskAny(expId,taskId);
   if(!t||getTaskResponsables(t).length<=1){notif('Debe quedar al menos un responsable','err');return false;}
+  const prevRs=getTaskResponsables(t).slice();
   return mutateTask(expId,taskId,t=>{
     t.responsables=(t.responsables||[]).filter(r=>agendaNorm(r)!==agendaNorm(n));
     t.asignados=(t.asignados||[]).filter(a=>agendaNorm(a.nombre)!==agendaNorm(n));
     if(agendaNorm(t.responsable||'')===agendaNorm(n))t.responsable=t.responsables[0]||'';
     t.historial.push({tipo:'quitar_asignado',fecha:hoy(),de:n,por:taskComentarioAutor()});
+    taskNotifSyncDesdeCambioResponsables(expId,t,prevRs);
     syncTaskAggregateState(t);
   });
 }
@@ -21273,6 +21381,7 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
   const nr=String(nuevoResp||'').trim();if(!nr)return false;
   return mutateTask(expId,taskId,t=>{
     normalizeTask(t);
+    const prevRs=getTaskResponsables(t).slice();
     if(opts.anadir){
       ensureAsignado(t,nr);
       t.historial.push({tipo:'asignacion_extra',fecha:hoy(),a:nr,por:taskComentarioAutor()});
@@ -21303,18 +21412,21 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
       if(eTr&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eTr))
         resetPqrsWorkflowTrasReasignar(eTr);
     }
+    taskNotifSyncDesdeCambioResponsables(expId,t,prevRs);
     syncTaskAggregateState(t);
   });
 }
 function anadirResponsableTask(expId,taskId,nombre,entregaModo){
   const n=String(nombre||'').trim();if(!n)return false;
   return mutateTask(expId,taskId,t=>{
+    const prevRs=getTaskResponsables(t).slice();
     ensureAsignado(t,n);
     if(getTaskResponsables(t).length>1){
       if(entregaModo)t.entregaModo=entregaModo==='unificada'?'unificada':'individual';
       else if(!t.entregaModo)t.entregaModo='individual';
     }
     t.historial.push({tipo:'asignacion_extra',fecha:hoy(),a:n,por:taskComentarioAutor()});
+    taskNotifSyncDesdeCambioResponsables(expId,t,prevRs);
     syncTaskAggregateState(t);
   });
 }
@@ -21545,9 +21657,14 @@ function syncTkCoEjPanelFromCheckboxes(cb){
   if(!row)return;
   const tr=row.querySelector('.tr');
   const primary=tr?tr.value.trim():'';
+  const meta=readTaskMeta(row);
+  const prevRs=getTaskResponsables(normalizeTask({
+    responsable:primary||meta.responsables&&meta.responsables[0]||'',
+    responsables:meta.responsables||[],
+    asignados:meta.asignados||[]
+  })).slice();
   const extras=[...row.querySelectorAll('.tk-coej-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
   const responsables=primary?[primary,...extras.filter(n=>agendaNorm(n)!==agendaNorm(primary))]:extras.slice();
-  const meta=readTaskMeta(row);
   const prevAsig=meta.asignados||[];
   meta.responsables=responsables;
   meta.asignados=responsables.map(n=>{
@@ -21557,10 +21674,23 @@ function syncTkCoEjPanelFromCheckboxes(cb){
   if(responsables.length>1&&!meta.entregaModo)meta.entregaModo='individual';
   if(responsables.length<=1)meta.entregaModo='individual';
   writeTaskMeta(row,meta);
+  const expId=String((typeof editId!=='undefined'&&editId)||window._conPanelActive||'').trim();
+  const tid=String(meta.id||'').trim();
+  if(expId&&tid&&typeof getTaskAny==='function'&&getTaskAny(expId,tid)&&typeof mutateTask==='function'){
+    mutateTask(expId,tid,function(tk){
+      tk.responsables=responsables.slice();
+      tk.asignados=meta.asignados.slice();
+      tk.entregaModo=meta.entregaModo||tk.entregaModo||'individual';
+      if(primary)tk.responsable=primary;
+      taskNotifSyncDesdeCambioResponsables(expId,tk,prevRs);
+      syncTaskAggregateState(tk);
+    });
+  }
   const modoWrap=row.querySelector('.tk-coej-modo-wrap');
   if(modoWrap)modoWrap.style.display=responsables.length>1?'':'none';
   const tagsEl=row.querySelector('.tk-asig-tags');
   if(tagsEl)tagsEl.innerHTML=renderTkAsigTags({...meta,responsables,asignados:meta.asignados,entregaModo:meta.entregaModo});
+  if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
 }
 function syncTkTrCoEj(sel){
   const row=sel.closest('.tkr-wrap');
