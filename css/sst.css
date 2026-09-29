@@ -1983,6 +1983,14 @@ body.task-review-doc-mode #task-modal-overlay{
   background:var(--bll,#f8fbff);
   box-shadow:inset 3px 0 0 var(--bl);
 }
+.task-chat-para-row{
+  display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;
+}
+.task-chat-para-row label{font-weight:600;color:var(--tx2);white-space:nowrap}
+.task-chat-para-sel{
+  flex:1;min-width:0;padding:5px 8px;border:1px solid var(--bd);border-radius:var(--r);
+  font-size:11px;background:var(--sf);color:var(--tx);
+}
 .task-modal.task-modal-firma-fisica{width:min(420px,94vw);max-height:85vh}
 .task-decision-icon-grid{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .task-decision-opt{
