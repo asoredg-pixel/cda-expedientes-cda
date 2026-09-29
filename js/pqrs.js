@@ -2644,6 +2644,17 @@ function onPqrsAsigRespChange(el){
     }
   }
   togglePqrsAsigModo();
+  if(typeof taskChatSyncParaFromAsignacion==='function')taskChatSyncParaFromAsignacion();
+  if(el&&el.checked){
+    const sel=document.getElementById('task-chat-para-sel');
+    if(sel&&sel.tagName==='SELECT'){
+      const v=String(el.value||'').trim();
+      const has=[...sel.options].some(function(o){
+        return typeof agendaNorm==='function'?agendaNorm(o.value)===agendaNorm(v):o.value===v;
+      });
+      if(has)sel.value=v;
+    }
+  }
 }
 window.onPqrsAsigRespChange=onPqrsAsigRespChange;
 function _pqrsAsignarSinCorreo(expId){
@@ -2719,7 +2730,10 @@ function openAsignarPqrsOficinaModal(expId){
   window._taskModalCtx={mode:'asignarPqrsOfi',expId,taskId:chatTaskId};
   window._pqrsAsignarForzarSinCorreo=false;
   togglePqrsAsigModo();
-  setTimeout(function(){if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);},30);
+  setTimeout(function(){
+    if(typeof taskChatSyncParaFromAsignacion==='function')taskChatSyncParaFromAsignacion();
+    if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
+  },30);
 }
 async function submitAsignarPqrsOficina(expId,taskId){
   const responsables=[...document.querySelectorAll('.pqrs-asig-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);

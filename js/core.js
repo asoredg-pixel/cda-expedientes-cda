@@ -10128,6 +10128,7 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
       body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t)+'</div>';
       setTimeout(function(){
         if(typeof togglePqrsAsigModo==='function')togglePqrsAsigModo();
+        if(typeof taskChatSyncParaFromAsignacion==='function')taskChatSyncParaFromAsignacion();
         if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
         if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
       },0);
@@ -16874,6 +16875,20 @@ function taskChatEncargadoDeptoNombre(t){
 function taskChatResponsableEscribeEncargado(){
   return !!esModoResponsable();
 }
+function taskChatPqrsAsigChecked(){
+  const cbs=document.querySelectorAll('.pqrs-asig-resp-cb:checked');
+  const out=[];
+  const seen=new Set();
+  cbs.forEach(function(c){
+    const n=String(c.value||'').trim();
+    if(!n)return;
+    const k=typeof agendaNorm==='function'?agendaNorm(n):n.toLowerCase();
+    if(seen.has(k))return;
+    seen.add(k);
+    out.push(n);
+  });
+  return out;
+}
 function taskChatDestinatariosLista(t){
   t=normalizeTask(t||{});
   const out=[];
@@ -16889,12 +16904,53 @@ function taskChatDestinatariosLista(t){
   push(getUltimoReportadoPor(t));
   (getTaskResponsables(t)||[]).forEach(push);
   push(t.responsable);
+  if(taskChatEncargadoEligeDestino()){
+    const expId=String((t.exp||t.codigo)||'').trim();
+    const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
+    let pool=[];
+    if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getAsignablesPqrsOficina==='function'){
+      pool=getAsignablesPqrsOficina(e._pqrs_oficina||getPqrsOficinaActiva())||[];
+    }else if(expId&&t.id&&typeof getResponsablesForTrasladoActividad==='function'){
+      pool=getResponsablesForTrasladoActividad(expId,t.id)||[];
+    }
+    pool.forEach(push);
+  }
   return out;
+}
+function taskChatParaOpcionesEncargado(t){
+  t=normalizeTask(t||{});
+  const enc=taskChatEncargadoDeptoNombre(t);
+  const checked=taskChatPqrsAsigChecked();
+  let opts=checked.length?checked.slice():taskChatDestinatariosLista(t);
+  if(opts.length>1&&enc){
+    opts=opts.filter(function(n){
+      return typeof agendaNorm==='function'?agendaNorm(n)!==agendaNorm(enc):String(n)!==enc;
+    });
+  }
+  if(!opts.length){
+    if(checked.length)return checked.slice();
+    if(enc)return[enc];
+    return taskChatDestinatariosLista(t);
+  }
+  return opts;
 }
 function taskChatResolveDefaultPara(t){
   t=normalizeTask(t||{});
   if(taskChatResponsableEscribeEncargado())
     return taskChatEncargadoDeptoNombre(t);
+  if(taskChatEncargadoEligeDestino()){
+    const checked=taskChatPqrsAsigChecked();
+    if(checked.length){
+      const enc=taskChatEncargadoDeptoNombre(t);
+      const pick=checked.find(function(n){
+        if(enc&&typeof agendaNorm==='function')return agendaNorm(n)!==agendaNorm(enc);
+        return n!==enc;
+      });
+      return pick||checked[0];
+    }
+    const opts=taskChatParaOpcionesEncargado(t);
+    if(opts.length)return opts[0];
+  }
   const rep=getUltimoReportadoPor(t);
   if(rep)return rep;
   const rs=getTaskResponsables(t)||[];
@@ -16903,6 +16959,47 @@ function taskChatResolveDefaultPara(t){
     if(st==='Por corregir'||st==='Por verificar')return rs[i];
   }
   return rs[0]||String(t.responsable||'').trim();
+}
+function taskChatSyncParaFromAsignacion(){
+  const form=document.getElementById('task-chat-form');
+  if(!form||!taskChatEncargadoEligeDestino())return;
+  const ctx=window._taskModalCtx||{};
+  const expId=ctx.expId;
+  const taskId=ctx.taskId;
+  if(!expId||!taskId)return;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t)return;
+  const prevEl=document.getElementById('task-chat-para-sel');
+  const prev=prevEl?String(prevEl.value||prevEl.getAttribute('value')||'').trim():'';
+  const fieldHtml=taskChatComposerParaFieldHtml(normalizeTask(t));
+  const row=form.querySelector('.task-chat-para-row');
+  const hidden=form.querySelector('input#task-chat-para-sel');
+  if(row){
+    const tmp=document.createElement('div');
+    tmp.innerHTML=fieldHtml;
+    const neu=tmp.firstElementChild;
+    if(neu)row.replaceWith(neu);
+  }else if(hidden){
+    const tmp=document.createElement('div');
+    tmp.innerHTML=fieldHtml;
+    const neu=tmp.firstElementChild;
+    if(neu)hidden.replaceWith(neu);
+  }
+  const sel=document.getElementById('task-chat-para-sel');
+  if(sel&&sel.tagName==='SELECT'){
+    const pick=taskChatResolveDefaultPara(normalizeTask(t));
+    if(pick){
+      const has=[...sel.options].some(function(o){
+        return typeof agendaNorm==='function'?agendaNorm(o.value)===agendaNorm(pick):o.value===pick;
+      });
+      if(has)sel.value=pick;
+    }else if(prev){
+      const hasPrev=[...sel.options].some(function(o){
+        return typeof agendaNorm==='function'?agendaNorm(o.value)===agendaNorm(prev):o.value===prev;
+      });
+      if(hasPrev)sel.value=prev;
+    }
+  }
 }
 function taskChatDestinatarioEfectivo(c,t){
   if(!c)return'';
@@ -16941,7 +17038,7 @@ function taskChatComposerParaFieldHtml(t){
   t=normalizeTask(t||{});
   const def=taskChatResolveDefaultPara(t)||'';
   if(taskChatEncargadoEligeDestino()){
-    const opts=taskChatDestinatariosLista(t);
+    const opts=taskChatParaOpcionesEncargado(t);
     if(!opts.length&&def)opts.push(def);
     let sel='';
     opts.forEach(function(n){
@@ -16964,6 +17061,8 @@ window.taskChatEncargadoEligeDestino=taskChatEncargadoEligeDestino;
 window.taskChatResolveDefaultPara=taskChatResolveDefaultPara;
 window.taskChatDestinatarioEfectivo=taskChatDestinatarioEfectivo;
 window.taskChatCampanitaAplica=taskChatCampanitaAplica;
+window.taskChatSyncParaFromAsignacion=taskChatSyncParaFromAsignacion;
+window.taskChatPqrsAsigChecked=taskChatPqrsAsigChecked;
 function renderTaskChatListHtml(t){
   t=normalizeTask(t||{});
   const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
