@@ -817,43 +817,36 @@ async function guardarPqrsSecretaria(modo){
     await persistExpedienteGranular(data,true);
     if(typeof mergeExpIntoExpsCache==='function')mergeExpIntoExpsCache(data);
   }
-  // Correo de radicación al solicitante: inmediatamente tras guardar, con Gmail aún válido
-  // (antes de Drive / reenvíos, que pueden tardar y caducar el token).
+  // ── PASO 2: Reenviar correo a la oficina ANTES del aviso al ciudadano ───
+  // (un 401 al ciudadano no debe invalidar el token de Secretaría antes del reenvío).
+  let _msgParaReenvio=null;
+  if(gmailMsgId){
+    if(typeof sstCargaProgress==='function'&&window._confirmRadicacionLoading){
+      sstCargaProgress(55,'Reenviando solicitud con anexos a la oficina…');
+    }
+    _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
+    if(!_msgParaReenvio&&typeof _pqrsFetchGmailMsgForReenvio==='function'){
+      _msgParaReenvio=await _pqrsFetchGmailMsgForReenvio(data,_msgParaReenvio);
+      if(_msgParaReenvio)_gmailCurrentMsg=_msgParaReenvio;
+    }
+    const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+    if(_tokOk&&!_msgParaReenvio&&typeof _gmailFetchMessageSecretaria==='function'){
+      _msgParaReenvio=await _gmailFetchMessageSecretaria(gmailMsgId);
+      if(_msgParaReenvio)_gmailCurrentMsg=_msgParaReenvio;
+    }
+    if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+      try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true,exp:data});}catch(err){console.warn('reenvio ds:',err);}
+      if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
+    }else if(!soloRadicar&&oficina!=='secretaria'){
+      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
+    }
+  }
   const notifRes=await tryEnviarNotifRadicacionAlRadicar(data,notifOpts);
-  // Refresco inmediato: Actividades NCA / bandeja oficina / consulta
-  // (antes solo se actualizaba al llegar el snapshot remoto, ~1–3 min).
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   else{
     if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
     if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
     if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-  }
-  // ── PASO 2: Reenviar correo a la oficina (solo si viene de Gmail) ────────
-  let _msgParaReenvio=null;
-  if(gmailMsgId){
-    _msgParaReenvio=(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId)?_gmailCurrentMsg:null;
-    const _tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
-    if(_tokOk&&!_msgParaReenvio&&typeof _gmailFetchMessageFull==='function'){
-      _msgParaReenvio=await _gmailFetchMessageFull(gmailMsgId);
-      if(_msgParaReenvio) _gmailCurrentMsg=_msgParaReenvio;
-    }
-    if(soloRadicar&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-      try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
-      if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
-    }else if(!soloRadicar){
-      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
-    }
-    if(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk){
-      const tokRe2=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
-      if(tokRe2){
-        reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
-        if(!reenvioOficinaOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-          try{
-            reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true,exp:data});
-          }catch(errRe2){console.warn('reenvio oficina retry:',errRe2);}
-        }
-      }
-    }
   }
   // ── PASO 3: Subir solo PDF soporte a Drive (anexos van en el correo reenviado) ────
   let manualDriveAtts=null;
@@ -993,41 +986,43 @@ function pqrsFueRadicadaPorCorreo(e){
   }
   return false;
 }
+function _pqrsEmailOficinaDestino(oficina){
+  let em=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(oficina)||'').trim():'';
+  if(!em){
+    const od=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
+    em=(od.email||'').trim();
+  }
+  return em;
+}
 async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMsg){
-  if(!e||!oficina||!expId)return false;
+  if(!e||!oficina||!expId||oficina==='secretaria')return false;
   if(!pqrsFueRadicadaPorCorreo(e))return false;
   const gmailMsgId=e._gmail_message_id||'';
   if(!gmailMsgId)return false;
   const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
   if(!tokOk)return false;
   let msg=prefetchedMsg||null;
-  if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
-  if(!msg&&typeof _gmailFetchMessageFull==='function'){
-    msg=await _gmailFetchMessageFull(gmailMsgId);
+  if(typeof _pqrsFetchGmailMsgForReenvio==='function'){
+    msg=await _pqrsFetchGmailMsgForReenvio(e,msg);
     if(msg)_gmailCurrentMsg=msg;
   }
-  if(!msg&&typeof gmailApiCall==='function'&&typeof GMAIL_API_BASE!=='undefined'&&typeof gmailIsTokenValid==='function'&&gmailIsTokenValid()){
-    try{msg=await gmailApiCall('GET',GMAIL_API_BASE+'/messages/'+gmailMsgId+'?format=full');}catch(err){console.warn('fetch gmail msg:',err);}
-  }
-  // Fallback: buscar en bandeja OFI del usuario actual (ej. NCA ya recibió el reenvío de secretaria)
-  if(!msg&&typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid()&&typeof _gmailOfiApi==='function'&&typeof GMAIL_API_BASE!=='undefined'){
-    const eExpId=String(e._exp||expId||'').trim();
-    if(eExpId){
-      try{
-        const q=encodeURIComponent('subject:"PQRSD #'+eExpId+'"');
-        const sr=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages?q='+q+'&maxResults=3');
-        if(sr&&sr.messages&&sr.messages.length){
-          const found=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages/'+sr.messages[0].id+'?format=full');
-          if(found){msg=found;console.log('reenvioOficina: mensaje encontrado en bandeja OFI para PQRSD',eExpId);}
-        }
-      }catch(err){console.warn('reenvioOficina búsqueda OFI:',err);}
-    }
-  }
   if(!msg||typeof reenviarEmailAOficina!=='function')return false;
+  const ofiEmail=_pqrsEmailOficinaDestino(oficina);
+  const introOfi='<p style="font-family:Arial,sans-serif;font-size:13px">La <strong>Secretaría DEGUV</strong> traslada esta PQRSD a su oficina. Debajo encontrará el correo original recibido en Secretaría (remitente, destinatarios y copia).</p>';
   try{
-    const ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true,exp:e});
-    if(ok&&typeof gmailMarkAsRead==='function')gmailMarkAsRead(gmailMsgId);
-    return ok;
+    let ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true,exp:e,introHtml:introOfi});
+    if(!ok&&ofiEmail&&typeof reenviarEmailRawARecipientes==='function'){
+      ok=await reenviarEmailRawARecipientes(msg,[ofiEmail],expId,{silent:true,exp:e,pqrsHistorial:false,label:labelOficina(oficina)});
+    }
+    if(!ok&&ofiEmail&&typeof reenviarEmailRawARecipientes==='function'){
+      ok=await reenviarEmailRawARecipientes(msg,[ofiEmail],expId,{silent:true,exp:e,pqrsHistorial:true,pqrsSinAdjuntosMime:true,introHtml:introOfi,label:labelOficina(oficina)});
+    }
+    if(!ok&&ofiEmail&&typeof _pqrsEnviarNotifAsignacion==='function'){
+      const r=await _pqrsEnviarNotifAsignacion(e,[ofiEmail],expId,msg);
+      ok=!!(r&&r.length);
+    }
+    if(ok&&typeof gmailMarkAsRead==='function'&&gmailIsTokenValid())gmailMarkAsRead(gmailMsgId);
+    return !!ok;
   }catch(err){
     console.warn('reenvio oficina:',err);
     return false;
@@ -1098,6 +1093,10 @@ async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
   // Intento 1: mensaje original por ID (requiere token de secretaria / cdaguaviare1)
   if(gmailMsgId){
     if(!msg&&(typeof _gmailCurrentMsg!=='undefined'&&_gmailCurrentMsg&&_gmailCurrentMsg.id===gmailMsgId))msg=_gmailCurrentMsg;
+    if(!msg&&typeof _gmailFetchMessageSecretaria==='function'){
+      msg=await _gmailFetchMessageSecretaria(gmailMsgId);
+      if(msg)_gmailCurrentMsg=msg;
+    }
     if(!msg&&typeof _gmailFetchMessageFull==='function'){
       msg=await _gmailFetchMessageFull(gmailMsgId);
       if(msg)_gmailCurrentMsg=msg;
