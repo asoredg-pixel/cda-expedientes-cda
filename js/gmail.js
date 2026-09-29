@@ -4185,6 +4185,7 @@ function gmailForwardHistorialBlockHtml(block) {
   if (block.cc) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Cc:</td><td style="padding:2px 8px">' + esc(block.cc) + '</td></tr>';
   if (block.subject) h += '<tr><td style="padding:2px 8px;font-weight:600;vertical-align:top">Asunto:</td><td style="padding:2px 8px">' + esc(block.subject) + '</td></tr>';
   h += '</table>';
+  if (block.soloEncabezados) return h + '</div>';
   var body = '';
   if (block.preferPlain && (block.bodyTxt || block.bodyHtml)) {
     var plain = block.bodyTxt || _gmailHtmlToPlainSnippet(block.bodyHtml, 24000);
@@ -4269,8 +4270,12 @@ function gmailBuildPqrsReenvioHtml(fullMsg, exp, opts) {
   var preferPlain = !!opts.preferPlainBody;
   blocks.forEach(function(b) {
     if (preferPlain) b.preferPlain = true;
+    if (opts.soloEncabezados) b.soloEncabezados = true;
     html += gmailForwardHistorialBlockHtml(b);
   });
+  if (opts.soloEncabezados) {
+    html += '<p style="font-family:Arial,sans-serif;font-size:12px;color:#444">A continuación el correo recibido con sus anexos.</p>';
+  }
   html += '<p style="font-size:11px;color:#888;font-family:Arial,sans-serif">Reenvío automático — Sistema de Seguimiento de Trámites CDA DEGUV.</p>';
   return html;
 }
@@ -4417,6 +4422,127 @@ function _reenviarEmailEncodeRawForRecipient(rawData, toEmail, expId) {
   return btoa(binOut).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+function _gmailRawB64urlToBytes(raw) {
+  const b64std = String(raw || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64std + '='.repeat((4 - b64std.length % 4) % 4);
+  const binaryStr = atob(padded);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (var i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+  return bytes;
+}
+
+function _gmailBytesToB64url(bytes) {
+  const CHUNK = 0x8000;
+  var b64 = '';
+  for (var i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
+    var bin = '';
+    for (var k = 0; k < slice.length; k++) bin += String.fromCharCode(slice[k]);
+    b64 += btoa(bin);
+  }
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Correo nuevo = bloque HTML de trazabilidad + correo original anidado sin reprocesar
+ * (cuerpo y anexos con la codificación original, que Gmail ya aceptó).
+ */
+function _buildMimeWrapOriginalBytes(to, subject, htmlBody, rawData) {
+  if (!rawData || !rawData.raw) throw new Error('No se pudo obtener el correo original');
+  const bytes = _gmailRawB64urlToBytes(rawData.raw);
+  var sepPos = -1, sepLen = 4;
+  for (var si = 0; si < bytes.length - 3; si++) {
+    if (bytes[si] === 13 && bytes[si + 1] === 10 && bytes[si + 2] === 13 && bytes[si + 3] === 10) { sepPos = si; break; }
+  }
+  if (sepPos < 0) {
+    for (var sj = 0; sj < bytes.length - 1; sj++) {
+      if (bytes[sj] === 10 && bytes[sj + 1] === 10) { sepPos = sj; sepLen = 2; break; }
+    }
+  }
+  if (sepPos < 0) throw new Error('Estructura del correo no reconocida');
+  const headerText = new TextDecoder('utf-8', { fatal: false }).decode(bytes.slice(0, sepPos));
+  const bodyBytes = bytes.slice(sepPos + sepLen);
+  const lb = headerText.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  const headerLines = headerText.split(lb);
+  function origHeader(name) {
+    const re = new RegExp('^' + name + ':', 'i');
+    for (var i = 0; i < headerLines.length; i++) {
+      if (!re.test(headerLines[i])) continue;
+      var val = headerLines[i].replace(re, '').trim();
+      var j = i + 1;
+      while (j < headerLines.length && /^[ \t]/.test(headerLines[j])) { val += ' ' + headerLines[j].trim(); j++; }
+      return val;
+    }
+    return '';
+  }
+  const origCt = origHeader('Content-Type') || 'text/plain; charset=us-ascii';
+  const origCte = origHeader('Content-Transfer-Encoding');
+  const subjectPlain = typeof _normalizeEmailSubjectText === 'function' ? _normalizeEmailSubjectText(subject) : subject;
+  const subjectEncoded = typeof _encodeEmailSubject === 'function' ? _encodeEmailSubject(subjectPlain) : subjectPlain;
+  const boundary = 'sst_wrap_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const htmlB64 = _gmailMimeFoldBase64(_gmailUtf8StringToBase64(htmlBody || ''));
+  const head = [
+    'MIME-Version: 1.0',
+    'To: ' + to,
+    'Subject: ' + subjectEncoded,
+    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
+    '',
+    '--' + boundary,
+    'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    htmlB64,
+    '',
+    '--' + boundary,
+    'Content-Type: ' + origCt
+  ];
+  if (origCte) head.push('Content-Transfer-Encoding: ' + origCte);
+  head.push('', '');
+  const headBytes = new TextEncoder().encode(head.join('\r\n'));
+  const tailBytes = new TextEncoder().encode('\r\n--' + boundary + '--\r\n');
+  const out = new Uint8Array(headBytes.length + bodyBytes.length + tailBytes.length);
+  out.set(headBytes, 0);
+  out.set(bodyBytes, headBytes.length);
+  out.set(tailBytes, headBytes.length + bodyBytes.length);
+  return out;
+}
+
+async function _gmailGetRawPqrs(msgId) {
+  const url = GMAIL_API_BASE + '/messages/' + msgId + '?format=raw';
+  if (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) {
+    try {
+      return await gmailApiCall('GET', url);
+    } catch (errSec) {
+      console.warn('_gmailGetRawPqrs (secretaría):', errSec);
+    }
+  }
+  return _gmailApiBest('GET', url);
+}
+
+const GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES = 4 * 1024 * 1024;
+
+/** Envía MIME ya armado; correos pesados por el endpoint de carga (hasta 35 MB). */
+async function _gmailSendMimeBytesPqrs(mimeBytes) {
+  if (mimeBytes.length < GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES) {
+    return _gmailApiPqrsReenvio('POST', GMAIL_API_BASE + '/messages/send', { raw: _gmailBytesToB64url(mimeBytes) });
+  }
+  var token = '';
+  if (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) token = gmailGetToken();
+  else if (typeof _gmailOfiIsSecretaria === 'function' && _gmailOfiIsSecretaria()) token = gmailGetToken();
+  else if (typeof gmailOfiGetToken === 'function') token = gmailOfiGetToken();
+  if (!token) throw new Error('Sin sesión Gmail. Conecte la bandeja.');
+  const res = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
+    body: new Blob([mimeBytes], { type: 'message/rfc822' })
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(function() { return ''; });
+    throw new Error('Gmail API ' + res.status + ': ' + txt.slice(0, 200));
+  }
+  return res.json();
+}
+
 async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
   opts = opts || {};
   const emails = (Array.isArray(recipientEmails) ? recipientEmails : [recipientEmails])
@@ -4446,15 +4572,33 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
       }
     }
     if (useHistorial && typeof gmailBuildPqrsReenvioHtml === 'function') {
+      var headers = (fullMsg.payload && fullMsg.payload.headers) || [];
+      var origSubj = gmailGetHeader(headers, 'subject') || (exp && exp._gmail_email_data && exp._gmail_email_data.asunto) || '';
+      var cleanSubj = typeof pqrsSubjectSinPrefijoRadicado === 'function'
+        ? pqrsSubjectSinPrefijoRadicado(origSubj, expId)
+        : origSubj;
+      var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
+      var fwdSubj = 'Fwd: ' + expTag + cleanSubj;
+      var intro = opts.introHtml || '';
+      if (!skipAdjuntosMime && fullMsg.id) {
+        var okWrap = 0;
+        try {
+          const rawOrig = await _gmailGetRawPqrs(fullMsg.id);
+          for (var wi = 0; wi < uniq.length; wi++) {
+            const htmlWrap = gmailBuildPqrsReenvioHtml(fullMsg, exp, { introHtml: intro, soloEncabezados: true });
+            await _gmailSendMimeBytesPqrs(_buildMimeWrapOriginalBytes(uniq[wi], fwdSubj, htmlWrap, rawOrig));
+            okWrap++;
+          }
+          if (!opts.silent && okWrap) {
+            notif('Correo reenviado con historial y adjuntos a ' + (opts.label || uniq.join(', ')), 'ok');
+          }
+          if (okWrap) return true;
+        } catch (errWrap) {
+          console.warn('reenviarEmailRawARecipientes trazabilidad+original:', errWrap);
+          if (okWrap) uniq.splice(0, okWrap);
+        }
+      }
       try {
-        var headers = (fullMsg.payload && fullMsg.payload.headers) || [];
-        var origSubj = gmailGetHeader(headers, 'subject') || (exp && exp._gmail_email_data && exp._gmail_email_data.asunto) || '';
-        var cleanSubj = typeof pqrsSubjectSinPrefijoRadicado === 'function'
-          ? pqrsSubjectSinPrefijoRadicado(origSubj, expId)
-          : origSubj;
-        var expTag = expId ? 'PQRSD #' + expId + ' ' : '';
-        var fwdSubj = 'Fwd: ' + expTag + cleanSubj;
-        var intro = opts.introHtml || '';
         var attachments = skipAdjuntosMime ? [] : await _gmailCollectMsgAttachmentsForForward(fullMsg);
         var okHist = 0;
         for (var hi = 0; hi < uniq.length; hi++) {
@@ -4473,7 +4617,7 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
         if (opts.pqrsHistorial === true) throw errHist;
       }
     }
-    const rawData = await _gmailApiPqrsReenvio('GET', GMAIL_API_BASE + '/messages/' + msg.id + '?format=raw');
+    const rawData = await _gmailGetRawPqrs(msg.id);
     var okCount = 0;
     for (var ri = 0; ri < uniq.length; ri++) {
       const encoded = _reenviarEmailEncodeRawForRecipient(rawData, uniq[ri], expId);
