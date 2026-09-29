@@ -63,7 +63,7 @@ function normalizeCfgObj(c){
   Object.keys(seeds).forEach(function(nom){
     if(c.actRegistroMap[nom]==null&&(c.actividadesPred||[]).indexOf(nom)>=0)c.actRegistroMap[nom]=seeds[nom];
   });
-  // «Concepto de seguimiento»: Registro → concepto; no exige firma Director (se notifica al aprobar)
+  // «Concepto de seguimiento»: Registro → concepto; no exige firma Director (correo solo con «Aprobar y notificar»)
   (c.actividadesPred||[]).forEach(function(nom){
     if(!/concepto\s+de\s+seguimiento/i.test(String(nom||'')))return;
     if(c.actRegistroMap[nom]==null)c.actRegistroMap[nom]='concepto';

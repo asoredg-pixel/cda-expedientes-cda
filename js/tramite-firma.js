@@ -1325,6 +1325,7 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
   if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
 }
 
+/** Legacy: no se invoca al «Aprobar y cerrar». El correo de entrega va solo por taskReviewConfirmarYNotificar. */
 async function notificarCiudadanoTrasVerificarTramite(expId,taskId){
   const e=getExpById(expId);
   if(!e)return;

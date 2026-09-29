@@ -8897,7 +8897,7 @@ function taskReviewDecidirAprobar(expId,taskId){
   confirmarCierreTaskReview(expId,taskId);
 }
 function confirmarCierreTaskReview(expId,taskId){
-  confirmarCierreTask(expId,taskId,{keepOpen:false});
+  confirmarCierreTask(expId,taskId,{keepOpen:false,showProgress:true});
 }
 function taskReviewDecidirImprimir(expId,taskId){
   // Aprobar → Por firmar (pendiente impresión). Badge: ✓ Revisada · X Imprimir.
@@ -19880,7 +19880,7 @@ function confirmarCierreTask(expId,taskId,opts){
   }
   // «Aprobar y cerrar» cierra. Por firmar solo sale de «Aprobar y pasar para Imprimir».
   if(typeof confirmarCierreTaskTramiteAware==='function'&&confirmarCierreTaskTramiteAware(expId,taskId))return;
-  verificarTaskExp(expId,taskId,fechaCierre,opts);
+  verificarTaskExp(expId,taskId,fechaCierre,Object.assign({skipAutoMail:true},opts));
 }
 function estadoTaskLabel(t){
   // Proyección del responsable (o encargado viendo ese responsable): ✓ Revisada · X Firmar / etc.
@@ -21459,12 +21459,23 @@ function limpiarSoportesPorCorregirTask(t){
 function verificarTaskExp(expId,taskId,fecha,opts){
   opts=opts||{};
   const keepOpen=!!opts.keepOpen;
+  const e0=typeof getExpById==='function'?getExpById(expId):null;
+  const expSub=String((e0&&e0._exp)||expId||'');
+  const prog=function(p,msg){
+    if(opts.showProgress&&typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
+  };
+  const hideProg=function(){
+    if(opts.showProgress&&typeof sstCargaHide==='function')sstCargaHide();
+  };
+  if(opts.showProgress&&typeof sstCargaShow==='function')
+    sstCargaShow({title:'Aprobando y cerrando',message:'Validando actividad…',pct:8,sub:expSub});
   // Aprobar/cerrar documento: solo en sistema. No enviar correo al responsable.
-  if(esModoResponsable()){notif('Solo el departamento puede verificar','err');return;}
+  if(esModoResponsable()){hideProg();notif('Solo el departamento puede verificar','err');return;}
   let t=getTaskFromExp(getExpById(expId),taskId);
   if(!t){t=normalizeActLibre(getActLibreById(taskId));if(t)expId=t.codigo;}
-  if(!t||!canDeptVerificarCierre(t)){notif('No puede cerrar esta actividad','err');return;}
+  if(!t||!canDeptVerificarCierre(t)){hideProg();notif('No puede cerrar esta actividad','err');return;}
   const doVerify=function(){
+    prog(35,'Registrando aprobación…');
     const trashIds=[];
     if(mutateTask(expId,taskId,t=>{
     normalizeTask(t);
@@ -21525,18 +21536,18 @@ function verificarTaskExp(expId,taskId,fecha,opts){
           }
         })();
       }
-      // Marcar publicado + correo ciudadano (trámites sin firma)
+      // Publicar en consulta. Correo al interesado solo con «Aprobar y notificar» (taskReviewConfirmarYNotificar).
       const expRec=getExpById(expId);
       const tDone=getTaskFromExp(expRec,taskId)||getActLibreById(taskId);
       if(typeof clearAltaResponsableAlAprobarDocumento==='function')
         clearAltaResponsableAlAprobarDocumento(expId,{force:true});
       if(expRec&&tDone&&!(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(expRec))){
         mutateTask(expId,taskId,function(tk){tk.publicado=true;if(opts.notificada){tk.ultimaRevisionDepto=Object.assign({},tk.ultimaRevisionDepto||{},{notificada:true});}});
-        if(!opts.skipAutoMail&&!opts.notificada&&typeof notificarCiudadanoTrasVerificarTramite==='function'){
-          notificarCiudadanoTrasVerificarTramite(expId,taskId).catch(function(err){console.warn(err);});
-        }
       }
-      if(!opts.silent)notif(opts.notificada?'Actividad revisada y notificada':'Actividad verificada y cerrada','ok');
+      prog(88,'Finalizando…');
+      if(opts.showProgress&&typeof sstCargaDone==='function'){
+        sstCargaDone({title:'Actividad cerrada',message:opts.notificada?'Actividad revisada y notificada':'Aprobada y cerrada',autoCloseMs:2000});
+      }else if(!opts.silent)notif(opts.notificada?'Actividad revisada y notificada':'Actividad verificada y cerrada','ok');
       if(expRec&&esPqrsSecretaria(expRec)){
         refreshPqrsDetalleViews(expId);
         renderSecretariaPqrs();
@@ -21555,9 +21566,10 @@ function verificarTaskExp(expId,taskId,fecha,opts){
           if(e){setCfgPtr(e._depto||getDeptoOperativo());renderFormulario(e._tramite,e,'con-side-form-wrap');}
         }
       }
-    }
+    }else hideProg();
   };
   if(typeof driveRenombrarSoporteActivoExp==='function'){
+    prog(18,'Actualizando documentos…');
     driveRenombrarSoporteActivoExp(expId,taskId,'aprobado').then(function(ok){
       if(!ok){
         try{
