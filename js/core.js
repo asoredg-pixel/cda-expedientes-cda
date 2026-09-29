@@ -1870,8 +1870,38 @@ function _pqrsCollectDocsRadicacion(e){
       :(nomArch&&!/;/.test(nomArch)&&!_pqrsEsNombreAnexoRadicacion(nomArch)&&nomArch.indexOf('.')>0?nomArch:'Soporte de radicación');
     push(e._pqrs_solicitud_link,nomPdf,'','soporte_radicacion');
   }
-  return out;
+  return typeof _pqrsOrdenDocsRadicacionDisplay==='function'?_pqrsOrdenDocsRadicacionDisplay(out,e):out;
 }
+/** Ventanilla / manual: documento subido → anexos → PDF institucional. Correo: orden original. */
+function _pqrsDocEsPdfSistemaRadicacion(d,e){
+  if(!d)return false;
+  const nom=String(d.nombre||'').trim();
+  if(_pqrsEsNombreSoporteRadicacion(nom))return true;
+  if(d.tipo!=='soporte_radicacion')return false;
+  if(_pqrsEsNombreAnexoRadicacion(nom))return false;
+  const url=d.driveLink||d.url||'';
+  if(e&&e._pqrs_solicitud_link&&url){
+    const match=typeof pqrsDriveUrlsMatch==='function'
+      ?pqrsDriveUrlsMatch(url,e._pqrs_solicitud_link)
+      :(String(url)===String(e._pqrs_solicitud_link));
+    if(match)return true;
+  }
+  return d.tipo==='soporte_radicacion';
+}
+function _pqrsOrdenDocsRadicacionDisplay(docs,e){
+  if(!docs||!docs.length||!e)return docs||[];
+  if(typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e))return docs;
+  const sistema=[];
+  const subidos=[];
+  docs.forEach(function(d){
+    if(_pqrsDocEsPdfSistemaRadicacion(d,e))sistema.push(d);
+    else subidos.push(d);
+  });
+  if(!sistema.length||!subidos.length)return docs;
+  const principal=subidos.length?[subidos.shift()]:[];
+  return principal.concat(subidos).concat(sistema);
+}
+window._pqrsOrdenDocsRadicacionDisplay=_pqrsOrdenDocsRadicacionDisplay;
 function _pqrsBuildSoportesRadicacion(e){
   const docs=_pqrsCollectDocsRadicacion(e);
   if(!docs.length)return[];
@@ -5039,7 +5069,7 @@ function collectPqrsOrigenDocs(e){
     const full=d.label||(d.tipo==='soporte_radicacion'?'Soporte de radicación':'Anexo radicado');
     const short=full.length>36?full.slice(0,34)+'…':full;
     docs.push({
-      id:d.tipo==='soporte_radicacion'&&i===0?'pqrs_sol':('pqrs_att_'+i),
+      id:i===0?'pqrs_sol':('pqrs_att_'+i),
       url:url,preview:p.preview||p.url||url,
       label:short,fullLabel:full
     });
