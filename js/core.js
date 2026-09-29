@@ -11070,7 +11070,7 @@ function renderPqrsEntregaCamposHtml(e,opts){
       mkEntregaAcc(4,'Informativa',
         '<p style="font-size:11px;color:var(--tx3);margin:0">Registro informativo visible en consulta ciudadana. La PQRSD queda <strong>cerrada</strong> sin notificación.</p>')+
       '</div>';
-    h+='<div id="pqrs-entrega-tipo-detalles" style="display:none">';
+    h+='<div id="pqrs-entrega-tipo-detalles" class="pqrs-entrega-detalles-acc-slot" style="display:none">';
   }else{
     h+='<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Tipo de respuesta</label>'+
       '<div class="fx" style="gap:5px;flex-wrap:wrap;margin-top:4px" id="pqrs-resp-tipo-btns">'+
@@ -11308,6 +11308,23 @@ function pqrsEntregaSyncOpcionHidden(opcion){
   if(hidModo)hidModo.value=modo;
   return{opcion,tipo,modo};
 }
+/** Acordeón encargado/oficina: campos de entrega justo debajo de la opción elegida. */
+function pqrsEntregaRepositionDetallesAcc(){
+  if(typeof pqrsEntregaUiEsAcordeonesEnc!=='function'||!pqrsEntregaUiEsAcordeonesEnc())return;
+  const det=document.getElementById('pqrs-entrega-tipo-detalles');
+  const wrap=document.getElementById('pqrs-entrega-opciones-accs-wrap');
+  if(!det||!wrap)return;
+  const detVisible=window.getComputedStyle(det).display!=='none';
+  let anchor=wrap.querySelector('.task-decision-acc.is-open');
+  if(!anchor&&detVisible){
+    const opcion=String((document.getElementById('pqrs-entrega-opcion')||{}).value||'').trim();
+    const nMap={mensaje:'1',oficio_firma:'2',oficio_notif:'3',informativa:'4'};
+    const n=nMap[opcion];
+    if(n)anchor=wrap.querySelector('.task-decision-acc[data-acc="'+n+'"]');
+  }
+  (anchor||wrap).insertAdjacentElement('afterend',det);
+}
+window.pqrsEntregaRepositionDetallesAcc=pqrsEntregaRepositionDetallesAcc;
 function pqrsEntregaOnOpcionAcc(hdrBtn){
   if(typeof taskReviewToggleAprobarAcc==='function')taskReviewToggleAprobarAcc(hdrBtn);
   const acc=hdrBtn&&hdrBtn.closest?hdrBtn.closest('.task-decision-acc'):null;
@@ -11394,10 +11411,12 @@ function pqrsEntregaRefreshUi(){
     if(!opcion||!tipo){
       if(detalles)detalles.style.display='none';
       if(hint)hint.style.display='';
+      pqrsEntregaRepositionDetallesAcc();
       return;
     }
     if(hint)hint.style.display='none';
     if(detalles)detalles.style.display='';
+    pqrsEntregaRepositionDetallesAcc();
     oficioModo=tipo===PQRS_WF_TIPO.OFICIO?pqrsEntregaOficioModo():'';
     oficioFlujoFirma=opcion==='oficio_firma'||(tipo===PQRS_WF_TIPO.OFICIO&&oficioModo==='flujo_firma');
     oficioCerrarNotif=opcion==='oficio_notif'||(tipo===PQRS_WF_TIPO.OFICIO&&oficioModo==='cerrar_notif');
@@ -11567,6 +11586,7 @@ function pqrsEntregaRefreshUi(){
   if(typeof ofiDocPqrsPrefillEmailTo==='function'&&(isMensaje||notifCorreoOficio)&&!esInterna){
     ofiDocPqrsPrefillEmailTo(null,false);
   }
+  if(encAcc)pqrsEntregaRepositionDetallesAcc();
 }
 function collectPqrsEntregaDatos(expId,eOpt){
   const e=eOpt||getExpById(expId);
@@ -24746,9 +24766,8 @@ function taskEsReentregaTrasCorreccion(t){
   return huboAjuste&&huboReenvio;
 }
 function taskReentregaBadgeHtml(t){
-  if(!taskEsReentregaTrasCorreccion(t))return'';
-  const n=(t.historial||[]).filter(h=>h&&h.tipo==='reenvio_verificacion').length;
-  return '<span class="bdg" style="background:#fff7ed;color:#c2410c;border:1px solid #fdba74;font-size:10px;margin-left:4px" title="Nueva entrega tras devolución a corrección">↩ Reentrega'+(n>1?' v'+n:'')+'</span>';
+  // Por revisar: el numerito en «X Revisar» (taskCountEntregasParaRevisar) ya indica 2ª/3ª entrega.
+  return'';
 }
 function taskEsRevisada(t){return !!getTaskRevisionDepto(t);}
 function taskCuentaComoRevisadaEncargado(t,e){

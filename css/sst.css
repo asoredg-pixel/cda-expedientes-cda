@@ -1977,6 +1977,12 @@ body.task-review-doc-mode #task-modal-overlay{
 .task-decision-acc-tit{font-size:12px;font-weight:600;letter-spacing:.02em}
 .task-decision-acc-body{display:none;padding:0 12px 12px;background:var(--sf,#fff)}
 .task-decision-acc.is-open .task-decision-acc-body{display:block}
+.pqrs-entrega-detalles-acc-slot{
+  margin:4px 0 10px;padding:10px 12px 2px;
+  border:1px solid var(--bl);border-radius:var(--r);
+  background:var(--bll,#f8fbff);
+  box-shadow:inset 3px 0 0 var(--bl);
+}
 .task-modal.task-modal-firma-fisica{width:min(420px,94vw);max-height:85vh}
 .task-decision-icon-grid{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .task-decision-opt{
