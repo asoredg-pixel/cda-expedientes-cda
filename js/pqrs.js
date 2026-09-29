@@ -166,6 +166,8 @@ function toggleSecInterna(){
   if(solWrap)solWrap.style.display=interna?'none':'';
   const medioNotif=document.getElementById('sec-medio-notif-wrap');
   if(medioNotif)medioNotif.style.display=interna?'none':'';
+  const anonWrap=document.getElementById('sec-anonimo-wrap');
+  if(anonWrap)anonWrap.style.display=interna?'none':'flex';
   if(interna){
     const anon=document.getElementById('sec-anonimo');
     if(anon){anon.checked=false;}
@@ -183,6 +185,19 @@ function toggleSecInterna(){
   if(typeof toggleSecAnonimo==='function')toggleSecAnonimo();
   else if(typeof toggleSecPersona==='function')toggleSecPersona();
 }
+/** Ventanilla: el soporte PDF de radicación solo se genera si Secretaría lo marca (otros medios: siempre). */
+function secMedioEsVentanilla(){
+  const m=String((document.getElementById('sec-medio')||{}).value||'').trim();
+  return (typeof normMedioRecepcionPqrs==='function'?normMedioRecepcionPqrs(m):m)==='Ventanilla';
+}
+function syncSecGenSoporteUi(){
+  const wrap=document.getElementById('sec-gen-soporte-wrap');
+  const chk=document.getElementById('sec-gen-soporte');
+  const ventanilla=secMedioEsVentanilla();
+  if(wrap)wrap.style.display=ventanilla?'flex':'none';
+  if(chk&&!ventanilla)chk.checked=false;
+}
+window.syncSecGenSoporteUi=syncSecGenSoporteUi;
 function toggleSecAnonimo(){
   if(esSecPqrsInternaUi()){
     const anonBlock=document.getElementById('sec-anon-contact-block');
@@ -286,6 +301,7 @@ function limpiarFormSecretaria(){
   });
   const anon=document.getElementById('sec-anonimo');if(anon)anon.checked=false;
   const pri=document.getElementById('sec-prioritaria');if(pri)pri.checked=false;
+  const genSop=document.getElementById('sec-gen-soporte');if(genSop)genSop.checked=false;
   const interna=document.getElementById('sec-interna');if(interna)interna.checked=false;
   const rem=document.getElementById('sec-oficina-remitente');if(rem)rem.value='';
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos');
@@ -302,11 +318,12 @@ function secRadicacionBusy(busy){
     el.disabled=!!busy||!secGmailRadicacionConectada();
   });
 }
-function mostrarRadicacionPqrsProgreso(soloRadicar){
+function mostrarRadicacionPqrsProgreso(soloRadicar,sinSoporte){
+  const msgProg=sinSoporte?'Registrando la solicitud…':'Generando soporte PDF y registrando la solicitud…';
   if(typeof sstCargaShow==='function'){
     sstCargaShow({
       title:soloRadicar?'Radicando PQRSD':'Radicando y trasladando',
-      message:'Generando soporte PDF y registrando la solicitud…',
+      message:msgProg,
       sub:'Espere mientras se completa la carga',
       pct:null
     });
@@ -315,7 +332,7 @@ function mostrarRadicacionPqrsProgreso(soloRadicar){
   if(typeof confirmExito!=='function')return;
   confirmExito({
     title:soloRadicar?'Radicando PQRSD':'Radicando y trasladando',
-    message:'Generando soporte PDF y registrando la solicitud…',
+    message:msgProg,
     tone:'radicacion',
     loading:true,
     hideFooter:true
@@ -716,12 +733,13 @@ async function guardarPqrsSecretaria(modo){
   if(fechaTermino&&fechaTermino<fechaSol){notif('La fecha de término no puede ser anterior a la fecha de solicitud','err');return;}
   const dupPqrs=expNumeroDuplicado(expId);
   if(dupPqrs){alertRegistroDuplicado(expId,'pqrs',dupPqrs);return;}
-  mostrarRadicacionPqrsProgreso(soloRadicar);
+  const sinSoportePdf=medio==='Ventanilla'&&!((document.getElementById('sec-gen-soporte')||{}).checked);
+  mostrarRadicacionPqrsProgreso(soloRadicar,sinSoportePdf);
   secRadicacionBusy(true);
   try{
   const tramId=getTramPqrsId('guaviare');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:'Secretaría DEGUV',fecha:fecha}]):'[]';
-  const hist=[{tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV'),oficina:''}];
+  const hist=[{tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV')+(sinSoportePdf?' · Ventanilla sin soporte PDF de radicación':''),oficina:''}];
   if(!soloRadicar){
     if(oficina==='secretaria'){
       hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
@@ -869,9 +887,10 @@ async function guardarPqrsSecretaria(modo){
         pjCorreo:pjFields._pj_correo||'',pjTel:pjFields._pj_telefono||'',
         tipoRadicacion,nombreCarpeta:nombre||(anon?'Anonimo':asunto),anexosFiles:anexoFiles,
         expediente:data,
+        sinSoporte:sinSoportePdf,
         silentNotif:true
       });
-      if(!(manualRes&&(manualRes.soporte||manualRes.link))){
+      if(!sinSoportePdf&&!(manualRes&&(manualRes.soporte||manualRes.link))){
         notif('PQRSD radicada, pero no quedó el PDF de solicitud en Drive. Reintente adjuntarlo desde Editar.','warn');
       }
       if(anexoFiles.length){

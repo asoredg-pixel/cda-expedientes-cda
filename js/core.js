@@ -24367,6 +24367,7 @@ function defaultMedioNotifDesdeRecepcion(medioRecep){
 function onSecMedioRecepcionChange(){
   const hid=document.getElementById('sec-medio-notif');
   const medio=(document.getElementById('sec-medio')||{}).value||'';
+  if(typeof syncSecGenSoporteUi==='function')syncSecGenSoporteUi();
   if(!medio){
     if(hid){hid.value='';delete hid.dataset.userSet;}
     document.querySelectorAll('#sec-medio-notif-btns .medio-notif-btn').forEach(b=>b.classList.remove('on'));

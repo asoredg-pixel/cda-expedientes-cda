@@ -27,7 +27,7 @@
 <script src="js/roles.js?v=20260924s"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20260930m"></script>
+<script src="js/core.js?v=20260930n"></script>
 <script src="js/formulario.js?v=20260917a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260929a"></script>
@@ -38,9 +38,9 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20260930j"></script>
+<script src="js/gmail.js?v=20260930k"></script>
 <script src="js/sst-file-upload.js?v=20260925f"></script>
-<script src="js/pqrs.js?v=20260930i"></script>
+<script src="js/pqrs.js?v=20260930j"></script>
 <script src="js/consulta.js?v=20260930a"></script>
 <script src="js/entrega-responsable.js?v=20260930a"></script>
 <script src="js/tramite-firma.js?v=20260930a"></script>
@@ -834,7 +834,12 @@
         <div class="fld"><label>Tipo de solicitud<span class="req-star">*</span></label><select id="sec-tipo" required><option value="" selected>— Seleccionar —</option><option value="Petición">Petición</option><option value="Queja">Queja</option><option value="Reclamo">Reclamo</option><option value="Denuncia">Denuncia</option><option value="Sugerencia">Sugerencia</option><option value="Reunión">Reunión</option><option value="Audiencia">Audiencia</option></select></div>
         <div class="fld"><label>Medio de recepción<span class="req-star">*</span></label><select id="sec-medio" required onchange="onSecMedioRecepcionChange()"><option value="" selected>— Seleccionar —</option><option value="Ventanilla">Ventanilla</option><option value="Correo">Correo</option><option value="Teléfono">Teléfono</option><option value="Web">Web</option></select></div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-interna" onchange="toggleSecInterna()"> PQRSD interna <span style="font-weight:400;color:var(--tx3)">(solicitud entre dependencias de la entidad — no envía correo al ciudadano)</span></label>
+      <div class="fx" id="sec-opciones-row" style="gap:6px 18px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px" title="Solicitud entre dependencias de la entidad — no envía correo al ciudadano"><input type="checkbox" id="sec-interna" onchange="toggleSecInterna()"> PQRSD interna</label>
+        <label id="sec-anonimo-wrap" style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
+        <label id="sec-gen-soporte-wrap" style="display:none;align-items:center;gap:6px;font-size:12px" title="Ventanilla: genere el PDF solo si el solicitante necesita llevarse su soporte (p. ej. petición verbal)"><input type="checkbox" id="sec-gen-soporte"> 🖨️ Generar soporte de radicación PDF</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
+      </div>
       <div id="sec-interna-block" style="display:none;margin-bottom:10px;padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
         <div class="fld"><label>Oficina remitente<span class="req-star">*</span></label>
           <select id="sec-oficina-remitente" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">
@@ -883,7 +888,6 @@
           <div class="fld"><label>Teléfono</label><input type="tel" id="sec-pj-ofi-telefono"></div>
         </div>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" id="sec-anonimo" onchange="toggleSecAnonimo()"> Solicitud anónima</label>
       <div id="sec-anon-contact-block" style="display:none;margin-bottom:10px;padding:10px;background:var(--sf2);border-radius:var(--r);border:1px solid var(--bd)">
         <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Datos de contacto opcionales — solo para notificación (no identifican al solicitante en el expediente)</div>
         <div class="fg">
@@ -892,7 +896,6 @@
         </div>
       </div>
       </div><!-- /sec-solicitante-wrap -->
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="sec-prioritaria"> ⚡ Marcar como prioritaria</label>
       <div class="fld" style="margin-bottom:10px"><label>Asunto / tema<span class="req-star">*</span></label><input type="text" id="sec-asunto" placeholder="Resumen de la solicitud" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>
       <div class="fld" style="margin-bottom:10px"><label>Detalle (opcional)</label><textarea id="sec-detalle" placeholder="Descripción adicional…" style="width:100%;min-height:72px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:'DM Sans',sans-serif"></textarea></div>
       <div class="fg" style="margin-bottom:10px">

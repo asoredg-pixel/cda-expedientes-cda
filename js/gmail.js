@@ -3764,30 +3764,32 @@ async function subirSoporteRadicacionManual(opts) {
       uploadTarget: 'solicitud',
       expediente: opts.expediente || null
     };
-    if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
-    const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
-    if (!pdfBlob) {
-      throw new Error('No se pudo generar el PDF de solicitud (jsPDF no disponible).');
+    if (!opts.sinSoporte) {
+      if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
+      const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
+      if (!pdfBlob) {
+        throw new Error('No se pudo generar el PDF de solicitud (jsPDF no disponible).');
+      }
+      const solName = typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('SOL', expId, { ext: 'pdf' })
+        : ('Solicitud_PQRSD-' + expId + '.pdf');
+      soporte = await driveUploadInstitutional(
+        pdfBlob,
+        solName,
+        'application/pdf',
+        tipoRad,
+        expId,
+        nombreCarpeta,
+        fechaRef,
+        uploadOpts
+      );
+      if (!soporte || !soporte.driveLink) {
+        throw new Error('No se pudo subir el PDF de solicitud a Drive.');
+      }
+      soporte.nombre = soporte.nombre || solName;
+      soporte.tipo = 'soporte_radicacion';
+      uploaded.push(soporte);
     }
-    const solName = typeof pqrsBuildDriveFilename === 'function'
-      ? pqrsBuildDriveFilename('SOL', expId, { ext: 'pdf' })
-      : ('Solicitud_PQRSD-' + expId + '.pdf');
-    soporte = await driveUploadInstitutional(
-      pdfBlob,
-      solName,
-      'application/pdf',
-      tipoRad,
-      expId,
-      nombreCarpeta,
-      fechaRef,
-      uploadOpts
-    );
-    if (!soporte || !soporte.driveLink) {
-      throw new Error('No se pudo subir el PDF de solicitud a Drive.');
-    }
-    soporte.nombre = soporte.nombre || solName;
-    soporte.tipo = 'soporte_radicacion';
-    uploaded.push(soporte);
 
     for (let i = 0; i < anexosFiles.length; i++) {
       const file = anexosFiles[i];
