@@ -10211,9 +10211,10 @@ function renderTaskReviewCompareEmbedHtml(doc){
   if(!doc)return'<div style="padding:8px;font-size:12px;color:var(--tx3)">Sin documento</div>';
   const sopLike={preview:doc.preview,url:doc.url,driveLink:doc.url,previewLink:doc.preview,mime:doc.mime,local:doc.local,version:''};
   if(soporteTieneVista(sopLike)||doc.preview||doc.url){
-    return soporteEsImagen(sopLike)
+    const drvImg=soporteEsImagen(sopLike)?soporteImagenDrivePreviewUrl(sopLike):'';
+    return soporteEsImagen(sopLike)&&!drvImg
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;height:100%;object-fit:contain;display:block">'
-      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
+      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(drvImg||doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"></iframe>';
   }
   return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
 }
@@ -14985,9 +14986,25 @@ function soporteEsExcel(s){
   const t=s.tipo||'';
   return/(spreadsheet|excel|ms-excel)/i.test(t)||/\.(xlsx?|csv)$/i.test(s.label||'');
 }
+/** Imágenes en Drive: visor /preview en iframe (uc?export=view ya no carga dentro de <img>). */
+function soporteImagenDrivePreviewUrl(s){
+  if(!s||typeof parseDrivePreviewUrl!=='function')return'';
+  const cands=[s.url,s.preview,s.driveLink,s.previewLink];
+  for(let i=0;i<cands.length;i++){
+    const src=String(cands[i]||'').trim();
+    if(!src||/^(blob:|data:)/i.test(src))continue;
+    const p=parseDrivePreviewUrl(src);
+    if(p&&p.id&&/drive\.google\.com/i.test(src))return 'https://drive.google.com/file/d/'+p.id+'/preview';
+  }
+  return'';
+}
 function renderSoporteEmbedHtml(sel){
   const src=sel.preview||sel.url;
   if(soporteEsImagen(sel)){
+    const drvPrev=soporteImagenDrivePreviewUrl(sel);
+    if(drvPrev){
+      return '<iframe id="soporte-iframe" sandbox="'+driveIframeSandbox()+'" src="'+escAttr(drvPrev)+'" title="'+escAttr(sel.label||'Imagen')+'" style="width:100%;height:100%;border:0"></iframe>';
+    }
     const imgSrc=/^https:\/\/drive\.google\.com\/uc\?/i.test(src)?src:(function(){
       const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(sel.url||src):{preview:src};
       return p.preview||src;
@@ -18099,9 +18116,10 @@ function renderCompareDocSideHtml(doc,sideLbl,t){
   const expanded=typeof taskModalIsViewportExpanded==='function'&&taskModalIsViewportExpanded();
   let vista='';
   if(soporteTieneVista(sopLike)){
-    vista=soporteEsImagen(sopLike)
+    const drvImg=soporteEsImagen(sopLike)?soporteImagenDrivePreviewUrl(sopLike):'';
+    vista=soporteEsImagen(sopLike)&&!drvImg
       ?'<img src="'+escAttr(doc.preview||doc.url)+'" alt="'+escAttr(doc.label)+'" style="width:100%;'+(expanded?'max-height:88vh':'max-height:420px')+';object-fit:contain;display:block">'
-      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
+      :'<iframe sandbox="'+driveIframeSandbox()+'" src="'+escAttr(drvImg||doc.preview||doc.url)+'" title="'+escAttr(doc.label)+'"'+(expanded?' class="compare-iframe-expand"':'')+'></iframe>';
   }else{
     vista='<div style="padding:12px;font-size:12px;color:var(--tx3)">Sin vista previa — <a href="'+escAttr(doc.url||'#')+'" target="_blank" rel="noopener">abrir enlace</a></div>';
   }
