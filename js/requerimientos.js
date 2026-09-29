@@ -99,7 +99,6 @@ function htmlTerminoCumplBlock(e,t,opts){
     '<input type="number" id="term-cumpl-dias" min="1" max="365" step="1" value="'+escAttr(d.dias)+'" placeholder="Ej. 10" oninput="syncTerminoCumplUi()" style="'+inp+'">'+
     '<span style="font-size:12px">días hábiles</span></div>'+
     '<div id="term-cumpl-prev" style="font-size:11px;color:var(--tx2);margin-top:6px"></div>'+
-    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Cuenta desde el día hábil siguiente a '+escAttr(opts.inicioLbl||'la notificación')+' (calendario Colombia, sin fines de semana ni festivos). Al vencer se sigue en Consolidado › Requerimientos y, tras '+REQ_PALETA_GRACIA_HABILES+' días hábiles, en Actividades › Requerimientos.</div>'+
     '</div></div>';
 }
 function _terminoCumplInicioUi(){
