@@ -3574,6 +3574,13 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-ofi-est.asig{background:var(--bll);color:var(--bl)}
 .pqrs-ofi-est.aten{background:var(--pul);color:var(--pu)}
 .pqrs-ofi-est.cerr{background:var(--gnl);color:var(--gn)}
+tr.pqrs-nca-pinned{background:color-mix(in srgb,var(--or) 6%,var(--sf))}
+tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--or)}
+.pqrs-nca-pin-lbl{font-size:12px;opacity:.85;vertical-align:middle}
+.sst-act-toolbar .pqrs-nca-pin-btn.on{
+  border-color:color-mix(in srgb,var(--or) 45%,var(--bd));
+  background:color-mix(in srgb,var(--or) 14%,var(--sf));
+}
 .pqrs-ofi-layout{display:grid;grid-template-columns:1fr;gap:1rem}
 @media(min-width:900px){.pqrs-ofi-layout.split{grid-template-columns:minmax(280px,1fr) minmax(320px,1.1fr)}}
 .pqrs-ofi-detalle{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:14px;min-height:200px}

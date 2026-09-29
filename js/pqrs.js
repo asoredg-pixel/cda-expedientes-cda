@@ -1582,8 +1582,72 @@ function getPqrsOficinaList(oficinaId,filtro){
     }
   }
   list=filterExpsPeriodo(list,'pqrs-ofi');
-  return list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
+  list=list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
+  if(filtro==='pend'&&typeof esNcaDeguv==='function'&&esNcaDeguv()&&typeof ordenarPqrsNcaPinsPrimero==='function')
+    list=ordenarPqrsNcaPinsPrimero(list);
+  return list;
 }
+/** Fijar PQRSD arriba en «Por ejecutar» (solo encargado NCA, visual local). */
+const NCA_PQRS_PIN_LS='sst_nca_pqrs_pin_por_ejecutar';
+function ncaPqrsPinUsuarioKey(){
+  const u=String(typeof responsableActivo!=='undefined'?responsableActivo:'').trim();
+  const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto('guaviare')||'').trim():'';
+  return u||enc||'nca';
+}
+function ncaPqrsPinsLeer(){
+  try{
+    const all=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_LS)||'{}');
+    const arr=all[ncaPqrsPinUsuarioKey()];
+    return Array.isArray(arr)?arr.map(function(x){return String(x||'').trim();}).filter(Boolean):[];
+  }catch(err){return[];}
+}
+function ncaPqrsPinsGuardar(arr){
+  try{
+    const all=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_LS)||'{}');
+    all[ncaPqrsPinUsuarioKey()]=(arr||[]).map(function(x){return String(x||'').trim();}).filter(Boolean);
+    localStorage.setItem(NCA_PQRS_PIN_LS,JSON.stringify(all));
+  }catch(err){}
+}
+function ncaPqrsEstaFijada(expId){
+  const id=String(expId||'').trim();
+  if(!id)return false;
+  return ncaPqrsPinsLeer().indexOf(id)>=0;
+}
+function ordenarPqrsNcaPinsPrimero(list){
+  const pins=ncaPqrsPinsLeer();
+  if(!pins.length)return list||[];
+  const pinSet=new Set(pins);
+  const pinned=[];
+  pins.forEach(function(id){
+    const hit=(list||[]).find(function(e){return String(e._exp||'').trim()===id;});
+    if(hit)pinned.push(hit);
+  });
+  const rest=(list||[]).filter(function(e){return!pinSet.has(String(e._exp||'').trim());});
+  return pinned.concat(rest);
+}
+function toggleNcaPqrsPinPorEjecutar(expId,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  if(typeof esNcaDeguv==='function'&&!esNcaDeguv())return;
+  const id=String(expId||'').trim();
+  if(!id)return;
+  let pins=ncaPqrsPinsLeer();
+  const idx=pins.indexOf(id);
+  if(idx>=0)pins.splice(idx,1);
+  else pins.unshift(id);
+  ncaPqrsPinsGuardar(pins);
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof notif==='function')notif(idx>=0?'📌 PQRSD desfijada':'📌 PQRSD fijada — queda arriba en Por ejecutar','ok');
+}
+function ncaPqrsPinBtnHtml(e){
+  if(typeof esNcaDeguv!=='function'||!esNcaDeguv())return'';
+  const id=jsStr(e&&e._exp);
+  if(!id)return'';
+  const on=ncaPqrsEstaFijada(e._exp);
+  return '<button type="button" class="btn bsm bic act-ico pqrs-nca-pin-btn'+(on?' on':'')+'" title="'+(on?'Desfijar':'Fijar arriba en Por ejecutar (solo para usted)')+'" onclick="event.stopPropagation();toggleNcaPqrsPinPorEjecutar(\''+id+'\',event)">📌</button> ';
+}
+window.ncaPqrsEstaFijada=ncaPqrsEstaFijada;
+window.toggleNcaPqrsPinPorEjecutar=toggleNcaPqrsPinPorEjecutar;
+window.ordenarPqrsNcaPinsPrimero=ordenarPqrsNcaPinsPrimero;
 /** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar»: 🧐 revisar · 📤 cargar firmado · ✍️ firma física. */
 function pqrsDirectorPorFirmarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
@@ -1623,12 +1687,15 @@ window.pqrsDirectorFirmadosAccionesHtml=pqrsDirectorFirmadosAccionesHtml;
  * Acciones «Por ejecutar» / «Por firmar» (oficinas + NCA):
  * chat · 📝 · 📤 · ✍️ · 📅 · 🔍  (✏️ solo NCA)
  * ✍️ en Por ejecutar → pasa a Por firmar; en Por firmar → marcar/desmarcar firma del Director.
+ * Encargado NCA en «Por ejecutar»: 📌 fijar (sin ✏️ editar expediente).
  */
 function pqrsOficinaPorEjecutarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
   if(!id)return'';
+  const filtroPe=String(window._pqrsOfiFiltro||'pend');
+  const esEncNca=typeof esNcaDeguv==='function'&&esNcaDeguv();
   const ofi=String(e._pqrs_oficina||'').trim();
-  const esNca=typeof esNcaDeguv==='function'&&esNcaDeguv()
+  const esNca=esEncNca
     ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca());
   let t=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null;
   if(!t&&typeof getPqrsTaskActiva==='function')t=getPqrsTaskActiva(e);
@@ -1642,8 +1709,9 @@ function pqrsOficinaPorEjecutarAccionesHtml(e){
   }
   const tid=t?jsStr(t.id):'';
   let h='<span class="sst-act-toolbar">';
-  // ✏️ solo NCA (oficinas: sin editar expediente)
-  if(esNca&&tid)
+  if(esEncNca&&filtroPe==='pend')
+    h+=ncaPqrsPinBtnHtml(e);
+  else if(esNca&&tid)
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+escAttr(e._exp)+'" data-sst-task="'+escAttr(t.id)+'">✏️</button> ';
   else if(esNca)
     h+='<button type="button" class="btn bsm bic act-ico" title="Ver / editar" onclick="event.stopPropagation();openPqrsSidePanel(\''+id+'\')">✏️</button> ';
@@ -2251,10 +2319,12 @@ function renderPqrsOficinaInbox(){
         :(e._tramite_firma_task
           ?('openTramiteDirectorFirmarModal(\''+escAttr(e._exp)+'\',\''+escAttr(e._taskId)+'\')')
           :('openPqrsSidePanel(\''+escAttr(e._exp)+'\')')));
-    const rowCls=(esFilaFirma?'pqrs-ofi-row-static':'');
+    const fijada=(filtro==='pend'&&typeof esNcaDeguv==='function'&&esNcaDeguv()&&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(e._exp));
+    const pinLbl=fijada?' <span class="pqrs-nca-pin-lbl" title="Fijada en Por ejecutar">📌</span>':'';
+    const rowCls=(esFilaFirma?'pqrs-ofi-row-static':'')+(fijada?' pqrs-nca-pinned':'');
     const rowStyle=esFilaFirma?'cursor:default':'cursor:pointer';
     const rowClick=clickFn?(' onclick="'+clickFn+'"'):'';
-    return '<tr class="'+rowCls.trim()+'" style="'+rowStyle+'"'+rowClick+'><td><strong>'+escAttr(e._exp)+'</strong> '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+asunto+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(hideExpEstadoExtra?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(hideExpEstadoExtra?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
+    return '<tr class="'+rowCls.trim()+'" style="'+rowStyle+'"'+rowClick+'><td><strong>'+escAttr(e._exp)+'</strong>'+pinLbl+' '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+asunto+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(hideExpEstadoExtra?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(hideExpEstadoExtra?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
   renderPqrsOficinaDetallePanel();
 }
