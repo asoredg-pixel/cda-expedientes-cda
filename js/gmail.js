@@ -3821,8 +3821,8 @@ async function subirSoporteRadicacionManual(opts) {
 
 // Auto-upload del soporte al radicar desde correo si aún no se ha subido.
 // Genera un PDF del correo (la solicitud) y lo sube al Drive institucional.
-// Los anexos NO se suben: ya llegan al correo de la oficina responsable.
-// Llamada desde pqrs.js antes de guardar el expediente.
+// Los anexos del correo NO se suben a Drive: se reenvían adjuntos al correo de la oficina.
+// Llamada desde pqrs.js tras el reenvío a oficina.
 async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
   if (!window._gmailPendingMsgId) return;           // no viene de Gmail
   if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) return; // ya subido
@@ -3871,20 +3871,10 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
     if (soporte) {
       window._gmailPendingAttachments = [soporte];
     }
-    if (_gmailCurrentMsg && _gmailCurrentMsg.payload && typeof subirAdjuntosEmailADrive === 'function') {
-      try {
-        const origAtts = await subirAdjuntosEmailADrive(_gmailCurrentMsg, expIdHint || '', nombreHint || '');
-        if (origAtts && origAtts.length) {
-          window._gmailPendingAttachments = (window._gmailPendingAttachments || []).concat(origAtts);
-        }
-      } catch (errAnx) {
-        console.warn('subir anexos originales radicación:', errAnx);
-      }
-    }
     if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) {
       if (typeof sstCargaHide === 'function' && window._confirmRadicacionLoading) sstCargaHide();
     } else {
-      notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');
+      notif('⚠️ No se pudo generar el soporte PDF en Drive. La oficina recibe los anexos en el correo reenviado.', 'warn');
     }
   } catch (e) {
     if (typeof sstCargaHide === 'function' && window._confirmRadicacionLoading) sstCargaHide();
@@ -3900,7 +3890,9 @@ async function subirAdjuntosEmailADrive(msg, expIdHint, nombreHint) {
   for (const att of parts.attachments) {
     if (!att.attachmentId) continue;
     try {
-      const data = await gmailGetAttachment(msg.id, att.attachmentId);
+      const data = typeof _gmailGetAttachmentAny === 'function'
+        ? await _gmailGetAttachmentAny(msg.id, att.attachmentId)
+        : await gmailGetAttachment(msg.id, att.attachmentId);
       let file;
       if (_driveEsGuaviare()) {
         // Use institutional Drive with correct folder type

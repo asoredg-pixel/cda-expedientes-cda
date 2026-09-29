@@ -732,7 +732,6 @@ async function guardarPqrsSecretaria(modo){
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=typeof secAnexoCollectFiles==='function'?secAnexoCollectFiles():(Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[]);
   let reenvioOficinaOk=false;
-  let reenvioAvisoOficinaOk=false;
   let reenvioDsOk=false;
   // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────
   const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
@@ -842,11 +841,21 @@ async function guardarPqrsSecretaria(modo){
       try{reenvioDsOk=await reenviarEmailAOficina(_msgParaReenvio,'ds_deguv',expId,{silent:true});}catch(err){console.warn('reenvio ds:',err);}
       if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
     }else if(!soloRadicar){
-      const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
       reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
     }
+    if(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk){
+      const tokRe2=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+      if(tokRe2){
+        reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
+        if(!reenvioOficinaOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+          try{
+            reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true,exp:data});
+          }catch(errRe2){console.warn('reenvio oficina retry:',errRe2);}
+        }
+      }
+    }
   }
-  // ── PASO 3: Subir PDF/anexos a Drive (solo si Firestore ya se guardó) ────
+  // ── PASO 3: Subir solo PDF soporte a Drive (anexos van en el correo reenviado) ────
   let manualDriveAtts=null;
   let manualDriveFolderLink='';
   let driveFolderMeta={};
@@ -934,40 +943,14 @@ async function guardarPqrsSecretaria(modo){
         :persistExpedienteGranular(data,false));
     }catch(errDrive){console.warn('persist Drive metadata:',errDrive);}
   }
-  // Reintento de reenvío con adjuntos (Drive ya cargado) si el primer intento falló
-  if(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk){
-    const tokRe=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
-    if(tokRe){
-      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
-      if(!reenvioOficinaOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
-        try{
-          reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true,exp:data});
-        }catch(errRe2){console.warn('reenvio oficina retry:',errRe2);}
-      }
-    }
-    if(!reenvioOficinaOk&&tokRe&&typeof _pqrsEnviarNotifAsignacion==='function'){
-      let _ofiEmail=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(oficina)||'').trim():'';
-      if(!_ofiEmail){
-        const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
-        _ofiEmail=(_ofiData.email||'').trim();
-      }
-      if(_ofiEmail){
-        try{
-          const avisoOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId,_msgParaReenvio||null);
-          if(avisoOk)reenvioAvisoOficinaOk=true;
-        }catch(_fe){console.warn('reenvio oficina fallback:',_fe);}
-      }
-    }
-  }
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
   window._gmailPendingEmailData=null;
   renderBandejaDepto();
   let correoTxt='';
   if(!soloRadicar&&gmailMsgId&&oficina!=='secretaria'){
-    if(reenvioOficinaOk)correoTxt=' Correo de la solicitud reenviado a la oficina.';
-    else if(reenvioAvisoOficinaOk)correoTxt=' No se pudo reenviar el correo original con anexos. Se envió un aviso a la oficina; reenvíe el correo desde Correos.';
-    else correoTxt=' No se reenvió el correo de la solicitud a '+labelOficina(oficina)+'. Reenvíe desde Correos.';
+    if(reenvioOficinaOk)correoTxt=' Correo de la solicitud reenviado a la oficina (historial y anexos adjuntos).';
+    else correoTxt=' No se reenvió el correo con anexos a '+labelOficina(oficina)+'. Use «Reenviar solicitud y anexos a oficina» o Correos.';
   }else if(soloRadicar&&reenvioDsOk)correoTxt=' Correo reenviado a DS DEGUV.';
   const msgPrincipal='PQRSD '+expId+(soloRadicar?' radicada — pendiente traslado a oficina':(oficina==='secretaria'?' radicado en Secretaría DEGUV':' radicado y trasladado a '+labelOficina(oficina)))+correoTxt+textoResultadoNotifRadicacion(notifRes);
   const correoPendiente=!!(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk);
@@ -1152,16 +1135,21 @@ function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
   const oficina=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):e._pqrs_oficina||'';
   // Saludo personalizado por destinatario (evita cruzar nombres entre coejecutores)
   const responsable=String(destinatarioNombre||e._pqrs_responsable_oficina||'responsable').trim()||'responsable';
-  const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
   const solLink=e._pqrs_solicitud_link||'';
   const folderLink=e._pqrs_drive_folder_link||'';
-  let linksHtml='';
-  if(solLink)linksHtml+='<li><a href="'+escAttr(solLink)+'">Solicitud / Soporte PDF</a></li>';
-  atts.forEach(function(a){if(a&&a.driveLink)linksHtml+='<li><a href="'+escAttr(a.driveLink)+'">'+escAttr(a.nombre||a.name||'Adjunto')+'</a></li>';});
-  if(folderLink&&!linksHtml)linksHtml='<li><a href="'+escAttr(folderLink)+'">Carpeta Drive de la PQRSD</a></li>';
-  const adjuntosHtml=linksHtml
-    ?('<p><strong>Documentos adjuntos en Drive:</strong></p><ul>'+linksHtml+'</ul>')
-    :(folderLink?'<p><a href="'+escAttr(folderLink)+'">Abrir carpeta Drive de la PQRSD</a></p>':'<p><em>Sin adjuntos registrados. Revise la carpeta Drive si fue asignado recientemente.</em></p>');
+  let adjuntosHtml='';
+  if(typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e)){
+    adjuntosHtml='<p><em>Los soportes de la solicitud van <strong>adjuntos a este correo</strong> (reenvío desde Secretaría), no por enlaces Drive.</em></p>';
+  }else{
+    const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
+    let linksHtml='';
+    if(solLink)linksHtml+='<li><a href="'+escAttr(solLink)+'">Solicitud / Soporte PDF</a></li>';
+    atts.forEach(function(a){if(a&&a.driveLink)linksHtml+='<li><a href="'+escAttr(a.driveLink)+'">'+escAttr(a.nombre||a.name||'Adjunto')+'</a></li>';});
+    if(folderLink&&!linksHtml)linksHtml='<li><a href="'+escAttr(folderLink)+'">Carpeta Drive de la PQRSD</a></li>';
+    adjuntosHtml=linksHtml
+      ?('<p><strong>Documentos en Drive:</strong></p><ul>'+linksHtml+'</ul>')
+      :(folderLink?'<p><a href="'+escAttr(folderLink)+'">Abrir carpeta Drive de la PQRSD</a></p>':'<p><em>Sin documentos en Drive para esta asignación.</em></p>');
+  }
   return '<p>Estimado/a <strong>'+escAttr(responsable)+'</strong>,</p>'+
     '<p>Se le ha asignado o notificado la siguiente PQRSD para su atención:</p>'+
     '<table style="border-collapse:collapse;font-size:13px;width:100%;max-width:520px">'+
@@ -1249,17 +1237,6 @@ async function pqrsReenviarCorreoOficinaManual(expId){
     if(!ok&&typeof reenviarEmailAOficina==='function'){
       const msg=await _pqrsFetchGmailMsgForReenvio(e,null);
       if(msg)ok=await reenviarEmailAOficina(msg,ofi,expId,{silent:false,exp:e});
-    }
-    if(!ok&&typeof _pqrsEnviarNotifAsignacion==='function'){
-      let em=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(ofi)||'').trim():'';
-      if(!em){
-        const od=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[ofi])||{};
-        em=(od.email||'').trim();
-      }
-      if(em){
-        const r=await _pqrsEnviarNotifAsignacion(e,[em],expId,null);
-        ok=!!(r&&r.length);
-      }
     }
   }finally{
     if(typeof sstCargaHide==='function')sstCargaHide();
