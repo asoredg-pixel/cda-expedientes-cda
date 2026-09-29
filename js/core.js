@@ -2286,6 +2286,12 @@ function htmlPqrsSidePanelContent(e){
       acciones+
       '</div>';
   }
+  if(esSecretaria()&&typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e)){
+    const ofiRe=String(e._pqrs_oficina||'').trim();
+    if(ofiRe&&ofiRe!=='secretaria'){
+      extra+='<div style="margin-bottom:8px"><button type="button" class="btn bsm bp" onclick="pqrsReenviarCorreoOficinaManual(\''+jsStr(e._exp)+'\')">📧 Reenviar solicitud y anexos a oficina</button></div>';
+    }
+  }
   return renderPqrsPlazoBarHtml(e)+extra+htmlPqrsOficinaDetalleCore(e,opts);
 }
 function puedeMarcarPqrsRespondida(e){

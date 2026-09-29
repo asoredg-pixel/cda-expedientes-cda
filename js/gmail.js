@@ -3114,9 +3114,21 @@ async function driveUploadInstitutionalB64(filename, mimeType, base64urlData, ti
 }
 
 async function _gmailGetAttachmentAny(messageId, attachmentId) {
+  // Mensajes radicados en Secretaría (cdaguaviare1): priorizar token de bandeja secretaría.
+  if (typeof gmailIsTokenValid === 'function' && gmailIsTokenValid()) {
+    try {
+      return await gmailGetAttachment(messageId, attachmentId);
+    } catch (errSec) {
+      console.warn('_gmailGetAttachmentAny (secretaría):', errSec);
+    }
+  }
   if (typeof _gmailOfiTokenValid === 'function' && _gmailOfiTokenValid()) {
-    const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + messageId + '/attachments/' + attachmentId);
-    return data.data;
+    try {
+      const data = await _gmailOfiApi('GET', GMAIL_API_BASE + '/messages/' + messageId + '/attachments/' + attachmentId);
+      return data.data;
+    } catch (errOfi) {
+      console.warn('_gmailGetAttachmentAny (oficina):', errOfi);
+    }
   }
   return gmailGetAttachment(messageId, attachmentId);
 }
@@ -3858,6 +3870,18 @@ async function gmailAutoUploadPendingAttachments(expIdHint, nombreHint) {
 
     if (soporte) {
       window._gmailPendingAttachments = [soporte];
+    }
+    if (_gmailCurrentMsg && _gmailCurrentMsg.payload && typeof subirAdjuntosEmailADrive === 'function') {
+      try {
+        const origAtts = await subirAdjuntosEmailADrive(_gmailCurrentMsg, expIdHint || '', nombreHint || '');
+        if (origAtts && origAtts.length) {
+          window._gmailPendingAttachments = (window._gmailPendingAttachments || []).concat(origAtts);
+        }
+      } catch (errAnx) {
+        console.warn('subir anexos originales radicación:', errAnx);
+      }
+    }
+    if (window._gmailPendingAttachments && window._gmailPendingAttachments.length) {
       if (typeof sstCargaHide === 'function' && window._confirmRadicacionLoading) sstCargaHide();
     } else {
       notif('⚠️ No se pudo generar el soporte PDF. El correo se reenvió a la oficina con sus anexos.', 'warn');

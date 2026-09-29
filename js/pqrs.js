@@ -843,21 +843,7 @@ async function guardarPqrsSecretaria(modo){
       if(!reenvioDsOk)notif('⚠️ PQRSD radicada, pero no se pudo reenviar el correo a DS DEGUV. Reenvíe manualmente desde Correos.','warn');
     }else if(!soloRadicar){
       const tmpRad={_gmail_message_id:gmailMsgId,f_f2:medio};
-      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(tmpRad,oficina,expId,_msgParaReenvio||null);
-      // Si el original no salió, avisar a la oficina. No cuenta como reenvío del correo de la solicitud.
-      if(!reenvioOficinaOk&&_tokOk&&typeof _pqrsEnviarNotifAsignacion==='function'){
-        let _ofiEmail=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(oficina)||'').trim():'';
-        if(!_ofiEmail){
-          const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
-          _ofiEmail=(_ofiData.email||'').trim();
-        }
-        if(_ofiEmail){
-          try{
-            const avisoOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId);
-            if(avisoOk)reenvioAvisoOficinaOk=true;
-          }catch(_fe){console.warn('reenvio oficina fallback:',_fe);}
-        }
-      }
+      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
     }
   }
   // ── PASO 3: Subir PDF/anexos a Drive (solo si Firestore ya se guardó) ────
@@ -947,6 +933,31 @@ async function guardarPqrsSecretaria(modo){
         ?persistExpedienteGranularAsync(data,false)
         :persistExpedienteGranular(data,false));
     }catch(errDrive){console.warn('persist Drive metadata:',errDrive);}
+  }
+  // Reintento de reenvío con adjuntos (Drive ya cargado) si el primer intento falló
+  if(gmailMsgId&&!soloRadicar&&oficina!=='secretaria'&&!reenvioOficinaOk){
+    const tokRe=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+    if(tokRe){
+      reenvioOficinaOk=await reenviarCorreoRadicacionPqrsAOficina(data,oficina,expId,_msgParaReenvio||null);
+      if(!reenvioOficinaOk&&_msgParaReenvio&&typeof reenviarEmailAOficina==='function'){
+        try{
+          reenvioOficinaOk=await reenviarEmailAOficina(_msgParaReenvio,oficina,expId,{silent:true,exp:data});
+        }catch(errRe2){console.warn('reenvio oficina retry:',errRe2);}
+      }
+    }
+    if(!reenvioOficinaOk&&tokRe&&typeof _pqrsEnviarNotifAsignacion==='function'){
+      let _ofiEmail=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(oficina)||'').trim():'';
+      if(!_ofiEmail){
+        const _ofiData=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficina])||{};
+        _ofiEmail=(_ofiData.email||'').trim();
+      }
+      if(_ofiEmail){
+        try{
+          const avisoOk=await _pqrsEnviarNotifAsignacion(data,[_ofiEmail],expId,_msgParaReenvio||null);
+          if(avisoOk)reenvioAvisoOficinaOk=true;
+        }catch(_fe){console.warn('reenvio oficina fallback:',_fe);}
+      }
+    }
   }
   window._gmailPendingMsgId=null;
   window._gmailPendingAttachments=null;
@@ -1165,7 +1176,7 @@ function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
     '<hr><p style="font-size:11px;color:#888">Notificación automática del Sistema de Seguimiento de Trámites — CDA Delegación Guaviare. No responda a este correo.</p>';
 }
 /** destinatarios: array de emails O de {email,nombre}. Cada uno recibe saludo con su propio nombre. */
-async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
+async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId,prefetchedMsg){
   if(!destinatarios||!destinatarios.length)return false;
   if(typeof _gmailApiBest!=='function'&&typeof gmailSend!=='function')return false;
   const num=expId||e._exp||'';
@@ -1177,6 +1188,20 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
     if(typeof d==='string')return{email:String(d||'').trim(),nombre:''};
     return{email:String(d&&d.email||'').trim(),nombre:String(d&&d.nombre||'').trim()};
   }).filter(function(d){return!!d.email;});
+  if(pqrsFueRadicadaPorCorreo(e)&&typeof reenviarEmailRawARecipientes==='function'){
+    const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
+    if(msg){
+      const emails=list.map(function(d){return d.email;});
+      try{
+        const rawOk=await reenviarEmailRawARecipientes(msg,emails,expId||num,{
+          silent:true,
+          exp:e,
+          introHtml:'<p style="font-family:Arial,sans-serif;font-size:13px">Se le asigna esta PQRSD para su atención. A continuación el correo de solicitud recibido en Secretaría (con adjuntos).</p>'
+        });
+        if(rawOk)return emails;
+      }catch(errRaw){console.warn('_pqrsEnviarNotifAsignacion raw:',errRaw);}
+    }
+  }
   let okCount=0;
   const okEmails=[];
   for(let i=0;i<list.length;i++){
@@ -1204,6 +1229,46 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId){
   }
   return okCount>0?okEmails:false;
 }
+/** Secretaría / encargado: reenviar correo de solicitud (con anexos) a la oficina asignada. */
+async function pqrsReenviarCorreoOficinaManual(expId){
+  expId=String(expId||'').trim();
+  const e=(exps||[]).find(function(x){return String(x._exp||'').trim()===expId;});
+  if(!e){notif('PQRSD no encontrada','err');return false;}
+  const ofi=String(e._pqrs_oficina||'').trim();
+  if(!ofi||ofi==='secretaria'){notif('No hay oficina destino para reenviar','err');return false;}
+  if(!pqrsFueRadicadaPorCorreo(e)){notif('Esta PQRSD no proviene de correo electrónico','warn');return false;}
+  const tokOk=(typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||(typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
+  if(!tokOk){
+    notif('Conecte la bandeja Gmail de Secretaría (cdaguaviare1) para reenviar con adjuntos','err');
+    return false;
+  }
+  if(typeof mostrarAsignacionPqrsProgreso==='function')mostrarAsignacionPqrsProgreso({conCorreo:true});
+  let ok=false;
+  try{
+    ok=await reenviarCorreoRadicacionPqrsAOficina(e,ofi,expId,null);
+    if(!ok&&typeof reenviarEmailAOficina==='function'){
+      const msg=await _pqrsFetchGmailMsgForReenvio(e,null);
+      if(msg)ok=await reenviarEmailAOficina(msg,ofi,expId,{silent:false,exp:e});
+    }
+    if(!ok&&typeof _pqrsEnviarNotifAsignacion==='function'){
+      let em=typeof getCorreoAutorizadoOficina==='function'?String(getCorreoAutorizadoOficina(ofi)||'').trim():'';
+      if(!em){
+        const od=(typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&encargadosGlobal.oficinas&&encargadosGlobal.oficinas[ofi])||{};
+        em=(od.email||'').trim();
+      }
+      if(em){
+        const r=await _pqrsEnviarNotifAsignacion(e,[em],expId,null);
+        ok=!!(r&&r.length);
+      }
+    }
+  }finally{
+    if(typeof sstCargaHide==='function')sstCargaHide();
+  }
+  if(ok)notif('📧 Correo de solicitud reenviado a '+labelOficina(ofi)+' con adjuntos','ok');
+  else notif('No se pudo reenviar el correo a la oficina. Verifique Gmail y el ID del mensaje original.','err');
+  return ok;
+}
+window.pqrsReenviarCorreoOficinaManual=pqrsReenviarCorreoOficinaManual;
 async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg){
   // Único correo al responsable por ahora: reenvío del radicado por correo (con anexos).
   // No usar este camino para aprobar documentos ni devolver por corregir.
