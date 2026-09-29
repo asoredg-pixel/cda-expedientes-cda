@@ -7913,7 +7913,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',trasladarNotificador:'Trasladar persona a notificar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -7924,22 +7924,137 @@ function taskReviewChatRailBtnHtml(ref,taskId,t){
   const side=String(window._taskReviewSideMode||'doc');
   return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='chat'?' on':'')+'" data-side="chat" title="Chat y observaciones del documento" onclick="taskReviewToggleSidePanel(\'chat\',\''+r+'\',\''+tid+'\')">'+chatWaIconHtml(15)+(badge?actIcoBadgeHtml(badge,'blue'):'')+'</button>';
 }
+/** Encargado NCA en paleta «Por notificar» (vista depto, no modo responsable). */
+function actEncargadoNcaGestionPorNotificar(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  return (typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    &&((typeof esNcaDeguv==='function'&&esNcaDeguv())
+      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()));
+}
+window.actEncargadoNcaGestionPorNotificar=actEncargadoNcaGestionPorNotificar;
+function puedeTrasladarPersonaNotificarEncargado(e,t){
+  if(!actEncargadoNcaGestionPorNotificar())return false;
+  return typeof taskEnFaseNotificacionAsignada==='function'&&taskEnFaseNotificacionAsignada(e,t);
+}
+window.puedeTrasladarPersonaNotificarEncargado=puedeTrasladarPersonaNotificarEncargado;
+function renderTaskReviewTrasladarNotificadorSideHtml(expId,taskId,t,e){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  e=e||(typeof getExpById==='function'?getExpById(expId):null);
+  t=t||(typeof getTaskAny==='function'?getTaskAny(expId,taskId):null);
+  if(!e||!t)return'<div style="padding:10px;font-size:12px;color:var(--tx3)">Actividad no encontrada</div>';
+  const esPqrs=typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+  let wf={},selVal='',deptoId=e._depto||t.depto||'guaviare';
+  if(esPqrs){
+    wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    selVal=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+    deptoId=e._pqrs_oficina||deptoId;
+  }else{
+    wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+    selVal=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  }
+  const selHtml=typeof _pqrsOpcionesNotificadorHtml==='function'
+    ?_pqrsOpcionesNotificadorHtml(e,wf,selVal,{modo:'firma',id:'task-review-notif-por-sel',todosResponsables:true,deptoId:deptoId,sinLabel:true})
+    :('<select id="task-review-notif-por-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></select>');
+  const quien=selVal||'— (sin designar)';
+  return '<div class="task-review-side-form">'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px">🔄 Trasladar persona a notificar</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Actual: <strong>'+escAttr(quien)+'</strong></div>'+
+    '<div class="fld" style="margin-bottom:12px"><label style="font-size:11px;font-weight:600">Nuevo responsable de notificar<span class="req-star">*</span></label>'+
+    selHtml+'</div>'+
+    '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitTrasladarPersonaNotificarReview(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>'+
+    '</div>';
+}
+window.renderTaskReviewTrasladarNotificadorSideHtml=renderTaskReviewTrasladarNotificadorSideHtml;
+function submitTrasladarPersonaNotificarReview(expId,taskId){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const nuevo=String((document.getElementById('task-review-notif-por-sel')||{}).value||'').trim();
+  if(!nuevo){notif('Seleccione quién notificará','err');return;}
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!e||!t){notif('Actividad no encontrada','err');return;}
+  if(!puedeTrasladarPersonaNotificarEncargado(e,t)){notif('No puede cambiar el notificador','err');return;}
+  const eq=typeof agendaNorm==='function'?function(a,b){return agendaNorm(a)===agendaNorm(b);}:function(a,b){return String(a||'').trim()===String(b||'').trim();};
+  const esPqrs=typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+  let anterior='';
+  if(esPqrs){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    anterior=String(wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+    if(anterior&&eq(anterior,nuevo)){notif('Ya está asignado a esa persona','warn');return;}
+    setPqrsWorkflow(e,{notificar_por:nuevo,notificar_por_propuesto:nuevo});
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    e._pqrs_historial.push({
+      tipo:'reasignacion_notificador',
+      fecha:typeof hoy==='function'?hoy():'',
+      nota:'Encargado NCA trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»',
+      oficina:e._pqrs_oficina||e._depto||'',
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'')
+    });
+    if(typeof mutateTask==='function'){
+      mutateTask(expId,taskId,function(tk){
+        if(typeof ensureAsignado==='function')ensureAsignado(tk,nuevo);
+        const rs=typeof getTaskResponsables==='function'?getTaskResponsables(tk):[];
+        if(!rs.some(function(n){return eq(n,nuevo);})){
+          tk.responsables=(tk.responsables||[]).concat([nuevo]);
+          if(typeof ensureAsignado==='function')ensureAsignado(tk,nuevo);
+        }
+      });
+    }
+    if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
+    try{persistExpedienteGranular(e);}catch(err){console.warn('submitTrasladarPersonaNotificarReview:',err);}
+  }else{
+    anterior=String((typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{})).notificar_por||'').trim();
+    if(anterior&&eq(anterior,nuevo)){notif('Ya está asignado a esa persona','warn');return;}
+    mutateTask(expId,taskId,function(tk){
+      const prev=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(tk):(tk.firmaWf||{});
+      tk.firmaWf=Object.assign({},prev,{notificar_por:nuevo,notificar_por_propuesto:nuevo});
+      if(typeof ensureAsignado==='function')ensureAsignado(tk,nuevo);
+      const rs=typeof getTaskResponsables==='function'?getTaskResponsables(tk):[];
+      if(!rs.some(function(n){return eq(n,nuevo);})){
+        tk.responsables=(tk.responsables||[]).concat([nuevo]);
+        if(typeof ensureAsignado==='function')ensureAsignado(tk,nuevo);
+      }
+      if(!Array.isArray(tk.historial))tk.historial=[];
+      tk.historial.push({
+        tipo:'reasignacion_notificador',
+        fecha:typeof hoy==='function'?hoy():'',
+        por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+        nota:'Encargado NCA trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»'
+      });
+      if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+        tramiteSincronizarParticipacionPostAprobacionFirma(tk);
+      if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+    });
+  }
+  taskReviewCloseSidePanel();
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  notif('🔄 Notificador actualizado: '+nuevo,'ok');
+}
+window.submitTrasladarPersonaNotificarReview=submitTrasladarPersonaNotificarReview;
 /** Rail del responsable designado a notificar: documento a notificar + chat/notas/organizar + 📬 */
-function taskReviewRespPorNotificarRailHtml(ref,taskId,t){
+function taskReviewRespPorNotificarRailHtml(ref,taskId,t,e){
   if(!t)return'';
+  e=e||(typeof getExpById==='function'?getExpById(ref):null);
   const refExp=t.sinExpediente?(t.codigo||ref):ref;
   const r=escAttr(refExp),tid=escAttr(taskId);
   const side=String(window._taskReviewSideMode||'doc');
+  const esEncNca=typeof actEncargadoNcaGestionPorNotificar==='function'&&actEncargadoNcaGestionPorNotificar();
   let h='<nav class="task-review-rail-nav" aria-label="Por notificar">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="Ver documento a notificar" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">🔍</button>';
   h+=taskReviewChatRailBtnHtml(refExp,taskId,t);
-  const autor=typeof notasInternasAutor==='function'?notasInternasAutor():'';
-  if(autor){
-    const nn=(typeof getNotasInternasList==='function'?(getNotasInternasList(refExp,taskId,autor)||[]):[]).length;
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notas'?' on':'')+'" data-side="notas" title="Notas internas privadas" onclick="taskReviewToggleSidePanel(\'notas\',\''+r+'\',\''+tid+'\')">📝'+(nn?actIcoBadgeHtml(nn,'yellow'):'')+'</button>';
+  if(!esEncNca){
+    const autor=typeof notasInternasAutor==='function'?notasInternasAutor():'';
+    if(autor){
+      const nn=(typeof getNotasInternasList==='function'?(getNotasInternasList(refExp,taskId,autor)||[]):[]).length;
+      h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notas'?' on':'')+'" data-side="notas" title="Notas internas privadas" onclick="taskReviewToggleSidePanel(\'notas\',\''+r+'\',\''+tid+'\')">📝'+(nn?actIcoBadgeHtml(nn,'yellow'):'')+'</button>';
+    }
+    if(typeof puedeAgendarTask==='function'&&puedeAgendarTask(t))
+      h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
   }
-  if(typeof puedeAgendarTask==='function'&&puedeAgendarTask(t))
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
+  if(esEncNca&&typeof puedeTrasladarPersonaNotificarEncargado==='function'&&puedeTrasladarPersonaNotificarEncargado(e,t))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='trasladarNotificador'?' on':'')+'" data-side="trasladarNotificador" title="Trasladar persona a notificar" onclick="taskReviewToggleSidePanel(\'trasladarNotificador\',\''+r+'\',\''+tid+'\')">🔄</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notificar'?' on':'')+'" data-side="notificar" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="taskReviewToggleSidePanel(\'notificar\',\''+r+'\',\''+tid+'\')">📬</button>';
   return h+'</nav>';
 }
@@ -9999,6 +10114,8 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
   }else if(mode==='decision'){
     body.innerHTML=renderTaskReviewDecisionSideHtml(expId,taskId,t);
     setTimeout(function(){initTaskReviewDecisionSide(expId,taskId,t);},30);
+  }else if(mode==='trasladarNotificador'){
+    body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarNotificadorSideHtml(expId,taskId,t,e)+'</div>';
   }else if(mode==='notificar'){
     const esPqrsN=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
@@ -21948,7 +22065,7 @@ function openTaskCommentsModal(expId,taskId,opts){
       railNav=taskReviewPorFirmarRailHtml(refAct,taskId,t,e);
     else if(isPqrsOrigenView)railNav=taskReviewPqrsOrigenRailHtml(refAct,taskId,t,e);
     else if(isRespVerPorNotificar&&typeof taskReviewRespPorNotificarRailHtml==='function')
-      railNav=taskReviewRespPorNotificarRailHtml(refAct,taskId,t);
+      railNav=taskReviewRespPorNotificarRailHtml(refAct,taskId,t,e);
     else if(isRespVerEntregaPendiente)railNav=taskReviewRespEntregaPendienteRailHtml(refAct,taskId,t);
     else if(isRespVerCorr||isRespVerDoc)railNav=taskReviewRespVerRailHtml(refAct,taskId,t);
     else if(isDeptVerDoc)railNav=pqrsPendRevVista?taskReviewFullRailHtml(refAct,taskId,t):taskReviewActividadVerRailHtml(refAct,taskId,t,e);
@@ -25163,10 +25280,13 @@ function renderActRowToolbarHtml(t,expAct){
     &&typeof tramitePuedeNotificar==='function'&&tramitePuedeNotificar(t);
   const puedeNotifToolbar=puedeNotifYo||esPqrsNotifDept||esTramNotifDept;
   if(!keepPorFirmaToolbar&&puedeNotifToolbar&&filtroActRow!=='done'){
+    const esEncNcaRow=typeof actEncargadoNcaGestionPorNotificar==='function'&&actEncargadoNcaGestionPorNotificar();
     let actsN='<span class="sst-act-toolbar">';
     actsN+=taskChatBtnHtml(t.exp,t.id,t);
-    actsN+=taskNotasInternasBtnHtml(t.exp,t.id);
-    if(typeof taskAgendaBtnHtml==='function')actsN+=taskAgendaBtnHtml(t.exp,t.id);
+    if(!esEncNcaRow){
+      actsN+=taskNotasInternasBtnHtml(t.exp,t.id);
+      if(typeof taskAgendaBtnHtml==='function')actsN+=taskAgendaBtnHtml(t.exp,t.id);
+    }
     actsN+='<button type="button" class="btn bsm bic act-ico" title="Ver documento a notificar" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true,porNotificarVista:true})">🔍</button>';
     actsN+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="event.stopPropagation();openActReportarNotificacion(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">📬</button>';
     actsN+='</span>';
