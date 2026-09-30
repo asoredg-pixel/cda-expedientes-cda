@@ -761,11 +761,10 @@ function sstMountEmailChips(inputEl,opts){
     edit.classList.toggle('is-invalid',!!edit.value&&edit.value.indexOf('@')>0&&!sstEmailLooksValid(edit.value.trim()));
   });
   edit.addEventListener('focus',function(){updateSug();});
+  // Confirmar ya: el clic en «Enviar/Notificar» lee el valor justo después del blur.
   edit.addEventListener('blur',function(){
-    sugHideTimer=setTimeout(function(){
-      hideSug();
-      commitBuffer();
-    },160);
+    commitBuffer();
+    sugHideTimer=setTimeout(hideSug,160);
   });
   edit.addEventListener('paste',function(ev){
     const txt=(ev.clipboardData||window.clipboardData||{}).getData('text')||'';
@@ -787,10 +786,31 @@ function sstMountEmailChips(inputEl,opts){
     hideSug();
     render();
   }
-  wrap._sstChips={setFromValue:setFromValue,max:max,edit:edit,hideSug:hideSug};
+  wrap._sstChips={setFromValue:setFromValue,max:max,edit:edit,hideSug:hideSug,commitBuffer:commitBuffer};
   render();
   return wrap;
 }
+/**
+ * Antes de enviar: confirma correos escritos sin Enter/coma en campos chips (Para/Cc/Cco).
+ * Devuelve '' si todo quedó bien, o «Para: «texto»» si queda un correo no válido.
+ */
+function sstEmailChipsConfirmarPendientes(ids){
+  let malo='';
+  (ids||[]).forEach(function(id){
+    const el=document.getElementById(id);
+    const wrap=el&&el.closest?el.closest('.email-chips'):null;
+    const c=wrap&&wrap._sstChips;
+    if(!c||!c.edit)return;
+    if(String(c.edit.value||'').trim()&&c.commitBuffer)c.commitBuffer();
+    const resto=String(c.edit.value||'').trim();
+    if(resto&&!malo){
+      const campo=/bcc$/i.test(id)?'Cco':(/cc$/i.test(id)?'Cc':'Para');
+      malo=campo+': «'+resto+'»';
+    }
+  });
+  return malo;
+}
+window.sstEmailChipsConfirmarPendientes=sstEmailChipsConfirmarPendientes;
 function sstEmailChipsRefresh(elOrId){
   const el=typeof elOrId==='string'?document.getElementById(elOrId):elOrId;
   if(!el)return;

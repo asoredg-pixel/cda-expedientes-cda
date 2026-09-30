@@ -1063,6 +1063,9 @@ async function submitTramiteNotificar(expId,taskId){
     ||null;
 
   if(isCorreo){
+    const maloN=typeof sstEmailChipsConfirmarPendientes==='function'
+      ?sstEmailChipsConfirmarPendientes(['tramite-notif-to','tramite-notif-cc','tramite-notif-bcc']):'';
+    if(maloN){notif('Correo no válido en '+maloN+'. Corríjalo o quítelo antes de enviar.','err');if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
     const toRaw=String((document.getElementById('tramite-notif-to')||{}).value||'').trim();
     const asunto=String((document.getElementById('tramite-notif-asunto')||{}).value||'').trim();
     const cuerpo=String((document.getElementById('tramite-notif-cuerpo')||{}).value||'').trim();
@@ -2627,6 +2630,9 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   }else if(modoSinNotif){
     // Sin campos adicionales: solo PDF firmado → atendida
   }else if(abrirNotif){
+    const maloA=typeof sstEmailChipsConfirmarPendientes==='function'
+      ?sstEmailChipsConfirmarPendientes(['tramite-atajo-email-to','tramite-atajo-email-cc','tramite-atajo-email-bcc']):'';
+    if(maloA){notif('Correo no válido en '+maloA+'. Corríjalo o quítelo antes de enviar.','err');return;}
     const to=String((document.getElementById('tramite-atajo-email-to')||{}).value||'').trim();
     if(!to){notif('Indique al menos un correo en «Para»','err');return;}
     const cuerpo=String((document.getElementById('tramite-atajo-email-cuerpo')||{}).value||'').trim();

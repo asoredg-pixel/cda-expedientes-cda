@@ -9512,6 +9512,9 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
   const e=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(expId):null);
+  const maloR=typeof sstEmailChipsConfirmarPendientes==='function'
+    ?sstEmailChipsConfirmarPendientes(['task-rev-notif-to','task-rev-notif-cc','task-rev-notif-bcc']):'';
+  if(maloR){notif('Correo no válido en '+maloR+'. Corríjalo o quítelo antes de enviar.','err');return;}
   const toRaw=String((document.getElementById('task-rev-notif-to')||{}).value||'').trim();
   const emailCc=String((document.getElementById('task-rev-notif-cc')||{}).value||'').trim();
   const emailBcc=String((document.getElementById('task-rev-notif-bcc')||{}).value||'').trim();
@@ -32056,6 +32059,9 @@ async function pqrsConfirmarNotificacionOficio(expId){
   const wfActual=getPqrsWorkflow(e);
 
   if(canal===PQRS_WF_CANAL.CORREO||canal==='correo'){
+    const maloP=typeof sstEmailChipsConfirmarPendientes==='function'
+      ?sstEmailChipsConfirmarPendientes(['pqrs-notif-to','pqrs-notif-cc','pqrs-notif-bcc']):'';
+    if(maloP){notif('Correo no válido en '+maloP+'. Corríjalo o quítelo antes de enviar.','err');if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
     const toRaw=String((document.getElementById('pqrs-notif-to')||{}).value||'').trim();
     const ccRaw=String((document.getElementById('pqrs-notif-cc')||{}).value||'').trim();
     const bccRaw=String((document.getElementById('pqrs-notif-bcc')||{}).value||'').trim();
@@ -33117,12 +33123,39 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
   const lista=Array.isArray(to)?to.filter(Boolean):[String(to||'').trim().toLowerCase()];
   if(!lista.length)throw new Error('Correo destino vacío');
   let first=null;
-  const errors=[];
+  let fallidos=[];
   for(const addr of lista){
-    try{const r=await send(addr);if(!first)first=r;}catch(err){errors.push(addr+': '+String(err.message||err));}
+    try{const r=await send(addr);if(!first)first=r;}catch(err){fallidos.push({addr:addr,err:String(err.message||err)});}
   }
-  if(!first&&errors.length)throw new Error(errors[0]);
+  if(!first&&fallidos.length)throw new Error(fallidos[0].addr+': '+fallidos[0].err);
+  if(fallidos.length){
+    await new Promise(function(r){setTimeout(r,1500);});
+    const quedan=[];
+    for(const f of fallidos){
+      try{await send(f.addr);}catch(err){quedan.push({addr:f.addr,err:String(err.message||err)});}
+    }
+    fallidos=quedan;
+    if(fallidos.length){
+      first.fallidos=fallidos.map(function(f){return f.addr;});
+      console.warn('pqrsEnviarCorreoCiudadano: no enviado a',fallidos);
+      pqrsAvisoCorreoNoEnviado(fallidos);
+    }
+  }
   return first;
+}
+/** Aviso aparte de la ventana central (el «Notificado» posterior no debe taparlo). */
+function pqrsAvisoCorreoNoEnviado(fallidos){
+  const txt='⚠️ El correo NO se envió a: '+fallidos.map(function(f){return f.addr+' ('+String(f.err||'').slice(0,80)+')';}).join(' · ')+
+    '. Reenvíelo a ese destinatario desde Gmail. (Clic para cerrar)';
+  try{
+    const n=document.createElement('div');
+    n.className='ntf ner';
+    n.style.cssText='max-width:420px;white-space:normal;cursor:pointer;z-index:100000';
+    n.textContent=txt;
+    n.onclick=function(){n.remove();};
+    document.body.appendChild(n);
+    setTimeout(function(){n.remove();},120000);
+  }catch(err){notif(txt,'warn');}
 }
 function registrarNotificacionCiudadanoPqrs(e,meta){
   if(!e)return;
