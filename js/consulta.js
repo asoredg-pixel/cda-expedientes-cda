@@ -1327,6 +1327,14 @@ function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   notif('Vinculado a '+target._exp,'ok');
   return true;
 }
+/** Asociación hecha desde el panel lateral de la revisión: no reabrir ni cerrar la ventana, solo repintar. */
+function reviewAsocRefrescarEnRevision(){
+  if(window._reviewAsocPanelId!=='task-review-asoc-body'||!document.getElementById('task-review-asoc-body'))return false;
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+  renderReviewAsocPickPanel('task-review-asoc-body');
+  return true;
+}
 function confirmReviewAsocPickAct(actTaskId){
   actTaskId=String(actTaskId||'').trim();
   const ctx=window._reviewAsocCtx||{};
@@ -1341,6 +1349,7 @@ function confirmReviewAsocPickAct(actTaskId){
     ok=!!pack;
     if(ok)notif('Actividad vinculada a '+sourceExp,'ok');
   }
+  if(ok&&reviewAsocRefrescarEnRevision())return;
   if(ok){
     cerrarReviewAsocPanel();
     if(typeof renderActividades==='function')renderActividades();
@@ -1377,6 +1386,7 @@ function confirmReviewAsocPick(targetExpId){
   }else{
     ok=asociarExpedienteDesdeRevision(ctx.sourceExp,targetExpId);
   }
+  if(ok&&reviewAsocRefrescarEnRevision())return;
   if(ok){
     cerrarReviewAsocPanel();
     if(typeof renderActividades==='function')renderActividades();
