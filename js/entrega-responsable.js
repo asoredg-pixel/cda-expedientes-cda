@@ -2159,7 +2159,10 @@ function retirarRegistroPendienteDeEntrega(e,t,opts){
   if(t.oficioPendienteAprobacion){delete t.oficioPendienteAprobacion;changed=true;}
   if(t.concepto){t.concepto='';changed=true;}
   if(t.conceptoTipo){t.conceptoTipo='';changed=true;}
-  if(t.conceptoReqId){delete t.conceptoReqId;changed=true;}
+  // Oficio de requerimiento: el vínculo con el concepto es de la actividad (la reentrega lo necesita).
+  const esOfiReq=!!t.esOficioRequerimiento||esActividadOficioRequerimiento(t.actividad||t.desc||'');
+  if(t.conceptoReqId&&!esOfiReq){delete t.conceptoReqId;changed=true;}
+  if(esOfiReq&&t.reqNum){t.reqNum='';changed=true;}
   if(t.actoNumero){t.actoNumero='';changed=true;}
   if(t.actoTipo){t.actoTipo='';changed=true;}
   if(!e){
@@ -2202,8 +2205,8 @@ function retirarRegistroPendienteDeEntrega(e,t,opts){
       const c=carr[i];
       if(!c)continue;
       if(tid&&String(c.taskId||'')===tid&&(forceAll||c.pendienteAprobacion)){cChanged=true;continue;}
-      if(t.esOficioRequerimiento&&t.conceptoReqId&&String(c.conceptoReqId||'')===String(t.conceptoReqId)){
-        if(c.reqOficio||c.reqNum||c.reqPendienteAprobacion){
+      if(esOfiReq&&t.conceptoReqId&&String(c.conceptoReqId||'')===String(t.conceptoReqId)){
+        if((forceAll||c.reqPendienteAprobacion)&&!c.reqNotif&&(c.reqOficio||c.reqNum||c.reqPendienteAprobacion)){
           c.reqOficio='';c.reqNum='';c.reqDias='';c.reqMedio='';c.reqNotif='';c.reqVence='';
           delete c.reqPendienteAprobacion;
           cChanged=true;
@@ -2345,8 +2348,8 @@ function htmlEntregaOficioRequerimientoBlock(e,t){
     '<input type="hidden" id="entrega-ofi-req-concepto-id" value="'+escAttr(t&&t.conceptoReqId||c.conceptoReqId||'')+'">'+
     '<div class="fg">'+
     '<div class="fld"><label>N° de oficio <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-oficio" value="'+escAttr(c.reqOficio||'')+'" placeholder="Ej. DSGV-E261485" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
-    '<div class="fld"><label>N° requerimiento <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-num" value="'+escAttr(c.reqNum||'')+'" placeholder="N° requerimiento" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
-    '<div class="fld"><label>Días hábiles para cumplir <span style="color:var(--rd)">*</span></label><input type="number" id="entrega-ofi-req-dias" min="1" value="'+escAttr(c.reqDias||'')+'" placeholder="Ej. 10" style="'+inp+'"></div>'+
+    '<div class="fld"><label>N° requerimiento <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-ofi-req-num" value="'+escAttr(c.reqNum||(t&&t.reqNum)||'')+'" placeholder="N° requerimiento" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()"></div>'+
+    '<div class="fld"><label>Días hábiles para cumplir <span style="color:var(--rd)">*</span></label><input type="number" id="entrega-ofi-req-dias" min="1" value="'+escAttr(c.reqDias||(t&&t.terminoCumplPropuesto&&t.terminoCumplPropuesto.dias)||'')+'" placeholder="Ej. 10" style="'+inp+'"></div>'+
     '</div>'+
     '<div style="margin-top:10px">'+notifHtml+'</div>';
 }
@@ -2383,10 +2386,7 @@ function applyEntregaOficioRequerimiento(e,t,item){
   if(!e||!item)return false;
   const reqId=String(item.conceptoReqId||(t&&t.conceptoReqId)||'').trim();
   const hit=findConceptoByReqId(e,reqId);
-  if(!hit){
-    notif('No se encontró el concepto vinculado al requerimiento','err');
-    return false;
-  }
+  if(!hit)return applyEntregaOficioRequerimientoSinConcepto(e,t,item);
   if(typeof validarNumeroRequerimientoDisponible==='function'){
     if(!validarNumeroRequerimientoDisponible(item.reqNum,e._exp,hit.index))return false;
   }
@@ -2415,6 +2415,35 @@ function applyEntregaOficioRequerimiento(e,t,item){
       t._oficio=item.reqOficio;
       t.oficioPendienteAprobacion=true;
     }
+  }
+  return true;
+}
+/**
+ * Requerimiento sin concepto (autoentrega o vínculo perdido): los datos quedan en la actividad y
+ * los días como término propuesto; el término corre al aprobar / notificar (requerimientos.js).
+ */
+function applyEntregaOficioRequerimientoSinConcepto(e,t,item){
+  if(!t){
+    notif('No se encontró la actividad del oficio de requerimiento; recargue e intente de nuevo','err');
+    return false;
+  }
+  if(typeof validarNumeroRequerimientoDisponible==='function'){
+    if(!validarNumeroRequerimientoDisponible(item.reqNum,null,null))return false;
+  }
+  if(typeof validarNumeroOficioDisponible==='function'&&item.reqOficio){
+    if(!validarNumeroOficioDisponible(item.reqOficio,e._exp))return false;
+  }
+  t.esOficioRequerimiento=true;
+  t.reqNum=item.reqNum;
+  t.reqMedio=item.reqMedio||'';
+  const dias=parseInt(item.reqDias,10)||0;
+  if(dias>0)t.terminoCumplPropuesto={dias:dias};
+  if(item.reqOficio){
+    t.oficioNumero=item.reqOficio;
+    t.oficio=item.reqOficio;
+    t.nro_oficio=item.reqOficio;
+    t._oficio=item.reqOficio;
+    t.oficioPendienteAprobacion=true;
   }
   return true;
 }
