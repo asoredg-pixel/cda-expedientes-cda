@@ -120,6 +120,29 @@ describe('Casilla «Aplica revisión de profesional» (envío)', () => {
     expect(c.puedeEliminarEntregaActividad('EXP-1', 't1')).toBe(false)
   })
 
+  it('actividad creada por el encargado: también se desvía al profesional y sigue el ciclo', () => {
+    const t = tareaTecnico()
+    delete t.autoAsignadaPorResponsable
+    t.origen = 'encargado'
+    t.creadoPor = 'Jefe'
+    const c = montarCore(t)
+    c.responsableActivo = 'Tec'
+    c._taskModalCtx = { revProfesional: 'Prof' }
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('A')])
+    expect(c.task.responsable).toBe('Prof')
+    expect(c.task.estado).toBe('En ejecución')
+    c.responsableActivo = 'Prof'
+    expect(c.devolverAlTecnicoRevisionPar('EXP-1', 't1', 'Corregir')).toBe(true)
+    expect(c.task.estado).toBe('Por corregir')
+    c.responsableActivo = 'Tec'
+    c._taskModalCtx = { revProfesional: '' }
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('B')])
+    expect(c.task.responsable).toBe('Prof')
+    c.responsableActivo = 'Prof'
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('C')])
+    expect(c.task.estado).toBe('Por verificar')
+  })
+
   it('sin casilla marcada: flujo normal a Por revisar', () => {
     const c = montarCore(tareaTecnico())
     c.responsableActivo = 'Tec'
@@ -221,6 +244,12 @@ describe('Selector de profesionales', () => {
     expect(c.htmlEntregaRegConceptoBlock(e, {})).toContain('No hay profesionales configurados')
     c.esModoResponsable = () => false
     expect(c.htmlEntregaRegConceptoBlock(e, {})).not.toContain('entrega-rev-prof-chk')
+  })
+
+  it('actividad de concepto creada por el encargado: el técnico ve la casilla al entregar', () => {
+    const c = montarEntrega()
+    const t = { id: 't9', actividad: 'Concepto técnico', origen: 'encargado', responsable: 'Tec' }
+    expect(c.htmlEntregaRegConceptoBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, { actividad: 'Concepto técnico', t })).toContain('entrega-rev-prof-chk')
   })
 
   it('un responsable con cargo Profesional no ve la casilla (entrega directo al encargado)', () => {
