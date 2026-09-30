@@ -63,13 +63,24 @@ function montarCore(task) {
     taskComentarioAutor: () => c.responsableActivo,
     driveDeleteInstitutional: async () => true,
     driveRenombrarSoporteActivoExp: async () => true,
+    deptoActivo: 'guaviare',
+    getEncargadoDepto: () => 'Jefe',
+    getNom: () => 'Titular',
+    getTram: () => ({ nombre: 'Concesión' }),
+    closeTaskModal: () => {},
+    renderActividades: () => {},
+    renderBandejaDepto: () => {},
   }
+  c.exps = [c.exp]
   c.window = c
   createContext(c)
   runInContext(extraerFunciones(read('js/core.js'), [
     'getAsignado', 'ensureAsignado', 'migrateLegacyAsignados', 'taskEsMultiAsignada', 'syncTaskAggregateState', 'taskRecibidaPorTraslado',
     'soporteEsPorCorregir', 'resetTaskPorCorregir', 'taskRevisionParCtx', 'puedeDevolverAlTecnico',
     'devolverAlTecnicoRevisionPar', 'enviarTaskPorVerificar', 'esAutoentregaResponsable', 'puedeEliminarEntregaActividad',
+    'taskRevParParticipante', 'taskRevParTecnicoEsperando', 'getTareasRevParTecnicoEsperando',
+    'taskChatEncargadoDeptoNombre', 'taskChatRevParOpciones', 'taskChatPuedeEscribirResp',
+    'submitDevolverAlTecnicoDesdeChat', 'cerrarTrasDevolverAlTecnico',
   ]), c)
   return c
 }
@@ -169,6 +180,71 @@ describe('Casilla «Aplica revisión de profesional» (envío)', () => {
     c2._taskModalCtx = { revProfesional: 'Prof' }
     c2.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('A')])
     expect(c2.task.responsable).toBe('Tec')
+  })
+})
+
+describe('Vistas de la revisión: Por revisar del técnico, chat y devolver', () => {
+  function enviadaAProf() {
+    const c = montarCore(tareaTecnico())
+    c.responsableActivo = 'Tec'
+    c._taskModalCtx = { revProfesional: 'Prof' }
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], 'Para su revisión', false, [archivo('A')])
+    return c
+  }
+
+  it('el técnico la ve en su «Por revisar» mientras la revisa el profesional; al aprobarse sale', () => {
+    const c = enviadaAProf()
+    const filas = c.getTareasRevParTecnicoEsperando()
+    expect(filas.length).toBe(1)
+    expect(filas[0]).toMatchObject({ id: 't1', exp: 'EXP-1', _revParTecnico: true })
+    c.responsableActivo = 'Prof'
+    expect(c.getTareasRevParTecnicoEsperando()).toEqual([])
+    c.responsableActivo = 'Tec'
+    c.task.estado = 'Atendida'
+    expect(c.getTareasRevParTecnicoEsperando()).toEqual([])
+  })
+
+  it('devuelta al técnico: sale de su «Por revisar» (queda en Por corregir)', () => {
+    const c = enviadaAProf()
+    c.responsableActivo = 'Prof'
+    c.devolverAlTecnicoRevisionPar('EXP-1', 't1', 'Ajustar')
+    c.responsableActivo = 'Tec'
+    expect(c.getTareasRevParTecnicoEsperando()).toEqual([])
+  })
+
+  it('el comentario de la entrega del técnico queda «Para: profesional»', () => {
+    const c = enviadaAProf()
+    expect(c.task.comentarios.at(-1)).toMatchObject({ texto: 'Para su revisión', para: 'Prof' })
+  })
+
+  it('chat: selector con el otro participante y el encargado; técnico escribe aunque no esté asignado', () => {
+    const c = enviadaAProf()
+    expect(c.taskChatRevParOpciones(c.task)).toEqual({ opts: ['Prof', 'Jefe'], def: 'Prof' })
+    expect(c.taskChatPuedeEscribirResp(c.task)).toBe(true)
+    c.responsableActivo = 'Prof'
+    expect(c.taskChatRevParOpciones(c.task)).toEqual({ opts: ['Tec', 'Jefe'], def: 'Tec' })
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('B')])
+    expect(c.task.estado).toBe('Por verificar')
+    expect(c.taskChatRevParOpciones(c.task).def).toBe('Jefe')
+    c.responsableActivo = 'Otro'
+    expect(c.taskChatRevParOpciones(c.task)).toBe(null)
+    expect(c.taskChatPuedeEscribirResp(c.task)).toBe(false)
+  })
+
+  it('devolver desde el chat usa el texto escrito como observación (obligatorio)', () => {
+    const c = enviadaAProf()
+    c.responsableActivo = 'Prof'
+    const inp = { value: '  ', focus: () => {} }
+    c.document = { getElementById: id => (id === 'task-cmt-input' ? inp : null), querySelectorAll: () => [] }
+    c.submitDevolverAlTecnicoDesdeChat('EXP-1', 't1')
+    expect(c.task.responsable).toBe('Prof')
+    expect(c.avisos.at(-1)[0]).toMatch(/Escriba en el chat/)
+    inp.value = 'Revisar coordenadas'
+    c.submitDevolverAlTecnicoDesdeChat('EXP-1', 't1')
+    expect(c.task.responsable).toBe('Tec')
+    expect(c.task.estado).toBe('Por corregir')
+    expect(c.task.comentarios.at(-1)).toMatchObject({ para: 'Tec', texto: '↩ Devuelta para corregir: Revisar coordenadas' })
+    expect(inp.value).toBe('')
   })
 })
 

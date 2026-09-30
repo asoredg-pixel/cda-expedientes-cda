@@ -8134,8 +8134,6 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
   }
-  if(yo&&typeof puedeDevolverAlTecnico==='function'&&puedeDevolverAlTecnico(t,usuario,e))
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='devolverTecnico'?' on':'')+'" data-side="devolverTecnico" title="Devolver al técnico para corregir" onclick="taskReviewToggleSidePanel(\'devolverTecnico\',\''+r+'\',\''+tid+'\')">↩</button>';
   // Autoentrega / entrega propia en observaciones (por corregir): eliminar entrega en el rail
   const puedeElimObs=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(refExp,taskId);
   if(puedeElimObs&&(miEst==='Por corregir'||est==='Por corregir'))
@@ -8542,7 +8540,10 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
       ||(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)));
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa||canDevolverFirma);
   const canShowDevolver=canReviewSop||canDevolverFirma;
-  const isRespView=esModoResponsable()&&taskUsuarioEsAsignado(t,responsableActivo);
+  const eRevPar=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  const isRespView=esModoResponsable()&&(taskUsuarioEsAsignado(t,responsableActivo)
+    ||(typeof taskRevParParticipante==='function'&&!!taskRevParParticipante(t,responsableActivo,eRevPar)));
+  const canDevolverTecnico=typeof puedeDevolverAlTecnico==='function'&&puedeDevolverAlTecnico(t,responsableActivo,eRevPar);
   const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma;
   const eid=escAttr(expId),tid=escAttr(taskId);
   const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
@@ -8574,6 +8575,8 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   }
   if(canShowDevolver)
     h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
+  else if(canDevolverTecnico)
+    h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" title="Escriba la observación en el chat y pulse aquí: pasa a Por corregir del técnico" onclick="submitDevolverAlTecnicoDesdeChat(\''+eid+'\',\''+tid+'\')">↩ Devolver al técnico para corregir</button></div>';
   h+='</div>';
   return h;
 }
@@ -16279,14 +16282,15 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       t.historial.push({tipo:'soporte',fecha:hoy(),version,url:'[archivo local]',por:rep,reportadoPor:rep,nota:archivoOpt.nombre||''});
     });
     if(cmt){
-      t.comentarios.push({
+      const paraCmt=revParRet?revParRet.profesional:(revProfEnvio?revProfEnvio.profesional:'');
+      t.comentarios.push(Object.assign({
         autor:rep,
         fecha:new Date().toISOString(),
         texto:cmt,
         rol:'ejecutor',
         incluidoEnReporte:true,
         reportadoPor:rep
-      });
+      },paraCmt?{para:paraCmt}:{}));
     }
     const hoyRep=hoy();
     if(taskEsMultiAsignada(t)&&t.entregaModo==='individual'){
@@ -16988,6 +16992,22 @@ function taskChatEncargadoDeptoNombre(t){
 function taskChatResponsableEscribeEncargado(){
   return !!esModoResponsable();
 }
+/** Revisión técnico ↔ profesional: el participante elige a quién escribe (el otro o el encargado). */
+function taskChatRevParOpciones(t){
+  const p=typeof taskRevParParticipante==='function'?taskRevParParticipante(t,responsableActivo):null;
+  if(!p)return null;
+  const enc=taskChatEncargadoDeptoNombre(t);
+  const otro=p.rol==='tecnico'?p.profesional:p.tecnico;
+  const opts=[otro];
+  if(enc&&agendaNorm(enc)!==agendaNorm(otro))opts.push(enc);
+  const def=(p.rol==='profesional'&&enc&&estadoTask(t)==='Por verificar')?enc:otro;
+  return{opts:opts,def:def};
+}
+function taskChatPuedeEscribirResp(t){
+  if(!(esModoResponsable()||esVistaActividadesDepto()))return false;
+  if(taskUsuarioEsAsignado(t,responsableActivo))return true;
+  return !!(typeof taskRevParParticipante==='function'&&taskRevParParticipante(t,responsableActivo));
+}
 function taskChatPqrsAsigChecked(){
   const cbs=document.querySelectorAll('.pqrs-asig-resp-cb:checked');
   const out=[];
@@ -17049,6 +17069,8 @@ function taskChatParaOpcionesEncargado(t){
 }
 function taskChatResolveDefaultPara(t){
   t=normalizeTask(t||{});
+  const rp=taskChatRevParOpciones(t);
+  if(rp)return rp.def;
   if(taskChatResponsableEscribeEncargado())
     return taskChatEncargadoDeptoNombre(t);
   if(taskChatEncargadoEligeDestino()){
@@ -17150,6 +17172,16 @@ function taskChatComentarioMetaHtml(c,t){
 function taskChatComposerParaFieldHtml(t){
   t=normalizeTask(t||{});
   const def=taskChatResolveDefaultPara(t)||'';
+  const rp=taskChatRevParOpciones(t);
+  if(rp){
+    let selRp='';
+    rp.opts.forEach(function(n){
+      selRp+='<option value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(rp.def)?' selected':'')+'>'+escAttr(n)+'</option>';
+    });
+    return '<div class="task-chat-para-row">'+
+      '<label for="task-chat-para-sel">Para</label>'+
+      '<select id="task-chat-para-sel" class="task-chat-para-sel">'+selRp+'</select></div>';
+  }
   if(taskChatEncargadoEligeDestino()){
     const opts=taskChatParaOpcionesEncargado(t);
     if(!opts.length&&def)opts.push(def);
@@ -17218,7 +17250,7 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   opts=opts||{};
   t=normalizeTask(t||{});
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
-  const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
+  const canWriteResp=taskChatPuedeEscribirResp(t);
   if(!canWriteDept&&!canWriteResp)return'';
   const sol=getTaskSolicitudPendiente(t);
   const eid=escAttr(expId),tid=escAttr(taskId);
@@ -17249,7 +17281,7 @@ function renderTaskChatPanelHtml(expId,taskId,t,opts){
   opts=opts||{};
   t=normalizeTask(t||{});
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
-  const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
+  const canWriteResp=taskChatPuedeEscribirResp(t);
   let form='';
   if(canWriteDept||canWriteResp){
     form=renderTaskChatComposerHtml(expId,taskId,t,opts.compactComposer===false?{compact:false}:{});
@@ -17262,7 +17294,7 @@ function renderTaskChatUnificadoHtml(expId,taskId,t){
   const chatAct=(t.comentarios||[]).filter(c=>!c.incluidoEnReporte);
   const lista=chatAct.length?renderTaskChatListHtml(t):'';
   const canWriteDept=!esModoResponsable()&&!esJurisdiccional();
-  const canWriteResp=(esModoResponsable()||esVistaActividadesDepto())&&taskUsuarioEsAsignado(t,responsableActivo);
+  const canWriteResp=taskChatPuedeEscribirResp(t);
   let form='';
   if(canWriteDept||canWriteResp){
     form=renderTaskChatComposerHtml(expId,taskId,t);
@@ -20166,6 +20198,18 @@ function taskEstadoBadgeHtml(t){
     }
     return '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>';
   }
+  // Revisión técnico ↔ profesional (vista del responsable)
+  const revParB=typeof taskRevParParticipante==='function'?taskRevParParticipante(t,responsableActivo,eExp):null;
+  if(revParB&&revParB.fase==='profesional'&&est!=='Atendida'){
+    if(revParB.rol==='tecnico'){
+      const stRv=taskEstadoStyle('Por verificar',t);
+      return badgeFromUi({lbl:est==='Por verificar'?'Por revisar · encargado':'En revisión · '+revParB.profesional,bg:stRv.bg,fg:stRv.fg});
+    }
+    if(est!=='Por verificar'){
+      const esCt=typeof resolveActividadRegistroTipo==='function'&&resolveActividadRegistroTipo(String(t.actividad||''))==='concepto';
+      return badgeFromUi({lbl:estadoTaskLabel(t),sub:esCt?'🔍 Rev CT':'🔍 Rev'});
+    }
+  }
   // Responsable (o encargado viendo ese responsable) con participación atendida: misma proyección
   const yoBadge=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
   if(yoBadge&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoBadge)
@@ -21963,6 +22007,50 @@ function taskRevisionParCtx(t,e){
   const conEntrega=h.slice(i+1).some(function(x){return x&&x.tipo==='traslado_entrega_reset';});
   return conEntrega?{tecnico:de,profesional:a,fase:'profesional'}:null;
 }
+/** Rol del usuario (técnico / profesional) en la revisión en curso de la actividad, o null. */
+function taskRevParParticipante(t,usuario,e){
+  usuario=usuario||responsableActivo;
+  if(!t||!usuario||!esModoResponsable())return null;
+  let ex=e;
+  if(ex===undefined){
+    const ref=t.exp||t.codigo||(window._taskModalCtx||{}).expId||'';
+    ex=t.sinExpediente||!ref||typeof getExpById!=='function'?null:getExpById(ref);
+  }
+  const ctx=taskRevisionParCtx(t,ex);
+  if(!ctx)return null;
+  const u=agendaNorm(usuario);
+  if(u===agendaNorm(ctx.tecnico))return Object.assign({rol:'tecnico'},ctx);
+  if(u===agendaNorm(ctx.profesional))return Object.assign({rol:'profesional'},ctx);
+  return null;
+}
+/** El técnico espera la revisión del profesional (o del encargado tras el profesional). */
+function taskRevParTecnicoEsperando(t,usuario,e){
+  if(!t||t.eliminada)return false;
+  const p=taskRevParParticipante(t,usuario,e);
+  return !!(p&&p.rol==='tecnico'&&p.fase==='profesional'&&estadoTask(t)!=='Atendida');
+}
+/** Filas para «Por revisar» del técnico: actividades que envió a revisión y hoy están a nombre del profesional. */
+function getTareasRevParTecnicoEsperando(){
+  if(!responsableActivo||!esModoResponsable())return[];
+  const out=[];
+  (exps||[]).forEach(function(e){
+    if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    (e.tasks||[]).forEach(function(t){
+      if(!t||t.eliminada||!(t.historial||[]).some(function(h){return h&&h.tipo==='traslado';}))return;
+      t=normalizeTask(t);
+      if(!taskRevParTecnicoEsperando(t,responsableActivo,e))return;
+      out.push(Object.assign({},t,{
+        exp:e._exp,
+        nombre:typeof getNom==='function'?getNom(e):'',
+        tram:(typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:'')||'',
+        depto:e._depto,
+        sinExpediente:false,
+        _revParTecnico:true
+      }));
+    });
+  });
+  return out;
+}
 function puedeDevolverAlTecnico(t,usuario,e){
   usuario=usuario||responsableActivo;
   if(!usuario||!esModoResponsable())return false;
@@ -22017,6 +22105,25 @@ function devolverAlTecnicoRevisionPar(expId,taskId,nota){
 function submitDevolverAlTecnico(expId,taskId){
   const nota=(document.getElementById('devolver-tecnico-nota')||{}).value;
   if(!devolverAlTecnicoRevisionPar(expId,taskId,nota))return;
+  cerrarTrasDevolverAlTecnico();
+}
+/** Desde «Chat y observaciones»: la observación es el texto escrito en el chat. */
+function submitDevolverAlTecnicoDesdeChat(expId,taskId){
+  const inp=document.getElementById('task-cmt-input');
+  const nota=String(inp&&inp.value||'').trim();
+  if(!nota){
+    notif('Escriba en el chat la observación para el técnico y luego pulse ↩ Devolver','err');
+    if(inp)inp.focus();
+    return;
+  }
+  if(!devolverAlTecnicoRevisionPar(expId,taskId,nota))return;
+  if(inp){
+    if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);
+    else inp.value='';
+  }
+  cerrarTrasDevolverAlTecnico();
+}
+function cerrarTrasDevolverAlTecnico(){
   const hadReview=(window._taskModalStack||[]).length>0;
   window._taskModalStack=[];
   closeTaskModal();
@@ -22025,6 +22132,7 @@ function submitDevolverAlTecnico(expId,taskId){
   renderBandejaDepto();
 }
 window.submitDevolverAlTecnico=submitDevolverAlTecnico;
+window.submitDevolverAlTecnicoDesdeChat=submitDevolverAlTecnicoDesdeChat;
 function anadirResponsableTask(expId,taskId,nombre,entregaModo){
   const n=String(nombre||'').trim();if(!n)return false;
   return mutateTask(expId,taskId,t=>{
@@ -22431,8 +22539,9 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(e&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)
       &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e))
   ));
+  const esRevParTecVer=!!(verDocumento&&typeof taskRevParTecnicoEsperando==='function'&&taskRevParTecnicoEsperando(t,responsableActivo,e));
   const isRespVerDoc=!isOficinaDocRespondida&&verDocumento&&esModoResponsable()
-    &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen)&&!forcePorFirmarVista;
+    &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen||esRevParTecVer)&&!forcePorFirmarVista;
   // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
   // Documento/comunicado Respondidas: siempre rail depto (Secretaría / oficinas / DS)
   const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista||isOficinaDocRespondida;
@@ -22443,7 +22552,8 @@ function openTaskCommentsModal(expId,taskId,opts){
   const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
     &&taskRespParticipacionAtendida(t,responsableActivo);
   const isRespVerEntregaPendiente=isRespVerDoc&&!esDesignadoNotifOpen&&(
-    miEstResp==='Por verificar'||est==='Por verificar'
+    esRevParTecVer
+    ||miEstResp==='Por verificar'||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))
   );
   const isRespVerPorNotificar=!!opts.porNotificarVista||!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
@@ -25845,6 +25955,13 @@ function actToolbarRespEjecCorrHtml(t,expAct,yo){
 
 function renderActRowToolbarHtml(t,expAct){
   if(typeof reqEsActividadAgrupada==='function'&&reqEsActividadAgrupada(t))return reqActividadAgrupadaToolbarHtml();
+  // Técnico con la actividad en revisión del profesional: solo ver entrega y chat
+  if(t._revParTecnico&&esModoResponsable()){
+    return '<span class="sst-act-toolbar">'+
+      '<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada a revisión" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>'+
+      taskChatBtnHtml(t.exp,t.id,t)+
+      '</span>';
+  }
   const eid=jsStr(t.exp),tid=jsStr(t.id);
   const est=estadoTask(t);
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
@@ -28230,9 +28347,11 @@ function filtrarActividadesPorEstado(list,filtro){
       return true;
     }):[];
     out=mergeActividadLists(out,mergeActividadLists(revFinal,tramRev));
+    if(typeof getTareasRevParTecnicoEsperando==='function')out=mergeActividadLists(out,getTareasRevParTecnicoEsperando());
     if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
       out=(out||[]).filter(function(t){
         if(!t)return false;
+        if(t._revParTecnico)return true;
         const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
         const esRevFinal=(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
           ||(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t));
