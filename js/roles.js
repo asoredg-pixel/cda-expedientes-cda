@@ -334,6 +334,11 @@ function esCargoCoordinador(){
   return usuarioCargoSesion()==='coordinador';
 }
 window.esCargoCoordinador=esCargoCoordinador;
+function esCargoProfesional(){
+  if(!esModoResponsable())return false;
+  return usuarioCargoSesion()==='profesional';
+}
+window.esCargoProfesional=esCargoProfesional;
 // Retorna true si el usuario VITAL puede actuar sobre la PQRSD indicada
 // (puede enviar correo aunque no tenga la PQRSD asignada)
 function vitalPuedeActuar(e){

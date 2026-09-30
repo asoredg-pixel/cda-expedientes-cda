@@ -251,7 +251,7 @@ function htmlEntregaRespPqrsAltaBox(){
       '<div class="fld"><label>Oficina remitente <span style="color:var(--rd)">*</span></label>'+
         '<select id="er-pqrs-oficina-remitente" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)">'+erPqrsRemitenteOptsHtml()+'</select></div>'+
     '</div>'+
-    '<div class="fld" style="margin-bottom:8px" id="er-pqrs-medio-notif-wrap">'+
+    '<div class="fld" style="margin-bottom:8px'+(esModoResponsable()?';display:none':'')+'" id="er-pqrs-medio-notif-wrap">'+
       '<label>Medio de notificación de rta.</label>'+
       '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="er-pqrs-medio-notif-btns"></div>'+
       '<input type="hidden" id="er-pqrs-medio-notif" value="">'+
@@ -341,7 +341,7 @@ function toggleErPqrsInterna(){
   const solWrap=document.getElementById('er-pqrs-solicitante-wrap');
   if(solWrap)solWrap.style.display=interna?'none':'';
   const medioNotif=document.getElementById('er-pqrs-medio-notif-wrap');
-  if(medioNotif)medioNotif.style.display=interna?'none':'';
+  if(medioNotif)medioNotif.style.display=(interna||esModoResponsable())?'none':'';
   if(interna){
     const anon=document.getElementById('er-pqrs-anonimo');
     if(anon)anon.checked=false;
@@ -668,7 +668,7 @@ function htmlEntregaRespInteresadoBox(tramiteId){
       '</div></div>';
   }
   h+=htmlEntregaRespApoAut({});
-  h+='<div class="fld" style="margin-top:10px"><label>Medio de notificación</label>'+
+  if(!esModoResponsable())h+='<div class="fld" style="margin-top:10px"><label>Medio de notificación</label>'+
     '<select id="entrega-int-medio-notif" style="'+inpStyle+'">'+
     '<option value="">— No indica —</option>'+
     '<option value="correo">Correo</option>'+
@@ -1175,9 +1175,10 @@ function collectEntregaRespInteresado(){
   const out={
     _apoderado:!!((document.getElementById('entrega-int-apoderado')||{}).checked),
     _autorizado:!!((document.getElementById('entrega-int-autorizado')||{}).checked),
-    _medio_notificacion:_entregaIntVal('entrega-int-medio-notif')||'',
     _subclase:_entregaIntVal('entrega-int-subclase')||''
   };
+  // Sin selector (responsable): no pisar el medio de notificación de un expediente existente
+  if(document.getElementById('entrega-int-medio-notif'))out._medio_notificacion=_entregaIntVal('entrega-int-medio-notif')||'';
   if(out._apoderado){
     Object.assign(out,{
       _apo_nombre:_entregaIntVal('entrega-int-apo-nombre'),
@@ -1821,8 +1822,10 @@ function entregaRegActoNumBlur(){
   if(typeof validarNumeroActoDisponible==='function')validarNumeroActoDisponible(num,expNum);
 }
 function entregaRegConceptoNumBlur(){
-  const num=String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim();
+  const el=document.getElementById('entrega-reg-concepto');
+  const num=String((el||{}).value||'').trim();
   if(!num)return;
+  if(el&&el.getAttribute('data-prefill')&&el.getAttribute('data-prefill')===num)return;
   if(typeof validarNumeroConceptoDisponible==='function')validarNumeroConceptoDisponible(num,null,null);
 }
 /** Actualiza el cuerpo/asunto del correo de notificación según lo digitado/seleccionado. */
@@ -1934,26 +1937,99 @@ function renderEntregaConceptoCoordBlock(e,coordId){
   }
   return h;
 }
+/** Responsables del depto con cargo «Profesional» en Usuarios autorizados (sin uno mismo ni el encargado). */
+function getProfesionalesRevisionDepto(deptoId){
+  const d=deptoId||(typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo)||'guaviare';
+  const yo=typeof agendaNorm==='function'?agendaNorm(responsableActivo||''):String(responsableActivo||'').toLowerCase();
+  const cache=typeof _usuariosCache!=='undefined'&&Array.isArray(_usuariosCache)?_usuariosCache:[];
+  const esProf=function(u){return u&&u.activo!==false&&String(u.cargo||'').trim().toLowerCase()==='profesional';};
+  const enc=typeof getEncargadoDepto==='function'?agendaNorm(getEncargadoDepto(d)||''):'';
+  const ins=typeof getInstructoresActivos==='function'?getInstructoresActivos(d):[];
+  const out=[];
+  ins.forEach(function(i){
+    if(typeof instructorEsAsignableActividad==='function'&&!instructorEsAsignableActividad(i))return;
+    const nom=String(i.nombre||'').trim();
+    if(!nom||agendaNorm(nom)===yo||(enc&&agendaNorm(nom)===enc))return;
+    const em=String(i.email||'').trim().toLowerCase();
+    const u=em&&typeof getUsuarioAutorizadoByEmail==='function'
+      ?getUsuarioAutorizadoByEmail(em)
+      :cache.find(function(x){return x&&agendaNorm(x.nombre||'')===agendaNorm(nom);});
+    if(esProf(u)&&out.indexOf(nom)<0)out.push(nom);
+  });
+  return out;
+}
+function htmlEntregaRevProfesionalBlock(e,t){
+  if(!(typeof esModoResponsable==='function'&&esModoResponsable()))return'';
+  // El profesional entrega directo al encargado
+  if(typeof esCargoProfesional==='function'&&esCargoProfesional())return'';
+  if(t){
+    if(typeof taskEsMultiAsignada==='function'&&taskEsMultiAsignada(t))return'';
+    if(typeof taskRevisionParCtx==='function'&&taskRevisionParCtx(t,e))return'';
+  }
+  const depto=(e&&e._depto)||(t&&t.depto)||'';
+  const profs=getProfesionalesRevisionDepto(depto);
+  if(!profs.length&&typeof ensureUsuariosFirestoreCache==='function'){
+    ensureUsuariosFirestoreCache().then(function(){
+      const box=document.getElementById('entrega-rev-prof-sel-box');
+      if(box)box.innerHTML=htmlEntregaRevProfesionalSel(getProfesionalesRevisionDepto(depto));
+    }).catch(function(){});
+  }
+  return '<div class="fld" style="grid-column:1/-1;margin-top:4px">'+
+    '<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer"><input type="checkbox" id="entrega-rev-prof-chk" onchange="var w=document.getElementById(\'entrega-rev-prof-sel-wrap\');if(w)w.style.display=this.checked?\'\':\'none\'"> Aplica revisión de profesional</label>'+
+    '<div id="entrega-rev-prof-sel-wrap" style="display:none;margin-top:6px"><div id="entrega-rev-prof-sel-box">'+htmlEntregaRevProfesionalSel(profs)+'</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:4px">La entrega pasa al Por ejecutar del profesional (no a Por revisar del encargado).</div></div>'+
+    '</div>';
+}
+function htmlEntregaRevProfesionalSel(profs){
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  return profs.length
+    ?'<select id="entrega-rev-prof-sel" style="'+inp+'"><option value="">— Seleccione profesional —</option>'+
+      profs.map(function(n){return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';}).join('')+'</select>'
+    :'<div style="font-size:11px;color:var(--or);font-weight:600">No hay profesionales configurados — solicite al administrador (Usuarios autorizados · Cargo especial «Profesional»).</div>';
+}
+/** Profesional elegido en la entrega (casilla marcada), o '' si no aplica. */
+function entregaRevProfesionalDestino(){
+  const chk=document.getElementById('entrega-rev-prof-chk');
+  if(!chk||!chk.checked)return'';
+  const sel=document.getElementById('entrega-rev-prof-sel');
+  return String(sel&&sel.value||'').trim();
+}
+/** Concepto pendiente de aprobación registrado por esta misma actividad (reentrega / revisión profesional). */
+function conceptoPendienteDeTarea(e,t){
+  if(!e||!t||!t.id)return null;
+  const arr=typeof conceptosSegData==='function'?conceptosSegData(e._conceptos_seg):[];
+  const tid=String(t.id);
+  for(let i=arr.length-1;i>=0;i--){
+    const c=arr[i];
+    if(c&&c.pendienteAprobacion&&String(c.taskId||'')===tid)return c;
+  }
+  return null;
+}
 function htmlEntregaRegConceptoBlock(e,opts){
   opts=opts||{};
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   const hoyStr=typeof hoy==='function'?hoy():'';
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const tipos=typeof getTiposConceptoCfg==='function'?getTiposConceptoCfg(depto):['Concepto técnico','Informe técnico','Otro'];
-  const defTipo=opts.tipoConcepto||resolveActividadConceptoTipo(opts.actividad||'',depto)||'';
+  const pre=opts.t?conceptoPendienteDeTarea(e,opts.t):null;
+  const p=pre||{};
+  const defTipo=p.tipoConcepto||opts.tipoConcepto||resolveActividadConceptoTipo(opts.actividad||'',depto)||'';
   const tipoOpts=tipos.map(function(t){
     return '<option value="'+escAttr(t)+'"'+(defTipo===t?' selected':'')+'>'+escAttr(t)+'</option>';
   }).join('');
+  const cumple=p.cumple||'si';
+  const optSel=function(v,cur){return v===cur?' selected':'';};
   const coordBlock=typeof renderEntregaConceptoCoordBlock==='function'?renderEntregaConceptoCoordBlock(e,'entrega-reg-concepto-coord'):'';
   return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">Información técnica · Concepto</div>'+
     '<div class="fg">'+
     '<div class="fld"><label>Tipo de concepto <span style="color:var(--rd)">*</span></label><select id="entrega-reg-concepto-tipo" style="'+inp+'"><option value="">— Seleccione —</option>'+tipoOpts+'</select></div>'+
-    '<div class="fld"><label>N° concepto técnico <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()" onblur="entregaRegConceptoNumBlur()"></div>'+
-    '<div class="fld"><label>Fecha elaboración</label><input type="date" id="entrega-reg-concepto-fecha" value="'+hoyStr+'" style="'+inp+'"></div>'+
-    '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Cumple</option><option value="no">No cumple</option><option value="na">No aplica</option></select></div>'+
-    '<div class="fld" id="entrega-reg-concepto-aplica-wrap" style="display:none"><label>¿Aplica requerimiento?</label><select id="entrega-reg-concepto-aplica-req" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Sí</option><option value="no">No</option></select></div>'+
-    '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'"></textarea></div>'+
+    '<div class="fld"><label>N° concepto técnico <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-reg-concepto" placeholder="N° concepto" value="'+escAttr(p.concepto||'')+'"'+(p.concepto?' data-prefill="'+escAttr(p.concepto)+'"':'')+' style="'+inp+'" oninput="entregaNotifRefreshCuerpoDesdeRegistro()" onblur="entregaRegConceptoNumBlur()"></div>'+
+    '<div class="fld"><label>Fecha elaboración</label><input type="date" id="entrega-reg-concepto-fecha" value="'+escAttr(p.fecha||hoyStr)+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label>¿Cumple?</label><select id="entrega-reg-concepto-cumple" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si"'+optSel('si',cumple)+'>Cumple</option><option value="no"'+optSel('no',cumple)+'>No cumple</option><option value="na"'+optSel('na',cumple)+'>No aplica</option></select></div>'+
+    '<div class="fld" id="entrega-reg-concepto-aplica-wrap" style="display:'+(cumple==='no'?'':'none')+'"><label>¿Aplica requerimiento?</label><select id="entrega-reg-concepto-aplica-req" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Sí</option><option value="no"'+(pre&&cumple==='no'&&!p.aplicaReq?' selected':'')+'>No</option></select></div>'+
+    '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'">'+(typeof escTextarea==='function'?escTextarea(p.observaciones||''):escAttr(p.observaciones||''))+'</textarea></div>'+
     coordBlock+
+    htmlEntregaRevProfesionalBlock(e,opts.t||null)+
     '</div>'+
     '<div id="entrega-reg-concepto-req-hint" style="display:none"></div>';
 }
@@ -1995,6 +2071,11 @@ function collectEntregaRespRegistroPayload(actividad){
     const conceptoNum=String((document.getElementById('entrega-reg-concepto')||{}).value||'').trim();
     if(!conceptoNum){
       notif('Indique el N° de concepto técnico','err');
+      return false;
+    }
+    const revChk=document.getElementById('entrega-rev-prof-chk');
+    if(revChk&&revChk.checked&&!entregaRevProfesionalDestino()){
+      notif('Seleccione el profesional que revisará el concepto','err');
       return false;
     }
     const baseline=String((document.getElementById('entrega-coord-baseline')||{}).value||'').trim();
@@ -2621,8 +2702,30 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
     notif('Indique el N° de acto administrativo','err');
     return false;
   }
+  // Reentrega de la misma actividad (revisión técnico ↔ profesional): reemplaza el concepto pendiente.
+  let conceptosPrev=null;
+  if(regPayload.tipo==='concepto'&&taskOpt&&taskOpt.id&&typeof conceptosSegData==='function'){
+    const tid=String(taskOpt.id);
+    const arr=conceptosSegData(e._conceptos_seg);
+    let prevReqId='';
+    const next=arr.filter(function(c){
+      if(c&&c.pendienteAprobacion&&String(c.taskId||'')===tid){
+        if(c.aplicaReq&&c.conceptoReqId)prevReqId=String(c.conceptoReqId);
+        return false;
+      }
+      return true;
+    });
+    if(next.length!==arr.length){
+      conceptosPrev=e._conceptos_seg;
+      e._conceptos_seg=JSON.stringify(next);
+      if(prevReqId&&regPayload.item.aplicaReq)regPayload.item.conceptoReqId=prevReqId;
+    }
+  }
   if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){
-    if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null))return false;
+    if(!validarNumeroConceptoDisponible(regPayload.item.concepto,null,null)){
+      if(conceptosPrev!==null)e._conceptos_seg=conceptosPrev;
+      return false;
+    }
   }
   if(regPayload.tipo==='acto'&&regPayload.item.numero){
     if(typeof validarNumeroActoDisponible==='function'){
@@ -2760,7 +2863,7 @@ function collectEntregaRespPqrsAlta(){
     anonCorreo:anon?gv('er-pqrs-anon-correo').toLowerCase():'',
     anonTel:anon?gv('er-pqrs-anon-tel'):'',
     oficinaRemitente:interna?gv('er-pqrs-oficina-remitente'):'',
-    medioNotif:interna?'':(typeof medioNotificacionNorm==='function'?medioNotificacionNorm(gv('er-pqrs-medio-notif')):gv('er-pqrs-medio-notif')),
+    medioNotif:(interna||esModoResponsable())?'':(typeof medioNotificacionNorm==='function'?medioNotificacionNorm(gv('er-pqrs-medio-notif')):gv('er-pqrs-medio-notif')),
     tipoPersona:tipoPersonaRaw,
     asunto:gv('er-pqrs-asunto'),
     detalle:gv('er-pqrs-detalle'),
@@ -3152,7 +3255,7 @@ function submitEntregaResponsable(){
   // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»
   // solo se activa al terminar OK (ver enviarTaskPorVerificar / entregaResponsable).
   if(typeof submitEnviarSoporteVerificacion==='function'){
-    window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente,noCloseOnOutside:true};
+    window._taskModalCtx={expId:pack.expId,taskId:pack.taskId,mode:'enviar',entregaResponsable:true,actLibre:!!pack.sinExpediente,noCloseOnOutside:true,revProfesional:entregaRevProfesionalDestino()};
     if(pack.sinExpediente&&pack.t){
       window._pendingActLibreEntrega={id:pack.taskId,codigo:pack.expId,t:pack.t};
     }
@@ -3189,6 +3292,8 @@ window.syncEntregaRespRegistroUi=syncEntregaRespRegistroUi;
 window.syncEntregaRespNotifCorreoUi=syncEntregaRespNotifCorreoUi;
 window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
+window.getProfesionalesRevisionDepto=getProfesionalesRevisionDepto;
+window.entregaRevProfesionalDestino=entregaRevProfesionalDestino;
 window.htmlEntregaRegActoBlock=htmlEntregaRegActoBlock;
 window.htmlEntregaRegFacturaBlock=htmlEntregaRegFacturaBlock;
 window.entregaFacAddRow=entregaFacAddRow;
