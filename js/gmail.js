@@ -44,6 +44,70 @@ function _gmailGetClientId() {
 function _gmailGisReady() {
   return !!(window.google && window.google.accounts && window.google.accounts.oauth2);
 }
+const GMAIL_GIS_SRC = 'https://accounts.google.com/gsi/client';
+let _gmailGisCargando = false;
+let _gmailGisAvisar = false;
+/** Versión mayor de Chrome/Edge/Firefox; 0 si no se reconoce. -1 = Internet Explorer. */
+function _gmailNavegadorVersion() {
+  const ua = String(navigator.userAgent || '');
+  if (/Trident\/|MSIE /.test(ua)) return { nom: 'Internet Explorer', v: -1 };
+  const m = ua.match(/Edg\/(\d+)/) || ua.match(/(?:Chrome|Chromium)\/(\d+)/) || ua.match(/Firefox\/(\d+)/);
+  if (!m) return { nom: '', v: 0 };
+  const nom = /Edg\//.test(ua) ? 'Edge' : (/Firefox\//.test(ua) ? 'Firefox' : 'Chrome');
+  return { nom: nom, v: parseInt(m[1], 10) || 0 };
+}
+/** La carga de Google falló: explica la causa probable (navegador viejo, reloj desfasado o bloqueo). */
+function _gmailGisDiagnostico() {
+  const nav = _gmailNavegadorVersion();
+  if (nav.v === -1 || (nav.v > 0 && nav.v < 90) || typeof fetch !== 'function') {
+    notif('El navegador es muy antiguo' + (nav.nom ? ' (' + nav.nom + (nav.v > 0 ? ' ' + nav.v : '') + ')' : '') +
+      ' y Google no permite conectar Drive/Gmail. Actualícelo (Menú → Ayuda → Acerca de) o use Chrome/Edge actualizado.', 'err');
+    return;
+  }
+  const msgBloqueo = 'No se pudo cargar el acceso de Google (accounts.google.com). Revise la conexión a internet y que el antivirus, ' +
+    'el bloqueador de anuncios o la prevención de seguimiento «Estricta» de Edge no lo bloqueen. Luego recargue con Ctrl+F5.';
+  fetch(location.origin + location.pathname, { method: 'HEAD', cache: 'no-store' }).then(function(r) {
+    const srv = Date.parse(r.headers.get('Date') || '');
+    if (srv && Math.abs(Date.now() - srv) > 5 * 60000) {
+      const f = function(ms) { return new Date(ms).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }); };
+      notif('La fecha u hora del equipo está mal (equipo: ' + f(Date.now()) + ' · real: ' + f(srv) + '). ' +
+        'Por eso Google no carga. Corríjala en Windows (Configuración → Hora e idioma → Establecer hora automáticamente) y recargue con Ctrl+F5.', 'err');
+      return;
+    }
+    notif(msgBloqueo, 'err');
+  }).catch(function() { notif(msgBloqueo, 'err'); });
+}
+/** La carga inicial de Google falló (no hay reintento propio): vuelve a descargarla. */
+function _gmailGisRecargar(silencioso) {
+  if (_gmailGisReady()) return;
+  if (!silencioso) _gmailGisAvisar = true;
+  if (_gmailGisCargando) return;
+  _gmailGisCargando = true;
+  const fin = function() {
+    _gmailGisCargando = false;
+    const avisar = _gmailGisAvisar;
+    _gmailGisAvisar = false;
+    if (!avisar) return;
+    if (_gmailGisReady()) notif('Google quedó listo. Pulse Conectar de nuevo.', 'ok');
+    else _gmailGisDiagnostico();
+  };
+  const s = document.createElement('script');
+  s.src = GMAIL_GIS_SRC;
+  s.async = true;
+  s.onload = function() {
+    let n = 0;
+    const t = setInterval(function() {
+      if (!_gmailGisReady() && ++n < 15) return;
+      clearInterval(t);
+      fin();
+    }, 200);
+  };
+  s.onerror = fin;
+  (document.head || document.documentElement).appendChild(s);
+}
+window.addEventListener('load', function() {
+  setTimeout(function() { if (!_gmailGisReady()) _gmailGisRecargar(true); }, 3000);
+});
 let _gmailConnectingWatchdog = null;
 let _gmailSesionProgTimer = null;
 const GMAIL_OAUTH_CONNECTING_MS = 90000;
@@ -150,7 +214,11 @@ function _gmailStartOAuth(scope, onToken, promptOpt) {
     return false;
   }
   if (!_gmailGisReady()) {
-    notif('Google Identity Services aún no cargó. Espere 5 segundos y pulse Conectar de nuevo.', 'warn');
+    const yaCargando = _gmailGisCargando;
+    _gmailGisRecargar(false);
+    if (_gmailGisCargando) notif(yaCargando
+      ? 'Aún se está cargando el acceso de Google. Espere unos segundos: le avisaremos cuando pueda pulsar Conectar.'
+      : 'El acceso de Google no había cargado; se está cargando de nuevo. Le avisaremos cuando pueda pulsar Conectar.', 'warn');
     return false;
   }
   _gmailConnecting = true;
@@ -362,7 +430,7 @@ function sstGmailTrySilentReconnect(doneCb) {
     if (doneCb) doneCb(false); return;
   }
   const clientId = _gmailGetClientId();
-  if (!clientId || !_gmailGisReady()) { if (doneCb) doneCb(false); return; }
+  if (!clientId || !_gmailGisReady()) { if (clientId) _gmailGisRecargar(true); if (doneCb) doneCb(false); return; }
   const useSec = typeof esSecretaria === 'function' && esSecretaria();
   const scope = useSec ? GMAIL_SCOPES : GMAIL_OFI_SCOPES;
   try {
