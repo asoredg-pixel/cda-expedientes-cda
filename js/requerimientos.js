@@ -2,7 +2,8 @@
 // requerimientos.js — Término de cumplimiento y seguimiento de requerimientos
 // - Bloque «Término para cumplir» al aprobar / notificar (días hábiles Colombia).
 // - Bandeja Consolidado › Requerimientos (Cumplió / Incumplió + exportar).
-// - Paleta «Requerimientos» del encargado en Actividades (🔍 revisar · ✔ cumplió · 📌 asignar).
+// - Paleta «Requerimientos» del encargado en Actividades (🔍 revisar · ✔ cumplió · 📌 asignar);
+//   también resoluciones por vencer / vencidas y facturas o acuerdos de pago en mora (✔ = gestión con observación).
 // - Actividad agrupada del encargado: retirada (solo se cierran las que existan).
 // Dependencias de runtime resueltas desde el scope global.
 // =============================================================================
@@ -12,6 +13,9 @@ const REQ_VERIF_ORIGEN='req_verif_agrupada';
 const REQ_POR_VENCER_DIAS=3;
 const REQ_PALETA_GRACIA_HABILES=3;
 const REQ_GESTION_CTX_TTL_MS=3*60*60*1000;
+const REQ_PAL_ACTO_AVISO_HABILES=30;
+const REQ_PAL_MORA_DIAS=15;
+const REQ_PAL_GESTION_KEYS=['palGestionRef','palGestionEn','palGestionPor','palGestionDesc','palGestionTaskIds'];
 const REQ_ESTADOS={
   en_termino:{lbl:'En término',bg:'var(--gnl)',fg:'var(--gn)',bd:'#9fe1cb'},
   por_vencer:{lbl:'Por vencer',bg:'var(--aml)',fg:'var(--am)',bd:'#f1d795'},
@@ -41,6 +45,26 @@ function reqDiasHabilesEntre(desde,hasta){
     if(typeof esDiaHabilCO!=='function'||esDiaHabilCO(s))n++;
   }
   return n;
+}
+/** Días calendario de desde a hasta. */
+function reqDiasCalEntre(desde,hasta){
+  const a=String(desde||'').slice(0,10),b=String(hasta||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b))return 0;
+  return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000);
+}
+/** Marca de gestión de la paleta en actos / facturas: el formulario del expediente no tiene campos y debe conservarla. */
+function reqPalGestionPick(o){
+  const r={};
+  if(!o)return r;
+  REQ_PAL_GESTION_KEYS.forEach(function(k){if(o[k]!==undefined&&o[k]!=='')r[k]=o[k];});
+  return r;
+}
+function reqPalGestionAttr(o){
+  const g=reqPalGestionPick(o);
+  return Object.keys(g).length?' data-pal-gestion="'+escAttr(JSON.stringify(g))+'"':'';
+}
+function reqPalGestionFromRow(row){
+  try{return JSON.parse((row&&row.getAttribute('data-pal-gestion'))||'{}')||{};}catch(err){return{};}
 }
 function reqEsOficioRequerimiento(t){
   if(!t)return false;
@@ -613,9 +637,116 @@ function reqPaletaEntra(x){
   if(!x||(x.estado!=='vencido'&&x.estado!=='incumplio'))return false;
   return reqDiasHabilesEntre(x.vence,reqHoy())>REQ_PALETA_GRACIA_HABILES;
 }
+function reqPalEsGestionItem(x){return !!(x&&(x.fuente==='acto'||x.fuente==='factura'||x.fuente==='acuerdo'));}
+function _reqPalActoTask(e,a){
+  const id=String(a.actoAdminId||''),tid=String(a.taskId||'');
+  return (e.tasks||[]).find(function(t){
+    return t&&!t.eliminada&&((tid&&String(t.id)===tid)||(id&&String(t.actoAdminId||'')===id));
+  })||null;
+}
+function _reqPalFacSig(f){return f?[f.tipo,f.ref,f.venc,f.valor].map(function(v){return String(v||'');}).join('|'):'';}
+/**
+ * Resoluciones a ≤30 días hábiles de vencer (o vencidas) y facturas / acuerdos de pago con ≥15 días calendario de mora.
+ * Sin registros pendientes de aprobación ni actos cuya notificación siga en revisión del encargado.
+ */
+function _reqPalEntradasExp(e,out){
+  if(!e||!e._exp)return;
+  const exp=String(e._exp),h=reqHoy();
+  const nombre=typeof getNom==='function'?getNom(e):exp;
+  const fx=function(s){return typeof fmtF==='function'?fmtF(s):s;};
+  const actos=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
+  actos.forEach(function(a,i){
+    if(!a||a.pendienteAprobacion||typeof estadoActoAdmin!=='function'||typeof vigenteActo!=='function')return;
+    if(estadoActoAdmin(a).archivada)return;
+    const vig=String(vigenteActo(a)||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(vig))return;
+    const vencida=vig<h;
+    if(!vencida&&reqDiasHabilesEntre(h,vig)>REQ_PAL_ACTO_AVISO_HABILES)return;
+    const palRef='v:'+vig;
+    if(a.palGestionEn&&a.palGestionRef===palRef)return;
+    const t=_reqPalActoTask(e,a);
+    if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return;
+    const pr=typeof tieneProrrogasActo==='function'&&tieneProrrogasActo(a);
+    out.push({
+      key:'a|'+exp+'|'+(a.actoAdminId||('i:'+i)),fuente:'acto',exp:exp,ref:exp,idx:i,actoAdminId:String(a.actoAdminId||''),
+      nombre:nombre,titulo:String(a.tipo||'Acto administrativo')+(a.numero?' N° '+a.numero:''),
+      detalle:[a.fecha?'Del '+fx(a.fecha):'',pr?'Vigencia por prórroga':''].filter(Boolean).join(' · '),
+      vence:vig,palRef:palRef,estado:vencida?'vencido':'por_vencer',taskId:t?String(t.id):''
+    });
+  });
+  const facs=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
+  facs.forEach(function(f,i){
+    if(!f||f.pendienteAprobacion||f.pago)return;
+    let fecha='',det='';
+    const esAcu=!!f.acuerdoPago;
+    if(esAcu){
+      const cuotas=typeof acuerdoCuotasData==='function'?acuerdoCuotasData(f):[];
+      if(cuotas.length){
+        const mora=cuotas.map(function(c,ci){return{c:c,n:ci+1};}).filter(function(o){return o.c&&o.c.fecha&&!o.c.pago&&o.c.fecha<h;});
+        mora.sort(function(p,q){return String(p.c.fecha).localeCompare(String(q.c.fecha));});
+        if(mora.length){
+          fecha=String(mora[0].c.fecha);
+          det='Cuota #'+mora[0].n+(mora.length>1?' · '+mora.length+' cuotas en mora':'');
+        }
+      }else if(!f.acuerdoDia)fecha=String(f.venc||'');
+    }else fecha=String(f.venc||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasCalEntre(fecha,h)<REQ_PAL_MORA_DIAS)return;
+    const palRef=(esAcu?'c:':'f:')+fecha;
+    if(f.palGestionEn&&f.palGestionRef===palRef)return;
+    const valor=f.valor&&typeof moneyFmt==='function'?'$'+moneyFmt(f.valor):'';
+    out.push({
+      key:'f|'+exp+'|'+i+'|'+palRef,fuente:esAcu?'acuerdo':'factura',exp:exp,ref:exp,idx:i,sig:_reqPalFacSig(f),
+      nombre:nombre,titulo:(esAcu?'Acuerdo de pago · ':'')+String(f.tipo||'Factura')+(f.ref?' · '+f.ref:''),
+      detalle:[det,valor?'Valor '+valor:''].filter(Boolean).join(' · '),
+      vence:fecha,palRef:palRef,estado:'vencido',taskId:f.taskId?String(f.taskId):''
+    });
+  });
+}
+/** Formulario del mismo expediente abierto: al guardarlo de nuevo no debe borrar la marca. */
+function _reqPalSyncFormRow(e,sel,idx,item){
+  try{
+    if(typeof editId==='undefined'||String(editId||'')!==String(e._exp))return;
+    const row=document.querySelectorAll(sel)[idx];
+    if(row)row.setAttribute('data-pal-gestion',JSON.stringify(reqPalGestionPick(item)));
+  }catch(err){}
+}
+function _reqPalMarcarGestion(e,x,d){
+  d=d||{};
+  if(!e||!x)return false;
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+  const patch=function(o){
+    o.palGestionRef=x.palRef;o.palGestionEn=new Date().toISOString();o.palGestionPor=por;
+    o.palGestionDesc=String(d.desc||'').slice(0,500);
+    if(d.taskIds&&d.taskIds.length)o.palGestionTaskIds=d.taskIds;else delete o.palGestionTaskIds;
+  };
+  if(x.fuente==='acto'){
+    const arr=typeof actosAdminData==='function'?actosAdminData(e._actos_admin):[];
+    let idx=x.actoAdminId?arr.findIndex(function(a){return a&&String(a.actoAdminId||'')===x.actoAdminId;}):-1;
+    if(idx<0&&!x.actoAdminId&&arr[x.idx]&&!arr[x.idx].actoAdminId)idx=x.idx;
+    if(idx<0||'v:'+String(vigenteActo(arr[idx])||'')!==x.palRef)return false;
+    patch(arr[idx]);
+    e._actos_admin=JSON.stringify(arr);
+    _reqPalSyncFormRow(e,'#actos-admin-list .acto-admin',idx,arr[idx]);
+  }else{
+    const arr=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
+    const idx=arr[x.idx]&&_reqPalFacSig(arr[x.idx])===x.sig?x.idx:arr.findIndex(function(f){return _reqPalFacSig(f)===x.sig;});
+    if(idx<0)return false;
+    patch(arr[idx]);
+    e._facturas_extra=JSON.stringify(arr);
+    _reqPalSyncFormRow(e,'#facturas-extra .factura-extra',idx,arr[idx]);
+  }
+  _reqPersistExp(e);
+  if(typeof logAudit==='function')
+    logAudit('Gestión paleta Requerimientos ['+x.exp+'] '+x.titulo+' — '+String(d.desc||'').slice(0,200),'expedientes',x.exp);
+  return true;
+}
 function reqPaletaEntradas(){
   if(!reqPaletaVisible())return[];
-  const out=reqColectarEntradas(reqListaAmbito(),{libres:true}).filter(reqPaletaEntra);
+  const lista=reqListaAmbito();
+  const out=reqColectarEntradas(lista,{libres:true}).filter(reqPaletaEntra);
+  lista.forEach(function(e){
+    try{_reqPalEntradasExp(e,out);}catch(err){console.warn('_reqPalEntradasExp:',err);}
+  });
   out.sort(function(a,b){
     return String(a.vence||'').localeCompare(String(b.vence||''))||String(a.exp||'').localeCompare(String(b.exp||''));
   });
@@ -628,11 +759,11 @@ function reqPaletaRowsHtml(q,colSpan){
   let rows=reqPaletaEntradas();
   const ql=String(q||'').toLowerCase().trim();
   if(ql)rows=rows.filter(function(x){
-    return [x.exp,x.nombre,x.titulo,x.reqNum,x.oficio].join(' ').toLowerCase().indexOf(ql)>=0;
+    return [x.exp,x.nombre,x.titulo,x.reqNum,x.oficio,x.detalle].join(' ').toLowerCase().indexOf(ql)>=0;
   });
   window._reqPaletaEntries=rows;
   if(!rows.length)
-    return '<tr><td colspan="'+colSpan+'" class="emp">Sin requerimientos vencidos por gestionar. Aparecen aquí '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento del término.</td></tr>';
+    return '<tr><td colspan="'+colSpan+'" class="emp">Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_DIAS+' días de mora.</td></tr>';
   const colNotif=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
   return rows.map(function(x,i){return _reqPaletaRowHtml(x,i,colNotif);}).join('');
 }
@@ -643,18 +774,33 @@ function _reqPaletaRowHtml(x,i,colNotif){
   const tram=e
     ?String(((typeof getTram==='function'&&getTram(e._tramite,e))||{}).nombre||e._tramite||'')
     :(t&&t.sinExpediente?'Sin expediente':'');
+  const esGest=reqPalEsGestionItem(x);
+  const bdgRd='<span class="bdg" style="background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1;white-space:nowrap">';
   const dv=reqDiasHabilesEntre(x.vence,reqHoy());
-  let badge='<span class="bdg" style="background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1;white-space:nowrap">⏱️ Req. vencido · '+dv+' d. háb.</span>';
-  if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff;white-space:nowrap">Incumplió</span>';
-  const det=[x.reqNum?'Req. '+escAttr(x.reqNum):'',x.oficio?'Oficio '+escAttr(x.oficio):'',x.dias?escAttr(x.dias)+' d. '+(x.unidad===REQ_TERM_UNIDAD?'háb.':'cal.'):''].filter(Boolean).join(' · ');
+  let badge;
+  if(x.fuente==='acto'){
+    badge=x.estado==='vencido'
+      ?bdgRd+'⚖️ Resolución vencida · '+dv+' d. háb.</span>'
+      :'<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">⚖️ Resolución vence en '+reqDiasHabilesEntre(reqHoy(),x.vence)+' d. háb.</span>';
+  }else if(esGest){
+    badge=bdgRd+'💲 '+(x.fuente==='acuerdo'?'Acuerdo en mora':'Factura en mora')+' · '+reqDiasCalEntre(x.vence,reqHoy())+' días</span>';
+  }else{
+    badge=bdgRd+'⏱️ Req. vencido · '+dv+' d. háb.</span>';
+    if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff;white-space:nowrap">Incumplió</span>';
+  }
+  const det=esGest
+    ?escAttr(x.detalle||'')
+    :[x.reqNum?'Req. '+escAttr(x.reqNum):'',x.oficio?'Oficio '+escAttr(x.oficio):'',x.dias?escAttr(x.dias)+' d. '+(x.unidad===REQ_TERM_UNIDAD?'háb.':'cal.'):''].filter(Boolean).join(' · ');
+  const cierre=x.fuente==='acto'?'Vigencia hasta '+fx(x.vence):(esGest?(x.fuente==='acuerdo'?'Corte ':'Venció ')+fx(x.vence):'Notificado '+fx(x.inicio));
+  const barra=x.fuente==='acto'&&x.estado!=='vencido'?'var(--am)':'var(--rd)';
   const resp=t&&typeof taskResponsablesLabel==='function'?taskResponsablesLabel(t,true):'—';
   const refHtml=e
     ?'<span style="color:var(--bl);cursor:pointer" data-con-exp-asoc="'+escAttr(x.exp)+'">'+escAttr(x.exp)+'</span>'
     :escAttr(x.exp);
   let acc='<button type="button" class="btn bsm bic act-ico" title="Ver: revisión con las opciones del encargado (editar expediente, trasladar…)" onclick="event.stopPropagation();reqPaletaVer('+i+')">🔍</button>';
-  acc+='<button type="button" class="btn bsm bic act-ico" title="Cumplió el requerimiento" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
+  acc+='<button type="button" class="btn bsm bic act-ico" title="'+(esGest?'Registrar gestión (observación obligatoria)':'Cumplió el requerimiento')+'" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
   if(e)acc+='<button type="button" class="btn bsm bic act-ico" title="Asignar actividad a un responsable (al guardarla sale de esta paleta)" onclick="event.stopPropagation();reqPaletaAsignar('+i+')">📌</button>';
-  return '<tr data-req-key="'+escAttr(x.key)+'" style="box-shadow:inset 3px 0 0 var(--rd)">'+
+  return '<tr data-req-key="'+escAttr(x.key)+'" style="box-shadow:inset 3px 0 0 '+barra+'">'+
     '<td class="act-col-estado">'+badge+'</td>'+
     '<td class="act-col-ref" style="font-family:\'DM Mono\',monospace;font-size:12px">'+refHtml+'</td>'+
     '<td class="act-col-tram">'+escAttr(tram)+'</td>'+
@@ -663,8 +809,8 @@ function _reqPaletaRowHtml(x,i,colNotif){
       (x.verifNota?'<div style="font-size:11px;color:var(--tx2);font-style:italic">'+escAttr(x.verifNota)+'</div>':'')+'</td>'+
     '<td class="act-col-resp" style="font-size:12px;color:var(--tx2)">'+resp+'</td>'+
     (colNotif?'<td class="act-col-notif"></td>':'')+
-    '<td class="act-col-vence" style="color:var(--rd)">'+fx(x.vence)+'</td>'+
-    '<td class="act-col-cierre" style="font-size:12px">Notificado '+fx(x.inicio)+'</td>'+
+    '<td class="act-col-vence" style="color:'+barra+'">'+fx(x.vence)+'</td>'+
+    '<td class="act-col-cierre" style="font-size:12px">'+cierre+'</td>'+
     '<td class="act-col-acciones"><div class="act-row-actions"><span class="sst-act-toolbar">'+acc+'</span></div></td></tr>';
 }
 function reqPaletaVer(i){
@@ -684,10 +830,17 @@ function reqPaletaCumplio(i){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   window._reqPaletaSel=x;
-  if(tit)tit.textContent='✔ Requerimiento cumplido';
+  const esGest=reqPalEsGestionItem(x);
+  if(tit)tit.textContent=esGest?'✔ Registrar gestión':'✔ Requerimiento cumplido';
   if(modal){modal.classList.remove('enviar-modal-only');modal.classList.remove('task-modal-wide');}
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r);box-sizing:border-box';
-  body.innerHTML='<div style="max-width:520px">'+
+  if(esGest)body.innerHTML='<div style="max-width:520px">'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px"><strong>'+escAttr(x.exp)+'</strong> · '+escAttr(x.nombre||'')+'<br>'+escAttr(x.titulo)+(x.vence?' · '+(x.fuente==='acto'?'vigencia':'vencimiento')+' '+escAttr(typeof fmtF==='function'?fmtF(x.vence):x.vence):'')+'</div>'+
+    '<div class="fld" style="margin-bottom:10px"><label>¿Qué gestión se hizo? <span class="req-star">*</span></label><textarea id="req-pal-nota" maxlength="500" placeholder="'+(x.fuente==='acto'?'Ej.: se requirió al titular la solicitud de renovación con oficio N°…':'Ej.: se envió cobro persuasivo con oficio N°…')+'" style="'+inp+';min-height:70px"></textarea></div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-bottom:10px">No modifica fechas ni pagos. Sale de la paleta y vuelve a aparecer si cambia '+(x.fuente==='acto'?'la vigencia (p. ej. nueva prórroga).':'el vencimiento o entra en mora otra cuota.')+'</div>'+
+    '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="reqPaletaConfirmarCumplio()">Confirmar</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div></div>';
+  else body.innerHTML='<div style="max-width:520px">'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px"><strong>'+escAttr(x.exp)+'</strong> · '+escAttr(x.nombre||'')+'<br>'+escAttr(x.titulo)+(x.vence?' · límite '+escAttr(typeof fmtF==='function'?fmtF(x.vence):x.vence):'')+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Fecha de cumplimiento <span class="req-star">*</span></label><input type="date" id="req-pal-fecha" value="'+escAttr(reqHoy())+'" max="'+escAttr(reqHoy())+'" style="'+inp+'"></div>'+
     '<div class="fld" style="margin-bottom:10px"><label>¿Cómo cumplió? <span class="req-star">*</span></label><textarea id="req-pal-nota" maxlength="500" placeholder="Ej.: radicó los documentos solicitados con el oficio N°…" style="'+inp+';min-height:70px"></textarea></div>'+
@@ -701,6 +854,18 @@ function reqPaletaCumplio(i){
 function reqPaletaConfirmarCumplio(){
   const x=window._reqPaletaSel;
   if(!x){notif('Vuelva a abrir el requerimiento','err');return;}
+  if(reqPalEsGestionItem(x)){
+    const notaG=String((document.getElementById('req-pal-nota')||{}).value||'').trim().slice(0,500);
+    if(!notaG){notif('Escriba qué gestión se hizo','err');return;}
+    if(!reqPuedeVerificar()){notif('Solo el encargado puede registrar la gestión','err');return;}
+    const eG=typeof getExpById==='function'?getExpById(x.exp):null;
+    if(!_reqPalMarcarGestion(eG,x,{desc:notaG})){notif('No se encontró el registro; recargue e intente de nuevo','err');return;}
+    window._reqPaletaSel=null;
+    if(typeof closeTaskModal==='function')closeTaskModal();
+    notif('Gestión registrada — sale de la paleta','ok');
+    _reqRefrescarVistas();
+    return;
+  }
   const fecha=String((document.getElementById('req-pal-fecha')||{}).value||'').trim();
   const nota=String((document.getElementById('req-pal-nota')||{}).value||'').trim().slice(0,500);
   if(!fecha){notif('Indique la fecha de cumplimiento','err');return;}
@@ -726,7 +891,7 @@ function reqPaletaAsignar(i){
   _reqGestionWatchStart();
   if(typeof openActividadesAsignadasDesdeRevision==='function')openActividadesAsignadasDesdeRevision(x.exp,x.taskId||'');
   else if(typeof editarExp==='function')editarExp(x.exp);
-  notif('Añada la actividad y guarde el expediente: el requerimiento saldrá de la paleta','ok');
+  notif('Añada la actividad y guarde el expediente: saldrá de la paleta','ok');
 }
 function _reqGestionWatchStart(){
   if(window._reqGestionTimer)return;
@@ -748,23 +913,29 @@ function reqGestionRevisar(){
   window._reqGestionCtx=null;
   _reqGestionWatchStop();
   if(reqRegistrarGestion(ctx,e,nuevas)){
-    notif('Requerimiento gestionado con la actividad asignada — sale de la paleta Requerimientos','ok');
+    notif('Gestionado con la actividad asignada — sale de la paleta Requerimientos','ok');
     _reqRefrescarVistas();
   }
 }
 function reqRegistrarGestion(ctx,e,nuevas){
   try{
+    const ids=nuevas.map(function(t){return String(t.id);});
+    const desc=nuevas.map(function(t){
+      const rs=typeof getTaskResponsables==='function'?getTaskResponsables(t):[t.responsable].filter(Boolean);
+      return String(t.actividad||t.desc||'Actividad')+(rs&&rs.length?' → '+rs.join(', '):'');
+    }).join(' · ').slice(0,300);
+    if(/^[af]\|/.test(String(ctx.key||''))){
+      const extra=[];
+      _reqPalEntradasExp(e,extra);
+      const g=extra.find(function(y){return y.key===ctx.key;});
+      return g?_reqPalMarcarGestion(e,g,{desc:'Se asignó '+desc,taskIds:ids}):false;
+    }
     const lista=[];
     _reqEntradasExp(e,lista);
     const x=lista.find(function(y){return y.key===ctx.key;});
     if(!x||x.cumplido||x.gestionado)return false;
     const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
     const en=new Date().toISOString();
-    const ids=nuevas.map(function(t){return String(t.id);});
-    const desc=nuevas.map(function(t){
-      const rs=typeof getTaskResponsables==='function'?getTaskResponsables(t):[t.responsable].filter(Boolean);
-      return String(t.actividad||t.desc||'Actividad')+(rs&&rs.length?' → '+rs.join(', '):'');
-    }).join(' · ').slice(0,300);
     const hist=function(tk){
       if(!Array.isArray(tk.historial))tk.historial=[];
       tk.historial.push({tipo:'gestion_requerimiento',fecha:reqHoy(),ts:Date.now(),por:por,nota:'Requerimiento vencido gestionado: se asignó '+desc});
@@ -819,6 +990,8 @@ window.reqBandejaExportarCsv=reqBandejaExportarCsv;
 window.reqVerifSyncActividadAgrupada=reqVerifSyncActividadAgrupada;
 window.reqEsActividadAgrupada=reqEsActividadAgrupada;
 window.reqActividadAgrupadaToolbarHtml=reqActividadAgrupadaToolbarHtml;
+window.reqPalGestionAttr=reqPalGestionAttr;
+window.reqPalGestionFromRow=reqPalGestionFromRow;
 window.reqPaletaVisible=reqPaletaVisible;
 window.reqPaletaContar=reqPaletaContar;
 window.reqPaletaRowsHtml=reqPaletaRowsHtml;

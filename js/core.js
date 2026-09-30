@@ -23552,6 +23552,7 @@ function readActoFromRow(row){
     vencimiento:item.querySelector('.la-pr-venc')?item.querySelector('.la-pr-venc').value:''
   })).filter(p=>p.numero||p.vencimiento);
   return{
+    ...(typeof reqPalGestionFromRow==='function'?reqPalGestionFromRow(row):{}),
     actoAdminId:row.getAttribute('data-acto-admin-id')||'',
     tipo:row.querySelector('.la-tipo')?row.querySelector('.la-tipo').value:'',
     numero:row.querySelector('.la-num')?row.querySelector('.la-num').value:'',
@@ -23806,7 +23807,7 @@ function facturaRowHtml(f,i){
   const enMora=f.venc&&f.venc<hoy()&&!f.pago;
   const enCoactivo=enMora&&f.persVenc&&f.persVenc<hoy();
   const tit=(f.tipo||'Factura')+(f.ref?' · '+f.ref:'')+(enMora?' · <span class="flag" style="background:var(--rdl);color:var(--rd)">Mora</span>':'');
-  return '<details class="item-fold factura-extra">'+
+  return '<details class="item-fold factura-extra"'+(typeof reqPalGestionAttr==='function'?reqPalGestionAttr(f):'')+'>'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo factura</label><select class="fx-tipo" onchange="syncFacturasExtra();refreshFacturaFold(this)">'+facturaTipoOpts(f.tipo||'')+'</select></div>'+
@@ -23872,7 +23873,7 @@ function actoAdminRowHtml(a,i){
   const showGestion=usaVenc&&!st.archivada&&(st.vencida||tieneProrrogasActo(a)||a.archivoFecha||a.archivoNum);
   const prorrogaHint=st.vencida&&!st.archivada?'<div style="font-size:11px;color:var(--am);margin-bottom:.5rem">Plazo vencido: registre prórroga, acto vinculado o archive el acto.</div>':'';
   const vincHtml=st.vencida&&!st.archivada&&usaVenc?actosVinculadosQuickHtml():'';
-  return '<details class="item-fold acto-admin" data-acto-admin-id="'+escAttr(a.actoAdminId||'')+'">'+
+  return '<details class="item-fold acto-admin" data-acto-admin-id="'+escAttr(a.actoAdminId||'')+'"'+(typeof reqPalGestionAttr==='function'?reqPalGestionAttr(a):'')+'>'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo de acto administrativo</label><select class="la-tipo" onchange="updateActoAdminRow(this.closest(\'.acto-admin\'));syncActosAdmin()">'+actoTipoOpts(a.tipo||'')+'</select></div>'+
@@ -28381,7 +28382,7 @@ function renderActividades(){
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido (días hábiles) sin verificar, tras 3 días hábiles de gracia. 🔍 revisar · ✔ cumplió · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
+    else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido (días hábiles) sin verificar, tras 3 días hábiles de gracia · Resoluciones a 30 días hábiles o menos de vencer (o vencidas) · Facturas y acuerdos de pago con 15 días o más de mora. 🔍 revisar · ✔ cumplió / gestión · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();

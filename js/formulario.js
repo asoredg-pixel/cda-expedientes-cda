@@ -663,6 +663,7 @@ function updateFacturaCobro(row){
 function syncFacturasExtra(){
   const rows=Array.from(document.querySelectorAll('#facturas-extra .factura-extra'));
   const arr=rows.map(r=>({
+    ...(typeof reqPalGestionFromRow==='function'?reqPalGestionFromRow(r):{}),
     tipo:r.querySelector('.fx-tipo').value,
     valor:moneyRaw(r.querySelector('.fx-valor').value),
     ref:r.querySelector('.fx-ref').value,
