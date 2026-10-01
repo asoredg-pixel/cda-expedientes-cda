@@ -9934,6 +9934,8 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   const canAsig=typeof puedeAsignarPqrsOficina==='function'&&puedeAsignarPqrsOficina(e);
   let h='<div class="task-review-side-form pqrs-trasl-side">';
   h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(e.f_f1||e._pqrs_detalle||expId)+'</div>';
+  if(canIni||canOfi||canAsig)
+    h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="pqrs-trasl-prior"'+(e._pqrs_prioritaria?' checked':'')+'> ⚡ Prioritaria <span style="font-weight:400;color:var(--tx3)">(se aplica al confirmar el traslado o la asignación)</span></label>';
   if(canIni||canOfi){
     h+='<div style="font-size:12px;font-weight:600;margin:10px 0 6px">🔄 Trasladar a otra oficina</div>';
     h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">DS, RN, OAP, Admin u otra oficina competente.</div>';

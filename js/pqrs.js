@@ -2909,6 +2909,16 @@ function openAsignarPqrsOficinaModal(expId){
     if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
   },30);
 }
+/** Casilla «⚡ Prioritaria» del panel Trasladar / Asignar (rail): aplica a la PQRSD y a su tarea de atención. */
+function pqrsAplicarPrioritariaDesdePanel(e){
+  const cb=document.getElementById('pqrs-trasl-prior');
+  if(!cb||!e)return;
+  const prior=!!cb.checked;
+  e._pqrs_prioritaria=prior;
+  (e.tasks||[]).forEach(function(t){
+    if(t&&!t.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))t.prioritaria=prior;
+  });
+}
 async function submitAsignarPqrsOficina(expId,taskId){
   const responsables=[...document.querySelectorAll('.pqrs-asig-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
   if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
@@ -2947,6 +2957,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   nomList=responsables.join(', ');
   e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
+  pqrsAplicarPrioritariaDesdePanel(e);
   const prior=!!e._pqrs_prioritaria;
   const actNombre=typeof pqrsActividadNombreDefault==='function'?pqrsActividadNombreDefault():'Oficio de respuesta';
   const detalle=obs||'';
@@ -3077,6 +3088,7 @@ async function submitTrasladoPqrsInicial(expId,taskId){
   if(!puedeTrasladarPqrsInicial(e)){notif('No puede trasladar esta PQRSD','err');return;}
   const por=esSecretaria()?'Secretaría DEGUV':(esDirectorDsDeguv()?'DS DEGUV':'Administrador');
   await _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,function(exp){
+    pqrsAplicarPrioritariaDesdePanel(exp);
     exp._pqrs_pendiente_traslado=false;
     exp._pqrs_oficina=nuevaOfi;
     exp._pqrs_traslado_fecha=hoy();
@@ -3125,6 +3137,7 @@ async function submitTrasladoPqrsInterOficina(expId,taskId){
   if(nuevaOfi===anterior){notif('Seleccione una oficina diferente','err');return;}
   const porTrasl=esSecretaria()?'Secretaría DEGUV':(labelOficina(getPqrsOficinaActiva())||'Oficina');
   await _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,function(exp){
+    pqrsAplicarPrioritariaDesdePanel(exp);
     exp._pqrs_oficina=nuevaOfi;
     exp._pqrs_traslado_fecha=hoy();
     exp._pqrs_traslado_por=porTrasl;
