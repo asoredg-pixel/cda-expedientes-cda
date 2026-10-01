@@ -1144,7 +1144,7 @@ async function _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg){
   }
   return msg;
 }
-function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
+function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre,sinAdjuntos){
   const num=expId||e._exp||'';
   const asunto=e.f_f1||e._tipo_solicitud||'PQRSD';
   const fecha=e._fecha_solicitud||e._fecha||'';
@@ -1156,7 +1156,7 @@ function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
   const solLink=e._pqrs_solicitud_link||'';
   const folderLink=e._pqrs_drive_folder_link||'';
   let adjuntosHtml='';
-  if(typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e)){
+  if(!sinAdjuntos&&typeof pqrsFueRadicadaPorCorreo==='function'&&pqrsFueRadicadaPorCorreo(e)){
     adjuntosHtml='<p><em>Los soportes de la solicitud van <strong>adjuntos a este correo</strong> (reenvío desde Secretaría), no por enlaces Drive.</em></p>';
   }else{
     const atts=Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[];
@@ -1182,7 +1182,8 @@ function _pqrsHtmlNotifAsignacion(e,expId,destinatarioNombre){
     '<hr><p style="font-size:11px;color:#888">Notificación automática del Sistema de Seguimiento de Trámites — CDA Delegación Guaviare. No responda a este correo.</p>';
 }
 /** destinatarios: array de emails O de {email,nombre}. Cada uno recibe saludo con su propio nombre. */
-async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId,prefetchedMsg){
+async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId,prefetchedMsg,opts){
+  opts=opts||{};
   if(!destinatarios||!destinatarios.length)return false;
   if(typeof _gmailApiBest!=='function'&&typeof gmailSend!=='function')return false;
   const num=expId||e._exp||'';
@@ -1194,7 +1195,7 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId,prefetchedMsg){
     if(typeof d==='string')return{email:String(d||'').trim(),nombre:''};
     return{email:String(d&&d.email||'').trim(),nombre:String(d&&d.nombre||'').trim()};
   }).filter(function(d){return!!d.email;});
-  if(pqrsFueRadicadaPorCorreo(e)&&typeof reenviarEmailRawARecipientes==='function'){
+  if(!opts.sinReenvioRaw&&pqrsFueRadicadaPorCorreo(e)&&typeof reenviarEmailRawARecipientes==='function'){
     const msg=await _pqrsFetchGmailMsgForReenvio(e,prefetchedMsg);
     if(msg){
       const emails=list.map(function(d){return d.email;});
@@ -1212,7 +1213,7 @@ async function _pqrsEnviarNotifAsignacion(e,destinatarios,expId,prefetchedMsg){
   const okEmails=[];
   for(let i=0;i<list.length;i++){
     const dest=list[i];
-    let body=_pqrsHtmlNotifAsignacion(e,num,dest.nombre||e._pqrs_responsable_oficina||'');
+    let body=_pqrsHtmlNotifAsignacion(e,num,dest.nombre||e._pqrs_responsable_oficina||'',!!opts.sinReenvioRaw);
     if(typeof gmailBuildPqrsReenvioHtml==='function'){
       body=gmailBuildPqrsReenvioHtml(null,e,{
         introHtml:'<p style="font-family:Arial,sans-serif;font-size:13px">Se le asigna esta PQRSD para su atención.</p>'
@@ -1283,6 +1284,8 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
       const rawOk=await reenviarEmailRawARecipientes(msg,emails,expId,{
         silent:true,
         exp:e,
+        verificarEnviados:true,
+        soloConTrazabilidad:true,
         introHtml:'<p style="font-family:Arial,sans-serif;font-size:13px">Se le asigna esta PQRSD. A continuación el historial del correo de solicitud recibido en Secretaría (Para, Cc y cuerpo del mensaje).</p>'
       });
       if(rawOk)okEmails=emails.slice();
@@ -1293,7 +1296,7 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
   });
   if(faltantes.length){
     try{
-      const r=await _pqrsEnviarNotifAsignacion(e,faltantes,expId);
+      const r=await _pqrsEnviarNotifAsignacion(e,faltantes,expId,null,{sinReenvioRaw:true});
       if(Array.isArray(r))okEmails=okEmails.concat(r);
     }catch(err){console.warn('notif asignacion responsable:',err);}
   }

@@ -4613,6 +4613,34 @@ async function _gmailSendMimeBytesPqrs(mimeBytes) {
   return res.json();
 }
 
+/**
+ * Destinatarios a los que aún NO salió el reenvío «PQRSD #expId» (carpeta Enviados, últimos 15 min).
+ * Gmail puede entregar el correo aunque la respuesta llegue con error: evita mandar un segundo formato.
+ */
+async function _gmailPqrsSinEnvioReciente(emails, expId) {
+  if (!expId || !emails || !emails.length) return emails || [];
+  const desde = Math.floor(Date.now() / 1000) - 15 * 60;
+  const pend = [];
+  for (var i = 0; i < emails.length; i++) {
+    const em = emails[i];
+    var enviado = false;
+    for (var intento = 0; intento < 2 && !enviado; intento++) {
+      if (intento) await new Promise(function(r) { setTimeout(r, 2500); });
+      try {
+        const q = encodeURIComponent('in:sent to:' + em + ' subject:"PQRSD #' + expId + '" after:' + desde);
+        const sr = await _gmailApiPqrsReenvio('GET', GMAIL_API_BASE + '/messages?q=' + q + '&maxResults=1');
+        enviado = !!(sr && sr.messages && sr.messages.length);
+      } catch (errQ) {
+        console.warn('_gmailPqrsSinEnvioReciente:', errQ);
+        break;
+      }
+    }
+    if (enviado) console.info('Reenvío PQRSD #' + expId + ': ya figura en Enviados para ' + em + ' — no se reenvía otro formato');
+    else pend.push(em);
+  }
+  return pend;
+}
+
 async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
   opts = opts || {};
   const emails = (Array.isArray(recipientEmails) ? recipientEmails : [recipientEmails])
@@ -4631,6 +4659,13 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
   const exp = opts.exp || (typeof getExpById === 'function' ? getExpById(expId) : null);
   const useHistorial = opts.pqrsHistorial !== false;
   const skipAdjuntosMime = !!opts.pqrsSinAdjuntosMime;
+  const verificarEnviados = !!opts.verificarEnviados;
+  async function quitarYaEnviados() {
+    if (!verificarEnviados || !uniq.length) return;
+    const pend = await _gmailPqrsSinEnvioReciente(uniq.slice(), expId);
+    uniq.splice(0, uniq.length);
+    pend.forEach(function(em) { uniq.push(em); });
+  }
   try {
     var fullMsg = msg;
     const secMsgId = (exp && String(exp._gmail_message_id || '').trim()) || String(fullMsg.id || '').trim();
@@ -4662,10 +4697,15 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
           if (!opts.silent && okWrap) {
             notif('Correo reenviado con historial y adjuntos a ' + (opts.label || uniq.join(', ')), 'ok');
           }
-          if (okWrap) return true;
+          if (okWrap) {
+            console.info('Reenvío PQRSD #' + expId + ': formato trazabilidad + correo original');
+            return true;
+          }
         } catch (errWrap) {
           console.warn('reenviarEmailRawARecipientes trazabilidad+original:', errWrap);
           if (okWrap) uniq.splice(0, okWrap);
+          await quitarYaEnviados();
+          if (!uniq.length) return true;
         }
       }
       try {
@@ -4681,12 +4721,18 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
           const lbl = opts.label || uniq.join(', ');
           notif('Correo reenviado con historial y adjuntos a ' + lbl, 'ok');
         }
+        if (okHist) console.info('Reenvío PQRSD #' + expId + ': formato historial + anexos adjuntos');
         return okHist > 0;
       } catch (errHist) {
         console.warn('reenviarEmailRawARecipientes historial+MIME:', errHist);
         if (opts.pqrsHistorial === true) throw errHist;
+        if (okHist) uniq.splice(0, okHist);
+        await quitarYaEnviados();
+        if (!uniq.length) return true;
+        if (opts.soloConTrazabilidad) return false;
       }
     }
+    if (opts.soloConTrazabilidad) return false;
     const rawData = await _gmailGetRawPqrs(msg.id);
     var okCount = 0;
     for (var ri = 0; ri < uniq.length; ri++) {
@@ -4698,6 +4744,7 @@ async function reenviarEmailRawARecipientes(msg, recipientEmails, expId, opts) {
       const lbl = opts.label || uniq.join(', ');
       notif('Correo reenviado con adjuntos a ' + lbl, 'ok');
     }
+    if (okCount) console.info('Reenvío PQRSD #' + expId + ': formato correo original (sin trazabilidad)');
     return okCount > 0;
   } catch (e) {
     console.error('reenviarEmailRawARecipientes:', e);
