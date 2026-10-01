@@ -17441,6 +17441,9 @@ window._entregaPromoverAnexoAPrincipal=_entregaPromoverAnexoAPrincipal;
 /** Formulario de entrega con cuerpo/correo propio: no exigir «comentario u observaciones». */
 function entregaModalOmiteComentarioEnvio(){
   if(document.getElementById('pqrs-entrega-campos'))return true;
+  // Entregas del responsable: sin recuadro de comentario; el adjunto se valida por N° de referencia.
+  if(document.getElementById('task-enviar-panel')&&!document.getElementById('enviar-cmt-opcional'))return true;
+  if(document.getElementById('entrega-rev-prof-host')&&!document.getElementById('enviar-cmt-opcional'))return true;
   const cb=document.getElementById('entrega-notif-correo');
   if(cb&&cb.checked)return true;
   const tipoPq=String((document.getElementById('pqrs-resp-tipo')||{}).value||'').trim();
@@ -17453,6 +17456,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   let adj=collectEnviarAdjuntos();
   // Si solo hay anexos (sin Documento principal), el primero pasa a documento de la entrega
   if(typeof _entregaPromoverAnexoAPrincipal==='function')adj=_entregaPromoverAnexoAPrincipal(adj);
+  if(typeof entregaValidarAdjuntoPorReferencia==='function'&&!entregaValidarAdjuntoPorReferencia(adj))return;
   const reqEl=document.getElementById('enviar-requiere-link');
   const requiereLink=reqEl&&reqEl.value==='1';
   let e=getExpById(expId);
@@ -18024,13 +18028,14 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">Como encargado del departamento, al finalizar la actividad queda <strong>cerrada directamente</strong>. Puede adjuntar soporte opcional.</div>';
   }else if(traslado){
     h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:8px;padding:6px 8px;background:var(--sf);border-radius:var(--r);border:1px solid var(--bd)">'+
-      'Entrega tras traslado — comentario obligatorio si no adjunta archivo.'+
+      'Entrega tras traslado — para mensajes al encargado use el chat de la actividad.'+
     '</div>';
   }
   if(esPqrsEntrega&&!sol){
     const uiEnc=!!(autoEnc||entregaDirectaUi);
     h+=renderPqrsEntregaCamposHtml(eExp,{modo:uiEnc?'enc_acc':'responsable'});
   }
+  let revProfHtml='';
   if(!sol&&!esPqrsEntrega){
     const actNom=String((t&&t.actividad)||'').trim();
     if(eExp){
@@ -18043,6 +18048,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
         h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
         h+=htmlEntregaRegConceptoBlock(eExp,{actividad:actNom,t:t});
         h+='</div>';
+        if(!autoEnc&&!finalizarEnc&&typeof htmlEntregaRevProfesionalBlock==='function')revProfHtml=htmlEntregaRevProfesionalBlock(eExp,t);
       }else if(regTipo==='factura'&&typeof htmlEntregaRegFacturaBlock==='function'){
         h+='<div id="entrega-reg-box" style="margin-bottom:10px;padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">';
         h+=htmlEntregaRegFacturaBlock();
@@ -18084,8 +18090,9 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       '</div>';
     }
     h+='<div id="enviar-adjuntos-rows" style="display:none"></div>';
-    if(!esPqrsEntrega){
-      h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':autoEnc?'Comentario sobre esta autoentrega (opcional)…':'Comentario sobre esta entrega (obligatorio si no adjunta archivo)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
+    // Entregas del responsable: sin comentario (los mensajes al encargado van por el chat de la actividad).
+    if(!esPqrsEntrega&&(finalizarEnc||autoEnc)){
+      h+='<textarea id="enviar-cmt-opcional" placeholder="'+(finalizarEnc?'Comentario opcional al finalizar…':'Comentario sobre esta autoentrega (opcional)…')+'" style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>';
     }
     if(autoEnc){
       const eid=escAttr(expId),tid=escAttr(taskId);
@@ -18097,6 +18104,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
         '<button type="button" class="btn bsm bp" onclick="submitAutoentregaEncargado(\''+eid+'\',\''+tid+'\',\'cerrar\')">✓ Entregar y cerrar (sin firma)</button>'+
         '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
     }else{
+      h+=revProfHtml;
       h+='<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" onclick="'+(finalizarEnc?'submitFinalizarEncargado':'submitEnviarSoporteVerificacion')+'(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">'+(finalizarEnc?'✓ Finalizar actividad':nuevaEntrega?'📤 Enviar nueva entrega':entregaDirectaUi?'📤 Enviar respuesta':esPqrsEntrega?'📤 Enviar a revisión':'📤 Enviar para verificación')+'</button>'+
         '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
     }

@@ -315,23 +315,32 @@ describe('Selector de profesionales', () => {
   it('el bloque muestra la casilla solo en modo responsable y el aviso si no hay profesionales', () => {
     const c = montarEntrega()
     const e = { _exp: 'EXP-1', _conceptos_seg: '[]' }
-    expect(c.htmlEntregaRegConceptoBlock(e, {})).toContain('entrega-rev-prof-chk')
+    expect(c.htmlEntregaRevProfesionalBlock(e, null)).toContain('entrega-rev-prof-chk')
     c._usuariosCache.forEach(u => { u.cargo = '' })
-    expect(c.htmlEntregaRegConceptoBlock(e, {})).toContain('No hay profesionales configurados')
+    expect(c.htmlEntregaRevProfesionalBlock(e, null)).toContain('No hay profesionales configurados')
     c.esModoResponsable = () => false
-    expect(c.htmlEntregaRegConceptoBlock(e, {})).not.toContain('entrega-rev-prof-chk')
+    expect(c.htmlEntregaRevProfesionalBlock(e, null)).not.toContain('entrega-rev-prof-chk')
+  })
+
+  it('la casilla ya no va dentro del bloque de concepto (se pinta antes del botón de entrega)', () => {
+    const c = montarEntrega()
+    expect(c.htmlEntregaRegConceptoBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, {})).not.toContain('entrega-rev-prof-chk')
+    const core = read('js/core.js')
+    expect(core).toMatch(/h\+=revProfHtml;\s*\n\s*h\+='<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp"/)
+    const er = read('js/entrega-responsable.js')
+    expect(er).toMatch(/<div id="entrega-rev-prof-host"><\/div>'\+\s*\n\s*'<div class="fx" style="gap:8px">'\+\s*\n\s*'<button type="button" class="btn bsm bp" onclick="submitEntregaResponsable\(\)"/)
   })
 
   it('actividad de concepto creada por el encargado: el técnico ve la casilla al entregar', () => {
     const c = montarEntrega()
     const t = { id: 't9', actividad: 'Concepto técnico', origen: 'encargado', responsable: 'Tec' }
-    expect(c.htmlEntregaRegConceptoBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, { actividad: 'Concepto técnico', t })).toContain('entrega-rev-prof-chk')
+    expect(c.htmlEntregaRevProfesionalBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, t)).toContain('entrega-rev-prof-chk')
   })
 
   it('un responsable con cargo Profesional no ve la casilla (entrega directo al encargado)', () => {
     const c = montarEntrega()
     c.esCargoProfesional = () => true
-    expect(c.htmlEntregaRegConceptoBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, {})).not.toContain('entrega-rev-prof-chk')
+    expect(c.htmlEntregaRevProfesionalBlock({ _exp: 'EXP-1', _conceptos_seg: '[]' }, null)).not.toContain('entrega-rev-prof-chk')
   })
 })
 
@@ -348,7 +357,7 @@ describe('Reentrega del concepto (profesional)', () => {
     expect(h).toMatch(/value="Informe técnico" selected/)
     expect(h).toMatch(/value="no" selected>No cumple/)
     expect(h).toContain('Obs técnico')
-    expect(h).not.toContain('entrega-rev-prof-chk')
+    expect(c.htmlEntregaRevProfesionalBlock(e, t)).not.toContain('entrega-rev-prof-chk')
   })
 
   it('reemplaza el concepto pendiente de la misma actividad sin bloquear por N° ya usado y reutiliza conceptoReqId', () => {

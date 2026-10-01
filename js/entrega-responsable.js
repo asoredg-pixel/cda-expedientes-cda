@@ -1438,8 +1438,7 @@ function openEntregaResponsableModal(){
     '<input type="hidden" id="enviar-modo-nueva" value="0">'+
     '<input type="hidden" id="enviar-modo-traslado" value="0">'+
     '<div id="enviar-adjuntos-rows" style="display:none"></div>'+
-    '<textarea id="enviar-cmt-opcional" placeholder="Comentario sobre esta entrega (obligatorio si no adjunta archivo)…" '+
-      'style="min-height:72px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;margin-bottom:8px;width:100%"></textarea>'+
+    '<div id="entrega-rev-prof-host"></div>'+
     '<div class="fx" style="gap:8px">'+
       '<button type="button" class="btn bsm bp" onclick="submitEntregaResponsable()">📤 Entregar a revisión</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
@@ -1622,6 +1621,8 @@ function syncEntregaRespRegistroUi(){
   const box=document.getElementById('entrega-resp-registro-box');
   const hint=document.getElementById('entrega-resp-reg-hint');
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const revProfHost=document.getElementById('entrega-rev-prof-host');
+  if(revProfHost)revProfHost.innerHTML='';
   if(libre){
     if(hint)hint.textContent='';
     if(box){box.style.display='none';box.innerHTML='';}
@@ -1675,6 +1676,7 @@ function syncEntregaRespRegistroUi(){
   const hoyStr=typeof hoy==='function'?hoy():'';
   if(tipo==='concepto'){
     box.innerHTML=typeof htmlEntregaRegConceptoBlock==='function'?htmlEntregaRegConceptoBlock(eSel,{actividad:act}):'';
+    if(revProfHost)revProfHost.innerHTML=htmlEntregaRevProfesionalBlock(eSel,null);
     setTimeout(function(){
       if(typeof coordSyncEntregaReview==='function')coordSyncEntregaReview('entrega-reg-concepto-coord');
     },0);
@@ -1974,7 +1976,7 @@ function htmlEntregaRevProfesionalBlock(e,t){
       if(box)box.innerHTML=htmlEntregaRevProfesionalSel(getProfesionalesRevisionDepto(depto));
     }).catch(function(){});
   }
-  return '<div class="fld" style="grid-column:1/-1;margin-top:4px">'+
+  return '<div class="fld" style="margin:4px 0 10px">'+
     '<label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer"><input type="checkbox" id="entrega-rev-prof-chk" onchange="var w=document.getElementById(\'entrega-rev-prof-sel-wrap\');if(w)w.style.display=this.checked?\'\':\'none\'"> Aplica revisión de profesional</label>'+
     '<div id="entrega-rev-prof-sel-wrap" style="display:none;margin-top:6px"><div id="entrega-rev-prof-sel-box">'+htmlEntregaRevProfesionalSel(profs)+'</div>'+
     '<div style="font-size:11px;color:var(--tx3);margin-top:4px">La entrega pasa al Por ejecutar del profesional (no a Por revisar del encargado).</div></div>'+
@@ -1986,6 +1988,26 @@ function htmlEntregaRevProfesionalSel(profs){
     ?'<select id="entrega-rev-prof-sel" style="'+inp+'"><option value="">— Seleccione profesional —</option>'+
       profs.map(function(n){return '<option value="'+escAttr(n)+'">'+escAttr(n)+'</option>';}).join('')+'</select>'
     :'<div style="font-size:11px;color:var(--or);font-weight:600">No hay profesionales configurados — solicite al administrador (Usuarios autorizados · Cargo especial «Profesional»).</div>';
+}
+/** N° de referencia diligenciado en la entrega (oficio, concepto, acto, factura), o ''. */
+function entregaRefDiligenciadaLabel(){
+  const val=function(id){return String((document.getElementById(id)||{}).value||'').trim();};
+  if(val('entrega-resp-oficio')||val('entrega-ofi-req-oficio'))return'N° de oficio';
+  if(val('entrega-reg-concepto'))return'N° de concepto';
+  if(val('entrega-reg-acto-num'))return'N° de acto administrativo';
+  const facs=document.querySelectorAll?Array.from(document.querySelectorAll('.entrega-reg-fac-ref')):[];
+  if(facs.some(function(el){return String(el.value||'').trim();}))return'N° de factura';
+  return'';
+}
+/** Adjunto opcional, salvo que se haya diligenciado un N° de referencia (PQRSD tiene su propia validación). */
+function entregaValidarAdjuntoPorReferencia(adj){
+  if(document.getElementById('pqrs-entrega-campos'))return true;
+  const a=adj||{};
+  if((a.links&&a.links.length)||(a.files&&a.files.length)||(a.anexos&&a.anexos.length)||(a.preUploaded&&a.preUploaded.length))return true;
+  const ref=entregaRefDiligenciadaLabel();
+  if(!ref)return true;
+  notif('Diligenció '+ref+': adjunte el documento de la entrega','err');
+  return false;
 }
 /** Profesional elegido en la entrega (casilla marcada), o '' si no aplica. */
 function entregaRevProfesionalDestino(){
@@ -2029,7 +2051,6 @@ function htmlEntregaRegConceptoBlock(e,opts){
     '<div class="fld" id="entrega-reg-concepto-aplica-wrap" style="display:'+(cumple==='no'?'':'none')+'"><label>¿Aplica requerimiento?</label><select id="entrega-reg-concepto-aplica-req" onchange="syncEntregaRespConceptoCumpleUi()" style="'+inp+'"><option value="si">Sí</option><option value="no"'+(pre&&cumple==='no'&&!p.aplicaReq?' selected':'')+'>No</option></select></div>'+
     '<div class="fld" style="grid-column:1/-1"><label>Observaciones / recomendaciones</label><textarea id="entrega-reg-concepto-obs" style="min-height:55px;'+inp+'">'+(typeof escTextarea==='function'?escTextarea(p.observaciones||''):escAttr(p.observaciones||''))+'</textarea></div>'+
     coordBlock+
-    htmlEntregaRevProfesionalBlock(e,opts.t||null)+
     '</div>'+
     '<div id="entrega-reg-concepto-req-hint" style="display:none"></div>';
 }
@@ -3242,14 +3263,7 @@ function ensureExpTaskEntregaResponsable(){
 function submitEntregaResponsable(){
   if(!puedeEntregarComoResponsable()){notif('No puede entregar en esta sesión','err');return;}
   const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
-  const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
-  const hasAdj=(adj.links&&adj.links.length)||(adj.files&&adj.files.length)||(adj.anexos&&adj.anexos.length)||(adj.preUploaded&&adj.preUploaded.length);
-  // En PQRSD el cuerpo/oficio también cuentan como contenido de entrega
-  const esPqrsUi=!!document.getElementById('pqrs-entrega-campos');
-  if(!hasAdj&&!cmt&&!esPqrsUi){
-    notif('Adjunte documento, anexo, link Drive y/o escriba un comentario','err');
-    return;
-  }
+  if(!entregaValidarAdjuntoPorReferencia(adj))return;
   const pack=ensureExpTaskEntregaResponsable();
   if(!pack)return;
   // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»
@@ -3294,6 +3308,7 @@ window.syncEntregaRespConceptoCumpleUi=syncEntregaRespConceptoCumpleUi;
 window.htmlEntregaRegConceptoBlock=htmlEntregaRegConceptoBlock;
 window.getProfesionalesRevisionDepto=getProfesionalesRevisionDepto;
 window.entregaRevProfesionalDestino=entregaRevProfesionalDestino;
+window.entregaValidarAdjuntoPorReferencia=entregaValidarAdjuntoPorReferencia;
 window.htmlEntregaRegActoBlock=htmlEntregaRegActoBlock;
 window.htmlEntregaRegFacturaBlock=htmlEntregaRegFacturaBlock;
 window.entregaFacAddRow=entregaFacAddRow;
