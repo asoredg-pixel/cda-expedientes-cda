@@ -27626,6 +27626,17 @@ function actividadNotifEsDeResp(t,respFilter){
   }
   return typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,rf);
 }
+/** Vista del encargado con otro responsable en el selector: qué filas son de ese responsable. */
+function actividadVisibleConRespFilter(t,respFilter,filtroAct){
+  if(filtroAct==='pornotif')return actividadNotifEsDeResp(t,respFilter);
+  // ⚡ Prioritarias: mismo criterio que el contador y que la paleta del responsable (asignado o notificador).
+  if(filtroAct==='prior')return actividadPerteneceARespFilter(t,respFilter);
+  const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  const enNotif=eN&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eN);
+  const tramNotif=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
+  if(enNotif||tramNotif)return actividadNotifEsDeResp(t,respFilter);
+  return actividadPerteneceARespFilter(t,respFilter);
+}
 function getActDeptRespFilterSafe(){
   if(typeof getActDeptRespFilter==='function'){
     const v=getActDeptRespFilter();
@@ -28683,14 +28694,7 @@ function renderActividades(){
   list=filtrarActividadesPorEstado(list,filtroAct);
   // Con otro responsable: no colar ítems ajenos (merges globales de porver/porfirma/notif)
   if(deptView&&respFilter&&!filterIsEnc){
-    if(filtroAct==='pornotif')list=(list||[]).filter(t=>actividadNotifEsDeResp(t,respFilter));
-    else list=(list||[]).filter(function(t){
-      const eN=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-      const enNotif=eN&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eN);
-      const tramNotif=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
-      if(filtroAct==='pornotif'||enNotif||tramNotif)return actividadNotifEsDeResp(t,respFilter);
-      return actividadPerteneceARespFilter(t,respFilter);
-    });
+    list=(list||[]).filter(function(t){return actividadVisibleConRespFilter(t,respFilter,filtroAct);});
   }
   // Anti-fantasma: quitar filas que ya no existen o están eliminadas en la fuente de verdad
   list=(list||[]).filter(function(row){
