@@ -231,14 +231,22 @@ describe('Vistas de la revisión: Por revisar del técnico, chat y devolver', ()
     expect(c.taskChatPuedeEscribirResp(c.task)).toBe(false)
   })
 
-  it('devolver desde el chat usa el texto escrito como observación (obligatorio)', () => {
+  it('devolver desde el chat sin escribir nada: pasa igual a Por corregir del técnico', () => {
     const c = enviadaAProf()
     c.responsableActivo = 'Prof'
     const inp = { value: '  ', focus: () => {} }
     c.document = { getElementById: id => (id === 'task-cmt-input' ? inp : null), querySelectorAll: () => [] }
     c.submitDevolverAlTecnicoDesdeChat('EXP-1', 't1')
-    expect(c.task.responsable).toBe('Prof')
-    expect(c.avisos.at(-1)[0]).toMatch(/Escriba en el chat/)
+    expect(c.task.responsable).toBe('Tec')
+    expect(c.task.estado).toBe('Por corregir')
+    expect(c.task.comentarios.at(-1)).toMatchObject({ para: 'Tec', texto: '↩ Devuelta para corregir' })
+  })
+
+  it('devolver desde el chat usa el texto escrito como observación', () => {
+    const c = enviadaAProf()
+    c.responsableActivo = 'Prof'
+    const inp = { value: '', focus: () => {} }
+    c.document = { getElementById: id => (id === 'task-cmt-input' ? inp : null), querySelectorAll: () => [] }
     inp.value = 'Revisar coordenadas'
     c.submitDevolverAlTecnicoDesdeChat('EXP-1', 't1')
     expect(c.task.responsable).toBe('Tec')

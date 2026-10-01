@@ -8576,7 +8576,7 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   if(canShowDevolver)
     h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" onclick="devolverTaskUnificado(\''+eid+'\',\''+tid+'\')">↩ Devolver</button></div>';
   else if(canDevolverTecnico)
-    h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" title="Escriba la observación en el chat y pulse aquí: pasa a Por corregir del técnico" onclick="submitDevolverAlTecnicoDesdeChat(\''+eid+'\',\''+tid+'\')">↩ Devolver al técnico para corregir</button></div>';
+    h+='<div class="task-review-chat-devolver"><button type="button" class="btn bsm bd2" title="Pasa a Por corregir del técnico. Si escribe algo en el chat, se envía como observación" onclick="submitDevolverAlTecnicoDesdeChat(\''+eid+'\',\''+tid+'\')">↩ Devolver al técnico para corregir</button></div>';
   h+='</div>';
   return h;
 }
@@ -22178,7 +22178,7 @@ function renderTaskReviewDevolverTecnicoSideHtml(expId,taskId,t){
     return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Esta actividad no se puede devolver al técnico.</div>';
   return '<div class="task-review-side-scroll" style="padding:10px">'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">La actividad pasa a <strong>Por corregir</strong> de <strong>'+escAttr(ctx.tecnico)+'</strong>. Cuando entregue la corrección, vuelve a su <strong>Por ejecutar</strong> (no pasa por el encargado).</div>'+
-    '<div class="fld" style="margin-bottom:10px"><label>Observación para el técnico <span style="color:var(--rd)">*</span></label><textarea id="devolver-tecnico-nota" placeholder="Indique qué debe corregir…" style="width:100%;min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
+    '<div class="fld" style="margin-bottom:10px"><label>Observación para el técnico (opcional)</label><textarea id="devolver-tecnico-nota" placeholder="Indique qué debe corregir…" style="width:100%;min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
     '<button type="button" class="btn bsm bp" onclick="submitDevolverAlTecnico(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">↩ Devolver para corregir</button>'+
     '</div>';
 }
@@ -22188,7 +22188,6 @@ function devolverAlTecnicoRevisionPar(expId,taskId,nota){
   const ref=t0.sinExpediente?(t0.codigo||expId):expId;
   const e0=t0.sinExpediente?null:getExpById(ref);
   const txt=String(nota||'').trim();
-  if(!txt){notif('Escriba la observación para el técnico','err');return false;}
   if(!puedeDevolverAlTecnico(t0,responsableActivo,e0)){notif('No puede devolver esta actividad al técnico','err');return false;}
   const ctx=taskRevisionParCtx(t0,e0);
   const por=responsableActivo||taskComentarioAutor();
@@ -22203,7 +22202,7 @@ function devolverAlTecnicoRevisionPar(expId,taskId,nota){
     t.comentarios.push({
       id:'cmt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
       autor:por,fecha:new Date().toISOString(),
-      texto:'↩ Devuelta para corregir: '+txt,
+      texto:'↩ Devuelta para corregir'+(txt?': '+txt:''),
       rol:'asignador',para:ctx.tecnico
     });
     syncTaskAggregateState(t);
@@ -22224,11 +22223,6 @@ function submitDevolverAlTecnico(expId,taskId){
 function submitDevolverAlTecnicoDesdeChat(expId,taskId){
   const inp=document.getElementById('task-cmt-input');
   const nota=String(inp&&inp.value||'').trim();
-  if(!nota){
-    notif('Escriba en el chat la observación para el técnico y luego pulse ↩ Devolver','err');
-    if(inp)inp.focus();
-    return;
-  }
   if(!devolverAlTecnicoRevisionPar(expId,taskId,nota))return;
   if(inp){
     if(typeof sstWaComposerReset==='function')sstWaComposerReset(inp);

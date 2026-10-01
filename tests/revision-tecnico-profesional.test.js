@@ -104,11 +104,11 @@ describe('Revisión técnico ↔ profesional', () => {
     expect(c.puedeDevolverAlTecnico(c.task, 'Prof', c.exp)).toBe(false)
   })
 
-  it('devolver exige observación', () => {
+  it('devolver sin observación también pasa al técnico (la observación es opcional)', () => {
     const c = montar(tareaTrasladada())
     c.responsableActivo = 'Prof'
-    expect(c.devolverAlTecnicoRevisionPar('EXP-1', 't1', '  ')).toBe(false)
-    expect(c.task.responsable).toBe('Prof')
+    expect(c.devolverAlTecnicoRevisionPar('EXP-1', 't1', '  ')).toBe(true)
+    expect(c.task.responsable).toBe('Tec')
   })
 
   it('ida y vuelta x veces y entrega final al encargado, sin borrar versiones de Drive', async () => {
