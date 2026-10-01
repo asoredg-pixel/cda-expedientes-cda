@@ -659,6 +659,17 @@ function upsertInstructorEncargado(deptoId,nombre,email,rol,oficinas){
   else{ins.nombre=nombre;if(email)ins.email=email;ins.activo=true;}
   ins.rol=rol;
   if(rol==='encargado_depto')c.instructores.forEach((x,j)=>{if(x!==ins&&x.rol==='encargado_depto')x.rol='contratista';});
+  if(rol==='encargado_oficina'&&Array.isArray(oficinas)&&oficinas.length){
+    for(let i=c.instructores.length-1;i>=0;i--){
+      const x=c.instructores[i];
+      if(x===ins||x.rol!=='encargado_oficina')continue;
+      const ofs=x.oficinas||[];
+      if(!ofs.some(o=>oficinas.includes(o)))continue;
+      const resto=ofs.filter(o=>!oficinas.includes(o));
+      if(resto.length)x.oficinas=resto;
+      else c.instructores.splice(i,1);
+    }
+  }
   if(Array.isArray(oficinas))ins.oficinas=oficinas.slice();
 }
 function removeEncargadoInstructorDepto(deptoId){

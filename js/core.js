@@ -9943,7 +9943,7 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       const opts='<option value="">— Seleccionar oficina —</option>'+
         OFICINAS_DEGUV.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
       h+='<div class="fld" style="margin-bottom:8px"><label>Oficina destino<span class="req-star">*</span></label>'+
-        '<select id="pqrs-trasl-ini-ofi-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
+        '<select id="pqrs-trasl-ini-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
         '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-ini-motivo" placeholder="Ej. Competencia de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
         '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }else{
@@ -9953,7 +9953,7 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
         destinos.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
       h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Oficina actual: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(actual):actual)+'</strong></div>'+
         '<div class="fld" style="margin-bottom:8px"><label>Nueva oficina destino<span class="req-star">*</span></label>'+
-        '<select id="pqrs-trasl-ofi-sel" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
+        '<select id="pqrs-trasl-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
         '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-motivo" placeholder="Ej. Reasignación por competencia" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
         '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInterOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }
@@ -11998,13 +11998,35 @@ function ensureTareaPqrsOficina(e,oficinaId){
   if(resp)e._pqrs_estado_oficina='asignado';
   else e._pqrs_estado_oficina='pendiente';
 }
+function pqrsChatComentariosParaTraslado(e){
+  const out=[];
+  (e&&Array.isArray(e.tasks)?e.tasks:[]).forEach(function(t){
+    if(!t||t.eliminada)return;
+    if(!String(t.actividad||'').startsWith('Atender PQRSD')&&!/^Oficio de respuesta\b/i.test(String(t.actividad||'')))return;
+    if(estadoTask(normalizeTask(t))==='Atendida')return;
+    (t.comentarios||[]).forEach(function(c){if(c&&!c.incluidoEnReporte)out.push({...c});});
+  });
+  return out;
+}
+function pqrsChatCopiarATareaActiva(e,cmts){
+  if(!e||!Array.isArray(e.tasks)||!cmts||!cmts.length)return;
+  const idx=e.tasks.findIndex(t=>t&&!t.eliminada&&(String(t.actividad||'').startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(t.actividad||''))));
+  if(idx<0)return;
+  const t=e.tasks[idx];
+  if(!Array.isArray(t.comentarios))t.comentarios=[];
+  const k=function(c){return String(c.fecha||'')+'|'+String(c.autor||'')+'|'+String(c.texto||'');};
+  const ya=new Set(t.comentarios.map(k));
+  cmts.forEach(function(c){if(!ya.has(k(c))){ya.add(k(c));t.comentarios.push(c);}});
+}
 function syncPqrsTareaTrasTraslado(e,nuevaOfi,motivoOpt){
   if(!e||!nuevaOfi)return;
+  const chatPrevio=pqrsChatComentariosParaTraslado(e);
   cancelarTareasPqrsNca(e,'Traslado a '+labelOficina(nuevaOfi)+' — actividad anterior cancelada');
   e._pqrs_responsable_oficina='';
   e._pqrs_estado_oficina='pendiente';
   if(nuevaOfi==='guaviare')ensureTareaPqrsNca(e);
   else if(nuevaOfi!=='secretaria')ensureTareaPqrsOficina(e,nuevaOfi);
+  pqrsChatCopiarATareaActiva(e,chatPrevio);
   if(nuevaOfi!=='secretaria'){
     const mot=String(motivoOpt||'').trim();
     pushPqrsAvisoOficina(e,nuevaOfi,'traslado',
@@ -17024,6 +17046,34 @@ function taskChatPqrsAsigChecked(){
   });
   return out;
 }
+/** Encargados de las oficinas a las que el usuario puede trasladar esta PQRSD: [{nombre,ofi,codigo}]. */
+function taskChatTrasladoDestinosEnc(t){
+  t=normalizeTask(t||{});
+  const expId=String((t.exp||t.codigo)||'').trim();
+  const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
+  if(!e||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return[];
+  const puede=(typeof puedeTrasladarPqrs==='function'&&puedeTrasladarPqrs(e))||
+    (typeof puedeTrasladarPqrsInicial==='function'&&puedeTrasladarPqrsInicial(e));
+  if(!puede||typeof OFICINAS_DEGUV==='undefined'||typeof getEncargadoOficina!=='function')return[];
+  const actual=String(e._pqrs_oficina||(typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'')||'');
+  const out=[];
+  OFICINAS_DEGUV.forEach(function(o){
+    if(o.id===actual)return;
+    const n=String(getEncargadoOficina(o.id)||'').trim();
+    if(n)out.push({nombre:n,ofi:o.id,codigo:o.codigo||o.nombre});
+  });
+  return out;
+}
+function taskChatTrasladoDestinoSelEnc(){
+  const sel=document.getElementById('pqrs-trasl-ini-ofi-sel')||document.getElementById('pqrs-trasl-ofi-sel');
+  const ofi=sel?String(sel.value||'').trim():'';
+  if(!ofi||typeof getEncargadoOficina!=='function')return'';
+  return String(getEncargadoOficina(ofi)||'').trim();
+}
+function taskChatParaLabel(n,t){
+  const d=taskChatTrasladoDestinosEnc(t).find(function(x){return agendaNorm(x.nombre)===agendaNorm(n);});
+  return d?n+' · '+d.codigo:n;
+}
 function taskChatDestinatariosLista(t){
   t=normalizeTask(t||{});
   const out=[];
@@ -17049,6 +17099,7 @@ function taskChatDestinatariosLista(t){
       pool=getResponsablesForTrasladoActividad(expId,t.id)||[];
     }
     pool.forEach(push);
+    taskChatTrasladoDestinosEnc(t).forEach(function(d){push(d.nombre);});
   }
   return out;
 }
@@ -17057,6 +17108,11 @@ function taskChatParaOpcionesEncargado(t){
   const enc=taskChatEncargadoDeptoNombre(t);
   const checked=taskChatPqrsAsigChecked();
   let opts=checked.length?checked.slice():taskChatDestinatariosLista(t);
+  if(checked.length){
+    taskChatTrasladoDestinosEnc(t).forEach(function(d){
+      if(!opts.some(function(n){return agendaNorm(n)===agendaNorm(d.nombre);}))opts.push(d.nombre);
+    });
+  }
   if(opts.length>1&&enc){
     opts=opts.filter(function(n){
       return typeof agendaNorm==='function'?agendaNorm(n)!==agendaNorm(enc):String(n)!==enc;
@@ -17076,6 +17132,8 @@ function taskChatResolveDefaultPara(t){
   if(taskChatResponsableEscribeEncargado())
     return taskChatEncargadoDeptoNombre(t);
   if(taskChatEncargadoEligeDestino()){
+    const destSel=taskChatTrasladoDestinoSelEnc();
+    if(destSel&&taskChatTrasladoDestinosEnc(t).some(function(d){return agendaNorm(d.nombre)===agendaNorm(destSel);}))return destSel;
     const checked=taskChatPqrsAsigChecked();
     if(checked.length){
       const enc=taskChatEncargadoDeptoNombre(t);
@@ -17189,7 +17247,7 @@ function taskChatComposerParaFieldHtml(t){
     if(!opts.length&&def)opts.push(def);
     let sel='';
     opts.forEach(function(n){
-      sel+='<option value="'+escAttr(n)+'"'+(typeof agendaNorm==='function'&&agendaNorm(n)===agendaNorm(def)?' selected':'')+'>'+escAttr(n)+'</option>';
+      sel+='<option value="'+escAttr(n)+'"'+(typeof agendaNorm==='function'&&agendaNorm(n)===agendaNorm(def)?' selected':'')+'>'+escAttr(taskChatParaLabel(n,t))+'</option>';
     });
     if(!sel)return'';
     return '<div class="task-chat-para-row">'+

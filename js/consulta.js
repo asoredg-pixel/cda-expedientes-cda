@@ -1069,6 +1069,10 @@ function matchActLibre(t,q){
   if(parts.some(function(v){return String(v||'').toLowerCase().includes(ql);}))return true;
   return false;
 }
+function reviewAsocEsPqrs(e){
+  if(typeof expAsocEsRegistroPqrs==='function')return !!expAsocEsRegistroPqrs(e);
+  return typeof esPqrsSecretaria==='function'&&!!esPqrsSecretaria(e);
+}
 function collectReviewAsocCandidatos(q,ctx){
   ctx=ctx||{};
   const source=String(ctx.sourceExp||ctx.sourceCod||'').trim();
@@ -1076,14 +1080,11 @@ function collectReviewAsocCandidatos(q,ctx){
   const items=[];
   let baseList=typeof expsAmbito==='function'?expsAmbito():(exps||[]);
   baseList=baseList.filter(function(e){return!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);});
-  if(!ql&&ctx.mode==='pqrs-pick'){
-    if(ctx.pqrsModo==='tramite')baseList=baseList.filter(function(e){return!(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));});
-    else baseList=baseList.filter(function(e){return typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);});
-  }
+  if(ctx.mode==='pqrs-pick'&&!ctx.allowTramite)baseList=baseList.filter(reviewAsocEsPqrs);
   if(source)baseList=baseList.filter(function(e){return!expAsocMatchNum(e._exp,source);});
   if(ql)baseList=baseList.filter(function(e){return matchS(e,ql);});
   baseList.forEach(function(e){items.push({tipo:'exp',e:e,id:e._exp});});
-  const incluirActs=!!ql||ctx.mode==='act-libre'||ctx.mode==='exp-asoc';
+  const incluirActs=(!!ql||ctx.mode==='act-libre'||ctx.mode==='exp-asoc')&&!(ctx.mode==='pqrs-pick'&&!ctx.allowTramite);
   if(incluirActs){
     const acts=(typeof actividadesLibres!=='undefined'?actividadesLibres:[]).map(function(t){
       return typeof normalizeActLibre==='function'?normalizeActLibre(t):t;
@@ -1141,20 +1142,14 @@ function renderReviewAsocPickPanel(panelId){
     return;
   }
   const q=String(ctx.q||'').trim();
-  let modoTabs='';
-  if(ctx.mode==='pqrs-pick'&&ctx.allowTramite){
-    const m=ctx.pqrsModo||'pqrs';
-    modoTabs='<div class="fx" style="gap:6px;margin-bottom:10px;flex-wrap:wrap">'+
-      '<button type="button" class="btn bsm'+(m!=='tramite'?' bp':'')+'" onclick="setReviewAsocPqrsModo(\'pqrs\')">PQRSD</button>'+
-      '<button type="button" class="btn bsm'+(m==='tramite'?' bp':'')+'" onclick="setReviewAsocPqrsModo(\'tramite\')">Expediente</button></div>';
-  }
   const list=collectReviewAsocCandidatos(q,ctx);
   const hint=ctx.mode==='act-libre'
     ?'Busque por número, nombre, correo del radicado, asunto o actividad sin expediente.'
-    :'Busque por número, interesado, asunto, correo de radicación, actividad sin expediente u otros datos.';
+    :(ctx.mode==='pqrs-pick'&&!ctx.allowTramite
+      ?'Busque la PQRSD por número, interesado, asunto, correo de radicación u otros datos.'
+      :'Busque por número, interesado, asunto, correo de radicación, actividad sin expediente u otros datos.');
   body.innerHTML=
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
-    modoTabs+
     (reviewAsocPuedeCrearExp(ctx)
       ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
       :'')+
@@ -1388,7 +1383,8 @@ function confirmReviewAsocPick(targetExpId){
     return;
   }
   if(ctx.mode==='pqrs-pick'){
-    const modo=ctx.pqrsModo==='tramite'?'tramite':'pqrs';
+    const target=typeof getExpById==='function'?getExpById(targetExpId):null;
+    const modo=ctx.allowTramite&&target&&!reviewAsocEsPqrs(target)?'tramite':'pqrs';
     ok=typeof asociarVinculoAPqrs==='function'&&asociarVinculoAPqrs(ctx.sourceExp,targetExpId,modo);
   }else{
     ok=asociarExpedienteDesdeRevision(ctx.sourceExp,targetExpId);

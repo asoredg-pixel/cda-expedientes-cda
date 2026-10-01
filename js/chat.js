@@ -1115,6 +1115,12 @@ function stopChatActiveSync(){
   _chatActiveUnsubs=[];
   if(_chatUnsub){try{_chatUnsub();}catch(e){}_chatUnsub=null;}
 }
+/** Conversación abierta en pantalla (ventana del chat visible y pestaña activa). */
+function chatViendoContacto(contactKey){
+  const w=document.getElementById('chat-window');
+  if(!w||!w.classList.contains('on')||document.hidden)return false;
+  return !!window._chatActiveContactKey&&chatNormKey(window._chatActiveContactKey)===chatNormKey(contactKey);
+}
 function initChatSyncForContact(contactKey){
   stopChatActiveSync();
   contactKey=String(contactKey||'').trim();
@@ -1127,11 +1133,13 @@ function initChatSyncForContact(contactKey){
   convIds.forEach(function(convId){
     const fsConvId=chatConvFirestoreId(convId);
     const unsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
+      let llegaron=false;
       snap.docChanges().forEach(function(change){
         const msg={id:change.doc.id,...change.doc.data()};
         chatApplyFirestoreMsgChange(change,msg);
-        if(change.type==='added')chatTryDesktopNotify(msg);
+        if(change.type==='added'){llegaron=true;chatTryDesktopNotify(msg);}
       });
+      if(llegaron&&chatViendoContacto(contactKey))void chatMarcarLeido(window._chatConvActiva);
       renderChatBadge();
       if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:150});
       else{renderChatMessages();renderChatContacts();}
@@ -1201,6 +1209,7 @@ async function chatMarcarLeido(convId){
     }
   });
   if(ch){
+    chatInvalidateContactPreviewCache();
     renderChatBadge();
     renderChatContacts();
     if(fsUpdates.length){
@@ -1517,6 +1526,8 @@ async function chatAbrirConv(contactKey){
   chatSyncLayout();
   renderChatContacts();
   renderChatMessages();
+  // Marcar ya lo visible: si cambia de chat antes de cargar el historial, no queda «sin ver»
+  void chatMarcarLeido(window._chatConvActiva);
   chatSyncComposeReadonly();
   setTimeout(function(){
     const inp=document.getElementById('chat-inp');
