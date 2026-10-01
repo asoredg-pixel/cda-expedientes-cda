@@ -849,13 +849,20 @@ function chatTryDesktopNotify(msg){
     }
   });
 }
+const CHAT_NOTIFY_VENTANA_DIAS=30;
+/** Avisos y badge: solo mensajes recientes; el historial completo se carga al abrir la conversación. */
+function chatNotifyRefReciente(ref){
+  if(!window._fsQuery||!window._fsWhere)return ref;
+  const desde=new Date(Date.now()-CHAT_NOTIFY_VENTANA_DIAS*864e5).toISOString();
+  return window._fsQuery(ref,window._fsWhere('ts','>=',desde));
+}
 function initChatNotifySync(){
   stopChatNotifySync();
   if(!document.body.classList.contains('sesion-activa'))return;
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollectionGroup)return;
   let primed=false;
-  const unsub=window._fsOnSnapshot(window._fsCollectionGroup(db,'mensajes'),function(snap){
+  const unsub=window._fsOnSnapshot(chatNotifyRefReciente(window._fsCollectionGroup(db,'mensajes')),function(snap){
     const initial=!primed;
     primed=true;
     snap.docChanges().forEach(function(change){
@@ -891,7 +898,7 @@ function chatNotifyConvIdsFallback(){
   const convIds=chatNotifyConvIds();
   convIds.forEach(function(fsConvId){
     let primed=false;
-    const unsub=window._fsOnSnapshot(window._fsCollection(db,'chats',fsConvId,'mensajes'),function(snap){
+    const unsub=window._fsOnSnapshot(chatNotifyRefReciente(window._fsCollection(db,'chats',fsConvId,'mensajes')),function(snap){
       const initial=!primed;
       primed=true;
       snap.docChanges().forEach(function(change){

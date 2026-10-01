@@ -1298,22 +1298,41 @@ function renderTabActual(){
 function refreshViewsAfterRemoteDataChange(){
   try{
     if(typeof poblarSelResponsable==='function')poblarSelResponsable();
+    // renderTabActual ya pinta la pestaña activa (Actividades, Consulta, Secretaría, Oficina) y la bandeja.
     if(typeof renderTabActual==='function')renderTabActual();
     else if(typeof renderTabla==='function')renderTabla();
-    // Refresco explícito de vistas clave (radicación / traslado inmediato)
-    try{
-      if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
-      if(typeof renderPqrsOficinaInbox==='function'&&document.getElementById('pg-pqrs-ofi')&&document.getElementById('pg-pqrs-ofi').classList.contains('on'))renderPqrsOficinaInbox();
-      if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
-      if(typeof renderSecretariaPqrs==='function'&&document.getElementById('pg-sec')&&document.getElementById('pg-sec').classList.contains('on'))renderSecretariaPqrs();
-      if(typeof renderBandejaDepto==='function')renderBandejaDepto();
-    }catch(_rv){}
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
     const sideExp=window._pqrsSideExp;
     if(sideExp&&typeof openPqrsSidePanel==='function')openPqrsSidePanel(sideExp);
     const conExp=window._conPanelActive;
     if(conExp&&typeof renderConSidePanel==='function')renderConSidePanel();
   }catch(e){console.warn('refreshViewsAfterRemoteDataChange:',e);}
+}
+/**
+ * Snapshots remotos llegan en ráfagas (varios deptos, cfg, global): un solo repintado por ráfaga.
+ * Con un <select> enfocado se espera a change/blur: repintar con la lista abierta la deja gris en Chrome.
+ */
+let _sstRemoteRefreshTimer=null;
+function scheduleRefreshViewsAfterRemoteDataChange(){
+  if(_sstRemoteRefreshTimer)clearTimeout(_sstRemoteRefreshTimer);
+  _sstRemoteRefreshTimer=setTimeout(function(){
+    _sstRemoteRefreshTimer=null;
+    const sel=document.activeElement;
+    if(sel&&sel.tagName==='SELECT'){
+      if(sel._sstRefreshPend)return;
+      sel._sstRefreshPend=true;
+      const go=function(){
+        sel.removeEventListener('change',go);
+        sel.removeEventListener('blur',go);
+        sel._sstRefreshPend=false;
+        setTimeout(refreshViewsAfterRemoteDataChange,0);
+      };
+      sel.addEventListener('change',go);
+      sel.addEventListener('blur',go);
+      return;
+    }
+    refreshViewsAfterRemoteDataChange();
+  },400);
 }
 function stopRealtimeExpSync(){
   if(!_fsUnsub)return;
@@ -1358,7 +1377,7 @@ function onRemoteCfgSnapshot(deptoId,snap){
   }
   if(!changed)return;
   try{_saveLSLocal();}catch(e){}
-  refreshViewsAfterRemoteDataChange();
+  scheduleRefreshViewsAfterRemoteDataChange();
 }
 function initRealtimeCfgSyncAll(){
   const db=window._db;
@@ -1477,7 +1496,7 @@ function initRealtimeGlobalSync(){
     if(Array.isArray(g.agendaEventos)){agendaEventos=g.agendaEventos;changed=true;}
     if(changed){
       try{_saveLSLocal();}catch(e){}
-      refreshViewsAfterRemoteDataChange();
+      scheduleRefreshViewsAfterRemoteDataChange();
     }
   },function(err){console.warn('Error escuchando sistema/global:',err);});
 }
@@ -1606,7 +1625,7 @@ function initRealtimeSync(){
         if(hydrateExpsFromSnapshotDocs(snap))changed=true;
       }
       if(!changed)return;
-      refreshViewsAfterRemoteDataChange();
+      scheduleRefreshViewsAfterRemoteDataChange();
     },function(err){console.warn('Error escuchando expedientes',depto,err);});
     unsubs.push(unsub);
   });
