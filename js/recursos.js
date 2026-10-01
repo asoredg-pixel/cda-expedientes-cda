@@ -1444,7 +1444,8 @@ async function recExpRenombrar(fileId) {
     required: true
   });
   if (nom === null) return;
-  const name = String(nom).trim();
+  let name = String(nom).trim();
+  if (!recExpIsFolder(f) && typeof _driveNombreArchivoPlano === 'function') name = _driveNombreArchivoPlano(name);
   if (!name || name === f.name) return;
   try {
     const fn = typeof driveRenameInstitutional === 'function' ? driveRenameInstitutional : window.driveRenameInstitutional;

@@ -1776,29 +1776,29 @@ function _pqrsDocEsAnexoRespuesta(d){
   if(d.es_radicacion||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud')return false;
   if(d.tipo==='anexo_respuesta'||d.es_anexo===true)return true;
   const nom=String(d.nombre||d.driveFilename||d.label||'');
-  if(/^anexo\s+pqrsd\b/i.test(nom)||/^solicitud_pqrsd/i.test(nom)||/_SOL\./i.test(nom))return false;
-  // {exp}_A01… = anexo de radicación (nombre corto); sin metadata no es anexo de respuesta
-  if(/_A\d{1,3}([_.]|$)/i.test(nom))return false;
+  if(/^anexo\s+pqrsd\b/i.test(nom)||/^solicitud[_ ]pqrsd/i.test(nom)||/[_ ]SOL\./i.test(nom))return false;
+  // {exp}_A01… / {exp} A01… = anexo de radicación (nombre corto); sin metadata no es anexo de respuesta
+  if(/[_ ]A\d{1,3}([_. ]|$)/i.test(nom))return false;
   if(/^anexo[-_\s]?\d*/i.test(nom))return true;
   // Tras renombre Drive (revision-anexo1-… / por_firmar-anexo2-…)
-  if(/(^|[-_])anexo[-_\s]?\d*/i.test(nom))return true;
+  if(/(^|[-_ ])anexo[-_\s]?\d*/i.test(nom))return true;
   return false;
 }
 /** Nombre típico del PDF institucional de radicación. */
 function _pqrsEsNombreSoporteRadicacion(nom){
   const n=String(nom||'').trim();
-  return /^solicitud_pqrsd/i.test(n)
+  return /^solicitud[_ ]pqrsd/i.test(n)
     ||/^soporte\s+de\s+solicitud/i.test(n)
     ||/^soporte\s+de\s+radicaci/i.test(n)
-    ||/_SOL\./i.test(n)
-    ||/^[^\\/]+_SOL\./i.test(n);
+    ||/[_ ]SOL\./i.test(n)
+    ||/^[^\\/]+[_ ]SOL\./i.test(n);
 }
 /** Nombre típico de anexo subido al radicar (ventanilla/correo). */
 function _pqrsEsNombreAnexoRadicacion(nom){
   const n=String(nom||'').trim();
   return /^anexo\s+pqrsd\b/i.test(n)
-    ||/_A\d{1,3}([_.]|$)/i.test(n)
-    ||/^A\d{1,3}[-_]/i.test(n);
+    ||/[_ ]A\d{1,3}([_. ]|$)/i.test(n)
+    ||/^A\d{1,3}[-_ ]/i.test(n);
 }
 /**
  * Documentos de la radicación: PDF soporte institucional + anexos de ventanilla/correo.
@@ -1817,8 +1817,8 @@ function _pqrsCollectDocsRadicacion(e){
     if(!n)return'Anexo radicado';
     const stripped=n
       .replace(/^ANEXO\s+PQRSD\s+\S+\s+/i,'')
-      .replace(/^[^\\/]+_A\d{1,3}_/i,'')
-      .replace(/^[^\\/]+_A\d{1,3}\./i,'')
+      .replace(/^[^\\/]+[_ ]A\d{1,3}[_ ]/i,'')
+      .replace(/^[^\\/]+[_ ]A\d{1,3}\./i,'')
       .trim();
     return stripped&&stripped!==n&&!/\.(pdf|docx?|png|jpe?g)$/i.test(stripped)
       ?('Anexo radicado: '+stripped)
@@ -1949,7 +1949,7 @@ function _pqrsDocEsPorCorregir(d){
   if(!d)return false;
   const est=String(d.driveEstado||'').toLowerCase();
   const nom=String(d.nombre||d.driveFilename||'');
-  return est==='acorregir'||/^acorregir[-_]/i.test(nom)||d.version_historial===true;
+  return est==='acorregir'||/^(acorregir|por corregir)[-_ ]/i.test(nom)||d.version_historial===true;
 }
 /** Entrega actual pendiente de revisión NCA. */
 function _pqrsDocEsRevisionActual(d){
@@ -2133,7 +2133,7 @@ function _pqrsDocEsBorradorInterno(d){
   if(['revision','acorregir','por_firma','por_firmar','vital_gestion'].includes(est))return true;
   const lbl=String(d.label||d.nombre||d.driveFilename||d.name||'');
   if(/por corregir|entrega\s*v\d+|por firmar|para firma/i.test(lbl))return true;
-  if(/^(revision|acorregir|por_firma|por_firmar)[-_]/i.test(lbl))return true;
+  if(/^(revision|por revisar|acorregir|por corregir|por[_ ]firma|por[_ ]firmar)[-_ ]/i.test(lbl))return true;
   if(d.version_historial)return true;
   if(d.activo===false&&(/por corregir|entrega\s*v\d+/i.test(lbl)||est==='acorregir'||est==='revision'))return true;
   return false;
@@ -11049,7 +11049,7 @@ function _pqrsAplicarDocsWfComoSoportes(t,e,docs,wf){
       ||String(d.driveEstado||'').toLowerCase()==='por_notificar'
       ||String(d.driveEstado||'').toLowerCase()==='firmado'
       ||/^oficio firmado/i.test(String(d.nombre||d.label||''))
-      ||/^por[_-]?notificar/i.test(String(d.nombre||d.label||'')));
+      ||/^por[_ -]?notificar/i.test(String(d.nombre||d.label||'')));
     const lbl=typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(d,list):(esNot?'Documento notificado':(esFirm?'Oficio firmado':'Documento'));
     return{
       id:'pqrs_wf_'+(d.fileId||d.driveFileId||i)+'_'+i,
@@ -14945,7 +14945,7 @@ function soporteEsDocumentoFirmado(s){
   const est=String(s.driveEstado||'').toLowerCase();
   if(est==='por_notificar'||est==='firmado'||est==='firma')return true;
   const lbl=String(s.label||s.nombre||s.driveFilename||'');
-  return /^firma\.\s*v/i.test(lbl)||/^oficio firmado/i.test(lbl)||/^por[_-]?notificar/i.test(lbl);
+  return /^firma\.\s*v/i.test(lbl)||/^oficio firmado/i.test(lbl)||/^por[_ -]?notificar/i.test(lbl);
 }
 window.soporteEsDocumentoFirmado=soporteEsDocumentoFirmado;
 function soporteUrlComparable(s){
@@ -18518,7 +18518,7 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
     if(aOk){
       // No renombrar versiones «por corregir» (se eliminan al cerrar)
       if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
-      if(/^revision[-_]/i.test(nom)||/(?:^|[-_])revision[-_]/i.test(nom))return true;
+      if(/^(revision|por revisar)[-_ ]/i.test(nom)||/(?:^|[-_ ])(revision|por revisar)[-_ ]/i.test(nom))return true;
       return !est||est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir'||est==='corregir';
     }
     return true;
@@ -21960,7 +21960,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
           const still=(tChk&&tChk.soportes||[]).some(function(s){
             if(!s||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)))return false;
             const nom=String(s.driveFilename||s.label||'');
-            return /^revision[-_]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
+            return /^(revision|por revisar)[-_ ]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
           });
           // Solo aviso silencioso en consola: el cierre/notif ya pudo ser exitoso (p.ej. docs con enlace Drive).
           if(still)console.warn('verificarTaskExp: quedó algún archivo con prefijo revision- en metadatos (Drive puede estar al día).');
@@ -30994,7 +30994,7 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
   if(!wf||!Array.isArray(wf.documentos))return;
   opts=opts||{};
   const only=Array.isArray(opts.onlyEstados)?opts.onlyEstados.map(function(s){return String(s||'').toLowerCase();}):null;
-  const prefRgx=/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido)-/i;
+  const prefRgx=/^(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
   for(const doc of wf.documentos){
     const estEff=String(doc.driveEstado||'revision').toLowerCase()||'revision';
     if(only&&only.indexOf(estEff)<0&&!(only.indexOf('revision')>=0&&!doc.driveEstado))continue;
@@ -31007,9 +31007,13 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
       continue;
     }
     const origName=doc.nombre||doc.driveFilename||'documento';
-    const cleanName=origName.replace(prefRgx,'');
-    const verPref=doc.entrega_n?('v'+doc.entrega_n+'-'):'';
-    const newName=nuevoEstado+'-'+verPref+cleanName;
+    const verPref=doc.entrega_n?('V'+doc.entrega_n+' '):'';
+    let cleanName=origName.replace(prefRgx,'');
+    if(verPref)cleanName=cleanName.replace(/^v\d+[- ]/i,'');
+    const estNom=(typeof _driveEstadoLegible==='function'&&_driveEstadoLegible(nuevoEstado))||nuevoEstado;
+    const newName=typeof _driveNombreArchivoPlano==='function'
+      ?_driveNombreArchivoPlano(estNom+' '+verPref+cleanName)
+      :(nuevoEstado+'-'+verPref+cleanName);
     try{
       if(typeof driveRenameInstitutional==='function'){
         const ok=await driveRenameInstitutional(fid,newName);
@@ -31054,7 +31058,7 @@ async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
         if(!s)return;
         const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
         const est=String(s.driveEstado||'').toLowerCase();
-        if((est==='acorregir'||/^acorregir[-_]/i.test(s.driveFilename||s.label||''))&&k&&!keepKeys.has(k)){
+        if((est==='acorregir'||/^(acorregir|por corregir)[-_ ]/i.test(s.driveFilename||s.label||''))&&k&&!keepKeys.has(k)){
           dropIds.push(s.driveFileId);
         }
       });
@@ -31063,7 +31067,7 @@ async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
         const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
         if(k&&keepKeys.has(k))return true;
         const est=String(s.driveEstado||'').toLowerCase();
-        if(est==='acorregir'||/^acorregir[-_]/i.test(s.driveFilename||s.label||''))return false;
+        if(est==='acorregir'||/^(acorregir|por corregir)[-_ ]/i.test(s.driveFilename||s.label||''))return false;
         return true;
       });
       for(let j=0;j<dropIds.length;j++){
@@ -33225,9 +33229,9 @@ function pqrsStripPrefijoInternoDrive(n){
   if(!s)return '';
   for(let i=0;i<8;i++){
     const prev=s;
-    s=s.replace(/^(docprincipal|anexo\d*)[-_]?(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido|notificado|vital_gestion|ok|guia|corregir)[-_]/i,'');
-    s=s.replace(/^v\d+-/i,'');
-    s=s.replace(/^(revision|acorregir|aprobado|por_firma|por_firmar|por_notificar|atendido|notificado|guia|corregir)[-_]/i,'');
+    s=s.replace(/^(docprincipal|anexo\d*)[-_ ]?(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|vital[_ ]gestion|ok|guia|corregir)[-_ ]/i,'');
+    s=s.replace(/^v\d+[- ]/i,'');
+    s=s.replace(/^(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|guia|corregir)[-_ ]/i,'');
     if(s===prev)break;
   }
   return s.trim();
