@@ -114,8 +114,9 @@ describe('Chat de la actividad: «Para» con oficinas destino del traslado', () 
 })
 
 describe('Panel Trasladar / Asignar en acordeón', () => {
-  function montarPanel({ canIni = false, canOfi = true, canAsig = true } = {}) {
+  function montarPanel({ canIni = false, canOfi = true, canAsig = true, oficina = 'guaviare', asignables = ['Ana NCA', 'Luis'] } = {}) {
     const c = {
+      getEncargadoOficina: id => ENC[id] || '',
       OFICINAS_DEGUV: OFICINAS,
       escAttr: s => String(s == null ? '' : s),
       agendaNorm: s => String(s || '').trim().toLowerCase(),
@@ -125,8 +126,8 @@ describe('Panel Trasladar / Asignar en acordeón', () => {
       puedeAsignarPqrsOficina: () => canAsig,
       getPqrsAtencionTask: e => e.tasks[0],
       getTaskResponsables: t => t.responsables || [],
-      getPqrsOficinaActiva: () => 'guaviare',
-      getAsignablesPqrsOficina: () => ['Ana NCA', 'Luis'],
+      getPqrsOficinaActiva: () => oficina,
+      getAsignablesPqrsOficina: () => asignables,
       labelOficina: id => id,
       normalizeTask: t => t,
       renderTaskChatListHtml: () => '',
@@ -134,7 +135,7 @@ describe('Panel Trasladar / Asignar en acordeón', () => {
     }
     createContext(c)
     runInContext(extraerFunciones(read('js/core.js'), ['renderTaskReviewTrasladarPqrsSideHtml']), c)
-    const e = { _exp: 'PQ-1', _pqrs_oficina: 'guaviare', tasks: [{ id: 't1', actividad: 'Oficio de respuesta', responsables: ['Ana NCA'] }] }
+    const e = { _exp: 'PQ-1', _pqrs_oficina: oficina, _pqrs_responsable_oficina: ENC[oficina], _pqrs_estado_oficina: 'asignado', tasks: [{ id: 't1', actividad: 'Oficio de respuesta', responsables: [ENC[oficina]] }] }
     return c.renderTaskReviewTrasladarPqrsSideHtml('PQ-1', 't1', e, e.tasks[0])
   }
 
@@ -148,6 +149,28 @@ describe('Panel Trasladar / Asignar en acordeón', () => {
     expect((h.match(/id="task-chat-form"/g) || []).length).toBe(1)
     expect((h.match(/pqrs-acc-chat-slot/g) || []).length).toBe(2)
     expect(h).toContain('id="pqrs-chat-parking"')
+  })
+
+  it('el encargado no sale marcado por defecto en Asignar (sigue en la lista)', () => {
+    const h = montarPanel()
+    expect(h).toContain('value="Ana NCA"')
+    expect(h).not.toMatch(/value="Ana NCA" checked/)
+  })
+
+  it('oficina sin responsables propios: solo Trasladar, ya desplegado y con chat', () => {
+    const h = montarPanel({ oficina: 'rn_deguv', asignables: ['Rita RN'] })
+    expect(h).not.toContain('pqrs-acc-asig')
+    expect(h).not.toContain('Confirmar asignación')
+    expect(h).not.toContain('pqrsTrasladoAsigAcordeon')
+    expect(h).toMatch(/id="pqrs-acc-trasl" class="pqrs-acc-body" style="padding/)
+    expect(h).toContain('id="task-chat-form"')
+    expect(h).not.toContain('pqrs-chat-parking')
+  })
+
+  it('oficina con responsables: acordeón de dos opciones', () => {
+    const h = montarPanel({ oficina: 'rn_deguv', asignables: ['Rita RN', 'Pedro'] })
+    expect(h).toContain("pqrsTrasladoAsigAcordeon('trasl')")
+    expect(h).toContain("pqrsTrasladoAsigAcordeon('asig')")
   })
 
   it('solo traslado (sin asignar): también trae chat', () => {

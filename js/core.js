@@ -9949,6 +9949,15 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   }else if(existTk){
     getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
   }
+  const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
+  const responsables=canAsig&&typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
+  const encOfi=typeof getEncargadoOficina==='function'?String(getEncargadoOficina(oficina)||'').trim():'';
+  const esEncOfi=function(n){return !!encOfi&&agendaNorm(n)===agendaNorm(encOfi);};
+  // La PQRSD queda a nombre del encargado mientras no se asigna: no pre-marcarlo.
+  const yaMarcar=yaAsig.filter(function(n){return!esEncOfi(n);});
+  // Oficina sin responsables propios (solo el encargado): no hay a quién asignar.
+  const showAsig=canAsig&&(oficina==='guaviare'||responsables.some(function(n){return!esEncOfi(n);}));
+  const unaSeccion=(canIni||canOfi)!==showAsig;
   // Un solo chat de la actividad: se mueve a la sección del acordeón que esté abierta (ids únicos).
   const chatTaskId=String((existTk&&existTk.id)||taskId||'').trim();
   const chatTk=existTk||(t&&String(t.id)===chatTaskId?t:null)||{id:chatTaskId,comentarios:[],responsables:yaAsig};
@@ -9965,9 +9974,12 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Los mensajes quedan en el chat de la actividad (rail 💬).</div></div>';
   }
   const accHd=function(id,txt){
+    if(unaSeccion)return '<div style="font-size:12px;font-weight:600;margin:10px 0 2px">'+txt+'</div>';
     return '<button type="button" class="pqrs-acc-hd" data-acc="'+id+'" onclick="pqrsTrasladoAsigAcordeon(\''+id+'\')" style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);font-size:12px;font-weight:600;color:var(--tx);cursor:pointer;text-align:left">'+
       '<span>'+txt+'</span><span class="pqrs-acc-chev" style="color:var(--tx3)">▸</span></button>';
   };
+  const accBodyStyle=unaSeccion?'padding:6px 2px 4px':'display:none;padding:10px 2px 4px';
+  const chatSlot=unaSeccion?chatBlock:'<div class="pqrs-acc-chat-slot"></div>';
   if(canIni||canOfi){
     let traslBody='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">DS, RN, OAP, Admin u otra oficina competente. Escriba al encargado de la oficina destino en el chat de la actividad.</div>';
     if(canIni){
@@ -9975,7 +9987,7 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
         OFICINAS_DEGUV.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
       traslBody+='<div class="fld" style="margin-bottom:8px"><label>Oficina destino<span class="req-star">*</span></label>'+
         '<select id="pqrs-trasl-ini-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
-        '<div class="pqrs-acc-chat-slot"></div>'+
+        chatSlot+
         '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:4px" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }else{
       const actual=e._pqrs_oficina||'';
@@ -9985,24 +9997,22 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       traslBody+='<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Oficina actual: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(actual):actual)+'</strong></div>'+
         '<div class="fld" style="margin-bottom:8px"><label>Nueva oficina destino<span class="req-star">*</span></label>'+
         '<select id="pqrs-trasl-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
-        '<div class="pqrs-acc-chat-slot"></div>'+
+        chatSlot+
         '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:4px" onclick="submitTrasladoPqrsInterOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }
     h+=accHd('trasl','🔄 Trasladar a otra oficina')+
-      '<div id="pqrs-acc-trasl" class="pqrs-acc-body" style="display:none;padding:10px 2px 4px">'+traslBody+'</div>';
+      '<div id="pqrs-acc-trasl" class="pqrs-acc-body" style="'+accBodyStyle+'">'+traslBody+'</div>';
   }
-  if(canAsig){
-    const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
-    const responsables=typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
+  if(showAsig){
     const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
     const respChecks=responsables.length
       ?responsables.map(function(n){
         const lbl=typeof labelAsignableConRol==='function'?labelAsignableConRol(n,oficina):n;
-        return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="onPqrsAsigRespChange(this)"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
+        return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaMarcar.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="onPqrsAsigRespChange(this)"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
       }).join('')
       :'<div style="padding:8px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
     h+=accHd('asig','👤 Asignar responsable')+
-      '<div id="pqrs-acc-asig" class="pqrs-acc-body" style="display:none;padding:10px 2px 4px">'+
+      '<div id="pqrs-acc-asig" class="pqrs-acc-body" style="'+accBodyStyle+'">'+
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(oficina):oficina)+'</strong></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Responsable(s)<span class="req-star">*</span></label>'+
       '<div id="pqrs-asig-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
@@ -10011,12 +10021,12 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
       '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
       '</select></div>'+
-      '<div class="pqrs-acc-chat-slot"></div>'+
+      chatSlot+
       '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(chatTaskId||taskId)+'\')">Confirmar asignación</button>'+
       '</div>';
   }
-  if(chatBlock)h+='<div id="pqrs-chat-parking" style="display:none">'+chatBlock+'</div>';
-  if(!canIni&&!canOfi&&!canAsig)
+  if(chatBlock&&!unaSeccion)h+='<div id="pqrs-chat-parking" style="display:none">'+chatBlock+'</div>';
+  if(!canIni&&!canOfi&&!showAsig)
     h+='<div style="font-size:12px;color:var(--tx3);padding:8px">No hay acciones de traslado o asignación disponibles.</div>';
   h+='</div>';
   return h;
