@@ -51,7 +51,7 @@ function renderConsolidadoResponsable(){
 function renderConsolidado(){
   document.querySelectorAll('#pg-cons .cgr, #pg-cons > .card, #pg-cons #cons-juris-panel').forEach(el=>{el.style.display='';});
   const rango=getPeriodoRango('cons');
-  const baseAmb=filterExpsPeriodo(expsAmbito(),'cons');
+  const baseAmb=filterExpsPeriodo(typeof reqListaAmbito==='function'?reqListaAmbito():expsAmbito(),'cons');
   window._jurisConsListCache=baseAmb;
   const amb=esJurisdiccional()?filtrarJurisConsList(baseAmb):(esDeptoConsFiltroActivo()?filtrarDeptoConsList(baseAmb):baseAmb);
   renderConsolidadoCortesPanel(amb,rango);

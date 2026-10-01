@@ -26453,7 +26453,8 @@ function updateActEstFilterForEnc(forEnc){
   if(optNotif)optNotif.hidden=!(!isDir&&(puedeFirmarBan||isResp));
   if(optVenc){optVenc.hidden=false;optVenc.textContent='Vencidas';}
   const optReq=sel.querySelector('option[value="req"]');
-  if(optReq)optReq.hidden=!(deptView&&typeof reqPaletaVisible==='function'&&reqPaletaVisible());
+  const reqSoloConsulta=!deptView&&typeof reqPaletaSoloConsulta==='function'&&reqPaletaSoloConsulta();
+  if(optReq)optReq.hidden=!((deptView||reqSoloConsulta)&&typeof reqPaletaVisible==='function'&&reqPaletaVisible());
   // Director sigue el seguimiento en «Por firma», no actúa en Por notificar
   if(isDir&&optNotif)optNotif.hidden=true;
   if(isDir&&optCorr)optCorr.hidden=true;
@@ -26466,6 +26467,8 @@ function updateActEstFilterForEnc(forEnc){
         :['pend','prior','venc','porver','porcorr','pornotif','done','all']));
   if(puedePorFirma&&order.indexOf('porfirma')<0)
     order.splice(order.length-2,0,'porfirma');
+  if(reqSoloConsulta&&order.indexOf('req')<0)
+    order.splice(order.length-2,0,'req');
   order.forEach(function(v){
     const o=sel.querySelector('option[value="'+v+'"]');
     if(o)sel.appendChild(o);
@@ -28649,7 +28652,8 @@ function renderActividades(){
   const q=(document.getElementById('s-act')?document.getElementById('s-act').value:'').toLowerCase();
   // Encargado / «Todos»: bandeja «Por revisar» = entregas de todos. Otro responsable: solo las suyas.
   const bandejaRevDepto=deptView&&(!respFilter||filterIsEnc);
-  const reqPaletaOn=bandejaRevDepto&&typeof reqPaletaVisible==='function'&&reqPaletaVisible();
+  const reqSoloConsulta=!deptView&&typeof reqPaletaSoloConsulta==='function'&&reqPaletaSoloConsulta();
+  const reqPaletaOn=(bandejaRevDepto||reqSoloConsulta)&&typeof reqPaletaVisible==='function'&&reqPaletaVisible();
   if(filtroAct==='req'&&!reqPaletaOn){
     filtroAct='pend';
     const selReq=document.getElementById('f-act-est');
@@ -28762,6 +28766,7 @@ function renderActividades(){
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. Al reentregar pasan a «Por revisar».';
+    else if(filtroAct==='req'&&reqSoloConsulta)sub.textContent='Requerimientos (solo consulta): término vencido sin verificar · Resoluciones a 30 días hábiles o menos de vencer · Facturas y acuerdos de pago con 15 días o más de mora. 🔍 ver el expediente. El encargado registra el cumplimiento o asigna la actividad.';
     else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido (días hábiles) sin verificar, tras 3 días hábiles de gracia · Resoluciones a 30 días hábiles o menos de vencer (o vencidas) · Facturas y acuerdos de pago con 15 días o más de mora. 🔍 revisar · ✔ cumplió / gestión · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
@@ -28806,7 +28811,11 @@ function renderActividades(){
     if(gwReq)gwReq.style.display='none';
     if(moreReq)moreReq.style.display='none';
     if(btnExp)btnExp.style.display='none';
-    if(tb)tb.innerHTML=reqPaletaRowsHtml(q,colSpan);
+    if(!deptView&&thead&&!thead.querySelector('.act-col-resp')){
+      const thDesc=thead.querySelector('.act-col-desc');
+      if(thDesc)thDesc.insertAdjacentHTML('afterend','<th class="act-col-resp">Responsable</th>');
+    }
+    if(tb)tb.innerHTML=reqPaletaRowsHtml(q,colSpan+(deptView?0:1));
     return;
   }
   const vistaToggle=document.getElementById('act-vista-toggle');

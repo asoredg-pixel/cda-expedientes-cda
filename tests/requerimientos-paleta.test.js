@@ -127,6 +127,36 @@ describe('Paleta Requerimientos — resoluciones', () => {
   })
 })
 
+describe('Paleta Requerimientos — coordinador (solo consulta)', () => {
+  it('ve la paleta de su departamento solo con 🔍 (sin ✔ ni 📌)', () => {
+    tasksRevFinal.clear()
+    const otro = Object.assign(expBase(), { _exp: 'EXP-VAU-001', _depto: 'vaupes' })
+    exps = [Object.assign(expBase(), { _depto: 'guaviare' }), otro]
+    const prev = { r: sst.esModoResponsable, e: sst.esEncargadoActivo, v: sst.esVistaActividadesDepto }
+    sst.esModoResponsable = () => true
+    sst.esEncargadoActivo = () => false
+    sst.esVistaActividadesDepto = () => false
+    sst.esCargoCoordinador = () => true
+    sst.getDeptoAgendaAsignacion = () => 'guaviare'
+    try {
+      expect(sst.reqPuedeVerificar()).toBe(false)
+      expect(sst.reqPaletaVisible()).toBe(true)
+      const rows = sst.reqPaletaEntradas()
+      expect(rows.length).toBeGreaterThan(0)
+      expect(rows.every(x => x.exp === 'EXP-TEST-001')).toBe(true)
+      const html = sst.reqPaletaRowsHtml('', 9)
+      expect(html).toContain('reqPaletaVer(')
+      expect(html).not.toContain('reqPaletaCumplio(')
+      expect(html).not.toContain('reqPaletaAsignar(')
+    } finally {
+      sst.esModoResponsable = prev.r
+      sst.esEncargadoActivo = prev.e
+      sst.esVistaActividadesDepto = prev.v
+      sst.esCargoCoordinador = () => false
+    }
+  })
+})
+
 describe('Paleta Requerimientos — facturas y acuerdos', () => {
   it('factura con 15 días calendario entra; con 14 no; pagada, al día o pendiente de aprobación no', () => {
     exps = [expBase()]

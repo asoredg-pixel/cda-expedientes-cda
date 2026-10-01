@@ -1437,6 +1437,7 @@ function tabsResponsableContratista(){
   const G='gmail-ofi',R='reg',A='act',C='con',Rec='rec';
   const tabs=[G,A,C,Rec];
   if(typeof responsablePuedeVerRegistro==='function'&&responsablePuedeVerRegistro())tabs.splice(1,0,R);
+  if(esCargoCoordinador())tabs.splice(tabs.indexOf(C)+1,0,'cons');
   return tabs;
 }
 function getTabsVisiblesSesion(){

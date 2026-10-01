@@ -161,6 +161,7 @@ function filtrarJurisConsList(list){
   });
 }
 function esDeptoConsFiltroActivo(){
+  if(typeof esCargoCoordinador==='function'&&esCargoCoordinador())return true;
   return !esJurisdiccional()&&!esModoResponsable()&&DEPTOS.some(d=>d.id===deptoActivo);
 }
 function filtrarDeptoConsList(list){
@@ -193,7 +194,7 @@ function renderJurisConsolidadoStats(list,fullList){
     const ft=window._deptoConsFiltroTram||'';
     const tramOpts=jurisTramiteOpciones(fullList);
     const total=list.length;
-    el.innerHTML='<div class="slbl">Filtros consolidado — '+escAttr(labelDepto(deptoActivo))+' ('+total+' expediente'+(total!==1?'s':'')+(ft?' · filtrado':'')+')</div>'+
+    el.innerHTML='<div class="slbl">Filtros consolidado — '+escAttr(labelDepto(typeof reqDeptoAmbito==='function'?reqDeptoAmbito():deptoActivo))+' ('+total+' expediente'+(total!==1?'s':'')+(ft?' · filtrado':'')+')</div>'+
       '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Filtre por tipo de trámite dentro del departamento.</div>'+
       '<div class="juris-filtros-bar">'+
       '<div class="fld"><label>Tipo de trámite</label><select id="depto-f-tram" onchange="onDeptoConsFiltroChange()">'+

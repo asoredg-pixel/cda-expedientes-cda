@@ -332,7 +332,7 @@ function reqColectarEntradas(list,opts){
   (list||[]).forEach(function(e){_reqEntradasExp(e,out);});
   if(opts.libres){
     const libs=typeof actividadesLibresForDepto==='function'&&typeof deptoActivo!=='undefined'
-      ?actividadesLibresForDepto(deptoActivo)
+      ?actividadesLibresForDepto(reqDeptoAmbito())
       :[];
     (libs||[]).forEach(function(t){
       if(!t||t.eliminada||!t.terminoCumpl||!t.terminoCumpl.vence)return;
@@ -352,8 +352,21 @@ function reqTareasTerminoIncumplido(e){
     return tc.estado==='incumplio'||tc.vence<h;
   });
 }
+/** Coordinador: paleta y consolidado en solo consulta (sin acciones del encargado). */
+function reqPaletaSoloConsulta(){
+  return typeof esCargoCoordinador==='function'&&esCargoCoordinador();
+}
+/** Departamento del ámbito: el del coordinador o el activo. */
+function reqDeptoAmbito(){
+  if(reqPaletaSoloConsulta()&&typeof getDeptoAgendaAsignacion==='function')return getDeptoAgendaAsignacion();
+  return typeof deptoActivo!=='undefined'?deptoActivo:'';
+}
 function reqListaAmbito(){
   const base=typeof expsAmbito==='function'?expsAmbito():(typeof exps!=='undefined'?exps:[]);
+  if(reqPaletaSoloConsulta()){
+    const d=reqDeptoAmbito();
+    return (base||[]).filter(function(e){return e&&String(e._depto||'guaviare')===d;});
+  }
   return (base||[]).filter(Boolean);
 }
 function reqPuedeVerificar(){
@@ -629,6 +642,7 @@ function _reqRefrescarVistas(){
   }catch(err){console.warn('_reqRefrescarVistas:',err);}
 }
 function reqPaletaVisible(){
+  if(reqPaletaSoloConsulta())return true;
   if(!reqPuedeVerificar())return false;
   return !(typeof esVistaActividadesDepto==='function'&&!esVistaActividadesDepto());
 }
@@ -797,9 +811,9 @@ function _reqPaletaRowHtml(x,i,colNotif){
   const refHtml=e
     ?'<span style="color:var(--bl);cursor:pointer" data-con-exp-asoc="'+escAttr(x.exp)+'">'+escAttr(x.exp)+'</span>'
     :escAttr(x.exp);
-  let acc='<button type="button" class="btn bsm bic act-ico" title="Ver: revisión con las opciones del encargado (editar expediente, trasladar…)" onclick="event.stopPropagation();reqPaletaVer('+i+')">🔍</button>';
-  acc+='<button type="button" class="btn bsm bic act-ico" title="'+(esGest?'Registrar gestión (observación obligatoria)':'Cumplió el requerimiento')+'" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
-  if(e)acc+='<button type="button" class="btn bsm bic act-ico" title="Asignar actividad a un responsable (al guardarla sale de esta paleta)" onclick="event.stopPropagation();reqPaletaAsignar('+i+')">📌</button>';
+  let acc='<button type="button" class="btn bsm bic act-ico" title="'+(reqPaletaSoloConsulta()?'Ver (solo consulta)':'Ver: revisión con las opciones del encargado (editar expediente, trasladar…)')+'" onclick="event.stopPropagation();reqPaletaVer('+i+')">🔍</button>';
+  if(!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="'+(esGest?'Registrar gestión (observación obligatoria)':'Cumplió el requerimiento')+'" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
+  if(e&&!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="Asignar actividad a un responsable (al guardarla sale de esta paleta)" onclick="event.stopPropagation();reqPaletaAsignar('+i+')">📌</button>';
   return '<tr data-req-key="'+escAttr(x.key)+'" style="box-shadow:inset 3px 0 0 '+barra+'">'+
     '<td class="act-col-estado">'+badge+'</td>'+
     '<td class="act-col-ref" style="font-family:\'DM Mono\',monospace;font-size:12px">'+refHtml+'</td>'+
@@ -816,6 +830,14 @@ function _reqPaletaRowHtml(x,i,colNotif){
 function reqPaletaVer(i){
   const x=(window._reqPaletaEntries||[])[i];
   if(!x)return;
+  if(reqPaletaSoloConsulta()){
+    const eV=typeof getExpById==='function'?getExpById(x.exp):null;
+    if(eV&&typeof abrirConsultaExpPanel==='function'){
+      if(typeof closeTaskModal==='function')closeTaskModal();
+      abrirConsultaExpPanel(x.exp,{allowSingle:true,edit:false,soloExp:true,forceReadOnly:true});
+    }else if(x.taskId&&typeof abrirConsultaActLibreDesdeAct==='function')abrirConsultaActLibreDesdeAct(x.ref,x.taskId);
+    return;
+  }
   if(x.taskId&&typeof openTaskVerDocumentoResp==='function'){openTaskVerDocumentoResp(x.ref,x.taskId);return;}
   if(typeof abrirConsultaExpAsociado==='function'){abrirConsultaExpAsociado(x.exp);return;}
   if(typeof editarExp==='function')editarExp(x.exp);
