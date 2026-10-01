@@ -67,3 +67,38 @@ describe('Prioritarias con responsable en el selector del encargado', () => {
     expect(c.actividadVisibleConRespFilter({ ...porNotificarDeOtro, responsables: ['Otro'], firmaWf: {} }, 'Laura', 'prior')).toBe(false)
   })
 })
+
+describe('Contador ⚡ Prioritarias del encargado (selector = él mismo)', () => {
+  function montarEnc() {
+    const c = {
+      agendaNorm: s => String(s || '').trim().toLowerCase(),
+      getExpById: () => ({ _exp: 'EXP-1' }),
+      getPqrsWorkflow: () => ({}),
+      taskUsuarioEsAsignado: (t, n) => (t.responsables || []).includes(n),
+      esNotifAsignadaVencida: () => true,
+      actividadPrioritariaOcultarNotifAjenaEnc: () => false,
+      esModoResponsable: () => false,
+      esVistaActividadesDepto: () => true,
+      getEncargadoDepto: () => 'Carlos',
+      getActDeptRespFilterSafe: () => 'Carlos',
+      deptoActivo: 'guaviare'
+    }
+    createContext(c)
+    runInContext(extraerFunciones(read('js/core.js'), [
+      'actividadNotifEsDeResp', 'esNotifAsignadaPrioritariaParaSesion', 'notifVencidaCuentaPrioritaria'
+    ]), c)
+    return c
+  }
+
+  it('no cuenta la notificación vencida que debe hacer otro responsable (no aparece en la lista)', () => {
+    const c = montarEnc()
+    expect(c.notifVencidaCuentaPrioritaria({ id: 'n1', responsables: ['Laura'], firmaWf: { notificar_por: 'Laura' } })).toBe(false)
+    expect(c.notifVencidaCuentaPrioritaria({ id: 'n2', responsables: ['Carlos'], firmaWf: { notificar_por: 'Carlos' } })).toBe(true)
+  })
+
+  it('el contador y la lista usan el mismo criterio', () => {
+    const src = read('js/core.js')
+    expect(src).toContain('const notifVencPrior=(notifAll||[]).filter(notifVencidaCuentaPrioritaria);')
+    expect(src).toMatch(/getTareasNotifVisiblesAct\(\):\[\]\)\s*\.filter\(notifVencidaCuentaPrioritaria\)/)
+  })
+})

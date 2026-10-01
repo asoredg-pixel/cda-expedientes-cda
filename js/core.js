@@ -26391,15 +26391,24 @@ function renderActividadesRowHtml(t){
   const cierreHtml=cierre;
   const expAct=getExpById(t.exp);
   const filActPin=document.getElementById('f-act-est');
-  const fijadaAct=!!(filActPin&&String(filActPin.value||'')==='pend'&&expAct&&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(expAct._exp||t.exp));
+  const filPinVal=filActPin?String(filActPin.value||''):'';
+  const pinKeyAct=typeof ncaActPinKey==='function'?ncaActPinKey(t,expAct):'';
+  const fijadaAct=!!((filPinVal==='pend'||filPinVal==='porver')&&pinKeyAct
+    &&typeof ncaEncargadoSesionPqrsPin==='function'&&ncaEncargadoSesionPqrsPin()
+    &&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(pinKeyAct));
   let refLbl=actRefCellHtml(t);
-  if(fijadaAct)refLbl='<span class="pqrs-nca-pin-lbl" title="Fijada en Por ejecutar">📌</span> '+refLbl;
+  if(fijadaAct)refLbl='<span class="pqrs-nca-pin-lbl" title="Fijada arriba">📌</span> '+refLbl;
   const priorBadge=taskPrioridadBadgeHtml(t);
   const bibBadge=typeof bibTaskReposBadgeHtml==='function'?bibTaskReposBadgeHtml(t):'';
   const altaBadge=(expActPre&&typeof expAltaResponsableBadgeHtml==='function')?expAltaResponsableBadgeHtml(expActPre):'';
   const sol=getTaskSolicitudPendiente(t);
   const solBadge=sol?('<span class="solicitud-pill" title="'+(sol.tipo==='traslado'?'Traslado':'Eliminación')+' solicitada por '+escAttr(sol.por)+'">⚠ Solicitud</span>'):'';
-  const acts=renderActRowToolbarHtml(t,expAct);
+  let acts=renderActRowToolbarHtml(t,expAct);
+  if(typeof ncaPinEnPorRevisarAct==='function'&&ncaPinEnPorRevisarAct(t,expAct)){
+    const pinBtn=ncaActPinBtnHtml(t,expAct);
+    const tb='<span class="sst-act-toolbar">';
+    acts=acts.indexOf(tb)>=0?acts.replace(tb,tb+pinBtn):pinBtn+acts;
+  }
   const respCol=esVistaActividadesDepto()?('<td class="act-col-resp" style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+'</td>'):'';
   const notifCol=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor()
     ?('<td class="act-col-notif" style="font-size:12px;color:var(--tx2)" title="Responsable designado a notificar">'+actNotificadorPorLabel(t,true)+'</td>')
@@ -27500,6 +27509,12 @@ function esNotifAsignadaPrioritariaParaSesion(t){
   return true;
 }
 window.esNotifAsignadaPrioritariaParaSesion=esNotifAsignadaPrioritariaParaSesion;
+/** Notificación vencida que entra en ⚡ Prioritarias: mismo criterio para la lista y el contador. */
+function notifVencidaCuentaPrioritaria(t){
+  return typeof esNotifAsignadaPrioritariaParaSesion==='function'
+    ?esNotifAsignadaPrioritariaParaSesion(t)
+    :(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t));
+}
 function esActividadPorEjecutar(t){
   if(!t||t.eliminada)return false;
   // Defensa temprana: deuda de notificar → solo paleta «Por notificar» (nunca «Por ejecutar»)
@@ -28567,11 +28582,7 @@ function filtrarActividadesPorEstado(list,filtro){
     let out=(list||[]).filter(t=>esActividadPrioritariaPendiente(t));
     // Notificaciones vencidas (5 días hábiles) → prioritarias aunque no estén en el listado base
     const notifVenc=(typeof getTareasNotifVisiblesAct==='function'?getTareasNotifVisiblesAct():[])
-      .filter(function(t){
-        return typeof esNotifAsignadaPrioritariaParaSesion==='function'
-          ?esNotifAsignadaPrioritariaParaSesion(t)
-          :(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t));
-      });
+      .filter(notifVencidaCuentaPrioritaria);
     return mergeActividadLists(out,notifVenc);
   }
   if(filtro==='all')return list;
@@ -28716,7 +28727,9 @@ function renderActividades(){
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
   if(q)list=list.filter(t=>matchActividadSearch(t,q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
-    (filtroAct==='porver'?sortTasksPorRevisar(list):
+    (filtroAct==='porver'?(typeof ordenarActividadesNcaPinsPrimero==='function'
+      ?ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list))
+      :sortTasksPorRevisar(list)):
     (filtroAct==='pend'||filtroAct==='venc'?(
       typeof ordenarActividadesNcaPinsPrimero==='function'&&filtroAct==='pend'
         ?ordenarActividadesNcaPinsPrimero(sortTasksPorEjecutar(list))
@@ -28733,8 +28746,12 @@ function renderActividades(){
   const notifAll=getTareasNotifVisiblesAct();
   const porEjec=all.filter(t=>esActividadPorEjecutar(t)).length;
   const priorBase=all.filter(t=>esActividadPrioritariaPendiente(t));
-  const notifVencPrior=(notifAll||[]).filter(function(t){return typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t);});
-  const prior=mergeActividadLists(priorBase,notifVencPrior).length;
+  const notifVencPrior=(notifAll||[]).filter(notifVencidaCuentaPrioritaria);
+  const prior=mergeActividadLists(priorBase,notifVencPrior).filter(function(row){
+    if(!row||row.eliminada)return false;
+    const live=typeof getTaskAny==='function'?getTaskAny(row.exp||row.codigo,row.id):row;
+    return !!(live&&!live.eliminada);
+  }).length;
   // Contadores Por revisar / Revisados / Por corregir: bandeja del encargado = todos; otro responsable = filtrado
   const porverScope=deptView?(bandejaRevDepto?null:respFilter):null;
   const porverBase=filterTasksPeriodo(deptView?getTareasDeptActividades(porverScope):getTareasResponsableActivo(),'act');
