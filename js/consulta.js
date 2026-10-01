@@ -1136,6 +1136,10 @@ function renderReviewAsocPickPanel(panelId){
   if(!body)return;
   window._reviewAsocPanelId=id;
   const ctx=window._reviewAsocCtx||{};
+  if(ctx.crearExp&&reviewAsocPuedeCrearExp(ctx)){
+    body.innerHTML=reviewAsocCrearExpFormHtml();
+    return;
+  }
   const q=String(ctx.q||'').trim();
   let modoTabs='';
   if(ctx.mode==='pqrs-pick'&&ctx.allowTramite){
@@ -1151,6 +1155,9 @@ function renderReviewAsocPickPanel(panelId){
   body.innerHTML=
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
     modoTabs+
+    (reviewAsocPuedeCrearExp(ctx)
+      ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
+      :'')+
     '<div class="fld" style="margin-bottom:10px"><input type="text" id="review-asoc-q" value="'+escAttr(q)+'" placeholder="Nombre, N° expediente, correo, asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="onReviewAsocSearchInput(this)"></div>'+
     '<div id="review-asoc-list" class="review-asoc-list">'+
     (list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>')+
@@ -1395,6 +1402,129 @@ function confirmReviewAsocPick(targetExpId){
     if(parent.isReviewDelivery&&parent.expId&&parent.taskId&&typeof openTaskCommentsModal==='function')
       openTaskCommentsModal(parent.expId,parent.taskId);
   }
+}
+/** «➕ Crear expediente» (solo Control del trámite) en el rail Asociar de Ver PQRSD: expedientes aún no registrados. */
+function reviewAsocPuedeCrearExp(ctx){
+  ctx=ctx||window._reviewAsocCtx||{};
+  return window._reviewAsocPanelId==='task-review-asoc-body'&&ctx.mode==='pqrs-pick'&&!!ctx.allowTramite
+    &&typeof puedeCrearExpedienteRegistro==='function'&&puedeCrearExpedienteRegistro();
+}
+function reviewAsocTramitesCrear(){
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const c=typeof cfgFor==='function'?cfgFor(depto):cfg;
+  return ((c&&c.tramites)||[]).filter(function(t){
+    return t&&t.id&&!(typeof esTramitePqrs==='function'&&esTramitePqrs(t.id));
+  });
+}
+function reviewAsocCrearExpSubHtml(tid){
+  const tram=reviewAsocTramitesCrear().find(function(t){return String(t.id)===String(tid||'');});
+  const list=tram&&typeof getTramSubclases==='function'?getTramSubclases(tram):[];
+  if(!list.length)return'';
+  const lbl=typeof getTramSubclaseLabel==='function'?getTramSubclaseLabel(tram):'Clase / tipo';
+  return '<div class="fld" style="margin-top:8px"><label>'+escAttr(lbl)+'<span class="req-star">*</span></label>'+
+    '<select id="review-asoc-new-sub" style="width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)"><option value="">— Seleccione —</option>'+
+    list.map(function(s){return '<option value="'+escAttr(s)+'">'+escAttr(s)+'</option>';}).join('')+'</select></div>';
+}
+function reviewAsocCrearExpFormHtml(){
+  const ctx=window._reviewAsocCtx||{};
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const hoyStr=typeof hoy==='function'?hoy():'';
+  const trams=reviewAsocTramitesCrear();
+  const estados=typeof ESTADOS!=='undefined'&&ESTADOS.length?ESTADOS:['Solicitud'];
+  return '<div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--bld)">➕ Nuevo expediente · Control del trámite</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Queda asociado a la PQRSD <strong>'+escAttr(ctx.sourceExp||'')+'</strong>. Los demás datos (interesado, etc.) se completan después desde Registro o Consulta.</div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Tipo de trámite<span class="req-star">*</span></label><select id="review-asoc-new-tram" style="'+inp+'" onchange="reviewAsocCrearExpTramChange(this)"><option value="">— Seleccione —</option>'+
+      trams.map(function(t){return '<option value="'+escAttr(t.id)+'">'+escAttr(t.nombre||t.id)+'</option>';}).join('')+'</select></div>'+
+    '<div class="fld"><label>N° Expediente<span class="req-star">*</span></label><input type="text" id="review-asoc-new-exp" value="'+escAttr(ctx.q||'')+'" placeholder="EXP-2026-001" style="'+inp+'"></div>'+
+    '<div class="fld"><label>Estado del trámite</label><select id="review-asoc-new-estado" style="'+inp+'" onchange="reviewAsocCrearExpEstadoChange(this)">'+
+      estados.map(function(v){return '<option'+(v==='Solicitud'?' selected':'')+'>'+escAttr(v)+'</option>';}).join('')+'</select></div>'+
+    '<div class="fld"><label>Fecha de solicitud (radicación)<span class="req-star">*</span></label><input type="date" id="review-asoc-new-fecha" value="'+escAttr(hoyStr)+'" style="'+inp+'"></div>'+
+    '<div class="fld" id="review-asoc-new-fest-wrap" style="display:none"><label>Fecha del estado</label><input type="date" id="review-asoc-new-fecha-est" value="'+escAttr(hoyStr)+'" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div id="review-asoc-new-sub-wrap"></div>'+
+    '<div class="fx" style="gap:8px;margin-top:12px;flex-wrap:wrap">'+
+    '<button type="button" class="btn bsm bp" onclick="reviewAsocCrearExpGuardar()">➕ Crear y asociar</button>'+
+    '<button type="button" class="btn bsm" onclick="reviewAsocCrearExpCancelar()">Cancelar</button></div>';
+}
+function reviewAsocCrearExpTramChange(sel){
+  const wrap=document.getElementById('review-asoc-new-sub-wrap');
+  if(wrap)wrap.innerHTML=reviewAsocCrearExpSubHtml(sel&&sel.value);
+}
+function reviewAsocCrearExpEstadoChange(sel){
+  const wrap=document.getElementById('review-asoc-new-fest-wrap');
+  if(wrap)wrap.style.display=sel&&sel.value&&sel.value!=='Solicitud'?'':'none';
+}
+function reviewAsocCrearExpAbrir(){
+  const ctx=window._reviewAsocCtx||{};
+  if(!reviewAsocPuedeCrearExp(ctx)){notif('No tiene permiso para crear expedientes','err');return;}
+  const qEl=document.getElementById('review-asoc-q');
+  if(qEl)ctx.q=String(qEl.value||'').trim();
+  ctx.crearExp=true;
+  window._reviewAsocCtx=ctx;
+  renderReviewAsocPickPanel();
+  setTimeout(function(){const s=document.getElementById('review-asoc-new-tram');if(s)s.focus();},60);
+}
+function reviewAsocCrearExpCancelar(){
+  const ctx=window._reviewAsocCtx||{};
+  ctx.crearExp=false;
+  window._reviewAsocCtx=ctx;
+  renderReviewAsocPickPanel();
+}
+function reviewAsocCrearExpGuardar(){
+  const ctx=window._reviewAsocCtx||{};
+  if(!reviewAsocPuedeCrearExp(ctx)){notif('No tiene permiso para crear expedientes','err');return;}
+  const val=function(id){return String((document.getElementById(id)||{}).value||'').trim();};
+  const tid=val('review-asoc-new-tram');
+  const expId=val('review-asoc-new-exp');
+  const estado=val('review-asoc-new-estado')||'Solicitud';
+  const fechaSol=val('review-asoc-new-fecha');
+  const fechaEst=estado==='Solicitud'?fechaSol:(val('review-asoc-new-fecha-est')||fechaSol);
+  const tram=reviewAsocTramitesCrear().find(function(t){return String(t.id)===tid;});
+  if(!tram){notif('Seleccione el tipo de trámite','err');return;}
+  if(!expId){notif('Complete N° Expediente','err');return;}
+  if((typeof getExpById==='function'&&getExpById(expId))||(typeof expNumeroDuplicado==='function'&&expNumeroDuplicado(expId))){
+    notif('Ya existe un registro con el N° «'+expId+'» — búsquelo y use 🖇️ Asociar','err');
+    return;
+  }
+  if(!fechaSol){notif('Complete la fecha de solicitud','err');return;}
+  const subs=typeof getTramSubclases==='function'?getTramSubclases(tram):[];
+  const sub=val('review-asoc-new-sub');
+  if(subs.length&&!sub){notif('Seleccione '+(typeof getTramSubclaseLabel==='function'?getTramSubclaseLabel(tram):'Clase / tipo'),'err');return;}
+  const sourceExp=String(ctx.sourceExp||'').trim();
+  const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
+  const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
+  const quien=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  const fe={Solicitud:fechaSol};
+  if(estado!=='Solicitud')fe[estado]=fechaEst;
+  const data={
+    _depto:depto,_tramite:tid,_exp:expId,_estado:estado,_fecha:fechaSol,_fechas_estado:JSON.stringify(fe),
+    _usar_etapa:false,_etapa:'',_instructor:'',
+    _subclase:sub,_tipo_sancionatorio:esSanc?sub:'',_es_pqrs:esSanc,_es_queja:esSanc,
+    _alta_desde_pqrs:sourceExp,_alta_por:quien,_alta_fecha:typeof hoy==='function'?hoy():fechaSol,
+    _tipo_persona:'natural',_pn_nombre:'',_pn_identificacion:'',_pn_correo:'',_pn_telefono:'',_est_com:false,
+    _facturas_extra:'[]',_actos_admin:'[]',_conceptos_seg:'[]',_expedientes_asociados:'[]',_info_tecnica_items:'[]',
+    tasks:[]
+  };
+  if(typeof syncFechasEstadoConEstado==='function')syncFechasEstadoConEstado(data);
+  const hist=typeof rebuildHistorial==='function'?rebuildHistorial(data,[]):[];
+  if(hist[0])hist[0].desc=String(hist[0].desc||'Apertura del proceso / trámite')+' · creado desde PQRSD '+sourceExp+(quien?' por '+quien:'');
+  data.historial=hist;
+  if(!Array.isArray(exps))exps=[];
+  exps.push(data);
+  if(typeof logAudit==='function')logAudit('Creó expediente ['+expId+'] desde PQRSD ['+sourceExp+']','expedientes',expId);
+  ctx.crearExp=false;
+  ctx.q=expId;
+  ctx.pqrsModo='tramite';
+  window._reviewAsocCtx=ctx;
+  // asociarVinculoAPqrs ya persiste la PQRSD y el expediente nuevo
+  const ok=typeof asociarVinculoAPqrs==='function'&&asociarVinculoAPqrs(sourceExp,expId,'tramite');
+  if(!ok){
+    if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
+    else if(typeof persistExpLocal==='function')persistExpLocal();
+    notif('Expediente '+expId+' creado. No se pudo asociar automáticamente — use 🖇️ Asociar','warn');
+  }
+  if(!reviewAsocRefrescarEnRevision())renderReviewAsocPickPanel();
 }
 function cerrarConsultaPanel(){
   const keepReview=!!window._reviewKeepOpen;
