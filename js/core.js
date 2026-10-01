@@ -9936,44 +9936,64 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
   h+='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">'+escAttr(e.f_f1||e._pqrs_detalle||expId)+'</div>';
   if(canIni||canOfi||canAsig)
     h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;margin-bottom:10px;cursor:pointer"><input type="checkbox" id="pqrs-trasl-prior"'+(e._pqrs_prioritaria?' checked':'')+'> ⚡ Prioritaria <span style="font-weight:400;color:var(--tx3)">(se aplica al confirmar el traslado o la asignación)</span></label>';
+  const existTk=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e,taskId):(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&(String(tk.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(tk.actividad)));});
+  // Pre-marcar solo los responsables reales de la tarea de atención.
+  // Si aún no hay asignación real (solo encargado por defecto del traslado), marcar al encargado.
+  const yaAsig=[];
+  const estadoOfi=String(e._pqrs_estado_oficina||'').trim();
+  const respOfi=String(e._pqrs_responsable_oficina||'').trim();
+  if(existTk&&estadoOfi==='asignado'){
+    getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
+  }else if(respOfi){
+    yaAsig.push(respOfi);
+  }else if(existTk){
+    getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
+  }
+  // Un solo chat de la actividad: se mueve a la sección del acordeón que esté abierta (ids únicos).
+  const chatTaskId=String((existTk&&existTk.id)||taskId||'').trim();
+  const chatTk=existTk||(t&&String(t.id)===chatTaskId?t:null)||{id:chatTaskId,comentarios:[],responsables:yaAsig};
+  let chatBlock='';
+  if((canIni||canOfi||canAsig)&&chatTaskId&&typeof renderTaskChatComposerHtml==='function'){
+    const msgs=typeof renderTaskChatListHtml==='function'?renderTaskChatListHtml(typeof normalizeTask==='function'?normalizeTask(chatTk):chatTk):'';
+    const composer=renderTaskChatComposerHtml(expId,chatTaskId,chatTk,{allowGuiaAttach:true});
+    chatBlock='<div id="pqrs-chat-block" class="fld pqrs-asig-chat-wrap" style="margin-bottom:10px">'+
+      '<label style="display:flex;align-items:center;gap:6px">'+(typeof chatWaIconHtml==='function'?chatWaIconHtml(14):'')+' Chat de la actividad <span style="font-weight:400;color:var(--tx3)">(indicaciones / adjuntos)</span></label>'+
+      '<div id="pqrs-asig-chat-msgs" class="task-chat-uni-scroll" style="max-height:160px;margin:6px 0;padding:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+      (msgs||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún. Escriba una indicación y envíe con ➤</div>')+
+      '</div>'+
+      '<div id="pqrs-asig-chat-compose">'+composer+'</div>'+
+      '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Los mensajes quedan en el chat de la actividad (rail 💬).</div></div>';
+  }
+  const accHd=function(id,txt){
+    return '<button type="button" class="pqrs-acc-hd" data-acc="'+id+'" onclick="pqrsTrasladoAsigAcordeon(\''+id+'\')" style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:8px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);font-size:12px;font-weight:600;color:var(--tx);cursor:pointer;text-align:left">'+
+      '<span>'+txt+'</span><span class="pqrs-acc-chev" style="color:var(--tx3)">▸</span></button>';
+  };
   if(canIni||canOfi){
-    h+='<div style="font-size:12px;font-weight:600;margin:10px 0 6px">🔄 Trasladar a otra oficina</div>';
-    h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">DS, RN, OAP, Admin u otra oficina competente.</div>';
+    let traslBody='<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">DS, RN, OAP, Admin u otra oficina competente. Escriba al encargado de la oficina destino en el chat de la actividad.</div>';
     if(canIni){
       const opts='<option value="">— Seleccionar oficina —</option>'+
         OFICINAS_DEGUV.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
-      h+='<div class="fld" style="margin-bottom:8px"><label>Oficina destino<span class="req-star">*</span></label>'+
+      traslBody+='<div class="fld" style="margin-bottom:8px"><label>Oficina destino<span class="req-star">*</span></label>'+
         '<select id="pqrs-trasl-ini-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
-        '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-ini-motivo" placeholder="Ej. Competencia de la oficina" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
-        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
+        '<div class="pqrs-acc-chat-slot"></div>'+
+        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:4px" onclick="submitTrasladoPqrsInicial(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }else{
       const actual=e._pqrs_oficina||'';
       const destinos=OFICINAS_DEGUV.filter(function(o){return o.id!==actual;});
       const opts='<option value="">— Seleccionar oficina —</option>'+
         destinos.map(function(o){return '<option value="'+escAttr(o.id)+'">'+escAttr(o.nombre)+'</option>';}).join('');
-      h+='<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Oficina actual: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(actual):actual)+'</strong></div>'+
+      traslBody+='<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Oficina actual: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(actual):actual)+'</strong></div>'+
         '<div class="fld" style="margin-bottom:8px"><label>Nueva oficina destino<span class="req-star">*</span></label>'+
         '<select id="pqrs-trasl-ofi-sel" onchange="if(typeof taskChatSyncParaFromAsignacion===\'function\')taskChatSyncParaFromAsignacion()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+opts+'</select></div>'+
-        '<div class="fld" style="margin-bottom:8px"><label>Motivo (opcional)</label><input type="text" id="pqrs-trasl-motivo" placeholder="Ej. Reasignación por competencia" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></div>'+
-        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:12px" onclick="submitTrasladoPqrsInterOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
+        '<div class="pqrs-acc-chat-slot"></div>'+
+        '<button type="button" class="btn bsm bp" style="width:100%;margin-bottom:4px" onclick="submitTrasladoPqrsInterOficina(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">Confirmar traslado</button>';
     }
+    h+=accHd('trasl','🔄 Trasladar a otra oficina')+
+      '<div id="pqrs-acc-trasl" class="pqrs-acc-body" style="display:none;padding:10px 2px 4px">'+traslBody+'</div>';
   }
   if(canAsig){
     const oficina=e._pqrs_oficina||getPqrsOficinaActiva();
     const responsables=typeof getAsignablesPqrsOficina==='function'?getAsignablesPqrsOficina(oficina):[];
-    const existTk=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e,taskId):(e.tasks||[]).find(function(tk){return tk&&!tk.eliminada&&tk.actividad&&(String(tk.actividad).startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(tk.actividad)));});
-    // Pre-marcar solo los responsables reales de la tarea de atención.
-    // Si aún no hay asignación real (solo encargado por defecto del traslado), marcar al encargado.
-    const yaAsig=[];
-    const estadoOfi=String(e._pqrs_estado_oficina||'').trim();
-    const respOfi=String(e._pqrs_responsable_oficina||'').trim();
-    if(existTk&&estadoOfi==='asignado'){
-      getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
-    }else if(respOfi){
-      yaAsig.push(respOfi);
-    }else if(existTk){
-      getTaskResponsables(existTk).forEach(function(n){if(n)yaAsig.push(String(n).trim());});
-    }
     const modoActual=existTk&&existTk.entregaModo==='unificada'?'unificada':'individual';
     const respChecks=responsables.length
       ?responsables.map(function(n){
@@ -9981,22 +10001,8 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
         return '<label class="act-libre-resp-row"><input type="checkbox" class="pqrs-asig-resp-cb" value="'+escAttr(n)+'"'+(yaAsig.some(function(r){return agendaNorm(r)===agendaNorm(n);})?' checked':'')+' onchange="onPqrsAsigRespChange(this)"><span class="act-libre-resp-nom">'+escAttr(lbl)+'</span></label>';
       }).join('')
       :'<div style="padding:8px;font-size:12px;color:var(--tx3)">No hay responsables configurados.</div>';
-    const chatTaskId=String((existTk&&existTk.id)||taskId||'').trim();
-    const chatTk=existTk||(t&&String(t.id)===chatTaskId?t:null)||{id:chatTaskId,comentarios:[],responsables:yaAsig};
-    let chatBlock='';
-    if(chatTaskId&&typeof renderTaskChatComposerHtml==='function'){
-      const msgs=typeof renderTaskChatListHtml==='function'?renderTaskChatListHtml(typeof normalizeTask==='function'?normalizeTask(chatTk):chatTk):'';
-      const composer=renderTaskChatComposerHtml(expId,chatTaskId,chatTk,{allowGuiaAttach:true});
-      chatBlock='<div class="fld pqrs-asig-chat-wrap" style="margin-bottom:10px">'+
-        '<label style="display:flex;align-items:center;gap:6px">'+(typeof chatWaIconHtml==='function'?chatWaIconHtml(14):'')+' Chat de la actividad <span style="font-weight:400;color:var(--tx3)">(indicaciones / adjuntos)</span></label>'+
-        '<div id="pqrs-asig-chat-msgs" class="task-chat-uni-scroll" style="max-height:160px;margin:6px 0;padding:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
-        (msgs||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún. Escriba una indicación y envíe con ➤</div>')+
-        '</div>'+
-        '<div id="pqrs-asig-chat-compose">'+composer+'</div>'+
-        '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Los mensajes quedan en el chat de la actividad (rail 💬).</div></div>';
-    }
-    h+='<div style="border-top:1px solid var(--bd);padding-top:12px;margin-top:4px">'+
-      '<div style="font-size:12px;font-weight:600;margin-bottom:6px">👤 Asignar responsable</div>'+
+    h+=accHd('asig','👤 Asignar responsable')+
+      '<div id="pqrs-acc-asig" class="pqrs-acc-body" style="display:none;padding:10px 2px 4px">'+
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Oficina: <strong>'+escAttr(typeof labelOficina==='function'?labelOficina(oficina):oficina)+'</strong></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Responsable(s)<span class="req-star">*</span></label>'+
       '<div id="pqrs-asig-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
@@ -10005,15 +10011,37 @@ function renderTaskReviewTrasladarPqrsSideHtml(expId,taskId,e,t){
       '<option value="individual"'+(modoActual!=='unificada'?' selected':'')+'>Individual — cada uno entrega por aparte</option>'+
       '<option value="unificada"'+(modoActual==='unificada'?' selected':'')+'>Unificada — con una entrega se cierra para todos</option>'+
       '</select></div>'+
-      chatBlock+
+      '<div class="pqrs-acc-chat-slot"></div>'+
       '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\',\''+escAttr(chatTaskId||taskId)+'\')">Confirmar asignación</button>'+
       '</div>';
   }
+  if(chatBlock)h+='<div id="pqrs-chat-parking" style="display:none">'+chatBlock+'</div>';
   if(!canIni&&!canOfi&&!canAsig)
     h+='<div style="font-size:12px;color:var(--tx3);padding:8px">No hay acciones de traslado o asignación disponibles.</div>';
   h+='</div>';
   return h;
 }
+/** Acordeón Trasladar / Asignar: una sección abierta a la vez; el chat de la actividad va a la abierta. */
+function pqrsTrasladoAsigAcordeon(id){
+  const abrir=document.getElementById('pqrs-acc-'+id);
+  if(!abrir)return;
+  const yaAbierta=abrir.style.display!=='none';
+  document.querySelectorAll('.pqrs-acc-body').forEach(function(b){b.style.display='none';});
+  document.querySelectorAll('.pqrs-acc-hd .pqrs-acc-chev').forEach(function(c){c.textContent='▸';});
+  const chat=document.getElementById('pqrs-chat-block');
+  const parking=document.getElementById('pqrs-chat-parking');
+  if(yaAbierta){
+    if(chat&&parking)parking.appendChild(chat);
+  }else{
+    abrir.style.display='';
+    const hd=document.querySelector('.pqrs-acc-hd[data-acc="'+id+'"] .pqrs-acc-chev');
+    if(hd)hd.textContent='▾';
+    const slot=abrir.querySelector('.pqrs-acc-chat-slot');
+    if(chat&&slot)slot.appendChild(chat);
+  }
+  if(typeof taskChatSyncParaFromAsignacion==='function')taskChatSyncParaFromAsignacion();
+}
+window.pqrsTrasladoAsigAcordeon=pqrsTrasladoAsigAcordeon;
 window.renderTaskReviewTrasladarPqrsSideHtml=renderTaskReviewTrasladarPqrsSideHtml;
 function initTaskReviewAsocSide(ref,taskId,t){
   const opts={ref:ref,taskId:taskId,task:t};
@@ -17046,10 +17074,15 @@ function taskChatPqrsAsigChecked(){
   });
   return out;
 }
+/** Las tareas guardadas dentro del expediente no traen `exp`: se usa el del modal abierto. */
+function taskChatExpIdDe(t){
+  const ctx=(typeof window!=='undefined'&&window._taskModalCtx)||{};
+  return String((t&&(t.exp||t.codigo))||ctx.expId||'').trim();
+}
 /** Encargados de las oficinas a las que el usuario puede trasladar esta PQRSD: [{nombre,ofi,codigo}]. */
 function taskChatTrasladoDestinosEnc(t){
   t=normalizeTask(t||{});
-  const expId=String((t.exp||t.codigo)||'').trim();
+  const expId=taskChatExpIdDe(t);
   const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
   if(!e||typeof taskEsAtenderPqrs!=='function'||!taskEsAtenderPqrs(t,e))return[];
   const puede=(typeof puedeTrasladarPqrs==='function'&&puedeTrasladarPqrs(e))||
@@ -17065,6 +17098,8 @@ function taskChatTrasladoDestinosEnc(t){
   return out;
 }
 function taskChatTrasladoDestinoSelEnc(){
+  const sec=document.getElementById('pqrs-acc-trasl');
+  if(sec&&sec.style&&sec.style.display==='none')return'';
   const sel=document.getElementById('pqrs-trasl-ini-ofi-sel')||document.getElementById('pqrs-trasl-ofi-sel');
   const ofi=sel?String(sel.value||'').trim():'';
   if(!ofi||typeof getEncargadoOficina!=='function')return'';
@@ -17090,7 +17125,7 @@ function taskChatDestinatariosLista(t){
   (getTaskResponsables(t)||[]).forEach(push);
   push(t.responsable);
   if(taskChatEncargadoEligeDestino()){
-    const expId=String((t.exp||t.codigo)||'').trim();
+    const expId=taskChatExpIdDe(t);
     const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
     let pool=[];
     if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getAsignablesPqrsOficina==='function'){

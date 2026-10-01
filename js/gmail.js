@@ -4614,12 +4614,12 @@ async function _gmailSendMimeBytesPqrs(mimeBytes) {
 }
 
 /**
- * Destinatarios a los que aún NO salió el reenvío «PQRSD #expId» (carpeta Enviados, últimos 15 min).
+ * Destinatarios a los que aún NO salió el reenvío «PQRSD #expId» (carpeta Enviados, últimos 3 min).
  * Gmail puede entregar el correo aunque la respuesta llegue con error: evita mandar un segundo formato.
  */
 async function _gmailPqrsSinEnvioReciente(emails, expId) {
   if (!expId || !emails || !emails.length) return emails || [];
-  const desde = Math.floor(Date.now() / 1000) - 15 * 60;
+  const desde = Math.floor(Date.now() / 1000) - 3 * 60;
   const pend = [];
   for (var i = 0; i < emails.length; i++) {
     const em = emails[i];

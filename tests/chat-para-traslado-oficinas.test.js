@@ -66,10 +66,11 @@ function montarChat({ oficina = 'admin_deguv', puedeTrasladar = true, destinoSel
     taskRevParParticipante: () => null,
     estadoTask: () => 'Pendiente'
   }
+  c.window = { _taskModalCtx: { expId: 'PQ-1' } }
   createContext(c)
   runInContext(extraerFunciones(read('js/core.js'), [
     'taskChatEncargadoEligeDestino', 'taskChatEncargadoDeptoNombre', 'taskChatResponsableEscribeEncargado',
-    'taskChatRevParOpciones', 'taskChatPqrsAsigChecked', 'taskChatTrasladoDestinosEnc',
+    'taskChatRevParOpciones', 'taskChatPqrsAsigChecked', 'taskChatExpIdDe', 'taskChatTrasladoDestinosEnc',
     'taskChatTrasladoDestinoSelEnc', 'taskChatParaLabel', 'taskChatDestinatariosLista',
     'taskChatParaOpcionesEncargado', 'taskChatResolveDefaultPara', 'taskChatComposerParaFieldHtml'
   ]), c)
@@ -98,10 +99,62 @@ describe('Chat de la actividad: «Para» con oficinas destino del traslado', () 
     expect(c.taskChatParaOpcionesEncargado(tarea('rn_deguv'))).toEqual(['Rita RN'])
   })
 
+  it('tarea guardada en la PQRSD (sin campo exp): usa la PQRSD del Ver PQRSD abierto', () => {
+    const c = montarChat({ oficina: 'guaviare', destinoSel: 'oap_deguv' })
+    const t = tarea('guaviare')
+    delete t.exp
+    expect(c.taskChatResolveDefaultPara(t)).toBe('Oscar OAP')
+  })
+
   it('los selectores de oficina destino del panel refrescan el «Para»', () => {
     const src = read('js/core.js')
     expect(src).toMatch(/id="pqrs-trasl-ini-ofi-sel" onchange="if\(typeof taskChatSyncParaFromAsignacion/)
     expect(src).toMatch(/id="pqrs-trasl-ofi-sel" onchange="if\(typeof taskChatSyncParaFromAsignacion/)
+  })
+})
+
+describe('Panel Trasladar / Asignar en acordeón', () => {
+  function montarPanel({ canIni = false, canOfi = true, canAsig = true } = {}) {
+    const c = {
+      OFICINAS_DEGUV: OFICINAS,
+      escAttr: s => String(s == null ? '' : s),
+      agendaNorm: s => String(s || '').trim().toLowerCase(),
+      getExpById: () => null,
+      puedeTrasladarPqrsInicial: () => canIni,
+      puedeTrasladarPqrs: () => canOfi,
+      puedeAsignarPqrsOficina: () => canAsig,
+      getPqrsAtencionTask: e => e.tasks[0],
+      getTaskResponsables: t => t.responsables || [],
+      getPqrsOficinaActiva: () => 'guaviare',
+      getAsignablesPqrsOficina: () => ['Ana NCA', 'Luis'],
+      labelOficina: id => id,
+      normalizeTask: t => t,
+      renderTaskChatListHtml: () => '',
+      renderTaskChatComposerHtml: () => '<form id="task-chat-form"></form>'
+    }
+    createContext(c)
+    runInContext(extraerFunciones(read('js/core.js'), ['renderTaskReviewTrasladarPqrsSideHtml']), c)
+    const e = { _exp: 'PQ-1', _pqrs_oficina: 'guaviare', tasks: [{ id: 't1', actividad: 'Oficio de respuesta', responsables: ['Ana NCA'] }] }
+    return c.renderTaskReviewTrasladarPqrsSideHtml('PQ-1', 't1', e, e.tasks[0])
+  }
+
+  it('dos secciones cerradas, sin «Motivo», y un solo chat estacionado', () => {
+    const h = montarPanel()
+    expect(h).toContain("pqrsTrasladoAsigAcordeon('trasl')")
+    expect(h).toContain("pqrsTrasladoAsigAcordeon('asig')")
+    expect(h).toMatch(/id="pqrs-acc-trasl" class="pqrs-acc-body" style="display:none/)
+    expect(h).toMatch(/id="pqrs-acc-asig" class="pqrs-acc-body" style="display:none/)
+    expect(h).not.toContain('Motivo (opcional)')
+    expect((h.match(/id="task-chat-form"/g) || []).length).toBe(1)
+    expect((h.match(/pqrs-acc-chat-slot/g) || []).length).toBe(2)
+    expect(h).toContain('id="pqrs-chat-parking"')
+  })
+
+  it('solo traslado (sin asignar): también trae chat', () => {
+    const h = montarPanel({ canIni: true, canOfi: false, canAsig: false })
+    expect(h).toContain('id="pqrs-trasl-ini-ofi-sel"')
+    expect(h).not.toContain('pqrs-acc-asig')
+    expect(h).toContain('id="task-chat-form"')
   })
 })
 
