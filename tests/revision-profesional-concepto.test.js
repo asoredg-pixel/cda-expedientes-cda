@@ -78,7 +78,7 @@ function montarCore(task) {
     'getAsignado', 'ensureAsignado', 'migrateLegacyAsignados', 'taskEsMultiAsignada', 'syncTaskAggregateState', 'taskRecibidaPorTraslado',
     'soporteEsPorCorregir', 'resetTaskPorCorregir', 'taskRevisionParCtx', 'puedeDevolverAlTecnico',
     'devolverAlTecnicoRevisionPar', 'enviarTaskPorVerificar', 'esAutoentregaResponsable', 'puedeEliminarEntregaActividad',
-    'taskRevParParticipante', 'taskRevParTecnicoEsperando', 'getTareasRevParTecnicoEsperando',
+    'taskRevParParticipante', 'taskRevParCorreccionRecibida', 'taskRevParTecnicoEsperando', 'getTareasRevParTecnicoEsperando',
     'taskChatEncargadoDeptoNombre', 'taskChatRevParOpciones', 'taskChatPuedeEscribirResp',
     'submitDevolverAlTecnicoDesdeChat', 'cerrarTrasDevolverAlTecnico',
   ]), c)
@@ -152,6 +152,23 @@ describe('Casilla «Aplica revisión de profesional» (envío)', () => {
     c.responsableActivo = 'Prof'
     c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('C')])
     expect(c.task.estado).toBe('Por verificar')
+  })
+
+  it('⇅ comparar: el profesional lo tiene al recibir la corrección del técnico (no en la primera entrega)', () => {
+    const c = montarCore(tareaTecnico())
+    c.responsableActivo = 'Tec'
+    c._taskModalCtx = { revProfesional: 'Prof' }
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('A')])
+    expect(c.taskRevParCorreccionRecibida(c.task, 'Prof', c.exp)).toBe(false)
+    c.responsableActivo = 'Prof'
+    c.devolverAlTecnicoRevisionPar('EXP-1', 't1', 'Corregir')
+    expect(c.taskRevParCorreccionRecibida(c.task, 'Prof', c.exp)).toBe(false)
+    c.responsableActivo = 'Tec'
+    c._taskModalCtx = { revProfesional: '' }
+    c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('B')])
+    expect(c.taskRevParCorreccionRecibida(c.task, 'Prof', c.exp)).toBe(true)
+    expect(c.taskRevParCorreccionRecibida(c.task, 'Tec', c.exp)).toBe(false)
+    expect(read('js/core.js')).toContain("if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr))")
   })
 
   it('sin casilla marcada: flujo normal a Por revisar', () => {

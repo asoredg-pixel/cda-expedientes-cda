@@ -8111,9 +8111,10 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   const puedeNotif=esPqrs&&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e);
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
+  const revParCorr=typeof taskRevParCorreccionRecibida==='function'&&taskRevParCorreccionRecibida(t,usuario,e);
   let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(esPqrs?(soloDocAprobado?'Documento y anexos aprobados':'Correo y solicitud'):'Documento')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">'+(esPqrs&&!soloDocAprobado?'📧':'📄')+'</button>';
-  if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'))
+  if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar versiones del documento" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
@@ -22135,6 +22136,15 @@ function taskRevParParticipante(t,usuario,e){
   if(u===agendaNorm(ctx.tecnico))return Object.assign({rol:'tecnico'},ctx);
   if(u===agendaNorm(ctx.profesional))return Object.assign({rol:'profesional'},ctx);
   return null;
+}
+/** El profesional recibió la corrección del técnico (vuelve a su Por ejecutar): puede comparar versiones. */
+function taskRevParCorreccionRecibida(t,usuario,e){
+  const p=taskRevParParticipante(t,usuario,e);
+  if(!p||p.rol!=='profesional'||p.fase!=='profesional')return false;
+  const h=t.historial||[];
+  let i=h.length-1;
+  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
+  return i>=0&&h[i].revisionPar==='correccion';
 }
 /** El técnico espera la revisión del profesional (o del encargado tras el profesional). */
 function taskRevParTecnicoEsperando(t,usuario,e){
