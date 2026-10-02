@@ -8760,8 +8760,11 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
   const e=typeof getExpById==='function'?getExpById(ref):null;
   const esRevFinal=typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e);
   const eid=jsStr(ref),tidJs=jsStr(taskId);
+  const titAprobar=esRevFinal
+    ?(typeof actividadNotifCorreoPropuesta==='function'&&actividadNotifCorreoPropuesta(t,e)?'Aprobar y notificar':'Aprobar y cerrar')
+    :'Aprobar';
   let h='';
-  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="'+(esRevFinal?'Aprobar y cerrar':'Aprobar')+'" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
+  h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="'+titAprobar+'" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
   if(!esRevFinal)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   return h;
@@ -8873,8 +8876,8 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
       if(t&&typeof htmlTerminoCumplBlock==='function')
         h+=htmlTerminoCumplBlock(e,t,{inicio:hoy(),inicioLbl:'la fecha del envío del correo (soporte de envío)'});
       h+=esTramCp
-        ?'<button type="button" class="btn bsm bp" id="tramite-notif-btn" style="width:100%;background:var(--gn);border-color:var(--gn)" onclick="submitTramiteNotificar(\''+eid+'\',\''+tid+'\')">✓ Aprobar y enviar notificación</button>'
-        :'<button type="button" class="btn bsm bp" id="pqrs-notif-btn" style="width:100%;background:var(--gn);border-color:var(--gn)" onclick="pqrsAprobarCorreoPropuestoNotif(\''+eid+'\')">✓ Aprobar y enviar notificación</button>';
+        ?'<button type="button" class="btn bsm bp" id="tramite-notif-btn" style="width:100%;background:var(--gn);border-color:var(--gn)" onclick="submitTramiteNotificar(\''+eid+'\',\''+tid+'\')">📬 Aprobar y notificar</button>'
+        :'<button type="button" class="btn bsm bp" id="pqrs-notif-btn" style="width:100%;background:var(--gn);border-color:var(--gn)" onclick="pqrsAprobarCorreoPropuestoNotif(\''+eid+'\')">📬 Aprobar y notificar</button>';
       h+='</div>';
       return h;
     }
@@ -19842,13 +19845,18 @@ function renderTaskVerifyBarHtml(expId,taskId,t){
         btns='<button type="button" class="btn bsm act-ico bp" onclick="openPqrsNotificarOficioModal(\''+jsStr(expId)+'\')" title="Notificar">📬</button>';
       else btns='<span style="font-size:11px;color:var(--tx2)">Pendiente'+(wf.notificar_por?': '+escAttr(wf.notificar_por):'')+'</span>';
     }else if(fase===PQRS_WF.REVISION_FINAL){
-      titulo='🧐 Revisar entrega notificada';
+      const propCorreo=pqrsNotifCorreoPropuesta(e);
+      titulo=propCorreo?'📧 Notificación por correo por revisar':'🧐 Revisar entrega notificada';
       const sop=wf.notificacion_reportada||{};
-      hint=(sop.soporteLink?'<a href="'+escAttr(sop.soporteLink)+'" target="_blank" rel="noopener">Ver documento notificado</a>':'');
+      hint=propCorreo
+        ?('Para: <strong>'+escAttr(wf.email_to||sop.para||'')+'</strong>'+(sop.por?' · diligenció '+escAttr(sop.por):''))
+        :(sop.soporteLink?'<a href="'+escAttr(sop.soporteLink)+'" target="_blank" rel="noopener">Ver documento notificado</a>':'');
       const puedeEncRev=(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
         ||(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto());
       if(esNcaDeguv()||esOficinaPqrsNca()||esAdministrador()||puedeEncRev)
-        btns='<button type="button" class="btn bsm bp" style="background:var(--gn);border-color:var(--gn)" onclick="ncaAprobarRevisionFinalNotif(\''+jsStr(expId)+'\')">✓ Aprobar y cerrar</button>';
+        btns=propCorreo
+          ?'<button type="button" class="btn bsm bp" style="background:#185fa5;border-color:#185fa5" onclick="openTaskCommentsModal(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\',{revisarEntrega:true})">📬 Aprobar y notificar</button>'
+          :'<button type="button" class="btn bsm bp" style="background:var(--gn);border-color:var(--gn)" onclick="ncaAprobarRevisionFinalNotif(\''+jsStr(expId)+'\')">✓ Aprobar y cerrar</button>';
     }else if(fase===PQRS_WF.RECHAZADA){
       titulo='↩ Devuelta';
       hint='';
@@ -22932,6 +22940,10 @@ function openTaskCommentsModal(expId,taskId,opts){
         }else if(isPqrsOrigenView||isRespVerAtendida||isRespVerPorNotificar){
           taskReviewCloseSidePanel();
           if(isPqrsOrigenView&&typeof initPqrsOrigenDocViewer==='function')initPqrsOrigenDocViewer(e);
+        }else if(canReviewSop&&typeof actividadNotifCorreoPropuesta==='function'&&actividadNotifCorreoPropuesta(t,e)){
+          window._taskReviewDecisionMode='aprobar';
+          if(typeof taskReviewOpenDecisionPanel==='function')taskReviewOpenDecisionPanel('aprobar',expId,taskId);
+          else taskReviewOpenSidePanel('decision',expId,taskId);
         }else if(canReviewSop&&e&&typeof taskReviewEsInformativaRevision==='function'&&taskReviewEsInformativaRevision(e)){
           window._taskReviewAprobarNotificar=false;
           window._taskReviewDecisionMode='aprobar';
@@ -32684,7 +32696,7 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
     }
     if(aprobarProp){
       if(!tokOfi)notif('Conecte el correo autorizado de la oficina (Correos) para enviar. La notificación sigue en Por revisar.','err');
-      if(btn){btn.disabled=false;btn.textContent='✓ Aprobar y enviar notificación';}
+      if(btn){btn.disabled=false;btn.textContent='📬 Aprobar y notificar';}
       return;
     }
     // Sin token oficina o falló: lista para envío del encargado

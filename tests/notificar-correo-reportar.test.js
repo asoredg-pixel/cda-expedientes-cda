@@ -201,5 +201,14 @@ describe('PQRSD: reportar notificación por correo', () => {
     expect(dec).toContain('actividadNotifCorreoPropuesta(t,e)')
     expect(dec).toContain('pqrsAprobarCorreoPropuestoNotif(')
     expect(dec).toContain('submitTramiteNotificar(')
+    expect(dec).toContain('📬 Aprobar y notificar')
+  })
+
+  it('barra de gestión PQRSD y apertura de la revisión llevan a Aprobar y notificar', () => {
+    const core = read('js/core.js')
+    const bar = cuerpoFuncion(core, 'renderTaskVerifyBarHtml')
+    expect(bar).toMatch(/btns=propCorreo\s*\?'<button[^']*'[^\n]*📬 Aprobar y notificar/)
+    expect(cuerpoFuncion(core, 'taskReviewDecisionRailHtml')).toContain("'Aprobar y notificar'")
+    expect(core).toMatch(/canReviewSop&&typeof actividadNotifCorreoPropuesta==='function'&&actividadNotifCorreoPropuesta\(t,e\)\)\{\s*window\._taskReviewDecisionMode='aprobar';/)
   })
 })
