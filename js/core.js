@@ -32229,7 +32229,7 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
       if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo oficio al Drive institucional…',sub:file.name||'PDF',pct:15});
       const nombreCarpeta=(e._qd_nombre||e._pn_nombre||expId);
       const firmadoNom='POR NOTIFICAR '+pqrsBuildDriveFilename('OFC',expId,{origName:file.name});
-      const res=await driveUploadInstitutional(file,firmadoNom,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+      const res=await driveUploadInstitutional(file,firmadoNom,file.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
       if(typeof sstCargaProgress==='function')sstCargaProgress(80,'Registrando firma…');
       pdfLink=res.driveLink;pdfFileId=res.fileId||'';pdfNombre=res.nombre||firmadoNom;
       const anexosKeep=(wf.documentos||[]).filter(_pqrsDocEsAnexoRespuesta);

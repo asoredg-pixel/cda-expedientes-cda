@@ -2158,9 +2158,10 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   const ctx=window._taskModalCtx||{};
   // Director: PDF + quién notifica. Encargado/VITAL: acordeones correo / asignar (también en ventana standalone).
   const esDirRev=!!ctx.directorRevisarPorFirmar||(!standalone&&typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
+  const enPorRevisar=!esDirRev&&typeof atajoFirmadoEnPorRevisar==='function'&&atajoFirmadoEnPorRevisar(t,e,refId);
   const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
   const pick=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:'Seleccionar PDF firmado',accept:'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:enPorRevisar?'Seleccionar documento (VoBo / firmado)':'Seleccionar PDF firmado',accept:enPorRevisar?'':'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
     :'';
   const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
   const canalRaw=String(wf.canal||'').trim().toLowerCase();
@@ -2256,12 +2257,26 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
         +accHtml(3,'Notificar por presencial, aviso u otro medio',otroMedioBlock,false)
         +accHtml(4,'Cargar y dar por atendida (sin notificar)',sinNotifBlock,false)));
 
+  const hintRev=enPorRevisar
+    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cargue el documento con su VoBo o firma (cualquier formato). Reemplaza al enviado para revisión y queda como <strong>versión final aprobada</strong>, sin pasar por firma del Director.</div>'
+    :'';
   return wrapOpen+closeBtn+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
+    hintRev+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
     docsHtml+
-    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post" style="display:none;margin-top:10px">'+postAcc+'</div></div>';
+    '<div id="task-atajo-firmado-post" class="task-atajo-firmado-post"'+(enPorRevisar?' data-siempre="1"':'')+' style="display:none;margin-top:10px">'+postAcc+'</div></div>';
 }
+/** Actividad aún en «Por revisar» (entrega sin decisión del encargado). */
+function atajoFirmadoEnPorRevisar(t,e,refId){
+  if(!t)return false;
+  if(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+    &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))return true;
+  if(typeof actividadCuentaComoPorRevisar==='function')
+    return !!actividadCuentaComoPorRevisar(Object.assign({},t,{exp:t.exp||refId,codigo:t.codigo||refId}));
+  return false;
+}
+window.atajoFirmadoEnPorRevisar=atajoFirmadoEnPorRevisar;
 /** Oficinas DEGUV / Secretaría (sin NCA): no asignan responsables notificados. */
 function atajoFirmadoEsVistaOficinaSinResponsables(){
   if(typeof esNcaDeguv==='function'&&esNcaDeguv())return false;
@@ -2693,7 +2708,7 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const refId=(t&&t.sinExpediente)?(t.codigo||expId):expId;
   const file=typeof tramiteAtajoFirmadoGetPdfBlob==='function'?tramiteAtajoFirmadoGetPdfBlob(refId,taskId):null;
-  if(!file){notif('Seleccione el PDF firmado','err');return;}
+  if(!file){notif('Seleccione el documento firmado','err');return;}
   let datosOtro=null;
   if(modoOtro){
     const canal=String((document.getElementById('tramite-atajo-otro-canal')||{}).value||'presencial').trim();
@@ -2795,7 +2810,7 @@ function initTaskReviewAtajoFirmadoSide(expId,taskId,t,opts){
     const it=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
     const listo=!!(it&&(it.blob||it.blobUrl||it.state==='uploaded'||it.state==='uploading'||it.nombre));
     if(post){
-      post.style.display=listo?'':'none';
+      post.style.display=(listo||post.getAttribute('data-siempre')==='1')?'':'none';
       // Acordeones cerrados al cargar
       post.querySelectorAll('.task-decision-acc.is-open').forEach(function(el){el.classList.remove('is-open');});
     }
@@ -2855,15 +2870,16 @@ async function tramiteUploadPdfFirmado(file,t,e,refId){
   if(!file)return null;
   const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
   const ctx=e||tramiteFirmaExpCtx(t,refId)||{_exp:refId,_sin_expediente:!!(t&&t.sinExpediente)};
+  const mime=file.type||'application/octet-stream';
   if(typeof driveUploadExpedienteActividad==='function'){
-    return await driveUploadExpedienteActividad(file,file.name||'firmado.pdf','application/pdf',ctx,t,autor,'por_notificar');
+    return await driveUploadExpedienteActividad(file,file.name||'firmado.pdf',mime,ctx,t,autor,'por_notificar');
   }
   const folderId=ctx._drive_folder_id||(t&&t._drive_folder_id)||'';
   if(folderId&&typeof driveUploadInstitutional==='function'){
     return await driveUploadInstitutional(
       file,
       'por_notificar-'+(file.name||'firmado.pdf'),
-      'application/pdf',
+      mime,
       'respuesta_aprobada',
       refId,
       (ctx._pn_nombre||ctx._exp)||refId,
