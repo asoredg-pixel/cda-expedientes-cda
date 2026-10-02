@@ -70,8 +70,8 @@ function ctxTramite(rol, valores) {
 }
 
 describe('Trámites: reportar notificación por correo', () => {
-  it('VITAL (modo responsable) que reporta cierra directo; responsable común no', () => {
-    expect(ctxTramite('vital')._f.cierra({})).toBe(true)
+  it('presencial / WhatsApp / aviso: solo el encargado NCA cierra directo; VITAL y responsable pasan a revisión', () => {
+    expect(ctxTramite('vital')._f.cierra({})).toBe(false)
     expect(ctxTramite('nca')._f.cierra({})).toBe(true)
     expect(ctxTramite('responsable')._f.cierra({})).toBe(false)
   })

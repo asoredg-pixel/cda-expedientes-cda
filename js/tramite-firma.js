@@ -229,11 +229,11 @@ function tramitePuedeNotificarCorreo(t){
  * cierra a atendida. No pasa por «Por revisar» su propia notificación.
  */
 function tramiteEncargadoNotificaCierraDirecto(t){
-  if(typeof esCargoVital==='function'&&esCargoVital())return true;
   if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
   if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return false;
   if(typeof esAdministrador==='function'&&esAdministrador())return true;
   if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  if(typeof esCargoVital==='function'&&esCargoVital())return true;
   if(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())return true;
   if(t&&typeof tramitePuedeNotificarCorreo==='function'&&tramitePuedeNotificarCorreo(t)
     &&!(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
