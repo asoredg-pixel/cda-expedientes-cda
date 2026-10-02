@@ -930,10 +930,16 @@ function mergeExpIntoExpsCache(exp){
   const id=expedienteDocId(exp);
   if(!id)return;
   if(!Array.isArray(exps))exps=[];
+  const idx=exps.findIndex(function(e){return expedienteDocId(e)===id;});
+  // Mismo objeto en caché: no reemplazarlo por una copia (flujos async aún lo están mutando)
+  if(idx>=0&&exps[idx]===exp){
+    delete exp._pending_fs_sync;
+    delete exp._pending_fs_at;
+    return;
+  }
   const clean=Object.assign({},exp);
   delete clean._pending_fs_sync;
   delete clean._pending_fs_at;
-  const idx=exps.findIndex(function(e){return expedienteDocId(e)===id;});
   if(idx>=0){
     // Si el remoto llega incompleto, no perder eliminadas ya aplicadas en caché
     const prev=exps[idx];
@@ -1555,6 +1561,9 @@ function applyExpedienteFirestoreChanges(changes){
       if(exps.length!==before)changed=true;
       return;
     }
+    // Eco del propio guardado: la copia en memoria ya es la más reciente y puede seguir mutándose
+    if(change.doc.metadata&&change.doc.metadata.hasPendingWrites
+      &&(exps||[]).some(function(e){return String(e._exp||'').trim()===String(change.doc.id||'').trim();}))return;
     const exp=mergeExpFromFirestoreSnapshot(change.doc.data(),change.doc.id);
     if(!exp)return;
     const idx=(exps||[]).findIndex(function(e){return String(e._exp||'').trim()===exp._exp;});
