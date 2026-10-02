@@ -4320,7 +4320,7 @@ function _gmailUtf8StringToBase64(str) {
   try {
     if (typeof TextEncoder !== 'undefined') {
       var bytes = new TextEncoder().encode(str);
-      var CHUNK = 0x8000;
+      var CHUNK = 0x6000;
       var b64 = '';
       for (var i = 0; i < bytes.length; i += CHUNK) {
         var slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
@@ -4611,7 +4611,7 @@ function _gmailRawB64urlToBytes(raw) {
 }
 
 function _gmailBytesToB64url(bytes) {
-  const CHUNK = 0x8000;
+  const CHUNK = 0x6000;
   var b64 = '';
   for (var i = 0; i < bytes.length; i += CHUNK) {
     const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
@@ -6583,14 +6583,15 @@ function _gmailOfiAppendSignatureHtml(htmlBody){
   if(typeof _gmailOfiSignatureHtml==='undefined'||!_gmailOfiSignatureHtml)return body;
   return body+'<div><br><div style="border-top:1px solid #e0e0e0;padding-top:8px">'+_gmailOfiSignatureHtml+'</div></div>';
 }
-/** Base64url del MIME. Evita encodeURIComponent sobre PDFs grandes (rompe / lanza URIError). */
+/** Base64url del MIME. Evita encodeURIComponent sobre PDFs grandes (rompe / lanza URIError).
+ *  CHUNK debe ser múltiplo de 3: si no, btoa deja '=' intermedios y Gmail rechaza el raw. */
 function _gmailOfiMimeToRawB64(mimeStr) {
   const s = String(mimeStr || '');
   // Ruta rápida: TextEncoder + btoa por bloques (evita congelar 1–5 min con PDFs).
   try {
     if (typeof TextEncoder !== 'undefined') {
       const bytes = new TextEncoder().encode(s);
-      const CHUNK = 0x8000;
+      const CHUNK = 0x6000;
       let b64 = '';
       for (let i = 0; i < bytes.length; i += CHUNK) {
         const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length));
@@ -6601,7 +6602,7 @@ function _gmailOfiMimeToRawB64(mimeStr) {
       return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
   } catch (errFast) { console.warn('_gmailOfiMimeToRawB64 fast:', errFast); }
-  const CHUNK = 0x8000;
+  const CHUNK = 0x6000;
   let b64 = '';
   for (let j = 0; j < s.length; j += CHUNK) {
     const slice = s.slice(j, j + CHUNK);
