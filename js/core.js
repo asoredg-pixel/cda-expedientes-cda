@@ -25512,7 +25512,8 @@ function updateDeptoUI(){
   document.body.classList.toggle('modo-ciudadano',ciudadano);
   if(typeof renderSstGmailSesionBloqueo==='function')renderSstGmailSesionBloqueo();
   if(typeof sstRescheduleGmailExpiryTimers==='function')sstRescheduleGmailExpiryTimers();
-  if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on'))showTab('act');
+  if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on')
+    &&!(typeof esCargoCoordinador==='function'&&esCargoCoordinador()))showTab('act');
   // No forzar Consulta si el responsable está en Actividades
   if(resp&&window._sstTabActual==='act'){
     const pgAct=document.getElementById('pg-act');
