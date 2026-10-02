@@ -7996,7 +7996,7 @@ function actEncargadoNcaGestionPorNotificar(){
 }
 window.actEncargadoNcaGestionPorNotificar=actEncargadoNcaGestionPorNotificar;
 function puedeTrasladarPersonaNotificarEncargado(e,t){
-  if(!actEncargadoNcaGestionPorNotificar())return false;
+  if(!actEncargadoNcaGestionPorNotificar()&&!(typeof esCargoVital==='function'&&esCargoVital()))return false;
   return typeof taskEnFaseNotificacionAsignada==='function'&&taskEnFaseNotificacionAsignada(e,t);
 }
 window.puedeTrasladarPersonaNotificarEncargado=puedeTrasladarPersonaNotificarEncargado;
@@ -8040,6 +8040,7 @@ function submitTrasladarPersonaNotificarReview(expId,taskId){
   if(!puedeTrasladarPersonaNotificarEncargado(e,t)){notif('No puede cambiar el notificador','err');return;}
   const eq=typeof agendaNorm==='function'?function(a,b){return agendaNorm(a)===agendaNorm(b);}:function(a,b){return String(a||'').trim()===String(b||'').trim();};
   const esPqrs=typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+  const quienTraslada=(typeof esCargoVital==='function'&&esCargoVital())?'VITAL':'Encargado NCA';
   let anterior='';
   if(esPqrs){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
@@ -8050,7 +8051,7 @@ function submitTrasladarPersonaNotificarReview(expId,taskId){
     e._pqrs_historial.push({
       tipo:'reasignacion_notificador',
       fecha:typeof hoy==='function'?hoy():'',
-      nota:'Encargado NCA trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»',
+      nota:quienTraslada+' trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»',
       oficina:e._pqrs_oficina||e._depto||'',
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'')
     });
@@ -8083,7 +8084,7 @@ function submitTrasladarPersonaNotificarReview(expId,taskId){
         tipo:'reasignacion_notificador',
         fecha:typeof hoy==='function'?hoy():'',
         por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
-        nota:'Encargado NCA trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»'
+        nota:quienTraslada+' trasladó notificación de «'+(anterior||'—')+'» a «'+nuevo+'»'
       });
       if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
         tramiteSincronizarParticipacionPostAprobacionFirma(tk);
@@ -8116,7 +8117,7 @@ function taskReviewRespPorNotificarRailHtml(ref,taskId,t,e){
     if(typeof puedeAgendarTask==='function'&&puedeAgendarTask(t))
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
   }
-  if(esEncNca&&typeof puedeTrasladarPersonaNotificarEncargado==='function'&&puedeTrasladarPersonaNotificarEncargado(e,t))
+  if(typeof puedeTrasladarPersonaNotificarEncargado==='function'&&puedeTrasladarPersonaNotificarEncargado(e,t))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='trasladarNotificador'?' on':'')+'" data-side="trasladarNotificador" title="Trasladar persona a notificar" onclick="taskReviewToggleSidePanel(\'trasladarNotificador\',\''+r+'\',\''+tid+'\')">🔄</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notificar'?' on':'')+'" data-side="notificar" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="taskReviewToggleSidePanel(\'notificar\',\''+r+'\',\''+tid+'\')">📬</button>';
   return h+'</nav>';
@@ -23535,8 +23536,22 @@ function sortTasksRevisadas(tasks){
   return sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaRevisadosKey);
 }
 /** Por firmar: más reciente enviado a firma primero. */
+function taskPorFirmaImpresoMarcado(t){
+  if(!t)return false;
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)){
+    const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    return !!(wf.impreso&&wf.impreso.en);
+  }
+  const fw=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+  return !!(fw.impreso&&fw.impreso.en);
+}
+/** VITAL / encargado: primero lo pasado a imprimir sin 🖨️; las ya marcadas impresas al final. */
 function sortTasksPorFirma(tasks){
-  return sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaPorFirmaKey);
+  const out=sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaPorFirmaKey);
+  if(!(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir()))return out;
+  return out.filter(function(t){return !taskPorFirmaImpresoMarcado(t);})
+    .concat(out.filter(taskPorFirmaImpresoMarcado));
 }
 /** Atendidas: más reciente cerrado primero. */
 function sortTasksAtendidas(tasks){
