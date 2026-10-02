@@ -260,6 +260,8 @@ async function sstFileUploadItem(it, uploadCtx, onPct) {
     const up = await driveUploadPqrsExpediente(f, nombre, tipo, uploadCtx.e, {
       label: driveEstado === 'guia_correccion' ? 'Guía corrección' : (it.esAnexo ? 'Anexo' : 'Respuesta'),
       uploadTarget: 'respuesta',
+      kind: driveEstado === 'guia_correccion' ? 'GUIA' : (it.esAnexo ? 'ANX' : (uploadCtx.pqrsKind || 'RSP')),
+      anexoN: it.esAnexo ? (it.anexo_n || it.anexoN || 1) : null,
       driveName: undefined
     });
     if (onPct) onPct(100);
@@ -563,13 +565,13 @@ function sstFileUploadCtxForExpTask(expId, taskId) {
   };
 }
 
-function sstFileUploadCtxForPqrsExp(expId) {
+function sstFileUploadCtxForPqrsExp(expId, pqrsKind) {
   expId = String(expId || '').trim();
   return function () {
     const e = typeof getExpById === 'function' ? getExpById(expId) : null;
     if (!e) return null;
     const t = { id: '_staging_', actividad: 'Notificación PQRSD' };
-    return { esPqrs: true, expId: expId, e: e, eDrive: e, t: t };
+    return { esPqrs: true, expId: expId, e: e, eDrive: e, t: t, pqrsKind: pqrsKind || '' };
   };
 }
 

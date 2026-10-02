@@ -4488,12 +4488,15 @@ async function submitPqrsRespuesta(expId){
       try{
         if(statusEl)statusEl.textContent='⬆ Subiendo…';
         if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round((idxFile/totFiles)*90),'Subiendo «'+file.name+'»…');
-        const res=await driveUploadInstitutional(file,file.name,file.type||'application/octet-stream','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
-        if(statusEl)statusEl.textContent='✅ Subido';
         const esOficioDoc=tipoResp===PQRS_WF_TIPO.OFICIO&&idxFile===0;
         const esSoporteNotif=isPersonal&&(tipoResp!==PQRS_WF_TIPO.OFICIO||idxFile>0);
+        const kindCierre=esOficioDoc?'OFC':(esSoporteNotif?'NOT':(idxFile===0?'RSP':'ANX'));
+        const driveNameCierre=pqrsBuildDriveFilename(kindCierre,expId,{origName:file.name,n:Math.max(1,idxFile)});
+        const res=await driveUploadInstitutional(file,driveNameCierre,file.type||'application/octet-stream','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+        if(statusEl)statusEl.textContent='✅ Subido';
         documentos.push({
           nombre:file.name,
+          driveFilename:res.nombre||driveNameCierre,
           driveLink:res.driveLink,
           previewLink:res.previewLink,
           fileId:res.fileId,
@@ -9356,7 +9359,7 @@ async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
   const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
   const ctx=e||{_exp:expId,_sin_expediente:!!(t&&t.sinExpediente)};
   if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof driveUploadInstitutional==='function'){
-    return await driveUploadInstitutional(blob,fileName,'application/pdf','respuesta_aprobada',e._exp||expId,e._qd_nombre||e._pn_nombre||e._pj_empresa||expId,e._fecha||'',{expediente:e,uploadTarget:'respuesta'});
+    return await driveUploadInstitutional(blob,pqrsBuildDriveFilename('SEN',e._exp||expId,{ext:'pdf'}),'application/pdf','respuesta_aprobada',e._exp||expId,e._qd_nombre||e._pn_nombre||e._pj_empresa||expId,e._fecha||'',{expediente:e,uploadTarget:'respuesta'});
   }
   if(typeof driveUploadExpedienteActividad==='function'){
     return await driveUploadExpedienteActividad(file,fileName,'application/pdf',ctx,t,autor,'notificado',{keepName:true});
@@ -9436,6 +9439,7 @@ async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
       const docs=(wf.documentos||[]).slice();
       docs.push({
         nombre:lblSop,
+        driveFilename:up.nombre||'',
         actividad:actNom,
         driveLink:up.driveLink||'',
         previewLink:up.previewLink||up.driveLink||'',
@@ -17827,6 +17831,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             ?await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
                 label:asAnexo?('Anexo '+anexoSeq):'Respuesta',
                 uploadTarget:'respuesta',
+                esAnexo:asAnexo,
+                anexoN:asAnexo?anexoSeq:null,
                 driveName:undefined
               })
             :await driveUploadExpedienteActividad(f.blob,pref,f.tipo,eDrive,t,rep,'revision');
@@ -27113,7 +27119,9 @@ async function submitCrearPqrsDesdeActLibre(){
             throw new Error('Subida Drive no disponible');
           const up=await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
             label:f.esAnexo?('Anexo '+anexoSeq):'Respuesta',
-            uploadTarget:'respuesta'
+            uploadTarget:'respuesta',
+            esAnexo:!!f.esAnexo,
+            anexoN:f.esAnexo?anexoSeq:null
           });
           if(up){
             if(!up.driveFileId&&up.fileId)up.driveFileId=up.fileId;
@@ -31030,7 +31038,7 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
   if(!wf||!Array.isArray(wf.documentos))return;
   opts=opts||{};
   const only=Array.isArray(opts.onlyEstados)?opts.onlyEstados.map(function(s){return String(s||'').toLowerCase();}):null;
-  const prefRgx=/^(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
+  const prefRgx=/^(revision[_ ]final|revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
   for(const doc of wf.documentos){
     const estEff=String(doc.driveEstado||'revision').toLowerCase()||'revision';
     if(only&&only.indexOf(estEff)<0&&!(only.indexOf('revision')>=0&&!doc.driveEstado))continue;
@@ -31042,7 +31050,14 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
       if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
       continue;
     }
-    const origName=doc.nombre||doc.driveFilename||'documento';
+    // doc.nombre suele ser etiqueta («Documento de respuesta», «Anexo 1»): usar el nombre real del archivo
+    const conExt=function(s){return /\.[a-zA-Z0-9]{1,8}$/.test(String(s||'').trim());};
+    let origName=conExt(doc.driveFilename)?doc.driveFilename:(conExt(doc.nombre)?doc.nombre:(doc.driveFilename||doc.nombre||'documento'));
+    if(!conExt(origName)){
+      const mime=String(doc.mime||'').toLowerCase();
+      const ext=/wordprocessingml/.test(mime)?'docx':(/msword/.test(mime)?'doc':(/png/.test(mime)?'png':(/jpe?g/.test(mime)?'jpg':'pdf')));
+      origName=String(origName).trim()+'.'+ext;
+    }
     const verPref=doc.entrega_n?('V'+doc.entrega_n+' '):'';
     let cleanName=origName.replace(prefRgx,'');
     if(verPref)cleanName=cleanName.replace(/^v\d+[- ]/i,'');
@@ -31053,7 +31068,10 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
     try{
       if(typeof driveRenameInstitutional==='function'){
         const ok=await driveRenameInstitutional(fid,newName);
-        if(ok){doc.nombre=newName;doc.driveFilename=newName;doc.driveEstado=nuevoEstado;}
+        if(ok){
+          if(conExt(doc.nombre)&&(!conExt(doc.driveFilename)||doc.nombre===doc.driveFilename))doc.nombre=newName;
+          doc.driveFilename=newName;doc.driveEstado=nuevoEstado;
+        }
         else doc.driveEstado=nuevoEstado;
       }else doc.driveEstado=nuevoEstado;
       if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
@@ -32123,9 +32141,10 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     if(file){
       if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando PDF firmado',message:'Subiendo oficio al Drive institucional…',sub:file.name||'PDF',pct:15});
       const nombreCarpeta=(e._qd_nombre||e._pn_nombre||expId);
-      const res=await driveUploadInstitutional(file,'por_notificar-'+file.name,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+      const firmadoNom='POR NOTIFICAR '+pqrsBuildDriveFilename('OFC',expId,{origName:file.name});
+      const res=await driveUploadInstitutional(file,firmadoNom,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
       if(typeof sstCargaProgress==='function')sstCargaProgress(80,'Registrando firma…');
-      pdfLink=res.driveLink;pdfFileId=res.fileId||'';pdfNombre='por_notificar-'+file.name;
+      pdfLink=res.driveLink;pdfFileId=res.fileId||'';pdfNombre=res.nombre||firmadoNom;
       const anexosKeep=(wf.documentos||[]).filter(_pqrsDocEsAnexoRespuesta);
       const otros=(wf.documentos||[]).filter(d=>d&&d.tipo!=='oficio_firmado'&&d.tipo!=='drive'&&!_pqrsDocEsAnexoRespuesta(d));
       wf.documentos=otros.concat(anexosKeep).concat([{nombre:pdfNombre,driveLink:pdfLink,previewLink:pdfLink,fileId:pdfFileId,tipo:'oficio_firmado',driveEstado:'por_notificar'}]);
@@ -32284,7 +32303,7 @@ function openPqrsNotificarOficioModal(expId){
     '<div style="font-size:12px;font-weight:600;margin-bottom:4px">📄 Oficio notificado (PDF)</div>'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:6px">Recomendado si no se cargó el PDF firmado: priorice subir aquí el oficio con que se notifica (quedará en Drive y consulta ciudadana).</div>'+
     (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'pqrs-notif-oficio-file',listId:'pqrs-notif-oficio-list',ctxKey:'pqrs-notif-oficio:'+expId,label:'Cargar oficio notificado',accept:'.pdf,application/pdf',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId):null})
+      ?sstFilePickBlock({inputId:'pqrs-notif-oficio-file',listId:'pqrs-notif-oficio-list',ctxKey:'pqrs-notif-oficio:'+expId,label:'Cargar oficio notificado',accept:'.pdf,application/pdf',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'OFC'):null})
       :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'pqrs-notif-oficio-file\').click()">📎 Cargar oficio notificado</button><input type="file" id="pqrs-notif-oficio-file" accept=".pdf,application/pdf" style="display:none"><span id="pqrs-notif-oficio-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
     '</div>'+
     (esEncargado||typeof esCargoVital==='function'&&esCargoVital()?_pqrsOpcionesNotificadorHtml(e,wf,notifAsignado||wf.notificar_por_propuesto||wf.entregado_por,{modo:'director',canal:canal}):'')+
@@ -32313,7 +32332,7 @@ function openPqrsNotificarOficioModal(expId){
     '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="pqrs-notif-obs" placeholder="Ej. Entregado en ventanilla / enviado por WhatsApp…" style="min-height:60px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(PDF o imagen del constancia/aviso)</span></label>'+
     (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'pqrs-notif-soporte',listId:'pqrs-notif-soporte-list',ctxKey:'pqrs-notif-soporte:'+expId,label:'Seleccionar archivo',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId):null})
+      ?sstFilePickBlock({inputId:'pqrs-notif-soporte',listId:'pqrs-notif-soporte-list',ctxKey:'pqrs-notif-soporte:'+expId,label:'Seleccionar archivo',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
       :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'pqrs-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="pqrs-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" style="display:none"><span id="pqrs-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
     '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a <strong>revisión del departamento</strong> para revisar el soporte y cerrar la actividad.</div></div>'+
     '</div>'+
@@ -32348,7 +32367,7 @@ function renderTaskReviewPqrsNotificarSideHtml(expId,taskId,e,t){
     canalUi=(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.PRESENCIAL:'presencial');
   const ctxDoc='pqrs-notif-doc:'+expId;
   const pickDoc=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'pqrs-notif-doc-file',listId:'pqrs-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId):null})
+    ?sstFilePickBlock({inputId:'pqrs-notif-doc-file',listId:'pqrs-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
     :'<input type="file" id="pqrs-notif-doc-file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">';
   return '<div class="task-review-side-scroll" style="padding:10px 12px">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">📬 Reportar notificación</div>'+
@@ -32445,17 +32464,19 @@ async function pqrsConfirmarNotificacionOficio(expId){
       if(btn)btn.textContent='Subiendo oficio notificado…';
       let resOf=null;
       if(itOfi&&itOfi.state==='uploaded'&&itOfi.uploaded){
-        resOf={driveLink:itOfi.uploaded.driveLink||itOfi.uploaded.previewLink,fileId:itOfi.uploaded.fileId||itOfi.uploaded.driveFileId||''};
+        resOf={driveLink:itOfi.uploaded.driveLink||itOfi.uploaded.previewLink,fileId:itOfi.uploaded.fileId||itOfi.uploaded.driveFileId||'',nombre:itOfi.uploaded.driveFilename||itOfi.uploaded.nombre||''};
       }else if(fileOficio){
         const nombreCarpeta=(e._qd_nombre||e._pn_nombre||expId);
-        resOf=await driveUploadInstitutional(fileOficio,'oficio-notificado-'+fileOficio.name,fileOficio.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+        resOf=await driveUploadInstitutional(fileOficio,pqrsBuildDriveFilename('OFC',expId,{origName:fileOficio.name}),fileOficio.type||'application/pdf','respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
       }
       if(!resOf)throw new Error('Sin archivo de oficio');
       const docsOf=(getPqrsWorkflow(e).documentos||[]).slice();
       const anexosKeep=docsOf.filter(_pqrsDocEsAnexoRespuesta);
       const otros=docsOf.filter(function(d){return d&&d.tipo!=='oficio_firmado'&&!_pqrsDocEsAnexoRespuesta(d);});
+      const nomOfNotif=resOf.nombre||pqrsBuildDriveFilename('OFC',expId,{origName:fileOficio?fileOficio.name:'documento.pdf'});
       const nuevo={
-        nombre:'oficio-notificado-'+(fileOficio?fileOficio.name:'documento.pdf'),
+        nombre:nomOfNotif,
+        driveFilename:nomOfNotif,
         driveLink:resOf.driveLink,
         previewLink:resOf.driveLink,
         fileId:resOf.fileId||'',
@@ -32561,7 +32582,7 @@ async function pqrsConfirmarNotificacionOficio(expId){
       res={driveLink:itSop.uploaded.driveLink||itSop.uploaded.previewLink,fileId:itSop.uploaded.fileId||itSop.uploaded.driveFileId||'',nombre:itSop.uploaded.nombre||itSop.nombre};
     }else if(fileSop){
       const mime=fileSop.type||'application/octet-stream';
-      res=await driveUploadInstitutional(fileSop,'documento-notificado-'+fileSop.name,mime,'respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
+      res=await driveUploadInstitutional(fileSop,pqrsBuildDriveFilename('NOT',expId,{origName:fileSop.name}),mime,'respuesta_aprobada',expId,nombreCarpeta,e._fecha||e._fecha_solicitud||'',{expediente:e,uploadTarget:'respuesta'});
     }
     if(!res)throw new Error('Sin documento');
     const nomDoc=res.nombre||(fileSop?fileSop.name:(itSop&&itSop.nombre))||'documento-notificado';
@@ -32569,6 +32590,7 @@ async function pqrsConfirmarNotificacionOficio(expId){
     const docs=(getPqrsWorkflow(e).documentos||[]).slice();
     docs.push({
       nombre:'Documento notificado '+canal+' — '+nomDoc,
+      driveFilename:res.nombre||'',
       driveLink:res.driveLink,
       previewLink:res.driveLink,
       fileId:res.fileId||'',
@@ -33023,7 +33045,7 @@ async function _pqrsSubirSoporteRespuesta(e,opts){
     const expId=e._exp||'';
     const nombreCarpeta=e._qd_nombre||e._pn_nombre||e._pj_empresa||expId;
     const fechaExp=e._fecha||e._fecha_solicitud||'';
-    const fileName='Soporte_Respuesta_'+expId+'.pdf';
+    const fileName=pqrsBuildDriveFilename('SRP',expId,{ext:'pdf'});
     const res=await driveUploadInstitutional(blob,fileName,'application/pdf','respuesta_aprobada',expId,nombreCarpeta,fechaExp,{expediente:e,uploadTarget:'respuesta'});
     return res;
   }catch(err){

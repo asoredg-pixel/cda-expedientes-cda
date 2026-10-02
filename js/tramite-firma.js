@@ -3551,7 +3551,9 @@ async function submitEntregaOficinaPqrsMigracion(){
             throw new Error('Subida Drive no disponible');
           const up=await driveUploadPqrsExpediente(f.blob,pref,f.tipo,e,{
             label:f.esAnexo?('Anexo '+anexoSeq):'Respuesta',
-            uploadTarget:'respuesta'
+            uploadTarget:'respuesta',
+            esAnexo:!!f.esAnexo,
+            anexoN:f.esAnexo?anexoSeq:null
           });
           if(up){
             if(!up.driveFileId&&up.fileId)up.driveFileId=up.fileId;

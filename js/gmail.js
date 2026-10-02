@@ -1970,14 +1970,17 @@ function _driveSafeFolderName(s, maxLen) {
 /**
  * Nombre de archivo Drive sin tildes/ñ ni guiones bajos (_ → espacio); otras plataformas los rechazan.
  * Conserva el guion (-): forma parte del número de expediente (PAF-0009-21).
+ * Nombre en MAYÚSCULAS; la extensión queda en minúscula (.pdf).
  */
 function _driveNombreArchivoPlano(s) {
-  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const n = String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[\u2010-\u2015\u2212]/g, '-')
     .replace(/_+/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s+(\.[a-zA-Z0-9]{1,8})$/, '$1')
     .trim();
+  const m = n.match(/^(.*\S)(\.[a-zA-Z0-9]{1,8})$/);
+  return m ? (m[1].toUpperCase() + m[2].toLowerCase()) : n.toUpperCase();
 }
 window._driveNombreArchivoPlano = _driveNombreArchivoPlano;
 
@@ -2013,10 +2016,71 @@ function _driveFileExt(origName, fallback) {
   return m ? m[1].toLowerCase() : (fallback || 'pdf');
 }
 
+/** Tipo de documento legible sin palabras de enlace: «Resolución que aprueba» → «Resolucion aprueba». */
+function _driveTipoDocCorto(s, maxLen) {
+  const stop = { de: 1, del: 1, la: 1, las: 1, el: 1, los: 1, lo: 1, que: 1, y: 1, e: 1, en: 1, a: 1, al: 1 };
+  const words = String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\- ]+/g, ' ').split(/\s+/)
+    .filter(function(w) { return w && !stop[w.toLowerCase()]; });
+  let out = '';
+  for (let i = 0; i < words.length; i++) {
+    const next = out ? out + ' ' + words[i] : words[i];
+    if (next.length > (maxLen || 40)) break;
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * Tipo del documento para el nombre en Drive: concepto (tipo), acto administrativo (tipo),
+ * factura (tipo) o, si no hay registro, el nombre de la actividad.
+ */
+function _driveTipoDocumentoNombre(e, task) {
+  const t = task || {};
+  const act = String(t.actividad || t.desc || '').trim();
+  const reg = typeof resolveActividadRegistroTipo === 'function' ? resolveActividadRegistroTipo(act) : '';
+  const enStaging = String(t.id || '') === '_staging_' && typeof document !== 'undefined';
+  const domVal = function(id) {
+    if (!enStaging) return '';
+    const el = document.getElementById(id);
+    return el ? String(el.value || '').trim() : '';
+  };
+  let acto = String(t.actoTipo || t.tipoActo || '').trim() || domVal('entrega-reg-acto-tipo');
+  if (!acto && e && t.actoAdminId && typeof findActoByAdminId === 'function') {
+    const hitA = findActoByAdminId(e, t.actoAdminId);
+    if (hitA && hitA.item && hitA.item.tipo) acto = String(hitA.item.tipo).trim();
+  }
+  if (acto) return _driveTipoDocCorto(acto);
+  let conc = String(t.conceptoTipo || '').trim() || domVal('entrega-reg-concepto-tipo');
+  if (!conc && e && t.conceptoReqId && typeof findConceptoByReqId === 'function') {
+    const hitC = findConceptoByReqId(e, t.conceptoReqId);
+    if (hitC && hitC.item && hitC.item.tipoConcepto) conc = String(hitC.item.tipoConcepto).trim();
+  }
+  if (!conc && e && reg === 'concepto' && t.id && typeof conceptosSegData === 'function') {
+    const arr = conceptosSegData(e._conceptos_seg) || [];
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (arr[i] && String(arr[i].taskId || '') === String(t.id) && arr[i].tipoConcepto) { conc = String(arr[i].tipoConcepto).trim(); break; }
+    }
+  }
+  if (conc) return _driveTipoDocCorto(conc);
+  const facRefs = String(t.facturaRefs || t.facturaRef || '').split(',').map(function(x) { return x.trim(); }).filter(Boolean);
+  if (e && (reg === 'factura' || facRefs.length) && typeof facturasData === 'function') {
+    const facs = facturasData(e._facturas_extra) || [];
+    let fTipo = '';
+    for (let i = facs.length - 1; i >= 0; i--) {
+      const f = facs[i];
+      if (!f || !f.tipo) continue;
+      if ((t.id && String(f.taskId || '') === String(t.id)) || (f.ref && facRefs.indexOf(String(f.ref).trim()) >= 0)) { fTipo = String(f.tipo).trim(); break; }
+    }
+    if (fTipo) return _driveTipoDocCorto(/^factura\b/i.test(fTipo) ? fTipo : ('Factura ' + fTipo));
+  }
+  return _driveTipoDocCorto(act) || 'DOCUMENTO';
+}
+
 /**
  * Nombre corto en Drive para soportes de expediente/actividad.
  * Sin fecha ni responsable (ya están en el sistema / se filtran ahí).
- * Formato: {docprincipal|anexoN} {estado legible} {exp} {actividad}.{ext}
+ * Formato: [ANEXON] {ESTADO} {EXP} {TIPO DOCUMENTO}.{ext}
  * No usar «proyeccion» en el nombre público (confunde: parece no aprobada).
  * Estado «aprobado» = aprobado / atendido / cerrado (con o sin notificación).
  * opts: { esAnexo, anexoN, soporte }
@@ -2024,7 +2088,7 @@ function _driveFileExt(origName, fallback) {
 function buildExpedienteDriveFilename(estado, e, task, responsable, origName, opts) {
   opts = opts || {};
   const exp = String(e && e._exp || '').trim().replace(/\s/g, '') || 'EXP';
-  const act = _driveSlug(task && (task.desc || task.actividad) || 'act', 16);
+  const act = _driveTipoDocumentoNombre(e, task);
   const ext = _driveFileExt(origName, 'pdf');
   const pref = _driveEstadoLegible(estado) || 'por revisar';
   const sop = opts.soporte || null;
@@ -2038,11 +2102,32 @@ function buildExpedienteDriveFilename(estado, e, task, responsable, origName, op
       || String(origName || '').match(/(?:^|[-_\s])A(\d+)(?:[-_.\s]|$)/i);
     anexoN = m ? (parseInt(m[1], 10) || 1) : 1;
   }
-  const rolPref = esAnexo ? ('anexo' + anexoN + ' ') : 'docprincipal ';
-  return _driveNombreArchivoPlano(rolPref + pref + ' ' + exp + ' ' + act + '.' + ext);
+  const rolPref = esAnexo ? ('anexo' + anexoN + ' ') : '';
+  const enCorreccion = pref === 'por corregir';
+  const entN = sop ? _driveEntregaNExp(task, sop, enCorreccion) : (String(estado || 'revision') === 'revision' ? _driveEntregaNExp(task, null) : 0);
+  const verPref = entN ? ('V' + entN + ' ') : '';
+  return _driveNombreArchivoPlano(rolPref + pref + ' ' + verPref + exp + ' ' + act + '.' + ext);
 }
 
-/** Nombre corto PQRSD: {exp} SOL.pdf | {exp} A01.pdf | {exp} OFC.pdf | {exp} FIR.pdf */
+/**
+ * N° de entrega del responsable (lote «lot_…») para distinguir versiones de corrección: V1, V2…
+ * 0 si la actividad tiene una sola entrega (salvo siempreV: devolución) o el soporte no es de una entrega.
+ * Sin soporte (subida nueva): siguiente número si ya hay entregas previas.
+ */
+function _driveEntregaNExp(task, soporte, siempreV) {
+  const lots = [];
+  ((task && task.soportes) || []).forEach(function(s) {
+    const l = String((s && s.loteEntrega) || '');
+    if (/^lot_/.test(l) && lots.indexOf(l) < 0) lots.push(l);
+  });
+  if (soporte) {
+    const i = lots.indexOf(String(soporte.loteEntrega || ''));
+    return (i >= 0 && (lots.length > 1 || siempreV)) ? i + 1 : 0;
+  }
+  return lots.length ? lots.length + 1 : 0;
+}
+
+/** Nombre corto PQRSD: {EXP} SOL.pdf | {EXP} A01.pdf | {EXP} RSP.pdf | {EXP} OFC.pdf | {EXP} FIR.pdf | {EXP} NOT.pdf */
 function pqrsBuildDriveFilename(kind, expId, opts) {
   opts = opts || {};
   const exp = _driveNombreArchivoPlano(String(expId || '').trim().replace(/\s/g, '')) || 'PQRSD';
@@ -2051,17 +2136,13 @@ function pqrsBuildDriveFilename(kind, expId, opts) {
   const nn = String(n).padStart(2, '0');
   const k = String(kind || 'DOC').toUpperCase();
   if (k === 'SOL' || k === 'SOLICITUD') return exp + ' SOL.' + ext;
-  if (k === 'ANX' || k === 'ANEXO') {
-    const slug = _driveSlug(opts.origName || opts.label || '', 18);
-    // Si el slug es genérico (extension-only residual), omitirlo
-    const base = exp + ' A' + nn;
-    if (!slug || slug === 'doc' || slug === ext) return base + '.' + ext;
-    return base + ' ' + slug + '.' + ext;
-  }
+  if (k === 'ANX' || k === 'ANEXO') return exp + ' A' + nn + '.' + ext;
   if (k === 'OFC' || k === 'OFICIO') return exp + ' OFC.' + ext;
   if (k === 'FIR' || k === 'FIRMAR') return exp + ' FIR.' + ext;
   if (k === 'RSP' || k === 'RESPUESTA') return exp + ' RSP.' + ext;
   if (k === 'NOT' || k === 'NOTIF') return exp + ' NOT.' + ext;
+  if (k === 'SRP') return exp + ' SOPORTE RESPUESTA.' + ext;
+  if (k === 'SEN') return exp + ' SOPORTE ENVIO.' + ext;
   const tag = _driveSlug(k, 8).toUpperCase() || 'DOC';
   return exp + ' ' + tag + '.' + ext;
 }
@@ -2432,7 +2513,8 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   };
   let newName = buildExpedienteDriveFilename(newEstado, e, task, responsable || soporte.autor, origName, nameOpts);
   // Evitar colisión si hay varias versiones a renombrar al mismo estado
-  const ver = opts.versionSuffix != null ? opts.versionSuffix : (opts.uniqueByVersion && soporte.version != null ? soporte.version : null);
+  const ver = opts.versionSuffix != null ? opts.versionSuffix
+    : (opts.uniqueByVersion && soporte.version != null && !_driveEntregaNExp(task, soporte) ? soporte.version : null);
   if (ver != null && ver !== '') {
     newName = String(newName).replace(/(\.[a-zA-Z0-9]{1,8})$/, ' V' + ver + '$1');
   }
@@ -3205,7 +3287,7 @@ async function driveUploadPqrsExpediente(blob, filename, mimeType, e, opts) {
   let driveName = opts.driveName;
   if (!driveName) {
     if (typeof pqrsBuildDriveFilename === 'function') {
-      const kind = opts.kind || (opts.uploadTarget === 'solicitud' ? 'SOL' : 'RSP');
+      const kind = opts.kind || (opts.uploadTarget === 'solicitud' ? 'SOL' : ((opts.esAnexo || opts.anexoN) ? 'ANX' : 'RSP'));
       driveName = pqrsBuildDriveFilename(kind, expId, { origName: safeFile || safeLabel, n: opts.anexoN || 1 });
     } else {
       driveName = (expId + '_' + (safeLabel || safeFile)).slice(0, 120);
@@ -3255,12 +3337,14 @@ async function subirAdjuntosGmailMsgRespuestaADrive(msg, e) {
   const nombreCarpeta = e._qd_nombre || e._pn_nombre || expId;
   const fechaExp = e._fecha || e._fecha_solicitud || '';
   const uploadOpts = { expediente: e, uploadTarget: 'respuesta' };
+  let anxN = 0;
   for (const att of parts.attachments) {
     if (!att.attachmentId) continue;
     try {
       const b64 = await _gmailGetAttachmentAny(msg.id, att.attachmentId);
-      const res = await driveUploadInstitutionalB64(att.filename, att.mimeType || 'application/octet-stream', b64, 'respuesta_aprobada', expId, nombreCarpeta, fechaExp, uploadOpts);
-      documentos.push({ nombre: att.filename, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo', mime: att.mimeType || '' });
+      const driveName = pqrsBuildDriveFilename('ANX', expId, { origName: att.filename, n: ++anxN });
+      const res = await driveUploadInstitutionalB64(driveName, att.mimeType || 'application/octet-stream', b64, 'respuesta_aprobada', expId, nombreCarpeta, fechaExp, uploadOpts);
+      documentos.push({ nombre: att.filename, driveFilename: res.nombre, driveLink: res.driveLink, previewLink: res.previewLink, fileId: res.fileId, tipo: 'archivo', mime: att.mimeType || '' });
     } catch (err) {
       console.warn('subirAdjuntosGmailMsgRespuestaADrive:', att.filename, err);
     }
