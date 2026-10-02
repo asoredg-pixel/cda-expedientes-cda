@@ -200,8 +200,6 @@ const CHAT_DRIVE_FOLDER_URL='https://drive.google.com/drive/folders/'+CHAT_DRIVE
 const CHAT_ADMIN_KEY='admin:Soporte';
 const CHAT_ADMIN_LABEL='Soporte';
 const CHAT_ADMIN_KEY_LEGACY='admin:Admin';
-/** accept de anexos en entregas / respuestas (incluye RAR). */
-const SST_FILE_ACCEPT_ANEXOS='.pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip';
 
 // LocalStorage
 const SST_LAST_EXPORT_KEY='sst_last_exportacion';
@@ -225,7 +223,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20261002f';
+const SST_BUILD_ID = '20261002g';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 

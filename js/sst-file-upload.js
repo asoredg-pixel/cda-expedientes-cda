@@ -468,7 +468,7 @@ function sstFilePickBlock(opts) {
   const listId = opts.listId || (inputId + '-list');
   const ctxKey = opts.ctxKey || inputId;
   const multi = !!opts.multi;
-  const accept = opts.accept || (typeof SST_FILE_ACCEPT_ANEXOS!=='undefined'?SST_FILE_ACCEPT_ANEXOS:'.pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip');
+  const accept = opts.accept || '';
   const label = opts.label != null ? opts.label : (multi ? 'Seleccionar anexos' : 'Seleccionar archivo');
   const btnCls = opts.btnClass || (multi ? 'btn bsm' : 'btn bsm bp');
   const title = opts.title || (label ? String(label) : 'Subir');
@@ -477,7 +477,7 @@ function sstFilePickBlock(opts) {
   if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, multi ? 'anexos' : 'main');
   return '<div class="sst-file-pick">' +
     '<button type="button" class="' + btnCls + '" title="' + escAttr(title) + '" onclick="sstFilePickByInputId(\'' + jsStr(inputId) + '\')">' + btnText + '</button>' +
-    '<input type="file" id="' + escAttr(inputId) + '"' + (multi ? ' multiple' : '') + ' accept="' + escAttr(accept) + '" style="display:none" onchange="sstFileOnPickByInputId(this)">' +
+    '<input type="file" id="' + escAttr(inputId) + '"' + (multi ? ' multiple' : '') + (accept ? ' accept="' + escAttr(accept) + '"' : '') + ' style="display:none" onchange="sstFileOnPickByInputId(this)">' +
     '</div>' +
     '<div id="' + escAttr(listId) + '" class="sst-file-slot-list"></div>';
 }

@@ -3240,7 +3240,7 @@ async function openPqrsRespuestaModal(expId,opts){
     ?sstFilePickBlock({inputId:'pqrs-resp-adj-file',listId:'pqrs-resp-adj-list',ctxKey:respAdjCtx,label:'Adjuntar archivo',getUploadCtx:pqrsRespUploadCtx})
     :'';
   const pqrsRespAnexPick=usaDriveInst&&typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'pqrs-resp-anexos-file',listId:'pqrs-resp-anexos-list',ctxKey:respAnexCtx,multi:true,label:'Cargar anexos',accept:'.pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip',btnClass:'btn bsm bd2',getUploadCtx:pqrsRespUploadCtx})
+    ?sstFilePickBlock({inputId:'pqrs-resp-anexos-file',listId:'pqrs-resp-anexos-list',ctxKey:respAnexCtx,multi:true,label:'Cargar anexos',btnClass:'btn bsm bd2',getUploadCtx:pqrsRespUploadCtx})
     :'';
   body.innerHTML=pqrsSelHtml+
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Tipo de respuesta</label>'+
@@ -3299,7 +3299,7 @@ async function openPqrsRespuestaModal(expId,opts){
         '<div class="fx" style="gap:6px;flex-wrap:wrap;align-items:center">'+
         '<button type="button" class="btn bsm bd2" onclick="pqrsRespAddAnexos()">📎 Cargar anexos</button>'+
         '</div>'+
-        '<input type="file" id="pqrs-resp-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
+        '<input type="file" id="pqrs-resp-anexos-file" multiple style="display:none" onchange="pqrsRespOnAnexosChange(this)">'+
         '<div id="pqrs-resp-anexos-list" style="margin-top:4px"></div>')+
     '</div>'+
     '</div>'+
@@ -11306,8 +11306,8 @@ function renderPqrsEntregaCamposHtml(e,opts){
     '<div class="sst-file-pick-row" style="margin-top:6px">'+
       '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
       '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
-      '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-      '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+      '<input type="file" id="enviar-adj-file" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+      '<input type="file" id="enviar-anexos-file" multiple style="display:none" onchange="sstFileOnPickByInputId(this)">'+
     '</div>'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="pqrs-entrega-main-lbl">Principal</div>'+
     '<div id="pqrs-entrega-att-list" class="sst-file-slot-list"></div>'+
@@ -16557,10 +16557,7 @@ function collectEnviarAdjuntos(){
   return{links,files,anexos};
 }
 function archivoPermitidoEnviar(file){
-  if(!file)return false;
-  const okType=file.type==='application/pdf'||(file.type&&file.type.startsWith('image/'))||(file.type&&file.type.startsWith('video/'))||
-    /(word|document|msword|wordprocessing)/i.test(file.type||'')||/\.(pdf|png|jpe?g|gif|webp|doc|docx|mp4|webm|mov)$/i.test(file.name||'');
-  return okType;
+  return !!file;
 }
 function readFilesAsData(files,cb){
   if(!files.length){cb([]);return;}
@@ -17433,7 +17430,7 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
     h+='<div id="task-chat-emoji-panel" class="chat-emoji-panel task-chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>';
     h+='<div class="task-cmt-wa-field chat-wa-field has-attach has-emoji">'+
       '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Escriba un mensaje…" autocomplete="off"></textarea>'+
-      '<input type="file" id="task-chat-file-inp" style="display:none" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,application/pdf,image/*" onchange="taskChatAttachOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
+      '<input type="file" id="task-chat-file-inp" style="display:none" multiple onchange="taskChatAttachOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
       '<button type="button" class="chat-wa-emoji-ico task-chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="taskChatToggleEmojiPicker(event)">😊</button>'+
       '<button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
       '<button type="button" class="task-cmt-send-ico chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
@@ -18251,8 +18248,8 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
         '<div class="sst-file-pick-row">'+
           '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
           '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
-          '<input type="file" id="enviar-adj-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-          '<input type="file" id="enviar-anexos-file" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+          '<input type="file" id="enviar-adj-file" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+          '<input type="file" id="enviar-anexos-file" multiple style="display:none" onchange="sstFileOnPickByInputId(this)">'+
         '</div>'+
         '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
         '<div id="enviar-adj-file-list" class="sst-file-slot-list"></div>'+
@@ -32401,10 +32398,10 @@ function openPqrsNotificarOficioModal(expId){
     '<div id="pqrs-notif-otro-box" style="'+(canal===PQRS_WF_CANAL.CORREO?'display:none':'')+'">'+
     '<div class="fld" style="margin-bottom:8px"><label>Fecha de notificación<span class="req-star">*</span></label><input type="date" id="pqrs-notif-fecha" value="'+escAttr(hoy())+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="pqrs-notif-obs" placeholder="Ej. Entregado en ventanilla / enviado por WhatsApp…" style="min-height:60px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(PDF o imagen del constancia/aviso)</span></label>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(constancia/aviso en cualquier formato)</span></label>'+
     (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'pqrs-notif-soporte',listId:'pqrs-notif-soporte-list',ctxKey:'pqrs-notif-soporte:'+expId,label:'Seleccionar archivo',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
-      :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'pqrs-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="pqrs-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" style="display:none"><span id="pqrs-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
+      ?sstFilePickBlock({inputId:'pqrs-notif-soporte',listId:'pqrs-notif-soporte-list',ctxKey:'pqrs-notif-soporte:'+expId,label:'Seleccionar archivo',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
+      :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'pqrs-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="pqrs-notif-soporte" style="display:none"><span id="pqrs-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
     '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a <strong>revisión del departamento</strong> para revisar el soporte y cerrar la actividad.</div></div>'+
     '</div>'+
     (puedeCorreoNotif&&tAct&&typeof htmlTerminoCumplBlock==='function'
@@ -32439,8 +32436,8 @@ function renderTaskReviewPqrsNotificarSideHtml(expId,taskId,e,t){
   const enviaDirecto=pqrsPuedeEnviarCorreoNotif(e);
   const ctxDoc='pqrs-notif-doc:'+expId;
   const pickDoc=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'pqrs-notif-doc-file',listId:'pqrs-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
-    :'<input type="file" id="pqrs-notif-doc-file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">';
+    ?sstFilePickBlock({inputId:'pqrs-notif-doc-file',listId:'pqrs-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',getUploadCtx:typeof sstFileUploadCtxForPqrsExp==='function'?sstFileUploadCtxForPqrsExp(expId,'NOT'):null})
+    :'<input type="file" id="pqrs-notif-doc-file">';
   return '<div class="task-review-side-scroll" style="padding:10px 12px">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">📬 Reportar notificación</div>'+
     '<div class="fld" style="margin-bottom:8px"><label style="font-weight:600;font-size:12px">Medio de notificación</label>'+

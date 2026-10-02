@@ -889,10 +889,10 @@ function openTramiteNotificarModal(expId,taskId){
     '<div id="tramite-notif-otro-box" style="'+(isCorreo?'display:none':'')+'">'+
     '<div class="fld" style="margin-bottom:8px"><label>Fecha de notificación<span class="req-star">*</span></label><input type="date" id="tramite-notif-fecha" value="'+escAttr(typeof hoy==='function'?hoy():'')+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Observación</label><textarea id="tramite-notif-obs" placeholder="Ej. Entregado en ventanilla / enviado por WhatsApp…" style="min-height:60px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px"></textarea></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(PDF o imagen de la constancia/aviso)</span></label>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Soporte de notificación<span class="req-star">*</span> <span style="font-weight:400;color:var(--tx3)">(constancia/aviso en cualquier formato)</span></label>'+
     (typeof sstFilePickBlock==='function'
-      ?sstFilePickBlock({inputId:'tramite-notif-soporte',listId:'tramite-notif-soporte-list',ctxKey:'tramite-notif-soporte:'+refId+':'+taskId,label:'Seleccionar archivo',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-      :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'tramite-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="tramite-notif-soporte" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" style="display:none"><span id="tramite-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
+      ?sstFilePickBlock({inputId:'tramite-notif-soporte',listId:'tramite-notif-soporte-list',ctxKey:'tramite-notif-soporte:'+refId+':'+taskId,label:'Seleccionar archivo',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+      :('<div class="sst-file-pick"><button type="button" class="btn bsm bp" onclick="document.getElementById(\'tramite-notif-soporte\').click()">📎 Seleccionar archivo</button><input type="file" id="tramite-notif-soporte" style="display:none"><span id="tramite-notif-soporte-name" class="sst-file-pick-name">Sin archivo seleccionado</span></div>'))+
     '<div style="font-size:11px;color:var(--tx2);margin-top:4px">Obligatorio. Al confirmar pasa a <strong>revisión del departamento</strong> para cerrar la actividad.</div></div>'+
     '</div>'+
     (typeof htmlTramiteNotifActoVencBlock==='function'?htmlTramiteNotifActoVencBlock(e,t):'')+
@@ -953,8 +953,8 @@ function renderTaskReviewNotificarSideHtml(expId,taskId,t){
     '<button type="button" class="btn bsm canal-resp-btn'+(canal==='aviso'||canal==='avisos'?' on':'')+'" data-val="aviso" onclick="tramiteNotifSetCanal(\'aviso\')">📌 Por aviso</button>';
   const ctxDoc='tramite-notif-doc:'+refId+':'+taskId;
   const pickDoc=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'tramite-notif-doc-file',listId:'tramite-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',accept:'.pdf,.png,.jpg,.jpeg,application/pdf,image/*',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
-    :'<input type="file" id="tramite-notif-doc-file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*">';
+    ?sstFilePickBlock({inputId:'tramite-notif-doc-file',listId:'tramite-notif-doc-list',ctxKey:ctxDoc,label:'Cargar documento notificado',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+    :'<input type="file" id="tramite-notif-doc-file">';
   return '<div class="task-review-side-scroll" style="padding:10px 12px">'+
     '<div style="font-size:13px;font-weight:600;margin-bottom:10px">📬 Reportar notificación</div>'+
     '<div class="fld" style="margin-bottom:8px"><label style="font-weight:600;font-size:12px">Medio de notificación</label>'+
@@ -3213,8 +3213,8 @@ function openEntregaOficinaFirmaModal(){
           '<div class="sst-file-pick-row" style="margin-top:6px">'+
             '<button type="button" class="btn bsm" onclick="sstFilePickByInputId(\'entrega-ofi-firma-file\')">📎 Seleccionar archivo</button>'+
             '<button type="button" class="btn bsm" onclick="sstFilePickByInputId(\'entrega-ofi-firma-anexos\')">Anexos +</button>'+
-            '<input type="file" id="entrega-ofi-firma-file" accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
-            '<input type="file" id="entrega-ofi-firma-anexos" multiple accept=".pdf,.doc,.docx,image/*,video/*,.rar,.zip,application/x-rar-compressed,application/vnd.rar,application/zip" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+            '<input type="file" id="entrega-ofi-firma-file" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
+            '<input type="file" id="entrega-ofi-firma-anexos" multiple style="display:none" onchange="sstFileOnPickByInputId(this)">'+
           '</div>'+
           '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px" id="ofi-doc-main-lbl">Principal</div>'+
           '<div id="entrega-ofi-firma-file-list" class="sst-file-slot-list"></div>'+

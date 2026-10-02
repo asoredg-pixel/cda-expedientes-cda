@@ -235,7 +235,7 @@ function secAnexoInitUi(){
   wrap.dataset.inited='1';
   const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
   wrap.innerHTML=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'sec-anexo-file',listId:'sec-anexo-list',ctxKey:ctxKey,multi:true,label:'Agregar archivo',accept:'.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,.rar',btnClass:'btn bsm'})
+    ?sstFilePickBlock({inputId:'sec-anexo-file',listId:'sec-anexo-list',ctxKey:ctxKey,multi:true,label:'Agregar archivo',btnClass:'btn bsm'})
     :('<button type="button" class="btn bsm" onclick="secAnexoAdd()">📎 Agregar archivo</button>');
   if(typeof sstFileInitPick==='function')sstFileInitPick('sec-anexo-file');
 }
@@ -250,7 +250,6 @@ function secAnexoAdd(){
     if(!ok)return;
     const inp=document.createElement('input');
     inp.type='file';inp.multiple=true;
-    inp.accept='.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,.rar';
     inp.onchange=function(){
       if(!window._secAnexoFiles)window._secAnexoFiles=[];
       Array.from(inp.files||[]).forEach(f=>{
@@ -2550,8 +2549,7 @@ function pqrsEditAnexoRestaurar(idx){
 }
 function pqrsEditAnexoAdd(){
   const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='.pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.zip,.rar';
-  inp.onchange=function(){
+  inp.type='file';inp.multiple=true;  inp.onchange=function(){
     if(!window._pqrsEditAnexosNew)window._pqrsEditAnexosNew=[];
     Array.from(inp.files||[]).forEach(f=>{
       if(!window._pqrsEditAnexosNew.some(x=>x.name===f.name&&x.size===f.size))
