@@ -211,4 +211,43 @@ describe('PQRSD: reportar notificación por correo', () => {
     expect(cuerpoFuncion(core, 'taskReviewDecisionRailHtml')).toContain("'Aprobar y notificar'")
     expect(core).toMatch(/canReviewSop&&typeof actividadNotifCorreoPropuesta==='function'&&actividadNotifCorreoPropuesta\(t,e\)\)\{\s*window\._taskReviewDecisionMode='aprobar';/)
   })
+
+  it('el soporte de envío solo se sube y registra si Gmail envió el correo', async () => {
+    const core = read('js/core.js')
+    const conf = cuerpoFuncion(core, 'pqrsConfirmarNotificacionOficio')
+    const iPre = conf.indexOf('{soloPdf:true}')
+    const iSend = conf.indexOf('await pqrsEnviarCorreoCiudadano(destinos')
+    const iReg = conf.indexOf('{pdfBlob:sopPre.pdfBlob,skipAttach:true}')
+    expect(iPre).toBeGreaterThan(0)
+    expect(iSend).toBeGreaterThan(iPre)
+    expect(iReg).toBeGreaterThan(iSend)
+
+    const code = extraerFunciones(core, ['registrarSoporteEnvioCorreoNotif'])
+    const calls = { upload: 0 }
+    const ctx = createContext({
+      File: class { constructor(p, n) { this.name = n } },
+      hoy: () => '2026-10-02',
+      generarPdfSoporteNotificacionActividad: async () => 'PDF',
+      taskReviewSubirSoporteNotificacion: async () => { calls.upload++; return { fileId: 'f1', driveLink: 'l' } },
+      window: {}
+    })
+    runInContext(code + '\nthis._reg=registrarSoporteEnvioCorreoNotif;', ctx)
+    const t = { soportes: [] }
+    const adj = []
+    const r = await ctx._reg(null, t, 'X', { soloPdf: true, por: 'Ana' }, adj)
+    expect(r.pdfBlob).toBe('PDF')
+    expect(adj.map(f => f.name)).toEqual(['Soporte_Envio.pdf'])
+    expect(calls.upload).toBe(0)
+    expect(t.soportes.length).toBe(0)
+    await ctx._reg(null, t, 'X', { pdfBlob: r.pdfBlob, skipAttach: true, por: 'Ana' }, null)
+    expect(calls.upload).toBe(1)
+    expect(t.soportes.length).toBe(1)
+  })
+})
+
+describe('Gmail OFI: error legible', () => {
+  it('extrae error.message de la respuesta de Google', () => {
+    const fn = cuerpoFuncion(read('js/gmail.js'), '_gmailOfiApi')
+    expect(fn).toContain('j.error.message')
+  })
 })

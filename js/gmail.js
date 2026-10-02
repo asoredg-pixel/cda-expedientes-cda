@@ -5840,7 +5840,9 @@ async function _gmailOfiApi(method, url, body, optsApi) {
         const t = await res.text().catch(function() { return ''; });
         const quotaMsg = _gmailQuotaFriendlyMessage(t);
         if (quotaMsg) throw new Error(quotaMsg);
-        throw new Error('API ' + res.status + ': ' + t.slice(0, 200));
+        let gMsg = '';
+        try { const j = JSON.parse(t); gMsg = (j && j.error && (j.error.message || j.error.status)) || ''; } catch (eJ) {}
+        throw new Error('API ' + res.status + ': ' + (gMsg || t.slice(0, 200)));
       }
       return res.json();
     } finally {
