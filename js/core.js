@@ -27584,7 +27584,10 @@ window.esNotifAsignadaVencida=esNotifAsignadaVencida;
 function esNotifAsignadaPrioritariaParaSesion(t){
   if(typeof esNotifAsignadaVencida!=='function'||!esNotifAsignadaVencida(t))return false;
   if(typeof actividadPrioritariaOcultarNotifAjenaEnc==='function'&&actividadPrioritariaOcultarNotifAjenaEnc(t))return false;
-  if(typeof esModoResponsable==='function'&&esModoResponsable())return true;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()){
+    const yo=typeof responsableActivo!=='undefined'?String(responsableActivo||'').trim():'';
+    return !yo||typeof actividadNotifEsDeResp!=='function'||actividadNotifEsDeResp(t,yo);
+  }
   const deptView=typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto();
   if(!deptView)return true;
   const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim():'';
