@@ -3717,7 +3717,7 @@ function cdaPdfContentBottomY(doc, margin) {
 var _cdaLogoPdfDataUrl = null;
 async function cdaLoadLogoPdfDataUrl() {
   if (_cdaLogoPdfDataUrl) return _cdaLogoPdfDataUrl;
-  const candidates = ['assets/logo-cda-pdf.png', 'assets/logo-cda.png', 'assets/logo-cda-icon.png'];
+  const candidates = ['assets/logo-cda-pdf.png?v=20261002', 'assets/logo-cda.png', 'assets/logo-cda-icon.png'];
   for (let i = 0; i < candidates.length; i++) {
     try {
       const url = new URL(candidates[i], window.location.href).href;

@@ -61,7 +61,8 @@ function sstPdfCollapseSpacedLetters(s){
     if(words.length>=4&&one>=words.length*0.65){
       return trimmed.replace(/(\S)\s+(?=\S)/g,'$1').replace(/\s{2,}/g,' ');
     }
-    return line.replace(/((?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]\s){2,}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])/g,function(seq){
+    // Solo letras sueltas (palabras de 1 carácter): «C O R P O» → «CORPO»; no «conocimiento y fines»
+    return line.replace(/(?<![A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])((?:[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9] ){3,}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])(?![A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9])/g,function(seq){
       return seq.replace(/\s+/g,'');
     });
   }).join('\n');
