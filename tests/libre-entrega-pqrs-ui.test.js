@@ -54,6 +54,16 @@ describe('Entrega de actividad libre NCA con panel PQRSD', () => {
     expect(c.taskLibreUsaEntregaPqrsUi({ depto: 'guaviare' })).toBe(false)
   })
 
+  it('no depende del cargo del responsable (VITAL, coordinador, profesional, contratista)', () => {
+    const regla = extraer(core, ['taskLibreUsaEntregaPqrsUi'])
+    expect(regla).not.toMatch(/esCargo|usuarioCargoSesion/)
+    const linea = extraer(core, ['renderEnviarPanelHtml']).split('\n').find(l => l.includes('const librePqrsUi='))
+    expect(linea).toBeTruthy()
+    expect(linea).not.toMatch(/esCargo|usuarioCargoSesion/)
+    const entrar = extraer(core, ['respMarcarPorVerificar'])
+    expect(entrar).not.toMatch(/esCargo(Vital|Coordinador|Profesional)/)
+  })
+
   it('el expediente ficticio precarga lo ya reportado', () => {
     const c = ctx()
     const st = c.libreEntregaPqrsStubExp({
