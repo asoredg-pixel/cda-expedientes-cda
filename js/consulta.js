@@ -500,6 +500,7 @@ function collectArchivosExp(e,taskIdFilter){
       if(soloPublico&&typeof _pqrsDocEsBorradorInterno==='function'&&_pqrsDocEsBorradorInterno(s))return;
       items.push({
         exp:e._exp,taskId:t.id,taskDesc:t.desc||t.actividad||'Actividad',
+        actNombre:String(t.actividad||t.desc||'').trim(),
         label:(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s)&&typeof etiquetaSoporteEnvioActividad==='function')
           ?etiquetaSoporteEnvioActividad(e,t,s)
           :(soloPublico&&typeof etiquetaDocNotifPublica==='function'
@@ -515,11 +516,24 @@ function collectArchivosActLibre(t){
   t=normalizeActLibre(t);
   return (t.soportes||[]).map(s=>({
     exp:t.codigo,taskId:t.id,taskDesc:t.desc||t.actividad||'Actividad',
+    actNombre:String(t.actividad||t.desc||'').trim(),
     label:(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s)&&typeof etiquetaSoporteEnvioActividad==='function')
       ?etiquetaSoporteEnvioActividad(null,t,s)
       :(s.label||('Documento v'+(s.version||'?'))),
     url:s.url||s.preview||'',local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',version:s.version||''
   }));
+}
+/** Tipo de documento para la línea secundaria («Soporte envío — X» → «Soporte envío»). */
+function archivoDocTipoCorto(lbl){
+  const s=String(lbl||'').trim();
+  return /^soporte (de )?env[ií]o\b/i.test(s)?'Soporte envío':s;
+}
+/** Archivos de actividad (staff): título = nombre de la actividad; el tipo de documento va debajo. */
+function archivoActividadTituloTipo(actNombre,docLbl,soloPub){
+  const act=String(actNombre||'').trim();
+  const doc=String(docLbl||'').trim();
+  if(soloPub||!act)return{descDoc:doc||'Documento',docKind:''};
+  return{descDoc:act,docKind:archivoDocTipoCorto(doc)||'Documento'};
 }
 function archivosItemFromRaw(raw){
   const r=raw||{};
@@ -552,7 +566,9 @@ function pushArchivosExpedienteRaw(raws,e,taskIdFilter){
     raws.push({exp:expId,label:d.label,tipoDoc:'Documento del trámite',descDoc:d.label||'Documento del trámite',url:d.url,preview:d.preview||d.url,origen:'Trámite',fecha:d.fecha||'',docTramiteId:d.id});
   });
   collectArchivosExp(e,taskIdFilter||null).forEach(function(it){
-    raws.push({exp:expId,taskId:it.taskId||'',taskDesc:it.taskDesc||'Actividad',label:it.label,url:it.url,local:!!it.local,mime:it.mime||'',fecha:it.fecha||'',version:it.version||'',origen:'Entrega',tipoDoc:'Entrega de actividad',descDoc:it.label||('Documento v'+(it.version||'?'))});
+    const tt=archivoActividadTituloTipo(it.actNombre,it.label||('Documento v'+(it.version||'?')),soloPub);
+    raws.push({exp:expId,taskId:it.taskId||'',taskDesc:it.taskDesc||'Actividad',label:it.label,url:it.url,local:!!it.local,mime:it.mime||'',fecha:it.fecha||'',version:it.version||'',origen:'Entrega',
+      tipoDoc:tt.docKind||'Entrega de actividad',docKind:tt.docKind,descDoc:tt.descDoc});
   });
   collectEnlacesExpediente(e).forEach(function(l){
     if(l.tipo==='Actividad')return;
@@ -587,9 +603,10 @@ function pushArchivosExpedienteRaw(raws,e,taskIdFilter){
       const descSop=(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s)&&typeof etiquetaSoporteEnvioActividad==='function')
         ?etiquetaSoporteEnvioActividad(e,t,s)
         :(s.label||('Entrega v'+(s.version||'?')));
+      const ttS=archivoActividadTituloTipo(t.actividad||t.desc,descSop,soloPub);
       raws.push({
-        exp:expId,taskId:t.id,taskDesc:'Entrega de actividad',tipoDoc:'Entrega · '+actTit,
-        descDoc:descSop,
+        exp:expId,taskId:t.id,taskDesc:'Entrega de actividad',tipoDoc:ttS.docKind||('Entrega · '+actTit),docKind:ttS.docKind,
+        descDoc:ttS.descDoc,
         url:url,preview:s.preview||url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',version:s.version||'',origen:'Entrega'
       });
     });
@@ -613,7 +630,7 @@ function collectArchivosConsultaCompleto(e,taskIdFilter,opts){
           exp:asoc._exp,asocDe:e._exp,
           taskId:r.taskId||'',taskDesc:r.taskDesc||'',label:r.label,url:r.url,preview:r.preview,
           local:!!r.local,mime:r.mime||'',fecha:r.fecha||'',version:r.version||'',origen:r.origen||'Asociado',
-          tipoDoc:tag+' · '+asoc._exp,
+          tipoDoc:tag+' · '+asoc._exp+(r.docKind?' · '+r.docKind:''),
           descDoc:(r.descDoc||r.label||'Documento')
         });
       });
@@ -1006,12 +1023,14 @@ function openConsultaArchivos(expId,taskId,opts){
     const act=getActLibreByCodigo(id)||getActLibreById(taskId);
     if(act){
       const cod=act.codigo||id;
+      const soloPubL=typeof esModoCiudadano==='function'&&esModoCiudadano();
       items=collectArchivosActLibre(act).map(it=>{
         const p=parseDrivePreviewUrl(it.url);
+        const ttL=archivoActividadTituloTipo(it.actNombre,it.label||it.descDoc,soloPubL);
         return {
           ...it,exp:cod,asocDe:'',
-          tipoDoc:'Actividad sin expediente · '+cod,
-          descDoc:it.label||it.descDoc||'Documento',
+          tipoDoc:ttL.docKind||('Actividad sin expediente · '+cod),
+          descDoc:ttL.descDoc,
           preview:it.local?(it.url||it.preview):(p.preview||p.url||it.url),
           openUrl:it.local?(it.url||it.preview):(p.url||it.url||it.preview)
         };
