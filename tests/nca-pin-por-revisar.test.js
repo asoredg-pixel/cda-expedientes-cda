@@ -42,11 +42,14 @@ function montar({ filtro = 'porver', encargado = true, pqrs = true } = {}) {
     jsStr: s => String(s || ''),
     ncaEncargadoSesionPqrsPin: () => encargado,
     renderPqrsOficinaInbox: () => {},
-    notif: () => {}
+    notif: () => {},
+    window: {}
   }
   createContext(c)
-  runInContext('const NCA_PQRS_PIN_LS="sst_nca_pqrs_pin_por_ejecutar";\n' + extraerFunciones(read('js/pqrs.js'), [
-    'ncaPinEnPorRevisarAct', 'ncaActPinKey', 'ncaActPinBtnHtml', 'ncaPqrsPinUsuarioKey', 'ncaPqrsPinsLeer', 'ncaPqrsPinsGuardar', 'ncaPqrsEstaFijada',
+  runInContext('const NCA_PQRS_PIN_LS="sst_nca_pqrs_pin_por_ejecutar";\nconst NCA_PQRS_PIN_MIGRADO_LS="sst_nca_pqrs_pin_migrado";\n' + extraerFunciones(read('js/pqrs.js'), [
+    'ncaPinEnPorRevisarAct', 'ncaActPinKey', 'ncaActPinBtnHtml', 'ncaPqrsPinUsuarioKey',
+    'ncaPqrsPinsNorm', 'ncaPqrsPinsLeerLocal', 'ncaPqrsPinsGuardarLocal', 'ncaPqrsPinsPersistFirestore',
+    'ncaPqrsPinsLeer', 'ncaPqrsPinsGuardar', 'ncaPqrsEstaFijada',
     'toggleNcaPqrsPinPorEjecutar', 'ordenarActividadesNcaPinsPrimero', 'ncaPqrsPinBtnHtml'
   ]), c)
   return c

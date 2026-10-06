@@ -298,6 +298,7 @@ async function loadLS(){
       else if(typeof setMantenimientoEstadoLocal==='function')setMantenimientoEstadoLocal({activo:false});
       if(typeof pqrsMatrizApplySheetIdFromGlobal==='function')pqrsMatrizApplySheetIdFromGlobal(g);
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
+      if(typeof ncaPqrsPinsApplyFromGlobal==='function')ncaPqrsPinsApplyFromGlobal(g);
     }
     const deptosCfg=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare'];
     const deptosExp=deptosExpedientesAccesibles();
@@ -1500,6 +1501,7 @@ function initRealtimeGlobalSync(){
       changed=true;
     }
     if(Array.isArray(g.agendaEventos)){agendaEventos=g.agendaEventos;changed=true;}
+    if(typeof ncaPqrsPinsApplyFromGlobal==='function'&&ncaPqrsPinsApplyFromGlobal(g))changed=true;
     if(changed){
       try{_saveLSLocal();}catch(e){}
       scheduleRefreshViewsAfterRemoteDataChange();

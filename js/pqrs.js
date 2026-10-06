@@ -1696,19 +1696,73 @@ function ncaPqrsPinUsuarioKey(){
   const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto('guaviare')||'').trim():'';
   return u||enc||'nca';
 }
-function ncaPqrsPinsLeer(){
+/** Fijadas compartidas entre equipos: sistema/global.ncaPinsByUser[usuario]. Cada equipo suma sus fijadas locales una sola vez. */
+const NCA_PQRS_PIN_MIGRADO_LS='sst_nca_pqrs_pin_migrado';
+function ncaPqrsPinsNorm(arr){
+  return Array.isArray(arr)?arr.map(function(x){return String(x||'').trim();}).filter(Boolean):[];
+}
+function ncaPqrsPinsLeerLocal(k){
   try{
     const all=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_LS)||'{}');
-    const arr=all[ncaPqrsPinUsuarioKey()];
-    return Array.isArray(arr)?arr.map(function(x){return String(x||'').trim();}).filter(Boolean):[];
+    return ncaPqrsPinsNorm(all[k]);
   }catch(err){return[];}
 }
-function ncaPqrsPinsGuardar(arr){
+function ncaPqrsPinsGuardarLocal(k,arr){
   try{
     const all=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_LS)||'{}');
-    all[ncaPqrsPinUsuarioKey()]=(arr||[]).map(function(x){return String(x||'').trim();}).filter(Boolean);
+    all[k]=ncaPqrsPinsNorm(arr);
     localStorage.setItem(NCA_PQRS_PIN_LS,JSON.stringify(all));
   }catch(err){}
+}
+function ncaPqrsPinsPersistFirestore(k,arr){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc||!k)return Promise.resolve(false);
+  const m={};
+  m[k]=ncaPqrsPinsNorm(arr);
+  if(!window._ncaPinsRemote||typeof window._ncaPinsRemote!=='object')window._ncaPinsRemote={};
+  window._ncaPinsRemote[k]=m[k].slice();
+  return Promise.resolve(window._fsSetDoc(window._fsDoc(db,'sistema','global'),{ncaPinsByUser:m},{merge:true}))
+    .then(function(){return true;})
+    .catch(function(err){console.warn('ncaPqrsPinsPersistFirestore:',err);return false;});
+}
+/** Lee sistema/global.ncaPinsByUser (carga inicial y tiempo real). Devuelve true si cambian las fijadas del usuario actual. */
+function ncaPqrsPinsApplyFromGlobal(g){
+  if(!g||typeof g!=='object')return false;
+  const k=ncaPqrsPinUsuarioKey();
+  const antes=ncaPqrsPinsLeer().join('|');
+  const map=(g.ncaPinsByUser&&typeof g.ncaPinsByUser==='object')?g.ncaPinsByUser:{};
+  const next={};
+  Object.keys(map).forEach(function(u){next[u]=ncaPqrsPinsNorm(map[u]);});
+  window._ncaPinsRemote=next;
+  window._ncaPinsRemoteLoaded=true;
+  return ncaPqrsPinsLeer().join('|')!==antes;
+}
+function ncaPqrsPinsLeer(){
+  const k=ncaPqrsPinUsuarioKey();
+  const local=ncaPqrsPinsLeerLocal(k);
+  if(!window._ncaPinsRemoteLoaded)return local;
+  const remoteMap=window._ncaPinsRemote||{};
+  const hasRemote=Object.prototype.hasOwnProperty.call(remoteMap,k);
+  let migrados={};
+  try{migrados=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_MIGRADO_LS)||'{}')||{};}catch(err){migrados={};}
+  if(!migrados[k]&&ncaEncargadoSesionPqrsPin()){
+    const union=hasRemote?remoteMap[k].slice():[];
+    local.forEach(function(id){if(union.indexOf(id)<0)union.push(id);});
+    migrados[k]=true;
+    try{localStorage.setItem(NCA_PQRS_PIN_MIGRADO_LS,JSON.stringify(migrados));}catch(err){}
+    ncaPqrsPinsGuardarLocal(k,union);
+    if(union.length&&(!hasRemote||union.length!==remoteMap[k].length))ncaPqrsPinsPersistFirestore(k,union);
+    return union;
+  }
+  if(!hasRemote)return local;
+  const remote=remoteMap[k].slice();
+  if(remote.join('|')!==local.join('|'))ncaPqrsPinsGuardarLocal(k,remote);
+  return remote;
+}
+function ncaPqrsPinsGuardar(arr){
+  const k=ncaPqrsPinUsuarioKey();
+  ncaPqrsPinsGuardarLocal(k,arr);
+  ncaPqrsPinsPersistFirestore(k,arr);
 }
 function ncaPqrsEstaFijada(expId){
   const id=String(expId||'').trim();
@@ -1771,6 +1825,7 @@ window.ncaPqrsEstaFijada=ncaPqrsEstaFijada;
 window.toggleNcaPqrsPinPorEjecutar=toggleNcaPqrsPinPorEjecutar;
 window.ordenarPqrsNcaPinsPrimero=ordenarPqrsNcaPinsPrimero;
 window.ordenarActividadesNcaPinsPrimero=ordenarActividadesNcaPinsPrimero;
+window.ncaPqrsPinsApplyFromGlobal=ncaPqrsPinsApplyFromGlobal;
 /** Acciones exclusivas del Director (DS DEGUV) en paleta «Por firmar»: 🧐 revisar · 📤 cargar firmado · ✍️ firma física. */
 function pqrsDirectorPorFirmarAccionesHtml(e){
   const id=jsStr(e&&e._exp);
