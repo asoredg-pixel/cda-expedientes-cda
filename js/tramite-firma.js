@@ -54,12 +54,13 @@ function tramitePuedeDevolverDesdeFirma(t){
  * Sale de firma (Director ya no la ve), encargado en Revisados (✓ Revisada · X Corregir),
  * responsable sale de Atendidas → Por ejecutar / corregir.
  */
-function tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota){
+function tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
   nota=String(nota||'').trim()||'Devuelta para corregir (impresión/firma)';
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'Encargado');
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){if(typeof notif==='function')notif('No se encontró la actividad','err');return false;}
-  if(!tramitePuedeDevolverDesdeFirma(t)){
+  const desdeNotif=!!(opts&&opts.desdePorNotificar&&taskFirmaEnPorNotificar(t));
+  if(!desdeNotif&&!tramitePuedeDevolverDesdeFirma(t)){
     if(typeof devolverTaskAlResponsable==='function')return devolverTaskAlResponsable(expId,taskId,nota);
     return false;
   }
@@ -70,6 +71,7 @@ function tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota){
     if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(tk,nota);
     if(tk.firmaWf&&typeof tk.firmaWf==='object'){
       tk.firmaWf.devolucion_encargado={por:por,en:new Date().toISOString(),motivo:nota,fase_prev:prev.fase||''};
+      if(desdeNotif)Object.assign(tk.firmaWf,{notificar_por:'',notificar_por_propuesto:'',notif_vence:'',notif_sin_plazo:false});
     }
     else{
       tk.fechaReportada='';

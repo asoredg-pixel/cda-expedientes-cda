@@ -7987,7 +7987,7 @@ function taskReviewFullRailHtml(ref,taskId,t){
     taskActividadIconRailHtml(ref,taskId,t);
 }
 function taskReviewSideTitles(){
-  return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',trasladarNotificador:'Trasladar persona a notificar',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación',devolverTecnico:'Devolver al técnico'};
+  return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',trasladarNotificador:'Trasladar persona a notificar',elimEntregaNotif:'Eliminar entrega',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación',devolverTecnico:'Devolver al técnico'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
   const nc=taskChatComentariosCount(t);
@@ -8108,6 +8108,72 @@ function submitTrasladarPersonaNotificarReview(expId,taskId){
   notif('🔄 Notificador actualizado: '+nuevo,'ok');
 }
 window.submitTrasladarPersonaNotificarReview=submitTrasladarPersonaNotificarReview;
+/** Encargado en «Por notificar»: devolver para corregir o eliminar la entrega. */
+function puedeEliminarEntregaPorNotificarEncargado(e,t){
+  if(!t||t.eliminada)return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
+  if(typeof esCargoVital==='function'&&esCargoVital())return false;
+  const esEnc=actEncargadoNcaGestionPorNotificar()
+    ||((typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+      &&typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto());
+  if(!esEnc)return false;
+  return typeof taskEnFaseNotificacionAsignada==='function'&&taskEnFaseNotificacionAsignada(e,t);
+}
+window.puedeEliminarEntregaPorNotificarEncargado=puedeEliminarEntregaPorNotificarEncargado;
+function renderTaskReviewElimEntregaNotifSideHtml(expId,taskId,t,e){
+  if(!puedeEliminarEntregaPorNotificarEncargado(e,t))
+    return'<div style="padding:12px;font-size:12px;color:var(--tx3)">No puede eliminar esta entrega.</div>';
+  const r=escAttr(expId),tid=escAttr(taskId);
+  const det='border:1px solid var(--bd);border-radius:var(--r);padding:8px 10px;margin-bottom:10px';
+  const sum='cursor:pointer;font-size:12px;font-weight:600';
+  return '<div class="task-review-side-form">'+
+    '<details open style="'+det+'"><summary style="'+sum+'">↩ 1. Devolver para corregir</summary>'+
+      '<div style="font-size:11px;color:var(--tx2);margin:8px 0">La actividad pasa a <strong>Por corregir</strong> y el responsable debe entregarla de nuevo desde cero. El documento actual queda <strong>por corregir</strong> para compararlo con la nueva entrega. Se borra la persona designada a notificar.</div>'+
+      '<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Mensaje al responsable (chat de la actividad)</label>'+
+      '<textarea id="elim-notif-msg" placeholder="Indique qué debe corregir…" style="width:100%;min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
+      '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitElimEntregaNotifDevolver(\''+r+'\',\''+tid+'\')">↩ Devolver para corregir</button>'+
+    '</details>'+
+    '<details style="'+det+'"><summary style="'+sum+'">🗑 2. Eliminar entrega</summary>'+
+      '<div style="font-size:11px;color:var(--tx2);margin:8px 0">Como si nada hubiera pasado: la actividad vuelve a <strong>Por ejecutar</strong>, se borran del Drive los documentos y anexos de la entrega y se liberan los N° de registro.</div>'+
+      '<button type="button" class="btn bsm" style="width:100%;color:var(--rd,#c0392b)" onclick="submitElimEntregaNotifEliminar(\''+r+'\',\''+tid+'\')">🗑 Eliminar entrega</button>'+
+    '</details>'+
+    '</div>';
+}
+window.renderTaskReviewElimEntregaNotifSideHtml=renderTaskReviewElimEntregaNotifSideHtml;
+function submitElimEntregaNotifDevolver(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const e=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  if(!puedeEliminarEntregaPorNotificarEncargado(e,t)){notif('No puede eliminar esta entrega','err');return;}
+  const msg=String((document.getElementById('elim-notif-msg')||{}).value||'').trim();
+  if(msg){
+    try{addTaskComentario(expId,taskId,msg);}catch(err){console.warn('elimEntregaNotif chat:',err);}
+  }
+  const nota=msg||'Devuelta desde Por notificar para entregar de nuevo';
+  const esPqrs=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e));
+  if(esPqrs)encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,{desdePorNotificar:true});
+  else if(typeof tramiteDevolverDesdeFirmaACorregir==='function')tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota,{desdePorNotificar:true});
+}
+window.submitElimEntregaNotifDevolver=submitElimEntregaNotifDevolver;
+function submitElimEntregaNotifEliminar(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  const e=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  if(!puedeEliminarEntregaPorNotificarEncargado(e,t)){notif('No puede eliminar esta entrega','err');return;}
+  const lbl=(t&&(t.desc||t.actividad))||'actividad';
+  const fn=function(){eliminarEntregaActividad(expId,taskId,{desdePorNotificar:true});};
+  if(typeof confirmEliminar==='function'){
+    confirmEliminar({
+      title:'Eliminar entrega',
+      message:'¿Eliminar la entrega de «'+lbl+'»?',
+      detail:'La actividad volverá a Por ejecutar como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega (incluido el firmado) y se liberan los N° de registro.',
+      confirmLabel:'Sí, eliminar entrega'
+    },fn);
+    return;
+  }
+  if(confirm('¿Eliminar esta entrega? La actividad volverá a Por ejecutar y se borrarán los documentos de Drive.'))fn();
+}
+window.submitElimEntregaNotifEliminar=submitElimEntregaNotifEliminar;
 /** Rail del responsable designado a notificar: documento a notificar + chat/notas/organizar + 📬 */
 function taskReviewRespPorNotificarRailHtml(ref,taskId,t,e){
   if(!t)return'';
@@ -8130,6 +8196,8 @@ function taskReviewRespPorNotificarRailHtml(ref,taskId,t,e){
   }
   if(typeof puedeTrasladarPersonaNotificarEncargado==='function'&&puedeTrasladarPersonaNotificarEncargado(e,t))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='trasladarNotificador'?' on':'')+'" data-side="trasladarNotificador" title="Trasladar persona a notificar" onclick="taskReviewToggleSidePanel(\'trasladarNotificador\',\''+r+'\',\''+tid+'\')">🔄</button>';
+  if(puedeEliminarEntregaPorNotificarEncargado(e,t))
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='elimEntregaNotif'?' on':'')+'" data-side="elimEntregaNotif" title="Eliminar entrega" onclick="taskReviewToggleSidePanel(\'elimEntregaNotif\',\''+r+'\',\''+tid+'\')">🗑</button>';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='notificar'?' on':'')+'" data-side="notificar" title="Reportar notificación (presencial / WhatsApp / aviso)" onclick="taskReviewToggleSidePanel(\'notificar\',\''+r+'\',\''+tid+'\')">📬</button>';
   return h+'</nav>';
 }
@@ -10333,6 +10401,8 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML=renderTaskReviewDevolverTecnicoSideHtml(expId,taskId,t);
   }else if(mode==='trasladarNotificador'){
     body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarNotificadorSideHtml(expId,taskId,t,e)+'</div>';
+  }else if(mode==='elimEntregaNotif'){
+    body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewElimEntregaNotifSideHtml(expId,taskId,t,t&&t.sinExpediente?null:e)+'</div>';
   }else if(mode==='notificar'){
     const esPqrsN=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
@@ -18938,8 +19008,13 @@ function limpiarRespuestaEntregaConservandoAlta(e){
   }
 }
 window.limpiarRespuestaEntregaConservandoAlta=limpiarRespuestaEntregaConservandoAlta;
-async function eliminarEntregaActividad(expId,taskId){
-  if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return false;}
+async function eliminarEntregaActividad(expId,taskId,opts){
+  const desdeNotif=!!(opts&&opts.desdePorNotificar);
+  if(desdeNotif){
+    const t0=getTaskAny(expId,taskId);
+    const e0=t0&&!t0.sinExpediente?getExpById(expId):null;
+    if(!puedeEliminarEntregaPorNotificarEncargado(e0,t0)){notif('No puede eliminar esta entrega','err');return false;}
+  }else if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return false;}
   let t=getTaskAny(expId,taskId);
   if(!t){notif('Actividad no encontrada','err');return false;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
@@ -18968,6 +19043,12 @@ async function eliminarEntregaActividad(expId,taskId){
   if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
     (wf.documentos||[]).forEach(function(d){
+      if(!d)return;
+      pushFid(d.fileId||d.driveFileId);
+    });
+  }
+  if(desdeNotif&&t.firmaWf&&Array.isArray(t.firmaWf.documentos)){
+    t.firmaWf.documentos.forEach(function(d){
       if(!d)return;
       pushFid(d.fileId||d.driveFileId);
     });
@@ -19068,6 +19149,7 @@ async function eliminarEntregaActividad(expId,taskId){
     tk.ultimaRevisionDepto=null;
     tk._pqrs_proyeccion_atendida=false;
     tk._firma_proyeccion_atendida=false;
+    if(desdeNotif&&tk.firmaWf&&typeof tk.firmaWf==='object')tk.firmaWf={fase:''};
     tk.comentarios=[];
     (tk.asignados||[]).forEach(function(a){
       if(!a)return;
@@ -19120,6 +19202,12 @@ async function eliminarEntregaActividad(expId,taskId){
     });
     if(!otrasTrasElim){
       limpiarRespuestaEntregaConservandoAlta(e);
+      if(desdeNotif&&typeof setPqrsWorkflow==='function'){
+        setPqrsWorkflow(e,{
+          impreso:null,listo_firma:null,firma_director:null,firma_fisica:null,
+          notificar_por:'',notificar_por_propuesto:'',notif_inicio:'',notif_vence:'',notificacion_reportada:null
+        });
+      }
       if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
       e._pqrs_historial.push({
         tipo:'eliminar_entrega',
@@ -20115,12 +20203,13 @@ function encargadoPuedeDevolverDesdeFirma(t){
  * PQRSD: fase RECHAZADA (sale de Por firma). Trámite: limpia firmaWf.
  * Encargado ve ✓ Revisada · X Corregir en «Por corregir»; responsable debe reentregar.
  */
-function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota){
+function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
   nota=String(nota||'').trim()||'Devuelta para corregir (impresión/firma)';
+  const desdeNotif=!!(opts&&opts.desdePorNotificar);
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(typeof responsableActivo!=='undefined'?responsableActivo:'Encargado');
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){if(typeof notif==='function')notif('No se encontró la actividad','err');return false;}
-  if(!encargadoPuedeDevolverDesdeFirma(t)){
+  if(!desdeNotif&&!encargadoPuedeDevolverDesdeFirma(t)){
     if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
       &&typeof tramiteDevolverDesdeFirmaACorregir==='function')
       return tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
@@ -20141,7 +20230,8 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota){
   const run=async function(){
     try{
       if(typeof _pqrsRenombrarDocsDriveWf==='function')
-        await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']});
+        await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']
+          .concat(desdeNotif?['por_notificar','firmado']:[])});
     }catch(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);}
     if(Array.isArray(t.soportes)){
       t.soportes.forEach(function(s){
@@ -20159,7 +20249,7 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota){
         if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
       });
     }
-    setPqrsWorkflow(e,{
+    setPqrsWorkflow(e,Object.assign({
       fase:PQRS_WF.RECHAZADA,
       documentos:wf.documentos||[],
       revision_nca:{aprobado:false,comentario:nota,por:por,en:new Date().toISOString(),origen:'devolver_desde_firma'},
@@ -20168,9 +20258,9 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota){
       listo_firma:null,
       firma_director:null,
       firma_fisica:null
-    });
+    },desdeNotif?{notificar_por:'',notificar_por_propuesto:'',notif_inicio:'',notif_vence:'',notificacion_reportada:null}:{}));
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'devolver_desde_firma',fecha:hoy(),nota:'Encargado devolvió desde firma: '+nota,oficina:e._depto||'guaviare',por:por});
+    e._pqrs_historial.push({tipo:'devolver_desde_firma',fecha:hoy(),nota:'Encargado devolvió desde '+(desdeNotif?'Por notificar':'firma')+': '+nota,oficina:e._depto||'guaviare',por:por});
     normalizeTask(t);
     migrateLegacyAsignados(t);
     t._pqrs_proyeccion_atendida=false;
