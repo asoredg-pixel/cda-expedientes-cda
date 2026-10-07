@@ -8127,11 +8127,20 @@ function renderTaskReviewElimEntregaNotifSideHtml(expId,taskId,t,e){
   const r=escAttr(expId),tid=escAttr(taskId);
   const det='border:1px solid var(--bd);border-radius:var(--r);padding:8px 10px;margin-bottom:10px';
   const sum='cursor:pointer;font-size:12px;font-weight:600';
+  const tn=typeof normalizeTask==='function'?normalizeTask(t):t;
+  const msgs=typeof renderTaskChatListHtml==='function'?renderTaskChatListHtml(tn):'';
+  const composer=typeof renderTaskChatComposerHtml==='function'?renderTaskChatComposerHtml(expId,taskId,tn,{allowGuiaAttach:true}):'';
+  const chatBlock='<div class="fld pqrs-asig-chat-wrap" style="margin-bottom:10px">'+
+    '<label style="display:flex;align-items:center;gap:6px">'+(typeof chatWaIconHtml==='function'?chatWaIconHtml(14):'')+' Chat de la actividad <span style="font-weight:400;color:var(--tx3)">(indicaciones / adjuntos)</span></label>'+
+    '<div id="pqrs-asig-chat-msgs" class="task-chat-uni-scroll" style="max-height:160px;margin:6px 0;padding:6px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf)">'+
+    (msgs||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún. Escriba qué debe corregir y envíe con ➤</div>')+
+    '</div>'+
+    '<div id="pqrs-asig-chat-compose">'+composer+'</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Los mensajes quedan en el chat de la actividad (rail 💬).</div></div>';
   return '<div class="task-review-side-form">'+
     '<details open style="'+det+'"><summary style="'+sum+'">↩ 1. Devolver para corregir</summary>'+
       '<div style="font-size:11px;color:var(--tx2);margin:8px 0">La actividad pasa a <strong>Por corregir</strong> y el responsable debe entregarla de nuevo desde cero. El documento actual queda <strong>por corregir</strong> para compararlo con la nueva entrega. Se borra la persona designada a notificar.</div>'+
-      '<div class="fld" style="margin-bottom:10px"><label style="font-size:11px;font-weight:600">Mensaje al responsable (chat de la actividad)</label>'+
-      '<textarea id="elim-notif-msg" placeholder="Indique qué debe corregir…" style="width:100%;min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
+      chatBlock+
       '<button type="button" class="btn bsm bp" style="width:100%" onclick="submitElimEntregaNotifDevolver(\''+r+'\',\''+tid+'\')">↩ Devolver para corregir</button>'+
     '</details>'+
     '<details style="'+det+'"><summary style="'+sum+'">🗑 2. Eliminar entrega</summary>'+
@@ -8141,13 +8150,19 @@ function renderTaskReviewElimEntregaNotifSideHtml(expId,taskId,t,e){
     '</div>';
 }
 window.renderTaskReviewElimEntregaNotifSideHtml=renderTaskReviewElimEntregaNotifSideHtml;
-function submitElimEntregaNotifDevolver(expId,taskId){
+async function submitElimEntregaNotifDevolver(expId,taskId){
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
   if(!puedeEliminarEntregaPorNotificarEncargado(e,t)){notif('No puede eliminar esta entrega','err');return;}
-  const msg=String((document.getElementById('elim-notif-msg')||{}).value||'').trim();
-  if(msg){
-    try{addTaskComentario(expId,taskId,msg);}catch(err){console.warn('elimEntregaNotif chat:',err);}
+  const inp=document.getElementById('task-cmt-input');
+  const msg=String(inp&&inp.value||'').trim();
+  const ctxKey=typeof sstFileChatGuiaCtxKey==='function'?sstFileChatGuiaCtxKey(expId,taskId):('chat-guia:'+expId+':'+taskId);
+  const stg=typeof sstFileStagingCtx==='function'?sstFileStagingCtx(ctxKey):null;
+  const adjPend=!!(stg&&([].concat(stg.main?[stg.main]:[],stg.anexos||[]).some(function(it){return it&&it.blob;})));
+  if(msg||adjPend){
+    try{await submitTaskComment(expId,taskId);}catch(err){console.warn('elimEntregaNotif chat:',err);}
+    const inp2=document.getElementById('task-cmt-input');
+    if(inp2&&String(inp2.value||'').trim())return;
   }
   const nota=msg||'Devuelta desde Por notificar para entregar de nuevo';
   const esPqrs=!!(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
@@ -10403,6 +10418,10 @@ function taskReviewOpenSidePanel(mode,expId,taskId){
     body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewTrasladarNotificadorSideHtml(expId,taskId,t,e)+'</div>';
   }else if(mode==='elimEntregaNotif'){
     body.innerHTML='<div class="task-review-side-scroll">'+renderTaskReviewElimEntregaNotifSideHtml(expId,taskId,t,t&&t.sinExpediente?null:e)+'</div>';
+    setTimeout(function(){
+      if(typeof sstInitWaComposers==='function')sstInitWaComposers(body);
+      if(typeof initTaskChatComposer==='function')initTaskChatComposer(expId,taskId);
+    },0);
   }else if(mode==='notificar'){
     const esPqrsN=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
@@ -23374,7 +23393,7 @@ async function submitTaskComment(expId,taskId){
           sideBody.innerHTML=renderTaskReviewChatSideHtml(expId,taskId,t);
           setTimeout(function(){initTaskReviewObsSide(expId,taskId,t);},30);
         }
-      }else if(window._taskReviewSideMode==='trasladar'&&t){
+      }else if((window._taskReviewSideMode==='trasladar'||window._taskReviewSideMode==='elimEntregaNotif')&&t){
         const msgs=document.getElementById('pqrs-asig-chat-msgs');
         if(msgs&&typeof renderTaskChatListHtml==='function'){
           msgs.innerHTML=renderTaskChatListHtml(t)||'<div style="font-size:11px;color:var(--tx3);padding:4px">Sin mensajes aún.</div>';

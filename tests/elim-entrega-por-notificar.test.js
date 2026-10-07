@@ -70,10 +70,16 @@ describe('Eliminar entrega desde Por notificar (encargado)', () => {
     expect(c.puedeEliminarEntregaPorNotificarEncargado({ _exp: 'P1' }, { id: 't2' })).toBe(true)
   })
 
-  it('panel muestra las dos opciones y el mensaje al chat', () => {
-    const h = ctx().renderTaskReviewElimEntregaNotifSideHtml('E1', 't1', tPorNotif, null)
+  it('panel muestra las dos opciones y el chat estilo WhatsApp de la actividad', () => {
+    const c = ctx({
+      renderTaskChatListHtml: () => '<div class="msg">hola</div>',
+      renderTaskChatComposerHtml: (ex, tk, t, o) => '<div id="task-chat-form" data-guia="' + !!(o && o.allowGuiaAttach) + '"></div>'
+    })
+    const h = c.renderTaskReviewElimEntregaNotifSideHtml('E1', 't1', tPorNotif, null)
     expect(h).toContain('Devolver para corregir')
-    expect(h).toContain('elim-notif-msg')
+    expect(h).toContain('id="task-chat-form" data-guia="true"')
+    expect(h).toContain('pqrs-asig-chat-msgs')
+    expect(h).toContain('hola')
     expect(h).toContain('submitElimEntregaNotifDevolver')
     expect(h).toContain('submitElimEntregaNotifEliminar')
   })
