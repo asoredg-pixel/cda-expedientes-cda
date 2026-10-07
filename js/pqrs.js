@@ -3300,10 +3300,20 @@ function getDocsAprobadosCiudadano(e){
   const docs=[];
   (e.tasks||[]).forEach(t=>{
     if(!taskDocAprobadoCiudadano(t))return;
+    let nAnexo=0;
     (t.soportes||[]).forEach(s=>{
       const u=s.preview||s.url||'';
       if(!u)return;
-      docs.push({url:u,preview:s.preview||s.url,label:s.label||'Respuesta aprobada',tipo:(t.desc||t.actividad||'Entrega de actividad').substring(0,80),mime:s.mime||'',fecha:t.fechaAtendida||''});
+      if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return;
+      let lbl=s.label||'Respuesta aprobada';
+      const esEnvio=typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s);
+      if(!esEnvio&&typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)&&typeof etiquetaDocNotifPublica==='function'){
+        nAnexo++;
+        lbl=etiquetaDocNotifPublica(Object.assign({},s,{anexo_n:nAnexo,_notif_rol:'anexo'}),nAnexo-1);
+      }else if(!esEnvio&&typeof pqrsStripPrefijoInternoDrive==='function'){
+        lbl=pqrsStripPrefijoInternoDrive(lbl)||lbl;
+      }
+      docs.push({url:u,preview:s.preview||s.url,label:lbl,tipo:(t.desc||t.actividad||'Entrega de actividad').substring(0,80),mime:s.mime||'',fecha:t.fechaAtendida||''});
     });
   });
   return docs;
