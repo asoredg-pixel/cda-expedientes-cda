@@ -2182,7 +2182,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   const enPorRevisar=!esDirRev&&typeof atajoFirmadoEnPorRevisar==='function'&&atajoFirmadoEnPorRevisar(t,e,refId);
   const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
   const pick=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:enPorRevisar?'Seleccionar documento (VoBo / firmado)':'Seleccionar PDF firmado',accept:enPorRevisar?'':'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
+    ?sstFilePickBlock({inputId:'tramite-atajo-firmado-file',listId:'tramite-atajo-firmado-list',ctxKey:ctxKey,label:enPorRevisar?'Seleccionar documento':'Seleccionar PDF firmado',accept:enPorRevisar?'':'application/pdf,.pdf',btnClass:'btn bsm bp',getUploadCtx:typeof sstFileUploadCtxForExpTask==='function'?sstFileUploadCtxForExpTask(refId,taskId):null})
     :'';
   const wf=esPqrs&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):{});
   const canalRaw=String(wf.canal||'').trim().toLowerCase();
@@ -2270,19 +2270,26 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Para actividades que requieren impresión y firma del Director <strong>sin notificar</strong> al ciudadano. Se carga el PDF firmado y la actividad queda <strong>atendida</strong>. El responsable recibirá aviso en la campanita.</div>'+
     '<button type="button" class="btn bsm bp" style="background:#15803d;border-color:#15803d;width:100%" onclick="'+confSinNotif+'">✓ Cargar y dar por atendida (sin notificar)</button>';
 
+  // Por revisar: reemplaza el principal del responsable (anexos se mantienen) y sigue a Por firmar (X Imprimir)
+  const confImprimir='cargarDocPasarImprimir(\''+pqrsExp+'\',\''+tid+'\','+(esPqrs?'true':'false')+')';
+  const imprimirBlock=
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Reemplaza el documento principal del responsable (los <strong>anexos se mantienen</strong>) y pasa a <strong>Por firmar</strong> (X Imprimir) para impresión, firma y notificación.</div>'+
+    '<button type="button" class="btn bsm bp" id="tramite-atajo-imprimir-btn" style="background:#7c3aed;border-color:#7c3aed;width:100%" onclick="'+confImprimir+'">🖨️ Cargar y pasar para Imprimir</button>';
+  const n0=enPorRevisar?1:0;
   const postAcc=
-    accHtml(1,'Notificar por correo ahora',emailBlock,false)+
+    (enPorRevisar?accHtml(1,'Cargar y pasar para Imprimir',imprimirBlock,false):'')+
+    accHtml(n0+1,'Notificar por correo ahora',emailBlock,false)+
     (esOfiSinResp
-      ?accHtml(2,'Notificado por otro medio',otroMedioBlock,false)
-      :(accHtml(2,'Asignar quién notificará',asignarBlock,false)
-        +accHtml(3,'Notificar por presencial, aviso u otro medio',otroMedioBlock,false)
-        +accHtml(4,'Cargar y dar por atendida (sin notificar)',sinNotifBlock,false)));
+      ?accHtml(n0+2,'Notificado por otro medio',otroMedioBlock,false)
+      :(accHtml(n0+2,'Asignar quién notificará',asignarBlock,false)
+        +accHtml(n0+3,'Notificar por presencial, aviso u otro medio',otroMedioBlock,false)
+        +accHtml(n0+4,'Cargar y dar por atendida (sin notificar)',sinNotifBlock,false)));
 
   const hintRev=enPorRevisar
-    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cargue el documento con su VoBo o firma (cualquier formato). Reemplaza al enviado para revisión y queda como <strong>versión final aprobada</strong>, sin pasar por firma del Director.</div>'
+    ?'<div style="font-size:11px;color:var(--tx2);margin-bottom:8px">Cargue el documento (cualquier formato). Reemplaza al enviado por el responsable; los anexos se mantienen. Páselo para <strong>Imprimir</strong> o, si ya tiene VoBo / firma, elija cómo se notifica (queda como <strong>versión final aprobada</strong>, sin pasar por firma del Director).</div>'
     :'';
   return wrapOpen+closeBtn+
-    '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">📤 Cargar documento firmado</div>'+
+    '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--bl)">'+(enPorRevisar?'📤 Cargar documento':'📤 Cargar documento firmado')+'</div>'+
     hintRev+
     '<div class="sst-file-pick-row" style="margin-bottom:12px">'+pick+'</div>'+
     docsHtml+
@@ -2811,6 +2818,150 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   }
 }
 window.cargarFirmadoDesdeRail=cargarFirmadoDesdeRail;
+/** Soportes principales de la entrega vigente (sin anexos, radicación, notificados, envío ni versiones por corregir). */
+function atajoSoportesPrincipalesReemplazo(t){
+  return ((t&&t.soportes)||[]).filter(function(s){
+    if(!s||s.activo===false)return false;
+    if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return false;
+    if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return false;
+    if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return false;
+    if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
+    return true;
+  });
+}
+/** PQRSD: documento(s) principal(es) de la última entrega en revisión (sin anexos ni versiones por corregir). */
+function atajoPqrsDocsPrincipalesReemplazo(wf){
+  const cands=((wf&&wf.documentos)||[]).filter(function(d){
+    if(!d)return false;
+    if(typeof _pqrsDocEsRevisionActual==='function'&&!_pqrsDocEsRevisionActual(d))return false;
+    if(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(d))return false;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(d))return false;
+    if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(d))return false;
+    return true;
+  });
+  const maxN=cands.reduce(function(m,d){return Math.max(m,Number(d.entrega_n)||0);},0);
+  return cands.filter(function(d){return (Number(d.entrega_n)||0)===maxN;});
+}
+/** Por revisar: el encargado carga su documento, reemplaza el principal del responsable (anexos se mantienen) y pasa a Imprimir. */
+async function cargarDocPasarImprimir(expId,taskId,esPqrs){
+  expId=String(expId||'').trim();
+  taskId=String(taskId||'').trim();
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return false;}
+  const refId=t.sinExpediente?(t.codigo||expId):expId;
+  const ctxKey=typeof sstFileCtxKeyTramiteAtajoFirmado==='function'?sstFileCtxKeyTramiteAtajoFirmado(refId,taskId):('tramite-atajo-firmado:'+refId+':'+taskId);
+  const staged=typeof sstFileGetMainItem==='function'?sstFileGetMainItem(ctxKey):null;
+  if(staged&&staged.state==='uploading'){notif('Espere a que termine de subir el documento','warn');return false;}
+  const yaSubido=staged&&staged.state==='uploaded'&&staged.uploaded?staged.uploaded:null;
+  const file=tramiteAtajoFirmadoGetPdfBlob(refId,taskId);
+  if(!file&&!yaSubido){notif('Seleccione el documento','err');return false;}
+  const e=esPqrs?(typeof getExpById==='function'?getExpById(expId):null):tramiteFirmaExpCtx(t,refId);
+  if(esPqrs&&!e){notif('PQRSD no encontrada','err');return false;}
+  const btn=document.getElementById('tramite-atajo-imprimir-btn');
+  const restaurar=function(){if(btn){btn.disabled=false;btn.textContent='🖨️ Cargar y pasar para Imprimir';}};
+  if(btn){btn.disabled=true;btn.textContent='Procesando…';}
+  try{
+    let res=yaSubido;
+    if(!res){
+      if(typeof sstSolicitarGmailParaAdjuntar==='function'&&!(await sstSolicitarGmailParaAdjuntar())){restaurar();return false;}
+      if(typeof sstCargaShow==='function')sstCargaShow({title:'Cargando documento',message:'Subiendo documento…',sub:file.name||'',pct:20});
+      const mime=file.type||'application/octet-stream';
+      if(esPqrs){
+        res=await driveUploadPqrsExpediente(file,file.name||'documento',mime,e,{label:'Respuesta',uploadTarget:'respuesta'});
+      }else if(typeof driveUploadExpedienteActividad==='function'){
+        const autorUp=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+        res=await driveUploadExpedienteActividad(file,file.name||'documento',mime,e,t,autorUp,'revision');
+      }else{
+        res=await tramiteUploadPdfFirmado(file,t,e,refId);
+      }
+    }
+    const fid=String((res&&(res.fileId||res.driveFileId))||'').trim();
+    if(!fid)throw new Error('No se pudo subir el documento');
+    const link=res.driveLink||res.previewLink||'';
+    const prev=res.previewLink||res.driveLink||'';
+    const nomArch=res.driveFilename||res.nombre||(file&&file.name)||(staged&&staged.nombre)||'documento';
+    const autor=typeof taskComentarioAutor==='function'?taskComentarioAutor():'';
+    const borrar=[];
+    const pushFid=function(x){
+      const f=String((x&&(x.driveFileId||x.fileId))||'').trim();
+      if(f&&f!==fid&&x.driveInstitutional!==false&&borrar.indexOf(f)<0)borrar.push(f);
+    };
+    const sopQuitar=atajoSoportesPrincipalesReemplazo(t);
+    sopQuitar.forEach(pushFid);
+    if(esPqrs){
+      const wf=getPqrsWorkflow(e);
+      const docsQuitar=atajoPqrsDocsPrincipalesReemplazo(wf);
+      docsQuitar.forEach(pushFid);
+      const ref0=docsQuitar[0]||{};
+      const docNuevo={
+        nombre:ref0.nombre||'Documento de respuesta',
+        driveLink:link,previewLink:prev,fileId:fid,driveFileId:fid,
+        tipo:ref0.tipo&&ref0.tipo!=='link'?ref0.tipo:'drive',
+        es_anexo:false,driveFilename:nomArch,driveEstado:'revision',
+        cargado_por_encargado:autor||true
+      };
+      if(ref0.entrega_n)docNuevo.entrega_n=ref0.entrega_n;
+      setPqrsWorkflow(e,{documentos:(wf.documentos||[]).filter(function(d){return docsQuitar.indexOf(d)<0;}).concat([docNuevo])});
+    }
+    const sopKeys=sopQuitar.map(function(s){return String(s.id||s.driveFileId||s.fileId||s.url||'');}).filter(Boolean);
+    mutateTask(refId,taskId,function(tk){
+      if(!Array.isArray(tk.soportes))tk.soportes=[];
+      tk.soportes=tk.soportes.filter(function(s){
+        if(!s)return false;
+        if(sopQuitar.indexOf(s)>=0)return false;
+        const k=String(s.id||s.driveFileId||s.fileId||s.url||'');
+        if(k&&sopKeys.indexOf(k)>=0)return false;
+        const f=String(s.driveFileId||s.fileId||'').trim();
+        return !(f&&borrar.indexOf(f)>=0);
+      });
+      tk.soportes.push({
+        id:'sop_'+Date.now(),
+        nombre:nomArch,
+        label:'Documento principal',
+        driveFileId:fid,
+        driveFilename:nomArch,
+        driveLink:link,
+        previewLink:prev,
+        url:link,
+        preview:prev,
+        driveInstitutional:true,
+        driveEstado:'revision',
+        tipo:'drive',
+        es_anexo:false,
+        es_proyeccion:true,
+        activo:true,
+        cargado_por_encargado:autor||true,
+        por:autor,
+        fecha:new Date().toISOString(),
+        version:tk.soportes.length+1
+      });
+      if(res.folderId&&!tk._drive_folder_id){
+        tk._drive_folder_id=res.folderId;
+        tk._drive_folder_link=res.folderLink||'';
+      }
+      if(Array.isArray(tk.historial))tk.historial.push({tipo:'soporte',fecha:typeof hoy==='function'?hoy():'',url:link,por:autor,nota:'Encargado reemplazó el documento principal (anexos se mantienen) → Imprimir'});
+    });
+    if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
+    if(borrar.length&&typeof driveDeleteInstitutional==='function'){
+      for(let i=0;i<borrar.length;i++){
+        try{await driveDeleteInstitutional(borrar[i]);}catch(errDel){console.warn('cargarDocPasarImprimir borrar:',errDel);}
+      }
+    }
+    if(typeof _taskReviewDecidirImprimirRun==='function')await _taskReviewDecidirImprimirRun(expId,taskId);
+    else if(esPqrs&&typeof ncaAprobarOficioFirmado==='function')await ncaAprobarOficioFirmado(expId,{omitNotificadorEnAprobacion:true,mantenerPaletaPorRevisar:true});
+    else await tramiteLibreParaImprimir(expId,taskId,{keepOpen:false,omitNotificadorEnAprobacion:true,mantenerPaletaPorRevisar:true});
+    return true;
+  }catch(err){
+    if(typeof sstCargaHide==='function')sstCargaHide();
+    notif('Error: '+String(err.message||err).slice(0,100),'err');
+    restaurar();
+    return false;
+  }
+}
+window.cargarDocPasarImprimir=cargarDocPasarImprimir;
+window.atajoSoportesPrincipalesReemplazo=atajoSoportesPrincipalesReemplazo;
+window.atajoPqrsDocsPrincipalesReemplazo=atajoPqrsDocsPrincipalesReemplazo;
 window.atajoFirmadoPersistEmailFields=atajoFirmadoPersistEmailFields;
 window.atajoFirmadoPersistAsignarFields=atajoFirmadoPersistAsignarFields;
 /** @deprecated use cargarFirmadoDesdeRail */

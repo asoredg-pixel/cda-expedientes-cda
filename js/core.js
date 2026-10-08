@@ -7589,7 +7589,7 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t,opts){
   if(forceDecision){
     const eid=jsStr(ref),tidJs=jsStr(taskId);
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="Aprobar" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   }else if(typeof taskReviewDecisionRailHtml==='function'){
     h+=taskReviewDecisionRailHtml(ref,taskId,t);
   }
@@ -8867,7 +8867,7 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
   let h='';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="'+titAprobar+'" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
   if(!esRevFinal)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento firmado" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   return h;
 }
 function taskReviewOpenDecisionPanel(mode,expId,taskId){

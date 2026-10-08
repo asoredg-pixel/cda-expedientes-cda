@@ -49,8 +49,8 @@ describe('Atajo «Cargar documento firmado» en Por revisar', () => {
     const r = extraer(tf, ['renderTaskReviewAtajoFirmadoHtml'])
     expect(r).toContain("accept:enPorRevisar?'':'application/pdf,.pdf'")
     expect(r).toContain('data-siempre="1"')
-    expect(r).toContain("accHtml(2,'Asignar quién notificará'")
-    expect(r).toContain("accHtml(4,'Cargar y dar por atendida (sin notificar)'")
+    expect(r).toContain("accHtml(n0+2,'Asignar quién notificará'")
+    expect(r).toContain("accHtml(n0+4,'Cargar y dar por atendida (sin notificar)'")
     expect(extraer(tf, ['initTaskReviewAtajoFirmadoSide'])).toContain("post.getAttribute('data-siempre')==='1'")
   })
 
