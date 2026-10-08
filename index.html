@@ -20,14 +20,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261001a"></script>
-<script src="js/constants.js?v=20261008o"></script>
+<script src="js/constants.js?v=20261008p"></script>
 <script src="js/utils.js?v=20261002a"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261006a"></script>
 <script src="js/roles.js?v=20261001b"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261008o"></script>
+<script src="js/core.js?v=20261008p"></script>
 <script src="js/formulario.js?v=20261001a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20260929a"></script>
@@ -379,7 +379,11 @@
     <div class="act-filtros-bar">
       <div id="act-dept-resp-bar" style="display:none;gap:6px;align-items:center" class="fx">
         <label style="font-size:12px;font-weight:600;white-space:nowrap;color:var(--tx,#1a1a1a)">Responsable:</label>
-        <select id="act-dept-resp-sel" style="min-width:200px;padding:6px 8px;border:1px solid var(--bd,#c5c5c5);border-radius:var(--r,6px);background:#fff;color:#1a1a1a;font-size:13px" onchange="renderActividades()"></select>
+        <select id="act-dept-resp-sel" style="display:none" onchange="renderActividades()"></select>
+        <div style="position:relative;min-width:280px">
+          <input type="text" id="act-dept-resp-inp" autocomplete="off" placeholder="Buscar responsable…" onfocus="actRespPickAbrir(this)" oninput="actRespPickFiltrar(this)" onkeydown="actRespPickKey(event,this)" onblur="setTimeout(actRespPickCerrar,200)" style="width:100%;padding:6px 8px;border:1px solid #c5c5c5;border-radius:6px;background:#fff;color:#1a1a1a;font-size:13px">
+          <div id="act-dept-resp-sug" class="entrega-resp-sug" style="display:none"></div>
+        </div>
       </div>
       <div class="sb" style="flex:1;margin-bottom:0">
         <select id="f-act-est" onchange="renderActividades()">

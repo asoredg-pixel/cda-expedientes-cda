@@ -10917,6 +10917,57 @@ function poblarActDeptRespSel(){
   if(cv&&[...sel.options].some(o=>o.value===cv))sel.value=cv;
   else if(esVistaActividadesOficinaPqrs())sel.value='__all__';
   else if(enc)sel.value=enc;
+  const inp=document.getElementById('act-dept-resp-inp');
+  if(inp&&document.activeElement!==inp)actRespPickSyncInput();
+}
+function actRespPickSyncInput(){
+  const sel=document.getElementById('act-dept-resp-sel');
+  const inp=document.getElementById('act-dept-resp-inp');
+  if(!sel||!inp)return;
+  const o=sel.options[sel.selectedIndex];
+  inp.value=o?String(o.textContent||''):'';
+}
+function actRespPickFiltrar(inp,todo){
+  const sel=document.getElementById('act-dept-resp-sel');
+  const portal=document.getElementById('act-dept-resp-sug');
+  if(!sel||!portal||!inp)return;
+  const words=todo?[]:String(inp.value||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const opts=[...sel.options].filter(o=>{
+    const s=String(o.textContent||'').toLowerCase();
+    return words.every(w=>s.includes(w));
+  });
+  portal.innerHTML=opts.length?opts.map(o=>'<button type="button" class="entrega-resp-sug-btn" data-idx="'+o.index+'"'+(o.index===sel.selectedIndex?' style="font-weight:700;color:var(--bl)"':'')+
+    ' onmousedown="event.preventDefault();actRespPickElegir('+o.index+')">'+escAttr(o.textContent)+'</button>').join('')
+    :'<div style="padding:8px 10px;font-size:12px;color:var(--tx3)">Sin coincidencias</div>';
+  portal.style.display='block';
+}
+function actRespPickAbrir(inp){
+  if(!inp)return;
+  try{inp.select();}catch(e){}
+  actRespPickFiltrar(inp,true);
+}
+function actRespPickElegir(idx){
+  const sel=document.getElementById('act-dept-resp-sel');
+  if(!sel||!sel.options[idx])return;
+  const cambio=sel.selectedIndex!==idx;
+  sel.selectedIndex=idx;
+  const inp=document.getElementById('act-dept-resp-inp');
+  actRespPickCerrar();
+  if(inp)inp.blur();
+  if(cambio&&typeof renderActividades==='function')renderActividades();
+}
+function actRespPickCerrar(){
+  const portal=document.getElementById('act-dept-resp-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  actRespPickSyncInput();
+}
+function actRespPickKey(ev,inp){
+  if(!ev)return;
+  if(ev.key==='Escape'){actRespPickCerrar();if(inp)inp.blur();return;}
+  if(ev.key!=='Enter')return;
+  ev.preventDefault();
+  const b=document.querySelector('#act-dept-resp-sug .entrega-resp-sug-btn');
+  if(b)actRespPickElegir(Number(b.getAttribute('data-idx')));
 }
 function poblarSelResponsable(){
   const sel=document.getElementById('sel-responsable');if(!sel)return;
