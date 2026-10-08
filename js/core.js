@@ -24006,12 +24006,18 @@ function taskPorFirmaImpresoMarcado(t){
   const fw=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
   return !!(fw.impreso&&fw.impreso.en);
 }
-/** VITAL / encargado: primero lo pasado a imprimir sin 🖨️; las ya marcadas impresas al final. */
+/** VITAL / encargado: primero lo pasado a imprimir sin 🖨️; las ya marcadas impresas al final.
+ *  VITAL: además ⚡ prioritarias → 🔥 urgentes → resto (dentro de cada banda, el orden anterior). */
 function sortTasksPorFirma(tasks){
   const out=sortTasksByFechaEntradaDesc(tasks,taskFechaEntradaPorFirmaKey);
   if(!(typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir()))return out;
-  return out.filter(function(t){return !taskPorFirmaImpresoMarcado(t);})
+  const res=out.filter(function(t){return !taskPorFirmaImpresoMarcado(t);})
     .concat(out.filter(taskPorFirmaImpresoMarcado));
+  if(!(typeof esCargoVital==='function'&&esCargoVital()))return res;
+  const bands=res.map(function(t){return taskUrgencyBandPorRevisar(t);});
+  return [0,1,2].reduce(function(acc,b){
+    return acc.concat(res.filter(function(t,i){return bands[i]===b;}));
+  },[]);
 }
 /** Atendidas: más reciente cerrado primero. */
 function sortTasksAtendidas(tasks){
