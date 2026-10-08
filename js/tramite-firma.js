@@ -243,7 +243,8 @@ function tramiteEncargadoNotificaCierraDirecto(t){
   return false;
 }
 window.tramiteEncargadoNotificaCierraDirecto=tramiteEncargadoNotificaCierraDirecto;
-function tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo){
+function tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,opts){
+  opts=opts||{};
   const docsNotif=typeof collectDocsParaNotificacionCorreo==='function'
     ?collectDocsParaNotificacionCorreo(e&&e._sin_expediente?null:e,t):[];
   const docsConLink=(docsNotif||[]).filter(function(d){
@@ -267,7 +268,7 @@ function tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo){
   const expId=(e&&e._exp)||'';
   const htmlBody='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo||'').replace(/\n/g,'<br>')+'</div>'+
     linksHtml+
-    (expId&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(expId):'')+
+    (expId&&!opts.interna&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(expId):'')+
     (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
   return{htmlBody:htmlBody,docsConLink:docsConLink};
 }
@@ -2232,8 +2233,18 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
       '</div></div>';
   }
 
+  // PQRSD y actividades sin expediente: igual que el encargado NCA — comunicación interna sin botón de consulta ciudadana
+  const internaDef=!!(e&&e._pqrs_interna)||!!(wf.comunicacion_interna||wf.traslado_interno||wf.notif_interna);
+  const muestraInterna=esPqrs||!!(t&&t.sinExpediente)
+    ||!!(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
+  const internaChk=muestraInterna
+    ?('<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+      '<input type="checkbox" id="tramite-atajo-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
+      '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>')
+    :'';
   const emailBlock=
     sugAtajo+
+    internaChk+
     '<div class="fld" style="margin-bottom:6px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="tramite-atajo-email-to" class="sst-email-chips" value="'+escAttr(destDef)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cc <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
@@ -2345,6 +2356,13 @@ function atajoFirmadoPersistEmailFields(expId,taskId,esPqrs){
     canal:'correo',
     notif_correo_entrega:true
   };
+  const cbInt=document.getElementById('tramite-atajo-notif-interna');
+  if(cbInt){
+    const interna=!!cbInt.checked;
+    patch.comunicacion_interna=interna;
+    patch.traslado_interno=interna;
+    patch.notif_interna=interna;
+  }
   if(esPqrs){
     const e=typeof getExpById==='function'?getExpById(expId):null;
     if(e&&typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,patch);
@@ -2591,7 +2609,7 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
   const destinos=toRaw.split(/[,;]+/).map(function(s){return s.trim().toLowerCase();}).filter(Boolean);
   if(!destinos.length){notif('Indique al menos un correo destino','err');return false;}
   if(!cuerpo){notif('Indique el mensaje','err');return false;}
-  const pack=typeof tramiteHtmlCuerpoNotifConDocs==='function'?tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo):null;
+  const pack=typeof tramiteHtmlCuerpoNotifConDocs==='function'?tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,{interna:wf.comunicacion_interna===true}):null;
   const htmlBody=(pack&&pack.htmlBody)||('<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>');
   const docsConLink=(pack&&pack.docsConLink)||[];
   const emailCc=String(wf.email_cc||'').trim();
@@ -2678,10 +2696,11 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
       const okG=await sstSolicitarGmailParaAdjuntar();
       if(!okG)return false;
     }
-    if(typeof sstCargaShow==='function')sstCargaShow({title:'Enviando correo',message:'Notificando al ciudadano…',pct:40});
+    const optsInt=wf.comunicacion_interna===true?{interna:true,comunicacionInterna:true}:(wf.comunicacion_interna===false?{interna:false}:{});
+    if(typeof sstCargaShow==='function')sstCargaShow({title:'Enviando correo',message:optsInt.interna?'Enviando comunicación interna…':'Notificando al ciudadano…',pct:40});
     const docsAdj=wf.documentos||[];
     const tAct=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
-    const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+escAttr(cuerpo)+'</p>');
+    const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,optsInt):('<p>'+escAttr(cuerpo)+'</p>');
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){notif('No hay envío de correo disponible','err');return false;}
     let sent=null;
     try{
