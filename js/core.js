@@ -20023,6 +20023,20 @@ function taskRespPuedeEditarCorreoEntrega(t,e){
     ||(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t));
 }
 window.taskRespPuedeEditarCorreoEntrega=taskRespPuedeEditarCorreoEntrega;
+/** «Entrega enviada» (trámite / libre): entrega por correo sin documento principal → abrir ✉️ al entrar. */
+function taskReviewRespEntregaAbrirCorreo(expId,t,e){
+  if(!t)return false;
+  const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))&&!taskPqrsActividadPosCierre(t,e);
+  if(esPqrs)return false;
+  if(!taskEntregaCorreoCtx(expId,t,e)||!taskRespPuedeEditarCorreoEntrega(t,e))return false;
+  return !(t.soportes||[]).some(function(s){
+    if(!s||s.activo===false)return false;
+    if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return false;
+    if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
+    return !!(s.url||s.preview||s.driveLink||s.driveFileId||s.fileId||s.data);
+  });
+}
+window.taskReviewRespEntregaAbrirCorreo=taskReviewRespEntregaAbrirCorreo;
 function renderRespEntregaCorreoSideHtml(expId,taskId,t,e,c){
   let h='<div class="task-review-side-scroll task-review-pqrs-correo">';
   h+='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Correo de su entrega</div>';
@@ -23394,6 +23408,8 @@ function openTaskCommentsModal(expId,taskId,opts){
           if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel(savedSideMode,expId,taskId);
         }else if(isRespVerCorr||isRespVerEntregaPendiente){
           if(isRespVerEntregaPendiente&&e&&typeof taskReviewShouldShowPqrsCorreo==='function'&&taskReviewShouldShowPqrsCorreo(e,t))
+            taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
+          else if(isRespVerEntregaPendiente&&typeof taskReviewRespEntregaAbrirCorreo==='function'&&taskReviewRespEntregaAbrirCorreo(refAct,t,e))
             taskReviewOpenSidePanel('pqrsCorreo',expId,taskId);
           else taskReviewCloseSidePanel();
         }else if(isPqrsOrigenView||isRespVerAtendida||isRespVerPorNotificar){
