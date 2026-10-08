@@ -22473,6 +22473,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
         if(typeof renderActividades==='function')renderActividades();
       }else{
         closeTaskModal();
+        if(typeof renderActividades==='function')renderActividades();
         if(window._conPanelEditMode&&document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on')&&window._conPanelActive===expId){
           renderConSidePanel();
         }else if(editId===expId){
@@ -31879,10 +31880,12 @@ async function ncaAprobarInformativa(expId){
   await _pqrsLimpiarDocumentosTrasCierre(e,getPqrsWorkflow(e));
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'informativa_aprobada',fecha:fechaResp,nota:'NCA aprobó respuesta informativa'+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+  if(tLibInfo&&tLibInfo.id)_ncaMarcarTaskRevisadaAprobada(expId,tLibInfo.id,{fecha:fechaResp,nota:'Aprobada — respuesta informativa',marcarAtendida:true,por:cerradoPor,reportadoPor:wf.entregado_por||''});
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
+  if(typeof renderActividades==='function')renderActividades();
   notif('ℹ️ Respuesta informativa aprobada — PQRSD cerrada sin enviar correo al ciudadano','ok');
 }
 
@@ -31925,12 +31928,14 @@ async function ncaAprobarCanalFisico(expId){
   await _pqrsLimpiarDocumentosTrasCierre(e,getPqrsWorkflow(e));
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({tipo:'revision_nca_canal_fisico',fecha:fechaResp,nota:'NCA aprobó respuesta con notificación '+canal+(d.comentario?' — '+d.comentario:''),oficina:'guaviare',por:cerradoPor});
+  if(tLibCan&&tLibCan.id)_ncaMarcarTaskRevisadaAprobada(expId,tLibCan.id,{fecha:fechaResp,nota:'Aprobada — notificación '+canal,marcarAtendida:true,por:cerradoPor,reportadoPor:wf.entregado_por||''});
   persistExpedienteGranular(e);
   // Notificar al ciudadano por correo que fue respondida (si tiene email)
   _pqrsNotificarCierreCiudadano(e,{canal,cuerpo:d.cuerpo||wf.cuerpo});
   closeTaskModal();
   renderPqrsOficinaInbox();
   renderSecretariaPqrs();
+  if(typeof renderActividades==='function')renderActividades();
   notif('✅ PQRSD cerrada — notificación física aprobada','ok');
 }
 
