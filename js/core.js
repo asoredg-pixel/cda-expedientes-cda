@@ -9523,6 +9523,28 @@ async function resolverCuentaEmisoraSoporteEnvio(e,t,opts){
   return correoEmisorSoporteEnvio(opts,e,t);
 }
 window.resolverCuentaEmisoraSoporteEnvio=resolverCuentaEmisoraSoporteEnvio;
+/** El cuerpo ya trae su propio cierre (Atentamente / Cordialmente…) en las últimas líneas. */
+function pdfCuerpoTieneCierre(cuerpo){
+  const lines=String(cuerpo||'').split('\n').map(function(l){return l.trim();}).filter(Boolean).slice(-4);
+  return lines.some(function(l){return /^(atentamente|cordialmente|cordial saludo|saludos cordiales|reciba un cordial saludo)\b/i.test(l);});
+}
+/** Cierre amable tras el cuerpo del correo en soportes de notificación: Atentamente, firma y Dirección Seccional Guaviare. */
+function pdfWriteCierreAmable(doc,y,margin,lineH){
+  const bottom=typeof cdaPdfContentBottomY==='function'?cdaPdfContentBottomY(doc,margin):(doc.internal.pageSize.getHeight()-margin);
+  if(y+lineH*2+40+lineH*2>bottom){doc.addPage();y=margin;}
+  y+=lineH;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);
+  doc.text('Atentamente,',margin,y);
+  y+=40;
+  doc.text('_____________________________',margin,y);
+  y+=lineH;
+  doc.setFont('helvetica','bold');
+  doc.text('Dirección Seccional Guaviare',margin,y);
+  doc.setFont('helvetica','normal');
+  return y+lineH;
+}
+window.pdfCuerpoTieneCierre=pdfCuerpoTieneCierre;
+window.pdfWriteCierreAmable=pdfWriteCierreAmable;
 async function generarPdfSoporteNotificacionActividad(e,t,opts){
   const jsPDFCtor=(window.jspdf&&window.jspdf.jsPDF)||window.jsPDF||null;
   if(!jsPDFCtor)return null;
@@ -9587,6 +9609,7 @@ async function generarPdfSoporteNotificacionActividad(e,t,opts){
     if(typeof _pdfWriteCuerpoSolicitud==='function')y=_pdfWriteCuerpoSolicitud(doc,cuerpoPrint,margin,y,maxW,lineH,margin);
     else if(typeof _pdfWriteLines==='function')y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoPrint,maxW),margin,y,lineH,pageH,margin);
     else{doc.text(doc.splitTextToSize(cuerpoPrint,maxW),margin,y);y+=lineH;}
+    if(!pdfCuerpoTieneCierre(cuerpoPrint))y=pdfWriteCierreAmable(doc,y,margin,lineH);
   }
   // Documentos / anexos enviados (mismos que en el correo como enlace Drive)
   let docsEnv=Array.isArray(opts.documentos)?opts.documentos:(Array.isArray(opts.docs)?opts.docs:null);
@@ -33655,6 +33678,7 @@ async function generarPdfRespuestaPqrs(e,opts){
     const cuerpoPrint=typeof sstPdfPlainForPrint==='function'?sstPdfPlainForPrint(cuerpoText):cuerpoText;
     if(typeof _pdfWriteCuerpoSolicitud==='function')y=_pdfWriteCuerpoSolicitud(doc,cuerpoPrint,margin,y,maxW,lineH,margin);
     else y=_pdfWriteLines(doc,doc.splitTextToSize(cuerpoPrint,maxW),margin,y,lineH,pageH,margin);
+    if(esCorreo&&!pdfCuerpoTieneCierre(cuerpoPrint))y=pdfWriteCierreAmable(doc,y,margin,lineH);
   }
   let docs=Array.isArray(opts.documentos)?opts.documentos:null;
   if(!docs||!docs.length){
