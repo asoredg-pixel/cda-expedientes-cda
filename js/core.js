@@ -34078,8 +34078,9 @@ function collectDocsParaNotificacionCorreo(e,t){
     const sops=typeof soportesVisiblesParaVista==='function'
       ?soportesVisiblesParaVista(t,{soloAprobados:true})
       :(t.soportes||[]).filter(function(s){return s&&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s));});
-    const mains=sops.filter(function(s){return s&&!s.excluido_notif&&!soporteEsAnexoEntrega(s);});
-    const anex=sops.filter(function(s){return s&&!s.excluido_notif&&soporteEsAnexoEntrega(s);});
+    const esRad=function(s){return typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s);};
+    const mains=sops.filter(function(s){return s&&!s.excluido_notif&&!esRad(s)&&!soporteEsAnexoEntrega(s);});
+    const anex=sops.filter(function(s){return s&&!s.excluido_notif&&!esRad(s)&&soporteEsAnexoEntrega(s);});
     // Preferir PDF firmado / por notificar / aprobado
     const firm=mains.filter(function(s){
       const est=String(s.driveEstado||'').toLowerCase();
