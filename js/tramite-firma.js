@@ -2233,15 +2233,12 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
       '</div></div>';
   }
 
-  // PQRSD y actividades sin expediente: igual que el encargado NCA — comunicación interna sin botón de consulta ciudadana
+  // Igual que el encargado NCA: comunicación interna sin botón de consulta ciudadana (PQRSD, trámites y libres)
   const internaDef=!!(e&&e._pqrs_interna)||!!(wf.comunicacion_interna||wf.traslado_interno||wf.notif_interna);
-  const muestraInterna=esPqrs||!!(t&&t.sinExpediente)
-    ||!!(e&&!e._sin_expediente&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
-  const internaChk=muestraInterna
-    ?('<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
-      '<input type="checkbox" id="tramite-atajo-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-      '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>')
-    :'';
+  const internaChk=
+    '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
+    '<input type="checkbox" id="tramite-atajo-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>';
   const emailBlock=
     sugAtajo+
     internaChk+

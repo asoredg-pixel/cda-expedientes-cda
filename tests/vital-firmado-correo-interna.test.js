@@ -64,9 +64,18 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
       .toContain('id="tramite-atajo-notif-interna" checked')
   })
 
-  it('trámite con expediente: no aparece', () => {
+  it('trámite con expediente: también aparece (desmarcada)', () => {
     const h = ctxRender(false, {}, { _exp: 'E1' })('E1', 't1', { id: 't1' })
-    expect(h).not.toContain('tramite-atajo-notif-interna')
+    expect(h).toContain('id="tramite-atajo-notif-interna"')
+    expect(h).not.toContain('id="tramite-atajo-notif-interna" checked')
+  })
+
+  it('VITAL en la ventana compacta de Por firmar (standalone) la ve en «Notificar por correo ahora»', () => {
+    const h = ctxRender(true, {}, { _exp: 'P1' })('P1', 't1', { id: 't1' }, { standalone: true })
+    const iChk = h.indexOf('tramite-atajo-notif-interna')
+    expect(iChk).toBeGreaterThan(-1)
+    expect(iChk).toBeGreaterThan(h.indexOf('Notificar por correo ahora'))
+    expect(iChk).toBeLessThan(h.indexOf('tramite-atajo-email-to'))
   })
 
   it('actividad sin expediente: aparece (desmarcada por defecto)', () => {
