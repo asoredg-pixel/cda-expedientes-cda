@@ -977,6 +977,9 @@ function renderTaskReviewNotificarSideHtml(expId,taskId,t){
     '<div class="fld" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px">Documento notificado<span class="req-star">*</span></label>'+
     '<div class="sst-file-pick-row" style="margin-top:4px">'+pickDoc+'</div></div>'+
     '</div>'+
+    (enviaDirecto&&typeof htmlTerminoCumplBlock==='function'
+      ?htmlTerminoCumplBlock(e&&!e._sin_expediente?e:null,t,{inicio:(typeof hoy==='function'?hoy():''),inicioInputId:'tramite-notif-fecha'})
+      :'')+
     '<button type="button" class="btn bsm bp" id="tramite-notif-btn" style="width:100%" onclick="submitTramiteNotificar(\''+escAttr(refId)+'\',\''+escAttr(taskId)+'\')">✅ Reportar como notificado</button>'+
     '</div>';
 }
@@ -989,6 +992,11 @@ function initTaskReviewNotificarSide(expId,taskId){
     sstFileStagingReset('tramite-notif-soporte:'+refId+':'+taskId);
   }
   if(typeof sstFileInitPick==='function')sstFileInitPick('tramite-notif-doc-file');
+  const fNotifEl=document.getElementById('tramite-notif-fecha');
+  if(fNotifEl&&document.getElementById('term-cumpl-box')&&typeof syncTerminoCumplUi==='function'){
+    fNotifEl.addEventListener('change',syncTerminoCumplUi);
+    syncTerminoCumplUi();
+  }
 }
 window.renderTaskReviewNotificarSideHtml=renderTaskReviewNotificarSideHtml;
 window.initTaskReviewNotificarSide=initTaskReviewNotificarSide;

@@ -103,11 +103,15 @@ function terminoCumplDefaults(e,t){
  * opts.inicio: fecha desde la que corre el término (YYYY-MM-DD).
  * opts.inicioInputId: input de fecha de notificación (si está visible, prima sobre opts.inicio).
  * opts.inicioLbl: texto de origen de la fecha.
+ * opts.marcado / opts.dias: valores ya diligenciados (priman sobre los guardados).
+ * opts.nota: texto de ayuda bajo el título.
  */
 function htmlTerminoCumplBlock(e,t,opts){
   opts=opts||{};
   if(!t||reqActividadExcluida(e,t))return'';
   const d=terminoCumplDefaults(e,t);
+  if(typeof opts.marcado==='boolean'&&!d.obligatorio)d.marcado=opts.marcado;
+  if(opts.dias!==undefined&&String(opts.dias).trim()!=='')d.dias=String(opts.dias).trim();
   const inicio=String(opts.inicio||reqHoy()).slice(0,10);
   const inp='width:90px;padding:6px;border:1px solid var(--bd);border-radius:var(--r)';
   const chk=d.obligatorio
@@ -117,6 +121,7 @@ function htmlTerminoCumplBlock(e,t,opts){
       '<span>Otorga término para cumplir <span style="font-weight:400;color:var(--tx3)">(requerimiento u obligación del interesado)</span></span></label>';
   return '<div id="term-cumpl-box" data-obligatorio="'+(d.obligatorio?'1':'0')+'" data-inicio="'+escAttr(inicio)+'" data-inicio-input="'+escAttr(opts.inicioInputId||'')+'" style="margin:10px 0;padding:10px;border:1px solid var(--bd);border-left:3px solid var(--or);border-radius:var(--r);background:var(--sf)">'+
     '<div style="font-size:12px;font-weight:600;color:var(--or);margin-bottom:6px">⏱️ Término para cumplir</div>'+
+    (opts.nota?'<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">'+opts.nota+'</div>':'')+
     chk+
     '<div id="term-cumpl-fields" style="'+(d.obligatorio||d.marcado?'':'display:none')+'">'+
     '<div class="fx" style="gap:8px;align-items:center;flex-wrap:wrap">'+
