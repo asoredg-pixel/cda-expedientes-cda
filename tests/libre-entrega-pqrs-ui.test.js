@@ -109,7 +109,7 @@ describe('Entrega de actividad libre NCA con panel PQRSD', () => {
 
   it('panel de entrega, envío y aprobación conectados', () => {
     const panel = extraer(core, ['renderEnviarPanelHtml'])
-    expect(panel).toContain("renderPqrsEntregaCamposHtml(libreEntregaPqrsStubExp(t),{modo:'responsable',libreTask:t,libreCtx:ctxLibre})")
+    expect(panel).toContain("renderPqrsEntregaCamposHtml(libreEntregaPqrsStubExp(t,eExp),{modo:'responsable',libreTask:t,libreCtx:ctxLibre})")
     expect(panel).toContain('if(!sol&&!esPqrsEntrega&&!librePqrsUi){')
     const campos = extraer(core, ['renderPqrsEntregaCamposHtml'])
     expect(campos).toContain('id="pqrs-entrega-libre"')
