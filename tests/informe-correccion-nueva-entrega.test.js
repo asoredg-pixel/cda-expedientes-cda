@@ -107,4 +107,11 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     expect(extraer(core, ['initEnviarArchivosPick'])).toContain('informeCorreccionPrecargar(expId,taskId)')
     expect(extraer(core, ['renderEnviarPanelHtml'])).toContain('h+=htmlInformeCorreccionResumen(t);')
   })
+
+  it('al subir un soporte nuevo no se borran de Drive los archivos anteriores del informe', () => {
+    const sub = extraer(core, ['submitEnviarSoporteVerificacion'])
+    const purgas = sub.split('\n').filter(l => l.includes('await drivePurgeTaskInstitutionalSoportes(t)'))
+    expect(purgas.length).toBe(1)
+    expect(purgas[0]).toContain('&&!esPqrs&&!t.informeContrato)')
+  })
 })

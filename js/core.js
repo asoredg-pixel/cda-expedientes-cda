@@ -18384,7 +18384,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
             await purgePqrsRevisionDocsForReplace(e,t);
         }
         // PQRSD: no borrar versiones anteriores en Drive — se conservan para comparar con la nueva entrega
-        if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs)await drivePurgeTaskInstitutionalSoportes(t);
+        // Informes: la corrección reutiliza archivos de la entrega anterior; solo se borra lo que el contratista quita (🗑)
+        if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs&&!t.informeContrato)await drivePurgeTaskInstitutionalSoportes(t);
         const uploaded=[];
         let anexoSeq=0;
         const hasExplicitMain=allUpload.some(function(x){return x&&!x.esAnexo;})||preUploaded.some(function(u){return u&&!u.esAnexo;});
