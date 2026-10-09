@@ -855,6 +855,11 @@ function getInstructoresOficina(oficinaId){
 }
 function getEncargadoOficina(oficinaId){
   oficinaId=oficinaId||deptoActivo;
+  if(oficinaId!=='guaviare'){
+    const eg=typeof encargadosGlobal!=='undefined'&&encargadosGlobal&&(oficinaId==='secretaria'?encargadosGlobal.secretaria:(encargadosGlobal.oficinas&&encargadosGlobal.oficinas[oficinaId]));
+    const nomEg=String((eg&&eg.nombre)||'').trim();
+    if(nomEg)return nomEg;
+  }
   const ins=getInstructoresCfg('guaviare').find(i=>i.activo!==false&&i.rol==='encargado_oficina'&&(i.oficinas||[]).includes(oficinaId));
   if(ins)return ins.nombre;
   if(oficinaId==='guaviare'){
