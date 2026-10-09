@@ -27018,10 +27018,26 @@ function renderActRowToolbarHtml(t,expAct){
   return acts;
 }
 
+/** Informe de contrato de la fila (la fila puede ser una copia sin el campo). */
+function actInformeContratoDe(t){
+  if(!t)return null;
+  if(t.informeContrato)return t.informeContrato;
+  const live=typeof getTaskAny==='function'?getTaskAny(t.exp||t.codigo,t.id):null;
+  return (live&&live.informeContrato)||null;
+}
+function actInformeContratoRefTxt(t){
+  const ic=actInformeContratoDe(t);
+  return ic?'Informe de actividades N° '+(parseInt(ic.n,10)||1):'';
+}
+/** Informes de contrato: máxima prioridad en Por revisar / Por corregir (orden estable). */
+function ordenarInformesContratoPrimero(list){
+  const arr=list||[];
+  return arr.filter(function(t){return !!actInformeContratoDe(t);}).concat(arr.filter(function(t){return !actInformeContratoDe(t);}));
+}
 function actRefCellHtml(t){
   const expId=String(t.exp||'').trim();
   const taskId=String(t.id||'').trim();
-  const refTxt=t.sinExpediente?String(t.codigo||t.exp||'').trim():String(t.exp||'').trim();
+  const refTxt=actInformeContratoRefTxt(t)||(t.sinExpediente?String(t.codigo||t.exp||'').trim():String(t.exp||'').trim());
   const inner='<span class="act-ref-link">'+escAttr(refTxt)+'</span>';
   // Responsable / Director: la Ref. no abre consulta (evita manito sin acción); usan 🔍 en acciones
   if(esModoResponsable()||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())){
@@ -27202,7 +27218,7 @@ function exportarActividadesExcel(){
   hdr.push('Vence','Cierre / reporte');
   const rows=list.map(t=>{
     const rev=deptView?getTaskRevisionDepto(t):null;
-    const r=[estadoTaskLabel(t),t.exp||t.codigo||'',t.tram||'',t.nombre||'',t.desc||t.actividad||''];
+    const r=[estadoTaskLabel(t),actInformeContratoRefTxt(t)||t.exp||t.codigo||'',t.tram||'',t.nombre||'',t.desc||t.actividad||''];
     if(deptView)r.push(taskResponsablesLabel(t,false));
     if(colNotif)r.push(typeof actNotificadorPorLabel==='function'?actNotificadorPorLabel(t,false):'');
     if(deptView)r.push(rev?(rev.tipo==='aprobada'?'Aprobada':'Enviada a corregir'):'');
@@ -29447,6 +29463,7 @@ function renderActividades(){
     ):
     (filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados'?sortTasksPorFirma(list):
     (filtroAct==='done'?sortTasksAtendidas(list):sortTasksByUrgency(list)))));
+  if(filtroAct==='porver'||filtroAct==='porcorr')list=ordenarInformesContratoPrimero(list);
   window._actExportList=list;
   if(btnExp)btnExp.style.display='';
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
