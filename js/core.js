@@ -16859,6 +16859,14 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           es_proyeccion:!esAnexo,
           anexo_n:esAnexo?(archivoOpt.anexo_n||null):null
         });
+        if(archivoOpt.informeAct){
+          const ia={n:archivoOpt.informeAct.n,nombre:String(archivoOpt.informeAct.nombre||'')};
+          t.soportes[t.soportes.length-1].informe_act=ia;
+          if(t.informeContrato){
+            if(!Array.isArray(t.informeContrato.actividades))t.informeContrato.actividades=[];
+            if(!t.informeContrato.actividades.some(function(x){return x&&String(x.n)===String(ia.n);}))t.informeContrato.actividades.push(ia);
+          }
+        }
         t.historial.push({tipo:'soporte',fecha:hoy(),version,url:archivoOpt.driveLink,por:rep,reportadoPor:rep,nota:esAnexo?'Anexo Drive':'Documento principal Drive'});
         return;
       }
@@ -18095,6 +18103,15 @@ window.entregaModalOmiteComentarioEnvio=entregaModalOmiteComentarioEnvio;
 function submitEnviarSoporteVerificacion(expId,taskId){
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   let adj=collectEnviarAdjuntos();
+  const eInf=getExpById(expId);
+  const tInf=(eInf?getTaskFromExp(eInf,taskId):null)||(typeof getActLibreById==='function'?getActLibreById(taskId):null);
+  if(tInf&&tInf.informeContrato){
+    if(!(adj.files||[]).length){notif('Cargue el informe (documento principal)','err');return;}
+    if((adj.anexos||[]).some(function(a){return a&&!a.informeAct;})){
+      notif('Cada soporte debe indicar su actividad: quítelo y cárguelo de nuevo con «📎 Soportes +»','err');
+      return;
+    }
+  }
   // Si solo hay anexos (sin Documento principal), el primero pasa a documento de la entrega
   if(typeof _entregaPromoverAnexoAPrincipal==='function')adj=_entregaPromoverAnexoAPrincipal(adj);
   if(typeof entregaValidarAdjuntoPorReferencia==='function'&&!entregaValidarAdjuntoPorReferencia(adj))return;
@@ -18356,6 +18373,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         const uploaded=[];
         let anexoSeq=0;
         const hasExplicitMain=allUpload.some(function(x){return x&&!x.esAnexo;});
+        const infSopK={};
         for(let i=0;i<allUpload.length;i++){
           const f=allUpload[i];
           let pref=f.nombre;
@@ -18363,6 +18381,14 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           if(asAnexo){
             anexoSeq++;
             pref='anexo-'+anexoSeq+'-'+(f.nombre||'doc');
+          }
+          const infAct=asAnexo&&t&&t.informeContrato&&f.informeAct?f.informeAct:null;
+          let infOpts;
+          if(infAct){
+            const kn=String(infAct.n);
+            if(infSopK[kn]==null)infSopK[kn]=(t.soportes||[]).filter(function(s){return s&&s.informe_act&&String(s.informe_act.n)===kn;}).length;
+            infSopK[kn]++;
+            infOpts={esAnexo:true,informeAct:infAct,informeSoporteK:infSopK[kn]};
           }
           if(typeof sstCargaProgress==='function'){
             sstCargaProgress(Math.round((i/total)*90), 'Subiendo «'+(f.nombre||'archivo')+'» ('+(i+1)+' de '+total+')…');
@@ -18376,7 +18402,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
                 anexoN:asAnexo?anexoSeq:null,
                 driveName:undefined
               })
-            :await driveUploadExpedienteActividad(f.blob,pref,f.tipo,eDrive,t,rep,'revision');
+            :await driveUploadExpedienteActividad(f.blob,pref,f.tipo,eDrive,t,rep,'revision',infOpts);
           if(up){
             if(!up.driveFileId&&up.fileId)up.driveFileId=up.fileId;
             if(!up.driveFilename&&up.nombre)up.driveFilename=up.nombre;
@@ -18389,6 +18415,11 @@ function submitEnviarSoporteVerificacion(expId,taskId){
               up.anexo_n=anexoSeq;
               up.nombre='Anexo '+anexoSeq;
               up.labelAnexo='Anexo '+anexoSeq;
+              if(infAct){
+                up.informeAct={n:infAct.n,nombre:infAct.nombre};
+                up.labelAnexo='Act '+infAct.n+' — '+infAct.nombre+' · soporte '+infOpts.informeSoporteK;
+                up.nombre=up.labelAnexo;
+              }
             }else{
               up.nombre=up.nombre||'Proyección de respuesta';
               up.labelProyeccion='Proyección de respuesta';
@@ -18736,14 +18767,16 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
       const envCtx=typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):('enviar-soporte:'+expId+':'+taskId);
       h+='<div class="fld" style="margin-bottom:10px">'+
         '<div class="sst-file-pick-row">'+
-          '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
-          '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
+          '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">'+(t&&t.informeContrato?'📄 Cargar informe':'📎 Seleccionar archivo')+'</button>'+
+          (t&&t.informeContrato
+            ?'<button type="button" class="btn bsm" onclick="entregaInformeElegirActividad(\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">📎 Soportes +</button>'
+            :'<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>')+
           '<input type="file" id="enviar-adj-file" style="display:none" onchange="sstFileOnPickByInputId(this)">'+
           '<input type="file" id="enviar-anexos-file" multiple style="display:none" onchange="sstFileOnPickByInputId(this)">'+
         '</div>'+
-        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
+        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">'+(t&&t.informeContrato?'Informe':'Principal')+'</div>'+
         '<div id="enviar-adj-file-list" class="sst-file-slot-list"></div>'+
-        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Anexos</div>'+
+        '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">'+(t&&t.informeContrato?'Soportes por actividad':'Anexos')+'</div>'+
         '<div id="enviar-anexos-list" class="sst-file-slot-list"></div>'+
       '</div>';
     }

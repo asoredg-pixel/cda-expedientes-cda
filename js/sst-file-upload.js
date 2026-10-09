@@ -97,7 +97,9 @@ function sstFileRenderItemRow(it, ctxKey, listId) {
     : '';
   const delBtn = '<button type="button" class="btn bsm bic act-ico bd2" onclick="sstFileRemove(\'' + jsStr(ctxKey) + '\',\'' + jsStr(it.id) + '\',\'' + jsStr(listId) + '\')" title="Quitar archivo">🗑</button>';
   return '<div class="sst-file-row' + (st === 'error' ? ' is-err' : '') + (st === 'uploading' ? ' is-uploading' : '') + '" data-sst-file-id="' + escAttr(it.id) + '">' +
-    '<span class="sst-file-row-name" title="' + escAttr(it.nombre) + '">📎 ' + escAttr(it.nombre) + '</span>' +
+    '<span class="sst-file-row-name" title="' + escAttr(it.nombre) + '">📎 ' +
+      (it.informeAct ? '<strong>Act ' + escAttr(String(it.informeAct.n)) + ' — ' + escAttr(it.informeAct.nombre) + ':</strong> ' : '') +
+      escAttr(it.nombre) + '</span>' +
     statusHtml +
     '<div class="sst-file-row-actions">' + previewBtn + delBtn + '</div>' +
     '</div>';
@@ -391,10 +393,20 @@ function sstFileOnAnexosPick(inputEl, opts) {
     });
     ctx.anexos = [];
   }
+  // Soporte de informe de contrato: actividad elegida justo antes de abrir el selector
+  const informeAct = window._informeActPendiente || null;
+  window._informeActPendiente = null;
   files.forEach(function (f) {
     if (typeof archivoPermitidoEnviar === 'function' && !archivoPermitidoEnviar(f)) return;
-    ctx.anexos.push(sstFileNewItem(f, { esAnexo: true }));
+    const it = sstFileNewItem(f, { esAnexo: true });
+    if (informeAct) it.informeAct = informeAct;
+    ctx.anexos.push(it);
   });
+  if (informeAct) {
+    ctx.anexos.sort(function (a, b) {
+      return ((a && a.informeAct && parseInt(a.informeAct.n, 10)) || 0) - ((b && b.informeAct && parseInt(b.informeAct.n, 10)) || 0);
+    });
+  }
   if (inputEl) inputEl.value = '';
   sstFileRefreshCtxLists(ctxKey, listId);
   if (files.length && typeof opts.getUploadCtx === 'function') {
@@ -427,6 +439,7 @@ function sstFileCollect(ctxKey) {
     }
     if (!it.blob) return;
     const row = { blob: it.blob, nombre: it.nombre, tipo: it.tipo, esAnexo: !!asAnexo };
+    if (it.informeAct) row.informeAct = it.informeAct;
     if (asAnexo) anexos.push(row);
     else files.push(row);
   }
@@ -539,6 +552,8 @@ function sstFileUploadCtxForExpTask(expId, taskId) {
     let t = e && taskId && typeof getTaskFromExp === 'function' ? getTaskFromExp(e, taskId) : null;
     if (!t && typeof getActLibreById === 'function') t = getActLibreById(taskId);
     if (!t && typeof getActLibreByCodigo === 'function') t = getActLibreByCodigo(expId);
+    // Informe de contrato: la carpeta/nombre dependen de la actividad del soporte → se sube al enviar
+    if (t && t.informeContrato) return null;
     if (t && t.sinExpediente) {
       const cod = t.codigo || expId;
       const depto = t.depto || (typeof getDeptoOperativo === 'function' ? getDeptoOperativo() : 'guaviare');

@@ -76,11 +76,13 @@ describe('Entrega de informes de contrato', () => {
     expect(c.validarInformeContrato(Object.assign({}, ok, { desde: '2026-04-01' }), contratos)).toMatch(/inválido/)
   })
 
-  it('carpeta Drive: Contratos/<año>/Contrato <N°>/Informe N (periodo)', () => {
+  it('carpeta Drive: Contratos/<año>/<N° CONTRATISTA>/Informe N (periodo)', () => {
     const c = createContext({})
     runInContext(extraer(gmail, ['driveContratoInformeFolderNames']), c)
-    const n = c.driveContratoInformeFolderNames({ numero: '045/2026', inicio: '2026-02-10', anio: '2026', n: 2, desde: '2026-03-01', hasta: '2026-03-31' })
-    expect(n).toEqual({ anio: '2026', contrato: 'Contrato 045-2026', informe: 'Informe 2 (01-03-2026 a 31-03-2026)' })
+    const n = c.driveContratoInformeFolderNames({ numero: '045/2026', contratista: 'Ana Pérez', inicio: '2026-02-10', anio: '2026', n: 2, desde: '2026-03-01', hasta: '2026-03-31' })
+    expect(n.anio).toBe('2026')
+    expect(n.contrato).toBe('045-2026 ANA PÉREZ')
+    expect(n.informe).toBe('Informe 2 (01-03-2026 a 31-03-2026)')
     const fn = extraer(gmail, ['driveEnsureExpedienteFolder'])
     expect(fn).toContain('if (e._contrato_informe) {')
     expect(fn.indexOf('e._contrato_informe')).toBeLessThan(fn.indexOf('DRIVE_ROOT_EXPEDIENTES_ID'))

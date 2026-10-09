@@ -582,6 +582,7 @@ function collectEntregaInforme(){
   const inicio=gv('entrega-inf-inicio');
   return{
     numero:gv('entrega-inf-numero'),
+    contratista:String(responsableActivo||'').trim(),
     inicio:inicio,
     fin:gv('entrega-inf-fin'),
     anio:inicio.slice(0,4),
@@ -620,6 +621,8 @@ function syncEntregaInformeModoUi(informe){
   }
   setTxt('entrega-resp-btn-main',informe?'📄 Cargar informe':'📎 Seleccionar archivo');
   setTxt('entrega-resp-btn-anexos',informe?'📎 Soportes +':'Anexos +');
+  const btnAnx=document.getElementById('entrega-resp-btn-anexos');
+  if(btnAnx)btnAnx.setAttribute('onclick',informe?'entregaInformeElegirActividad()':'sstFilePickAnexosBtn()');
   setTxt('entrega-resp-lbl-main',informe?'Informe':'Principal');
   setTxt('entrega-resp-lbl-anexos',informe?'Soportes del contrato / actividades':'Anexos');
 }
@@ -663,6 +666,89 @@ function ensureTaskInformeContrato(){
   window._pendingActLibreEntrega={id:t.id,codigo:t.codigo,t:t};
   return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
 }
+/** Actividades del contrato (N° y nombre) ya usadas en soportes de informes anteriores. */
+function informeActividadesDeContrato(lista,resp,numero){
+  const rn=agendaNorm(resp),nn=agendaNorm(numero);
+  const map={};
+  const add=function(a){
+    const n=parseInt(a&&a.n,10);
+    if(!n||map[n])return;
+    map[n]={n:n,nombre:String(a.nombre||'').trim()};
+  };
+  (lista||[]).forEach(function(t){
+    if(!t||t.eliminada||!t.informeContrato)return;
+    if(agendaNorm(t.responsable)!==rn||agendaNorm(t.informeContrato.numero)!==nn)return;
+    (t.informeContrato.actividades||[]).forEach(add);
+    (t.soportes||[]).forEach(function(s){if(s&&s.informe_act)add(s.informe_act);});
+  });
+  return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return a.n-b.n;});
+}
+/** Ventana: ¿a qué actividad del contrato corresponde el soporte? Luego abre el selector de archivos. */
+function entregaInformeElegirActividad(expId,taskId){
+  window._informeActPendiente=null;
+  let numero='',resp=responsableActivo||'';
+  if(taskId){
+    const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+    if(t&&t.informeContrato){numero=t.informeContrato.numero;resp=t.responsable||resp;}
+  }else{
+    numero=String((document.getElementById('entrega-inf-numero')||{}).value||'').trim();
+  }
+  if(!numero){notif('Indique primero el N° de contrato','err');return;}
+  window._informeActsSesion=window._informeActsSesion||{};
+  const ses=window._informeActsSesion[agendaNorm(numero)]||[];
+  const acts=informeActividadesDeContrato(typeof actividadesLibres!=='undefined'?actividadesLibres:[],resp,numero);
+  ses.forEach(function(a){if(!acts.some(function(x){return x.n===a.n;}))acts.push(a);});
+  acts.sort(function(a,b){return a.n-b.n;});
+  window._informeActsElegibles=acts;
+  let ov=document.getElementById('informe-act-overlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='informe-act-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(ov);
+  }
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const opts=acts.map(function(a,i){return'<option value="'+i+'">Act '+a.n+' — '+escAttr(a.nombre)+'</option>';}).join('')+
+    '<option value="__nueva__"'+(acts.length?'':' selected')+'>➕ Nueva actividad</option>';
+  ov.innerHTML='<div style="background:var(--sf,#fff);color:var(--tx);border-radius:10px;max-width:440px;width:100%;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">'+
+    '<div style="font-size:14px;font-weight:700;margin-bottom:4px">📎 Soporte de actividad</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">¿A qué actividad del contrato N° '+escAttr(numero)+' corresponde el soporte?</div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><select id="informe-act-sel" style="'+inp+'" onchange="document.getElementById(\'informe-act-nueva\').style.display=this.value===\'__nueva__\'?\'\':\'none\'">'+opts+'</select></div>'+
+    '<div id="informe-act-nueva" class="fg" style="'+(acts.length?'display:none;':'')+'margin-bottom:8px">'+
+      '<div class="fld"><label>N° de actividad</label><input type="number" min="1" step="1" id="informe-act-n" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Nombre de la actividad</label><input type="text" id="informe-act-nombre" placeholder="Como figura en el contrato" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div class="fx" style="gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button type="button" class="btn bsm" onclick="document.getElementById(\'informe-act-overlay\').style.display=\'none\'">Cancelar</button>'+
+      '<button type="button" class="btn bsm bp" onclick="entregaInformeConfirmarActividad(\''+escAttr(jsStr(numero))+'\')">Elegir archivos</button>'+
+    '</div></div>';
+  ov.style.display='flex';
+}
+function entregaInformeConfirmarActividad(numero){
+  const v=String((document.getElementById('informe-act-sel')||{}).value||'');
+  const acts=window._informeActsElegibles||[];
+  let act=null;
+  if(v==='__nueva__'){
+    const n=parseInt(String((document.getElementById('informe-act-n')||{}).value||''),10);
+    const nombre=String((document.getElementById('informe-act-nombre')||{}).value||'').trim();
+    if(!(n>=1)){notif('Indique el N° de la actividad','err');return;}
+    if(!nombre){notif('Indique el nombre de la actividad','err');return;}
+    if(acts.some(function(a){return a.n===n;})){notif('La actividad '+n+' ya existe: elíjala en la lista','err');return;}
+    act={n:n,nombre:nombre};
+    const k=agendaNorm(numero);
+    window._informeActsSesion=window._informeActsSesion||{};
+    (window._informeActsSesion[k]=window._informeActsSesion[k]||[]).push(act);
+  }else{
+    act=acts[parseInt(v,10)]||null;
+  }
+  if(!act)return;
+  window._informeActPendiente={n:act.n,nombre:act.nombre};
+  const ov=document.getElementById('informe-act-overlay');
+  if(ov)ov.style.display='none';
+  if(typeof sstFilePickAnexosBtn==='function')sstFilePickAnexosBtn();
+}
+window.entregaInformeElegirActividad=entregaInformeElegirActividad;
+window.entregaInformeConfirmarActividad=entregaInformeConfirmarActividad;
 /** Máximos configurados por el administrador (null = sin límite). */
 function getCriteriosInformes(){
   const c=(typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.criteriosInformes)||{};
@@ -3572,6 +3658,10 @@ function submitEntregaResponsable(){
   const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
   if(!entregaValidarAdjuntoPorReferencia(adj))return;
   if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar())return;
+  if(entregaRespEsInforme()&&(adj.anexos||[]).some(function(a){return a&&!a.informeAct;})){
+    notif('Cada soporte debe indicar su actividad: quítelo y cárguelo de nuevo con «📎 Soportes +»','err');
+    return;
+  }
   if(entregaRespEsInforme()&&!((adj.files&&adj.files.length)||(adj.preUploaded||[]).some(function(u){return u&&!u.esAnexo;}))){
     notif('Cargue el informe (documento principal)','err');
     return;

@@ -1951,6 +1951,8 @@ function _driveEsGuaviare() {
 // Expedientes Guaviare (excluye Guainía y Vaupés).
 function _driveExpedienteEsGuaviare(e) {
   if (!_driveEsGuaviare()) return false;
+  // Informes de contrato van a Recursos, sin importar el departamento
+  if (e && e._contrato_informe) return true;
   const d = e && e._depto ? String(e._depto).trim().toLowerCase() : '';
   if (d === 'guainia' || d === 'vaupes') return false;
   return true;
@@ -2198,18 +2200,39 @@ async function driveEnsureExpedienteFolder(e) {
   return { folderId: folderId, folderLink: folderLink };
 }
 
-/** Nombres de carpeta Recursos/Contratos/<año>/Contrato <N°>/Informe N (periodo). */
-function driveContratoInformeFolderNames(inf) {
+/** Recursos/Contratos/<año>/<N° CONTRATISTA>/Informe N (periodo)/Soportes Informe N/Act n - nombre. */
+function driveContratoInformeFolderNames(inf, act) {
   inf = inf || {};
   const limpio = function (s) { return String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim(); };
   const dmy = function (iso) { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : limpio(iso); };
   const anio = String(inf.anio || String(inf.inicio || '').slice(0, 4) || new Date().getFullYear());
   const per = (inf.desde || inf.hasta) ? ' (' + dmy(inf.desde) + ' a ' + dmy(inf.hasta) + ')' : '';
+  const nInf = parseInt(inf.n, 10) || 1;
+  const contratista = limpio(inf.contratista).toUpperCase();
   return {
     anio: anio,
-    contrato: 'Contrato ' + limpio(inf.numero),
-    informe: 'Informe ' + (parseInt(inf.n, 10) || 1) + per
+    contrato: limpio(inf.numero) + (contratista ? ' ' + contratista : ''),
+    informe: 'Informe ' + nInf + per,
+    soportes: 'Soportes Informe ' + nInf,
+    actividad: act ? limpio('Act ' + (parseInt(act.n, 10) || 1) + ' - ' + String(act.nombre || '')).slice(0, 120) : ''
   };
+}
+/** «Informe 1 - 234 MARCELA CHARA.pdf» (V2… si es corrección) · «Act1 soporte 2 - 234 MARCELA CHARA.pdf». */
+function driveContratoInformeFilename(inf, task, origName, opts) {
+  opts = opts || {};
+  const n = driveContratoInformeFolderNames(inf);
+  const ext = _driveFileExt(origName, 'pdf');
+  if (opts.informeAct) {
+    const k = parseInt(opts.informeSoporteK, 10) || 1;
+    return _driveNombreArchivoPlano('Act' + (parseInt(opts.informeAct.n, 10) || 1) + ' soporte ' + k + ' - ' + n.contrato + '.' + ext);
+  }
+  const entN = _driveEntregaNExp(task, null);
+  return _driveNombreArchivoPlano('Informe ' + (parseInt(inf.n, 10) || 1) + ' - ' + n.contrato + (entN > 1 ? ' V' + entN : '') + '.' + ext);
+}
+async function driveEnsureContratoInformeActFolder(token, informeFolderId, inf, act) {
+  const nombres = driveContratoInformeFolderNames(inf, act);
+  const sopId = await _driveEnsureFolder(token, nombres.soportes, informeFolderId);
+  return await _driveEnsureFolder(token, nombres.actividad, sopId);
 }
 
 async function driveEnsureContratoInformeFolder(inf, token) {
@@ -2536,6 +2559,8 @@ window.driveResolveDestFolderActLibreVinculo = driveResolveDestFolderActLibreVin
 async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, responsable, opts) {
   opts = opts || {};
   if (!soporte || soporte.driveInstitutional === false) return false;
+  // Informes de contrato: nombres fijos (no «aprobado…» / «por corregir…»)
+  if (task && task.informeContrato) return false;
   if (typeof esSoporteEnvioCorreoItem === 'function' && esSoporteEnvioCorreoItem(soporte)) return false;
   const fid = String(soporte.driveFileId || soporte.fileId || '').trim();
   if (!fid) return false;
@@ -2581,10 +2606,15 @@ async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task,
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
   const folder = await driveEnsureExpedienteFolder(e);
+  const infC = e && e._contrato_informe;
+  let parentId = folder.folderId;
+  if (infC && opts.informeAct) parentId = await driveEnsureContratoInformeActFolder(token, folder.folderId, infC, opts.informeAct);
   let filename;
   if (opts.keepName || opts.keepOrigName) {
     filename = _driveSafeFileName(origName, 180);
     if (!/\.[a-zA-Z0-9]{1,8}$/.test(filename)) filename += '.' + _driveFileExt(origName, 'pdf');
+  } else if (infC) {
+    filename = driveContratoInformeFilename(infC, task, origName, opts);
   } else {
     filename = buildExpedienteDriveFilename(estado || 'revision', e, task, responsable, origName, {
       esAnexo: !!(opts.esAnexo || opts.es_anexo),
@@ -2593,7 +2623,7 @@ async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task,
     });
   }
   const form = new FormData();
-  const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [folder.folderId] };
+  const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [parentId] };
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
   form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType }));
   const up = await fetch(DRIVE_UPLOAD_URL, {
