@@ -23317,7 +23317,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     &&!pqrsPendRevVista
     &&!(isDeptVerDoc&&typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,e));
   if(isPqrsOrigenView&&!opts.keepStack)window._pqrsOrigenSelDoc='';
-  if(forceSoloAprobados&&e&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
+  if((forceSoloAprobados||(verRevisado&&enPorFirmarOpen))&&e&&typeof ensurePqrsSoportesAprobadosOnTask==='function')
     ensurePqrsSoportesAprobadosOnTask(t,e);
   const forceRevisarEntrega=!!opts.revisarEntrega||verRevisado;
   const directorRevisarPorFirmar=!!opts.directorRevisarPorFirmar;
