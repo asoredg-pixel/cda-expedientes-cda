@@ -10166,6 +10166,7 @@ function initEnviarArchivosPick(expId,taskId,lists){
     sstFileRenderList(mainList,envCtx);
     sstFileRenderList(anexosList,envCtx);
   }
+  if(!lists&&typeof informeCorreccionPrecargar==='function')informeCorreccionPrecargar(expId,taskId);
 }
 const LIBRE_ENTREGA_PQRS_LISTS={main:'pqrs-entrega-att-list',anexos:'pqrs-entrega-anexos-list'};
 function renderTaskReviewEntregaSideHtml(expId,taskId,t){
@@ -16791,6 +16792,11 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
             s.version_historial=true;
             if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
           });
+          // Archivo de la entrega devuelta que se conserva (informes): no dejarlo como «por corregir» (se borraría de Drive al aprobar)
+          const reusados=new Set(archivos.map(function(a){return String((a&&(a.driveFileId||a.fileId))||'');}).filter(Boolean));
+          if(reusados.size)t.soportes=(t.soportes||[]).filter(function(s){
+            return !s||!soporteEsPorCorregir(s)||!reusados.has(String(s.driveFileId||s.fileId||''));
+          });
         }else if(esReemplazoPqrsVerificar&&esWfTaskPqrs){
           const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
           if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
@@ -18114,7 +18120,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
   const eInf=getExpById(expId);
   const tInf=(eInf?getTaskFromExp(eInf,taskId):null)||(typeof getActLibreById==='function'?getActLibreById(taskId):null);
   if(tInf&&tInf.informeContrato){
-    if(!(adj.files||[]).length){notif('Cargue el informe (documento principal)','err');return;}
+    const infPre=(adj.preUploaded||[]).some(function(u){return u&&!u.esAnexo&&!u.informeAct;});
+    if(!(adj.files||[]).length&&!infPre){notif('Cargue el informe (documento principal)','err');return;}
     if((adj.anexos||[]).some(function(a){return a&&!a.informeAct;})){
       notif('Cada soporte debe indicar su actividad: quítelo y cárguelo de nuevo con «📎 Soportes +»','err');
       return;
@@ -18380,7 +18387,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         if(t&&typeof drivePurgeTaskInstitutionalSoportes==='function'&&!esPqrs)await drivePurgeTaskInstitutionalSoportes(t);
         const uploaded=[];
         let anexoSeq=0;
-        const hasExplicitMain=allUpload.some(function(x){return x&&!x.esAnexo;});
+        const hasExplicitMain=allUpload.some(function(x){return x&&!x.esAnexo;})||preUploaded.some(function(u){return u&&!u.esAnexo;});
         const infSopK={};
         for(let i=0;i<allUpload.length;i++){
           const f=allUpload[i];
@@ -18759,7 +18766,9 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
     }
     const notifPrev=!!(t&&(t.notifCorreoEntrega||(t.firmaWf&&(t.firmaWf.notif_correo_entrega||t.firmaWf.canal==='correo'||t.firmaWf.canal===(typeof PQRS_WF_CANAL!=='undefined'?PQRS_WF_CANAL.CORREO:'')))));
     // Oficio de requerimiento incluye su propio checkbox + campos de correo
-    if(!(typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(actNom))
+    if(t&&t.informeContrato){
+      if(typeof htmlInformeCorreccionResumen==='function')h+=htmlInformeCorreccionResumen(t);
+    }else if(!(typeof esActividadOficioRequerimiento==='function'&&esActividadOficioRequerimiento(actNom))
       &&typeof htmlEntregaNotifCorreoCheck==='function')
       h+=htmlEntregaNotifCorreoCheck({checked:notifPrev,e:eExp,t:t,actividad:actNom,sinExpediente:!!(t&&t.sinExpediente)});
   }

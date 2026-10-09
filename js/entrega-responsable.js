@@ -988,6 +988,77 @@ window.guardarBorradorInforme=guardarBorradorInforme;
 window.descartarBorradorInforme=descartarBorradorInforme;
 window.informeBorradorOnQuitar=informeBorradorOnQuitar;
 window.informeBorradorCerrarTrasEntrega=informeBorradorCerrarTrasEntrega;
+// ── Corrección de informe (Por corregir): la nueva entrega parte de los archivos de la última entrega ──
+function informeCorreccionAplica(t){
+  return !!(t&&t.informeContrato&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir');
+}
+function htmlInformeCorreccionResumen(t){
+  const ic=(t&&t.informeContrato)||{};
+  return'<div style="padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2);margin-bottom:10px">'+
+    '<div style="font-size:12px;font-weight:700;margin-bottom:4px">📑 Informe de contrato</div>'+
+    '<div style="font-size:12px">Contrato N° <strong>'+escAttr(String(ic.numero||''))+'</strong> · Informe N° <strong>'+escAttr(String(ic.n||''))+'</strong> · Periodo '+fmtF(ic.desde)+' a '+fmtF(ic.hasta)+'</div>'+
+    (informeCorreccionAplica(t)
+      ?'<div style="font-size:11px;color:var(--tx3);margin-top:6px">Se cargaron los archivos de la última entrega. Quite (🗑) los que deba corregir —se eliminan de Drive—, '+
+        'agregue soportes con «📎 Soportes +» o reemplace el informe con «📄 Cargar informe», y pulse Enviar nueva entrega.</div>'
+      :'')+
+  '</div>';
+}
+/** Ítem de staging «ya en Drive» a partir de un soporte de la entrega devuelta. */
+function informeCorreccionItem(s,expId,taskId){
+  const fid=String(s.driveFileId||s.fileId||'');
+  const link=String(s.driveLink||s.url||'');
+  const prev=String(s.previewLink||s.preview||link);
+  const fname=String(s.driveFilename||'');
+  const base={fileId:fid,driveFileId:fid,driveLink:link,previewLink:prev,driveFilename:fname,driveEstado:'revision',driveInstitutional:true};
+  const it={
+    id:'sf_c_'+fid,blob:null,blobUrl:'',tipo:s.mime||'',state:'uploaded',pct:100,
+    driveFileId:fid,driveLink:link,previewLink:prev,driveFilename:fname,error:'',
+    corrPrev:{expId:expId,taskId:taskId,soporteId:s.id||''}
+  };
+  if(s.informe_act){
+    const act={n:parseInt(s.informe_act.n,10)||0,nombre:String(s.informe_act.nombre||'')};
+    const m=String(s.label||'').match(/soporte (\d+)/i)||fname.match(/soporte (\d+)/i);
+    const k=m?parseInt(m[1],10):1;
+    const lbl='Act '+act.n+' — '+act.nombre+' · soporte '+k;
+    return Object.assign(it,{nombre:fname||('soporte '+k),esAnexo:true,informeAct:act,informeSoporteK:k,
+      uploaded:Object.assign(base,{nombre:lbl,labelAnexo:lbl,informeAct:act,informeSoporteK:k,tipo:'anexo_respuesta',es_anexo:true,anexo_n:s.anexo_n||null})});
+  }
+  return Object.assign(it,{nombre:fname||'Informe',esAnexo:false,
+    uploaded:Object.assign(base,{nombre:'Documento principal',labelPrincipal:'Documento principal',tipo:'drive'})});
+}
+/** Precarga informe y soportes de la entrega devuelta en la ventana de nueva entrega. */
+function informeCorreccionPrecargar(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!informeCorreccionAplica(t)||typeof sstFileStagingCtx!=='function'||typeof sstFileEnviarCtxKey!=='function')return;
+  const ck=sstFileEnviarCtxKey(expId,taskId);
+  const ctx=sstFileStagingCtx(ck);
+  const ult=(typeof getSoportesUltimaEntrega==='function'?getSoportesUltimaEntrega(t):[]).filter(function(s){
+    return s&&(s.driveFileId||s.fileId)&&s.tipo!=='soporte_notificacion'&&s.tipo!=='soporte_respuesta';
+  });
+  ult.forEach(function(s){
+    const it=informeCorreccionItem(s,expId,taskId);
+    if(it.informeAct)ctx.anexos.push(it);
+    else if(!ctx.main)ctx.main=it;
+  });
+  ctx.anexos.sort(function(x,y){
+    const ax=(x&&x.informeAct&&parseInt(x.informeAct.n,10))||0,ay=(y&&y.informeAct&&parseInt(y.informeAct.n,10))||0;
+    return ax-ay||((x&&x.informeSoporteK)||0)-((y&&y.informeSoporteK)||0);
+  });
+  if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,'enviar-anexos-list');
+}
+/** Archivo de la entrega devuelta quitado (ya eliminado de Drive): sale también del registro de la actividad. */
+function informeCorreccionOnQuitar(it){
+  const c=it&&it.corrPrev;
+  const fid=String((it&&it.driveFileId)||'');
+  if(!c||!fid||typeof mutateTask!=='function')return;
+  mutateTask(c.expId,c.taskId,function(t){
+    t.soportes=(t.soportes||[]).filter(function(s){return !s||String(s.driveFileId||s.fileId||'')!==fid;});
+  });
+}
+window.informeCorreccionAplica=informeCorreccionAplica;
+window.htmlInformeCorreccionResumen=htmlInformeCorreccionResumen;
+window.informeCorreccionPrecargar=informeCorreccionPrecargar;
+window.informeCorreccionOnQuitar=informeCorreccionOnQuitar;
 /** Máximos configurados por el administrador (null = sin límite). */
 function getCriteriosInformes(){
   const c=(typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.criteriosInformes)||{};

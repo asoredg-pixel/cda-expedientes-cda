@@ -198,6 +198,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (!hit || !hit.item) return;
   const it = hit.item;
   if (it.borrador && !confirm('¿Quitar este soporte del borrador? Se eliminará de Drive.')) return;
+  if (it.corrPrev && !confirm('¿Quitar «' + (it.nombre || 'archivo') + '» de la entrega anterior? Se eliminará de Drive.')) return;
   if (it.driveFileId && typeof driveDeleteInstitutional === 'function') {
     try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
       console.warn('sstFileRemove drive:', err);
@@ -222,6 +223,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (hit.slot === 'anexos' && inpAnex) inpAnex.value = '';
   sstFileRefreshCtxLists(ctxKey, listId);
   if (it.borrador && typeof informeBorradorOnQuitar === 'function') informeBorradorOnQuitar();
+  if (it.corrPrev && typeof informeCorreccionOnQuitar === 'function') informeCorreccionOnQuitar(it);
 }
 
 async function sstFileUploadItem(it, uploadCtx, onPct) {
@@ -356,10 +358,16 @@ function sstFileOnMainPick(inputEl, opts) {
   const ctx = sstFileStagingCtx(ctxKey);
   if (ctx.main) {
     const old = ctx.main;
+    // Informe de la entrega devuelta: solo se reemplaza con archivo elegido y confirmación
+    if (old.corrPrev && (!f || !confirm('¿Reemplazar el informe de la entrega anterior? Se eliminará de Drive.'))) {
+      if (inputEl) inputEl.value = '';
+      return;
+    }
     if (old.driveFileId && typeof driveDeleteInstitutional === 'function') {
       driveDeleteInstitutional(old.driveFileId).catch(function () {});
     }
     if (old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}
+    if (old.corrPrev && typeof informeCorreccionOnQuitar === 'function') informeCorreccionOnQuitar(old);
   }
   if (!f) {
     ctx.main = null;
