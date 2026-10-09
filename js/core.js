@@ -9525,7 +9525,8 @@ async function resolverCuentaEmisoraSoporteEnvio(e,t,opts){
 window.resolverCuentaEmisoraSoporteEnvio=resolverCuentaEmisoraSoporteEnvio;
 /** El cuerpo ya trae su propio cierre (Atentamente / Cordialmente…) en las últimas líneas. */
 function pdfCuerpoTieneCierre(cuerpo){
-  const lines=String(cuerpo||'').split('\n').map(function(l){return l.trim();}).filter(Boolean).slice(-4);
+  // La primera línea es el saludo («Cordial saludo,»), no el cierre.
+  const lines=String(cuerpo||'').split('\n').map(function(l){return l.trim();}).filter(Boolean).slice(1).slice(-4);
   return lines.some(function(l){return /^(atentamente|cordialmente|cordial saludo|saludos cordiales|reciba un cordial saludo)\b/i.test(l);});
 }
 /** Cierre amable tras el cuerpo del correo en soportes de notificación: Atentamente, firma y Dirección Seccional Guaviare. */
