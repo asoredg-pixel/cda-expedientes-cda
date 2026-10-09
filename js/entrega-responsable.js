@@ -421,11 +421,14 @@ function syncEntregaRespModoUi(){
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
+  const informe=entregaRespEsInforme();
   if(libre){
     const deptoLibre=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
     const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
     window._entregaLibreCodigoPreview=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
   }else window._entregaLibreCodigoPreview='';
+  syncEntregaInformeModoUi(informe);
+  if(informe)return;
   if(typeof sstFileTryUpload==='function'){
     sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-file-list',entregaRespFileUploadCtx);
     sstFileTryUpload(entregaRespFileCtxKey(),'entrega-resp-anexos-list',entregaRespFileUploadCtx);
@@ -463,7 +466,207 @@ function syncEntregaRespModoUi(){
   }
 }
 
+// ── Entrega de informes de contrato ─────────────────────────────────────────
+function entregaRespEsInforme(){
+  return !!((document.getElementById('entrega-resp-modo-informe')||{}).checked);
+}
+function getCorreoInformesContrato(){
+  return String((typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.contratosInformesCorreo)||'').trim();
+}
+function informeIsoAddDays(iso,n){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m)return'';
+  const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]+(n||0)));
+  return d.toISOString().slice(0,10);
+}
+function informeFinDeMes(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})/);
+  if(!m)return'';
+  return new Date(Date.UTC(+m[1],+m[2],0)).toISOString().slice(0,10);
+}
+/** Siguiente N° de informe y periodo sugerido: desde el día siguiente al último periodo (o inicio) hasta fin de mes, sin pasar el fin del contrato. */
+function informeContratoSiguiente(informes,inicio,fin){
+  const arr=(informes||[]).filter(Boolean);
+  const n=arr.reduce(function(m,x){return Math.max(m,parseInt(x.n,10)||0);},0)+1;
+  const ultHasta=arr.map(function(x){return String(x.hasta||'');}).filter(Boolean).sort().pop()||'';
+  let desde=ultHasta?informeIsoAddDays(ultHasta,1):String(inicio||'');
+  if(fin&&desde&&desde>fin)desde=String(fin);
+  let hasta=desde?informeFinDeMes(desde):'';
+  if(fin&&hasta&&hasta>fin)hasta=String(fin);
+  return{n:n,desde:desde,hasta:hasta};
+}
+/** Contratos del responsable deducidos de sus informes ya entregados. */
+function informeContratosDeResponsable(lista,resp){
+  const rn=agendaNorm(resp);
+  const map={};
+  (lista||[]).forEach(function(t){
+    if(!t||t.eliminada||!t.informeContrato)return;
+    if(agendaNorm(t.responsable)!==rn)return;
+    const ic=t.informeContrato;
+    const k=String(ic.numero||'').trim();
+    if(!k)return;
+    const c=map[k]||(map[k]={numero:k,inicio:ic.inicio||'',fin:ic.fin||'',informes:[]});
+    c.informes.push({n:ic.n,desde:ic.desde||'',hasta:ic.hasta||'',taskId:t.id});
+  });
+  return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return String(b.inicio).localeCompare(String(a.inicio));});
+}
+function validarInformeContrato(d,contratos){
+  if(!d||!d.numero)return'Indique el N° de contrato';
+  if(!d.inicio||!d.fin)return'Indique la fecha de inicio y la fecha final del contrato';
+  if(d.inicio>d.fin)return'La fecha final del contrato no puede ser anterior a la de inicio';
+  if(!(d.n>=1))return'Indique el N° de informe';
+  if(!d.desde||!d.hasta)return'Indique el periodo del informe (desde y hasta)';
+  if(d.desde>d.hasta)return'El periodo del informe es inválido: «desde» es posterior a «hasta»';
+  if(d.desde<d.inicio||d.hasta>d.fin)return'El periodo del informe debe estar dentro de las fechas del contrato';
+  const c=(contratos||[]).find(function(x){return agendaNorm(x.numero)===agendaNorm(d.numero);});
+  if(c&&c.informes.some(function(i){return (parseInt(i.n,10)||0)===d.n;}))return'Ya entregó el informe N° '+d.n+' de este contrato';
+  return'';
+}
+function entregaInformeContratosActuales(){
+  return informeContratosDeResponsable(typeof actividadesLibres!=='undefined'?actividadesLibres:[],responsableActivo);
+}
+function htmlEntregaInformeBox(){
+  const contratos=entregaInformeContratosActuales();
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const req=' <span style="color:var(--rd)">*</span>';
+  let opts=contratos.map(function(c){
+    return'<option value="'+escAttr(c.numero)+'">Contrato '+escAttr(c.numero)+' ('+fmtF(c.inicio)+' – '+fmtF(c.fin)+')</option>';
+  }).join('');
+  opts+='<option value="__nuevo__">➕ Nuevo contrato</option>';
+  return'<div style="padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2)">'+
+    '<div style="font-size:12px;font-weight:700;margin-bottom:8px">📑 Informe de contrato</div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Contrato'+req+'</label>'+
+      '<select id="entrega-inf-contrato" style="'+inp+'" onchange="entregaInformeOnContratoChange()">'+opts+'</select></div>'+
+    '<div id="entrega-inf-nuevo-box" class="fg" style="margin-bottom:8px">'+
+      '<div class="fld"><label>N° de contrato'+req+'</label><input type="text" id="entrega-inf-numero" placeholder="Ej. 045-2026" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Fecha inicio'+req+'</label><input type="date" id="entrega-inf-inicio" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
+      '<div class="fld"><label>Fecha final'+req+'</label><input type="date" id="entrega-inf-fin" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
+    '</div>'+
+    '<div class="fg" style="margin-bottom:6px">'+
+      '<div class="fld"><label>N° de informe'+req+'</label><input type="number" min="1" step="1" id="entrega-inf-n" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Periodo desde'+req+'</label><input type="date" id="entrega-inf-desde" style="'+inp+'"></div>'+
+      '<div class="fld"><label>Periodo hasta'+req+'</label><input type="date" id="entrega-inf-hasta" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--tx3)">Cargue el informe con «📄 Cargar informe» y los soportes del contrato o de las actividades con «📎 Soportes +». '+
+      'Se guardan en Recursos › Contratos › año › N° de contrato. Queda <strong>Por revisar</strong>; al aprobarse se remite por correo a la oficina interna.</div>'+
+  '</div>';
+}
+function entregaInformeAplicarSugerencia(){
+  const v=String((document.getElementById('entrega-inf-contrato')||{}).value||'');
+  const c=entregaInformeContratosActuales().find(function(x){return x.numero===v;});
+  const inicio=String((document.getElementById('entrega-inf-inicio')||{}).value||'');
+  const fin=String((document.getElementById('entrega-inf-fin')||{}).value||'');
+  const s=informeContratoSiguiente(c?c.informes:[],inicio,fin);
+  const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
+  set('entrega-inf-n',s.n);
+  set('entrega-inf-desde',s.desde);
+  set('entrega-inf-hasta',s.hasta);
+}
+function entregaInformeOnContratoChange(){
+  const v=String((document.getElementById('entrega-inf-contrato')||{}).value||'');
+  const c=entregaInformeContratosActuales().find(function(x){return x.numero===v;});
+  const box=document.getElementById('entrega-inf-nuevo-box');
+  if(box)box.style.display=c?'none':'';
+  const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
+  set('entrega-inf-numero',c?c.numero:'');
+  set('entrega-inf-inicio',c?c.inicio:'');
+  set('entrega-inf-fin',c?c.fin:'');
+  entregaInformeAplicarSugerencia();
+}
+function collectEntregaInforme(){
+  const gv=function(id){return String((document.getElementById(id)||{}).value||'').trim();};
+  const inicio=gv('entrega-inf-inicio');
+  return{
+    numero:gv('entrega-inf-numero'),
+    inicio:inicio,
+    fin:gv('entrega-inf-fin'),
+    anio:inicio.slice(0,4),
+    n:parseInt(gv('entrega-inf-n'),10)||0,
+    desde:gv('entrega-inf-desde'),
+    hasta:gv('entrega-inf-hasta')
+  };
+}
+function syncEntregaInformeModoUi(informe){
+  const box=document.getElementById('entrega-resp-informe-box');
+  const setTxt=function(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt;};
+  if(informe){
+    ['entrega-resp-exist-box','entrega-resp-alta-box','entrega-resp-alta-pqrs-box','entrega-resp-libre-hint','entrega-resp-libre-box','entrega-resp-actividad-wrap','entrega-resp-oficio-wrap'].forEach(function(id){
+      const el=document.getElementById(id);
+      if(el)el.style.display='none';
+    });
+    ['entrega-resp-registro-box','entrega-resp-notif-correo-box','entrega-resp-pqrs-box'].forEach(function(id){
+      const el=document.getElementById(id);
+      if(el){el.style.display='none';el.innerHTML='';}
+    });
+    const tramFiles=document.getElementById('entrega-resp-tramite-files');
+    if(tramFiles){
+      if(tramFiles._tramiteFilesHtmlBackup&&!document.getElementById('entrega-resp-file-list'))tramFiles.innerHTML=tramFiles._tramiteFilesHtmlBackup;
+      tramFiles.style.display='';
+    }
+    const cmtEl=document.getElementById('enviar-cmt-opcional');
+    if(cmtEl)cmtEl.style.display='';
+    if(box){
+      if(!box.innerHTML){box.innerHTML=htmlEntregaInformeBox();entregaInformeOnContratoChange();}
+      box.style.display='';
+    }
+  }else{
+    if(box)box.style.display='none';
+    const actWrap=document.getElementById('entrega-resp-actividad-wrap');
+    if(actWrap)actWrap.style.display='';
+  }
+  setTxt('entrega-resp-btn-main',informe?'📄 Cargar informe':'📎 Seleccionar archivo');
+  setTxt('entrega-resp-btn-anexos',informe?'📎 Soportes +':'Anexos +');
+  setTxt('entrega-resp-lbl-main',informe?'Informe':'Principal');
+  setTxt('entrega-resp-lbl-anexos',informe?'Soportes del contrato / actividades':'Anexos');
+}
+/** Crea la actividad libre «Informe de contrato» del responsable (sin actividad predeterminada ni interesado). */
+function ensureTaskInformeContrato(){
+  if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
+  const inf=collectEntregaInforme();
+  const err=validarInformeContrato(inf,entregaInformeContratosActuales());
+  if(err){notif(err,'err');return null;}
+  const deptoLibre=typeof resolveDeptoActLibre==='function'
+    ?resolveDeptoActLibre()
+    :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
+  const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
+  const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
+  const per=fmtF(inf.desde)+' a '+fmtF(inf.hasta);
+  const detalle='Contrato N° '+inf.numero+' · Informe N° '+inf.n+' · Periodo '+per;
+  let t=buildTaskEntregaResponsable('Informe de contrato',detalle,responsableActivo);
+  t=typeof normalizeActLibre==='function'?normalizeActLibre(Object.assign(t,{
+    depto:deptoOk,
+    codigo:cod,
+    sinExpediente:true,
+    autoAsignadaPorResponsable:true,
+    origen:'responsable'
+  })):Object.assign(t,{depto:deptoOk,codigo:cod,sinExpediente:true});
+  t.informeContrato=inf;
+  t.notifCorreoEntrega=true;
+  t.firmaWf=Object.assign({},t.firmaWf||{},{
+    canal:'correo',
+    notif_correo_entrega:true,
+    email_to:getCorreoInformesContrato(),
+    email_subject:'Informe N° '+inf.n+' — Contrato N° '+inf.numero+' — '+responsableActivo,
+    cuerpo:'Cordial saludo,\n\nSe remite el informe N° '+inf.n+' del contrato N° '+inf.numero+', correspondiente al periodo '+per+
+      ', presentado por '+responsableActivo+', junto con sus soportes, para su conocimiento y trámite correspondiente.'
+  });
+  t.firmaWf.email_body=t.firmaWf.cuerpo;
+  if(!Array.isArray(actividadesLibres))actividadesLibres=[];
+  t._pending_fs_sync=true;
+  t._pending_fs_at=Date.now();
+  actividadesLibres.push(t);
+  if(typeof persistExpLocal==='function')persistExpLocal();
+  window._pendingActLibreEntrega={id:t.id,codigo:t.codigo,t:t};
+  return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
+}
+window.entregaRespEsInforme=entregaRespEsInforme;
+window.getCorreoInformesContrato=getCorreoInformesContrato;
+window.informeContratoSiguiente=informeContratoSiguiente;
+window.entregaInformeOnContratoChange=entregaInformeOnContratoChange;
+window.entregaInformeAplicarSugerencia=entregaInformeAplicarSugerencia;
+
 function entregaRespEsFlujoPqrs(){
+  if(entregaRespEsInforme())return false;
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   if(pqrsNuevo)return true;
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
@@ -1297,6 +1500,8 @@ function tramitesEntregaRespOptsHtml(){
 function entregaRespFileCtxKey(){return'entrega-resp';}
 function entregaRespFileUploadCtx(){return typeof resolveEntregaUploadContext==='function'?resolveEntregaUploadContext():null;}
 function resolveEntregaUploadContext(){
+  // Informe de contrato: la carpeta depende de N° contrato/informe/periodo; se sube al entregar.
+  if(entregaRespEsInforme())return null;
   const actividad=String((document.getElementById('entrega-resp-actividad')||{}).value||'').trim()||'Entrega';
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
@@ -1376,6 +1581,7 @@ function openEntregaResponsableModal(){
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="onEntregaRespModoRadioChange()"> Expediente / PQRSD</label>'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-libre" onchange="onEntregaRespModoRadioChange()"> Actividad sin expediente</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-informe" onchange="onEntregaRespModoRadioChange()"> Entrega de informes</label>'+
       '<input type="checkbox" id="entrega-resp-modo-nuevo" style="display:none" tabindex="-1" aria-hidden="true">'+
       '<input type="checkbox" id="entrega-resp-modo-pqrs" style="display:none" tabindex="-1" aria-hidden="true">'+
     '</div>'+
@@ -1404,6 +1610,7 @@ function openEntregaResponsableModal(){
     '</div>'+
     '<div id="entrega-resp-libre-hint" style="display:none"></div>'+
     '<div id="entrega-resp-libre-box" style="display:none;margin-bottom:10px">'+htmlEntregaLibreInteresadoBox()+'</div>'+
+    '<div id="entrega-resp-informe-box" style="display:none;margin-bottom:10px"></div>'+
     '<div id="entrega-resp-actividad-wrap" class="fld" style="margin-bottom:8px;margin-top:10px"><label>Actividad predeterminada <span style="color:var(--rd)">*</span></label>'+
       '<div style="position:relative">'+
         '<input type="text" id="entrega-resp-actividad" placeholder="Escriba para buscar y elija de la lista…" autocomplete="off" '+
@@ -1424,14 +1631,14 @@ function openEntregaResponsableModal(){
     '<div id="entrega-resp-tramite-files">'+
     '<div class="fld" style="margin-bottom:10px">'+
       '<div class="sst-file-pick-row">'+
-        '<button type="button" class="btn bsm" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
-        '<button type="button" class="btn bsm" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
+        '<button type="button" class="btn bsm" id="entrega-resp-btn-main" onclick="sstFilePickMainBtn()">📎 Seleccionar archivo</button>'+
+        '<button type="button" class="btn bsm" id="entrega-resp-btn-anexos" onclick="sstFilePickAnexosBtn()">Anexos +</button>'+
         '<input type="file" id="enviar-adj-file" style="display:none" onchange="entregaRespOnMainFileChange(this)">'+
         '<input type="file" id="enviar-anexos-file" multiple style="display:none" onchange="entregaRespOnAnexosFileChange(this)">'+
       '</div>'+
-      '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
+      '<div id="entrega-resp-lbl-main" style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Principal</div>'+
       '<div id="entrega-resp-file-list" class="sst-file-slot-list"></div>'+
-      '<div style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Anexos</div>'+
+      '<div id="entrega-resp-lbl-anexos" style="font-size:11px;font-weight:600;color:var(--tx3);margin-top:6px;margin-bottom:2px">Anexos</div>'+
       '<div id="entrega-resp-anexos-list" class="sst-file-slot-list"></div>'+
     '</div></div>'+
     '<input type="hidden" id="enviar-requiere-link" value="0">'+
@@ -1576,6 +1783,7 @@ function resolveActividadConceptoTipo(nombreAct,deptoId){
 function syncEntregaRespNotifCorreoUi(){
   const box=document.getElementById('entrega-resp-notif-correo-box');
   if(!box)return;
+  if(entregaRespEsInforme()){box.style.display='none';box.innerHTML='';return;}
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
   const esPqrs=pqrsNuevo||(typeof entregaRespEsFlujoPqrs==='function'&&entregaRespEsFlujoPqrs());
   if(esPqrs){box.style.display='none';box.innerHTML='';return;}
@@ -3102,6 +3310,7 @@ function crearStubExpedienteEntregaResp(opts){
 }
 
 function ensureExpTaskEntregaResponsable(){
+  if(entregaRespEsInforme())return ensureTaskInformeContrato();
   const nuevo=typeof isEntregaRespModoNuevo==='function'?isEntregaRespModoNuevo():!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   const pqrsNuevo=typeof isEntregaRespModoPqrsNuevo==='function'?isEntregaRespModoPqrsNuevo():false;
@@ -3264,6 +3473,10 @@ function submitEntregaResponsable(){
   if(!puedeEntregarComoResponsable()){notif('No puede entregar en esta sesión','err');return;}
   const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
   if(!entregaValidarAdjuntoPorReferencia(adj))return;
+  if(entregaRespEsInforme()&&!((adj.files&&adj.files.length)||(adj.preUploaded||[]).some(function(u){return u&&!u.esAnexo;}))){
+    notif('Cargue el informe (documento principal)','err');
+    return;
+  }
   const pack=ensureExpTaskEntregaResponsable();
   if(!pack)return;
   // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»

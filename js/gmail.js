@@ -2164,6 +2164,12 @@ async function driveEnsureExpedienteFolder(e) {
       folderLink: e._drive_folder_link || ('https://drive.google.com/drive/folders/' + e._drive_folder_id)
     };
   }
+  if (e._contrato_informe) {
+    const rInf = await driveEnsureContratoInformeFolder(e._contrato_informe, token);
+    e._drive_folder_id = rInf.folderId;
+    e._drive_folder_link = rInf.folderLink;
+    return rInf;
+  }
   let ref = new Date(e._fecha || e._fecha_solicitud || '');
   if (isNaN(ref.getTime())) ref = new Date();
   const anio = ref.getFullYear().toString();
@@ -2191,6 +2197,35 @@ async function driveEnsureExpedienteFolder(e) {
   e._drive_folder_link = folderLink;
   return { folderId: folderId, folderLink: folderLink };
 }
+
+/** Nombres de carpeta Recursos/Contratos/<año>/Contrato <N°>/Informe N (periodo). */
+function driveContratoInformeFolderNames(inf) {
+  inf = inf || {};
+  const limpio = function (s) { return String(s || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim(); };
+  const dmy = function (iso) { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : limpio(iso); };
+  const anio = String(inf.anio || String(inf.inicio || '').slice(0, 4) || new Date().getFullYear());
+  const per = (inf.desde || inf.hasta) ? ' (' + dmy(inf.desde) + ' a ' + dmy(inf.hasta) + ')' : '';
+  return {
+    anio: anio,
+    contrato: 'Contrato ' + limpio(inf.numero),
+    informe: 'Informe ' + (parseInt(inf.n, 10) || 1) + per
+  };
+}
+
+async function driveEnsureContratoInformeFolder(inf, token) {
+  token = token || _driveGetBestToken();
+  if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
+  if (!inf || !String(inf.numero || '').trim()) throw new Error('Falta el N° de contrato');
+  const nombres = driveContratoInformeFolderNames(inf);
+  const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+  const contratosId = await _driveEnsureFolder(token, 'Contratos', rootId);
+  const anioId = await _driveEnsureFolder(token, nombres.anio, contratosId);
+  const contratoId = await _driveEnsureFolder(token, nombres.contrato, anioId);
+  const folderId = await _driveEnsureFolder(token, nombres.informe, contratoId);
+  return { folderId: folderId, folderLink: 'https://drive.google.com/drive/folders/' + folderId };
+}
+window.driveContratoInformeFolderNames = driveContratoInformeFolderNames;
+window.driveEnsureContratoInformeFolder = driveEnsureContratoInformeFolder;
 
 async function driveRenameInstitutional(fileId, newName) {
   const token = _driveGetBestToken();

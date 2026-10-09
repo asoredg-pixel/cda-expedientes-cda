@@ -108,6 +108,7 @@ function tramiteFirmaExpCtx(t,expId){
       _sin_expediente:true,
       _pn_nombre:'(Sin expediente)',
       tasks:[t],
+      _contrato_informe:t.informeContrato||null,
       _drive_folder_id:t._drive_folder_id||'',
       _drive_folder_link:t._drive_folder_link||''
     };

@@ -8863,10 +8863,10 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
   const eid=jsStr(ref),tidJs=jsStr(taskId);
   const titAprobar=esRevFinal
     ?(typeof actividadNotifCorreoPropuesta==='function'&&actividadNotifCorreoPropuesta(t,e)?'Aprobar y notificar':'Aprobar y cerrar')
-    :'Aprobar';
+    :(t&&t.informeContrato?'Aprobar y enviar por correo':'Aprobar');
   let h='';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='aprobar'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="aprobar" title="'+titAprobar+'" onclick="taskReviewOpenDecisionPanel(\'aprobar\',\''+eid+'\',\''+tidJs+'\')">✅</button>';
-  if(!esRevFinal)
+  if(!esRevFinal&&!(t&&t.informeContrato))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-decision'+(String(window._taskReviewDecisionMode||'')==='atajoFirmado'&&window._taskReviewSideMode==='decision'?' on':'')+'" data-side="decision" data-decision-mode="atajoFirmado" title="Cargar documento" onclick="taskReviewOpenDecisionPanel(\'atajoFirmado\',\''+eid+'\',\''+tidJs+'\')">📤</button>';
   return h;
 }
@@ -9007,6 +9007,16 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
         h+=htmlTerminoCumplBlock(e,t,{inicio:(wfRf.notificacion_reportada&&wfRf.notificacion_reportada.fecha)||hoy(),inicioLbl:'la fecha de notificación reportada'});
       }
       h+='<button type="button" class="btn bsm bp" style="width:100%;background:var(--gn);border-color:var(--gn)" onclick="taskReviewConfirmarDecision(\''+eid+'\',\''+tid+'\')">✓ Aprobar y cerrar</button>';
+      h+='</div>';
+      return h;
+    }
+    if(t&&t.informeContrato){
+      const ic=t.informeContrato;
+      window._taskReviewAprobarNotificar=true;
+      h+='<div style="padding:8px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:10px;font-size:12px"><strong>📑 Informe de contrato</strong> — Contrato N° '+escAttr(ic.numero)+' · Informe N° '+escAttr(String(ic.n||''))+' · Periodo '+fmtF(ic.desde)+' a '+fmtF(ic.hasta)+'</div>';
+      h+='<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Al aprobar se envía por correo a la oficina interna (sin consulta ciudadana) y la actividad queda <strong>✓ Revisada</strong>.</p>';
+      h+=renderTaskReviewNotifEmailFieldsHtml(e,t,expId,{sinInterna:true,destDefault:typeof getCorreoInformesContrato==='function'?getCorreoInformesContrato():''});
+      h+='<button type="button" class="btn bsm bp" id="task-rev-notif-btn" style="width:100%;margin-top:10px;background:#185fa5;border-color:#185fa5" onclick="taskReviewConfirmarYNotificar(\''+eid+'\',\''+tid+'\')">📧 Aprobar y enviar por correo</button>';
       h+='</div>';
       return h;
     }
@@ -9305,9 +9315,10 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el informe de «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.';
   return 'Cordial saludo,\n\nPor medio de la presente, se remite la documentación de la actividad «'+act+'»'+refExp+' para su conocimiento y fines pertinentes.';
 }
-function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
+function renderTaskReviewNotifEmailFieldsHtml(e,t,expId,opts){
+  opts=opts||{};
   const wf=taskReviewNotifWfFuente(e,t);
-  const destWf=String(wf.email_to||'').trim();
+  const destWf=String(wf.email_to||'').trim()||String(opts.destDefault||'').trim();
   const dest=destWf||taskReviewCorreosNotificacion(e,t).join(', ');
   const emailCc=String(wf.email_cc||'').trim();
   const emailBcc=String(wf.email_bcc||'').trim();
@@ -9320,9 +9331,10 @@ function renderTaskReviewNotifEmailFieldsHtml(e,t,expId){
   return '<div id="task-rev-notif-email-wrap" style="margin-top:12px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<div style="font-size:12px;font-weight:600;margin-bottom:8px">Correo de notificación</div>'+
     sug+
+    (opts.sinInterna?'':
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="task-rev-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>'+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>')+
     '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">'+(destWf?'Datos diligenciados en la entrega (editables).':'Indique los destinatarios en Para / Cc / Cco.')+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="task-rev-notif-to" class="sst-email-chips" value="'+escAttr(dest)+'" style="width:100%;box-sizing:border-box"></div>'+
@@ -18110,6 +18122,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
     _depto:t.depto||'guaviare',
     _sin_expediente:true,
     _pn_nombre:'Sin expediente',
+    _contrato_informe:t.informeContrato||null,
     _drive_folder_id:t._drive_folder_id||'',
     _drive_folder_link:t._drive_folder_link||''
   }:null);
@@ -19043,7 +19056,7 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   const esLibre=!!t.sinExpediente||(typeof isActLibreRef==='function'&&isActLibreRef(expId,taskId));
   const e=esLibre
     ?(typeof tramiteFirmaExpCtx==='function'?tramiteFirmaExpCtx(t,expId):{
-        _exp:t.codigo||expId,_depto:t.depto||'guaviare',_sin_expediente:true,
+        _exp:t.codigo||expId,_depto:t.depto||'guaviare',_sin_expediente:true,_contrato_informe:t.informeContrato||null,
         _drive_folder_id:t._drive_folder_id||'',_drive_folder_link:t._drive_folder_link||''
       })
     :getExpById(expId);

@@ -2343,6 +2343,8 @@ async function guardarRecursosConfigDrive() {
   recursosConfig = recursosConfig || {};
   if (g) recursosConfig.guainiaDriveRoot = String(g.value || '').trim();
   if (v) recursosConfig.vaupesDriveRoot = String(v.value || '').trim();
+  const ic = document.getElementById('rec-cfg-informes-correo');
+  if (ic) recursosConfig.contratosInformesCorreo = String(ic.value || '').trim();
   const ok = await saveRecursosFirestore();
   if (ok) { notif('Configuración guardada', 'ok'); renderRecursosPanel(); if (typeof renderListasCfg === 'function') renderListasCfg(); }
   else notif('Error al guardar', 'err');
@@ -2356,7 +2358,8 @@ function recursosCfgCardBody() {
   h += '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px">Gestione enlaces y repositorios por ámbito: <strong>todo el sistema</strong> (visible para todos los roles internos), <strong>departamento</strong> (Guaviare, Guainía o Vaupés) u <strong>oficina</strong> (compartido con responsables asignados a esa oficina).</p>';
   h += '<div class="fg" style="margin-bottom:14px"><div class="fld"><label>Guainía — carpeta Drive regional</label><input type="url" id="rec-cfg-guainia" value="' + escAttr(recursosConfig.guainiaDriveRoot || '') + '" placeholder="https://drive.google.com/drive/folders/…"></div>';
   h += '<div class="fld"><label>Vaupés — carpeta Drive regional</label><input type="url" id="rec-cfg-vaupes" value="' + escAttr(recursosConfig.vaupesDriveRoot || '') + '" placeholder="https://drive.google.com/drive/folders/…"></div></div>';
-  h += '<button type="button" class="btn bsm bp" style="margin-bottom:14px" onclick="guardarRecursosConfigDrive()">Guardar carpetas regionales</button>';
+  h += '<div class="fld" style="margin-bottom:14px"><label>Correo destino de informes de contrato <span style="font-weight:400;color:var(--tx3)">(oficina interna; varios separados por coma)</span></label><input type="text" id="rec-cfg-informes-correo" value="' + escAttr(recursosConfig.contratosInformesCorreo || '') + '" placeholder="contratacion@…"></div>';
+  h += '<button type="button" class="btn bsm bp" style="margin-bottom:14px" onclick="guardarRecursosConfigDrive()">Guardar configuración</button>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
   h += '<button type="button" class="btn bsm bp" onclick="recursosCfgNuevoEnlace()">+ Enlace</button>';
   h += '<button type="button" class="btn bsm bp" onclick="recursosCfgNuevoRepo()">+ Repositorio</button>';
