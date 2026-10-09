@@ -98,6 +98,10 @@ function isEntregaRespModoPqrsNuevo(){
   return window._entregaRespCrearTipo==='pqrs'||!!((document.getElementById('entrega-resp-modo-pqrs')||{}).checked);
 }
 function onEntregaRespModoRadioChange(){
+  if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar()){
+    const ex=document.getElementById('entrega-resp-modo-existente');
+    if(ex)ex.checked=true;
+  }
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   setEntregaRespModoNuevo(false);
   if(!libre){
@@ -659,6 +663,100 @@ function ensureTaskInformeContrato(){
   window._pendingActLibreEntrega={id:t.id,codigo:t.codigo,t:t};
   return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
 }
+/** Máximos configurados por el administrador (null = sin límite). */
+function getCriteriosInformes(){
+  const c=(typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.criteriosInformes)||{};
+  const n=function(v){
+    if(v==null||v==='')return null;
+    const x=parseInt(v,10);
+    return isNaN(x)||x<0?null:x;
+  };
+  return{maxPrior:n(c.maxPrioritarias),maxUrgVenc:n(c.maxUrgVenc)};
+}
+/** Una actividad prioritaria y vencida cuenta en ambos criterios. Bloquea solo si supera el máximo. */
+function informeCriteriosEvaluar(cands,crit,esPrior,esUrgVenc){
+  const prior=[],urg=[];
+  (cands||[]).forEach(function(t){
+    if(!t||t.eliminada||t.informeContrato)return;
+    if(esPrior(t))prior.push(t);
+    if(esUrgVenc(t))urg.push(t);
+  });
+  const c=crit||{};
+  const exPrior=c.maxPrior!=null&&prior.length>c.maxPrior?prior.length-c.maxPrior:0;
+  const exUrg=c.maxUrgVenc!=null&&urg.length>c.maxUrgVenc?urg.length-c.maxUrgVenc:0;
+  return{prior:prior,urg:urg,exPrior:exPrior,exUrg:exUrg,bloquea:exPrior>0||exUrg>0};
+}
+/** Actividades del responsable en Por ejecutar, Prioritarias, Por revisar y Por corregir. */
+function informeCriteriosCandidatas(){
+  if(typeof getTareasResponsableActivo!=='function'||typeof filtrarActividadesPorEstado!=='function')return[];
+  const list=getTareasResponsableActivo();
+  let out=[];
+  ['pend','prior','porver','porcorr'].forEach(function(f){
+    try{out=mergeActividadLists(out,filtrarActividadesPorEstado(list,f));}catch(err){console.warn('criterios informe:',f,err);}
+  });
+  return out;
+}
+function informeCriteriosResponsableActual(){
+  const crit=getCriteriosInformes();
+  if(crit.maxPrior==null&&crit.maxUrgVenc==null)return{bloquea:false,prior:[],urg:[],exPrior:0,exUrg:0,crit:crit};
+  const r=informeCriteriosEvaluar(informeCriteriosCandidatas(),crit,
+    function(t){
+      return !!t.prioritaria&&!(typeof taskPrioridadMarcadoresResueltos==='function'&&taskPrioridadMarcadoresResueltos(t));
+    },
+    function(t){
+      return (typeof taskEsPrioridadCriticaVencimiento==='function'&&taskEsPrioridadCriticaVencimiento(t))
+        ||(typeof taskActividadVencida==='function'&&taskActividadVencida(t))
+        ||(typeof esNotifAsignadaVencida==='function'&&esNotifAsignadaVencida(t));
+    });
+  r.crit=crit;
+  return r;
+}
+function cerrarBloqueoInformeCriterios(){
+  const ov=document.getElementById('informe-crit-overlay');
+  if(ov)ov.style.display='none';
+}
+function mostrarBloqueoInformeCriterios(r){
+  let ov=document.getElementById('informe-crit-overlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='informe-crit-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.onclick=function(ev){if(ev.target===ov)cerrarBloqueoInformeCriterios();};
+    document.body.appendChild(ov);
+  }
+  const filas=function(arr){
+    return'<ul style="margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.5">'+arr.map(function(t){
+      const ref=t.exp||t.codigo||'';
+      const est=typeof estadoTaskLabel==='function'?estadoTaskLabel(t):(t.estado||'');
+      const v=typeof taskVenceEfectivo==='function'?(taskVenceEfectivo(t)||t.vence):t.vence;
+      return'<li><strong>'+escAttr(ref)+'</strong> — '+escAttr(t.actividad||t.desc||'Actividad')+
+        ' <span style="color:var(--tx3)">· '+escAttr(est)+(v?' · vence '+fmtF(v):'')+'</span></li>';
+    }).join('')+'</ul>';
+  };
+  const bloque=function(tit,arr,max,exceso){
+    return'<div style="margin-top:12px;padding:8px 10px;border:1px solid #f5c2c7;background:#fff5f5;border-radius:var(--r)">'+
+      '<div style="font-size:12px"><strong>'+tit+':</strong> tiene <strong>'+arr.length+'</strong> y el máximo permitido es <strong>'+max+'</strong>. '+
+      'Atienda al menos <strong>'+exceso+'</strong> para poder entregar el informe.</div>'+filas(arr)+'</div>';
+  };
+  let h='<div style="background:var(--sf,#fff);color:var(--tx);border-radius:10px;max-width:560px;width:100%;max-height:80vh;overflow:auto;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)">';
+  h+='<div style="font-size:14px;font-weight:700">⛔ Aún no puede entregar el informe</div>';
+  h+='<div style="font-size:12px;color:var(--tx2);margin-top:4px">Supera el máximo de actividades pendientes definido para entregar informes de contrato.</div>';
+  if(r.exPrior>0)h+=bloque('Prioritarias ⚡',r.prior,r.crit.maxPrior,r.exPrior);
+  if(r.exUrg>0)h+=bloque('Urgentes 🔥 y vencidas',r.urg,r.crit.maxUrgVenc,r.exUrg);
+  h+='<div style="text-align:right;margin-top:14px"><button type="button" class="btn bsm bp" onclick="cerrarBloqueoInformeCriterios()">Entendido</button></div></div>';
+  ov.innerHTML=h;
+  ov.style.display='flex';
+}
+/** true si puede entregar; si no, muestra la ventana con las actividades a atender. */
+function informeCriteriosPermiteEntregar(){
+  let r=null;
+  try{r=informeCriteriosResponsableActual();}catch(err){console.warn('criterios informe:',err);return true;}
+  if(!r||!r.bloquea)return true;
+  mostrarBloqueoInformeCriterios(r);
+  return false;
+}
+window.cerrarBloqueoInformeCriterios=cerrarBloqueoInformeCriterios;
+window.informeCriteriosPermiteEntregar=informeCriteriosPermiteEntregar;
 window.entregaRespEsInforme=entregaRespEsInforme;
 window.getCorreoInformesContrato=getCorreoInformesContrato;
 window.informeContratoSiguiente=informeContratoSiguiente;
@@ -3473,6 +3571,7 @@ function submitEntregaResponsable(){
   if(!puedeEntregarComoResponsable()){notif('No puede entregar en esta sesión','err');return;}
   const adj=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{links:[],files:[],anexos:[],preUploaded:[]};
   if(!entregaValidarAdjuntoPorReferencia(adj))return;
+  if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar())return;
   if(entregaRespEsInforme()&&!((adj.files&&adj.files.length)||(adj.preUploaded||[]).some(function(u){return u&&!u.esAnexo;}))){
     notif('Cargue el informe (documento principal)','err');
     return;

@@ -369,6 +369,7 @@ function renderListasCfg(){
       cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Modo mantenimiento','Congela la aplicación para ajustes: los funcionarios pueden entrar y consultar, pero no diligenciar ni adjuntar. Indique fecha y hora de restablecimiento.',mantenimientoCfgCardBody(),false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
+    if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Criterios informes contratistas','Máximo de actividades prioritarias y de urgentes/vencidas pendientes para poder entregar el informe de contrato.',informesCriteriosCfgCardBody(),false);
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Recursos (enlaces y biblioteca)','Enlaces externos y repositorios Drive por ámbito: sistema, departamento u oficina.',typeof recursosCfgCardBody==='function'?recursosCfgCardBody():'',false);
     html+=cfgSectionFold('Actividades predeterminadas','Opciones reutilizables al asignar o entregar actividades (con o sin expediente).',ro?cfgCardReadonlyStrings(cfg.actividadesPred||[]):actPredCardBody(),false)+
       cfgSectionFold('Tipos de concepto','Opciones al añadir conceptos en Información técnica o al entregar actividades de concepto.',ro?cfgCardReadonlyStrings(cfg.tiposConcepto||[]):tipoConceptoCardBody(),false)+
@@ -380,6 +381,38 @@ function renderListasCfg(){
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
   });
 }
+function informesCriteriosCfgCardBody(){
+  const rc=(typeof recursosConfig!=='undefined'&&recursosConfig)||{};
+  const c=rc.criteriosInformes||{};
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  return '<div class="cfcard">'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cuentan las actividades del contratista en <strong>Por ejecutar, Prioritarias, Por revisar y Por corregir</strong>. Si supera un máximo, no puede entregar el informe hasta atender las necesarias. Deje vacío para no aplicar ese criterio.</p>'+
+    '<div class="fg" style="margin-bottom:10px">'+
+    '<div class="fld"><label for="cfg-inf-max-prior">Máximo de prioritarias ⚡</label><input type="number" min="0" step="1" id="cfg-inf-max-prior" value="'+escAttr(c.maxPrioritarias!=null?String(c.maxPrioritarias):'')+'" placeholder="Ej. 3" style="'+inp+'"></div>'+
+    '<div class="fld"><label for="cfg-inf-max-urgvenc">Máximo entre urgentes 🔥 y vencidas</label><input type="number" min="0" step="1" id="cfg-inf-max-urgvenc" value="'+escAttr(c.maxUrgVenc!=null?String(c.maxUrgVenc):'')+'" placeholder="Ej. 5" style="'+inp+'"></div>'+
+    '</div>'+
+    '<div class="fld" style="margin-bottom:12px"><label for="cfg-inf-correo">Correo destino <span style="font-weight:400;color:var(--tx3)">(opcional: precarga el «Para» al aprobar; si se deja vacío, el encargado lo escribe)</span></label><input type="text" id="cfg-inf-correo" value="'+escAttr(rc.contratosInformesCorreo||'')+'" placeholder="contratacion@…" style="'+inp+'"></div>'+
+    '<button type="button" class="btn bsm bp" onclick="guardarInformesCriteriosCfg()">Guardar criterios</button>'+
+  '</div>';
+}
+async function guardarInformesCriteriosCfg(){
+  if(!(esAdministrador()||esAdminFirestore())){notif('Solo el administrador puede cambiar estos criterios','err');return;}
+  const num=function(id){
+    const s=String((document.getElementById(id)||{}).value||'').trim();
+    if(s==='')return null;
+    const n=parseInt(s,10);
+    return isNaN(n)||n<0?NaN:n;
+  };
+  const maxP=num('cfg-inf-max-prior'),maxU=num('cfg-inf-max-urgvenc');
+  if(Number.isNaN(maxP)||Number.isNaN(maxU)){notif('Los máximos deben ser números enteros (0 o más)','err');return;}
+  recursosConfig=recursosConfig||{};
+  recursosConfig.criteriosInformes={maxPrioritarias:maxP,maxUrgVenc:maxU};
+  recursosConfig.contratosInformesCorreo=String((document.getElementById('cfg-inf-correo')||{}).value||'').trim();
+  const ok=typeof saveRecursosFirestore==='function'?await saveRecursosFirestore():false;
+  if(ok){notif('Criterios de informes guardados','ok');renderListasCfg();}
+  else notif('Error al guardar','err');
+}
+window.guardarInformesCriteriosCfg=guardarInformesCriteriosCfg;
 function _mantDtLocalValue(iso){
   const s=String(iso||'').trim();
   if(!s)return'';
