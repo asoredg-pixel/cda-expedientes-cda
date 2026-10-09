@@ -72,8 +72,10 @@ describe('Criterios informes contratistas', () => {
     expect(c.informeCriteriosEvaluar(lista, { maxPrior: null, maxUrgVenc: null }, esPrior, esUrg).bloquea).toBe(false)
   })
 
-  it('se valida al elegir «Entrega de informes» y al entregar', () => {
-    expect(extraer(er, ['onEntregaRespModoRadioChange'])).toContain('if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar()){')
+  it('al elegir «Entrega de informes» solo avisa (permite borrador); al entregar bloquea', () => {
+    const f = extraer(er, ['onEntregaRespModoRadioChange'])
+    expect(f).toContain('if(entregaRespEsInforme())informeCriteriosPermiteEntregar();')
+    expect(f).not.toContain("ex.checked=true")
     expect(extraer(er, ['submitEntregaResponsable'])).toContain('if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar())return;')
     expect(extraer(er, ['informeCriteriosCandidatas'])).toContain("['pend','prior','porver','porcorr']")
   })

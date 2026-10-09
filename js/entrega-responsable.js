@@ -98,10 +98,8 @@ function isEntregaRespModoPqrsNuevo(){
   return window._entregaRespCrearTipo==='pqrs'||!!((document.getElementById('entrega-resp-modo-pqrs')||{}).checked);
 }
 function onEntregaRespModoRadioChange(){
-  if(entregaRespEsInforme()&&!informeCriteriosPermiteEntregar()){
-    const ex=document.getElementById('entrega-resp-modo-existente');
-    if(ex)ex.checked=true;
-  }
+  // Si supera criterios solo se avisa: puede guardar borrador; el bloqueo aplica al Entregar
+  if(entregaRespEsInforme())informeCriteriosPermiteEntregar();
   const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
   setEntregaRespModoNuevo(false);
   if(!libre){
@@ -527,7 +525,11 @@ function validarInformeContrato(d,contratos){
   return'';
 }
 function entregaInformeContratosActuales(){
-  return informeContratosDeResponsable(typeof actividadesLibres!=='undefined'?actividadesLibres:[],responsableActivo);
+  const list=informeContratosDeResponsable(typeof actividadesLibres!=='undefined'?actividadesLibres:[],responsableActivo);
+  informeBorradoresDeResponsable(window._informesBorradores,responsableActivo).forEach(function(b){
+    if(!list.some(function(c){return agendaNorm(c.numero)===agendaNorm(b.numero);}))list.push({numero:b.numero,inicio:b.inicio||'',fin:b.fin||'',informes:[]});
+  });
+  return list;
 }
 function htmlEntregaInformeBox(){
   const contratos=entregaInformeContratosActuales();
@@ -551,7 +553,9 @@ function htmlEntregaInformeBox(){
       '<div class="fld"><label>Periodo desde'+req+'</label><input type="date" id="entrega-inf-desde" style="'+inp+'"></div>'+
       '<div class="fld"><label>Periodo hasta'+req+'</label><input type="date" id="entrega-inf-hasta" style="'+inp+'"></div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--tx3)">Cargue el informe con «📄 Cargar informe» y los soportes del contrato o de las actividades con «📎 Soportes +». '+
+    '<div id="entrega-inf-borrador"></div>'+
+    '<div style="font-size:11px;color:var(--tx3)">Cargue los soportes de las actividades con «📎 Soportes +» y guárdelos con «💾 Guardar borrador» a medida que avanza. '+
+      'Cuando tenga todo, adjunte el informe con «📄 Cargar informe» y pulse Entregar. '+
       'Se guardan en Recursos › Contratos › año › N° de contrato. Queda <strong>Por revisar</strong>; al aprobarse se remite por correo a la oficina interna.</div>'+
   '</div>';
 }
@@ -576,6 +580,7 @@ function entregaInformeOnContratoChange(){
   set('entrega-inf-inicio',c?c.inicio:'');
   set('entrega-inf-fin',c?c.fin:'');
   entregaInformeAplicarSugerencia();
+  informeBorradorAplicarUi();
 }
 function collectEntregaInforme(){
   const gv=function(id){return String((document.getElementById(id)||{}).value||'').trim();};
@@ -611,14 +616,29 @@ function syncEntregaInformeModoUi(informe){
     const cmtEl=document.getElementById('enviar-cmt-opcional');
     if(cmtEl)cmtEl.style.display='';
     if(box){
-      if(!box.innerHTML){box.innerHTML=htmlEntregaInformeBox();entregaInformeOnContratoChange();}
+      if(!box.innerHTML){
+        box.innerHTML=htmlEntregaInformeBox();
+        entregaInformeOnContratoChange();
+        informeBorradorFetchAll().then(function(){
+          if(!entregaRespEsInforme())return;
+          const sel=document.getElementById('entrega-inf-contrato');
+          const faltan=!!sel&&entregaInformeContratosActuales().some(function(c){
+            return !Array.from(sel.options).some(function(o){return o.value===c.numero;});
+          });
+          if(faltan){box.innerHTML=htmlEntregaInformeBox();entregaInformeOnContratoChange();}
+          else informeBorradorAplicarUi();
+        });
+      }else informeBorradorAplicarUi();
       box.style.display='';
     }
   }else{
     if(box)box.style.display='none';
     const actWrap=document.getElementById('entrega-resp-actividad-wrap');
     if(actWrap)actWrap.style.display='';
+    informeBorradorQuitarDeStaging();
   }
+  const btnBor=document.getElementById('entrega-resp-btn-borrador');
+  if(btnBor)btnBor.style.display=informe?'':'none';
   setTxt('entrega-resp-btn-main',informe?'📄 Cargar informe':'📎 Seleccionar archivo');
   setTxt('entrega-resp-btn-anexos',informe?'📎 Soportes +':'Anexos +');
   const btnAnx=document.getElementById('entrega-resp-btn-anexos');
@@ -695,7 +715,8 @@ function entregaInformeElegirActividad(expId,taskId){
   }
   if(!numero){notif('Indique primero el N° de contrato','err');return;}
   window._informeActsSesion=window._informeActsSesion||{};
-  const ses=window._informeActsSesion[agendaNorm(numero)]||[];
+  const bor=taskId?null:informeBorradorActual();
+  const ses=(window._informeActsSesion[agendaNorm(numero)]||[]).concat(((bor&&bor.soportes)||[]).filter(function(s){return s&&s.informeAct;}).map(function(s){return{n:parseInt(s.informeAct.n,10)||0,nombre:String(s.informeAct.nombre||'')};}));
   const acts=informeActividadesDeContrato(typeof actividadesLibres!=='undefined'?actividadesLibres:[],resp,numero);
   ses.forEach(function(a){if(!acts.some(function(x){return x.n===a.n;}))acts.push(a);});
   acts.sort(function(a,b){return a.n-b.n;});
@@ -749,6 +770,224 @@ function entregaInformeConfirmarActividad(numero){
 }
 window.entregaInformeElegirActividad=entregaInformeElegirActividad;
 window.entregaInformeConfirmarActividad=entregaInformeConfirmarActividad;
+// ── Borrador de informe: soportes ya en Drive, registro en sistema/global.informesBorradores ──
+function informeBorradorKey(resp,numero){
+  const s=function(x){return String(x||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');};
+  return'b_'+s(resp)+'__'+s(numero);
+}
+function informeBorradoresDeResponsable(map,resp){
+  const rn=agendaNorm(resp);
+  return Object.keys(map||{}).map(function(k){return map[k];}).filter(function(b){return b&&b.numero&&agendaNorm(b.responsable)===rn;});
+}
+function informeBorradorActual(){
+  const numero=String((document.getElementById('entrega-inf-numero')||{}).value||'').trim();
+  if(!numero||!responsableActivo)return null;
+  return (window._informesBorradores||{})[informeBorradorKey(responsableActivo,numero)]||null;
+}
+async function informeBorradorFetchAll(){
+  const db=window._db;
+  if(!db||!window._fsGetDoc||!window._fsDoc)return window._informesBorradores||{};
+  try{
+    const snap=await window._fsGetDoc(window._fsDoc(db,'sistema','global'));
+    const g=snap&&snap.exists()?(snap.data()||{}):{};
+    window._informesBorradores=(g.informesBorradores&&typeof g.informesBorradores==='object')?g.informesBorradores:{};
+  }catch(err){console.warn('informeBorradorFetchAll:',err);}
+  return window._informesBorradores||{};
+}
+/** b=null elimina el borrador. Solo escribe la clave de este borrador (merge). */
+async function informeBorradorPersistir(key,b){
+  const db=window._db;
+  if(!db||!window._fsSetDoc||!window._fsDoc)throw new Error('Sin conexión a la base de datos');
+  if(typeof ensureFirestoreAuthReady==='function'){
+    const a=await ensureFirestoreAuthReady();
+    if(!a||!a.ok)throw new Error('Sesión no disponible');
+  }
+  let val;
+  if(b===null){
+    if(!window._fsDeleteField)throw new Error('Sin soporte para eliminar');
+    val=window._fsDeleteField();
+  }else val=typeof _fsStripUndefinedDeep==='function'?_fsStripUndefinedDeep(b):b;
+  const pay={informesBorradores:{}};
+  pay.informesBorradores[key]=val;
+  await window._fsSetDoc(window._fsDoc(db,'sistema','global'),pay,{merge:true});
+  window._informesBorradores=window._informesBorradores||{};
+  if(b===null)delete window._informesBorradores[key];
+  else window._informesBorradores[key]=b;
+}
+/** Ítem de staging «ya en Drive» a partir de un soporte del borrador. */
+function informeBorradorItem(s){
+  const act={n:parseInt(s.informeAct&&s.informeAct.n,10)||0,nombre:String((s.informeAct&&s.informeAct.nombre)||'')};
+  const k=parseInt(s.k,10)||1;
+  const fid=String(s.driveFileId||'');
+  const lbl='Act '+act.n+' — '+act.nombre+' · soporte '+k;
+  const link=String(s.driveLink||'');
+  const prev=String(s.previewLink||link);
+  return{
+    id:'sf_b_'+fid,nombre:s.nombre||s.driveFilename||lbl,blob:null,blobUrl:'',tipo:s.tipo||'',esAnexo:true,
+    state:'uploaded',pct:100,driveFileId:fid,driveLink:link,previewLink:prev,driveFilename:s.driveFilename||'',error:'',
+    informeAct:act,informeSoporteK:k,borrador:true,
+    uploaded:{fileId:fid,driveFileId:fid,driveLink:link,previewLink:prev,driveFilename:s.driveFilename||'',nombre:lbl,labelAnexo:lbl,
+      informeAct:act,informeSoporteK:k,driveEstado:'revision',driveInstitutional:true,tipo:'anexo_respuesta',es_anexo:true}
+  };
+}
+function informeBorradorQuitarDeStaging(){
+  if(typeof sstFileStagingCtx!=='function')return;
+  const ck=entregaRespFileCtxKey();
+  const ctx=sstFileStagingCtx(ck);
+  const antes=(ctx.anexos||[]).length;
+  ctx.anexos=(ctx.anexos||[]).filter(function(a){return a&&!a.borrador;});
+  if(ctx.anexos.length!==antes&&typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,'entrega-resp-anexos-list');
+}
+function informeBorradorBannerUi(){
+  const el=document.getElementById('entrega-inf-borrador');
+  if(!el)return;
+  const b=informeBorradorActual();
+  if(!b){el.innerHTML='';return;}
+  const n=(b.soportes||[]).length;
+  const f=String(b.actualizado||'').slice(0,10);
+  el.innerHTML='<div style="margin:2px 0 8px;padding:8px 10px;border:1px solid #b6d4fe;background:#f0f7ff;border-radius:var(--r);font-size:12px">'+
+    '💾 <strong>Borrador del informe N° '+escAttr(String(b.n||''))+'</strong>'+(f?' · guardado '+fmtF(f):'')+' · '+n+' soporte'+(n===1?'':'s')+
+    '. Siga agregando soportes y guárdelos; al tener todo, adjunte el informe y pulse Entregar.'+
+    '<div style="margin-top:6px"><button type="button" class="btn bsm bd2" onclick="descartarBorradorInforme()">🗑 Descartar borrador</button></div></div>';
+}
+/** Carga en el formulario el borrador del contrato elegido (periodo fijo y soportes ya en Drive). */
+function informeBorradorAplicarUi(){
+  if(typeof sstFileStagingCtx!=='function')return;
+  const ck=entregaRespFileCtxKey();
+  const ctx=sstFileStagingCtx(ck);
+  ctx.anexos=(ctx.anexos||[]).filter(function(a){return a&&!a.borrador;});
+  const b=entregaRespEsInforme()?informeBorradorActual():null;
+  ['entrega-inf-n','entrega-inf-desde','entrega-inf-hasta'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el)el.disabled=!!b;
+  });
+  if(b){
+    const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
+    set('entrega-inf-n',b.n);
+    set('entrega-inf-desde',b.desde||'');
+    set('entrega-inf-hasta',b.hasta||'');
+    (b.soportes||[]).forEach(function(s){if(s&&s.driveFileId)ctx.anexos.push(informeBorradorItem(s));});
+    ctx.anexos.sort(function(x,y){
+      const ax=(x&&x.informeAct&&parseInt(x.informeAct.n,10))||0,ay=(y&&y.informeAct&&parseInt(y.informeAct.n,10))||0;
+      return ax-ay||((x&&x.informeSoporteK)||0)-((y&&y.informeSoporteK)||0);
+    });
+  }
+  if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,'entrega-resp-anexos-list');
+  informeBorradorBannerUi();
+}
+async function informeBorradorGuardarDesdeStaging(key,inf,prev){
+  const ctx=sstFileStagingCtx(entregaRespFileCtxKey());
+  const sop=(ctx.anexos||[]).filter(function(a){return a&&a.borrador&&a.driveFileId;}).map(function(a){
+    return{driveFileId:a.driveFileId,driveLink:a.driveLink||'',previewLink:a.previewLink||'',driveFilename:a.driveFilename||'',
+      nombre:a.nombre||'',tipo:a.tipo||'',informeAct:{n:a.informeAct.n,nombre:a.informeAct.nombre},k:a.informeSoporteK||1};
+  });
+  const ahora=new Date().toISOString();
+  const b=sop.length?{
+    key:key,responsable:String(responsableActivo||'').trim(),numero:inf.numero,contratista:inf.contratista||String(responsableActivo||'').trim(),
+    inicio:inf.inicio||'',fin:inf.fin||'',anio:inf.anio||String(inf.inicio||'').slice(0,4),n:inf.n,desde:inf.desde||'',hasta:inf.hasta||'',
+    creado:(prev&&prev.creado)||ahora,actualizado:ahora,soportes:sop
+  }:null;
+  await informeBorradorPersistir(key,b);
+}
+async function guardarBorradorInforme(){
+  if(!entregaRespEsInforme())return;
+  if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return;}
+  const inf=collectEntregaInforme();
+  const errInf=validarInformeContrato(inf,entregaInformeContratosActuales());
+  if(errInf){notif(errInf,'err');return;}
+  const ck=entregaRespFileCtxKey();
+  const ctx=sstFileStagingCtx(ck);
+  const nuevos=(ctx.anexos||[]).filter(function(a){return a&&!a.borrador&&a.blob;});
+  if(nuevos.some(function(a){return !a.informeAct;})){
+    notif('Cada soporte debe indicar su actividad: quítelo y cárguelo de nuevo con «📎 Soportes +»','err');
+    return;
+  }
+  if(!nuevos.length){notif('Agregue soportes con «📎 Soportes +» para guardarlos en el borrador','err');return;}
+  const okAuth=typeof sstSolicitarGmailParaAdjuntar==='function'?await sstSolicitarGmailParaAdjuntar():true;
+  if(!okAuth){notif('Conecte Gmail/Drive para guardar el borrador','err');return;}
+  const key=informeBorradorKey(responsableActivo,inf.numero);
+  const prev=(window._informesBorradores||{})[key]||null;
+  const eDrive={_exp:'INFORME',_fecha:typeof hoy==='function'?hoy():'',_depto:'guaviare',_sin_expediente:true,_pn_nombre:'Sin expediente',
+    _contrato_informe:inf,_drive_folder_id:'',_drive_folder_link:''};
+  const kMax={};
+  (ctx.anexos||[]).forEach(function(a){
+    if(a&&a.borrador&&a.informeAct){const kn=String(a.informeAct.n);kMax[kn]=Math.max(kMax[kn]||0,parseInt(a.informeSoporteK,10)||0);}
+  });
+  if(typeof sstCargaShow==='function')sstCargaShow({title:'Guardando borrador',message:'Subiendo soportes a Drive…',sub:'0 de '+nuevos.length+' archivos',pct:0});
+  let subidos=0,errUp=null;
+  for(let i=0;i<nuevos.length;i++){
+    const it=nuevos[i];
+    const kn=String(it.informeAct.n);
+    const k=(kMax[kn]||0)+1;
+    if(typeof sstCargaProgress==='function')sstCargaProgress(Math.round((i/nuevos.length)*90),'Subiendo «'+(it.nombre||'archivo')+'» ('+(i+1)+' de '+nuevos.length+')…');
+    try{
+      const up=await driveUploadExpedienteActividad(it.blob,it.nombre,it.tipo,eDrive,{id:'_borrador_'},responsableActivo,'revision',
+        {esAnexo:true,informeAct:it.informeAct,informeSoporteK:k});
+      kMax[kn]=k;
+      const b=informeBorradorItem({driveFileId:up.driveFileId||up.fileId,driveLink:up.driveLink,previewLink:up.previewLink,
+        driveFilename:up.driveFilename||up.nombre,nombre:it.nombre,tipo:it.tipo,informeAct:it.informeAct,k:k});
+      Object.assign(it,{state:'uploaded',pct:100,driveFileId:b.driveFileId,driveLink:b.driveLink,previewLink:b.previewLink,
+        driveFilename:b.driveFilename,informeSoporteK:k,uploaded:b.uploaded,borrador:true});
+      subidos++;
+    }catch(err){errUp=err;console.warn('guardarBorradorInforme drive:',err);break;}
+  }
+  if(subidos){
+    if(typeof sstCargaProgress==='function')sstCargaProgress(95,'Guardando borrador…');
+    try{await informeBorradorGuardarDesdeStaging(key,inf,prev);}
+    catch(errFs){
+      console.warn('guardarBorradorInforme firestore:',errFs);
+      if(typeof sstCargaHide==='function')sstCargaHide();
+      notif('Los soportes quedaron en Drive, pero no se pudo guardar el borrador. Intente de nuevo.','err');
+      return;
+    }
+  }
+  if(typeof sstCargaDone==='function')sstCargaDone({holdMs:220});
+  else if(typeof sstCargaHide==='function')sstCargaHide();
+  const sel=document.getElementById('entrega-inf-contrato');
+  if(sel&&!Array.from(sel.options).some(function(o){return o.value===inf.numero;})){
+    const box=document.getElementById('entrega-resp-informe-box');
+    if(box){box.innerHTML=htmlEntregaInformeBox();const s2=document.getElementById('entrega-inf-contrato');if(s2)s2.value=inf.numero;}
+    entregaInformeOnContratoChange();
+  }else informeBorradorAplicarUi();
+  if(errUp)notif('Se guardaron '+subidos+' de '+nuevos.length+' soportes. No se pudo subir «'+(nuevos[subidos].nombre||'archivo')+'»: '+String(errUp.message||errUp).slice(0,90),'err');
+  else notif('💾 Borrador guardado ('+subidos+' soporte'+(subidos===1?'':'s')+' nuevo'+(subidos===1?'':'s')+')'+(ctx.main?'. El informe se sube al pulsar Entregar.':''),'ok');
+}
+/** Tras quitar un soporte del borrador (ya eliminado de Drive): actualizar el registro. */
+function informeBorradorOnQuitar(){
+  const b=informeBorradorActual();
+  if(!b)return;
+  informeBorradorGuardarDesdeStaging(b.key||informeBorradorKey(responsableActivo,b.numero),b,b)
+    .then(function(){informeBorradorAplicarUi();})
+    .catch(function(err){console.warn('informeBorradorOnQuitar:',err);notif('No se pudo actualizar el borrador','err');});
+}
+async function descartarBorradorInforme(){
+  const b=informeBorradorActual();
+  if(!b)return;
+  const n=(b.soportes||[]).length;
+  if(!confirm('¿Descartar el borrador del informe N° '+b.n+'? Se eliminarán de Drive sus '+n+' soporte'+(n===1?'':'s')+'.'))return;
+  const okAuth=typeof sstSolicitarGmailParaAdjuntar==='function'?await sstSolicitarGmailParaAdjuntar():true;
+  if(!okAuth){notif('Conecte Gmail/Drive para descartar el borrador','err');return;}
+  for(const s of (b.soportes||[])){
+    if(s&&s.driveFileId&&typeof driveDeleteInstitutional==='function'){
+      try{await driveDeleteInstitutional(s.driveFileId);}catch(err){console.warn('descartar borrador drive:',err);}
+    }
+  }
+  try{await informeBorradorPersistir(b.key||informeBorradorKey(responsableActivo,b.numero),null);}
+  catch(err){console.warn('descartarBorradorInforme:',err);notif('No se pudo descartar el borrador','err');return;}
+  informeBorradorAplicarUi();
+  entregaInformeAplicarSugerencia();
+  notif('Borrador descartado','ok');
+}
+/** Al entregar el informe, sus soportes pasan a la actividad: el registro del borrador ya no aplica. */
+function informeBorradorCerrarTrasEntrega(t){
+  if(!t||!t.informeContrato||!t.informeContrato.numero)return;
+  const key=informeBorradorKey(responsableActivo||t.responsable,t.informeContrato.numero);
+  informeBorradorPersistir(key,null).catch(function(err){console.warn('informeBorradorCerrarTrasEntrega:',err);});
+}
+window.guardarBorradorInforme=guardarBorradorInforme;
+window.descartarBorradorInforme=descartarBorradorInforme;
+window.informeBorradorOnQuitar=informeBorradorOnQuitar;
+window.informeBorradorCerrarTrasEntrega=informeBorradorCerrarTrasEntrega;
 /** Máximos configurados por el administrador (null = sin límite). */
 function getCriteriosInformes(){
   const c=(typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.criteriosInformes)||{};
@@ -829,6 +1068,7 @@ function mostrarBloqueoInformeCriterios(r){
   h+='<div style="font-size:12px;color:var(--tx2);margin-top:4px">Supera el máximo de actividades pendientes definido para entregar informes de contrato.</div>';
   if(r.exPrior>0)h+=bloque('Prioritarias ⚡',r.prior,r.crit.maxPrior,r.exPrior);
   if(r.exUrg>0)h+=bloque('Urgentes 🔥 y vencidas',r.urg,r.crit.maxUrgVenc,r.exUrg);
+  h+='<div style="font-size:12px;color:var(--tx2);margin-top:10px">Mientras tanto puede seguir cargando soportes con «💾 Guardar borrador».</div>';
   h+='<div style="text-align:right;margin-top:14px"><button type="button" class="btn bsm bp" onclick="cerrarBloqueoInformeCriterios()">Entendido</button></div></div>';
   ov.innerHTML=h;
   ov.style.display='flex';
@@ -1832,6 +2072,7 @@ function openEntregaResponsableModal(){
     '<div id="entrega-rev-prof-host"></div>'+
     '<div class="fx" style="gap:8px">'+
       '<button type="button" class="btn bsm bp" onclick="submitEntregaResponsable()">📤 Entregar a revisión</button>'+
+      '<button type="button" class="btn bsm" id="entrega-resp-btn-borrador" style="display:none" onclick="guardarBorradorInforme()">💾 Guardar borrador</button>'+
       '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>'+
     '</div>';
   ov.classList.add('on');

@@ -16970,6 +16970,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
     const ctxEr=window._taskModalCtx||{};
+    if(ctxEr.entregaResponsable&&t.informeContrato&&typeof informeBorradorCerrarTrasEntrega==='function')informeBorradorCerrarTrasEntrega(t);
     if(ctxEr.entregaResponsable&&typeof setActFiltro==='function'){
       try{setActFiltro('porver');}catch(errF){}
     }else{
@@ -18386,7 +18387,8 @@ function submitEnviarSoporteVerificacion(expId,taskId){
           let infOpts;
           if(infAct){
             const kn=String(infAct.n);
-            if(infSopK[kn]==null)infSopK[kn]=(t.soportes||[]).filter(function(s){return s&&s.informe_act&&String(s.informe_act.n)===kn;}).length;
+            if(infSopK[kn]==null)infSopK[kn]=Math.max((t.soportes||[]).filter(function(s){return s&&s.informe_act&&String(s.informe_act.n)===kn;}).length,
+              preUploaded.reduce(function(m,u){return u&&u.informeAct&&String(u.informeAct.n)===kn?Math.max(m,parseInt(u.informeSoporteK,10)||0):m;},0));
             infSopK[kn]++;
             infOpts={esAnexo:true,informeAct:infAct,informeSoporteK:infSopK[kn]};
           }

@@ -197,6 +197,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   const hit = sstFileFindItem(ctx, itemId);
   if (!hit || !hit.item) return;
   const it = hit.item;
+  if (it.borrador && !confirm('¿Quitar este soporte del borrador? Se eliminará de Drive.')) return;
   if (it.driveFileId && typeof driveDeleteInstitutional === 'function') {
     try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
       console.warn('sstFileRemove drive:', err);
@@ -220,6 +221,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (hit.slot === 'main' && inpMain) inpMain.value = '';
   if (hit.slot === 'anexos' && inpAnex) inpAnex.value = '';
   sstFileRefreshCtxLists(ctxKey, listId);
+  if (it.borrador && typeof informeBorradorOnQuitar === 'function') informeBorradorOnQuitar();
 }
 
 async function sstFileUploadItem(it, uploadCtx, onPct) {
