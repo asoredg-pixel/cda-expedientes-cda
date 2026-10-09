@@ -4224,6 +4224,8 @@ function clearAltaResponsableAlAprobarDocumento(expId,opts){
   opts=opts||{};
   expId=String(expId||'').trim();
   if(!expId)return false;
+  // Actividad sin expediente (ACT-…, informes): no hay alta que cerrar
+  if(typeof getExpById!=='function'||!getExpById(expId))return false;
   return marcarAltaExpedienteRevisada(expId,{silent:true,force:!!opts.force,por:opts.por});
 }
 
