@@ -718,7 +718,7 @@ function initChatSync(convId){
       chatApplyFirestoreMsgChange(change,msg);
       if(change.type==='added')chatTryDesktopNotify(msg);
     });
-    renderChatBadge();
+    scheduleRenderChatBadge();
     if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:120,contacts:false});
     else renderChatMessages();
   });
@@ -736,6 +736,15 @@ function stopChatNotifySync(){
   clearTimeout(_chatNotifyUiTimer);_chatNotifyUiTimer=null;
   clearTimeout(_chatNotifySettleTimer);_chatNotifySettleTimer=null;
   _chatNotifySettling=false;
+}
+/** Un solo conteo de no leídos por ráfaga de snapshots (uno por conversación ≈ 90 ms c/u). */
+let _chatBadgeTimer=null;
+function scheduleRenderChatBadge(){
+  if(_chatBadgeTimer)return;
+  _chatBadgeTimer=setTimeout(function(){
+    _chatBadgeTimer=null;
+    renderChatBadge();
+  },150);
 }
 function scheduleChatNotifySync(){
   clearTimeout(_chatNotifySyncTimer);
@@ -879,7 +888,7 @@ function initChatNotifySync(){
         chatTryDesktopNotify(msg);
       }
     });
-    renderChatBadge();
+    scheduleRenderChatBadge();
     const chatWin=document.getElementById('chat-window');
     if(!(chatWin&&chatWin.classList.contains('on')))return;
     // Descarga inicial / ráfagas: solo badge. Re-pintar DOM rompe clics y hover (~10s).
@@ -913,7 +922,7 @@ function chatNotifyConvIdsFallback(){
         chatMergeIncomingMsg(msg);
         if(!initial&&change.type==='added'&&!chatEsMio(msg))chatTryDesktopNotify(msg);
       });
-      renderChatBadge();
+      scheduleRenderChatBadge();
       if(!(document.getElementById('chat-window')&&document.getElementById('chat-window').classList.contains('on')))return;
       if(chatNotifyShouldSkipDomPaint(initial))return;
       scheduleChatOpenUiRefresh({delay:200});
@@ -1140,7 +1149,7 @@ function initChatSyncForContact(contactKey){
         if(change.type==='added'){llegaron=true;chatTryDesktopNotify(msg);}
       });
       if(llegaron&&chatViendoContacto(contactKey))void chatMarcarLeido(window._chatConvActiva);
-      renderChatBadge();
+      scheduleRenderChatBadge();
       if(typeof scheduleChatOpenUiRefresh==='function')scheduleChatOpenUiRefresh({delay:150});
       else{renderChatMessages();renderChatContacts();}
     });
@@ -2585,8 +2594,9 @@ if(!window._chatNotifyFirebaseHook){
   });
   document.addEventListener('visibilitychange',function(){
     if(document.hidden||!document.body.classList.contains('sesion-activa'))return;
-    if(typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
-    if(typeof renderChatBadge==='function')renderChatBadge();
+    // Los listeners siguen vivos con la ventana oculta: reabrirlos re-descarga todo y congela la pantalla
+    if(!_chatNotifyUnsubs.length&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
+    scheduleRenderChatBadge();
     const w=document.getElementById('chat-window');
     if(w&&w.classList.contains('on')&&typeof renderChatContacts==='function')renderChatContacts();
   });
