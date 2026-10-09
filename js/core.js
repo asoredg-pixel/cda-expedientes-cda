@@ -8517,6 +8517,7 @@ function compareDocShortLabel(d){
   const lab=String(d.label||d.titulo||'Documento').replace(/^📎\s*|^📄\s*/,'').trim();
   const meta=String(d.meta||'').trim();
   const shortMeta=meta?(' · '+meta.split(' · ')[0]):'';
+  if(d.esAnexo&&/^act \d/i.test(lab))return '📎 '+lab+shortMeta;
   if(d.esAnexo&&!/^anexo/i.test(lab))return '📎 Anexo · '+lab+shortMeta;
   return lab+shortMeta;
 }
@@ -8605,6 +8606,8 @@ function taskReviewSyncCompareSelect(t,e,taskId,show){
   const selB=document.getElementById('task-review-compare-sel-b');
   const pair=document.getElementById('task-review-compare-sel-pair');
   if(!selA||!selB)return;
+  const barSub=pair?pair.closest('.task-review-doc-bar-sub'):null;
+  if(barSub)barSub.classList.remove('task-review-compare-activo');
   if(show){
     const opts=renderTaskReviewCompareSelectHtml(t,e,taskId);
     if(opts.a&&opts.b){
@@ -8617,6 +8620,8 @@ function taskReviewSyncCompareSelect(t,e,taskId,show){
       selA.setAttribute('aria-hidden','false');
       selB.setAttribute('aria-hidden','false');
       if(pair){pair.classList.add('on');pair.setAttribute('aria-hidden','false');}
+      // Informes traen muchas pestañas (un soporte por actividad) que empujaban los selectores fuera de la barra
+      if(barSub)barSub.classList.add('task-review-compare-activo');
       renderTaskReviewComparePreviews();
     }
   }else{
@@ -16046,6 +16051,8 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         lab='📎 Anexo por corregir '+n;
       }else if(esCorr){
         lab='📄 Por corregir'+(s.version?' · v'+s.version:'');
+      }else if(esAn&&s.informe_act){
+        lab='📎 '+String(s.label||('Act '+s.informe_act.n+' — '+(s.informe_act.nombre||''))).trim();
       }else if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
         lab='📎 Anexo '+n;

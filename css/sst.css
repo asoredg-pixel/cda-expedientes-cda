@@ -1229,7 +1229,11 @@ body.task-review-doc-mode #task-modal-overlay{
   min-width:min(240px,55%);
 }
 .task-modal.task-modal-review .task-review-doc-bar-compare .task-review-doc-tabs{
-  flex:0 0 auto;
+  flex:0 1 auto;
+  min-width:0;
+}
+.task-modal.task-modal-review .task-review-doc-bar-sub.task-review-compare-activo .task-review-doc-tabs{
+  display:none;
 }
 .task-modal.task-modal-review .task-review-doc-bar-compare .task-review-doc-tools{
   flex:0 0 auto;
