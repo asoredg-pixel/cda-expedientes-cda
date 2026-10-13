@@ -3578,8 +3578,8 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-ofi-est.asig{background:var(--bll);color:var(--bl)}
 .pqrs-ofi-est.aten{background:var(--pul);color:var(--pu)}
 .pqrs-ofi-est.cerr{background:var(--gnl);color:var(--gn)}
-tr.pqrs-nca-pinned{background:color-mix(in srgb,var(--or) 6%,var(--sf))}
-tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--or)}
+tr.pqrs-nca-pinned{background:var(--bll)}
+tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--bl)}
 .pqrs-nca-pin-lbl{font-size:12px;opacity:.85;vertical-align:middle}
 .sst-act-toolbar .pqrs-nca-pin-btn.on{
   border-color:color-mix(in srgb,var(--or) 45%,var(--bd));

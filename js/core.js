@@ -27248,12 +27248,13 @@ function renderActividadesRowHtml(t){
     :'';
   const priorAbierta=typeof taskPrioridadMarcadoresResueltos==='function'?!taskPrioridadMarcadoresResueltos(t):(est!=='Atendida');
   const esCrit=priorAbierta&&taskEsPrioridadCriticaVencimiento(t);
-  const rowStyle=[
-    fijadaAct?'background:color-mix(in srgb,var(--or) 6%,transparent);box-shadow:inset 3px 0 0 var(--or)':'',
+  // En «Por revisar» solo la fila fijada lleva fondo; prioridad y reentrega quedan en los badges.
+  const sinFondoFila=fijadaAct||filPinVal==='porver';
+  const rowStyle=fijadaAct?'background:var(--bll);box-shadow:inset 3px 0 0 var(--bl)':sinFondoFila?'':[
     esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(priorAbierta&&t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
-  const rowCls=(fijadaAct?'pqrs-nca-pinned ':'')+(esCrit?'prioritaria-crit':(priorAbierta&&t.prioritaria?'prioritaria':''));
+  const rowCls=(fijadaAct?'pqrs-nca-pinned ':'')+(sinFondoFila?'':(esCrit?'prioritaria-crit':(priorAbierta&&t.prioritaria?'prioritaria':'')));
   const rowData=' data-act-exp="'+escAttr(String(t.exp||t.codigo||''))+'" data-act-task="'+escAttr(String(t.id||''))+'"';
   return '<tr'+(rowCls?' class="'+rowCls+'"':'')+rowData+(rowStyle?' style="'+rowStyle+'"':'')+'><td class="act-col-estado">'+badgeHtml+priorBadge+bibBadge+altaBadge+solBadge+taskReentregaBadgeHtml(t)+revExtra+'</td>'+
     '<td class="act-col-ref" style="font-family:\'DM Mono\',monospace;font-size:12px">'+refLbl+'</td>'+
