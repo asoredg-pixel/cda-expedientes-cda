@@ -8673,12 +8673,13 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
     &&((typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t))
       ||(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)));
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa||canDevolverFirma);
-  const canShowDevolver=canReviewSop||canDevolverFirma;
+  const canDevolverAtendida=encargadoPuedeDevolverAtendida(t,expId);
+  const canShowDevolver=canReviewSop||canDevolverFirma||canDevolverAtendida;
   const eRevPar=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
   const isRespView=esModoResponsable()&&(taskUsuarioEsAsignado(t,responsableActivo)
     ||(typeof taskRevParParticipante==='function'&&!!taskRevParParticipante(t,responsableActivo,eRevPar)));
   const canDevolverTecnico=typeof puedeDevolverAlTecnico==='function'&&puedeDevolverAlTecnico(t,responsableActivo,eRevPar);
-  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma;
+  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma||canDevolverAtendida;
   const eid=escAttr(expId),tid=escAttr(taskId);
   const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
   let h='<div class="task-review-chat-side'+(useWaLayout?' task-review-chat-side-wa':'')+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
@@ -20694,9 +20695,24 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
 }
 window.encargadoPuedeDevolverDesdeFirma=encargadoPuedeDevolverDesdeFirma;
 window.encargadoDevolverDesdeFirmaACorregir=encargadoDevolverDesdeFirmaACorregir;
+/** Encargado: devolver para corrección una actividad ya atendida (no PQRSD ni documentos de oficina). */
+function encargadoPuedeDevolverAtendida(t,expId){
+  if(!t||t.eliminada||t.origen==='oficina_firma')return false;
+  if(esModoResponsable()||esJurisdiccional())return false;
+  if(!(typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()))return false;
+  if(estadoTask(t)!=='Atendida')return false;
+  const e=!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId||t.exp||t.codigo):null;
+  if(e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))||(typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))))return false;
+  return true;
+}
+window.encargadoPuedeDevolverAtendida=encargadoPuedeDevolverAtendida;
 /** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o nota genérica. */
 function devolverTaskUnificado(expId,taskId){
   const t=getTaskAny(expId,taskId);
+  if(t&&estadoTask(t)==='Atendida'){
+    if(!encargadoPuedeDevolverAtendida(t,expId)){notif('Esta actividad atendida no se puede devolver','err');return;}
+    if(!confirm('Esta actividad ya está atendida (aprobada).\n\n¿Devolverla para corrección? Dejará de estar atendida y pasará a «Por corregir» a la espera de una nueva entrega del responsable.'))return;
+  }
   const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
   const ronda=getMarcadoresRonda(t);
   const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&n.rondaRevision===ronda;});
