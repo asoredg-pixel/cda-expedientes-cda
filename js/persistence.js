@@ -727,6 +727,38 @@ function upsertActividadesLibresFromRemote(remote){
   });
 }
 
+/** Ids quitados a propósito en esta sesión (papelera definitiva, pasó a expediente, alta fallida). */
+const _actLibresQuitadosIds=new Set();
+function actLibreMarcarQuitada(id){
+  const s=String(id||'').trim();
+  if(s)_actLibresQuitadosIds.add(s);
+}
+window.actLibreMarcarQuitada=actLibreMarcarQuitada;
+/** Lista a guardar + las remotas que esta sesión no tiene: una sesión con lista vacía o vieja no borra las de otros. */
+function mergeActLibresConRemotoParaGuardar(list,remoto){
+  const ids=new Set();
+  (Array.isArray(actividadesLibres)?actividadesLibres:[]).forEach(function(t){if(t&&t.id)ids.add(String(t.id));});
+  (list||[]).forEach(function(t){if(t&&t.id)ids.add(String(t.id));});
+  const out=(list||[]).slice();
+  (Array.isArray(remoto)?remoto:[]).forEach(function(r){
+    const id=String((r&&r.id)||'');
+    if(!id||ids.has(id)||_actLibresQuitadosIds.has(id))return;
+    ids.add(id);
+    out.push(r);
+  });
+  return out;
+}
+async function actLibresRemotoDoc(ref){
+  try{
+    const snap=await window._fsGetDoc(ref);
+    const data=snap&&snap.exists()?snap.data():null;
+    return data&&Array.isArray(data.actividadesLibres)?data.actividadesLibres:[];
+  }catch(err){
+    console.warn('actLibresRemotoDoc: no se pudo leer remoto',err);
+    return [];
+  }
+}
+
 /** Guarda libres del depto en departamentos/{deptoId} (permiso de responsable/encargado). */
 async function saveActividadesLibresDeptoFirestore(deptoId){
   const db=window._db;
@@ -734,13 +766,15 @@ async function saveActividadesLibresDeptoFirestore(deptoId){
   if(!db||!window._fsSetDoc||!d||d==='responsables')return false;
   if(typeof DEPTOS_FIRESTORE!=='undefined'&&DEPTOS_FIRESTORE.indexOf(d)<0)return false;
   try{
-    const list=actividadesLibresForDepto(d).map(function(t){
+    const ref=window._fsDoc(db,'departamentos',d);
+    let list=actividadesLibresForDepto(d).map(function(t){
       return sanitizeActLibreForFirestore(t);
     }).filter(Boolean);
+    if(window._fsGetDoc)list=mergeActLibresConRemotoParaGuardar(list,await actLibresRemotoDoc(ref));
     const payload=typeof _fsStripUndefinedDeep==='function'
       ?_fsStripUndefinedDeep({actividadesLibres:list,updatedAt:new Date().toISOString()})
       :{actividadesLibres:list,updatedAt:new Date().toISOString()};
-    await window._fsSetDoc(window._fsDoc(db,'departamentos',d),payload,{merge:true});
+    await window._fsSetDoc(ref,payload,{merge:true});
     return true;
   }catch(err){
     console.error('saveActividadesLibresDeptoFirestore:',d,err);
@@ -855,11 +889,14 @@ async function saveGlobalFirestore(){
       bandejaLeidos:typeof getBandejaLeidos==='function'?getBandejaLeidos():[],
       bandejaEliminados:typeof getBandejaEliminados==='function'?getBandejaEliminados():[]
     };
+    const refGlobal=window._fsDoc(db,'sistema','global');
+    let libresGlobal=(actividadesLibres||[]).map(function(t){
+      return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
+    }).filter(Boolean);
+    if(window._fsGetDoc)libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,await actLibresRemotoDoc(refGlobal));
     let payload={
       personas:personas||[],
-      actividadesLibres:(actividadesLibres||[]).map(function(t){
-        return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
-      }).filter(Boolean),
+      actividadesLibres:libresGlobal,
       agendaEventos:agendaEventos||[],
       bandejaLeidos:bandejaPay.bandejaLeidos||[],
       bandejaEliminados:bandejaPay.bandejaEliminados||[],
@@ -882,7 +919,7 @@ async function saveGlobalFirestore(){
       }));
     }
     if(typeof _fsStripUndefinedDeep==='function')payload=_fsStripUndefinedDeep(payload);
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
+    await window._fsSetDoc(refGlobal,payload,{merge:true});
     // Ya sincronizado: limpiar flags pendientes locales
     (actividadesLibres||[]).forEach(function(t){
       if(t&&t._pending_fs_sync){delete t._pending_fs_sync;delete t._pending_fs_at;}
@@ -1210,9 +1247,12 @@ async function saveFirestore(){
       bandejaLeidos:typeof getBandejaLeidos==='function'?getBandejaLeidos():[],
       bandejaEliminados:typeof getBandejaEliminados==='function'?getBandejaEliminados():[]
     };
+    const refGlobal=window._fsDoc(db,'sistema','global');
+    let libresGlobal=(actividadesLibres||[]).slice();
+    if(window._fsGetDoc)libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,await actLibresRemotoDoc(refGlobal));
     const payload={
       personas:personas||[],
-      actividadesLibres:actividadesLibres||[],
+      actividadesLibres:libresGlobal,
       agendaEventos:agendaEventos||[],
       bandejaLeidos:bandejaPay.bandejaLeidos||[],
       bandejaEliminados:bandejaPay.bandejaEliminados||[],
@@ -1233,7 +1273,7 @@ async function saveFirestore(){
         deptoResponsable:String(u.deptoResponsable||'').trim()
       }));
     }
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),payload,{merge:true});
+    await window._fsSetDoc(refGlobal,payload,{merge:true});
     for(const depto of DEPTOS_FIRESTORE){
       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{
         cfg:cfgByDepto[depto]||{},

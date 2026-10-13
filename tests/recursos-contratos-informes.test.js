@@ -34,7 +34,7 @@ function ctx() {
     soporteEsPorCorregir: s => s.driveEstado === 'acorregir'
   })
   runInContext(extraer(gm, ['driveContratoInformeFolderNames']), c)
-  runInContext(extraer(rec, ['recursosContratosArbol']), c)
+  runInContext(extraer(rec, ['recursosContratosArbol', 'recursosContratosInformesOcultos', 'recursosContratosEsDelContratista']), c)
   return c
 }
 
@@ -83,5 +83,20 @@ describe('Recursos › Contratos', () => {
     const arbol = c.recursosContratosArbol([task('a', 1, 'Atendida', []), t2], 'Marcela Chara')
     expect(arbol.map(x => x.anio)).toEqual(['2026', '2025'])
     expect(c.recursosContratosArbol([t2], '').length).toBe(0)
+  })
+
+  it('Drive: solo carpetas del contratista y oculta informes aún no aprobados', () => {
+    const c = ctx()
+    expect(c.recursosContratosEsDelContratista('234 MARCELA CHARA', 'Marcela Chara')).toBe(true)
+    expect(c.recursosContratosEsDelContratista('CPS-045-2026 MARCELA CHARA', 'Marcela Chara')).toBe(true)
+    expect(c.recursosContratosEsDelContratista('234 ANA MARCELA CHARA', 'Marcela Chara')).toBe(false)
+    expect(c.recursosContratosEsDelContratista('273 YUNEISI SANCHEZ', 'Marcela Chara')).toBe(false)
+    expect(c.recursosContratosEsDelContratista('MARCELA CHARA', 'Marcela Chara')).toBe(false)
+    const ocultos = c.recursosContratosInformesOcultos([
+      task('a', 1, 'Atendida', []),
+      task('b', 2, 'Por verificar', []),
+      task('c', 3, 'Por corregir', [], 'Otro Contratista')
+    ], 'Marcela Chara')
+    expect([...ocultos]).toEqual(['234 MARCELA CHARA|Informe 2 (01-02-2026 a 28-02-2026)'])
   })
 })

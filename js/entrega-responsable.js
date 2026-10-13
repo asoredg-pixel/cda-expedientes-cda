@@ -4451,6 +4451,7 @@ function vincularActLibreAExpediente(taskId,e){
   if(Array.isArray(actividadesLibres)){
     const ix=actividadesLibres.findIndex(function(x){return x&&x.id===taskId;});
     if(ix>=0)actividadesLibres.splice(ix,1);
+    if(typeof actLibreMarcarQuitada==='function')actLibreMarcarQuitada(taskId);
   }
 
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);

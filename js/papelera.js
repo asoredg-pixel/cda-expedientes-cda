@@ -259,7 +259,10 @@ async function eliminarDefinitivoActividadPapelera(expId,taskId){
     else if(typeof persistExpLocal==='function')persistExpLocal();
   }else if(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)){
     const ix=actividadesLibres.findIndex(function(x){return x&&(String(x.id||'')===tid||String(x.codigo||'')===eid);});
-    if(ix>=0)actividadesLibres.splice(ix,1);
+    if(ix>=0){
+      if(typeof actLibreMarcarQuitada==='function')actLibreMarcarQuitada(actividadesLibres[ix].id);
+      actividadesLibres.splice(ix,1);
+    }
     if(typeof persistExpLocal==='function')persistExpLocal();
     if(typeof persistActividadesLibresFirestore==='function')persistActividadesLibresFirestore();
     else if(typeof saveGlobalFirestore==='function')saveGlobalFirestore();

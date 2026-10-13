@@ -4350,6 +4350,7 @@ async function submitEntregaOficinaFirma(){
       if(!sopMain.url&&(modoFirma||modoListo)){
         const ix=actividadesLibres.findIndex(function(x){return x&&x.id===t.id;});
         if(ix>=0)actividadesLibres.splice(ix,1);
+        if(typeof actLibreMarcarQuitada==='function')actLibreMarcarQuitada(t.id);
         throw new Error('No se pudo adjuntar el documento principal. Conecte Gmail/Drive e intente de nuevo.');
       }
       if(sopMain.url)soportes.push(sopMain);
@@ -4571,6 +4572,7 @@ async function submitEntregaOficinaFirma(){
     if(createdId&&Array.isArray(actividadesLibres)){
       const ix=actividadesLibres.findIndex(function(x){return x&&x.id===createdId;});
       if(ix>=0)actividadesLibres.splice(ix,1);
+      if(typeof actLibreMarcarQuitada==='function')actLibreMarcarQuitada(createdId);
     }
     if(typeof sstCargaHide==='function')sstCargaHide();
     notif('Error: '+String(err.message||err).slice(0,160),'err');

@@ -92,6 +92,8 @@ function setRecursosSubTab(tab) {
 function setRecursosNav(nav) {
   window._recursosNav = nav === 'enlaces' || nav === 'contratos' ? nav : 'biblioteca';
   window._recursosContratosPath = [];
+  window._recContratosDrivePath = [];
+  window._recContratosDrive = null;
   /* Mis carpetas / Enlaces desde el menú izquierdo cierran el explorador abierto */
   window._recursosRepoSel = null;
   window._recursosEnlaceSel = null;
@@ -685,7 +687,121 @@ function recursosContratosIr(nivel, clave) {
   renderRecursosPanel();
 }
 
+/** «Contrato|Informe N (…)» de informes del contratista aún no aprobados (no se muestran desde Drive). */
+function recursosContratosInformesOcultos(tasks, nombre) {
+  const yo = String(nombre || '').trim();
+  const out = new Set();
+  (tasks || []).forEach(function(t) {
+    const inf = t && t.informeContrato;
+    if (!inf || t.eliminada || !yo || typeof driveContratoInformeFolderNames !== 'function') return;
+    const mio = typeof taskUsuarioEsAsignado === 'function' ? taskUsuarioEsAsignado(t, yo) : String(t.responsable || '').trim() === yo;
+    if (!mio || (typeof estadoTask === 'function' ? estadoTask(t) : t.estado) === 'Atendida') return;
+    const nm = driveContratoInformeFolderNames(inf);
+    out.add(nm.contrato + '|' + nm.informe);
+  });
+  return out;
+}
+
+/** Carpetas de contrato del contratista en Recursos/Contratos/<año>/ (sufijo = nombre en mayúsculas). */
+function recursosContratosEsDelContratista(nombreCarpeta, contratista) {
+  const suf = String(contratista || '').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().toUpperCase();
+  if (!suf) return false;
+  const n = String(nombreCarpeta || '').trim().toUpperCase();
+  if (n.length <= suf.length || n.slice(-suf.length - 1) !== ' ' + suf) return false;
+  const pre = n.slice(0, -suf.length - 1).trim().split(' ');
+  return /\d/.test(pre[pre.length - 1] || '');
+}
+
+async function recursosContratosCargarDrive(folderId) {
+  const st = window._recContratosDrive || (window._recContratosDrive = { hijos: {} });
+  const key = folderId || '_raiz';
+  if (st.hijos[key] || st.cargando === key) return;
+  st.cargando = key;
+  st.error = '';
+  try {
+    const token = typeof _driveGetBestToken === 'function' ? _driveGetBestToken() : '';
+    if (!token) throw new Error('Conecte su correo en Correos para ver sus carpetas de Drive.');
+    let lista = [];
+    if (!folderId) {
+      const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+      const cont = await _driveFindFolderInParent(token, 'Contratos', rootId);
+      if (cont && cont.id) {
+        const anios = await driveListFolderChildren(cont.id);
+        for (const a of anios) {
+          if (!a.esCarpeta) continue;
+          (await driveListFolderChildren(a.id)).forEach(function(c) {
+            if (c.esCarpeta && recursosContratosEsDelContratista(c.name, responsableActivo)) lista.push(Object.assign({ anio: a.name }, c));
+          });
+        }
+      }
+    } else {
+      lista = await driveListFolderChildren(folderId);
+    }
+    st.hijos[key] = lista.filter(function(f) { return f && f.name && String(f.name).toUpperCase().indexOf('ELIMINADO-') !== 0; });
+  } catch (err) {
+    st.error = String((err && err.message) || err);
+  }
+  st.cargando = '';
+  if (window._recursosNav === 'contratos') renderRecursosPanel();
+}
+
+function recursosContratosDriveAbrir(idx) {
+  const f = (window._recContratosDriveItems || [])[idx];
+  if (!f) return;
+  window._recContratosDrivePath = (window._recContratosDrivePath || []).concat([{ id: f.id, name: f.name }]);
+  renderRecursosPanel();
+}
+
+function recursosContratosDriveIr(nivel) {
+  window._recContratosDrivePath = (window._recContratosDrivePath || []).slice(0, nivel);
+  renderRecursosPanel();
+}
+
 function renderRecursosContratosPanel() {
+  const token = typeof _driveGetBestToken === 'function' ? _driveGetBestToken() : '';
+  if (!token) return renderRecursosContratosRegistros();
+  const path = window._recContratosDrivePath || [];
+  const cur = path.length ? path[path.length - 1] : null;
+  const st = window._recContratosDrive || { hijos: {} };
+  let items = st.hijos[cur ? cur.id : '_raiz'];
+  if (!items && !st.error) setTimeout(function() { recursosContratosCargarDrive(cur ? cur.id : ''); }, 0);
+  let h = '<div class="rec-bib-panel">';
+  h += '<div class="rec-bib-hdr"><div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📑 Contratos</span>';
+  h += '<p class="rec-bib-lead">Informes de contrato aprobados y sus soportes. Solo consulta.</p></div></div>';
+  h += '<div class="rec-shared-hdr">' + [{ name: 'Contratos' }].concat(path).map(function(r, i) {
+    return i === path.length ? '<strong>' + escAttr(r.name) + '</strong>'
+      : '<a href="#" onclick="recursosContratosDriveIr(' + i + ');return false">' + escAttr(r.name) + '</a>';
+  }).join(' › ') + '</div>';
+  h += '<div class="rec-files-list">';
+  if (!items) {
+    h += st.error
+      ? '<div class="rec-info-banner warn">No se pudo leer Drive: ' + escAttr(st.error) + '</div>'
+      : '<div class="rec-empty">Cargando…</div>';
+  } else {
+    if (path.length === 1) {
+      const ocultos = recursosContratosInformesOcultos(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], responsableActivo);
+      items = items.filter(function(f) { return !(f.esCarpeta && ocultos.has(path[0].name + '|' + f.name)); });
+    }
+    items = items.slice().sort(function(a, b) {
+      return (b.esCarpeta ? 1 : 0) - (a.esCarpeta ? 1 : 0) || String(a.name).localeCompare(String(b.name), 'es', { numeric: true });
+    });
+    window._recContratosDriveItems = items;
+    items.forEach(function(f, i) {
+      if (f.esCarpeta) {
+        h += '<div class="rec-file-row"><span>📁 ' + escAttr(f.name) + (f.anio ? ' <span class="rec-file-repo">· ' + escAttr(f.anio) + '</span>' : '') + '</span>'
+          + '<button type="button" class="btn bsm" onclick="recursosContratosDriveAbrir(' + i + ')">Abrir</button></div>';
+      } else {
+        h += '<div class="rec-file-row"><span>📄 ' + escAttr(f.name) + '</span>'
+          + '<a class="btn bsm" href="https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view" target="_blank" rel="noopener">Abrir</a></div>';
+      }
+    });
+    if (!items.length) h += '<div class="rec-empty">' + (path.length ? 'Carpeta vacía.' : 'Aún no tiene informes de contrato aprobados.') + '</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
+
+function renderRecursosContratosRegistros() {
   const arbol = recursosContratosArbol(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], responsableActivo);
   const p = window._recursosContratosPath || [];
   const c = p[0] ? arbol.find(function(x) { return x.key === p[0]; }) : null;
@@ -708,6 +824,7 @@ function renderRecursosContratosPanel() {
   let h = '<div class="rec-bib-panel">';
   h += '<div class="rec-bib-hdr"><div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📑 Contratos</span>';
   h += '<p class="rec-bib-lead">Informes de contrato aprobados y sus soportes. Solo consulta.</p></div></div>';
+  h += '<div class="rec-info-banner warn rec-bib-drive-hint">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver también los informes guardados en Drive.</div>';
   h += '<div class="rec-shared-hdr">' + ruta.map(function(r, i) {
     return i === ruta.length - 1 ? '<strong>' + escAttr(r.nombre) + '</strong>'
       : '<a href="#" onclick="recursosContratosIr(' + r.nivel + ');return false">' + escAttr(r.nombre) + '</a>';
@@ -733,6 +850,8 @@ function renderRecursosContratosPanel() {
   return h;
 }
 window.recursosContratosIr = recursosContratosIr;
+window.recursosContratosDriveAbrir = recursosContratosDriveAbrir;
+window.recursosContratosDriveIr = recursosContratosDriveIr;
 
 function abrirRecursosRepo(repoId) {
   window._recursosNav = 'biblioteca';
