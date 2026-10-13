@@ -34,7 +34,7 @@ function ctx() {
     soporteEsPorCorregir: s => s.driveEstado === 'acorregir'
   })
   runInContext(extraer(gm, ['driveContratoInformeFolderNames']), c)
-  runInContext(extraer(rec, ['recursosContratosArbol', 'recursosContratosInformesOcultos', 'recursosContratosEsDelContratista']), c)
+  runInContext(extraer(rec, ['recursosContratosEsDeAlguno', 'recursosContratosArbol', 'recursosContratosInformesOcultos', 'recursosContratosEsDelContratista']), c)
   return c
 }
 

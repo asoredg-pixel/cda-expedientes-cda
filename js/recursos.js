@@ -624,18 +624,40 @@ function renderRecursosBibliotecaPanel(depto, bibOk, ofiSel) {
   return h;
 }
 
-/** «Contratos» (solo consulta): cada contratista ve sus informes de contrato aprobados. */
+/** «Contratos» (solo consulta): cada contratista ve sus informes aprobados; el encargado NCA, los de todos los responsables de Guaviare. */
 function recursosContratosVisible() {
+  if (typeof esNcaDeguv === 'function' && esNcaDeguv()) return true;
   return ((typeof esModoResponsable === 'function' && esModoResponsable()) || (typeof esModoContratista === 'function' && esModoContratista()))
     && typeof responsableActivo !== 'undefined' && !!String(responsableActivo || '').trim();
 }
 
+function recursosContratosNombres() {
+  if (typeof esNcaDeguv === 'function' && esNcaDeguv()) {
+    return (typeof getInstructoresCfg === 'function' ? getInstructoresCfg('guaviare') : [])
+      .map(function(i) { return String((i && i.nombre) || '').trim(); }).filter(Boolean);
+  }
+  const yo = String((typeof responsableActivo !== 'undefined' && responsableActivo) || '').trim();
+  return yo ? [yo] : [];
+}
+
+function recursosContratosLead() {
+  return typeof esNcaDeguv === 'function' && esNcaDeguv()
+    ? 'Informes de contrato aprobados de los responsables de Guaviare. Solo consulta.'
+    : 'Informes de contrato aprobados y sus soportes. Solo consulta.';
+}
+
+function recursosContratosEsDeAlguno(t, nombres) {
+  return nombres.some(function(yo) {
+    return typeof taskUsuarioEsAsignado === 'function' ? taskUsuarioEsAsignado(t, yo) : String(t.responsable || '').trim() === yo;
+  });
+}
+
 /** Árbol Contrato › Informe N › (informe presentado + Soportes › Act n › archivos), como en Drive. */
 function recursosContratosArbol(tasks, nombre) {
-  const yo = String(nombre || '').trim();
+  const yos = (Array.isArray(nombre) ? nombre : [nombre]).map(function(n) { return String(n || '').trim(); }).filter(Boolean);
   const contratos = [];
   const byKey = {};
-  if (!yo) return contratos;
+  if (!yos.length) return contratos;
   const nombres = function(inf, act) {
     if (typeof driveContratoInformeFolderNames === 'function') return driveContratoInformeFolderNames(inf, act);
     const n = parseInt(inf.n, 10) || 1;
@@ -644,12 +666,10 @@ function recursosContratosArbol(tasks, nombre) {
   };
   (tasks || []).forEach(function(t) {
     const inf = t && t.informeContrato;
-    if (!inf || t.eliminada) return;
-    const mio = typeof taskUsuarioEsAsignado === 'function' ? taskUsuarioEsAsignado(t, yo) : String(t.responsable || '').trim() === yo;
-    if (!mio) return;
+    if (!inf || t.eliminada || !recursosContratosEsDeAlguno(t, yos)) return;
     if ((typeof estadoTask === 'function' ? estadoTask(t) : t.estado) !== 'Atendida') return;
     const nm = nombres(inf);
-    const ck = String(inf.numero || '').trim() + '|' + String(inf.inicio || nm.anio || '');
+    const ck = nm.contrato + '|' + String(inf.inicio || nm.anio || '');
     let c = byKey[ck];
     if (!c) {
       c = byKey[ck] = { key: ck, nombre: 'Contrato ' + nm.contrato, anio: nm.anio, inicio: String(inf.inicio || ''), fin: String(inf.fin || ''), informes: [] };
@@ -689,13 +709,12 @@ function recursosContratosIr(nivel, clave) {
 
 /** «Contrato|Informe N (…)» de informes del contratista aún no aprobados (no se muestran desde Drive). */
 function recursosContratosInformesOcultos(tasks, nombre) {
-  const yo = String(nombre || '').trim();
+  const yos = (Array.isArray(nombre) ? nombre : [nombre]).map(function(n) { return String(n || '').trim(); }).filter(Boolean);
   const out = new Set();
   (tasks || []).forEach(function(t) {
     const inf = t && t.informeContrato;
-    if (!inf || t.eliminada || !yo || typeof driveContratoInformeFolderNames !== 'function') return;
-    const mio = typeof taskUsuarioEsAsignado === 'function' ? taskUsuarioEsAsignado(t, yo) : String(t.responsable || '').trim() === yo;
-    if (!mio || (typeof estadoTask === 'function' ? estadoTask(t) : t.estado) === 'Atendida') return;
+    if (!inf || t.eliminada || !yos.length || typeof driveContratoInformeFolderNames !== 'function') return;
+    if (!recursosContratosEsDeAlguno(t, yos) || (typeof estadoTask === 'function' ? estadoTask(t) : t.estado) === 'Atendida') return;
     const nm = driveContratoInformeFolderNames(inf);
     out.add(nm.contrato + '|' + nm.informe);
   });
@@ -725,12 +744,13 @@ async function recursosContratosCargarDrive(folderId) {
     if (!folderId) {
       const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
       const cont = await _driveFindFolderInParent(token, 'Contratos', rootId);
+      const nombres = recursosContratosNombres();
       if (cont && cont.id) {
         const anios = await driveListFolderChildren(cont.id);
         for (const a of anios) {
           if (!a.esCarpeta) continue;
           (await driveListFolderChildren(a.id)).forEach(function(c) {
-            if (c.esCarpeta && recursosContratosEsDelContratista(c.name, responsableActivo)) lista.push(Object.assign({ anio: a.name }, c));
+            if (c.esCarpeta && nombres.some(function(n) { return recursosContratosEsDelContratista(c.name, n); })) lista.push(Object.assign({ anio: a.name }, c));
           });
         }
       }
@@ -767,7 +787,7 @@ function renderRecursosContratosPanel() {
   if (!items && !st.error) setTimeout(function() { recursosContratosCargarDrive(cur ? cur.id : ''); }, 0);
   let h = '<div class="rec-bib-panel">';
   h += '<div class="rec-bib-hdr"><div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📑 Contratos</span>';
-  h += '<p class="rec-bib-lead">Informes de contrato aprobados y sus soportes. Solo consulta.</p></div></div>';
+  h += '<p class="rec-bib-lead">' + recursosContratosLead() + '</p></div></div>';
   h += '<div class="rec-shared-hdr">' + [{ name: 'Contratos' }].concat(path).map(function(r, i) {
     return i === path.length ? '<strong>' + escAttr(r.name) + '</strong>'
       : '<a href="#" onclick="recursosContratosDriveIr(' + i + ');return false">' + escAttr(r.name) + '</a>';
@@ -779,7 +799,7 @@ function renderRecursosContratosPanel() {
       : '<div class="rec-empty">Cargando…</div>';
   } else {
     if (path.length === 1) {
-      const ocultos = recursosContratosInformesOcultos(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], responsableActivo);
+      const ocultos = recursosContratosInformesOcultos(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], recursosContratosNombres());
       items = items.filter(function(f) { return !(f.esCarpeta && ocultos.has(path[0].name + '|' + f.name)); });
     }
     items = items.slice().sort(function(a, b) {
@@ -788,11 +808,12 @@ function renderRecursosContratosPanel() {
     window._recContratosDriveItems = items;
     items.forEach(function(f, i) {
       if (f.esCarpeta) {
-        h += '<div class="rec-file-row"><span>📁 ' + escAttr(f.name) + (f.anio ? ' <span class="rec-file-repo">· ' + escAttr(f.anio) + '</span>' : '') + '</span>'
-          + '<button type="button" class="btn bsm" onclick="recursosContratosDriveAbrir(' + i + ')">Abrir</button></div>';
+        h += '<div class="rec-file-row" style="cursor:pointer" onclick="recursosContratosDriveAbrir(' + i + ')"><span>📁 ' + escAttr(f.name) + (f.anio ? ' <span class="rec-file-repo">· ' + escAttr(f.anio) + '</span>' : '') + '</span>'
+          + '<button type="button" class="btn bsm">Abrir</button></div>';
       } else {
-        h += '<div class="rec-file-row"><span>📄 ' + escAttr(f.name) + '</span>'
-          + '<a class="btn bsm" href="https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view" target="_blank" rel="noopener">Abrir</a></div>';
+        const url = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/view';
+        h += '<div class="rec-file-row" style="cursor:pointer" onclick="window.open(\'' + url + '\',\'_blank\',\'noopener\')"><span>📄 ' + escAttr(f.name) + '</span>'
+          + '<a class="btn bsm" href="' + url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir</a></div>';
       }
     });
     if (!items.length) h += '<div class="rec-empty">' + (path.length ? 'Carpeta vacía.' : 'Aún no tiene informes de contrato aprobados.') + '</div>';
@@ -802,7 +823,7 @@ function renderRecursosContratosPanel() {
 }
 
 function renderRecursosContratosRegistros() {
-  const arbol = recursosContratosArbol(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], responsableActivo);
+  const arbol = recursosContratosArbol(typeof actividadesLibres !== 'undefined' ? actividadesLibres : [], recursosContratosNombres());
   const p = window._recursosContratosPath || [];
   const c = p[0] ? arbol.find(function(x) { return x.key === p[0]; }) : null;
   const inf = c && p[1] ? c.informes.find(function(x) { return x.key === p[1]; }) : null;
@@ -814,16 +835,16 @@ function renderRecursosContratosRegistros() {
   if (enSop) ruta.push({ nombre: inf.soportesNombre, nivel: 3 });
   if (act) ruta.push({ nombre: act.nombre, nivel: 4 });
   const carpeta = function(nombre, nivel, clave, extra) {
-    return '<div class="rec-file-row"><span>📁 ' + escAttr(nombre) + (extra ? ' <span class="rec-file-repo">· ' + escAttr(extra) + '</span>' : '') + '</span>'
-      + '<button type="button" class="btn bsm" onclick="recursosContratosIr(' + nivel + ',\'' + escAttr(clave) + '\')">Abrir</button></div>';
+    return '<div class="rec-file-row" style="cursor:pointer" onclick="recursosContratosIr(' + nivel + ',\'' + escAttr(clave) + '\')"><span>📁 ' + escAttr(nombre) + (extra ? ' <span class="rec-file-repo">· ' + escAttr(extra) + '</span>' : '') + '</span>'
+      + '<button type="button" class="btn bsm">Abrir</button></div>';
   };
   const archivo = function(f) {
-    return '<div class="rec-file-row"><span>📄 ' + escAttr(f.nombre) + '</span>'
-      + '<a class="btn bsm" href="' + escAttr(f.link) + '" target="_blank" rel="noopener">Abrir</a></div>';
+    return '<div class="rec-file-row" style="cursor:pointer" onclick="window.open(\'' + escAttr(String(f.link).replace(/'/g, '%27')) + '\',\'_blank\',\'noopener\')"><span>📄 ' + escAttr(f.nombre) + '</span>'
+      + '<a class="btn bsm" href="' + escAttr(f.link) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir</a></div>';
   };
   let h = '<div class="rec-bib-panel">';
   h += '<div class="rec-bib-hdr"><div class="rec-bib-hdr-text"><span class="rec-bib-kicker">📑 Contratos</span>';
-  h += '<p class="rec-bib-lead">Informes de contrato aprobados y sus soportes. Solo consulta.</p></div></div>';
+  h += '<p class="rec-bib-lead">' + recursosContratosLead() + '</p></div></div>';
   h += '<div class="rec-info-banner warn rec-bib-drive-hint">Conecte su correo en <a href="#" onclick="recursosIrACorreos();return false">Correos</a> para ver también los informes guardados en Drive.</div>';
   h += '<div class="rec-shared-hdr">' + ruta.map(function(r, i) {
     return i === ruta.length - 1 ? '<strong>' + escAttr(r.nombre) + '</strong>'
