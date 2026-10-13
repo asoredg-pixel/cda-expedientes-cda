@@ -33884,7 +33884,7 @@ async function generarPdfRespuestaPqrs(e,opts){
     y=_pdfWriteLines(doc,lines,margin+110,y,14,pageH,margin);y+=2;
   });
 
-  const cuerpoText=String(wf.cuerpo||e._pqrs_respuesta_nota||opts.cuerpo||'').trim();
+  const cuerpoText=String(opts.cuerpo||wf.cuerpo||e._pqrs_respuesta_nota||'').trim();
   if(esCorreo){
     const emailMeta=[
       ['Para:',opts.para||wf.email_to||''],
