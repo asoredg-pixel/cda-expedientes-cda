@@ -9696,8 +9696,20 @@ function esSoporteEnvioCorreoItem(s){
   if(s.tipo==='soporte_notificacion'||s.tipo==='soporte_respuesta')return true;
   return /^(soporte de env[ií]o|soporte env[ií]o)/i.test(String(s.label||s.nombre||s.descDoc||'').trim());
 }
-/** Etiqueta de lista: «Soporte envío — Resolución que aprueba». */
+/** Nombre público del documento de la actividad: «Concepto de seguimiento No. CT26597» (sin número: solo la actividad). */
+function taskDocNombrePublico(e,t,s){
+  if(!t)return'';
+  if(s&&typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return'';
+  const tipo=String(t.actoTipo||t.tipoActo||t.actividad||t.desc||'').trim();
+  if(!tipo)return'';
+  const num=typeof taskReviewNumeroDocumentoAct==='function'?String(taskReviewNumeroDocumentoAct(e,t)||'').trim():'';
+  return num?(tipo+' No. '+num):tipo;
+}
+window.taskDocNombrePublico=taskDocNombrePublico;
+/** Etiqueta de lista: «Soporte envío — Resolución que aprueba No. 123». */
 function etiquetaSoporteEnvioActividad(e,t,d){
+  const nomDoc=taskDocNombrePublico(e,t);
+  if(nomDoc)return 'Soporte envío — '+nomDoc;
   const raw=String((d&&(d.label||d.nombre))||'').trim();
   if(/soporte env[ií]o\s*[—\-–]\s+\S/i.test(raw))return raw.replace(/^Soporte de env[ií]o/i,'Soporte envío');
   const act=actividadNombreParaSoporteEnvio(e,t,d);
@@ -34251,6 +34263,7 @@ function etiquetaDocNotifPublica(d,idx){
   if(/^proyecci/i.test(nom)||nom==='Proyección de respuesta')nom='';
   if(/^Documento principal$/i.test(nom)||/^Anexo\s+\d+$/i.test(nom))nom='';
   if(esAn)return nom?('Anexo '+n+': '+nom):('Anexo '+n);
+  if(d._doc_nombre_publico)return String(d._doc_nombre_publico);
   const archivo=typeof pqrsNombreEnlaceCorreo==='function'?pqrsNombreEnlaceCorreo(d,idx,null):nom;
   const nomVis=archivo.replace(/^respuesta[-_]/i,'')||nom;
   return nomVis?('Documento principal: '+nomVis):'Documento principal';
@@ -34320,7 +34333,7 @@ function collectDocsParaNotificacionCorreo(e,t){
     if(main){
       const nomMain=main.driveFilename||main.nombre||main.label||'Documento principal';
       const lblMain=/^proyecci/i.test(String(nomMain))?'Documento principal':nomMain;
-      push(Object.assign({},main,{_notif_rol:'documento',nombre:lblMain,label:lblMain}));
+      push(Object.assign({},main,{_notif_rol:'documento',nombre:lblMain,label:lblMain,_doc_nombre_publico:typeof taskDocNombrePublico==='function'?taskDocNombrePublico(e,t,main):''}));
     }
     anex.forEach(function(s,i){
       const n=s.anexo_n||(i+1);

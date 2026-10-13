@@ -504,7 +504,7 @@ function collectArchivosExp(e,taskIdFilter){
         label:(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s)&&typeof etiquetaSoporteEnvioActividad==='function')
           ?etiquetaSoporteEnvioActividad(e,t,s)
           :(soloPublico&&typeof etiquetaDocNotifPublica==='function'
-            ?etiquetaDocNotifPublica(s)
+            ?etiquetaDocNotifPublica(Object.assign({},s,{_doc_nombre_publico:typeof taskDocNombrePublico==='function'?taskDocNombrePublico(e,t,s):''}))
             :(s.label||('Documento v'+(s.version||'?')))),
         url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',version:s.version||''
       });

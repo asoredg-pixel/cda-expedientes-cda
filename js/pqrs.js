@@ -3310,8 +3310,12 @@ function getDocsAprobadosCiudadano(e){
       if(!esEnvio&&typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)&&typeof etiquetaDocNotifPublica==='function'){
         nAnexo++;
         lbl=etiquetaDocNotifPublica(Object.assign({},s,{anexo_n:nAnexo,_notif_rol:'anexo'}),nAnexo-1);
-      }else if(!esEnvio&&typeof pqrsStripPrefijoInternoDrive==='function'){
-        lbl=pqrsStripPrefijoInternoDrive(lbl)||lbl;
+      }else if(esEnvio&&typeof etiquetaSoporteEnvioActividad==='function'){
+        lbl=etiquetaSoporteEnvioActividad(e,t,s);
+      }else{
+        const nomPub=typeof taskDocNombrePublico==='function'?taskDocNombrePublico(e,t,s):'';
+        if(nomPub)lbl=nomPub;
+        else if(typeof pqrsStripPrefijoInternoDrive==='function')lbl=pqrsStripPrefijoInternoDrive(lbl)||lbl;
       }
       docs.push({url:u,preview:s.preview||s.url,label:lbl,tipo:(t.desc||t.actividad||'Entrega de actividad').substring(0,80),mime:s.mime||'',fecha:t.fechaAtendida||''});
     });
