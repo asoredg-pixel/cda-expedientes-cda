@@ -23839,25 +23839,104 @@ async function submitTaskComment(expId,taskId){
     if(window._taskChatSubmitLock===lockKey)window._taskChatSubmitLock='';
   }
 }
+const TASK_HIST_FASE_LBL={
+  para_firma:'🖨 Aprobada para imprimir y firmar',
+  pendiente_gestion_vital:'🖨 Aprobada para imprimir y firmar',
+  por_firmar:'✍️ Pasó a firma del Director',
+  pendiente_notificacion:'📨 Firmada — asignada para notificar',
+  lista_para_envio:'📨 Lista para notificar',
+  revision_final_nca:'🔎 Notificación reportada — en revisión',
+  cerrada_atendida:'✓ Notificación aprobada — atendida',
+  rechazada:'↩ Devuelta para corregir'
+};
+const TASK_HIST_DEVOLUCIONES=new Set(['ajuste_soporte','devolver_desde_firma','devuelto_director_firma','notif_devuelta_corregir','revision_nca_rechazado']);
+function taskHistHoraTxt(h){
+  let d=null;
+  if(h.ts!=null&&h.ts!==''){const n=Number(h.ts);if(isFinite(n)&&n>0)d=new Date(n<1e12?n*1000:n);}
+  else if(h.en)d=new Date(h.en);
+  if(!d||isNaN(d.getTime()))return '';
+  return d.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+}
+/** Texto de un evento de trazabilidad (sin fecha). '' = no se muestra. */
+function taskHistLineaTxt(h){
+  const por=h.por?' · '+escAttr(h.por):'';
+  const nota=h.nota?': '+escAttr(h.nota):'';
+  switch(h.tipo){
+    case 'traslado':
+      if(h.revisionPar==='devolucion')return '↩ Devuelta al técnico para corregir: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+nota;
+      if(h.revisionPar==='correccion')return '📤 Corrección del técnico al profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
+      if(h.revisionPar==='solicitud')return '📤 Enviada a revisión de profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
+      return '↔ Traslado: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
+    case 'asignacion':return '📌 Asignada'+(h.a?' a '+escAttr(h.a):'')+por;
+    case 'autoasignacion_responsable':return '📌 Creada por el responsable'+por;
+    case 'asignacion_extra':return '👥 Co-ejecutor añadido: '+escAttr(h.a||'—');
+    case 'quitar_asignado':return '👥 Co-ejecutor retirado: '+escAttr(h.de||'—');
+    case 'edicion':return '✏️ Editada'+nota;
+    case 'solicitud_traslado':return '📩 Solicitud de traslado'+(h.a?' → '+escAttr(h.a):'')+nota;
+    case 'solicitud_eliminacion':return '📩 Solicitud de eliminación'+nota;
+    case 'solicitud_resuelta':return (h.resolucion==='aprobada'?'✓':'↩')+' Solicitud '+escAttr(h.solTipo||'')+' '+escAttr(h.resolucion||'');
+    case 'eliminacion':return '🗑 Eliminada'+nota;
+    case 'restauracion':return '♻ Restaurada'+por;
+    case 'ajuste_soporte':return '↩ Revisada y devuelta para corregir'+por+nota;
+    case 'enviar_firma':return (/impresi/i.test(String(h.nota||''))?'🖨 Aprobada para imprimir y firmar':'✍️ Aprobada — enviada a firma del Director')+por;
+    case 'firma_proyeccion_atendida':return '';
+    case 'atajo_firmado_revision':return '✍️ Documento firmado cargado — pasa a notificar'+por;
+    case 'atajo_firmado_otro_medio':return '✍️ Documento firmado cargado — notificado por otro medio'+por;
+    case 'firmado_atendida_sin_notif':return '✍️ Documento firmado — atendida sin notificar'+por;
+    case 'notif_reportada_revision':return '📨 Notificación reportada — en revisión del encargado'+por;
+    case 'notif_encargado_cierre':return '📨 Notificada por el encargado — atendida'+por;
+    case 'notif_devuelta_corregir':return '↩ Notificación devuelta para corregir'+por+nota;
+    case 'devolver_desde_firma':return '↩ Devuelta desde firma para corregir'+por+nota;
+    case 'devuelto_director_firma':return '↩ El Director devolvió para corregir'+por+nota;
+    case 'revision_nca_aprobado':case 'revision_nca_aprobado_oficio':case 'revision_nca_aprobado_oficio_firma':return '✓ Revisión aprobada'+por;
+    case 'revision_nca_rechazado':return '↩ Revisada y devuelta para corregir'+por+nota;
+    case 'verificacion':return (/notific/i.test(String(h.nota||''))?'✓ Aprobada y notificada':'✓ Aprobada y cerrada')+por;
+    case 'cierre_encargado':return '✓ Cerrada por el encargado'+por;
+    case 'autoentrega_encargado':return '📤 Entregada por el encargado'+por;
+    case 'termino_cumplimiento':return '⏱ Término de cumplimiento'+nota;
+  }
+  if(h.nota)return escAttr(h.nota)+por;
+  const tipo=String(h.tipo||'').replace(/_/g,' ').trim();
+  return tipo?escAttr(tipo.charAt(0).toUpperCase()+tipo.slice(1))+por:'';
+}
+/** Trazabilidad legible: hitos principales con fecha y hora, sin repetidos (un archivo = un «soporte»; firma_wf sin cambio de fase). */
 function renderTaskHistorialHtml(t){
-  return (t.historial||[]).map(h=>{
-    if(h.tipo==='traslado'&&h.revisionPar==='devolucion')return '↩ Devuelta al técnico para corregir: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+' ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='traslado'&&h.revisionPar==='correccion')return '📤 Corrección del técnico al profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='traslado'&&h.revisionPar==='solicitud')return '📤 Enviada a revisión de profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='traslado')return '↔ Traslado: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='asignacion_extra')return '👥 Co-ejecutor añadido: '+escAttr(h.a||'—')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='quitar_asignado')return '👥 Co-ejecutor retirado: '+escAttr(h.de||'—')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='edicion')return '✏️ Editada ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='solicitud_traslado')return '📩 Solicitud de traslado'+(h.a?' → '+escAttr(h.a):'')+' ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='solicitud_eliminacion')return '📩 Solicitud de eliminación ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='solicitud_resuelta')return (h.resolucion==='aprobada'?'✓':'↩')+' Solicitud '+(h.solTipo||'')+' '+escAttr(h.resolucion||'')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='eliminacion')return '🗑 Eliminada ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='soporte')return '📎 Soporte v'+(h.version||'?')+' ('+fmtF(h.fecha)+')'+(h.por?' · '+escAttr(h.por):'');
-    if(h.tipo==='ajuste_soporte')return '↩ Devuelta por corregir ('+fmtF(h.fecha)+')'+(h.nota?': '+escAttr(h.nota):'');
-    if(h.tipo==='reenvio_verificacion')return '📤 Reenviada para verificación v'+(h.version||'?')+' ('+fmtF(h.fecha)+')';
-    if(h.tipo==='verificacion')return '✓ Aprobada y cerrada ('+fmtF(h.fecha)+')'+(h.por?' · '+escAttr(h.por):'');
-    return escAttr(h.tipo||'');
-  }).join('<br>');
+  const hist=((t&&t.historial)||[]).filter(Boolean);
+  const versReenvio=new Set(hist.filter(h=>h.tipo==='reenvio_verificacion').map(h=>String(h.version||'')));
+  const versVistas=new Set();
+  let ultFase=null;
+  const out=[];
+  hist.forEach(h=>{
+    let txt='';
+    if(TASK_HIST_DEVOLUCIONES.has(h.tipo))ultFase=null;
+    if(h.tipo==='soporte'){
+      const v=String(h.version||'');
+      if(!v)txt='📎 '+escAttr(h.nota||'Documento cargado')+(h.por?' · '+escAttr(h.por):'');
+      else{
+        if(versReenvio.has(v)||versVistas.has(v))return;
+        versVistas.add(v);
+        txt=((parseInt(v,10)||1)>1?'📤 Nueva entrega (corrección v'+v+')':'📤 Enviada para revisión')+(h.por?' · '+escAttr(h.por):'');
+      }
+    }else if(h.tipo==='reenvio_verificacion'){
+      const v=parseInt(h.version,10)||1;
+      const quien=h.por||h.reportadoPor||'';
+      txt=(v>1?'📤 Nueva entrega (corrección v'+v+')':'📤 Enviada para revisión')+(quien?' · '+escAttr(quien):'');
+    }else if(h.tipo==='firma_wf'){
+      const m=String(h.nota||'').match(/→\s*(.+)$/);
+      if(!m)txt=h.nota?'✍️ '+escAttr(h.nota):'';
+      else{
+        const fase=m[1].trim();
+        if(fase===ultFase)return;
+        ultFase=fase;
+        txt=TASK_HIST_FASE_LBL[fase]||'';
+      }
+    }else txt=taskHistLineaTxt(h);
+    if(!txt||(out.length&&out[out.length-1].txt===txt))return;
+    const hora=taskHistHoraTxt(h);
+    const cuando=(h.fecha?fmtF(h.fecha):'')+(hora?' '+hora:'');
+    out.push({txt:txt,html:(cuando?'<span style="color:var(--tx3)">'+escAttr(cuando)+'</span> · ':'')+txt});
+  });
+  return out.map(o=>o.html).join('<br>');
 }
 function renderTaskConsultaItem(e,t,qs){
   t=normalizeTask(t);
@@ -27775,7 +27854,7 @@ async function submitCrearPqrsDesdeActLibre(){
           tAsig.asignados=[{nombre:respAsig,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
           if(!Array.isArray(tAsig.historial))tAsig.historial=[];
           tAsig.historial.push({
-            tipo:'asignacion',fecha:typeof hoy==='function'?hoy():'',por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+            tipo:'asignacion',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
             nota:'Asignada a '+respAsig+' al crear desde NCA'
           });
         }
@@ -28134,7 +28213,7 @@ function submitCrearActLibre(){
     responsable:responsables[0],responsables:responsables,asignados:asignados,entregaModo:entregaModo,
     depto:resolveDeptoActLibre(deptoActivo),codigo:cod,
     plazoDias:plazoMeta.plazo,vence:plazoMeta.vence||'',prioritaria:prior,
-    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),por:taskComentarioAutor(),nota:'Actividad sin expediente creada'}],soportes:[],notasDoc:[]
+    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:'Actividad sin expediente creada'}],soportes:[],notasDoc:[]
   });
   actividadesLibres.push(t);
   saveLS();closeTaskModal();renderActividades();notif('Actividad '+cod+' creada y asignada a '+responsables.join(', '),'ok');

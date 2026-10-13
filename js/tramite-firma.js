@@ -36,6 +36,7 @@ function setTaskFirmaWf(expId,taskId,patch){
     t.historial.push({
       tipo:'firma_wf',
       fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
+      ts:Date.now(),
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
       nota:'Firma trámite → '+faseNota
     });
@@ -600,6 +601,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
     tk.historial.push({
       tipo:'enviar_firma',
       fecha:hoy(),
+      ts:Date.now(),
       por:taskComentarioAutor(),
       nota:esImprimir?'Enviado a «Por firmar» (pendiente impresión)':'Enviado a «Por firmar» (Director)'
     });
@@ -1236,6 +1238,7 @@ async function submitTramiteNotificar(expId,taskId){
       tk.historial.push({
         tipo:cierraDirecto?'notif_encargado_cierre':'notif_reportada_revision',
         fecha:typeof hoy==='function'?hoy():fechaN,
+        ts:Date.now(),
         por:por,
         nota:cierraDirecto
           ?('Notificación '+canal+' por encargado — actividad atendida'+(obs?' · '+obs:''))
@@ -3233,6 +3236,7 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
       tk.historial.push({
         tipo:cerrarSinNotif?'firmado_atendida_sin_notif':(cerrarOtro?'atajo_firmado_otro_medio':'atajo_firmado_revision'),
         fecha:inicio,
+        ts:Date.now(),
         por:taskComentarioAutor(),
         para:cerrarSinNotif?paraAviso:'',
         nota:cerrarSinNotif

@@ -3561,6 +3561,7 @@ function buildTaskEntregaResponsable(actividad,detalle,responsable){
     historial:[{
       tipo:'autoasignacion_responsable',
       fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
+      ts:Date.now(),
       por:responsable,
       nota:'Actividad sin expediente creada por el responsable al entregar (mismo flujo que asignación del encargado)'
     }],
