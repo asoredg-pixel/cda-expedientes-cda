@@ -1684,8 +1684,16 @@ function ncaPinEnPorRevisarAct(t,e){
   if(!(pgAct&&pgAct.classList.contains('on')&&filAct&&String(filAct.value||'')==='porver'))return false;
   return !!ncaActPinKey(t,e);
 }
-function ncaActPinKey(t,e){
-  return String((e&&e._exp)||(t&&(t.exp||t.codigo))||'').trim();
+/** En «Por revisar» se fija cada actividad (un mismo expediente/PQRSD puede tener varias). */
+function ncaActPinKey(t,e,porRevisar){
+  const base=String((e&&e._exp)||(t&&(t.exp||t.codigo))||'').trim();
+  if(!base)return'';
+  if(porRevisar==null){
+    const fil=document.getElementById('f-act-est');
+    porRevisar=!!(fil&&String(fil.value||'')==='porver');
+  }
+  const tid=String((t&&t.id)||'').trim();
+  return porRevisar&&tid?base+'#'+tid:base;
 }
 function ncaActPinBtnHtml(t,e){
   const key=ncaActPinKey(t,e);
@@ -1797,16 +1805,16 @@ function toggleNcaPqrsPinPorEjecutar(expId,ev){
     renderActividades();
   if(typeof notif==='function')notif(idx>=0?'📌 Desfijada':'📌 Fijada — queda arriba en Por ejecutar y Por revisar','ok');
 }
-function ordenarActividadesNcaPinsPrimero(list){
+function ordenarActividadesNcaPinsPrimero(list,porRevisar){
   if(!ncaEncargadoSesionPqrsPin())return list||[];
   const pins=ncaPqrsPinsLeer();
   if(!pins.length)return list||[];
   const pinSet=new Set(pins);
   const pinned=[];
   pins.forEach(function(id){
-    (list||[]).forEach(function(t){if(String(t.exp||t.codigo||'').trim()===id)pinned.push(t);});
+    (list||[]).forEach(function(t){if(ncaActPinKey(t,null,!!porRevisar)===id)pinned.push(t);});
   });
-  const rest=(list||[]).filter(function(t){return!pinSet.has(String(t.exp||t.codigo||'').trim());});
+  const rest=(list||[]).filter(function(t){return!pinSet.has(ncaActPinKey(t,null,!!porRevisar));});
   return pinned.concat(rest);
 }
 function ncaPqrsPinBtnHtml(e){

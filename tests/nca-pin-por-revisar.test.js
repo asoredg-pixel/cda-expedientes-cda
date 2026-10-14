@@ -82,6 +82,6 @@ describe('📌 en «Por revisar» (encargado NCA)', () => {
   it('la fila de Por revisar pinta el botón y la lista se ordena con las fijadas', () => {
     const src = read('js/core.js')
     expect(src).toContain("if(typeof ncaPinEnPorRevisarAct==='function'&&ncaPinEnPorRevisarAct(t,expAct)){")
-    expect(src).toContain('ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list))')
+    expect(src).toContain('ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list),true)')
   })
 })

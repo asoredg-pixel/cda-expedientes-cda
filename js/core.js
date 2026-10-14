@@ -27370,7 +27370,7 @@ function renderActividadesRowHtml(t){
   const expAct=getExpById(t.exp);
   const filActPin=document.getElementById('f-act-est');
   const filPinVal=filActPin?String(filActPin.value||''):'';
-  const pinKeyAct=typeof ncaActPinKey==='function'?ncaActPinKey(t,expAct):'';
+  const pinKeyAct=typeof ncaActPinKey==='function'?ncaActPinKey(t,expAct,filPinVal==='porver'):'';
   const fijadaAct=!!((filPinVal==='pend'||filPinVal==='porver')&&pinKeyAct
     &&typeof ncaEncargadoSesionPqrsPin==='function'&&ncaEncargadoSesionPqrsPin()
     &&typeof ncaPqrsEstaFijada==='function'&&ncaPqrsEstaFijada(pinKeyAct));
@@ -29852,7 +29852,7 @@ function renderActividades(){
   if(q)list=list.filter(t=>matchActividadSearch(t,q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
     (filtroAct==='porver'?(typeof ordenarActividadesNcaPinsPrimero==='function'
-      ?ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list))
+      ?ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list),true)
       :sortTasksPorRevisar(list)):
     (filtroAct==='pend'||filtroAct==='venc'?(
       typeof ordenarActividadesNcaPinsPrimero==='function'&&filtroAct==='pend'
