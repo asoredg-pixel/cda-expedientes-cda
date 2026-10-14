@@ -3761,6 +3761,8 @@ function crearStubExpedienteEntregaResp(opts){
     notif('Número de expediente duplicado','err');
     return null;
   }
+  const porEnc=!!opts.porEncargado;
+  const altaPor=String(opts.por||responsableActivo||'').trim();
   const fe={Solicitud:hoyStr,'En trámite':hoyStr};
   const data={
     _depto:depto,
@@ -3772,12 +3774,12 @@ function crearStubExpedienteEntregaResp(opts){
     _usar_etapa:false,
     _etapa:'',
     _instructor:'',
-    _alta_por_responsable:true,
-    _alta_por:responsableActivo||'',
+    _alta_por_responsable:!porEnc,
+    _alta_por:altaPor,
     _alta_fecha:hoyStr,
-    _pendiente_revision_alta:true,
-    _alta_revisada_en:'',
-    _alta_revisada_por:'',
+    _pendiente_revision_alta:!porEnc,
+    _alta_revisada_en:porEnc?hoyStr:'',
+    _alta_revisada_por:porEnc?altaPor:'',
     _tipo_persona:'natural',
     _pn_nombre:'',
     _pn_identificacion:'',
@@ -3793,7 +3795,7 @@ function crearStubExpedienteEntregaResp(opts){
     historial:[{
       estado:'En trámite',
       fecha:hoyStr,
-      nota:'Alta por responsable ('+(responsableActivo||'')+') al entregar primera actividad'
+      nota:porEnc?('Alta por encargado ('+altaPor+') al asignar actividad'):('Alta por responsable ('+(responsableActivo||'')+') al entregar primera actividad')
     }]
   };
   if(interesadoDatos)applyEntregaRespInteresadoToExp(data,interesadoDatos);
@@ -3802,7 +3804,7 @@ function crearStubExpedienteEntregaResp(opts){
   exps.push(data);
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
   else if(typeof persistExpLocal==='function')persistExpLocal();
-  if(typeof logAudit==='function')logAudit('Alta expediente por responsable ['+expId+']','expedientes',expId);
+  if(typeof logAudit==='function')logAudit((porEnc?'Alta expediente por encargado [':'Alta expediente por responsable [')+expId+']','expedientes',expId);
   return data;
 }
 

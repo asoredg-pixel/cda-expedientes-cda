@@ -27693,13 +27693,13 @@ function exportarExcelInforme(){
 }
 function exportarExcelCompleto(){exportarExcelInforme();}
 function openCrearActLibreModal(){
-  if(!esVistaActividadesDepto()){notif('Solo el encargado del departamento puede crear actividades sin expediente','err');return;}
+  if(!esVistaActividadesDepto()){notif('Solo el encargado del departamento puede crear actividades','err');return;}
   const ov=document.getElementById('task-modal-overlay');
   const tit=document.getElementById('task-modal-title');
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  if(tit)tit.textContent='Nueva actividad / PQRSD';
+  if(tit)tit.textContent='Crear actividad';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only','task-modal-wide');}
   const respSel=document.getElementById('act-dept-resp-sel');
   const defResp=respSel&&respSel.value?respSel.value:responsableActivo;
@@ -27713,25 +27713,27 @@ function openCrearActLibreModal(){
     (puedePqrs
       ?('<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
         '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-modo-tipo" id="act-libre-modo-act" checked onchange="actLibreModoTipoChange()"> Actividad sin expediente</label>'+
-        '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-modo-tipo" id="act-libre-modo-pqrs" onchange="actLibreModoTipoChange()"> Crear PQRSD</label>'+
+        '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="act-libre-modo-tipo" id="act-libre-modo-pqrs" onchange="actLibreModoTipoChange()"> Expediente / PQRSD</label>'+
       '</div>')
       :'')+
-    '<div id="act-libre-act-wrap">'+
-    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
-    '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual">Individual — cada uno entrega por aparte</option><option value="unificada">Unificada — con una entrega se cierra para todos</option></select></div>'+
-    actLibrePlazoFieldsHtml(null)+
-    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-prior"> ⚡ Actividad prioritaria</label>'+
-    '</div>'+
     '<div id="act-libre-pqrs-wrap" style="display:none">'+
-      '<div class="fld" style="margin-bottom:8px"><label>Buscar si ya existe</label>'+
+      '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente / PQRSD</label>'+
         '<div style="position:relative">'+
-          '<input type="text" id="act-libre-pqrs-exp" placeholder="Digite N° PQRSD…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
+          '<input type="text" id="act-libre-pqrs-exp" placeholder="Digite N° expediente, PQRSD o interesado…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" '+
             'oninput="actLibrePqrsExpInput(this)" onfocus="actLibrePqrsFiltrarSug(this)" onblur="setTimeout(function(){var p=document.getElementById(\'act-libre-pqrs-sug\');if(p)p.style.display=\'none\';},180)">'+
           '<div id="act-libre-pqrs-sug" class="entrega-resp-sug" style="display:none"></div>'+
         '</div>'+
-        '<div id="act-libre-pqrs-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Si no existe, elija crear en la lista.</div>'+
+        '<div id="act-libre-pqrs-hint" style="font-size:11px;color:var(--tx3);margin-top:4px">Si no existe, elija crear expediente o PQRSD en la lista.</div>'+
+      '</div>'+
+      '<div id="act-libre-exp-alta-box" style="display:none;margin-bottom:10px">'+
+        '<div style="font-size:12px;font-weight:600;color:var(--gn);margin:4px 0 8px">✚ Crear expediente</div>'+
+        '<div class="fg" style="margin-bottom:4px">'+
+          '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
+            '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+          '<div class="fld"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
+            '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" onchange="syncEntregaRespAltaFormPorTramite()">'+(typeof tramitesEntregaRespOptsHtml==='function'?tramitesEntregaRespOptsHtml():'')+'</select></div>'+
+        '</div>'+
+        '<div id="entrega-resp-persona-host"></div>'+
       '</div>'+
       '<div id="act-libre-pqrs-alta-box" style="display:none;margin-bottom:10px;padding:10px;border:1px solid #d4c7f0;border-radius:var(--r);background:#faf8ff">'+altaPqrsHtml+
         '<div class="fld" id="act-libre-pqrs-resp-fld" style="margin-top:10px;margin-bottom:4px">'+
@@ -27747,11 +27749,20 @@ function openCrearActLibreModal(){
         '<textarea id="act-libre-pqrs-cmt" placeholder="Comentario u observaciones (opcional)…" style="min-height:56px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;width:100%;margin-top:8px;box-sizing:border-box"></textarea>'+
       '</div>'+
     '</div>'+
+    '<div id="act-libre-act-wrap">'+
+    '<div class="fld" style="margin-bottom:8px"><label>Actividad</label><div class="act-wrap"><input type="text" id="act-libre-nombre" data-sug-src="exp" placeholder="Buscar actividad..." oninput="filtrarActsPred(this)" onfocus="filtrarActsPred(this)" onblur="setTimeout(()=>hideActsPred(this),160)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Detalle (opcional)</label><input type="text" id="act-libre-detalle" placeholder="Detalles adicionales" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Responsables (marque uno o varios)</label><div id="act-libre-resps" class="act-libre-resps-box">'+respChecks+'</div></div>'+
+    '<div class="fld" id="act-libre-modo-wrap" style="margin-bottom:8px;display:none"><label>Modo de entrega (varios responsables)</label><select id="act-libre-modo" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"><option value="individual">Individual — cada uno entrega por aparte</option><option value="unificada">Unificada — con una entrega se cierra para todos</option></select></div>'+
+    actLibrePlazoFieldsHtml(null)+
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:12px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-prior"> ⚡ Actividad prioritaria</label>'+
+    '</div>'+
     '<div class="fx" style="gap:8px"><button type="button" class="btn bsm bp" id="act-libre-submit-btn" onclick="submitCrearActLibreOrPqrs()">Crear actividad</button><button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button></div>';
   ov.classList.add('on');
   window._taskModalCtx={mode:'crearActLibre',entregaDirectaPqrs:false};
   window._actLibrePqrsCrear=false;
   window._actLibrePqrsExpId='';
+  window._actLibreExpSel=null;
   toggleActLibreModo();
   if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
   if(puedePqrs)actLibreModoTipoChange();
@@ -27788,14 +27799,24 @@ function actLibrePqrsRespChange(){
   if(btn)btn.textContent=atender?'📤 Crear y atender PQRSD':'✚ Crear y asignar PQRSD';
   if(window._taskModalCtx)window._taskModalCtx.entregaDirectaPqrs=atender;
 }
-function actLibreModoTipoChange(){
-  const pqrs=!!((document.getElementById('act-libre-modo-pqrs')||{}).checked);
+/** Modo «Expediente / PQRSD»: la actividad (responsables, plazo) solo se muestra con un expediente elegido o en alta. */
+function actLibreExpSyncUi(){
+  const modoExp=!!((document.getElementById('act-libre-modo-pqrs')||{}).checked);
+  const sel=window._actLibreExpSel;
+  const conExp=!!(sel&&(sel.tipo==='exp'||sel.tipo==='nuevoExp'));
   const actW=document.getElementById('act-libre-act-wrap');
   const pqrsW=document.getElementById('act-libre-pqrs-wrap');
+  const altaExp=document.getElementById('act-libre-exp-alta-box');
   const btn=document.getElementById('act-libre-submit-btn');
-  if(actW)actW.style.display=pqrs?'none':'';
-  if(pqrsW)pqrsW.style.display=pqrs?'':'none';
-  if(btn)btn.textContent=pqrs?'✚ Crear PQRSD':'Crear actividad';
+  if(actW)actW.style.display=(!modoExp||conExp)?'':'none';
+  if(pqrsW)pqrsW.style.display=modoExp?'':'none';
+  if(altaExp)altaExp.style.display=(modoExp&&sel&&sel.tipo==='nuevoExp')?'':'none';
+  if(btn&&!(modoExp&&window._actLibrePqrsCrear))
+    btn.textContent=modoExp&&conExp?(sel.tipo==='nuevoExp'?'✚ Crear expediente y asignar':'Asignar actividad'):'Crear actividad';
+}
+function actLibreModoTipoChange(){
+  const pqrs=!!((document.getElementById('act-libre-modo-pqrs')||{}).checked);
+  actLibreExpSyncUi();
   if(pqrs){
     actLibrePqrsFijarNca();
     if(typeof initEntregaRespPqrsAltaUi==='function')initEntregaRespPqrsAltaUi();
@@ -27805,29 +27826,35 @@ function actLibreModoTipoChange(){
 function actLibrePqrsExpInput(inp){
   window._actLibrePqrsCrear=false;
   window._actLibrePqrsExpId='';
+  window._actLibreExpSel=null;
   const alta=document.getElementById('act-libre-pqrs-alta-box');
   if(alta)alta.style.display='none';
+  const hint=document.getElementById('act-libre-pqrs-hint');
+  if(hint)hint.textContent='Si no existe, elija crear expediente o PQRSD en la lista.';
+  actLibreExpSyncUi();
   actLibrePqrsFiltrarSug(inp);
 }
 function actLibrePqrsFiltrarSug(inp){
   const portal=document.getElementById('act-libre-pqrs-sug');
   if(!portal||!inp)return;
   const q=String(inp.value||'').trim();
-  const list=(typeof buscarExpedientesEntregaResp==='function'?buscarExpedientesEntregaResp(q,12):[]).filter(function(e){
-    return e&&((typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite)));
-  });
+  const list=typeof buscarExpedientesEntregaResp==='function'?buscarExpedientesEntregaResp(q,12):[];
   const ql=q.toLowerCase();
   const exact=q&&typeof getExpById==='function'?getExpById(q):null;
-  const hasExact=!!(exact&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exact))
-    ||list.some(function(e){return String(e._exp||'').trim().toLowerCase()===ql;});
+  const hasExact=!!exact||list.some(function(e){return String(e._exp||'').trim().toLowerCase()===ql;});
   let html=list.map(function(e){
     const nom=typeof getNom==='function'?getNom(e):'';
-    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();actLibrePqrsPickExistente(\''+
-      String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'+
-      '<span style="color:#6d3fa8;font-weight:600">Ya existe</span> · <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(nom)+'</button>';
+    const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+    const tram=!esPqrs&&typeof getTram==='function'?getTram(e._tramite,e):null;
+    const expEsc=String(e._exp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();'+(esPqrs?'actLibrePqrsPickExistente':'actLibreExpPickExistente')+'(\''+expEsc+'\')">'+
+      (esPqrs?'<span style="color:#6d3fa8;font-weight:600">PQRSD</span>':'<span style="color:var(--bl)">Trámite</span>')+
+      ' · <strong>'+escAttr(e._exp)+'</strong>'+(tram&&tram.nombre?' · '+escAttr(tram.nombre):'')+' · '+escAttr(nom)+'</button>';
   }).join('');
   if(q.length>=2&&!hasExact){
     const qEsc=String(q).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html+='<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();actLibreExpPickCrear(\''+qEsc+'\')">'+
+      '<span style="color:var(--gn);font-weight:600">✚ Crear expediente</span> · <strong>'+escAttr(q)+'</strong></button>';
     html+='<button type="button" class="entrega-resp-sug-btn" onmousedown="event.preventDefault();actLibrePqrsPickCrear(\''+qEsc+'\')">'+
       '<span style="color:#6d3fa8;font-weight:600">✚ Crear PQRSD</span> · <strong>'+escAttr(q)+'</strong></button>';
   }
@@ -27835,22 +27862,67 @@ function actLibrePqrsFiltrarSug(inp){
   portal.innerHTML=html;
   portal.style.display='block';
 }
-function actLibrePqrsPickExistente(expNum){
+function actLibreExpPickExistente(expNum){
+  const e=typeof getExpById==='function'?getExpById(expNum):null;
+  if(!e){notif('Expediente no encontrado','err');return;}
   window._actLibrePqrsCrear=false;
   window._actLibrePqrsExpId='';
+  window._actLibreExpSel={tipo:'exp',expId:String(e._exp||expNum)};
+  const inp=document.getElementById('act-libre-pqrs-exp');
+  if(inp)inp.value=e._exp||expNum;
+  const portal=document.getElementById('act-libre-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const alta=document.getElementById('act-libre-pqrs-alta-box');
+  if(alta)alta.style.display='none';
+  const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+  const hint=document.getElementById('act-libre-pqrs-hint');
+  if(hint)hint.innerHTML='Seleccionado: <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tram?tram.nombre:'Trámite')+' · '+
+    escAttr(typeof getNom==='function'?getNom(e):'')+' · '+escAttr(e._estado||'')+'<br>Elija la actividad y a quién se asigna.';
+  actLibreExpSyncUi();
+  setTimeout(function(){const a=document.getElementById('act-libre-nombre');if(a)a.focus();},60);
+}
+function actLibreExpPickCrear(expNum){
+  expNum=String(expNum||'').trim();
+  window._actLibrePqrsCrear=false;
+  window._actLibrePqrsExpId='';
+  window._actLibreExpSel={tipo:'nuevoExp',expId:expNum};
   const inp=document.getElementById('act-libre-pqrs-exp');
   if(inp)inp.value=expNum;
   const portal=document.getElementById('act-libre-pqrs-sug');
   if(portal){portal.style.display='none';portal.innerHTML='';}
   const alta=document.getElementById('act-libre-pqrs-alta-box');
   if(alta)alta.style.display='none';
+  const expNuevo=document.getElementById('entrega-resp-exp-nuevo');
+  if(expNuevo)expNuevo.value=expNum;
   const hint=document.getElementById('act-libre-pqrs-hint');
-  if(hint)hint.innerHTML='Ya existe <strong>'+escAttr(expNum)+'</strong>. Ciérrelo y ábrala desde la bandeja PQRSD.';
-  notif('Esa PQRSD ya está en el sistema — ábrala desde la bandeja','ok');
+  if(hint)hint.textContent='Complete los datos del expediente, la actividad y a quién se asigna.';
+  if(typeof syncEntregaRespAltaFormPorTramite==='function')syncEntregaRespAltaFormPorTramite();
+  actLibreExpSyncUi();
+  setTimeout(function(){const s=document.getElementById('entrega-resp-tramite');if(s)s.focus();},60);
+}
+/** PQRSD que ya existe: se asigna con el mismo modal de la bandeja (varios responsables, reenvío de correo). */
+function actLibrePqrsPickExistente(expNum){
+  const portal=document.getElementById('act-libre-pqrs-sug');
+  if(portal){portal.style.display='none';portal.innerHTML='';}
+  const e=typeof getExpById==='function'?getExpById(expNum):null;
+  if(!e){notif('PQRSD no encontrada','err');return;}
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){notif('La PQRSD '+e._exp+' ya está atendida','err');return;}
+  const ofi=String(e._pqrs_oficina||'').trim();
+  const ofiAct=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'guaviare';
+  if(ofi!==ofiAct){
+    notif(ofi?('La PQRSD '+e._exp+' está en '+(typeof labelOficina==='function'?labelOficina(ofi):ofi)+' — no se puede asignar desde aquí')
+      :('La PQRSD '+e._exp+' aún no ha sido trasladada a esta oficina por Secretaría'),'err');
+    return;
+  }
+  if(typeof openAsignarPqrsOficinaModal!=='function'){notif('No se pudo abrir la asignación de PQRSD','err');return;}
+  if(typeof closeTaskModal==='function')closeTaskModal();
+  setTimeout(function(){openAsignarPqrsOficinaModal(e._exp);},0);
 }
 function actLibrePqrsPickCrear(expNum){
   window._actLibrePqrsCrear=true;
   window._actLibrePqrsExpId=String(expNum||'').trim();
+  window._actLibreExpSel=null;
+  actLibreExpSyncUi();
   const inp=document.getElementById('act-libre-pqrs-exp');
   if(inp)inp.value=expNum;
   const portal=document.getElementById('act-libre-pqrs-sug');
@@ -27872,9 +27944,61 @@ function actLibrePqrsPickCrear(expNum){
   if(hint)hint.textContent='Complete el formulario. Asigne responsable o responda al ciudadano.';
 }
 function submitCrearActLibreOrPqrs(){
-  if(!!((document.getElementById('act-libre-modo-pqrs')||{}).checked))
-    return submitCrearPqrsDesdeActLibre();
+  if(!!((document.getElementById('act-libre-modo-pqrs')||{}).checked)){
+    if(window._actLibrePqrsCrear)return submitCrearPqrsDesdeActLibre();
+    return submitCrearActividadEnExpediente();
+  }
   return submitCrearActLibre();
+}
+function submitCrearActividadEnExpediente(){
+  const sel=window._actLibreExpSel;
+  if(!sel||(sel.tipo!=='exp'&&sel.tipo!=='nuevoExp')){
+    notif('Busque el expediente o PQRSD y elíjalo en la lista (o elija crearlo)','err');
+    return;
+  }
+  const act=String((document.getElementById('act-libre-nombre')||{}).value||'').trim();
+  const det=String((document.getElementById('act-libre-detalle')||{}).value||'').trim();
+  const responsables=[...document.querySelectorAll('.act-libre-resp-cb:checked')].map(el=>el.value.trim()).filter(Boolean);
+  const plazoMeta=readActLibrePlazoVence();
+  if(!plazoMeta.ok){notif(plazoMeta.err||'Revise el plazo','err');return;}
+  if(!act){notif('Indique la actividad','err');return;}
+  if(!responsables.length){notif('Seleccione al menos un responsable','err');return;}
+  const prior=!!((document.getElementById('act-libre-prior')||{}).checked);
+  const modoEl=document.getElementById('act-libre-modo');
+  const entregaModo=(modoEl&&responsables.length>1)?modoEl.value:'individual';
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  let e=null;
+  if(sel.tipo==='nuevoExp'){
+    if(typeof collectEntregaRespInteresado!=='function'||typeof crearStubExpedienteEntregaResp!=='function'){
+      notif('No se pudo cargar el formulario de alta de expediente','err');return;
+    }
+    const expNuevo=String((document.getElementById('entrega-resp-exp-nuevo')||{}).value||'').trim();
+    const tid=String((document.getElementById('entrega-resp-tramite')||{}).value||'').trim();
+    const datos=collectEntregaRespInteresado();
+    const errInt=validateEntregaRespInteresado(datos);
+    if(errInt){notif(errInt,'err');return;}
+    e=crearStubExpedienteEntregaResp({expId:expNuevo,tramiteId:tid,interesadoDatos:datos,porEncargado:true,por:por});
+    if(!e)return;
+  }else{
+    e=typeof getExpById==='function'?getExpById(sel.expId):null;
+    if(!e){notif('Expediente no encontrado','err');return;}
+  }
+  const t=normalizeTask({
+    id:genTaskId(),actividad:act,detalle:det,desc:act+(det?' — '+det:''),
+    responsable:responsables[0],responsables:responsables,
+    asignados:responsables.map(n=>({nombre:n,fechaReportada:'',fechaAtendida:'',estado:'pendiente'})),
+    entregaModo:entregaModo,plazoDias:plazoMeta.plazo,vence:plazoMeta.vence||'',prioritaria:prior,
+    fechaAtendida:'',fechaReportada:'',estado:'En ejecución',eliminada:false,
+    comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),ts:Date.now(),por:por,nota:'Asignada a '+responsables.join(', ')}],soportes:[],notasDoc:[]
+  });
+  if(!Array.isArray(e.tasks))e.tasks=[];
+  e.tasks.push(t);
+  if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+  else saveLS();
+  if(typeof logAudit==='function')logAudit('Actividad asignada ['+e._exp+'] '+act+' → '+responsables.join(', '),'expedientes',e._exp);
+  closeTaskModal();
+  renderActividades();
+  notif((sel.tipo==='nuevoExp'?'Expediente '+e._exp+' creado. ':'')+'Actividad asignada a '+responsables.join(', '),'ok');
 }
 async function submitCrearPqrsDesdeActLibre(){
   if(!window._actLibrePqrsCrear){
@@ -28232,6 +28356,8 @@ window.actLibrePqrsExpInput=actLibrePqrsExpInput;
 window.actLibrePqrsFiltrarSug=actLibrePqrsFiltrarSug;
 window.actLibrePqrsPickExistente=actLibrePqrsPickExistente;
 window.actLibrePqrsPickCrear=actLibrePqrsPickCrear;
+window.actLibreExpPickExistente=actLibreExpPickExistente;
+window.actLibreExpPickCrear=actLibreExpPickCrear;
 window.actLibrePqrsRespChange=actLibrePqrsRespChange;
 window.actLibrePqrsFijarNca=actLibrePqrsFijarNca;
 window.submitCrearActLibreOrPqrs=submitCrearActLibreOrPqrs;
