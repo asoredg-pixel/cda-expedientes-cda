@@ -42,7 +42,7 @@ function ctx(locales, remoto) {
     }
   })
   runInContext('const _actLibresQuitadosIds=new Set();\n' + extraer(per, [
-    'actLibreMarcarQuitada', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
+    'actLibreEventTs', 'actLibreMarcarQuitada', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
     'actividadesLibresForDepto', 'sanitizeActLibreForFirestore', 'saveActividadesLibresDeptoFirestore'
   ]), c)
   return { c, escritos }

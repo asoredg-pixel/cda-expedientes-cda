@@ -280,7 +280,10 @@ async function loadLS(){
     if(globalSnap.exists()){
       const g=globalSnap.data();
       if(Array.isArray(g.personas))personas=g.personas;
-      if(Array.isArray(g.actividadesLibres))actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+      if(Array.isArray(g.actividadesLibres)){
+        actLibresMarcarEntregasLocalesMasRecientes(g.actividadesLibres);
+        actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+      }
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
       // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
@@ -326,6 +329,7 @@ async function loadLS(){
         const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
         if(Array.isArray(data.actividadesLibres)){
+          actLibresMarcarEntregasLocalesMasRecientes(data.actividadesLibres);
           actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
             ?upsertActividadesLibresFromRemote(data.actividadesLibres)
             :mergeActividadesLibresFromRemote(data.actividadesLibres);
@@ -354,6 +358,7 @@ async function loadLS(){
     updateSyncIndicator((exps&&exps.length)?'synced':(authOk?'synced':'offline'));
     if(sesionOn&&typeof scheduleChatNotifySync==='function')scheduleChatNotifySync();
     if(sesionOn)syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
+    if(sesionOn)syncPendingActividadesLibresToFirestore().catch(function(e){console.warn('syncActLibres:',e);});
     if(sesionOn&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   }catch(err){
     if(gen!==_loadLSGen)return;
@@ -734,12 +739,18 @@ function actLibreMarcarQuitada(id){
   if(s)_actLibresQuitadosIds.add(s);
 }
 window.actLibreMarcarQuitada=actLibreMarcarQuitada;
-/** Lista a guardar + las remotas que esta sesión no tiene: una sesión con lista vacía o vieja no borra las de otros. */
+/** Lista a guardar + las remotas que esta sesión no tiene: una sesión con lista vacía o vieja no borra las de otros
+ *  ni pisa con su copia vieja una actividad que otro actualizó después (p. ej. la entrega de un informe). */
 function mergeActLibresConRemotoParaGuardar(list,remoto){
   const ids=new Set();
   (Array.isArray(actividadesLibres)?actividadesLibres:[]).forEach(function(t){if(t&&t.id)ids.add(String(t.id));});
   (list||[]).forEach(function(t){if(t&&t.id)ids.add(String(t.id));});
-  const out=(list||[]).slice();
+  const remById=new Map();
+  (Array.isArray(remoto)?remoto:[]).forEach(function(r){if(r&&r.id)remById.set(String(r.id),r);});
+  const out=(list||[]).map(function(t){
+    const r=t&&t.id?remById.get(String(t.id)):null;
+    return r&&actLibreEventTs(r)>actLibreEventTs(t)?r:t;
+  });
   (Array.isArray(remoto)?remoto:[]).forEach(function(r){
     const id=String((r&&r.id)||'');
     if(!id||ids.has(id)||_actLibresQuitadosIds.has(id))return;
@@ -747,6 +758,24 @@ function mergeActLibresConRemotoParaGuardar(list,remoto){
     out.push(r);
   });
   return out;
+}
+/** Entrega local (últimos 7 días) más reciente que la de Firestore (otra sesión la pisó): marcarla para volver a subirla. */
+function actLibresMarcarEntregasLocalesMasRecientes(remoto){
+  const remById=new Map();
+  (Array.isArray(remoto)?remoto:[]).forEach(function(r){if(r&&r.id)remById.set(String(r.id),r);});
+  const limite=Date.now()-7*24*60*60*1000;
+  let n=0;
+  (Array.isArray(actividadesLibres)?actividadesLibres:[]).forEach(function(t){
+    if(!t||!t.id||t.eliminada||!t.fechaReportada)return;
+    const r=remById.get(String(t.id));
+    if(!r)return;
+    const tsLocal=actLibreEventTs(t);
+    if(tsLocal<limite||tsLocal<=actLibreEventTs(r))return;
+    t._pending_fs_sync=true;
+    t._pending_fs_at=Date.now();
+    n++;
+  });
+  return n;
 }
 async function actLibresRemotoDoc(ref){
   try{
@@ -1407,8 +1436,32 @@ function stopAllRealtimeSync(){
 function desuscribirCfgSync(){
   // Los listeners de configuración son globales durante la sesión; no se detienen al cambiar pestaña.
 }
+/** Cambio de actividades libres que llegó mientras esta sesión guardaba: se aplica al terminar (no se pierde). */
+const _actLibresSnapDiferidos={};
+function cancelarActLibresSnapDiferido(clave){
+  const h=_actLibresSnapDiferidos[clave];
+  if(h){clearTimeout(h);delete _actLibresSnapDiferidos[clave];}
+}
+function diferirActLibresSnap(clave,lista,esDepto){
+  if(!Array.isArray(lista)||!lista.length)return;
+  cancelarActLibresSnapDiferido(clave);
+  _actLibresSnapDiferidos[clave]=setTimeout(function(){
+    delete _actLibresSnapDiferidos[clave];
+    if(_localSaving){diferirActLibresSnap(clave,lista,esDepto);return;}
+    actividadesLibres=esDepto&&typeof upsertActividadesLibresFromRemote==='function'
+      ?upsertActividadesLibresFromRemote(lista)
+      :mergeActividadesLibresFromRemote(lista);
+    try{_saveLSLocal();}catch(e){}
+    scheduleRefreshViewsAfterRemoteDataChange();
+  },2500);
+}
 function onRemoteCfgSnapshot(deptoId,snap){
-  if(_localSaving||!snap.exists())return;
+  if(_localSaving){
+    if(snap.exists())diferirActLibresSnap('depto:'+deptoId,(snap.data()||{}).actividadesLibres,true);
+    return;
+  }
+  cancelarActLibresSnapDiferido('depto:'+deptoId);
+  if(!snap.exists())return;
   const data=snap.data();
   let changed=false;
   if(data&&data.cfg){
@@ -1511,7 +1564,12 @@ function initRealtimeGlobalSync(){
   if(!db||!window._fsOnSnapshot||!window._fsDoc)return;
   if(_globalUnsub)return;
   _globalUnsub=window._fsOnSnapshot(window._fsDoc(db,'sistema','global'),function(snap){
-    if(_localSaving||!snap.exists())return;
+    if(_localSaving){
+      if(snap.exists())diferirActLibresSnap('global',(snap.data()||{}).actividadesLibres,false);
+      return;
+    }
+    cancelarActLibresSnapDiferido('global');
+    if(!snap.exists())return;
     const g=snap.data()||{};
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){

@@ -88,6 +88,6 @@ describe('Repintado tras cambios remotos', () => {
 
   it('los listeners de Firestore usan el repintado agrupado', () => {
     const src = read('js/persistence.js')
-    expect((src.match(/^\s+scheduleRefreshViewsAfterRemoteDataChange\(\);/gm) || []).length).toBe(3)
+    expect((src.match(/^\s+scheduleRefreshViewsAfterRemoteDataChange\(\);/gm) || []).length).toBe(4)
   })
 })
