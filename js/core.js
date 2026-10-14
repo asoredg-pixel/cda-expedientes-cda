@@ -2927,13 +2927,18 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
   let totalLocal=0;
   adjuntos.forEach(function(f){totalLocal+=(f&&f.size)||0;});
   const MAX_ATTACH=800*1024;
+  // Límite de Gmail (25 MB por mensaje, con la codificación base64 de los adjuntos).
+  const MAX_ATTACH_INTERNA=18*1024*1024;
   // NCA/oficinas: con docs en Drive nunca embeber PDF en el MIME del correo (salvo traslado interno: conservar adjuntos del correo origen)
   if(!esInterna&&(docsConLink.length>0||totalLocal>MAX_ATTACH)){
     adjuntos=[];
     prog(progBase+1,docsConLink.length?'Enviando con enlaces Drive…':'Enviando correo…');
-  }else if(esInterna&&totalLocal>MAX_ATTACH){
+  }
+  let adjOmitidos=false;
+  if(esInterna&&totalLocal>MAX_ATTACH_INTERNA){
     prog(progBase+1,'Adjuntos muy pesados — se envía con historial en el cuerpo…');
     adjuntos=[];
+    adjOmitidos=true;
   }
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
   prog(Math.min(97,progBase+3),esInterna?'Enviando correo interno…':'Enviando correo al ciudadano…');
@@ -2952,11 +2957,13 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
           cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
         });
       }catch(errRetry){throw errRetry;}
+      adjOmitidos=true;
     }else if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
       prog(Math.min(98,progBase+4),'Reintentando envío sin adjuntos embebidos…');
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
         cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
       });
+      adjOmitidos=true;
     }else if(/failed to fetch|network/i.test(msg)){
       prog(Math.min(98,progBase+4),'Reintentando envío…');
       await new Promise(function(r){setTimeout(r,600);});
@@ -2968,6 +2975,8 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     }
   }
   if(!sent)throw new Error('No se pudo enviar el correo. Conecte el correo de NCA/oficina en la pestaña Correos e intente de nuevo.');
+  if(esInterna&&adjOmitidos&&typeof notif==='function')
+    notif('⚠️ El traslado se envió sin los adjuntos del correo original (muy pesados o Gmail los rechazó). Reenvíelos desde Gmail.','warn');
   if(opts.registrarHist!==false&&typeof registrarNotificacionCiudadanoPqrs==='function'){
     const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
     registrarNotificacionCiudadanoPqrs(e,{

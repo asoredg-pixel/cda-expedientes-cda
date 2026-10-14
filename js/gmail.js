@@ -6787,7 +6787,34 @@ async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opt
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
     to, subject, htmlBody, list, opts.cc || '', opts.bcc || ''
   );
+  if (mime.length * 3 / 4 >= GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES) return _gmailOfiSendMimeUpload(_gmailRawB64urlToBytes(mime));
   return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
+}
+
+/** Correo pesado (anexos del correo origen): el JSON de messages/send no lo acepta; endpoint de carga hasta 35 MB. */
+async function _gmailOfiSendMimeUpload(mimeBytes) {
+  let token = _gmailOfiIsSecretaria()
+    ? (sessionStorage.getItem(GMAIL_TOKEN_KEY) || '')
+    : gmailOfiGetToken();
+  if (!token && !_gmailOfiIsSecretaria() && typeof _driveGetBestToken === 'function') token = _driveGetBestToken() || '';
+  if (!token) { notif('⚠️ Reconecte su correo para continuar.', 'err'); throw new Error('Sin token.'); }
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(function() { try { ctrl.abort(); } catch (eA) {} }, 180000) : null;
+  try {
+    const res = await fetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'message/rfc822' },
+      body: new Blob([mimeBytes], { type: 'message/rfc822' }),
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(function() { return ''; });
+      throw new Error('API ' + res.status + ': ' + txt.slice(0, 200));
+    }
+    return res.json();
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function gmailOfiSendCompose() {
