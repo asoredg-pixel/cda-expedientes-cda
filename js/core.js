@@ -23793,6 +23793,7 @@ function closeTaskModal(){
       modal.classList.remove('task-modal-firma-fisica');
       modal.classList.remove('enviar-modal-only');
       modal.classList.remove('entrega-resp-modal');
+      modal.classList.remove('act-libre-crear-modal');
       modal.classList.remove('pqrs-entrega-modal');
       modal.classList.remove('task-modal-chat');
       modal.classList.remove('task-modal-notas');
@@ -27709,7 +27710,7 @@ function openCrearActLibreModal(){
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
   if(tit)tit.textContent='Crear actividad';
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only','task-modal-wide');}
+  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only','task-modal-wide','entrega-resp-modal','act-libre-crear-modal');}
   const respSel=document.getElementById('act-dept-resp-sel');
   const defResp=respSel&&respSel.value?respSel.value:responsableActivo;
   const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoActivo):getContratistasAsignables(deptoActivo);
@@ -27775,7 +27776,6 @@ function openCrearActLibreModal(){
   toggleActLibreModo();
   if(typeof syncActLibrePlazoModo==='function')syncActLibrePlazoModo();
   if(puedePqrs)actLibreModoTipoChange();
-  setTimeout(()=>{const inp=document.getElementById('act-libre-nombre');if(inp)inp.focus();},80);
 }
 function actLibrePqrsFijarNca(){
   const ofiSel=document.getElementById('er-pqrs-oficina');
@@ -27888,7 +27888,6 @@ function actLibreExpPickExistente(expNum){
   if(hint)hint.innerHTML='Seleccionado: <strong>'+escAttr(e._exp)+'</strong> · '+escAttr(tram?tram.nombre:'Trámite')+' · '+
     escAttr(typeof getNom==='function'?getNom(e):'')+' · '+escAttr(e._estado||'')+'<br>Elija la actividad y a quién se asigna.';
   actLibreExpSyncUi();
-  setTimeout(function(){const a=document.getElementById('act-libre-nombre');if(a)a.focus();},60);
 }
 function actLibreExpPickCrear(expNum){
   expNum=String(expNum||'').trim();
