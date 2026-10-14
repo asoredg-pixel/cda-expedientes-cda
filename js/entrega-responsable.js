@@ -1023,6 +1023,11 @@ function informeCorreccionItem(s,expId,taskId){
     return Object.assign(it,{nombre:fname||('soporte '+k),esAnexo:true,informeAct:act,informeSoporteK:k,
       uploaded:Object.assign(base,{nombre:lbl,labelAnexo:lbl,informeAct:act,informeSoporteK:k,tipo:'anexo_respuesta',es_anexo:true,anexo_n:s.anexo_n||null})});
   }
+  if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)){
+    const lblA=String(s.label||'').replace(/\s*·\s*por corregir/i,'').trim()||('Anexo '+(s.anexo_n||''));
+    return Object.assign(it,{nombre:fname||lblA,esAnexo:true,
+      uploaded:Object.assign(base,{nombre:lblA,labelAnexo:lblA,tipo:'anexo_respuesta',es_anexo:true,anexo_n:s.anexo_n||null})});
+  }
   return Object.assign(it,{nombre:fname||'Informe',esAnexo:false,
     uploaded:Object.assign(base,{nombre:'Documento principal',labelPrincipal:'Documento principal',tipo:'drive'})});
 }
@@ -1033,11 +1038,11 @@ function informeCorreccionPrecargar(expId,taskId){
   const ck=sstFileEnviarCtxKey(expId,taskId);
   const ctx=sstFileStagingCtx(ck);
   const ult=(typeof getSoportesUltimaEntrega==='function'?getSoportesUltimaEntrega(t):[]).filter(function(s){
-    return s&&(s.driveFileId||s.fileId)&&s.tipo!=='soporte_notificacion'&&s.tipo!=='soporte_respuesta';
+    return s&&(s.driveFileId||s.fileId)&&s.tipo!=='soporte_notificacion'&&s.tipo!=='soporte_respuesta'&&!s.corr_descartado;
   });
   ult.forEach(function(s){
     const it=informeCorreccionItem(s,expId,taskId);
-    if(it.informeAct)ctx.anexos.push(it);
+    if(it.esAnexo)ctx.anexos.push(it);
     else if(!ctx.main)ctx.main=it;
   });
   ctx.anexos.sort(function(x,y){
@@ -1046,11 +1051,18 @@ function informeCorreccionPrecargar(expId,taskId){
   });
   if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,'enviar-anexos-list');
 }
-/** Archivo de la entrega devuelta quitado (ya eliminado de Drive): sale también del registro de la actividad. */
+/** Anexo de la entrega devuelta quitado (ya eliminado de Drive): sale del registro.
+ *  Informe principal: se conserva «por corregir» para que el encargado compare; se borra al aprobar. */
 function informeCorreccionOnQuitar(it){
   const c=it&&it.corrPrev;
   const fid=String((it&&it.driveFileId)||'');
   if(!c||!fid||typeof mutateTask!=='function')return;
+  if(!it.esAnexo){
+    mutateTask(c.expId,c.taskId,function(t){
+      (t.soportes||[]).forEach(function(s){if(s&&String(s.driveFileId||s.fileId||'')===fid)s.corr_descartado=true;});
+    });
+    return;
+  }
   mutateTask(c.expId,c.taskId,function(t){
     t.soportes=(t.soportes||[]).filter(function(s){return !s||String(s.driveFileId||s.fileId||'')!==fid;});
   });

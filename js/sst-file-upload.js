@@ -199,7 +199,9 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   const it = hit.item;
   if (it.borrador && !confirm('¿Quitar este soporte del borrador? Se eliminará de Drive.')) return;
   if (it.corrPrev && !confirm('¿Quitar «' + (it.nombre || 'archivo') + '» de la entrega anterior? Se eliminará de Drive.')) return;
-  if (it.driveFileId && typeof driveDeleteInstitutional === 'function') {
+  // Informe devuelto: se conserva para que el encargado compare (se borra al aprobar)
+  const conservarCorr = !!(it.corrPrev && !it.esAnexo);
+  if (it.driveFileId && !conservarCorr && typeof driveDeleteInstitutional === 'function') {
     try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
       console.warn('sstFileRemove drive:', err);
       if (typeof notif === 'function') notif('No se pudo eliminar del Drive', 'warn');
@@ -363,7 +365,7 @@ function sstFileOnMainPick(inputEl, opts) {
       if (inputEl) inputEl.value = '';
       return;
     }
-    if (old.driveFileId && typeof driveDeleteInstitutional === 'function') {
+    if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional === 'function') {
       driveDeleteInstitutional(old.driveFileId).catch(function () {});
     }
     if (old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}

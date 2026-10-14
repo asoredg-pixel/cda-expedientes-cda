@@ -79,7 +79,7 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
   it('quitar un archivo lo saca del registro de la actividad', () => {
     const t = { informeContrato: { numero: '045', n: 1 }, estado: 'Por corregir', soportes: sops.map(s => ({ ...s })) }
     const { c } = ctxEr(t)
-    c.informeCorreccionOnQuitar({ driveFileId: 'S2', corrPrev: { expId: 'ACT-1', taskId: 'T1' } })
+    c.informeCorreccionOnQuitar({ driveFileId: 'S2', esAnexo: true, corrPrev: { expId: 'ACT-1', taskId: 'T1' } })
     expect(t.soportes.map(s => s.id)).toEqual(['v1', 'm', 'a1', 'n'])
   })
 

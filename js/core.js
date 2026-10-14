@@ -16078,8 +16078,8 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       if(!url&&!s.local)return;
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
       if(/^link\s*drive$/i.test(String(s.label||s.nombre||'').trim()))return;
-      const esCorr=soporteEsPorCorregir(s);
       const esAn=soporteEsAnexoEntrega(s);
+      const esCorr=soporteEsPorCorregir(s)&&!(esAn&&t.informeContrato);
       const entregaActual=ultEntregaIds.has(s.id)&&!esCorr;
       let lab;
       if(esCorr&&esAn){
