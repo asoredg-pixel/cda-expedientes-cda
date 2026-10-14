@@ -27397,7 +27397,7 @@ function updateActEstFilterForEnc(forEnc){
       ?['pend','prior','venc','porver','porcorr','porfirma','pornotif','done','all']
       :(isDir
         ?['pend','prior','venc','porfirma','pornotif','done','all']
-        :['pend','prior','venc','porver','porcorr','pornotif','done','all']));
+        :['pend','prior','venc','pornotif','porcorr','porver','done','all']));
   if(puedePorFirma&&order.indexOf('porfirma')<0)
     order.splice(order.length-2,0,'porfirma');
   if(reqSoloConsulta&&order.indexOf('req')<0)
@@ -29720,23 +29720,28 @@ function renderActividades(){
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
   const puedeFirmarMets=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
   const puedePorFirmaMets=puedeImprimirMets||puedeFirmarMets||puedeFirmadosMets;
-  // Orden de tarjetas según rol
-  let metsHtml=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)')+
-    actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)')+
-    actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
-  if(deptView)metsHtml+=actMetCard('revisados','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+nRevisados+'</div><div class="l">Revisados</div>','var(--gn)');
-  if(isResp||isVital||deptView)metsHtml+=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
+  const cards={};
+  cards.pend=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)');
+  cards.prior=actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)');
+  cards.porver=actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
+  if(deptView)cards.revisados=actMetCard('revisados','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+nRevisados+'</div><div class="l">Revisados</div>','var(--gn)');
+  if(isResp||isVital||deptView)cards.porcorr=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedePorFirmaMets){
-    metsHtml+=actMetCard('porfirma','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirma+'</div><div class="l">Por firma</div>','#0d5c2e');
+    cards.porfirma=actMetCard('porfirma','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirma+'</div><div class="l">Por firma</div>','#0d5c2e');
   }
   if(!esDirAct){
-    metsHtml+=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>','var(--bl)');
+    cards.pornotif=actMetCard('pornotif','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nNotif+'</div><div class="l">Por notificar</div>','var(--bl)');
   }
   if(reqPaletaOn){
     const nReq=typeof reqPaletaContar==='function'?reqPaletaContar():0;
-    metsHtml+=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Requerimientos</div>','#9a3412');
+    cards.req=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Requerimientos</div>','#9a3412');
   }
-  metsHtml+=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)');
+  cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)');
+  // Orden de tarjetas según rol (responsable: Por revisar justo antes de Atendidas)
+  const ordenMets=isResp&&!isVital&&!esDirAct
+    ?['pend','prior','pornotif','porcorr','porver','porfirma','req','done']
+    :['pend','prior','porver','revisados','porcorr','porfirma','pornotif','req','done'];
+  const metsHtml=ordenMets.map(function(k){return cards[k]||'';}).join('');
   if(mets)mets.innerHTML=metsHtml;
   const selEst=document.getElementById('f-act-est');
   if(selEst){
