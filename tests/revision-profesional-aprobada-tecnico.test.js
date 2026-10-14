@@ -37,8 +37,8 @@ function ctx(exps, yo) {
     taskUsuarioEsAsignado: (t, u) => String(t.responsable).toUpperCase() === String(u).toUpperCase(),
     getNom: () => '', getTram: () => ({ nombre: '' })
   })
-  runInContext(extraer(core, ['taskRevParAprobadaInfo', 'taskTieneRevisionPar', 'getTareasRevParTecnicoAprobadas',
-    'bandejaActFiltroParaTask']), c)
+  runInContext(extraer(core, ['taskRevParAprobadaInfo', 'taskRevParTecnicoAprobada', 'taskTieneRevisionPar',
+    'getTareasRevParTecnicoAprobadas', 'bandejaActFiltroParaTask']), c)
   return c
 }
 
@@ -70,6 +70,15 @@ describe('Revisión del profesional aprobada → técnico', () => {
     const info = c.taskRevParAprobadaInfo(tarea('Atendida'), null)
     expect(info).toMatchObject({ tecnico: 'TECNICO', profesional: 'PROFESIONAL', hidx: 2, fecha: '2026-10-13', por: 'ENCARGADO NCA' })
     expect(c.bandejaActFiltroParaTask(null, { tipo: 'revpar_aprobada' })).toBe('done')
+  })
+
+  it('lupa en Atendidas: el técnico abre la vista de responsable (rail vertical) con lo aprobado', () => {
+    const c = ctx([], 'TECNICO')
+    expect(c.taskRevParTecnicoAprobada(tarea('Atendida'), 'TECNICO', null)).toBe(true)
+    expect(c.taskRevParTecnicoAprobada(tarea('Atendida'), 'OTRO', null)).toBe(false)
+    expect(c.taskRevParTecnicoAprobada(tarea('Por verificar'), 'TECNICO', null)).toBe(false)
+    expect(core).toMatch(/\|\|\(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada\(t,responsableActivo,e\)\)\)\);/)
+    expect(core).toMatch(/estadoTask\(t\)==='Atendida'\s*\?'<button[^\n]*\{soloAprobados:true\}\)">🔍/)
   })
 
   it('campanita: se agrega el aviso, su clave y abre el documento aprobado', () => {

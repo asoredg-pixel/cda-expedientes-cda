@@ -8677,7 +8677,8 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const canShowDevolver=canReviewSop||canDevolverFirma||canDevolverAtendida;
   const eRevPar=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
   const isRespView=esModoResponsable()&&(taskUsuarioEsAsignado(t,responsableActivo)
-    ||(typeof taskRevParParticipante==='function'&&!!taskRevParParticipante(t,responsableActivo,eRevPar)));
+    ||(typeof taskRevParParticipante==='function'&&!!taskRevParParticipante(t,responsableActivo,eRevPar))
+    ||(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada(t,responsableActivo,eRevPar)));
   const canDevolverTecnico=typeof puedeDevolverAlTecnico==='function'&&puedeDevolverAlTecnico(t,responsableActivo,eRevPar);
   const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma||canDevolverAtendida;
   const eid=escAttr(expId),tid=escAttr(taskId);
@@ -22928,6 +22929,12 @@ function taskRevParAprobadaInfo(t,e){
     fecha:String((v&&v.fecha)||t.fechaAtendida||'').slice(0,10),
     por:String((v&&v.por)||t.verificadoPor||'').trim()};
 }
+function taskRevParTecnicoAprobada(t,usuario,e){
+  if(!usuario||!esModoResponsable()||!taskTieneRevisionPar(t))return false;
+  if(e===undefined)e=t.sinExpediente||typeof getExpById!=='function'?null:getExpById(t.exp||t.codigo||'');
+  const info=taskRevParAprobadaInfo(t,e);
+  return !!(info&&agendaNorm(info.tecnico)===agendaNorm(usuario));
+}
 function taskTieneRevisionPar(t){
   return !!(t&&!t.eliminada&&(t.historial||[]).some(function(h){return h&&h.tipo==='traslado'&&h.revisionPar;}));
 }
@@ -23437,7 +23444,8 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(e&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(e)
       &&typeof pqrsPuedeNotificarOficio==='function'&&pqrsPuedeNotificarOficio(e))
   ));
-  const esRevParTecVer=!!(verDocumento&&typeof taskRevParTecnicoEsperando==='function'&&taskRevParTecnicoEsperando(t,responsableActivo,e));
+  const esRevParTecVer=!!(verDocumento&&((typeof taskRevParTecnicoEsperando==='function'&&taskRevParTecnicoEsperando(t,responsableActivo,e))
+    ||(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada(t,responsableActivo,e))));
   const isRespVerDoc=!isOficinaDocRespondida&&verDocumento&&esModoResponsable()
     &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen||esRevParTecVer)&&!forcePorFirmarVista;
   // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
@@ -26962,7 +26970,9 @@ function renderActRowToolbarHtml(t,expAct){
   // Técnico con la actividad en revisión del profesional: solo ver entrega y chat
   if(t._revParTecnico&&esModoResponsable()){
     return '<span class="sst-act-toolbar">'+
-      '<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada a revisión" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>'+
+      (estadoTask(t)==='Atendida'
+        ?'<button type="button" class="btn bsm bic act-ico" title="Ver documento y anexos aprobados" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true})">🔍</button>'
+        :'<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada a revisión" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>')+
       taskChatBtnHtml(t.exp,t.id,t)+
       '</span>';
   }
