@@ -281,8 +281,9 @@ async function loadLS(){
       const g=globalSnap.data();
       if(Array.isArray(g.personas))personas=g.personas;
       if(Array.isArray(g.actividadesLibres)){
-        actLibresMarcarEntregasLocalesMasRecientes(g.actividadesLibres);
-        actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+        const remG=actLibresRemotoCombinado('global',g.actividadesLibres);
+        actLibresMarcarEntregasLocalesMasRecientes(remG);
+        actividadesLibres=mergeActividadesLibresFromRemote(remG);
       }
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
       // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
@@ -329,10 +330,11 @@ async function loadLS(){
         const data=result.value.data();
         cfgByDepto[depto]=normalizeCfgObj(data.cfg||{});
         if(Array.isArray(data.actividadesLibres)){
-          actLibresMarcarEntregasLocalesMasRecientes(data.actividadesLibres);
+          const remD=actLibresRemotoCombinado('depto:'+depto,data.actividadesLibres);
+          actLibresMarcarEntregasLocalesMasRecientes(remD);
           actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
-            ?upsertActividadesLibresFromRemote(data.actividadesLibres)
-            :mergeActividadesLibresFromRemote(data.actividadesLibres);
+            ?upsertActividadesLibresFromRemote(remD)
+            :mergeActividadesLibresFromRemote(remD);
         }
       }else{
         if(result.status==='rejected')console.warn('Sin acceso al departamento (normal para rol restringido):',depto);
@@ -758,6 +760,22 @@ function mergeActLibresConRemotoParaGuardar(list,remoto){
     out.push(r);
   });
   return out;
+}
+/** Última lista recibida de cada registro (sistema/global y departamentos/*). Se combinan para no quitar de memoria
+ *  lo que solo está en uno: los responsables solo escriben en el del departamento. */
+const _actLibresRemotoPorDoc={};
+function actLibresRemotoCombinado(clave,lista){
+  _actLibresRemotoPorDoc[clave]=Array.isArray(lista)?lista:[];
+  const byId=new Map();
+  Object.keys(_actLibresRemotoPorDoc).forEach(function(k){
+    _actLibresRemotoPorDoc[k].forEach(function(t){
+      if(!t||!t.id||_actLibresQuitadosIds.has(String(t.id)))return;
+      const id=String(t.id);
+      const prev=byId.get(id);
+      byId.set(id,prev?pickMejorActLibre(prev,t):t);
+    });
+  });
+  return Array.from(byId.values());
 }
 /** Entrega local (últimos 7 días) más reciente que la de Firestore (otra sesión la pisó): marcarla para volver a subirla. */
 function actLibresMarcarEntregasLocalesMasRecientes(remoto){
@@ -1448,9 +1466,10 @@ function diferirActLibresSnap(clave,lista,esDepto){
   _actLibresSnapDiferidos[clave]=setTimeout(function(){
     delete _actLibresSnapDiferidos[clave];
     if(_localSaving){diferirActLibresSnap(clave,lista,esDepto);return;}
+    const rem=actLibresRemotoCombinado(clave,lista);
     actividadesLibres=esDepto&&typeof upsertActividadesLibresFromRemote==='function'
-      ?upsertActividadesLibresFromRemote(lista)
-      :mergeActividadesLibresFromRemote(lista);
+      ?upsertActividadesLibresFromRemote(rem)
+      :mergeActividadesLibresFromRemote(rem);
     try{_saveLSLocal();}catch(e){}
     scheduleRefreshViewsAfterRemoteDataChange();
   },2500);
@@ -1470,9 +1489,10 @@ function onRemoteCfgSnapshot(deptoId,snap){
     changed=true;
   }
   if(data&&Array.isArray(data.actividadesLibres)){
+    const remD=actLibresRemotoCombinado('depto:'+deptoId,data.actividadesLibres);
     actividadesLibres=typeof upsertActividadesLibresFromRemote==='function'
-      ?upsertActividadesLibresFromRemote(data.actividadesLibres)
-      :mergeActividadesLibresFromRemote(data.actividadesLibres);
+      ?upsertActividadesLibresFromRemote(remD)
+      :mergeActividadesLibresFromRemote(remD);
     changed=true;
   }
   if(!changed)return;
@@ -1595,7 +1615,7 @@ function initRealtimeGlobalSync(){
       }
     }
     if(Array.isArray(g.actividadesLibres)){
-      actividadesLibres=mergeActividadesLibresFromRemote(g.actividadesLibres);
+      actividadesLibres=mergeActividadesLibresFromRemote(actLibresRemotoCombinado('global',g.actividadesLibres));
       changed=true;
     }
     if(Array.isArray(g.agendaEventos)){agendaEventos=g.agendaEventos;changed=true;}

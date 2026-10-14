@@ -3799,7 +3799,7 @@ function pqrsNumeroDesdeUiAltaOCtx(){
   }
   const ctx=window._taskModalCtx||{};
   const ctxExp=String(ctx.expId||'').trim();
-  if(ctxExp&&!/^ACT[-_]/i.test(ctxExp))return ctxExp;
+  if(ctxExp&&!/^(ACT|INF)[-_]/i.test(ctxExp))return ctxExp;
   const expBuscar=String((document.getElementById('entrega-resp-exp')||{}).value||'').trim();
   if(expBuscar)return expBuscar;
   return'';
@@ -7419,10 +7419,18 @@ function cerrarActAgendaPanel(){
 function actAgendaGuardarForm(){
   actAgendaProgramar();
 }
-function genCodigoActLibre(depto){
-  const pref={guaviare:'ACT-GV',guainia:'ACT-GN',vaupes:'ACT-VP'}[depto]||'ACT';
-  const n=(actividadesLibres||[]).filter(a=>a.depto===depto&&!a.eliminada).length+1;
-  return pref+'-'+String(n).padStart(4,'0');
+/** Consecutivo = mayor existente + 1 (incluye eliminadas: contar repetía números). Informes de contrato: INF-GV-0001. */
+function genCodigoActLibre(depto,opts){
+  const base=opts&&opts.informe?'INF':'ACT';
+  const suf={guaviare:'GV',guainia:'GN',vaupes:'VP'}[depto];
+  const pref=suf?base+'-'+suf:base;
+  const re=new RegExp('^'+pref+'-(\\d+)$');
+  let max=0;
+  (actividadesLibres||[]).forEach(function(a){
+    const m=String((a&&a.codigo)||'').trim().match(re);
+    if(m)max=Math.max(max,parseInt(m[1],10)||0);
+  });
+  return pref+'-'+String(max+1).padStart(4,'0');
 }
 /** Departamento real de una actividad libre (nunca el módulo «responsables»). */
 function resolveDeptoActLibre(hint){

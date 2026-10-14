@@ -427,7 +427,7 @@ function syncEntregaRespModoUi(){
   if(libre){
     const deptoLibre=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre():(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
     const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
-    window._entregaLibreCodigoPreview=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
+    window._entregaLibreCodigoPreview=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk,{informe:informe}):('ACT-'+Date.now());
   }else window._entregaLibreCodigoPreview='';
   syncEntregaInformeModoUi(informe);
   if(informe)return;
@@ -656,7 +656,7 @@ function ensureTaskInformeContrato(){
     ?resolveDeptoActLibre()
     :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
   const deptoOk=(deptoLibre&&deptoLibre!=='responsables')?deptoLibre:'guaviare';
-  const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk):('ACT-'+Date.now());
+  const cod=typeof genCodigoActLibre==='function'?genCodigoActLibre(deptoOk,{informe:true}):('INF-'+Date.now());
   const per=fmtF(inf.desde)+' a '+fmtF(inf.hasta);
   const detalle='Contrato N° '+inf.numero+' · Informe N° '+inf.n+' · Periodo '+per;
   let t=buildTaskEntregaResponsable('Informe de contrato',detalle,responsableActivo);

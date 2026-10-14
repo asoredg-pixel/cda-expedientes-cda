@@ -2177,7 +2177,7 @@ async function driveEnsureExpedienteFolder(e) {
   const anio = ref.getFullYear().toString();
   const expNum = String(e._exp || '').trim();
   const nomSlug = _driveSlug(typeof getNom === 'function' ? getNom(e) : (e._pn_nombre || ''), 30);
-  const esActLibre = !!(e._sin_expediente || /^ACT[-_]/i.test(expNum));
+  const esActLibre = !!(e._sin_expediente || /^(ACT|INF)[-_]/i.test(expNum));
   const carpNom = (esActLibre ? '' : 'EXP-') + expNum.replace(/\s/g, '') + (nomSlug ? '-' + nomSlug : '');
   let parent = DRIVE_ROOT_EXPEDIENTES_ID;
   // Persistir ID de carpeta año para no recrear "2026 (1)" entre sesiones

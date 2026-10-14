@@ -77,6 +77,7 @@ describe('Informe entregado: otra sesión no lo pisa', () => {
         _localSaving: true, actividadesLibres: [],
         upsertActividadesLibresFromRemote: l => { aplicadas++; return l },
         mergeActividadesLibresFromRemote: l => { aplicadas++; return l },
+        actLibresRemotoCombinado: (k, l) => l,
         _saveLSLocal: () => {}, scheduleRefreshViewsAfterRemoteDataChange: () => {},
         setTimeout, clearTimeout
       })
