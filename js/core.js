@@ -10298,7 +10298,11 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
   const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
   let detalle='La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.';
-  if(esAuto&&pe){
+  const revParSide=pe&&t&&typeof taskRevParTecnicoPuedeEliminar==='function'&&taskRevParTecnicoPuedeEliminar(t,responsableActivo,eSide)
+    ?taskRevisionParCtx(t,eSide):null;
+  if(revParSide&&!esAuto){
+    detalle='El profesional <strong>'+escAttr(revParSide.profesional)+'</strong> aún no la ha revisado. Al eliminar la entrega sale de su revisión, la actividad vuelve a <strong>su Por ejecutar</strong> y se borran los documentos para que cargue uno nuevo.';
+  }else if(esAuto&&pe){
     detalle=tieneExp
       ?'Autoentrega con expediente/PQRSD: se cancelan documentos y N° de la entrega; <strong>se conservan los datos del registro</strong> para una nueva entrega. No queda en Por ejecutar.'
       :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.';
@@ -19311,6 +19315,8 @@ function puedeEliminarEntregaActividad(expId,taskId){
   }
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&typeof taskRevParTecnicoPuedeEliminar==='function'
+    &&taskRevParTecnicoPuedeEliminar(t,responsableActivo,e))return true;
   // Autoentrega del responsable: puede cancelar si está por verificar o por corregir
   const revParEl=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,e):null;
   const esProfRevPar=!!(revParEl&&revParEl.fase==='profesional'&&agendaNorm(revParEl.profesional)===agendaNorm(responsableActivo||''));
@@ -19347,6 +19353,8 @@ function eliminarEntregaActividadConfirm(expId,taskId){
   const eConf=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(t.exp||expId):null):null;
   const tieneExp=!!eConf;
   const esPqrsConf=!!(eConf&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eConf));
+  const revParConf=!esAuto&&typeof taskRevParTecnicoPuedeEliminar==='function'&&taskRevParTecnicoPuedeEliminar(t,responsableActivo,eConf)
+    ?taskRevisionParCtx(t,eConf):null;
   const fn=function(){eliminarEntregaActividad(expId,taskId);};
   if(typeof confirmEliminar==='function'){
     confirmEliminar({
@@ -19358,7 +19366,9 @@ function eliminarEntregaActividadConfirm(expId,taskId){
         ?(tieneExp
           ?('Se eliminan documentos/anexos de Drive y se liberan N° de factura, oficio, concepto o acto. El '+(esPqrsConf?'PQRSD':'expediente')+' y sus datos de registro (interesado, radicación, etc.) se conservan para no volver a digitarlos. La actividad de entrega no quedará en Por ejecutar.')
           :'Como la actividad se creó al entregar (📤 Entregar documento), se anula por completo: no quedará en Por ejecutar. Se borrarán del Drive los documentos y anexos.')
-        :'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
+        :revParConf
+          ?('Sale de la revisión de '+revParConf.profesional+' y la actividad vuelve a su Por ejecutar para que cargue un nuevo documento. Se borrarán del Drive los documentos y anexos de esta entrega y se libera el N° registrado.')
+          :'La actividad volverá a Por ejecutar (según su plazo: en término, vencida, urgente o prioritaria), como si no se hubiera entregado. Se borrarán del Drive los documentos y anexos de esta entrega.',
       confirmLabel:esAuto?'Sí, cancelar autoentrega':'Sí, eliminar entrega'
     },fn);
     return;
@@ -19413,6 +19423,10 @@ async function eliminarEntregaActividad(expId,taskId,opts){
   const e=t.sinExpediente?null:getExpById(refId);
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
+  // Técnico retira la entrega enviada a revisión del profesional: la actividad vuelve a su nombre
+  const revParTec=!desdeNotif&&typeof esModoResponsable==='function'&&esModoResponsable()
+    &&typeof taskRevParTecnicoPuedeEliminar==='function'&&taskRevParTecnicoPuedeEliminar(t,responsableActivo,e)
+    ?taskRevisionParCtx(t,e):null;
   // Liberar N° de concepto/acto/factura/oficio de esta entrega
   if(typeof retirarRegistroPendienteDeEntrega==='function'){
     try{
@@ -19570,6 +19584,12 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       });
       return;
     }
+    if(revParTec){
+      tk.responsable=revParTec.tecnico;
+      tk.responsables=[revParTec.tecnico];
+      tk.asignados=[{nombre:revParTec.tecnico,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
+      tk.reporteTrasladado=false;
+    }
     tk.estado='En ejecución';
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
     if(tk.fechaReportada)tk.fechaReportada='';
@@ -19580,7 +19600,9 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       fecha:hoy(),
       ts:Date.now(),
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||''),
-      nota:'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos ni N° de registro de la entrega)'
+      nota:revParTec
+        ?('Entrega retirada de la revisión de '+revParTec.profesional+' — vuelve a Por ejecutar de '+revParTec.tecnico+' (sin documentos ni N° de registro de la entrega)')
+        :'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos ni N° de registro de la entrega)'
     });
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
@@ -22904,6 +22926,18 @@ function taskRevParTecnicoEsperando(t,usuario,e){
   if(!t||t.eliminada)return false;
   const p=taskRevParParticipante(t,usuario,e);
   return !!(p&&p.rol==='tecnico'&&p.fase==='profesional'&&estadoTask(t)!=='Atendida');
+}
+/** El técnico puede eliminar su entrega mientras el profesional no la haya revisado (sin acciones suyas tras el envío). */
+function taskRevParTecnicoPuedeEliminar(t,usuario,e){
+  if(!taskRevParTecnicoEsperando(t,usuario,e))return false;
+  const est=estadoTask(t);
+  if(est==='Por verificar'||est==='Por corregir'||est==='Atendida'||t.fechaReportada)return false;
+  const h=t.historial||[];
+  let i=h.length-1;
+  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
+  if(i<0||(h[i].revisionPar!=='solicitud'&&h[i].revisionPar!=='correccion'))return false;
+  const prof=agendaNorm(h[i].a||'');
+  return !h.slice(i+1).some(function(x){return x&&agendaNorm(x.por||x.reportadoPor||'')===prof;});
 }
 /** Filas para «Por revisar» del técnico: actividades que envió a revisión y hoy están a nombre del profesional. */
 function getTareasRevParTecnicoEsperando(){
@@ -26991,6 +27025,9 @@ function renderActRowToolbarHtml(t,expAct){
       (estadoTask(t)==='Atendida'
         ?'<button type="button" class="btn bsm bic act-ico" title="Ver documento y anexos aprobados" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true})">🔍</button>'
         :'<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada a revisión" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>')+
+      (estadoTask(t)!=='Atendida'&&typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)
+        ?'<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: sale de la revisión del profesional, vuelve a su Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>'
+        :'')+
       taskChatBtnHtml(t.exp,t.id,t)+
       '</span>';
   }
