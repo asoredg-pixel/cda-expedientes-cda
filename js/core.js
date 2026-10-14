@@ -27791,6 +27791,7 @@ function openCrearActLibreModal(){
               return '<option value="'+escAttr(n)+'">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' (encargado)':'')+'</option>';
             }).join('')+
           '</select>'+
+          '<label id="act-libre-pqrs-prior-lbl" style="display:none;align-items:center;gap:6px;font-size:12px;margin-top:8px" title="Atender en el menor tiempo posible"><input type="checkbox" id="act-libre-pqrs-prior"> ⚡ PQRSD prioritaria</label>'+
         '</div>'+
         '<div id="act-libre-pqrs-entrega-host" style="margin-top:10px"></div>'+
         '<textarea id="act-libre-pqrs-cmt" placeholder="Comentario u observaciones (opcional)…" style="min-height:56px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;width:100%;margin-top:8px;box-sizing:border-box"></textarea>'+
@@ -27842,6 +27843,8 @@ function actLibrePqrsRespChange(){
     }
   }
   if(cmt)cmt.style.display=atender?'':'none';
+  const priorLbl=document.getElementById('act-libre-pqrs-prior-lbl');
+  if(priorLbl)priorLbl.style.display=atender?'none':'flex';
   if(btn)btn.textContent=atender?'📤 Crear y atender PQRSD':'✚ Crear y asignar PQRSD';
   if(window._taskModalCtx)window._taskModalCtx.entregaDirectaPqrs=atender;
 }
@@ -27945,23 +27948,27 @@ function actLibreExpPickCrear(expNum){
   actLibreExpSyncUi();
   setTimeout(function(){const s=document.getElementById('entrega-resp-tramite');if(s)s.focus();},60);
 }
-/** PQRSD que ya existe: se asigna con el mismo modal de la bandeja (varios responsables, reenvío de correo). */
+/** PQRSD que ya existe (abierta o atendida): igual que un expediente, se elige la actividad y a quién se asigna. */
 function actLibrePqrsPickExistente(expNum){
   const portal=document.getElementById('act-libre-pqrs-sug');
   if(portal){portal.style.display='none';portal.innerHTML='';}
   const e=typeof getExpById==='function'?getExpById(expNum):null;
   if(!e){notif('PQRSD no encontrada','err');return;}
-  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e)){notif('La PQRSD '+e._exp+' ya está atendida','err');return;}
-  const ofi=String(e._pqrs_oficina||'').trim();
-  const ofiAct=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'guaviare';
-  if(ofi!==ofiAct){
-    notif(ofi?('La PQRSD '+e._exp+' está en '+(typeof labelOficina==='function'?labelOficina(ofi):ofi)+' — no se puede asignar desde aquí')
-      :('La PQRSD '+e._exp+' aún no ha sido trasladada a esta oficina por Secretaría'),'err');
-    return;
+  const cerrada=typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e);
+  if(!cerrada){
+    const ofi=String(e._pqrs_oficina||'').trim();
+    const ofiAct=typeof getPqrsOficinaActiva==='function'?getPqrsOficinaActiva():'guaviare';
+    if(ofi!==ofiAct){
+      notif(ofi?('La PQRSD '+e._exp+' está en '+(typeof labelOficina==='function'?labelOficina(ofi):ofi)+' — no se puede asignar desde aquí')
+        :('La PQRSD '+e._exp+' aún no ha sido trasladada a esta oficina por Secretaría'),'err');
+      return;
+    }
   }
-  if(typeof openAsignarPqrsOficinaModal!=='function'){notif('No se pudo abrir la asignación de PQRSD','err');return;}
-  if(typeof closeTaskModal==='function')closeTaskModal();
-  setTimeout(function(){openAsignarPqrsOficinaModal(e._exp);},0);
+  actLibreExpPickExistente(e._exp);
+  const hint=document.getElementById('act-libre-pqrs-hint');
+  if(hint)hint.innerHTML='Seleccionada: <strong>PQRSD '+escAttr(e._exp)+'</strong> · '+
+    escAttr(typeof getNom==='function'?getNom(e):'')+(cerrada?' · <span style="color:var(--gn)">atendida</span>':'')+
+    '<br>Elija la actividad y a quién se asigna.';
 }
 function actLibrePqrsPickCrear(expNum){
   window._actLibrePqrsCrear=true;
@@ -28027,6 +28034,14 @@ function submitCrearActividadEnExpediente(){
   }else{
     e=typeof getExpById==='function'?getExpById(sel.expId):null;
     if(!e){notif('Expediente no encontrado','err');return;}
+    // Atender una PQRSD abierta: asignación de la bandeja (reenvía anexos y no duplica la tarea de atención)
+    if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))
+      &&(act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act))&&typeof openAsignarPqrsOficinaModal==='function'){
+      if(prior)e._pqrs_prioritaria=true;
+      closeTaskModal();
+      setTimeout(function(){openAsignarPqrsOficinaModal(e._exp);},0);
+      return;
+    }
   }
   const t=normalizeTask({
     id:genTaskId(),actividad:act,detalle:det,desc:act+(det?' — '+det:''),
@@ -28120,6 +28135,7 @@ async function submitCrearPqrsDesdeActLibre(){
           tAsig.responsable=respAsig;
           tAsig.responsables=[respAsig];
           tAsig.asignados=[{nombre:respAsig,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
+          if((document.getElementById('act-libre-pqrs-prior')||{}).checked){tAsig.prioritaria=true;e._pqrs_prioritaria=true;}
           if(!Array.isArray(tAsig.historial))tAsig.historial=[];
           tAsig.historial.push({
             tipo:'asignacion',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',

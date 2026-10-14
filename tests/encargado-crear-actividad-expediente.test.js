@@ -49,8 +49,8 @@ describe('Textos del encargado', () => {
     expect(fn).toMatch(/esPqrs\?'actLibrePqrsPickExistente':'actLibreExpPickExistente'/)
   })
 
-  it('PQRSD existente abre el modal de asignación de la bandeja', () => {
-    expect(extraer(core, ['actLibrePqrsPickExistente'])).toMatch(/openAsignarPqrsOficinaModal\(e\._exp\)/)
+  it('PQRSD existente se elige como un expediente (actividad + responsables)', () => {
+    expect(extraer(core, ['actLibrePqrsPickExistente'])).toContain('actLibreExpPickExistente(e._exp);')
   })
 })
 
