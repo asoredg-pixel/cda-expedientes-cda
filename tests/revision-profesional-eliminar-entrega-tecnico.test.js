@@ -70,6 +70,17 @@ describe('Técnico elimina entrega en revisión del profesional', () => {
     expect(fn).toMatch(/tk\.asignados=\[\{nombre:revParTec\.tecnico,fechaReportada:'',fechaAtendida:'',estado:'pendiente'\}\]/)
   })
 
+  it('si la creó el técnico (autoentrega) se anula; solo la asignada vuelve a Por ejecutar', () => {
+    const fn = extraer(core, ['eliminarEntregaActividad'])
+    const iAutoExp = fn.indexOf('if(esAuto&&e){')
+    const iAutoLibre = fn.indexOf('tk.eliminada=true;')
+    const iRevPar = fn.indexOf('tk.responsable=revParTec.tecnico;')
+    expect(iAutoExp).toBeGreaterThan(-1)
+    expect(iAutoExp).toBeLessThan(iRevPar)
+    expect(iAutoLibre).toBeLessThan(iRevPar)
+    expect(fn.slice(iAutoExp, iRevPar)).toMatch(/e\.tasks=Array\.isArray\(e\.tasks\)\?e\.tasks\.filter/)
+  })
+
   it('permiso en puedeEliminarEntregaActividad y 🗑 en la fila del técnico', () => {
     expect(extraer(core, ['puedeEliminarEntregaActividad'])).toMatch(/taskRevParTecnicoPuedeEliminar\(t,responsableActivo,e\)\)return true/)
     const tb = extraer(core, ['renderActRowToolbarHtml'])
