@@ -21494,6 +21494,7 @@ function bandejaItemKey(it){
   if(it.tipo==='pqrs_fecha_sol')return 'pfs|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   if(it.tipo==='pqrs_aviso')return 'pa|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   if(it.tipo==='firmado_atendida')return 'fa|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
+  if(it.tipo==='revpar_aprobada')return 'rpa|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
   return 'p|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'');
 }
 /** Claves canónica + legacy (p. ej. chat con cidx) para no perder marcas antiguas. */
@@ -21702,6 +21703,25 @@ function collectBandejaItems(){
         pushFromTask(t,t.codigo);
       });
     })();
+    // Revisión del profesional aprobada por el encargado → campanita al técnico que la envió (últimos 30 días)
+    (function collectRevParAprobadaAvisos(){
+      const yo=String(responsableActivo||'').trim();
+      if(!yo||typeof taskRevParAprobadaInfo!=='function')return;
+      exps.forEach(function(e){
+        (e.tasks||[]).forEach(function(t){
+          if(!taskTieneRevisionPar(t))return;
+          t=normalizeTask(t);
+          const info=taskRevParAprobadaInfo(t,e);
+          if(!info||agendaNorm(info.tecnico)!==agendaNorm(yo)||!info.fecha||diffDias(info.fecha)<-30)return;
+          items.push({
+            modo:'resp',tipo:'revpar_aprobada',exp:e._exp,taskId:t.id,hidx:info.hidx,
+            fecha:info.fecha,autor:info.por||'Encargado',
+            texto:'✅ Aprobada — la actividad que envió a revisión de '+info.profesional+' ya está atendida. Abra para ver y descargar el documento.',
+            desc:t.desc||t.actividad||'',responsable:t.responsable||''
+          });
+        });
+      });
+    })();
     (actividadesLibres||[]).forEach(t=>{
       t=normalizeActLibre(t);
       if(t.eliminada||!taskUsuarioEsAsignado(t,responsableActivo))return;
@@ -21817,6 +21837,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='pqrs_fecha_sol'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--bll);color:var(--bl)">Fecha solicitud</span>':
     it.tipo==='pqrs_aviso'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--bll);color:var(--bl)">Aviso PQRSD</span>':
     it.tipo==='firmado_atendida'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--gnl);color:var(--gn)">Firmado · Atendida</span>':
+    it.tipo==='revpar_aprobada'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--gnl);color:var(--gn)">Aprobada · Atendida</span>':
     '<span class="inbox-item-tag inbox-tag-ver">Reporte</span>';
   const tit=it.tipo==='comentario'?(it.autor+' · '+it.exp):
     it.tipo==='agenda'?(it.autor+' · Agenda'):
@@ -21829,6 +21850,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='sol_traslado'||it.tipo==='sol_eliminacion'?('Solicitud · '+it.exp):
     it.tipo==='pqrs_traslado'||it.tipo==='pqrs_fecha_sol'||it.tipo==='pqrs_aviso'?('PQRSD · '+it.exp):
     it.tipo==='firmado_atendida'?((it.autor||'VITAL / Encargado')+' · '+it.exp):
+    it.tipo==='revpar_aprobada'?((it.autor||'Encargado')+' · '+it.exp):
     (it.responsable+' · '+it.exp);
   const txt=it.tipo==='porverificar'?(it.texto||it.desc):it.texto;
   const toggle=modoVista==='read'
@@ -21998,7 +22020,7 @@ function bandejaActFiltroParaTask(t,it){
   if(tipo==='sol_traslado'||tipo==='sol_eliminacion'||tipo==='porverificar')return'porver';
   if(tipo==='devolucion'||tipo==='obsdocumento'||tipo==='notadoc')return tienePorCorr?'porcorr':'pend';
   if(tipo==='pqrs_traslado'||tipo==='pqrs_fecha_sol'||tipo==='pqrs_aviso')return'pend';
-  if(tipo==='firmado_atendida')return'done';
+  if(tipo==='firmado_atendida'||tipo==='revpar_aprobada')return'done';
   if(!t){
     if(tipo==='auto_venc1'||tipo==='auto_venc3')return'pend';
     return'pend';
@@ -22101,7 +22123,7 @@ function abrirActividadDesdeBandeja(it,resolved,filtro){
       if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,taskId,{revisarEntrega:true});
       return;
     }
-    if(tipo==='firmado_atendida'){
+    if(tipo==='firmado_atendida'||tipo==='revpar_aprobada'){
       if(typeof openTaskVerDocumentoResp==='function')
         openTaskVerDocumentoResp(expId,taskId,{soloAprobados:true});
       else if(typeof openTaskCommentsModal==='function')
@@ -22875,6 +22897,52 @@ function getTareasRevParTecnicoEsperando(){
       if(!t||t.eliminada||!(t.historial||[]).some(function(h){return h&&h.tipo==='traslado';}))return;
       t=normalizeTask(t);
       if(!taskRevParTecnicoEsperando(t,responsableActivo,e))return;
+      out.push(Object.assign({},t,{
+        exp:e._exp,
+        nombre:typeof getNom==='function'?getNom(e):'',
+        tram:(typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:'')||'',
+        depto:e._depto,
+        sinExpediente:false,
+        _revParTecnico:true
+      }));
+    });
+  });
+  return out;
+}
+/** Actividad que el técnico envió a revisión del profesional y el encargado ya aprobó (Atendida). */
+function taskRevParAprobadaInfo(t,e){
+  if(!t||t.eliminada||taskEsMultiAsignada(t)||estadoTask(t)!=='Atendida')return null;
+  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return null;
+  const h=t.historial||[];
+  let i=h.length-1;
+  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
+  if(i<0)return null;
+  const tr=h[i];
+  if(tr.revisionPar!=='solicitud'&&tr.revisionPar!=='correccion')return null;
+  const tec=String(tr.de||'').trim(),prof=String(tr.a||'').trim();
+  if(!tec||!prof||agendaNorm(tec)===agendaNorm(prof)||agendaNorm(prof)!==agendaNorm(t.responsable||''))return null;
+  let j=h.length-1;
+  while(j>i&&!(h[j]&&h[j].tipo==='verificacion'))j--;
+  const v=j>i?h[j]:null;
+  return{tecnico:tec,profesional:prof,hidx:v?j:-1,
+    fecha:String((v&&v.fecha)||t.fechaAtendida||'').slice(0,10),
+    por:String((v&&v.por)||t.verificadoPor||'').trim()};
+}
+function taskTieneRevisionPar(t){
+  return !!(t&&!t.eliminada&&(t.historial||[]).some(function(h){return h&&h.tipo==='traslado'&&h.revisionPar;}));
+}
+/** Filas para «Atendidas» del técnico: lo que envió a revisión del profesional y ya fue aprobado. */
+function getTareasRevParTecnicoAprobadas(){
+  if(!responsableActivo||!esModoResponsable())return[];
+  const yo=agendaNorm(responsableActivo);
+  const out=[];
+  (exps||[]).forEach(function(e){
+    if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    (e.tasks||[]).forEach(function(t){
+      if(!taskTieneRevisionPar(t))return;
+      t=normalizeTask(t);
+      const info=taskRevParAprobadaInfo(t,e);
+      if(!info||agendaNorm(info.tecnico)!==yo||taskUsuarioEsAsignado(t,responsableActivo))return;
       out.push(Object.assign({},t,{
         exp:e._exp,
         nombre:typeof getNom==='function'?getNom(e):'',
@@ -29375,7 +29443,7 @@ function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='porcorr')return(list||[]).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   });
-  if(filtro==='done')return list.filter(t=>{
+  if(filtro==='done')return mergeActividadLists(list.filter(t=>{
     const yoResp=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
     if(yoResp){
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
@@ -29422,7 +29490,7 @@ function filtrarActividadesPorEstado(list,filtro){
     if(eEnc&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eEnc)
       &&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eEnc))return true;
     return estadoTask(t)==='Atendida';
-  });
+  }),typeof getTareasRevParTecnicoAprobadas==='function'?getTareasRevParTecnicoAprobadas():[]);
   if(filtro==='revisados'){
     return (list||[]).filter(function(t){
       const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
