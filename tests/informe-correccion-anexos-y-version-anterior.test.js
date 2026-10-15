@@ -47,7 +47,7 @@ function ctxEr(t) {
     sstFileRefreshCtxLists: () => {},
     mutateTask: (e, k, fn) => { fn(t); return true }
   })
-  runInContext(extraer(er, ['informeCorreccionAplica', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']), c)
+  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']), c)
   return { c, staging }
 }
 
@@ -97,7 +97,7 @@ describe('Informe devuelto: anexos como primera entrega y versión anterior para
     expect(extraer(up, ['sstFileOnMainPick'])).toContain('if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional')
   })
 
-  it('Comparar: en informes los anexos no se rotulan «Anexo por corregir»', () => {
-    expect(core).toContain('const esCorr=soporteEsPorCorregir(s)&&!(esAn&&t.informeContrato);')
+  it('Comparar: los anexos no se rotulan «Anexo por corregir»', () => {
+    expect(core).toContain('const esCorr=soporteEsPorCorregir(s)&&!esAn;')
   })
 })

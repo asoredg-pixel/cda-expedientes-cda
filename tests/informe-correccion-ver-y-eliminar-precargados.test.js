@@ -48,7 +48,7 @@ describe('Informe devuelto: informe y anexos precargados con ver y eliminar', ()
     sstFileRefreshCtxLists: () => {},
     escAttr: s => String(s), jsStr: s => String(s)
   })
-  runInContext(extraer(er, ['informeCorreccionAplica', 'informeCorreccionItem', 'informeCorreccionPrecargar']), c)
+  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar']), c)
   runInContext(extraer(up, ['sstFileRenderItemRow', 'sstFileCollect']), c)
   c.informeCorreccionPrecargar('INF-GV-0001', 'T1')
   const ctx = staging.k

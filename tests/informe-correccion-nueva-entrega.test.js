@@ -49,7 +49,7 @@ function ctxEr(t) {
     mutateTask: (e, k, fn) => { fn(t); return true },
     escAttr: s => String(s), fmtF: s => String(s || '')
   })
-  runInContext(extraer(er, ['informeCorreccionAplica', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar', 'htmlInformeCorreccionResumen']), c)
+  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar', 'htmlInformeCorreccionResumen']), c)
   return { c, staging }
 }
 
@@ -104,7 +104,7 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     expect(sub).toContain('||preUploaded.some(function(u){return u&&!u.esAnexo;});')
     const env = extraer(core, ['enviarTaskPorVerificar'])
     expect(env).toContain('return !s||!soporteEsPorCorregir(s)||!reusados.has(String(s.driveFileId||s.fileId||\'\'));')
-    expect(extraer(core, ['initEnviarArchivosPick'])).toContain('informeCorreccionPrecargar(expId,taskId)')
+    expect(extraer(core, ['initEnviarArchivosPick'])).toContain('informeCorreccionPrecargar(expId,taskId,{ctxKey:envCtx,anexosListId:anexosList})')
     expect(extraer(core, ['renderEnviarPanelHtml'])).toContain('h+=htmlInformeCorreccionResumen(t);')
   })
 

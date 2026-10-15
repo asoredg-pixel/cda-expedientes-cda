@@ -2093,7 +2093,9 @@ window._pqrsBuildAdjDocumentosEntrega=_pqrsBuildAdjDocumentosEntrega;
  * Al aprobar se limpian las versiones viejas (_pqrsLimpiarVersionesCorreccionWf).
  */
 function _pqrsMergeDocumentosEntrega(prevDocs,nuevos,entregaN){
-  const hist=(Array.isArray(prevDocs)?prevDocs:[]).filter(d=>d&&(_pqrsDocEsPorCorregir(d)||d.conservar_version));
+  // Archivo de la entrega devuelta que el responsable conservó: deja de ser versión «por corregir»
+  const keysNuevos=new Set((Array.isArray(nuevos)?nuevos:[]).map(_pqrsDocKey).filter(Boolean));
+  const hist=(Array.isArray(prevDocs)?prevDocs:[]).filter(d=>d&&(_pqrsDocEsPorCorregir(d)||d.conservar_version)&&!keysNuevos.has(_pqrsDocKey(d)));
   const seen=new Set(hist.map(_pqrsDocKey).filter(Boolean));
   const added=[];
   (Array.isArray(nuevos)?nuevos:[]).forEach(function(a){
@@ -2101,7 +2103,11 @@ function _pqrsMergeDocumentosEntrega(prevDocs,nuevos,entregaN){
     const key=_pqrsDocKey(a);
     if(key&&seen.has(key))return;
     if(key)seen.add(key);
-    added.push(Object.assign({},a,{
+    const limpio={};
+    ['driveFilename','nombre'].forEach(function(f){
+      if(a[f]&&/^(acorregir|por corregir)[-_ ]+/i.test(String(a[f])))limpio[f]=String(a[f]).replace(/^(acorregir|por corregir)[-_ ]+/i,'');
+    });
+    added.push(Object.assign({},a,limpio,{
       driveEstado:a.driveEstado||'revision',
       entrega_n:entregaN,
       entregado_en:a.entregado_en||new Date().toISOString(),
@@ -10152,7 +10158,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   }
 }
 window.taskReviewConfirmarYNotificar=taskReviewConfirmarYNotificar;
-function initPqrsEntregaArchivosPick(){
+function initPqrsEntregaArchivosPick(expId,taskId){
   const ctxKey=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
   if(typeof sstFileStagingReset==='function')sstFileStagingReset(ctxKey);
   const getCtx=typeof entregaRespFileUploadCtx==='function'?entregaRespFileUploadCtx:null;
@@ -10172,6 +10178,8 @@ function initPqrsEntregaArchivosPick(){
     sstFileRenderList('pqrs-entrega-att-list',ctxKey);
     sstFileRenderList('pqrs-entrega-anexos-list',ctxKey);
   }
+  if(expId&&taskId&&typeof informeCorreccionPrecargar==='function')
+    informeCorreccionPrecargar(expId,taskId,{ctxKey:ctxKey,anexosListId:'pqrs-entrega-anexos-list'});
 }
 function initEnviarArchivosPick(expId,taskId,lists){
   if(typeof sstFileStagingReset==='function'&&typeof sstFileEnviarCtxKey==='function'){
@@ -10197,7 +10205,7 @@ function initEnviarArchivosPick(expId,taskId,lists){
     sstFileRenderList(mainList,envCtx);
     sstFileRenderList(anexosList,envCtx);
   }
-  if(!lists&&typeof informeCorreccionPrecargar==='function')informeCorreccionPrecargar(expId,taskId);
+  if(typeof informeCorreccionPrecargar==='function')informeCorreccionPrecargar(expId,taskId,{ctxKey:envCtx,anexosListId:anexosList});
 }
 const LIBRE_ENTREGA_PQRS_LISTS={main:'pqrs-entrega-att-list',anexos:'pqrs-entrega-anexos-list'};
 function renderTaskReviewEntregaSideHtml(expId,taskId,t){
@@ -10208,7 +10216,7 @@ function initTaskReviewEntregaSide(expId,taskId,t){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const esPqrs=!!(e&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,e));
   const esLibrePqrsUi=!esPqrs&&!!document.getElementById('pqrs-entrega-libre');
-  if(esPqrs)initPqrsEntregaArchivosPick();
+  if(esPqrs)initPqrsEntregaArchivosPick(expId,taskId);
   else initEnviarArchivosPick(expId,taskId,esLibrePqrsUi?LIBRE_ENTREGA_PQRS_LISTS:null);
   if(esPqrs||esLibrePqrsUi){
     setTimeout(function(){if(typeof pqrsEntregaRefreshUi==='function')pqrsEntregaRefreshUi();},40);
@@ -11448,11 +11456,15 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
       e._pqrs_respuesta_soportes=prev.concat(nuevos);
     }else{
       // Conservar soportes de versiones anteriores (por corregir) para comparar
-      const prev=Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes.slice():[];
-      prev.forEach(function(s){if(s)s.activo=false;});
       const wfPrev=getPqrsWorkflow(e);
-      const entregaN=(Number(wfPrev.entrega_n)||prev.filter(function(s){return s&&s.activo!==false;}).length||0)+1;
+      const prev0=Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes.slice():[];
+      const entregaN=(Number(wfPrev.entrega_n)||0)+1;
       const nuevos=archivos.map(function(a,i){return mapSop(Object.assign({},a,{driveEstado:a.driveEstado||'revision'}),i,entregaN);}).filter(Boolean);
+      const kSop=function(s){return typeof _pqrsDocKey==='function'?_pqrsDocKey({driveLink:s.url,url:s.url,fileId:s.fileId}):String((s&&(s.url||s.preview))||'').toLowerCase();};
+      // Archivo conservado de la entrega devuelta: entra como vigente, no como versión «por corregir»
+      const kNuevos=new Set(nuevos.map(kSop).filter(Boolean));
+      const prev=prev0.filter(function(s){return !s||!kNuevos.has(kSop(s));});
+      prev.forEach(function(s){if(s)s.activo=false;});
       const seen=new Set(prev.map(function(s){return typeof _pqrsDocKey==='function'?_pqrsDocKey({driveLink:s.url,url:s.url,fileId:s.fileId}):String((s&&(s.url||s.preview))||'').toLowerCase();}).filter(Boolean));
       nuevos.forEach(function(s){
         const k=typeof _pqrsDocKey==='function'?_pqrsDocKey({driveLink:s.url,url:s.url,fileId:s.fileId}):String((s.url||s.preview)||'').toLowerCase();
@@ -11533,6 +11545,21 @@ function guardarPqrsRespuestaDatos(e,opts,cerrar){
       wfPatch.notificar_por_propuesto=String(opts.notificarPor).trim();
     }
     setPqrsWorkflow(e,wfPatch);
+    // Archivos conservados de la entrega devuelta: en Drive pierden el prefijo «Por corregir»
+    const kCorrPrev=new Set((wfPrev.documentos||[]).filter(function(d){return d&&_pqrsDocEsPorCorregir(d);}).map(_pqrsDocKey).filter(Boolean));
+    const reusados=(!opts.reemplazarRevision&&kCorrPrev.size)?docsMerged.filter(function(d){return d&&d.entrega_n===entregaN&&kCorrPrev.has(_pqrsDocKey(d));}):[];
+    if(reusados.length&&typeof _pqrsRenombrarDocsDriveWf==='function'){
+      _pqrsRenombrarDocsDriveWf({documentos:reusados},'revision').then(function(){
+        const byKey={};
+        reusados.forEach(function(d){byKey[_pqrsDocKey(d)]=d;});
+        const wfNow=getPqrsWorkflow(e)||{};
+        setPqrsWorkflow(e,{documentos:(wfNow.documentos||[]).map(function(d){
+          const r=d&&d.entrega_n===entregaN?byKey[_pqrsDocKey(d)]:null;
+          return r?Object.assign({},d,{driveFilename:r.driveFilename,driveEstado:'revision'}):d;
+        })});
+        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      }).catch(function(err){console.warn('renombrar archivos conservados:',err);});
+    }
     e._pqrs_historial.push({tipo:'entrega_respuesta_nca',fecha:fechaResp,nota:'Entrega de respuesta para revisión NCA (v'+entregaN+')'+(oficioExt?' · Oficio '+oficioExt:'')+' — '+pqrsComentarioAutor(),oficina:e._pqrs_oficina,responsable:responsableActivo||''});
     const tidSync=String(wfPatch.task_id||opts.taskId||'').trim();
     if(tidSync&&typeof pqrsSincronizarTaskTrasReentrega==='function')
@@ -16079,7 +16106,7 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
       if(/^link\s*drive$/i.test(String(s.label||s.nombre||'').trim()))return;
       const esAn=soporteEsAnexoEntrega(s);
-      const esCorr=soporteEsPorCorregir(s)&&!(esAn&&t.informeContrato);
+      const esCorr=soporteEsPorCorregir(s)&&!esAn;
       const entregaActual=ultEntregaIds.has(s.id)&&!esCorr;
       let lab;
       if(esCorr&&esAn){
@@ -18893,7 +18920,7 @@ function openEnviarSoporteModal(expId,taskId,modo){
     ||(esPqrsEntrega&&eExp&&typeof puedeResponderDirecto==='function'&&puedeResponderDirecto(eExp)
       &&typeof puedeMarcarPqrsRespondida==='function'&&puedeMarcarPqrsRespondida(eExp));
   window._taskModalCtx={expId,taskId,mode:'enviar',actLibre:!!t.sinExpediente,entregaDirectaPqrs:entregaDir};
-  if(esPqrsEntrega)initPqrsEntregaArchivosPick();
+  if(esPqrsEntrega)initPqrsEntregaArchivosPick(expId,taskId);
   else initEnviarArchivosPick(expId,taskId,esLibrePqrsUi?LIBRE_ENTREGA_PQRS_LISTS:null);
   if(esPqrsEntrega||esLibrePqrsUi){
     setTimeout(function(){
