@@ -15559,6 +15559,14 @@ function soporteUrlComparable(s){
   if(!s)return'';
   return String(s.url||s.preview||s.driveLink||s.previewLink||'').trim();
 }
+/** N° de actividad del informe de contrato a la que pertenece el soporte (0 si no aplica). */
+function soporteInformeActN(s){
+  if(!s)return 0;
+  const n=s.informe_act&&parseInt(s.informe_act.n,10);
+  if(n>0)return n;
+  const m=String(s.label||'').match(/^Act\s+(\d+)\s+—/i);
+  return m?parseInt(m[1],10):0;
+}
 function soporteTabLabel(s,idx,soportes){
   const list=soportes||[];
   if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
@@ -15573,6 +15581,12 @@ function soporteTabLabel(s,idx,soportes){
     return 'Anexo rad. '+(n>0?n:1);
   }
   if(soporteEsAnexoEntrega(s)){
+    const actN=soporteInformeActN(s);
+    if(actN){
+      const deAct=list.filter(function(x){return x&&soporteEsAnexoEntrega(x)&&soporteInformeActN(x)===actN;});
+      const k=deAct.indexOf(s)+1;
+      return 'Act '+actN+(deAct.length>1?' · '+(k>0?k:1):'');
+    }
     const anexos=list.filter(soporteEsAnexoEntrega);
     const n=anexos.indexOf(s)+1;
     return 'Anexo '+(n>0?n:(s.anexo_n||1));
@@ -19800,7 +19814,8 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
         (soportes.length>1?('<div class="soporte-doc-tabs task-review-doc-tabs">'+soportes.map((s,i)=>{
           const on=sel&&s.id===sel.id;
           const lbl=soporteTabLabel(s,i,soportes);
-          return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'" onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
+          const tip=soporteInformeActN(s)?String(s.label||'').replace(/\s*·\s*por corregir/i,'').trim():'';
+          return '<button type="button" class="soporte-doc-tab'+(on?' on':'')+'"'+(tip?' title="'+escAttr(tip)+'"':'')+' onclick="selectTaskSoporte(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\',\''+escAttr(s.id)+'\')">'+escAttr(lbl)+'</button>';
         }).join('')+'</div>'):'')+
         (showCompareBtn?('<div id="task-review-compare-sel-pair" class="task-review-compare-sel-pair" aria-hidden="true">'+
           '<div class="task-review-compare-sel-col"><span class="task-review-compare-sel-lbl">◀ Izq.</span>'+
