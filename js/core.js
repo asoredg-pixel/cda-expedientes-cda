@@ -24335,8 +24335,15 @@ function revEnCursoAplicarSnap(st,d){
   }
   revEnCursoAplicarUi();
 }
+/** Correo del token Auth (debe coincidir con authEmail() de firestore.rules). */
+function revEnCursoEmail(){
+  const au=window._firebaseAuth&&window._firebaseAuth.currentUser;
+  const tokenEm=au&&au.email?String(au.email).toLowerCase().trim():'';
+  if(tokenEm)return tokenEm;
+  return typeof notasInternasEmail==='function'?notasInternasEmail():'';
+}
 function revEnCursoEscribir(st){
-  const email=typeof notasInternasEmail==='function'?notasInternasEmail():'';
+  const email=revEnCursoEmail();
   if(!email){
     console.warn('revision_en_curso: sin correo de sesión; no se puede registrar presencia');
     return Promise.resolve(false);
@@ -24348,9 +24355,12 @@ function revEnCursoEscribir(st){
     por:typeof getExpLockUserLabel==='function'?getExpLockUserLabel():'',
     email:email,
     sid:st.sid,desde:st.desde,latido:Date.now()
-  })).then(function(){return true;}).catch(function(err){
+  },{merge:true})).then(function(){return true;}).catch(function(err){
     st.propio=false;
+    const msg=String(err&&err.message||err||'');
     console.warn('revision_en_curso:',err);
+    if(/permission|insufficient/i.test(msg))
+      console.warn('revision_en_curso: despliegue las reglas (firebase deploy --only firestore:rules). email=',email);
     return false;
   });
 }

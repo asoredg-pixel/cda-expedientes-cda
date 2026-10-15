@@ -87,7 +87,7 @@ function ctx(opts) {
   })
   runInContext([constLinea('REV_EN_CURSO_TTL_MS'), constLinea('REV_EN_CURSO_LATIDO_MS'), constLinea('REV_EN_CURSO_SIDES')].join('\n'), c)
   runInContext(extraer(core, ['revEnCursoDocId', 'revEnCursoVigente', 'revEnCursoAplica', 'revEnCursoRol', 'revEnCursoAplicarUi',
-    'revEnCursoSnapData', 'revEnCursoAplicarSnap', 'revEnCursoEscribir', 'revEnCursoDetener', 'revEnCursoIniciar', 'revEnCursoAlAbrir', 'revEnCursoBloqueaAccion']), c)
+    'revEnCursoSnapData', 'revEnCursoAplicarSnap', 'revEnCursoEmail', 'revEnCursoEscribir', 'revEnCursoDetener', 'revEnCursoIniciar', 'revEnCursoAlAbrir', 'revEnCursoBloqueaAccion']), c)
   const snap = d => listener && listener({ exists: () => !!d, data: () => d })
   return { c, modal, writes, deletes, snap, avisos }
 }
@@ -252,7 +252,11 @@ describe('Puntos de bloqueo, estilos y reglas', () => {
     expect(css).toContain('.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="decision"]')
   })
 
-  it('reglas: leer cualquier usuario activo; escribir con su correo; borrar solo el suyo', () => {
-    expect(rules).toMatch(/match \/revision_en_curso\/\{id\}\s*\{\s*allow read: if isActiveUser\(\);\s*allow create, update: if isActiveUser\(\) && request\.resource\.data\.email == authEmail\(\);\s*allow delete: if isActiveUser\(\) && resource\.data\.email == authEmail\(\);/)
+  it('reglas: leer cualquier usuario activo; escribir con email del token; borrar propio o vencido', () => {
+    expect(rules).toContain('match /revision_en_curso/{id}')
+    expect(rules).toContain("request.resource.data.email.lower() == authEmail()")
+    expect(rules).toContain('resource.data.latido < request.time.toMillis() - 120000')
+    expect(extraer(core, ['revEnCursoEscribir'])).toContain('firebase deploy --only firestore:rules')
+    expect(extraer(core, ['revEnCursoEscribir'])).toContain('{merge:true}')
   })
 })
