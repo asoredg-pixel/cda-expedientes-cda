@@ -40,7 +40,7 @@ function render(historial) {
     Set, Date, Number, isFinite, isNaN, parseInt, String
   })
   runInContext(constante(core, 'TASK_HIST_FASE_LBL') + '\n' + constante(core, 'TASK_HIST_DEVOLUCIONES') + '\n' +
-    extraer(core, ['taskHistHoraTxt', 'taskHistLineaTxt', 'renderTaskHistorialHtml']), c)
+    extraer(core, ['taskHistHoraTxt', 'taskHistLineaTxt', 'taskHistMismoMomento', 'taskHistOcultarComoDuplicado', 'renderTaskHistorialHtml']), c)
   return c.renderTaskHistorialHtml({ historial }).split('<br>').map(l => l.replace(/<[^>]+>/g, ''))
 }
 
@@ -96,5 +96,21 @@ describe('Trazabilidad legible de la actividad', () => {
       { tipo: 'firma_wf', fecha: '2026-09-15', nota: 'Firma trámite → por_firmar' }
     ])
     expect(lineas.length).toBe(3)
+  })
+
+  it('encargado devolvió vía profesional: no duplica «Revisada y devuelta» con el traslado', () => {
+    const ts = new Date(2026, 9, 15, 17, 57).getTime()
+    const lineas = render([
+      { tipo: 'traslado', fecha: '2026-10-13', revisionPar: 'solicitud', de: 'MABEL LOPEZ', a: 'JHON ORTEGA' },
+      { tipo: 'reenvio_verificacion', fecha: '2026-10-13', version: 1, por: 'MABEL LOPEZ', ts },
+      { tipo: 'traslado', fecha: '2026-10-15', ts, de: 'JHON ORTEGA', a: 'MABEL LOPEZ', por: 'CARLOS', revisionPar: 'devolucion_nca', nota: 'Devuelta para corregir' },
+      { tipo: 'ajuste_soporte', fecha: '2026-10-15', ts: ts + 10, por: 'CARLOS', nota: 'Devuelta para corregir' }
+    ])
+    expect(lineas.filter(l => /devuelta|devolvió/i.test(l))).toHaveLength(1)
+    expect(lineas.some(l => /Encargado devolvió al técnico/.test(l))).toBe(true)
+    expect(lineas.some(l => /Revisada y devuelta para corregir/.test(l))).toBe(false)
+    // 1.ª entrega genérica no se repite si ya está el traslado a profesional (misma fecha)
+    expect(lineas.filter(l => /Enviada/.test(l))).toHaveLength(1)
+    expect(lineas.some(l => /Enviada a revisión de profesional/.test(l))).toBe(true)
   })
 })

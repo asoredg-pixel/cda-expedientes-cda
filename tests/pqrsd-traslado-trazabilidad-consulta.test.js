@@ -48,7 +48,7 @@ function ctx(extra) {
     TASK_HIST_DEVOLUCIONES: new Set(), TASK_HIST_FASE_LBL: {}
   }, extra || {}))
   runInContext(extraer(core, ['pqrsUltimoTrasladoOficina', 'cancelarTareasPqrsNca', 'taskTrasladoPqrsInfo', 'taskTrasladoPqrsTxt',
-    'taskTrasladoPqrsLineaHtml', 'taskHistHoraTxt', 'taskHistLineaTxt', 'renderTaskHistorialHtml', 'renderTaskConsultaItem']), c)
+    'taskTrasladoPqrsLineaHtml', 'taskHistHoraTxt', 'taskHistLineaTxt', 'taskHistMismoMomento', 'taskHistOcultarComoDuplicado', 'renderTaskHistorialHtml', 'renderTaskConsultaItem']), c)
   return c
 }
 

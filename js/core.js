@@ -15654,6 +15654,40 @@ function soporteInformeActN(s){
   const m=String(s.label||'').match(/^Act\s+(\d+)\s+—/i);
   return m?parseInt(m[1],10):0;
 }
+/** Índice del anexo dentro de la misma actividad (1, 2…); 0 si no se conoce. */
+function soporteInformeActK(s){
+  if(!s)return 0;
+  const k=parseInt(s.informeSoporteK,10);
+  if(k>0)return k;
+  const m=String(s.label||'').match(/soporte\s+(\d+)/i);
+  return m?parseInt(m[1],10):0;
+}
+/**
+ * Orden de pestañas al revisar informe: documentos principales/proyecciones primero;
+ * anexos por actividad de menor a mayor (Act 1, Act 2, Act 4…) y, en la misma, por soporte 1, 2…
+ */
+function soportesOrdenTabsInforme(list){
+  if(!Array.isArray(list)||list.length<2)return list||[];
+  return list.map(function(s,i){return{s:s,i:i};}).sort(function(a,b){
+    const an=typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(a.s);
+    const bn=typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(b.s);
+    if(an!==bn)return an?1:-1;
+    if(!an)return a.i-b.i;
+    const actA=soporteInformeActN(a.s)||0,actB=soporteInformeActN(b.s)||0;
+    if(actA!==actB){
+      if(!actA)return 1;
+      if(!actB)return -1;
+      return actA-actB;
+    }
+    const kA=soporteInformeActK(a.s)||0,kB=soporteInformeActK(b.s)||0;
+    if(kA!==kB){
+      if(!kA)return 1;
+      if(!kB)return -1;
+      return kA-kB;
+    }
+    return a.i-b.i;
+  }).map(function(x){return x.s;});
+}
 function soporteTabLabel(s,idx,soportes){
   const list=soportes||[];
   if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
@@ -19945,6 +19979,8 @@ function renderTaskSoportePanelHtml(expId,taskId,t,sopSelId,opts){
     const filtered=soportes.filter(function(s){return s&&set[String(s.id)];});
     if(filtered.length)soportes=filtered;
   }
+  if(soportes.length>1&&typeof soportesOrdenTabsInforme==='function')
+    soportes=soportesOrdenTabsInforme(soportes);
   // Documento a notificar: un solo archivo (firmado / aprobado), sin pestañas de versiones duplicadas
   if(porNotifVista&&soportes.length&&!(firmSopIds&&firmSopIds.length)){
     const defId=typeof getDefaultSoporteSel==='function'?getDefaultSoporteSel(t):'';
@@ -24577,6 +24613,40 @@ function taskHistLineaTxt(h){
   const tipo=String(h.tipo||'').replace(/_/g,' ').trim();
   return tipo?escAttr(tipo.charAt(0).toUpperCase()+tipo.slice(1))+por:'';
 }
+/** ¿Dos hitos del historial son del mismo momento (misma fecha o ts a menos de 2 min)? */
+function taskHistMismoMomento(a,b){
+  if(!a||!b)return false;
+  if((a.fecha||'')&&(a.fecha||'')===(b.fecha||''))return true;
+  const ta=Number(a.ts||0),tb=Number(b.ts||0);
+  return ta>0&&tb>0&&Math.abs(ta-tb)<120000;
+}
+/**
+ * Oculta la línea genérica cuando ya hay una más específica del mismo momento:
+ * - «Revisada y devuelta…» (ajuste_soporte) si hay traslado devolucion / devolucion_nca
+ * - «Enviada para revisión» (1.ª entrega) si hay traslado a profesional (solicitud)
+ */
+function taskHistOcultarComoDuplicado(hist,i){
+  const h=hist&&hist[i];
+  if(!h)return false;
+  const cerca=function(pred){
+    for(let j=Math.max(0,i-3);j<=Math.min(hist.length-1,i+3);j++){
+      if(j===i)continue;
+      const o=hist[j];
+      if(o&&pred(o)&&taskHistMismoMomento(h,o))return true;
+    }
+    return false;
+  };
+  if(h.tipo==='ajuste_soporte'){
+    return cerca(function(o){
+      return o.tipo==='traslado'&&(o.revisionPar==='devolucion_nca'||o.revisionPar==='devolucion');
+    });
+  }
+  const v1=(h.tipo==='reenvio_verificacion'||h.tipo==='soporte')&&(parseInt(h.version,10)||1)===1;
+  if(v1){
+    return cerca(function(o){return o.tipo==='traslado'&&o.revisionPar==='solicitud';});
+  }
+  return false;
+}
 /** Trazabilidad legible: hitos principales con fecha y hora, sin repetidos (un archivo = un «soporte»; firma_wf sin cambio de fase). */
 function renderTaskHistorialHtml(t){
   const hist=((t&&t.historial)||[]).filter(Boolean);
@@ -24584,7 +24654,8 @@ function renderTaskHistorialHtml(t){
   const versVistas=new Set();
   let ultFase=null;
   const out=[];
-  hist.forEach(h=>{
+  hist.forEach(function(h,i){
+    if(taskHistOcultarComoDuplicado(hist,i))return;
     let txt='';
     if(TASK_HIST_DEVOLUCIONES.has(h.tipo))ultFase=null;
     if(h.tipo==='soporte'){

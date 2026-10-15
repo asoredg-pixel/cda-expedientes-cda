@@ -32,7 +32,7 @@ const c = createContext({
   soporteEsDocumentoNotificado: () => false,
   soporteEsDocumentoFirmado: () => false
 })
-runInContext(extraer(core, ['soporteInformeActN', 'soporteTabLabel']), c)
+runInContext(extraer(core, ['soporteInformeActN', 'soporteInformeActK', 'soportesOrdenTabsInforme', 'soporteTabLabel']), c)
 
 describe('Informe de contrato: pestañas de anexos por actividad', () => {
   const sops = [
@@ -62,7 +62,24 @@ describe('Informe de contrato: pestañas de anexos por actividad', () => {
     expect(c.soporteTabLabel(otros[1], 1, otros)).toBe('Anexo 2')
   })
 
+  it('pestañas ordenadas: proyecciones primero, luego Act 1, 3, 4… (menor a mayor)', () => {
+    const desord = [
+      { id: 'a11', es_anexo: true, informe_act: { n: 11 }, label: 'Act 11 — X · soporte 1' },
+      { id: 'proy', label: 'Proy. v3 · activa', es_proyeccion: true },
+      { id: 'a1b', es_anexo: true, informe_act: { n: 1 }, label: 'Act 1 — Y · soporte 2' },
+      { id: 'a3', es_anexo: true, informe_act: { n: 3 }, label: 'Act 3 — Z · soporte 1' },
+      { id: 'a1a', es_anexo: true, informe_act: { n: 1 }, label: 'Act 1 — Y · soporte 1' },
+      { id: 'a4', es_anexo: true, informe_act: { n: 4 }, label: 'Act 4 — W · soporte 1' }
+    ]
+    expect(c.soportesOrdenTabsInforme(desord).map(s => s.id))
+      .toEqual(['proy', 'a1a', 'a1b', 'a3', 'a4', 'a11'])
+  })
+
   it('al pasar el mouse por la pestaña se ve la actividad completa', () => {
     expect(core).toContain("const tip=soporteInformeActN(s)?String(s.label||'').replace(/\\s*·\\s*por corregir/i,'').trim():'';")
+  })
+
+  it('el panel de revisión aplica el orden de pestañas del informe', () => {
+    expect(extraer(core, ['renderTaskSoportePanelHtml'])).toContain('soportesOrdenTabsInforme(soportes)')
   })
 })
