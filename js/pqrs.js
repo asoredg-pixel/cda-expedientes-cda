@@ -1722,13 +1722,26 @@ function ncaPqrsPinsGuardarLocal(k,arr){
     localStorage.setItem(NCA_PQRS_PIN_LS,JSON.stringify(all));
   }catch(err){}
 }
+function ncaPqrsPinNombreNorm(s){
+  return typeof agendaNorm==='function'?agendaNorm(s):String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+/** Claves remotas del mismo usuario escritas distinto (mayúsculas, tildes, espacios) según el equipo. */
+function ncaPqrsPinsRemoteVariantes(k){
+  const map=window._ncaPinsRemote||{};
+  const n=ncaPqrsPinNombreNorm(k);
+  return Object.keys(map).filter(function(u){return ncaPqrsPinNombreNorm(u)===n;})
+    .sort(function(a,b){return a===k?-1:(b===k?1:0);});
+}
 function ncaPqrsPinsPersistFirestore(k,arr){
   const db=window._db;
   if(!db||!window._fsSetDoc||!window._fsDoc||!k)return Promise.resolve(false);
   const m={};
-  m[k]=ncaPqrsPinsNorm(arr);
+  const val=ncaPqrsPinsNorm(arr);
   if(!window._ncaPinsRemote||typeof window._ncaPinsRemote!=='object')window._ncaPinsRemote={};
-  window._ncaPinsRemote[k]=m[k].slice();
+  ncaPqrsPinsRemoteVariantes(k).concat([k]).forEach(function(u){
+    m[u]=val.slice();
+    window._ncaPinsRemote[u]=val.slice();
+  });
   return Promise.resolve(window._fsSetDoc(window._fsDoc(db,'sistema','global'),{ncaPinsByUser:m},{merge:true}))
     .then(function(){return true;})
     .catch(function(err){console.warn('ncaPqrsPinsPersistFirestore:',err);return false;});
@@ -1749,8 +1762,15 @@ function ncaPqrsPinsLeer(){
   const k=ncaPqrsPinUsuarioKey();
   const local=ncaPqrsPinsLeerLocal(k);
   if(!window._ncaPinsRemoteLoaded)return local;
-  const remoteMap=window._ncaPinsRemote||{};
-  const hasRemote=Object.prototype.hasOwnProperty.call(remoteMap,k);
+  const remoteMap0=window._ncaPinsRemote||{};
+  const variantes=ncaPqrsPinsRemoteVariantes(k);
+  const hasRemote=variantes.length>0;
+  const remoteMap={};
+  if(hasRemote){
+    const union=[];
+    variantes.forEach(function(u){(remoteMap0[u]||[]).forEach(function(id){if(union.indexOf(id)<0)union.push(id);});});
+    remoteMap[k]=union;
+  }
   let migrados={};
   try{migrados=JSON.parse(localStorage.getItem(NCA_PQRS_PIN_MIGRADO_LS)||'{}')||{};}catch(err){migrados={};}
   if(!migrados[k]&&ncaEncargadoSesionPqrsPin()){

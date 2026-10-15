@@ -236,6 +236,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // -------------------------------------------------------------------------
+    // notas_internas/{email} — notas privadas del usuario (sincronizadas entre equipos)
+    // Solo el dueño de la cuenta lee y escribe su documento.
+    // -------------------------------------------------------------------------
+    match /notas_internas/{email} {
+      allow read, write: if isActiveUser() && email.lower() == authEmail();
+    }
+
     // Cualquier otra ruta bajo sistema/ queda denegada por defecto.
     match /sistema/{docId} {
       allow read, write: if false;

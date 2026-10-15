@@ -17294,8 +17294,97 @@ function notasInternasStoreKey(autor,expId,taskId){
   return a+'|'+String(expId||'').trim()+'|'+String(taskId||'').trim();
 }
 function loadNotasInternasStore(){
+  notasInternasSyncStart();
   try{return JSON.parse(localStorage.getItem('sst_notas_internas')||'{}')||{};}
   catch(e){return{};}
+}
+/** Copia privada por cuenta en Firestore (notas_internas/{correo}) para ver las notas en cualquier equipo.
+ *  Entrada local sin «cuenta» = pendiente de subir; con «cuenta» = ya sincronizada. */
+function notasInternasEmail(){
+  const u=window._usuarioActual;
+  const au=window._firebaseAuth&&window._firebaseAuth.currentUser;
+  return String((u&&u.email)||(au&&au.email)||'').toLowerCase().trim();
+}
+function notasInternasDocRef(){
+  const em=notasInternasEmail();
+  if(!window._db||!window._fsDoc||!em)return null;
+  return window._fsDoc(window._db,'notas_internas',em);
+}
+function notasInternasMarcarCuenta(keys,em){
+  let store;
+  try{store=JSON.parse(localStorage.getItem('sst_notas_internas')||'{}')||{};}catch(e){return;}
+  let cambio=false;
+  keys.forEach(function(k){if(store[k]&&!store[k].cuenta){store[k].cuenta=em;cambio=true;}});
+  if(cambio)saveNotasInternasStore(store);
+}
+function notasInternasSubir(byKey){
+  const ref=notasInternasDocRef();
+  const em=notasInternasEmail();
+  const keys=Object.keys(byKey||{});
+  if(!ref||!window._fsSetDoc||!keys.length)return Promise.resolve(false);
+  const del=window._fsDeleteField?window._fsDeleteField():null;
+  const pay={};
+  keys.forEach(function(k){
+    const ent=byKey[k];
+    if(ent){const c=Object.assign({},ent);delete c.cuenta;pay[k]=c;}
+    else if(del)pay[k]=del;
+  });
+  return Promise.resolve(window._fsSetDoc(ref,{byKey:pay,updatedAt:new Date().toISOString()},{merge:true}))
+    .then(function(){notasInternasMarcarCuenta(keys.filter(function(k){return !!byKey[k];}),em);return true;})
+    .catch(function(err){console.warn('notasInternasSubir:',err);return false;});
+}
+function notasInternasAplicarRemoto(data){
+  const em=notasInternasEmail();
+  if(!em)return false;
+  const remote=(data&&data.byKey&&typeof data.byKey==='object')?data.byKey:{};
+  let store;
+  try{store=JSON.parse(localStorage.getItem('sst_notas_internas')||'{}')||{};}catch(e){store={};}
+  const autor=notasInternasAutor();
+  const aNorm=autor?(typeof agendaNorm==='function'?agendaNorm(autor):String(autor).toLowerCase().trim()):'';
+  const subir={};
+  let cambio=false;
+  Object.keys(store).forEach(function(k){
+    const loc=store[k];
+    if(!loc||typeof loc!=='object')return;
+    const rem=remote[k];
+    if(!loc.cuenta){
+      // Pendiente de este equipo (o anterior a la sincronización): sube si es del usuario actual y más reciente
+      if(String(k).split('|')[0]!==aNorm)return;
+      if(!rem||String(loc.updatedAt||'')>String(rem.updatedAt||''))subir[k]=loc;
+      return;
+    }
+    if(loc.cuenta===em&&!rem){delete store[k];cambio=true;}
+  });
+  Object.keys(remote).forEach(function(k){
+    const rem=remote[k];
+    if(!rem||typeof rem!=='object'||subir[k])return;
+    const loc=store[k];
+    if(loc&&loc.cuenta===em&&String(loc.updatedAt||'')===String(rem.updatedAt||''))return;
+    if(loc&&!loc.cuenta&&String(loc.updatedAt||'')>String(rem.updatedAt||''))return;
+    store[k]=Object.assign({},rem,{cuenta:em});
+    cambio=true;
+  });
+  if(cambio)saveNotasInternasStore(store);
+  if(Object.keys(subir).length)notasInternasSubir(subir);
+  return cambio;
+}
+function notasInternasSyncStart(){
+  const em=notasInternasEmail();
+  if(window._notasIntSyncOn&&window._notasIntSyncOn===em)return;
+  if(window._notasIntSyncOn&&typeof window._notasIntUnsub==='function'){
+    try{window._notasIntUnsub();}catch(e){}
+    window._notasIntSyncOn='';
+  }
+  const ref=notasInternasDocRef();
+  if(!ref||!window._fsOnSnapshot)return;
+  window._notasIntSyncOn=notasInternasEmail();
+  try{
+    window._notasIntUnsub=window._fsOnSnapshot(ref,function(snap){
+      const data=snap&&typeof snap.exists==='function'&&snap.exists()?snap.data():{};
+      if(!notasInternasAplicarRemoto(data))return;
+      if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+    },function(err){console.warn('notas internas (sincronización):',err);});
+  }catch(err){console.warn('notasInternasSyncStart:',err);}
 }
 function saveNotasInternasStore(store){
   try{localStorage.setItem('sst_notas_internas',JSON.stringify(store||{}));return true;}
@@ -17336,7 +17425,10 @@ function setNotaInterna(expId,taskId,texto,meta){
       nombre:(meta&&meta.nombre)||''
     };
   }
-  return saveNotasInternasStore(store);
+  const ok=saveNotasInternasStore(store);
+  const sub={};sub[key]=store[key]||null;
+  notasInternasSubir(sub);
+  return ok;
 }
 function taskNotasInternasBtnHtml(expId,taskId){
   const autor=notasInternasAutor();
@@ -17473,7 +17565,10 @@ function saveNotasInternasList(expId,taskId,notas,meta){
       nombre:(meta&&meta.nombre)||''
     };
   }
-  return saveNotasInternasStore(store);
+  const ok=saveNotasInternasStore(store);
+  const sub={};sub[key]=store[key]||null;
+  notasInternasSubir(sub);
+  return ok;
 }
 function taskKeepNoteCardHtml(n,expId,taskId){
   return '<div class="task-keep-note" data-nota-id="'+escAttr(n.id)+'">'+

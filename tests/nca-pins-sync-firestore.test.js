@@ -45,7 +45,7 @@ function mkCtx(localPins) {
   runInContext(
     "const NCA_PQRS_PIN_LS='sst_nca_pqrs_pin_por_ejecutar';\nconst NCA_PQRS_PIN_MIGRADO_LS='sst_nca_pqrs_pin_migrado';\n" +
     extraer(pqrs, ['ncaPqrsPinUsuarioKey', 'ncaPqrsPinsNorm', 'ncaPqrsPinsLeerLocal', 'ncaPqrsPinsGuardarLocal',
-      'ncaPqrsPinsPersistFirestore', 'ncaPqrsPinsApplyFromGlobal', 'ncaPqrsPinsLeer', 'ncaPqrsPinsGuardar']), c)
+      'ncaPqrsPinNombreNorm', 'ncaPqrsPinsRemoteVariantes', 'ncaPqrsPinsPersistFirestore', 'ncaPqrsPinsApplyFromGlobal', 'ncaPqrsPinsLeer', 'ncaPqrsPinsGuardar']), c)
   return { c, writes }
 }
 
