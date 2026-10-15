@@ -307,7 +307,7 @@ function renderFormulario(tid,ed,targetId){
     fechasEstadoStoreHtml(ev)+
     '<input type="hidden" id="fld__fecha" value="'+(fechasEv.Solicitud||ev._fecha||'')+'">'+
     '<div class="fg ctrl-top-row">'+
-    '<div class="fld"><label>N° Expediente<span class="req-star">*</span></label><input type="text" id="fld__exp" value="'+(ev._exp||'')+'" placeholder="EXP-2026-001"></div>'+
+    '<div class="fld"><label>N° Expediente<span class="req-star">*</span></label><input type="text" id="fld__exp" value="'+(ev._exp||'')+'"'+(ev._exp?'':' oninput="expNumMayusInput(this)"')+' placeholder="EXP-2026-001"></div>'+
     '<div class="fld"><label>Estado del trámite</label><select id="fld__estado" onchange="onEstadoChange()">'+estOpts+'</select></div>'+
     '<div class="fld"><label id="lbl-fecha-estado">Fecha del estado</label><input type="date" id="fld__fecha_estado" value="'+fechaEstadoVal+'" onchange="onFechaEstadoVisibleChange()"></div>'+
     '</div>'+

@@ -193,6 +193,7 @@ function guardarExpCore(stayOnForm){
     const fromPanel=el?String(el.value||'').trim():'';
     expId=fromPanel||String(editId);
   }
+  if(!editId)expId=String(expId||'').trim().toUpperCase();
   if(!expId){notif('Complete N° Expediente','err');return;}
   const fechaCollect=collectFechasEstado();
   if(!fechaCollect._fecha&&stayOnForm){

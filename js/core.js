@@ -28032,7 +28032,7 @@ function openCrearActLibreModal(){
         '<div style="font-size:12px;font-weight:600;color:var(--gn);margin:4px 0 8px">✚ Crear expediente</div>'+
         '<div class="fg" style="margin-bottom:4px">'+
           '<div class="fld"><label>N° expediente <span style="color:var(--rd)">*</span></label>'+
-            '<input type="text" id="entrega-resp-exp-nuevo" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
+            '<input type="text" id="entrega-resp-exp-nuevo" oninput="expNumMayusInput(this)" placeholder="Número del expediente (p. ej. el de VITAL)" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)"></div>'+
           '<div class="fld"><label>Tipo de trámite <span style="color:var(--rd)">*</span></label>'+
             '<select id="entrega-resp-tramite" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" onchange="syncEntregaRespAltaFormPorTramite()">'+(typeof tramitesEntregaRespOptsHtml==='function'?tramitesEntregaRespOptsHtml():'')+'</select></div>'+
         '</div>'+
@@ -31278,6 +31278,16 @@ function alertExpAsocNoEncontrado(v){
     detail:v||'',
     confirmLabel:'Entendido'
   },function(){});
+}
+/** N° de expediente nuevo siempre en mayúscula al digitar o pegar (conserva la posición del cursor). */
+function expNumMayusInput(el){
+  if(!el)return;
+  const v=String(el.value||'');
+  const up=v.toUpperCase();
+  if(v===up||up.length!==v.length)return;
+  const s=el.selectionStart,f=el.selectionEnd;
+  el.value=up;
+  try{if(s!=null)el.setSelectionRange(s,f);}catch(err){}
 }
 function expNumeroDuplicado(expId,opts){
   opts=opts||{};
