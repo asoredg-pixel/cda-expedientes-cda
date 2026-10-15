@@ -122,7 +122,28 @@ describe('Presencia y bloqueo en tiempo real', () => {
     expect(k.writes).toHaveLength(1)
     expect(k.writes[0].ref).toBe('revision_en_curso/PAF-1__t1')
     expect(k.writes[0].data).toMatchObject({ expId: 'PAF-1', taskId: 't1', rol: 'ejecutor', por: 'Ana Ruiz', email: 'yo@cda.gov.co', sid: 'sid-yo' })
+    expect(k.c.window._revEnCurso.propio).toBe(true)
     expect(k.modal._cls.has('task-modal-en-revision')).toBe(false)
+  })
+
+  it('doc ya existe con mi sid (reapertura): marca propio y latea; si está vencido lo reescribe', () => {
+    const k = ctx({ label: 'Carlos (Encargado NCA)' })
+    k.c.revEnCursoIniciar('20261981', 'tk_1', 'revisor')
+    const desde = Date.now() - 30000
+    k.snap({ sid: 'sid-yo', por: 'Carlos', desde, latido: Date.now(), email: 'yo@cda.gov.co', rol: 'revisor' })
+    expect(k.c.window._revEnCurso.propio).toBe(true)
+    expect(k.c.window._revEnCurso.bloqueo).toBe(null)
+    expect(k.c.window._revEnCurso.desde).toBe(desde)
+    expect(k.writes).toHaveLength(0) // vigente propio: no reescribe en el snapshot (el timer latea)
+    k.c.revEnCursoDetener()
+    expect(k.deletes).toEqual(['revision_en_curso/20261981__tk_1'])
+
+    const k2 = ctx({ label: 'Carlos (Encargado NCA)' })
+    k2.c.revEnCursoIniciar('20261981', 'tk_1', 'revisor')
+    k2.snap({ sid: 'sid-yo', por: 'Carlos', desde: Date.now() - 300000, latido: Date.now() - 200000, rol: 'revisor' })
+    expect(k2.c.window._revEnCurso.propio).toBe(true)
+    expect(k2.writes).toHaveLength(1)
+    expect(k2.writes[0].data.sid).toBe('sid-yo')
   })
 
   it('responsable abre mientras el encargado revisa: borde rojo, aviso y sin nueva entrega ni eliminar', () => {

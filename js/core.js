@@ -24348,10 +24348,18 @@ function revEnCursoIniciar(expId,taskId,rol){
     st.unsub=window._fsOnSnapshot(st.ref,function(snap){
       if(window._revEnCurso!==st)return;
       const d=snap&&typeof snap.exists==='function'&&snap.exists()?snap.data():null;
+      // Otro usuario vigente → solo lectura. Si el doc es mío (o está vacío/vencido) → reclamar / marcar propio.
+      // Importante: si ya existe con mi sid (p. ej. reapertura o latido previo), hay que poner propio=true;
+      // si no, no latea ni libera al cerrar (bloqueo:null y propio:false en consola).
       if(revEnCursoVigente(d)&&d.sid!==st.sid){st.propio=false;st.bloqueo=d;}
       else{
         st.bloqueo=null;
-        if(!d||d.sid!==st.sid)revEnCursoEscribir(st);
+        if(d&&d.sid===st.sid&&revEnCursoVigente(d)){
+          st.propio=true;
+          if(!st.desde)st.desde=Number(d.desde)||Date.now();
+        }else{
+          revEnCursoEscribir(st);
+        }
       }
       revEnCursoAplicarUi();
     },function(err){console.warn('revision_en_curso (escucha):',err);});
