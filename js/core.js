@@ -5157,6 +5157,39 @@ function renderPqrsOrigenMailStageHtml(e){
   if(!inner)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin correo almacenado.</div>';
   return pqrsOrigenMailStageWrap(inner);
 }
+/** Sin PDF principal de la solicitud (ventanilla sin soporte; solo anexos o nada) y no radicada por correo. */
+function pqrsOrigenMostrarDetalle(e){
+  if(!e)return false;
+  if(typeof pqrsFueRadicadaPorCorreo==='function'?pqrsFueRadicadaPorCorreo(e):pqrsOrigenHasMailPane(e))return false;
+  const rad=typeof _pqrsCollectDocsRadicacion==='function'?_pqrsCollectDocsRadicacion(e):[];
+  if(rad.some(function(d){return d&&d.tipo==='soporte_radicacion'&&!_pqrsEsNombreAnexoRadicacion(d.nombre);}))return false;
+  return !!(String(e.f_f1||'').trim()||String(e._pqrs_detalle||e._detalle_general||'').trim()||(typeof detalleNotasData==='function'&&detalleNotasData(e._detalle_notas).length));
+}
+function renderPqrsOrigenDetalleStageHtml(e){
+  if(!e)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">PQRSD no encontrada</div>';
+  const kv=function(k,v){
+    v=String(v||'').trim();
+    return v?'<div class="pqrs-det-sec"><div class="pqrs-det-k">'+k+'</div><div class="pqrs-det-v">'+escAttr(v)+'</div></div>':'';
+  };
+  const notas=typeof detalleNotasData==='function'?detalleNotasData(e._detalle_notas).filter(function(n){return n&&String(n.texto||'').trim();}):[];
+  const txtStyle='font-size:13px;line-height:1.55;white-space:pre-wrap;color:var(--tx)';
+  const det=notas.length
+    ?notas.map(function(n){
+      return '<div style="padding:.45rem 0;border-bottom:1px solid var(--bd)">'+
+        '<div style="font-size:11px;color:var(--tx3);margin-bottom:3px">'+escAttr(n.autor||'—')+(n.fecha?' · '+fmtF(n.fecha):'')+'</div>'+
+        '<div style="'+txtStyle+'">'+escAttr(n.texto)+'</div></div>';
+    }).join('')
+    :'<div style="'+txtStyle+'">'+escAttr(String(e._pqrs_detalle||e._detalle_general||'').trim()||'—')+'</div>';
+  const nom=typeof getNom==='function'?getNom(e):'';
+  return '<div class="pqrs-origen-detalle" style="padding:16px 18px;max-width:780px;margin:0 auto;overflow:auto;height:100%;box-sizing:border-box">'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;padding:6px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">📝 Radicada sin documento PDF de la solicitud. Estos son el asunto y el detalle que registró Secretaría al radicar.</div>'+
+    kv('Asunto',e.f_f1)+
+    kv('Tipo de solicitud',e._tipo_solicitud)+
+    kv('Solicitante',nom)+
+    kv('Radicado',(e._fecha?fmtF(e._fecha):'')+(e.f_f2?' · '+e.f_f2:''))+
+    '<div class="pqrs-det-sec"><div class="pqrs-det-k">Detalle / descripción</div>'+det+'</div>'+
+  '</div>';
+}
 function renderPqrsOrigenDocStageHtml(doc){
   if(!doc)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin documento seleccionado.</div>';
   const sopLike={preview:doc.preview,url:doc.url,label:doc.label};
@@ -5172,6 +5205,9 @@ function selectPqrsOrigenDoc(docId){
   if(docId==='mail'){
     cerrarPqrsOrigenAttInline();
     stage.innerHTML=renderPqrsOrigenMailStageHtml(e);
+  }else if(docId==='detalle'){
+    cerrarPqrsOrigenAttInline();
+    stage.innerHTML=renderPqrsOrigenDetalleStageHtml(e);
   }else{
     cerrarPqrsOrigenAttInline();
     const docs=collectPqrsOrigenDocs(e);
@@ -5202,9 +5238,10 @@ function initPqrsOrigenDocViewer(e){
   e=e||(window._taskModalCtx&&typeof getExpById==='function'?getExpById(window._taskModalCtx.expId):null);
   const docs=collectPqrsOrigenDocs(e);
   const hasMail=pqrsOrigenHasMailPane(e);
+  const hasDet=pqrsOrigenMostrarDetalle(e);
   let sel=String(window._pqrsOrigenSelDoc||'').trim();
-  if(!sel||((sel==='mail'&&!hasMail)||(sel!=='mail'&&!docs.some(function(d){return d.id===sel;}))))
-    sel=docs.length?docs[0].id:(hasMail?'mail':'');
+  if(!sel||((sel==='mail'&&!hasMail)||(sel==='detalle'&&!hasDet)||(sel!=='mail'&&sel!=='detalle'&&!docs.some(function(d){return d.id===sel;}))))
+    sel=hasDet?'detalle':(docs.length?docs[0].id:(hasMail?'mail':''));
   window._pqrsOrigenSelDoc=sel;
   selectPqrsOrigenDoc(sel);
 }
@@ -5212,11 +5249,14 @@ function renderPqrsOrigenReviewHtml(e){
   if(!e)return'<div style="padding:12px;color:var(--tx3)">PQRSD no encontrada</div>';
   const docs=collectPqrsOrigenDocs(e);
   const hasMail=pqrsOrigenHasMailPane(e);
-  if(!docs.length&&!hasMail)
+  const hasDet=pqrsOrigenMostrarDetalle(e);
+  if(!docs.length&&!hasMail&&!hasDet)
     return'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin documentos ni correo de la solicitud.</div>';
   let sel=String(window._pqrsOrigenSelDoc||'').trim();
-  if(!sel)sel=docs.length?docs[0].id:(hasMail?'mail':'');
+  if(!sel)sel=hasDet?'detalle':(docs.length?docs[0].id:(hasMail?'mail':''));
   let tabs='';
+  if(hasDet)
+    tabs+='<button type="button" class="soporte-doc-tab pqrs-origen-doc-tab task-review-doc-tab'+(sel==='detalle'?' on':'')+'" data-doc-id="detalle" onclick="selectPqrsOrigenDoc(\'detalle\')">📝 Solicitud</button>';
   docs.forEach(function(d){
     tabs+='<button type="button" class="soporte-doc-tab pqrs-origen-doc-tab task-review-doc-tab'+(d.id===sel?' on':'')+'" data-doc-id="'+escAttr(d.id)+'" onclick="selectPqrsOrigenDoc(\''+jsStr(d.id)+'\')">'+escAttr(d.label)+'</button>';
   });
@@ -5226,6 +5266,7 @@ function renderPqrsOrigenReviewHtml(e){
   const openBtn=(openUrl&&openUrl.url)?('<button type="button" class="btn bsm bsm-ico" onclick="openDriveVentanaEmergente(\''+escAttr(openUrl.url)+'\')" title="Abrir en ventana emergente">↗</button>'):'';
   let stage='';
   if(sel==='mail')stage=renderPqrsOrigenMailStageHtml(e);
+  else if(sel==='detalle')stage=renderPqrsOrigenDetalleStageHtml(e);
   else{
     const doc=docs.find(function(d){return d.id===sel;})||docs[0];
     stage=doc?renderPqrsOrigenDocStageHtml(doc):'<div style="padding:16px;font-size:12px;color:var(--tx3)">Sin documento.</div>';
