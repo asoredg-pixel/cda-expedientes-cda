@@ -168,7 +168,7 @@ describe('Casilla «Aplica revisión de profesional» (envío)', () => {
     c.enviarTaskPorVerificar('EXP-1', 't1', [], '', false, [archivo('B')])
     expect(c.taskRevParCorreccionRecibida(c.task, 'Prof', c.exp)).toBe(true)
     expect(c.taskRevParCorreccionRecibida(c.task, 'Tec', c.exp)).toBe(false)
-    expect(read('js/core.js')).toContain("if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr))")
+    expect(read('js/core.js')).toContain("if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr||revParProfDevNca))")
   })
 
   it('sin casilla marcada: flujo normal a Por revisar', () => {

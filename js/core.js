@@ -8345,9 +8345,10 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
   const docsCompare=typeof collectDocsComparables==='function'?collectDocsComparables(e,taskId,t):[];
   const showCompareBtn=docsCompare.length>=2||(t.soportes||[]).length>=2;
   const revParCorr=typeof taskRevParCorreccionRecibida==='function'&&taskRevParCorreccionRecibida(t,usuario,e);
+  const revParProfDevNca=typeof taskRevParProfesionalEsperaCorreccionNca==='function'&&taskRevParProfesionalEsperaCorreccionNca(t,usuario,e);
   let h='<nav class="task-review-rail-nav" aria-label="Acciones responsable">';
   h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='doc'?' on':'')+'" data-side="doc" title="'+(esPqrs?(soloDocAprobado?'Documento y anexos aprobados':'Correo y solicitud'):'Documento')+'" onclick="taskReviewOpenSidePanel(\'doc\',\''+r+'\',\''+tid+'\')">'+(esPqrs&&!soloDocAprobado?'📧':'📄')+'</button>';
-  if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr))
+  if(showCompareBtn&&(miEst==='Por corregir'||est==='Por corregir'||revParCorr||revParProfDevNca))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='compare'?' on':'')+'" data-side="compare" title="Comparar versiones del documento" onclick="taskReviewToggleSidePanel(\'compare\',\''+r+'\',\''+tid+'\')">⇅</button>';
   if(!t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn task-review-rail-side'+(side==='exp'?' on':'')+'" data-side="exp" title="Expediente" onclick="taskReviewToggleSidePanel(\'exp\',\''+r+'\',\''+tid+'\')">📋</button>';
@@ -19435,6 +19436,11 @@ function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
   const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e0=t0&&!t0.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  // Concepto vía profesional: el encargado devolvió → al técnico (no al profesional)
+  if(typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t0,e0)
+    &&typeof encargadoDevolverRevParATecnico==='function'){
+    return encargadoDevolverRevParATecnico(expId,taskId,nota||'Devuelta al responsable');
+  }
   // Ya en Por firma / Revisados: cancelar firma y pasar a Por corregir (igual que desde Por revisar)
   if(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t0)
     &&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
@@ -21000,15 +21006,26 @@ function devolverTaskUnificado(expId,taskId){
   let nota=chat;
   if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
   if(!nota)nota='Devuelta para corregir';
-  if(chat){
-    try{addTaskComentario(expId,taskId,chat);}catch(err){}
-  }
   const ctx=window._taskModalCtx||{};
   if(ctx.directorRevisarPorFirmar&&typeof directorDevolverDesdePorFirmar==='function'){
+    if(chat){try{addTaskComentario(expId,taskId,chat);}catch(err){}}
     directorDevolverDesdePorFirmar(expId,taskId,nota);
     return;
   }
   const eDev=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
+  // Concepto revisado por profesional → encargado: devolver al técnico (el profesional solo recibe campanita)
+  if(typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eDev)
+    &&typeof encargadoDevolverRevParATecnico==='function'){
+    const ctxPar=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,eDev):null;
+    if(chat&&ctxPar&&ctxPar.tecnico){
+      try{addTaskComentario(expId,taskId,chat,{para:ctxPar.tecnico});}catch(err){}
+    }
+    encargadoDevolverRevParATecnico(expId,taskId,nota);
+    return;
+  }
+  if(chat){
+    try{addTaskComentario(expId,taskId,chat);}catch(err){}
+  }
   if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eDev)
     &&typeof devolverNotificacionRevisionFinal==='function'){
     devolverNotificacionRevisionFinal(expId,taskId,nota);
@@ -21291,6 +21308,9 @@ function taskEstadoBadgeHtml(t){
   }
   // Revisión técnico ↔ profesional (vista del responsable)
   const revParB=typeof taskRevParParticipante==='function'?taskRevParParticipante(t,responsableActivo,eExp):null;
+  if(t._revParProfDevNca||(typeof taskRevParProfesionalEsperaCorreccionNca==='function'&&taskRevParProfesionalEsperaCorreccionNca(t,responsableActivo,eExp))){
+    return badgeFromUi({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'Por corregir',subFg:'#a16207',subBg:'#fef9c3'});
+  }
   if(revParB&&revParB.fase==='profesional'&&est!=='Atendida'){
     if(revParB.rol==='tecnico'){
       const stRv=taskEstadoStyle('Por verificar',t);
@@ -21763,6 +21783,7 @@ function bandejaItemKey(it){
   if(it.tipo==='pqrs_aviso')return 'pa|'+it.exp+'|'+(it.pqrsAvisoId||it.fecha||'');
   if(it.tipo==='firmado_atendida')return 'fa|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
   if(it.tipo==='revpar_aprobada')return 'rpa|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
+  if(it.tipo==='revpar_devolucion_nca')return 'rpdn|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'')+'|'+(it.hidx!=null?it.hidx:'');
   return 'p|'+it.exp+'|'+it.taskId+'|'+(it.fecha||'');
 }
 /** Claves canónica + legacy (p. ej. chat con cidx) para no perder marcas antiguas. */
@@ -21990,6 +22011,32 @@ function collectBandejaItems(){
         });
       });
     })();
+    // Encargado devolvió al técnico un concepto que el profesional había enviado → campanita al profesional (Atendidas)
+    (function collectRevParDevNcaAvisos(){
+      const yo=String(responsableActivo||'').trim();
+      if(!yo||typeof taskRevParProfesionalEsperaCorreccionNca!=='function')return;
+      exps.forEach(function(e){
+        (e.tasks||[]).forEach(function(t){
+          if(!taskTieneRevisionPar(t))return;
+          t=normalizeTask(t);
+          if(!taskRevParProfesionalEsperaCorreccionNca(t,yo,e))return;
+          const h=t.historial||[];
+          let i=h.length-1;
+          while(i>=0&&!(h[i]&&h[i].tipo==='traslado'&&h[i].revisionPar==='devolucion_nca'))i--;
+          if(i<0)return;
+          const tr=h[i];
+          const fecha=String(tr.fecha||'').slice(0,10);
+          if(fecha&&diffDias(fecha)<-30)return;
+          const tec=String(tr.a||t.responsable||'').trim();
+          items.push({
+            modo:'resp',tipo:'revpar_devolucion_nca',exp:e._exp,taskId:t.id,hidx:i,
+            fecha:fecha||hoy(),autor:tr.por||'Encargado',
+            texto:'↩ El encargado devolvió «'+(t.desc||t.actividad||'actividad')+'» — fue al técnico '+tec+'. Abra Atendidas para ver el documento y las observaciones.',
+            desc:t.desc||t.actividad||'',responsable:t.responsable||''
+          });
+        });
+      });
+    })();
     (actividadesLibres||[]).forEach(t=>{
       t=normalizeActLibre(t);
       if(t.eliminada||!taskUsuarioEsAsignado(t,responsableActivo))return;
@@ -22106,6 +22153,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='pqrs_aviso'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--bll);color:var(--bl)">Aviso PQRSD</span>':
     it.tipo==='firmado_atendida'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--gnl);color:var(--gn)">Firmado · Atendida</span>':
     it.tipo==='revpar_aprobada'?'<span class="inbox-item-tag inbox-tag-ver" style="background:var(--gnl);color:var(--gn)">Aprobada · Atendida</span>':
+    it.tipo==='revpar_devolucion_nca'?'<span class="inbox-item-tag inbox-tag-ver" style="background:#fef2f2;color:#991b1b">Devuelta · Atendidas</span>':
     '<span class="inbox-item-tag inbox-tag-ver">Reporte</span>';
   const tit=it.tipo==='comentario'?(it.autor+' · '+it.exp):
     it.tipo==='agenda'?(it.autor+' · Agenda'):
@@ -22119,6 +22167,7 @@ function renderBandejaItemHtml(it,i,leidos,modoVista){
     it.tipo==='pqrs_traslado'||it.tipo==='pqrs_fecha_sol'||it.tipo==='pqrs_aviso'?('PQRSD · '+it.exp):
     it.tipo==='firmado_atendida'?((it.autor||'VITAL / Encargado')+' · '+it.exp):
     it.tipo==='revpar_aprobada'?((it.autor||'Encargado')+' · '+it.exp):
+    it.tipo==='revpar_devolucion_nca'?((it.autor||'Encargado')+' · '+it.exp):
     (it.responsable+' · '+it.exp);
   const txt=it.tipo==='porverificar'?(it.texto||it.desc):it.texto;
   const toggle=modoVista==='read'
@@ -22288,7 +22337,7 @@ function bandejaActFiltroParaTask(t,it){
   if(tipo==='sol_traslado'||tipo==='sol_eliminacion'||tipo==='porverificar')return'porver';
   if(tipo==='devolucion'||tipo==='obsdocumento'||tipo==='notadoc')return tienePorCorr?'porcorr':'pend';
   if(tipo==='pqrs_traslado'||tipo==='pqrs_fecha_sol'||tipo==='pqrs_aviso')return'pend';
-  if(tipo==='firmado_atendida'||tipo==='revpar_aprobada')return'done';
+  if(tipo==='firmado_atendida'||tipo==='revpar_aprobada'||tipo==='revpar_devolucion_nca')return'done';
   if(!t){
     if(tipo==='auto_venc1'||tipo==='auto_venc3')return'pend';
     return'pend';
@@ -22389,6 +22438,13 @@ function abrirActividadDesdeBandeja(it,resolved,filtro){
     }
     if(tipo==='porverificar'||filtro==='porver'){
       if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(expId,taskId,{revisarEntrega:true});
+      return;
+    }
+    if(tipo==='revpar_devolucion_nca'){
+      if(typeof openTaskVerDocumentoResp==='function')
+        openTaskVerDocumentoResp(expId,taskId);
+      else if(typeof openTaskCommentsModal==='function')
+        openTaskCommentsModal(expId,taskId,{verDocumento:true});
       return;
     }
     if(tipo==='firmado_atendida'||tipo==='revpar_aprobada'){
@@ -23119,7 +23175,7 @@ function taskRevisionParCtx(t,e){
   const tr=h[i];
   const de=String(tr.de||'').trim(),a=String(tr.a||'').trim();
   if(!de||!a||agendaNorm(de)===agendaNorm(a)||agendaNorm(a)!==agendaNorm(t.responsable||''))return null;
-  if(tr.revisionPar==='devolucion')return{tecnico:a,profesional:de,fase:'tecnico'};
+  if(tr.revisionPar==='devolucion'||tr.revisionPar==='devolucion_nca')return{tecnico:a,profesional:de,fase:'tecnico'};
   if(tr.revisionPar==='correccion'||tr.revisionPar==='solicitud')return{tecnico:de,profesional:a,fase:'profesional'};
   const conEntrega=h.slice(i+1).some(function(x){return x&&x.tipo==='traslado_entrega_reset';});
   return conEntrega?{tecnico:de,profesional:a,fase:'profesional'}:null;
@@ -23148,6 +23204,87 @@ function taskRevParCorreccionRecibida(t,usuario,e){
   let i=h.length-1;
   while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
   return i>=0&&h[i].revisionPar==='correccion';
+}
+/** El encargado devolvió al técnico un concepto que el profesional había enviado a Por verificar: el profesional la ve en Atendidas. */
+function taskRevParProfesionalEsperaCorreccionNca(t,usuario,e){
+  if(!t||t.eliminada||!usuario||!esModoResponsable())return false;
+  if(typeof estadoTask==='function'&&estadoTask(t)!=='Por corregir')return false;
+  const p=taskRevParParticipante(t,usuario,e);
+  if(!p||p.rol!=='profesional'||p.fase!=='tecnico')return false;
+  const h=t.historial||[];
+  let i=h.length-1;
+  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
+  return i>=0&&h[i].revisionPar==='devolucion_nca';
+}
+/** Filas Atendidas del profesional: conceptos que envió al encargado y este devolvió al técnico. */
+function getTareasRevParProfesionalDevueltaNca(){
+  if(!responsableActivo||!esModoResponsable())return[];
+  const out=[];
+  (exps||[]).forEach(function(e){
+    if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    (e.tasks||[]).forEach(function(t){
+      if(!t||t.eliminada||!taskTieneRevisionPar(t))return;
+      t=normalizeTask(t);
+      if(!taskRevParProfesionalEsperaCorreccionNca(t,responsableActivo,e))return;
+      out.push(Object.assign({},t,{
+        exp:e._exp,
+        nombre:typeof getNom==='function'?getNom(e):'',
+        tram:(typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:'')||'',
+        depto:e._depto,
+        sinExpediente:false,
+        _revParProfDevNca:true
+      }));
+    });
+  });
+  return out;
+}
+/** Encargado/NCA puede devolver al técnico (no al profesional) si el concepto está en Por verificar tras revisión par. */
+function encargadoPuedeDevolverRevParATecnico(t,e){
+  if(!t||t.eliminada)return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  const ctx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,e||null):null;
+  if(!ctx||ctx.fase!=='profesional')return false;
+  return !!(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t));
+}
+/**
+ * Devolución del encargado: reasigna al técnico, marca Por corregir, chat al técnico.
+ * El profesional recibe campanita y ve la actividad en Atendidas (documento + observaciones).
+ */
+function encargadoDevolverRevParATecnico(expId,taskId,nota){
+  const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t0){notif('Actividad no encontrada','err');return false;}
+  const ref=t0.sinExpediente?(t0.codigo||expId):expId;
+  const e0=t0.sinExpediente?null:(typeof getExpById==='function'?getExpById(ref):null);
+  if(!encargadoPuedeDevolverRevParATecnico(t0,e0))return false;
+  const ctx=taskRevisionParCtx(t0,e0);
+  const txt=String(nota||'').trim()||'Devuelta para corregir';
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():'Encargado';
+  const ok=mutateTask(ref,taskId,function(t){
+    normalizeTask(t);
+    t.responsable=ctx.tecnico;
+    t.responsables=[ctx.tecnico];
+    t.asignados=[{nombre:ctx.tecnico,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
+    t.historial.push({tipo:'traslado',fecha:hoy(),ts:Date.now(),de:ctx.profesional,a:ctx.tecnico,por:por,revisionPar:'devolucion_nca',nota:txt});
+    resetTaskPorCorregir(t,txt,ctx.tecnico);
+    t.reporteTrasladado=false;
+    t.comentarios.push({
+      id:'cmt_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+      autor:por,fecha:new Date().toISOString(),
+      texto:'↩ Devuelta al técnico para corregir'+(txt&&txt!=='Devuelta para corregir'?': '+txt:''),
+      rol:'asignador',para:ctx.tecnico
+    });
+    syncTaskAggregateState(t);
+  });
+  if(!ok)return false;
+  if(typeof driveRenombrarSoporteActivoExp==='function'){
+    driveRenombrarSoporteActivoExp(ref,taskId,'corregir').catch(function(err){console.warn('drive rename corregir:',err);});
+  }
+  const inReview=typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen();
+  if(!inReview)notif('Devuelta a '+ctx.tecnico+' — el profesional '+ctx.profesional+' recibe aviso en campanita','ok');
+  closeTaskModal();
+  renderBandejaDepto();
+  if(document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+  return true;
 }
 /** El técnico espera la revisión del profesional (o del encargado tras el profesional). */
 function taskRevParTecnicoEsperando(t,usuario,e){
@@ -23727,18 +23864,20 @@ function openTaskCommentsModal(expId,taskId,opts){
   ));
   const esRevParTecVer=!!(verDocumento&&((typeof taskRevParTecnicoEsperando==='function'&&taskRevParTecnicoEsperando(t,responsableActivo,e))
     ||(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada(t,responsableActivo,e))));
+  const esRevParProfDevNca=!!(verDocumento&&typeof taskRevParProfesionalEsperaCorreccionNca==='function'
+    &&taskRevParProfesionalEsperaCorreccionNca(t,responsableActivo,e));
   const isRespVerDoc=!isOficinaDocRespondida&&verDocumento&&esModoResponsable()
-    &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen||esRevParTecVer)&&!forcePorFirmarVista;
+    &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen||esRevParTecVer||esRevParProfDevNca)&&!forcePorFirmarVista;
   // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
   // Documento/comunicado Respondidas: siempre rail depto (Secretaría / oficinas / DS)
   const isDeptVerDocBase=(verDocumento&&!esModoResponsable()&&!esJurisdiccional())||forcePorFirmarVista||isOficinaDocRespondida;
   const isDeptVerDoc=isDeptVerDocBase&&!opts.porNotificarVista;
   const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista||isConsultaVista;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
-  const isRespVerCorr=isRespVerDoc&&(miEstResp==='Por corregir'||est==='Por corregir');
-  const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
+  const isRespVerCorr=isRespVerDoc&&(esRevParProfDevNca||miEstResp==='Por corregir'||est==='Por corregir');
+  const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
     &&taskRespParticipacionAtendida(t,responsableActivo);
-  const isRespVerEntregaPendiente=isRespVerDoc&&!esDesignadoNotifOpen&&(
+  const isRespVerEntregaPendiente=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&(
     esRevParTecVer
     ||miEstResp==='Por verificar'||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))
@@ -24354,6 +24493,7 @@ function taskHistLineaTxt(h){
   switch(h.tipo){
     case 'traslado':
       if(h.revisionPar==='devolucion')return '↩ Devuelta al técnico para corregir: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+nota;
+      if(h.revisionPar==='devolucion_nca')return '↩ Encargado devolvió al técnico (vía profesional): '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+nota+por;
       if(h.revisionPar==='correccion')return '📤 Corrección del técnico al profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
       if(h.revisionPar==='solicitud')return '📤 Enviada a revisión de profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
       return '↔ Traslado: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
@@ -27416,6 +27556,13 @@ function renderActRowToolbarHtml(t,expAct){
       taskChatBtnHtml(t.exp,t.id,t)+
       '</span>';
   }
+  // Profesional: concepto que envió al encargado y este devolvió al técnico → Atendidas (ver documento/obs.)
+  if(t._revParProfDevNca&&esModoResponsable()){
+    return '<span class="sst-act-toolbar">'+
+      '<button type="button" class="btn bsm bic act-ico" title="Ver documento por corregir y observaciones del encargado" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>'+
+      taskChatBtnHtml(t.exp,t.id,t)+
+      '</span>';
+  }
   const eid=jsStr(t.exp),tid=jsStr(t.id);
   const est=estadoTask(t);
   const yo=esModoResponsable()?taskUsuarioEsAsignado(t,responsableActivo):(esVistaActividadesDepto()&&esTareaDelEncargado(t));
@@ -30033,7 +30180,8 @@ function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='porcorr')return(list||[]).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   });
-  if(filtro==='done')return mergeActividadLists(list.filter(t=>{
+  if(filtro==='done'){
+    let doneList=mergeActividadLists(list.filter(t=>{
     const yoResp=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
     if(yoResp){
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
@@ -30081,6 +30229,10 @@ function filtrarActividadesPorEstado(list,filtro){
       &&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eEnc))return true;
     return estadoTask(t)==='Atendida';
   }),typeof getTareasRevParTecnicoAprobadas==='function'?getTareasRevParTecnicoAprobadas():[]);
+    if(typeof getTareasRevParProfesionalDevueltaNca==='function')
+      doneList=mergeActividadLists(doneList,getTareasRevParProfesionalDevueltaNca());
+    return doneList;
+  }
   if(filtro==='revisados'){
     return (list||[]).filter(function(t){
       const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
