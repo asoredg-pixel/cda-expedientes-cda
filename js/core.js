@@ -8984,6 +8984,7 @@ function taskReviewDecisionRailHtml(ref,taskId,t){
   return h;
 }
 function taskReviewOpenDecisionPanel(mode,expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'revisor'))return;
   mode=String(mode||'aprobar').trim();
   // Al entrar en Aprobar, los acordeones nacen cerrados. El encargado elige.
   window._taskReviewAprobarNotificar=false;
@@ -10774,6 +10775,8 @@ function refFromCtx(expId,taskId,t){
   return t&&t.sinExpediente?(t.codigo||expId):expId;
 }
 function taskReviewToggleSidePanel(mode,expId,taskId){
+  const revSide=typeof REV_EN_CURSO_SIDES!=='undefined'?REV_EN_CURSO_SIDES[mode]:'';
+  if(revSide&&window._taskReviewSideMode!==mode&&typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,revSide))return;
   const ctx=window._taskModalCtx||{};
   if(window._taskReviewSideMode===mode){
     taskReviewCloseSidePanel();
@@ -18370,6 +18373,7 @@ function entregaModalOmiteComentarioEnvio(){
 }
 window.entregaModalOmiteComentarioEnvio=entregaModalOmiteComentarioEnvio;
 function submitEnviarSoporteVerificacion(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ejecutor'))return;
   const cmt=String((document.getElementById('enviar-cmt-opcional')||{}).value||'').trim();
   let adj=collectEnviarAdjuntos();
   const eInf=getExpById(expId);
@@ -19108,6 +19112,7 @@ function openEnviarSoporteModal(expId,taskId,modo){
   const esLibrePqrsUi=!esPqrsEntrega&&!!document.getElementById('pqrs-entrega-libre');
   if(modal&&esLibrePqrsUi)modal.classList.add('pqrs-entrega-modal');
   ov.classList.add('on');
+  if(typeof revEnCursoAlAbrir==='function')revEnCursoAlAbrir(expId,taskId,t,e,{});
   const prevCtx=window._taskModalCtx||{};
   const entregaDir=!!prevCtx.entregaDirectaPqrs
     ||(esPqrsEntrega&&eExp&&typeof puedeResponderDirecto==='function'&&puedeResponderDirecto(eExp)
@@ -19566,6 +19571,7 @@ function puedeEliminarEntregaActividad(expId,taskId){
   return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
 function eliminarEntregaActividadConfirm(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ejecutor'))return;
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return;}
   const t=getTaskAny(expId,taskId);
   const lbl=(t&&(t.desc||t.actividad))||'actividad';
@@ -20981,6 +20987,7 @@ function encargadoPuedeDevolverAtendida(t,expId){
 window.encargadoPuedeDevolverAtendida=encargadoPuedeDevolverAtendida;
 /** Un solo «Devolver» en revisión: usa observación del chat, marcadores del documento o nota genérica. */
 function devolverTaskUnificado(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'revisor'))return;
   const t=getTaskAny(expId,taskId);
   if(t&&estadoTask(t)==='Atendida'){
     if(!encargadoPuedeDevolverAtendida(t,expId)){notif('Esta actividad atendida no se puede devolver','err');return;}
@@ -23285,12 +23292,14 @@ function devolverAlTecnicoRevisionPar(expId,taskId,nota){
   return true;
 }
 function submitDevolverAlTecnico(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'revisor'))return;
   const nota=(document.getElementById('devolver-tecnico-nota')||{}).value;
   if(!devolverAlTecnicoRevisionPar(expId,taskId,nota))return;
   cerrarTrasDevolverAlTecnico();
 }
 /** Desde «Chat y observaciones»: la observación es el texto escrito en el chat. */
 function submitDevolverAlTecnicoDesdeChat(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'revisor'))return;
   const inp=document.getElementById('task-cmt-input');
   const nota=String(inp&&inp.value||'').trim();
   if(!devolverAlTecnicoRevisionPar(expId,taskId,nota))return;
@@ -23774,6 +23783,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(!!isDeptVerDoc&&!!pqrsPendRevVista&&!!canReviewSop&&!chatOnly&&!soloGestion)
     ||directorRevisarPorFirmar;
   if(isReviewDelivery)window._taskViewTabPreferido='doc';
+  if(typeof revEnCursoAlAbrir==='function')revEnCursoAlAbrir(expId,taskId,t,e,{canReviewSop:canReviewSop,consulta:isConsultaVista});
   if(modal){
     const pqrsReviewWide=e&&taskEsAtenderPqrs(t,e)&&(canReviewSop||isPqrsOrigenView);
     const docsWide=e?collectDocsComparables(e,taskId,t):[];
@@ -24030,8 +24040,127 @@ function clearTaskModalHdrOpenBtn(){
   const openBtn=document.getElementById('task-modal-hdr-open');
   if(openBtn)openBtn.remove();
 }
+// ─── Revisión en curso (tiempo real entre equipos) ─────────────────────────
+// revision_en_curso/{exp__tarea}: quien abre primero la actividad la «tiene»; el otro lado queda en solo lectura
+// (revisor: no aprueba ni devuelve · responsable/técnico: no carga nueva entrega ni elimina).
+const REV_EN_CURSO_TTL_MS=120000;
+const REV_EN_CURSO_LATIDO_MS=30000;
+const REV_EN_CURSO_SIDES={entrega:'ejecutor',eliminar:'ejecutor',elimEntregaNotif:'ejecutor',decision:'revisor',devolverTecnico:'revisor'};
+function revEnCursoDocId(expId,taskId){
+  return (String(expId||'').trim()+'__'+String(taskId||'').trim()).replace(/[\/\s]/g,'_');
+}
+function revEnCursoVigente(d,now){
+  return !!(d&&d.sid&&(Number(d.latido)||0)>(now||Date.now())-REV_EN_CURSO_TTL_MS);
+}
+function revEnCursoAplica(t,e){
+  if(!t||t.eliminada)return false;
+  if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return true;
+  if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return true;
+  const rp=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,e||null):null;
+  return !!(rp&&rp.fase==='profesional');
+}
+/** 'revisor' (encargado / profesional), 'ejecutor' (responsable / técnico) o '' si no participa. */
+function revEnCursoRol(t,e,o){
+  o=o||{};
+  if(o.consulta||!revEnCursoAplica(t,e))return'';
+  if(!esModoResponsable())return(!esJurisdiccional()&&o.canReviewSop)?'revisor':'';
+  const rp=typeof taskRevParParticipante==='function'?taskRevParParticipante(t,responsableActivo,e||null):null;
+  if(rp&&rp.fase==='profesional')return rp.rol==='profesional'?'revisor':'ejecutor';
+  const u=agendaNorm(responsableActivo||'');
+  return u&&u===agendaNorm(t.responsable||'')?'ejecutor':'';
+}
+function revEnCursoAplicarUi(){
+  const st=window._revEnCurso;
+  const modal=document.querySelector('#task-modal-overlay .task-modal');
+  const b=st&&st.bloqueo;
+  if(modal){
+    modal.classList.toggle('task-modal-en-revision',!!b);
+    modal.classList.toggle('rev-bloq-ejecutor',!!(b&&st.rol==='ejecutor'));
+    modal.classList.toggle('rev-bloq-revisor',!!(b&&st.rol==='revisor'));
+  }
+  let ban=document.getElementById('rev-en-curso-banner');
+  if(!b||!modal){if(ban)ban.remove();return;}
+  const quien=String(b.por||'Otro usuario').trim();
+  const hora=typeof fmtHoraLock==='function'?fmtHoraLock(b.desde):'';
+  const txt=st.rol==='revisor'
+    ?'🔒 '+quien+' tiene abierta esta actividad desde las '+hora+' y puede estar ajustando la entrega. Puede ver documentos y demás opciones; no puede aprobar ni devolver hasta que la cierre.'
+    :'🔒 En revisión por '+quien+' desde las '+hora+'. Puede ver documentos y demás opciones; no puede cargar nueva entrega ni eliminar hasta que termine la revisión.';
+  if(!ban){
+    ban=document.createElement('div');
+    ban.id='rev-en-curso-banner';
+    ban.className='rev-en-curso-banner';
+    const hdr=modal.querySelector('.task-modal-hdr');
+    if(hdr&&hdr.nextSibling)modal.insertBefore(ban,hdr.nextSibling);else modal.appendChild(ban);
+  }
+  ban.textContent=txt;
+}
+function revEnCursoEscribir(st){
+  st.propio=true;
+  if(!st.desde)st.desde=Date.now();
+  return Promise.resolve(window._fsSetDoc(st.ref,{
+    expId:st.expId,taskId:st.taskId,rol:st.rol,
+    por:typeof getExpLockUserLabel==='function'?getExpLockUserLabel():'',
+    email:typeof notasInternasEmail==='function'?notasInternasEmail():'',
+    sid:st.sid,desde:st.desde,latido:Date.now()
+  })).catch(function(err){console.warn('revision_en_curso:',err);});
+}
+function revEnCursoDetener(){
+  const st=window._revEnCurso;
+  if(!st)return;
+  window._revEnCurso=null;
+  if(st.timer)clearInterval(st.timer);
+  try{if(typeof st.unsub==='function')st.unsub();}catch(err){}
+  if(st.propio&&window._fsDeleteDoc){
+    Promise.resolve(window._fsDeleteDoc(st.ref)).catch(function(err){console.warn('revision_en_curso (liberar):',err);});
+  }
+  revEnCursoAplicarUi();
+}
+function revEnCursoIniciar(expId,taskId,rol){
+  expId=String(expId||'').trim();taskId=String(taskId||'').trim();
+  const cur=window._revEnCurso;
+  if(cur&&cur.expId===expId&&cur.taskId===taskId&&cur.rol===rol){revEnCursoAplicarUi();return;}
+  revEnCursoDetener();
+  if(!rol||!expId||!taskId||!window._db||!window._fsDoc||!window._fsOnSnapshot||!window._fsSetDoc)return;
+  const st={expId:expId,taskId:taskId,rol:rol,sid:getCdaLockSessionId(),propio:false,bloqueo:null,desde:0};
+  st.ref=window._fsDoc(window._db,'revision_en_curso',revEnCursoDocId(expId,taskId));
+  window._revEnCurso=st;
+  try{
+    st.unsub=window._fsOnSnapshot(st.ref,function(snap){
+      if(window._revEnCurso!==st)return;
+      const d=snap&&typeof snap.exists==='function'&&snap.exists()?snap.data():null;
+      if(revEnCursoVigente(d)&&d.sid!==st.sid){st.propio=false;st.bloqueo=d;}
+      else{
+        st.bloqueo=null;
+        if(!d||d.sid!==st.sid)revEnCursoEscribir(st);
+      }
+      revEnCursoAplicarUi();
+    },function(err){console.warn('revision_en_curso (escucha):',err);});
+  }catch(err){console.warn('revEnCursoIniciar:',err);}
+  st.timer=setInterval(function(){
+    if(window._revEnCurso!==st)return;
+    if(st.propio)revEnCursoEscribir(st);
+    else if(st.bloqueo&&!revEnCursoVigente(st.bloqueo)){st.bloqueo=null;revEnCursoEscribir(st);revEnCursoAplicarUi();}
+  },REV_EN_CURSO_LATIDO_MS);
+}
+function revEnCursoAlAbrir(expId,taskId,t,e,o){
+  revEnCursoIniciar(expId,taskId,revEnCursoRol(t,e,o));
+}
+/** Bloquea la acción si la otra parte tiene la actividad abierta. tipo: 'ejecutor' | 'revisor'. */
+function revEnCursoBloqueaAccion(expId,taskId,tipo){
+  const st=window._revEnCurso;
+  if(!st||!st.bloqueo||!revEnCursoVigente(st.bloqueo))return false;
+  if(st.expId!==String(expId||'').trim()||st.taskId!==String(taskId||'').trim())return false;
+  if(tipo&&st.rol!==tipo)return false;
+  const quien=String(st.bloqueo.por||'Otro usuario').trim();
+  notif(st.rol==='revisor'
+    ?'🔒 '+quien+' tiene abierta la actividad (posible ajuste). Espere a que la cierre para aprobar o devolver.'
+    :'🔒 La actividad está en revisión por '+quien+'. Espere a que termine para cargar una nueva entrega o eliminar.','warn');
+  return true;
+}
+if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('pagehide',function(){revEnCursoDetener();});
 function closeTaskModal(){
   if(popTaskModalLayer())return;
+  revEnCursoDetener();
   clearTaskModalHdrOpenBtn();
   const ctx=window._taskModalCtx||{};
   const formRow=ctx.formRowEl;

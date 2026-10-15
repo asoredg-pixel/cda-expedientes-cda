@@ -244,6 +244,16 @@ service cloud.firestore {
       allow read, write: if isActiveUser() && email.lower() == authEmail();
     }
 
+    // -------------------------------------------------------------------------
+    // revision_en_curso/{exp__tarea} — quién tiene abierta una actividad en revisión (tiempo real)
+    // Todos los usuarios activos leen; cada quien escribe con su correo y solo borra el suyo.
+    // -------------------------------------------------------------------------
+    match /revision_en_curso/{id} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && request.resource.data.email == authEmail();
+      allow delete: if isActiveUser() && resource.data.email == authEmail();
+    }
+
     // Cualquier otra ruta bajo sistema/ queda denegada por defecto.
     match /sistema/{docId} {
       allow read, write: if false;

@@ -3581,6 +3581,13 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-ofi-est.aten{background:var(--pul);color:var(--pu)}
 .pqrs-ofi-est.cerr{background:var(--gnl);color:var(--gn)}
 tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--bl)}
+.task-modal.task-modal-en-revision{box-shadow:0 0 0 2px rgba(220,38,38,.5),0 0 24px 6px rgba(220,38,38,.25)!important}
+.rev-en-curso-banner{flex-shrink:0;margin:8px 12px 0;padding:8px 12px;font-size:12px;line-height:1.45;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--r)}
+.task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="entrega"],
+.task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="eliminar"],
+.task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="elimEntregaNotif"],
+.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="decision"],
+.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="devolverTecnico"]{opacity:.35;filter:grayscale(1);cursor:not-allowed}
 .pqrs-nca-pin-lbl{font-size:12px;opacity:.85;vertical-align:middle}
 .sst-act-toolbar .pqrs-nca-pin-btn.on{
   border-color:color-mix(in srgb,var(--or) 45%,var(--bd));
