@@ -738,12 +738,12 @@ async function guardarPqrsSecretaria(modo){
   try{
   const tramId=getTramPqrsId('guaviare');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:'Secretaría DEGUV',fecha:fecha}]):'[]';
-  const hist=[{tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV')+(sinSoportePdf?' · Ventanilla sin soporte PDF de radicación':''),oficina:''}];
+  const hist=[{ts:Date.now(),tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV')+(sinSoportePdf?' · Ventanilla sin soporte PDF de radicación':''),oficina:''}];
   if(!soloRadicar){
     if(oficina==='secretaria'){
-      hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
+      hist.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
     }else{
-      hist.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Traslado inicial a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
+      hist.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:'Traslado inicial a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
     }
   }
   const gmailMsgId=window._gmailPendingMsgId||'';
@@ -1305,7 +1305,7 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
     const enviados=pendientes.filter(function(p){
       return okEmails.some(function(em){return String(em).toLowerCase()===String(p.email).toLowerCase();});
     });
-    e._pqrs_historial.push({
+    e._pqrs_historial.push({ts:Date.now(),
       tipo:'reenvio_correo_responsable',
       fecha:hoy(),
       nota:'Notificación de PQRSD enviada a responsable(s): '+enviados.map(function(p){return p.nombre;}).join(', ')
@@ -2779,7 +2779,7 @@ async function submitEditPqrsSecretaria(expId){
     e._pqrs_traslado_fecha=hoy();
     e._pqrs_traslado_por='Secretaría DEGUV';
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:'Corrección de oficina destino por Secretaría',oficina:oficina,oficinaAnterior:ofiAnt,por:'Secretaría DEGUV'});
+    e._pqrs_historial.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:'Corrección de oficina destino por Secretaría',oficina:oficina,oficinaAnterior:ofiAnt,por:'Secretaría DEGUV'});
     syncPqrsTareaTrasTraslado(e,oficina,'Corrección de oficina destino por Secretaría');
   }else if(e._pqrs_oficina==='guaviare')ensureTareaPqrsNca(e);
   else if(e._pqrs_oficina&&e._pqrs_oficina!=='secretaria')ensureTareaPqrsOficina(e,e._pqrs_oficina);
@@ -3036,7 +3036,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   else if(e._pqrs_asig_observaciones==null)e._pqrs_asig_observaciones='';
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   nomList=responsables.join(', ');
-  e._pqrs_historial.push({tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
+  e._pqrs_historial.push({ts:Date.now(),tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   pqrsAplicarPrioritariaDesdePanel(e);
   const prior=!!e._pqrs_prioritaria;
@@ -3177,7 +3177,7 @@ async function submitTrasladoPqrsInicial(expId,taskId){
     exp._pqrs_responsable_oficina=typeof getEncargadoOficina==='function'?getEncargadoOficina(nuevaOfi):'';
     exp._pqrs_estado_oficina='pendiente';
     if(!Array.isArray(exp._pqrs_historial))exp._pqrs_historial=[];
-    exp._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
+    exp._pqrs_historial.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Traslado inicial a oficina competente',oficina:nuevaOfi,oficinaAnterior:'secretaria',por:por});
   });
 }
 function openTrasladoPqrsInterOficinaModal(expId){
@@ -3223,7 +3223,7 @@ async function submitTrasladoPqrsInterOficina(expId,taskId){
     exp._pqrs_traslado_fecha=hoy();
     exp._pqrs_traslado_por=porTrasl;
     if(!Array.isArray(exp._pqrs_historial))exp._pqrs_historial=[];
-    exp._pqrs_historial.push({tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:porTrasl});
+    exp._pqrs_historial.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:motivo||'Reasignación entre oficinas',oficina:nuevaOfi,oficinaAnterior:anterior,por:porTrasl});
   });
 }
 function anonimizarParaCiudadano(txt){

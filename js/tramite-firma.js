@@ -2449,7 +2449,7 @@ async function atajoFirmadoCerrarComoAtendidaOtroMedio(expId,taskId,esPqrs,datos
     e._pqrs_respuesta_medio=canal;
     e._medio_notificacion=canal;
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({
+    e._pqrs_historial.push({ts:Date.now(),
       tipo:'notif_otro_medio_atajo',
       fecha:fecha,
       nota:'Oficio firmado notificado por '+medioLbl+(obs?' · '+obs:'')+' — '+por,
@@ -2532,7 +2532,7 @@ async function atajoFirmadoCerrarComoAtendidaSinNotif(expId,taskId,esPqrs){
       });
     }
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({
+    e._pqrs_historial.push({ts:Date.now(),
       tipo:'firmado_atendida_sin_notif',
       fecha:fecha,
       nota:'Oficio firmado cargado — PQRSD atendida (sin notificar)'+(para?' · Aviso a '+para:''),

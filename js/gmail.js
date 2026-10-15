@@ -6967,7 +6967,7 @@ async function _gmailOfiFinalizarRespuestaPqrsDesdeCompose(ctx, mail) {
     });
   } else {
     if (!Array.isArray(e._pqrs_historial)) e._pqrs_historial = [];
-    e._pqrs_historial.push({ tipo: 'notificacion_correo', fecha: fecha, nota: 'Respuesta enviada por correo a ' + (para || 'ciudadano'), oficina: e._pqrs_oficina || '' });
+    e._pqrs_historial.push({ ts: Date.now(), tipo: 'notificacion_correo', fecha: fecha, nota: 'Respuesta enviada por correo a ' + (para || 'ciudadano'), oficina: e._pqrs_oficina || '' });
   }
   if (typeof persistExpedienteGranular === 'function') persistExpedienteGranular(e);
   if (typeof renderPqrsOficinaInbox === 'function') renderPqrsOficinaInbox();

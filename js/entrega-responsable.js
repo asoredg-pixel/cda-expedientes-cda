@@ -3737,8 +3737,8 @@ function crearStubPqrsEntregaResp(datos,opts){
   const origenLbl=origenAlta==='oficina'?'oficina':(origenAlta==='nca'?'encargado NCA':'responsable');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:por,fecha:fecha}]):'[]';
   const hist=[
-    {tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Radicado',oficina:''},
-    {tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:por}
+    {ts:Date.now(),tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+(datos.oficinaRemitente||'')+'). ':(anon?'Solicitud anónima. ':''))+'Radicado',oficina:''},
+    {ts:Date.now(),tipo:'traslado_oficina',fecha:fecha,nota:'Asignada a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:por}
   ];
   const tipoRadicacion=typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro');
   const skipRevAlta=!!opts.skipRevisionAlta||origenAlta==='oficina'||origenAlta==='nca';
