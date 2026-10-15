@@ -78,6 +78,8 @@ function ctx(opts) {
     window: {
       _db: {},
       _fsDoc: (db, col, id) => col + '/' + id,
+      // En tests la presencia se simula con snap(); getDoc no debe adelantarse
+      _fsGetDoc: () => new Promise(() => {}),
       _fsSetDoc: (ref, data) => { writes.push({ ref, data }); return Promise.resolve() },
       _fsDeleteDoc: ref => { deletes.push(ref); return Promise.resolve() },
       _fsOnSnapshot: (ref, cb) => { listener = cb; return () => { listener = null } }
@@ -85,7 +87,7 @@ function ctx(opts) {
   })
   runInContext([constLinea('REV_EN_CURSO_TTL_MS'), constLinea('REV_EN_CURSO_LATIDO_MS'), constLinea('REV_EN_CURSO_SIDES')].join('\n'), c)
   runInContext(extraer(core, ['revEnCursoDocId', 'revEnCursoVigente', 'revEnCursoAplica', 'revEnCursoRol', 'revEnCursoAplicarUi',
-    'revEnCursoEscribir', 'revEnCursoDetener', 'revEnCursoIniciar', 'revEnCursoAlAbrir', 'revEnCursoBloqueaAccion']), c)
+    'revEnCursoSnapData', 'revEnCursoAplicarSnap', 'revEnCursoEscribir', 'revEnCursoDetener', 'revEnCursoIniciar', 'revEnCursoAlAbrir', 'revEnCursoBloqueaAccion']), c)
   const snap = d => listener && listener({ exists: () => !!d, data: () => d })
   return { c, modal, writes, deletes, snap, avisos }
 }
@@ -144,6 +146,26 @@ describe('Presencia y bloqueo en tiempo real', () => {
     expect(k2.c.window._revEnCurso.propio).toBe(true)
     expect(k2.writes).toHaveLength(1)
     expect(k2.writes[0].data.sid).toBe('sid-yo')
+  })
+
+  it('abrir sin rol no tumba la presencia del revisor en la misma actividad', () => {
+    const k = ctx({ label: 'Carlos' })
+    k.c.revEnCursoIniciar('20261981', 'tk_1', 'revisor')
+    k.snap(null)
+    expect(k.c.window._revEnCurso.propio).toBe(true)
+    k.c.revEnCursoIniciar('20261981', 'tk_1', '')
+    expect(k.c.window._revEnCurso).toBeTruthy()
+    expect(k.c.window._revEnCurso.rol).toBe('revisor')
+    expect(k.c.window._revEnCurso.propio).toBe(true)
+  })
+
+  it('sin correo de sesión no escribe (reglas Firestore exigen email)', async () => {
+    const k = ctx({ label: 'Carlos' })
+    k.c.notasInternasEmail = () => ''
+    k.c.revEnCursoIniciar('20261981', 'tk_1', 'revisor')
+    k.snap(null)
+    expect(k.writes).toHaveLength(0)
+    expect(k.c.window._revEnCurso.propio).toBe(false)
   })
 
   it('responsable abre mientras el encargado revisa: borde rojo, aviso y sin nueva entrega ni eliminar', () => {

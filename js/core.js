@@ -24314,15 +24314,45 @@ function revEnCursoAplicarUi(){
   }
   ban.textContent=txt;
 }
+function revEnCursoSnapData(snap){
+  if(!snap)return null;
+  const ex=typeof snap.exists==='function'?snap.exists():!!snap.exists;
+  if(!ex||typeof snap.data!=='function')return null;
+  return snap.data()||null;
+}
+/** Aplica el documento de presencia: bloqueo ajeno o reclamo propio. */
+function revEnCursoAplicarSnap(st,d){
+  if(!st)return;
+  if(revEnCursoVigente(d)&&d.sid!==st.sid){st.propio=false;st.bloqueo=d;}
+  else{
+    st.bloqueo=null;
+    if(d&&d.sid===st.sid&&revEnCursoVigente(d)){
+      st.propio=true;
+      if(!st.desde)st.desde=Number(d.desde)||Date.now();
+    }else{
+      revEnCursoEscribir(st);
+    }
+  }
+  revEnCursoAplicarUi();
+}
 function revEnCursoEscribir(st){
+  const email=typeof notasInternasEmail==='function'?notasInternasEmail():'';
+  if(!email){
+    console.warn('revision_en_curso: sin correo de sesión; no se puede registrar presencia');
+    return Promise.resolve(false);
+  }
   st.propio=true;
   if(!st.desde)st.desde=Date.now();
   return Promise.resolve(window._fsSetDoc(st.ref,{
     expId:st.expId,taskId:st.taskId,rol:st.rol,
     por:typeof getExpLockUserLabel==='function'?getExpLockUserLabel():'',
-    email:typeof notasInternasEmail==='function'?notasInternasEmail():'',
+    email:email,
     sid:st.sid,desde:st.desde,latido:Date.now()
-  })).catch(function(err){console.warn('revision_en_curso:',err);});
+  })).then(function(){return true;}).catch(function(err){
+    st.propio=false;
+    console.warn('revision_en_curso:',err);
+    return false;
+  });
 }
 function revEnCursoDetener(){
   const st=window._revEnCurso;
@@ -24338,36 +24368,37 @@ function revEnCursoDetener(){
 function revEnCursoIniciar(expId,taskId,rol){
   expId=String(expId||'').trim();taskId=String(taskId||'').trim();
   const cur=window._revEnCurso;
+  // Sin rol (p. ej. abrir entrega sin canReviewSop): no tumbar la presencia de la misma actividad
+  if(!rol){
+    if(cur&&cur.expId===expId&&cur.taskId===taskId)return;
+    if(cur)revEnCursoDetener();
+    return;
+  }
   if(cur&&cur.expId===expId&&cur.taskId===taskId&&cur.rol===rol){revEnCursoAplicarUi();return;}
   revEnCursoDetener();
-  if(!rol||!expId||!taskId||!window._db||!window._fsDoc||!window._fsOnSnapshot||!window._fsSetDoc)return;
+  if(!expId||!taskId||!window._db||!window._fsDoc||!window._fsOnSnapshot||!window._fsSetDoc)return;
   const st={expId:expId,taskId:taskId,rol:rol,sid:getCdaLockSessionId(),propio:false,bloqueo:null,desde:0};
   st.ref=window._fsDoc(window._db,'revision_en_curso',revEnCursoDocId(expId,taskId));
   window._revEnCurso=st;
   try{
     st.unsub=window._fsOnSnapshot(st.ref,function(snap){
       if(window._revEnCurso!==st)return;
-      const d=snap&&typeof snap.exists==='function'&&snap.exists()?snap.data():null;
-      // Otro usuario vigente → solo lectura. Si el doc es mío (o está vacío/vencido) → reclamar / marcar propio.
-      // Importante: si ya existe con mi sid (p. ej. reapertura o latido previo), hay que poner propio=true;
-      // si no, no latea ni libera al cerrar (bloqueo:null y propio:false en consola).
-      if(revEnCursoVigente(d)&&d.sid!==st.sid){st.propio=false;st.bloqueo=d;}
-      else{
-        st.bloqueo=null;
-        if(d&&d.sid===st.sid&&revEnCursoVigente(d)){
-          st.propio=true;
-          if(!st.desde)st.desde=Number(d.desde)||Date.now();
-        }else{
-          revEnCursoEscribir(st);
-        }
-      }
-      revEnCursoAplicarUi();
+      revEnCursoAplicarSnap(st,revEnCursoSnapData(snap));
     },function(err){console.warn('revision_en_curso (escucha):',err);});
   }catch(err){console.warn('revEnCursoIniciar:',err);}
+  // No depender solo del primer snapshot (a veces tarda o falla la escucha): leer y reclamar ya
+  if(window._fsGetDoc){
+    Promise.resolve(window._fsGetDoc(st.ref)).then(function(snap){
+      if(window._revEnCurso!==st)return;
+      if(st.propio||st.bloqueo)return;
+      revEnCursoAplicarSnap(st,revEnCursoSnapData(snap));
+    }).catch(function(err){console.warn('revision_en_curso (getDoc):',err);});
+  }
   st.timer=setInterval(function(){
     if(window._revEnCurso!==st)return;
     if(st.propio)revEnCursoEscribir(st);
     else if(st.bloqueo&&!revEnCursoVigente(st.bloqueo)){st.bloqueo=null;revEnCursoEscribir(st);revEnCursoAplicarUi();}
+    else if(!st.bloqueo)revEnCursoEscribir(st); // snapshot no llegó / escritura falló → reintentar
   },REV_EN_CURSO_LATIDO_MS);
 }
 function revEnCursoAlAbrir(expId,taskId,t,e,o){
