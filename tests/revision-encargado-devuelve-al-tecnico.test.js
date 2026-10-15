@@ -48,6 +48,7 @@ function montar(task, opts) {
   const c = createContext({
     console, JSON, String, Number, Math, Date, Array, Object, Promise,
     avisos, task,
+    window: { _taskModalCtx: {} },
     responsableActivo: opts.responsable || '',
     exps: [{ _exp: 'EXP-1', tasks: [task], _depto: 'guaviare' }],
     actividadesLibres: [],
@@ -94,10 +95,21 @@ function montar(task, opts) {
   })
   runInContext(extraer(core, [
     'resetTaskPorCorregir', 'taskRevisionParCtx', 'taskRevParParticipante', 'taskTieneRevisionPar',
-    'taskRevParProfesionalEsperaCorreccionNca', 'getTareasRevParProfesionalDevueltaNca',
+    'taskRevParOriginadorNoProf', 'taskRevParProfesionalEsperaCorreccionNca', 'getTareasRevParProfesionalDevueltaNca',
     'encargadoPuedeDevolverRevParATecnico', 'encargadoDevolverRevParATecnico',
-    'taskHistLineaTxt', 'bandejaActFiltroParaTask', 'bandejaItemKey'
+    'taskHistLineaTxt', 'bandejaActFiltroParaTask', 'bandejaItemKey', 'taskChatResolveDefaultPara'
   ]), c)
+  // Stubs mínimos del chat (encargado elige destino)
+  c.taskChatRevParOpciones = () => null
+  c.taskChatResponsableEscribeEncargado = () => false
+  c.taskChatEncargadoEligeDestino = () => true
+  c.taskChatTrasladoDestinoSelEnc = () => ''
+  c.taskChatTrasladoDestinosEnc = () => []
+  c.taskChatPqrsAsigChecked = () => []
+  c.taskChatParaOpcionesEncargado = () => ['Prof', 'Coord']
+  c.taskChatEncargadoDeptoNombre = () => 'Encargado NCA'
+  c.getTaskResponsables = t => t.responsables || [t.responsable]
+  c.getUltimoReportadoPor = () => 'Prof'
   // Constantes usadas por taskHistLineaTxt
   runInContext('var TASK_HIST_EMOJI={}; var TASK_HIST_DEVOLUCIONES=new Set();', c)
   return c
@@ -124,7 +136,7 @@ describe('Encargado devuelve concepto vía profesional → técnico', () => {
     expect(tr).toMatchObject({ revisionPar: 'devolucion_nca', de: 'Prof', a: 'Tec', por: 'Encargado NCA' })
     const cmt = c.task.comentarios[c.task.comentarios.length - 1]
     expect(cmt.para).toBe('Tec')
-    expect(cmt.texto).toContain('Devuelta al técnico')
+    expect(cmt.texto).toContain('Devuelta para corregir')
     expect(c.task.soportes[0].activo).toBe(false)
     expect(c.task.soportes[0].driveEstado).toBe('acorregir')
   })
@@ -161,6 +173,21 @@ describe('Encargado devuelve concepto vía profesional → técnico', () => {
     expect(extraer(core, ['devolverTaskAlResponsable'])).toContain('encargadoDevolverRevParATecnico')
     expect(core).toContain('getTareasRevParProfesionalDevueltaNca()')
     expect(core).toContain('collectRevParDevNcaAvisos')
+  })
+
+  it('coordinador (u otro no profesional) que envió al profesional: «Para» y devolución van al coordinador, no al profesional', () => {
+    const t = tareaEnPorVerificarProf()
+    t.historial = [
+      { tipo: 'traslado', de: 'Coord', a: 'Prof', por: 'Coord', revisionPar: 'solicitud', fecha: '2026-10-14' },
+      { tipo: 'reenvio_verificacion', por: 'Prof', fecha: '2026-10-15', ts: Date.now() }
+    ]
+    const c = montar(t)
+    expect(c.taskRevParOriginadorNoProf(c.task, c.exps[0])).toBe('Coord')
+    expect(c.taskChatResolveDefaultPara(c.task)).toBe('Coord')
+    expect(c.taskChatResolveDefaultPara(c.task)).not.toBe('Prof')
+    expect(c.encargadoDevolverRevParATecnico('EXP-1', 't1', 'Ajuste')).toBe(true)
+    expect(c.task.responsable).toBe('Coord')
+    expect(c.task.comentarios.pop().para).toBe('Coord')
   })
 
   it('tras corrección del técnico (correccion) el profesional puede comparar (versión NCA queda en historial)', () => {
