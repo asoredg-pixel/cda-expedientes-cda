@@ -476,9 +476,16 @@ function finalizarTareasPqrsAlCerrar(e,nota){
     e.tasks[i]=t;
   });
 }
+/** Último traslado de oficina registrado en la PQRSD (opcional: de esa fecha). */
+function pqrsUltimoTrasladoOficina(e,fecha){
+  const hs=((e&&e._pqrs_historial)||[]).filter(function(h){return h&&h.tipo==='traslado_oficina'&&(!fecha||h.fecha===fecha);});
+  return hs.length?hs[hs.length-1]:null;
+}
 function cancelarTareasPqrsNca(e,nota){
   if(!e||!Array.isArray(e.tasks))return 0;
   nota=nota||'PQRSD trasladada — actividad cancelada';
+  const tr=pqrsUltimoTrasladoOficina(e,hoy());
+  const traza=tr?{ofiDe:tr.oficinaAnterior||'',ofiA:tr.oficina||'',trasladoPor:tr.por||'',motivo:tr.nota||''}:{};
   let n=0;
   for(let i=0;i<e.tasks.length;i++){
     let t=normalizeTask(e.tasks[i]);
@@ -487,7 +494,7 @@ function cancelarTareasPqrsNca(e,nota){
     if(estadoTask(t)==='Atendida')continue;
     t.eliminada=true;
     if(!Array.isArray(t.historial))t.historial=[];
-    t.historial.push({tipo:'cancelacion_traslado',fecha:hoy(),por:pqrsComentarioAutor(),nota:nota});
+    t.historial.push(Object.assign({tipo:'cancelacion_traslado',fecha:hoy(),ts:Date.now(),por:pqrsComentarioAutor(),nota:nota},traza));
     e.tasks[i]=t;
     n++;
   }
@@ -24058,6 +24065,9 @@ function taskHistLineaTxt(h){
     case 'solicitud_eliminacion':return '📩 Solicitud de eliminación'+nota;
     case 'solicitud_resuelta':return (h.resolucion==='aprobada'?'✓':'↩')+' Solicitud '+escAttr(h.solTipo||'')+' '+escAttr(h.resolucion||'');
     case 'eliminacion':return '🗑 Eliminada'+nota;
+    case 'cancelacion_traslado':
+      if(!h.ofiDe&&!h.ofiA)break;
+      return taskTrasladoPqrsTxt({de:h.ofiDe,a:h.ofiA,por:h.trasladoPor||h.por,motivo:h.motivo});
     case 'restauracion':return '♻ Restaurada'+por;
     case 'ajuste_soporte':return '↩ Revisada y devuelta para corregir'+por+nota;
     case 'enviar_firma':return (/impresi/i.test(String(h.nota||''))?'🖨 Aprobada para imprimir y firmar':'✍️ Aprobada — enviada a firma del Director')+por;
@@ -24120,17 +24130,42 @@ function renderTaskHistorialHtml(t){
   });
   return out.map(o=>o.html).join('<br>');
 }
+/** Traslado de oficina que dejó sin efecto esta actividad de PQRSD (null si no aplica). */
+function taskTrasladoPqrsInfo(e,t){
+  if(!t||!t.eliminada)return null;
+  const hs=(t.historial||[]).filter(function(h){return h&&h.tipo==='cancelacion_traslado';});
+  const h=hs[hs.length-1];
+  if(!h)return null;
+  // Traslados anteriores sin origen/destino en la actividad: se toman del historial de la PQRSD
+  const tr=(h.ofiDe||h.ofiA)?null:pqrsUltimoTrasladoOficina(e,h.fecha);
+  const m=String(h.nota||'').match(/^(?:Traslado|Devolución) a (.+?) — /);
+  return{
+    fecha:h.fecha||'',ts:h.ts||null,
+    de:h.ofiDe||(tr&&tr.oficinaAnterior)||'',
+    a:h.ofiA||(tr&&tr.oficina)||'',
+    aTxt:m?m[1]:'',
+    por:h.trasladoPor||(tr&&tr.por)||h.por||'',
+    motivo:h.motivo||(tr&&tr.nota)||''
+  };
+}
+function taskTrasladoPqrsTxt(info){
+  const lbl=function(o){return o?String((typeof labelOficina==='function'&&labelOficina(o))||o):'';};
+  const de=lbl(info.de),a=lbl(info.a)||String(info.aTxt||'');
+  return '↪ Trasladada'+(de?' de '+escAttr(de):'')+(a?' a '+escAttr(a):'')+
+    (info.por?' · por '+escAttr(info.por):'')+(info.motivo?' · '+escAttr(info.motivo):'');
+}
 function renderTaskConsultaItem(e,t,qs){
   t=normalizeTask(t);
   const expId=e._exp||t.codigo;
-  const est=estadoTask(t),lbl=estadoTaskLabel(t),st=taskEstadoStyle(est),venc=est==='Vencida';
+  const trPq=esModoCiudadano()?null:taskTrasladoPqrsInfo(e,t);
+  const est=estadoTask(t),lbl=trPq?'Trasladada':estadoTaskLabel(t),st=taskEstadoStyle(est),venc=est==='Vencida';
   const dc=est==='Atendida'?'td-ok':est==='Por verificar'?'td-p':venc?'td-v':'td-p';
   const ciu=esModoCiudadano();
   const ncChat=ciu?0:taskChatComentariosCount(t);
   const ns=(t.soportes||[]).length;
   const hist=!ciu&&(t.historial||[]).some(h=>h.tipo==='traslado'||h.tipo==='eliminacion'||h.tipo==='soporte'||h.tipo==='ajuste_soporte');
   const desc=hl(ciu?anonimizarParaCiudadano(t.desc||(t.actividad||'')):(t.desc||(t.actividad||'')),qs);
-  const del=t.eliminada?' opacity:.65;text-decoration:line-through':'';
+  const del=trPq?' opacity:.75':(t.eliminada?' opacity:.65;text-decoration:line-through':'');
   const coBtn=ciu?'':taskCoEjecutorBtnHtml(expId,t.id);
   const respLbl=ciu?'':taskEsMultiAsignada(t)?taskResponsablesLabel(t,false):(t.responsable||'');
   const cmtBtn=ciu?'':taskChatBtnHtml(expId,t.id,t);
@@ -24145,7 +24180,14 @@ function renderTaskConsultaItem(e,t,qs){
     '<span class="bdg" style="margin-left:6px;font-size:10px;background:'+st.bg+';color:'+st.fg+'">'+lbl+'</span>'+
     agBtn+sopBtn+cmtBtn+
     (hist&&!ncChat&&!ns?'<button type="button" class="btn bsm bic" title="Ver historial" onclick="openTaskCommentsModal(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
-    '</div>'+(hist?'<div style="font-size:10px;color:var(--tx3);padding-left:18px;margin-top:-2px;margin-bottom:4px">'+renderTaskHistorialHtml(t)+'</div>':'');
+    '</div>'+(hist||trPq?'<div style="font-size:10px;color:var(--tx3);padding-left:18px;margin-top:-2px;margin-bottom:4px">'+
+      [hist?renderTaskHistorialHtml(trPq?Object.assign({},t,{historial:(t.historial||[]).filter(function(h){return !h||h.tipo!=='cancelacion_traslado';})}):t):'',
+        trPq?taskTrasladoPqrsLineaHtml(trPq):''].filter(Boolean).join('<br>')+'</div>':'');
+}
+function taskTrasladoPqrsLineaHtml(info){
+  const hora=info.ts?taskHistHoraTxt({ts:info.ts}):'';
+  const cuando=(info.fecha?fmtF(info.fecha):'')+(hora?' '+hora:'');
+  return (cuando?escAttr(cuando)+' · ':'')+'<span style="color:var(--tx2);font-weight:600">'+taskTrasladoPqrsTxt(info)+'</span>';
 }
 function renderInteresadoConsultaBody(e){
   let h='<div class="ig">';

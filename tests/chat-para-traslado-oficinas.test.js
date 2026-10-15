@@ -196,7 +196,7 @@ describe('Traslado: los mensajes del chat pasan a la nueva actividad', () => {
     }
     createContext(c)
     runInContext(extraerFunciones(read('js/core.js'), [
-      'cancelarTareasPqrsNca', 'pqrsChatComentariosParaTraslado', 'pqrsChatCopiarATareaActiva', 'syncPqrsTareaTrasTraslado'
+      'pqrsUltimoTrasladoOficina', 'cancelarTareasPqrsNca', 'pqrsChatComentariosParaTraslado', 'pqrsChatCopiarATareaActiva', 'syncPqrsTareaTrasTraslado'
     ]), c)
     return c
   }
