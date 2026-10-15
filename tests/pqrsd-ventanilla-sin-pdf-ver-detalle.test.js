@@ -1,7 +1,7 @@
 /**
  * pqrsd-ventanilla-sin-pdf-ver-detalle.test.js — PQRSD radicada por ventanilla sin PDF principal (solo anexos o
  * sin archivos): al abrir la solicitud desde el rail, lo primero que se ve es «📝 Solicitud» con el asunto y el
- * detalle que escribió Secretaría. No aplica si hay PDF principal ni a radicaciones por correo.
+ * detalle que escribió Secretaría. No aplica si hay PDF principal o solicitud cargada, ni a radicaciones por correo.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -78,10 +78,17 @@ describe('Ventanilla sin PDF principal: primero se ve la solicitud escrita', () 
     const html = c.renderPqrsOrigenReviewHtml(Object.assign(base(), { _rad: [] }))
     expect(html).not.toContain('Sin documentos ni correo')
     expect(html).toContain('📝 Solicitud')
-    expect(html).toContain('Asunto')
-    expect(html).toContain('Detalle / descripción')
-    expect(html).toContain('Juan Gómez')
-    expect(html).toContain('10/10/2026 · Ventanilla')
+    expect(html).toContain('>Asunto<')
+    expect(html).toContain('>Detalle<')
+  })
+
+  it('la vista muestra solo el asunto y el detalle de Secretaría (sin tipo, solicitante ni radicado)', () => {
+    const html = c.renderPqrsOrigenDetalleStageHtml(Object.assign(base(), { _rad: [] }))
+    expect(html).toContain('Solicitud de visita técnica al predio')
+    expect(html).toContain('El usuario solicita visita por tala en la vereda X.')
+    expect(html).not.toContain('Juan Gómez')
+    expect(html).not.toContain('Tipo de solicitud')
+    expect(html).not.toContain('10/10/2026 · Ventanilla')
   })
 
   it('sin notas: usa el detalle general', () => {
@@ -107,9 +114,13 @@ describe('No aplica', () => {
     expect(c.pqrsOrigenMostrarDetalle(Object.assign(base(), { _rad: [], _wf: { tipo_radicacion: 'radicacion_correo' } }))).toBe(false)
   })
 
-  it('un anexo marcado como principal por error no cuenta como PDF de la solicitud', () => {
+  it('radicadas antes de «Cargar solicitud»: el primer anexo queda como soporte y no sale «📝 Solicitud»', () => {
     const e = Object.assign(base(), { _rad: [Object.assign({}, ANEXO, { tipo: 'soporte_radicacion' })] })
-    expect(c.pqrsOrigenMostrarDetalle(e)).toBe(true)
+    expect(c.pqrsOrigenMostrarDetalle(e)).toBe(false)
+  })
+
+  it('con «Cargar solicitud» (documento subido): no sale «📝 Solicitud»', () => {
+    expect(c.pqrsOrigenMostrarDetalle(Object.assign(base(), { _rad: [], _pqrs_solicitud_cargada: true }))).toBe(false)
   })
 
   it('sin asunto ni detalle: no hay nada que mostrar', () => {

@@ -3994,6 +3994,7 @@ async function subirSoporteRadicacionManual(opts) {
 
   const uploaded = [];
   let soporte = null;
+  let solicitud = null;
   let pqrsFolder = null;
   const silentNotif = !!opts.silentNotif;
   try {
@@ -4006,6 +4007,30 @@ async function subirSoporteRadicacionManual(opts) {
       uploadTarget: 'solicitud',
       expediente: opts.expediente || null
     };
+    if (opts.solicitudFile) {
+      const solFile = opts.solicitudFile;
+      const solDocName = (typeof pqrsBuildDriveFilename === 'function'
+        ? pqrsBuildDriveFilename('SOL', expId, { origName: solFile.name || 'solicitud.pdf' })
+        : (expId + ' SOL.pdf')).replace(/ SOL\.([^.]+)$/, ' SOLICITUD.$1');
+      solicitud = await driveUploadInstitutional(
+        solFile,
+        solDocName,
+        solFile.type || 'application/octet-stream',
+        tipoRad,
+        expId,
+        nombreCarpeta,
+        fechaRef,
+        uploadOpts
+      );
+      if (solicitud && solicitud.driveLink) {
+        solicitud.nombre = solDocName;
+        solicitud.tipo = 'soporte_radicacion';
+        solicitud.es_solicitud = true;
+        uploaded.push(solicitud);
+      } else {
+        solicitud = null;
+      }
+    }
     if (!opts.sinSoporte) {
       if (!silentNotif) notif('🖨️ Generando soporte PDF y subiendo al Drive institucional…', 'info');
       const pdfBlob = await generarPdfSolicitudManual(Object.assign({}, opts, { anexosNombres: anexosNombres }));
@@ -4073,9 +4098,10 @@ async function subirSoporteRadicacionManual(opts) {
 
   return {
     soporte: soporte,
-    anexos: uploaded.filter(function(u) { return u !== soporte; }),
+    solicitud: solicitud,
+    anexos: uploaded.filter(function(u) { return u !== soporte && u !== solicitud; }),
     all: uploaded,
-    link: soporte ? soporte.driveLink : (uploaded[0] ? uploaded[0].driveLink : ''),
+    link: solicitud ? solicitud.driveLink : (soporte ? soporte.driveLink : (uploaded[0] ? uploaded[0].driveLink : '')),
     folderLink: pqrsFolder ? pqrsFolder.pqrsFolderLink : '',
     pqrsFolderId: pqrsFolder ? pqrsFolder.pqrsFolderId : '',
     solicitudFolderId: pqrsFolder ? pqrsFolder.solicitudFolderId : '',

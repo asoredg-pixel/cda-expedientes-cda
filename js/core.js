@@ -1856,11 +1856,11 @@ function _pqrsCollectDocsRadicacion(e){
       .replace(/^[^\\/]+[_ ]A\d{1,3}[_ ]/i,'')
       .replace(/^[^\\/]+[_ ]A\d{1,3}\./i,'')
       .trim();
-    return stripped&&stripped!==n&&!/\.(pdf|docx?|png|jpe?g)$/i.test(stripped)
+    return stripped&&stripped!==n&&!/\.(pdf|docx?|png|jpe?g)$/i.test(stripped)&&!/^(pdf|docx?|xlsx?|png|jpe?g|gif|heic|tiff?|zip|rar|txt|mp3|mp4)$/i.test(stripped)
       ?('Anexo radicado: '+stripped)
       :(_pqrsEsNombreAnexoRadicacion(n)?'Anexo radicado':n);
   };
-  const push=function(url,nombre,fileId,tipoHint){
+  const push=function(url,nombre,fileId,tipoHint,esSolicitud){
     if(!url)return;
     if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url))return;
     const k=keyOf(url,{fileId:fileId});
@@ -1877,8 +1877,9 @@ function _pqrsCollectDocsRadicacion(e){
       driveLink:url,url:url,previewLink:url,
       nombre:nom,fileId:fileId||'',driveFileId:fileId||'',
       tipo:tipo,
-      label:tipo==='soporte_radicacion'?'Soporte de radicación (PDF)':labelAnexo(nom),
+      label:esSolicitud?'Solicitud radicada':(tipo==='soporte_radicacion'?'Soporte de radicación (PDF)':labelAnexo(nom)),
       es_radicacion:true,
+      es_solicitud:!!esSolicitud,
       es_anexo:tipo==='anexo_radicacion'
     });
   };
@@ -1892,12 +1893,15 @@ function _pqrsCollectDocsRadicacion(e){
       const matchSol=e._pqrs_solicitud_link&&typeof pqrsDriveUrlsMatch==='function'
         ?pqrsDriveUrlsMatch(url,e._pqrs_solicitud_link)
         :(e._pqrs_solicitud_link&&String(url)===String(e._pqrs_solicitud_link));
-      if(_pqrsEsNombreSoporteRadicacion(nom)||(matchSol&&!_pqrsEsNombreAnexoRadicacion(nom))||(i===0&&matchSol))
+      if(att.es_solicitud)tipo='soporte_radicacion';
+      // Radicadas con «Cargar solicitud» / «Adjuntar anexos»: un anexo nunca es el documento principal
+      else if(e._pqrs_solicitud_cargada!=null&&_pqrsEsNombreAnexoRadicacion(nom))tipo='anexo_radicacion';
+      else if(_pqrsEsNombreSoporteRadicacion(nom)||(matchSol&&!_pqrsEsNombreAnexoRadicacion(nom))||(i===0&&matchSol))
         tipo='soporte_radicacion';
       else if(_pqrsEsNombreAnexoRadicacion(nom)||i>0||!matchSol)
         tipo='anexo_radicacion';
       else tipo='soporte_radicacion';
-      push(url,nom,att.fileId||att.driveFileId||'',tipo);
+      push(url,nom,att.fileId||att.driveFileId||'',tipo,!!att.es_solicitud);
     });
   }else if(e._pqrs_solicitud_link){
     const nomArch=String(e._pqrs_solicitud_archivo||'').trim();
@@ -1910,7 +1914,7 @@ function _pqrsCollectDocsRadicacion(e){
 }
 /** Ventanilla / manual: documento subido → anexos → PDF institucional. Correo: orden original. */
 function _pqrsDocEsPdfSistemaRadicacion(d,e){
-  if(!d)return false;
+  if(!d||d.es_solicitud)return false;
   const nom=String(d.nombre||'').trim();
   if(_pqrsEsNombreSoporteRadicacion(nom))return true;
   if(d.tipo!=='soporte_radicacion')return false;
@@ -5197,33 +5201,28 @@ function renderPqrsOrigenMailStageHtml(e){
 function pqrsOrigenMostrarDetalle(e){
   if(!e)return false;
   if(typeof pqrsFueRadicadaPorCorreo==='function'?pqrsFueRadicadaPorCorreo(e):pqrsOrigenHasMailPane(e))return false;
+  if(e._pqrs_solicitud_cargada===true)return false;
   const rad=typeof _pqrsCollectDocsRadicacion==='function'?_pqrsCollectDocsRadicacion(e):[];
-  if(rad.some(function(d){return d&&d.tipo==='soporte_radicacion'&&!_pqrsEsNombreAnexoRadicacion(d.nombre);}))return false;
+  if(rad.some(function(d){return d&&d.tipo==='soporte_radicacion';}))return false;
   return !!(String(e.f_f1||'').trim()||String(e._pqrs_detalle||e._detalle_general||'').trim()||(typeof detalleNotasData==='function'&&detalleNotasData(e._detalle_notas).length));
 }
 function renderPqrsOrigenDetalleStageHtml(e){
   if(!e)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">PQRSD no encontrada</div>';
-  const kv=function(k,v){
-    v=String(v||'').trim();
-    return v?'<div class="pqrs-det-sec"><div class="pqrs-det-k">'+k+'</div><div class="pqrs-det-v">'+escAttr(v)+'</div></div>':'';
-  };
   const notas=typeof detalleNotasData==='function'?detalleNotasData(e._detalle_notas).filter(function(n){return n&&String(n.texto||'').trim();}):[];
-  const txtStyle='font-size:13px;line-height:1.55;white-space:pre-wrap;color:var(--tx)';
+  const txtStyle='font-size:14px;line-height:1.6;white-space:pre-wrap;color:var(--tx)';
+  const kStyle='font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px';
+  const boxStyle='padding:12px 14px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:14px';
   const det=notas.length
-    ?notas.map(function(n){
-      return '<div style="padding:.45rem 0;border-bottom:1px solid var(--bd)">'+
-        '<div style="font-size:11px;color:var(--tx3);margin-bottom:3px">'+escAttr(n.autor||'—')+(n.fecha?' · '+fmtF(n.fecha):'')+'</div>'+
+    ?notas.map(function(n,i){
+      return '<div style="'+(i?'padding-top:.6rem;margin-top:.6rem;border-top:1px solid var(--bd)':'')+'">'+
+        (notas.length>1?'<div style="font-size:11px;color:var(--tx3);margin-bottom:3px">'+escAttr(n.autor||'—')+(n.fecha?' · '+fmtF(n.fecha):'')+'</div>':'')+
         '<div style="'+txtStyle+'">'+escAttr(n.texto)+'</div></div>';
     }).join('')
     :'<div style="'+txtStyle+'">'+escAttr(String(e._pqrs_detalle||e._detalle_general||'').trim()||'—')+'</div>';
-  const nom=typeof getNom==='function'?getNom(e):'';
-  return '<div class="pqrs-origen-detalle" style="padding:16px 18px;max-width:780px;margin:0 auto;overflow:auto;height:100%;box-sizing:border-box">'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;padding:6px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">📝 Radicada sin documento PDF de la solicitud. Estos son el asunto y el detalle que registró Secretaría al radicar.</div>'+
-    kv('Asunto',e.f_f1)+
-    kv('Tipo de solicitud',e._tipo_solicitud)+
-    kv('Solicitante',nom)+
-    kv('Radicado',(e._fecha?fmtF(e._fecha):'')+(e.f_f2?' · '+e.f_f2:''))+
-    '<div class="pqrs-det-sec"><div class="pqrs-det-k">Detalle / descripción</div>'+det+'</div>'+
+  return '<div class="pqrs-origen-detalle" style="padding:18px 20px;max-width:780px;margin:0 auto;overflow:auto;height:100%;box-sizing:border-box">'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:14px;padding:6px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">📝 Radicada sin documento de solicitud. Asunto y detalle registrados por Secretaría en el formulario de radicación.</div>'+
+    '<div style="'+boxStyle+'"><div style="'+kStyle+'">Asunto</div><div style="font-size:16px;font-weight:600;line-height:1.45;color:var(--tx)">'+escAttr(String(e.f_f1||'').trim()||'—')+'</div></div>'+
+    '<div style="'+boxStyle+'"><div style="'+kStyle+'">Detalle</div>'+det+'</div>'+
   '</div>';
 }
 function renderPqrsOrigenDocStageHtml(doc){
@@ -16218,7 +16217,8 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
         lab='📎 Anexo '+n;
       }else if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
-        lab=s.tipo==='soporte_radicacion'||/^soporte de radicaci/i.test(String(s.label||''))
+        lab=/^solicitud radicada/i.test(String(s.label||''))?'Solicitud'
+          :s.tipo==='soporte_radicacion'||/^soporte de radicaci/i.test(String(s.label||''))
           ?'Rad. · PDF'
           :('Anexo rad. '+(s.anexo_n||''));
         if(!lab||lab==='Anexo rad. '){

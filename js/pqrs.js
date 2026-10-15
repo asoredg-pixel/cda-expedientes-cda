@@ -235,12 +235,21 @@ function secAnexoInitUi(){
   wrap.dataset.inited='1';
   const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
   wrap.innerHTML=typeof sstFilePickBlock==='function'
-    ?sstFilePickBlock({inputId:'sec-anexo-file',listId:'sec-anexo-list',ctxKey:ctxKey,multi:true,label:'Agregar archivo',btnClass:'btn bsm'})
-    :('<button type="button" class="btn bsm" onclick="secAnexoAdd()">📎 Agregar archivo</button>');
-  if(typeof sstFileInitPick==='function')sstFileInitPick('sec-anexo-file');
+    ?('<div style="margin-bottom:6px">'+sstFilePickBlock({inputId:'sec-sol-file',listId:'sec-sol-list',ctxKey:ctxKey,multi:false,label:'Cargar solicitud',btnClass:'btn bsm',title:'Oficio o solicitud recibida (escaneada) — un archivo. Si no la carga, se mostrará el asunto y el detalle del formulario.'})+'</div>'+
+      sstFilePickBlock({inputId:'sec-anexo-file',listId:'sec-anexo-list',ctxKey:ctxKey,multi:true,label:'Adjuntar anexos',btnClass:'btn bsm'}))
+    :('<button type="button" class="btn bsm" onclick="secAnexoAdd()">📎 Adjuntar anexos</button>');
+  if(typeof sstFileInitPick==='function'){sstFileInitPick('sec-sol-file');sstFileInitPick('sec-anexo-file');}
+}
+/** Documento de la solicitud cargado con «Cargar solicitud» (slot principal); null si no hay. */
+function secSolicitudCollectFile(){
+  const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
+  if(typeof sstFileCollect!=='function')return null;
+  const r=(sstFileCollect(ctxKey).files||[])[0];
+  return r&&r.blob?r.blob:null;
 }
 function secAnexoCollectFiles(){
   const ctxKey=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
+  if(typeof sstFileCollect==='function')return (sstFileCollect(ctxKey).anexos||[]).map(function(r){return r&&r.blob;}).filter(Boolean);
   if(typeof sstFileCollectRawFiles==='function')return sstFileCollectRawFiles(ctxKey);
   return Array.isArray(window._secAnexoFiles)?window._secAnexoFiles.slice():[];
 }
@@ -303,7 +312,9 @@ function limpiarFormSecretaria(){
   const genSop=document.getElementById('sec-gen-soporte');if(genSop)genSop.checked=false;
   const interna=document.getElementById('sec-interna');if(interna)interna.checked=false;
   const rem=document.getElementById('sec-oficina-remitente');if(rem)rem.value='';
-  if(typeof sstFileStagingReset==='function')sstFileStagingReset(typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos');
+  const secFileCtx=typeof sstFileCtxKeySecRadicacion==='function'?sstFileCtxKeySecRadicacion():'sec-radicacion-anexos';
+  if(typeof sstFileStagingReset==='function')sstFileStagingReset(secFileCtx);
+  if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(secFileCtx);
   window._secAnexoFiles=[];if(typeof secAnexoRenderList==='function')secAnexoRenderList();
   resetSecRadicacionFormulario();
   toggleSecInterna();
@@ -748,6 +759,7 @@ async function guardarPqrsSecretaria(modo){
   }
   const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=typeof secAnexoCollectFiles==='function'?secAnexoCollectFiles():(Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[]);
+  const solicitudFile=!gmailMsgId&&typeof secSolicitudCollectFile==='function'?secSolicitudCollectFile():null;
   let reenvioOficinaOk=false;
   let reenvioDsOk=false;
   // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────
@@ -782,6 +794,7 @@ async function guardarPqrsSecretaria(modo){
     _pqrs_workflow:JSON.stringify({fase:typeof PQRS_WF!=='undefined'?PQRS_WF.SIN_RESPUESTA:'sin_respuesta',tipo_radicacion:tipoRadicacion}),
     _pqrs_radicado_menu_secretaria:true,
     _pqrs_radicado_menu_en:new Date().toISOString(),
+    ...(gmailMsgId?{}:{_pqrs_solicitud_cargada:false}),
     updatedAt:new Date().toISOString()
   });
   // Conservar correos para la notificación: el spread de pjFields puede dejar
@@ -884,7 +897,7 @@ async function guardarPqrsSecretaria(modo){
         asunto,detalle,tipoPersona,
         pjEmpresa:pjFields._pj_empresa||'',pjNit:pjFields._pj_nit||'',
         pjCorreo:pjFields._pj_correo||'',pjTel:pjFields._pj_telefono||'',
-        tipoRadicacion,nombreCarpeta:nombre||(anon?'Anonimo':asunto),anexosFiles:anexoFiles,
+        tipoRadicacion,nombreCarpeta:nombre||(anon?'Anonimo':asunto),anexosFiles:anexoFiles,solicitudFile:solicitudFile,
         expediente:data,
         sinSoporte:sinSoportePdf,
         silentNotif:true
@@ -897,6 +910,9 @@ async function guardarPqrsSecretaria(modo){
         if(subidos<anexoFiles.length){
           notif('No se pudo subir algún anexo al Drive. La PQRSD ya quedó radicada — adjunte el archivo manualmente luego.','warn');
         }
+      }
+      if(solicitudFile&&!(manualRes&&manualRes.solicitud)){
+        notif('No se pudo subir la solicitud al Drive. La PQRSD ya quedó radicada — adjúntela luego desde Editar.','warn');
       }
       if(manualRes&&manualRes.all&&manualRes.all.length)manualDriveAtts=manualRes.all;
       manualDriveFolderLink=(manualRes&&(manualRes.folderLink||manualRes.pqrsFolderLink))||'';
@@ -937,10 +953,12 @@ async function guardarPqrsSecretaria(modo){
   if(hayMetadrive){
     data._pqrs_solicitud_link=linkFinal;
     // Guardar nombre del PDF de radicación (no solo nombres de anexos)
-    const soporteNom=(manualRes&&manualRes.soporte&&(manualRes.soporte.nombre||manualRes.soporte.name))
+    const soporteNom=(manualRes&&manualRes.solicitud&&(manualRes.solicitud.nombre||manualRes.solicitud.name))
+      ||(manualRes&&manualRes.soporte&&(manualRes.soporte.nombre||manualRes.soporte.name))
       ||(gmailAtts&&gmailAtts[0]&&(gmailAtts[0].nombre||gmailAtts[0].name))
       ||'';
     data._pqrs_solicitud_archivo=soporteNom||archivoFinal||'';
+    if(manualRes&&manualRes.solicitud)data._pqrs_solicitud_cargada=true;
     data._pqrs_drive_folder_link=folderLinkFinal;
     data._pqrs_drive_folder_id=driveFolderMeta.pqrsFolderId||'';
     data._pqrs_drive_solicitud_folder_id=driveFolderMeta.solicitudFolderId||'';
