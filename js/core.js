@@ -27651,7 +27651,7 @@ function renderActividadesRowHtml(t){
   const esCrit=priorAbierta&&taskEsPrioridadCriticaVencimiento(t);
   // En «Por revisar» solo la fila fijada lleva fondo; prioridad y reentrega quedan en los badges.
   const sinFondoFila=fijadaAct||filPinVal==='porver';
-  const rowStyle=fijadaAct?'background:var(--bll);box-shadow:inset 3px 0 0 var(--bl)':sinFondoFila?'':[
+  const rowStyle=fijadaAct?'box-shadow:inset 3px 0 0 var(--bl)':sinFondoFila?'':[
     esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(priorAbierta&&t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
