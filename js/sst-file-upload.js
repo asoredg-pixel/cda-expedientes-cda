@@ -192,40 +192,104 @@ function sstFilePreview(ctxKey, itemId) {
   window.open(url, '_blank', 'noopener');
 }
 
+function sstFileConfirmQuitar(opts, onOk, onCancel) {
+  opts = opts || {};
+  const cancelFn = typeof onCancel === 'function' ? onCancel : null;
+  const okFn = typeof onOk === 'function' ? onOk : null;
+  if (typeof confirmEliminar === 'function') {
+    const restoreHandlers = function () {
+      const c = document.getElementById('confirm-prec-cancel');
+      const o = document.getElementById('confirm-prec-overlay');
+      if (c) c.onclick = function () { closeConfirmDialog(false); };
+      if (o) o.onclick = function (ev) { if (ev.target === o) closeConfirmDialog(false); };
+    };
+    confirmEliminar({
+      title: opts.title || 'Confirmar',
+      message: opts.message || '¿Está seguro?',
+      detail: opts.detail || 'Se eliminará de Drive.',
+      confirmLabel: opts.confirmLabel || 'Sí, quitar'
+    }, function () {
+      restoreHandlers();
+      if (okFn) okFn();
+    });
+    // Cancelar / clic fuera: liberar input pendiente si aplica
+    const cancel = document.getElementById('confirm-prec-cancel');
+    if (cancel) {
+      cancel.onclick = function () {
+        closeConfirmDialog(false);
+        restoreHandlers();
+        if (cancelFn) cancelFn();
+      };
+    }
+    const ov = document.getElementById('confirm-prec-overlay');
+    if (ov) {
+      ov.onclick = function (ev) {
+        if (ev.target !== ov) return;
+        closeConfirmDialog(false);
+        restoreHandlers();
+        if (cancelFn) cancelFn();
+      };
+    }
+    return;
+  }
+  const msg = String(opts.message || '') + (opts.detail ? '\n' + opts.detail : '');
+  if (window.confirm(msg)) { if (okFn) okFn(); }
+  else if (cancelFn) cancelFn();
+}
+
 async function sstFileRemove(ctxKey, itemId, listId) {
   const ctx = sstFileStagingCtx(ctxKey);
   const hit = sstFileFindItem(ctx, itemId);
   if (!hit || !hit.item) return;
   const it = hit.item;
-  if (it.borrador && !confirm('¿Quitar este soporte del borrador? Se eliminará de Drive.')) return;
-  if (it.corrPrev && !confirm('¿Quitar «' + (it.nombre || 'archivo') + '» de la entrega anterior? Se eliminará de Drive.')) return;
-  // Informe devuelto: se conserva para que el encargado compare (se borra al aprobar)
-  const conservarCorr = !!(it.corrPrev && !it.esAnexo);
-  if (it.driveFileId && !conservarCorr && typeof driveDeleteInstitutional === 'function') {
-    try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
-      console.warn('sstFileRemove drive:', err);
-      if (typeof notif === 'function') notif('No se pudo eliminar del Drive', 'warn');
-    }
-  }
-  if (it.blobUrl) try { URL.revokeObjectURL(it.blobUrl); } catch (e) {}
-  if (hit.slot === 'main') ctx.main = null;
-  else if (hit.idx >= 0) ctx.anexos.splice(hit.idx, 1);
-  if (window._sstFilePickRegistry) {
-    Object.keys(window._sstFilePickRegistry).forEach(function (inpId) {
-      const r = window._sstFilePickRegistry[inpId];
-      if (r && r.ctxKey === ctxKey) {
-        const inp = document.getElementById(inpId);
-        if (inp) inp.value = '';
+  const aplicar = async function () {
+    // Informe devuelto: se conserva para que el encargado compare (se borra al aprobar)
+    const conservarCorr = !!(it.corrPrev && !it.esAnexo);
+    if (it.driveFileId && !conservarCorr && typeof driveDeleteInstitutional === 'function') {
+      try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
+        console.warn('sstFileRemove drive:', err);
+        if (typeof notif === 'function') notif('No se pudo eliminar del Drive', 'warn');
       }
-    });
+    }
+    if (it.blobUrl) try { URL.revokeObjectURL(it.blobUrl); } catch (e) {}
+    if (hit.slot === 'main') ctx.main = null;
+    else if (hit.idx >= 0) ctx.anexos.splice(hit.idx, 1);
+    if (window._sstFilePickRegistry) {
+      Object.keys(window._sstFilePickRegistry).forEach(function (inpId) {
+        const r = window._sstFilePickRegistry[inpId];
+        if (r && r.ctxKey === ctxKey) {
+          const inp = document.getElementById(inpId);
+          if (inp) inp.value = '';
+        }
+      });
+    }
+    const inpMain = document.getElementById('enviar-adj-file');
+    const inpAnex = document.getElementById('enviar-anexos-file');
+    if (hit.slot === 'main' && inpMain) inpMain.value = '';
+    if (hit.slot === 'anexos' && inpAnex) inpAnex.value = '';
+    sstFileRefreshCtxLists(ctxKey, listId);
+    if (it.borrador && typeof informeBorradorOnQuitar === 'function') informeBorradorOnQuitar();
+    if (it.corrPrev && typeof informeCorreccionOnQuitar === 'function') informeCorreccionOnQuitar(it);
+  };
+  if (it.borrador) {
+    sstFileConfirmQuitar({
+      title: 'Quitar del borrador',
+      message: '¿Quitar este soporte del borrador?',
+      detail: 'Se eliminará de Drive.',
+      confirmLabel: 'Sí, quitar'
+    }, function () { aplicar(); });
+    return;
   }
-  const inpMain = document.getElementById('enviar-adj-file');
-  const inpAnex = document.getElementById('enviar-anexos-file');
-  if (hit.slot === 'main' && inpMain) inpMain.value = '';
-  if (hit.slot === 'anexos' && inpAnex) inpAnex.value = '';
-  sstFileRefreshCtxLists(ctxKey, listId);
-  if (it.borrador && typeof informeBorradorOnQuitar === 'function') informeBorradorOnQuitar();
-  if (it.corrPrev && typeof informeCorreccionOnQuitar === 'function') informeCorreccionOnQuitar(it);
+  if (it.corrPrev) {
+    sstFileConfirmQuitar({
+      title: 'Quitar de la entrega anterior',
+      message: '¿Quitar «' + (it.nombre || 'archivo') + '» de la entrega anterior?',
+      detail: 'Se eliminará de Drive.',
+      confirmLabel: 'Sí, quitar'
+    }, function () { aplicar(); });
+    return;
+  }
+  await aplicar();
 }
 
 async function sstFileUploadItem(it, uploadCtx, onPct) {
@@ -351,20 +415,13 @@ async function sstFileTryUpload(ctxKey, listId, getUploadCtx) {
   }
 }
 
-function sstFileOnMainPick(inputEl, opts) {
+function sstFileOnMainPickApply(inputEl, opts, old) {
   opts = opts || {};
   const ctxKey = opts.ctxKey || 'entrega';
   const listId = opts.listId || 'entrega-resp-file-list';
-  if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, 'main');
   const f = inputEl && inputEl.files && inputEl.files[0];
   const ctx = sstFileStagingCtx(ctxKey);
-  if (ctx.main) {
-    const old = ctx.main;
-    // Informe de la entrega devuelta: solo se reemplaza con archivo elegido y confirmación
-    if (old.corrPrev && (!f || !confirm('¿Reemplazar el informe de la entrega anterior? Se eliminará de Drive.'))) {
-      if (inputEl) inputEl.value = '';
-      return;
-    }
+  if (old) {
     if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional === 'function') {
       driveDeleteInstitutional(old.driveFileId).catch(function () {});
     }
@@ -386,6 +443,39 @@ function sstFileOnMainPick(inputEl, opts) {
   if (typeof opts.getUploadCtx === 'function') {
     sstFileTryUpload(ctxKey, listId, opts.getUploadCtx);
   }
+}
+
+function sstFileOnMainPick(inputEl, opts) {
+  opts = opts || {};
+  const ctxKey = opts.ctxKey || 'entrega';
+  const listId = opts.listId || 'entrega-resp-file-list';
+  if (typeof sstFileRegisterList === 'function') sstFileRegisterList(listId, ctxKey, 'main');
+  const f = inputEl && inputEl.files && inputEl.files[0];
+  const ctx = sstFileStagingCtx(ctxKey);
+  if (ctx.main) {
+    const old = ctx.main;
+    // Informe de la entrega devuelta: solo se reemplaza con archivo elegido y confirmación
+    if (old.corrPrev) {
+      if (!f) {
+        if (inputEl) inputEl.value = '';
+        return;
+      }
+      sstFileConfirmQuitar({
+        title: 'Reemplazar entrega anterior',
+        message: '¿Reemplazar el informe de la entrega anterior?',
+        detail: 'Se eliminará de Drive.',
+        confirmLabel: 'Sí, reemplazar'
+      }, function () {
+        sstFileOnMainPickApply(inputEl, opts, old);
+      }, function () {
+        if (inputEl) inputEl.value = '';
+      });
+      return;
+    }
+    sstFileOnMainPickApply(inputEl, opts, old);
+    return;
+  }
+  sstFileOnMainPickApply(inputEl, opts, null);
 }
 
 function sstFileOnAnexosPick(inputEl, opts) {

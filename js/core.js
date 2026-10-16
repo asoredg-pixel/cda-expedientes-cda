@@ -7159,7 +7159,11 @@ function taskReporteBtnHtml(expId,taskId,yo){
   }
   if(miEst==='Atendida')return '';
   if(!puedeReportarTask(t,usuario))return '';
-  const title=(miEst==='Por corregir'?'Entrega — nueva corrección':'Entrega de actividad')+cmtTip;
+  // Por corregir: sin contador en 📤 (el chat ya muestra mensajes; el n.º de comentarios de entrega confunde)
+  if(miEst==='Por corregir'){
+    return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entrega — nueva corrección" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤</button>';
+  }
+  const title='Entrega de actividad'+cmtTip;
   return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="'+escAttr(title)+'" onclick="respMarcarPorVerificar(\''+exp+'\',\''+tid+'\')">📤'+cmtBadge+'</button>';
 }
 function refreshVistasTrasAgendar(){
@@ -8576,7 +8580,8 @@ function taskReviewRespVerRailHtml(ref,taskId,t){
     return h+'</nav>';
   }
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
+    const badgeEnt=miEst==='Por corregir'?'':taskEntregaCmtBadgeHtml(t);
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+badgeEnt+'</button>';
   }
   // Autoentrega / entrega propia en observaciones (por corregir): eliminar entrega en el rail
   const puedeElimObs=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(refExp,taskId);
@@ -8812,7 +8817,8 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
   if(e&&puedeEliminarPqrsEnVisor(e))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='eliminar'?' on':'')+'" data-side="eliminar" title="Eliminar PQRSD" onclick="taskReviewToggleSidePanel(\'eliminar\',\''+r+'\',\''+tid+'\')">🗑️</button>';
   if(yo&&typeof puedeReportarTask==='function'&&puedeReportarTask(t,usuario)&&miEst!=='Atendida'&&miEst!=='Por verificar'&&est!=='Por verificar'){
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+taskEntregaCmtBadgeHtml(t)+'</button>';
+    const badgeEnt=miEst==='Por corregir'?'':taskEntregaCmtBadgeHtml(t);
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(side==='entrega'?' on':'')+'" data-side="entrega" title="'+(miEst==='Por corregir'?'Nueva corrección':'Nueva entrega')+'" onclick="taskReviewToggleSidePanel(\'entrega\',\''+r+'\',\''+tid+'\')">📤'+badgeEnt+'</button>';
   }
   return h+'</nav>';
 }
