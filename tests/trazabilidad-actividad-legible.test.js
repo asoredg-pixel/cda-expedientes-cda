@@ -113,4 +113,22 @@ describe('Trazabilidad legible de la actividad', () => {
     expect(lineas.filter(l => /Enviada/.test(l))).toHaveLength(1)
     expect(lineas.some(l => /Enviada a revisión de profesional/.test(l))).toBe(true)
   })
+
+  it('corrección técnico→profesional: no duplica «Nueva entrega (corrección v2)» con el traslado', () => {
+    const ts = new Date(2026, 9, 13, 10, 4).getTime()
+    const lineas = render([
+      { tipo: 'autoasignacion_responsable', fecha: '2026-09-30', por: 'ANA ARIAS' },
+      { tipo: 'traslado', fecha: '2026-09-30', ts: ts - 1e9, revisionPar: 'solicitud', de: 'ANA ARIAS', a: 'LILIANA MARTINEZ', por: 'ANA ARIAS' },
+      { tipo: 'reenvio_verificacion', fecha: '2026-09-30', version: 1, por: 'ANA ARIAS' },
+      { tipo: 'traslado', fecha: '2026-10-06', revisionPar: 'devolucion', de: 'LILIANA MARTINEZ', a: 'ANA ARIAS', por: 'LILIANA MARTINEZ' },
+      { tipo: 'reenvio_verificacion', fecha: '2026-10-13', ts, version: 2, por: 'ANA ARIAS', reportadoPor: 'ANA ARIAS' },
+      { tipo: 'traslado', fecha: '2026-10-13', ts: ts + 5, de: 'ANA ARIAS', a: 'LILIANA MARTINEZ', por: 'ANA ARIAS', revisionPar: 'correccion' },
+      { tipo: 'reenvio_verificacion', fecha: '2026-10-13', ts: ts + 3600000, version: 3, por: 'LILIANA MARTINEZ' }
+    ])
+    expect(lineas.filter(l => /Nueva entrega \(corrección v2\)/.test(l))).toHaveLength(0)
+    expect(lineas.filter(l => /Corrección del técnico al profesional/.test(l))).toHaveLength(1)
+    expect(lineas.some(l => /Corrección del técnico al profesional: ANA ARIAS → LILIANA MARTINEZ/.test(l))).toBe(true)
+    // La entrega del profesional (v3) sin traslado de corrección sí se muestra
+    expect(lineas.some(l => /Nueva entrega \(corrección v3\)/.test(l))).toBe(true)
+  })
 })

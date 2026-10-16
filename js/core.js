@@ -4747,7 +4747,11 @@ function pqrsHistorialEventoLabel(h){
     const orig=h.oficinaAnterior?labelOficina(h.oficinaAnterior):'';
     return orig?'Traslado: '+orig+' → '+dest:'Traslado a '+dest;
   }
-  if(h.tipo==='asignacion_oficina')return 'Asignación a responsable de la oficina';
+  if(h.tipo==='asignacion_oficina'){
+    const noms=pqrsNombresDesdeAsignacionHist(h);
+    return noms?'Asigna a: '+noms:'Asigna a responsable';
+  }
+  if(h.tipo==='reenvio_correo_responsable')return 'Notificación de PQRSD enviada a responsable(s)';
   if(h.tipo==='respuesta_oficina')return 'Respuesta registrada';
   if(h.tipo==='entrega_respuesta')return 'Entrega con datos de respuesta';
   if(h.tipo==='recepcion_nca')return 'Recibido en NCA DEGUV';
@@ -4764,9 +4768,30 @@ function pqrsHistorialEventoLabel(h){
   if(h.tipo==='vital_firma_completada')return 'VITAL — oficio firmado subido al Drive institucional';
   return 'Actualización';
 }
+/** Nombre(s) del/los responsable(s) en un hito de asignación. */
+function pqrsNombresDesdeAsignacionHist(h){
+  if(!h)return'';
+  if(h.a)return String(h.a).trim();
+  const n=String(h.nota||'').trim();
+  const m=n.match(/Asignad[oa]\s+a\s+(.+?)(?:\s*\((?:entrega|individual|unificada)|$|\s*·\s*Obs:)/i);
+  if(m)return m[1].replace(/\s+$/,'').trim();
+  const m2=n.match(/Asignad[oa]\s+a\s+(.+)$/i);
+  return m2?m2[1].trim():'';
+}
+/** ts numérico (number, string o Timestamp Firestore). */
+function pqrsHistTsNum(h){
+  const t=h&&h.ts;
+  if(t==null||t==='')return 0;
+  if(typeof t==='number'&&isFinite(t)&&t>0)return t;
+  if(typeof t==='string'&&/^\d+(\.\d+)?$/.test(t.trim())){const n=Number(t);return n>0?n:0;}
+  if(t&&typeof t.toMillis==='function'){try{const n=t.toMillis();return n>0?n:0;}catch(e){}}
+  if(t&&typeof t.seconds==='number')return t.seconds*1000+(t.nanoseconds?Math.floor(t.nanoseconds/1e6):0);
+  const n=Number(t);
+  return(isFinite(n)&&n>0)?n:0;
+}
 /** Hora del evento de PQRSD; solo si la marca de tiempo es del mismo día registrado (fechas de respuesta pueden ser anteriores). */
 function pqrsHistHoraTxt(h){
-  const n=Number(h&&h.ts);
+  const n=pqrsHistTsNum(h);
   if(!(n>0))return'';
   const d=new Date(n);
   if(isNaN(d.getTime()))return'';
@@ -4794,6 +4819,11 @@ function pqrsHistOcultarRecepcionTraslado(h,hist){
     return !ofi||!dest||dest===ofi;
   });
 }
+/** Correo al responsable al asignar: redundante con «Asigna a: …» (se entiende que le llega). */
+function pqrsHistOcultarReenvioTrasAsignacion(h,hist){
+  if(!h||h.tipo!=='reenvio_correo_responsable')return false;
+  return (hist||[]).some(function(x){return x&&x.tipo==='asignacion_oficina';});
+}
 /** Radicación en trazabilidad: fecha/hora de solicitud (correo recibido o ventanilla). */
 function pqrsHistItemTrazabilidad(h,e){
   if(!h)return h;
@@ -4815,7 +4845,8 @@ function pqrsHistEmoji(h){
     revision_nca_rechazado:'↩',devolver_desde_firma:'↩',devuelto_director_firma:'↩',notif_devuelta_corregir:'↩',
     impreso_oficio:'🖨',impreso_oficio_desmarcar:'🖨',pasar_a_firma_director:'✍️',firma_fisica_director:'✍️',firma_director:'✍️',vital_firma_completada:'✍️',
     informativa:'ℹ️',informativa_aprobada:'ℹ️',asociacion_exp:'🖇️',asociacion_pqrs:'🖇️',ajuste_fecha_solicitud:'✏️',
-    notificacion_radicacion:'📧',notificacion_correo:'📧',aviso_informativo_correo:'📧',notificacion_excepcion:'⚠️'
+    notificacion_radicacion:'📧',notificacion_correo:'📧',aviso_informativo_correo:'📧',notificacion_excepcion:'⚠️',
+    reenvio_correo_responsable:'📨'
   };
   if(m[t])return m[t];
   const s=t+' '+String((h&&h.nota)||'');
@@ -4833,9 +4864,14 @@ function renderPqrsTrazabilidadHtml(e){
   let items=[];
   const histRaw=(e._pqrs_historial||[]).slice();
   const hist=histRaw
-    .filter(function(h){return !pqrsHistOcultarRecepcionTraslado(h,histRaw);})
+    .filter(function(h){return !pqrsHistOcultarRecepcionTraslado(h,histRaw)&&!pqrsHistOcultarReenvioTrasAsignacion(h,histRaw);})
     .map(function(h){return pqrsHistItemTrazabilidad(h,e);})
-    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((a.ts>0&&b.ts>0)?a.ts-b.ts:0));
+    .sort(function(a,b){
+      const cf=String(a.fecha||'').localeCompare(String(b.fecha||''));
+      if(cf)return cf;
+      const ta=pqrsHistTsNum(a),tb=pqrsHistTsNum(b);
+      return(ta>0&&tb>0)?ta-tb:0;
+    });
   if(!hist.some(h=>h.tipo==='radicacion')){
     const fs=String(e._fecha_solicitud||e._fecha||'').trim();
     if(fs){
@@ -4846,19 +4882,30 @@ function renderPqrsTrazabilidadHtml(e){
     }
   }
   hist.forEach(h=>items.push(h));
-  items.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((Number(a.ts)>0&&Number(b.ts)>0)?Number(a.ts)-Number(b.ts):0));
+  items.sort(function(a,b){
+    const cf=String(a.fecha||'').localeCompare(String(b.fecha||''));
+    if(cf)return cf;
+    const ta=pqrsHistTsNum(a),tb=pqrsHistTsNum(b);
+    return(ta>0&&tb>0)?ta-tb:0;
+  });
   if(!items.length)return'';
   const tl=items.map(h=>{
     const lbl=pqrsHistorialEventoLabel(h);
     let nota=String(h.nota||'').trim();
     // No mostrar notas internas de alta/migración ni cuerpo de respuesta en radicación/respuesta
     if(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))nota='';
+    // Asignación: el nombre va en la etiqueta «Asigna a: …»; solo conservar Obs.
+    if(h.tipo==='asignacion_oficina'){
+      const om=String(h.nota||'').match(/·\s*Obs:\s*(.+)$/i);
+      nota=om?om[1].trim():'';
+    }
     const esTrasl=h.tipo==='traslado_oficina';
     let txt;
     if(esTrasl)txt=escAttr(lbl)+(nota?' · Motivo: '+escAttr(nota):'');
+    else if(h.tipo==='asignacion_oficina')txt=escAttr(lbl)+(nota?' · Obs: '+escAttr(nota):'');
     else if(lbl==='Actualización')txt=nota?escAttr(nota):escAttr(lbl);
     else txt=escAttr(lbl)+(nota?': '+escAttr(nota):'');
-    const por=h.por&&nota.indexOf(String(h.por))<0?' · '+escAttr(h.por):'';
+    const por=h.por&&nota.indexOf(String(h.por))<0&&String(lbl).indexOf(String(h.por))<0?' · '+escAttr(h.por):'';
     const hora=pqrsHistHoraTxt(h);
     const cuando=fmtF(h.fecha||e._fecha_solicitud||e._fecha)+(hora?' '+hora:'');
     return '<div class="pqrs-tl-line" style="font-size:12px;line-height:1.5;padding:3px 0;color:var(--tx)">'+
@@ -24941,6 +24988,7 @@ function taskHistMismoMomento(a,b){
  * Oculta la línea genérica cuando ya hay una más específica del mismo momento:
  * - «Revisada y devuelta…» (ajuste_soporte) si hay traslado devolucion / devolucion_nca
  * - «Enviada para revisión» (1.ª entrega) si hay traslado a profesional (solicitud)
+ * - «Nueva entrega (corrección vN)» si hay «Corrección del técnico al profesional» (correccion)
  */
 function taskHistOcultarComoDuplicado(hist,i){
   const h=hist&&hist[i];
@@ -24958,9 +25006,20 @@ function taskHistOcultarComoDuplicado(hist,i){
       return o.tipo==='traslado'&&(o.revisionPar==='devolucion_nca'||o.revisionPar==='devolucion');
     });
   }
-  const v1=(h.tipo==='reenvio_verificacion'||h.tipo==='soporte')&&(parseInt(h.version,10)||1)===1;
-  if(v1){
-    return cerca(function(o){return o.tipo==='traslado'&&o.revisionPar==='solicitud';});
+  const esEntrega=(h.tipo==='reenvio_verificacion'||h.tipo==='soporte');
+  if(esEntrega){
+    const v=parseInt(h.version,10)||1;
+    if(v===1)return cerca(function(o){return o.tipo==='traslado'&&o.revisionPar==='solicitud';});
+    // corrección v2+: ocultar «Nueva entrega» solo si el traslado al profesional es del mismo instante (ts ±2 min)
+    for(let j=Math.max(0,i-3);j<=Math.min(hist.length-1,i+3);j++){
+      if(j===i)continue;
+      const o=hist[j];
+      if(!o||o.tipo!=='traslado'||o.revisionPar!=='correccion')continue;
+      const ta=Number(h.ts||0),tb=Number(o.ts||0);
+      if(ta>0&&tb>0){if(Math.abs(ta-tb)<120000)return true;}
+      else if(taskHistMismoMomento(h,o))return true;
+    }
+    return false;
   }
   return false;
 }
@@ -29111,7 +29170,7 @@ async function submitCrearPqrsDesdeActLibre(){
       if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
       e._pqrs_historial.push({ts:Date.now(),
         tipo:'asignacion_oficina',fecha:typeof hoy==='function'?hoy():'',
-        nota:'Asignada a '+respAsig,oficina:'guaviare',por:responsableActivo||''
+        a:respAsig,nota:'Asignada a '+respAsig,oficina:'guaviare',por:responsableActivo||''
       });
       if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
       closeTaskModal();

@@ -35,8 +35,8 @@ const c = createContext({
   fmtF: s => String(s || '').slice(0, 10).split('-').reverse().join('/')
 })
 runInContext(extraer(core, [
-  'pqrsHistorialEventoLabel', 'pqrsHistHoraTxt', 'pqrsTsDesdeCorreo',
-  'pqrsHistOcultarRecepcionTraslado', 'pqrsHistItemTrazabilidad',
+  'pqrsHistorialEventoLabel', 'pqrsNombresDesdeAsignacionHist', 'pqrsHistTsNum', 'pqrsHistHoraTxt', 'pqrsTsDesdeCorreo',
+  'pqrsHistOcultarRecepcionTraslado', 'pqrsHistOcultarReenvioTrasAsignacion', 'pqrsHistItemTrazabilidad',
   'pqrsHistEmoji', 'renderPqrsTrazabilidadHtml'
 ]), c)
 
@@ -105,5 +105,30 @@ describe('Los eventos nuevos de la PQRSD guardan la hora', () => {
       })
     })
     expect(sin).toEqual([])
+  })
+})
+
+describe('Asignación: una sola línea con hora (sin correo al responsable duplicado)', () => {
+  it('muestra «Asigna a: …» con hora y oculta el reenvío de correo al responsable', () => {
+    const tsAsig = ts('2026-10-14', 11, 20)
+    const html = c.renderPqrsTrazabilidadHtml({
+      _fecha: '2026-10-12',
+      _fecha_solicitud: '2026-10-12',
+      _medio_notificacion: 'correo',
+      _pqrs_historial: [
+        { ts: ts('2026-10-12', 7, 55), tipo: 'radicacion', fecha: '2026-10-12', nota: 'Radicado por Secretaría DEGUV' },
+        { ts: tsAsig, tipo: 'asignacion_oficina', fecha: '2026-10-14', a: 'MARCELA CHARA', nota: 'Asignado a MARCELA CHARA' },
+        { ts: tsAsig + 1000, tipo: 'reenvio_correo_responsable', fecha: '2026-10-14', nota: 'Notificación de PQRSD enviada a responsable(s): MARCELA CHARA' }
+      ]
+    })
+    const lineas = html.split('pqrs-tl-line').slice(1)
+    const hora = new Date(tsAsig).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
+    expect(html).not.toContain('Notificación de PQRSD enviada a responsable')
+    expect(html).not.toContain('Asignación a responsable de la oficina')
+    expect(lineas.some(l => l.includes('Asigna a: MARCELA CHARA') && l.includes(hora))).toBe(true)
+  })
+
+  it('pqrsHistTsNum lee Timestamp estilo Firestore', () => {
+    expect(c.pqrsHistTsNum({ ts: { seconds: 1760450000, nanoseconds: 0 } })).toBe(1760450000 * 1000)
   })
 })

@@ -1291,7 +1291,8 @@ async function pqrsReenviarCorreoOficinaManual(expId){
   return ok;
 }
 window.pqrsReenviarCorreoOficinaManual=pqrsReenviarCorreoOficinaManual;
-async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg){
+async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetchedMsg,opts){
+  opts=opts||{};
   // Único correo al responsable por ahora: reenvío del radicado por correo (con anexos).
   // No usar este camino para aprobar documentos ni devolver por corregir.
   if(!e||!expId||!nombres||!nombres.length)return false;
@@ -1328,15 +1329,20 @@ async function reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,prefetc
   }
   if(okEmails.length){
     pqrsMarcarCorreosReenviados(e,okEmails);
-    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    const enviados=pendientes.filter(function(p){
-      return okEmails.some(function(em){return String(em).toLowerCase()===String(p.email).toLowerCase();});
-    });
-    e._pqrs_historial.push({ts:Date.now(),
-      tipo:'reenvio_correo_responsable',
-      fecha:hoy(),
-      nota:'Notificación de PQRSD enviada a responsable(s): '+enviados.map(function(p){return p.nombre;}).join(', ')
-    });
+    // Si hubo asignación, «Asigna a: …» ya implica el correo; no duplicar en trazabilidad
+    const omitHist=!!opts.omitHistAsignacion
+      ||(Array.isArray(e._pqrs_historial)&&e._pqrs_historial.some(function(x){return x&&x.tipo==='asignacion_oficina';}));
+    if(!omitHist){
+      if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+      const enviados=pendientes.filter(function(p){
+        return okEmails.some(function(em){return String(em).toLowerCase()===String(p.email).toLowerCase();});
+      });
+      e._pqrs_historial.push({ts:Date.now(),
+        tipo:'reenvio_correo_responsable',
+        fecha:hoy(),
+        nota:'Notificación de PQRSD enviada a responsable(s): '+enviados.map(function(p){return p.nombre;}).join(', ')
+      });
+    }
     return true;
   }
   return false;
@@ -1352,7 +1358,7 @@ async function tryReenvioPqrsCorreoAResponsables(e,nombres,expId,opts){
     if(!opts.silent)notif('⚠️ PQRSD asignada, pero NO se pudo reenviar el correo (sesión Gmail expirada). Reconecte la bandeja.','warn');
     return false;
   }
-  const ok=await reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId);
+  const ok=await reenviarCorreoRadicacionPqrsAResponsables(e,nombres,expId,null,opts);
   if(!ok&&!opts.silent){
     const sinEmail=nombres.filter(function(n){return!getEmailResponsablePqrs(n);});
     if(sinEmail.length){
@@ -3104,7 +3110,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   else if(e._pqrs_asig_observaciones==null)e._pqrs_asig_observaciones='';
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   nomList=responsables.join(', ');
-  e._pqrs_historial.push({ts:Date.now(),tipo:'asignacion_oficina',fecha:hoy(),nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
+  e._pqrs_historial.push({ts:Date.now(),tipo:'asignacion_oficina',fecha:hoy(),a:nomList,nota:'Asignado a '+nomList+(entregaModo==='unificada'?' (entrega unificada)':(responsables.length>1?' (entrega individual)':''))+(obs?' · Obs: '+obs:''),oficina:e._pqrs_oficina});
   const {vence,plazoDias}=pqrsPlazoTaskMeta(e);
   pqrsAplicarPrioritariaDesdePanel(e);
   const prior=!!e._pqrs_prioritaria;
@@ -3179,7 +3185,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
   let correoOk=true;
   if(enviaraCorreo&&typeof tryReenvioPqrsCorreoAResponsables==='function'){
     if(typeof sstCargaProgress==='function')sstCargaProgress(65,'Enviando correo al responsable…');
-    correoOk=await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:true});
+    correoOk=await tryReenvioPqrsCorreoAResponsables(e,responsables,expId,{silent:true,omitHistAsignacion:true});
     if(e._pqrs_correo_reenviado_a&&e._pqrs_correo_reenviado_a.length)persistExpedienteGranular(e);
   }else if(typeof sstCargaProgress==='function'){
     sstCargaProgress(85,'Finalizando asignación…');

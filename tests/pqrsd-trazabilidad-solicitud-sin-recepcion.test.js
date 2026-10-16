@@ -36,8 +36,8 @@ const c = createContext({
   fmtF: s => String(s || '').slice(0, 10).split('-').reverse().join('/')
 })
 runInContext(extraer(core, [
-  'pqrsHistorialEventoLabel', 'pqrsHistHoraTxt', 'pqrsTsDesdeCorreo',
-  'pqrsHistOcultarRecepcionTraslado', 'pqrsHistItemTrazabilidad',
+  'pqrsHistorialEventoLabel', 'pqrsNombresDesdeAsignacionHist', 'pqrsHistTsNum', 'pqrsHistHoraTxt', 'pqrsTsDesdeCorreo',
+  'pqrsHistOcultarRecepcionTraslado', 'pqrsHistOcultarReenvioTrasAsignacion', 'pqrsHistItemTrazabilidad',
   'pqrsHistEmoji', 'renderPqrsTrazabilidadHtml'
 ]), c)
 
