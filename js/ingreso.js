@@ -267,14 +267,15 @@ function updateHeaderUsuario(){
   if(bar)bar.style.display='inline-flex';
   if(barMob)barMob.style.display='flex';
 }
-function alertUsuarioDesactivado(opts){
+function alertAccesoLoginModal(opts){
   opts=opts||{};
   const email=String(opts.email||'').trim();
-  const msg='Su usuario está desactivado y no puede ingresar al sistema. Contacte al administrador para solicitar la reactivación de su cuenta.';
+  const msg=String(opts.message||'').trim();
+  const title=String(opts.title||'Acceso denegado').trim();
   const detail=email?('Cuenta: '+email):'';
   if(typeof confirmPrecaucion==='function'){
     confirmPrecaucion({
-      title:'Usuario desactivado',
+      title:title,
       message:msg,
       detail:detail,
       confirmLabel:'Entendido',
@@ -284,6 +285,28 @@ function alertUsuarioDesactivado(opts){
   }else{
     try{window.alert(msg+(detail?'\n'+detail:''));}catch(e){}
   }
+}
+function alertUsuarioDesactivado(opts){
+  opts=opts||{};
+  alertAccesoLoginModal({
+    email:opts.email,
+    title:'Acceso denegado',
+    message:'Su acceso temporalmente ha sido denegado. Contacte con la dirección seccional para más información.'
+  });
+}
+function alertCorreoNoAutorizado(opts){
+  opts=opts||{};
+  alertAccesoLoginModal({
+    email:opts.email,
+    title:'Sin acceso al sistema',
+    message:'Su correo no cuenta con acceso al sistema como funcionario.'
+  });
+}
+function instructorAsociadoDesactivado(email){
+  email=String(email||'').trim().toLowerCase();
+  if(!email||typeof findInstructorByEmail!=='function')return false;
+  const ins=findInstructorByEmail(email);
+  return !!(ins&&ins.activo===false);
 }
 async function verificarUsuarioFirestore(fbUser){
   const email=String(fbUser&&fbUser.email||'').trim().toLowerCase();
@@ -306,14 +329,15 @@ async function verificarUsuarioFirestore(fbUser){
     const snap=await window._fsGetDoc(window._fsDoc(db,'usuarios',email));
     if(!snap.exists()){
       setLoginStatus('');
-      setLoginAuthMsg('❌ Acceso denegado. Su correo no está autorizado. Contacte al administrador.','err');
+      setLoginAuthMsg('');
+      alertCorreoNoAutorizado({email:email});
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
     const data=snap.data()||{};
-    if(data.activo===false){
+    if(data.activo===false||instructorAsociadoDesactivado(email)){
       setLoginStatus('');
-      setLoginAuthMsg('❌ Acceso denegado. Su cuenta está desactivada. Contacte al administrador.','err');
+      setLoginAuthMsg('');
       alertUsuarioDesactivado({email:email});
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
