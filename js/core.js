@@ -393,9 +393,11 @@ function handleSstUiClick(ev){
   if(action)sstRunAction(action,hit);
 }
 function ensureOverlaysClosed(){
+  const keepLoginDeny=!!window._sstLoginAccesoModal;
   ['con-side-overlay','task-modal-overlay','confirm-prec-overlay','pqrs-side-overlay','act-agenda-overlay',
    'export-reminder-overlay','gmail-sesion-overlay','agenda-cal-overlay','rec-drive-overlay',
    'rec-upload-overlay','rec-prompt-overlay','rec-share-overlay','bib-guardar-overlay','ciudadano-doc-overlay'].forEach(function(id){
+    if(keepLoginDeny&&id==='confirm-prec-overlay')return;
     const el=document.getElementById(id);
     if(!el)return;
     el.classList.remove('on');
@@ -412,9 +414,11 @@ function ensureOverlaysClosed(){
   if(chatWin)chatWin.classList.remove('on');
   const chatFab=document.getElementById('chat-fab');
   if(chatFab)chatFab.classList.remove('open');
-  if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
-  window._confirmExitoMode=false;
-  window._confirmRadicacionLoading=false;
+  if(!keepLoginDeny){
+    if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
+    window._confirmExitoMode=false;
+    window._confirmRadicacionLoading=false;
+  }
 }
 /** Cierra modales/timers al volver a la pantalla de inicio (evita ventanas fugaces de Drive/Gmail). */
 function sstPrepararPantallaLogin(){
@@ -422,7 +426,8 @@ function sstPrepararPantallaLogin(){
     document.body.classList.remove('gmail-sesion-bloqueado');
     window._sstGmailAttachForce=false;
     window._sstGmailAttachCb=null;
-    if(typeof closeConfirmExito==='function')closeConfirmExito();
+    // No cerrar el aviso de acceso denegado / correo no autorizado (queda con «Entendido»)
+    if(!window._sstLoginAccesoModal&&typeof closeConfirmExito==='function')closeConfirmExito();
     ensureOverlaysClosed();
     // Tokens Gmail en sessionStorage siguen vivos tras cerrar sesión app y disparan avisos
     if(typeof gmailSetToken==='function')gmailSetToken('');

@@ -273,6 +273,9 @@ function alertAccesoLoginModal(opts){
   const msg=String(opts.message||'').trim();
   const title=String(opts.title||'Acceso denegado').trim();
   const detail=email?('Cuenta: '+email):'';
+  const liberar=function(){window._sstLoginAccesoModal=false;};
+  // Evita que initLoginScreen/signOut cierren el aviso al instante
+  window._sstLoginAccesoModal=true;
   if(typeof confirmPrecaucion==='function'){
     confirmPrecaucion({
       title:title,
@@ -280,11 +283,25 @@ function alertAccesoLoginModal(opts){
       detail:detail,
       confirmLabel:'Entendido',
       hideCancel:true,
+      requireAck:true,
       tone:'warn'
-    },function(){});
+    },liberar);
   }else{
     try{window.alert(msg+(detail?'\n'+detail:''));}catch(e){}
+    liberar();
   }
+}
+async function denegarAccesoLoginYAvisar(email,tipo){
+  setLoginStatus('');
+  setLoginAuthMsg('');
+  if(window._authSignOut)await window._authSignOut().catch(function(){});
+  // Tras el signOut el listener llama initLoginScreen; abrir el modal después
+  const mostrar=function(){
+    if(tipo==='desactivado')alertUsuarioDesactivado({email:email});
+    else alertCorreoNoAutorizado({email:email});
+  };
+  if(typeof requestAnimationFrame==='function')requestAnimationFrame(function(){setTimeout(mostrar,0);});
+  else setTimeout(mostrar,0);
 }
 function alertUsuarioDesactivado(opts){
   opts=opts||{};
@@ -328,18 +345,12 @@ async function verificarUsuarioFirestore(fbUser){
   try{
     const snap=await window._fsGetDoc(window._fsDoc(db,'usuarios',email));
     if(!snap.exists()){
-      setLoginStatus('');
-      setLoginAuthMsg('');
-      alertCorreoNoAutorizado({email:email});
-      if(window._authSignOut)await window._authSignOut().catch(()=>{});
+      await denegarAccesoLoginYAvisar(email,'no_autorizado');
       return;
     }
     const data=snap.data()||{};
     if(data.activo===false||instructorAsociadoDesactivado(email)){
-      setLoginStatus('');
-      setLoginAuthMsg('');
-      alertUsuarioDesactivado({email:email});
-      if(window._authSignOut)await window._authSignOut().catch(()=>{});
+      await denegarAccesoLoginYAvisar(email,'desactivado');
       return;
     }
     window._usuarioActual={email,nombre:data.nombre||email,rol:normalizarRolLoginFirestore(data.rol||''),codigo:data.codigo||'',cargo:String(data.cargo||'').trim().toLowerCase(),uid,rolOriginal:data.rol||'',deptoResponsable:String(data.deptoResponsable||'').trim()};
