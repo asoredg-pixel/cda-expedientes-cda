@@ -5302,9 +5302,18 @@ function prePopularFormDesdeEmail(msg) {
       size: a.size || 0,
       attachmentId: a.attachmentId || ''
     }));
+    const _dateHdr = gmailGetHeader(_h, 'date') || '';
+    let _fechaTs = 0;
+    if (_dateHdr) {
+      try {
+        const _dHdr = new Date(_dateHdr);
+        if (!isNaN(_dHdr.getTime())) _fechaTs = _dHdr.getTime();
+      } catch (_eTs) {}
+    }
     window._gmailPendingEmailData = {
       remitente: _from.name ? (_from.name + ' <' + (_from.email || '') + '>') : (_from.email || ''),
-      fecha: gmailGetHeader(_h, 'date') || '',
+      fecha: _dateHdr,
+      fechaTs: _fechaTs || undefined,
       para: gmailGetHeader(_h, 'to') || '',
       cc: gmailGetHeader(_h, 'cc') || '',
       asunto: typeof pqrsAsuntoFromEmailSubject === 'function'

@@ -34,7 +34,11 @@ const c = createContext({
   escAttr: s => String(s),
   fmtF: s => String(s || '').slice(0, 10).split('-').reverse().join('/')
 })
-runInContext(extraer(core, ['pqrsHistorialEventoLabel', 'pqrsHistHoraTxt', 'pqrsHistEmoji', 'renderPqrsTrazabilidadHtml']), c)
+runInContext(extraer(core, [
+  'pqrsHistorialEventoLabel', 'pqrsHistHoraTxt', 'pqrsTsDesdeCorreo',
+  'pqrsHistOcultarRecepcionTraslado', 'pqrsHistItemTrazabilidad',
+  'pqrsHistEmoji', 'renderPqrsTrazabilidadHtml'
+]), c)
 
 const ts = (fecha, h, m) => { const [y, mo, d] = fecha.split('-').map(Number); return new Date(y, mo - 1, d, h, m).getTime() }
 

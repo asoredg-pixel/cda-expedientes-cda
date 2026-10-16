@@ -749,7 +749,19 @@ async function guardarPqrsSecretaria(modo){
   try{
   const tramId=getTramPqrsId('guaviare');
   const detNotas=detalle?JSON.stringify([{texto:detalle,autor:'Secretaría DEGUV',fecha:fecha}]):'[]';
-  const hist=[{ts:Date.now(),tipo:'radicacion',fecha:fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV')+(sinSoportePdf?' · Ventanilla sin soporte PDF de radicación':''),oficina:''}];
+  const gmailMsgId=window._gmailPendingMsgId||'';
+  const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
+    ?window._gmailPendingEmailData:null;
+  // Radicación: fecha de solicitud; hora = recepción del correo o momento de radicación (ventanilla).
+  let tsRadicacion=Date.now();
+  if(typeof pqrsTsDesdeCorreo==='function'){
+    const tsMail=pqrsTsDesdeCorreo(gmailEmailData);
+    if(tsMail>0)tsRadicacion=tsMail;
+  }else if(gmailEmailData&&gmailEmailData.fecha){
+    const dMail=new Date(gmailEmailData.fecha);
+    if(!isNaN(dMail.getTime()))tsRadicacion=dMail.getTime();
+  }
+  const hist=[{ts:tsRadicacion,tipo:'radicacion',fecha:fechaSol||fecha,nota:(interna?'Radicado interno (oficina remitente: '+oficinaRemitente+'). ':'')+(soloRadicar?'Radicado sin traslado — pendiente asignación de oficina':'Radicado por Secretaría DEGUV')+(sinSoportePdf?' · Ventanilla sin soporte PDF de radicación':''),oficina:''}];
   if(!soloRadicar){
     if(oficina==='secretaria'){
       hist.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:'Asignado a Secretaría DEGUV para gestión directa',oficina:'secretaria',oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
@@ -757,14 +769,11 @@ async function guardarPqrsSecretaria(modo){
       hist.push({ts:Date.now(),tipo:'traslado_oficina',fecha:hoy(),nota:'Traslado inicial a oficina competente',oficina:oficina,oficinaAnterior:'secretaria',por:'Secretaría DEGUV'});
     }
   }
-  const gmailMsgId=window._gmailPendingMsgId||'';
   const anexoFiles=typeof secAnexoCollectFiles==='function'?secAnexoCollectFiles():(Array.isArray(window._secAnexoFiles)&&window._secAnexoFiles.length?window._secAnexoFiles:[]);
   const solicitudFile=!gmailMsgId&&typeof secSolicitudCollectFile==='function'?secSolicitudCollectFile():null;
   let reenvioOficinaOk=false;
   let reenvioDsOk=false;
   // ── PASO 1: Guardar en Firestore primero (sin Drive) ────────────────────
-  const gmailEmailData=(window._gmailPendingEmailData&&typeof window._gmailPendingEmailData==='object')
-    ?window._gmailPendingEmailData:null;
   const tipoRadicacion=gmailMsgId?'radicacion_correo':(typeof tipoRadicacionDesdeMedioPqrs==='function'?tipoRadicacionDesdeMedioPqrs(medio):(medio==='Ventanilla'?'radicacion_ventanilla':'radicacion_otro'));
   const encargadoOfi=soloRadicar?'':(typeof getEncargadoOficina==='function'?getEncargadoOficina(oficina):'');
   const data=normalizePqrsOficinaFields({
@@ -3297,7 +3306,8 @@ function ciudadanoEventoLabel(h){
   if(h.tipo==='notificacion_radicacion')return 'Radicación notificada al ciudadano por correo';
   if(h.tipo==='notificacion_excepcion')return 'Notificación por correo — excepción registrada';
   if(h.tipo==='revision_final_aprobada'||h.tipo==='revision_nca_canal_fisico')return 'Respuesta notificada — solicitud atendida';
-  if(h.tipo==='recepcion_nca')return 'Recibido para trámite en NCA DEGUV';
+  // Recepción tras traslado: redundante para el ciudadano (el traslado ya implica recibido)
+  if(h.tipo==='recepcion_nca'||h.tipo==='recepcion_oficina')return '';
   if(h.tipo==='informativa'||h.tipo==='informativa_aprobada')return 'Solicitud informativa — atendida';
   return 'Actualización del trámite';
 }

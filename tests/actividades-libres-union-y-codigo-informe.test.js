@@ -68,24 +68,27 @@ describe('Lista remota combinada (global + departamento)', () => {
 
 describe('Código de actividad libre e informe', () => {
   function gen(lista, depto, opts) {
-    const c = createContext({ actividadesLibres: lista })
-    runInContext(extraer(core, ['genCodigoActLibre']), c)
+    const c = createContext({ actividadesLibres: lista, Date, String, RegExp, parseInt, Math, isFinite })
+    runInContext(extraer(core, ['esCodigoInformeAnio', 'genCodigoActLibre']), c)
     return c.genCodigoActLibre(depto, opts)
   }
   const lista = [
     { depto: 'guaviare', codigo: 'ACT-GV-0027' },
     { depto: 'guaviare', codigo: 'ACT-GV-0001' },
     { depto: 'guaviare', codigo: 'ACT-GV-0030', eliminada: true },
-    { depto: 'guaviare', codigo: 'INF-GV-0002' }
+    { depto: 'guaviare', codigo: 'INF-GV26002' },
+    { depto: 'guaviare', codigo: 'INF-GV25099' }
   ]
 
   it('consecutivo = mayor existente + 1 (incluye eliminadas)', () => {
     expect(gen(lista, 'guaviare')).toBe('ACT-GV-0031')
   })
 
-  it('informes usan su propio consecutivo INF', () => {
-    expect(gen(lista, 'guaviare', { informe: true })).toBe('INF-GV-0003')
-    expect(gen([], 'guaviare', { informe: true })).toBe('INF-GV-0001')
+  it('informes: INF + depto + año (2) + consecutivo (3), p. ej. INF-GV26001', () => {
+    expect(gen(lista, 'guaviare', { informe: true, anio: 2026 })).toBe('INF-GV26003')
+    expect(gen([], 'guaviare', { informe: true, anio: 2026 })).toBe('INF-GV26001')
+    expect(gen(lista, 'guaviare', { informe: true, anio: 2027 })).toBe('INF-GV27001')
+    expect(gen([{ codigo: 'INF-GV27004' }], 'guaviare', { informe: true, anio: 2027 })).toBe('INF-GV27005')
     expect(gen([], 'vaupes')).toBe('ACT-VP-0001')
   })
 
@@ -94,25 +97,29 @@ describe('Código de actividad libre e informe', () => {
     expect(ent).toMatch(/genCodigoActLibre\(deptoOk,\{informe:informe\}\)/)
   })
 
-  it('normalizeActLibre migra informes con código ACT- a INF-', () => {
+  it('normalizeActLibre migra ACT- e INF-GV-000x al formato con año', () => {
     const lista = [
-      { depto: 'guaviare', codigo: 'INF-GV-0002' },
-      { id: 'x', depto: 'guaviare', codigo: 'ACT-GV-0031', informeContrato: { n: 1, numero: 'C-1' } }
+      { depto: 'guaviare', codigo: 'INF-GV26002' },
+      { id: 'x', depto: 'guaviare', codigo: 'ACT-GV-0031', informeContrato: { n: 1, numero: 'C-1' } },
+      { id: 'y', depto: 'guaviare', codigo: 'INF-GV-0002', informeContrato: { n: 2, numero: 'C-2' } }
     ]
     const c = createContext({
       actividadesLibres: lista,
       normalizeTask: t => t,
       actLibreInteresadoLabel: () => '',
-      Date, String, RegExp, parseInt, Math, Array, Object
+      Date, String, RegExp, parseInt, Math, Array, Object, isFinite
     })
-    runInContext(extraer(core, ['genCodigoActLibre', 'resolveDeptoActLibre', 'normalizeActLibre']), c)
-    // Stubs usados por resolveDeptoActLibre
+    runInContext(extraer(core, ['esCodigoInformeAnio', 'genCodigoActLibre', 'resolveDeptoActLibre', 'normalizeActLibre']), c)
     c.DEPTOS = [{ id: 'guaviare' }, { id: 'guainia' }, { id: 'vaupes' }]
     c.window = { _usuarioActual: { deptoResponsable: 'guaviare' } }
     c.deptoActivo = 'guaviare'
     c.getDeptoOperativo = () => 'guaviare'
     const t = c.normalizeActLibre(lista[1])
-    expect(t.codigo).toBe('INF-GV-0003')
+    expect(t.codigo).toMatch(/^INF-GV\d{5}$/)
+    expect(t.codigo).toBe('INF-GV26003')
     expect(t._codigoPrev).toBe('ACT-GV-0031')
+    const t2 = c.normalizeActLibre(lista[2])
+    expect(t2.codigo).toBe('INF-GV26004')
+    expect(t2._codigoPrev).toBe('INF-GV-0002')
   })
 })

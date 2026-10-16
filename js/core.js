@@ -4748,6 +4748,39 @@ function pqrsHistHoraTxt(h){
   if(h.fecha&&String(h.fecha).slice(0,10)!==dia)return'';
   return d.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
 }
+/** Timestamp de recepción del correo (Date header o fechaTs) para la línea de radicación. */
+function pqrsTsDesdeCorreo(emailData){
+  if(!emailData||typeof emailData!=='object')return 0;
+  const n=Number(emailData.fechaTs);
+  if(n>0)return n;
+  const raw=String(emailData.fecha||'').trim();
+  if(!raw)return 0;
+  const d=new Date(raw);
+  return isNaN(d.getTime())?0:d.getTime();
+}
+/** «Recibido en oficina» es redundante si ya hubo traslado (se entiende recibido). */
+function pqrsHistOcultarRecepcionTraslado(h,hist){
+  if(!h||(h.tipo!=='recepcion_nca'&&h.tipo!=='recepcion_oficina'))return false;
+  const ofi=String(h.oficina||(h.tipo==='recepcion_nca'?'guaviare':'')).trim();
+  return (hist||[]).some(function(x){
+    if(!x||x.tipo!=='traslado_oficina')return false;
+    const dest=String(x.oficina||'').trim();
+    return !ofi||!dest||dest===ofi;
+  });
+}
+/** Radicación en trazabilidad: fecha/hora de solicitud (correo recibido o ventanilla). */
+function pqrsHistItemTrazabilidad(h,e){
+  if(!h)return h;
+  if(h.tipo==='radicacion'){
+    const fs=String((e&&e._fecha_solicitud)||h.fecha||(e&&e._fecha)||'').trim();
+    const out=Object.assign({},h);
+    if(fs)out.fecha=fs.slice(0,10);
+    const tsMail=pqrsTsDesdeCorreo(e&&e._gmail_email_data);
+    if(tsMail>0)out.ts=tsMail;
+    return out;
+  }
+  return h;
+}
 function pqrsHistEmoji(h){
   const t=String((h&&h.tipo)||'');
   const m={
@@ -4772,11 +4805,22 @@ function renderPqrsTrazabilidadHtml(e){
   e=normalizePqrsOficinaFields(e);
   const medio=medioNotificacionFlagHtml(e._medio_notificacion,false);
   let items=[];
-  const hist=(e._pqrs_historial||[]).slice().sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((a.ts>0&&b.ts>0)?a.ts-b.ts:0));
-  if(!hist.some(h=>h.tipo==='radicacion')&&e._fecha){
-    items.push({tipo:'radicacion',fecha:e._fecha,nota:'Radicado por Secretaría DEGUV',oficina:''});
+  const histRaw=(e._pqrs_historial||[]).slice();
+  const hist=histRaw
+    .filter(function(h){return !pqrsHistOcultarRecepcionTraslado(h,histRaw);})
+    .map(function(h){return pqrsHistItemTrazabilidad(h,e);})
+    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((a.ts>0&&b.ts>0)?a.ts-b.ts:0));
+  if(!hist.some(h=>h.tipo==='radicacion')){
+    const fs=String(e._fecha_solicitud||e._fecha||'').trim();
+    if(fs){
+      const syn={tipo:'radicacion',fecha:fs.slice(0,10),nota:'Radicado por Secretaría DEGUV',oficina:''};
+      const tsMail=pqrsTsDesdeCorreo(e._gmail_email_data);
+      if(tsMail>0)syn.ts=tsMail;
+      items.push(pqrsHistItemTrazabilidad(syn,e));
+    }
   }
   hist.forEach(h=>items.push(h));
+  items.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||((Number(a.ts)>0&&Number(b.ts)>0)?Number(a.ts)-Number(b.ts):0));
   if(!items.length)return'';
   const tl=items.map(h=>{
     const lbl=pqrsHistorialEventoLabel(h);
@@ -4790,7 +4834,7 @@ function renderPqrsTrazabilidadHtml(e){
     else txt=escAttr(lbl)+(nota?': '+escAttr(nota):'');
     const por=h.por&&nota.indexOf(String(h.por))<0?' · '+escAttr(h.por):'';
     const hora=pqrsHistHoraTxt(h);
-    const cuando=fmtF(h.fecha||e._fecha)+(hora?' '+hora:'');
+    const cuando=fmtF(h.fecha||e._fecha_solicitud||e._fecha)+(hora?' '+hora:'');
     return '<div class="pqrs-tl-line" style="font-size:12px;line-height:1.5;padding:3px 0;color:var(--tx)">'+
       '<span style="color:var(--tx3)">'+escAttr(cuando)+'</span> · '+pqrsHistEmoji(h)+' '+txt+
       (por?'<span style="color:var(--tx2)">'+por+'</span>':'')+'</div>';
@@ -7517,11 +7561,33 @@ function cerrarActAgendaPanel(){
 function actAgendaGuardarForm(){
   actAgendaProgramar();
 }
-/** Consecutivo = mayor existente + 1 (incluye eliminadas: contar repetía números). Informes de contrato: INF-GV-0001. */
-function genCodigoActLibre(depto,opts){
-  const base=opts&&opts.informe?'INF':'ACT';
+/** ¿Código de informe con año: INF-GV26001, INF-VP27005…? */
+function esCodigoInformeAnio(cod,depto){
+  const c=String(cod||'').trim().toUpperCase();
   const suf={guaviare:'GV',guainia:'GN',vaupes:'VP'}[depto];
-  const pref=suf?base+'-'+suf:base;
+  if(suf)return new RegExp('^INF-'+suf+'\\d{2}\\d{3}$').test(c);
+  return /^INF-[A-Z]{2}\d{2}\d{3}$/.test(c);
+}
+/**
+ * Consecutivo = mayor existente + 1 (incluye eliminadas).
+ * Actividades libres: ACT-GV-0001.
+ * Informes de contrato: INF-GV26001 (sufijo depto + año 2 dígitos + consecutivo 3 dígitos).
+ */
+function genCodigoActLibre(depto,opts){
+  const suf={guaviare:'GV',guainia:'GN',vaupes:'VP'}[depto]||'';
+  if(opts&&opts.informe){
+    const y=opts.anio!=null?parseInt(opts.anio,10):(new Date()).getFullYear();
+    const yy=String((isFinite(y)?y:(new Date()).getFullYear())%100).padStart(2,'0');
+    const pref='INF-'+(suf||'XX')+yy;
+    const re=new RegExp('^INF-'+(suf||'[A-Z]{2}')+yy+'(\\d{3,})$','i');
+    let max=0;
+    (actividadesLibres||[]).forEach(function(a){
+      const m=String((a&&a.codigo)||'').trim().match(re);
+      if(m)max=Math.max(max,parseInt(m[1],10)||0);
+    });
+    return pref+String(max+1).padStart(3,'0');
+  }
+  const pref=suf?'ACT-'+suf:'ACT';
   const re=new RegExp('^'+pref+'-(\\d+)$');
   let max=0;
   (actividadesLibres||[]).forEach(function(a){
@@ -7557,10 +7623,10 @@ function normalizeActLibre(t){
   t=normalizeTask(t);
   t.sinExpediente=true;
   t.depto=resolveDeptoActLibre(t.depto);
-  // Informes de contrato: siempre INF-GV-0001… (migra códigos ACT- antiguos)
+  // Informes: INF-GV26001… (migra ACT-… e INF-GV-0001 antiguos)
   if(t.informeContrato){
     const c=String(t.codigo||'').trim();
-    if(!c||/^ACT[-_]/i.test(c)){
+    if(!esCodigoInformeAnio(c,t.depto)){
       const neu=genCodigoActLibre(t.depto,{informe:true});
       if(neu&&neu!==c){
         if(c)t._codigoPrev=c;
@@ -13082,8 +13148,7 @@ function ensureTareaPqrsNca(e){
   });
   e.tasks.push(tk);
   e._pqrs_estado_oficina='asignado';
-  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({ts:Date.now(),tipo:'recepcion_nca',fecha:hoy(),nota:'Recibido en NCA DEGUV para trámite completo',oficina:'guaviare'});
+  // No registrar «recepcion_nca» en _pqrs_historial: el traslado a la oficina ya implica recepción.
 }
 function abrirPqrsBasicoSiAplica(expId,opts){
   opts=opts||{};
