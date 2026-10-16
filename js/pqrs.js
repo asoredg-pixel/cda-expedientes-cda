@@ -1671,7 +1671,22 @@ function getPqrsOficinaList(oficinaId,filtro){
     }
   }
   list=filterExpsPeriodo(list,'pqrs-ofi');
-  list=list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
+  // Por ejecutar / Vencidas: más próximo a vencer primero (vence desde fecha de solicitud, no radicación)
+  if(filtro==='pend'||filtro==='atras'){
+    list=list.sort(function(a,b){
+      const pa=!!a._pqrs_prioritaria,pb=!!b._pqrs_prioritaria;
+      if(pa!==pb)return pa?-1:1;
+      const va=(typeof getPqrsVenceFecha==='function'?getPqrsVenceFecha(a):'')||'9999';
+      const vb=(typeof getPqrsVenceFecha==='function'?getPqrsVenceFecha(b):'')||'9999';
+      if(va!==vb)return String(va).localeCompare(String(vb));
+      const sa=String(a._fecha_solicitud||a._fecha||'9999').slice(0,10);
+      const sb=String(b._fecha_solicitud||b._fecha||'9999').slice(0,10);
+      if(sa!==sb)return sa.localeCompare(sb);
+      return String(a._exp||'').localeCompare(String(b._exp||''));
+    });
+  }else{
+    list=list.sort((a,b)=>String(b._pqrs_traslado_fecha||b._fecha||'').localeCompare(String(a._pqrs_traslado_fecha||a._fecha||'')));
+  }
   if(filtro==='pend'&&typeof ordenarPqrsNcaPinsPrimero==='function')
     list=ordenarPqrsNcaPinsPrimero(list);
   return list;

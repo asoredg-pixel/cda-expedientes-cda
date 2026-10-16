@@ -817,7 +817,22 @@ function taskVenceEfectivo(t){
     const wf=t.firmaWf||{};
     if(wf.notif_vence)return String(wf.notif_vence).slice(0,10);
   }
+  // PQRSD: plazo desde fecha de solicitud (correo recibido / ventanilla), no t.vence cacheado de la radicación
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
+    &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
+    &&typeof getPqrsVenceFecha==='function'){
+    const pv=String(getPqrsVenceFecha(e)||'').slice(0,10);
+    if(pv)return pv;
+  }
   return String(t.vence||'').slice(0,10);
+}
+/** Fecha de solicitud del ciudadano (correo) o radicación (ventanilla) — desempate en Por ejecutar. */
+function taskFechaSolicitudSortKey(t){
+  if(!t)return'9999';
+  const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+  if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+    return String(e._fecha_solicitud||e._fecha||'9999').slice(0,10);
+  return String(t.vence||t.fecha||'9999').slice(0,10);
 }
 function taskActividadVencida(t){
   if(!t||t.eliminada)return false;
@@ -999,8 +1014,12 @@ function sortTasksPorEjecutar(tasks){
   return [...tasks].sort(function(a,b){
     const ba=taskUrgencyBandPorEjecutar(a),bb=taskUrgencyBandPorEjecutar(b);
     if(ba!==bb)return ba-bb;
+    // Más próximo a vencer primero (vence = solicitud + plazo PQRSD)
     const va=taskVenceEfectivo(a)||'9999',vb=taskVenceEfectivo(b)||'9999';
     if(va!==vb)return va.localeCompare(vb);
+    // Empate: solicitud más antigua primero (correo de hace días ante ventanilla del mismo día de radicación)
+    const sa=taskFechaSolicitudSortKey(a),sb=taskFechaSolicitudSortKey(b);
+    if(sa!==sb)return sa.localeCompare(sb);
     return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
   });
 }
@@ -5744,6 +5763,16 @@ function syncPqrsFechaSolicitud(e,fechaSol){
   const fe=JSON.parse(e._fechas_estado||'{}');
   fe.Solicitud=fs;
   e._fechas_estado=JSON.stringify(fe);
+  // Recalcular vence de actividades «Atender PQRSD» con la nueva fecha de solicitud
+  if(Array.isArray(e.tasks)&&typeof pqrsPlazoTaskMeta==='function'){
+    const meta=pqrsPlazoTaskMeta(e);
+    e.tasks.forEach(function(t){
+      if(!t||t.eliminada)return;
+      if(typeof taskEsAtenderPqrs==='function'&&!taskEsAtenderPqrs(t,e))return;
+      t.vence=meta.vence;
+      t.plazoDias=meta.plazoDias;
+    });
+  }
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   if(prev&&prev!==fs){
     e._pqrs_historial.push({ts:Date.now(),tipo:'ajuste_fecha_solicitud',fecha:hoy(),nota:'Fecha de solicitud del ciudadano actualizada a '+fmtF(fs),fechaSolicitud:fs,por:'Secretaría DEGUV'});
