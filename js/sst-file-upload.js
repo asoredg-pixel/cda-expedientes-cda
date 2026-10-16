@@ -243,7 +243,8 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (!hit || !hit.item) return;
   const it = hit.item;
   const aplicar = async function () {
-    // Informe devuelto: se conserva para que el encargado compare (se borra al aprobar)
+    // Documento principal de entrega devuelta: se conserva en Drive para comparar versiones (se borra al aprobar).
+    // Anexos: sí se eliminan de Drive y no quedan pestaña.
     const conservarCorr = !!(it.corrPrev && !it.esAnexo);
     if (it.driveFileId && !conservarCorr && typeof driveDeleteInstitutional === 'function') {
       try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {

@@ -1076,20 +1076,37 @@ function informeCorreccionPrecargar(expId,taskId,opts){
   });
   if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,opts.anexosListId||'enviar-anexos-list');
 }
-/** Anexo de la entrega devuelta quitado (ya eliminado de Drive): sale del registro.
- *  Informe principal: se conserva «por corregir» para que el encargado compare; se borra al aprobar. */
+/** Anexo de la entrega devuelta quitado (ya eliminado de Drive): sale del registro (sin pestaña).
+ *  Documento principal (informe / PQRSD / trámite / act. libre): se conserva «por corregir» para comparar; se borra al aprobar. */
 function informeCorreccionOnQuitar(it){
   const c=it&&it.corrPrev;
   const fid=String((it&&it.driveFileId)||'');
   if(!c||!fid||typeof mutateTask!=='function')return;
   if(!it.esAnexo){
     mutateTask(c.expId,c.taskId,function(t){
-      (t.soportes||[]).forEach(function(s){if(s&&String(s.driveFileId||s.fileId||'')===fid)s.corr_descartado=true;});
+      (t.soportes||[]).forEach(function(s){
+        if(!s||String(s.driveFileId||s.fileId||'')!==fid)return;
+        s.corr_descartado=true;
+        s.activo=false;
+        s.driveEstado='acorregir';
+        s.version_historial=true;
+        if(s.label&&!/por corregir/i.test(String(s.label||'')))
+          s.label=String(s.label)+' · por corregir';
+      });
     });
     return;
   }
+  const lblIt=String((it.uploaded&&(it.uploaded.labelAnexo||it.uploaded.nombre))||it.nombre||'').trim();
   mutateTask(c.expId,c.taskId,function(t){
     t.soportes=(t.soportes||[]).filter(function(s){return !s||String(s.driveFileId||s.fileId||'')!==fid;});
+    if(!Array.isArray(t.historial))t.historial=[];
+    t.historial.push({
+      tipo:'anexo_quitado_correccion',
+      fecha:typeof hoy==='function'?hoy():'',
+      ts:Date.now(),
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+      nota:lblIt||'Anexo'
+    });
   });
   // PQRSD: también sale de los documentos de la respuesta (no queda para comparar ni para borrar al aprobar)
   const e=typeof getExpById==='function'?getExpById(c.expId):null;

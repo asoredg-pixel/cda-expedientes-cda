@@ -15716,6 +15716,8 @@ function soportesVisiblesParaVista(t,opts){
   if(!sops.length)return sops;
   let list=sops.filter(function(s){
     if(!s)return false;
+    // Anexo eliminado en corrección: no pestaña (el archivo ya no existe en Drive)
+    if(s.anexo_quitado_correccion)return false;
     if(!soporteEsPorCorregir(s))return true;
     return !opts.soloAprobados&&soporteTieneVista(s);
   });
@@ -15928,9 +15930,13 @@ function soporteTabLabel(s,idx,soportes){
     return 'Anexo rad. '+(n>0?n:1);
   }
   if(soporteEsAnexoEntrega(s)){
+    if(s.anexo_quitado_correccion){
+      const actQ=soporteInformeActN(s);
+      return(actQ?('Act '+actQ):'Anexo')+' · eliminado';
+    }
     const actN=soporteInformeActN(s);
     if(actN){
-      const deAct=list.filter(function(x){return x&&soporteEsAnexoEntrega(x)&&soporteInformeActN(x)===actN;});
+      const deAct=list.filter(function(x){return x&&soporteEsAnexoEntrega(x)&&soporteInformeActN(x)===actN&&!x.anexo_quitado_correccion;});
       const k=deAct.indexOf(s)+1;
       return 'Act '+actN+(deAct.length>1?' · '+(k>0?k:1):'');
     }
@@ -16084,7 +16090,18 @@ function soporteImagenDrivePreviewUrl(s){
   return'';
 }
 function renderSoporteEmbedHtml(sel){
+  if(sel&&sel.anexo_quitado_correccion){
+    return '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;background:var(--sf2)">'+
+      '<div style="max-width:360px">'+
+        '<div style="font-size:28px;margin-bottom:10px">🗑</div>'+
+        '<div style="font-size:14px;font-weight:600;color:var(--tx);margin-bottom:8px">Anexo eliminado en la corrección</div>'+
+        '<div style="font-size:12px;color:var(--tx2);line-height:1.5">El responsable quitó o reemplazó este soporte al enviar la nueva entrega. Ya no está disponible en Drive.</div>'+
+      '</div></div>';
+  }
   const src=sel.preview||sel.url;
+  if(!String(src||'').trim()){
+    return '<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:var(--tx2);font-size:13px">Documento no disponible.</div>';
+  }
   if(soporteEsImagen(sel)){
     const drvPrev=soporteImagenDrivePreviewUrl(sel);
     if(drvPrev){
@@ -17209,16 +17226,36 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       t.soportes.forEach(s=>{if(s&&s.activo)s.activo=false;});
       if(hasNewInstitutional&&(!esPqrsEntregaAct||esNuevaEntrega)){
         if(esNuevaEntrega&&esCorreccionDevuelta){
+          const reusados=new Set(archivos.map(function(a){return String((a&&(a.driveFileId||a.fileId))||'');}).filter(Boolean));
+          const esAnexoCorr=function(s){
+            return !!(s&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
+              ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))));
+          };
+          // Documento principal (informe / PQRSD / trámite / act. libre): versionar «por corregir» para comparar hasta aprobar.
+          // Anexos: no versionar; si no se reutilizan, salen (sin pestaña) y se borran de Drive.
           (t.soportes||[]).forEach(function(s){
-            if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+            if(!s||s.anexo_quitado_correccion)return;
+            if(!(s.driveInstitutional||s.driveFileId||s.fileId))return;
             if(soporteEsPorCorregir(s))return;
+            if(esAnexoCorr(s))return;
             s.activo=false;
             s.driveEstado='acorregir';
             s.version_historial=true;
             if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
           });
-          // Archivo de la entrega devuelta que se conserva (informes): no dejarlo como «por corregir» (se borraría de Drive al aprobar)
-          const reusados=new Set(archivos.map(function(a){return String((a&&(a.driveFileId||a.fileId))||'');}).filter(Boolean));
+          t.soportes=(t.soportes||[]).filter(function(s){
+            if(!s)return false;
+            if(s.anexo_quitado_correccion)return false;
+            if(!esAnexoCorr(s))return true;
+            const fid=String(s.driveFileId||s.fileId||'').trim();
+            if(fid&&reusados.has(fid))return false;
+            if(fid){
+              if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
+              window._soportesDriveABorrar.push(fid);
+            }
+            return false;
+          });
+          // Principal reutilizado en la nueva entrega: deja de ser versión «por corregir» (se recrea como vigente)
           if(reusados.size)t.soportes=(t.soportes||[]).filter(function(s){
             return !s||!soporteEsPorCorregir(s)||!reusados.has(String(s.driveFileId||s.fileId||''));
           });
@@ -19649,14 +19686,13 @@ function resetTaskPorCorregir(t,nota,reportadoPor){
   if(venceOrig)t.vence=venceOrig;
   if(plazoOrig!=null&&plazoOrig!=='')t.plazoDias=plazoOrig;
   t.ultimaRevisionDepto={tipo:'corregir',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:nota||''};
-  const esInf=!!t.informeContrato;
   (t.soportes||[]).forEach(function(s){
     if(!s||!s.activo)return;
     s.activo=false;
     s.driveEstado='acorregir';
-    const esAn=esInf&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
+    const esAn=!!(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
       ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)));
-    // Informe: solo el documento principal queda «por corregir» para comparar; los anexos no versionan
+    // Solo el documento principal queda «por corregir» para comparar; los anexos no versionan (PQRSD, trámite, informe, act. libre)
     if(esAn){
       if(s.label)s.label=compareDocSinPorCorregir(s.label);
       return;
@@ -23201,6 +23237,8 @@ function limpiarSoportesPorCorregirTask(t){
   if(!t||!Array.isArray(t.soportes))return trash;
   t.soportes=t.soportes.filter(function(s){
     if(!s)return false;
+    // Avisos de anexo quitado: sin archivo en Drive
+    if(s.anexo_quitado_correccion)return false;
     if(soporteEsPorCorregir(s)){trash.push(s);return false;}
     return true;
   });
@@ -24967,6 +25005,7 @@ function taskHistLineaTxt(h){
       return taskTrasladoPqrsTxt({de:h.ofiDe,a:h.ofiA,por:h.trasladoPor||h.por,motivo:h.motivo});
     case 'restauracion':return '♻ Restaurada'+por;
     case 'ajuste_soporte':return '↩ Revisada y devuelta para corregir'+por+nota;
+    case 'anexo_quitado_correccion':return '🗑 Anexo quitado en corrección'+(nota||por);
     case 'enviar_firma':return (/impresi/i.test(String(h.nota||''))?'🖨 Aprobada para imprimir y firmar':'✍️ Aprobada — enviada a firma del Director')+por;
     case 'firma_proyeccion_atendida':return '';
     case 'atajo_firmado_revision':return '✍️ Documento firmado cargado — pasa a notificar'+por;
