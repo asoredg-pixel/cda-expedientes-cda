@@ -3580,16 +3580,30 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 .pqrs-ofi-est.asig{background:var(--bll);color:var(--bl)}
 .pqrs-ofi-est.aten{background:var(--pul);color:var(--pu)}
 .pqrs-ofi-est.cerr{background:var(--gnl);color:var(--gn)}
-/* Fijadas (Por ejecutar / Por revisar): sin fondo; borde suave del color de la paleta activa (como .met.is-on) */
+/* Fijadas: sin caja; solo separador degradado bajo la última fijada (color de la paleta activa) */
 tr.pqrs-nca-pinned > td{background:transparent!important}
-tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--met-accent-hex, var(--bl))}
-#pg-act #act-table-wrap tbody tr.pqrs-nca-pinned,
-#tbl-pqrs-ofi-wrap tbody tr.pqrs-nca-pinned{
-  outline:2px solid color-mix(in srgb, var(--met-accent-hex, var(--bl)) 58%, transparent);
-  outline-offset:-2px;
-  box-shadow:0 0 0 3px var(--met-on-ring, rgba(24,95,165,.32));
-}
 #pg-act #act-table-wrap tbody tr.pqrs-nca-pinned:hover > td{background:transparent!important}
+#pg-act #act-table-wrap,
+#tbl-pqrs-ofi-wrap{position:relative}
+#pg-act #act-table-wrap tbody tr.pqrs-nca-pinned-last > td:first-child,
+#tbl-pqrs-ofi-wrap tbody tr.pqrs-nca-pinned-last > td:first-child{position:relative;overflow:visible}
+#pg-act #act-table-wrap tbody tr.pqrs-nca-pinned-last > td:first-child::after,
+#tbl-pqrs-ofi-wrap tbody tr.pqrs-nca-pinned-last > td:first-child::after{
+  content:'';
+  position:absolute;
+  left:0;
+  bottom:0;
+  height:2px;
+  width:var(--pqrs-pin-sep-w,100%);
+  pointer-events:none;
+  z-index:1;
+  background:linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--met-accent-hex, var(--or)) 28%, transparent) 8%,
+    color-mix(in srgb, var(--met-accent-hex, var(--or)) 62%, transparent) 50%,
+    color-mix(in srgb, var(--met-accent-hex, var(--or)) 28%, transparent) 92%,
+    transparent 100%);
+}
 .task-modal.task-modal-en-revision{box-shadow:0 0 0 2px rgba(220,38,38,.5),0 0 24px 6px rgba(220,38,38,.25)!important}
 .rev-en-curso-banner{flex-shrink:0;margin:8px 12px 0;padding:8px 12px;font-size:12px;line-height:1.45;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:var(--r)}
 .task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="entrega"],

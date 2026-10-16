@@ -2564,6 +2564,7 @@ function renderPqrsOficinaInbox(){
     const rowClick=clickFn?(' onclick="'+clickFn+'"'):'';
     return '<tr class="'+rowCls.trim()+'" style="'+rowStyle+'"'+rowClick+'><td><strong>'+escAttr(e._exp)+'</strong>'+pinLbl+' '+pqrsPrioritariaBadge(e)+'</td><td>'+escAttr(tipoLbl)+'</td><td>'+asunto+'</td><td>'+fmtF(e._fecha)+'</td><td>'+(hideExpEstadoExtra?'':pqrsEstadoConsultaBadge(e)+' ')+wfBadge+' '+(hideExpEstadoExtra?'':pqrsMedioNotificacionFlagHtml(e,true))+'</td><td onclick="event.stopPropagation()">'+pqrsAccionesTablaHtml(e)+'</td></tr>';
   }).join('');
+  if(typeof markUltimaFilaFijadaNca==='function')markUltimaFilaFijadaNca(document.getElementById('tbl-pqrs-ofi-wrap'));
   renderPqrsOficinaDetallePanel();
 }
 function setEditPqrsMedioNotificacion(val,userPick){

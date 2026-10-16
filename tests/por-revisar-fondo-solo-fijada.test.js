@@ -1,6 +1,6 @@
 /**
  * por-revisar-fondo-solo-fijada.test.js — Encargado NCA › Por revisar / Por ejecutar:
- * la fila fijada no lleva fondo (evita parpadeo); se distingue con borde suave del color de la paleta activa.
+ * filas fijadas sin fondo ni caja; solo separador degradado bajo la última fijada.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -27,7 +27,7 @@ function estiloFila({ fijadaAct, filPinVal, esCrit = false, priorAbierta = true,
 }
 
 describe('Por revisar: fondo solo en la fila fijada', () => {
-  it('fila fijada: sin fondo ni sombra inline (borde suave va en CSS), aunque sea reentrega o urgente', () => {
+  it('fila fijada: sin fondo ni sombra inline, aunque sea reentrega o urgente', () => {
     const r = estiloFila({ fijadaAct: true, filPinVal: 'porver', esCrit: true, reentrega: true })
     expect(r.rowStyle).toBe('')
     expect(r.rowStyle).not.toMatch(/background/)
@@ -46,16 +46,16 @@ describe('Por revisar: fondo solo en la fila fijada', () => {
     expect(r.rowCls).toBe('prioritaria-crit')
   })
 
-  it('CSS de fila fijada: sin fondo; borde suave con acento de paleta (como .met.is-on)', () => {
-    expect(css).not.toMatch(/tr\.pqrs-nca-pinned\{[^}]*background/)
+  it('CSS: sin caja en cada fijada; separador degradado solo en la última', () => {
+    expect(css).not.toMatch(/tr\.pqrs-nca-pinned\s*\{[^}]*outline/)
+    expect(css).not.toMatch(/tr\.pqrs-nca-pinned td:first-child\{border-left/)
+    expect(css).toMatch(/pqrs-nca-pinned-last[\s\S]*?linear-gradient\(90deg/)
     expect(css).toMatch(/tr\.pqrs-nca-pinned\s*>\s*td\{[^}]*background:\s*transparent/)
-    expect(css).toMatch(/tr\.pqrs-nca-pinned td:first-child\{border-left:3px solid var\(--met-accent-hex/)
-    expect(css).toMatch(/tr\.pqrs-nca-pinned[\s\S]{0,120}?outline:\s*2px solid/)
-    expect(css).toMatch(/box-shadow:\s*0 0 0 3px var\(--met-on-ring/)
   })
 
-  it('applyMetAccentVars propaga el color de la paleta a la tabla', () => {
-    expect(core).toMatch(/function applyMetAccentVars\(/)
+  it('markUltimaFilaFijadaNca y acento de paleta en la tabla', () => {
+    expect(core).toMatch(/function markUltimaFilaFijadaNca\(/)
+    expect(core).toMatch(/pqrs-nca-pinned-last/)
     expect(core).toMatch(/applyMetAccentVars\(document\.getElementById\('act-table-wrap'\)/)
   })
 })

@@ -5641,7 +5641,7 @@ function metOnCssVars(accent){
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return '--met-accent-hex:'+hex+';--met-on-bg:rgba('+r+','+g+','+b+',0.14);--met-on-ring:rgba('+r+','+g+','+b+',0.38);';
 }
-/** Aplica el acento de la paleta activa al contenedor de filas (borde suave de fijadas). */
+/** Aplica el acento de la paleta activa al contenedor de filas (separador de fijadas). */
 function applyMetAccentVars(el,accent){
   if(!el||!el.style)return;
   const hex=resolveMetAccentHex(accent);
@@ -5649,6 +5649,19 @@ function applyMetAccentVars(el,accent){
   el.style.setProperty('--met-accent-hex',hex);
   el.style.setProperty('--met-on-bg','rgba('+r+','+g+','+b+',0.14)');
   el.style.setProperty('--met-on-ring','rgba('+r+','+g+','+b+',0.32)');
+}
+/** Marca la última fila fijada y mide el ancho para el separador degradado. */
+function markUltimaFilaFijadaNca(tableEl){
+  if(!tableEl)return;
+  const tbody=tableEl.tBodies&&tableEl.tBodies[0]?tableEl.tBodies[0]:tableEl.querySelector('tbody');
+  if(!tbody)return;
+  tbody.querySelectorAll('tr.pqrs-nca-pinned-last').forEach(function(tr){tr.classList.remove('pqrs-nca-pinned-last');});
+  const pins=tbody.querySelectorAll('tr.pqrs-nca-pinned');
+  if(!pins.length)return;
+  const last=pins[pins.length-1];
+  last.classList.add('pqrs-nca-pinned-last');
+  const w=tableEl.offsetWidth||0;
+  if(w>0)last.style.setProperty('--pqrs-pin-sep-w',w+'px');
 }
 function pqrsMetCard(filterVal,style,inner,accent){
   const cur=String(window._pqrsOfiFiltro||'pend');
@@ -30810,7 +30823,13 @@ function renderActividades(){
     ganttWrap.style.display=useGantt?'block':'none';
     if(useGantt)renderActGantt(listRender);
   }
-  if(tb&&!useGantt)tb.innerHTML=listRender.length?listRender.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
+  if(tb&&!useGantt){
+    tb.innerHTML=listRender.length?listRender.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
+    if(typeof markUltimaFilaFijadaNca==='function'){
+      const tblAct=tb.closest('table')||document.querySelector('#act-table-wrap table');
+      markUltimaFilaFijadaNca(tblAct);
+    }
+  }
 }
 // PERSONA_ROLES → js/constants.js
 function personaBusquedaTexto(p){
