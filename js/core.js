@@ -7557,7 +7557,21 @@ function normalizeActLibre(t){
   t=normalizeTask(t);
   t.sinExpediente=true;
   t.depto=resolveDeptoActLibre(t.depto);
-  if(!t.codigo)t.codigo=genCodigoActLibre(t.depto);
+  // Informes de contrato: siempre INF-GV-0001… (migra códigos ACT- antiguos)
+  if(t.informeContrato){
+    const c=String(t.codigo||'').trim();
+    if(!c||/^ACT[-_]/i.test(c)){
+      const neu=genCodigoActLibre(t.depto,{informe:true});
+      if(neu&&neu!==c){
+        if(c)t._codigoPrev=c;
+        t.codigo=neu;
+        t._pending_fs_sync=true;
+        t._pending_fs_at=Date.now();
+      }
+    }
+  }else if(!t.codigo){
+    t.codigo=genCodigoActLibre(t.depto);
+  }
   const lbl=actLibreInteresadoLabel(t);
   if(lbl)t.interesadoNombre=lbl;
   return t;
@@ -8620,9 +8634,15 @@ function wrapTaskReviewMainWithSidePanel(mainInner){
     taskReviewSidePanelShellHtml()+
   '</div>';
 }
+/** Quita «por corregir» de etiquetas de comparar (anexos de informe no versionan corrección). */
+function compareDocSinPorCorregir(lab){
+  return String(lab||'').replace(/\s*[·\-–]\s*por corregir\b/ig,'').replace(/\s+por corregir\b/ig,'').trim();
+}
 function compareDocShortLabel(d){
   if(!d)return'Documento';
-  const lab=String(d.label||d.titulo||'Documento').replace(/^📎\s*|^📄\s*/,'').trim();
+  let lab=String(d.label||d.titulo||'Documento').replace(/^📎\s*|^📄\s*/,'').trim();
+  // Anexos: nunca mostrar «por corregir». Documento principal por corregir: sí (grupo «Versiones por corregir»).
+  if(d.esAnexo||!d.porCorregir)lab=compareDocSinPorCorregir(lab)||lab;
   const meta=String(d.meta||'').trim();
   const shortMeta=meta?(' · '+meta.split(' · ')[0]):'';
   if(d.esAnexo&&/^act \d/i.test(lab))return '📎 '+lab+shortMeta;
@@ -11029,7 +11049,8 @@ function getActLibreById(id){
 function getActLibreByCodigo(cod){
   const sc=String(cod||'').trim();
   if(!sc)return null;
-  let found=(actividadesLibres||[]).find(t=>String(t&&t.codigo||'').trim()===sc)||null;
+  let found=(actividadesLibres||[]).find(t=>String(t&&t.codigo||'').trim()===sc
+    ||String(t&&t._codigoPrev||'').trim()===sc)||null;
   if(!found&&window._pendingActLibreEntrega&&String(window._pendingActLibreEntrega.codigo||'')===sc){
     found=window._pendingActLibreEntrega.t||null;
     if(found){
@@ -16252,10 +16273,11 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       }else if(esCorr){
         lab='📄 Por corregir'+(s.version?' · v'+s.version:'');
       }else if(esAn&&s.informe_act){
-        lab='📎 '+String(s.label||('Act '+s.informe_act.n+' — '+(s.informe_act.nombre||''))).trim();
+        lab='📎 '+compareDocSinPorCorregir(String(s.label||('Act '+s.informe_act.n+' — '+(s.informe_act.nombre||''))).trim());
       }else if(esAn){
         const n=(typeof _pqrsAnexoNumero==='function'?_pqrsAnexoNumero(s,sops):0)||s.anexo_n||1;
-        lab='📎 Anexo '+n;
+        const rawAn=compareDocSinPorCorregir(String(s.label||'').trim());
+        lab=rawAn&&!/^anexo\b/i.test(rawAn)?('📎 '+rawAn):('📎 Anexo '+n);
       }else if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s)){
         lab=/^solicitud radicada/i.test(String(s.label||''))?'Solicitud'
           :s.tipo==='soporte_radicacion'||/^soporte de radicaci/i.test(String(s.label||''))
@@ -19424,10 +19446,18 @@ function resetTaskPorCorregir(t,nota,reportadoPor){
   if(venceOrig)t.vence=venceOrig;
   if(plazoOrig!=null&&plazoOrig!=='')t.plazoDias=plazoOrig;
   t.ultimaRevisionDepto={tipo:'corregir',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:nota||''};
+  const esInf=!!t.informeContrato;
   (t.soportes||[]).forEach(function(s){
     if(!s||!s.activo)return;
     s.activo=false;
     s.driveEstado='acorregir';
+    const esAn=esInf&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
+      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)));
+    // Informe: solo el documento principal queda «por corregir» para comparar; los anexos no versionan
+    if(esAn){
+      if(s.label)s.label=compareDocSinPorCorregir(s.label);
+      return;
+    }
     s.version_historial=true;
     if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
   });
@@ -24098,6 +24128,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     else if(isVerDocMode){
       if(isRespVerCorr)titReview='Documento devuelto · observaciones';
       else if(isRespVerEntregaPendiente)titReview='Entrega enviada';
+      else if(t.informeContrato)titReview='Informe de contrato';
       else titReview=t.sinExpediente?'Actividad asignada':'Documento y observaciones';
     }
     if(tit)tit.textContent=titReview+' · '+(t.codigo||expId);

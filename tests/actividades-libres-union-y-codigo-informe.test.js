@@ -93,4 +93,26 @@ describe('Código de actividad libre e informe', () => {
     expect(ent).toMatch(/genCodigoActLibre\(deptoOk,\{informe:true\}\)/)
     expect(ent).toMatch(/genCodigoActLibre\(deptoOk,\{informe:informe\}\)/)
   })
+
+  it('normalizeActLibre migra informes con código ACT- a INF-', () => {
+    const lista = [
+      { depto: 'guaviare', codigo: 'INF-GV-0002' },
+      { id: 'x', depto: 'guaviare', codigo: 'ACT-GV-0031', informeContrato: { n: 1, numero: 'C-1' } }
+    ]
+    const c = createContext({
+      actividadesLibres: lista,
+      normalizeTask: t => t,
+      actLibreInteresadoLabel: () => '',
+      Date, String, RegExp, parseInt, Math, Array, Object
+    })
+    runInContext(extraer(core, ['genCodigoActLibre', 'resolveDeptoActLibre', 'normalizeActLibre']), c)
+    // Stubs usados por resolveDeptoActLibre
+    c.DEPTOS = [{ id: 'guaviare' }, { id: 'guainia' }, { id: 'vaupes' }]
+    c.window = { _usuarioActual: { deptoResponsable: 'guaviare' } }
+    c.deptoActivo = 'guaviare'
+    c.getDeptoOperativo = () => 'guaviare'
+    const t = c.normalizeActLibre(lista[1])
+    expect(t.codigo).toBe('INF-GV-0003')
+    expect(t._codigoPrev).toBe('ACT-GV-0031')
+  })
 })

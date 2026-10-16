@@ -39,12 +39,30 @@ describe('Informe: selectores de comparar documentos', () => {
 
   it('soportes del informe se listan por actividad en el selector', () => {
     const c = createContext({})
-    runInContext(extraer(core, ['compareDocShortLabel']), c)
+    runInContext(extraer(core, ['compareDocSinPorCorregir', 'compareDocShortLabel']), c)
     expect(c.compareDocShortLabel({ label: '📎 Act 2 — Visitas · soporte 1', esAnexo: true, meta: '09/10/2026' }))
       .toBe('📎 Act 2 — Visitas · soporte 1 · 09/10/2026')
     expect(c.compareDocShortLabel({ label: '📎 Anexo 3', esAnexo: true, meta: '' })).toBe('Anexo 3')
     expect(c.compareDocShortLabel({ label: 'Act. Visita', esAnexo: true, meta: '' })).toBe('📎 Anexo · Act. Visita')
     const fn = extraer(core, ['collectDocsComparables'])
     expect(fn).toContain("}else if(esAn&&s.informe_act){")
+  })
+
+  it('anexos en comparar no muestran «por corregir» (solo el informe principal versiona)', () => {
+    const c = createContext({})
+    runInContext(extraer(core, ['compareDocSinPorCorregir', 'compareDocShortLabel']), c)
+    expect(c.compareDocShortLabel({
+      label: 'Act 1 — ACTIVIDAD 1 · soporte 1 · por corregir',
+      esAnexo: true, meta: '15/10/2026'
+    })).toBe('📎 Act 1 — ACTIVIDAD 1 · soporte 1 · 15/10/2026')
+    expect(c.compareDocShortLabel({
+      label: 'Act 2 - ACTIVIDAD 2 - soporte 1 - por corregir',
+      esAnexo: true, meta: '15/10/2026'
+    })).not.toMatch(/por corregir/i)
+    // Documento principal por corregir: se conserva la indicación
+    expect(c.compareDocShortLabel({ label: '📄 Por corregir · v1', porCorregir: true, esAnexo: false, meta: '' }))
+      .toMatch(/por corregir/i)
+    expect(extraer(core, ['resetTaskPorCorregir'])).toContain('informeContrato')
+    expect(extraer(core, ['resetTaskPorCorregir'])).toContain('compareDocSinPorCorregir')
   })
 })
