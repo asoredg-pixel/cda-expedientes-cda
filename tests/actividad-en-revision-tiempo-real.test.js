@@ -181,14 +181,24 @@ describe('Presencia y bloqueo en tiempo real', () => {
     expect(k.avisos[0][1]).toBe('warn')
   })
 
-  it('encargado abre mientras el responsable la tiene abierta: no puede aprobar ni devolver', () => {
+  it('encargado abre mientras el responsable la tiene abierta: no puede aprobar, devolver ni eliminar', () => {
     const k = ctx({})
     k.c.revEnCursoIniciar('PAF-1', 't1', 'revisor')
     k.snap(otro({ por: 'Ana Ruiz', rol: 'ejecutor' }))
     expect(k.modal._cls.has('rev-bloq-revisor')).toBe(true)
     expect(k.modal._kids[0].textContent).toContain('Ana Ruiz tiene abierta esta actividad')
-    expect(k.modal._kids[0].textContent).toContain('no puede aprobar ni devolver')
+    expect(k.modal._kids[0].textContent).toContain('ni eliminar la entrega')
     expect(k.c.revEnCursoBloqueaAccion('PAF-1', 't1', 'revisor')).toBe(true)
+    expect(k.c.revEnCursoBloqueaAccion('PAF-1', 't1', 'ambos')).toBe(true)
+    expect(k.avisos.some(a => /eliminar/i.test(a[0]))).toBe(true)
+  })
+
+  it('responsable abre mientras el encargado revisa: tampoco puede eliminar (ambos)', () => {
+    const k = ctx({ responsable: 'Ana Ruiz' })
+    k.c.revEnCursoIniciar('PAF-1', 't1', 'ejecutor')
+    k.snap(otro())
+    expect(k.c.revEnCursoBloqueaAccion('PAF-1', 't1', 'ambos')).toBe(true)
+    expect(k.avisos.some(a => /eliminar/i.test(a[0]))).toBe(true)
   })
 
   it('al terminar la otra parte, se quita el bloqueo y toma la actividad sin recargar', () => {
@@ -234,10 +244,15 @@ describe('Puntos de bloqueo, estilos y reglas', () => {
     for (const fn of ['devolverTaskUnificado', 'submitDevolverAlTecnico', 'submitDevolverAlTecnicoDesdeChat']) {
       expect(extraer(core, [fn])).toContain("revEnCursoBloqueaAccion(expId,taskId,'revisor')")
     }
-    for (const fn of ['submitEnviarSoporteVerificacion', 'eliminarEntregaActividadConfirm']) {
-      expect(extraer(core, [fn])).toContain("revEnCursoBloqueaAccion(expId,taskId,'ejecutor')")
+    expect(extraer(core, ['submitEnviarSoporteVerificacion'])).toContain("revEnCursoBloqueaAccion(expId,taskId,'ejecutor')")
+    for (const fn of ['eliminarEntregaActividadConfirm', 'eliminarActOEntregaOpciones', 'submitElimEntregaNotifEliminar']) {
+      expect(extraer(core, [fn])).toContain("revEnCursoBloqueaAccion(expId,taskId,'ambos')")
     }
-    expect(constLinea('REV_EN_CURSO_SIDES')).toContain("entrega:'ejecutor',eliminar:'ejecutor',elimEntregaNotif:'ejecutor',decision:'revisor'")
+    expect(constLinea('REV_EN_CURSO_SIDES')).toContain("eliminar:'ambos',elimEntregaNotif:'ambos'")
+  })
+
+  it('borde rojo: atenuar eliminar también al revisor', () => {
+    expect(css).toContain('.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="eliminar"]')
   })
 
   it('se registra al abrir la actividad o la entrega y se libera al cerrar', () => {

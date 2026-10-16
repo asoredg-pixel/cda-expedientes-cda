@@ -8283,6 +8283,7 @@ async function submitElimEntregaNotifDevolver(expId,taskId){
 }
 window.submitElimEntregaNotifDevolver=submitElimEntregaNotifDevolver;
 function submitElimEntregaNotifEliminar(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ambos'))return;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const e=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
   if(!puedeEliminarEntregaPorNotificarEncargado(e,t)){notif('No puede eliminar esta entrega','err');return;}
@@ -13529,6 +13530,7 @@ function actEliminarActOEntregaBtnHtml(expId,taskId){
   return '<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega o actividad" onclick="eliminarActOEntregaOpciones(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">🗑️</button>';
 }
 function eliminarActOEntregaOpciones(expId,taskId){
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ambos'))return;
   const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
   const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
   if(!pe&&!pa){notif('No puede eliminar en este estado','err');return;}
@@ -19652,7 +19654,7 @@ function puedeEliminarEntregaActividad(expId,taskId){
   return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
 function eliminarEntregaActividadConfirm(expId,taskId){
-  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ejecutor'))return;
+  if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ambos'))return;
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return;}
   const t=getTaskAny(expId,taskId);
   const lbl=(t&&(t.desc||t.actividad))||'actividad';
@@ -20999,60 +21001,59 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
     return false;
   }
   const wf=getPqrsWorkflow(e)||{};
-  const run=async function(){
-    try{
-      if(typeof _pqrsRenombrarDocsDriveWf==='function')
-        await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']
-          .concat(desdeNotif?['por_notificar','firmado']:[])});
-    }catch(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);}
-    if(Array.isArray(t.soportes)){
-      t.soportes.forEach(function(s){
-        if(!s||!s.activo)return;
-        s.driveEstado='acorregir';
-        if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
-        s.activo=false;
-      });
-    }
-    if(Array.isArray(e._pqrs_respuesta_soportes)){
-      e._pqrs_respuesta_soportes.forEach(function(s){
-        if(!s||s.activo===false)return;
-        s.activo=false;
-        s.driveEstado='acorregir';
-        if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
-      });
-    }
-    setPqrsWorkflow(e,Object.assign({
-      fase:PQRS_WF.RECHAZADA,
-      documentos:wf.documentos||[],
-      revision_nca:{aprobado:false,comentario:nota,por:por,en:new Date().toISOString(),origen:'devolver_desde_firma'},
-      devolucion_encargado:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:wf.fase||''},
-      impreso:null,
-      listo_firma:null,
-      firma_director:null,
-      firma_fisica:null
-    },desdeNotif?{notificar_por:'',notificar_por_propuesto:'',notif_inicio:'',notif_vence:'',notificacion_reportada:null}:{}));
-    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-    e._pqrs_historial.push({ts:Date.now(),tipo:'devolver_desde_firma',fecha:hoy(),nota:'Encargado devolvió desde '+(desdeNotif?'Por notificar':'firma')+': '+nota,oficina:e._depto||'guaviare',por:por});
-    normalizeTask(t);
-    migrateLegacyAsignados(t);
-    t._pqrs_proyeccion_atendida=false;
-    if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(t,nota);
-    else{
-      t.fechaReportada='';
-      t.fechaAtendida='';
-      t.estado='Por corregir';
-    }
-    if(!Array.isArray(t.historial))t.historial=[];
-    t.historial.push({tipo:'devolver_desde_firma',fecha:hoy(),ts:Date.now(),por:por,nota:nota});
-    persistExpedienteGranular(e);
-    closeTaskModal();
-    if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
-    if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
-    if(typeof renderActividades==='function')renderActividades();
-    if(typeof renderBandejaDepto==='function')renderBandejaDepto();
-    if(typeof notif==='function')notif('↩ Devuelta — ✓ Revisada · X Corregir','ok');
-  };
-  run();
+  // Persistencia primero (VITAL/Director dejan de verla en Por firmar al instante);
+  // el renombre Drive va después y no debe retrasar el sync.
+  if(Array.isArray(t.soportes)){
+    t.soportes.forEach(function(s){
+      if(!s||!s.activo)return;
+      s.driveEstado='acorregir';
+      if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+      s.activo=false;
+    });
+  }
+  if(Array.isArray(e._pqrs_respuesta_soportes)){
+    e._pqrs_respuesta_soportes.forEach(function(s){
+      if(!s||s.activo===false)return;
+      s.activo=false;
+      s.driveEstado='acorregir';
+      if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+    });
+  }
+  setPqrsWorkflow(e,Object.assign({
+    fase:PQRS_WF.RECHAZADA,
+    documentos:wf.documentos||[],
+    revision_nca:{aprobado:false,comentario:nota,por:por,en:new Date().toISOString(),origen:'devolver_desde_firma'},
+    devolucion_encargado:{por:por,en:new Date().toISOString(),motivo:nota,fase_prev:wf.fase||''},
+    impreso:null,
+    listo_firma:null,
+    firma_director:null,
+    firma_fisica:null
+  },desdeNotif?{notificar_por:'',notificar_por_propuesto:'',notif_inicio:'',notif_vence:'',notificacion_reportada:null}:{}));
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({ts:Date.now(),tipo:'devolver_desde_firma',fecha:hoy(),nota:'Encargado devolvió desde '+(desdeNotif?'Por notificar':'firma')+': '+nota,oficina:e._depto||'guaviare',por:por});
+  normalizeTask(t);
+  migrateLegacyAsignados(t);
+  t._pqrs_proyeccion_atendida=false;
+  if(typeof resetTaskPorCorregir==='function')resetTaskPorCorregir(t,nota);
+  else{
+    t.fechaReportada='';
+    t.fechaAtendida='';
+    t.estado='Por corregir';
+  }
+  if(!Array.isArray(t.historial))t.historial=[];
+  t.historial.push({tipo:'devolver_desde_firma',fecha:hoy(),ts:Date.now(),por:por,nota:nota});
+  persistExpedienteGranular(e);
+  closeTaskModal();
+  if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();
+  if(typeof renderSecretariaPqrs==='function')renderSecretariaPqrs();
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderBandejaDepto==='function')renderBandejaDepto();
+  if(typeof notif==='function')notif('↩ Devuelta — ✓ Revisada · X Corregir','ok');
+  if(typeof _pqrsRenombrarDocsDriveWf==='function'){
+    _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']
+      .concat(desdeNotif?['por_notificar','firmado']:[])})
+      .catch(function(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);});
+  }
   return true;
 }
 window.encargadoPuedeDevolverDesdeFirma=encargadoPuedeDevolverDesdeFirma;
@@ -24265,7 +24266,8 @@ function clearTaskModalHdrOpenBtn(){
 // (revisor: no aprueba ni devuelve · responsable/técnico: no carga nueva entrega ni elimina).
 const REV_EN_CURSO_TTL_MS=120000;
 const REV_EN_CURSO_LATIDO_MS=30000;
-const REV_EN_CURSO_SIDES={entrega:'ejecutor',eliminar:'ejecutor',elimEntregaNotif:'ejecutor',decision:'revisor',devolverTecnico:'revisor'};
+// 'ambos' = bloquear a revisor y a ejecutor (p. ej. eliminar entrega mientras el otro tiene abierta la actividad)
+const REV_EN_CURSO_SIDES={entrega:'ejecutor',eliminar:'ambos',elimEntregaNotif:'ambos',decision:'revisor',devolverTecnico:'revisor'};
 function revEnCursoDocId(expId,taskId){
   return (String(expId||'').trim()+'__'+String(taskId||'').trim()).replace(/[\/\s]/g,'_');
 }
@@ -24303,7 +24305,7 @@ function revEnCursoAplicarUi(){
   const quien=String(b.por||'Otro usuario').trim();
   const hora=typeof fmtHoraLock==='function'?fmtHoraLock(b.desde):'';
   const txt=st.rol==='revisor'
-    ?'🔒 '+quien+' tiene abierta esta actividad desde las '+hora+' y puede estar ajustando la entrega. Puede ver documentos y demás opciones; no puede aprobar ni devolver hasta que la cierre.'
+    ?'🔒 '+quien+' tiene abierta esta actividad desde las '+hora+' y puede estar ajustando la entrega. Puede ver documentos y demás opciones; no puede aprobar, devolver ni eliminar la entrega hasta que la cierre.'
     :'🔒 En revisión por '+quien+' desde las '+hora+'. Puede ver documentos y demás opciones; no puede cargar nueva entrega ni eliminar hasta que termine la revisión.';
   if(!ban){
     ban=document.createElement('div');
@@ -24414,16 +24416,21 @@ function revEnCursoIniciar(expId,taskId,rol){
 function revEnCursoAlAbrir(expId,taskId,t,e,o){
   revEnCursoIniciar(expId,taskId,revEnCursoRol(t,e,o));
 }
-/** Bloquea la acción si la otra parte tiene la actividad abierta. tipo: 'ejecutor' | 'revisor'. */
+/** Bloquea la acción si la otra parte tiene la actividad abierta. tipo: 'ejecutor' | 'revisor' | 'ambos'. */
 function revEnCursoBloqueaAccion(expId,taskId,tipo){
   const st=window._revEnCurso;
   if(!st||!st.bloqueo||!revEnCursoVigente(st.bloqueo))return false;
   if(st.expId!==String(expId||'').trim()||st.taskId!==String(taskId||'').trim())return false;
-  if(tipo&&st.rol!==tipo)return false;
+  if(tipo&&tipo!=='ambos'&&st.rol!==tipo)return false;
   const quien=String(st.bloqueo.por||'Otro usuario').trim();
-  notif(st.rol==='revisor'
-    ?'🔒 '+quien+' tiene abierta la actividad (posible ajuste). Espere a que la cierre para aprobar o devolver.'
-    :'🔒 La actividad está en revisión por '+quien+'. Espere a que termine para cargar una nueva entrega o eliminar.','warn');
+  const msg=tipo==='ambos'
+    ?(st.rol==='revisor'
+      ?'🔒 '+quien+' tiene abierta la actividad. Espere a que la cierre para eliminar la entrega.'
+      :'🔒 La actividad está en revisión por '+quien+'. Espere a que termine para eliminar la entrega.')
+    :(st.rol==='revisor'
+      ?'🔒 '+quien+' tiene abierta la actividad (posible ajuste). Espere a que la cierre para aprobar o devolver.'
+      :'🔒 La actividad está en revisión por '+quien+'. Espere a que termine para cargar una nueva entrega o eliminar.');
+  notif(msg,'warn');
   return true;
 }
 if(typeof window!=='undefined'&&window.addEventListener)window.addEventListener('pagehide',function(){revEnCursoDetener();});

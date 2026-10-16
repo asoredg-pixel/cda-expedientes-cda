@@ -646,7 +646,7 @@ function scoreActividadLibreMerge(t){
   let s=0;
   if(t.eliminada)s+=50; // nunca revivir eliminadas
   if(actLibreEsPorCorregirMerge(t))s+=12;
-  const nAj=(t.historial||[]).filter(function(h){return h&&h.tipo==='ajuste_soporte';}).length;
+  const nAj=(t.historial||[]).filter(function(h){return h&&(h.tipo==='ajuste_soporte'||h.tipo==='devolver_desde_firma');}).length;
   if(nAj)s+=4+Math.min(nAj,4);
   if(t.fechaReportada||t.estado==='Por verificar')s+=4;
   if((t.soportes||[]).length)s+=2;
@@ -656,7 +656,8 @@ function scoreActividadLibreMerge(t){
   if((t.notasDoc||[]).length)s+=2+(t.notasDoc.length||0);
   if((t.comentarios||[]).length)s+=2+(t.comentarios.length||0);
   const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
-  if(f){
+  // Si ya está Por corregir, no premiar una fase de firma vieja (evita que VITAL siga viendo Por firmar)
+  if(f&&!actLibreEsPorCorregirMerge(t)){
     s+=20;
     if(t.firmaWf.firma_fisica&&t.firmaWf.firma_fisica.en)s+=8;
     if(/notif|lista_para_envio/i.test(f))s+=12;
@@ -673,18 +674,22 @@ function pickMejorActLibre(a,b){
   // Preferir siempre eliminada=true (no revivir)
   if(a.eliminada&&!b.eliminada)return a;
   if(b.eliminada&&!a.eliminada)return b;
+  // Devolución a corregir (sin fase de firma) gana frente a caché local aún en Por firmar
+  const aCorr=actLibreEsPorCorregirMerge(a),bCorr=actLibreEsPorCorregirMerge(b);
+  const aF=!!(a.firmaWf&&String(a.firmaWf.fase||'').trim());
+  const bF=!!(b.firmaWf&&String(b.firmaWf.fase||'').trim());
+  if(aCorr&&!aF&&bF&&!bCorr)return a;
+  if(bCorr&&!bF&&aF&&!aCorr)return b;
   const ta=actLibreEventTs(a),tb=actLibreEventTs(b);
   if(ta!==tb)return ta>tb?a:b;
   const sa=scoreActividadLibreMerge(a),sb=scoreActividadLibreMerge(b);
   if(sa>sb)return a;
   if(sb>sa)return b;
-  const ca=actLibreEsPorCorregirMerge(a),cb=actLibreEsPorCorregirMerge(b);
-  if(ca&&!cb)return a;
-  if(cb&&!ca)return b;
-  // Empate: conservar firmaWf si solo una lo tiene
-  const fa=!!(a.firmaWf&&a.firmaWf.fase),fb=!!(b.firmaWf&&b.firmaWf.fase);
-  if(fa&&!fb)return a;
-  if(fb&&!fa)return b;
+  if(aCorr&&!bCorr)return a;
+  if(bCorr&&!aCorr)return b;
+  // Empate: conservar firmaWf si solo una lo tiene (y la otra no está por corregir)
+  if(aF&&!bF)return a;
+  if(bF&&!aF)return b;
   return b;
 }
 function actLibreKeepLocalOnly(t){
@@ -1637,6 +1642,16 @@ function mergeExpFromFirestoreSnapshot(data,docId){
   if(!expId)return null;
   return{...data,_exp:expId,id:expId};
 }
+/** Remoto ya devolvió a corregir / limpió firma: no resucitar «Por firmar» desde caché local. */
+function taskRemotoDevueltoACorregir(rem){
+  if(!rem)return false;
+  if(String(rem.estado||'')==='Por corregir')return true;
+  if((rem.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';}))return true;
+  return (rem.historial||[]).some(function(h){
+    return h&&(h.tipo==='devolver_desde_firma'||h.tipo==='ajuste_soporte'||h.tipo==='notif_devuelta_corregir'
+      ||h.tipo==='devuelto_director_firma'||h.tipo==='revision_nca_rechazado');
+  });
+}
 /** Fusiona tasks local/remoto: conserva eliminadas locales y firmaWf más avanzado. */
 function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
   const byId=new Map();
@@ -1655,13 +1670,17 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
     if(!rem){put(t);return;}
     if(t.eliminada&&!rem.eliminada){put(t);return;}
     if(rem.eliminada&&!t.eliminada)return;
+    // Sync local pendiente (marcadores / entrega en curso): conservar local
+    if(t._pending_fs_sync){put(t);return;}
     const lf=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
     const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();
+    // Encargado devolvió desde Por firmar: remoto deja fase vacía + Por corregir.
+    // Antes se resuscitaba firmaWf local y VITAL seguía viéndola hasta F5.
     if(lf&&!rf){
+      if(taskRemotoDevueltoACorregir(rem))return;
       put(Object.assign({},rem,t,{firmaWf:t.firmaWf,requiereFirma:t.requiereFirma||rem.requiereFirma}));
       return;
     }
-    if(t._pending_fs_sync){put(t);return;}
     // Empate: conservar el más reciente por historial / fechaReportada
     const lh=(t.historial&&t.historial.length)||0;
     const rh=(rem.historial&&rem.historial.length)||0;

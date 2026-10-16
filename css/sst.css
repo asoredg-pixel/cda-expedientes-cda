@@ -3587,7 +3587,9 @@ tr.pqrs-nca-pinned td:first-child{border-left:3px solid var(--bl)}
 .task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="eliminar"],
 .task-modal.rev-bloq-ejecutor .task-review-rail-btn[data-side="elimEntregaNotif"],
 .task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="decision"],
-.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="devolverTecnico"]{opacity:.35;filter:grayscale(1);cursor:not-allowed}
+.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="devolverTecnico"],
+.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="eliminar"],
+.task-modal.rev-bloq-revisor .task-review-rail-btn[data-side="elimEntregaNotif"]{opacity:.35;filter:grayscale(1);cursor:not-allowed}
 .pqrs-nca-pin-lbl{font-size:12px;opacity:.85;vertical-align:middle}
 .sst-act-toolbar .pqrs-nca-pin-btn.on{
   border-color:color-mix(in srgb,var(--or) 45%,var(--bd));
