@@ -2475,6 +2475,11 @@ function renderPqrsOficinaInbox(){
       (showFirmadosCard?pqrsMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+firmados+'</div><div class="l">Firmados</div>','#15803d'):'')+
       (showPorNotificarCard&&(porNotif||showPorFirmarCard)?pqrsMetCard('por_notificar','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>','var(--bl)'):'')+
       pqrsMetCard('cerr','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>','var(--gn)');
+    const accOfi={
+      pend:'var(--or)',atras:'var(--rd)',revision:'#6d3fa8',para_firma:'#1a7a4a',por_firmar:'#0d5c2e',
+      firmados:'#15803d',por_notificar:'var(--bl)',cerr:'var(--gn)',por_trasladar:'#7c5cbf'
+    }[filtro]||'var(--or)';
+    if(typeof applyMetAccentVars==='function')applyMetAccentVars(document.getElementById('tbl-pqrs-ofi-wrap'),accOfi);
   }
   if(!list.length){
     const vacioMsg=qOfi

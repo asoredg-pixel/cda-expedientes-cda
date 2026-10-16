@@ -5641,6 +5641,15 @@ function metOnCssVars(accent){
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
   return '--met-accent-hex:'+hex+';--met-on-bg:rgba('+r+','+g+','+b+',0.14);--met-on-ring:rgba('+r+','+g+','+b+',0.38);';
 }
+/** Aplica el acento de la paleta activa al contenedor de filas (borde suave de fijadas). */
+function applyMetAccentVars(el,accent){
+  if(!el||!el.style)return;
+  const hex=resolveMetAccentHex(accent);
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  el.style.setProperty('--met-accent-hex',hex);
+  el.style.setProperty('--met-on-bg','rgba('+r+','+g+','+b+',0.14)');
+  el.style.setProperty('--met-on-ring','rgba('+r+','+g+','+b+',0.32)');
+}
 function pqrsMetCard(filterVal,style,inner,accent){
   const cur=String(window._pqrsOfiFiltro||'pend');
   const on=cur===String(filterVal||'');
@@ -28193,9 +28202,9 @@ function renderActividadesRowHtml(t){
     :'';
   const priorAbierta=typeof taskPrioridadMarcadoresResueltos==='function'?!taskPrioridadMarcadoresResueltos(t):(est!=='Atendida');
   const esCrit=priorAbierta&&taskEsPrioridadCriticaVencimiento(t);
-  // En «Por revisar» solo la fila fijada lleva fondo; prioridad y reentrega quedan en los badges.
+  // Fijada: sin fondo (borde suave vía CSS .pqrs-nca-pinned + acento de paleta). En «Por revisar» tampoco fondo de prioridad/reentrega.
   const sinFondoFila=fijadaAct||filPinVal==='porver';
-  const rowStyle=fijadaAct?'box-shadow:inset 3px 0 0 var(--bl)':sinFondoFila?'':[
+  const rowStyle=fijadaAct||sinFondoFila?'':[
     esCrit?'background:linear-gradient(90deg,rgba(234,88,12,.08),transparent)':(priorAbierta&&t.prioritaria?'background:linear-gradient(90deg,rgba(163,45,45,.05),transparent)':''),
     taskEsReentregaTrasCorreccion(t)?'background:linear-gradient(90deg,rgba(194,65,12,.08),transparent);box-shadow:inset 3px 0 0 #ea580c':''
   ].filter(Boolean).join(';');
@@ -30744,17 +30753,19 @@ function renderActividades(){
   const metsHtml=ordenMets.map(function(k){return cards[k]||'';}).join('');
   if(mets)mets.innerHTML=metsHtml;
   const selEst=document.getElementById('f-act-est');
+  const accentByFiltro={
+    pend:'var(--or)',venc:'var(--rd)',prior:'var(--rd)',porver:'var(--bl)',revisados:'var(--gn)',porcorr:'var(--or)',
+    porfirma:'#0d5c2e',parafirma:'#0d5c2e',porfirmar:'#0d5c2e',firmados:'#0d5c2e',pornotif:'var(--bl)',done:'var(--gn)',req:'#9a3412'
+  };
+  const accAct=accentByFiltro[filtroAct]||'var(--or)';
   if(selEst){
-    const accentByFiltro={
-      pend:'var(--or)',venc:'var(--rd)',prior:'var(--rd)',porver:'var(--bl)',revisados:'var(--gn)',porcorr:'var(--or)',
-      porfirma:'#0d5c2e',parafirma:'#0d5c2e',porfirmar:'#0d5c2e',firmados:'#0d5c2e',pornotif:'var(--bl)',done:'var(--gn)',req:'#9a3412'
-    };
-    const acc=accentByFiltro[filtroAct]||'var(--or)';
-    const hex=resolveMetAccentHex(acc);
+    const hex=resolveMetAccentHex(accAct);
     selEst.classList.add('act-filtro-on');
     selEst.style.setProperty('--met-accent-hex',hex);
     selEst.style.borderLeftColor=hex;
   }
+  // Acento en la tabla: borde suave de filas fijadas = color de la paleta activa
+  if(typeof applyMetAccentVars==='function')applyMetAccentVars(document.getElementById('act-table-wrap'),accAct);
   if(filtroAct==='req'&&typeof reqPaletaRowsHtml==='function'){
     const twReq=document.getElementById('act-table-wrap');
     const gwReq=document.getElementById('act-gantt-wrap');
