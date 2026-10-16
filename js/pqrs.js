@@ -3156,7 +3156,7 @@ async function submitAsignarPqrsOficina(expId,taskId){
       taskSincronizarNotificadorTrasCambioResponsables(expId,e.tasks[existIdx],prevRespsList,responsables);
     if(cambioResp&&enRev){
       if(typeof resetEntregaAlReasignarTask==='function')
-        resetEntregaAlReasignarTask(e.tasks[existIdx],{nota:'Reasignada — la entrega anterior queda como referencia; el nuevo responsable debe entregar de nuevo'});
+        resetEntregaAlReasignarTask(e.tasks[existIdx],{e:e,nota:'Reasignada — la entrega anterior queda como anexo de referencia; el nuevo responsable debe entregar de nuevo'});
       if(typeof resetPqrsWorkflowTrasReasignar==='function')resetPqrsWorkflowTrasReasignar(e);
     }
   }else{

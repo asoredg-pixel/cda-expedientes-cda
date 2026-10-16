@@ -1105,12 +1105,62 @@ function informeCorreccionOnQuitar(it){
     if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   }
 }
+/** Tras traslado en revisión: precarga la entrega del responsable anterior (como anexos/principal ya en Drive). */
+function entregaTrasladoAnexosPrecargar(expId,taskId,opts){
+  opts=opts||{};
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t||t.eliminada)return;
+  if(typeof entregaCorreccionAplica==='function'&&entregaCorreccionAplica(t))return;
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return;
+  const e=typeof getExpById==='function'?getExpById(expId):null;
+  const items=typeof getAnexosTrasladoEntrega==='function'?getAnexosTrasladoEntrega(e,t)
+    :((e&&e._pqrs_anexos_traslado_entrega)||(t.anexosTrasladoEntrega)||[]);
+  if(!items.length||typeof sstFileStagingCtx!=='function')return;
+  const ck=opts.ctxKey||(typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):'');
+  if(!ck)return;
+  const ctx=sstFileStagingCtx(ck);
+  if(!Array.isArray(ctx.anexos))ctx.anexos=[];
+  items.forEach(function(a){
+    if(!a)return;
+    const fid=String(a.driveFileId||a.fileId||'');
+    const link=String(a.url||a.preview||'');
+    if(!fid&&!link)return;
+    // Evitar duplicar si ya está en staging (p. ej. corrección)
+    const ya=function(it){
+      return it&&((fid&&String(it.driveFileId||'')===fid)||(link&&String(it.driveLink||it.previewLink||'')===link));
+    };
+    if(ya(ctx.main)||(ctx.anexos||[]).some(ya))return;
+    const fname=String(a.label||'').replace(/^Entrega anterior\s*·\s*/i,'');
+    const base={fileId:fid,driveFileId:fid,driveLink:link,previewLink:String(a.preview||link),driveFilename:fname,driveEstado:'revision',driveInstitutional:true};
+    const it={
+      id:'sf_tr_'+(fid||Math.random().toString(36).slice(2,8)),blob:null,blobUrl:'',tipo:a.mime||'',state:'uploaded',pct:100,
+      driveFileId:fid,driveLink:link,previewLink:String(a.preview||link),driveFilename:fname,error:'',
+      trasladoPrev:{expId:expId,taskId:taskId}
+    };
+    if(a.esPrincipal&&!ctx.main){
+      ctx.main=Object.assign(it,{nombre:fname||'Documento principal',esAnexo:false,
+        uploaded:Object.assign(base,{nombre:'Documento principal',labelPrincipal:'Documento principal',tipo:'drive'})});
+    }else{
+      const lblA=fname||('Anexo');
+      ctx.anexos.push(Object.assign(it,{nombre:lblA,esAnexo:true,
+        uploaded:Object.assign(base,{nombre:lblA,labelAnexo:lblA,tipo:'anexo_respuesta',es_anexo:true,anexo_n:a.anexo_n||null})}));
+    }
+  });
+  if(typeof sstFileRefreshCtxLists==='function'){
+    sstFileRefreshCtxLists(ck,opts.anexosListId||'enviar-anexos-list');
+    if(opts.mainListId&&typeof sstFileRenderList==='function')sstFileRenderList(opts.mainListId,ck);
+  }else if(typeof sstFileRenderList==='function'){
+    if(opts.mainListId)sstFileRenderList(opts.mainListId,ck);
+    if(opts.anexosListId)sstFileRenderList(opts.anexosListId,ck);
+  }
+}
 window.entregaCorreccionAplica=entregaCorreccionAplica;
 window.entregaCorreccionSoportesPrevios=entregaCorreccionSoportesPrevios;
 window.informeCorreccionAplica=informeCorreccionAplica;
 window.htmlInformeCorreccionResumen=htmlInformeCorreccionResumen;
 window.informeCorreccionPrecargar=informeCorreccionPrecargar;
 window.informeCorreccionOnQuitar=informeCorreccionOnQuitar;
+window.entregaTrasladoAnexosPrecargar=entregaTrasladoAnexosPrecargar;
 /** Máximos configurados por el administrador (null = sin límite). */
 function getCriteriosInformes(){
   const c=(typeof recursosConfig!=='undefined'&&recursosConfig&&recursosConfig.criteriosInformes)||{};
