@@ -19812,6 +19812,20 @@ function resetTaskPorCorregir(t,nota,reportadoPor){
 function solicitarAjusteSoporte(expId,taskId,nota){
   return mutateTask(expId,taskId,t=>resetTaskPorCorregir(t,nota||''));
 }
+/** fileId del soporte: metadatos o id embebido en el enlace Drive. */
+function _soporteResolveDriveFileId(s){
+  if(!s)return '';
+  let fid=String(s.driveFileId||s.fileId||'').trim();
+  if(fid)return fid;
+  const url=String(s.driveLink||s.url||s.preview||s.previewLink||'').trim();
+  if(!url)return '';
+  if(typeof parseDrivePreviewUrl==='function'){
+    const p=parseDrivePreviewUrl(url);
+    if(p&&p.id)return String(p.id).trim();
+  }
+  const m=url.match(/\/(?:file|document|spreadsheets|presentation)\/d\/([^/?#]+)/i)||url.match(/[?&]id=([^&]+)/);
+  return m?String(m[1]).trim():'';
+}
 async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   let t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){
@@ -19833,8 +19847,10 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   let list=(t.soportes||[]).filter(function(s){
     if(!s)return false;
     if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
-    const fid=String(s.driveFileId||s.fileId||'').trim();
+    const fid=_soporteResolveDriveFileId(s);
     if(!fid||s.driveInstitutional===false)return false;
+    if(!s.driveFileId)s.driveFileId=fid;
+    if(!s.fileId)s.fileId=fid;
     const est=String(s.driveEstado||'').toLowerCase();
     const nom=String(s.driveFilename||s.label||s.nombre||'');
     // Renombrar borradores internos; no tocar ya aprobados/por notificar si el destino es el mismo
@@ -19852,10 +19868,14 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   }
   if(!list.length){
     const activo=getSoporteActivo(t);
-    if(activo&&(activo.driveFileId||activo.fileId)
+    const fidAct=activo?_soporteResolveDriveFileId(activo):'';
+    if(activo&&fidAct
       &&!(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(activo))
-      &&!(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(activo)))
+      &&!(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(activo))){
+      if(!activo.driveFileId)activo.driveFileId=fidAct;
+      if(!activo.fileId)activo.fileId=fidAct;
       list.push(activo);
+    }
   }
   let any=false;
   const uniqueByVersion=aOk&&list.length>1;
@@ -23490,24 +23510,40 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       }
     }else hideProg();
   };
-  if(typeof driveRenombrarSoporteActivoExp==='function'){
-    prog(18,'Actualizando documentos…');
-    driveRenombrarSoporteActivoExp(expId,taskId,'aprobado').then(function(ok){
-      if(!ok){
-        try{
-          const tChk=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
-          const still=(tChk&&tChk.soportes||[]).some(function(s){
-            if(!s||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)))return false;
-            const nom=String(s.driveFilename||s.label||'');
-            return /^(revision|por revisar)[-_ ]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
-          });
-          // Solo aviso silencioso en consola: el cierre/notif ya pudo ser exitoso (p.ej. docs con enlace Drive).
-          if(still)console.warn('verificarTaskExp: quedó algún archivo con prefijo revision- en metadatos (Drive puede estar al día).');
-        }catch(errW){}
-      }
-      doVerify();
-    }).catch(function(){doVerify();});
-  }else doVerify();
+  (async function(){
+    // «Aprobar y cerrar» no pedía Gmail/Drive: el renombre fallaba en silencio y el PDF seguía «POR REVISAR».
+    if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+      try{
+        const okG=await sstSolicitarGmailParaAdjuntar();
+        if(!okG){
+          if(!opts.silent&&typeof notif==='function')
+            notif('Conecte Gmail/Drive para renombrar el documento al aprobar','warn');
+        }
+      }catch(errG){console.warn('verificarTaskExp gmail:',errG);}
+    }
+    let ok=false;
+    if(typeof driveRenombrarSoporteActivoExp==='function'){
+      prog(18,'Actualizando documentos…');
+      try{ok=await driveRenombrarSoporteActivoExp(expId,taskId,'aprobado');}catch(errR){console.warn('verificarTaskExp rename:',errR);}
+    }
+    if(!ok){
+      try{
+        const tChk=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+        const still=(tChk&&tChk.soportes||[]).some(function(s){
+          if(!s||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)))return false;
+          if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
+          const nom=String(s.driveFilename||s.label||'');
+          return /^(revision|por revisar)[-_ ]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
+        });
+        if(still){
+          console.warn('verificarTaskExp: quedó archivo con prefijo POR REVISAR tras aprobar.');
+          if(!opts.silent&&typeof notif==='function')
+            notif('Actividad cerrada, pero el archivo en Drive no se renombró (sigue «Por revisar»). Revise la conexión Drive.','warn');
+        }
+      }catch(errW){}
+    }
+    doVerify();
+  })().catch(function(err){console.warn('verificarTaskExp:',err);doVerify();});
 }
 function addTaskComentario(expId,taskId,texto,opts){
   opts=opts||{};

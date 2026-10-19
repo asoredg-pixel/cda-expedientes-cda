@@ -2562,9 +2562,18 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   // Informes de contrato: nombres fijos (no «aprobado…» / «por corregir…»)
   if (task && task.informeContrato) return false;
   if (typeof esSoporteEnvioCorreoItem === 'function' && esSoporteEnvioCorreoItem(soporte)) return false;
-  const fid = String(soporte.driveFileId || soporte.fileId || '').trim();
+  let fid = String(soporte.driveFileId || soporte.fileId || '').trim();
+  if (!fid && typeof _soporteResolveDriveFileId === 'function') {
+    fid = String(_soporteResolveDriveFileId(soporte) || '').trim();
+  }
+  if (!fid) {
+    const url = String(soporte.driveLink || soporte.url || soporte.preview || soporte.previewLink || '').trim();
+    const m = url.match(/\/(?:file|document|spreadsheets|presentation)\/d\/([^/?#]+)/i) || url.match(/[?&]id=([^&]+)/);
+    if (m) fid = String(m[1]).trim();
+  }
   if (!fid) return false;
-  if (!soporte.driveFileId && soporte.fileId) soporte.driveFileId = fid;
+  if (!soporte.driveFileId) soporte.driveFileId = fid;
+  if (!soporte.fileId) soporte.fileId = fid;
   const origName = soporte.driveFilename || soporte.label || soporte.nombre || '';
   const nameOpts = {
     soporte: soporte,
