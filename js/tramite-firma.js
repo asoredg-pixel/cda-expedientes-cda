@@ -1122,32 +1122,44 @@ async function submitTramiteNotificar(expId,taskId){
     const pack=typeof tramiteHtmlCuerpoNotifConDocs==='function'?tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo):null;
     const htmlBody=(pack&&pack.htmlBody)||('<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>');
     const docsConLink=(pack&&pack.docsConLink)||[];
+    const expSub=String(refId||expId||'').trim();
+    const progNotif=function(p,msg){
+      if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
+    };
     try{
       if(typeof sstSolicitarGmailParaAdjuntar==='function'){
         const okG=await sstSolicitarGmailParaAdjuntar();
         if(!okG){if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}return;}
       }
+      // Misma ventana de progreso que el encargado (VITAL / designado al notificar por correo)
+      if(typeof sstCargaShow==='function')
+        sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:12,sub:expSub,unico:true});
       if(btn)btn.textContent='Enviando correo…';
+      progNotif(35,'Preparando correo…');
       const emailCc=String((document.getElementById('tramite-notif-cc')||{}).value||'').trim();
       const emailBcc=String((document.getElementById('tramite-notif-bcc')||{}).value||'').trim();
       const ofiId=(e&&e._depto)||t.depto||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
       if(typeof pqrsEnviarCorreoCiudadano!=='function'){
+        if(typeof sstCargaHide==='function')sstCargaHide();
         notif('No hay envío de correo disponible','err');
         if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
         return;
       }
+      progNotif(55,'Enviando correo…');
       let sent=null;
       try{
         sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,[],{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:ofiId});
       }catch(errSend){
         const msg=String(errSend&&errSend.message||errSend||'');
         if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)){
+          progNotif(60,'Reintentando envío…');
           await new Promise(function(r){setTimeout(r,600);});
           sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,[],{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:ofiId});
         }else throw errSend;
       }
       if(!tramiteCorreoQuedoEnEnviados(sent))
         throw new Error('El correo no quedó registrado en Enviados. Verifique Gmail e intente de nuevo.');
+      progNotif(80,'Registrando soporte de envío…');
       if(typeof registrarSoporteEnvioCorreoNotif==='function'){
         await registrarSoporteEnvioCorreoNotif(e&&!e._sin_expediente?e:null,t,refId,{
           para:destinos.join(', '),cc:emailCc,asunto:asunto,cuerpo:cuerpo,por:por,
@@ -1157,6 +1169,7 @@ async function submitTramiteNotificar(expId,taskId){
         },[]);
       }
     }catch(err){
+      if(typeof sstCargaHide==='function')sstCargaHide();
       notif('No se pudo enviar el correo: '+String(err.message||err).slice(0,100),'err');
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
       return;
@@ -1166,11 +1179,14 @@ async function submitTramiteNotificar(expId,taskId){
       mutateTask(refId,taskId,function(tk){tk.soportes=(t.soportes||[]).slice();});
     }
     if(!applyActoVenc()){
+      if(typeof sstCargaHide==='function')sstCargaHide();
       if(btn){btn.disabled=false;btn.textContent='✅ Confirmar notificación';}
       return;
     }
+    progNotif(92,'Cerrando actividad…');
     await finalizarTramiteTrasPublicar(refId,taskId,{via:'notificacion',destinos:destinos,canal:'correo'});
     applyTermino(typeof hoy==='function'?hoy():'','correo');
+    if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:400});
     notif('📬 Notificado por correo y actividad cerrada','ok');
     closeTaskModal();
     return;
@@ -1312,6 +1328,7 @@ function tramiteGuardarCorreoPropuestoNotif(refId,taskId,por,btn){
     tk.historial.push({
       tipo:'notif_correo_propuesta',
       fecha:fecha,
+      ts:Date.now(),
       por:por,
       nota:'Correo de notificación diligenciado para '+destinos.join(', ')+' — pendiente aprobación y envío del encargado'
     });

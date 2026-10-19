@@ -1028,17 +1028,65 @@ function sortTasksPorEjecutar(tasks){
     return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
   });
 }
+/** Bandas ⚡/🔥 para VITAL en «Por firmar» (no usar en «Por revisar»). */
 function taskUrgencyBandPorRevisar(t){
   if(t&&t.prioritaria)return 0;
   if(taskEsPrioridadCriticaVencimiento(t))return 1;
   return 2;
 }
+/**
+ * Marca de cola en «Por revisar»: última entrega o notificación reportada (ts).
+ * Incluye reenvío tras corrección y notif. reportada / correo propuesto — misma cola FIFO.
+ */
 function taskFechaEntregaSortKey(t){
   if(!t)return'9999';
-  const hits=(t.historial||[]).filter(function(h){return h&&h.tipo==='reenvio_verificacion';});
-  const ult=hits.length?hits[hits.length-1]:null;
-  if(ult&&ult.ts)return String(ult.ts).padStart(15,'0');
-  if(ult&&ult.fecha)return ult.fecha.length>10?ult.fecha:ult.fecha+'T00:00:00';
+  function padTs(n){return String(Math.floor(n)).padStart(15,'0');}
+  function parseTs(s){
+    if(s==null||s==='')return 0;
+    if(typeof s==='number'&&isFinite(s))return s;
+    const d=Date.parse(String(s));
+    return isNaN(d)?0:d;
+  }
+  let best=0;
+  const tipos={
+    reenvio_verificacion:1,
+    notif_reportada_revision:1,
+    notif_correo_propuesta:1,
+    envio_verificacion:1,
+    reporte:1
+  };
+  (t.historial||[]).forEach(function(h){
+    if(!h||!tipos[h.tipo])return;
+    let ts=parseTs(h.ts);
+    if(!ts&&h.fecha){
+      const f=String(h.fecha).trim();
+      ts=parseTs(f.length>10?f:f+'T00:00:00');
+    }
+    if(ts>best)best=ts;
+  });
+  const nrTask=t.firmaWf&&t.firmaWf.notificacion_reportada;
+  if(nrTask){
+    const tsNr=parseTs(nrTask.en)||(nrTask.fecha?parseTs(String(nrTask.fecha).length>10?nrTask.fecha:String(nrTask.fecha)+'T00:00:00'):0);
+    if(tsNr>best)best=tsNr;
+  }
+  if(typeof getExpById==='function'&&typeof getPqrsWorkflow==='function'&&typeof taskEsAtenderPqrs==='function'){
+    try{
+      const e=getExpById(t.exp||t.codigo);
+      if(e&&taskEsAtenderPqrs(t,e)){
+        const wf=getPqrsWorkflow(e)||{};
+        const nrWf=wf.notificacion_reportada;
+        if(nrWf){
+          const tsNrW=parseTs(nrWf.en)||(nrWf.fecha?parseTs(String(nrWf.fecha).length>10?nrWf.fecha:String(nrWf.fecha)+'T00:00:00'):0);
+          if(tsNrW>best)best=tsNrW;
+        }
+        if(!best){
+          const tsWf=parseTs(wf.entregado_en);
+          if(tsWf)best=tsWf;
+        }
+      }
+    }catch(err){}
+  }
+  if(best)return padTs(best);
   const fr=String(t.fechaReportada||'').trim();
   if(fr)return fr.length>10?fr:fr+'T00:00:00';
   const asig=(t.asignados||[]).filter(function(a){return a&&a.estado==='por_verificar'&&a.fechaReportada;}).map(function(a){return a.fechaReportada;}).sort();
@@ -1048,10 +1096,12 @@ function taskFechaEntregaSortKey(t){
   }
   return'9999';
 }
+/** Encargado NCA «Por revisar»: ⚡ prioritarias, luego FIFO por fecha/hora de entrega o notificación.
+ *  Sin bandas 🔥/vencidas (informes y fijadas se aplican después en renderActividades). */
 function sortTasksPorRevisar(tasks){
   return [...tasks].sort(function(a,b){
-    const ba=taskUrgencyBandPorRevisar(a),bb=taskUrgencyBandPorRevisar(b);
-    if(ba!==bb)return ba-bb;
+    const pa=!!(a&&a.prioritaria),pb=!!(b&&b.prioritaria);
+    if(pa!==pb)return pa?-1:1;
     const fa=taskFechaEntregaSortKey(a),fb=taskFechaEntregaSortKey(b);
     if(fa!==fb)return fa.localeCompare(fb);
     return String(a.exp||a.codigo||'').localeCompare(String(b.exp||b.codigo||''));
@@ -34773,8 +34823,11 @@ function pqrsGuardarCorreoPropuestoNotif(e,por,btn){
   e._pqrs_historial.push({ts:Date.now(),tipo:'notif_correo_propuesta',fecha:fecha,nota:'Correo de notificación diligenciado para '+destinos.join(', ')+' — pendiente aprobación y envío del encargado',por:por});
   const tAt=(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
     ||((e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);})||null);
-  if(tAt&&typeof marcarActividadTrasNotifReportada==='function')
-    marcarActividadTrasNotifReportada(tAt,por,fecha);
+  if(tAt){
+    if(typeof marcarActividadTrasNotifReportada==='function')marcarActividadTrasNotifReportada(tAt,por,fecha);
+    if(!Array.isArray(tAt.historial))tAt.historial=[];
+    tAt.historial.push({tipo:'notif_correo_propuesta',fecha:fecha,ts:Date.now(),por:por,nota:'Correo diligenciado — pendiente aprobación del encargado'});
+  }
   persistExpedienteGranular(e);
   closeTaskModal();
   renderPqrsOficinaInbox();
@@ -34878,20 +34931,31 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
     setPqrsWorkflow(e,{email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw,email_subject:asunto,cuerpo:cuerpo,canal:PQRS_WF_CANAL.CORREO});
     // Solo envía si hay token de oficina (nunca desde Gmail personal — VITAL usa cuenta del encargado NCA)
     if(tokOfi){
+      const expSub=String(expId||'').trim();
+      const progNotif=function(p,msg){
+        if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
+      };
       try{
+        // Misma ventana de progreso que el encargado al notificar por correo (VITAL / NCA / oficina)
+        if(typeof sstCargaShow==='function')
+          sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:10,sub:expSub,unico:true});
         if(btn)btn.textContent='Descargando anexos…';
+        progNotif(25,'Preparando documentos…');
         const docsAdj=wfActual.documentos||[];
         const adjuntos=typeof pqrsPrepararAdjuntosNotificacionCorreo==='function'
           ?await pqrsPrepararAdjuntosNotificacionCorreo(docsAdj,{e:e,t:typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null})
           :[];
         const tActN=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
         const sopOpts={para:destinos.join(', '),cc:ccRaw,asunto:asunto,cuerpo:cuerpo,por:por,documentos:docsAdj};
+        progNotif(45,'Generando soporte de envío…');
         const sopPre=typeof registrarSoporteEnvioCorreoNotif==='function'
           ?await registrarSoporteEnvioCorreoNotif(e,tActN,expId,Object.assign({soloPdf:true},sopOpts),adjuntos)
           :null;
         if(btn)btn.textContent='Enviando correo…';
+        progNotif(70,'Enviando correo…');
         const html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj):('<p>'+escAttr(cuerpo)+'</p>');
         const sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
+        progNotif(88,'Registrando notificación…');
         if(sopPre&&sopPre.pdfBlob)
           await registrarSoporteEnvioCorreoNotif(e,tActN,expId,Object.assign({pdfBlob:sopPre.pdfBlob,skipAttach:true},sopOpts),null);
         const nAdj=adjuntos.length;
@@ -34899,11 +34963,13 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
         if(typeof registrarNotificacionCiudadanoPqrs==='function'){
           registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:'correo',enviado:true,a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),cuenta_emisora:(sent&&sent.cuenta)||'oficina',gmail_message_id:(sent&&sent.messageId)||'',por:por,histTipo:'notificacion_correo',histNota:'Oficio firmado notificado por correo ('+ofiLbl+') a '+destinos.join(', ')+(nAdj?' · '+nAdj+' adjunto(s)':'')});
         }
+        progNotif(94,'Cerrando actividad…');
         await _pqrsRenombrarDocsDriveWf(getPqrsWorkflow(e),'atendido');
         setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
         await _pqrsAplicarCierrePqrsYLimpiarDocs(e,wfActual.fecha_respuesta||hoy(),'PQRSD cerrada — oficio notificado por correo');
         termPqrs(hoy(),'correo');
         persistExpedienteGranular(e);
+        if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:400});
         closeTaskModal();
         renderPqrsOficinaInbox();
         if(typeof renderActividades==='function')renderActividades();
@@ -34911,6 +34977,7 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
         return;
       }catch(err){
         console.warn('pqrsConfirmarNotificacionOficio:',err);
+        if(typeof sstCargaHide==='function')sstCargaHide();
         notif('No se pudo enviar: '+String(err.message||err).slice(0,240)+'. Queda pendiente para el encargado.','warn');
       }
     }
@@ -35020,8 +35087,11 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
     e._pqrs_historial.push({ts:Date.now(),tipo:'notif_reportada_revision',fecha:hoy(),nota:'Notificación '+canal+' reportada con documento notificado — pendiente revisión del departamento'+(obs?' · '+obs:''),por:por});
     const tAt=(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
       ||((e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);})||null);
-    if(tAt&&typeof marcarActividadTrasNotifReportada==='function')
-      marcarActividadTrasNotifReportada(tAt,por,fechaN);
+    if(tAt){
+      if(typeof marcarActividadTrasNotifReportada==='function')marcarActividadTrasNotifReportada(tAt,por,fechaN);
+      if(!Array.isArray(tAt.historial))tAt.historial=[];
+      tAt.historial.push({tipo:'notif_reportada_revision',fecha:hoy(),ts:Date.now(),por:por,nota:'Notificación '+canal+' reportada — pendiente revisión'});
+    }
     termPqrsProponer();
     window._pqrsNotifSoporteFile=null;
     window._pqrsNotifOficioFile=null;

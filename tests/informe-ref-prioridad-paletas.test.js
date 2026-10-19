@@ -52,7 +52,7 @@ describe('Informes de contrato en Actividades', () => {
     expect(c.ordenarInformesContratoPrimero(list).map(t => t.id)).toEqual(['b', 'd', 'a', 'c'])
   })
 
-  it('se aplica en Por revisar y Por corregir (después de fijadas y urgencia) y en el Excel', () => {
+  it('se aplica en Por revisar y Por corregir (después de fijadas y prioritarias) y en el Excel', () => {
     expect(extraer(core, ['renderActividades'])).toContain("if(filtroAct==='porver'||filtroAct==='porcorr')list=ordenarInformesContratoPrimero(list);")
     expect(extraer(core, ['exportarActividadesExcel'])).toContain('actInformeContratoRefTxt(t)||t.exp||t.codigo')
   })
