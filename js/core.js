@@ -8838,6 +8838,38 @@ function wrapTaskReviewMainWithSidePanel(mainInner){
 function compareDocSinPorCorregir(lab){
   return String(lab||'').replace(/\s*[·\-–]\s*por corregir\b/ig,'').replace(/\s+por corregir\b/ig,'').trim();
 }
+/** N° de actividad de informe en un doc comparable (Act 1, Act 7…). */
+function compareDocInformeActN(d){
+  if(!d)return 0;
+  const m=String(d.label||d.titulo||'').match(/\bAct\s+(\d+)\b/i);
+  return m?parseInt(m[1],10)||0:0;
+}
+/** N° de soporte dentro de la misma actividad (soporte 1, 2…). */
+function compareDocInformeActK(d){
+  if(!d)return 0;
+  const m=String(d.label||d.titulo||'').match(/soporte\s+(\d+)/i);
+  if(m)return parseInt(m[1],10)||0;
+  const m2=String(d.label||d.titulo||'').match(/\bAnexo\s+(\d+)\b/i);
+  return m2?parseInt(m2[1],10)||0:0;
+}
+/** Anexos de informe en comparar: Act 1, Act 3, Act 5… y dentro de cada una por soporte. */
+function ordenarDocsComparablesInformeAnexos(items){
+  return(items||[]).slice().sort(function(a,b){
+    const actA=compareDocInformeActN(a),actB=compareDocInformeActN(b);
+    if(actA!==actB){
+      if(!actA)return 1;
+      if(!actB)return -1;
+      return actA-actB;
+    }
+    const kA=compareDocInformeActK(a),kB=compareDocInformeActK(b);
+    if(kA!==kB){
+      if(!kA)return 1;
+      if(!kB)return -1;
+      return kA-kB;
+    }
+    return String(a.label||'').localeCompare(String(b.label||''),'es');
+  });
+}
 function compareDocShortLabel(d){
   if(!d)return'Documento';
   let lab=String(d.label||d.titulo||'Documento').replace(/^📎\s*|^📄\s*/,'').trim();
@@ -8857,9 +8889,9 @@ function buildCompareGroupedOptsHtml(docs,selectedId){
     {lbl:'Documento firmado (a notificar)',test:function(d){return!!d.firmado&&!d.esAnexo;}},
     {lbl:'Documento notificado',test:function(d){return!!d.notificado&&!d.esAnexo;}},
     {lbl:'Documento principal',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!d.esAnexo&&!d.porCorregir&&!d.notificado&&!d.firmado;}},
-    {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Anexos · entrega actual',test:function(d){return d.origen==='Entrega'&&d.entregaActual&&!!d.esAnexo&&!d.porCorregir;},ordenInforme:true},
     {lbl:'Entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!d.esAnexo&&!d.porCorregir&&!d.notificado&&!d.firmado;}},
-    {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo&&!d.porCorregir;}},
+    {lbl:'Anexos · entregas anteriores',test:function(d){return d.origen==='Entrega'&&!d.entregaActual&&!!d.esAnexo&&!d.porCorregir;},ordenInforme:true},
     {lbl:'Expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===false&&!d.notificado&&!d.firmado&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Anexos · expediente / PQRSD',test:function(d){return/asociad/i.test(String(d.origen||''))===false&&!!d.esAnexo===true&&(d.origen==='PQRSD'||d.origen==='Expediente'||d.origen==='Actividad'||d.origen==='Trámite'||String(d.origen||'').indexOf('PQRSD')>=0);}},
     {lbl:'Registros asociados',test:function(d){return/asociad/i.test(String(d.origen||''))&&!d.esAnexo;}},
@@ -8868,8 +8900,9 @@ function buildCompareGroupedOptsHtml(docs,selectedId){
   const used=new Set();
   let opts='';
   groups.forEach(function(g){
-    const items=docs.filter(function(d){return g.test(d)&&!used.has(d.id);});
+    let items=docs.filter(function(d){return g.test(d)&&!used.has(d.id);});
     if(!items.length)return;
+    if(g.ordenInforme)items=ordenarDocsComparablesInformeAnexos(items);
     opts+='<optgroup label="'+escAttr(g.lbl)+'">';
     items.forEach(function(d){
       used.add(d.id);
@@ -8886,8 +8919,10 @@ function initTaskReviewCompareDefaults(t,e,taskId,docs){
   if(!docs||docs.length<2)return;
   const principal=getSoportePrincipalUltimaEntrega(t);
   let defA=principal?('sop_'+principal.id):'';
-  const ult=getSoportesUltimaEntrega(t);
-  const firstAnx=ult.find(soporteEsAnexoEntrega);
+  const ult=typeof soportesOrdenTabsInforme==='function'
+    ?soportesOrdenTabsInforme(getSoportesUltimaEntrega(t)||[])
+    :getSoportesUltimaEntrega(t);
+  const firstAnx=(ult||[]).find(soporteEsAnexoEntrega);
   let defB=firstAnx?('sop_'+firstAnx.id):'';
   // Revisión de notificación: Proy. a la izquierda, Not. a la derecha
   const proyDoc=docs.find(function(d){return !d.esAnexo&&!d.notificado&&!d.porCorregir&&(/proy/i.test(String(d.label||''))||d.origen==='Entrega'||d.origen==='PQRSD');});
@@ -16517,6 +16552,15 @@ function collectDocsComparables(e,taskId,tDirect,opts){
       }else{
         lab='Proy. v'+(s.version||1)+(s.activo?' · activa':'');
       }
+      let sortKey=(s.fecha||'0000')+'_sop_'+(esCorr?'0':'1')+String(s.version||0).padStart(5,'0')+(esAn?'_z':'');
+      // Anexos de informe: orden numérico Act 1, 3, 5… (no por fecha de carga)
+      if(esAn&&typeof soporteInformeActN==='function'){
+        const actN=soporteInformeActN(s);
+        if(actN>0){
+          const k=typeof soporteInformeActK==='function'?soporteInformeActK(s):0;
+          sortKey='9_inf_act_'+String(actN).padStart(4,'0')+'_k'+String(k||0).padStart(3,'0')+'_'+(entregaActual?'1':'0')+(esCorr?'0':'1');
+        }
+      }
       add({
         id:'sop_'+s.id,origen:'Entrega',soporteId:s.id,esAnexo:esAn,entregaActual:entregaActual,porCorregir:esCorr,
         notificado:typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s),
@@ -16525,7 +16569,7 @@ function collectDocsComparables(e,taskId,tDirect,opts){
         titulo:lab,
         meta:fmtF((s.fecha||'').slice(0,10)),
         preview:s.preview||s.previewLink||s.driveLink||url,url,local:!!s.local,mime:s.mime||'',fecha:s.fecha||'',
-        sortKey:(s.fecha||'0000')+'_sop_'+(esCorr?'0':'1')+String(s.version||0).padStart(5,'0')+(esAn?'_z':'')
+        sortKey:sortKey
       });
     };
     [...sops].sort((a,b)=>(a.version||0)-(b.version||0)).forEach(pushSopComparable);
