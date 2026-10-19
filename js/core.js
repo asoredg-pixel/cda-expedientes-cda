@@ -24609,6 +24609,9 @@ function openTaskCommentsModal(expId,taskId,opts){
     ||(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada(t,responsableActivo,e))));
   const esRevParProfDevNca=!!(verDocumento&&typeof taskRevParProfesionalEsperaCorreccionNca==='function'
     &&taskRevParProfesionalEsperaCorreccionNca(t,responsableActivo,e));
+  // Profesional con concepto corregido en Por ejecutar: debe ver Proy. v1 · corregir / v2 · activa
+  const esRevParCorrRecibida=!!(verDocumento&&typeof taskRevParCorreccionRecibida==='function'
+    &&taskRevParCorreccionRecibida(t,responsableActivo,e));
   const isRespVerDoc=!isOficinaDocRespondida&&verDocumento&&esModoResponsable()
     &&(taskUsuarioEsAsignado(t,responsableActivo)||esDesignadoNotifOpen||esRevParTecVer||esRevParProfDevNca)&&!forcePorFirmarVista;
   // Vista «documento a notificar»: responsable designado O cualquier rol con porNotificarVista
@@ -24618,9 +24621,9 @@ function openTaskCommentsModal(expId,taskId,opts){
   const isVerDocMode=isRespVerDoc||isDeptVerDoc||!!opts.porNotificarVista||isConsultaVista;
   const miEstResp=taskEsMultiAsignada(t)&&responsableActivo?estadoTaskForAsignado(t,responsableActivo):est;
   const isRespVerCorr=isRespVerDoc&&(esRevParProfDevNca||miEstResp==='Por corregir'||est==='Por corregir');
-  const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
+  const isRespVerAtendida=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&!esRevParCorrRecibida&&responsableActivo&&typeof taskRespParticipacionAtendida==='function'
     &&taskRespParticipacionAtendida(t,responsableActivo);
-  const isRespVerEntregaPendiente=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&(
+  const isRespVerEntregaPendiente=isRespVerDoc&&!esDesignadoNotifOpen&&!esRevParProfDevNca&&!esRevParCorrRecibida&&(
     esRevParTecVer
     ||miEstResp==='Por verificar'||est==='Por verificar'
     ||(typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t))
@@ -24628,7 +24631,8 @@ function openTaskCommentsModal(expId,taskId,opts){
   const isRespVerPorNotificar=!!opts.porNotificarVista||!!(isRespVerDoc&&esDesignadoNotifOpen&&!isRespVerCorr&&!isRespVerEntregaPendiente);
   // Respondidas oficina: mostrar todos los soportes (no filtrar «aprobados»)
   // Consulta: todos los documentos de la actividad (no solo aprobados)
-  const forceSoloAprobados=!isOficinaDocRespondida&&!isConsultaVista&&(!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar);
+  // Corrección a profesional: no filtrar v1 «por corregir» (mismas pestañas que ve el encargado)
+  const forceSoloAprobados=!isOficinaDocRespondida&&!isConsultaVista&&!esRevParCorrRecibida&&(!!opts.soloAprobados||!!isRespVerAtendida||!!isRespVerPorNotificar);
   const pqrsPostAprobVista=!!(e&&(
     (typeof pqrsFasePostAprobacionProyeccion==='function'&&pqrsFasePostAprobacionProyeccion(e))
     ||(typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))
@@ -24694,7 +24698,7 @@ function openTaskCommentsModal(expId,taskId,opts){
   const sopPanel=(chatOnly||soloGestion)?'':(
     isPqrsOrigenView
       ?(typeof renderPqrsOrigenReviewHtml==='function'?renderPqrsOrigenReviewHtml(e):'')
-      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)),directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosSopIds:opts.directorFirmadosSopIds||((window._taskModalCtx||{}).directorFirmadosSopIds)||null,porNotificarVista:!!isRespVerPorNotificar||!!opts.porNotificarVista})
+      :renderTaskSoportePanelHtml(expId,taskId,t,window._taskSopSel,{hideEnviar:true,hideEntrega:true,isReview:!!isReviewDelivery,isRespVerCorr:!!isRespVerCorr,isRespVerAtendida:!!(isRespVerAtendida||forceSoloAprobados),soloAprobados:!!(forceSoloAprobados||isRespVerAtendida||(isRespVerDoc&&!isRespVerCorr&&!isRespVerEntregaPendiente&&!esRevParCorrRecibida)),isReviewWaSide:!!(isRespVerCorr||isDeptReviewWa),porFirmarVista:!!forcePorFirmarVista,showImprimirDoc:!!forcePorFirmarVista||(typeof taskReviewEnPorFirmarUi==='function'&&taskReviewEnPorFirmarUi(t,e)),directorRevisarPorFirmar:!!directorRevisarPorFirmar,directorFirmadosSopIds:opts.directorFirmadosSopIds||((window._taskModalCtx||{}).directorFirmadosSopIds)||null,porNotificarVista:!!isRespVerPorNotificar||!!opts.porNotificarVista})
   );
   const hist=(t.historial||[]).length&&!chatOnly&&!soloGestion&&!isReviewDelivery?'<div style="font-size:12px;color:var(--tx2);margin-bottom:.6rem">'+renderTaskHistorialHtml(t)+'</div>':'';
   const pqrsDocBanner=(!chatOnly&&!soloGestion&&e&&taskEsAtenderPqrs(t,e))?
