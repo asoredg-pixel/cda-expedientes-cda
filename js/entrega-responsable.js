@@ -1007,51 +1007,106 @@ function htmlInformeCorreccionResumen(t){
 function entregaCorreccionAplica(t){
   return !!(t&&!t.eliminada&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir');
 }
-/** Archivos de la última entrega del responsable (sin radicación, notificación, firmados ni soportes de envío).
- *  Si en una reentrega solo se regeneró el principal, los anexos pueden seguir en un lote anterior
- *  (siguen visibles en pestañas @): se reincorporan a la precarga de «Nueva entrega». */
+/** ¿Cuenta como anexo de entrega (informe / PQRSD / trámite / act. libre)? */
+function entregaCorreccionEsAnexo(s){
+  return !!(s&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
+    ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))
+    ||(typeof _pqrsDocEsAnexoRespuesta==='function'&&_pqrsDocEsAnexoRespuesta(s))));
+}
+/** PQRSD: documentos del workflow como soportes de precarga (lote = entrega_n). */
+function entregaCorreccionSoportesDesdePqrsWf(t){
+  if(!t||typeof getExpById!=='function'||typeof getPqrsWorkflow!=='function')return[];
+  if(typeof taskEsAtenderPqrs!=='function')return[];
+  const e=getExpById(t.exp||t.codigo);
+  if(!e||!taskEsAtenderPqrs(t,e))return[];
+  const wf=getPqrsWorkflow(e)||{};
+  return (wf.documentos||[]).filter(function(d){
+    if(!d||!(d.fileId||d.driveFileId||d.driveLink||d.url))return false;
+    if(d.tipo==='soporte_notificacion'||d.tipo==='soporte_respuesta'||d.tipo==='notificacion_soporte')return false;
+    if(d.tipo==='oficio_firmado'||d.notificado===true)return false;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(d))return false;
+    if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(d))return false;
+    if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(d))return false;
+    if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(d))return false;
+    return true;
+  }).map(function(d,i){
+    const fid=String(d.fileId||d.driveFileId||'');
+    const link=String(d.driveLink||d.url||d.previewLink||'');
+    const esAn=entregaCorreccionEsAnexo(d);
+    const nEnt=Number(d.entrega_n)||0;
+    return{
+      id:d.id||('pqrs_corr_'+fid+'_'+i),
+      driveFileId:fid,fileId:fid,
+      driveLink:link,url:link,
+      previewLink:String(d.previewLink||d.preview||link),
+      preview:String(d.preview||d.previewLink||link),
+      driveFilename:String(d.driveFilename||d.nombre||''),
+      label:String(d.nombre||d.label||d.driveFilename||''),
+      mime:d.mime||'',
+      es_anexo:esAn,
+      tipo:esAn?'anexo_respuesta':(d.tipo||'drive'),
+      anexo_n:d.anexo_n||null,
+      loteEntrega:nEnt?('wf_ent_'+String(nEnt).padStart(4,'0')):(d.loteEntrega||''),
+      driveEstado:d.driveEstado||'',
+      version_historial:!!d.version_historial
+    };
+  });
+}
+/** Archivos de la última entrega (informe, trámite, act. sin expediente o PQRSD).
+ *  Si en una reentrega solo se regeneró el principal, los anexos pueden seguir en un lote /
+ *  entrega_n anterior (visibles en @): se reincorporan a «Nueva entrega». */
 function entregaCorreccionSoportesPrevios(t){
-  const cand=((t&&t.soportes)||[]).filter(function(s){
-    if(!s||!(s.driveFileId||s.fileId)||s.corr_descartado)return false;
+  const filtroBase=function(s){
+    if(!s||!(s.driveFileId||s.fileId||s.driveLink||s.url)||s.corr_descartado)return false;
     if(s.anexo_quitado_correccion)return false;
-    if(s.tipo==='soporte_notificacion'||s.tipo==='soporte_respuesta')return false;
+    if(s.tipo==='soporte_notificacion'||s.tipo==='soporte_respuesta'||s.tipo==='notificacion_soporte')return false;
     if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return false;
     if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return false;
     if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s))return false;
     if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
-    return true;
-  });
-  const esAnexo=function(s){
-    return !!(s&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
-      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))));
+    return !!(s.driveFileId||s.fileId);
+  };
+  const seenFid=new Set();
+  const cand=[];
+  function addCand(s){
+    if(!filtroBase(s))return;
+    const fid=String(s.driveFileId||s.fileId||'').toLowerCase();
+    if(fid){
+      if(seenFid.has(fid))return;
+      seenFid.add(fid);
+    }
+    cand.push(s);
+  }
+  ((t&&t.soportes)||[]).forEach(addCand);
+  // PQRSD: wf.documentos es fuente de verdad (anexos de entrega_n previa si solo se regeneró el oficio)
+  entregaCorreccionSoportesDesdePqrsWf(t).forEach(addCand);
+  const esAnexo=entregaCorreccionEsAnexo;
+  const loteRank=function(l){
+    const m=String(l||'').match(/(\d+)$/);
+    return m?parseInt(m[1],10):0;
   };
   const mains=cand.filter(function(s){return !esAnexo(s);});
   const anexos=cand.filter(esAnexo);
+  // Lote / entrega más reciente (lot_200, L2, wf_ent_0002…); no reactivar un principal de entrega anterior
+  let maxRank=0;
+  cand.forEach(function(s){const r=loteRank(s&&s.loteEntrega);if(r>maxRank)maxRank=r;});
   let lastMain=null;
   if(mains.length){
-    const conLote=mains.filter(function(s){return s&&s.loteEntrega;});
-    if(conLote.length){
-      const lotes=[...new Set(conLote.map(function(s){return String(s.loteEntrega);}))].sort();
-      const lastLote=lotes[lotes.length-1];
-      const delLote=conLote.filter(function(s){return String(s.loteEntrega)===lastLote;});
-      lastMain=delLote[delLote.length-1]||conLote[conLote.length-1];
-    }else{
-      lastMain=mains[mains.length-1];
-    }
+    const delUlt=maxRank
+      ?mains.filter(function(s){return loteRank(s.loteEntrega)===maxRank;})
+      :mains.slice();
+    if(delUlt.length)lastMain=delUlt[delUlt.length-1];
   }
   const loteMain=lastMain&&lastMain.loteEntrega?String(lastMain.loteEntrega):'';
   let anexosUsar=loteMain
     ?anexos.filter(function(a){return String(a.loteEntrega||'')===loteMain;})
     :[];
-  // 2ª+ corrección: el informe nuevo puede ir solo en el último lote; los soportes siguen en el anterior
+  // 2ª+ corrección: principal nuevo en el último lote; anexos pueden quedar en el anterior
   if(!anexosUsar.length&&anexos.length){
-    const lotesA=[...new Set(anexos.map(function(a){return String(a.loteEntrega||'');}).filter(Boolean))].sort();
-    if(lotesA.length){
-      const lastA=lotesA[lotesA.length-1];
-      anexosUsar=anexos.filter(function(a){return String(a.loteEntrega||'')===lastA;});
-    }else{
-      anexosUsar=anexos.slice();
-    }
+    let maxA=0;
+    anexos.forEach(function(a){const r=loteRank(a.loteEntrega);if(r>maxA)maxA=r;});
+    if(maxA)anexosUsar=anexos.filter(function(a){return loteRank(a.loteEntrega)===maxA;});
+    else anexosUsar=anexos.slice();
   }
   const seen=new Set();
   const out=[];
@@ -1095,7 +1150,7 @@ function informeCorreccionItem(s,expId,taskId){
     return Object.assign(it,{nombre:fname||lblA,esAnexo:true,
       uploaded:Object.assign(base,{nombre:lblA,labelAnexo:lblA,tipo:'anexo_respuesta',es_anexo:true,anexo_n:s.anexo_n||null})});
   }
-  return Object.assign(it,{nombre:fname||'Informe',esAnexo:false,
+  return Object.assign(it,{nombre:fname||'Documento principal',esAnexo:false,
     uploaded:Object.assign(base,{nombre:'Documento principal',labelPrincipal:'Documento principal',tipo:'drive'})});
 }
 /** Precarga documento principal y anexos de la entrega devuelta en la ventana de nueva entrega.
@@ -1215,6 +1270,8 @@ function entregaTrasladoAnexosPrecargar(expId,taskId,opts){
   }
 }
 window.entregaCorreccionAplica=entregaCorreccionAplica;
+window.entregaCorreccionEsAnexo=entregaCorreccionEsAnexo;
+window.entregaCorreccionSoportesDesdePqrsWf=entregaCorreccionSoportesDesdePqrsWf;
 window.entregaCorreccionSoportesPrevios=entregaCorreccionSoportesPrevios;
 window.informeCorreccionAplica=informeCorreccionAplica;
 window.htmlInformeCorreccionResumen=htmlInformeCorreccionResumen;

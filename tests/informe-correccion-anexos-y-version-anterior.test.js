@@ -47,7 +47,7 @@ function ctxEr(t) {
     sstFileRefreshCtxLists: () => {},
     mutateTask: (e, k, fn) => { fn(t); return true }
   })
-  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']), c)
+  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionEsAnexo', 'entregaCorreccionSoportesDesdePqrsWf', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']), c)
   return { c, staging }
 }
 

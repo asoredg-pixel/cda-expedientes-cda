@@ -31,7 +31,7 @@ function extraer(src, nombres) {
   }).join('\n')
 }
 
-const FN_ER = ['entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']
+const FN_ER = ['entregaCorreccionAplica', 'entregaCorreccionEsAnexo', 'entregaCorreccionSoportesDesdePqrsWf', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar']
 
 /** Soportes tal como quedan tras resetTaskPorCorregir (activo=false, acorregir, «por corregir»). */
 function soportesDevueltos() {
@@ -126,6 +126,79 @@ describe('PQRSD devuelta: precarga en la ventana de entrega PQRSD', () => {
     expect(m.staging['entrega-resp'].main.driveFileId).toBe('MAIN')
     expect(m.staging['entrega-resp'].anexos.length).toBe(2)
     expect(m.refrescos[0]).toEqual(['entrega-resp', 'pqrs-entrega-anexos-list'])
+  })
+})
+
+describe('2ª corrección: anexos del lote / entrega_n anterior (trámite, sin expediente, PQRSD)', () => {
+  const FN = ['entregaCorreccionAplica', 'entregaCorreccionEsAnexo', 'entregaCorreccionSoportesDesdePqrsWf', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar']
+
+  function montar2(t, extra) {
+    const staging = {}
+    const c = createContext(Object.assign({
+      getTaskAny: () => t,
+      estadoTask: x => x.estado,
+      getSoportesUltimaEntrega: x => x.soportes,
+      soporteEsAnexoEntrega: s => s.es_anexo === true || s.tipo === 'anexo_respuesta',
+      _pqrsDocEsAnexoRespuesta: s => s.es_anexo === true || s.tipo === 'anexo_respuesta',
+      soporteEsDocRadicacion: () => false,
+      soporteEsDocumentoFirmado: () => false,
+      soporteEsDocumentoNotificado: () => false,
+      esSoporteEnvioCorreoItem: () => false,
+      getExpById: () => null,
+      getPqrsWorkflow: () => ({}),
+      taskEsAtenderPqrs: () => false,
+      sstFileEnviarCtxKey: (e, k) => 'enviar-soporte:' + e + ':' + k,
+      sstFileStagingCtx: k => (staging[k] = staging[k] || { main: null, anexos: [] }),
+      sstFileRefreshCtxLists: () => {}
+    }, extra || {}))
+    runInContext(extraer(er, FN), c)
+    return { c, staging }
+  }
+
+  it('trámite / act. sin expediente: principal nuevo + anexos del lote anterior', () => {
+    const t = {
+      estado: 'Por corregir',
+      sinExpediente: true,
+      soportes: [
+        { id: 'a1', driveFileId: 'AN1', label: 'Anexo 1', es_anexo: true, loteEntrega: 'lot_100' },
+        { id: 'a2', driveFileId: 'AN2', label: 'Anexo 2', es_anexo: true, loteEntrega: 'lot_100' },
+        { id: 'm1', driveFileId: 'OLD', label: 'Documento principal · por corregir', version_historial: true, loteEntrega: 'lot_100' },
+        { id: 'm2', driveFileId: 'MAIN2', label: 'Documento principal · por corregir', version_historial: true, loteEntrega: 'lot_200' }
+      ]
+    }
+    const { c, staging } = montar2(t)
+    c.informeCorreccionPrecargar('ACT-LIBRE', 'T1')
+    const ctx = staging['enviar-soporte:ACT-LIBRE:T1']
+    expect(ctx.main.driveFileId).toBe('MAIN2')
+    expect(ctx.anexos.map(a => a.driveFileId).sort()).toEqual(['AN1', 'AN2'])
+  })
+
+  it('PQRSD: anexos solo en wf.documentos de entrega_n anterior se precargan', () => {
+    const t = {
+      estado: 'Por corregir',
+      exp: 'PQRS-9',
+      soportes: [
+        { id: 'm2', driveFileId: 'MAIN2', label: 'Documento principal · por corregir', version_historial: true, loteEntrega: 'lot_200' }
+      ]
+    }
+    const e = {
+      _exp: 'PQRS-9',
+      documentos: [
+        { nombre: 'Oficio v1', fileId: 'MAIN1', driveEstado: 'acorregir', entrega_n: 1, version_historial: true },
+        { nombre: 'Anexo 1', fileId: 'AN1', driveEstado: 'acorregir', entrega_n: 1, es_anexo: true, version_historial: true },
+        { nombre: 'Anexo 2', fileId: 'AN2', driveEstado: 'acorregir', entrega_n: 1, es_anexo: true, version_historial: true },
+        { nombre: 'Oficio v2', fileId: 'MAIN2', driveEstado: 'acorregir', entrega_n: 2, version_historial: true }
+      ]
+    }
+    const { c, staging } = montar2(t, {
+      getExpById: () => e,
+      getPqrsWorkflow: () => ({ documentos: e.documentos, task_id: 'T9' }),
+      taskEsAtenderPqrs: () => true
+    })
+    c.informeCorreccionPrecargar('PQRS-9', 'T9', { ctxKey: 'entrega-resp', anexosListId: 'pqrs-entrega-anexos-list' })
+    const ctx = staging['entrega-resp']
+    expect(ctx.main.driveFileId).toBe('MAIN2')
+    expect(ctx.anexos.map(a => a.driveFileId).sort()).toEqual(['AN1', 'AN2'])
   })
 })
 

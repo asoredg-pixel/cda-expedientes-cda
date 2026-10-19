@@ -49,7 +49,7 @@ function ctxEr(t) {
     mutateTask: (e, k, fn) => { fn(t); return true },
     escAttr: s => String(s), fmtF: s => String(s || '')
   })
-  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar', 'htmlInformeCorreccionResumen']), c)
+  runInContext(extraer(er, ['informeCorreccionAplica', 'entregaCorreccionAplica', 'entregaCorreccionEsAnexo', 'entregaCorreccionSoportesDesdePqrsWf', 'entregaCorreccionSoportesPrevios', 'informeCorreccionItem', 'informeCorreccionPrecargar', 'informeCorreccionOnQuitar', 'htmlInformeCorreccionResumen']), c)
   return { c, staging }
 }
 
