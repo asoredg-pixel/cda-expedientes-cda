@@ -9495,7 +9495,16 @@ function taskReviewDecidirAprobar(expId,taskId){
     errorTitle:'No se pudo completar la aprobación'
   },function(){return _taskReviewDecidirAprobarRun(expId,taskId);});
 }
-function _taskReviewDecidirAprobarRun(expId,taskId){
+/** Antes de cerrar PQRSD desde el panel unificado: renombra en Drive los docs en revisión → APROBADO. */
+async function _pqrsRenombrarDocsAlCerrarDesdeRevision(e,estado){
+  if(!e||typeof getPqrsWorkflow!=='function'||typeof _pqrsRenombrarDocsDriveWf!=='function')return;
+  const wf=getPqrsWorkflow(e);
+  if(!wf||!Array.isArray(wf.documentos)||!wf.documentos.length)return;
+  try{
+    await _pqrsRenombrarDocsDriveWf(wf,estado||'aprobado',{onlyEstados:['revision','']});
+  }catch(err){console.warn('_pqrsRenombrarDocsAlCerrarDesdeRevision:',err);}
+}
+async function _taskReviewDecidirAprobarRun(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   const termPayload=typeof collectTerminoCumplFromUi==='function'?collectTerminoCumplFromUi():null;
@@ -9530,6 +9539,7 @@ function _taskReviewDecidirAprobarRun(expId,taskId){
     if(tipo===(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.MENSAJE:'mensaje')&&typeof ncaAprobarMensajeSimple==='function')return ncaAprobarMensajeSimple(expId);
     // Oficio u otro: cerrar como atendida sin firma (confirmación directa del encargado)
     if(typeof taskReviewCerrarPqrsAtendida==='function'){
+      await _pqrsRenombrarDocsAlCerrarDesdeRevision(e,'aprobado');
       taskReviewCerrarPqrsAtendida(e,{fecha:hoy(),notificada:false,via:'confirmar_cerrar',cuerpo:wf.cuerpo||''});
       verificarTaskExp(expId,taskId,hoy(),{silent:false,skipAutoMail:true,forceClosePqrs:true,afterVerify:termTrasCerrar});
       closeTaskModal();
@@ -9545,6 +9555,7 @@ function _taskReviewDecidirAprobarRun(expId,taskId){
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e)
     &&typeof taskReviewCerrarPqrsAtendida==='function'){
+    await _pqrsRenombrarDocsAlCerrarDesdeRevision(e,'aprobado');
     taskReviewCerrarPqrsAtendida(e,{fecha:hoy(),notificada:false,via:'confirmar_cerrar'});
     verificarTaskExp(expId,taskId,hoy(),{silent:false,skipAutoMail:true,forceClosePqrs:true,afterVerify:termTrasCerrar});
     closeTaskModal();
@@ -10497,6 +10508,8 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     prog(95,'Cerrando actividad…');
     if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(e&&e._exp?e._exp:refId,(t&&t.id)||taskId);
     if(esPqrsNotif&&typeof taskReviewCerrarPqrsAtendida==='function'){
+      // Panel unificado: antes no renombraba wf.documentos (quedaban «POR REVISAR» en Drive)
+      await _pqrsRenombrarDocsAlCerrarDesdeRevision(e,'atendido');
       taskReviewCerrarPqrsAtendida(e,{
         fecha:fechaC,por:por,cuerpo:cuerpo,notificada:true,
         para:destinos.join(', '),soporteDoc:soporteDoc,
