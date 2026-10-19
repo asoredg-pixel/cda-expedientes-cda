@@ -23695,6 +23695,8 @@ function resetPqrsWorkflowTrasReasignar(e){
   const f=pqrsWorkflowFase(e);
   if(f!==PQRS_WF.PENDIENTE_REVISION&&f!==PQRS_WF.RECHAZADA)return false;
   const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  // Defensa: no dejar notificación reportada huérfana si el reset corre por error
+  if(wf.notificacion_reportada||f===PQRS_WF.REVISION_FINAL)return false;
   const docs=(wf.documentos||[]).map(function(d){
     if(!d||typeof d!=='object')return d;
     return Object.assign({},d,{activo:false,version_historial:true,driveEstado:d.driveEstado||'acorregir'});
@@ -23703,7 +23705,8 @@ function resetPqrsWorkflowTrasReasignar(e){
     fase:PQRS_WF.SIN_RESPUESTA,
     entregado_por:'',
     revision_nca:null,
-    documentos:docs
+    documentos:docs,
+    notificacion_reportada:null
   });
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({ts:Date.now(),
@@ -23714,19 +23717,137 @@ function resetPqrsWorkflowTrasReasignar(e){
   });
   return true;
 }
+/**
+ * ¿La reasignación toca notificación (Por notificar / revisión final / huérfana)?
+ * En ese caso NO se debe abrir «Por ejecutar» (nueva entrega de respuesta).
+ */
+function pqrsEsContextoReasignacionNotificacion(e,t){
+  if(!e)return false;
+  const f=typeof pqrsWorkflowFase==='function'?pqrsWorkflowFase(e):'';
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  if(f===PQRS_WF.REVISION_FINAL||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO)return true;
+  if(wf&&wf.notificacion_reportada)return true;
+  if(t&&t._pqrs_notif_en_revision)return true;
+  if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return true;
+  if(t&&typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return true;
+  return false;
+}
+/**
+ * Reasignar en contexto de notificación: queda en «Por notificar» (no Por ejecutar ni Por revisar).
+ * Limpia notificación reportada / revisión final y designa al nuevo responsable como notificador.
+ */
+function pqrsReasignarMantenerPorNotificar(e,t,nuevoResp,opts){
+  opts=opts||{};
+  if(!e||!t)return false;
+  const nr=String(nuevoResp||'').trim();
+  if(!nr||typeof setPqrsWorkflow!=='function')return false;
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const prevRep=wf.notificacion_reportada||null;
+  const anterior=String(opts.de||wf.notificar_por||wf.notificar_por_propuesto||'').trim();
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  const faseNotif=typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion';
+  setPqrsWorkflow(e,{
+    fase:faseNotif,
+    notificacion_reportada:null,
+    notificar_por:nr,
+    notificar_por_propuesto:nr,
+    _notif_devuelta_corregir:false,
+    notificacion_devuelta:prevRep?{
+      por:por,en:new Date().toISOString(),fecha:hoy(),
+      motivo:'Reasignación — vuelve a Por notificar',
+      prev:prevRep
+    }:(wf.notificacion_devuelta||null)
+  });
+  if(typeof pqrsAsegurarPlazoNotificacion==='function'){
+    try{pqrsAsegurarPlazoNotificacion(e,hoy());}catch(errP){}
+  }
+  t._pqrs_notif_en_revision=false;
+  t.fechaReportada='';
+  t._pqrs_proyeccion_atendida=true;
+  if(t.firmaWf&&typeof t.firmaWf==='object'){
+    t.firmaWf=Object.assign({},t.firmaWf,{
+      fase:faseNotif,
+      notificacion_reportada:null,
+      notificar_por:nr,
+      notificar_por_propuesto:nr
+    });
+  }
+  (t.asignados||[]).forEach(function(a){
+    if(!a)return;
+    if(a.estado==='por_verificar'){
+      a.estado='pendiente';
+      a.fechaReportada='';
+      a.fechaAtendida='';
+    }
+  });
+  if(typeof ensureAsignado==='function')ensureAsignado(t,nr);
+  if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')
+    pqrsSincronizarParticipacionPostAprobacion(e);
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  e._pqrs_historial.push({ts:Date.now(),
+    tipo:'reasignacion_notificador',
+    fecha:hoy(),
+    nota:(por||'Encargado')+' reasignó notificación'+(anterior?' de «'+anterior+'»':'')+' a «'+nr+'» — queda en Por notificar',
+    oficina:e._pqrs_oficina||e._depto||'',
+    por:por
+  });
+  if(!Array.isArray(t.historial))t.historial=[];
+  t.historial.push({
+    tipo:'reasignacion_notificador',fecha:hoy(),ts:Date.now(),por:por,
+    nota:'Reasignación de notificación → Por notificar · '+nr
+  });
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  return true;
+}
+/** Sanea EA-like: sin_respuesta + notificación reportada huérfana → Por notificar. */
+function pqrsRepararNotifHuerfanaTrasReasignacion(e){
+  if(!e||typeof getPqrsWorkflow!=='function'||typeof setPqrsWorkflow!=='function')return false;
+  const wf=getPqrsWorkflow(e)||{};
+  const f=String(wf.fase||'');
+  if(f!==PQRS_WF.SIN_RESPUESTA&&f!=='sin_respuesta')return false;
+  if(!wf.notificacion_reportada)return false;
+  const t=(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
+    ||(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
+  const nr=String(wf.notificar_por||wf.notificar_por_propuesto
+    ||(wf.notificacion_reportada&&wf.notificacion_reportada.por)||'').trim();
+  if(!nr||!t)return false;
+  const ok=pqrsReasignarMantenerPorNotificar(e,t,nr,{de:wf.notificar_por||''});
+  if(ok&&typeof persistExpedienteGranular==='function'){
+    try{persistExpedienteGranular(e,false);}catch(err){console.warn('pqrsRepararNotifHuerfana:',err);}
+  }
+  return ok;
+}
+function pqrsRepararNotifHuerfanasActivas(){
+  if(window._pqrsHealNotifRun)return;
+  window._pqrsHealNotifRun=true;
+  try{
+    (typeof exps!=='undefined'?exps:[]).forEach(function(e){
+      if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return;
+      try{pqrsRepararNotifHuerfanaTrasReasignacion(e);}catch(err){}
+    });
+  }finally{
+    setTimeout(function(){window._pqrsHealNotifRun=false;},800);
+  }
+}
 window.resetEntregaAlReasignarTask=resetEntregaAlReasignarTask;
 window.resetPqrsWorkflowTrasReasignar=resetPqrsWorkflowTrasReasignar;
+window.pqrsEsContextoReasignacionNotificacion=pqrsEsContextoReasignacionNotificacion;
+window.pqrsReasignarMantenerPorNotificar=pqrsReasignarMantenerPorNotificar;
+window.pqrsRepararNotifHuerfanaTrasReasignacion=pqrsRepararNotifHuerfanaTrasReasignacion;
+window.pqrsRepararNotifHuerfanasActivas=pqrsRepararNotifHuerfanasActivas;
 function trasladarTaskExp(expId,taskId,nuevoResp,opts){
   opts=opts||{};
   const nr=String(nuevoResp||'').trim();if(!nr)return false;
   return mutateTask(expId,taskId,t=>{
     normalizeTask(t);
     const prevRs=getTaskResponsables(t).slice();
+    let anteriorResp=String(t.responsable||prevRs[0]||'').trim();
     if(opts.anadir){
       ensureAsignado(t,nr);
       t.historial.push({tipo:'asignacion_extra',fecha:hoy(),a:nr,por:taskComentarioAutor()});
     }else{
       const anterior=t.responsable||'';
+      anteriorResp=String(anterior||anteriorResp).trim();
       t.responsable=nr;
       t.reporteTrasladado=true;
       if(taskEsMultiAsignada(t)||(t.responsables||[]).length){
@@ -23746,12 +23867,31 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
       ||(t.asignados||[]).some(function(a){return a&&(a.estado==='por_verificar'||a.estado==='por_corregir'||a.fechaReportada);});
     if(!opts.anadir&&enRev){
       const eTr=typeof getExpById==='function'?getExpById(expId):null;
-      resetEntregaAlReasignarTask(t,{
-        e:eTr,
-        nota:'Traslado — la entrega anterior queda como anexo de referencia; el nuevo responsable debe entregar de nuevo'
-      });
-      if(eTr&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eTr))
-        resetPqrsWorkflowTrasReasignar(eTr);
+      // Notificación / revisión final: reasignar → Por notificar (nunca abrir Por ejecutar)
+      if(eTr&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eTr)
+        &&typeof pqrsEsContextoReasignacionNotificacion==='function'
+        &&pqrsEsContextoReasignacionNotificacion(eTr,t)
+        &&typeof pqrsReasignarMantenerPorNotificar==='function'){
+        pqrsReasignarMantenerPorNotificar(eTr,t,nr,{de:anteriorResp});
+      }else if(t&&typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t)
+        &&typeof setTaskFirmaWf==='function'){
+        const faseNotif=typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion';
+        setTaskFirmaWf(expId,t.id||taskId,{
+          fase:faseNotif,notificacion_reportada:null,
+          notificar_por:nr,notificar_por_propuesto:nr
+        });
+        t._pqrs_notif_en_revision=false;
+        t.fechaReportada='';
+        if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+          tramiteSincronizarParticipacionPostAprobacionFirma(t);
+      }else{
+        resetEntregaAlReasignarTask(t,{
+          e:eTr,
+          nota:'Traslado — la entrega anterior queda como anexo de referencia; el nuevo responsable debe entregar de nuevo'
+        });
+        if(eTr&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eTr))
+          resetPqrsWorkflowTrasReasignar(eTr);
+      }
     }
     taskNotifSyncDesdeCambioResponsables(expId,t,prevRs);
     syncTaskAggregateState(t);
@@ -30818,16 +30958,30 @@ function filtrarActividadesPorEstado(list,filtro){
     return mergeActividadLists(pqrs,tram);
   }
   if(filtro==='pornotif'){
+    if(typeof pqrsRepararNotifHuerfanasActivas==='function'){
+      try{pqrsRepararNotifHuerfanasActivas();}catch(errHealN){}
+    }
     return getTareasNotifVisiblesAct();
+  }
+  if(filtro==='pend'||filtro==='porver'){
+    // Sanea huérfanos: sin_respuesta + notificación reportada (doble bandeja tras reasignar)
+    if(typeof pqrsRepararNotifHuerfanasActivas==='function'){
+      try{pqrsRepararNotifHuerfanasActivas();}catch(errHeal){}
+    }
   }
   if(filtro==='pend'){
     // Solo por ejecutar: notificaciones van a la paleta «Por notificar»
     return (list||[]).filter(function(t){
       if(!esActividadPorEjecutar(t))return false;
+      // Exclusión mutua: si cuenta como Por revisar, no en Por ejecutar
+      if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return false;
       if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t))return false;
       const eP=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
       if(eP&&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eP)
         &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eP))return false;
+      if(eP&&typeof pqrsEsContextoReasignacionNotificacion==='function'
+        &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eP)
+        &&pqrsEsContextoReasignacionNotificacion(eP,t))return false;
       return true;
     });
   }
