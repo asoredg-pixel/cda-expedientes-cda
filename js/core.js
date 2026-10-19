@@ -21386,61 +21386,83 @@ window.encargadoPuedeDevolverAtendida=encargadoPuedeDevolverAtendida;
 function devolverTaskUnificado(expId,taskId){
   if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'revisor'))return;
   const t=getTaskAny(expId,taskId);
+  const ejecutar=function(){
+    const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
+    const ronda=getMarcadoresRonda(t);
+    const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&n.rondaRevision===ronda;});
+    const nObs=obs.length;
+    let nota=chat;
+    if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
+    if(!nota)nota='Devuelta para corregir';
+    const ctx=window._taskModalCtx||{};
+    if(ctx.directorRevisarPorFirmar&&typeof directorDevolverDesdePorFirmar==='function'){
+      if(chat){try{addTaskComentario(expId,taskId,chat);}catch(err){}}
+      directorDevolverDesdePorFirmar(expId,taskId,nota);
+      return;
+    }
+    const eDev=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
+    // Concepto vía profesional → encargado: devolver al originador (técnico/coordinador/VITAL); el profesional solo campanita
+    if(typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eDev)
+      &&typeof encargadoDevolverRevParATecnico==='function'){
+      const destChat=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t,eDev):'';
+      if(chat&&destChat){
+        try{addTaskComentario(expId,taskId,chat,{para:destChat});}catch(err){}
+      }
+      encargadoDevolverRevParATecnico(expId,taskId,nota);
+      return;
+    }
+    if(chat){
+      try{addTaskComentario(expId,taskId,chat);}catch(err){}
+    }
+    if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eDev)
+      &&typeof devolverNotificacionRevisionFinal==='function'){
+      devolverNotificacionRevisionFinal(expId,taskId,nota);
+      return;
+    }
+    // PQRSD en revisión NCA: fase → RECHAZADA + Por corregir (misma vía del panel NCA)
+    if(eDev&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eDev)
+      &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(eDev)
+      &&typeof ncaRechazarRespuesta==='function'){
+      ncaRechazarRespuesta(expId,nota);
+      return;
+    }
+    // Ya aprobada en Por imprimir / Por firmar / Revisados: cancelar firma y pasar a corregir
+    if(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t)
+      &&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
+      encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota);
+      return;
+    }
+    if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
+      &&typeof tramiteDevolverDesdeFirmaACorregir==='function'){
+      tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
+      return;
+    }
+    devolverTaskAlResponsable(expId,taskId,nota);
+  };
   if(t&&estadoTask(t)==='Atendida'){
     if(!encargadoPuedeDevolverAtendida(t,expId)){notif('Esta actividad atendida no se puede devolver','err');return;}
-    if(!confirm('Esta actividad ya está atendida (aprobada).\n\n¿Devolverla para corrección? Dejará de estar atendida y pasará a «Por corregir» a la espera de una nueva entrega del responsable.'))return;
-  }
-  const chat=String((document.getElementById('task-cmt-input')||{}).value||'').trim();
-  const ronda=getMarcadoresRonda(t);
-  const obs=(t&&(t.notasDoc||[])||[]).filter(function(n){return n&&n.rol==='revisor'&&n.rondaRevision===ronda;});
-  const nObs=obs.length;
-  let nota=chat;
-  if(!nota&&nObs)nota='Devuelto con '+nObs+' observación(es) en documento';
-  if(!nota)nota='Devuelta para corregir';
-  const ctx=window._taskModalCtx||{};
-  if(ctx.directorRevisarPorFirmar&&typeof directorDevolverDesdePorFirmar==='function'){
-    if(chat){try{addTaskComentario(expId,taskId,chat);}catch(err){}}
-    directorDevolverDesdePorFirmar(expId,taskId,nota);
-    return;
-  }
-  const eDev=t&&!t.sinExpediente?(typeof getExpById==='function'?getExpById(expId):null):null;
-  // Concepto vía profesional → encargado: devolver al originador (técnico/coordinador/VITAL); el profesional solo campanita
-  if(typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eDev)
-    &&typeof encargadoDevolverRevParATecnico==='function'){
-    const destChat=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t,eDev):'';
-    if(chat&&destChat){
-      try{addTaskComentario(expId,taskId,chat,{para:destChat});}catch(err){}
+    if(typeof confirmEliminar==='function'){
+      confirmEliminar({
+        title:'Devolver actividad atendida',
+        message:'Esta actividad ya está atendida (aprobada). ¿Devolverla para corrección?',
+        detail:'Dejará de estar atendida y pasará a «Por corregir» a la espera de una nueva entrega del responsable.',
+        confirmLabel:'Sí, devolver'
+      },ejecutar);
+      return;
     }
-    encargadoDevolverRevParATecnico(expId,taskId,nota);
-    return;
+    if(typeof confirmPrecaucion==='function'){
+      confirmPrecaucion({
+        title:'Devolver actividad atendida',
+        message:'Esta actividad ya está atendida (aprobada). ¿Devolverla para corrección?',
+        detail:'Dejará de estar atendida y pasará a «Por corregir» a la espera de una nueva entrega del responsable.',
+        confirmLabel:'Sí, devolver',
+        tone:'warn'
+      },ejecutar);
+      return;
+    }
+    if(!window.confirm('Esta actividad ya está atendida (aprobada).\n\n¿Devolverla para corrección? Dejará de estar atendida y pasará a «Por corregir» a la espera de una nueva entrega del responsable.'))return;
   }
-  if(chat){
-    try{addTaskComentario(expId,taskId,chat);}catch(err){}
-  }
-  if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eDev)
-    &&typeof devolverNotificacionRevisionFinal==='function'){
-    devolverNotificacionRevisionFinal(expId,taskId,nota);
-    return;
-  }
-  // PQRSD en revisión NCA: fase → RECHAZADA + Por corregir (misma vía del panel NCA)
-  if(eDev&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eDev)
-    &&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(eDev)
-    &&typeof ncaRechazarRespuesta==='function'){
-    ncaRechazarRespuesta(expId,nota);
-    return;
-  }
-  // Ya aprobada en Por imprimir / Por firmar / Revisados: cancelar firma y pasar a corregir
-  if(typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t)
-    &&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
-    encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota);
-    return;
-  }
-  if(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)
-    &&typeof tramiteDevolverDesdeFirmaACorregir==='function'){
-    tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota);
-    return;
-  }
-  devolverTaskAlResponsable(expId,taskId,nota);
+  ejecutar();
 }
 /**
  * Devolver notificación reportada (revisión final): sale de «Por revisar»,
