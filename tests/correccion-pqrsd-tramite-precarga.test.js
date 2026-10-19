@@ -274,7 +274,7 @@ describe('Quitar en la nueva entrega de una PQRSD', () => {
 
 describe('PQRSD: al enviar, los archivos conservados son de la entrega vigente', () => {
   const c = createContext({ responsableActivo: 'Ana', parseDrivePreviewUrl: null })
-  runInContext(extraer(core, ['_pqrsDocEsPorCorregir', '_pqrsDocKey', '_pqrsMergeDocumentosEntrega']), c)
+  runInContext(extraer(core, ['_pqrsDocEsPorCorregir', '_pqrsDocKey', '_pqrsMarcarDocsComoPorCorregir', '_pqrsMergeDocumentosEntrega']), c)
   const prev = [
     { nombre: 'Documento de respuesta', fileId: 'MAIN', driveFilename: 'Por corregir V2 Oficio.pdf', driveEstado: 'acorregir', entrega_n: 2, version_historial: true },
     { nombre: 'Anexo 1', fileId: 'AN1', driveFilename: 'Por corregir V2 Anexo 1.pdf', driveEstado: 'acorregir', entrega_n: 2, version_historial: true, es_anexo: true },

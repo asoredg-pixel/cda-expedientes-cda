@@ -392,6 +392,22 @@ function collectArchivosPqrsLinks(e){
   const items=[];
   if(!e||!esPqrsSecretaria(e))return items;
   const soloPublico=typeof esModoCiudadano==='function'&&esModoCiudadano();
+  const wfCons=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):null;
+  const faseCons=String((wfCons&&wfCons.fase)||'').toLowerCase();
+  // Tras aprobar (firma / notificar / cerrada): no listar historial «por corregir»
+  const postAprobCons=!!(typeof PQRS_WF!=='undefined'&&(
+    faseCons===PQRS_WF.POR_FIRMAR||faseCons===PQRS_WF.PARA_FIRMA||faseCons===PQRS_WF.VITAL_GESTION
+    ||faseCons==='por_firmar'||faseCons==='por_firma'||faseCons==='para_firma'
+    ||faseCons===PQRS_WF.PENDIENTE_NOTIF||faseCons===PQRS_WF.LISTA_ENVIO||faseCons===PQRS_WF.REVISION_FINAL
+    ||faseCons===PQRS_WF.CERRADA
+  ));
+  const ocultarHistCorr=function(meta){
+    if(!meta||soloPublico)return false;
+    if(!postAprobCons)return false;
+    if(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(meta))return true;
+    if(meta.activo===false&&(/por corregir/i.test(String(meta.label||meta.nombre||''))||meta.version_historial))return true;
+    return false;
+  };
   const seen=new Set();
   const keyOf=function(url){
     const raw=String(url||'').trim();
@@ -408,6 +424,7 @@ function collectArchivosPqrsLinks(e){
       if(meta&&meta.tipo==='link')return;
       if(/^link\s*drive$/i.test(String(label||'').trim()))return;
     }
+    if(ocultarHistCorr(meta))return;
     if(soloPublico&&meta&&typeof _pqrsDocEsVisibleCiudadano==='function'&&!_pqrsDocEsVisibleCiudadano(meta,e,{tipo:meta._tipoPub||'respuesta'}))return;
     const key=keyOf(url);
     if(!key||seen.has(key))return;
@@ -438,7 +455,9 @@ function collectArchivosPqrsLinks(e){
       }
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(s))return;
       if(/^link\s*drive$/i.test(String(s.label||'').trim()))return;
-      const lblRaw=soloPublico?String(s.label||s.driveFilename||s.nombre||('Respuesta '+(i+1))).replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim():(s.label||('Respuesta '+(i+1)));
+      if(ocultarHistCorr(s))return;
+      const lblWf=!soloPublico&&typeof _pqrsEtiquetaDocWf==='function'?_pqrsEtiquetaDocWf(s):'';
+      const lblRaw=soloPublico?String(s.label||s.driveFilename||s.nombre||('Respuesta '+(i+1))).replace(/\s*·\s*(por corregir|entrega v\d+)/ig,'').trim():(lblWf||s.label||('Respuesta '+(i+1)));
       const lbl=(soloPublico&&typeof etiquetaDocNotifPublica==='function')
         ?etiquetaDocNotifPublica(Object.assign({},s,{label:lblRaw,nombre:s.driveFilename||s.nombre||lblRaw}))
         :lblRaw;
@@ -460,6 +479,7 @@ function collectArchivosPqrsLinks(e){
     const wf=getPqrsWorkflow(e);
     wfDocs.forEach(function(d,i){
       if(!d)return;
+      if(ocultarHistCorr(d))return;
       if(typeof _pqrsDocEsLinkDriveGenerico==='function'&&_pqrsDocEsLinkDriveGenerico(d))return;
       const url=d.driveLink||d.previewLink||'';
       if(!url||(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url)))return;

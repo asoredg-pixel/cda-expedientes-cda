@@ -2174,12 +2174,35 @@ window._pqrsDocEsLinkDriveGenerico=_pqrsDocEsLinkDriveGenerico;
 window._pqrsDeduplicarDocumentosRespuesta=_pqrsDeduplicarDocumentosRespuesta;
 window._pqrsBuildAdjDocumentosEntrega=_pqrsBuildAdjDocumentosEntrega;
 /**
+ * Marca docs de respuesta no definitivos como historial «por corregir» (sistema).
+ * Usado al devolver y, de forma defensiva, al reentregar si faltó el marcado.
+ */
+function _pqrsMarcarDocsComoPorCorregir(docs,entregaN){
+  const n=Number(entregaN)||0;
+  (Array.isArray(docs)?docs:[]).forEach(function(d){
+    if(!d||_pqrsDocEsPorCorregir(d))return;
+    if(d.notificado===true||d.tipo==='notificacion_soporte'||d.tipo==='soporte_notificacion')return;
+    if(d.es_radicacion||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud')return;
+    const est=String(d.driveEstado||'').toLowerCase();
+    if(['notificado','revision_final','cerrado','atendido'].includes(est))return;
+    d.driveEstado='acorregir';
+    d.version_historial=true;
+    d.conservar_version=true;
+    if(n&&!d.entrega_n)d.entrega_n=n;
+  });
+  return docs;
+}
+/**
  * Conserva historial de versiones «por corregir» y agrega la nueva entrega.
  * Al aprobar se limpian las versiones viejas (_pqrsLimpiarVersionesCorreccionWf).
  */
 function _pqrsMergeDocumentosEntrega(prevDocs,nuevos,entregaN){
   // Archivo de la entrega devuelta que el responsable conservó: deja de ser versión «por corregir»
   const keysNuevos=new Set((Array.isArray(nuevos)?nuevos:[]).map(_pqrsDocKey).filter(Boolean));
+  // Si al devolver no se marcó la entrega previa, archivarla aquí para no perderla en Drive/consulta
+  _pqrsMarcarDocsComoPorCorregir((Array.isArray(prevDocs)?prevDocs:[]).filter(function(d){
+    return d&&!keysNuevos.has(_pqrsDocKey(d));
+  }),(Number(entregaN)||1)-1);
   const hist=(Array.isArray(prevDocs)?prevDocs:[]).filter(d=>d&&(_pqrsDocEsPorCorregir(d)||d.conservar_version)&&!keysNuevos.has(_pqrsDocKey(d)));
   const seen=new Set(hist.map(_pqrsDocKey).filter(Boolean));
   const added=[];
@@ -2222,6 +2245,17 @@ function _pqrsEtiquetaDocWf(d,docsOpt){
     const canal=String(d.canal||'').trim();
     return 'Documento notificado'+(canal?' · '+canal:'');
   }
+  // «por corregir» antes que oficio_firmado: si no, Consulta oculta el identificador de corrección
+  const nEnt=d.entrega_n?(' · entrega '+d.entrega_n):'';
+  if(_pqrsDocEsPorCorregir(d)){
+    if(_pqrsDocEsAnexoRespuesta(d)){
+      const nAn=_pqrsAnexoNumero(d,docsOpt);
+      return 'Anexo '+nAn+nEnt+' · por corregir';
+    }
+    if(d.tipo==='oficio_firmado'||/^oficio firmado/i.test(String(d.nombre||d.label||'')))
+      return 'Oficio firmado'+nEnt+' · por corregir';
+    return 'Proyección de respuesta'+nEnt+' · por corregir';
+  }
   if(d.tipo==='oficio_firmado'||String(d.driveEstado||'').toLowerCase()==='por_notificar'
     ||String(d.driveEstado||'').toLowerCase()==='firmado'
     ||/^oficio firmado/i.test(String(d.nombre||d.label||'')))
@@ -2230,10 +2264,8 @@ function _pqrsEtiquetaDocWf(d,docsOpt){
     const n=_pqrsAnexoNumero(d,docsOpt);
     return 'Anexo '+n;
   }
-  const n=d.entrega_n?(' · entrega '+d.entrega_n):'';
-  if(_pqrsDocEsPorCorregir(d))return 'Proyección de respuesta'+n+' · por corregir';
-  if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return 'Proyección de respuesta'+n+' · entrega actual';
-  return 'Proyección de respuesta'+n+(d.driveEstado?' · '+d.driveEstado:'');
+  if(String(d.driveEstado||'').toLowerCase()==='revision'||!d.driveEstado)return 'Proyección de respuesta'+nEnt+' · entrega actual';
+  return 'Proyección de respuesta'+nEnt+(d.driveEstado?' · '+d.driveEstado:'');
 }
 /** URL de carpeta Drive (no es un archivo previsualizable; provoca 403 en el visor). */
 function esUrlCarpetaDrive(url){
@@ -21446,9 +21478,16 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
   if(typeof renderBandejaDepto==='function')renderBandejaDepto();
   if(typeof notif==='function')notif('↩ Devuelta — ✓ Revisada · X Corregir','ok');
   if(typeof _pqrsRenombrarDocsDriveWf==='function'){
-    _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','']
-      .concat(desdeNotif?['por_notificar','firmado']:[])})
-      .catch(function(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);});
+    (async function(){
+      try{
+        if(typeof sstSolicitarGmailParaAdjuntar==='function')await sstSolicitarGmailParaAdjuntar();
+        if(typeof _pqrsMarcarDocsComoPorCorregir==='function')_pqrsMarcarDocsComoPorCorregir(wf.documentos||[],wf.entrega_n);
+        await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['por_firmar','por_firma','aprobado','revision','vital_gestion','','drive','archivo','oficio_firmado','acorregir','corregir']
+          .concat(desdeNotif?['por_notificar','firmado']:[])});
+        if(typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,{documentos:wf.documentos||[]});
+        if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
+      }catch(err){console.warn('encargadoDevolverDesdeFirmaACorregir rename:',err);}
+    })();
   }
   return true;
 }
@@ -33522,14 +33561,21 @@ async function ncaRechazarRespuesta(expId,motivoOpt){
     notif('Indique el motivo de la devolución','err');return;
   }
   const wf=getPqrsWorkflow(e);
-  // Solo renombrar la entrega actual (revision) → acorregir; conservar versiones previas
-  await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{onlyEstados:['revision','']});
+  // Marcar entrega actual (aunque sea oficio_firmado / por_firma) y renombrar en Drive con Vn
+  if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+    try{await sstSolicitarGmailParaAdjuntar();}catch(errG){console.warn('ncaRechazarRespuesta gmail:',errG);}
+  }
+  _pqrsMarcarDocsComoPorCorregir(wf.documentos||[],wf.entrega_n);
+  await _pqrsRenombrarDocsDriveWf(wf,'acorregir',{
+    onlyEstados:['revision','','drive','archivo','oficio_firmado','por_firma','por_firmar','aprobado','vital_gestion','acorregir','corregir']
+  });
   // Sincronizar soportes de la tarea / lista de respuesta
   const t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
   if(t&&Array.isArray(t.soportes)){
     t.soportes.forEach(function(s){
       if(!s||!s.activo)return;
       s.driveEstado='acorregir';
+      s.version_historial=true;
       if(s.label&&!/por corregir/i.test(s.label))s.label=String(s.label)+' · por corregir';
       s.activo=false;
     });
@@ -33539,6 +33585,7 @@ async function ncaRechazarRespuesta(expId,motivoOpt){
       if(!s||s.activo===false)return;
       s.activo=false;
       s.driveEstado='acorregir';
+      s.version_historial=true;
       if(s.label&&!/por corregir/i.test(s.label))s.label=String(s.label)+' · por corregir';
     });
   }
@@ -33573,15 +33620,20 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
   opts=opts||{};
   const only=Array.isArray(opts.onlyEstados)?opts.onlyEstados.map(function(s){return String(s||'').toLowerCase();}):null;
   const prefRgx=/^(revision[_ ]final|revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
+  const entregaWf=Number(wf.entrega_n)||0;
   for(const doc of wf.documentos){
     const estEff=String(doc.driveEstado||'revision').toLowerCase()||'revision';
     if(only&&only.indexOf(estEff)<0&&!(only.indexOf('revision')>=0&&!doc.driveEstado))continue;
-    // No re-renombrar versiones ya archivadas como por corregir cuando el destino también es acorregir
-    if(nuevoEstado==='acorregir'&&_pqrsDocEsPorCorregir(doc)&&estEff==='acorregir')continue;
+    // Ya archivado con prefijo «por corregir» en Drive: no re-renombrar
+    if(nuevoEstado==='acorregir'&&estEff==='acorregir'&&/^(acorregir|por corregir)[-_ ]/i.test(String(doc.driveFilename||doc.nombre||'')))continue;
     const fid=doc.fileId||doc.driveFileId||null;
+    if(nuevoEstado==='acorregir'){
+      doc.version_historial=true;
+      doc.conservar_version=true;
+      if(entregaWf&&!doc.entrega_n)doc.entrega_n=entregaWf;
+    }
     if(!fid){
       doc.driveEstado=nuevoEstado;
-      if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
       continue;
     }
     // doc.nombre suele ser etiqueta («Documento de respuesta», «Anexo 1»): usar el nombre real del archivo
@@ -33592,9 +33644,11 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
       const ext=/wordprocessingml/.test(mime)?'docx':(/msword/.test(mime)?'doc':(/png/.test(mime)?'png':(/jpe?g/.test(mime)?'jpg':'pdf')));
       origName=String(origName).trim()+'.'+ext;
     }
-    const verPref=doc.entrega_n?('V'+doc.entrega_n+' '):'';
+    const entN=Number(doc.entrega_n)||entregaWf||0;
+    const verPref=entN?('V'+entN+' '):'';
     let cleanName=origName.replace(prefRgx,'');
     if(verPref)cleanName=cleanName.replace(/^v\d+[- ]/i,'');
+    // Nombres cortos PQRSD («20261841 RSP.pdf»): quitar solo prefijos de estado, no el radicado
     const estNom=(typeof _driveEstadoLegible==='function'&&_driveEstadoLegible(nuevoEstado))||nuevoEstado;
     const newName=typeof _driveNombreArchivoPlano==='function'
       ?_driveNombreArchivoPlano(estNom+' '+verPref+cleanName)
@@ -33608,17 +33662,52 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
         }
         else doc.driveEstado=nuevoEstado;
       }else doc.driveEstado=nuevoEstado;
+    }catch(err){
+      console.warn('_pqrsRenombrarDocsDriveWf:',err);
+      doc.driveEstado=nuevoEstado;
       if(nuevoEstado==='acorregir'){doc.version_historial=true;doc.conservar_version=true;}
-    }catch(err){console.warn('_pqrsRenombrarDocsDriveWf:',err);doc.driveEstado=nuevoEstado;}
+    }
   }
 }
-/** Tras aprobar: elimina de Drive y del workflow las versiones «por corregir»; deja solo la entrega aprobada. */
+/** Tras aprobar: elimina de Drive y del workflow las versiones «por corregir» / entregas previas; deja solo la entrega aprobada. */
 async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
   if(!wf||!Array.isArray(wf.documentos))return;
   const keep=[],trash=[];
+  const entregaN=Number(wf.entrega_n)||0;
+  // Si se aprueba sin reentrega (docs siguen «por corregir»), reactivar la entrega vigente antes de limpiar
+  const hayVigente=(wf.documentos||[]).some(function(d){
+    return d&&!_pqrsDocEsPorCorregir(d)
+      &&d.tipo!=='notificacion_soporte'&&d.tipo!=='soporte_notificacion'&&!d.notificado
+      &&!d.es_radicacion&&d.tipo!=='soporte_radicacion'&&d.tipo!=='anexo_radicacion';
+  });
+  if(!hayVigente){
+    (wf.documentos||[]).forEach(function(d){
+      if(!d||!_pqrsDocEsPorCorregir(d))return;
+      const n=Number(d.entrega_n)||0;
+      if(entregaN>0&&n>0&&n!==entregaN)return;
+      d.driveEstado='revision';
+      d.version_historial=false;
+      d.conservar_version=false;
+    });
+  }
+  const esBasuraCorr=function(d){
+    if(!d)return false;
+    if(d.notificado===true||d.tipo==='notificacion_soporte'||d.tipo==='soporte_notificacion')return false;
+    if(d.es_radicacion||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud')return false;
+    if(_pqrsDocEsPorCorregir(d))return true;
+    if(d.activo===false&&(d.version_historial||/por corregir/i.test(String(d.label||d.nombre||d.driveFilename||''))))return true;
+    const n=Number(d.entrega_n)||0;
+    // Entregas anteriores a la aprobada (aunque no hubieran quedado marcadas)
+    if(entregaN>0&&n>0&&n<entregaN){
+      const est=String(d.driveEstado||'').toLowerCase();
+      if(['notificado','revision_final','cerrado','atendido'].includes(est))return false;
+      return true;
+    }
+    return false;
+  };
   wf.documentos.forEach(function(d){
     if(!d)return;
-    if(_pqrsDocEsPorCorregir(d))trash.push(d);
+    if(esBasuraCorr(d))trash.push(d);
     else keep.push(d);
   });
   for(let i=0;i<trash.length;i++){
@@ -33630,32 +33719,31 @@ async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
   wf.documentos=keep;
   if(e){
     const keepKeys=new Set(keep.map(_pqrsDocKey).filter(Boolean));
-    if(Array.isArray(e._pqrs_respuesta_soportes)&&keepKeys.size){
+    if(Array.isArray(e._pqrs_respuesta_soportes)){
       e._pqrs_respuesta_soportes=e._pqrs_respuesta_soportes.filter(function(s){
-        const k=String((s&&(s.url||s.preview))||'').toLowerCase();
-        return !k||keepKeys.has(k);
+        if(!s)return false;
+        if(esBasuraCorr(s))return false;
+        const k=_pqrsDocKey(s);
+        if(keepKeys.size&&k)return keepKeys.has(k);
+        if(s.activo===false&&(_pqrsDocEsPorCorregir(s)||/por corregir/i.test(String(s.label||''))))return false;
+        return true;
       }).map(function(s){
-        return Object.assign({},s,{activo:true,label:String(s.label||'Respuesta').replace(/\s*·\s*por corregir/i,'').replace(/\s*·\s*entrega v\d+/i,'')});
+        return Object.assign({},s,{activo:true,version_historial:false,label:String(s.label||'Respuesta').replace(/\s*·\s*por corregir/i,'').replace(/\s*·\s*entrega v\d+/i,'').replace(/\s*·\s*entrega \d+/i,'')});
       });
     }
-    // Limpiar soportes de la tarea Atender PQRSD que eran por corregir
+    // Limpiar soportes de la tarea Atender PQRSD que eran por corregir / entregas viejas
     const t=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
-    if(t&&Array.isArray(t.soportes)&&keepKeys.size){
+    if(t&&Array.isArray(t.soportes)){
       const dropIds=[];
-      t.soportes.forEach(function(s){
-        if(!s)return;
-        const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
-        const est=String(s.driveEstado||'').toLowerCase();
-        if((est==='acorregir'||/^(acorregir|por corregir)[-_ ]/i.test(s.driveFilename||s.label||''))&&k&&!keepKeys.has(k)){
-          dropIds.push(s.driveFileId);
-        }
-      });
       t.soportes=t.soportes.filter(function(s){
         if(!s)return false;
-        const k=String((s.url||s.preview||s.driveLink)||'').toLowerCase();
-        if(k&&keepKeys.has(k))return true;
-        const est=String(s.driveEstado||'').toLowerCase();
-        if(est==='acorregir'||/^(acorregir|por corregir)[-_ ]/i.test(s.driveFilename||s.label||''))return false;
+        const k=_pqrsDocKey(s);
+        if(keepKeys.size&&k&&keepKeys.has(k))return true;
+        if(esBasuraCorr(s)||_pqrsDocEsPorCorregir(s)||String(s.driveEstado||'').toLowerCase()==='acorregir'
+          ||/^(acorregir|por corregir)[-_ ]/i.test(s.driveFilename||s.label||'')){
+          dropIds.push(s.driveFileId||s.fileId);
+          return false;
+        }
         return true;
       });
       for(let j=0;j<dropIds.length;j++){
