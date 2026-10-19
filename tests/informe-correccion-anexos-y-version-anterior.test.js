@@ -88,13 +88,14 @@ describe('Informe devuelto: anexos como primera entrega y versión anterior para
       sstFileStagingCtx: () => ctx, sstFileRefreshCtxLists: () => {}, confirm: () => true, document: { getElementById: () => null },
       sstFileFindItem: (cx, id) => id === 'x' ? { item: cx.main, slot: 'main', idx: -1 } : { item: cx.anexos[0], slot: 'anexos', idx: 0 },
       driveDeleteInstitutional: id => { borrados.push(id); return Promise.resolve() },
-      informeCorreccionOnQuitar: () => {}, window: {}
+      informeCorreccionOnQuitar: () => {}, window: {},
+      sstFileConfirmQuitar: (_o, ok) => { if (ok) ok() }
     })
     runInContext(extraer(up, ['sstFileRemove']), c)
     await c.sstFileRemove('k', 'x', 'l')
     await c.sstFileRemove('k', 'y', 'l')
     expect(borrados).toEqual(['G1'])
-    expect(extraer(up, ['sstFileOnMainPick'])).toContain('if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional')
+    expect(extraer(up, ['sstFileOnMainPickApply'])).toContain('if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional')
   })
 
   it('Comparar: los anexos no se rotulan «Anexo por corregir»', () => {

@@ -1007,10 +1007,13 @@ function htmlInformeCorreccionResumen(t){
 function entregaCorreccionAplica(t){
   return !!(t&&!t.eliminada&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir');
 }
-/** Archivos de la última entrega del responsable (sin radicación, notificación, firmados ni soportes de envío). */
+/** Archivos de la última entrega del responsable (sin radicación, notificación, firmados ni soportes de envío).
+ *  Si en una reentrega solo se regeneró el principal, los anexos pueden seguir en un lote anterior
+ *  (siguen visibles en pestañas @): se reincorporan a la precarga de «Nueva entrega». */
 function entregaCorreccionSoportesPrevios(t){
   const cand=((t&&t.soportes)||[]).filter(function(s){
     if(!s||!(s.driveFileId||s.fileId)||s.corr_descartado)return false;
+    if(s.anexo_quitado_correccion)return false;
     if(s.tipo==='soporte_notificacion'||s.tipo==='soporte_respuesta')return false;
     if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return false;
     if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return false;
@@ -1018,12 +1021,52 @@ function entregaCorreccionSoportesPrevios(t){
     if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
     return true;
   });
-  const lotes=[];
-  cand.forEach(function(s){const l=s.loteEntrega;if(l&&lotes.indexOf(l)<0)lotes.push(l);});
-  if(lotes.length){
-    const last=lotes[lotes.length-1];
-    return cand.filter(function(s){return s.loteEntrega===last;});
+  const esAnexo=function(s){
+    return !!(s&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
+      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))));
+  };
+  const mains=cand.filter(function(s){return !esAnexo(s);});
+  const anexos=cand.filter(esAnexo);
+  let lastMain=null;
+  if(mains.length){
+    const conLote=mains.filter(function(s){return s&&s.loteEntrega;});
+    if(conLote.length){
+      const lotes=[...new Set(conLote.map(function(s){return String(s.loteEntrega);}))].sort();
+      const lastLote=lotes[lotes.length-1];
+      const delLote=conLote.filter(function(s){return String(s.loteEntrega)===lastLote;});
+      lastMain=delLote[delLote.length-1]||conLote[conLote.length-1];
+    }else{
+      lastMain=mains[mains.length-1];
+    }
   }
+  const loteMain=lastMain&&lastMain.loteEntrega?String(lastMain.loteEntrega):'';
+  let anexosUsar=loteMain
+    ?anexos.filter(function(a){return String(a.loteEntrega||'')===loteMain;})
+    :[];
+  // 2ª+ corrección: el informe nuevo puede ir solo en el último lote; los soportes siguen en el anterior
+  if(!anexosUsar.length&&anexos.length){
+    const lotesA=[...new Set(anexos.map(function(a){return String(a.loteEntrega||'');}).filter(Boolean))].sort();
+    if(lotesA.length){
+      const lastA=lotesA[lotesA.length-1];
+      anexosUsar=anexos.filter(function(a){return String(a.loteEntrega||'')===lastA;});
+    }else{
+      anexosUsar=anexos.slice();
+    }
+  }
+  const seen=new Set();
+  const out=[];
+  function push(s){
+    if(!s)return;
+    const fid=String(s.driveFileId||s.fileId||'');
+    if(fid){
+      if(seen.has(fid))return;
+      seen.add(fid);
+    }
+    out.push(s);
+  }
+  push(lastMain);
+  anexosUsar.forEach(push);
+  if(out.length)return out;
   return typeof getSoportesUltimaEntrega==='function'?getSoportesUltimaEntrega({soportes:cand}):cand;
 }
 /** Ítem de staging «ya en Drive» a partir de un soporte de la entrega devuelta. */

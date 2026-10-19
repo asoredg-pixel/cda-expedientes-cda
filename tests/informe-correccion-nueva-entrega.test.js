@@ -68,6 +68,24 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     expect(ctx.anexos.every(a => a.state === 'uploaded')).toBe(true)
   })
 
+  it('2ª corrección: si solo se regeneró el informe, precarga anexos del lote anterior', () => {
+    const t = {
+      informeContrato: { numero: '274', n: 1 },
+      estado: 'Por corregir',
+      soportes: [
+        { id: 'a1', driveFileId: 'S1', label: 'Act 1 — Actas · soporte 1', informe_act: { n: 1, nombre: 'Actas' }, es_anexo: true, loteEntrega: 'lot_100' },
+        { id: 'a2', driveFileId: 'S2', label: 'Act 6 — Seguimiento · soporte 2', informe_act: { n: 6, nombre: 'Seguimiento' }, es_anexo: true, loteEntrega: 'lot_100' },
+        { id: 'm1', driveFileId: 'OLD', label: 'Documento principal · por corregir', version_historial: true, loteEntrega: 'lot_100' },
+        { id: 'm2', driveFileId: 'INF2', label: 'Documento principal · por corregir', driveFilename: 'INFORME 1 V2.pdf', version_historial: true, loteEntrega: 'lot_200' }
+      ]
+    }
+    const { c, staging } = ctxEr(t)
+    c.informeCorreccionPrecargar('ACT-1', 'T1')
+    const ctx = staging['enviar-soporte:ACT-1:T1']
+    expect(ctx.main.driveFileId).toBe('INF2')
+    expect(ctx.anexos.map(a => a.driveFileId).sort()).toEqual(['S1', 'S2'])
+  })
+
   it('solo aplica a informes en Por corregir', () => {
     const t = { informeContrato: { numero: '045', n: 1 }, estado: 'Por verificar', soportes: sops.map(s => ({ ...s })) }
     const { c, staging } = ctxEr(t)
@@ -89,7 +107,8 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     const ctx = { main: { corrPrev: {}, driveFileId: 'INF' }, anexos: [] }
     const c = createContext({
       sstFileRegisterList: () => {}, sstFileStagingCtx: () => ctx, sstFileRefreshCtxLists: () => {},
-      confirm: () => false, driveDeleteInstitutional: () => { borrados++; return Promise.resolve() }
+      confirm: () => false, driveDeleteInstitutional: () => { borrados++; return Promise.resolve() },
+      sstFileConfirmQuitar: (_o, ok) => { /* no confirmar reemplazo */ }
     })
     runInContext(extraer(up, ['sstFileOnMainPick']), c)
     c.sstFileOnMainPick({ files: [], value: 'x' }, {})
