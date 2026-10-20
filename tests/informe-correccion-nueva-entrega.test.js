@@ -37,11 +37,14 @@ const sops = [
   { id: 'n', driveFileId: 'NOT', tipo: 'soporte_notificacion', loteEntrega: 'L2' }
 ]
 
-function ctxEr(t) {
+function ctxEr(t, opts) {
   const staging = {}
   const c = createContext({
     getTaskAny: () => t,
     estadoTask: x => x.estado,
+    taskPuedeCorregirSinRevision: opts && opts.corrVoluntaria
+      ? (x => x && x.estado === 'Por verificar')
+      : () => false,
     getSoportesUltimaEntrega: x => x.soportes.filter(s => s.loteEntrega === 'L2'),
     sstFileEnviarCtxKey: (e, k) => 'enviar-soporte:' + e + ':' + k,
     sstFileStagingCtx: k => (staging[k] = staging[k] || { main: null, anexos: [] }),
@@ -86,12 +89,22 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     expect(ctx.anexos.map(a => a.driveFileId).sort()).toEqual(['S1', 'S2'])
   })
 
-  it('solo aplica a informes en Por corregir', () => {
+  it('también precarga en corrección voluntaria (Por verificar, aún sin revisión)', () => {
+    const t = { informeContrato: { numero: '045', n: 1 }, estado: 'Por verificar', soportes: sops.map(s => ({ ...s })) }
+    const { c, staging } = ctxEr(t, { corrVoluntaria: true })
+    expect(c.entregaCorreccionAplica(t)).toBe(true)
+    expect(c.informeCorreccionAplica(t)).toBe(true)
+    c.informeCorreccionPrecargar('ACT-1', 'T1')
+    const ctx = staging['enviar-soporte:ACT-1:T1']
+    expect(ctx.main.driveFileId).toBe('INF')
+    expect(ctx.anexos.map(a => a.driveFileId)).toEqual(['S1', 'S2'])
+  })
+
+  it('sin corrección voluntaria, Por verificar no precarga', () => {
     const t = { informeContrato: { numero: '045', n: 1 }, estado: 'Por verificar', soportes: sops.map(s => ({ ...s })) }
     const { c, staging } = ctxEr(t)
     c.informeCorreccionPrecargar('ACT-1', 'T1')
     expect(staging['enviar-soporte:ACT-1:T1']).toBeUndefined()
-    expect(c.informeCorreccionAplica({ estado: 'Por corregir' })).toBe(false)
   })
 
   it('quitar un archivo lo saca del registro de la actividad', () => {

@@ -93,7 +93,7 @@ describe('Soportes del informe por actividad', () => {
     expect(sub).toContain('informeSoporteK:infSopK[kn]')
     expect(sub).toContain("eDrive,t,rep,'revision',infOpts)")
     const env = extraer(core, ['enviarTaskPorVerificar'])
-    expect(env).toContain('t.soportes[t.soportes.length-1].informe_act=ia;')
+    expect(env).toMatch(/last\.informe_act\s*=\s*ia/)
     expect(env).toContain('t.informeContrato.actividades.push(ia)')
     expect(extraer(er, ['syncEntregaInformeModoUi'])).toContain("informe?'entregaInformeElegirActividad()':'sstFilePickAnexosBtn()'")
   })

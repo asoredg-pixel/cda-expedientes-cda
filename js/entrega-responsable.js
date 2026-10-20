@@ -646,12 +646,49 @@ function syncEntregaInformeModoUi(informe){
   setTxt('entrega-resp-lbl-main',informe?'Informe':'Principal');
   setTxt('entrega-resp-lbl-anexos',informe?'Soportes del contrato / actividades':'Anexos');
 }
-/** Crea la actividad libre «Informe de contrato» del responsable (sin actividad predeterminada ni interesado). */
+/** INF pendiente del mismo contrato/informe/periodo/responsable (evitar duplicar al re-entregar). */
+function findTaskInformeContratoReusable(inf,resp){
+  if(!inf||!resp)return null;
+  const rn=agendaNorm(resp);
+  const nn=agendaNorm(inf.numero);
+  const nInf=parseInt(inf.n,10)||0;
+  const desde=String(inf.desde||'');
+  const hasta=String(inf.hasta||'');
+  let best=null,bestRank=-1;
+  (typeof actividadesLibres!=='undefined'?actividadesLibres:[]).forEach(function(t){
+    if(!t||t.eliminada||!t.informeContrato)return;
+    const asg=typeof taskUsuarioEsAsignado==='function'?taskUsuarioEsAsignado(t,resp):(agendaNorm(t.responsable||'')===rn);
+    if(!asg)return;
+    const ic=t.informeContrato;
+    if(agendaNorm(ic.numero)!==nn)return;
+    if((parseInt(ic.n,10)||0)!==nInf)return;
+    if(String(ic.desde||'')!==desde||String(ic.hasta||'')!==hasta)return;
+    const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+    // Reusar solo si aún no la cerró el encargado
+    if(est==='Atendida')return;
+    if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return;
+    let rank=0;
+    if(est==='Por verificar')rank=3;
+    else if(est==='Por corregir')rank=2;
+    else if(est==='En ejecución'||est==='Vencida')rank=1;
+    else return;
+    if(rank>bestRank){best=t;bestRank=rank;}
+  });
+  return best;
+}
+/** Crea o reutiliza la actividad libre «Informe de contrato» del responsable. */
 function ensureTaskInformeContrato(){
   if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
   const inf=collectEntregaInforme();
   const err=validarInformeContrato(inf,entregaInformeContratosActuales());
   if(err){notif(err,'err');return null;}
+  const reused=findTaskInformeContratoReusable(inf,responsableActivo);
+  if(reused){
+    if(typeof normalizeActLibre==='function')normalizeActLibre(reused);
+    reused.informeContrato=Object.assign({},reused.informeContrato||{},inf);
+    window._pendingActLibreEntrega={id:reused.id,codigo:reused.codigo,t:reused};
+    return{e:null,t:reused,expId:reused.codigo,taskId:reused.id,createdStub:false,createdTask:false,reused:true,registroTipo:'',esPqrs:false,sinExpediente:true};
+  }
   const deptoLibre=typeof resolveDeptoActLibre==='function'
     ?resolveDeptoActLibre()
     :(typeof getDeptoOperativo==='function'?getDeptoOperativo():(deptoActivo||'guaviare'));
@@ -684,7 +721,7 @@ function ensureTaskInformeContrato(){
   actividadesLibres.push(t);
   if(typeof persistExpLocal==='function')persistExpLocal();
   window._pendingActLibreEntrega={id:t.id,codigo:t.codigo,t:t};
-  return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,registroTipo:'',esPqrs:false,sinExpediente:true};
+  return{e:null,t:t,expId:t.codigo,taskId:t.id,createdStub:false,createdTask:true,reused:false,registroTipo:'',esPqrs:false,sinExpediente:true};
 }
 /** Actividades del contrato (N° y nombre) ya usadas en soportes de informes anteriores. */
 function informeActividadesDeContrato(lista,resp,numero){
@@ -989,23 +1026,29 @@ window.descartarBorradorInforme=descartarBorradorInforme;
 window.informeBorradorOnQuitar=informeBorradorOnQuitar;
 window.informeBorradorCerrarTrasEntrega=informeBorradorCerrarTrasEntrega;
 // ── Corrección de informe (Por corregir): la nueva entrega parte de los archivos de la última entrega ──
+/** Informe en Por corregir o «corregir aún sin revisión» (Por verificar): precargar última entrega. */
 function informeCorreccionAplica(t){
-  return !!(t&&t.informeContrato&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir');
+  if(!t||!t.informeContrato||typeof estadoTask!=='function')return false;
+  if(estadoTask(t)==='Por corregir')return true;
+  return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
 function htmlInformeCorreccionResumen(t){
   const ic=(t&&t.informeContrato)||{};
+  const precarga=typeof entregaCorreccionAplica==='function'?entregaCorreccionAplica(t):informeCorreccionAplica(t);
   return'<div style="padding:10px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf2);margin-bottom:10px">'+
     '<div style="font-size:12px;font-weight:700;margin-bottom:4px">📑 Informe de contrato</div>'+
     '<div style="font-size:12px">Contrato N° <strong>'+escAttr(String(ic.numero||''))+'</strong> · Informe N° <strong>'+escAttr(String(ic.n||''))+'</strong> · Periodo '+fmtF(ic.desde)+' a '+fmtF(ic.hasta)+'</div>'+
-    (informeCorreccionAplica(t)
+    (precarga
       ?'<div style="font-size:11px;color:var(--tx3);margin-top:6px">Se cargaron los archivos de la última entrega. Quite (🗑) los que deba corregir —se eliminan de Drive—, '+
         'agregue soportes con «📎 Soportes +» o reemplace el informe con «📄 Cargar informe», y pulse Enviar nueva entrega.</div>'
       :'')+
   '</div>';
 }
-/** Actividad devuelta (informe, trámite o PQRSD): la nueva entrega parte de los archivos de la última entrega. */
+/** Actividad a reentregar: Por corregir, o Por verificar antes de que el encargado revise (corrección voluntaria). */
 function entregaCorreccionAplica(t){
-  return !!(t&&!t.eliminada&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir');
+  if(!t||t.eliminada||typeof estadoTask!=='function')return false;
+  if(estadoTask(t)==='Por corregir')return true;
+  return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
 /** ¿Cuenta como anexo de entrega (informe / PQRSD / trámite / act. libre)? */
 function entregaCorreccionEsAnexo(s){
@@ -4202,6 +4245,13 @@ function submitEntregaResponsable(){
   }
   const pack=ensureExpTaskEntregaResponsable();
   if(!pack)return;
+  // INF reutilizado sin anexos en staging: traer los de la entrega ya registrada (mismo Por revisar)
+  if(pack.reused&&entregaRespEsInforme()&&typeof informeCorreccionPrecargar==='function'&&typeof sstFileStagingCtx==='function'){
+    const ck=typeof entregaRespFileCtxKey==='function'?entregaRespFileCtxKey():'entrega-resp';
+    const ctx=sstFileStagingCtx(ck);
+    if(!(ctx.anexos||[]).length)
+      informeCorreccionPrecargar(pack.expId,pack.taskId,{ctxKey:ck,anexosListId:'entrega-resp-anexos-list'});
+  }
   // Reutilizar el envío a verificación (Drive + Por verificar). La paleta «Por revisar»
   // solo se activa al terminar OK (ver enviarTaskPorVerificar / entregaResponsable).
   if(typeof submitEnviarSoporteVerificacion==='function'){
