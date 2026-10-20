@@ -756,6 +756,23 @@ async function recursosContratosCargarDrive(folderId) {
       }
     } else {
       lista = await driveListFolderChildren(folderId);
+      // Informe ya aprobado: si quedaron PDFs de intentos anteriores, dejar solo el vigente
+      if(typeof informePurgarEntregasPreviasAlAprobar==='function'&&Array.isArray(typeof actividadesLibres!=='undefined'?actividadesLibres:null)){
+        const tAt=(actividadesLibres||[]).find(function(t){
+          if(!t||t.eliminada||!t.informeContrato)return false;
+          if(String(t._drive_folder_id||'')!==String(folderId))return false;
+          const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+          return est==='Atendida';
+        });
+        const nPdf=(lista||[]).filter(function(f){return f&&!f.esCarpeta&&/^Informe\s+\d+\b/i.test(String(f.name||''));}).length;
+        if(tAt&&nPdf>1){
+          try{
+            await informePurgarEntregasPreviasAlAprobar(tAt);
+            if(typeof persistActividadesLibresFirestore==='function')await persistActividadesLibresFirestore();
+            lista=await driveListFolderChildren(folderId);
+          }catch(errP){console.warn('recursos informe purge:',errP);}
+        }
+      }
     }
     st.hijos[key] = lista.filter(function(f) { return f && f.name && String(f.name).toUpperCase().indexOf('ELIMINADO-') !== 0; });
   } catch (err) {

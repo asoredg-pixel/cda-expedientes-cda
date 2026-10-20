@@ -2250,6 +2250,70 @@ async function driveEnsureContratoInformeFolder(inf, token) {
 window.driveContratoInformeFolderNames = driveContratoInformeFolderNames;
 window.driveEnsureContratoInformeFolder = driveEnsureContratoInformeFolder;
 
+/**
+ * Al aprobar un informe: deja un solo PDF del informe en la carpeta (el vigente)
+ * y borra en Drive las entregas anteriores (V2, V3, duplicados). Los soportes por actividad se conservan.
+ */
+async function informePurgarEntregasPreviasAlAprobar(t) {
+  if (!t || !t.informeContrato) return false;
+  const esAn = function(s) {
+    if (!s) return false;
+    if (s.informe_act || s.informeAct) return true;
+    if (typeof soporteEsAnexoEntrega === 'function' && soporteEsAnexoEntrega(s)) return true;
+    return /^Act\s+\d+\s*[—\-–]/i.test(String(s.label || s.driveFilename || ''));
+  };
+  const porCorr = function(s) {
+    return typeof soporteEsPorCorregir === 'function' && soporteEsPorCorregir(s);
+  };
+  const mains = (t.soportes || []).filter(function(s) { return s && !esAn(s); });
+  const vivos = mains.filter(function(s) { return !porCorr(s) && s.activo !== false; });
+  const pool = vivos.length ? vivos : mains.filter(function(s) { return !porCorr(s); });
+  const base = pool.length ? pool : mains;
+  const keep = base.length ? base[base.length - 1] : null;
+  const keepId = keep ? String(keep.driveFileId || keep.fileId || '') : '';
+  if (!keepId) return false;
+  const nInf = parseInt(t.informeContrato.n, 10) || 1;
+  const rx = new RegExp('^Informe\\s+' + nInf + '\\b', 'i');
+  const trash = {};
+  mains.forEach(function(s) {
+    const id = String((s && (s.driveFileId || s.fileId)) || '');
+    if (id && id !== keepId) trash[id] = true;
+  });
+  if (typeof driveEnsureContratoInformeFolder === 'function' && typeof driveListFolderChildren === 'function') {
+    try {
+      const folder = await driveEnsureContratoInformeFolder(t.informeContrato);
+      const kids = folder && folder.folderId ? await driveListFolderChildren(folder.folderId) : [];
+      (kids || []).forEach(function(k) {
+        if (!k || k.esCarpeta || !k.id) return;
+        if (!rx.test(String(k.name || ''))) return;
+        if (k.id === keepId) return;
+        trash[k.id] = true;
+      });
+    } catch (err) { console.warn('informePurgarEntregasPreviasAlAprobar folder:', err); }
+  }
+  const ids = Object.keys(trash);
+  for (let i = 0; i < ids.length; i++) {
+    if (typeof driveDeleteInstitutional === 'function') {
+      try { await driveDeleteInstitutional(ids[i]); } catch (errD) { console.warn('informe purge delete:', errD); }
+    }
+  }
+  if (typeof driveRenameInstitutional === 'function' && typeof driveContratoInformeFilename === 'function') {
+    const nom = driveContratoInformeFilename(t.informeContrato, { soportes: [] }, keep.driveFilename || keep.label || 'informe.pdf', {});
+    try {
+      const okR = await driveRenameInstitutional(keepId, nom);
+      if (okR) keep.driveFilename = nom;
+    } catch (errR) { console.warn('informe purge rename:', errR); }
+  }
+  t.soportes = (t.soportes || []).filter(function(s) {
+    if (!s || esAn(s)) return !!s;
+    const id = String(s.driveFileId || s.fileId || '');
+    if (s === keep || (keepId && id === keepId)) return true;
+    return false;
+  });
+  return ids.length > 0;
+}
+window.informePurgarEntregasPreviasAlAprobar = informePurgarEntregasPreviasAlAprobar;
+
 async function driveRenameInstitutional(fileId, newName) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;

@@ -23573,6 +23573,11 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       prog(18,'Actualizando documentos…');
       try{ok=await driveRenombrarSoporteActivoExp(expId,taskId,'aprobado');}catch(errR){console.warn('verificarTaskExp rename:',errR);}
     }
+    const tInfPur=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+    if(tInfPur&&tInfPur.informeContrato&&typeof informePurgarEntregasPreviasAlAprobar==='function'){
+      prog(24,'Quitando entregas anteriores del informe…');
+      try{await informePurgarEntregasPreviasAlAprobar(tInfPur);}catch(errI){console.warn('verificarTaskExp informe purge:',errI);}
+    }
     if(!ok){
       try{
         const tChk=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
