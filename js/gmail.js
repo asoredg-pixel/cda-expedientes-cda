@@ -2314,6 +2314,47 @@ async function informePurgarEntregasPreviasAlAprobar(t) {
 }
 window.informePurgarEntregasPreviasAlAprobar = informePurgarEntregasPreviasAlAprobar;
 
+/** Localiza la carpeta «Informe N (…)» sin crearla. */
+async function informeResolverCarpetaDrive(t) {
+  if (!t || !t.informeContrato) return '';
+  const directa = String(t._drive_folder_id || '').trim();
+  if (directa) return directa;
+  if (typeof _driveGetBestToken !== 'function' || typeof driveContratoInformeFolderNames !== 'function' || typeof _driveFindFolderInParent !== 'function') return '';
+  const token = _driveGetBestToken();
+  if (!token) return '';
+  const nombres = driveContratoInformeFolderNames(t.informeContrato);
+  const rootId = typeof DRIVE_ROOT_RECURSOS_ID !== 'undefined' ? DRIVE_ROOT_RECURSOS_ID : '18oV-qm2J4OX1lIoITcqhIs2WJ-iHFk29';
+  try {
+    const contratos = await _driveFindFolderInParent(token, 'Contratos', rootId);
+    if (!contratos || !contratos.id) return '';
+    const anio = await _driveFindFolderInParent(token, nombres.anio, contratos.id);
+    if (!anio || !anio.id) return '';
+    const contrato = await _driveFindFolderInParent(token, nombres.contrato, anio.id);
+    if (!contrato || !contrato.id) return '';
+    const informe = await _driveFindFolderInParent(token, nombres.informe, contrato.id);
+    return informe && informe.id ? String(informe.id) : '';
+  } catch (err) {
+    console.warn('informeResolverCarpetaDrive:', err);
+    return '';
+  }
+}
+/** Borra la carpeta del informe y todo lo que haya dentro (PDF, soportes, Act). */
+async function informeEliminarCarpetaDrive(t) {
+  if (!t || !t.informeContrato || typeof driveDeleteFolderRecursive !== 'function') return false;
+  const folderId = await informeResolverCarpetaDrive(t);
+  if (!folderId) return false;
+  try {
+    const ok = await driveDeleteFolderRecursive(folderId);
+    if (ok) t._drive_folder_id = '';
+    return !!ok;
+  } catch (err) {
+    console.warn('informeEliminarCarpetaDrive:', err);
+    return false;
+  }
+}
+window.informeResolverCarpetaDrive = informeResolverCarpetaDrive;
+window.informeEliminarCarpetaDrive = informeEliminarCarpetaDrive;
+
 async function driveRenameInstitutional(fileId, newName) {
   const token = _driveGetBestToken();
   if (!token || !fileId) return false;
