@@ -30009,8 +30009,17 @@ function submitCrearActLibre(){
     plazoDias:plazoMeta.plazo,vence:plazoMeta.vence||'',prioritaria:prior,
     comentarios:[],historial:[{tipo:'asignacion',fecha:hoy(),ts:Date.now(),por:taskComentarioAutor(),nota:'Actividad sin expediente creada'}],soportes:[],notasDoc:[]
   });
+  t._pending_fs_sync=true;
+  t._pending_fs_at=Date.now();
   actividadesLibres.push(t);
-  saveLS();closeTaskModal();renderActividades();notif('Actividad '+cod+' creada y asignada a '+responsables.join(', '),'ok');
+  try{if(typeof persistExpLocal==='function')persistExpLocal();}catch(errL){console.warn('crearActLibre local:',errL);}
+  closeTaskModal();renderActividades();notif('Actividad '+cod+' creada y asignada a '+responsables.join(', '),'ok');
+  const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:null;
+  if(persistFn){
+    persistFn().then(function(ok){
+      if(!ok&&typeof notif==='function')notif('La actividad quedó en este equipo; no se pudo sincronizar. Se reintentará.','err');
+    }).catch(function(err){console.warn('crearActLibre persist:',err);});
+  }else if(typeof saveLS==='function')saveLS();
 }
 function conActCoEjSummaryHtml(tasks){
   const co=(tasks||[]).filter(t=>!t.eliminada&&taskEsMultiAsignada(t)).length;

@@ -692,8 +692,22 @@ function pickMejorActLibre(a,b){
   if(bF&&!aF)return b;
   return b;
 }
+/** Alta recién creada (solo asignación, sin entrega): el snapshot viejo no debe borrarla. */
+function actLibreEsAltaReciente(t){
+  if(!t||t.eliminada||t.fechaReportada||t.fechaAtendida)return false;
+  if((t.soportes||[]).length)return false;
+  const ts=actLibreEventTs(t);
+  if(!ts||(Date.now()-ts)>15*60*1000)return false;
+  const h=t.historial||[];
+  if(!h.length)return true;
+  return h.every(function(x){return x&&(x.tipo==='asignacion'||x.tipo==='creacion');});
+}
 function actLibreKeepLocalOnly(t){
   if(!t||!t.id||t.eliminada)return false;
+  if(typeof _actLibresQuitadosIds!=='undefined'&&_actLibresQuitadosIds.has(String(t.id)))return false;
+  // Alta de «+ crear actividad»: aunque el guardado ya haya limpiado el flag, el snapshot
+  // diferido (lista anterior) no debe hacerla desaparecer.
+  if(actLibreEsAltaReciente(t))return true;
   if(!t._pending_fs_sync)return false;
   const at=Number(t._pending_fs_at)||0;
   // Solo conservar huérfanos locales con sync pendiente reciente (evita resucitar borrados remotos)
