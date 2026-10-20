@@ -3379,6 +3379,22 @@ function taskDocAprobadoCiudadano(t){
   if(hasDraft&&!t.publicado)return false;
   return !!(t.publicado||t.verificadoPor||(t.historial||[]).some(h=>h.tipo==='verificacion'));
 }
+/** Consulta ciudadana: lo más reciente primero; sin fecha, al final. */
+function ciudadanoDocsOrdenReciente(docs){
+  (docs||[]).forEach(function(d,i){if(d&&d._ord==null)d._ord=i;});
+  (docs||[]).sort(function(a,b){
+    const fa=String((a&&a.fecha)||'').slice(0,10);
+    const fb=String((b&&b.fecha)||'').slice(0,10);
+    if(fa!==fb){
+      if(!fa)return 1;
+      if(!fb)return -1;
+      return fb.localeCompare(fa);
+    }
+    return (b._ord||0)-(a._ord||0);
+  });
+  return docs;
+}
+window.ciudadanoDocsOrdenReciente=ciudadanoDocsOrdenReciente;
 function getDocsAprobadosCiudadano(e){
   const docs=[];
   (e.tasks||[]).forEach(t=>{
@@ -3599,6 +3615,7 @@ async function buscarExpCiudadano(){
       });
     });
   }
+  ciudadanoDocsOrdenReciente(docs);
   const docsHtml=docs.length?docs.map(function(d){
     const ico=(d.mime||'').includes('pdf')||String(d.url||'').includes('pdf')?'📄':'📎';
     const nom=d.label||'Documento';
