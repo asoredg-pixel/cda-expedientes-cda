@@ -11,10 +11,10 @@
 const REQ_TERM_UNIDAD='habiles';
 const REQ_VERIF_ORIGEN='req_verif_agrupada';
 const REQ_POR_VENCER_DIAS=3;
-const REQ_PALETA_GRACIA_HABILES=3;
+const REQ_PALETA_GRACIA_HABILES=5;
 const REQ_GESTION_CTX_TTL_MS=3*60*60*1000;
 const REQ_PAL_ACTO_AVISO_HABILES=30;
-const REQ_PAL_MORA_DIAS=15;
+const REQ_PAL_MORA_DIAS=5;
 const REQ_PAL_GESTION_KEYS=['palGestionRef','palGestionEn','palGestionPor','palGestionDesc','palGestionTaskIds'];
 const REQ_ESTADOS={
   en_termino:{lbl:'En término',bg:'var(--gnl)',fg:'var(--gn)',bd:'#9fe1cb'},
@@ -651,10 +651,10 @@ function reqPaletaVisible(){
   if(!reqPuedeVerificar())return false;
   return !(typeof esVistaActividadesDepto==='function'&&!esVistaActividadesDepto());
 }
-/** Vencido (o incumplido sin gestionar) y pasados los días hábiles de gracia. */
+/** Vencido (o incumplido sin gestionar) desde el 5.º día hábil después del vencimiento. */
 function reqPaletaEntra(x){
   if(!x||(x.estado!=='vencido'&&x.estado!=='incumplio'))return false;
-  return reqDiasHabilesEntre(x.vence,reqHoy())>REQ_PALETA_GRACIA_HABILES;
+  return reqDiasHabilesEntre(x.vence,reqHoy())>=REQ_PALETA_GRACIA_HABILES;
 }
 function reqPalEsGestionItem(x){return !!(x&&(x.fuente==='acto'||x.fuente==='factura'||x.fuente==='acuerdo'));}
 function _reqPalActoTask(e,a){
@@ -665,7 +665,7 @@ function _reqPalActoTask(e,a){
 }
 function _reqPalFacSig(f){return f?[f.tipo,f.ref,f.venc,f.valor].map(function(v){return String(v||'');}).join('|'):'';}
 /**
- * Resoluciones a ≤30 días hábiles de vencer (o vencidas) y facturas / acuerdos de pago con ≥15 días calendario de mora.
+ * Resoluciones a ≤30 días hábiles de vencer (o vencidas) y facturas / acuerdos de pago a los 5 días calendario del vencimiento.
  * Sin registros pendientes de aprobación ni actos cuya notificación siga en revisión del encargado.
  */
 function _reqPalEntradasExp(e,out){
@@ -782,7 +782,7 @@ function reqPaletaRowsHtml(q,colSpan){
   });
   window._reqPaletaEntries=rows;
   if(!rows.length)
-    return '<tr><td colspan="'+colSpan+'" class="emp">Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_DIAS+' días de mora.</td></tr>';
+    return '<tr><td colspan="'+colSpan+'" class="emp">Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_DIAS+' días después del vencimiento.</td></tr>';
   const colNotif=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
   return rows.map(function(x,i){return _reqPaletaRowHtml(x,i,colNotif);}).join('');
 }

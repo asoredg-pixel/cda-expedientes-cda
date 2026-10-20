@@ -88,8 +88,8 @@ function expBase() {
     { actoAdminId: 'aRev', tipo: 'Resolución', numero: 'RV', vencimiento: '2026-09-01' },
   ]
   const facturas = [
-    { tipo: 'Seguimiento', ref: 'F15', valor: '100000', venc: '2026-09-15' },
-    { tipo: 'Seguimiento', ref: 'F14', valor: '100000', venc: '2026-09-16' },
+    { tipo: 'Seguimiento', ref: 'F5', valor: '100000', venc: '2026-09-25' },
+    { tipo: 'Seguimiento', ref: 'F4', valor: '100000', venc: '2026-09-26' },
     { tipo: 'Seguimiento', ref: 'FPag', valor: '100000', venc: '2026-08-01', pago: '2026-08-02' },
     { tipo: 'Seguimiento', ref: 'ACU', valor: '300000', venc: '2026-08-01', acuerdoPago: true, acuerdoCuotas: [
       { fecha: '2026-08-01', monto: '100000', pago: '2026-08-01' },
@@ -157,11 +157,22 @@ describe('Paleta Requerimientos — coordinador (solo consulta)', () => {
   })
 })
 
+describe('Paleta Requerimientos — término a los 5 días hábiles', () => {
+  it('entra cuando ya pasaron 5 días desde el vencimiento y no antes', () => {
+    const entra = vence => sst.reqPaletaEntra({ estado: 'vencido', vence })
+    // 2026-09-30 es miércoles. 23/09 cumple 5 días hábiles; 24/09 solo 4.
+    expect(entra('2026-09-23')).toBe(true)
+    expect(entra('2026-09-24')).toBe(false)
+    expect(entra('2026-09-30')).toBe(false)
+    expect(sst.reqPaletaEntra({ estado: 'en_termino', vence: '2026-09-01' })).toBe(false)
+  })
+})
+
 describe('Paleta Requerimientos — facturas y acuerdos', () => {
-  it('factura con 15 días calendario entra; con 14 no; pagada, al día o pendiente de aprobación no', () => {
+  it('factura a los 5 días del vencimiento entra; a los 4 no; pagada, al día o pendiente de aprobación no', () => {
     exps = [expBase()]
     const k = claves().filter(s => !s.startsWith('acto:')).sort()
-    expect(k).toEqual(['acuerdo:ACU', 'factura:F15'])
+    expect(k).toEqual(['acuerdo:ACU', 'factura:F5'])
   })
 
   it('acuerdo toma la cuota más antigua sin pagar', () => {
@@ -187,7 +198,7 @@ describe('Gestión (✔) y reaparición', () => {
     expect(rows.find(x => x.actoAdminId === 'a30')).toBeUndefined()
 
     const f0 = JSON.parse(e._facturas_extra)[0]
-    expect(f0.palGestionRef).toBe('f:2026-09-15')
+    expect(f0.palGestionRef).toBe('f:2026-09-25')
     expect(f0.palGestionDesc).toBe('Cobro persuasivo')
     expect(f0.palGestionPor).toBe('Encargado NCA')
 
