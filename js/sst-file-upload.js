@@ -245,7 +245,7 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   const aplicar = async function () {
     // Documento principal de entrega devuelta: se conserva en Drive para comparar versiones (se borra al aprobar).
     // Anexos: sí se eliminan de Drive y no quedan pestaña.
-    const conservarCorr = !!(it.corrPrev && !it.esAnexo);
+    const conservarCorr = !!it.corrPrev || (typeof driveArchivoReferenciado === 'function' && driveArchivoReferenciado(it.driveFileId));
     if (it.driveFileId && !conservarCorr && typeof driveDeleteInstitutional === 'function') {
       try { await driveDeleteInstitutional(it.driveFileId); } catch (err) {
         console.warn('sstFileRemove drive:', err);
@@ -284,8 +284,8 @@ async function sstFileRemove(ctxKey, itemId, listId) {
   if (it.corrPrev) {
     sstFileConfirmQuitar({
       title: 'Quitar de la entrega anterior',
-      message: '¿Quitar «' + (it.nombre || 'archivo') + '» de la entrega anterior?',
-      detail: 'Se eliminará de Drive.',
+      message: '¿Quitar «' + (it.nombre || 'archivo') + '» de esta entrega?',
+      detail: 'Queda para el encargado hasta que apruebe. No se borra de Drive ahora.',
       confirmLabel: 'Sí, quitar'
     }, function () { aplicar(); });
     return;
@@ -423,7 +423,8 @@ function sstFileOnMainPickApply(inputEl, opts, old) {
   const f = inputEl && inputEl.files && inputEl.files[0];
   const ctx = sstFileStagingCtx(ctxKey);
   if (old) {
-    if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional === 'function') {
+    const yaEnEntrega = !!old.corrPrev || (typeof driveArchivoReferenciado === 'function' && driveArchivoReferenciado(old.driveFileId));
+    if (old.driveFileId && !yaEnEntrega && typeof driveDeleteInstitutional === 'function') {
       driveDeleteInstitutional(old.driveFileId).catch(function () {});
     }
     if (old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}
@@ -463,8 +464,8 @@ function sstFileOnMainPick(inputEl, opts) {
       }
       sstFileConfirmQuitar({
         title: 'Reemplazar entrega anterior',
-        message: '¿Reemplazar el informe de la entrega anterior?',
-        detail: 'Se eliminará de Drive.',
+        message: '¿Reemplazar el documento de la entrega anterior?',
+        detail: 'El anterior queda para el encargado hasta que apruebe.',
         confirmLabel: 'Sí, reemplazar'
       }, function () {
         sstFileOnMainPickApply(inputEl, opts, old);
@@ -489,7 +490,8 @@ function sstFileOnAnexosPick(inputEl, opts) {
   if (!ctx.anexos) ctx.anexos = [];
   if (opts.replace) {
     (ctx.anexos || []).forEach(function (old) {
-      if (old && old.driveFileId && typeof driveDeleteInstitutional === 'function') {
+      const anexoYaEnEntrega = !!(old && (old.corrPrev || (typeof driveArchivoReferenciado === 'function' && driveArchivoReferenciado(old.driveFileId))));
+      if (old && old.driveFileId && !anexoYaEnEntrega && typeof driveDeleteInstitutional === 'function') {
         driveDeleteInstitutional(old.driveFileId).catch(function () {});
       }
       if (old && old.blobUrl) try { URL.revokeObjectURL(old.blobUrl); } catch (e) {}

@@ -17446,13 +17446,13 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
             return !!(s&&(s.informe_act||s.es_anexo===true||s.tipo==='anexo_respuesta'
               ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))));
           };
-          // Documento principal (informe / PQRSD / trámite / act. libre): versionar «por corregir» para comparar hasta aprobar.
-          // Anexos: no versionar; si no se reutilizan, salen (sin pestaña) y se borran de Drive.
+          // Principal y anexos de la entrega anterior quedan para el encargado hasta que apruebe.
           (t.soportes||[]).forEach(function(s){
             if(!s||s.anexo_quitado_correccion)return;
             if(!(s.driveInstitutional||s.driveFileId||s.fileId))return;
             if(soporteEsPorCorregir(s))return;
-            if(esAnexoCorr(s))return;
+            const fid=String(s.driveFileId||s.fileId||'').trim();
+            if(fid&&reusados.has(fid))return;
             s.activo=false;
             s.driveEstado='acorregir';
             s.version_historial=true;
@@ -17461,28 +17461,23 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           t.soportes=(t.soportes||[]).filter(function(s){
             if(!s)return false;
             if(s.anexo_quitado_correccion)return false;
-            if(!esAnexoCorr(s))return true;
             const fid=String(s.driveFileId||s.fileId||'').trim();
-            if(fid&&reusados.has(fid))return false;
-            if(fid){
-              if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
-              window._soportesDriveABorrar.push(fid);
-              driveOpEncolarEnTask(t,fid,'borrar');
-            }
-            return false;
+            if(esAnexoCorr(s)&&fid&&reusados.has(fid))return false;
+            return true;
           });
           // Principal reutilizado en la nueva entrega: deja de ser versión «por corregir» (se recrea como vigente)
           if(reusados.size)t.soportes=(t.soportes||[]).filter(function(s){
             return !s||!soporteEsPorCorregir(s)||!reusados.has(String(s.driveFileId||s.fileId||''));
           });
         }else if(esReemplazoPqrsVerificar&&esWfTaskPqrs){
-          const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
-          if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
-          drop.forEach(function(s){
-            const fid=String(s.driveFileId||s.fileId||'').trim();
-            if(fid){window._soportesDriveABorrar.push(fid);driveOpEncolarEnTask(t,fid,'borrar');}
+          (t.soportes||[]).forEach(function(s){
+            if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+            if(soporteEsPorCorregir(s))return;
+            s.activo=false;
+            s.driveEstado='acorregir';
+            s.version_historial=true;
+            if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
           });
-          t.soportes=(t.soportes||[]).filter(s=>!s||(!s.driveInstitutional&&!s.driveFileId&&!s.fileId));
         }else if(esNuevaEntrega||esReporteTrasladado){
           // Traslado: la entrega del responsable anterior queda como versión «por corregir» (se borra al aprobar)
           (t.soportes||[]).forEach(function(s){
@@ -17493,13 +17488,14 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
             if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
           });
         }else{
-          const drop=(t.soportes||[]).filter(s=>s&&(s.driveInstitutional||s.driveFileId||s.fileId));
-          if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
-          drop.forEach(function(s){
-            const fid=String(s.driveFileId||s.fileId||'').trim();
-            if(fid){window._soportesDriveABorrar.push(fid);driveOpEncolarEnTask(t,fid,'borrar');}
+          (t.soportes||[]).forEach(function(s){
+            if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+            if(soporteEsPorCorregir(s))return;
+            s.activo=false;
+            s.driveEstado='acorregir';
+            s.version_historial=true;
+            if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
           });
-          t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId&&!s.fileId);
         }
       }
     }
@@ -20231,6 +20227,36 @@ function puedeEliminarEntregaActividad(expId,taskId){
   if(esPqrsRev&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))return true;
   return typeof taskPuedeCorregirSinRevision==='function'&&taskPuedeCorregirSinRevision(t);
 }
+/** Devuelta para corregir: las entregas anteriores se conservan hasta que el encargado apruebe. */
+function taskConservaEntregasHastaAprobar(t){
+  if(!t||t.informeContrato)return false;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  if(est==='Por corregir')return true;
+  if(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='corregir')return true;
+  if((t.historial||[]).some(function(h){
+    return h&&(h.tipo==='ajuste_soporte'||h.revisionPar==='devolucion'||h.revisionPar==='devolucion_nca');
+  }))return true;
+  return (t.soportes||[]).some(function(s){
+    return s&&(s.version_historial||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)));
+  });
+}
+function driveArchivoReferenciado(fileId){
+  fileId=String(fileId||'').trim();
+  if(!fileId)return false;
+  const hit=function(s){
+    if(!s)return false;
+    return String(s.driveFileId||s.fileId||'').trim()===fileId;
+  };
+  const lists=[];
+  (typeof exps!=='undefined'?exps:[]).forEach(function(e){(e&&e.tasks||[]).forEach(function(t){if(t)lists.push(t);});});
+  (typeof actividadesLibres!=='undefined'?actividadesLibres:[]).forEach(function(t){if(t)lists.push(t);});
+  for(let i=0;i<lists.length;i++){
+    if((lists[i].soportes||[]).some(hit))return true;
+  }
+  return false;
+}
+window.taskConservaEntregasHastaAprobar=taskConservaEntregasHastaAprobar;
+window.driveArchivoReferenciado=driveArchivoReferenciado;
 function eliminarEntregaActividadConfirm(expId,taskId){
   if(typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,'ambos'))return;
   if(!puedeEliminarEntregaActividad(expId,taskId)){notif('No puede eliminar esta entrega','err');return;}
@@ -20254,6 +20280,8 @@ function eliminarEntregaActividadConfirm(expId,taskId){
         :('¿Eliminar la entrega de «'+lbl+'»?')),
       detail:esInforme
         ?'Se anula el informe como si no se hubiera entregado: se borran de Drive el PDF, los soportes y la carpeta del informe (no queda en Recursos).'
+        :(!esAuto&&typeof taskConservaEntregasHastaAprobar==='function'&&taskConservaEntregasHastaAprobar(t))
+        ?'La entrega anterior sigue visible para el encargado, para comparar versiones. Se borra de Drive solo cuando apruebe la última. La actividad vuelve a Por ejecutar para que cargue la nueva.'
         :esAuto
         ?(tieneExp
           ?('Se eliminan documentos/anexos de Drive y se liberan N° de factura, oficio, concepto o acto. El '+(esPqrsConf?'PQRSD':'expediente')+' y sus datos de registro (interesado, radicación, etc.) se conservan para no volver a digitarlos. La actividad de entrega no quedará en Por ejecutar.')
@@ -20331,16 +20359,19 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       }
     }catch(errRet){console.warn('eliminarEntrega registro:',errRet);}
   }
+  const conservaVersiones=!desdeNotif&&!t.informeContrato&&!esAuto&&taskConservaEntregasHastaAprobar(t);
   const fileIds=[];
   const pushFid=function(id){
     const fid=String(id||'').trim();
     if(fid&&fileIds.indexOf(fid)<0)fileIds.push(fid);
   };
+  if(!conservaVersiones){
   (t.soportes||[]).forEach(function(s){
     if(!s)return;
     pushFid(s.driveFileId||s.fileId);
   });
-  if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getPqrsWorkflow==='function'){
+  }
+  if(!conservaVersiones&&e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getPqrsWorkflow==='function'){
     const wf=getPqrsWorkflow(e);
     (wf.documentos||[]).forEach(function(d){
       if(!d)return;
@@ -20473,7 +20504,18 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     if(tk.conceptoReqId)delete tk.conceptoReqId;
     if(tk.actoAdminId)delete tk.actoAdminId;
     if(tk.esActoAdmin)delete tk.esActoAdmin;
-    tk.soportes=[];
+    if(conservaVersiones){
+      (tk.soportes||[]).forEach(function(s){
+        if(!s||!(s.driveInstitutional||s.driveFileId||s.fileId))return;
+        if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return;
+        s.activo=false;
+        s.driveEstado='acorregir';
+        s.version_historial=true;
+        if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
+      });
+    }else{
+      tk.soportes=[];
+    }
     tk.notasDoc=[];
     tk.fechaReportada='';
     tk.fechaAtendida='';
@@ -20526,9 +20568,11 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       fecha:hoy(),
       ts:Date.now(),
       por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||''),
-      nota:revParTec
+      nota:conservaVersiones
+        ?'Entrega retirada para una nueva versión — los documentos anteriores quedan para el encargado hasta que apruebe'
+        :(revParTec
         ?('Entrega retirada de la revisión de '+revParTec.profesional+' — vuelve a Por ejecutar de '+revParTec.tecnico+' (sin documentos ni N° de registro de la entrega)')
-        :'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos ni N° de registro de la entrega)'
+        :'Entrega eliminada — actividad vuelve a Por ejecutar (sin documentos ni N° de registro de la entrega)')
     });
   });
   if(!ok){notif('No se pudo eliminar la entrega','err');return false;}
@@ -20574,6 +20618,8 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     ?'🗑 Informe eliminado — se borraron archivos y carpeta de Drive'
     :esAuto
     ?'🗑 Autoentrega cancelada — la actividad no queda en Por ejecutar'
+    :conservaVersiones
+    ?'La entrega anterior queda visible para el encargado hasta que apruebe. Puede cargar la nueva.'
     :'🗑 Entrega eliminada — la actividad vuelve a Por ejecutar','ok');
   closeTaskModal();
   if(!esAuto){
@@ -23702,7 +23748,7 @@ function driveOpsCompletarAtendida(t,e){
   const antes=(t._drive_ops||[]).length;
   const vivos={};
   (t.soportes||[]).forEach(function(s){
-    if(!s||s.activo===false||s.version_historial)return;
+    if(!s)return;
     const id=typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):String(s.driveFileId||s.fileId||'');
     if(id)vivos[id]=true;
   });

@@ -2528,6 +2528,7 @@ async function driveFetchFileBlob(fileId) {
 window.driveFetchFileBlob = driveFetchFileBlob;
 
 async function driveDeleteInstitutional(fileId) {
+  if (typeof driveArchivoReferenciado === 'function' && driveArchivoReferenciado(fileId)) return false;
   const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
   if (!tokens.length) {
     const t = _driveGetBestToken();
@@ -2567,6 +2568,7 @@ async function _driveVerArchivoConTokens(fileId) {
 }
 /** 'ok' borrado, 'gone' ya no existe, 'pendiente' esta cuenta no puede. Sin avisos. */
 async function driveIntentarBorrarSilencioso(fileId) {
+  if (typeof driveArchivoReferenciado === 'function' && driveArchivoReferenciado(fileId)) return 'pendiente';
   const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
   if (!fileId || !tokens.length) return 'pendiente';
   for (let i = 0; i < tokens.length; i++) {

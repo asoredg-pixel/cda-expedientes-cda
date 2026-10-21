@@ -107,11 +107,13 @@ describe('Informe devuelto: nueva entrega como borrador', () => {
     expect(staging['enviar-soporte:ACT-1:T1']).toBeUndefined()
   })
 
-  it('quitar un archivo lo saca del registro de la actividad', () => {
+  it('quitar un anexo lo deja en el registro para el encargado', () => {
     const t = { informeContrato: { numero: '045', n: 1 }, estado: 'Por corregir', soportes: sops.map(s => ({ ...s })) }
     const { c } = ctxEr(t)
     c.informeCorreccionOnQuitar({ driveFileId: 'S2', esAnexo: true, corrPrev: { expId: 'ACT-1', taskId: 'T1' } })
-    expect(t.soportes.map(s => s.id)).toEqual(['v1', 'm', 'a1', 'n'])
+    const an = t.soportes.find(s => s.driveFileId === 'S2')
+    expect(an.version_historial).toBe(true)
+    expect(an.corr_descartado).toBe(true)
   })
 
   it('quitar pide confirmación; el informe previo solo se reemplaza con archivo y confirmación', () => {

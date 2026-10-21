@@ -248,13 +248,15 @@ describe('Quitar en la nueva entrega de una PQRSD', () => {
     return { t, e, m, persisted: () => persist }
   }
 
-  it('anexo quitado: sale de la actividad, de los documentos de la PQRSD y de los soportes de respuesta', () => {
+  it('anexo quitado: queda en la actividad para el encargado hasta que apruebe', () => {
     const s = escenario()
     s.m.c.informeCorreccionOnQuitar({ driveFileId: 'AN1', esAnexo: true, corrPrev: { expId: 'PQRS-0001', taskId: 'T9' } })
-    expect(s.t.soportes.some(x => x.driveFileId === 'AN1')).toBe(false)
-    expect(s.e.wf.documentos.map(d => d.fileId)).toEqual(['MAIN', 'AN2'])
-    expect(s.e._pqrs_respuesta_soportes.map(x => x.fileId)).toEqual(['MAIN'])
-    expect(s.persisted()).toBe(1)
+    const an = s.t.soportes.find(x => x.driveFileId === 'AN1')
+    expect(an.version_historial).toBe(true)
+    expect(an.corr_descartado).toBe(true)
+    expect(s.e.wf.documentos.map(d => d.fileId)).toEqual(['MAIN', 'AN1', 'AN2'])
+    expect(s.e._pqrs_respuesta_soportes.map(x => x.fileId)).toEqual(['AN1', 'MAIN'])
+    expect(s.persisted()).toBe(0)
   })
 
   it('principal quitado: se conserva «por corregir» para comparar (no se borra del registro)', () => {
@@ -266,9 +268,9 @@ describe('Quitar en la nueva entrega de una PQRSD', () => {
     expect(s.persisted()).toBe(0)
   })
 
-  it('en Drive: el principal precargado no se elimina al quitarlo; los anexos sí', () => {
+  it('en Drive: ni el principal ni el anexo precargados se eliminan al quitarlos', () => {
     const body = extraer(up, ['sstFileRemove'])
-    expect(body).toMatch(/conservarCorr\s*=\s*!!\(it\.corrPrev\s*&&\s*!it\.esAnexo\)/)
+    expect(body).toMatch(/conservarCorr\s*=\s*!!it\.corrPrev/)
   })
 })
 

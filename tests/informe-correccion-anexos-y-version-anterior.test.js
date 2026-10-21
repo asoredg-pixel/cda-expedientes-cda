@@ -74,14 +74,16 @@ describe('Informe devuelto: anexos como primera entrega y versión anterior para
     expect(staging.k.main).toBeNull()
   })
 
-  it('quitar un anexo lo saca del registro', () => {
+  it('quitar un anexo lo deja para el encargado', () => {
     const t = { informeContrato: { n: 1 }, estado: 'Por corregir', soportes: sops() }
     const { c } = ctxEr(t)
     c.informeCorreccionOnQuitar({ driveFileId: 'G1', esAnexo: true, corrPrev: { expId: 'ACT-1', taskId: 'T1' } })
-    expect(t.soportes.map(s => s.id)).toEqual(['m', 'a1'])
+    const an = t.soportes.find(s => s.id === 'g')
+    expect(an.version_historial).toBe(true)
+    expect(an.corr_descartado).toBe(true)
   })
 
-  it('Drive: el informe devuelto no se borra al quitarlo ni al reemplazarlo; los anexos sí', async () => {
+  it('Drive: ni el informe ni el anexo devueltos se borran al quitarlos', async () => {
     const borrados = []
     const ctx = { main: { id: 'x', corrPrev: {}, driveFileId: 'INF', esAnexo: false }, anexos: [{ id: 'y', corrPrev: {}, driveFileId: 'G1', esAnexo: true }] }
     const c = createContext({
@@ -94,8 +96,8 @@ describe('Informe devuelto: anexos como primera entrega y versión anterior para
     runInContext(extraer(up, ['sstFileRemove']), c)
     await c.sstFileRemove('k', 'x', 'l')
     await c.sstFileRemove('k', 'y', 'l')
-    expect(borrados).toEqual(['G1'])
-    expect(extraer(up, ['sstFileOnMainPickApply'])).toContain('if (old.driveFileId && !old.corrPrev && typeof driveDeleteInstitutional')
+    expect(borrados).toEqual([])
+    expect(extraer(up, ['sstFileOnMainPickApply'])).toContain('yaEnEntrega')
   })
 
   it('Comparar: los anexos no se rotulan «Anexo por corregir»', () => {
