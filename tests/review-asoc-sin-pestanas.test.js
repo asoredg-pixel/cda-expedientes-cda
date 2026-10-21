@@ -91,3 +91,36 @@ describe('Asociar desde Ver PQRSD sin pestañas', () => {
     expect(c.asociados).toEqual([['PQ-1', 'PQ-2', 'pqrs']])
   })
 })
+
+describe('Aviso de asociado visible y permanente', () => {
+  it('no se cierra solo y queda por encima de Ver PQRSD', () => {
+    const core = read('js/core.js')
+    const aviso = extraerFunciones(core, ['avisoVinculoAsociado'])
+    expect(aviso).toContain('autoCloseMs:0')
+    expect(aviso).toContain('requireAck:true')
+    expect(core).toContain('elevateOverlayAboveModals(ov,100200)')
+    expect(core).toContain("const okMsg='Quedó asociado a '+target._exp+'.'")
+  })
+
+  it('el buscador marca Ya asociado y deja el aviso en el panel', () => {
+    const consulta = read('js/consulta.js')
+    const c = createContext({
+      window: { _reviewAsocCtx: { sourceExp: 'PQ-1', mode: 'pqrs-pick' }, _reviewAsocAviso: null },
+      getExpById: () => ({ _usar_exp_asociados: true, _expedientes_asociados: '["EXP-7"]' }),
+      getExpAsociadosDirectos: () => ['EXP-7'],
+      expAsocMatchNum: (a, b) => String(a) === String(b),
+      escAttr: s => String(s == null ? '' : s),
+      hl: s => String(s || ''),
+      jsStr: s => String(s || ''),
+      getTram: () => null,
+      getNom: () => 'Persona',
+      esPqrsSecretaria: () => false
+    })
+    runInContext(extraerFunciones(consulta, ['reviewAsocYaVinculado', 'reviewAsocPickCardHtml']), c)
+    expect(c.reviewAsocYaVinculado('EXP-7')).toBe(true)
+    const html = c.reviewAsocPickCardHtml({ tipo: 'exp', e: { _exp: 'EXP-7' } })
+    expect(html).toContain('Ya asociado')
+    expect(html).not.toContain('confirmReviewAsocPick')
+    expect(consulta).toContain('id="review-asoc-aviso"')
+  })
+})

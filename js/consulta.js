@@ -1109,6 +1109,14 @@ function matchActLibre(t,q){
   if(parts.some(function(v){return String(v||'').toLowerCase().includes(ql);}))return true;
   return false;
 }
+function reviewAsocYaVinculado(targetExp){
+  const ctx=window._reviewAsocCtx||{};
+  const source=String(ctx.sourceExp||'').trim();
+  if(!source||typeof getExpById!=='function'||typeof getExpAsociadosDirectos!=='function')return false;
+  const src=getExpById(source);
+  if(!src)return false;
+  return getExpAsociadosDirectos(src).some(function(n){return expAsocMatchNum(n,targetExp);});
+}
 function reviewAsocEsPqrs(e){
   if(typeof expAsocEsRegistroPqrs==='function')return !!expAsocEsRegistroPqrs(e);
   return typeof esPqrsSecretaria==='function'&&!!esPqrsSecretaria(e);
@@ -1168,7 +1176,10 @@ function reviewAsocPickCardHtml(item){
     '<div class="fx" style="gap:6px;margin-top:8px;flex-wrap:wrap">'+
     '<button type="button" class="btn bsm" onclick="reviewAsocVerConsulta(\''+jsStr(e._exp)+'\',\'\',\'exp\')">🔍 Consultar</button>'+
     '<button type="button" class="btn bsm" onclick="reviewAsocVerArchivos(\''+jsStr(e._exp)+'\')">📁 Archivos</button>'+
-    (puedeAsoc?'<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPick(\''+jsStr(e._exp)+'\')">🖇️ Asociar</button>':'')+
+    (puedeAsoc?(reviewAsocYaVinculado(e._exp)
+      ?'<button type="button" class="btn bsm" disabled style="opacity:.9">✓ Ya asociado</button>'
+      :'<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPick(\''+jsStr(e._exp)+'\')">🖇️ Asociar</button>')
+      :'')+
     '</div></div>';
 }
 function renderReviewAsocPickPanel(panelId){
@@ -1182,6 +1193,7 @@ function renderReviewAsocPickPanel(panelId){
     return;
   }
   const q=String(ctx.q||'').trim();
+  const aviso=window._reviewAsocAviso&&window._reviewAsocAviso.msg?window._reviewAsocAviso:null;
   const list=collectReviewAsocCandidatos(q,ctx);
   const hint=ctx.mode==='act-libre'
     ?'Busque por número, nombre, correo del radicado, asunto o actividad sin expediente.'
@@ -1189,6 +1201,7 @@ function renderReviewAsocPickPanel(panelId){
       ?'Busque la PQRSD por número, interesado, asunto, correo de radicación u otros datos.'
       :'Busque por número, interesado, asunto, correo de radicación, actividad sin expediente u otros datos.');
   body.innerHTML=
+    (aviso?'<div id="review-asoc-aviso" style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:#e7f6ee;border:1px solid #1a7a4a;color:#145c38;font-size:13px;font-weight:600">✓ '+escAttr(aviso.msg)+'</div>':'')+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
     (reviewAsocPuedeCrearExp(ctx)
       ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
@@ -1262,6 +1275,7 @@ function cerrarReviewAsocPanel(){
     resetOverlayElevation(panel);
   }
   window._reviewAsocCtx=null;
+  window._reviewAsocAviso=null;
 }
 function reviewAsocVerArchivos(expId,taskId,libre){
   expId=String(expId||'').trim();
@@ -1359,14 +1373,23 @@ function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   if(!target){notif('No se encontró «'+targetExpNum+'»','err');return false;}
   if(typeof expAsocVinculoPermitido==='function'&&!expAsocVinculoPermitido(target,e)){notif('No puede vincular con ese registro','err');return false;}
   const previos=typeof getExpAsociadosDirectos==='function'?getExpAsociadosDirectos(e):[];
-  if(previos.some(function(n){return expAsocMatchNum(n,target._exp);})){notif('Este vínculo ya está registrado','ok');return true;}
+  if(previos.some(function(n){return expAsocMatchNum(n,target._exp);})){
+    const yaMsg=target._exp+' ya estaba asociado. No hace falta volver a asociarlo.';
+    window._reviewAsocAviso={msg:yaMsg,exp:target._exp,ya:true};
+    if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(yaMsg);
+    else notif(yaMsg,'ok');
+    return true;
+  }
   const nuevos=previos.concat([target._exp]);
   e._usar_exp_asociados=true;
   e._expedientes_asociados=JSON.stringify(nuevos);
   if(typeof aplicarAsociadosBidireccional==='function')aplicarAsociadosBidireccional(sourceExpId,nuevos,previos);
   if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
   if(target&&target._exp!==e._exp&&typeof persistExpedienteGranular==='function')persistExpedienteGranular(target,false);
-  notif('Vinculado a '+target._exp,'ok');
+  const okMsg='Quedó asociado a '+target._exp+'.';
+  window._reviewAsocAviso={msg:okMsg,exp:target._exp,ya:false};
+  if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
+  else notif(okMsg,'ok');
   return true;
 }
 /** Asociación hecha desde el panel lateral de la revisión: no reabrir ni cerrar la ventana, solo repintar. */
@@ -1378,6 +1401,9 @@ function reviewAsocRefrescarEnRevision(){
   return true;
 }
 function confirmReviewAsocPickAct(actTaskId){
+  if(window._reviewAsocBusy)return;
+  window._reviewAsocBusy=true;
+  try{
   actTaskId=String(actTaskId||'').trim();
   const ctx=window._reviewAsocCtx||{};
   if(!actTaskId){notif('Actividad no válida','err');return;}
@@ -1389,7 +1415,12 @@ function confirmReviewAsocPickAct(actTaskId){
   if(typeof vincularActLibreAExpediente==='function'){
     const pack=vincularActLibreAExpediente(actTaskId,target);
     ok=!!pack;
-    if(ok)notif('Actividad vinculada a '+sourceExp,'ok');
+    if(ok){
+      const okMsg='Quedó asociado a '+sourceExp+'.';
+      window._reviewAsocAviso={msg:okMsg,exp:sourceExp,ya:false};
+      if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
+      else notif(okMsg,'ok');
+    }
   }
   if(ok&&reviewAsocRefrescarEnRevision())return;
   if(ok){
@@ -1400,8 +1431,12 @@ function confirmReviewAsocPickAct(actTaskId){
     if(parent.isReviewDelivery&&parent.expId&&parent.taskId&&typeof openTaskCommentsModal==='function')
       openTaskCommentsModal(parent.expId,parent.taskId);
   }
+  }finally{window._reviewAsocBusy=false;}
 }
 function confirmReviewAsocPick(targetExpId){
+  if(window._reviewAsocBusy)return;
+  window._reviewAsocBusy=true;
+  try{
   targetExpId=String(targetExpId||'').trim();
   const ctx=window._reviewAsocCtx||{};
   if(!targetExpId){notif('Seleccione un registro','err');return;}
@@ -1414,7 +1449,10 @@ function confirmReviewAsocPick(targetExpId){
       const pack=vincularActLibreAExpediente(tid,target);
       ok=!!pack;
       if(ok){
-        notif('Actividad vinculada a '+targetExpId,'ok');
+        const okMsg='Quedó asociado a '+targetExpId+'.';
+        window._reviewAsocAviso={msg:okMsg,exp:targetExpId,ya:false};
+        if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
+        else notif(okMsg,'ok');
         cerrarReviewAsocPanel();
         if(typeof renderActividades==='function')renderActividades();
         if(typeof openTaskCommentsModal==='function')openTaskCommentsModal(targetExpId,pack.taskId||tid);
@@ -1438,6 +1476,7 @@ function confirmReviewAsocPick(targetExpId){
     if(parent.isReviewDelivery&&parent.expId&&parent.taskId&&typeof openTaskCommentsModal==='function')
       openTaskCommentsModal(parent.expId,parent.taskId);
   }
+  }finally{window._reviewAsocBusy=false;}
 }
 /** «➕ Crear expediente» (solo Control del trámite) en el rail Asociar de Ver PQRSD: expedientes aún no registrados. */
 function reviewAsocPuedeCrearExp(ctx){

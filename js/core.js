@@ -11026,6 +11026,7 @@ function taskReviewCloseSidePanel(){
   if(typeof cancelPendingAnnotPin==='function')cancelPendingAnnotPin();
   if(window._annotMarking)releaseAnnotMarkingMode();
   taskReviewSyncRailSide('doc');
+  window._reviewAsocAviso=null;
 }
 function taskReviewOpenSidePanel(mode,expId,taskId){
   mode=String(mode||'doc').trim()||'doc';
@@ -13277,7 +13278,10 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   if(!expAsocVinculoPermitido(target,e)){notif('No puede vincular con ese registro','err');return false;}
   const previos=getExpAsociadosDirectos(e);
   if(previos.some(function(n){return expAsocMatchNum(n,target._exp);})){
-    notif('Este vínculo ya está registrado','ok');
+    const yaMsg=target._exp+' ya estaba asociado. No hace falta volver a asociarlo.';
+    window._reviewAsocAviso={msg:yaMsg,exp:target._exp,ya:true};
+    if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(yaMsg);
+    else notif(yaMsg,'ok');
     return true;
   }
   const nuevos=previos.concat([target._exp]);
@@ -13291,7 +13295,10 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   // Persistir la PQRSD y el expediente vinculado (bidireccional puede mutar ambos)
   persistExpedienteGranular(e,false);
   if(target&&target._exp!==e._exp)persistExpedienteGranular(target,false);
-  notif('PQRSD vinculada a '+target._exp,'ok');
+  const okMsg='Quedó asociado a '+target._exp+'.';
+  window._reviewAsocAviso={msg:okMsg,exp:target._exp,ya:false};
+  if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
+  else notif(okMsg,'ok');
   return true;
 }
 function filtrarPqrsExpAsocSug(inp){
@@ -27768,6 +27775,7 @@ function confirmExito(opts){
   if(window._confirmExitoTimer){clearTimeout(window._confirmExitoTimer);window._confirmExitoTimer=null;}
   window._confirmExitoMode=true;
   window._confirmPrecOk=null;
+  window._confirmRequireAck=!!opts.requireAck;
   const tone=opts.tone||'success';
   if(box){
     box.className='confirm-prec-box tone-'+tone+(opts.loading?' confirm-prec-loading':'');
@@ -27811,6 +27819,13 @@ function confirmExito(opts){
     _sstCargaUiReset();
   }
   ov.classList.add('on');
+  // Ver PQRSD queda en z-index 100080: el aviso tiene que pintarse encima, también si el modal se reeleva al repintar.
+  if(typeof elevateOverlayAboveModals==='function'&&typeof taskModalEstaAbierto==='function'&&taskModalEstaAbierto()){
+    elevateOverlayAboveModals(ov,100200);
+    setTimeout(function(){
+      if(ov.classList.contains('on'))elevateOverlayAboveModals(ov,100200);
+    },180);
+  }
   // Mensajes: 1 s (salvo carga, que queda abierta hasta sstCargaDone/Hide)
   const autoMs=opts.autoCloseMs!==undefined?opts.autoCloseMs:(opts.loading?null:SST_MSG_AUTO_MS);
   if(autoMs){
@@ -27837,6 +27852,7 @@ function closeConfirmExito(){
     if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
   }
   window._confirmExitoMode=false;
+  window._confirmRequireAck=false;
   window._confirmRadicacionLoading=false;
   window._sstProgresoUnico=false;
   window._sstCargaFinalHasta=0;
@@ -27846,6 +27862,25 @@ function closeConfirmExito(){
   if(foot)foot.style.display='';
   if(ico){ico.className='';ico.textContent='⚠️';}
   if(box)box.className='confirm-prec-box';
+}
+/** Aviso de vínculo: queda encima de Ver PQRSD y no se cierra solo (hay que pulsar Entendido). */
+function avisoVinculoAsociado(msg){
+  msg=String(msg||'').trim();
+  if(!msg)return;
+  if(typeof confirmExito!=='function'){
+    if(typeof notif==='function')notif(msg,'ok');
+    return;
+  }
+  confirmExito({
+    title:'Asociado',
+    message:msg,
+    detail:'El vínculo quedó registrado. Cierre este aviso con Entendido.',
+    tone:'success',
+    hideFooter:false,
+    confirmLabel:'Entendido',
+    autoCloseMs:0,
+    requireAck:true
+  });
 }
 function esTramitePqrs(tid){
   if(tid==='t_pqrs')return true;
