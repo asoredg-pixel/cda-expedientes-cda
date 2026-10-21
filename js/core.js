@@ -23363,7 +23363,11 @@ function openAutoentregaEncargadoModal(expId,taskId){
   const eEnc=typeof getExpById==='function'?getExpById(expId):null;
   const encComoPqrs=typeof taskEncargadoEntregaComoPqrs==='function'&&taskEncargadoEntregaComoPqrs(t,eEnc);
   if(tit)tit.textContent=(encComoPqrs?'Entregar respuesta':'Autoentrega (encargado)')+' · '+(t.codigo||expId);
-  if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
+  if(modal){
+    modal.classList.remove('task-modal-wide','task-modal-review','task-modal-resp-ver','task-modal-review-wa-side','task-modal-archivos','task-modal-chat','task-modal-viewport-expand','task-modal-compare-expand');
+    modal.classList.add('enviar-modal-only','pqrs-entrega-modal');
+  }
+  document.body.classList.remove('task-review-doc-mode','compare-docs-expanded','task-doc-viewport-expanded');
   const est=estadoTask(t),st=taskEstadoStyle(est);
   body.innerHTML='<div style="margin-bottom:.75rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span></div>'+
     '<div style="font-size:13px;margin-bottom:.75rem">'+escAttr(t.desc||t.actividad||'Actividad')+'</div>'+
