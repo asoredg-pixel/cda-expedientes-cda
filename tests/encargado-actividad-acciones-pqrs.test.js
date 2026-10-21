@@ -1,6 +1,6 @@
 /**
- * Actividad que el encargado se crea y se asigna: en Por ejecutar las acciones
- * son las de una PQRSD (entregar respuesta, enviar a Por firmar, ver), no la autoentrega.
+ * Trámite o actividad que el encargado se asigna: en Por ejecutar la fila es la de
+ * una PQRSD (pin, chat, notas, agenda, ver). Entregar y Por firmar quedan en el visor.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -36,7 +36,7 @@ function ctx() {
     taskEsAtenderPqrs: () => false,
     taskEnFlujoFirmaTramite: () => false
   })
-  runInContext(extraer(core, ['taskCreadaPorEncargado', 'taskMuestraAccionesComoPqrs']), c)
+  runInContext(extraer(core, ['taskCreadaPorEncargado', 'taskEncargadoEntregaComoPqrs', 'taskMuestraAccionesComoPqrs']), c)
   return c
 }
 
@@ -54,20 +54,27 @@ describe('Encargado: actividad propia con acciones de PQRSD', () => {
     expect(c.taskCreadaPorEncargado({ origen: 'responsable', creadaPorEncargado: true })).toBe(false)
   })
 
-  it('en Por ejecutar muestra el juego de acciones de PQRSD', () => {
+  it('un trámite ya creado, sin marca ni historial, usa la fila de la PQRSD', () => {
     const c = ctx()
-    const t = {
-      estado: 'En ejecución',
-      historial: [{ tipo: 'asignacion', nota: 'Asignada a CARLOS ANDRES QUINTERO SANTOS' }]
-    }
-    expect(c.taskMuestraAccionesComoPqrs(t, { _exp: 'SOD-00065-26' })).toBe(true)
-    expect(c.taskMuestraAccionesComoPqrs({ estado: 'Atendida', creadaPorEncargado: true }, null)).toBe(false)
+    const sod = { estado: 'En ejecución', actividad: 'Certificado de Viabilidad Ambiental' }
+    expect(c.taskEncargadoEntregaComoPqrs(sod, { _exp: 'SOD-00065-26' })).toBe(true)
+    expect(c.taskMuestraAccionesComoPqrs(sod, { _exp: 'SOD-00065-26' })).toBe(true)
+    expect(c.taskMuestraAccionesComoPqrs({ estado: 'Atendida' }, { _exp: 'SOD-00065-26' })).toBe(false)
+    expect(c.taskMuestraAccionesComoPqrs({ estado: 'En ejecución', informeContrato: { n: 1 } }, null)).toBe(false)
+    const ajeno = ctx()
+    ajeno.esTareaDelEncargado = () => false
+    expect(ajeno.taskMuestraAccionesComoPqrs({ estado: 'En ejecución' }, { _exp: 'SOD-00065-26' })).toBe(false)
     const tb = extraer(core, ['actEncargadoComoPqrsToolbarHtml'])
-    expect(tb).toContain('Entregar respuesta')
-    expect(tb).toContain('Enviar a Por firmar')
+    expect(tb).toContain('ncaActPinBtnHtml')
     expect(tb).toContain('openTaskVerDocumentoResp')
-    expect(tb).not.toContain('submitAutoentregaEncargado')
+    expect(tb).not.toContain('Entregar respuesta')
+    expect(tb).not.toContain('openAutoentregaEncargadoModal')
+    const rail = extraer(core, ['taskReviewActividadVerRailHtml'])
+    expect(rail).toContain('Entregar respuesta')
+    expect(rail).toContain('Enviar a Por firmar')
+    expect(rail).toContain('taskMuestraAccionesComoPqrs')
     const panel = extraer(core, ['renderEnviarPanelHtml'])
+    expect(panel).toContain('taskEncargadoEntregaComoPqrs')
     expect(panel).toContain('submitEntregaEncargadoComoPqrs')
     expect(panel).toContain("modo:encComoPqrs?'enc_acc':'responsable'")
   })

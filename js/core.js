@@ -8738,6 +8738,10 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
   }
   if(puedeAgendarTask(t))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Organizar en mi día" onclick="openAgendaDesdeActividad(\''+r+'\',\''+tid+'\')">📅</button>';
+  if(typeof taskMuestraAccionesComoPqrs==='function'&&taskMuestraAccionesComoPqrs(t,e)){
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn" title="Entregar respuesta" onclick="openAutoentregaEncargadoModal(\''+eid+'\',\''+tidJs+'\')">📤</button>';
+    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" title="Enviar a Por firmar (espera firma del Director)" onclick="tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tidJs+'\',{modo:\'imprimir\'})">✍️</button>';
+  }
   if(enPorFirmar){
     h+=typeof taskReviewImpresoRailBtnHtml==='function'?taskReviewImpresoRailBtnHtml(refExp,taskId,t,e):'';
     if(typeof actPuedeCargarFirmadoPorFirmar==='function'?actPuedeCargarFirmadoPorFirmar():!esModoResponsable())
@@ -11683,19 +11687,26 @@ function taskCreadaPorEncargado(t){
   });
 }
 /**
- * Encargado, actividad propia en Por ejecutar (no PQRSD, no informe, no firma):
- * mismas acciones que una PQRSD en Por ejecutar.
+ * Actividad de trámite (o sin expediente) asignada al encargado, en Por ejecutar.
+ * No exige la marca creadaPorEncargado: un trámite ya guardado (p. ej. SOD-00065-26)
+ * entra igual aunque el historial no se haya conservado.
  */
-function taskMuestraAccionesComoPqrs(t,expAct){
-  if(!taskCreadaPorEncargado(t))return false;
+function taskEncargadoEntregaComoPqrs(t,expAct){
+  if(!t||t.informeContrato)return false;
+  if(t.origen==='oficina_firma'||t.origen==='responsable')return false;
   if(expAct&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,expAct))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return false;
-  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
-  if(!(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
-    &&!(typeof esAdministrador==='function'&&esAdministrador()))return false;
   if(!(typeof esTareaDelEncargado==='function'&&esTareaDelEncargado(t)))return false;
   const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
   return ['En ejecución','Vencida','Por corregir','Parcial'].indexOf(est)>=0;
+}
+/** Misma fila de acciones que una PQRSD en Actividades › Por ejecutar. */
+function taskMuestraAccionesComoPqrs(t,expAct){
+  if(!taskEncargadoEntregaComoPqrs(t,expAct))return false;
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
+  if(!(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    &&!(typeof esAdministrador==='function'&&esAdministrador()))return false;
+  return true;
 }
 /** Expediente ficticio para renderPqrsEntregaCamposHtml con lo ya registrado en la actividad libre. */
 function libreEntregaPqrsStubExp(t,eBase){
@@ -11766,6 +11777,7 @@ window.libreEntregaRespTipoRevision=libreEntregaRespTipoRevision;
 window.libreEntregaRespBannerHtml=libreEntregaRespBannerHtml;
 window.taskLibreUsaEntregaPqrsUi=taskLibreUsaEntregaPqrsUi;
 window.taskCreadaPorEncargado=taskCreadaPorEncargado;
+window.taskEncargadoEntregaComoPqrs=taskEncargadoEntregaComoPqrs;
 window.taskMuestraAccionesComoPqrs=taskMuestraAccionesComoPqrs;
 window.libreEntregaPqrsStubExp=libreEntregaPqrsStubExp;
 window.aplicarLibreEntregaPqrsDatos=aplicarLibreEntregaPqrsDatos;
@@ -19488,7 +19500,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   const autoEnc=modo==='autoentregaEncargado';
   const eExp=getExpById(expId);
   const esPqrsEntrega=!!(eExp&&typeof taskUsaEntregaPqrsUi==='function'&&taskUsaEntregaPqrsUi(t,eExp));
-  const encComoPqrs=autoEnc&&typeof taskCreadaPorEncargado==='function'&&taskCreadaPorEncargado(t)&&!esPqrsEntrega;
+  const encComoPqrs=autoEnc&&typeof taskEncargadoEntregaComoPqrs==='function'&&taskEncargadoEntregaComoPqrs(t,eExp)&&!esPqrsEntrega;
   const librePqrsUi=!finalizarEnc&&(encComoPqrs||(!autoEnc&&(
     (!eExp&&typeof taskLibreUsaEntregaPqrsUi==='function'&&taskLibreUsaEntregaPqrsUi(t))
     ||(!!eExp&&typeof taskPqrsActividadPosCierre==='function'&&taskPqrsActividadPosCierre(t,eExp)))));
@@ -23348,8 +23360,8 @@ function openAutoentregaEncargadoModal(expId,taskId){
   const body=document.getElementById('task-modal-body');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov||!body)return;
-  const encComoPqrs=typeof taskCreadaPorEncargado==='function'&&taskCreadaPorEncargado(t)
-    &&!(typeof taskEsAtenderPqrs==='function'&&typeof getExpById==='function'&&taskEsAtenderPqrs(t,getExpById(expId)));
+  const eEnc=typeof getExpById==='function'?getExpById(expId):null;
+  const encComoPqrs=typeof taskEncargadoEntregaComoPqrs==='function'&&taskEncargadoEntregaComoPqrs(t,eEnc);
   if(tit)tit.textContent=(encComoPqrs?'Entregar respuesta':'Autoentrega (encargado)')+' · '+(t.codigo||expId);
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only');}
   const est=estadoTask(t),st=taskEstadoStyle(est);
@@ -28600,20 +28612,23 @@ async function pqrsMarcarImpreso(expId){
 window.pqrsMarcarImpreso=pqrsMarcarImpreso;
 window.actImpresoCheckBtnHtml=actImpresoCheckBtnHtml;
 
-/** Por ejecutar, actividad que el encargado se creó: mismas acciones que una PQRSD. */
+/** Por ejecutar: misma fila que una PQRSD (📌 💬 📝 📅 🔍). Entregar y Por firmar quedan en el visor. */
 function actEncargadoComoPqrsToolbarHtml(t,expAct){
   const ref=t.sinExpediente?(t.codigo||t.exp):(t.exp||t.codigo);
   const eid=jsStr(ref),tid=jsStr(t.id);
   const eesc=escAttr(ref),tesc=escAttr(t.id);
   let h='<span class="sst-act-toolbar">';
-  if(t.sinExpediente)
+  const fil=document.getElementById('f-act-est');
+  const enPend=!!(fil&&String(fil.value||'')==='pend');
+  const pin=enPend&&typeof ncaEncargadoSesionPqrsPin==='function'&&ncaEncargadoSesionPqrsPin()
+    &&typeof ncaActPinBtnHtml==='function'?ncaActPinBtnHtml(t,expAct||{_exp:ref}):'';
+  if(pin)h+=pin;
+  else if(t.sinExpediente)
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar actividad" onclick="event.stopPropagation();abrirPanelActLibre(\''+eid+'\',\''+tid+'\')">✏️</button>';
   else
     h+='<button type="button" class="btn bsm bic act-ico" title="Editar expediente" data-sst-action="editarExpDesdeAct" data-sst-exp="'+eesc+'" data-sst-task="'+tesc+'">✏️</button>';
   h+=taskChatBtnHtml(ref,t.id,t);
   h+=taskNotasInternasBtnHtml(ref,t.id);
-  h+='<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Entregar respuesta" onclick="event.stopPropagation();openAutoentregaEncargadoModal(\''+eid+'\',\''+tid+'\')">📤</button>';
-  h+='<button type="button" class="btn bsm bic act-ico" title="Enviar a Por firmar (espera firma del Director)" onclick="event.stopPropagation();tramiteEnviarAFirmaDesdeRevision(\''+eid+'\',\''+tid+'\',{modo:\'imprimir\'})">✍️</button>';
   if(typeof taskAgendaBtnHtml==='function'){
     const ag=taskAgendaBtnHtml(ref,t.id);
     if(ag)h+=ag;
