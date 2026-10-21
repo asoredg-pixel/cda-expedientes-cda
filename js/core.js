@@ -17467,6 +17467,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
             if(fid){
               if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
               window._soportesDriveABorrar.push(fid);
+              driveOpEncolarEnTask(t,fid,'borrar');
             }
             return false;
           });
@@ -17479,7 +17480,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
           drop.forEach(function(s){
             const fid=String(s.driveFileId||s.fileId||'').trim();
-            if(fid)window._soportesDriveABorrar.push(fid);
+            if(fid){window._soportesDriveABorrar.push(fid);driveOpEncolarEnTask(t,fid,'borrar');}
           });
           t.soportes=(t.soportes||[]).filter(s=>!s||(!s.driveInstitutional&&!s.driveFileId&&!s.fileId));
         }else if(esNuevaEntrega||esReporteTrasladado){
@@ -17496,7 +17497,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
           if(!Array.isArray(window._soportesDriveABorrar))window._soportesDriveABorrar=[];
           drop.forEach(function(s){
             const fid=String(s.driveFileId||s.fileId||'').trim();
-            if(fid)window._soportesDriveABorrar.push(fid);
+            if(fid){window._soportesDriveABorrar.push(fid);driveOpEncolarEnTask(t,fid,'borrar');}
           });
           t.soportes=(t.soportes||[]).filter(s=>!s.driveInstitutional&&!s.driveFileId&&!s.fileId);
         }
@@ -17644,6 +17645,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
     }
   });
   if(ok){
+    if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
     const toDel=(window._soportesDriveABorrar||[]).slice();
     window._soportesDriveABorrar=[];
     if(toDel.length&&typeof driveDeleteInstitutional==='function'){
@@ -23668,6 +23670,151 @@ function limpiarGuiaCorreccionTask(t){
   });
   return trash;
 }
+/** Cola silenciosa: borrar o renombrar en Drive cuando se conecte quien subió el archivo. */
+function driveOpEncolarEnTask(t,fileId,op,nombre){
+  if(!t)return;
+  fileId=String(fileId||'').trim();
+  op=op==='renombrar'?'renombrar':'borrar';
+  nombre=String(nombre||'').trim();
+  if(!fileId)return;
+  if(op==='renombrar'&&!nombre)return;
+  if(!Array.isArray(t._drive_ops))t._drive_ops=[];
+  if(op==='borrar'){
+    t._drive_ops=t._drive_ops.filter(function(x){return !(x&&x.fileId===fileId&&x.op==='renombrar');});
+  }
+  const prev=t._drive_ops.find(function(x){return x&&x.fileId===fileId&&x.op===op;});
+  if(prev){
+    if(op==='renombrar')prev.nombre=nombre;
+    return;
+  }
+  if(op==='renombrar'&&t._drive_ops.some(function(x){return x&&x.fileId===fileId&&x.op==='borrar';}))return;
+  t._drive_ops.push({fileId:fileId,op:op,nombre:nombre,ts:Date.now()});
+}
+function driveOpIdDeUrl(url){
+  const p=typeof parseDrivePreviewUrl==='function'?parseDrivePreviewUrl(url):null;
+  return p&&p.id?String(p.id).trim():'';
+}
+/** Actividad ya aceptada: recupera versiones viejas que quedaron en el historial y el nombre pendiente del vigente. */
+function driveOpsCompletarAtendida(t,e){
+  if(!t||t.informeContrato||!Array.isArray(t.historial))return false;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  if(est!=='Atendida')return false;
+  const antes=(t._drive_ops||[]).length;
+  const vivos={};
+  (t.soportes||[]).forEach(function(s){
+    if(!s||s.activo===false||s.version_historial)return;
+    const id=typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):String(s.driveFileId||s.fileId||'');
+    if(id)vivos[id]=true;
+  });
+  t.historial.forEach(function(h){
+    if(!h||h.tipo!=='soporte')return;
+    const id=driveOpIdDeUrl(h.url);
+    if(!id||vivos[id])return;
+    driveOpEncolarEnTask(t,id,'borrar');
+  });
+  if(typeof buildExpedienteDriveFilename==='function'){
+    (t.soportes||[]).forEach(function(s){
+      if(!s||s.activo===false||s.version_historial)return;
+      const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+      if(esAn)return;
+      const nom=String(s.driveFilename||'');
+      if(!/^(por revisar|revision)[-_ ]/i.test(nom))return;
+      const id=typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):String(s.driveFileId||s.fileId||'');
+      if(!id)return;
+      let nuevo='';
+      try{nuevo=buildExpedienteDriveFilename('aprobado',e||null,t,typeof getUltimoReportadoPor==='function'?getUltimoReportadoPor(t):'',nom,{soporte:s});}catch(errN){nuevo='';}
+      if(nuevo&&nuevo!==nom)driveOpEncolarEnTask(t,id,'renombrar',nuevo);
+    });
+  }
+  return (t._drive_ops||[]).length!==antes;
+}
+function driveOpAplicarNombreLocal(t,fileId,nombre){
+  if(!t||!fileId||!nombre)return;
+  (t.soportes||[]).forEach(function(s){
+    const id=String((s&&(s.driveFileId||s.fileId))||'');
+    if(id!==fileId)return;
+    s.driveFilename=nombre;
+    if(!s.driveEstado||s.driveEstado==='revision'||s.driveEstado==='por_verificar')s.driveEstado='aprobado';
+  });
+}
+function driveOpsHolderDeWf(wf){
+  if(!wf||typeof exps==='undefined'||!Array.isArray(exps))return null;
+  const tid=String(wf.task_id||'').trim();
+  if(!tid)return null;
+  for(let i=0;i<exps.length;i++){
+    const e=exps[i];
+    if(!e||!Array.isArray(e.tasks))continue;
+    const t=e.tasks.find(function(x){return x&&String(x.id)===tid;});
+    if(t)return t;
+  }
+  return null;
+}
+async function driveOpsProcesarSilencioso(){
+  if(window._driveOpsBusy){window._driveOpsRerun=true;return;}
+  if(typeof _driveGetBestToken==='function'&&!_driveGetBestToken())return;
+  window._driveOpsBusy=true;
+  try{
+    const filas=[];
+    const encolarFila=function(e,t,libre,enExp){
+      if(!t)return;
+      const antes=(t._drive_ops||[]).length;
+      if(!enExp){try{driveOpsCompletarAtendida(t,e);}catch(errC){}}
+      const crecio=(t._drive_ops||[]).length!==antes;
+      if(Array.isArray(t._drive_ops)&&t._drive_ops.length)filas.push({e:e,t:t,libre:!!libre,enExp:!!enExp,crecio:crecio});
+    };
+    (typeof exps!=='undefined'?exps:[]).forEach(function(e){
+      (e&&e.tasks||[]).forEach(function(t){encolarFila(e,t,false,false);});
+      if(e&&Array.isArray(e._drive_ops)&&e._drive_ops.length)encolarFila(e,e,false,true);
+    });
+    (typeof actividadesLibres!=='undefined'?actividadesLibres:[]).forEach(function(t){encolarFila(null,t,true,false);});
+    const dirtyExp=[];
+    let dirtyLibre=false;
+    for(let i=0;i<filas.length;i++){
+      const row=filas[i];
+      const arr=row.t._drive_ops||[];
+      const keep=[];
+      let cambio=!!row.crecio;
+      const len0=arr.length;
+      for(let j=0;j<arr.length;j++){
+        const op=arr[j];
+        if(!op||!op.fileId){cambio=true;continue;}
+        let r='pendiente';
+        try{
+          if(op.op==='renombrar'&&op.nombre&&typeof driveIntentarRenombrarSilencioso==='function')
+            r=await driveIntentarRenombrarSilencioso(op.fileId,op.nombre);
+          else if(typeof driveIntentarBorrarSilencioso==='function')
+            r=await driveIntentarBorrarSilencioso(op.fileId);
+        }catch(errOp){r='pendiente';}
+        if(r==='ok'||r==='gone'){
+          cambio=true;
+          if(r==='ok'&&op.op==='renombrar')driveOpAplicarNombreLocal(row.enExp?null:row.t,op.fileId,op.nombre);
+        }else keep.push(op);
+      }
+      if(keep.length!==len0)cambio=true;
+      if(!cambio)continue;
+      row.t._drive_ops=keep;
+      if(row.libre)dirtyLibre=true;
+      else if(row.e&&dirtyExp.indexOf(row.e)<0)dirtyExp.push(row.e);
+    }
+    for(let k=0;k<dirtyExp.length;k++){
+      try{
+        if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(dirtyExp[k],false);
+        else if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(dirtyExp[k],false);
+      }catch(errP){}
+    }
+    if(dirtyLibre&&typeof persistActividadesLibresFirestore==='function'){
+      try{await persistActividadesLibresFirestore();}catch(errL){}
+    }
+  }finally{
+    window._driveOpsBusy=false;
+    if(window._driveOpsRerun){
+      window._driveOpsRerun=false;
+      driveOpsProcesarSilencioso();
+    }
+  }
+}
+window.driveOpEncolarEnTask=driveOpEncolarEnTask;
+window.driveOpsProcesarSilencioso=driveOpsProcesarSilencioso;
 function limpiarSoportesPorCorregirTask(t){
   const trash=[];
   if(!t||!Array.isArray(t.soportes))return trash;
@@ -23737,9 +23884,29 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       if(fid)trashIds.push(fid);
     });
     trash.forEach(function(s){
-      const fid=String(s.driveFileId||s.fileId||'').trim();
-      if(fid)trashIds.push(fid);
+      const fid=String((typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):'')||s.driveFileId||s.fileId||'').trim();
+      if(!fid)return;
+      trashIds.push(fid);
+      driveOpEncolarEnTask(t,fid,'borrar');
     });
+    if(!t.informeContrato&&typeof buildExpedienteDriveFilename==='function'){
+      (t.soportes||[]).forEach(function(s){
+        if(!s||s.activo===false||s.version_historial)return;
+        if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return;
+        const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+        if(esAn)return;
+        const nom=String(s.driveFilename||'');
+        if(!/^(por revisar|revision)[-_ ]/i.test(nom))return;
+        const fid=String((typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):'')||s.driveFileId||s.fileId||'').trim();
+        if(!fid)return;
+        let nuevo='';
+        try{
+          const eNom=typeof getExpById==='function'?getExpById(expId):null;
+          nuevo=buildExpedienteDriveFilename('aprobado',eNom,t,typeof getUltimoReportadoPor==='function'?getUltimoReportadoPor(t):'',nom,{soporte:s});
+        }catch(errN){nuevo='';}
+        if(nuevo&&nuevo!==nom)driveOpEncolarEnTask(t,fid,'renombrar',nuevo);
+      });
+    }
     const fechaC=fecha||hoy();
     // Cierre real: si quedó en Por firmar / Para firma, sale de esa paleta (sin «X Imprimir»).
     if((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))
@@ -23854,6 +24021,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       }catch(errW){}
     }
     doVerify();
+    if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
   })().catch(function(err){console.warn('verificarTaskExp:',err);doVerify();});
 }
 function addTaskComentario(expId,taskId,texto,opts){
@@ -34042,7 +34210,13 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
           if(conExt(doc.nombre)&&(!conExt(doc.driveFilename)||doc.nombre===doc.driveFilename))doc.nombre=newName;
           doc.driveFilename=newName;doc.driveEstado=nuevoEstado;
         }
-        else doc.driveEstado=nuevoEstado;
+        else{
+          doc.driveEstado=nuevoEstado;
+          if(nuevoEstado!=='acorregir'&&nuevoEstado!=='corregir'&&typeof driveOpEncolarEnTask==='function'){
+            const holder=typeof driveOpsHolderDeWf==='function'?driveOpsHolderDeWf(wf):null;
+            if(holder)driveOpEncolarEnTask(holder,fid,'renombrar',newName);
+          }
+        }
       }else doc.driveEstado=nuevoEstado;
     }catch(err){
       console.warn('_pqrsRenombrarDocsDriveWf:',err);
@@ -34092,9 +34266,18 @@ async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
     if(esBasuraCorr(d))trash.push(d);
     else keep.push(d);
   });
+  let destCorr=driveOpsHolderDeWf(wf);
+  if(!destCorr&&e){
+    const tid=String((wf&&wf.task_id)||'').trim();
+    if(tid&&Array.isArray(e.tasks))destCorr=e.tasks.find(function(x){return x&&String(x.id)===tid;})||null;
+    if(!destCorr&&typeof getPqrsAtencionTask==='function')destCorr=getPqrsAtencionTask(e);
+    if(!destCorr)destCorr=e;
+  }
   for(let i=0;i<trash.length;i++){
     const fid=trash[i].fileId||trash[i].driveFileId;
-    if(fid&&typeof driveDeleteInstitutional==='function'){
+    if(!fid)continue;
+    if(destCorr)driveOpEncolarEnTask(destCorr,fid,'borrar');
+    if(typeof driveDeleteInstitutional==='function'){
       try{await driveDeleteInstitutional(fid);}catch(err){console.warn('_pqrsLimpiarVersionesCorreccionWf delete:',err);}
     }
   }
@@ -34129,12 +34312,15 @@ async function _pqrsLimpiarVersionesCorreccionWf(e,wf){
         return true;
       });
       for(let j=0;j<dropIds.length;j++){
-        if(dropIds[j]&&typeof driveDeleteInstitutional==='function'){
+        if(!dropIds[j])continue;
+        driveOpEncolarEnTask(t,dropIds[j],'borrar');
+        if(typeof driveDeleteInstitutional==='function'){
           try{await driveDeleteInstitutional(dropIds[j]);}catch(err){}
         }
       }
     }
   }
+  if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
 }
 /**
  * Al cerrar (notificada / atendida / informativa): en consulta ciudadana y Drive

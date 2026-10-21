@@ -362,6 +362,7 @@ async function loadLS(){
     if(sesionOn)syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending:',e);});
     if(sesionOn)syncPendingActividadesLibresToFirestore().catch(function(e){console.warn('syncActLibres:',e);});
     if(sesionOn&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    if(sesionOn&&typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
   }catch(err){
     if(gen!==_loadLSGen)return;
     console.error('Error cargando Firestore:',err);
@@ -399,6 +400,7 @@ async function reloadExpedientesTrasLogin(){
         if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
         updateSyncIndicator('synced');
         if(typeof papeleraSchedulePurge==='function')papeleraSchedulePurge();
+        if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
         console.log('reloadExpedientesTrasLogin: '+lastCount+' expediente(s) (intento '+(attempt+1)+', deptos='+deptos.join(',')+')');
         return true;
       }

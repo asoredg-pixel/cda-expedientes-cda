@@ -659,6 +659,9 @@ function sstFinalizeGmailConnect() {
   renderSstGmailSesionBloqueo();
   if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
   if (sstGmailSesionActiva()) sstCerrarGmailAttachModal(true);
+  if (typeof driveOpsProcesarSilencioso === 'function') {
+    setTimeout(function() { driveOpsProcesarSilencioso(); }, 800);
+  }
 }
 function sstSolicitarGmailParaAdjuntar(opts) {
   opts = opts || {};
@@ -2293,17 +2296,21 @@ async function informePurgarEntregasPreviasAlAprobar(t) {
   }
   const ids = Object.keys(trash);
   for (let i = 0; i < ids.length; i++) {
+    if (typeof driveOpEncolarEnTask === 'function') driveOpEncolarEnTask(t, ids[i], 'borrar');
     if (typeof driveDeleteInstitutional === 'function') {
       try { await driveDeleteInstitutional(ids[i]); } catch (errD) { console.warn('informe purge delete:', errD); }
     }
   }
+  let okInformeNom = false;
+  let nomInforme = '';
   if (typeof driveRenameInstitutional === 'function' && typeof driveContratoInformeFilename === 'function') {
-    const nom = driveContratoInformeFilename(t.informeContrato, { soportes: [] }, keep.driveFilename || keep.label || 'informe.pdf', {});
+    nomInforme = driveContratoInformeFilename(t.informeContrato, { soportes: [] }, keep.driveFilename || keep.label || 'informe.pdf', {});
     try {
-      const okR = await driveRenameInstitutional(keepId, nom);
-      if (okR) keep.driveFilename = nom;
+      okInformeNom = await driveRenameInstitutional(keepId, nomInforme);
+      if (okInformeNom) keep.driveFilename = nomInforme;
     } catch (errR) { console.warn('informe purge rename:', errR); }
   }
+  if (!okInformeNom && nomInforme && typeof driveOpEncolarEnTask === 'function') driveOpEncolarEnTask(t, keepId, 'renombrar', nomInforme);
   t.soportes = (t.soportes || []).filter(function(s) {
     if (!s || esAn(s)) return !!s;
     const id = String(s.driveFileId || s.fileId || '');
@@ -2544,6 +2551,56 @@ async function driveDeleteInstitutional(fileId) {
   }
   return saw404;
 }
+
+async function _driveVerArchivoConTokens(fileId) {
+  const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?fields=id&supportsAllDrives=true', {
+        headers: { Authorization: 'Bearer ' + tokens[i] }
+      });
+      if (res.ok) return true;
+    } catch (err) {}
+  }
+  return false;
+}
+/** 'ok' borrado, 'gone' ya no existe, 'pendiente' esta cuenta no puede. Sin avisos. */
+async function driveIntentarBorrarSilencioso(fileId) {
+  const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
+  if (!fileId || !tokens.length) return 'pendiente';
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?supportsAllDrives=true', {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer ' + tokens[i] }
+      });
+      if (res.ok) return 'ok';
+    } catch (err) {}
+  }
+  const visible = await _driveVerArchivoConTokens(fileId);
+  return visible ? 'pendiente' : 'gone';
+}
+async function driveIntentarRenombrarSilencioso(fileId, newName) {
+  const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
+  if (!fileId || !newName || !tokens.length) return 'pendiente';
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?supportsAllDrives=true', {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + tokens[i], 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      });
+      if (res.ok) return 'ok';
+    } catch (err) {}
+  }
+  const visible = await _driveVerArchivoConTokens(fileId);
+  return visible ? 'pendiente' : 'gone';
+}
+window.driveIntentarBorrarSilencioso = driveIntentarBorrarSilencioso;
+window.driveIntentarRenombrarSilencioso = driveIntentarRenombrarSilencioso;
 
 /** Lista ids de archivos (no carpetas) dentro de una carpeta Drive. */
 async function driveListFolderFileIds(folderId) {
