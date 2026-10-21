@@ -2737,7 +2737,7 @@ function openEditPqrsSecretariaModal(expId){
   body.innerHTML='<div style="font-size:12px;color:var(--tx2);margin-bottom:10px">Puede modificar todos los datos de la solicitud. Si cambia la oficina destino se registrará un traslado.</div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Fecha de solicitud (ciudadano)</label><input type="date" id="pqrs-edit-fecha-solicitud" value="'+escAttr(e._fecha_solicitud||e._fecha||hoy())+'"></div>'+
-    '<div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="pqrs-edit-fecha-termino" value="'+escAttr(e._pqrs_fecha_termino||'')+'" title="Si el oficio indica un plazo menor a 15 días"></div>'+
+    '<div class="fld"><label>Fecha de término <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label><input type="date" id="pqrs-edit-fecha-termino" value="'+escAttr(e._pqrs_fecha_termino||'')+'" title="Si el oficio indica un plazo distinto a 15 días hábiles"></div>'+
     (puedeEditarFechaRadicacionPqrs()?('<div class="fld"><label>Fecha de radicación <span style="font-weight:400;color:var(--tx3)">(admin)</span></label><input type="date" id="pqrs-edit-fecha" value="'+escAttr(e._fecha||hoy())+'"></div>'):'')+
     '<div class="fld"><label>Tipo de solicitud</label><select id="pqrs-edit-tipo">'+tipoOpts+'</select></div>'+
     '<div class="fld"><label>Medio de recepción</label><select id="pqrs-edit-medio" onchange="onEditPqrsMedioRecepcionChange()">'+medioOpts+'</select></div>'+

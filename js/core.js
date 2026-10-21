@@ -569,6 +569,8 @@ function getPqrsVenceFecha(e){
   if(custom)return custom;
   const plazo=getPqrsPlazoDias(e);
   const inicio=e._fecha_solicitud||e._fecha||hoy();
+  // Ley 1755: 15 días hábiles (festivos Colombia), contados desde el día siguiente a la solicitud.
+  if(typeof addDiasHabilesCO==='function')return addDiasHabilesCO(inicio,plazo);
   return calcVenceDesde(inicio,plazo);
 }
 function pqrsPlazoTaskMeta(e){
@@ -590,16 +592,22 @@ function getPqrsPlazoInfo(e){
   const custom=String(e._pqrs_fecha_termino||'').trim();
   const plazo=custom&&vence?Math.max(1,diasEntre(inicio,vence)):getPqrsPlazoDias(e);
   const hoyStr=hoy();
-  const diasTrans=dias(inicio);
-  const diasRest=vence?diffDias(vence):0;
-  const pct=plazo?Math.min(100,Math.round(diasTrans/plazo*100)):0;
+  const habiles=!custom;
+  const corte=pqrsEstaCerrada(e)?(e._pqrs_respuesta_fecha||hoyStr):hoyStr;
+  const diasTrans=habiles&&typeof diasHabilesEntreCO==='function'
+    ?Math.max(0,diasHabilesEntreCO(inicio,corte))
+    :dias(inicio);
+  const diasRest=vence
+    ?(habiles&&typeof diasHabilesEntreCO==='function'?diasHabilesEntreCO(hoyStr,vence):diffDias(vence))
+    :0;
+  const pct=plazo?Math.min(100,Math.round(Math.max(0,diasTrans)/plazo*100)):0;
   let estado='ok';
   if(pqrsEstaCerrada(e)){
     const respF=e._pqrs_respuesta_fecha||hoyStr;
     estado=(vence&&respF>vence)?'over':'ok';
   }else if(vence&&hoyStr>vence)estado='over';
   else if(vence&&diasRest<=Math.max(2,Math.ceil(plazo*0.25)))estado='warn';
-  return{plazo,inicio,vence,diasTrans,diasRest,pct,estado};
+  return{plazo,inicio,vence,diasTrans,diasRest,pct,estado,habiles};
 }
 function pqrsEstaAtrasada(e){
   if(pqrsEstaCerrada(e))return false;
@@ -629,14 +637,15 @@ function renderPqrsPlazoBarHtml(e){
   if(!p.vence)return'';
   const cls=p.estado==='over'?'over':p.estado==='warn'?'warn':'ok';
   const lbl=p.estado==='over'?'Plazo vencido':p.estado==='warn'?'Próximo a vencer':'A tiempo';
-  const extra=pqrsEstaCerrada(e)?(pqrsRespuestaEnTermino(e)?' · Respondida en término':' · Respondida fuera de término'):(' · '+Math.max(0,p.diasRest)+' día(s) restantes');
+  const extra=pqrsEstaCerrada(e)?(pqrsRespuestaEnTermino(e)?' · Respondida en término':' · Respondida fuera de término'):(' · '+Math.max(0,p.diasRest)+(p.habiles?' día(s) hábiles restantes':' día(s) restantes'));
   const fs=e._fecha_solicitud||'';
   const rad=e._fecha||'';
   const plazoLbl=fs?('Solicitud '+fmtF(fs)+(rad&&rad!==fs?' · Radicado '+fmtF(rad):'')):('Radicado '+fmtF(p.inicio));
-  const plazoNota=e._pqrs_fecha_termino?' · término indicado en oficio':' · plazo legal 15 días';
+  const plazoNota=e._pqrs_fecha_termino?' · término indicado en oficio':(' · plazo legal '+p.plazo+' días hábiles (Colombia)');
+  const plazoUnidad=p.habiles?' día(s) hábiles':' día(s)';
   return '<div class="pqrs-plazo-wrap"><div class="pqrs-plazo-lbl"><span><strong>'+lbl+'</strong> · '+plazoLbl+' → vence '+fmtF(p.vence)+'</span><span>'+p.pct+'%</span></div>'+
     '<div class="pqrs-plazo-track"><div class="pqrs-plazo-fill '+cls+'" style="width:'+p.pct+'%"></div></div>'+
-    '<div style="font-size:10px;color:var(--tx3)">Plazo: '+p.plazo+' día(s)'+plazoNota+extra+'</div></div>';
+    '<div style="font-size:10px;color:var(--tx3)">Plazo: '+p.plazo+plazoUnidad+plazoNota+extra+'</div></div>';
 }
 function pqrsPrioritariaBadge(e){
   return e&&e._pqrs_prioritaria?'<span class="bdg bdg-prior" title="Prioritaria">⚡ Prioritaria</span>':'';
@@ -828,6 +837,17 @@ function taskVenceEfectivo(t){
     &&typeof getPqrsVenceFecha==='function'){
     const pv=String(getPqrsVenceFecha(e)||'').slice(0,10);
     if(pv)return pv;
+  }
+  return String(t.vence||'').slice(0,10);
+}
+/** Vencimiento que cuenta para «Vencida»: el de la PQRSD (días hábiles), no el cacheado en calendario. */
+function taskVenceParaPlazo(t){
+  if(!t)return'';
+  if(typeof taskVenceEfectivo==='function'){
+    try{
+      const v=String(taskVenceEfectivo(t)||'').slice(0,10);
+      if(v)return v;
+    }catch(err){}
   }
   return String(t.vence||'').slice(0,10);
 }
@@ -13528,6 +13548,7 @@ function migrateLegacyAsignados(t){
 function syncTaskAggregateState(t){
   migrateLegacyAsignados(t);
   const asig=t.asignados||[];
+  const venceEst=typeof taskVenceParaPlazo==='function'?taskVenceParaPlazo(t):String(t.vence||'');
   if(asig.length<=1){
     const a=asig[0];
     if(a){
@@ -13542,11 +13563,11 @@ function syncTaskAggregateState(t){
           t.estado='Por verificar';
         }else t.estado='Por corregir';
       }else if(t.fechaReportada&&!t.fechaAtendida)t.estado='Por verificar';
-      else t.estado=(t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
+      else t.estado=(venceEst&&venceEst<hoy())?'Vencida':'En ejecución';
     }else{
       t.fechaReportada='';
       t.fechaAtendida='';
-      t.estado=(t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
+      t.estado=(venceEst&&venceEst<hoy())?'Vencida':'En ejecución';
     }
     return;
   }
@@ -13569,7 +13590,7 @@ function syncTaskAggregateState(t){
     t.fechaReportada='';
     t.fechaAtendida='';
     const pend=asig.some(a=>a.estado!=='atendido');
-    t.estado=(pend&&t.vence&&t.vence<hoy())?'Vencida':'En ejecución';
+    t.estado=(pend&&venceEst&&venceEst<hoy())?'Vencida':'En ejecución';
   }
 }
 function estadoTaskRawFromAsignado(a,t){
@@ -13578,7 +13599,8 @@ function estadoTaskRawFromAsignado(a,t){
   if(a.estado==='atendido'||a.fechaAtendida)return'Atendida';
   if(a.estado==='por_verificar'||a.fechaReportada)return'Por verificar';
   if(a.estado==='por_corregir')return'Por corregir';
-  if(t.vence&&t.vence<hoy())return'Vencida';
+  const venceEst=typeof taskVenceParaPlazo==='function'?taskVenceParaPlazo(t):String(t.vence||'');
+  if(venceEst&&venceEst<hoy())return'Vencida';
   return'En ejecución';
 }
 function estadoTaskForAsignado(t,nombre){
@@ -20835,7 +20857,8 @@ function estadoTaskRaw(t){
     if(anyPorCorr)return'Por corregir';
     const atendCount=asig.filter(a=>a.estado==='atendido').length;
     if(atendCount>0&&atendCount<asig.length)return'Parcial';
-    if(t.vence&&t.vence<hoy()&&asig.some(a=>a.estado!=='atendido'))return'Vencida';
+    const venceEst=typeof taskVenceParaPlazo==='function'?taskVenceParaPlazo(t):String(t.vence||'');
+    if(venceEst&&venceEst<hoy()&&asig.some(a=>a.estado!=='atendido'))return'Vencida';
     return'En ejecución';
   }
   const enFirma=typeof taskFirmaWfActiva==='function'?taskFirmaWfActiva(t):!!(t.firmaWf&&String(t.firmaWf.fase||'').trim()&&String(t.firmaWf.fase).indexOf('cerrada')<0);
@@ -20843,7 +20866,10 @@ function estadoTaskRaw(t){
   if(t.estado==='Por verificar'||(t.fechaReportada&&!t.fechaAtendida))return'Por verificar';
   if(t.fechaAtendida||t.estado==='Atendida'||t.estado==='Completada')return'Atendida';
   if(t.estado==='Por corregir'&&!t.fechaReportada&&!t.fechaAtendida)return'Por corregir';
-  if(t.estado==='Vencida'||(t.vence&&t.vence<hoy()&&!t.fechaReportada&&!t.fechaAtendida&&t.estado!=='Por corregir'))return'Vencida';
+  const venceEst=typeof taskVenceParaPlazo==='function'?taskVenceParaPlazo(t):String(t.vence||'');
+  // «Vencida» guardada con el plazo calendario no se mantiene si el término hábil sigue vigente.
+  if(t.estado==='Vencida'&&!(venceEst&&venceEst>=hoy()))return'Vencida';
+  if(venceEst&&venceEst<hoy()&&!t.fechaReportada&&!t.fechaAtendida&&t.estado!=='Por corregir')return'Vencida';
   return'En ejecución';
 }
 function estadoTask(t){return estadoTaskRaw(normalizeTask(t));}
@@ -25018,7 +25044,7 @@ function openTaskCommentsModal(expId,taskId,opts){
     (typeof bibGuardarEnBibliotecaBarHtml==='function'?bibGuardarEnBibliotecaBarHtml(expId,taskId,t):'')
   ):'';
   if(soloGestion&&tit)tit.textContent='Co-ejecutores · '+(t.codigo||expId);
-  const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(t.vence)+'</span></div>');
+  const statusRow=isReviewDelivery?'':('<div style="margin-bottom:.5rem"><span class="bdg" style="background:'+st.bg+';color:'+st.fg+'">'+estadoTaskLabel(t)+'</span> <span style="font-size:12px;color:var(--tx2)">'+taskResponsablesLabel(t,true)+' · vence '+fmtF(typeof taskVenceEfectivo==='function'?(taskVenceEfectivo(t)||t.vence):t.vence)+'</span></div>');
   if(isReviewDelivery){
     if(!opts.keepStack){
       if(isRespVerCorr||isRespVerEntregaPendiente||isPqrsOrigenView)window._taskReviewSideMode='doc';
@@ -25779,7 +25805,7 @@ function renderTaskConsultaItem(e,t,qs){
     '<span style="flex:1;font-weight:500">'+desc+'</span>'+
     coBtn+
     (respLbl?'<span style="color:var(--tx2);font-size:11px;margin-right:5px;max-width:140px" title="'+escAttr(respLbl)+'">'+escAttr(respLbl)+'</span>':'')+
-    '<span style="color:'+(venc?'var(--rd)':'var(--tx3)')+';font-size:11px">'+fmtF(t.vence)+'</span>'+
+    '<span style="color:'+(venc?'var(--rd)':'var(--tx3)')+';font-size:11px">'+fmtF(typeof taskVenceEfectivo==='function'?(taskVenceEfectivo(t)||t.vence):t.vence)+'</span>'+
     '<span class="bdg" style="margin-left:6px;font-size:10px;background:'+st.bg+';color:'+st.fg+'">'+lbl+'</span>'+
     agBtn+sopBtn+cmtBtn+
     (hist&&!ncChat&&!ns?'<button type="button" class="btn bsm bic" title="Ver historial" onclick="openTaskCommentsModal(\''+escAttr(expId)+'\',\''+escAttr(t.id)+'\')">📋</button>':'')+
@@ -29258,6 +29284,8 @@ function pqrsMatrizDiasRespuesta(e){
   if(!resp)return '';
   const inicio=e._fecha||e._fecha_solicitud||'';
   if(!inicio)return '';
+  if(!String(e._pqrs_fecha_termino||'').trim()&&typeof diasHabilesEntreCO==='function')
+    return String(Math.max(0,diasHabilesEntreCO(inicio,resp)));
   return String(Math.max(0,diasEntre(inicio,resp)));
 }
 function pqrsMatrizDiasParaVencer(e){
@@ -29266,8 +29294,12 @@ function pqrsMatrizDiasParaVencer(e){
   if(pqrsEstaCerrada(e)){
     const wf=getPqrsWorkflow(e);
     const resp=wf.fecha_respuesta||e._pqrs_respuesta_fecha||'';
-    if(resp)return String(diasEntre(resp,p.vence));
+    if(resp){
+      if(p.habiles&&typeof diasHabilesEntreCO==='function')return String(diasHabilesEntreCO(resp,p.vence));
+      return String(diasEntre(resp,p.vence));
+    }
   }
+  if(p.habiles)return String(p.diasRest);
   return String(diffDias(p.vence));
 }
 function buildPqrsMatrizRow(e,item){
@@ -30721,10 +30753,14 @@ function ganttCollectTermDates(list){
       const tram=getTram(e._tramite,e);
       const fi=getFechaEstado(e,'Solicitud')||e._fecha;
       if(ter&&fi){
-        const lim=addDaysDate(fi,ter.plazo);
+        const esPqrs=typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite);
+        const lim=(esPqrs&&typeof getPqrsVenceFecha==='function'?getPqrsVenceFecha(e):'')||addDaysDate(fi,ter.plazo);
         ganttMarkTermDate(map,lim,ter.estado==='venc'||ter.estado==='done-venc'?'venc':ter.estado==='warn'?'warn':'ok');
         const alertaDias=Math.floor(ter.plazo*(Number(tram&&tram.alerta!=null?tram.alerta:80)/100));
-        if(alertaDias>0)ganttMarkTermDate(map,addDaysDate(fi,alertaDias),'warn');
+        if(alertaDias>0){
+          const alertaFecha=(esPqrs&&typeof addDiasHabilesCO==='function')?addDiasHabilesCO(fi,alertaDias):addDaysDate(fi,alertaDias);
+          ganttMarkTermDate(map,alertaFecha,'warn');
+        }
       }
     }
     const st=ganttTaskVenceStatus(t);
@@ -30948,7 +30984,8 @@ function ganttExpTermInfo(expId){
   const ter=calcTerminos(e);
   const fi=getFechaEstado(e,'Solicitud')||e._fecha;
   if(!fi||!ter||!ter.plazo)return null;
-  const lim=addDaysDate(fi,ter.plazo);
+  const esPqrs=typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite);
+  const lim=(esPqrs&&typeof getPqrsVenceFecha==='function'?getPqrsVenceFecha(e):'')||addDaysDate(fi,ter.plazo);
   const tram=getTram(e._tramite,e);
   let col='var(--gn)';
   if(ter.estado==='venc'||ter.estado==='done-venc')col='var(--rd)';
@@ -33361,20 +33398,33 @@ function calcTerminos(e){
   const t=getTram(e._tramite,e);
   const fechaIni=getFechaEstado(e,'Solicitud')||e._fecha;
   if(!t||!fechaIni)return null;
-  const d=dias(fechaIni);
-  const plazo=Number(t.plazo)||60;
+  const esPqrs=typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite);
+  const unidad=esPqrs?'habiles':(t.unidad||'dias');
+  const plazo=Number(t.plazo)||(esPqrs?15:60);
+  const d=(unidad==='habiles'&&typeof diasHabilesEntreCO==='function')
+    ?Math.max(0,diasHabilesEntreCO(String(fechaIni).slice(0,10),hoy()))
+    :dias(fechaIni);
   const alerta=Number(t.alerta)||80;
-  const pct=Math.round((d/plazo)*100);
+  const pct=plazo?Math.round((d/plazo)*100):0;
   const isFin=FINALS.includes(e._etapa)||e._estado==='Atendido'||isArchivadoEstado(e._estado)||e._estado==='Seguimiento';
   let estado='ok';
-  if(isFin){
+  if(esPqrs&&typeof getPqrsVenceFecha==='function'){
+    const vence=getPqrsVenceFecha(e);
+    const pasado=!!(vence&&hoy()>vence);
+    if(isFin){
+      const en=typeof pqrsRespuestaEnTermino==='function'?pqrsRespuestaEnTermino(e):!pasado;
+      estado=en===false?'done-venc':'done-ok';
+    }else if(pasado)estado='venc';
+    else if(pct>=alerta)estado='warn';
+    else estado='ok';
+  }else if(isFin){
     estado=d<=plazo?'done-ok':'done-venc';
   } else {
     if(d>plazo)estado='venc';
     else if(pct>=alerta)estado='warn';
     else estado='ok';
   }
-  return {d,plazo,pct:Math.min(pct,100),estado,isFin,unidad:t.unidad||'dias'};
+  return {d,plazo,pct:Math.min(pct,100),estado,isFin,unidad:unidad};
 }
 function termsBdg(ter){
   if(!ter)return'';

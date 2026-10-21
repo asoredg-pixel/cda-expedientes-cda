@@ -148,6 +148,28 @@ function esDiaHabilCO(fechaStr){
   if(!esDiaHabilCO._cache[y])esDiaHabilCO._cache[y]=festivosColombiaSet(y);
   return !esDiaHabilCO._cache[y].has(s);
 }
+/**
+ * Días hábiles colombianos entre dos fechas.
+ * Cuenta desde el día siguiente a `desde` hasta `hasta` inclusive
+ * (el mismo criterio que addDiasHabilesCO). Negativo si `hasta` es anterior.
+ */
+function diasHabilesEntreCO(desde,hasta){
+  const a=String(desde||'').slice(0,10);
+  const b=String(hasta||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(a)||!/^\d{4}-\d{2}-\d{2}$/.test(b)||a===b)return 0;
+  const inv=b<a;
+  const start=inv?b:a;
+  const end=inv?a:b;
+  let d=new Date(start+'T12:00:00');
+  const endD=new Date(end+'T12:00:00');
+  let n=0,guard=0;
+  while(d<endD&&guard<8000){
+    d.setDate(d.getDate()+1);
+    if(esDiaHabilCO(_isoDateLocal(d)))n++;
+    guard++;
+  }
+  return inv?-n:n;
+}
 /** Suma N días hábiles colombianos a partir del día siguiente a `desde`. */
 function addDiasHabilesCO(desde,n){
   const nNum=Math.max(0,Number(n)||0);

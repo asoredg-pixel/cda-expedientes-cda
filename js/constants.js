@@ -94,7 +94,7 @@ const DEF={
   tiposSancionatorio:['Deforestación','Foco deforestación','Quema','Extracción ilegal de flora','Contaminación','Otro'],
   tramites:[
     {id:'t_pqrs',nombre:'PQRSD',desc:'Petición, queja, reclamo, denuncia y sugerencia',color:'#6d3fa8',
-     plazo:15,alerta:80,unidad:'dias',
+     plazo:15,alerta:80,unidad:'habiles',
      etapas:[],
      etapasSeg:['Seguimiento de respuesta','Verificación de cumplimiento','Cierre'],
      campos:[
@@ -186,7 +186,7 @@ const REG_EDIT_SECS={
 const INST_ROLES={contratista:'Contratista',encargado_depto:'Encargado del departamento',encargado_oficina:'Encargado de oficina'};
 
 // Trámite virtual PQRSD (no persiste en cfg, se usa como fallback)
-const PQRS_TRAM_VIRTUAL={id:'t_pqrs',nombre:'PQRSD',color:'#6366f1',plazo:15,unidad:'dias',alerta:80,campos:[],etapas:[],etapasSeg:[]};
+const PQRS_TRAM_VIRTUAL={id:'t_pqrs',nombre:'PQRSD',color:'#6366f1',plazo:15,unidad:'habiles',alerta:80,campos:[],etapas:[],etapasSeg:[]};
 
 // Retención de mensajes de chat leídos
 const RETENCION_LEIDOS_DIAS=30;
@@ -223,7 +223,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20261021g';
+const SST_BUILD_ID = '20261021h';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 
