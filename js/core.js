@@ -19948,11 +19948,31 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
       if(/^(revision|por revisar)[-_ ]/i.test(nom)||/(?:^|[-_ ])(revision|por revisar)[-_ ]/i.test(nom))return true;
       return !est||est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir'||est==='corregir';
     }
+    // Devolver: solo el documento principal (el que estaba «por revisar») pasa a «por corregir»
+    if(newEstado==='corregir'||newEstado==='acorregir'){
+      if(s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta')return false;
+      if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return false;
+    }
     return true;
   });
-  if(aOk&&list.length>1){
-    const activos=list.filter(function(s){return s.activo!==false&&!s.version_historial;});
-    if(activos.length)list=activos;
+  if(aOk&&list.length){
+    const vigentes=list.filter(function(s){return s.activo!==false&&!s.version_historial;});
+    const base=vigentes.length?vigentes:list;
+    let lastMain=null;
+    base.forEach(function(s){
+      const esAn=s.es_anexo===true||s.esAnexo===true||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+      if(!esAn)lastMain=s;
+    });
+    if(lastMain){
+      const lote=lastMain.loteEntrega;
+      list=base.filter(function(s){
+        if(s===lastMain)return true;
+        const esAn=s.es_anexo===true||s.esAnexo===true||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+        if(!esAn)return false;
+        if(lote&&s.loteEntrega&&s.loteEntrega!==lote)return false;
+        return true;
+      });
+    }
   }
   if(!list.length){
     const activo=getSoporteActivo(t);
@@ -19963,6 +19983,16 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
       if(!activo.driveFileId)activo.driveFileId=fidAct;
       if(!activo.fileId)activo.fileId=fidAct;
       list.push(activo);
+    }
+  }
+  if((newEstado==='corregir'||newEstado==='acorregir')&&list.length
+    &&typeof _driveGetBestToken==='function'&&!_driveGetBestToken()
+    &&typeof sstSolicitarGmailParaAdjuntar==='function'){
+    let okG=false;
+    try{okG=await sstSolicitarGmailParaAdjuntar();}catch(errG){okG=false;}
+    if(!okG){
+      if(typeof notif==='function')notif('Conecte Gmail/Drive para renombrar el documento a «por corregir». En Drive sigue «Por revisar».','warn');
+      return false;
     }
   }
   let any=false;
@@ -19982,6 +20012,12 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
     });
     if(ok)any=true;
   }
+  if((newEstado==='corregir'||newEstado==='acorregir')&&!any&&list.length&&typeof notif==='function'){
+    const sigue=list.some(function(s){
+      return /^(por revisar|revision)[-_ ]/i.test(String((s&&s.driveFilename)||''));
+    });
+    if(sigue)notif('La actividad quedó por corregir, pero el archivo en Drive no se renombró (sigue «Por revisar»). Revise la conexión Drive.','warn');
+  }
   if(any){
     if(esLibre){
       try{
@@ -19993,6 +20029,24 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado){
   }
   return any;
 }
+/** Si ya se devolvió y el PDF sigue «POR REVISAR» en Drive, vuelve a renombrarlo a «por corregir». */
+function driveReintentarNombrePorCorregir(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t||t.informeContrato||typeof driveRenombrarSoporteActivoExp!=='function')return;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  if(est!=='Por corregir')return;
+  const pendiente=(t.soportes||[]).some(function(s){
+    if(!s)return false;
+    if(s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta')return false;
+    if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return false;
+    return /^(por revisar|revision)[-_ ]/i.test(String(s.driveFilename||''));
+  });
+  if(!pendiente)return;
+  driveRenombrarSoporteActivoExp(expId,taskId,'corregir').catch(function(err){
+    console.warn('renombrar por corregir:',err);
+  });
+}
+window.driveReintentarNombrePorCorregir=driveReintentarNombrePorCorregir;
 function devolverTaskAlResponsable(expId,taskId,nota){
   // Solo marca «por corregir» en sistema (historial/campanita). No notificar por correo al responsable.
   const t0=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
@@ -23597,11 +23651,32 @@ function limpiarGuiaCorreccionTask(t){
 function limpiarSoportesPorCorregirTask(t){
   const trash=[];
   if(!t||!Array.isArray(t.soportes))return trash;
+  // Entrega que se aprueba: último principal vigente. Lo demás «por corregir»
+  // o que se quedó «POR REVISAR» (el renombre falló) se elimina.
+  let vigente=null;
+  t.soportes.forEach(function(s){
+    if(!s||s.anexo_quitado_correccion||s.activo===false||s.version_historial)return;
+    if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return;
+    const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'
+      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+    if(esAn)return;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return;
+    vigente=s;
+  });
+  const loteV=vigente&&vigente.loteEntrega;
   t.soportes=t.soportes.filter(function(s){
     if(!s)return false;
-    // Avisos de anexo quitado: sin archivo en Drive
     if(s.anexo_quitado_correccion)return false;
-    if(soporteEsPorCorregir(s)){trash.push(s);return false;}
+    if(vigente&&s===vigente)return true;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return true;
+    if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return true;
+    const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'
+      ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
+    if(esAn&&s.activo!==false&&!s.version_historial&&(!loteV||!s.loteEntrega||s.loteEntrega===loteV))return true;
+    if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)){trash.push(s);return false;}
+    const nom=String(s.driveFilename||s.label||'');
+    const est=String(s.driveEstado||'').toLowerCase();
+    if(/^(por revisar|revision)[-_ ]/i.test(nom)||est==='revision'){trash.push(s);return false;}
     return true;
   });
   return trash;
@@ -24994,6 +25069,8 @@ function openTaskCommentsModal(expId,taskId,opts){
     body.innerHTML=statusRow+bibBar+pqrsDocBanner+asigPanel+sopPanel+hist+chatSep+verifyBar;
   }
   ov.classList.add('on');
+  if(est==='Por corregir'&&typeof driveReintentarNombrePorCorregir==='function')
+    driveReintentarNombrePorCorregir(expId,taskId);
   if(isReviewDelivery){
     document.body.classList.add('task-review-doc-mode');
     window._soporteObsOpen=false;

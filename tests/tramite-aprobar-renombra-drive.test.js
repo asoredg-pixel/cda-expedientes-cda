@@ -95,6 +95,56 @@ describe('driveRenombrarSoporteActivoExp (concepto)', () => {
     expect(sop.driveFilename).toMatch(/^APROBADO /i)
   })
 
+  it('al devolver, el principal POR REVISAR pasa a POR CORREGIR y el anexo no', async () => {
+    const principal = {
+      driveFileId: 'p1',
+      driveFilename: 'POR REVISAR VDA-00011-15 RESOLUCION TRASLADA DERECHOS.pdf',
+      driveEstado: 'acorregir',
+      activo: false,
+      version_historial: true,
+      label: 'Documento principal · por corregir'
+    }
+    const anexo = {
+      driveFileId: 'a1',
+      es_anexo: true,
+      driveFilename: 'POR REVISAR VDA-00011-15 ANEXO.pdf',
+      driveEstado: 'acorregir',
+      activo: false
+    }
+    const t = { id: 't1', actividad: 'Resolución traslada derechos y deberes', estado: 'Por corregir', soportes: [principal, anexo] }
+    const e = { _exp: 'VDA-00011-15', _depto: 'guaviare' }
+    const c = ctxRename(t, e)
+    const ok = await c.driveRenombrarSoporteActivoExp('VDA-00011-15', 't1', 'corregir')
+    expect(ok).toBe(true)
+    expect(c.renombres.map(r => r.fid)).toEqual(['p1'])
+    expect(c.renombres[0].name).toMatch(/^POR CORREGIR /i)
+    expect(c.renombres[0].name).toMatch(/VDA-00011-15/i)
+    expect(principal.driveFilename).toMatch(/^POR CORREGIR /i)
+  })
+
+  it('al aprobar solo renombra el principal vigente, no otro POR REVISAR anterior', async () => {
+    const viejo = {
+      driveFileId: 'OLD',
+      driveFilename: 'POR REVISAR VDA-00011-15 RESOLUCION.pdf',
+      driveEstado: 'revision',
+      activo: true
+    }
+    const actual = {
+      driveFileId: 'NEW',
+      driveFilename: 'POR REVISAR VDA-00011-15 RESOLUCION.pdf',
+      driveEstado: 'revision',
+      activo: true
+    }
+    const t = { id: 't1', actividad: 'Resolución', soportes: [viejo, actual] }
+    const e = { _exp: 'VDA-00011-15', _depto: 'guaviare' }
+    const c = ctxRename(t, e)
+    const ok = await c.driveRenombrarSoporteActivoExp('VDA-00011-15', 't1', 'aprobado')
+    expect(ok).toBe(true)
+    expect(c.renombres.map(r => r.fid)).toEqual(['NEW'])
+    expect(c.renombres[0].name).toMatch(/^APROBADO /i)
+    expect(viejo.driveFilename).toMatch(/^POR REVISAR /i)
+  })
+
   it('no renombra informe de contrato (nombres fijos)', async () => {
     const sop = {
       driveFileId: 'f1',
@@ -108,6 +158,42 @@ describe('driveRenombrarSoporteActivoExp (concepto)', () => {
     const ok = await c.driveRenombrarSoporteActivoExp('X', 't1', 'aprobado')
     expect(ok).toBe(false)
     expect(c.renombres.length).toBe(0)
+  })
+})
+
+describe('limpiarSoportesPorCorregirTask', () => {
+  it('al aprobar borra por corregir y los que siguieron POR REVISAR; deja la entrega vigente', () => {
+    const c = createContext({
+      soporteEsAnexoEntrega: s => !!(s && s.es_anexo),
+      soporteEsDocRadicacion: () => false,
+      esSoporteEnvioCorreoItem: () => false
+    })
+    runInContext(extraer(core, ['soporteEsPorCorregir', 'limpiarSoportesPorCorregirTask']), c)
+    const viejo = {
+      id: 'v', driveFileId: 'OLD',
+      driveFilename: 'POR REVISAR VDA-00011-15 RESOLUCION.pdf',
+      driveEstado: 'revision', activo: false
+    }
+    const corregido = {
+      id: 'c', driveFileId: 'C1',
+      driveFilename: 'POR CORREGIR VDA-00011-15 RESOLUCION.pdf',
+      driveEstado: 'acorregir', version_historial: true, activo: false,
+      label: 'Documento principal · por corregir'
+    }
+    const actual = {
+      id: 'n', driveFileId: 'NEW',
+      driveFilename: 'POR REVISAR VDA-00011-15 RESOLUCION.pdf',
+      driveEstado: 'revision', activo: true, loteEntrega: 'lot2'
+    }
+    const anexo = {
+      id: 'a', es_anexo: true, driveFileId: 'A',
+      driveFilename: 'ANEXO1 POR REVISAR VDA-00011-15.pdf',
+      activo: true, loteEntrega: 'lot2'
+    }
+    const t = { soportes: [viejo, corregido, actual, anexo] }
+    const trash = c.limpiarSoportesPorCorregirTask(t)
+    expect(t.soportes.map(s => s.id)).toEqual(['n', 'a'])
+    expect(trash.map(s => s.id).sort()).toEqual(['c', 'v'])
   })
 })
 

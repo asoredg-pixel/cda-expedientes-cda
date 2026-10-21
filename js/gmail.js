@@ -2709,6 +2709,8 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
       } else {
         soporte.label = 'Documento principal';
       }
+      if (newEstado === 'corregir' || newEstado === 'acorregir')
+        soporte.label = String(soporte.label || 'Documento principal') + ' · por corregir';
     }
     soporte.driveEstado = newEstado;
   }
