@@ -25412,6 +25412,23 @@ function taskHistHoraTxt(h){
   if(!d||isNaN(d.getTime()))return '';
   return d.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
 }
+/** Fecha y hora del hito. Si `fecha` es el día UTC del mismo instante (hoy() después de las 7 p. m.), muestra el día local. */
+function taskHistCuandoTxt(h){
+  if(!h)return '';
+  let d=null;
+  const n=typeof pqrsHistTsNum==='function'?pqrsHistTsNum(h):0;
+  if(n>0)d=new Date(n<1e12?n*1000:n);
+  else if(h.en)d=new Date(h.en);
+  const fecha=String(h.fecha||'').slice(0,10);
+  if(!d||isNaN(d.getTime()))return fecha&&typeof fmtF==='function'?fmtF(fecha):fecha;
+  const localDia=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  let utcDia='';
+  try{utcDia=d.toISOString().slice(0,10);}catch(e){}
+  const hora=d.toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+  if(fecha&&fecha!==localDia&&fecha!==utcDia)return typeof fmtF==='function'?fmtF(fecha):fecha;
+  const diaTxt=typeof fmtF==='function'?fmtF(localDia):localDia;
+  return diaTxt+(hora?' '+hora:'');
+}
 /** Texto de un evento de trazabilidad (sin fecha). '' = no se muestra. */
 function taskHistLineaTxt(h){
   const por=h.por?' · '+escAttr(h.por):'';
@@ -25539,8 +25556,7 @@ function renderTaskHistorialHtml(t){
       }
     }else txt=taskHistLineaTxt(h);
     if(!txt||(out.length&&out[out.length-1].txt===txt))return;
-    const hora=taskHistHoraTxt(h);
-    const cuando=(h.fecha?fmtF(h.fecha):'')+(hora?' '+hora:'');
+    const cuando=taskHistCuandoTxt(h);
     out.push({txt:txt,html:(cuando?'<span style="color:var(--tx3)">'+escAttr(cuando)+'</span> · ':'')+txt});
   });
   return out.map(o=>o.html).join('<br>');

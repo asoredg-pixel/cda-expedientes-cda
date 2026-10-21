@@ -5,7 +5,10 @@
 // =============================================================================
 
 // ── Fechas ────────────────────────────────────────────────────────────────────
-function hoy(){return new Date().toISOString().split('T')[0];}
+function hoy(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 function dias(f){return Math.floor((new Date()-new Date(f))/86400000);}
 function fmtF(f){if(!f||f==='—')return'-';const p=String(f).split('-');if(p.length!==3||isNaN(+p[0])||isNaN(+p[1])||isNaN(+p[2]))return'-';return p[2]+'/'+p[1]+'/'+p[0];}
 /** dd/mm/aaaa hh:mm en hora local (soportes PDF de correo). */
