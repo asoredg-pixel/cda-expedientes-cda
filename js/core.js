@@ -17628,7 +17628,10 @@ function collectEnviarAdjuntos(){
   const tm=window._taskModalCtx;
   const libreHid=document.getElementById('pqrs-entrega-libre');
   const ckLibre=libreHid?String(libreHid.getAttribute('data-ctx')||'').trim():'';
-  if(typeof sstFileCollect==='function'&&(ckLibre||(tm&&tm.mode==='enviar'&&typeof sstFileEnviarCtxKey==='function'))){
+  // Panel «Nueva entrega» del modal de revisión: el contexto sigue en revisión (no mode enviar)
+  // y los soportes precargados viven en el staging, no en el <input type=file> (se vacía al elegir).
+  const sideEntrega=window._taskReviewSideMode==='entrega';
+  if(typeof sstFileCollect==='function'&&(ckLibre||(tm&&(tm.mode==='enviar'||sideEntrega)&&typeof sstFileEnviarCtxKey==='function'))){
     const ck=ckLibre||sstFileEnviarCtxKey(tm.expId,tm.taskId);
     const staged=sstFileCollect(ck);
     if(staged&&(staged.files.length||staged.anexos.length||staged.preUploaded.length)){
