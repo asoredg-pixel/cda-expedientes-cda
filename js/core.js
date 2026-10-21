@@ -28814,7 +28814,8 @@ function renderActRowToolbarHtml(t,expAct){
   const canEditExpDesdeAct=puedeGestionarActividadesDepto()
     ||((esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))
       &&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel());
-  if(canEditExpDesdeAct&&!pendienteRev&&!esRevisadaEnc){
+  // Por firmar: la actividad que el encargado se autoasignó no lleva ✏️ (misma fila que el resto: 💬 📝 🖨️ ✍️ 📤)
+  if(canEditExpDesdeAct&&!pendienteRev&&!esRevisadaEnc&&!enPorFirmarVistaEarly){
     if(typeof ncaPinReemplazaEditarExpPend==='function'&&ncaPinReemplazaEditarExpPend(t,expAct))
       acts+=typeof ncaPqrsPinBtnHtml==='function'?ncaPqrsPinBtnHtml(expAct):'';
     else if(t.sinExpediente){

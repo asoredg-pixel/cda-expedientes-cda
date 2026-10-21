@@ -73,6 +73,8 @@ describe('Encargado: actividad propia con acciones de PQRSD', () => {
     expect(rail).toContain('Entregar respuesta')
     expect(rail).toContain('Enviar a Por firmar')
     expect(rail).toContain('taskMuestraAccionesComoPqrs')
+    const editGate = core.slice(core.indexOf('if(canEditExpDesdeAct&&!pendienteRev&&!esRevisadaEnc'))
+    expect(editGate.slice(0, 160)).toContain('!enPorFirmarVistaEarly')
     const abrir = extraer(core, ['openAutoentregaEncargadoModal'])
     expect(abrir).toContain('task-modal-review')
     expect(abrir).toContain('pqrs-entrega-modal')
