@@ -2355,20 +2355,39 @@ async function informeEliminarCarpetaDrive(t) {
 window.informeResolverCarpetaDrive = informeResolverCarpetaDrive;
 window.informeEliminarCarpetaDrive = informeEliminarCarpetaDrive;
 
+function _driveTokensParaRenombrar() {
+  const out = [];
+  const add = function(t) {
+    t = String(t || '').trim();
+    if (t && out.indexOf(t) < 0) out.push(t);
+  };
+  if (typeof gmailOfiIsTokenValid === 'function' && gmailOfiIsTokenValid() && typeof gmailOfiGetToken === 'function')
+    add(gmailOfiGetToken());
+  add(typeof _driveGetSecretariaToken === 'function' ? _driveGetSecretariaToken() : '');
+  add(typeof _driveGetBestToken === 'function' ? _driveGetBestToken() : '');
+  return out;
+}
 async function driveRenameInstitutional(fileId, newName) {
-  const token = _driveGetBestToken();
-  if (!token || !fileId) return false;
-  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
-    '?supportsAllDrives=true', {
-    method: 'PATCH',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: newName })
-  });
-  if (!res.ok) {
-    console.warn('driveRenameInstitutional:', fileId, res.status);
-    return false;
+  driveRenameInstitutional.lastStatus = 0;
+  const tokens = _driveTokensParaRenombrar();
+  if (!fileId || !tokens.length) return false;
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?supportsAllDrives=true', {
+        method: 'PATCH',
+        headers: { 'Authorization': 'Bearer ' + tokens[i], 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName })
+      });
+      driveRenameInstitutional.lastStatus = res.status;
+      if (res.ok) return true;
+      console.warn('driveRenameInstitutional:', fileId, res.status);
+    } catch (err) {
+      driveRenameInstitutional.lastStatus = 0;
+      console.warn('driveRenameInstitutional:', err);
+    }
   }
-  return true;
+  return false;
 }
 
 async function driveGetFileMeta(fileId) {
@@ -2502,14 +2521,28 @@ async function driveFetchFileBlob(fileId) {
 window.driveFetchFileBlob = driveFetchFileBlob;
 
 async function driveDeleteInstitutional(fileId) {
-  const token = _driveGetBestToken();
-  if (!token || !fileId) return false;
-  const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
-    '?supportsAllDrives=true', {
-    method: 'DELETE',
-    headers: { 'Authorization': 'Bearer ' + token }
-  });
-  return res.ok || res.status === 404;
+  const tokens = typeof _driveTokensParaRenombrar === 'function' ? _driveTokensParaRenombrar() : [];
+  if (!tokens.length) {
+    const t = _driveGetBestToken();
+    if (t) tokens.push(t);
+  }
+  if (!fileId || !tokens.length) return false;
+  let saw404 = false;
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      const res = await fetch(DRIVE_API_BASE + '/files/' + encodeURIComponent(fileId) +
+        '?supportsAllDrives=true', {
+        method: 'DELETE',
+        headers: { 'Authorization': 'Bearer ' + tokens[i] }
+      });
+      if (res.ok) return true;
+      if (res.status === 404) saw404 = true;
+      else console.warn('driveDeleteInstitutional:', fileId, res.status);
+    } catch (err) {
+      console.warn('driveDeleteInstitutional:', err);
+    }
+  }
+  return saw404;
 }
 
 /** Lista ids de archivos (no carpetas) dentro de una carpeta Drive. */

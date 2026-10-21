@@ -41,6 +41,17 @@ describe('_soporteResolveDriveFileId', () => {
   })
 })
 
+describe('devolver no pide permiso extra de Drive', () => {
+  it('no solicita el scope drive completo ni avisa al devolver', () => {
+    expect(gmail).not.toContain("'https://www.googleapis.com/auth/drive'")
+    expect(gmail).not.toContain('function gmailReconectarParaRenombrar')
+    const src = extraer(core, ['driveRenombrarSoporteActivoExp'])
+    expect(src).not.toContain('gmailReconectarParaRenombrar')
+    expect(src).not.toContain('sigue «Por revisar»')
+    expect(core).toContain('que se quedó «POR REVISAR»')
+  })
+})
+
 describe('driveRenombrarSoporteActivoExp (concepto)', () => {
   function ctxRename(t, e) {
     const renombres = []
