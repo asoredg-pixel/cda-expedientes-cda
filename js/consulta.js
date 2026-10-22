@@ -1619,6 +1619,7 @@ function cerrarConsultaPanel(){
   window._conPanelActLibre=null;
   window._conPanelActLibreReadOnly=false;
   window._conPanelPqrsNcaEdit=false;
+  window._conPanelPqrsContableOnly=false;
   window._conPanelDesdeConsulta=false;
   restoreCfgDeptoUsuario();
   if(keepReview){
@@ -1733,6 +1734,10 @@ function renderConSidePanel(){
     if((window._conArchItems||[]).length)setTimeout(()=>initConPanelArchivosPreview(window._conPanelTaskId||null),80);
     setTimeout(function(){
       conPanelColapsarTodasSecciones();
+      if(window._conPanelPqrsContableOnly){
+        const sec=document.querySelector('#con-side-form-wrap #sec-contable');
+        if(sec)sec.open=true;
+      }
       if(window._conPanelFocusActividades){
         conPanelFocusActividadesAsignadas();
         window._conPanelFocusActividades=false;
@@ -1805,6 +1810,13 @@ function conPanelActivarEdicion(expId){
   }
   const pgCon=document.getElementById('pg-con');
   window._conPanelEditMode=true;
+  window._conPanelPqrsContableOnly=false;
+  const eEd=typeof getExpById==='function'?getExpById(expId):null;
+  if(eEd&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(eEd)
+    &&(typeof esModoResponsable==='function'&&esModoResponsable()||typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())
+    &&!(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    &&typeof responsablePuedeEditarContableEnPqrs==='function'&&responsablePuedeEditarContableEnPqrs())
+    window._conPanelPqrsContableOnly=true;
   window._conPanelOpenArchivos=false;
   window._conPanelDesdeConsulta=!!(pgCon&&pgCon.classList.contains('on'));
   window._conPanelActive=expId;
@@ -1837,8 +1849,12 @@ function abrirConsultaExpPanel(expId,opts){
   if(opts.soloExp)window._conPanelExps=[id];
   else window._conPanelExps=hasAsoc?getConPanelExpGroup(id):[id];
   window._conPanelActive=id;
-  // PQRSD: responsable/oficina solo consulta en el panel (edición por flujo PQRSD)
-  if(esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv())&&!esVistaActividadesDepto())opts.edit=false;
+  // PQRSD: el radicado sigue en consulta. Información contable sí se edita si el administrador habilitó esa sección.
+  window._conPanelPqrsContableOnly=false;
+  const pqrsSoloConsulta=esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv())&&!esVistaActividadesDepto();
+  const soloContable=pqrsSoloConsulta&&typeof responsablePuedeEditarContableEnPqrs==='function'&&responsablePuedeEditarContableEnPqrs();
+  if(soloContable)window._conPanelPqrsContableOnly=true;
+  if(pqrsSoloConsulta&&!soloContable)opts.edit=false;
   // Responsable con secciones en Configuración: abrir siempre en edición (igual alta vía Entregar o alta del encargado)
   else if(opts.forceReadOnly!==true
     &&(esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()))

@@ -27181,7 +27181,7 @@ function refreshFacturaFold(el){
 function contableHtml(ev){
   migrarAcuerdoGlobal(ev);
   const extras=facturasData(ev._facturas_extra);
-  return '<details class="form-section"><summary class="form-section-hdr" style="cursor:pointer">Información contable</summary><div class="form-section-body">'+
+  return '<details class="form-section" id="sec-contable"'+(window._conPanelPqrsContableOnly?' open':'')+'><summary class="form-section-hdr" style="cursor:pointer">Información contable</summary><div class="form-section-body">'+
     '<input type="hidden" id="fld__facturas_extra" value=\''+escAttr(ev._facturas_extra||'[]')+'\'><div id="facturas-extra">'+extras.map((f,i)=>facturaRowHtml(f,i)).join('')+'</div><button class="btn bsm" type="button" onclick="addFacturaExtra()">+ Añadir factura</button>'+btnGuardarSeccion()+
   '</div></details>';
 }

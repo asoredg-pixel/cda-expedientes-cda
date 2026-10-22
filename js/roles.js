@@ -382,6 +382,12 @@ function responsablePuedeEditarSec(key){
   const secs=getRegSeccionesResponsableActivo();
   return Array.isArray(secs)&&secs.includes(key);
 }
+/** Responsable con «Información contable» en Configuración: puede marcar pagos también en una PQRSD. */
+function responsablePuedeEditarContableEnPqrs(){
+  if(typeof esModoResponsable!=='function'||(!esModoResponsable()&&!(typeof esModoContratista==='function'&&esModoContratista())))return false;
+  return !!responsablePuedeEditarSec('contable');
+}
+window.responsablePuedeEditarContableEnPqrs=responsablePuedeEditarContableEnPqrs;
 /** Crear desde Registro: encargado/admin, o responsable con facultad «Control del trámite». */
 function puedeCrearExpedienteRegistro(){
   if(typeof esSoloLectura==='function'&&esSoloLectura())return false;
@@ -392,6 +398,7 @@ function puedeCrearExpedienteRegistro(){
 window.puedeCrearExpedienteRegistro=puedeCrearExpedienteRegistro;
 function regSecHtml(key,html){
   if(!html)return '';
+  if(window._conPanelPqrsContableOnly&&key!=='contable')return '';
   if((esModoResponsable()||esModoContratista())&&!responsablePuedeEditarSec(key))return '';
   return html;
 }

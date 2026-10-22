@@ -64,6 +64,14 @@ function mergeTasksForSave(formTasks,prevTasks){
   });
   return merged;
 }
+/** En una PQRSD el responsable solo actualiza facturas y pago; el radicado no se reescribe. */
+function aplicarContableSobreExpediente(prev,data){
+  if(!prev||!data)return prev;
+  ['_facturas_extra','_acuerdo_pago','_acuerdo_dia','_acuerdo_solicitud','_acuerdo_notificacion','_acuerdo_corte','_fac_sol_eval','_fac_sol_eval_ref','_fac_sol_pub','_fac_sol_pub_ref','_fac_sol_venc','_fac_sol_pago','_fac_tra_enabled','_fac_tra_res','_fac_tra_res_ref','_fac_tra_pub','_fac_tra_pub_ref','_fac_tra_venc','_fac_tra_pago','_persuasivo_fecha','_persuasivo_venc','_coactivo_traslado','_enviar_coactivo'].forEach(function(k){
+    if(data[k]!==undefined)prev[k]=data[k];
+  });
+  return prev;
+}
 /** Al corregir el N° de expediente, los vínculos siguen al número nuevo (no queda el anterior suelto). */
 function migrarReferenciasNumeroExpediente(prevId,nextId){
   const a=String(prevId||'').trim();
@@ -177,7 +185,8 @@ function abrirConsultaExpPanelDesdeAct(expId,taskId){
   if(!e){notif('Expediente «'+expId+'» no encontrado','err');return;}
   const t=taskId?getTaskAny(expId,taskId):null;
   const esPqrsNcaAct=e&&t&&taskEsAtenderPqrs(t,e)&&esOficinaPqrsNca();
-  const pqrsRead=esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv());
+  const puedeContablePqrs=typeof responsablePuedeEditarContableEnPqrs==='function'&&responsablePuedeEditarContableEnPqrs();
+  const pqrsRead=esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv())&&!puedeContablePqrs;
   window._conPanelPqrsNcaEdit=!!(esPqrsNcaAct&&!esVistaActividadesDepto());
   const editDept=esVistaActividadesDepto()&&puedeEditarExpPanel();
   let edit=false;
@@ -538,6 +547,12 @@ function guardarExpCore(stayOnForm){
     if(prev._alta_revisada_por)data._alta_revisada_por=prev._alta_revisada_por;
     if(prev._biblioteca_repo_ids!=null)data._biblioteca_repo_ids=prev._biblioteca_repo_ids;
     const prevEstado=prev._estado||'';
+    if(window._conPanelPqrsContableOnly){
+      aplicarContableSobreExpediente(prev,data);
+      exps[idx]=prev;
+      editId=prev._exp||expId;
+      logAudit('Actualizó información contable de PQRSD ['+(prev._exp||expId)+']','pqrsd',prev._exp||expId);
+    }else{
     exps[idx]={...data,historial:rebuildHistorial(data,prev.historial)};
     editId=expId;
     if(numeroCambio){
@@ -551,6 +566,7 @@ function guardarExpCore(stayOnForm){
     if(prevEstado&&data._estado&&prevEstado!==data._estado){
       logAudit('Cambió estado de '+prevEstado+' a '+data._estado+' en ['+expId+']','expedientes',expId);
     }
+    }
   }else{
     const dup=expNumeroDuplicado(expId);
     if(dup){alertRegistroDuplicado(expId,'expediente',dup);return;}
@@ -560,9 +576,11 @@ function guardarExpCore(stayOnForm){
     if(esPqrsExp)logAudit('Creó PQRSD ['+expId+']','pqrsd',expId);
     else logAudit('Creó expediente ['+expId+']','expedientes',expId);
   }
-  upsertPersonaCatalog(data);
-  const nuevosAsoc=data._usar_exp_asociados?expedientesAsociadosData(data._expedientes_asociados):[];
-  aplicarAsociadosBidireccional(expId,nuevosAsoc,prevAsoc);
+  if(!window._conPanelPqrsContableOnly){
+    upsertPersonaCatalog(data);
+    const nuevosAsoc=data._usar_exp_asociados?expedientesAsociadosData(data._expedientes_asociados):[];
+    aplicarAsociadosBidireccional(expId,nuevosAsoc,prevAsoc);
+  }
   if(window._conPanelActive===expId||editId===expId){
     liberarExpLock(expId);
     detenerRenovacionExpLock();
