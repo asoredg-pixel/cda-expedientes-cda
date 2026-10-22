@@ -6,12 +6,35 @@
 // GUARDAR EXPEDIENTE
 // ================================================================
 function mergeTasksForSave(formTasks,prevTasks){
+  const prevList=(prevTasks||[]).map(normalizeTask).filter(Boolean);
   const prevMap={};
-  (prevTasks||[]).map(normalizeTask).forEach(t=>{if(t.id)prevMap[t.id]=t;});
+  prevList.forEach(t=>{if(t&&t.id)prevMap[String(t.id)]=t;});
+  const claimed=new Set();
+  function adoptarPrev(ft){
+    if(!ft)return null;
+    if(ft.id&&prevMap[String(ft.id)])return prevMap[String(ft.id)];
+    if(ft.soportes&&ft.soportes.length)return null;
+    const act=String(ft.actividad||ft.desc||'').trim().toLowerCase();
+    const resp=String(ft.responsable||(ft.responsables&&ft.responsables[0])||'').trim().toLowerCase();
+    if(!act)return null;
+    const cands=prevList.filter(function(p){
+      if(!p||!p.id||claimed.has(String(p.id)))return false;
+      if(String(p.actividad||p.desc||'').trim().toLowerCase()!==act)return false;
+      const pr=String(p.responsable||(p.responsables&&p.responsables[0])||'').trim().toLowerCase();
+      if(resp&&pr&&resp!==pr)return false;
+      return !!((p.soportes&&p.soportes.length)||p.fechaReportada);
+    });
+    return cands.length===1?cands[0]:null;
+  }
   const formIds=new Set();
   const merged=(formTasks||[]).map(ft=>{
-    formIds.add(ft.id);
-    const p=prevMap[ft.id];
+    const p0=adoptarPrev(ft);
+    if(p0){
+      claimed.add(String(p0.id));
+      ft=Object.assign({},ft,{id:p0.id});
+    }
+    if(ft&&ft.id)formIds.add(String(ft.id));
+    const p=p0||(ft&&ft.id?prevMap[String(ft.id)]:null);
     if(!p)return ft;
     return normalizeTask({
       ...p,...ft,
@@ -33,13 +56,39 @@ function mergeTasksForSave(formTasks,prevTasks){
       bibliotecaRepoIds:(ft.bibliotecaRepoIds&&ft.bibliotecaRepoIds.length)?ft.bibliotecaRepoIds:(p.bibliotecaRepoIds||[])
     });
   });
-  (prevTasks||[]).map(normalizeTask).forEach(p=>{
-    if(!p.id||formIds.has(p.id))return;
+  prevList.forEach(p=>{
+    if(!p.id||formIds.has(String(p.id)))return;
     // Conservar eliminadas y entregas autoasignadas por responsable que aún no están en el formulario abierto
     if(p.eliminada||p.autoAsignadaPorResponsable||p.origen==='responsable'||p.fechaReportada||(p.soportes&&p.soportes.length))
       merged.push(p);
   });
   return merged;
+}
+/** Al corregir el N° de expediente, los vínculos siguen al número nuevo (no queda el anterior suelto). */
+function migrarReferenciasNumeroExpediente(prevId,nextId){
+  const a=String(prevId||'').trim();
+  const b=String(nextId||'').trim();
+  if(!a||!b||a===b)return;
+  const aLc=a.toLowerCase();
+  (typeof exps!=='undefined'?exps:[]).forEach(function(e){
+    if(!e)return;
+    let arr=[];
+    try{arr=JSON.parse(e._expedientes_asociados||'[]');}catch(err){arr=[];}
+    if(!Array.isArray(arr)||!arr.length)return;
+    let ch=false;
+    const seen={};
+    const next=[];
+    arr.forEach(function(n){
+      let v=String(n||'').trim();
+      if(!v)return;
+      if(v.toLowerCase()===aLc){v=b;ch=true;}
+      const k=v.toLowerCase();
+      if(seen[k]){ch=true;return;}
+      seen[k]=true;
+      next.push(v);
+    });
+    if(ch)e._expedientes_asociados=JSON.stringify(next);
+  });
 }
 function prevTasksForExp(expId){
   const prevExp=exps.find(x=>x._exp===expId);
@@ -331,7 +380,7 @@ function guardarExpCore(stayOnForm){
     _fecha_seg:getFechaEstado({...fechaCollect,_fechas_estado:fechaCollect._fechas_estado},'Seguimiento')||'',
     _obs_seg:'',
     ...collectDetalleNotas(),
-    _es_pqrs:esCaso,_es_queja:esCaso,
+    _es_pqrs:!!esPqrs,_es_queja:!!esPqrs,
     _tipo_solicitud:esPqrs?gv('fld__tipo_solicitud'):'',
     // Conducta/caso: ya no hay campo en interesado; usar Infracción (_subclase) del control del trámite
     _tipo_sancionatorio:esSanc?(gv('fld__subclase')||gv('fld__tipo_sancionatorio')||''):'',
@@ -469,6 +518,8 @@ function guardarExpCore(stayOnForm){
       data=mergeExpDataPorSecciones(data,exps[idx]||{},secs);
     }
   }
+  const prevExpId=idx>=0?String((exps[idx]&&exps[idx]._exp)||'').trim():'';
+  const numeroCambio=!!(prevExpId&&String(expId||'').trim()!==prevExpId);
   if(idx>=0){
     const prev=exps[idx]||{};
     const dup=expNumeroDuplicado(expId,{excludeExp:prev._exp});
@@ -489,6 +540,11 @@ function guardarExpCore(stayOnForm){
     const prevEstado=prev._estado||'';
     exps[idx]={...data,historial:rebuildHistorial(data,prev.historial)};
     editId=expId;
+    if(numeroCambio){
+      migrarReferenciasNumeroExpediente(prevExpId,expId);
+      if(window._conPanelActive===prevExpId)window._conPanelActive=expId;
+      logAudit('Corrigió N° de expediente '+prevExpId+' → '+expId,'expedientes',expId);
+    }
     const esPqrsExp=esPqrsSecretaria(data)||esTramitePqrs(data._tramite);
     if(esPqrsExp)logAudit('Editó PQRSD ['+expId+']','pqrsd',expId);
     else logAudit('Editó expediente ['+expId+']','expedientes',expId);
@@ -535,7 +591,14 @@ function guardarExpCore(stayOnForm){
       saveExpedienteDoc(deptoActivo,savedExp),
       saveGlobalFirestore()
     ]).then(function(results){
-      updateSyncIndicator(results.every(r=>r!==false)?'synced':'error');
+      const ok=results.every(r=>r!==false);
+      updateSyncIndicator(ok?'synced':'error');
+      if(ok&&numeroCambio&&typeof deleteExpedienteDoc==='function'){
+        deleteExpedienteDoc(savedExp._depto||deptoActivo,{_exp:prevExpId,_depto:savedExp._depto}).then(function(){
+          if(typeof purgeExpFromLocalStorageCache==='function')purgeExpFromLocalStorageCache(prevExpId);
+          if(typeof removeExpLocalBackup==='function')removeExpLocalBackup(prevExpId);
+        });
+      }
     }).catch(function(){
       updateSyncIndicator('error');
     });

@@ -11614,6 +11614,7 @@ function getTareasResponsableActivo(){
         }
       }
     }
+    if(typeof persistUnirEntregaDuplicada==='function')persistUnirEntregaDuplicada(e);
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -11677,6 +11678,7 @@ function getTareasDeptActividades(respFilter){
         }
       }
     }
+    if(typeof persistUnirEntregaDuplicada==='function')persistUnirEntregaDuplicada(e);
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
@@ -11880,6 +11882,43 @@ function getPqrsAtencionTask(e,preferTaskId){
 }
 window.findPqrsAtencionTaskIndex=findPqrsAtencionTaskIndex;
 window.getPqrsAtencionTask=getPqrsAtencionTask;
+/** Copia sin documento junto a la entrega real (mismo nombre, responsable y vencimiento). */
+function unirEntregaDuplicadaSinDocumento(e){
+  if(!e||!Array.isArray(e.tasks))return false;
+  if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))return false;
+  let changed=false;
+  e.tasks.forEach(function(t){
+    if(!t||t.eliminada)return;
+    if(t.soportes&&t.soportes.length)return;
+    const act=String(t.actividad||'').trim().toLowerCase();
+    if(!act)return;
+    const resp=String(t.responsable||(t.responsables&&t.responsables[0])||'').trim().toLowerCase();
+    const par=e.tasks.find(function(p){
+      if(!p||p===t||p.eliminada)return false;
+      if(!(p.soportes&&p.soportes.length))return false;
+      if(String(p.actividad||'').trim().toLowerCase()!==act)return false;
+      const pr=String(p.responsable||(p.responsables&&p.responsables[0])||'').trim().toLowerCase();
+      if(resp&&pr&&resp!==pr)return false;
+      if(t.vence&&p.vence&&String(t.vence)!==String(p.vence))return false;
+      return true;
+    });
+    if(!par)return;
+    t.eliminada=true;
+    if(!Array.isArray(t.historial))t.historial=[];
+    t.historial.push({tipo:'dedupe',fecha:typeof hoy==='function'?hoy():'',nota:'Copia sin documento unificada con la entrega en revisión'});
+    changed=true;
+  });
+  return changed;
+}
+window.unirEntregaDuplicadaSinDocumento=unirEntregaDuplicadaSinDocumento;
+function persistUnirEntregaDuplicada(e){
+  if(!unirEntregaDuplicadaSinDocumento(e))return;
+  if(!window._entregaDedupePersist)window._entregaDedupePersist=new Set();
+  const dk=String(e._exp||'');
+  if(!dk||window._entregaDedupePersist.has(dk))return;
+  window._entregaDedupePersist.add(dk);
+  try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe entrega:',err);}
+}
 /** Une tareas duplicadas «Oficio de respuesta / Atender PQRSD» dejadas por un bug de asignación. */
 function dedupePqrsAtencionTasks(e){
   if(!e||!Array.isArray(e.tasks))return false;

@@ -907,6 +907,8 @@ function getOficinaParaEnvioCorreoPqrs(e){
 }
 function esPqrsSecretaria(e){
   if(!e)return false;
+  // Sancionatorio no es PQRSD aunque un guardado anterior haya dejado _es_pqrs.
+  if(typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(e._tramite))return false;
   if(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite))return true;
   // Respaldo: registros radicados por Secretaría aunque _tramite venga incompleto
   if(e._es_pqrs||e._radicado_secretaria)return true;
