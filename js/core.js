@@ -6121,9 +6121,9 @@ function puedeVerTabAgenda(){
     ||(typeof esOficinaPqrsBasica==='function'&&esOficinaPqrsBasica())
     ||(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv());
 }
-/** Solo encargados de departamentos regionales (Guaviare, Guainía, Vaupés) o cargo Coordinador. */
+/** Departamento de la paleta: Coordinador y Contable usan el de su usuario; el resto, el activo. */
 function getDeptoAgendaAsignacion(){
-  if(typeof esCargoCoordinador==='function'&&esCargoCoordinador()){
+  if((typeof esCargoCoordinador==='function'&&esCargoCoordinador())||(typeof esCargoContable==='function'&&esCargoContable())){
     const d=String(window._usuarioActual&&window._usuarioActual.deptoResponsable||'').trim();
     if(d&&DEPTOS.some(function(x){return x.id===d;}))return d;
     return 'guaviare';
@@ -15486,7 +15486,7 @@ function paintUsuariosCfgTable(){
       '<td style="font-size:12px">'+escAttr(u.email)+'</td>'+
       '<td>'+escAttr(tituloRolFirestore(u.rol))+'</td>'+
       '<td>'+escAttr(labelDeptoResponsableUsuario(u))+'</td>'+
-      '<td>'+escAttr(u.codigo||'—')+(u.cargo==='vital'?' <span class="bdg" style="background:#6d3fa8;color:#fff;font-size:10px">VITAL</span>':'')+(u.cargo==='coordinador'?' <span class="bdg" style="background:#0f766e;color:#fff;font-size:10px">Coordinador</span>':'')+(u.cargo==='profesional'?' <span class="bdg" style="background:#1d4ed8;color:#fff;font-size:10px">Profesional</span>':'')+'</td>'+
+      '<td>'+escAttr(u.codigo||'—')+(u.cargo==='vital'?' <span class="bdg" style="background:#6d3fa8;color:#fff;font-size:10px">VITAL</span>':'')+(u.cargo==='coordinador'?' <span class="bdg" style="background:#0f766e;color:#fff;font-size:10px">Coordinador</span>':'')+(u.cargo==='profesional'?' <span class="bdg" style="background:#1d4ed8;color:#fff;font-size:10px">Profesional</span>':'')+(u.cargo==='contable'?' <span class="bdg" style="background:#b45309;color:#fff;font-size:10px">Contable</span>':'')+'</td>'+
       '<td>'+(act?'<span class="bdg" style="background:var(--gnl);color:var(--gn)">Activo</span>':'<span class="bdg" style="background:var(--rdl);color:var(--rd)">Inactivo</span>')+'</td>'+
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm" '+(_usuariosToggleBusy?'disabled ':'')+'onclick="SST.editarUsuarioFirestore(\''+em+'\')">Editar</button> '+
@@ -15528,7 +15528,7 @@ function buildUsuariosCfgShell(){
     '<div class="fld"><label>Correo Gmail (ID del documento)</label><input type="text" id="usu-fs-email" class="sst-email-chips" data-email-chips-max="1" placeholder="usuario@gmail.com" autocomplete="off"></div>'+
     rolField+
     '<div class="fld"><label>Código de aprobación</label><input type="text" id="usu-fs-codigo" placeholder="NCA-CPG"></div>'+
-    '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option><option value="coordinador">Coordinador (eventos a responsables en Tasks)</option><option value="profesional">Profesional (revisa conceptos)</option></select></div>'+
+    '<div class="fld" id="usu-fs-cargo-wrap" style="display:none"><label>Cargo especial</label><select id="usu-fs-cargo"><option value="">— Ninguno —</option><option value="vital">VITAL (apoyo administrativo firma)</option><option value="coordinador">Coordinador (eventos a responsables en Tasks)</option><option value="profesional">Profesional (revisa conceptos)</option><option value="contable">Contable (cartera en mora: facturas, persuasivos y acuerdos)</option></select></div>'+
     '<div class="fld"><label style="display:flex;align-items:center;gap:6px;margin-top:22px"><input type="checkbox" id="usu-fs-activo" checked style="width:16px;height:16px"> Activo</label></div>'+
     '</div>'+
     '<div class="fx" style="gap:8px;margin-top:8px"><button type="button" id="usu-fs-guardar" class="btn bsm bp" onclick="SST.guardarUsuarioFirestore()">Guardar</button><button type="button" class="btn bsm" onclick="SST.ocultarFormUsuarioFirestore()">Cancelar</button></div>'+
@@ -32128,8 +32128,9 @@ function renderActividades(){
     else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
     else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
     else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='req'&&reqSoloConsulta)sub.textContent='Requerimientos (solo consulta): término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer · Facturas y acuerdos de pago a los 5 días del vencimiento. 🔍 ver el expediente. El encargado registra el cumplimiento o asigna la actividad.';
-    else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer (o vencidas) · Facturas y acuerdos de pago a los 5 días del vencimiento. 🔍 revisar · ✔ cumplió / gestión · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
+    else if(filtroAct==='req'&&typeof esCargoContable==='function'&&esCargoContable())sub.textContent='Cartera en mora de su departamento: facturas, persuasivos vencidos y acuerdos de pago, desde el 3.er día hábil. 🔍 ver el expediente, trámite o PQRSD · ✏️ editar Información contable. Si registra el pago, sale de la paleta.';
+    else if(filtroAct==='req'&&reqSoloConsulta)sub.textContent='Requerimientos (solo consulta): término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer · Facturas y acuerdos de pago al 3.er día hábil del vencimiento. 🔍 ver el expediente. El encargado registra el cumplimiento o asigna la actividad.';
+    else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer (o vencidas) · Facturas y acuerdos de pago al 3.er día hábil del vencimiento. 🔍 revisar · ✔ cumplió / gestión · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
     else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
   }
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();

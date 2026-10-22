@@ -89,7 +89,7 @@ function expBase() {
   ]
   const facturas = [
     { tipo: 'Seguimiento', ref: 'F5', valor: '100000', venc: '2026-09-25' },
-    { tipo: 'Seguimiento', ref: 'F4', valor: '100000', venc: '2026-09-26' },
+    { tipo: 'Seguimiento', ref: 'F4', valor: '100000', venc: '2026-09-28' },
     { tipo: 'Seguimiento', ref: 'FPag', valor: '100000', venc: '2026-08-01', pago: '2026-08-02' },
     { tipo: 'Seguimiento', ref: 'ACU', valor: '300000', venc: '2026-08-01', acuerdoPago: true, acuerdoCuotas: [
       { fecha: '2026-08-01', monto: '100000', pago: '2026-08-01' },
@@ -169,7 +169,7 @@ describe('Paleta Requerimientos — término a los 5 días hábiles', () => {
 })
 
 describe('Paleta Requerimientos — facturas y acuerdos', () => {
-  it('factura a los 5 días del vencimiento entra; a los 4 no; pagada, al día o pendiente de aprobación no', () => {
+  it('factura al 3.er día hábil del vencimiento entra; a los 2 no; pagada, al día o pendiente de aprobación no', () => {
     exps = [expBase()]
     const k = claves().filter(s => !s.startsWith('acto:')).sort()
     expect(k).toEqual(['acuerdo:ACU', 'factura:F5'])

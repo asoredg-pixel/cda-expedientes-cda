@@ -225,8 +225,11 @@ function guardarExp(stayOnForm){
     notif('Error al guardar: '+(err&&err.message?err.message:'revise los datos'),'err');
   }
 }
+function contablePaletaPuedeGuardar(){
+  return !!(window._contablePaletaEdit&&typeof esCargoContable==='function'&&esCargoContable()&&editId);
+}
 function guardarExpCore(stayOnForm){
-  if(esSoloLectura()){notif((typeof esMantenimientoActivo==='function'&&esMantenimientoActivo())?'Modo mantenimiento: solo consulta':'En este modo no puede modificar expedientes','err');return;}
+  if(esSoloLectura()&&!contablePaletaPuedeGuardar()){notif((typeof esMantenimientoActivo==='function'&&esMantenimientoActivo())?'Modo mantenimiento: solo consulta':'En este modo no puede modificar expedientes','err');return;}
   let tid=(document.getElementById('r_tramite')||{}).value||'';
   if(!tid&&editId){const exT=exps.find(x=>x._exp===editId);if(exT)tid=exT._tramite||'';}
   if(!tid){notif('Seleccione un tipo de trámite','err');return;}

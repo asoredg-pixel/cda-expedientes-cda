@@ -1620,6 +1620,7 @@ function cerrarConsultaPanel(){
   window._conPanelActLibreReadOnly=false;
   window._conPanelPqrsNcaEdit=false;
   window._conPanelPqrsContableOnly=false;
+  window._contablePaletaEdit=false;
   window._conPanelDesdeConsulta=false;
   restoreCfgDeptoUsuario();
   if(keepReview){
@@ -1695,7 +1696,7 @@ function renderConSidePanel(){
     const isMain=id===primary;
     return '<button type="button" class="con-panel-tab'+(id===active?' on':'')+(isMain?'':' asoc')+'" data-sst-action="conPanelSelExp" data-sst-exp="'+escAttr(id)+'">'+escAttr(id)+(isMain?'':' ↗')+'</button>';
   }).join('')+'</div>'):'';
-  const canEdit=puedeEditarExpPanel();
+  const canEdit=puedeEditarExpPanel()||!!(window._contablePaletaEdit&&typeof esCargoContable==='function'&&esCargoContable());
   const lockedByOther=!window._conPanelEditMode&&!!getExpLockVigente(e._exp)&&!poseeExpLock(e._exp);
   const lockBanner=window._conPanelLockMsg?('<div style="padding:10px 12px;margin-bottom:10px;border-radius:var(--r);background:var(--aml);border:1px solid #e8c97a;font-size:12px;color:#7a5500;line-height:1.45">'+escAttr(window._conPanelLockMsg)+'</div>'):'';
   const altaBanner=typeof renderAltaResponsableBannerHtml==='function'?renderAltaResponsableBannerHtml(e,{expId:e._exp,showDone:true}):'';
@@ -1850,7 +1851,14 @@ function abrirConsultaExpPanel(expId,opts){
   else window._conPanelExps=hasAsoc?getConPanelExpGroup(id):[id];
   window._conPanelActive=id;
   // PQRSD: el radicado sigue en consulta. Información contable sí se edita si el administrador habilitó esa sección.
+  // Cargo Contable: desde la paleta solo se abre Información contable (expediente o PQRSD).
   window._conPanelPqrsContableOnly=false;
+  window._contablePaletaEdit=!!(opts.contablePaleta&&typeof esCargoContable==='function'&&esCargoContable());
+  if(window._contablePaletaEdit){
+    window._conPanelPqrsContableOnly=true;
+    opts.edit=true;
+    opts.forceReadOnly=false;
+  }
   const pqrsSoloConsulta=esPqrsSecretaria(e)&&(esModoResponsable()||esModoOficinaDeguv())&&!esVistaActividadesDepto();
   const soloContable=pqrsSoloConsulta&&typeof responsablePuedeEditarContableEnPqrs==='function'&&responsablePuedeEditarContableEnPqrs();
   if(soloContable)window._conPanelPqrsContableOnly=true;

@@ -3,7 +3,7 @@
 // - Bloque «Término para cumplir» al aprobar / notificar (días hábiles Colombia).
 // - Bandeja Consolidado › Requerimientos (Cumplió / Incumplió + exportar).
 // - Paleta «Requerimientos» del encargado en Actividades (🔍 revisar · ✔ cumplió · 📌 asignar);
-//   también resoluciones por vencer / vencidas y facturas o acuerdos de pago en mora (✔ = gestión con observación).
+//   también resoluciones por vencer / vencidas y facturas o acuerdos de pago en mora al 3.er día hábil (✔ = gestión con observación).
 // - Actividad agrupada del encargado: retirada (solo se cierran las que existan).
 // Dependencias de runtime resueltas desde el scope global.
 // =============================================================================
@@ -14,7 +14,8 @@ const REQ_POR_VENCER_DIAS=3;
 const REQ_PALETA_GRACIA_HABILES=5;
 const REQ_GESTION_CTX_TTL_MS=3*60*60*1000;
 const REQ_PAL_ACTO_AVISO_HABILES=30;
-const REQ_PAL_MORA_DIAS=5;
+/** Facturas y acuerdos entran a la paleta al 3.er día hábil después del vencimiento (encargado, coordinador y contable). */
+const REQ_PAL_MORA_HABILES=3;
 const REQ_PAL_GESTION_KEYS=['palGestionRef','palGestionEn','palGestionPor','palGestionDesc','palGestionTaskIds'];
 const REQ_ESTADOS={
   en_termino:{lbl:'En término',bg:'var(--gnl)',fg:'var(--gn)',bd:'#9fe1cb'},
@@ -357,9 +358,14 @@ function reqTareasTerminoIncumplido(e){
     return tc.estado==='incumplio'||tc.vence<h;
   });
 }
-/** Coordinador: paleta y consolidado en solo consulta (sin acciones del encargado). */
+/** Coordinador y Contable: paleta en consulta (sin ✔ ni 📌 del encargado). El contable además edita lo contable. */
 function reqPaletaSoloConsulta(){
-  return typeof esCargoCoordinador==='function'&&esCargoCoordinador();
+  return (typeof esCargoCoordinador==='function'&&esCargoCoordinador())
+    ||(typeof esCargoContable==='function'&&esCargoContable());
+}
+/** Contable: solo facturas en mora, persuasivos vencidos y acuerdos de pago vencidos. */
+function reqPaletaSoloCartera(){
+  return typeof esCargoContable==='function'&&esCargoContable();
 }
 /** Departamento del ámbito: el del coordinador o el activo. */
 function reqDeptoAmbito(){
@@ -665,7 +671,7 @@ function _reqPalActoTask(e,a){
 }
 function _reqPalFacSig(f){return f?[f.tipo,f.ref,f.venc,f.valor].map(function(v){return String(v||'');}).join('|'):'';}
 /**
- * Resoluciones a ≤30 días hábiles de vencer (o vencidas) y facturas / acuerdos de pago a los 5 días calendario del vencimiento.
+ * Resoluciones a ≤30 días hábiles de vencer (o vencidas) y facturas / acuerdos de pago al 3.er día hábil del vencimiento.
  * Sin registros pendientes de aprobación ni actos cuya notificación siga en revisión del encargado.
  */
 function _reqPalEntradasExp(e,out){
@@ -709,15 +715,18 @@ function _reqPalEntradasExp(e,out){
         }
       }else if(!f.acuerdoDia)fecha=String(f.venc||'');
     }else fecha=String(f.venc||'');
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasCalEntre(fecha,h)<REQ_PAL_MORA_DIAS)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasHabilesEntre(fecha,h)<REQ_PAL_MORA_HABILES)return;
     const palRef=(esAcu?'c:':'f:')+fecha;
     if(f.palGestionEn&&f.palGestionRef===palRef)return;
     const valor=f.valor&&typeof moneyFmt==='function'?'$'+moneyFmt(f.valor):'';
+    const persVenc=String(f.persVenc||'');
+    const persVencido=!esAcu&&/^\d{4}-\d{2}-\d{2}$/.test(persVenc)&&persVenc<h;
     out.push({
       key:'f|'+exp+'|'+i+'|'+palRef,fuente:esAcu?'acuerdo':'factura',exp:exp,ref:exp,idx:i,sig:_reqPalFacSig(f),
       nombre:nombre,titulo:(esAcu?'Acuerdo de pago · ':'')+String(f.tipo||'Factura')+(f.ref?' · '+f.ref:''),
       detalle:[det,valor?'Valor '+valor:''].filter(Boolean).join(' · '),
-      vence:fecha,palRef:palRef,estado:'vencido',taskId:f.taskId?String(f.taskId):''
+      vence:fecha,palRef:palRef,estado:'vencido',taskId:f.taskId?String(f.taskId):'',
+      persVencido:persVencido,persVenc:persVencido?persVenc:''
     });
   });
 }
@@ -769,6 +778,7 @@ function reqPaletaEntradas(){
   out.sort(function(a,b){
     return String(a.vence||'').localeCompare(String(b.vence||''))||String(a.exp||'').localeCompare(String(b.exp||''));
   });
+  if(reqPaletaSoloCartera())return out.filter(function(x){return x.fuente==='factura'||x.fuente==='acuerdo';});
   return out;
 }
 function reqPaletaContar(){
@@ -781,8 +791,12 @@ function reqPaletaRowsHtml(q,colSpan){
     return [x.exp,x.nombre,x.titulo,x.reqNum,x.oficio,x.detalle].join(' ').toLowerCase().indexOf(ql)>=0;
   });
   window._reqPaletaEntries=rows;
-  if(!rows.length)
-    return '<tr><td colspan="'+colSpan+'" class="emp">Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_DIAS+' días después del vencimiento.</td></tr>';
+  if(!rows.length){
+    const vacio=reqPaletaSoloCartera()
+      ?'Sin facturas, persuasivos ni acuerdos de pago en mora. Entran al '+REQ_PAL_MORA_HABILES+'.º día hábil del vencimiento. Si ya tienen fecha de pago, no aparecen.'
+      :'Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_HABILES+' días hábiles después del vencimiento.';
+    return '<tr><td colspan="'+colSpan+'" class="emp">'+vacio+'</td></tr>';
+  }
   const colNotif=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
   return rows.map(function(x,i){return _reqPaletaRowHtml(x,i,colNotif);}).join('');
 }
@@ -802,7 +816,9 @@ function _reqPaletaRowHtml(x,i,colNotif){
       ?bdgRd+'⚖️ Resolución vencida · '+dv+' d. háb.</span>'
       :'<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">⚖️ Resolución vence en '+reqDiasHabilesEntre(reqHoy(),x.vence)+' d. háb.</span>';
   }else if(esGest){
-    badge=bdgRd+'💲 '+(x.fuente==='acuerdo'?'Acuerdo en mora':'Factura en mora')+' · '+reqDiasCalEntre(x.vence,reqHoy())+' días</span>';
+    const lbl=x.fuente==='acuerdo'?'Acuerdo en mora':(x.persVencido?'Persuasivo vencido':'Factura en mora');
+    const dias=x.persVencido?reqDiasCalEntre(x.persVenc,reqHoy()):reqDiasCalEntre(x.vence,reqHoy());
+    badge=bdgRd+'💲 '+lbl+' · '+dias+' días</span>';
   }else{
     badge=bdgRd+'⏱️ Req. vencido · '+dv+' d. háb.</span>';
     if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff;white-space:nowrap">Incumplió</span>';
@@ -817,6 +833,7 @@ function _reqPaletaRowHtml(x,i,colNotif){
     ?'<span style="color:var(--bl);cursor:pointer" data-con-exp-asoc="'+escAttr(x.exp)+'">'+escAttr(x.exp)+'</span>'
     :escAttr(x.exp);
   let acc='<button type="button" class="btn bsm bic act-ico" title="'+(reqPaletaSoloConsulta()?'Ver (solo consulta)':'Ver: revisión con las opciones del encargado (editar expediente, trasladar…)')+'" onclick="event.stopPropagation();reqPaletaVer('+i+')">🔍</button>';
+  if(e&&reqPaletaSoloCartera())acc+='<button type="button" class="btn bsm bic act-ico" title="Editar Información contable (pago, persuasivo, acuerdo). Si registra el pago, sale de la paleta" onclick="event.stopPropagation();reqPaletaEditar('+i+')">✏️</button>';
   if(!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="'+(esGest?'Registrar gestión (observación obligatoria)':'Cumplió el requerimiento')+'" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
   if(e&&!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="Asignar actividad a un responsable (al guardarla sale de esta paleta)" onclick="event.stopPropagation();reqPaletaAsignar('+i+')">📌</button>';
   return '<tr data-req-key="'+escAttr(x.key)+'" style="box-shadow:inset 3px 0 0 '+barra+'">'+
@@ -832,9 +849,22 @@ function _reqPaletaRowHtml(x,i,colNotif){
     '<td class="act-col-cierre" style="font-size:12px">'+cierre+'</td>'+
     '<td class="act-col-acciones"><div class="act-row-actions"><span class="sst-act-toolbar">'+acc+'</span></div></td></tr>';
 }
+function reqPaletaEditar(i){
+  const x=(window._reqPaletaEntries||[])[i];
+  if(!x||!reqPaletaSoloCartera())return;
+  const eE=typeof getExpById==='function'?getExpById(x.exp):null;
+  if(!eE||typeof abrirConsultaExpPanel!=='function'){
+    if(typeof notif==='function')notif('No se pudo abrir la información contable','err');
+    return;
+  }
+  if(typeof closeTaskModal==='function')closeTaskModal();
+  window._contablePaletaEdit=true;
+  abrirConsultaExpPanel(x.exp,{allowSingle:true,edit:true,soloExp:true,contablePaleta:true});
+}
 function reqPaletaVer(i){
   const x=(window._reqPaletaEntries||[])[i];
   if(!x)return;
+  window._contablePaletaEdit=false;
   if(reqPaletaSoloConsulta()){
     const eV=typeof getExpById==='function'?getExpById(x.exp):null;
     if(eV&&typeof abrirConsultaExpPanel==='function'){
@@ -1023,6 +1053,7 @@ window.reqPaletaVisible=reqPaletaVisible;
 window.reqPaletaContar=reqPaletaContar;
 window.reqPaletaRowsHtml=reqPaletaRowsHtml;
 window.reqPaletaVer=reqPaletaVer;
+window.reqPaletaEditar=reqPaletaEditar;
 window.reqPaletaCumplio=reqPaletaCumplio;
 window.reqPaletaConfirmarCumplio=reqPaletaConfirmarCumplio;
 window.reqPaletaAsignar=reqPaletaAsignar;

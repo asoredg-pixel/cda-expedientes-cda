@@ -334,6 +334,12 @@ function esCargoCoordinador(){
   return usuarioCargoSesion()==='coordinador';
 }
 window.esCargoCoordinador=esCargoCoordinador;
+/** Responsable de cartera: paleta de mora y edición solo de Información contable. */
+function esCargoContable(){
+  if(!esModoResponsable())return false;
+  return usuarioCargoSesion()==='contable';
+}
+window.esCargoContable=esCargoContable;
 function esCargoProfesional(){
   if(!esModoResponsable())return false;
   return usuarioCargoSesion()==='profesional';
@@ -362,7 +368,7 @@ function getInstructorByNombre(nombre){
   }
   return null;
 }
-function getRegSeccionesResponsableActivo(){
+function regSeccionesInstructorActivo(){
   if((!esModoResponsable()&&!esModoContratista())||!responsableActivo)return null;
   let ins=getInstructorByNombre(responsableActivo);
   if(!ins&&typeof findInstructorByEmail==='function'&&window._usuarioActual&&window._usuarioActual.email)
@@ -371,9 +377,17 @@ function getRegSeccionesResponsableActivo(){
   if(ins.rol==='encargado_depto')return Object.keys(REG_EDIT_SECS);
   return Array.isArray(ins.regSecciones)?ins.regSecciones.filter(Boolean):[];
 }
+function getRegSeccionesResponsableActivo(){
+  const secs=regSeccionesInstructorActivo();
+  if(!Array.isArray(secs))return secs;
+  // El cargo Contable no abre la pestaña Registro: solo suma «contable» mientras edita desde la paleta.
+  if(window._contablePaletaEdit&&typeof esCargoContable==='function'&&esCargoContable()&&secs.indexOf('contable')<0)
+    return secs.concat(['contable']);
+  return secs;
+}
 function responsablePuedeVerRegistro(){
   if(!esModoResponsable()&&!esModoContratista())return true;
-  const secs=getRegSeccionesResponsableActivo();
+  const secs=regSeccionesInstructorActivo();
   return Array.isArray(secs)&&secs.length>0;
 }
 function responsablePuedeEditarSec(key){
