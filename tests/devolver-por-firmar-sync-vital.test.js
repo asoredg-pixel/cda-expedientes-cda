@@ -82,6 +82,6 @@ describe('Devolver desde Por firmar: sync inmediato para VITAL', () => {
     const renameAt = fn.indexOf('_pqrsRenombrarDocsDriveWf')
     expect(persistAt).toBeGreaterThan(0)
     expect(renameAt).toBeGreaterThan(persistAt)
-    expect(fn).toMatch(/_pqrsRenombrarDocsDriveWf\([\s\S]*?\)\s*\.catch/)
+    expect(fn).toMatch(/try\{[\s\S]*_pqrsRenombrarDocsDriveWf[\s\S]*\}catch/)
   })
 })

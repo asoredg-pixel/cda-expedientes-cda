@@ -9179,15 +9179,19 @@ function renderTaskReviewChatSideHtml(expId,taskId,t){
   const canDevolverFirma=!esModoResponsable()&&!esJurisdiccional()
     &&((typeof encargadoPuedeDevolverDesdeFirma==='function'&&encargadoPuedeDevolverDesdeFirma(t))
       ||(typeof tramitePuedeDevolverDesdeFirma==='function'&&tramitePuedeDevolverDesdeFirma(t)));
+  const eChatDev=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
+  const canDevolverPorNotif=!esModoResponsable()&&!esJurisdiccional()
+    &&typeof puedeEliminarEntregaPorNotificarEncargado==='function'
+    &&puedeEliminarEntregaPorNotificarEncargado(eChatDev,t);
   const canReviewSop=!esModoResponsable()&&!esJurisdiccional()&&(taskPendienteVerificacion(t)||deptWa||canDevolverFirma);
   const canDevolverAtendida=encargadoPuedeDevolverAtendida(t,expId);
-  const canShowDevolver=canReviewSop||canDevolverFirma||canDevolverAtendida;
+  const canShowDevolver=canReviewSop||canDevolverFirma||canDevolverAtendida||canDevolverPorNotif;
   const eRevPar=t&&!t.sinExpediente&&typeof getExpById==='function'?getExpById(expId):null;
   const isRespView=esModoResponsable()&&(taskUsuarioEsAsignado(t,responsableActivo)
     ||(typeof taskRevParParticipante==='function'&&!!taskRevParParticipante(t,responsableActivo,eRevPar))
     ||(typeof taskRevParTecnicoAprobada==='function'&&taskRevParTecnicoAprobada(t,responsableActivo,eRevPar)));
   const canDevolverTecnico=typeof puedeDevolverAlTecnico==='function'&&puedeDevolverAlTecnico(t,responsableActivo,eRevPar);
-  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||canDevolverFirma||canDevolverAtendida;
+  const useWaLayout=isRespView||canReviewSop||!!ctx.isReviewDelivery||!!ctx.porFirmarVista||!!ctx.porNotificarVista||!!ctx.isRespVerPorNotificar||canDevolverFirma||canDevolverPorNotif||canDevolverAtendida;
   const eid=escAttr(expId),tid=escAttr(taskId);
   const st=typeof taskReviewChatSectState==='function'?taskReviewChatSectState():{obs:false,chat:false};
   let h='<div class="task-review-chat-side'+(useWaLayout?' task-review-chat-side-wa':'')+(st.obs?' obs-collapsed':'')+(st.chat?' chat-collapsed':'')+'">';
@@ -21850,14 +21854,20 @@ function encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,opts){
     return false;
   }
   const wf=getPqrsWorkflow(e)||{};
+  if(desdeNotif&&typeof _pqrsMarcarDocsComoPorCorregir==='function')
+    _pqrsMarcarDocsComoPorCorregir(wf.documentos||[],wf.entrega_n);
   // Persistencia primero (VITAL/Director dejan de verla en Por firmar al instante);
   // el renombre Drive va después y no debe retrasar el sync.
   if(Array.isArray(t.soportes)){
     t.soportes.forEach(function(s){
       if(!s||!s.activo)return;
+      const esAn=!!(s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'
+        ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s)));
       s.driveEstado='acorregir';
-      if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
       s.activo=false;
+      if(esAn)return;
+      s.version_historial=true;
+      if(s.label&&!/por corregir/i.test(String(s.label||'')))s.label=String(s.label)+' · por corregir';
     });
   }
   if(Array.isArray(e._pqrs_respuesta_soportes)){
@@ -21956,6 +21966,18 @@ function devolverTaskUnificado(expId,taskId){
     }
     if(chat){
       try{addTaskComentario(expId,taskId,chat);}catch(err){}
+    }
+    if(typeof puedeEliminarEntregaPorNotificarEncargado==='function'&&puedeEliminarEntregaPorNotificarEncargado(eDev,t)){
+      const esPqrsNotif=!!(eDev&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eDev)
+        &&typeof pqrsEnFaseNotificacion==='function'&&pqrsEnFaseNotificacion(eDev));
+      if(esPqrsNotif&&typeof encargadoDevolverDesdeFirmaACorregir==='function'){
+        encargadoDevolverDesdeFirmaACorregir(expId,taskId,nota,{desdePorNotificar:true});
+        return;
+      }
+      if(typeof tramiteDevolverDesdeFirmaACorregir==='function'){
+        tramiteDevolverDesdeFirmaACorregir(expId,taskId,nota,{desdePorNotificar:true});
+        return;
+      }
     }
     if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eDev)
       &&typeof devolverNotificacionRevisionFinal==='function'){
