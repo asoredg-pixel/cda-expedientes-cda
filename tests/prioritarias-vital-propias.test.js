@@ -57,3 +57,27 @@ describe('⚡ Prioritarias: notificaciones vencidas solo del propio responsable'
     expect(f(asignadaSinNotif)).toBe(true)
   })
 })
+
+describe('PQRSD con dos oficios del mismo nombre', () => {
+  const c = createContext({
+    getExpById: () => ({ _exp: 'EA260241' }),
+    pqrsEstaCerrada: () => false,
+    taskFirmaFase: () => '',
+    taskEnPipelineFirmaNotifAbierta: () => true,
+    taskPrioridadEntregaResponsableCumplida: () => false,
+    estadoTask: t => t.estado || 'En ejecución',
+    esModoResponsable: () => true,
+    responsableActivo: 'LINA BELTRAN',
+    taskUsuarioEsAsignado: () => true,
+    estadoTaskForAsignado: () => 'Atendida',
+    PQRS_WF: { CERRADA: 'cerrada_atendida' }
+  })
+  runInContext(extraer(['taskProyeccionYaAprobada', 'taskPrioridadMarcadoresResueltos']), c)
+
+  it('la ya aprobada sale de Prioritarias; la que sigue pendiente no', () => {
+    const aprobada = { id: 'of-1', actividad: 'Oficio de respuesta', prioritaria: true, _pqrs_proyeccion_atendida: true, estado: 'Atendida' }
+    const pendiente = { id: 'of-2', actividad: 'Oficio de respuesta', prioritaria: true, estado: 'Por verificar' }
+    expect(c.taskPrioridadMarcadoresResueltos(aprobada)).toBe(true)
+    expect(c.taskPrioridadMarcadoresResueltos(pendiente)).toBe(false)
+  })
+})

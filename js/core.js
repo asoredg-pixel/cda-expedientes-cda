@@ -895,13 +895,35 @@ function taskDiasDesdeVencimiento(t){
 function taskVenceActividadBase(t){
   return String((t&&t.vence)||'').slice(0,10);
 }
+/** La fase de firma/notif de la PQRSD aplica solo a la actividad de atención, no a las hermanas ya aprobadas. */
+function pqrsTaskEsLaDeAtencion(t,e){
+  if(!t||!e)return false;
+  if(typeof getPqrsTaskActiva==='function'){
+    const canon=getPqrsTaskActiva(e);
+    if(canon&&String(canon.id||'')&&String(t.id||''))return String(canon.id)===String(t.id);
+  }
+  const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+  const tid=String(wf&&wf.task_id||'').trim();
+  if(tid)return String(t.id||'')===tid;
+  return typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
+}
+window.pqrsTaskEsLaDeAtencion=pqrsTaskEsLaDeAtencion;
+/** Proyección ya aceptada: no sigue en ⚡ Prioritarias (la notificación vive en su paleta). */
+function taskProyeccionYaAprobada(t){
+  if(!t||t.eliminada)return false;
+  if(t._pqrs_proyeccion_atendida||t._firma_proyeccion_atendida)return true;
+  const rev=t.ultimaRevisionDepto;
+  return !!(rev&&String(rev.tipo||'')==='aprobada');
+}
+window.taskProyeccionYaAprobada=taskProyeccionYaAprobada;
 /** Aún en firma / por notificar / revisión final (no cerrada). */
 function taskEnPipelineFirmaNotifAbierta(t){
   if(!t||t.eliminada)return false;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
   if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
     &&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))
-    &&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e))return true;
+    &&typeof pqrsEnFlujoFirmaNotif==='function'&&pqrsEnFlujoFirmaNotif(e)
+    &&pqrsTaskEsLaDeAtencion(t,e))return true;
   if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return true;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t)){
     const f=typeof taskFirmaFase==='function'?taskFirmaFase(t):'';
@@ -944,9 +966,10 @@ function taskPrioridadEntregaResponsableCumplida(t){
   return false;
 }
 window.taskPrioridadEntregaResponsableCumplida=taskPrioridadEntregaResponsableCumplida;
-/** ⚡/🔥 resueltos: aceptada sin deuda de firma/notif, o ya notificada/cerrada. */
+/** ⚡/🔥 resueltos: proyección ya aprobada, o ya notificada/cerrada. Notificar no la deja en Prioritarias. */
 function taskPrioridadMarcadoresResueltos(t){
   if(!t||t.eliminada)return true;
+  if(taskProyeccionYaAprobada(t))return true;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
   if(e&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return true;
   if(typeof taskFirmaFase==='function'){
@@ -977,7 +1000,8 @@ function taskNotifUrgenteCtx(t){
   if(!t)return out;
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
   if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
-    &&typeof pqrsExpedienteEsperaNotificacion==='function'&&pqrsExpedienteEsperaNotificacion(e)){
+    &&typeof pqrsExpedienteEsperaNotificacion==='function'&&pqrsExpedienteEsperaNotificacion(e)
+    &&pqrsTaskEsLaDeAtencion(t,e)){
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
     out.enNotif=true;
     out.sinPlazo=!!(wf.notif_sin_plazo||(typeof pqrsNotifEsCorreoSinPlazo==='function'&&pqrsNotifEsCorreoSinPlazo(e)));
