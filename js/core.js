@@ -9885,15 +9885,21 @@ function taskEntregaCorreoCtx(expId,t,e){
     &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
   if(esPqrs){
     const wf=typeof getPqrsWorkflow==='function'?(getPqrsWorkflow(e)||{}):{};
+    const fw=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
+    const er=(t.entregaResp&&typeof t.entregaResp==='object')?t.entregaResp:{};
+    const wfTid=String(wf.task_id||'').trim();
+    const tid=String(t.id||'').trim();
+    const paralela=!!(wfTid&&tid&&wfTid!==tid&&(er.tipo||fw.email_to||fw.cuerpo||fw.email_body||fw.email_subject));
+    const src=paralela?fw:wf;
     const TIPO=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO:{MENSAJE:'mensaje',OFICIO:'oficio'};
-    const tipo=wf.tipo||TIPO.MENSAJE;
+    const tipo=paralela?(er.tipo||TIPO.MENSAJE):(wf.tipo||TIPO.MENSAJE);
     const correo=tipo===TIPO.MENSAJE
-      ||(tipo===TIPO.OFICIO&&((typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(wf.canal||''))||!!String(wf.email_to||'').trim()));
+      ||(tipo===TIPO.OFICIO&&((typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo((paralela?fw.canal:wf.canal)||''))||!!String(src.email_to||'').trim()));
     if(!correo)return null;
-    return{esPqrs:true,
-      to:String(wf.email_to||'').trim(),cc:String(wf.email_cc||'').trim(),bcc:String(wf.email_bcc||'').trim(),
-      asunto:String(wf.email_subject||'').trim()||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||'')),
-      cuerpo:String(wf.cuerpo||'').trim()};
+    return{esPqrs:true,paralela:paralela,
+      to:String(src.email_to||'').trim(),cc:String(src.email_cc||'').trim(),bcc:String(src.email_bcc||'').trim(),
+      asunto:String(src.email_subject||src.asunto||'').trim()||('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||'')),
+      cuerpo:String(src.cuerpo||src.email_body||(paralela?er.cuerpo:'')||'').trim()};
   }
   const wf=(typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{}))||{};
   const correo=wf.notif_correo_entrega===true
@@ -9962,7 +9968,7 @@ function taskEntregaCorreoGuardar(expId,taskId,opts){
   if(!c){notif('No se pudo guardar el correo','err');return false;}
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
   const edit={por:por,en:new Date().toISOString(),campos:Object.keys(patch)};
-  if(c.esPqrs){
+  if(c.esPqrs&&!c.paralela){
     setPqrsWorkflow(e,Object.assign({},patch,{correo_editado:edit}));
     if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e);
   }else{
@@ -11919,6 +11925,60 @@ function persistUnirEntregaDuplicada(e){
   window._entregaDedupePersist.add(dk);
   try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe entrega:',err);}
 }
+/** La actividad ya tiene una entrega propia (documento o fecha reportada). */
+function pqrsTaskTieneEntregaPropia(t){
+  if(!t||t.eliminada)return false;
+  if((t.soportes||[]).some(function(s){return s&&(s.url||s.preview||s.driveLink||s.driveFileId||s.fileId);}))return true;
+  return !!String(t.fechaReportada||'').trim();
+}
+/**
+ * Hay otra entrega de esta PQRSD todavía por revisar.
+ * Sin taskId (formulario de una actividad nueva) basta con que el workflow esté en revisión.
+ */
+function pqrsEntregaPendienteEsAjena(e,taskId){
+  if(!e||e._sin_expediente||e._act_libre)return false;
+  if(typeof getPqrsWorkflow!=='function'||typeof pqrsWorkflowFase!=='function'||typeof PQRS_WF==='undefined')return false;
+  if(pqrsWorkflowFase(e)!==PQRS_WF.PENDIENTE_REVISION)return false;
+  const tid=String(taskId||'').trim();
+  const wf=getPqrsWorkflow(e)||{};
+  const wfTid=String(wf.task_id||'').trim();
+  if(!tid)return true;
+  if(wfTid)return wfTid!==tid;
+  return (e.tasks||[]).some(function(t){
+    if(!t||t.eliminada||String(t.id||'')===tid)return false;
+    return pqrsTaskTieneEntregaPropia(t);
+  });
+}
+/** Guarda el correo de una entrega adicional en su actividad, sin tocar la que ya está por revisar. */
+function pqrsGuardarEntregaParalelaEnTask(e,opts){
+  opts=opts||{};
+  const tid=String(opts.taskId||'').trim();
+  const t=(e.tasks||[]).find(function(x){return x&&String(x.id||'')===tid;});
+  if(!t)return false;
+  const cuerpo=opts.cuerpo||opts.nota||'';
+  const tipo=opts.tipo||'';
+  t.entregaResp={tipo:tipo,fecha:opts.fechaResp||'',oficio:opts.oficioExt||'',cuerpo:cuerpo};
+  const prev=(t.firmaWf&&typeof t.firmaWf==='object')?t.firmaWf:{};
+  const esCorreo=opts.notifCorreoEntrega===true||tipo==='mensaje';
+  if(esCorreo){
+    t.notifCorreoEntrega=true;
+    t.firmaWf=Object.assign({},prev,{
+      canal:'correo',notif_correo_entrega:true,
+      email_to:opts.emailTo||'',email_cc:opts.emailCc||'',email_bcc:opts.emailBcc||'',
+      email_subject:opts.emailSubject||'',cuerpo:cuerpo,email_body:cuerpo
+    });
+  }else{
+    t.notifCorreoEntrega=false;
+    t.firmaWf=Object.assign({},prev,{canal:'presencial',notif_correo_entrega:false,cuerpo:cuerpo,email_body:cuerpo});
+  }
+  if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+  const autor=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():'';
+  e._pqrs_historial.push({ts:Date.now(),tipo:'entrega_respuesta_nca_paralela',fecha:opts.fechaResp||'',nota:'Entrega adicional en revisión (no reemplaza la anterior)'+(autor?' — '+autor:''),oficina:e._pqrs_oficina||'',responsable:autor,task_id:tid});
+  return true;
+}
+window.pqrsTaskTieneEntregaPropia=pqrsTaskTieneEntregaPropia;
+window.pqrsEntregaPendienteEsAjena=pqrsEntregaPendienteEsAjena;
+window.pqrsGuardarEntregaParalelaEnTask=pqrsGuardarEntregaParalelaEnTask;
 /** Une tareas duplicadas «Oficio de respuesta / Atender PQRSD» dejadas por un bug de asignación. */
 function dedupePqrsAtencionTasks(e){
   if(!e||!Array.isArray(e.tasks))return false;
@@ -11931,6 +11991,20 @@ function dedupePqrsAtencionTasks(e){
     if(act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act))idxs.push(i);
   });
   if(idxs.length<=1)return false;
+  const conEntrega=idxs.filter(function(i){return pqrsTaskTieneEntregaPropia(e.tasks[i]);});
+  if(conEntrega.length>=2){
+    let changed=false;
+    idxs.forEach(function(i){
+      if(pqrsTaskTieneEntregaPropia(e.tasks[i]))return;
+      const dup=normalizeTask(e.tasks[i]);
+      e.tasks[i]=normalizeTask(Object.assign({},dup,{
+        eliminada:true,
+        historial:(dup.historial||[]).concat([{tipo:'dedupe',fecha:hoy(),nota:'Asignación vacía unificada; las entregas en revisión se conservan'}])
+      }));
+      changed=true;
+    });
+    return changed;
+  }
   const score=function(t){
     let s=0;
     if(t.fechaReportada)s+=100;
@@ -12012,6 +12086,10 @@ function actActividadLabelDisplay(t,expAct){
 function guardarPqrsRespuestaDatos(e,opts,cerrar){
   if(!e)return;
   opts=opts||{};
+  if(!cerrar&&opts.fechaResp&&typeof pqrsEntregaPendienteEsAjena==='function'&&pqrsEntregaPendienteEsAjena(e,opts.taskId)){
+    pqrsGuardarEntregaParalelaEnTask(e,opts);
+    return;
+  }
   const fechaResp=opts.fechaResp||'';
   const oficioExt=opts.oficioExt||'';
   const medioResp=opts.medioResp||'';
@@ -12324,17 +12402,19 @@ function renderPqrsEntregaCamposHtml(e,opts){
   const uiModo=pqrsEntregaResolverUiModo(opts);
   const tLibre=opts.libreTask||null;
   const wf=getPqrsWorkflow(e);
+  const entregaAjena=!tLibre&&typeof pqrsEntregaPendienteEsAjena==='function'&&pqrsEntregaPendienteEsAjena(e,String(opts.taskId||'').trim());
+  const wfVis=entregaAjena?{}:wf;
   const canalDef=(typeof pqrsCanalDefaultRespuesta==='function'?pqrsCanalDefaultRespuesta(e):PQRS_WF_CANAL.CORREO);
-  const canalActual=wf.canal||e._pqrs_respuesta_medio||canalDef;
-  const emailTo=String(wf.email_to||'').trim()
+  const canalActual=entregaAjena?canalDef:(wf.canal||e._pqrs_respuesta_medio||canalDef);
+  const emailTo=String(wfVis.email_to||'').trim()
     ||(typeof pqrsCorreoCiudadano==='function'?String(pqrsCorreoCiudadano(e)||'').trim():'')
     ||(tLibre&&typeof entregaNotifCorreosDefault==='function'?String(entregaNotifCorreosDefault(null,tLibre)||'').trim():'');
-  const emailCc=String(wf.email_cc||'').trim();
-  const emailBcc=String(wf.email_bcc||'').trim();
+  const emailCc=String(wfVis.email_cc||'').trim();
+  const emailBcc=String(wfVis.email_bcc||'').trim();
   const asuntoMail=tLibre
     ?('Notificación — '+(tLibre.actividad||'actividad')+' — '+(e._exp||''))
     :('Respuesta a su '+(e._tipo_solicitud||'solicitud PQRSD')+' — '+(e._exp||''));
-  const internaDef=!!(e._pqrs_interna)||!!(wf&&(wf.comunicacion_interna||wf.traslado_interno||wf.notif_interna));
+  const internaDef=!!(e._pqrs_interna)||(!entregaAjena&&!!(wf&&(wf.comunicacion_interna||wf.traslado_interno||wf.notif_interna)));
   const sugEnt=typeof htmlCorreosSugeridosNotificacion==='function'?htmlCorreosSugeridosNotificacion(e,tLibre||undefined):'';
   // También sugerir correo digitado en alta PQRSD (aún sin expediente)
   const altaMailIds=['er-pqrs-pn-correo','er-pqrs-pj-correo','er-pqrs-pj-ofi-correo','er-pqrs-anon-correo'];
@@ -12345,7 +12425,7 @@ function renderPqrsEntregaCamposHtml(e,opts){
       if(av&&av.includes('@')){emailToEff=av;break;}
     }
   }
-  const tipoActual=String(wf.tipo||'').trim();
+  const tipoActual=String(wfVis.tipo||'').trim();
   const tipoInicialResp=tipoActual||(typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio');
   const opcionInicial='';
   const mkEntregaAcc=function(n,tit,body){
@@ -12391,14 +12471,14 @@ function renderPqrsEntregaCamposHtml(e,opts){
     h+='<div id="pqrs-entrega-tipo-detalles" style="display:'+(tipoInicialResp?'block':'none')+'">';
   }
   h+='<div class="fg" style="margin-bottom:8px">'+
-    '<div class="fld" id="pqrs-entrega-fecha-row"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy())+'"></div>'+
+    '<div class="fld" id="pqrs-entrega-fecha-row"><label>Fecha de la respuesta<span class="req-star">*</span></label><input type="date" id="pqrs-entrega-resp-fecha" value="'+escAttr(entregaAjena?hoy():(wf.fecha_respuesta||e._pqrs_respuesta_fecha||hoy()))+'"></div>'+
     '<div class="fld" id="pqrs-entrega-oficio-row"><label>N° de oficio <span id="pqrs-entrega-oficio-req" class="req-star" style="display:none">*</span><span id="pqrs-entrega-oficio-hint" style="font-weight:400;color:var(--tx3)"> (si aplica)</span></label>'+
-    '<input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(wf.oficio||e._pqrs_respuesta_oficio||'')+'" oninput="onPqrsEntregaOficioInput()" onblur="onPqrsEntregaOficioBlur()">'+
+    '<input type="text" id="pqrs-entrega-resp-oficio" placeholder="Ej. DSGV-E261485" value="'+escAttr(entregaAjena?'':(wf.oficio||e._pqrs_respuesta_oficio||''))+'" oninput="onPqrsEntregaOficioInput()" onblur="onPqrsEntregaOficioBlur()">'+
     '<div id="pqrs-entrega-oficio-err" class="fld-err" style="display:none"></div></div>'+
     '</div>';
   h+='<div id="pqrs-entrega-oficio-notif-row" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin:0">'+
-    '<input type="checkbox" id="pqrs-entrega-notif-correo"'+(wf.notif_correo_entrega===true?' checked':'')+' onchange="pqrsEntregaToggleNotifCorreo()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
+    '<input type="checkbox" id="pqrs-entrega-notif-correo"'+(wfVis.notif_correo_entrega===true?' checked':'')+' onchange="pqrsEntregaToggleNotifCorreo()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
     '<span>Se notificará por correo electrónico</span></label>'+
     '</div>';
   h+='<div id="pqrs-entrega-otro-medio-row" style="display:none;margin-bottom:10px;padding:8px 10px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r)">'+
@@ -12430,10 +12510,10 @@ function renderPqrsEntregaCamposHtml(e,opts){
     '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
     '<input type="text" id="pqrs-entrega-email-bcc" class="sst-email-chips" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto (referencia)</label>'+
-    '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wf.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
+    '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wfVis.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '</div>';
   h+='<div class="fld" id="pqrs-entrega-cuerpo-wrap"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>'+
-    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(wf.cuerpo||e._pqrs_respuesta_nota||'')+'</textarea>'+
+    '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(entregaAjena?'':(wf.cuerpo||e._pqrs_respuesta_nota||''))+'</textarea>'+
     '</div>';
   // Adjunto estilo oficinas (oculto para informativa)
   h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px">'+
@@ -19651,7 +19731,7 @@ function renderEnviarPanelHtml(expId,taskId,t,modo){
   }
   if(esPqrsEntrega&&!sol){
     const uiEnc=!!(autoEnc||entregaDirectaUi);
-    h+=renderPqrsEntregaCamposHtml(eExp,{modo:uiEnc?'enc_acc':'responsable'});
+    h+=renderPqrsEntregaCamposHtml(eExp,{modo:uiEnc?'enc_acc':'responsable',taskId:t&&t.id});
   }else if(librePqrsUi&&!sol){
     const ctxLibre=typeof sstFileEnviarCtxKey==='function'?sstFileEnviarCtxKey(expId,taskId):('enviar-soporte:'+expId+':'+taskId);
     h+=renderPqrsEntregaCamposHtml(libreEntregaPqrsStubExp(t,eExp),{modo:encComoPqrs?'enc_acc':'responsable',libreTask:t,libreCtx:ctxLibre});
