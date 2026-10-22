@@ -3047,6 +3047,22 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&x.size===f.size;}))return;
     adjuntos.push(f);
   });
+  // Oficio o anexos ya en Drive (sin blob local): la oficina destino no abre enlaces de este Drive.
+  if(esInterna&&typeof pqrsDriveDocToFile==='function'){
+    for(let di=0;di<docsAdj.length;di++){
+      const d=docsAdj[di];
+      if(!d||d.localBlob||d._localBlob||d.blob)continue;
+      if(d.tipo==='soporte_notificacion'||d.tipo==='link'||d.tipo==='soporte_respuesta')continue;
+      if(!(d.fileId||d.driveFileId||d.driveLink||d.previewLink||d.url))continue;
+      try{
+        const f=await pqrsDriveDocToFile(d,e._exp);
+        if(!f)continue;
+        const key=String(f.name||'').toLowerCase();
+        if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key&&(x.size||0)===(f.size||0);}))continue;
+        adjuntos.push(f);
+      }catch(errOfi){console.warn('traslado oficio drive:',errOfi);}
+    }
+  }
   // Si ya están en Drive O el peso local es alto: solo enlaces (MIME base64 → Failed to fetch en NCA/oficinas).
   const docsConLink=docsAdj.filter(function(d){
     return d&&(d.driveLink||d.previewLink||d.fileId||d.driveFileId)&&d.tipo!=='soporte_notificacion';
@@ -3093,14 +3109,12 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     });
   }catch(errSend){
     const msg=String(errSend&&errSend.message||errSend||'');
-    if(esInterna&&adjuntos.length&&/invalid value|message\.raw|400/i.test(msg)){
-      prog(Math.min(98,progBase+4),'Reintentando envío (historial en cuerpo, sin adjuntos embebidos)…');
-      try{
-        sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
-          cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
-        });
-      }catch(errRetry){throw errRetry;}
-      adjOmitidos=true;
+    if(esInterna&&adjuntos.length&&/invalid value|message\.raw|400|failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)){
+      prog(Math.min(98,progBase+4),'Reintentando envío con la solicitud y el oficio…');
+      await new Promise(function(r){setTimeout(r,600);});
+      sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
+        cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:ofiEnvio
+      });
     }else if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
       prog(Math.min(98,progBase+4),'Reintentando envío sin adjuntos embebidos…');
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{
@@ -9822,7 +9836,7 @@ function renderTaskReviewNotifEmailFieldsHtml(e,t,expId,opts){
     (opts.sinInterna?'':
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="task-rev-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>')+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; lleva la solicitud y el oficio si lo adjunta)</span></span></label>')+
     '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px">'+(destWf?'Datos diligenciados en la entrega (editables).':'Indique los destinatarios en Para / Cc / Cco.')+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="task-rev-notif-to" class="sst-email-chips" value="'+escAttr(dest)+'" style="width:100%;box-sizing:border-box"></div>'+
@@ -10478,6 +10492,19 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
         adjuntos.push(f);
       });
     }
+    if(esInterna&&typeof pqrsDriveDocToFile==='function'){
+      for(let di=0;di<docsConLink.length;di++){
+        const d=docsConLink[di];
+        if(!d)continue;
+        try{
+          const f=await pqrsDriveDocToFile(d,e&&e._exp);
+          if(!f)continue;
+          const key=String(f.name||'').toLowerCase();
+          if(adjuntos.some(function(x){return String(x.name||'').toLowerCase()===key;}))continue;
+          adjuntos.push(f);
+        }catch(errOfi){console.warn('traslado oficio notif:',errOfi);}
+      }
+    }
     if(typeof pqrsEnviarCorreoCiudadano!=='function'){
       if(typeof sstCargaHide==='function')sstCargaHide();
       notif('No hay envío de correo disponible','err');
@@ -10494,7 +10521,11 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
     }catch(errSend){
       const msg=String(errSend&&errSend.message||errSend||'');
-      if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
+      if(esInterna&&adjuntos.length&&/failed to fetch|network|tiempo agotado|respondió a tiempo|invalid value|message\.raw|400/i.test(msg)){
+        prog(70,'Reintentando envío con la solicitud y el oficio…');
+        await new Promise(function(r){setTimeout(r,600);});
+        sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
+      }else if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)&&adjuntos.length){
         prog(70,'Reintentando envío sin adjuntos embebidos…');
         sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,[],{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
       }else if(/failed to fetch|network/i.test(msg)){
@@ -12327,7 +12358,7 @@ function renderPqrsEntregaCamposHtml(e,opts){
     '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--bl)">📧 Destinatarios del correo</div>'+
     (tLibre?'':'<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="pqrs-entrega-notif-interna"'+(internaDef?' checked':'')+' onchange="pqrsEntregaToggleComInterna()" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>')+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; lleva la solicitud y el oficio si lo adjunta)</span></span></label>')+
     sugEnt+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="pqrs-entrega-email-to" class="sst-email-chips" placeholder="ciudadano@ejemplo.com" value="'+escAttr(emailToEff)+'" style="width:100%;box-sizing:border-box"></div>'+
@@ -21140,7 +21171,7 @@ function renderNcaRevisionEmailBlockHtml(expId,e,wf){
     sugNca+
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="nca-rev-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>'+
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; lleva la solicitud y el oficio si lo adjunta)</span></span></label>'+
     '<div class="fld" style="margin-bottom:8px"><label>Para <span class="req-star">*</span></label>'+
     '<input type="text" id="nca-rev-email-to" class="sst-email-chips" value="'+escAttr(emailToRev)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+
@@ -36476,7 +36507,63 @@ function pqrsGmailDataB64AttachmentsToFiles(rawAtts){
   return files;
 }
 window.pqrsGmailDataB64AttachmentsToFiles=pqrsGmailDataB64AttachmentsToFiles;
-/** HTML + adjuntos del correo Gmail origen para traslado interno (mismo criterio que reenvío Secretaría→NCA). */
+/** Documentos de la radicación (ventanilla o PDF del correo) guardados en Drive por Secretaría. */
+function pqrsDocsSolicitudRadicada(e){
+  if(!e)return [];
+  const out=[];
+  const seen={};
+  const push=function(d){
+    if(!d)return;
+    let fid=String(d.fileId||d.driveFileId||'').trim();
+    const link=String(d.driveLink||d.url||d.previewLink||'').trim();
+    if(!fid&&link&&typeof parseDrivePreviewUrl==='function'){
+      const p=parseDrivePreviewUrl(link);
+      fid=String(p&&p.id||'').trim();
+    }
+    const key=fid||link;
+    if(!key||seen[key])return;
+    seen[key]=true;
+    out.push({
+      nombre:String(d.nombre||d.name||d.label||'Solicitud').trim()||'Solicitud',
+      driveLink:link,
+      previewLink:String(d.previewLink||link||'').trim(),
+      fileId:fid,
+      driveFileId:fid,
+      mimeType:d.mime||d.mimeType||''
+    });
+  };
+  const sol=String(e._pqrs_solicitud_link||'').trim();
+  if(sol){
+    const nomSol=String(e._pqrs_solicitud_archivo||'').split(';')[0].trim()||'Solicitud';
+    push({nombre:nomSol,driveLink:sol});
+  }
+  (Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[]).forEach(function(a){
+    if(!a)return;
+    push({
+      nombre:a.nombre||a.name||a.label||'Adjunto de la solicitud',
+      driveLink:a.driveLink||a.url||'',
+      previewLink:a.previewLink||'',
+      fileId:a.fileId||a.driveFileId||'',
+      mime:a.mime||a.mimeType||''
+    });
+  });
+  return out;
+}
+window.pqrsDocsSolicitudRadicada=pqrsDocsSolicitudRadicada;
+/** Descarga la solicitud radicada para adjuntarla al traslado (la oficina destino no está en el sistema). */
+async function pqrsArchivosSolicitudRadicada(e){
+  const docs=pqrsDocsSolicitudRadicada(e);
+  const files=[];
+  for(let i=0;i<docs.length;i++){
+    try{
+      const f=typeof pqrsDriveDocToFile==='function'?await pqrsDriveDocToFile(docs[i],e&&e._exp):null;
+      if(f)files.push(f);
+    }catch(err){console.warn('pqrsArchivosSolicitudRadicada:',docs[i]&&docs[i].nombre,err);}
+  }
+  return files;
+}
+window.pqrsArchivosSolicitudRadicada=pqrsArchivosSolicitudRadicada;
+/** HTML + adjuntos del correo Gmail origen y de la solicitud en Drive para traslado interno. */
 async function pqrsArmarEnvioTrasladoInterno(e,cuerpo,documentos,opts){
   opts=opts||{};
   let fullMsg=opts.fullMsg||null;
@@ -36494,6 +36581,16 @@ async function pqrsArmarEnvioTrasladoInterno(e,cuerpo,documentos,opts){
       origenFiles=typeof pqrsGmailDataB64AttachmentsToFiles==='function'?pqrsGmailDataB64AttachmentsToFiles(raw):[];
     }catch(errAtt){console.warn('pqrsArmarEnvioTrasladoInterno adjuntos:',errAtt);}
   }
+  try{
+    const solFiles=await pqrsArchivosSolicitudRadicada(e);
+    (solFiles||[]).forEach(function(f){
+      if(!f)return;
+      const key=String(f.name||'').toLowerCase();
+      const sz=f.size||0;
+      if(origenFiles.some(function(x){return String(x.name||'').toLowerCase()===key&&(x.size||0)===sz;}))return;
+      origenFiles.push(f);
+    });
+  }catch(errSol){console.warn('pqrsArmarEnvioTrasladoInterno solicitud:',errSol);}
   return{html:html,origenFiles:origenFiles,fullMsg:fullMsg};
 }
 window.pqrsArmarEnvioTrasladoInterno=pqrsArmarEnvioTrasladoInterno;

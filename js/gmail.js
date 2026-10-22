@@ -7030,8 +7030,16 @@ async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opt
   const mime = await _gmailOfiBuildHtmlMimeWithAttachments(
     to, subject, htmlBody, list, opts.cc || '', opts.bcc || ''
   );
-  if (mime.length * 3 / 4 >= GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES) return _gmailOfiSendMimeUpload(_gmailRawB64urlToBytes(mime));
-  return _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
+  const mimeBytes = typeof _gmailRawB64urlToBytes === 'function' ? _gmailRawB64urlToBytes(mime) : null;
+  if (mime.length * 3 / 4 >= GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES && mimeBytes) return _gmailOfiSendMimeUpload(mimeBytes);
+  try {
+    return await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
+  } catch (errSend) {
+    const msg = String(errSend && errSend.message || errSend || '');
+    if (mimeBytes && /failed to fetch|network|invalid value|message\.raw|413|400/i.test(msg))
+      return _gmailOfiSendMimeUpload(mimeBytes);
+    throw errSend;
+  }
 }
 
 /** Correo pesado (anexos del correo origen): el JSON de messages/send no lo acepta; endpoint de carga hasta 35 MB. */

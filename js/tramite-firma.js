@@ -2259,7 +2259,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
   const internaChk=
     '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="tramite-atajo-notif-interna"'+(internaDef?' checked':'')+' style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; solo el cuerpo del correo)</span></span></label>';
+    '<span>Traslado / comunicación interna <span style="font-weight:400;color:var(--tx3)">(sin botón de consulta ciudadana; lleva la solicitud y el oficio si lo adjunta)</span></span></label>';
   const emailBlock=
     sugAtajo+
     internaChk+
