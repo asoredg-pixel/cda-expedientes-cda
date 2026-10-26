@@ -18,6 +18,12 @@ function sessionDocRef(email){
 function generateSessionId(){
   return 'sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,12);
 }
+function sesionRemotaEsAnterior(data){
+  const at=Date.parse(String(data&&(data.activeSessionAt||'')||''))||0;
+  const claim=Number(window._sessionClaimAt)||0;
+  // El primer aviso de Firestore puede traer la sesión vieja en caché y expulsar el ingreso recién hecho.
+  return !!(at&&claim&&at+1500<claim);
+}
 function sesionRemotaEstaViva(data){
   data=data||{};
   const sid=String(data.activeSessionId||'').trim();
@@ -81,6 +87,7 @@ async function claimActiveSession(email){
   try{
     await window._fsSetDoc(ref,payload,{merge:true});
     _sessionId=sid;
+    window._sessionClaimAt=Date.parse(now)||Date.now();
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
@@ -183,6 +190,7 @@ function startSessionGuard(email){
     const data=snap.exists()?snap.data():{};
     const remoteSid=String(data.activeSessionId||'').trim();
     if(!remoteSid||remoteSid===_sessionId)return;
+    if(sesionRemotaEsAnterior(data))return;
     if(sesionRemotaEstaViva(data))cerrarSesionPorConflicto();
   },function(err){console.warn('Error escuchando sesión:',err);});
   let _hbTick=0;
@@ -197,7 +205,7 @@ function startSessionGuard(email){
         if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
         const d=snap.exists()?snap.data():{};
         const remote=String(d.activeSessionId||'').trim();
-        if(remote&&remote!==_sessionId&&sesionRemotaEstaViva(d)){
+        if(remote&&remote!==_sessionId&&!sesionRemotaEsAnterior(d)&&sesionRemotaEstaViva(d)){
           cerrarSesionPorConflicto();
         }
       }).catch(function(){});
@@ -391,71 +399,113 @@ async function verificarUsuarioFirestore(fbUser){
     console.error('Error verificando usuario:',err);
     // Ya quedó la sesión: un fallo al pintar (p. ej. al mezclar informes) no debe devolver al inicio.
     if(document.body.classList.contains('sesion-activa'))return;
+    try{await releaseActiveSession(email,{force:true});}catch(e){}
     setLoginStatus('');
     window._loginMsgSticky=true;
     setLoginAuthMsg('Error al verificar acceso. Intente de nuevo.','err');
     if(window._authSignOut)await window._authSignOut().catch(()=>{});
   }
 }
-async function iniciarLoginGoogle(){
+function avisarFalloLogin(msg){
+  window._loginMsgSticky=true;
+  setLoginStatus('');
+  initLoginScreen();
+  setLoginAuthMsg(msg,'err');
+  if(typeof alertAccesoLoginModal==='function'){
+    alertAccesoLoginModal({title:'No se pudo ingresar',message:msg});
+  }
+}
+function iniciarLoginGoogle(){
   if(window._loginGoogleInFlight)return;
-  if(!window._authSignInGoogle){
-    if(!window._firebaseReady){
-      const waitBtn=document.getElementById('btn-google-login');
-      if(waitBtn)waitBtn.disabled=true;
-      setLoginAuthMsg('Cargando autenticación…','');
-      await new Promise(function(res){
-        const t=setTimeout(res,8000);
-        window.addEventListener('firebase-ready',function(){clearTimeout(t);res();},{once:true});
-      });
-      if(waitBtn)waitBtn.disabled=false;
-    }
-    if(!window._authSignInGoogle){
-      setLoginAuthMsg('Autenticación Google no disponible. Recargue la página.','err');
-      return;
-    }
+  if(!window._authSignInGoogle&&!window._authSignInGoogleRedirect){
+    setLoginAuthMsg('Cargando autenticación… Espere un momento y pulse de nuevo.','');
+    return;
   }
   const btn=document.getElementById('btn-google-login');
   window._loginGoogleInFlight=true;
   window._loginMsgSticky=false;
+  window._authVerifying=true;
   if(btn)btn.disabled=true;
   setLoginAuthMsg('');
-  try{
-    window._authVerifying=true;
-    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    // Abrir la ventana de la cuenta en el mismo clic. No esperar la carga de informes ni una redirección previa.
-    const cred=await window._authSignInGoogle();
-    await verificarUsuarioFirestore(cred&&cred.user);
-  }catch(err){
-    console.error(err);
-    const code=err&&err.code;
-    const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
-    if(cerrado){
-      const user=await esperarUsuarioGoogleTrasCierre();
-      if(user){
-        try{
-          await verificarUsuarioFirestore(user);
-          return;
-        }catch(e2){console.error('login tras cierre de aviso:',e2);}
-      }
-    }
-    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    setLoginStatus('');
-    window._loginMsgSticky=true;
-    initLoginScreen();
-    const detalle=code?(' ('+code+')'):'';
-    if(cerrado){
-      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.'+detalle,'err');
-    }else if(code==='auth/popup-blocked'){
-      setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
-    }else{
-      setLoginAuthMsg('Error al iniciar sesión con Google.'+detalle,'err');
-    }
-  }finally{
+  setLoginStatus('Abriendo Google para elegir su cuenta…',true);
+  let navego=false;
+  window.addEventListener('pagehide',function(){navego=true;},{once:true});
+  const terminar=function(){
     window._authVerifying=false;
     window._loginGoogleInFlight=false;
     if(btn)btn.disabled=false;
+  };
+  const fallo=function(err){
+    if(navego)return;
+    console.error(err);
+    const code=err&&err.code;
+    const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
+    const cerrarCon=function(user){
+      if(navego)return;
+      if(user){
+        verificarUsuarioFirestore(user).finally(terminar);
+        return;
+      }
+      try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+      const detalle=code?(' ('+code+')'):'';
+      let msg='No se completó el ingreso. Elija de nuevo su cuenta de Google.'+detalle;
+      if(code==='auth/popup-blocked')msg='El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.';
+      else if(code&&!cerrado)msg='Error al iniciar sesión con Google.'+detalle;
+      avisarFalloLogin(msg);
+      terminar();
+    };
+    if(cerrado){
+      esperarUsuarioGoogleTrasCierre().then(cerrarCon);
+      return;
+    }
+    cerrarCon(window._firebaseAuth&&window._firebaseAuth.currentUser);
+  };
+  const abrirVentana=function(){
+    if(navego)return;
+    if(!window._authSignInGoogle){
+      fallo({code:'auth/popup-blocked'});
+      return;
+    }
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+    try{sessionStorage.removeItem('sst_login_usar_ventana');}catch(e){}
+    setLoginStatus('Abriendo la ventana de la cuenta…',true);
+    window._authSignInGoogle().then(function(cred){
+      if(navego)return;
+      return verificarUsuarioFirestore(cred&&cred.user).finally(terminar);
+    }).catch(fallo);
+  };
+  let usarVentana=false;
+  try{usarVentana=sessionStorage.getItem('sst_login_usar_ventana')==='1';}catch(e){}
+  if(usarVentana){
+    abrirVentana();
+    return;
   }
+  // Sin esperas antes: la página va a Google en este clic. El aviso pequeño se cierra al elegir la cuenta y no entrega la sesión.
+  if(window._authSignInGoogleRedirect){
+    try{sessionStorage.setItem('sst_login_redirect_once','1');}catch(e){}
+    try{
+      const ret=window._authSignInGoogleRedirect();
+      const t=setTimeout(function(){
+        if(navego)return;
+        try{sessionStorage.setItem('sst_login_usar_ventana','1');}catch(e){}
+        avisarFalloLogin('Google no abrió la página de la cuenta. Pulse Ingresar con Google otra vez.');
+        terminar();
+      },2500);
+      Promise.resolve(ret).then(function(){},function(err){
+        clearTimeout(t);
+        console.error('login redirect:',err);
+        try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+        if(!navego)abrirVentana();
+      });
+      return;
+    }catch(err){
+      console.error('login redirect:',err);
+      try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+      abrirVentana();
+      return;
+    }
+  }
+  abrirVentana();
 }
 /** El aviso se cerró, pero la cuenta puede haber quedado en Firebase. */
 function esperarUsuarioGoogleTrasCierre(){
@@ -517,7 +567,12 @@ function authConTope(p,ms){
     let done=false;
     const timer=setTimeout(function(){if(done)return;done=true;resolve(null);},ms);
     Promise.resolve(p).then(function(v){
-      if(done)return;done=true;clearTimeout(timer);resolve(v);
+      if(done){
+        const u=v&&v.user;
+        if(u&&!window._usuarioActual&&typeof verificarUsuarioFirestore==='function')verificarUsuarioFirestore(u);
+        return;
+      }
+      done=true;clearTimeout(timer);resolve(v);
     },function(err){
       if(done)return;done=true;clearTimeout(timer);reject(err);
     });
@@ -536,21 +591,20 @@ function initFirebaseAuthListener(){
   };
   if(!esperaba||!window._authGetRedirectResult){fin();return Promise.resolve();}
   window._authVerifying=true;
-  const chain=authConTope(window._authGetRedirectResult(),2500).then(function(res){
+  setLoginStatus('Completando el ingreso con Google…',true);
+  const chain=authConTope(window._authGetRedirectResult(),12000).then(function(res){
     try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
     const user=(res&&res.user)||(auth&&auth.currentUser)||null;
     if(user&&!window._usuarioActual)return verificarUsuarioFirestore(user);
     if(esperaba&&!user){
-      window._loginMsgSticky=true;
-      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.','err');
+      avisarFalloLogin('No se completó el ingreso. Elija de nuevo su cuenta de Google.');
     }
   }).catch(function(err){
     console.warn('login redirect:',err);
     try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
     if(esperaba){
-      window._loginMsgSticky=true;
       const code=err&&err.code?(' ('+err.code+')'):'';
-      setLoginAuthMsg('No se completó el ingreso con Google'+code+'. Intente de nuevo.','err');
+      avisarFalloLogin('No se completó el ingreso con Google'+code+'. Intente de nuevo.');
     }
   }).then(fin);
   window._authBootstrapPromise=chain;
