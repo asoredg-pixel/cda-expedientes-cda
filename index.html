@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026h"></script>
-<script src="js/constants.js?v=20261026i"></script>
+<script src="js/constants.js?v=20261026j"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261026e"></script>
@@ -46,7 +46,7 @@
 <script src="js/requerimientos.js?v=20261022g"></script>
 <script src="js/papelera.js?v=20261013a"></script>
 <script src="js/recursos.js?v=20261020a"></script>
-<script src="js/ingreso.js?v=20261026i"></script>
+<script src="js/ingreso.js?v=20261026j"></script>
 </head>
 <body>
 <div id="mant-banner" class="mant-banner" role="status" aria-live="polite"></div>
@@ -1349,23 +1349,31 @@ async function bootstrapApp(){
   document.documentElement.classList.add('ui-editor-modal-mode');
   ensurePrimerUsoDate();
   window._bandejaVista='pending';
-  if(window._firebaseReady)await loadLS();
-  else{
+  if(!window._firebaseReady){
     await new Promise(res=>{
       const t=setTimeout(()=>res(),4000);
       window.addEventListener('firebase-ready',()=>{clearTimeout(t);res();},{once:true});
     });
-    await loadLS();
   }
-  initLoginScreen();
-  initFirebaseAuthListener();
+  // La cuenta de Google se resuelve ANTES de mezclar informes (loadLS). Si va después, el aviso se cierra y no entra.
+  if(typeof initFirebaseAuthListener==='function'){
+    try{await initFirebaseAuthListener();}catch(e){console.warn('auth listener:',e);}
+  }
+  await loadLS();
+  if(!document.body.classList.contains('sesion-activa'))initLoginScreen();
   initSecMedioNotificacion(true);
   if(typeof resetSecRadicacionFormulario==='function')resetSecRadicacionFormulario();
   const buildTag=document.getElementById('sst-build-tag');
   if(buildTag&&typeof SST_BUILD_ID!=='undefined')buildTag.textContent='· v'+SST_BUILD_ID;
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
-  window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
+  window.addEventListener('firebase-ready',()=>{
+    const seguir=function(){
+      if(!document.body.classList.contains('sesion-activa'))loadLS().then(function(){if(!document.body.classList.contains('sesion-activa'))initLoginScreen();});
+    };
+    if(typeof initFirebaseAuthListener==='function')Promise.resolve(initFirebaseAuthListener()).then(seguir).catch(seguir);
+    else seguir();
+  });
 }
 bootstrapApp();
 </script>

@@ -57,16 +57,25 @@ describe('Ingreso Google cuando el aviso se cierra', () => {
     await expect(p).resolves.toBe(user)
   })
 
-  it('el ingreso no trata ese cierre como cancelación definitiva ni redirige la página', () => {
+  it('al elegir la cuenta la página va a Google y recupera la sesión antes de mezclar informes', () => {
     const fn = extraer(ingreso, ['iniciarLoginGoogle'])
+    expect(fn).toContain('_authSignInGoogleRedirect')
     expect(fn).toContain('esperarUsuarioGoogleTrasCierre()')
-    expect(fn).not.toContain('_authSignInGoogleRedirect')
     expect(fn).not.toContain('Inicio de sesión cancelado.')
     const boot = extraer(ingreso, ['initFirebaseAuthListener'])
-    const iReg = boot.indexOf('registrarListenerAuth()')
-    const iRedir = boot.indexOf('_authGetRedirectResult')
-    expect(iReg).toBeGreaterThan(-1)
-    expect(iRedir).toBeGreaterThan(iReg)
+    const iCall = boot.indexOf('window._authGetRedirectResult()')
+    const iFin = boot.indexOf('.then(fin)')
+    expect(iCall).toBeGreaterThan(-1)
+    expect(iFin).toBeGreaterThan(iCall)
+    expect(boot).toContain('registrarListenerAuth()')
+    const html = readFileSync(resolve(root, 'index.html'), 'utf8')
+    const b = html.slice(html.indexOf('async function bootstrapApp'))
+    const iAuth = b.indexOf('initFirebaseAuthListener')
+    const iLoad = b.indexOf('await loadLS()')
+    expect(iAuth).toBeGreaterThan(-1)
+    expect(iLoad).toBeGreaterThan(iAuth)
+    const ver = extraer(ingreso, ['verificarUsuarioFirestore'])
+    expect(ver).toContain("classList.contains('sesion-activa')")
   })
 
   it('el script de Drive no se carga en la pantalla de inicio', () => {

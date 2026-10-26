@@ -235,6 +235,13 @@ function initLoginScreen(){
   if(authPanel)authPanel.style.display='';
   if(rolesWrap)rolesWrap.style.display='none';
   if(sub)sub.textContent='Personal autorizado: ingrese con su cuenta Google.';
+  if(window._loginMsgSticky){
+    const prev=document.getElementById('login-auth-msg');
+    const txt=prev?String(prev.textContent||''):'';
+    setLoginStatus('');
+    if(txt)setLoginAuthMsg(txt,'err');
+    return;
+  }
   setLoginAuthMsg('');
   setLoginStatus('');
 }
@@ -382,13 +389,19 @@ async function verificarUsuarioFirestore(fbUser){
     ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
+    // Ya quedó la sesión: un fallo al pintar (p. ej. al mezclar informes) no debe devolver al inicio.
+    if(document.body.classList.contains('sesion-activa'))return;
     setLoginStatus('');
+    window._loginMsgSticky=true;
     setLoginAuthMsg('Error al verificar acceso. Intente de nuevo.','err');
     if(window._authSignOut)await window._authSignOut().catch(()=>{});
   }
 }
 async function iniciarLoginGoogle(){
   if(window._loginGoogleInFlight)return;
+  if(window._authBootstrapPromise){
+    try{await window._authBootstrapPromise;}catch(e){}
+  }
   if(!window._authSignInGoogle){
     if(!window._firebaseReady){
       const waitBtn=document.getElementById('btn-google-login');
@@ -407,17 +420,27 @@ async function iniciarLoginGoogle(){
   }
   const btn=document.getElementById('btn-google-login');
   window._loginGoogleInFlight=true;
+  window._loginMsgSticky=false;
   if(btn)btn.disabled=true;
   setLoginAuthMsg('');
   try{
     window._authVerifying=true;
+    // El aviso (popup) se cierra al elegir la cuenta y Firebase no entrega la sesión:
+    // la página va a Google y vuelve. Hay que hacerlo en el mismo clic, antes de cargar informes.
+    if(window._authSignInGoogleRedirect){
+      try{sessionStorage.setItem('sst_login_redirect_once','1');}catch(e){}
+      setLoginStatus('Abriendo Google para ingresar…',true);
+      await window._authSignInGoogleRedirect();
+      const ya=window._firebaseAuth&&window._firebaseAuth.currentUser;
+      if(ya)await verificarUsuarioFirestore(ya);
+      return;
+    }
     const cred=await window._authSignInGoogle();
     await verificarUsuarioFirestore(cred&&cred.user);
   }catch(err){
     console.error(err);
     const code=err&&err.code;
     const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
-    // Si la cuenta ya quedó en Firebase, entrar. No redirigir toda la página.
     if(cerrado){
       const user=await esperarUsuarioGoogleTrasCierre();
       if(user){
@@ -427,14 +450,17 @@ async function iniciarLoginGoogle(){
         }catch(e2){console.error('login tras cierre de aviso:',e2);}
       }
     }
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
     setLoginStatus('');
+    window._loginMsgSticky=true;
     initLoginScreen();
+    const detalle=code?(' ('+code+')'):'';
     if(cerrado){
-      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.','err');
+      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.'+detalle,'err');
     }else if(code==='auth/popup-blocked'){
       setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
     }else{
-      setLoginAuthMsg('Error al iniciar sesión con Google.','err');
+      setLoginAuthMsg('Error al iniciar sesión con Google.'+detalle,'err');
     }
   }finally{
     window._authVerifying=false;
@@ -449,7 +475,7 @@ function esperarUsuarioGoogleTrasCierre(){
   return new Promise(function(resolve){
     let done=false;
     const finish=function(u){if(done)return;done=true;resolve(u||null);};
-    const t=setTimeout(function(){finish(auth&&auth.currentUser);},2000);
+    const t=setTimeout(function(){finish(auth&&auth.currentUser);},8000);
     if(!window._authOnStateChanged||!auth){clearTimeout(t);finish(null);return;}
     let unsub=function(){};
     try{
@@ -489,6 +515,8 @@ function registrarListenerAuth(){
       verificarUsuarioFirestore(user).finally(()=>{window._authVerifying=false;});
     }
     if(!user){
+      // Mientras el aviso está abierto o vuelve la redirección, un «sin usuario» momentáneo no debe borrar el ingreso.
+      if(window._authVerifying||window._loginGoogleInFlight)return;
       window._usuarioActual=null;
       authUsuario=null;
       if(!document.body.classList.contains('sesion-activa'))initLoginScreen();
@@ -496,17 +524,38 @@ function registrarListenerAuth(){
   });
 }
 function initFirebaseAuthListener(){
-  if(!window._authOnStateChanged||!window._firebaseAuth)return;
-  registrarListenerAuth();
-  if(!window._authGetRedirectResult)return;
-  Promise.resolve(window._authGetRedirectResult()).then(function(res){
+  if(window._authBootstrapHecho)return Promise.resolve();
+  if(!window._authOnStateChanged||!window._firebaseAuth)return Promise.resolve();
+  window._authBootstrapHecho=true;
+  const auth=window._firebaseAuth;
+  let esperaba=false;
+  try{esperaba=sessionStorage.getItem('sst_login_redirect_once')==='1';}catch(e){}
+  // getRedirectResult antes del listener y antes de loadLS: si no, la mezcla de informes se come la cuenta.
+  window._authVerifying=true;
+  const fin=function(){
+    window._authVerifying=false;
+    registrarListenerAuth();
+  };
+  if(!window._authGetRedirectResult){fin();return Promise.resolve();}
+  const chain=Promise.resolve(window._authGetRedirectResult()).then(function(res){
     try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    if(!res||!res.user||window._usuarioActual||window._authVerifying)return;
-    window._authVerifying=true;
-    return verificarUsuarioFirestore(res.user).finally(function(){window._authVerifying=false;});
+    const user=(res&&res.user)||(auth&&auth.currentUser)||null;
+    if(user&&!window._usuarioActual)return verificarUsuarioFirestore(user);
+    if(esperaba&&!user){
+      window._loginMsgSticky=true;
+      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.','err');
+    }
   }).catch(function(err){
     console.warn('login redirect:',err);
-  });
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+    if(esperaba){
+      window._loginMsgSticky=true;
+      const code=err&&err.code?(' ('+err.code+')'):'';
+      setLoginAuthMsg('No se completó el ingreso con Google'+code+'. Intente de nuevo.','err');
+    }
+  }).then(fin);
+  window._authBootstrapPromise=chain;
+  return chain;
 }
 function ingresarConsultaCiudadana(){
   ingresarComoRol('ciudadano');
@@ -583,6 +632,7 @@ function ingresarComoRol(rolId,respNombre){
       return;
     }
   }
+  try{
   rolSesion=rolId;
   try{sessionStorage.setItem('sst_rol_sesion',rolId);}catch(e){}
   if(rolId==='contratista'){
@@ -681,6 +731,11 @@ function ingresarComoRol(rolId,respNombre){
   if(typeof sstIniciarGmailObligatorio==='function')sstIniciarGmailObligatorio();
   setTimeout(()=>maybeShowExportReminder(),800);
   startIdleSessionWatch();
+  }catch(err){
+    console.error('ingresarComoRol:',err);
+    document.body.classList.add('sesion-activa');
+    if(typeof notif==='function')notif('Ingresó, pero una pantalla no pudo cargarse. Si no ve sus trámites, recargue con Ctrl+F5.','warn');
+  }
 }
 /** 4 horas sin actividad (mouse/teclado/toque) → cierre forzado de sesión. */
 const SST_IDLE_MS=4*60*60*1000;
