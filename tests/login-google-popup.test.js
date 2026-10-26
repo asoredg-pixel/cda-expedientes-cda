@@ -57,13 +57,24 @@ describe('Ingreso Google cuando el aviso se cierra', () => {
     await expect(p).resolves.toBe(user)
   })
 
-  it('el ingreso no trata ese cierre como cancelación definitiva', () => {
+  it('el ingreso no trata ese cierre como cancelación definitiva ni redirige la página', () => {
     const fn = extraer(ingreso, ['iniciarLoginGoogle'])
     expect(fn).toContain('esperarUsuarioGoogleTrasCierre()')
-    expect(fn).toContain('_authSignInGoogleRedirect')
+    expect(fn).not.toContain('_authSignInGoogleRedirect')
     expect(fn).not.toContain('Inicio de sesión cancelado.')
     const boot = extraer(ingreso, ['initFirebaseAuthListener'])
-    expect(boot).toContain('_authGetRedirectResult')
+    const iReg = boot.indexOf('registrarListenerAuth()')
+    const iRedir = boot.indexOf('_authGetRedirectResult')
+    expect(iReg).toBeGreaterThan(-1)
+    expect(iRedir).toBeGreaterThan(iReg)
+  })
+
+  it('el script de Drive no se carga en la pantalla de inicio', () => {
+    const html = readFileSync(resolve(root, 'index.html'), 'utf8')
+    const gmail = readFileSync(resolve(root, 'js/gmail.js'), 'utf8')
+    expect(html).not.toContain('accounts.google.com/gsi/client')
+    const i = gmail.indexOf("addEventListener('load'")
+    expect(gmail.slice(i, i + 420)).toContain("classList.contains('sesion-activa')")
   })
 
   it('Firebase ofrece ingreso por redirección si el aviso no deja entrar', () => {
