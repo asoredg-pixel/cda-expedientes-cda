@@ -412,14 +412,38 @@ async function iniciarLoginGoogle(){
   try{
     window._authVerifying=true;
     const cred=await window._authSignInGoogle();
-    await verificarUsuarioFirestore(cred.user);
+    await verificarUsuarioFirestore(cred&&cred.user);
   }catch(err){
     console.error(err);
+    const code=err&&err.code;
+    const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
+    // Chrome cierra el aviso al elegir la cuenta y Firebase lo reporta como cancelado.
+    if(cerrado){
+      const user=await esperarUsuarioGoogleTrasCierre();
+      if(user){
+        try{
+          await verificarUsuarioFirestore(user);
+          return;
+        }catch(e2){console.error('login tras cierre de aviso:',e2);}
+      }
+    }
+    if((cerrado||code==='auth/popup-blocked')&&window._authSignInGoogleRedirect){
+      let ya=false;
+      try{ya=sessionStorage.getItem('sst_login_redirect_once')==='1';}catch(e){}
+      if(!ya){
+        try{sessionStorage.setItem('sst_login_redirect_once','1');}catch(e){}
+        setLoginStatus('Completando el ingreso con Google…',true);
+        try{
+          await window._authSignInGoogleRedirect();
+          return;
+        }catch(e3){console.warn('login redirect:',e3);}
+      }
+    }
     setLoginStatus('');
     initLoginScreen();
-    const code=err&&err.code;
-    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){
-      setLoginAuthMsg('Inicio de sesión cancelado.','err');
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+    if(cerrado){
+      setLoginAuthMsg('No se completó el ingreso. Elija de nuevo su cuenta de Google.','err');
     }else if(code==='auth/popup-blocked'){
       setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
     }else{
@@ -431,8 +455,32 @@ async function iniciarLoginGoogle(){
     if(btn)btn.disabled=false;
   }
 }
-function initFirebaseAuthListener(){
-  if(!window._authOnStateChanged||!window._firebaseAuth)return;
+/** El aviso se cerró, pero la cuenta puede haber quedado en Firebase. */
+function esperarUsuarioGoogleTrasCierre(){
+  const auth=window._firebaseAuth;
+  if(auth&&auth.currentUser)return Promise.resolve(auth.currentUser);
+  return new Promise(function(resolve){
+    let done=false;
+    const finish=function(u){if(done)return;done=true;resolve(u||null);};
+    const t=setTimeout(function(){finish(auth&&auth.currentUser);},2000);
+    if(!window._authOnStateChanged||!auth){clearTimeout(t);finish(null);return;}
+    let unsub=function(){};
+    try{
+      unsub=window._authOnStateChanged(auth,function(u){
+        if(!u)return;
+        clearTimeout(t);
+        try{unsub();}catch(e){}
+        finish(u);
+      });
+    }catch(e){
+      clearTimeout(t);
+      finish((auth&&auth.currentUser)||null);
+    }
+  });
+}
+function registrarListenerAuth(){
+  if(window._authListenerListo||!window._authOnStateChanged||!window._firebaseAuth)return;
+  window._authListenerListo=true;
   window._authOnStateChanged(window._firebaseAuth,user=>{
     if(document.body.classList.contains('sesion-activa')){
       if(user){authUsuario=user;return;}
@@ -458,6 +506,20 @@ function initFirebaseAuthListener(){
       authUsuario=null;
       if(!document.body.classList.contains('sesion-activa'))initLoginScreen();
     }
+  });
+}
+function initFirebaseAuthListener(){
+  if(!window._authOnStateChanged||!window._firebaseAuth)return;
+  if(!window._authGetRedirectResult){registrarListenerAuth();return;}
+  window._authVerifying=true;
+  Promise.resolve(window._authGetRedirectResult()).then(function(res){
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+    if(res&&res.user&&!window._usuarioActual)return verificarUsuarioFirestore(res.user);
+  }).catch(function(err){
+    console.warn('login redirect:',err);
+  }).finally(function(){
+    window._authVerifying=false;
+    registrarListenerAuth();
   });
 }
 function ingresarConsultaCiudadana(){
