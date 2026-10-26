@@ -57,9 +57,10 @@ describe('Ingreso Google cuando el aviso se cierra', () => {
     await expect(p).resolves.toBe(user)
   })
 
-  it('al elegir la cuenta la página va a Google y recupera la sesión antes de mezclar informes', () => {
+  it('el botón abre la ventana de la cuenta y no espera una redirección', () => {
     const fn = extraer(ingreso, ['iniciarLoginGoogle'])
-    expect(fn).toContain('_authSignInGoogleRedirect')
+    expect(fn).toContain('window._authSignInGoogle()')
+    expect(fn).not.toContain('_authSignInGoogleRedirect')
     expect(fn).toContain('esperarUsuarioGoogleTrasCierre()')
     expect(fn).not.toContain('Inicio de sesión cancelado.')
     const boot = extraer(ingreso, ['initFirebaseAuthListener'])
@@ -67,6 +68,7 @@ describe('Ingreso Google cuando el aviso se cierra', () => {
     const iFin = boot.indexOf('.then(fin)')
     expect(iCall).toBeGreaterThan(-1)
     expect(iFin).toBeGreaterThan(iCall)
+    expect(boot).toContain('authConTope(window._authGetRedirectResult(),2500)')
     expect(boot).toContain('registrarListenerAuth()')
     const html = readFileSync(resolve(root, 'index.html'), 'utf8')
     const b = html.slice(html.indexOf('async function bootstrapApp'))

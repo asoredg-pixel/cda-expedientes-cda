@@ -399,9 +399,6 @@ async function verificarUsuarioFirestore(fbUser){
 }
 async function iniciarLoginGoogle(){
   if(window._loginGoogleInFlight)return;
-  if(window._authBootstrapPromise){
-    try{await window._authBootstrapPromise;}catch(e){}
-  }
   if(!window._authSignInGoogle){
     if(!window._firebaseReady){
       const waitBtn=document.getElementById('btn-google-login');
@@ -425,16 +422,8 @@ async function iniciarLoginGoogle(){
   setLoginAuthMsg('');
   try{
     window._authVerifying=true;
-    // El aviso (popup) se cierra al elegir la cuenta y Firebase no entrega la sesión:
-    // la página va a Google y vuelve. Hay que hacerlo en el mismo clic, antes de cargar informes.
-    if(window._authSignInGoogleRedirect){
-      try{sessionStorage.setItem('sst_login_redirect_once','1');}catch(e){}
-      setLoginStatus('Abriendo Google para ingresar…',true);
-      await window._authSignInGoogleRedirect();
-      const ya=window._firebaseAuth&&window._firebaseAuth.currentUser;
-      if(ya)await verificarUsuarioFirestore(ya);
-      return;
-    }
+    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+    // Abrir la ventana de la cuenta en el mismo clic. No esperar la carga de informes ni una redirección previa.
     const cred=await window._authSignInGoogle();
     await verificarUsuarioFirestore(cred&&cred.user);
   }catch(err){
@@ -523,6 +512,17 @@ function registrarListenerAuth(){
     }
   });
 }
+function authConTope(p,ms){
+  return new Promise(function(resolve,reject){
+    let done=false;
+    const timer=setTimeout(function(){if(done)return;done=true;resolve(null);},ms);
+    Promise.resolve(p).then(function(v){
+      if(done)return;done=true;clearTimeout(timer);resolve(v);
+    },function(err){
+      if(done)return;done=true;clearTimeout(timer);reject(err);
+    });
+  });
+}
 function initFirebaseAuthListener(){
   if(window._authBootstrapHecho)return Promise.resolve();
   if(!window._authOnStateChanged||!window._firebaseAuth)return Promise.resolve();
@@ -530,14 +530,13 @@ function initFirebaseAuthListener(){
   const auth=window._firebaseAuth;
   let esperaba=false;
   try{esperaba=sessionStorage.getItem('sst_login_redirect_once')==='1';}catch(e){}
-  // getRedirectResult antes del listener y antes de loadLS: si no, la mezcla de informes se come la cuenta.
-  window._authVerifying=true;
   const fin=function(){
-    window._authVerifying=false;
+    if(!window._loginGoogleInFlight)window._authVerifying=false;
     registrarListenerAuth();
   };
-  if(!window._authGetRedirectResult){fin();return Promise.resolve();}
-  const chain=Promise.resolve(window._authGetRedirectResult()).then(function(res){
+  if(!esperaba||!window._authGetRedirectResult){fin();return Promise.resolve();}
+  window._authVerifying=true;
+  const chain=authConTope(window._authGetRedirectResult(),2500).then(function(res){
     try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
     const user=(res&&res.user)||(auth&&auth.currentUser)||null;
     if(user&&!window._usuarioActual)return verificarUsuarioFirestore(user);
