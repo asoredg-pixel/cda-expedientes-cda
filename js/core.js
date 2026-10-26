@@ -22330,6 +22330,7 @@ function confirmarCierreTask(expId,taskId,opts){
   verificarTaskExp(expId,taskId,fechaCierre,Object.assign({skipAutoMail:true},opts));
 }
 function estadoTaskLabel(t){
+  if(t&&t.eliminada)return'Eliminada';
   // Proyección del responsable (o encargado viendo ese responsable): ✓ Revisada · X Firmar / etc.
   const yoLab=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
   if(yoLab&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoLab)){

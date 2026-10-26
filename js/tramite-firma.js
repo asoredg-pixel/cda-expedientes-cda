@@ -337,6 +337,8 @@ function tramiteNotifCorreoCamposHtml(e,t,wf){
 window.tramiteNotifCorreoPropuesta=tramiteNotifCorreoPropuesta;
 window.tramiteNotifCorreoCamposHtml=tramiteNotifCorreoCamposHtml;
 function taskFirmaEstadoUi(t){
+  // En papelera no sigue «X Firmar»: Consulta la mostraba como si aún esperara firma.
+  if(!t||t.eliminada)return null;
   if(!taskEnFlujoFirmaTramite(t)&&!taskFirmaFase(t)&&!taskFirmaEnRevisionFinalNotif(t))return null;
   const f=taskFirmaFase(t);
   const wf=getTaskFirmaWf(t);

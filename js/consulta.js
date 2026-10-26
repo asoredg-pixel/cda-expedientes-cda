@@ -2048,6 +2048,12 @@ function conConsultaActLibreCard(stub){
     '</div>'+
   '</details>';
 }
+/** Papelera no se lista en Consulta. Sí se deja el rastro «Trasladada» de una PQRSD. */
+function taskVisibleEnConsulta(e,t){
+  if(!t)return false;
+  if(!t.eliminada)return true;
+  return typeof taskTrasladoPqrsInfo==='function'&&!!taskTrasladoPqrsInfo(e,t);
+}
 function conConsultaOneCard(e){
   if(e&&e._consulta_act_libre)return conConsultaActLibreCard(e);
   if(_conConsultaPag.mode==='pqrs'){
@@ -2093,7 +2099,8 @@ function conConsultaOneCard(e){
   const porCorrT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Por corregir').length;
   const vencT=tasks.filter(t=>!t.eliminada&&estadoTask(t)==='Vencida').length;
   const d=dias(getFechaEstado(e,'Solicitud')||e._fecha);
-  const tkHtml=tasks.length?tasks.map(t=>renderTaskConsultaItem(e,t,_conConsultaPag.qs)).join(''):'<div style="font-size:12px;color:var(--tx3);padding:5px">Sin actividades</div>';
+  const tasksVis=tasks.filter(function(t){return taskVisibleEnConsulta(e,t);});
+  const tkHtml=tasksVis.length?tasksVis.map(t=>renderTaskConsultaItem(e,t,_conConsultaPag.qs)).join(''):'<div style="font-size:12px;color:var(--tx3);padding:5px">Sin actividades</div>';
   const pendAct=tasks.filter(t=>!t.eliminada&&estadoTask(t)!=='Atendida').length;
   const asocList=getExpAsociadosAll(e);
   const hasAsoc=asocList.length>0;
