@@ -20635,13 +20635,30 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     });
   }
 
-  // Informe aún no aprobado: se borra el registro y la carpeta de Drive (como si no se hubiera entregado).
+  // Informe aún no aprobado: queda eliminado (no se saca de la lista).
+  // Si solo se quita de memoria, al guardar se mezcla de nuevo la copia del servidor y reaparece en Por revisar.
   if(t.informeContrato&&!e){
     const tidInf=String(taskId||t.id||'').trim();
+    const cuandoInf=new Date().toISOString();
+    const marcarInfElim=function(rowInf){
+      if(!rowInf)return;
+      rowInf.eliminada=true;
+      rowInf.eliminadaEn=cuandoInf;
+      rowInf.eliminadaMotivo='Entrega de informe eliminada';
+      rowInf.estado='En ejecución';
+      rowInf.fechaReportada='';
+      rowInf.fechaAtendida='';
+      rowInf.soportes=[];
+      rowInf._pending_fs_sync=true;
+      rowInf._pending_fs_at=Date.now();
+      if(!Array.isArray(rowInf.historial))rowInf.historial=[];
+      rowInf.historial.push({tipo:'eliminacion',fecha:typeof hoy==='function'?hoy():cuandoInf.slice(0,10),nota:'Entrega de informe eliminada',ts:Date.now()});
+    };
     if(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)){
       const ixInf=actividadesLibres.findIndex(function(x){return x&&String(x.id||'')===tidInf;});
-      if(ixInf>=0)actividadesLibres.splice(ixInf,1);
-    }
+      if(ixInf>=0)marcarInfElim(actividadesLibres[ixInf]);
+      else{marcarInfElim(t);actividadesLibres.push(t);}
+    }else marcarInfElim(t);
     try{if(typeof persistExpLocal==='function')persistExpLocal();}catch(errL){console.warn('eliminarEntrega informe local:',errL);}
     try{
       const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:null;
@@ -20659,11 +20676,25 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     if(typeof informeBorradorCerrarTrasEntrega==='function'){
       try{informeBorradorCerrarTrasEntrega(t);}catch(errB){}
     }
-    notif('🗑 Informe eliminado — se borraron el registro, los archivos y la carpeta de Drive','ok');
     closeTaskModal();
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderBandejaDepto==='function')renderBandejaDepto();
     if(typeof renderRecursosPanel==='function')renderRecursosPanel();
+    try{
+      if(typeof confirmExito==='function'){
+        confirmExito({
+          title:'Informe eliminado',
+          message:'Se eliminó la entrega del informe. Ya no aparece en Por revisar.',
+          detail:'Se borraron el registro, los archivos y la carpeta de Drive.',
+          tone:'success',
+          hideFooter:false,
+          confirmLabel:'Entendido',
+          autoCloseMs:0
+        });
+      }else if(typeof notif==='function'){
+        notif('🗑 Informe eliminado — se borraron el registro, los archivos y la carpeta de Drive','ok');
+      }
+    }catch(errN){console.warn('eliminarEntrega informe aviso:',errN);}
     return true;
   }
 
