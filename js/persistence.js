@@ -1003,13 +1003,17 @@ async function saveGlobalFirestore(){
     let libresGlobal=(actividadesLibres||[]).map(function(t){
       return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
     }).filter(Boolean);
+    // La radicación solo necesita el índice (personas). Si no se puede leer la lista
+    // de actividades, no se aborta el índice ni se escribe una lista vacía encima.
+    let incluirLibres=true;
     if(window._fsGetDoc){
       const remotoLibres=await actLibresRemotoDoc(refGlobal);
       if(remotoLibres==null){
-        window._lastFsSaveError={code:'unavailable',msg:'No se leyó la lista remota de actividades; no se sobrescribe'};
-        return false;
+        incluirLibres=false;
+        console.warn('saveGlobalFirestore: no se leyeron actividades libres; el índice se guarda sin modificarlas');
+      }else{
+        libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,remotoLibres);
       }
-      libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,remotoLibres);
     }
     let payload={
       personas:personas||[],
@@ -1035,13 +1039,25 @@ async function saveGlobalFirestore(){
         deptoResponsable:String(u.deptoResponsable||'').trim()
       }));
     }
+    if(!incluirLibres)delete payload.actividadesLibres;
     if(typeof _fsStripUndefinedDeep==='function')payload=_fsStripUndefinedDeep(payload);
-    await window._fsSetDoc(refGlobal,payload,{merge:true});
-    // Ya sincronizado: limpiar flags pendientes locales
-    (actividadesLibres||[]).forEach(function(t){
-      if(t&&t._pending_fs_sync){delete t._pending_fs_sync;delete t._pending_fs_at;}
-    });
-    if(window._pendingActLibreEntrega)window._pendingActLibreEntrega=null;
+    try{
+      await window._fsSetDoc(refGlobal,payload,{merge:true});
+    }catch(errWrite){
+      // La lista de actividades no debe impedir guardar personas / índice (radicación).
+      if(!Object.prototype.hasOwnProperty.call(payload,'actividadesLibres'))throw errWrite;
+      console.warn('saveGlobalFirestore: reintento del índice sin actividades libres',errWrite);
+      delete payload.actividadesLibres;
+      incluirLibres=false;
+      await window._fsSetDoc(refGlobal,payload,{merge:true});
+    }
+    // Ya sincronizado: limpiar flags pendientes locales solo si la lista sí se escribió
+    if(incluirLibres){
+      (actividadesLibres||[]).forEach(function(t){
+        if(t&&t._pending_fs_sync){delete t._pending_fs_sync;delete t._pending_fs_at;}
+      });
+      if(window._pendingActLibreEntrega)window._pendingActLibreEntrega=null;
+    }
     return true;
   }catch(err){
     console.error('saveGlobalFirestore:',err);
@@ -1263,7 +1279,9 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
     updateSyncIndicator('synced');
     if(!globalOk&&typeof notif==='function'){
       const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp);
-      notif(esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.','warn');
+      const cod=window._lastFsSaveError&&window._lastFsSaveError.code;
+      const base=esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.';
+      notif(base+(cod&&cod!=='unknown'?' ('+cod+')':''),'warn');
     }
     return true;
   }
