@@ -417,7 +417,9 @@ function avisarFalloLogin(msg){
 }
 function iniciarLoginGoogle(){
   if(window._loginGoogleInFlight)return;
-  if(!window._authSignInGoogle&&!window._authSignInGoogleRedirect){
+  // La ventanita (signInWithPopup) es el ingreso. La página completa a Google no devuelve
+  // la cuenta: el sitio está en GitHub Pages y el dominio de Auth es otro.
+  if(!window._authSignInGoogle){
     setLoginAuthMsg('Cargando autenticación… Espere un momento y pulse de nuevo.','');
     return;
   }
@@ -427,26 +429,23 @@ function iniciarLoginGoogle(){
   window._authVerifying=true;
   if(btn)btn.disabled=true;
   setLoginAuthMsg('');
-  setLoginStatus('Abriendo Google para elegir su cuenta…',true);
-  let navego=false;
-  window.addEventListener('pagehide',function(){navego=true;},{once:true});
+  setLoginStatus('Abriendo la ventana de la cuenta…',true);
+  try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
+  try{sessionStorage.removeItem('sst_login_usar_ventana');}catch(e){}
   const terminar=function(){
     window._authVerifying=false;
     window._loginGoogleInFlight=false;
     if(btn)btn.disabled=false;
   };
   const fallo=function(err){
-    if(navego)return;
     console.error(err);
     const code=err&&err.code;
     const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
     const cerrarCon=function(user){
-      if(navego)return;
       if(user){
         verificarUsuarioFirestore(user).finally(terminar);
         return;
       }
-      try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
       const detalle=code?(' ('+code+')'):'';
       let msg='No se completó el ingreso. Elija de nuevo su cuenta de Google.'+detalle;
       if(code==='auth/popup-blocked')msg='El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.';
@@ -460,52 +459,9 @@ function iniciarLoginGoogle(){
     }
     cerrarCon(window._firebaseAuth&&window._firebaseAuth.currentUser);
   };
-  const abrirVentana=function(){
-    if(navego)return;
-    if(!window._authSignInGoogle){
-      fallo({code:'auth/popup-blocked'});
-      return;
-    }
-    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    try{sessionStorage.removeItem('sst_login_usar_ventana');}catch(e){}
-    setLoginStatus('Abriendo la ventana de la cuenta…',true);
-    window._authSignInGoogle().then(function(cred){
-      if(navego)return;
-      return verificarUsuarioFirestore(cred&&cred.user).finally(terminar);
-    }).catch(fallo);
-  };
-  let usarVentana=false;
-  try{usarVentana=sessionStorage.getItem('sst_login_usar_ventana')==='1';}catch(e){}
-  if(usarVentana){
-    abrirVentana();
-    return;
-  }
-  // Sin esperas antes: la página va a Google en este clic. El aviso pequeño se cierra al elegir la cuenta y no entrega la sesión.
-  if(window._authSignInGoogleRedirect){
-    try{sessionStorage.setItem('sst_login_redirect_once','1');}catch(e){}
-    try{
-      const ret=window._authSignInGoogleRedirect();
-      const t=setTimeout(function(){
-        if(navego)return;
-        try{sessionStorage.setItem('sst_login_usar_ventana','1');}catch(e){}
-        avisarFalloLogin('Google no abrió la página de la cuenta. Pulse Ingresar con Google otra vez.');
-        terminar();
-      },2500);
-      Promise.resolve(ret).then(function(){},function(err){
-        clearTimeout(t);
-        console.error('login redirect:',err);
-        try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-        if(!navego)abrirVentana();
-      });
-      return;
-    }catch(err){
-      console.error('login redirect:',err);
-      try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-      abrirVentana();
-      return;
-    }
-  }
-  abrirVentana();
+  window._authSignInGoogle().then(function(cred){
+    return verificarUsuarioFirestore(cred&&cred.user).finally(terminar);
+  }).catch(fallo);
 }
 /** El aviso se cerró, pero la cuenta puede haber quedado en Firebase. */
 function esperarUsuarioGoogleTrasCierre(){

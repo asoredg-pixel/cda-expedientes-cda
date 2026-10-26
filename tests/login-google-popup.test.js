@@ -57,12 +57,11 @@ describe('Ingreso Google cuando el aviso se cierra', () => {
     await expect(p).resolves.toBe(user)
   })
 
-  it('el clic va a Google sin esperas y, si no sale de la página, abre la ventana', () => {
+  it('el clic abre la ventanita de la cuenta y no manda la página a Google', () => {
     const fn = extraer(ingreso, ['iniciarLoginGoogle'])
-    const iRed = fn.indexOf('_authSignInGoogleRedirect()')
-    expect(iRed).toBeGreaterThan(-1)
-    expect(fn).toContain('abrirVentana()')
-    expect(fn).toContain('window._authSignInGoogle()')
+    expect(fn).not.toContain('_authSignInGoogleRedirect')
+    expect(fn).not.toContain("setItem('sst_login_redirect_once'")
+    expect(fn.indexOf('window._authSignInGoogle()')).toBeGreaterThan(-1)
     expect(fn).toContain('esperarUsuarioGoogleTrasCierre')
     expect(fn).not.toContain('await ')
     expect(fn).not.toContain('Inicio de sesión cancelado.')
