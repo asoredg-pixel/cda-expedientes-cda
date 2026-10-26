@@ -32,7 +32,7 @@ function extraer(src, nombres) {
 function ctxUnion() {
   const c = createContext({ console, Date, Map, Set })
   runInContext('var _actLibresQuitadosIds=new Set();var _actLibresRemotoPorDoc={};\n' + extraer(per, [
-    'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'pickMejorActLibre', 'actLibresRemotoCombinado'
+    'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'actLibreTieneArchivoDrive', 'pickMejorActLibre', 'actLibresRemotoCombinado'
   ]), c)
   return c
 }

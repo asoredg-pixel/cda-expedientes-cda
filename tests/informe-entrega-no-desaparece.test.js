@@ -10,6 +10,7 @@ import { Script, createContext, runInContext } from 'vm'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const per = readFileSync(resolve(root, 'js/persistence.js'), 'utf8')
+const gmail = readFileSync(resolve(root, 'js/gmail.js'), 'utf8')
 
 function extraer(src, nombres) {
   return nombres.map(n => {
@@ -26,7 +27,7 @@ function extraer(src, nombres) {
 }
 
 const nombres = [
-  'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'pickMejorActLibre',
+  'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'actLibreTieneArchivoDrive', 'pickMejorActLibre',
   'actLibreEsAltaReciente', 'actLibreEsEntregaHuerfana', 'actLibreKeepLocalOnly',
   'clearActividadesLibresLocalCache', 'upsertActividadesLibresFromRemote', 'actLibresRemotoDoc'
 ]
@@ -57,8 +58,10 @@ function informeEntregado(haceMs) {
 }
 
 describe('Entrega de informe que no quedó en Firestore', () => {
-  it('un snapshot sin la actividad no la borra a los 4 días y la deja pendiente de subir', () => {
+  it('si el guardado aún está pendiente, un snapshot vacío no borra el informe con PDF', () => {
     const local = informeEntregado(4 * 24 * 60 * 60 * 1000)
+    local._pending_fs_sync = true
+    local._pending_fs_at = Date.now()
     const c = ctx()
     c.actividadesLibres = [local]
     runInContext(extraer(per, nombres), c)
@@ -66,6 +69,16 @@ describe('Entrega de informe que no quedó en Firestore', () => {
     expect(out.map(t => t.id)).toEqual(['inf1'])
     expect(out[0]._pending_fs_sync).toBe(true)
     expect(out[0].estado).toBe('Por verificar')
+  })
+
+  it('un informe ya sincronizado que ya no está en el servidor no reaparece (aunque tenga fecha de entrega)', () => {
+    const local = informeEntregado(4 * 24 * 60 * 60 * 1000)
+    delete local.soportes
+    delete local._drive_folder_id
+    const c = ctx()
+    c.actividadesLibres = [local]
+    runInContext(extraer(per, nombres), c)
+    expect(c.upsertActividadesLibresFromRemote([]).map(t => t.id)).toEqual([])
   })
 
   it('una copia más nueva sin la entrega no pisa el informe ya reportado', () => {
@@ -101,5 +114,8 @@ describe('Entrega de informe que no quedó en Firestore', () => {
     const globalFn = extraer(per, ['saveGlobalFirestore'])
     expect(globalFn).toContain('remotoLibres==null')
     expect(globalFn).toContain('el índice se guarda sin modificarlas')
+    const folder = extraer(gmail, ['driveEnsureExpedienteFolder'])
+    expect(folder.indexOf('e._contrato_informe')).toBeGreaterThan(0)
+    expect(folder.indexOf('if (e._drive_folder_id)')).toBeGreaterThan(folder.indexOf('e._contrato_informe'))
   })
 })

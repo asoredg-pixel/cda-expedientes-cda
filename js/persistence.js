@@ -682,8 +682,8 @@ function pickMejorActLibre(a,b){
   const bF=!!(b.firmaWf&&String(b.firmaWf.fase||'').trim());
   if(aCorr&&!aF&&bF&&!bCorr)return a;
   if(bCorr&&!bF&&aF&&!aCorr)return b;
-  // Una copia más nueva sin la entrega no debe pisar el informe ya reportado (el PDF sigue en Drive).
-  const aEnt=actLibreTieneEntrega(a),bEnt=actLibreTieneEntrega(b);
+  // Una copia más nueva sin el PDF no debe pisar el informe que sí tiene archivo en Drive.
+  const aEnt=actLibreTieneArchivoDrive(a),bEnt=actLibreTieneArchivoDrive(b);
   if(aEnt&&!bEnt&&!bCorr)return a;
   if(bEnt&&!aEnt&&!aCorr)return b;
   const ta=actLibreEventTs(a),tb=actLibreEventTs(b);
@@ -714,21 +714,23 @@ function actLibreTieneEntrega(t){
   if(t.fechaReportada||t.estado==='Por verificar'||t.estado==='Por corregir')return true;
   return (t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);});
 }
+/** PDF ya subido a Drive (no basta la fecha de entrega: eso reinyectaba informes eliminados y vacíos). */
+function actLibreTieneArchivoDrive(t){
+  if(!t||t.eliminada)return false;
+  return (t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);});
+}
 /**
- * Informe (u otra entrega) que está en este navegador y no en el snapshot.
- * Drive ya tiene el PDF; no descartarla a los 15 min si Firestore no la recibió.
- * Se re-marca pendiente para volver a subirla (hasta 7 días).
+ * Informe que este navegador aún no logró guardar (sync pendiente) y ya tiene archivo.
+ * No se revive uno que el servidor ya no tiene si la entrega ya se había sincronizado
+ * o si lo eliminaron: eso devolvía el informe a Por revisar sin soportes.
  */
 function actLibreEsEntregaHuerfana(t){
-  if(!t||t.eliminada||!t.id)return false;
+  if(!t||t.eliminada||!t.id||!t._pending_fs_sync)return false;
   const inf=t.informeContrato&&String(t.informeContrato.numero||'').trim();
   if(!inf)return false;
-  const conEvidencia=!!(t.fechaReportada||t._drive_folder_id||(t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);}));
-  if(!conEvidencia)return false;
+  if(!actLibreTieneArchivoDrive(t)&&!t._drive_folder_id)return false;
   const ts=actLibreEventTs(t)||Number(t._pending_fs_at)||0;
   if(ts&&(Date.now()-ts)>7*24*60*60*1000)return false;
-  t._pending_fs_sync=true;
-  if(!t._pending_fs_at)t._pending_fs_at=Date.now();
   return true;
 }
 function actLibreKeepLocalOnly(t){
