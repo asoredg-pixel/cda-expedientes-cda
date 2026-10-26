@@ -71,6 +71,16 @@ describe('Entrega de informe que no quedó en Firestore', () => {
     expect(out[0].estado).toBe('Por verificar')
   })
 
+  it('un pendiente de hace horas no reaparece si el servidor ya no lo tiene', () => {
+    const local = informeEntregado(2 * 60 * 60 * 1000)
+    local._pending_fs_sync = true
+    local._pending_fs_at = Date.now() - 2 * 60 * 60 * 1000
+    const c = ctx()
+    c.actividadesLibres = [local]
+    runInContext(extraer(per, nombres), c)
+    expect(c.upsertActividadesLibresFromRemote([]).map(t => t.id)).toEqual([])
+  })
+
   it('un informe ya sincronizado que ya no está en el servidor no reaparece (aunque tenga fecha de entrega)', () => {
     const local = informeEntregado(4 * 24 * 60 * 60 * 1000)
     delete local.soportes

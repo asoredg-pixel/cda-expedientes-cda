@@ -588,7 +588,9 @@ window.persistMantenimientoFirestore=persistMantenimientoFirestore;
 function actividadesLibresForDepto(deptoId){
   const d=String(deptoId||'').trim()||'guaviare';
   return (Array.isArray(actividadesLibres)?actividadesLibres:[]).filter(function(t){
-    if(!t||t.eliminada)return false;
+    if(!t)return false;
+    // La papelera también se guarda. Si se omite, el otro navegador no ve la eliminación
+    // y vuelve a subir el informe a Por revisar.
     const td=typeof resolveDeptoActLibre==='function'?resolveDeptoActLibre(t.depto):(t.depto||'guaviare');
     return td===d;
   });
@@ -729,8 +731,8 @@ function actLibreEsEntregaHuerfana(t){
   const inf=t.informeContrato&&String(t.informeContrato.numero||'').trim();
   if(!inf)return false;
   if(!actLibreTieneArchivoDrive(t)&&!t._drive_folder_id)return false;
-  const ts=actLibreEventTs(t)||Number(t._pending_fs_at)||0;
-  if(ts&&(Date.now()-ts)>7*24*60*60*1000)return false;
+  const pendienteDesde=Number(t._pending_fs_at)||0;
+  if(!pendienteDesde||(Date.now()-pendienteDesde)>15*60*1000)return false;
   return true;
 }
 function actLibreKeepLocalOnly(t){
@@ -775,8 +777,12 @@ function upsertActividadesLibresFromRemote(remote){
       if(actLibreKeepLocalOnly(t))byId.set(id,t);
       return;
     }
+    if(remT.eliminada&&!t.eliminada){
+      byId.set(id,remT);
+      return;
+    }
     // Remoto gana salvo sync local pendiente (marcadores / entrega reciente)
-    if(t._pending_fs_sync&&scoreActividadLibreMerge(t)>=scoreActividadLibreMerge(remT)){
+    if(t._pending_fs_sync&&!remT.eliminada&&scoreActividadLibreMerge(t)>=scoreActividadLibreMerge(remT)){
       byId.set(id,t);
       return;
     }
@@ -807,7 +813,8 @@ function mergeActLibresConRemotoParaGuardar(list,remoto){
   (Array.isArray(remoto)?remoto:[]).forEach(function(r){if(r&&r.id)remById.set(String(r.id),r);});
   const out=(list||[]).map(function(t){
     const r=t&&t.id?remById.get(String(t.id)):null;
-    return r&&actLibreEventTs(r)>actLibreEventTs(t)?r:t;
+    if(!r)return t;
+    return pickMejorActLibre(t,r);
   });
   (Array.isArray(remoto)?remoto:[]).forEach(function(r){
     const id=String((r&&r.id)||'');
