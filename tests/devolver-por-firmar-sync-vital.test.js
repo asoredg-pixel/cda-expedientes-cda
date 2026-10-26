@@ -57,7 +57,7 @@ describe('Devolver desde Por firmar: sync inmediato para VITAL', () => {
   it('pickMejorActLibre: Por corregir sin fase gana frente a caché en Por firmar', () => {
     const c = createContext({ String, Array, Object, Math, Number, Date, isFinite, isNaN })
     runInContext(extraer(persistence, [
-      'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'pickMejorActLibre'
+      'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'pickMejorActLibre'
     ]), c)
     const enFirma = {
       id: 'a1', estado: 'Atendida',

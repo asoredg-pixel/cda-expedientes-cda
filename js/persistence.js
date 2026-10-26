@@ -682,6 +682,10 @@ function pickMejorActLibre(a,b){
   const bF=!!(b.firmaWf&&String(b.firmaWf.fase||'').trim());
   if(aCorr&&!aF&&bF&&!bCorr)return a;
   if(bCorr&&!bF&&aF&&!aCorr)return b;
+  // Una copia más nueva sin la entrega no debe pisar el informe ya reportado (el PDF sigue en Drive).
+  const aEnt=actLibreTieneEntrega(a),bEnt=actLibreTieneEntrega(b);
+  if(aEnt&&!bEnt&&!bCorr)return a;
+  if(bEnt&&!aEnt&&!aCorr)return b;
   const ta=actLibreEventTs(a),tb=actLibreEventTs(b);
   if(ta!==tb)return ta>tb?a:b;
   const sa=scoreActividadLibreMerge(a),sb=scoreActividadLibreMerge(b);
@@ -704,24 +708,53 @@ function actLibreEsAltaReciente(t){
   if(!h.length)return true;
   return h.every(function(x){return x&&(x.tipo==='asignacion'||x.tipo==='creacion');});
 }
+/** Hay entrega real (Por revisar / archivos), no un alta vacía. */
+function actLibreTieneEntrega(t){
+  if(!t||t.eliminada)return false;
+  if(t.fechaReportada||t.estado==='Por verificar'||t.estado==='Por corregir')return true;
+  return (t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);});
+}
+/**
+ * Informe (u otra entrega) que está en este navegador y no en el snapshot.
+ * Drive ya tiene el PDF; no descartarla a los 15 min si Firestore no la recibió.
+ * Se re-marca pendiente para volver a subirla (hasta 7 días).
+ */
+function actLibreEsEntregaHuerfana(t){
+  if(!t||t.eliminada||!t.id)return false;
+  const inf=t.informeContrato&&String(t.informeContrato.numero||'').trim();
+  if(!inf)return false;
+  const conEvidencia=!!(t.fechaReportada||t._drive_folder_id||(t.soportes||[]).some(function(s){return s&&(s.driveFileId||s.fileId);}));
+  if(!conEvidencia)return false;
+  const ts=actLibreEventTs(t)||Number(t._pending_fs_at)||0;
+  if(ts&&(Date.now()-ts)>7*24*60*60*1000)return false;
+  t._pending_fs_sync=true;
+  if(!t._pending_fs_at)t._pending_fs_at=Date.now();
+  return true;
+}
 function actLibreKeepLocalOnly(t){
   if(!t||!t.id||t.eliminada)return false;
   if(typeof _actLibresQuitadosIds!=='undefined'&&_actLibresQuitadosIds.has(String(t.id)))return false;
   // Alta de «+ crear actividad»: aunque el guardado ya haya limpiado el flag, el snapshot
   // diferido (lista anterior) no debe hacerla desaparecer.
   if(actLibreEsAltaReciente(t))return true;
+  if(actLibreEsEntregaHuerfana(t))return true;
   if(!t._pending_fs_sync)return false;
   const at=Number(t._pending_fs_at)||0;
   // Solo conservar huérfanos locales con sync pendiente reciente (evita resucitar borrados remotos)
   if(!at)return true;
   return (Date.now()-at)<15*60*1000;
 }
-/** Remoto vacío = limpieza intencional: no resucitar desde localStorage / pestañas viejas. */
+/** Remoto vacío = limpieza intencional: no resucitar altas viejas. Sí se conserva un informe ya entregado (el PDF está en Drive). */
 function clearActividadesLibresLocalCache(){
-  actividadesLibres=[];
-  window._pendingActLibreEntrega=null;
-  try{localStorage.removeItem('sst_act_libres');}catch(e){}
-  return [];
+  const keep=(Array.isArray(actividadesLibres)?actividadesLibres:[]).filter(function(t){
+    return actLibreKeepLocalOnly(t);
+  });
+  actividadesLibres=keep;
+  if(!keep.length){
+    window._pendingActLibreEntrega=null;
+    try{localStorage.removeItem('sst_act_libres');}catch(e){}
+  }
+  return keep.slice();
 }
 function upsertActividadesLibresFromRemote(remote){
   const rem=Array.isArray(remote)?remote:[];
@@ -822,8 +855,9 @@ async function actLibresRemotoDoc(ref){
     const data=snap&&snap.exists()?snap.data():null;
     return data&&Array.isArray(data.actividadesLibres)?data.actividadesLibres:[];
   }catch(err){
-    console.warn('actLibresRemotoDoc: no se pudo leer remoto',err);
-    return [];
+    // null = lectura fallida. [] = documento vacío. No guardar encima de una lectura fallida.
+    console.warn('actLibresRemotoDoc: no se pudo leer remoto; no se sobrescribe la lista',err);
+    return null;
   }
 }
 
@@ -838,7 +872,15 @@ async function saveActividadesLibresDeptoFirestore(deptoId){
     let list=actividadesLibresForDepto(d).map(function(t){
       return sanitizeActLibreForFirestore(t);
     }).filter(Boolean);
-    if(window._fsGetDoc)list=mergeActLibresConRemotoParaGuardar(list,await actLibresRemotoDoc(ref));
+    if(window._fsGetDoc){
+      const remotoLibres=await actLibresRemotoDoc(ref);
+      if(remotoLibres==null){
+        window._lastFsSaveError={code:'unavailable',msg:'No se leyó la lista remota de actividades; no se sobrescribe'};
+        updateSyncIndicator('error');
+        return false;
+      }
+      list=mergeActLibresConRemotoParaGuardar(list,remotoLibres);
+    }
     const payload=typeof _fsStripUndefinedDeep==='function'
       ?_fsStripUndefinedDeep({actividadesLibres:list,updatedAt:new Date().toISOString()})
       :{actividadesLibres:list,updatedAt:new Date().toISOString()};
@@ -961,7 +1003,14 @@ async function saveGlobalFirestore(){
     let libresGlobal=(actividadesLibres||[]).map(function(t){
       return typeof sanitizeActLibreForFirestore==='function'?sanitizeActLibreForFirestore(t):t;
     }).filter(Boolean);
-    if(window._fsGetDoc)libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,await actLibresRemotoDoc(refGlobal));
+    if(window._fsGetDoc){
+      const remotoLibres=await actLibresRemotoDoc(refGlobal);
+      if(remotoLibres==null){
+        window._lastFsSaveError={code:'unavailable',msg:'No se leyó la lista remota de actividades; no se sobrescribe'};
+        return false;
+      }
+      libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,remotoLibres);
+    }
     let payload={
       personas:personas||[],
       actividadesLibres:libresGlobal,
@@ -1317,7 +1366,15 @@ async function saveFirestore(){
     };
     const refGlobal=window._fsDoc(db,'sistema','global');
     let libresGlobal=(actividadesLibres||[]).slice();
-    if(window._fsGetDoc)libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,await actLibresRemotoDoc(refGlobal));
+    if(window._fsGetDoc){
+      const remotoLibres=await actLibresRemotoDoc(refGlobal);
+      if(remotoLibres==null){
+        window._lastFsSaveError={code:'unavailable',msg:'No se leyó la lista remota de actividades; no se sobrescribe'};
+        updateSyncIndicator('error');
+        return;
+      }
+      libresGlobal=mergeActLibresConRemotoParaGuardar(libresGlobal,remotoLibres);
+    }
     const payload={
       personas:personas||[],
       actividadesLibres:libresGlobal,

@@ -26,7 +26,8 @@ function extraer(src, nombres) {
 }
 
 const nombres = [
-  'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'pickMejorActLibre',
+  'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneEntrega', 'pickMejorActLibre',
+  'actLibreEsEntregaHuerfana',
   'actLibreEsAltaReciente', 'actLibreKeepLocalOnly', 'clearActividadesLibresLocalCache',
   'upsertActividadesLibresFromRemote'
 ]
