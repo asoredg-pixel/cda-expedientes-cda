@@ -445,6 +445,8 @@ function esSoloLectura(){
   return false;
 }
 function esMantenimientoActivo(){
+  // Sin cupo de escritura en Firestore lo guardado no llega a la nube: se trabaja como en mantenimiento.
+  if(window._fsCuotaAgotada)return true;
   return !!(typeof mantenimientoEstado!=='undefined'&&mantenimientoEstado&&mantenimientoEstado.activo);
 }
 /** Bloquea mutaciones cuando el modo mantenimiento está activo. Devuelve true si hay que abortar. */
@@ -474,10 +476,20 @@ function fmtMantenimientoRestablece(iso){
 }
 function aplicarModoMantenimientoUI(){
   const on=esMantenimientoActivo();
+  const mantAdmin=!!(typeof mantenimientoEstado!=='undefined'&&mantenimientoEstado&&mantenimientoEstado.activo);
   document.body.classList.toggle('modo-mantenimiento',on);
+  // El aviso no se muestra en la pantalla de inicio ni en la consulta ciudadana.
+  const verAviso=on&&document.body.classList.contains('sesion-activa')&&!esModoCiudadano();
+  document.body.classList.toggle('mant-aviso-visible',verAviso);
   const ban=document.getElementById('mant-banner');
   if(ban){
-    if(on){
+    if(verAviso&&!mantAdmin){
+      const rolU=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+      const gestiona=(typeof esAdministrador==='function'&&esAdministrador())||rolU==='guaviare';
+      const hora=typeof horaReinicioCuotaFirebase==='function'?horaReinicioCuotaFirebase():'2:00 a. m.';
+      ban.innerHTML='⚠️ <strong>Límite diario de Firebase alcanzado</strong> — solo consulta: los cambios no se guardarían. Se restablece a las <strong>'+escAttr(hora)+'</strong>; después recargue con Ctrl+F5.'+
+        (gestiona?' <a class="mant-ok" href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="margin-left:8px;color:#fde68a;text-decoration:underline">Ver uso y facturación de Firebase</a>':'');
+    }else if(verAviso){
       const when=fmtMantenimientoRestablece(mantenimientoEstado.restableceAt);
       const extra=mantenimientoEstado.mensaje?(' · '+mantenimientoEstado.mensaje):'';
       ban.innerHTML='🛠️ <strong>Modo mantenimiento</strong> — solo consulta. Restablecimiento estimado: <strong>'+escAttr(when)+'</strong>'+escAttr(extra)+

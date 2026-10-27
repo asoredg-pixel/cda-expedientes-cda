@@ -55,23 +55,10 @@ function horaReinicioCuotaFirebase(){
     return '2:00 a. m.';
   }
 }
+/** Cupo agotado: el sistema queda en solo consulta, con el mismo bloqueo del modo mantenimiento. */
 function mostrarAvisoCuotaFirestore(){
   if(!document.body)return;
-  let el=document.getElementById('fs-cuota-banner');
-  if(!el){
-    el=document.createElement('div');
-    el.id='fs-cuota-banner';
-    el.setAttribute('role','alert');
-    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100300;background:#7f1d1d;color:#fff;padding:10px 16px;font-size:13px;line-height:1.45;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.25)';
-    document.body.insertBefore(el,document.body.firstChild);
-  }
-  const u=window._usuarioActual;
-  const rol=String(u&&u.rol||'').trim();
-  const gestiona=rol==='admin'||rol==='guaviare';
-  el.innerHTML='Se alcanzó el límite diario gratuito de Firebase. Los cambios no se están guardando en la nube. '+
-    'Se restablece a las '+escAttr(horaReinicioCuotaFirebase())+' (hora de este equipo). Evite registrar información hasta entonces.'+
-    (gestiona?' <a href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="color:#fde68a;text-decoration:underline">Ver uso y facturación de Firebase</a>':'');
-  el.style.display='block';
+  if(typeof aplicarModoMantenimientoUI==='function')aplicarModoMantenimientoUI();
 }
 window.addEventListener('firestore-cuota-agotada',mostrarAvisoCuotaFirestore);
 async function leerSesionFirestore(email){
@@ -717,6 +704,7 @@ function ingresarComoRol(rolId,respNombre){
   const rolInfo=ROLES_INGRESO.find(r=>r.id===rolId);
   logAudit('Inició sesión con rol '+(rolInfo?rolInfo.titulo:rolId),'configuracion',null);
   updateHeaderUsuario();
+  if(typeof aplicarModoMantenimientoUI==='function')aplicarModoMantenimientoUI();
   if(typeof sstIniciarGmailObligatorio==='function')sstIniciarGmailObligatorio();
   setTimeout(()=>maybeShowExportReminder(),800);
   startIdleSessionWatch();
@@ -762,6 +750,7 @@ function salirDeSesionApp(){
   if(typeof stopAllRealtimeSync==='function')stopAllRealtimeSync();
   if(email)void releaseActiveSession(email);
   document.body.classList.remove('sesion-activa');
+  document.body.classList.remove('mant-aviso-visible');
   if(typeof stopChatNotifySync==='function')stopChatNotifySync();
   if(typeof stopChatActiveSync==='function')stopChatActiveSync();
   window._bandejaNotifySeeded=false;

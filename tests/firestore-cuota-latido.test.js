@@ -105,37 +105,73 @@ describe('Latido de sesión', () => {
   })
 })
 
-describe('Aviso de cupo', () => {
-  function ctxAviso(rol) {
-    const el = { style: {}, setAttribute() {}, innerHTML: '' }
+const roles = readFileSync(resolve(root, 'js/roles.js'), 'utf8')
+const css = readFileSync(resolve(root, 'css/sst.css'), 'utf8')
+
+describe('Cupo agotado: solo consulta, como el modo mantenimiento', () => {
+  function ctxModo({ cuota = false, mant = false, sesion = true, depto = 'guaviare', rol = 'responsables' } = {}) {
+    const clases = new Set(sesion ? ['sesion-activa'] : [])
+    const ban = { innerHTML: '' }
     const c = createContext({
       window: {},
       document: {
-        body: { insertBefore() {}, firstChild: null },
-        getElementById: () => el,
-        createElement: () => el
+        body: {
+          classList: {
+            contains: k => clases.has(k),
+            toggle: (k, on) => { if (on) clases.add(k); else clases.delete(k) }
+          }
+        },
+        getElementById: () => ban,
+        querySelector: () => null
       },
       escAttr: s => String(s),
-      Date
+      horaReinicioCuotaFirebase: () => '2:00 a. m.',
+      esAdministrador: () => rol === 'admin',
+      deptoActivo: depto,
+      mantenimientoEstado: { activo: mant, restableceAt: '', mensaje: '' }
     })
     c.window = c
-    c._usuarioActual = rol ? { rol } : null
-    runInContext(extraer(ingreso, ['horaReinicioCuotaFirebase', 'mostrarAvisoCuotaFirestore']), c)
-    c.mostrarAvisoCuotaFirestore()
-    return el
+    c._fsCuotaAgotada = cuota
+    c._usuarioActual = { rol }
+    runInContext(extraer(roles, ['esModoCiudadano', 'esMantenimientoActivo', 'fmtMantenimientoRestablece', 'aplicarModoMantenimientoUI']), c)
+    c.aplicarModoMantenimientoUI()
+    return { c, clases, ban }
   }
 
-  it('el encargado NCA y el administrador ven el enlace a Firebase', () => {
-    expect(ctxAviso('guaviare').innerHTML).toContain('console.firebase.google.com/project/cda-tramites/usage')
-    expect(ctxAviso('admin').innerHTML).toContain('console.firebase.google.com')
+  it('sin cupo, el sistema queda en solo consulta con su aviso', () => {
+    const { c, clases, ban } = ctxModo({ cuota: true })
+    expect(c.esMantenimientoActivo()).toBe(true)
+    expect(clases.has('modo-mantenimiento')).toBe(true)
+    expect(clases.has('mant-aviso-visible')).toBe(true)
+    expect(ban.innerHTML).toContain('Límite diario de Firebase')
+    expect(ban.innerHTML).not.toContain('console.firebase')
   })
 
-  it('el responsable y la pantalla de inicio ven el aviso sin el enlace', () => {
-    const resp = ctxAviso('responsables').innerHTML
-    const inicio = ctxAviso(null).innerHTML
-    expect(resp).toContain('límite diario')
-    expect(resp).not.toContain('console.firebase')
-    expect(inicio).toContain('Se restablece a las')
-    expect(inicio).not.toContain('console.firebase')
+  it('el encargado NCA y el administrador ven el enlace a Firebase', () => {
+    expect(ctxModo({ cuota: true, rol: 'guaviare' }).ban.innerHTML).toContain('console.firebase.google.com/project/cda-tramites/usage')
+    expect(ctxModo({ cuota: true, rol: 'admin' }).ban.innerHTML).toContain('console.firebase.google.com')
+  })
+
+  it('en la pantalla de inicio y en la consulta ciudadana no se ve ningún aviso', () => {
+    for (const caso of [{ cuota: true, sesion: false }, { mant: true, sesion: false }, { cuota: true, depto: 'ciudadano' }, { mant: true, depto: 'ciudadano' }]) {
+      const { clases, ban } = ctxModo(caso)
+      expect(clases.has('mant-aviso-visible')).toBe(false)
+      expect(ban.innerHTML).toBe('')
+    }
+    expect(css).toContain('body.mant-aviso-visible .mant-banner{display:block}')
+    expect(css).not.toContain('body.modo-mantenimiento .mant-banner{display:block}')
+  })
+
+  it('el mantenimiento del administrador conserva su propio aviso', () => {
+    const { ban } = ctxModo({ mant: true })
+    expect(ban.innerHTML).toContain('Modo mantenimiento')
+    expect(ban.innerHTML).not.toContain('Límite diario')
+  })
+
+  it('con cupo y sin mantenimiento todo queda normal', () => {
+    const { c, clases } = ctxModo()
+    expect(c.esMantenimientoActivo()).toBe(false)
+    expect(clases.has('modo-mantenimiento')).toBe(false)
+    expect(clases.has('mant-aviso-visible')).toBe(false)
   })
 })
