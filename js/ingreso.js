@@ -253,7 +253,13 @@ function setLoginStatus(msg,show){
   const panel=document.getElementById('login-auth-panel');
   if(!el)return;
   if(show&&msg){
-    el.textContent=msg;
+    el.innerHTML='<div class="gmail-sesion-progress" aria-live="polite">'+
+      '<div class="gmail-sesion-spinner-ring" role="progressbar" aria-label="Ingresando"></div>'+
+      '<p class="gmail-sesion-progress-txt" style="color:inherit"></p>'+
+      '<div class="gmail-sesion-prog-bar" aria-hidden="true" style="max-width:240px;background:rgba(255,255,255,.15)"><div class="gmail-sesion-prog-fill"></div></div>'+
+      '</div>';
+    const txt=el.querySelector('.gmail-sesion-progress-txt');
+    if(txt)txt.textContent=msg;
     el.style.display='block';
     if(panel)panel.style.display='none';
   }else{
@@ -369,7 +375,7 @@ async function verificarUsuarioFirestore(fbUser){
     if(window._authSignOut)await window._authSignOut().catch(()=>{});
     return;
   }
-  setLoginStatus('⏳ Verificando acceso…',true);
+  setLoginStatus('Verificando acceso…',true);
   const db=window._db;
   if(!db||!window._fsGetDoc||!window._fsDoc){
     setLoginStatus('');
@@ -393,15 +399,16 @@ async function verificarUsuarioFirestore(fbUser){
       mergeUsuarioEnCache({email,nombre:data.nombre||email,rol:data.rol||'',codigo:data.codigo||'',cargo:data.cargo||'',activo:data.activo!==false,deptoResponsable:data.deptoResponsable||''});
     }
     authUsuario=fbUser;
-    setLoginStatus('');
     setLoginAuthMsg('');
     const acceso=resolverAccesoLoginUsuario(data,email);
     if(!acceso.ok){
+      setLoginStatus('');
       window._usuarioActual=null;
       setLoginAuthMsg(acceso.msg,'err');
       if(window._authSignOut)await window._authSignOut().catch(()=>{});
       return;
     }
+    setLoginStatus('Ingresando al sistema…',true);
     const sesion=await claimActiveSession(email);
     if(sesion==='RULES'||!sesion){
       console.warn('Sesión en Firestore no disponible; ingreso sin bloqueo remoto.');
@@ -414,6 +421,7 @@ async function verificarUsuarioFirestore(fbUser){
     if(rolesWrap)rolesWrap.style.display='none';
     // No pisar consulta ciudadana abierta por deep-link del correo
     if(document.body.classList.contains('sesion-activa')&&typeof esModoCiudadano==='function'&&esModoCiudadano())return;
+    setLoginStatus('');
     ingresarComoRol(acceso.rol,acceso.respNom);
     if(window._fsCuotaAgotada)mostrarAvisoCuotaFirestore();
   }catch(err){
