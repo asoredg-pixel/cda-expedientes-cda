@@ -43,21 +43,94 @@ function vigilarEscritura(fn){
     return p;
   };
 }
+// Medidor de lecturas: documentos entregados por fuente, acumulados en el día aunque se recargue.
+// Consola: sstLecturas() muestra el desglose; sstLecturas(true) lo reinicia.
+const FS_LECT_KEY='sst_fs_lecturas';
+let fsLect=null;
+let fsLectTimer=null;
+function fsLectHoy(){return new Date().toLocaleDateString('en-CA');}
+function fsLectEstado(){
+  const hoy=fsLectHoy();
+  if(fsLect&&fsLect.dia===hoy)return fsLect;
+  try{fsLect=JSON.parse(localStorage.getItem(FS_LECT_KEY)||'null');}catch(e){fsLect=null;}
+  if(!fsLect||fsLect.dia!==hoy||!fsLect.por)fsLect={dia:hoy,total:0,cargas:0,por:{}};
+  return fsLect;
+}
+function fsLectRuta(ref){
+  let p='';
+  try{
+    if(ref&&typeof ref.path==='string')p=ref.path;
+    else if(ref&&ref._query){
+      p=ref._query.collectionGroup?('*/'+ref._query.collectionGroup):ref._query.path.canonicalString();
+      if(ref._query.filters&&ref._query.filters.length)p+=' (filtro)';
+    }
+  }catch(e){}
+  if(!p)return'?';
+  const seg=p.split('/');
+  if(seg[0]==='sistema'||seg[0]==='departamentos')return seg.length<=2?p:seg.map(function(s,i){return i%2===1&&i>1?'*':s;}).join('/');
+  return seg.map(function(s,i){return i%2===1?'*':s;}).join('/');
+}
+function fsLectSumar(tipo,ref,n){
+  if(!(n>0))return;
+  const st=fsLectEstado();
+  const fase=(typeof document!=='undefined'&&document.body&&document.body.classList.contains('sesion-activa'))?'':' (antes de ingresar)';
+  const k=tipo+' '+fsLectRuta(ref)+fase;
+  const r=st.por[k]||(st.por[k]={lecturas:0,veces:0});
+  r.lecturas+=n;
+  r.veces++;
+  st.total+=n;
+  clearTimeout(fsLectTimer);
+  fsLectTimer=setTimeout(function(){try{localStorage.setItem(FS_LECT_KEY,JSON.stringify(st));}catch(e){}},2000);
+}
+function fsLectSnap(ref,snap){
+  try{
+    if(!snap||(snap.metadata&&snap.metadata.fromCache))return;
+    if(typeof snap.docChanges==='function'){
+      fsLectSumar('escucha',ref,snap.docChanges().filter(function(c){return !(c.doc&&c.doc.metadata&&c.doc.metadata.hasPendingWrites);}).length);
+    }else if(!(snap.metadata&&snap.metadata.hasPendingWrites)){
+      fsLectSumar('escucha',ref,1);
+    }
+  }catch(e){}
+}
+window.sstLecturas=function(reiniciar){
+  const st=fsLectEstado();
+  if(reiniciar){fsLect={dia:fsLectHoy(),total:0,cargas:0,por:{}};try{localStorage.removeItem(FS_LECT_KEY);}catch(e){}return'Medidor reiniciado';}
+  const filas=Object.keys(st.por).map(function(k){return{fuente:k,lecturas:st.por[k].lecturas,veces:st.por[k].veces};})
+    .sort(function(a,b){return b.lecturas-a.lecturas;});
+  console.table(filas);
+  return'Día '+st.dia+': '+st.total+' lecturas en este navegador, '+st.cargas+' apertura(s) de la página';
+};
+fsLectEstado().cargas++;
 const db=getFirestore(app);
 const auth=getAuth(app);
 window._db=db;
 window._firebaseAuth=auth;
 window._fsDoc=doc;
-window._fsGetDoc=getDoc;
+window._fsGetDoc=function(ref){
+  return getDoc.apply(null,arguments).then(function(s){
+    if(!(s&&s.metadata&&s.metadata.fromCache))fsLectSumar('getDoc',ref,1);
+    return s;
+  });
+};
 window._fsSetDoc=vigilarEscritura(setDoc);
 window._fsUpdateDoc=vigilarEscritura(updateDoc);
 window._fsAddDoc=vigilarEscritura(addDoc);
-window._fsOnSnapshot=onSnapshot;
+window._fsOnSnapshot=function(ref,cb){
+  if(typeof cb!=='function')return onSnapshot.apply(null,arguments);
+  const args=Array.prototype.slice.call(arguments);
+  args[1]=function(snap){fsLectSnap(ref,snap);return cb.apply(this,arguments);};
+  return onSnapshot.apply(null,args);
+};
 window._fsCollection=collection;
 window._fsCollectionGroup=collectionGroup;
 window._fsQuery=query;
 window._fsWhere=where;
-window._fsGetDocs=getDocs;
+window._fsGetDocs=function(ref){
+  return getDocs.apply(null,arguments).then(function(s){
+    if(!(s&&s.metadata&&s.metadata.fromCache))fsLectSumar('getDocs',ref,Math.max(1,(s&&s.size)||0));
+    return s;
+  });
+};
 window._fsDeleteDoc=vigilarEscritura(deleteDoc);
 window._fsDeleteField=deleteField;
 window._fsArrayUnion=arrayUnion;
