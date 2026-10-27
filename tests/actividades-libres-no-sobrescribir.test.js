@@ -73,7 +73,7 @@ describe('Actividades libres: guardar sin borrar las de otros', () => {
   })
 
   it('global y guardado legado también combinan con el remoto', () => {
-    expect(per).toMatch(/remotoLibres==null[\s\S]*libresGlobal=mergeActLibresConRemotoParaGuardar\(libresGlobal,remotoLibres\)[\s\S]*actividadesLibres:libresGlobal/)
+    expect(per).toMatch(/libresGlobal=mergeActLibresConRemotoParaGuardar\(libresGlobal,await actLibresRemotoDoc\(refGlobal\)\)[\s\S]*actividadesLibres:libresGlobal/)
     expect(per.match(/mergeActLibresConRemotoParaGuardar\(libresGlobal/g).length).toBe(2)
   })
 })

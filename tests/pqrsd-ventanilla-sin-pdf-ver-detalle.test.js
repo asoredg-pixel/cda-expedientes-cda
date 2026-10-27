@@ -45,7 +45,6 @@ function ctx() {
   })
   runInContext(extraer(pq, ['pqrsFueRadicadaPorCorreo']), c)
   runInContext(extraer(core, ['collectPqrsOrigenDocs', 'pqrsOrigenHasMailPane', 'pqrsOrigenMostrarDetalle',
-    'pqrsOrientacionLinea', 'htmlPqrsSolicitudOrientacion',
     'renderPqrsOrigenDetalleStageHtml', 'renderPqrsOrigenDocStageHtml', 'renderPqrsOrigenReviewHtml']), c)
   return c
 }
@@ -83,47 +82,13 @@ describe('Ventanilla sin PDF principal: primero se ve la solicitud escrita', () 
     expect(html).toContain('>Detalle<')
   })
 
-  it('antes del asunto muestra al solicitante y su contacto, sin tipo ni radicado', () => {
-    const html = c.renderPqrsOrigenDetalleStageHtml(Object.assign(base(), {
-      _rad: [], _tipo_persona: 'natural', _pn_correo: 'juan@correo.com', _pn_telefono: '3001112233'
-    }))
-    const iNom = html.indexOf('Juan Gómez')
-    const iAsunto = html.indexOf('>Asunto<')
-    expect(iNom).toBeGreaterThan(0)
-    expect(iAsunto).toBeGreaterThan(iNom)
-    expect(html).toContain('Persona natural')
-    expect(html).toContain('juan@correo.com')
-    expect(html).toContain('3001112233')
+  it('la vista muestra solo el asunto y el detalle de Secretaría (sin tipo, solicitante ni radicado)', () => {
+    const html = c.renderPqrsOrigenDetalleStageHtml(Object.assign(base(), { _rad: [] }))
+    expect(html).toContain('Solicitud de visita técnica al predio')
     expect(html).toContain('El usuario solicita visita por tala en la vereda X.')
+    expect(html).not.toContain('Juan Gómez')
     expect(html).not.toContain('Tipo de solicitud')
     expect(html).not.toContain('10/10/2026 · Ventanilla')
-  })
-
-  it('jurídica, quien radica, apoderado, autorizado y anónimo', () => {
-    const jur = c.renderPqrsOrigenDetalleStageHtml(Object.assign(base(), {
-      _rad: [], _tipo_persona: 'juridica', _pn_nombre: '',
-      _pj_empresa: 'Alcaldía de X', _pj_nit: '900123456', _pj_correo: 'alcaldia@x.gov.co',
-      _qd_nombre: 'María López', _qd_identificacion: '1.020.304', _qd_correo: 'maria@x.gov.co', _qd_telefono: '3110001122',
-      _apoderado: true, _apo_nombre: 'Pedro Ruiz', _apo_correo: 'pedro@abogado.com',
-      _autorizado: true, _aut_nombre: 'Ana Díaz', _aut_telefono: '3209998877'
-    }))
-    expect(jur.indexOf('>Asunto<')).toBeGreaterThan(jur.indexOf('Alcaldía de X'))
-    expect(jur).toContain('Persona jurídica')
-    expect(jur).toContain('alcaldia@x.gov.co')
-    expect(jur).toContain('Quien radica')
-    expect(jur).toContain('María López')
-    expect(jur).toContain('maria@x.gov.co')
-    expect(jur).toContain('Apoderado')
-    expect(jur).toContain('Pedro Ruiz')
-    expect(jur).toContain('Autorizado')
-    expect(jur).toContain('Ana Díaz')
-    const anon = c.renderPqrsOrigenDetalleStageHtml(Object.assign(base(), {
-      _rad: [], _qd_anonimo: true, _pn_nombre: '', _qd_correo: 'aviso@correo.com'
-    }))
-    expect(anon).toContain('Solicitud anónima')
-    expect(anon).toContain('aviso@correo.com')
-    expect(anon).not.toContain('Juan Gómez')
-    expect(anon.indexOf('>Asunto<')).toBeGreaterThan(anon.indexOf('Solicitud anónima'))
   })
 
   it('sin notas: usa el detalle general', () => {

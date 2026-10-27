@@ -2163,19 +2163,17 @@ async function driveEnsureExpedienteFolder(e) {
   }
   const token = _driveGetBestToken();
   if (!token) throw new Error('Sin token Gmail/Drive. Conecte su correo primero.');
-  // Informe de contrato: siempre la carpeta de Recursos/Contratos. Un id viejo
-  // subía el PDF a una carpeta privada y el encargado veía «Necesitas acceso».
-  if (e._contrato_informe) {
-    const rInf = await driveEnsureContratoInformeFolder(e._contrato_informe, token);
-    e._drive_folder_id = rInf.folderId;
-    e._drive_folder_link = rInf.folderLink;
-    return rInf;
-  }
   if (e._drive_folder_id) {
     return {
       folderId: e._drive_folder_id,
       folderLink: e._drive_folder_link || ('https://drive.google.com/drive/folders/' + e._drive_folder_id)
     };
+  }
+  if (e._contrato_informe) {
+    const rInf = await driveEnsureContratoInformeFolder(e._contrato_informe, token);
+    e._drive_folder_id = rInf.folderId;
+    e._drive_folder_link = rInf.folderLink;
+    return rInf;
   }
   let ref = new Date(e._fecha || e._fecha_solicitud || '');
   if (isNaN(ref.getTime())) ref = new Date();
@@ -2836,7 +2834,7 @@ async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task,
   const meta = { name: filename, mimeType: mimeType || 'application/octet-stream', parents: [parentId] };
   form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
   form.append('file', blob instanceof Blob ? blob : new Blob([blob], { type: mimeType }));
-  const up = await fetch(DRIVE_UPLOAD_URL + '&supportsAllDrives=true', {
+  const up = await fetch(DRIVE_UPLOAD_URL, {
     method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: form
   });
   if (!up.ok) {
@@ -2844,7 +2842,7 @@ async function driveUploadExpedienteActividad(blob, origName, mimeType, e, task,
     throw new Error('Drive upload ' + up.status + ': ' + t.slice(0, 120));
   }
   const file = await up.json();
-  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions?supportsAllDrives=true', {
+  await fetch(DRIVE_API_BASE + '/files/' + file.id + '/permissions', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'reader', type: 'anyone' })
