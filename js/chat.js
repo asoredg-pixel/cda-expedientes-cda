@@ -2229,6 +2229,94 @@ function chatCorreoSesionEmail(){
 function chatDriveConectado(){
   return typeof _driveGetBestToken==='function'&&!!_driveGetBestToken();
 }
+function chatEsNombrePegadoGenerico(name){
+  const n=String(name||'').trim();
+  if(!n)return true;
+  return /^(image|blob|archivo)(\.(png|jpe?g|gif|webp|bmp))?$/i.test(n);
+}
+function chatExtensionPegada(type, name){
+  const t=String(type||'').toLowerCase();
+  const map={
+    'image/jpeg':'jpg','image/jpg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp','image/bmp':'bmp',
+    'application/pdf':'pdf',
+    'application/msword':'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+    'application/vnd.ms-excel':'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+    'application/zip':'zip',
+    'text/plain':'txt'
+  };
+  if(map[t])return map[t];
+  const m=String(name||'').match(/\.([a-z0-9]{1,8})$/i);
+  if(m)return m[1].toLowerCase();
+  if(t.indexOf('image/')===0)return 'png';
+  return 'bin';
+}
+function chatNombreCapturaPegada(ahora, ext, esImagen){
+  const d=(ahora&&typeof ahora.getFullYear==='function')?ahora:new Date();
+  function p(n){return String(n).padStart(2,'0');}
+  const base=esImagen?'Captura-':'Archivo-';
+  return base+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds())+'.'+(ext||'bin');
+}
+function chatArchivoParaEnviarDesdePegado(file, ahora){
+  if(!file)return null;
+  if(!chatEsNombrePegadoGenerico(file.name))return file;
+  const ext=chatExtensionPegada(file.type, file.name);
+  const esImagen=String(file.type||'').toLowerCase().indexOf('image/')===0||/^(png|jpe?g|gif|webp|bmp)$/.test(ext);
+  const nombre=chatNombreCapturaPegada(ahora, ext, esImagen);
+  if(typeof File==='function'){
+    try{
+      return new File([file], nombre, {type:file.type||(esImagen?'image/png':'application/octet-stream')});
+    }catch(e){}
+  }
+  try{Object.defineProperty(file,'name',{value:nombre,configurable:true});}catch(e2){}
+  return file;
+}
+function chatArchivosEnPortapapeles(data){
+  const out=[];
+  const seen={};
+  function push(file){
+    if(!file||typeof file!=='object')return;
+    const key=String(file.name||'')+'|'+String(file.type||'')+'|'+String(file.size==null?'':file.size)+'|'+String(file.lastModified==null?'':file.lastModified);
+    if(seen[key])return;
+    seen[key]=true;
+    out.push(file);
+  }
+  if(!data)return out;
+  const files=data.files;
+  if(files&&files.length){
+    for(let i=0;i<files.length;i++)push(files[i]);
+  }
+  const items=data.items;
+  if(items&&items.length){
+    for(let i=0;i<items.length;i++){
+      const it=items[i];
+      if(!it||it.kind!=='file'||typeof it.getAsFile!=='function')continue;
+      const f=it.getAsFile();
+      if(f)push(f);
+    }
+  }
+  return out;
+}
+function chatAlPegarComposer(ev){
+  const files=chatArchivosEnPortapapeles(ev&&ev.clipboardData);
+  if(!files.length)return;
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  const contactKey=window._chatActiveContactKey||(typeof chatActiveContactKey==='function'?chatActiveContactKey():'')||'';
+  if(typeof chatPuedeResponderAContacto==='function'&&!chatPuedeResponderAContacto(contactKey)){
+    if(typeof chatModalAlert==='function'){
+      chatModalAlert({
+        title:'Solo lectura',
+        message:'No se pueden adjuntar archivos en avisos de Soporte.',
+        detail:'Los mensajes de Soporte son solo de lectura.',
+        tone:'warn'
+      });
+    }
+    return;
+  }
+  const listo=chatArchivoParaEnviarDesdePegado(files[0], new Date());
+  if(typeof chatEnviarArchivo==='function')chatEnviarArchivo(listo);
+}
 function chatAdjuntarArchivoClick(){
   const inp=document.getElementById('chat-file-inp');
   if(!inp)return;
@@ -2559,6 +2647,7 @@ async function chatEnviarArchivo(fileArg){
 }
 window.chatEnviarArchivo=chatEnviarArchivo;
 window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
+window.chatAlPegarComposer=chatAlPegarComposer;
 window.chatSetReplyTo=chatSetReplyTo;
 window.chatClearReplyTo=chatClearReplyTo;
 window.chatScrollToMsg=chatScrollToMsg;
