@@ -387,43 +387,85 @@ async function verificarUsuarioFirestore(fbUser){
     if(window._authSignOut)await window._authSignOut().catch(()=>{});
   }
 }
-async function iniciarLoginGoogle(){
-  if(window._loginGoogleInFlight)return;
-  if(!window._authSignInGoogle){
-    if(!window._firebaseReady){
-      const waitBtn=document.getElementById('btn-google-login');
-      if(waitBtn)waitBtn.disabled=true;
-      setLoginAuthMsg('Cargando autenticación…','');
-      await new Promise(function(res){
-        const t=setTimeout(res,8000);
-        window.addEventListener('firebase-ready',function(){clearTimeout(t);res();},{once:true});
+function clientIdLoginGoogle(){
+  if(window._gmailClientId)return String(window._gmailClientId);
+  if(typeof GMAIL_OAUTH_CLIENT_ID!=='undefined'&&GMAIL_OAUTH_CLIENT_ID)return String(GMAIL_OAUTH_CLIENT_ID);
+  return'';
+}
+/** Ventanita de cuentas (la misma del correo). No usa el aviso de Firebase, que se cierra y no devuelve la sesión. */
+function pedirCuentaGoogle(){
+  const gis=window.google&&window.google.accounts&&window.google.accounts.oauth2;
+  const clientId=clientIdLoginGoogle();
+  if(!gis||!clientId||!window._authSignInWithAccessToken){
+    return Promise.reject({code:'gis-missing'});
+  }
+  return new Promise(function(resolve,reject){
+    let done=false;
+    const fin=function(err,cred){
+      if(done)return;
+      done=true;
+      if(err)reject(err);
+      else resolve(cred);
+    };
+    let client;
+    try{
+      client=gis.initTokenClient({
+        client_id:clientId,
+        scope:'openid email profile',
+        callback:function(resp){
+          if(!resp||resp.error||!resp.access_token){
+            fin({code:(resp&&resp.error)||'auth/popup-closed-by-user',message:resp&&(resp.error_description||resp.error)});
+            return;
+          }
+          window._authSignInWithAccessToken(resp.access_token).then(function(cred){fin(null,cred);},fin);
+        },
+        error_callback:function(err){
+          const tipo=err&&err.type;
+          if(tipo==='popup_failed_to_open')fin({code:'auth/popup-blocked'});
+          else fin({code:'auth/popup-closed-by-user'});
+        }
       });
-      if(waitBtn)waitBtn.disabled=false;
-    }
-    if(!window._authSignInGoogle){
-      setLoginAuthMsg('Autenticación Google no disponible. Recargue la página.','err');
+    }catch(err){
+      fin(err||{code:'gis-missing'});
       return;
     }
+    try{client.requestAccessToken({prompt:'select_account'});}
+    catch(err){fin(err||{code:'auth/popup-blocked'});}
+  });
+}
+async function iniciarLoginGoogle(){
+  if(window._loginGoogleInFlight)return;
+  if(!window._authSignInWithAccessToken&&!window._authSignInGoogle){
+    setLoginAuthMsg('Cargando autenticación… Espere un momento y pulse de nuevo.','');
+    return;
   }
   const btn=document.getElementById('btn-google-login');
   window._loginGoogleInFlight=true;
   if(btn)btn.disabled=true;
   setLoginAuthMsg('');
+  setLoginStatus('Abriendo la ventana de la cuenta…',true);
   try{
     window._authVerifying=true;
-    const cred=await window._authSignInGoogle();
-    await verificarUsuarioFirestore(cred.user);
+    let cred;
+    try{
+      cred=await pedirCuentaGoogle();
+    }catch(errGis){
+      if(!errGis||errGis.code!=='gis-missing'||!window._authSignInGoogle)throw errGis;
+      cred=await window._authSignInGoogle();
+    }
+    await verificarUsuarioFirestore(cred&&cred.user);
   }catch(err){
     console.error(err);
     setLoginStatus('');
     initLoginScreen();
-    const code=err&&err.code;
-    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){
+    const code=err&&(err.code||err.type);
+    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'||code==='popup_closed'){
       setLoginAuthMsg('Inicio de sesión cancelado.','err');
-    }else if(code==='auth/popup-blocked'){
+    }else if(code==='auth/popup-blocked'||code==='popup_failed_to_open'){
       setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
     }else{
-      setLoginAuthMsg('Error al iniciar sesión con Google.','err');
+      const detalle=code?(' ('+code+')'):'';
+      setLoginAuthMsg('Error al iniciar sesión con Google'+detalle+'.','err');
     }
   }finally{
     window._authVerifying=false;

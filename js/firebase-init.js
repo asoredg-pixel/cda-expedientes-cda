@@ -10,7 +10,7 @@ const firebaseConfig={
 };
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,query,where,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
-import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import{getAuth,GoogleAuthProvider,signInWithPopup,signInWithCredential,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 const db=getFirestore(app);
 const auth=getAuth(app);
@@ -36,6 +36,9 @@ window._googleProvider=new GoogleAuthProvider();
 // Force account picker every time so users can switch accounts after logout
 window._googleProvider.setCustomParameters({prompt:'select_account'});
 window._authSignInGoogle=()=>signInWithPopup(auth,window._googleProvider);
+// La ventanita de Firebase se cierra al elegir la cuenta y no devuelve la sesión.
+// El aviso de Google del correo sí la devuelve: con ese token se registra en Auth.
+window._authSignInWithAccessToken=(accessToken)=>signInWithCredential(auth,GoogleAuthProvider.credential(null,accessToken));
 window._authSignOut=()=>signOut(auth);
 window._authOnStateChanged=onAuthStateChanged;
 window._firebaseReady=true;
