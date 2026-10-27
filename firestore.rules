@@ -244,6 +244,12 @@ service cloud.firestore {
       allow read, write: if isActiveUser() && email.lower() == authEmail();
     }
 
+    // bandeja_estado/{email} — leídos/eliminados de la bandeja de cada usuario.
+    // El administrador puede escribir todos para la migración desde sistema/global.
+    match /bandeja_estado/{email} {
+      allow read, write: if isActiveUser() && (email.lower() == authEmail() || isAdmin());
+    }
+
     // -------------------------------------------------------------------------
     // revision_en_curso/{exp__tarea} — quién tiene abierta una actividad en revisión (tiempo real)
     // Todos los usuarios activos leen; escriben/borran con el correo del token (authEmail).

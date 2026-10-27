@@ -22711,6 +22711,10 @@ function schedulePersistBandejaEstado(){
   if(window._bandejaPersistTimer)clearTimeout(window._bandejaPersistTimer);
   window._bandejaPersistTimer=setTimeout(function(){
     window._bandejaPersistTimer=null;
+    if(_bandejaDocUnsub&&!window._bandejaDocFallo){
+      persistBandejaEstadoUsuario().catch(function(err){console.warn('persist bandeja usuario:',err);});
+      return;
+    }
     if(typeof saveGlobalFirestore==='function'){
       saveGlobalFirestore().catch(function(err){console.warn('persist bandeja campanita:',err);});
     }
@@ -22814,6 +22818,89 @@ function buildBandejaEstadoPayloadForSave(){
     bandejaEliminadosByUser:Object.assign({},window._bandejaEliminadosByUserCache)
   };
 }
+// Leídos/eliminados de cada usuario en bandeja_estado/{email}: en sistema/global llegaron a 580 KB
+// y el documento no cabía en 1 MB. Si la regla no está publicada se sigue usando sistema/global.
+let _bandejaDocUnsub=null;
+function bandejaEstadoDocRef(email){
+  const em=String(email||'').trim().toLowerCase();
+  if(!em||!window._db||!window._fsDoc)return null;
+  return window._fsDoc(window._db,'bandeja_estado',em);
+}
+async function persistBandejaEstadoUsuario(){
+  const ref=bandejaEstadoDocRef(bandejaUsuarioScope());
+  if(!ref||!window._fsSetDoc)return false;
+  await window._fsSetDoc(ref,{leidos:getBandejaLeidos(),eliminados:getBandejaEliminados(),updatedAt:new Date().toISOString()},{merge:true});
+  return true;
+}
+function detenerBandejaEstadoUsuario(){
+  if(_bandejaDocUnsub){try{_bandejaDocUnsub();}catch(e){}}
+  _bandejaDocUnsub=null;
+}
+function iniciarBandejaEstadoUsuario(){
+  detenerBandejaEstadoUsuario();
+  const ref=bandejaEstadoDocRef(bandejaUsuarioScope());
+  if(!ref||!window._fsOnSnapshot)return;
+  window._bandejaDocFallo=false;
+  let primero=true;
+  _bandejaDocUnsub=window._fsOnSnapshot(ref,function(snap){
+    const inicial=primero;
+    primero=false;
+    const d=snap&&snap.exists()?(snap.data()||{}):null;
+    if(d){
+      const l=new Set(getBandejaLeidos()),e=new Set(getBandejaEliminados());
+      const nl=l.size,ne=e.size;
+      (Array.isArray(d.leidos)?d.leidos:[]).forEach(function(k){if(k)l.add(String(k));});
+      (Array.isArray(d.eliminados)?d.eliminados:[]).forEach(function(k){if(k)e.add(String(k));});
+      if(l.size!==nl)_bandejaWriteList('leidos',[...l]);
+      if(e.size!==ne)_bandejaWriteList('eliminados',[...e]);
+      if((l.size!==nl||e.size!==ne)&&typeof scheduleRefreshViewsAfterRemoteDataChange==='function')scheduleRefreshViewsAfterRemoteDataChange();
+    }else if(inicial&&(getBandejaLeidos().length||getBandejaEliminados().length)){
+      persistBandejaEstadoUsuario().catch(function(err){console.warn('migrar bandeja propia:',err);});
+    }
+    if(inicial)migrarBandejaGlobalAUsuarios();
+  },function(err){
+    window._bandejaDocFallo=true;
+    _bandejaDocUnsub=null;
+    console.warn('bandeja_estado no disponible (¿regla publicada?); se usa sistema/global',err);
+  });
+}
+/** Solo administrador, una vez: copia las marcas de todos a bandeja_estado y las borra de sistema/global. */
+async function migrarBandejaGlobalAUsuarios(){
+  if(window._bandejaMigracionCorriendo||window._bandejaMigracionHecha)return;
+  if(typeof esAdministrador!=='function'||!esAdministrador())return;
+  const db=window._db;
+  if(!db||!window._fsGetDoc||!window._fsSetDoc||!window._fsArrayUnion||!window._fsDeleteField)return;
+  window._bandejaMigracionCorriendo=true;
+  try{
+    const refGlobal=window._fsDoc(db,'sistema','global');
+    const snap=await window._fsGetDoc(refGlobal);
+    const g=snap&&snap.exists()?(snap.data()||{}):{};
+    if(!('bandejaLeidosByUser' in g)&&!('bandejaEliminadosByUser' in g)){window._bandejaMigracionHecha=true;return;}
+    const L=g.bandejaLeidosByUser||{},E=g.bandejaEliminadosByUser||{};
+    const lista=function(v){return (Array.isArray(v)?v:[]).filter(Boolean).map(String);};
+    const emails=[...new Set(Object.keys(L).concat(Object.keys(E)))].filter(function(em){return em&&em.indexOf('@')>0;});
+    for(const em of emails){
+      const pay={updatedAt:new Date().toISOString()};
+      const l=lista(L[em]),e=lista(E[em]);
+      if(l.length)pay.leidos=window._fsArrayUnion.apply(null,l);
+      if(e.length)pay.eliminados=window._fsArrayUnion.apply(null,e);
+      await window._fsSetDoc(bandejaEstadoDocRef(em),pay,{merge:true});
+    }
+    await window._fsSetDoc(refGlobal,{
+      bandejaLeidosByUser:window._fsDeleteField(),
+      bandejaEliminadosByUser:window._fsDeleteField(),
+      updatedAt:new Date().toISOString()
+    },{merge:true});
+    window._bandejaMigracionHecha=true;
+    console.log('Bandeja: marcas de '+emails.length+' usuario(s) pasadas a bandeja_estado; sistema/global liberado');
+  }catch(err){
+    console.warn('migrarBandejaGlobalAUsuarios:',err);
+  }finally{
+    window._bandejaMigracionCorriendo=false;
+  }
+}
+window.iniciarBandejaEstadoUsuario=iniciarBandejaEstadoUsuario;
+window.detenerBandejaEstadoUsuario=detenerBandejaEstadoUsuario;
 function eliminarBandejaItemIdx(idx,ev){
   if(ev)ev.stopPropagation();
   const it=(window._bandejaItems||[])[idx];if(!it)return;

@@ -64,8 +64,9 @@ function ctxGlobal() {
 }
 
 describe('sistema/global sin la lista compartida antigua de la bandeja', () => {
-  it('al guardar se borra la lista compartida y se conserva la de cada usuario', async () => {
+  it('al guardar se borra la lista compartida; sin bandeja_estado se conserva la de cada usuario', async () => {
     const { c, escritos } = ctxGlobal()
+    c.window._bandejaDocFallo = true
     expect(await c.saveGlobalFirestore()).toBe(true)
     const p = escritos[0]
     expect(p.bandejaLeidos).toBe(BORRAR)

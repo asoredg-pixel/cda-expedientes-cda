@@ -1010,6 +1010,11 @@ function quitarBandejaCompartidaDelPayload(payload){
   if(!payload||typeof window._fsDeleteField!=='function')return payload;
   payload.bandejaLeidos=window._fsDeleteField();
   payload.bandejaEliminados=window._fsDeleteField();
+  // Con bandeja_estado/{email} activo no se reescriben las listas de todos en sistema/global.
+  if(!window._bandejaDocFallo){
+    delete payload.bandejaLeidosByUser;
+    delete payload.bandejaEliminadosByUser;
+  }
   return payload;
 }
 async function saveGlobalFirestore(){
@@ -1583,6 +1588,7 @@ function stopAllRealtimeSync(){
   stopRealtimeCfgSync();
   stopRealtimeGlobalSync();
   if(typeof stopUsuariosFirestoreListener==='function')stopUsuariosFirestoreListener();
+  if(typeof detenerBandejaEstadoUsuario==='function')detenerBandejaEstadoUsuario();
   if(typeof stopSessionGuard==='function')stopSessionGuard();
 }
 function desuscribirCfgSync(){
@@ -1765,6 +1771,7 @@ function initAppRealtimeSync(){
   initRealtimeCfgSyncAll();
   initRealtimeGlobalSync();
   if(typeof startUsuariosFirestoreListener==='function')startUsuariosFirestoreListener();
+  if(typeof iniciarBandejaEstadoUsuario==='function')iniciarBandejaEstadoUsuario();
 }
 function mergeExpFromFirestoreSnapshot(data,docId){
   const expId=String((data&&data._exp)||(data&&data.id)||docId||'').trim();
