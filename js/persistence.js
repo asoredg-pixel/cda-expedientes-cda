@@ -1005,6 +1005,13 @@ window.saveActividadesLibresDeptoFirestore=saveActividadesLibresDeptoFirestore;
 window.persistActividadesLibresFirestore=persistActividadesLibresFirestore;
 window.upsertActividadesLibresFromRemote=upsertActividadesLibresFromRemote;
 
+/** Borra de sistema/global la lista compartida antigua de la bandeja (cada usuario tiene la suya en *ByUser). */
+function quitarBandejaCompartidaDelPayload(payload){
+  if(!payload||typeof window._fsDeleteField!=='function')return payload;
+  payload.bandejaLeidos=window._fsDeleteField();
+  payload.bandejaEliminados=window._fsDeleteField();
+  return payload;
+}
 async function saveGlobalFirestore(){
   const db=window._db;
   if(!db||!window._fsSetDoc)return false;
@@ -1039,8 +1046,6 @@ async function saveGlobalFirestore(){
       personas:personas||[],
       actividadesLibres:libresGlobal,
       agendaEventos:agendaEventos||[],
-      bandejaLeidos:bandejaPay.bandejaLeidos||[],
-      bandejaEliminados:bandejaPay.bandejaEliminados||[],
       bandejaLeidosByUser:bandejaPay.bandejaLeidosByUser||{},
       bandejaEliminadosByUser:bandejaPay.bandejaEliminadosByUser||{},
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
@@ -1061,6 +1066,7 @@ async function saveGlobalFirestore(){
     }
     if(!incluirLibres)delete payload.actividadesLibres;
     if(typeof _fsStripUndefinedDeep==='function')payload=_fsStripUndefinedDeep(payload);
+    quitarBandejaCompartidaDelPayload(payload);
     try{
       await window._fsSetDoc(refGlobal,payload,{merge:true});
     }catch(errWrite){
@@ -1417,8 +1423,6 @@ async function saveFirestore(){
       personas:personas||[],
       actividadesLibres:libresGlobal,
       agendaEventos:agendaEventos||[],
-      bandejaLeidos:bandejaPay.bandejaLeidos||[],
-      bandejaEliminados:bandejaPay.bandejaEliminados||[],
       bandejaLeidosByUser:bandejaPay.bandejaLeidosByUser||{},
       bandejaEliminadosByUser:bandejaPay.bandejaEliminadosByUser||{},
       encargadosGlobal:normalizeEncargadosGlobal(encargadosGlobal),
@@ -1436,6 +1440,7 @@ async function saveFirestore(){
         deptoResponsable:String(u.deptoResponsable||'').trim()
       }));
     }
+    quitarBandejaCompartidaDelPayload(payload);
     await window._fsSetDoc(refGlobal,payload,{merge:true});
     for(const depto of DEPTOS_FIRESTORE){
       await window._fsSetDoc(window._fsDoc(db,'departamentos',depto),{

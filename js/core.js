@@ -22786,9 +22786,8 @@ function applyBandejaEstadoFromRemote(g){
   }
   if(scope&&window._bandejaLeidosByUserCache[scope])unionInto(localL,window._bandejaLeidosByUserCache[scope]);
   if(scope&&window._bandejaEliminadosByUserCache[scope])unionInto(localE,window._bandejaEliminadosByUserCache[scope]);
-  // Legacy compartido: solo como respaldo de migración (no sobrescribe)
-  unionInto(localL,g.bandejaLeidos);
-  unionInto(localE,g.bandejaEliminados);
+  // La lista compartida antigua (bandejaLeidos/bandejaEliminados) era la del último que guardó:
+  // sumarla hacía que cada usuario heredara las marcas de todos y llenó sistema/global (1 MB).
   _bandejaWriteList('leidos',[...localL]);
   _bandejaWriteList('eliminados',[...localE]);
   if(scope){
