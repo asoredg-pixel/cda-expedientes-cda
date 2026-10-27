@@ -18521,6 +18521,25 @@ function taskChatAttachPick(expId,taskId){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true))
     .then(function(ok){if(ok)run();});
 }
+function taskChatAlPegarComposer(ev,expId,taskId){
+  const files=typeof chatArchivosEnPortapapeles==='function'?chatArchivosEnPortapapeles(ev&&ev.clipboardData):[];
+  if(!files||!files.length)return;
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  const ahora=new Date();
+  const listos=files.map(function(f){
+    return typeof chatArchivoParaEnviarDesdePegado==='function'?chatArchivoParaEnviarDesdePegado(f,ahora):f;
+  }).filter(Boolean);
+  if(!listos.length)return;
+  const poner=function(){
+    taskChatAttachOnPick(expId,taskId,{files:listos,value:''});
+  };
+  if(typeof chatDriveConectado==='function'&&!chatDriveConectado()){
+    if(typeof chatModalCorreoRequerido==='function')chatModalCorreoRequerido();
+    return;
+  }
+  const pedir=typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true);
+  Promise.resolve(pedir).then(function(ok){if(ok)poner();});
+}
 function taskChatAttachOnPick(expId,taskId,inputEl){
   if(!inputEl||!inputEl.files||!inputEl.files.length)return;
   const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
@@ -18604,6 +18623,7 @@ function taskChatGuiaPick(expId,taskId){taskChatAttachPick(expId,taskId);}
 function taskChatGuiaOnPick(expId,taskId,inputEl){taskChatAttachOnPick(expId,taskId,inputEl);}
 window.taskChatAttachPick=taskChatAttachPick;
 window.taskChatAttachOnPick=taskChatAttachOnPick;
+window.taskChatAlPegarComposer=taskChatAlPegarComposer;
 window.taskChatAttachRemove=taskChatAttachRemove;
 window.taskChatToggleEmojiPicker=taskChatToggleEmojiPicker;
 window.taskChatInsertEmoji=taskChatInsertEmoji;
@@ -18974,10 +18994,10 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
     h+='<div class="task-chat-attach-staging" id="task-chat-attach-list"></div>';
     h+='<div id="task-chat-emoji-panel" class="chat-emoji-panel task-chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>';
     h+='<div class="task-cmt-wa-field chat-wa-field has-attach has-emoji">'+
-      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Escriba un mensaje…" autocomplete="off"></textarea>'+
+      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Escriba un mensaje…" title="Puede pegar una imagen o un archivo con Ctrl+V" autocomplete="off" onpaste="taskChatAlPegarComposer(event,\''+eidJs+'\',\''+tidJs+'\')"></textarea>'+
       '<input type="file" id="task-chat-file-inp" style="display:none" multiple onchange="taskChatAttachOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
       '<button type="button" class="chat-wa-emoji-ico task-chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="taskChatToggleEmojiPicker(event)">😊</button>'+
-      '<button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
+      '<button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo o pegar con Ctrl+V (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
       '<button type="button" class="task-cmt-send-ico chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
       '</div>'+
       (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
