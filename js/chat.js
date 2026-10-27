@@ -858,7 +858,7 @@ function chatTryDesktopNotify(msg){
     }
   });
 }
-const CHAT_NOTIFY_VENTANA_DIAS=30;
+const CHAT_NOTIFY_VENTANA_DIAS=10;
 /** Avisos y badge: solo mensajes recientes; el historial completo se carga al abrir la conversación. */
 function chatNotifyRefReciente(ref){
   if(!window._fsQuery||!window._fsWhere)return ref;
