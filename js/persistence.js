@@ -1719,6 +1719,19 @@ async function syncPendingActividadesLibresToFirestore(){
 }
 window.syncPendingActividadesLibresToFirestore=syncPendingActividadesLibresToFirestore;
 
+const GLOBAL_AVISO_KB=800;
+/** sistema/global admite 1 MB (también en Blaze): avisar con tiempo a quien puede gestionarlo. */
+function avisarTamanoGlobalSiCrece(g){
+  if(window._globalAvisoTamanoMostrado)return;
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if(!((typeof esAdministrador==='function'&&esAdministrador())||rol==='guaviare'))return;
+  let kb=0;
+  try{kb=Math.round(JSON.stringify(g||{}).length/1024);}catch(e){return;}
+  window._sstGlobalKB=kb;
+  if(kb<GLOBAL_AVISO_KB)return;
+  window._globalAvisoTamanoMostrado=true;
+  if(typeof notif==='function')notif('⚠️ El documento global de Firebase ocupa '+kb+' KB de 1.024 KB. Avise a soporte antes de que se llene: al llegar al límite dejan de guardarse personas, agenda y actividades libres.','warn');
+}
 function initRealtimeGlobalSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsDoc)return;
@@ -1731,6 +1744,7 @@ function initRealtimeGlobalSync(){
     cancelarActLibresSnapDiferido('global');
     if(!snap.exists())return;
     const g=snap.data()||{};
+    avisarTamanoGlobalSiCrece(g);
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
       setMantenimientoEstadoLocal(g.mantenimiento);
