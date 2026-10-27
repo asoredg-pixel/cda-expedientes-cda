@@ -387,6 +387,17 @@ async function reloadExpedientesTrasLogin(){
   if(!authReady||!authReady.ok)return false;
   const deptos=deptosExpedientesAccesibles();
   let lastCount=0;
+  // La escucha en tiempo real ya descarga todos los expedientes: repetirlo con getDocs duplica las lecturas.
+  if(await esperarPrimerSnapExpedientes(deptos,EXP_PRIMER_SNAP_TOPE_MS)&&Array.isArray(exps)&&exps.length){
+    mergePendingExpBackup();
+    clearLegacyExpsLocalStorage();
+    if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+    updateSyncIndicator('synced');
+    if(typeof papeleraSchedulePurge==='function')papeleraSchedulePurge();
+    if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
+    console.log('reloadExpedientesTrasLogin: '+exps.length+' expediente(s) desde la escucha en tiempo real (deptos='+deptos.join(',')+')');
+    return true;
+  }
   for(let attempt=0;attempt<3;attempt++){
     try{
       if(attempt>0)await new Promise(function(r){setTimeout(r,400*attempt);});
@@ -1533,7 +1544,20 @@ function scheduleRefreshViewsAfterRemoteDataChange(){
     refreshViewsAfterRemoteDataChange();
   },400);
 }
+const EXP_PRIMER_SNAP_TOPE_MS=10000;
+/** depto → {p,listo}: primera respuesta del servidor a la escucha de expedientes. */
+let _expPrimerSnap={};
+function esperarPrimerSnapExpedientes(deptos,ms){
+  const ps=(deptos||[]).map(function(d){return _expPrimerSnap[d]&&_expPrimerSnap[d].p;});
+  if(!ps.length||ps.some(function(p){return !p;}))return Promise.resolve(false);
+  return Promise.race([
+    Promise.all(ps).then(function(r){return r.every(Boolean);}),
+    new Promise(function(res){setTimeout(function(){res(false);},ms);})
+  ]);
+}
 function stopRealtimeExpSync(){
+  Object.keys(_expPrimerSnap).forEach(function(d){_expPrimerSnap[d].listo(false);});
+  _expPrimerSnap={};
   if(!_fsUnsub)return;
   if(Array.isArray(_fsUnsub))_fsUnsub.forEach(function(u){try{u();}catch(e){}});
   else try{_fsUnsub();}catch(e){}
@@ -1863,6 +1887,9 @@ function initRealtimeSync(){
   const unsubs=[];
   const deptos=deptosExpedientesAccesibles();
   deptos.forEach(function(depto){
+    let listo;
+    _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
+    const primer=_expPrimerSnap[depto];
     const unsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
       // No bloquear por _localSaving: ese flag es de cfg/global y retrasaba
       // la aparición de PQRSD recién radicadas en Actividades/Consulta (~1–3 min).
@@ -1872,9 +1899,13 @@ function initRealtimeSync(){
       if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
         if(hydrateExpsFromSnapshotDocs(snap))changed=true;
       }
+      if(!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
       if(!changed)return;
       scheduleRefreshViewsAfterRemoteDataChange();
-    },function(err){console.warn('Error escuchando expedientes',depto,err);});
+    },function(err){
+      primer.listo(false);
+      console.warn('Error escuchando expedientes',depto,err);
+    });
     unsubs.push(unsub);
   });
   _fsUnsub=unsubs;
