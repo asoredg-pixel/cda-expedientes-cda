@@ -19,15 +19,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script type="module" src="js/firebase-init.js?v=20261026h"></script>
-<script src="js/constants.js?v=20261026m"></script>
+<script type="module" src="js/firebase-init.js?v=20261026n"></script>
+<script src="js/constants.js?v=20261026n"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
-<script src="js/persistence.js?v=20261026e"></script>
+<script src="js/persistence.js?v=20261026n"></script>
 <script src="js/roles.js?v=20261022g"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261026g"></script>
+<script src="js/core.js?v=20261026n"></script>
 <script src="js/formulario.js?v=20261015a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
@@ -37,16 +37,17 @@
 <script src="js/chat.js?v=20261009a"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
-<script src="js/gmail.js?v=20261026i"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
+<script src="js/gmail.js?v=20261026n"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261021h"></script>
-<script src="js/consulta.js?v=20261026g"></script>
+<script src="js/consulta.js?v=20261026n"></script>
 <script src="js/entrega-responsable.js?v=20261021m"></script>
-<script src="js/tramite-firma.js?v=20261026g"></script>
+<script src="js/tramite-firma.js?v=20261026n"></script>
 <script src="js/requerimientos.js?v=20261022g"></script>
 <script src="js/papelera.js?v=20261013a"></script>
 <script src="js/recursos.js?v=20261020a"></script>
-<script src="js/ingreso.js?v=20261026m"></script>
+<script src="js/ingreso.js?v=20261026n"></script>
 </head>
 <body>
 <div id="mant-banner" class="mant-banner" role="status" aria-live="polite"></div>
@@ -1349,31 +1350,23 @@ async function bootstrapApp(){
   document.documentElement.classList.add('ui-editor-modal-mode');
   ensurePrimerUsoDate();
   window._bandejaVista='pending';
-  if(!window._firebaseReady){
+  if(window._firebaseReady)await loadLS();
+  else{
     await new Promise(res=>{
       const t=setTimeout(()=>res(),4000);
       window.addEventListener('firebase-ready',()=>{clearTimeout(t);res();},{once:true});
     });
+    await loadLS();
   }
-  // La cuenta de Google se resuelve ANTES de mezclar informes (loadLS). Si va después, el aviso se cierra y no entra.
-  if(typeof initFirebaseAuthListener==='function'){
-    try{await initFirebaseAuthListener();}catch(e){console.warn('auth listener:',e);}
-  }
-  await loadLS();
-  if(!document.body.classList.contains('sesion-activa'))initLoginScreen();
+  initLoginScreen();
+  initFirebaseAuthListener();
   initSecMedioNotificacion(true);
   if(typeof resetSecRadicacionFormulario==='function')resetSecRadicacionFormulario();
   const buildTag=document.getElementById('sst-build-tag');
   if(buildTag&&typeof SST_BUILD_ID!=='undefined')buildTag.textContent='· v'+SST_BUILD_ID;
   document.addEventListener('click',e=>{const t=clickTargetEl(e);if(!t||!t.closest||t.closest('#depto-inbox-wrap'))return;closeBandejaDepto();});
   ensureOverlaysClosed();
-  window.addEventListener('firebase-ready',()=>{
-    const seguir=function(){
-      if(!document.body.classList.contains('sesion-activa'))loadLS().then(function(){if(!document.body.classList.contains('sesion-activa'))initLoginScreen();});
-    };
-    if(typeof initFirebaseAuthListener==='function')Promise.resolve(initFirebaseAuthListener()).then(seguir).catch(seguir);
-    else seguir();
-  });
+  window.addEventListener('firebase-ready',()=>{if(!document.body.classList.contains('sesion-activa'))loadLS().then(()=>initLoginScreen());});
 }
 bootstrapApp();
 </script>

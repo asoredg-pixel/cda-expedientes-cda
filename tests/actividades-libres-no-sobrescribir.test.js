@@ -42,8 +42,7 @@ function ctx(locales, remoto) {
     }
   })
   runInContext('const _actLibresQuitadosIds=new Set();\n' + extraer(per, [
-    'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'scoreActividadLibreMerge', 'actLibreTieneArchivoDrive', 'pickMejorActLibre',
-    'actLibreMarcarQuitada', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
+    'actLibreEventTs', 'actLibreMarcarQuitada', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
     'actividadesLibresForDepto', 'sanitizeActLibreForFirestore', 'saveActividadesLibresDeptoFirestore'
   ]), c)
   return { c, escritos }
@@ -66,16 +65,11 @@ describe('Actividades libres: guardar sin borrar las de otros', () => {
     expect(out[0].estado).toBe('Por corregir')
   })
 
-  it('la papelera queda guardada y no revive la copia viva del servidor', async () => {
-    const { c, escritos } = ctx(
-      [act('e', { eliminada: true, updatedAt: new Date().toISOString() })],
-      [act('a'), act('e', { estado: 'Por verificar', updatedAt: new Date().toISOString() }), act('x')]
-    )
+  it('quitadas a propósito o eliminadas no se resucitan', async () => {
+    const { c, escritos } = ctx([act('e', { eliminada: true })], [act('a'), act('e'), act('x')])
     c.actLibreMarcarQuitada('x')
     await c.saveActividadesLibresDeptoFirestore('guaviare')
-    const out = escritos['departamentos/guaviare'].actividadesLibres
-    expect(out.map(t => t.id)).toEqual(['e', 'a'])
-    expect(out.find(t => t.id === 'e').eliminada).toBe(true)
+    expect(escritos['departamentos/guaviare'].actividadesLibres.map(t => t.id)).toEqual(['a'])
   })
 
   it('global y guardado legado también combinan con el remoto', () => {

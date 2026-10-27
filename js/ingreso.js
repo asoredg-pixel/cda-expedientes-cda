@@ -18,12 +18,6 @@ function sessionDocRef(email){
 function generateSessionId(){
   return 'sess_'+Date.now()+'_'+Math.random().toString(36).slice(2,12);
 }
-function sesionRemotaEsAnterior(data){
-  const at=Date.parse(String(data&&(data.activeSessionAt||'')||''))||0;
-  const claim=Number(window._sessionClaimAt)||0;
-  // El primer aviso de Firestore puede traer la sesión vieja en caché y expulsar el ingreso recién hecho.
-  return !!(at&&claim&&at+1500<claim);
-}
 function sesionRemotaEstaViva(data){
   data=data||{};
   const sid=String(data.activeSessionId||'').trim();
@@ -87,7 +81,6 @@ async function claimActiveSession(email){
   try{
     await window._fsSetDoc(ref,payload,{merge:true});
     _sessionId=sid;
-    window._sessionClaimAt=Date.parse(now)||Date.now();
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
@@ -190,7 +183,6 @@ function startSessionGuard(email){
     const data=snap.exists()?snap.data():{};
     const remoteSid=String(data.activeSessionId||'').trim();
     if(!remoteSid||remoteSid===_sessionId)return;
-    if(sesionRemotaEsAnterior(data))return;
     if(sesionRemotaEstaViva(data))cerrarSesionPorConflicto();
   },function(err){console.warn('Error escuchando sesión:',err);});
   let _hbTick=0;
@@ -205,7 +197,7 @@ function startSessionGuard(email){
         if(!document.body.classList.contains('sesion-activa')||!_sessionId)return;
         const d=snap.exists()?snap.data():{};
         const remote=String(d.activeSessionId||'').trim();
-        if(remote&&remote!==_sessionId&&!sesionRemotaEsAnterior(d)&&sesionRemotaEstaViva(d)){
+        if(remote&&remote!==_sessionId&&sesionRemotaEstaViva(d)){
           cerrarSesionPorConflicto();
         }
       }).catch(function(){});
@@ -243,13 +235,6 @@ function initLoginScreen(){
   if(authPanel)authPanel.style.display='';
   if(rolesWrap)rolesWrap.style.display='none';
   if(sub)sub.textContent='Personal autorizado: ingrese con su cuenta Google.';
-  if(window._loginMsgSticky){
-    const prev=document.getElementById('login-auth-msg');
-    const txt=prev?String(prev.textContent||''):'';
-    setLoginStatus('');
-    if(txt)setLoginAuthMsg(txt,'err');
-    return;
-  }
   setLoginAuthMsg('');
   setLoginStatus('');
 }
@@ -397,98 +382,57 @@ async function verificarUsuarioFirestore(fbUser){
     ingresarComoRol(acceso.rol,acceso.respNom);
   }catch(err){
     console.error('Error verificando usuario:',err);
-    // Ya quedó la sesión: un fallo al pintar (p. ej. al mezclar informes) no debe devolver al inicio.
-    if(document.body.classList.contains('sesion-activa'))return;
-    try{await releaseActiveSession(email,{force:true});}catch(e){}
     setLoginStatus('');
-    window._loginMsgSticky=true;
     setLoginAuthMsg('Error al verificar acceso. Intente de nuevo.','err');
     if(window._authSignOut)await window._authSignOut().catch(()=>{});
   }
 }
-function avisarFalloLogin(msg){
-  window._loginMsgSticky=true;
-  setLoginStatus('');
-  initLoginScreen();
-  setLoginAuthMsg(msg,'err');
-  if(typeof alertAccesoLoginModal==='function'){
-    alertAccesoLoginModal({title:'No se pudo ingresar',message:msg});
-  }
-}
-function iniciarLoginGoogle(){
+async function iniciarLoginGoogle(){
   if(window._loginGoogleInFlight)return;
-  // La ventanita (signInWithPopup) es el ingreso. La página completa a Google no devuelve
-  // la cuenta: el sitio está en GitHub Pages y el dominio de Auth es otro.
   if(!window._authSignInGoogle){
-    setLoginAuthMsg('Cargando autenticación… Espere un momento y pulse de nuevo.','');
-    return;
+    if(!window._firebaseReady){
+      const waitBtn=document.getElementById('btn-google-login');
+      if(waitBtn)waitBtn.disabled=true;
+      setLoginAuthMsg('Cargando autenticación…','');
+      await new Promise(function(res){
+        const t=setTimeout(res,8000);
+        window.addEventListener('firebase-ready',function(){clearTimeout(t);res();},{once:true});
+      });
+      if(waitBtn)waitBtn.disabled=false;
+    }
+    if(!window._authSignInGoogle){
+      setLoginAuthMsg('Autenticación Google no disponible. Recargue la página.','err');
+      return;
+    }
   }
   const btn=document.getElementById('btn-google-login');
   window._loginGoogleInFlight=true;
-  window._loginMsgSticky=false;
-  window._authVerifying=true;
   if(btn)btn.disabled=true;
   setLoginAuthMsg('');
-  setLoginStatus('Abriendo la ventana de la cuenta…',true);
-  try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-  try{sessionStorage.removeItem('sst_login_usar_ventana');}catch(e){}
-  const terminar=function(){
+  try{
+    window._authVerifying=true;
+    const cred=await window._authSignInGoogle();
+    await verificarUsuarioFirestore(cred.user);
+  }catch(err){
+    console.error(err);
+    setLoginStatus('');
+    initLoginScreen();
+    const code=err&&err.code;
+    if(code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request'){
+      setLoginAuthMsg('Inicio de sesión cancelado.','err');
+    }else if(code==='auth/popup-blocked'){
+      setLoginAuthMsg('El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.','err');
+    }else{
+      setLoginAuthMsg('Error al iniciar sesión con Google.','err');
+    }
+  }finally{
     window._authVerifying=false;
     window._loginGoogleInFlight=false;
     if(btn)btn.disabled=false;
-  };
-  const fallo=function(err){
-    console.error(err);
-    const code=err&&err.code;
-    const cerrado=code==='auth/popup-closed-by-user'||code==='auth/cancelled-popup-request';
-    const cerrarCon=function(user){
-      if(user){
-        verificarUsuarioFirestore(user).finally(terminar);
-        return;
-      }
-      const detalle=code?(' ('+code+')'):'';
-      let msg='No se completó el ingreso. Elija de nuevo su cuenta de Google.'+detalle;
-      if(code==='auth/popup-blocked')msg='El navegador bloqueó la ventana de Google. Permita ventanas emergentes para este sitio e intente de nuevo.';
-      else if(code&&!cerrado)msg='Error al iniciar sesión con Google.'+detalle;
-      avisarFalloLogin(msg);
-      terminar();
-    };
-    if(cerrado){
-      esperarUsuarioGoogleTrasCierre().then(cerrarCon);
-      return;
-    }
-    cerrarCon(window._firebaseAuth&&window._firebaseAuth.currentUser);
-  };
-  window._authSignInGoogle().then(function(cred){
-    return verificarUsuarioFirestore(cred&&cred.user).finally(terminar);
-  }).catch(fallo);
+  }
 }
-/** El aviso se cerró, pero la cuenta puede haber quedado en Firebase. */
-function esperarUsuarioGoogleTrasCierre(){
-  const auth=window._firebaseAuth;
-  if(auth&&auth.currentUser)return Promise.resolve(auth.currentUser);
-  return new Promise(function(resolve){
-    let done=false;
-    const finish=function(u){if(done)return;done=true;resolve(u||null);};
-    const t=setTimeout(function(){finish(auth&&auth.currentUser);},8000);
-    if(!window._authOnStateChanged||!auth){clearTimeout(t);finish(null);return;}
-    let unsub=function(){};
-    try{
-      unsub=window._authOnStateChanged(auth,function(u){
-        if(!u)return;
-        clearTimeout(t);
-        try{unsub();}catch(e){}
-        finish(u);
-      });
-    }catch(e){
-      clearTimeout(t);
-      finish((auth&&auth.currentUser)||null);
-    }
-  });
-}
-function registrarListenerAuth(){
-  if(window._authListenerListo||!window._authOnStateChanged||!window._firebaseAuth)return;
-  window._authListenerListo=true;
+function initFirebaseAuthListener(){
+  if(!window._authOnStateChanged||!window._firebaseAuth)return;
   window._authOnStateChanged(window._firebaseAuth,user=>{
     if(document.body.classList.contains('sesion-activa')){
       if(user){authUsuario=user;return;}
@@ -510,61 +454,11 @@ function registrarListenerAuth(){
       verificarUsuarioFirestore(user).finally(()=>{window._authVerifying=false;});
     }
     if(!user){
-      // Mientras el aviso está abierto o vuelve la redirección, un «sin usuario» momentáneo no debe borrar el ingreso.
-      if(window._authVerifying||window._loginGoogleInFlight)return;
       window._usuarioActual=null;
       authUsuario=null;
       if(!document.body.classList.contains('sesion-activa'))initLoginScreen();
     }
   });
-}
-function authConTope(p,ms){
-  return new Promise(function(resolve,reject){
-    let done=false;
-    const timer=setTimeout(function(){if(done)return;done=true;resolve(null);},ms);
-    Promise.resolve(p).then(function(v){
-      if(done){
-        const u=v&&v.user;
-        if(u&&!window._usuarioActual&&typeof verificarUsuarioFirestore==='function')verificarUsuarioFirestore(u);
-        return;
-      }
-      done=true;clearTimeout(timer);resolve(v);
-    },function(err){
-      if(done)return;done=true;clearTimeout(timer);reject(err);
-    });
-  });
-}
-function initFirebaseAuthListener(){
-  if(window._authBootstrapHecho)return Promise.resolve();
-  if(!window._authOnStateChanged||!window._firebaseAuth)return Promise.resolve();
-  window._authBootstrapHecho=true;
-  const auth=window._firebaseAuth;
-  let esperaba=false;
-  try{esperaba=sessionStorage.getItem('sst_login_redirect_once')==='1';}catch(e){}
-  const fin=function(){
-    if(!window._loginGoogleInFlight)window._authVerifying=false;
-    registrarListenerAuth();
-  };
-  if(!esperaba||!window._authGetRedirectResult){fin();return Promise.resolve();}
-  window._authVerifying=true;
-  setLoginStatus('Completando el ingreso con Google…',true);
-  const chain=authConTope(window._authGetRedirectResult(),12000).then(function(res){
-    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    const user=(res&&res.user)||(auth&&auth.currentUser)||null;
-    if(user&&!window._usuarioActual)return verificarUsuarioFirestore(user);
-    if(esperaba&&!user){
-      avisarFalloLogin('No se completó el ingreso. Elija de nuevo su cuenta de Google.');
-    }
-  }).catch(function(err){
-    console.warn('login redirect:',err);
-    try{sessionStorage.removeItem('sst_login_redirect_once');}catch(e){}
-    if(esperaba){
-      const code=err&&err.code?(' ('+err.code+')'):'';
-      avisarFalloLogin('No se completó el ingreso con Google'+code+'. Intente de nuevo.');
-    }
-  }).then(fin);
-  window._authBootstrapPromise=chain;
-  return chain;
 }
 function ingresarConsultaCiudadana(){
   ingresarComoRol('ciudadano');
@@ -641,7 +535,6 @@ function ingresarComoRol(rolId,respNombre){
       return;
     }
   }
-  try{
   rolSesion=rolId;
   try{sessionStorage.setItem('sst_rol_sesion',rolId);}catch(e){}
   if(rolId==='contratista'){
@@ -732,19 +625,9 @@ function ingresarComoRol(rolId,respNombre){
   const rolInfo=ROLES_INGRESO.find(r=>r.id===rolId);
   logAudit('Inició sesión con rol '+(rolInfo?rolInfo.titulo:rolId),'configuracion',null);
   updateHeaderUsuario();
-  if(rolId!=='ciudadano'&&typeof _gmailGisRecargar==='function'){
-    setTimeout(function(){
-      try{if(typeof _gmailGisReady!=='function'||!_gmailGisReady())_gmailGisRecargar(true);}catch(e){}
-    },800);
-  }
   if(typeof sstIniciarGmailObligatorio==='function')sstIniciarGmailObligatorio();
   setTimeout(()=>maybeShowExportReminder(),800);
   startIdleSessionWatch();
-  }catch(err){
-    console.error('ingresarComoRol:',err);
-    document.body.classList.add('sesion-activa');
-    if(typeof notif==='function')notif('Ingresó, pero una pantalla no pudo cargarse. Si no ve sus trámites, recargue con Ctrl+F5.','warn');
-  }
 }
 /** 4 horas sin actividad (mouse/teclado/toque) → cierre forzado de sesión. */
 const SST_IDLE_MS=4*60*60*1000;

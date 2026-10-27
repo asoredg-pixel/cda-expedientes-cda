@@ -63,17 +63,14 @@ describe('Eliminar entrega de informe', () => {
     expect(otro.informePuedeEliminarEntrega(inf)).toBe(false)
   })
 
-  it('al eliminar deja el informe marcado y borra la carpeta de Drive', async () => {
+  it('al eliminar quita el registro y borra la carpeta de Drive', async () => {
     const deleted = []
     const folders = []
-    let guardado = null
     const t = {
       id: 'INF1',
       codigo: 'INF1',
       sinExpediente: true,
       informeContrato: { n: 1, numero: '272' },
-      estado: 'Por verificar',
-      fechaReportada: '2026-10-22',
       _drive_folder_id: 'CARP',
       soportes: [{ driveFileId: 'PDF' }, { driveFileId: 'ANX' }]
     }
@@ -84,18 +81,9 @@ describe('Eliminar entrega de informe', () => {
       puedeEliminarEntregaActividad: () => true,
       getTaskAny: () => t,
       notif: () => {},
-      confirmExito: () => {},
       closeTaskModal: () => {},
       persistExpLocal: () => {},
-      persistActividadesLibresFirestore: async () => {
-        guardado = actividadesLibres.map(x => ({
-          id: x.id,
-          eliminada: !!x.eliminada,
-          estado: x.estado,
-          fechaReportada: x.fechaReportada || ''
-        }))
-        return true
-      },
+      persistActividadesLibresFirestore: async () => true,
       driveDeleteInstitutional: async (id) => { deleted.push(id); return true },
       informeEliminarCarpetaDrive: async (task) => { folders.push(task._drive_folder_id); return true },
       informeBorradorCerrarTrasEntrega: () => {},
@@ -107,10 +95,7 @@ describe('Eliminar entrega de informe', () => {
     runInContext(extraer(core, ['eliminarEntregaActividad']), c)
     const ok = await c.eliminarEntregaActividad('INF1', 'INF1')
     expect(ok).toBe(true)
-    expect(guardado).toEqual([{ id: 'INF1', eliminada: true, estado: 'En ejecución', fechaReportada: '' }])
-    expect(actividadesLibres).toHaveLength(1)
-    expect(actividadesLibres[0].eliminada).toBe(true)
-    expect(actividadesLibres[0].fechaReportada).toBe('')
+    expect(actividadesLibres).toEqual([])
     expect(deleted.sort()).toEqual(['ANX', 'PDF'])
     expect(folders).toEqual(['CARP'])
   })

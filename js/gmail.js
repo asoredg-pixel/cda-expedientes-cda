@@ -106,12 +106,7 @@ function _gmailGisRecargar(silencioso) {
   (document.head || document.documentElement).appendChild(s);
 }
 window.addEventListener('load', function() {
-  setTimeout(function() {
-    // En la pantalla de inicio este script cierra el aviso de Firebase y el funcionario no entra.
-    if(!document.body.classList.contains('sesion-activa'))return;
-    if(typeof esModoCiudadano==='function'&&esModoCiudadano())return;
-    if(!_gmailGisReady()) _gmailGisRecargar(true);
-  }, 3000);
+  setTimeout(function() { if (!_gmailGisReady()) _gmailGisRecargar(true); }, 3000);
 });
 let _gmailConnectingWatchdog = null;
 let _gmailSesionProgTimer = null;
