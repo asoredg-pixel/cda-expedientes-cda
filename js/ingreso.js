@@ -762,6 +762,7 @@ function salirDeSesionApp(){
   if(typeof stopAllRealtimeSync==='function')stopAllRealtimeSync();
   if(email)void releaseActiveSession(email);
   document.body.classList.remove('sesion-activa');
+  if(typeof _reparoSoltarCola==='function')_reparoSoltarCola();
   document.body.classList.remove('mant-aviso-visible');
   if(typeof stopChatNotifySync==='function')stopChatNotifySync();
   if(typeof stopChatActiveSync==='function')stopChatActiveSync();

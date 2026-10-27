@@ -1283,20 +1283,24 @@ function _persistLocalBackupHint(exp){
     ?' La PQRSD quedó guardada localmente y se sincronizará al reconectar.'
     :' El expediente quedó guardado localmente y se sincronizará al reconectar.';
 }
-async function persistExpedienteGranular(exp,withGlobal){
-  return persistExpedienteGranularAsync(exp,withGlobal);
+async function persistExpedienteGranular(exp,withGlobal,opts){
+  return persistExpedienteGranularAsync(exp,withGlobal,opts);
 }
 /** Guarda el expediente en Firestore y retorna true/false (para await en radicación). */
-async function persistExpedienteGranularAsync(exp,withGlobal){
+async function persistExpedienteGranularAsync(exp,withGlobal,opts){
   if(!exp)return false;
+  opts=opts||{};
+  const silencioso=!!opts.silent;
   const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
-  console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
-  updateSyncIndicator('syncing');
+  if(!silencioso)console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
+  if(!silencioso)updateSyncIndicator('syncing');
   const authOk=await ensureFirestoreAuthReady();
   if(!authOk.ok){
-    persistExpLocalBackup(exp);
-    updateSyncIndicator('error');
-    if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+_persistLocalBackupHint(exp),'err');
+    if(!opts.sinRespaldoLocal)persistExpLocalBackup(exp);
+    if(!silencioso){
+      updateSyncIndicator('error');
+      if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+_persistLocalBackupHint(exp),'err');
+    }
     return false;
   }
   // Evita que el listener ignore el snapshot del propio guardado (y el de otras pestañas
@@ -1307,8 +1311,8 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
   if(expOk){
     removeExpLocalBackup(expedienteDocId(exp));
     mergeExpIntoExpsCache(exp);
-    updateSyncIndicator('synced');
-    if(!globalOk&&typeof notif==='function'){
+    if(!silencioso)updateSyncIndicator('synced');
+    if(!silencioso&&!globalOk&&typeof notif==='function'){
       const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp);
       const cod=window._lastFsSaveError&&window._lastFsSaveError.code;
       const base=esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.';
@@ -1316,15 +1320,97 @@ async function persistExpedienteGranularAsync(exp,withGlobal){
     }
     return true;
   }
-  persistExpLocalBackup(exp);
-  updateSyncIndicator('error');
-  const lastErr=window._lastFsSaveError||null;
-  const errCode=lastErr&&lastErr.code||'unknown';
-  console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
-  if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+_persistLocalBackupHint(exp),'err');
+  if(!opts.sinRespaldoLocal)persistExpLocalBackup(exp);
+  if(!silencioso){
+    updateSyncIndicator('error');
+    const lastErr=window._lastFsSaveError||null;
+    const errCode=lastErr&&lastErr.code||'unknown';
+    console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
+    if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+_persistLocalBackupHint(exp),'err');
+  }
   return false;
 }
 window.persistExpedienteGranularAsync=persistExpedienteGranularAsync;
+/** Reparos al pintar listas (dedupe / heal). Una escritura a la vez, sin aviso.
+ *  Sin sesión no encola: al volver a entrar se recalcula desde Firestore.
+ *  Si la sesión se cae (otro equipo, cierre, sin red) se suelta la cola y no se sube un documento a medias. */
+function _reparoEstado(){
+  if(!window._reparoEstado)window._reparoEstado={cola:[],activo:false,espera:null};
+  return window._reparoEstado;
+}
+function _reparoSesionUi(){
+  return typeof document!=='undefined'&&!!(document.body&&document.body.classList.contains('sesion-activa'));
+}
+function _reparoSesionLista(){
+  if(!_reparoSesionUi())return false;
+  const auth=window._firebaseAuth;
+  return !!(auth&&auth.currentUser);
+}
+function _reparoSoltarCola(){
+  const st=_reparoEstado();
+  if(st.espera){clearInterval(st.espera);st.espera=null;}
+  st.cola.forEach(function(item){if(item&&item.set)item.set.delete(item.clave);});
+  st.cola.length=0;
+}
+function _reparoDrenar(){
+  const st=_reparoEstado();
+  if(st.activo)return;
+  if(!st.cola.length){
+    if(st.espera){clearInterval(st.espera);st.espera=null;}
+    return;
+  }
+  if(!_reparoSesionUi()){_reparoSoltarCola();return;}
+  if(!_reparoSesionLista()){
+    if(!st.espera)st.espera=setInterval(function(){_reparoDrenar();},1500);
+    return;
+  }
+  if(st.espera){clearInterval(st.espera);st.espera=null;}
+  const item=st.cola.shift();
+  if(!item)return;
+  st.activo=true;
+  Promise.resolve(persistExpedienteGranularAsync(item.exp,false,{silent:true,sinRespaldoLocal:true})).then(function(ok){
+    st.activo=false;
+    if(ok){_reparoDrenar();return;}
+    if(!_reparoSesionUi()){
+      if(item.set)item.set.delete(item.clave);
+      _reparoSoltarCola();
+      return;
+    }
+    item.intentos=(item.intentos||0)+1;
+    if(item.intentos>=5){
+      if(item.set)item.set.delete(item.clave);
+      _reparoDrenar();
+      return;
+    }
+    setTimeout(function(){
+      if(!_reparoSesionUi()){if(item.set)item.set.delete(item.clave);_reparoSoltarCola();return;}
+      st.cola.push(item);
+      _reparoDrenar();
+    },8000);
+    _reparoDrenar();
+  },function(){
+    st.activo=false;
+    if(item.set)item.set.delete(item.clave);
+    if(!_reparoSesionUi())_reparoSoltarCola();
+    else _reparoDrenar();
+  });
+}
+function encolarReparoExpediente(exp,setName,clave){
+  if(!exp)return false;
+  setName=String(setName||'_reparoExpPersist');
+  clave=String(clave!=null?clave:(exp._exp||'')).trim();
+  if(!clave)return false;
+  if(!_reparoSesionUi())return false;
+  if(!window[setName]||!(window[setName] instanceof Set))window[setName]=new Set();
+  const set=window[setName];
+  if(set.has(clave))return false;
+  set.add(clave);
+  _reparoEstado().cola.push({exp:exp,set:set,clave:clave,intentos:0});
+  _reparoDrenar();
+  return true;
+}
+window.encolarReparoExpediente=encolarReparoExpediente;
+window._reparoSoltarCola=_reparoSoltarCola;
 function diagTestSaveExpedienteDoc(){
   saveExpedienteDoc('guaviare',{
     _exp:'TEST-001',

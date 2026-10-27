@@ -11688,12 +11688,7 @@ function getTareasResponsableActivo(){
     if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
     if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof dedupePqrsAtencionTasks==='function'){
       if(dedupePqrsAtencionTasks(e)){
-        if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
-        const dk=String(e._exp||'');
-        if(dk&&!window._pqrsDedupePersist.has(dk)){
-          window._pqrsDedupePersist.add(dk);
-          try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
-        }
+        if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(e,'_pqrsDedupePersist',e._exp);
       }
     }
     if(typeof persistUnirEntregaDuplicada==='function')persistUnirEntregaDuplicada(e);
@@ -11727,12 +11722,7 @@ function getTareasOficinaPqrsActividades(respFilter){
   const ofi=deptoActivo;
   exps.filter(e=>esPqrsSecretaria(e)&&e._pqrs_oficina===ofi).forEach(e=>{
     if(typeof dedupePqrsAtencionTasks==='function'&&dedupePqrsAtencionTasks(e)){
-      if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
-      const dk=String(e._exp||'');
-      if(dk&&!window._pqrsDedupePersist.has(dk)){
-        window._pqrsDedupePersist.add(dk);
-        try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
-      }
+      if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(e,'_pqrsDedupePersist',e._exp);
     }
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
@@ -11752,12 +11742,7 @@ function getTareasDeptActividades(respFilter){
     if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
     if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof dedupePqrsAtencionTasks==='function'){
       if(dedupePqrsAtencionTasks(e)){
-        if(!window._pqrsDedupePersist)window._pqrsDedupePersist=new Set();
-        const dk=String(e._exp||'');
-        if(dk&&!window._pqrsDedupePersist.has(dk)){
-          window._pqrsDedupePersist.add(dk);
-          try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe pqrs:',err);}
-        }
+        if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(e,'_pqrsDedupePersist',e._exp);
       }
     }
     if(typeof persistUnirEntregaDuplicada==='function')persistUnirEntregaDuplicada(e);
@@ -11995,11 +11980,7 @@ function unirEntregaDuplicadaSinDocumento(e){
 window.unirEntregaDuplicadaSinDocumento=unirEntregaDuplicadaSinDocumento;
 function persistUnirEntregaDuplicada(e){
   if(!unirEntregaDuplicadaSinDocumento(e))return;
-  if(!window._entregaDedupePersist)window._entregaDedupePersist=new Set();
-  const dk=String(e._exp||'');
-  if(!dk||window._entregaDedupePersist.has(dk))return;
-  window._entregaDedupePersist.add(dk);
-  try{if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);}catch(err){console.warn('dedupe entrega:',err);}
+  if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(e,'_entregaDedupePersist',e._exp);
 }
 /** La actividad ya tiene una entrega propia (documento o fecha reportada). */
 function pqrsTaskTieneEntregaPropia(t){
@@ -29681,33 +29662,18 @@ function renderActividadesRowHtml(t){
     const realT=(expActPre.tasks||[]).find(function(x){return x&&String(x.id)===String(t.id);});
     if(realT&&pqrsHealTaskTrasDevolucionDirector(expActPre,realT)){
       Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
-      if(!window._pqrsHealDevDirPersist)window._pqrsHealDevDirPersist=new Set();
-      const hk=String(expActPre._exp||'')+'|'+String(realT.id||'');
-      if(!window._pqrsHealDevDirPersist.has(hk)){
-        window._pqrsHealDevDirPersist.add(hk);
-        try{persistExpedienteGranular(expActPre);}catch(err){console.warn('heal devolucion director:',err);}
-      }
+      if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(expActPre,'_pqrsHealDevDirPersist',String(expActPre._exp||'')+'|'+String(realT.id||''));
     }
     // Heal: Por corregir + workflow aún en PENDIENTE_REVISION (devolver desde rail unificado)
     if(realT&&typeof pqrsHealTrasDevolucionCorregirPendiente==='function'
       &&pqrsHealTrasDevolucionCorregirPendiente(expActPre,realT)){
       Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
-      if(!window._pqrsHealCorrPendPersist)window._pqrsHealCorrPendPersist=new Set();
-      const hkC=String(expActPre._exp||'')+'|'+String(realT.id||'')+'|corr';
-      if(!window._pqrsHealCorrPendPersist.has(hkC)){
-        window._pqrsHealCorrPendPersist.add(hkC);
-        try{persistExpedienteGranular(expActPre);}catch(errC){console.warn('heal devolucion corregir:',errC);}
-      }
+      if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(expActPre,'_pqrsHealCorrPendPersist',String(expActPre._exp||'')+'|'+String(realT.id||'')+'|corr');
     }
     if(realT&&typeof pqrsHealTrasReentregaCorregirPendiente==='function'
       &&pqrsHealTrasReentregaCorregirPendiente(expActPre,realT)){
       Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
-      if(!window._pqrsHealReentregaPersist)window._pqrsHealReentregaPersist=new Set();
-      const hkR=String(expActPre._exp||'')+'|'+String(realT.id||'')+'|reent';
-      if(!window._pqrsHealReentregaPersist.has(hkR)){
-        window._pqrsHealReentregaPersist.add(hkR);
-        try{persistExpedienteGranular(expActPre);}catch(errR){console.warn('heal reentrega corregir:',errR);}
-      }
+      if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(expActPre,'_pqrsHealReentregaPersist',String(expActPre._exp||'')+'|'+String(realT.id||'')+'|reent');
     }
     // Heal: ya aprobada (firma/notif/cerrada) pero la actividad quedó en «Por verificar»
     if(realT&&!realT._pqrs_proyeccion_atendida
@@ -29719,12 +29685,7 @@ function renderActividadesRowHtml(t){
         if(!realT.ultimaRevisionDepto)
           _ncaMarcarTaskRevisadaAprobada(expActPre._exp,realT.id,{nota:'Aprobada (sincronizado)',por:'sistema'});
         Object.assign(t,realT,{exp:t.exp,depto:t.depto,nombre:t.nombre,tram:t.tram,sinExpediente:t.sinExpediente,esPqrs:t.esPqrs,prioritaria:t.prioritaria});
-        if(!window._pqrsHealPostAprobPersist)window._pqrsHealPostAprobPersist=new Set();
-        const hk2=String(expActPre._exp||'')+'|'+String(realT.id||'')+'|post';
-        if(!window._pqrsHealPostAprobPersist.has(hk2)){
-          window._pqrsHealPostAprobPersist.add(hk2);
-          try{persistExpedienteGranular(expActPre);}catch(err2){console.warn('heal post aprobacion:',err2);}
-        }
+        if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(expActPre,'_pqrsHealPostAprobPersist',String(expActPre._exp||'')+'|'+String(realT.id||'')+'|post');
       }catch(errH){console.warn('heal post aprobacion:',errH);}
     }
   }
