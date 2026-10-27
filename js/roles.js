@@ -487,7 +487,7 @@ function aplicarModoMantenimientoUI(){
       const rolU=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
       const gestiona=(typeof esAdministrador==='function'&&esAdministrador())||rolU==='guaviare';
       const hora=typeof horaReinicioCuotaFirebase==='function'?horaReinicioCuotaFirebase():'2:00 a. m.';
-      ban.innerHTML='⚠️ <strong>Límite diario de Firebase alcanzado</strong> — solo consulta: los cambios no se guardarían. Se restablece a las <strong>'+escAttr(hora)+'</strong>; después recargue con Ctrl+F5.'+
+      ban.innerHTML='⚠️ <strong>Firebase no está guardando: Límite diario de Firebase alcanzado o sin conexión</strong> — solo consulta: lo que asigne o edite se perdería. El cupo se restablece a las <strong>'+escAttr(hora)+'</strong>; la edición se libera sola cuando Firebase vuelva a guardar.'+
         (gestiona?' <a class="mant-ok" href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="margin-left:8px;color:#fde68a;text-decoration:underline">Ver uso y facturación de Firebase</a>':'');
     }else if(verAviso){
       const when=fmtMantenimientoRestablece(mantenimientoEstado.restableceAt);

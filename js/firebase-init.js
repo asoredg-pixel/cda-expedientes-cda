@@ -19,22 +19,46 @@ onLog(function(e){
   window._fsCuotaAgotada=true;
   window.dispatchEvent(new Event('firestore-cuota-agotada'));
 },{level:'error'});
+// Sin cupo de escritura Firestore no da error: muestra el cambio en pantalla y lo pierde al recargar.
+// Un guardado sin confirmar a tiempo pasa el sistema a solo consulta; se libera cuando todos confirman.
+const FS_TOPE_CONFIRMACION_MS=10000;
+let fsEscriturasPendientes=0;
+function vigilarEscritura(fn){
+  return function(){
+    const p=fn.apply(null,arguments);
+    fsEscriturasPendientes++;
+    const t=setTimeout(function(){
+      if(window._fsCuotaAgotada)return;
+      window._fsCuotaAgotada=true;
+      window.dispatchEvent(new Event('firestore-cuota-agotada'));
+    },FS_TOPE_CONFIRMACION_MS);
+    const fin=function(ok){
+      clearTimeout(t);
+      fsEscriturasPendientes--;
+      if(!ok||!window._fsCuotaAgotada||fsEscriturasPendientes>0)return;
+      window._fsCuotaAgotada=false;
+      window.dispatchEvent(new Event('firestore-cuota-restablecida'));
+    };
+    Promise.resolve(p).then(function(){fin(true);},function(){fin(false);});
+    return p;
+  };
+}
 const db=getFirestore(app);
 const auth=getAuth(app);
 window._db=db;
 window._firebaseAuth=auth;
 window._fsDoc=doc;
 window._fsGetDoc=getDoc;
-window._fsSetDoc=setDoc;
-window._fsUpdateDoc=updateDoc;
-window._fsAddDoc=addDoc;
+window._fsSetDoc=vigilarEscritura(setDoc);
+window._fsUpdateDoc=vigilarEscritura(updateDoc);
+window._fsAddDoc=vigilarEscritura(addDoc);
 window._fsOnSnapshot=onSnapshot;
 window._fsCollection=collection;
 window._fsCollectionGroup=collectionGroup;
 window._fsQuery=query;
 window._fsWhere=where;
 window._fsGetDocs=getDocs;
-window._fsDeleteDoc=deleteDoc;
+window._fsDeleteDoc=vigilarEscritura(deleteDoc);
 window._fsDeleteField=deleteField;
 window._fsArrayUnion=arrayUnion;
 window._fsArrayRemove=arrayRemove;

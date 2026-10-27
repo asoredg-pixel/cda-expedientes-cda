@@ -61,6 +61,10 @@ function mostrarAvisoCuotaFirestore(){
   if(typeof aplicarModoMantenimientoUI==='function')aplicarModoMantenimientoUI();
 }
 window.addEventListener('firestore-cuota-agotada',mostrarAvisoCuotaFirestore);
+window.addEventListener('firestore-cuota-restablecida',function(){
+  mostrarAvisoCuotaFirestore();
+  if(document.body&&document.body.classList.contains('sesion-activa')&&typeof notif==='function')notif('Firebase volvió a guardar los cambios. Ya puede editar.','ok');
+});
 async function leerSesionFirestore(email){
   const ref=sessionDocRef(email);
   if(!ref||!window._fsGetDoc)return null;
