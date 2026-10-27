@@ -6,8 +6,9 @@
 // INGRESO POR ROLES
 // ================================================================
 // ROLES_INGRESO → js/constants.js
-const SESSION_STALE_MS=90*1000;
-const SESSION_HEARTBEAT_MS=25000;
+// Cada latido es una escritura en Firestore (cupo gratis: 20.000 al día para todo el sistema).
+const SESSION_STALE_MS=12*60*1000;
+const SESSION_HEARTBEAT_MS=5*60*1000;
 
 function sessionDocRef(email){
   const db=window._db;
@@ -28,6 +29,51 @@ function sesionRemotaEstaViva(data){
   if(!t||isNaN(t))return false;
   return (Date.now()-t)<SESSION_STALE_MS;
 }
+/** Con la cuota agotada, Firestore deja la escritura reintentando sin responder. */
+function fsEscrituraConTope(p,ms){
+  return Promise.race([p,new Promise(function(res,rej){
+    setTimeout(function(){rej({code:'deadline-exceeded'});},ms);
+  })]);
+}
+function marcarCuotaFirestoreSiAplica(err){
+  const txt=String((err&&(err.code||''))+' '+(err&&err.message||''));
+  if(!/resource-exhausted|quota exceeded/i.test(txt))return;
+  if(window._fsCuotaAgotada)return;
+  window._fsCuotaAgotada=true;
+  try{window.dispatchEvent(new Event('firestore-cuota-agotada'));}catch(e){}
+}
+/** El cupo gratis se restablece a la medianoche hora del Pacífico. */
+function horaReinicioCuotaFirebase(){
+  try{
+    const ahora=new Date();
+    const pt=new Date(ahora.toLocaleString('en-US',{timeZone:'America/Los_Angeles'}));
+    const desfase=ahora.getTime()-pt.getTime();
+    const medianoche=new Date(pt.getTime());
+    medianoche.setHours(24,0,0,0);
+    return new Date(medianoche.getTime()+desfase).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+  }catch(e){
+    return '2:00 a. m.';
+  }
+}
+function mostrarAvisoCuotaFirestore(){
+  if(!document.body)return;
+  let el=document.getElementById('fs-cuota-banner');
+  if(!el){
+    el=document.createElement('div');
+    el.id='fs-cuota-banner';
+    el.setAttribute('role','alert');
+    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:100300;background:#7f1d1d;color:#fff;padding:10px 16px;font-size:13px;line-height:1.45;font-weight:600;box-shadow:0 2px 10px rgba(0,0,0,.25)';
+    document.body.insertBefore(el,document.body.firstChild);
+  }
+  const u=window._usuarioActual;
+  const rol=String(u&&u.rol||'').trim();
+  const gestiona=rol==='admin'||rol==='guaviare';
+  el.innerHTML='Se alcanzó el límite diario gratuito de Firebase. Los cambios no se están guardando en la nube. '+
+    'Se restablece a las '+escAttr(horaReinicioCuotaFirebase())+' (hora de este equipo). Evite registrar información hasta entonces.'+
+    (gestiona?' <a href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="color:#fde68a;text-decoration:underline">Ver uso y facturación de Firebase</a>':'');
+  el.style.display='block';
+}
+window.addEventListener('firestore-cuota-agotada',mostrarAvisoCuotaFirestore);
 async function leerSesionFirestore(email){
   const ref=sessionDocRef(email);
   if(!ref||!window._fsGetDoc)return null;
@@ -36,6 +82,7 @@ async function leerSesionFirestore(email){
     return snap.exists()?snap.data():null;
   }catch(err){
     console.warn('leerSesionFirestore:',err);
+    marcarCuotaFirestoreSiAplica(err);
     return null;
   }
 }
@@ -62,7 +109,7 @@ async function claimActiveSession(email){
     const remoteSid=String(existing.activeSessionId||'').trim();
     if(localSid&&localSid===remoteSid){
       _sessionId=localSid;
-      try{await window._fsSetDoc(ref,{activeSessionHeartbeat:new Date().toISOString()},{merge:true});}catch(e){}
+      try{await fsEscrituraConTope(window._fsSetDoc(ref,{activeSessionHeartbeat:new Date().toISOString()},{merge:true}),8000);}catch(e){}
       return localSid;
     }
     // Hay otra sesión activa: la desplazamos escribiendo un nuevo ID
@@ -79,13 +126,14 @@ async function claimActiveSession(email){
     email:email
   };
   try{
-    await window._fsSetDoc(ref,payload,{merge:true});
+    await fsEscrituraConTope(window._fsSetDoc(ref,payload,{merge:true}),8000);
     _sessionId=sid;
     try{sessionStorage.setItem('sst_session_id',sid);}catch(e){}
     return sid;
   }catch(err){
     if(err&&err.code==='permission-denied')return'RULES';
     console.warn('claimActiveSession:',err);
+    marcarCuotaFirestoreSiAplica(err);
     return null;
   }
 }
@@ -380,8 +428,10 @@ async function verificarUsuarioFirestore(fbUser){
     // No pisar consulta ciudadana abierta por deep-link del correo
     if(document.body.classList.contains('sesion-activa')&&typeof esModoCiudadano==='function'&&esModoCiudadano())return;
     ingresarComoRol(acceso.rol,acceso.respNom);
+    if(window._fsCuotaAgotada)mostrarAvisoCuotaFirestore();
   }catch(err){
     console.error('Error verificando usuario:',err);
+    marcarCuotaFirestoreSiAplica(err);
     setLoginStatus('');
     setLoginAuthMsg('Error al verificar acceso. Intente de nuevo.','err');
     if(window._authSignOut)await window._authSignOut().catch(()=>{});

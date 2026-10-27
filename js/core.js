@@ -5483,6 +5483,77 @@ function pqrsOrigenMostrarDetalle(e){
   if(rad.some(function(d){return d&&d.tipo==='soporte_radicacion';}))return false;
   return !!(String(e.f_f1||'').trim()||String(e._pqrs_detalle||e._detalle_general||'').trim()||(typeof detalleNotasData==='function'&&detalleNotasData(e._detalle_notas).length));
 }
+function pqrsOrientacionLinea(label,val){
+  val=String(val||'').trim();
+  if(!val)return '';
+  return '<div style="font-size:13px;line-height:1.45;color:var(--tx)"><span style="color:var(--tx3)">'+escAttr(label)+': </span>'+escAttr(val)+'</div>';
+}
+/** Datos del solicitante (ventanilla sin PDF) para orientar la respuesta, antes del asunto. */
+function htmlPqrsSolicitudOrientacion(e){
+  if(!e)return '';
+  const kStyle='font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px';
+  const boxStyle='padding:12px 14px;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:14px';
+  function bloque(titulo,rows){
+    const body=(rows||[]).filter(Boolean).join('');
+    if(!body)return '';
+    return '<div style="'+boxStyle+'"><div style="'+kStyle+'">'+escAttr(titulo)+'</div>'+body+'</div>';
+  }
+  const nomFuerte=function(t){return '<div style="font-size:14px;font-weight:600;line-height:1.4;color:var(--tx)">'+escAttr(String(t||'').trim()||'—')+'</div>';};
+  let quien='';
+  if(e._pqrs_interna){
+    quien=bloque('Solicitante', [
+      '<div style="font-size:13px;font-weight:600;color:var(--tx)">PQRSD interna</div>',
+      pqrsOrientacionLinea('Oficina remitente', e._pqrs_oficina_remitente||e._qd_nombre)
+    ]);
+  }else if(e._qd_anonimo){
+    quien=bloque('Solicitante', [
+      '<div style="font-size:13px;font-weight:600;color:var(--tx)">Solicitud anónima</div>',
+      pqrsOrientacionLinea('Correo', e._qd_correo||e._pn_correo),
+      pqrsOrientacionLinea('Teléfono', e._qd_telefono||e._pn_telefono)
+    ]);
+  }else if(String(e._tipo_persona||'')==='juridica'){
+    const nit=e._pj_nit?(typeof formatNitDisplay==='function'?formatNitDisplay(e._pj_nit):e._pj_nit):'';
+    quien=bloque('Solicitante · Persona jurídica', [
+      nomFuerte(e._pj_empresa),
+      pqrsOrientacionLinea('NIT', nit),
+      pqrsOrientacionLinea('Correo', e._pj_correo),
+      pqrsOrientacionLinea('Teléfono', e._pj_telefono)
+    ]);
+    const oficia=String(e._qd_nombre||'').trim();
+    if(oficia&&oficia!==String(e._pj_empresa||'').trim()){
+      quien+=bloque('Quien radica', [
+        nomFuerte(oficia),
+        pqrsOrientacionLinea('Identificación', e._qd_identificacion),
+        pqrsOrientacionLinea('Correo', e._qd_correo),
+        pqrsOrientacionLinea('Teléfono', e._qd_telefono)
+      ]);
+    }
+  }else{
+    quien=bloque('Solicitante · Persona natural', [
+      nomFuerte(e._pn_nombre||e._qd_nombre),
+      pqrsOrientacionLinea('Identificación', e._pn_identificacion||e._qd_identificacion),
+      pqrsOrientacionLinea('Correo', e._pn_correo||e._qd_correo),
+      pqrsOrientacionLinea('Teléfono', e._pn_telefono||e._qd_telefono)
+    ]);
+  }
+  if(e._apoderado){
+    quien+=bloque('Apoderado', [
+      nomFuerte(e._apo_nombre),
+      pqrsOrientacionLinea('Identificación', e._apo_identificacion),
+      pqrsOrientacionLinea('Correo', e._apo_correo),
+      pqrsOrientacionLinea('Teléfono', e._apo_telefono)
+    ]);
+  }
+  if(e._autorizado){
+    quien+=bloque('Autorizado', [
+      nomFuerte(e._aut_nombre),
+      pqrsOrientacionLinea('Identificación', e._aut_identificacion),
+      pqrsOrientacionLinea('Correo', e._aut_correo),
+      pqrsOrientacionLinea('Teléfono', e._aut_telefono)
+    ]);
+  }
+  return quien;
+}
 function renderPqrsOrigenDetalleStageHtml(e){
   if(!e)return'<div style="padding:16px;font-size:12px;color:var(--tx3)">PQRSD no encontrada</div>';
   const notas=typeof detalleNotasData==='function'?detalleNotasData(e._detalle_notas).filter(function(n){return n&&String(n.texto||'').trim();}):[];
@@ -5498,6 +5569,7 @@ function renderPqrsOrigenDetalleStageHtml(e){
     :'<div style="'+txtStyle+'">'+escAttr(String(e._pqrs_detalle||e._detalle_general||'').trim()||'—')+'</div>';
   return '<div class="pqrs-origen-detalle" style="padding:18px 20px;max-width:780px;margin:0 auto;overflow:auto;height:100%;box-sizing:border-box">'+
     '<div style="font-size:11px;color:var(--tx2);margin-bottom:14px;padding:6px 10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">📝 Radicada sin documento de solicitud. Asunto y detalle registrados por Secretaría en el formulario de radicación.</div>'+
+    htmlPqrsSolicitudOrientacion(e)+
     '<div style="'+boxStyle+'"><div style="'+kStyle+'">Asunto</div><div style="font-size:16px;font-weight:600;line-height:1.45;color:var(--tx)">'+escAttr(String(e.f_f1||'').trim()||'—')+'</div></div>'+
     '<div style="'+boxStyle+'"><div style="'+kStyle+'">Detalle</div>'+det+'</div>'+
   '</div>';
@@ -20563,13 +20635,30 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     });
   }
 
-  // Informe aún no aprobado: se borra el registro y la carpeta de Drive (como si no se hubiera entregado).
+  // Informe aún no aprobado: queda eliminado (no se saca de la lista).
+  // Si solo se quita de memoria, al guardar se mezcla de nuevo la copia del servidor y reaparece en Por revisar.
   if(t.informeContrato&&!e){
     const tidInf=String(taskId||t.id||'').trim();
+    const cuandoInf=new Date().toISOString();
+    const marcarInfElim=function(rowInf){
+      if(!rowInf)return;
+      rowInf.eliminada=true;
+      rowInf.eliminadaEn=cuandoInf;
+      rowInf.eliminadaMotivo='Entrega de informe eliminada';
+      rowInf.estado='En ejecución';
+      rowInf.fechaReportada='';
+      rowInf.fechaAtendida='';
+      rowInf.soportes=[];
+      rowInf._pending_fs_sync=true;
+      rowInf._pending_fs_at=Date.now();
+      if(!Array.isArray(rowInf.historial))rowInf.historial=[];
+      rowInf.historial.push({tipo:'eliminacion',fecha:typeof hoy==='function'?hoy():cuandoInf.slice(0,10),nota:'Entrega de informe eliminada',ts:Date.now()});
+    };
     if(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)){
       const ixInf=actividadesLibres.findIndex(function(x){return x&&String(x.id||'')===tidInf;});
-      if(ixInf>=0)actividadesLibres.splice(ixInf,1);
-    }
+      if(ixInf>=0)marcarInfElim(actividadesLibres[ixInf]);
+      else{marcarInfElim(t);actividadesLibres.push(t);}
+    }else marcarInfElim(t);
     try{if(typeof persistExpLocal==='function')persistExpLocal();}catch(errL){console.warn('eliminarEntrega informe local:',errL);}
     try{
       const persistFn=typeof persistActividadesLibresFirestore==='function'?persistActividadesLibresFirestore:null;
@@ -20587,11 +20676,25 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     if(typeof informeBorradorCerrarTrasEntrega==='function'){
       try{informeBorradorCerrarTrasEntrega(t);}catch(errB){}
     }
-    notif('🗑 Informe eliminado — se borraron el registro, los archivos y la carpeta de Drive','ok');
     closeTaskModal();
     if(typeof renderActividades==='function')renderActividades();
     if(typeof renderBandejaDepto==='function')renderBandejaDepto();
     if(typeof renderRecursosPanel==='function')renderRecursosPanel();
+    try{
+      if(typeof confirmExito==='function'){
+        confirmExito({
+          title:'Informe eliminado',
+          message:'Se eliminó la entrega del informe. Ya no aparece en Por revisar.',
+          detail:'Se borraron el registro, los archivos y la carpeta de Drive.',
+          tone:'success',
+          hideFooter:false,
+          confirmLabel:'Entendido',
+          autoCloseMs:0
+        });
+      }else if(typeof notif==='function'){
+        notif('🗑 Informe eliminado — se borraron el registro, los archivos y la carpeta de Drive','ok');
+      }
+    }catch(errN){console.warn('eliminarEntrega informe aviso:',errN);}
     return true;
   }
 
@@ -22227,6 +22330,7 @@ function confirmarCierreTask(expId,taskId,opts){
   verificarTaskExp(expId,taskId,fechaCierre,Object.assign({skipAutoMail:true},opts));
 }
 function estadoTaskLabel(t){
+  if(t&&t.eliminada)return'Eliminada';
   // Proyección del responsable (o encargado viendo ese responsable): ✓ Revisada · X Firmar / etc.
   const yoLab=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
   if(yoLab&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,yoLab)){

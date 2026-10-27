@@ -8,10 +8,17 @@ const firebaseConfig={
   messagingSenderId:"215089141263",
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
-import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import{initializeApp,onLog}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,query,where,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signInWithCredential,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
+// Con la cuota diaria agotada, Firestore solo lo informa en su registro: las escrituras quedan en espera.
+onLog(function(e){
+  const txt=String((e&&e.message)||'')+' '+((e&&Array.isArray(e.args))?e.args.map(String).join(' '):'');
+  if(!/resource-exhausted|quota exceeded/i.test(txt)||window._fsCuotaAgotada)return;
+  window._fsCuotaAgotada=true;
+  window.dispatchEvent(new Event('firestore-cuota-agotada'));
+},{level:'error'});
 const db=getFirestore(app);
 const auth=getAuth(app);
 window._db=db;
