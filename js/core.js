@@ -8525,7 +8525,7 @@ function taskReviewSideTitles(){
   return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',trasladarNotificador:'Trasladar persona a notificar',elimEntregaNotif:'Eliminar entrega',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación',devolverTecnico:'Devolver al técnico'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
-  const nc=taskChatComentariosCount(t);
+  const nc=typeof chatActividadNoLeidosTask==='function'?chatActividadNoLeidosTask(ref,taskId):0;
   const sel=typeof getSoporteSeleccionado==='function'?getSoporteSeleccionado(t):getSoporteActivo(t);
   const no=(t&&t.notasDoc||[]).filter(function(n){return n&&n.rol==='revisor'&&sel&&String(n.soporteId||'')===String(sel.id||'');}).length;
   const badge=Math.max(nc,no);
@@ -11310,6 +11310,7 @@ function refFromCtx(expId,taskId,t){
   return t&&t.sinExpediente?(t.codigo||expId):expId;
 }
 function taskReviewToggleSidePanel(mode,expId,taskId){
+  if(mode==='chat'&&window._taskReviewSideMode!=='chat'&&typeof chatActividadMarcarLeidos==='function')chatActividadMarcarLeidos(expId,taskId);
   const revSide=typeof REV_EN_CURSO_SIDES!=='undefined'?REV_EN_CURSO_SIDES[mode]:'';
   if(revSide&&window._taskReviewSideMode!==mode&&typeof revEnCursoBloqueaAccion==='function'&&revEnCursoBloqueaAccion(expId,taskId,revSide))return;
   const ctx=window._taskModalCtx||{};
@@ -18040,7 +18041,7 @@ function actIcoBadgeHtml(n,tipo){
   return '<span class="'+cls+'" aria-hidden="true">'+num+'</span>';
 }
 function taskChatBtnHtml(expId,taskId,t){
-  const nc=taskChatComentariosCount(t);
+  const nc=typeof chatActividadNoLeidosTask==='function'?chatActividadNoLeidosTask(expId,taskId):0;
   const ref=escAttr(expId),tid=escAttr(taskId);
   return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat de actividad'+(nc?' · '+nc+' mensaje'+(nc>1?'s':''):'')+'" onclick="event.stopPropagation();openTaskCommentsChatOnly(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+actIcoBadgeHtml(nc,'blue')+'</button>';
 }
@@ -19001,6 +19002,169 @@ window.taskChatEncargadoEligeDestino=taskChatEncargadoEligeDestino;
 window.taskChatResolveDefaultPara=taskChatResolveDefaultPara;
 window.taskChatDestinatarioEfectivo=taskChatDestinatarioEfectivo;
 window.taskChatCampanitaAplica=taskChatCampanitaAplica;
+function chatActividadYoNombre(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return String(typeof responsableActivo!=='undefined'?responsableActivo||'':'').trim();
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional())return'';
+  if(typeof getEncargadoDepto==='function'){
+    const enc=String(getEncargadoDepto(typeof deptoActivo!=='undefined'?deptoActivo:'')||'').trim();
+    if(enc)return enc;
+  }
+  return String(typeof responsableActivo!=='undefined'?responsableActivo||'':'').trim();
+}
+function chatActividadClave(expId,taskId){
+  return 'actchat:'+encodeURIComponent(String(expId||''))+'/'+encodeURIComponent(String(taskId||''));
+}
+function chatActividadParseClave(key){
+  const s=String(key||'');
+  if(s.indexOf('actchat:')!==0)return null;
+  const rest=s.slice('actchat:'.length);
+  const i=rest.indexOf('/');
+  if(i<0)return null;
+  try{
+    return{expId:decodeURIComponent(rest.slice(0,i)),taskId:decodeURIComponent(rest.slice(i+1))};
+  }catch(e){return null;}
+}
+function chatActividadEsClave(key){
+  return String(key||'').indexOf('actchat:')===0;
+}
+function chatActividadParticipa(c,t,yo){
+  if(!c||c.incluidoEnReporte||!yo)return false;
+  const autor=String(c.autor||'').trim();
+  if(autor&&typeof agendaNorm==='function'&&agendaNorm(autor)===agendaNorm(yo))return true;
+  return typeof taskChatCampanitaAplica==='function'&&taskChatCampanitaAplica(c,t,yo);
+}
+function chatActividadComentarioItem(expId,taskId,c,ci){
+  return{tipo:'comentario',exp:expId,taskId:taskId,cidx:ci,fecha:(c&&c.fecha)||'',autor:(c&&c.autor)||'',texto:(c&&c.texto)||''};
+}
+function chatActividadComentarioNoLeido(c,t,yo,leidos,expId,taskId,ci){
+  if(typeof taskChatCampanitaAplica!=='function'||!taskChatCampanitaAplica(c,t,yo))return false;
+  const it=chatActividadComentarioItem(expId,taskId,c,ci);
+  if(typeof bandejaItemIsEliminado==='function'&&bandejaItemIsEliminado(it))return false;
+  if(typeof bandejaItemIsLeido==='function'&&bandejaItemIsLeido(it,leidos))return false;
+  return true;
+}
+function chatActividadResumen(expId,taskId,t,yo,leidos){
+  if(typeof normalizeTask==='function')t=normalizeTask(t||{});
+  else t=t||{};
+  const cms=[];
+  (t.comentarios||[]).forEach(function(c,ci){
+    if(chatActividadParticipa(c,t,yo))cms.push({c:c,ci:ci});
+  });
+  if(!cms.length)return null;
+  let unread=0;
+  cms.forEach(function(x){
+    if(chatActividadComentarioNoLeido(x.c,t,yo,leidos,expId,taskId,x.ci))unread++;
+  });
+  const last=cms[cms.length-1].c;
+  const desc=String(t.desc||t.actividad||t.codigo||'').trim();
+  const cuerpo=String(last.texto||'').trim()||((last.adjuntos&&last.adjuntos.length)?'Archivo':'');
+  return{
+    key:chatActividadClave(expId,taskId),
+    kind:'actchat',
+    expId:String(expId||''),
+    taskId:String(taskId||''),
+    label:String(expId||taskId||'Actividad'),
+    meta:desc?('Actividad · '+desc):'Chat de actividad',
+    preview:(last.autor?String(last.autor)+': ':'')+cuerpo,
+    ts:String(last.fecha||''),
+    unread:unread
+  };
+}
+function chatActividadHilos(){
+  const yo=chatActividadYoNombre();
+  if(!yo)return[];
+  const leidos=typeof getBandejaLeidos==='function'?getBandejaLeidos():[];
+  const out=[];
+  const seen={};
+  function add(expId,taskId,t){
+    if(!t||t.eliminada)return;
+    const id=String(expId||'')+'|'+String(taskId||'');
+    if(!id||id==='|'||seen[id])return;
+    const row=chatActividadResumen(expId,taskId,t,yo,leidos);
+    if(!row)return;
+    seen[id]=true;
+    out.push(row);
+  }
+  const listaExp=typeof exps!=='undefined'&&Array.isArray(exps)?exps:[];
+  listaExp.forEach(function(e){
+    (e.tasks||[]).forEach(function(t){
+      if(typeof normalizeTask==='function')t=normalizeTask(t);
+      add(e._exp,t&&t.id,t);
+    });
+  });
+  const libres=typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)?actividadesLibres:[];
+  libres.forEach(function(t){
+    if(typeof normalizeActLibre==='function')t=normalizeActLibre(t);
+    add((t&&(t.codigo||t.exp))||'',t&&t.id,t);
+  });
+  window._chatActHilos=out;
+  return out;
+}
+function chatActividadHilo(key){
+  const list=Array.isArray(window._chatActHilos)?window._chatActHilos:chatActividadHilos();
+  for(let i=0;i<list.length;i++)if(list[i].key===key)return list[i];
+  return null;
+}
+function chatActividadNoLeidosTotal(){
+  return chatActividadHilos().reduce(function(n,h){return n+(h.unread||0);},0);
+}
+function chatActividadNoLeidosTask(expId,taskId){
+  const yo=chatActividadYoNombre();
+  if(!yo||typeof getTaskAny!=='function')return 0;
+  const t=getTaskAny(expId,taskId);
+  if(!t)return 0;
+  const leidos=typeof getBandejaLeidos==='function'?getBandejaLeidos():[];
+  const row=chatActividadResumen(expId,taskId,t,yo,leidos);
+  return row?row.unread:0;
+}
+function chatActividadEnviarPara(t,yo){
+  if(typeof normalizeTask==='function')t=normalizeTask(t||{});
+  else t=t||{};
+  const cms=(t.comentarios||[]).filter(function(c){return c&&!c.incluidoEnReporte;});
+  for(let i=cms.length-1;i>=0;i--){
+    const c=cms[i];
+    const autor=String(c.autor||'').trim();
+    if(autor&&typeof agendaNorm==='function'&&agendaNorm(autor)!==agendaNorm(yo))return autor;
+    const dest=typeof taskChatDestinatarioEfectivo==='function'?taskChatDestinatarioEfectivo(c,t):'';
+    if(dest&&typeof agendaNorm==='function'&&agendaNorm(dest)!==agendaNorm(yo))return dest;
+  }
+  if(typeof taskChatResolveDefaultPara==='function')return taskChatResolveDefaultPara(t)||'';
+  return'';
+}
+function chatActividadMarcarLeidos(expId,taskId){
+  const yo=chatActividadYoNombre();
+  if(!yo||typeof getTaskAny!=='function'||typeof markBandejaItemLeido!=='function')return 0;
+  let t=getTaskAny(expId,taskId);
+  if(!t)return 0;
+  if(typeof normalizeTask==='function')t=normalizeTask(t);
+  let n=0;
+  (t.comentarios||[]).forEach(function(c,ci){
+    if(!chatActividadComentarioNoLeido(c,t,yo,typeof getBandejaLeidos==='function'?getBandejaLeidos():[],expId,taskId,ci))return;
+    markBandejaItemLeido(chatActividadComentarioItem(expId,taskId,c,ci));
+    n++;
+  });
+  window._chatActHilos=null;
+  if(typeof scheduleRenderChatBadge==='function')scheduleRenderChatBadge();
+  if(typeof renderActividades==='function'&&document.getElementById('pg-act')&&document.getElementById('pg-act').classList.contains('on'))renderActividades();
+  return n;
+}
+function chatActividadEnviarTexto(expId,taskId,texto){
+  const yo=chatActividadYoNombre();
+  if(!yo||typeof getTaskAny!=='function'||typeof addTaskComentario!=='function')return false;
+  const t=getTaskAny(expId,taskId);
+  if(!t)return false;
+  const para=chatActividadEnviarPara(t,yo);
+  return !!addTaskComentario(expId,taskId,texto,{para:para});
+}
+window.chatActividadClave=chatActividadClave;
+window.chatActividadParseClave=chatActividadParseClave;
+window.chatActividadEsClave=chatActividadEsClave;
+window.chatActividadHilos=chatActividadHilos;
+window.chatActividadHilo=chatActividadHilo;
+window.chatActividadNoLeidosTotal=chatActividadNoLeidosTotal;
+window.chatActividadNoLeidosTask=chatActividadNoLeidosTask;
+window.chatActividadMarcarLeidos=chatActividadMarcarLeidos;
+window.chatActividadEnviarTexto=chatActividadEnviarTexto;
 window.taskChatSyncParaFromAsignacion=taskChatSyncParaFromAsignacion;
 window.taskChatPqrsAsigChecked=taskChatPqrsAsigChecked;
 function renderTaskChatListHtml(t){
@@ -23171,12 +23335,6 @@ function collectBandejaItems(){
       (e.tasks||[]).forEach(t=>{
         t=normalizeTask(t);
         if(t.eliminada||!taskUsuarioEsAsignado(t,responsableActivo))return;
-        (t.comentarios||[]).forEach((c,ci)=>{
-          if(c.incluidoEnReporte)return;
-          if(typeof taskChatCampanitaAplica==='function'?taskChatCampanitaAplica(c,t,responsableActivo):false){
-            items.push({modo:'resp',tipo:'comentario',exp:e._exp,taskId:t.id,cidx:ci,fecha:c.fecha||'',autor:c.autor||'',texto:c.texto||'',desc:t.desc||t.actividad||'',responsable:t.responsable||''});
-          }
-        });
         const est=estadoTask(t);
         const obsRevisor=(t.notasDoc||[]).filter(n=>n.rol==='revisor');
         const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
@@ -23283,12 +23441,6 @@ function collectBandejaItems(){
     (actividadesLibres||[]).forEach(t=>{
       t=normalizeActLibre(t);
       if(t.eliminada||!taskUsuarioEsAsignado(t,responsableActivo))return;
-      (t.comentarios||[]).forEach((c,ci)=>{
-        if(c.incluidoEnReporte)return;
-        if(typeof taskChatCampanitaAplica==='function'?taskChatCampanitaAplica(c,t,responsableActivo):false){
-          items.push({modo:'resp',tipo:'comentario',exp:t.codigo,taskId:t.id,cidx:ci,fecha:c.fecha||'',autor:c.autor||'',texto:c.texto||'',desc:t.desc||t.actividad||'',responsable:t.responsable||''});
-        }
-      });
       const est=estadoTask(t);
       const obsRevisor=(t.notasDoc||[]).filter(n=>n.rol==='revisor');
       const ultDev=(t.historial||[]).filter(h=>h.tipo==='ajuste_soporte').pop();
@@ -23316,18 +23468,11 @@ function collectBandejaItems(){
     return items.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).slice(0,80);
   }
   if(esJurisdiccional())return [];
-  const encCampanita=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
   const amb=exps.filter(e=>(e._depto||'guaviare')===deptoActivo);
   amb.forEach(e=>{
     (e.tasks||[]).forEach(t=>{
       t=normalizeTask(t);
       if(t.eliminada)return;
-      (t.comentarios||[]).forEach((c,ci)=>{
-        if(c.incluidoEnReporte)return;
-        if(encCampanita&&(typeof taskChatCampanitaAplica==='function'?taskChatCampanitaAplica(c,t,encCampanita):false)){
-          items.push({modo:'depto',tipo:'comentario',exp:e._exp,taskId:t.id,cidx:ci,fecha:c.fecha||'',autor:c.autor||t.responsable||'',texto:c.texto||'',desc:t.desc||t.actividad||'',responsable:t.responsable||''});
-        }
-      });
       const sol=getTaskSolicitudPendiente(t);
       if(sol&&!taskEsAtenderPqrs(t,e)){
         items.push({
@@ -23340,12 +23485,6 @@ function collectBandejaItems(){
   });
   getActividadesLibresDepto(deptoActivo).forEach(t=>{
     if(t.eliminada)return;
-    (t.comentarios||[]).forEach((c,ci)=>{
-      if(c.incluidoEnReporte)return;
-      if(encCampanita&&(typeof taskChatCampanitaAplica==='function'?taskChatCampanitaAplica(c,t,encCampanita):false)){
-        items.push({modo:'depto',tipo:'comentario',exp:t.codigo,taskId:t.id,cidx:ci,fecha:c.fecha||'',autor:c.autor||t.responsable||'',texto:c.texto||'',desc:t.desc||t.actividad||'',responsable:t.responsable||''});
-      }
-    });
     const sol=getTaskSolicitudPendiente(t);
     if(sol){
       items.push({
@@ -23435,7 +23574,7 @@ function renderBandejaDepto(){
   const show=esModoCiudadano()?false:(esModoResponsable()?!!responsableActivo:!esJurisdiccional());
   wrap.style.display=show?'':'none';
   if(!show)return;
-  if(hdr)hdr.textContent=esModoResponsable()?'Notificaciones del departamento':(esModoOficinaDeguv()||esOficinaPqrsNca()||esNcaDeguv())?'Notificaciones PQRSD':'Chat y solicitudes';
+  if(hdr)hdr.textContent=esModoResponsable()?'Notificaciones del departamento':(esModoOficinaDeguv()||esOficinaPqrsNca()||esNcaDeguv())?'Notificaciones PQRSD':'Avisos y solicitudes';
   const items=collectBandejaItems().filter(function(it){
     if(bandejaItemIsEliminado(it))return false;
     // Defensa: nunca mostrar alertas auto de plazo al encargado / depto
@@ -23473,6 +23612,7 @@ function renderBandejaDepto(){
     }
   }
   window._bandejaUnreadKeysPrev=unreadKeys;
+  if(typeof chatPingActividadHilos==='function')chatPingActividadHilos();
   if(badge){
     if(unread>0){
       badge.textContent=unread;
@@ -25542,6 +25682,7 @@ function restaurarTaskExp(expId,taskId){
   });
 }
 function openTaskCommentsChatOnly(expId,taskId){
+  if(typeof chatActividadMarcarLeidos==='function')chatActividadMarcarLeidos(expId,taskId);
   if(typeof taskModalIsReviewOpen==='function'&&taskModalIsReviewOpen()&&typeof taskReviewToggleSidePanel==='function'){
     taskReviewToggleSidePanel('chat',expId,taskId);
     return;
