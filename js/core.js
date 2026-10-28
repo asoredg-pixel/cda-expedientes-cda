@@ -22431,6 +22431,18 @@ function estadoTaskLabel(t){
   if(e==='Atendida')return'✓ Revisada';
   return e;
 }
+/** Revisión par tal como la ve el responsable, o el encargado cuando filtra por ese nombre. */
+function taskRevParRolEnVista(t,e){
+  const yo=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
+  if(!t||!yo)return null;
+  const ctx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,e||null):null;
+  if(!ctx)return null;
+  const u=typeof agendaNorm==='function'?agendaNorm(yo):String(yo).trim();
+  const eq=function(n){return (typeof agendaNorm==='function'?agendaNorm(n):String(n||'').trim())===u;};
+  if(eq(ctx.tecnico))return Object.assign({rol:'tecnico'},ctx);
+  if(eq(ctx.profesional))return Object.assign({rol:'profesional'},ctx);
+  return null;
+}
 /** Badge de estado (HTML). */
 function taskEstadoBadgeHtml(t){
   const est=estadoTask(t);
@@ -22451,8 +22463,8 @@ function taskEstadoBadgeHtml(t){
     }
     return '<span class="bdg" style="background:'+(ui.bg||st.bg)+';color:'+(ui.fg||st.fg)+'">'+escAttr(ui.lbl)+'</span>';
   }
-  // Revisión técnico ↔ profesional (vista del responsable)
-  const revParB=typeof taskRevParParticipante==='function'?taskRevParParticipante(t,responsableActivo,eExp):null;
+  // Revisión técnico ↔ profesional: el profesional la ve, y el encargado también si filtra por ese responsable
+  const revParB=taskRevParRolEnVista(t,eExp);
   if(t._revParProfDevNca||(typeof taskRevParProfesionalEsperaCorreccionNca==='function'&&taskRevParProfesionalEsperaCorreccionNca(t,responsableActivo,eExp))){
     return badgeFromUi({lbl:'✓ Revisada',bg:'var(--gnl)',fg:'var(--gn)',sub:'Por corregir',subFg:'#a16207',subBg:'#fef9c3'});
   }
