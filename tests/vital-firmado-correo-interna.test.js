@@ -97,7 +97,7 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
     const interna = c._f(e, { id: 't' }, 'Hola', { interna: true }).htmlBody
     expect(interna).not.toContain('CONSULTA')
     expect(interna).toContain('<PIE>')
-    expect(extraer(tf, ['tramiteAtajoEnviarCorreoDirecto'])).toContain('tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,{interna:wf.comunicacion_interna===true})')
+    expect(extraer(tf, ['tramiteAtajoEnviarCorreoDirecto'])).toContain('tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,{interna:wf.comunicacion_interna===true,entidad:esEntidad})')
   })
 
   it('libre: la marca se guarda en el flujo de la actividad', () => {

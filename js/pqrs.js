@@ -3499,7 +3499,7 @@ function closeCiudadanoDocViewer(){
   const ifr=document.getElementById('ciudadano-doc-iframe');
   const foot=document.getElementById('ciudadano-doc-foot');
   if(ov){
-    ov.classList.remove('on');
+    ov.classList.remove('on','pqrs-att-ventana-on');
     ov.setAttribute('aria-hidden','true');
     if(typeof resetOverlayElevation==='function')resetOverlayElevation(ov);
   }

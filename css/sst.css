@@ -4300,6 +4300,16 @@ html.ui-editor-modal-mode #ciudadano-doc-overlay.task-modal-overlay,
 #rec-prompt-overlay.task-modal-overlay.on{
   z-index:100050!important;
 }
+#ciudadano-doc-overlay.pqrs-att-ventana-on,
+html.ui-editor-modal-mode #ciudadano-doc-overlay.pqrs-att-ventana-on.task-modal-overlay{
+  z-index:100200!important;
+}
+#ciudadano-doc-overlay.pqrs-att-ventana-on .task-modal{
+  width:min(1040px,96vw);max-width:96vw;
+}
+#ciudadano-doc-overlay.pqrs-att-ventana-on #ciudadano-doc-iframe{
+  height:min(78vh,820px);
+}
 .rec-prompt-modal{width:min(400px,96vw)!important}
 .bib-guardar-modal{width:min(920px,96vw)!important;max-height:min(92vh,820px);display:flex;flex-direction:column}
 .bib-guardar-modal .task-modal-body{overflow:auto;flex:1;min-height:0}

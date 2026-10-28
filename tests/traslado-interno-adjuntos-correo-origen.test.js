@@ -87,10 +87,10 @@ describe('Entrega directa · traslado interno', () => {
   it('ya no quita los adjuntos del correo origen por pasar de 800 KB', () => {
     expect(fn).not.toMatch(/esInterna&&totalLocal>MAX_ATTACH\)/)
     expect(fn).toMatch(/MAX_ATTACH_INTERNA=18\*1024\*1024/)
-    expect(fn).toMatch(/if\(esInterna&&totalLocal>MAX_ATTACH_INTERNA\)/)
+    expect(fn).toMatch(/if\(esTraslado&&totalLocal>MAX_ATTACH_INTERNA\)/)
   })
   it('avisa si el reintento salió sin adjuntos', () => {
-    expect(fn).toMatch(/if\(esInterna&&adjOmitidos&&typeof notif==='function'\)/)
+    expect(fn).toMatch(/if\(esTraslado&&adjOmitidos&&typeof notif==='function'\)/)
   })
   it('el traslado interno no reintenta vaciando los adjuntos', () => {
     expect(fn).toMatch(/Reintentando envío con la solicitud y el oficio/)
