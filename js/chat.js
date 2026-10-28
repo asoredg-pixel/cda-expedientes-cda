@@ -2298,10 +2298,22 @@ function chatArchivosEnPortapapeles(data){
   }
   return out;
 }
-function chatAlPegarComposer(ev){
-  const files=chatArchivosEnPortapapeles(ev&&ev.clipboardData);
-  if(!files.length)return;
-  if(ev&&ev.preventDefault)ev.preventDefault();
+function chatEventoTraeArchivos(ev){
+  const types=ev&&ev.dataTransfer&&ev.dataTransfer.types;
+  if(!types||!types.length)return false;
+  for(let i=0;i<types.length;i++){
+    if(String(types[i])==='Files')return true;
+  }
+  return false;
+}
+function chatAlArrastrarComposer(ev){
+  if(!chatEventoTraeArchivos(ev))return;
+  if(ev.preventDefault)ev.preventDefault();
+  if(ev.stopPropagation)ev.stopPropagation();
+  try{ev.dataTransfer.dropEffect='copy';}catch(e){}
+}
+function chatEnviarArchivosPegados(files){
+  if(!files||!files.length)return;
   const contactKey=window._chatActiveContactKey||(typeof chatActiveContactKey==='function'?chatActiveContactKey():'')||'';
   if(typeof chatPuedeResponderAContacto==='function'&&!chatPuedeResponderAContacto(contactKey)){
     if(typeof chatModalAlert==='function'){
@@ -2316,6 +2328,19 @@ function chatAlPegarComposer(ev){
   }
   const listo=chatArchivoParaEnviarDesdePegado(files[0], new Date());
   if(typeof chatEnviarArchivo==='function')chatEnviarArchivo(listo);
+}
+function chatAlPegarComposer(ev){
+  const files=chatArchivosEnPortapapeles(ev&&ev.clipboardData);
+  if(!files.length)return;
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  chatEnviarArchivosPegados(files);
+}
+function chatAlSoltarComposer(ev){
+  const files=chatArchivosEnPortapapeles(ev&&ev.dataTransfer);
+  if(!files.length)return;
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  chatEnviarArchivosPegados(files);
 }
 function chatAdjuntarArchivoClick(){
   const inp=document.getElementById('chat-file-inp');
@@ -2648,6 +2673,8 @@ async function chatEnviarArchivo(fileArg){
 window.chatEnviarArchivo=chatEnviarArchivo;
 window.chatAdjuntarArchivoClick=chatAdjuntarArchivoClick;
 window.chatAlPegarComposer=chatAlPegarComposer;
+window.chatAlArrastrarComposer=chatAlArrastrarComposer;
+window.chatAlSoltarComposer=chatAlSoltarComposer;
 window.chatSetReplyTo=chatSetReplyTo;
 window.chatClearReplyTo=chatClearReplyTo;
 window.chatScrollToMsg=chatScrollToMsg;

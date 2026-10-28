@@ -56,6 +56,7 @@ function ctx() {
     'chatNombreCapturaPegada',
     'chatArchivoParaEnviarDesdePegado',
     'chatArchivosEnPortapapeles',
+    'chatEnviarArchivosPegados',
     'chatAlPegarComposer'
   ]), c)
   return c

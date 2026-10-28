@@ -20,21 +20,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026u"></script>
-<script src="js/constants.js?v=20261027h"></script>
+<script src="js/constants.js?v=20261027i"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261027f"></script>
 <script src="js/roles.js?v=20261026t"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261027h"></script>
+<script src="js/core.js?v=20261027i"></script>
 <script src="js/formulario.js?v=20261015a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
 <script src="js/consolidado.js?v=20261001a"></script>
 <script src="js/configuracion.js?v=20261009a"></script>
 <script src="js/export.js?v=20260911h"></script>
-<script src="js/chat.js?v=20261027g"></script>
+<script src="js/chat.js?v=20261027i"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
@@ -656,7 +656,7 @@
   </div>
   <div class="chat-layout">
     <div id="chat-contacts" class="chat-contacts"></div>
-    <div id="chat-main" class="chat-main hidden">
+    <div id="chat-main" class="chat-main hidden" ondragover="chatAlArrastrarComposer(event)" ondrop="chatAlSoltarComposer(event)">
       <div id="chat-msgs" class="chat-msgs"></div>
       <div id="chat-readonly-banner" class="chat-readonly-banner" style="display:none" hidden>📢 Aviso de Soporte</div>
       <div id="chat-reply-bar" class="chat-reply-bar" style="display:none" aria-live="polite"></div>
@@ -664,9 +664,9 @@
       <div id="chat-emoji-panel" class="chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>
       <div class="chat-compose chat-compose-wa">
         <div class="chat-wa-field has-attach has-emoji">
-          <textarea class="sst-wa-compose" id="chat-inp" rows="1" placeholder="Escriba un mensaje…" title="Puede pegar una imagen o un archivo con Ctrl+V" onpaste="chatAlPegarComposer(event)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatEnviarTexto();}"></textarea>
+          <textarea class="sst-wa-compose" id="chat-inp" rows="1" placeholder="Escriba un mensaje…" title="Puede pegar o arrastrar una imagen o un archivo" onpaste="chatAlPegarComposer(event)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();chatEnviarTexto();}"></textarea>
           <button type="button" class="chat-wa-emoji-ico" id="chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="chatToggleEmojiPicker(event)">😊</button>
-          <button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo o pegar con Ctrl+V (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="chatAdjuntarArchivoClick()">📎</button>
+          <button type="button" class="chat-wa-attach-ico" title="Adjuntar, pegar o arrastrar un archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="chatAdjuntarArchivoClick()">📎</button>
           <button type="button" class="chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="chatEnviarTexto()">➤</button>
         </div>
       </div>

@@ -18521,6 +18521,47 @@ function taskChatAttachPick(expId,taskId){
   (typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true))
     .then(function(ok){if(ok)run();});
 }
+function taskChatAlArrastrarComposer(ev){
+  const types=ev&&ev.dataTransfer&&ev.dataTransfer.types;
+  if(!types||!types.length)return;
+  let esArchivo=false;
+  for(let i=0;i<types.length;i++){
+    if(String(types[i])==='Files'){esArchivo=true;break;}
+  }
+  if(!esArchivo)return;
+  if(ev.preventDefault)ev.preventDefault();
+  if(ev.stopPropagation)ev.stopPropagation();
+  try{ev.dataTransfer.dropEffect='copy';}catch(e){}
+}
+function taskChatAlSoltarComposer(ev,expId,taskId){
+  const files=typeof chatArchivosEnPortapapeles==='function'?chatArchivosEnPortapapeles(ev&&ev.dataTransfer):[];
+  if(!files||!files.length)return;
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const ahora=new Date();
+  const listos=files.map(function(f){
+    return typeof chatArchivoParaEnviarDesdePegado==='function'?chatArchivoParaEnviarDesdePegado(f,ahora):f;
+  }).filter(Boolean);
+  if(!listos.length)return;
+  const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
+  const bad=listos.find(function(f){return f&&f.size>maxBytes;});
+  if(bad){
+    if(typeof chatModalAlert==='function'){
+      chatModalAlert({title:'Archivo demasiado grande',message:'El archivo supera el límite de 25 MB del chat.',detail:bad.name,tone:'warn'});
+    }else if(typeof notif==='function')notif('Archivo demasiado grande (máx. 25 MB)','err');
+    return;
+  }
+  const poner=function(){
+    taskChatAttachOnPick(expId,taskId,{files:listos,value:''});
+    if(typeof submitTaskComment==='function')submitTaskComment(expId,taskId);
+  };
+  if(typeof chatDriveConectado==='function'&&!chatDriveConectado()){
+    if(typeof chatModalCorreoRequerido==='function')chatModalCorreoRequerido();
+    return;
+  }
+  const pedir=typeof sstSolicitarGmailParaAdjuntar==='function'?sstSolicitarGmailParaAdjuntar():Promise.resolve(true);
+  Promise.resolve(pedir).then(function(ok){if(ok)poner();});
+}
 function taskChatAlPegarComposer(ev,expId,taskId){
   const files=typeof chatArchivosEnPortapapeles==='function'?chatArchivosEnPortapapeles(ev&&ev.clipboardData):[];
   if(!files||!files.length)return;
@@ -18624,6 +18665,8 @@ function taskChatGuiaOnPick(expId,taskId,inputEl){taskChatAttachOnPick(expId,tas
 window.taskChatAttachPick=taskChatAttachPick;
 window.taskChatAttachOnPick=taskChatAttachOnPick;
 window.taskChatAlPegarComposer=taskChatAlPegarComposer;
+window.taskChatAlArrastrarComposer=taskChatAlArrastrarComposer;
+window.taskChatAlSoltarComposer=taskChatAlSoltarComposer;
 window.taskChatAttachRemove=taskChatAttachRemove;
 window.taskChatToggleEmojiPicker=taskChatToggleEmojiPicker;
 window.taskChatInsertEmoji=taskChatInsertEmoji;
@@ -18989,15 +19032,15 @@ function renderTaskChatComposerHtml(expId,taskId,t,opts){
   const eid=escAttr(expId),tid=escAttr(taskId);
   const eidJs=jsStr(expId),tidJs=jsStr(taskId);
   if(opts.compact!==false){
-    let h='<div class="task-cmt-form task-cmt-form-wa task-cmt-form-wa-tools" id="task-chat-form">';
+    let h='<div class="task-cmt-form task-cmt-form-wa task-cmt-form-wa-tools" id="task-chat-form" ondragover="taskChatAlArrastrarComposer(event)" ondrop="taskChatAlSoltarComposer(event,\''+eidJs+'\',\''+tidJs+'\')">';
     h+=taskChatComposerParaFieldHtml(t);
     h+='<div class="task-chat-attach-staging" id="task-chat-attach-list"></div>';
     h+='<div id="task-chat-emoji-panel" class="chat-emoji-panel task-chat-emoji-panel" style="display:none" hidden aria-hidden="true"></div>';
     h+='<div class="task-cmt-wa-field chat-wa-field has-attach has-emoji">'+
-      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Escriba un mensaje…" title="Puede pegar una imagen o un archivo con Ctrl+V" autocomplete="off" onpaste="taskChatAlPegarComposer(event,\''+eidJs+'\',\''+tidJs+'\')"></textarea>'+
+      '<textarea class="sst-wa-compose" id="task-cmt-input" rows="1" placeholder="Escriba un mensaje…" title="Puede pegar o arrastrar una imagen o un archivo" autocomplete="off" onpaste="taskChatAlPegarComposer(event,\''+eidJs+'\',\''+tidJs+'\')"></textarea>'+
       '<input type="file" id="task-chat-file-inp" style="display:none" multiple onchange="taskChatAttachOnPick(\''+eidJs+'\',\''+tidJs+'\',this)">'+
       '<button type="button" class="chat-wa-emoji-ico task-chat-emoji-btn" title="Emojis" aria-label="Emojis" aria-expanded="false" onclick="taskChatToggleEmojiPicker(event)">😊</button>'+
-      '<button type="button" class="chat-wa-attach-ico" title="Adjuntar archivo o pegar con Ctrl+V (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
+      '<button type="button" class="chat-wa-attach-ico" title="Adjuntar, pegar o arrastrar un archivo (máx. 25 MB)" aria-label="Adjuntar archivo" onclick="taskChatAttachPick(\''+eidJs+'\',\''+tidJs+'\')">📎</button>'+
       '<button type="button" class="task-cmt-send-ico chat-wa-send-ico" title="Enviar mensaje" aria-label="Enviar mensaje" onclick="submitTaskComment(\''+eid+'\',\''+tid+'\')">➤</button>'+
       '</div>'+
       (sol?'<span class="solicitud-pill">Solicitud enviada</span>':'')+
@@ -19019,7 +19062,7 @@ function renderTaskChatPanelHtml(expId,taskId,t,opts){
   if(canWriteDept||canWriteResp){
     form=renderTaskChatComposerHtml(expId,taskId,t,opts.compactComposer===false?{compact:false}:{});
   }
-  return '<div class="task-chat-sep" id="task-chat-sep">'+(opts.hideTitle?'':'<div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat</div>')+
+  return '<div class="task-chat-sep" id="task-chat-sep" ondragover="taskChatAlArrastrarComposer(event)" ondrop="taskChatAlSoltarComposer(event,\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">'+(opts.hideTitle?'':'<div style="font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px">'+chatWaIconHtml(16)+' Chat</div>')+
     '<div class="task-chat-uni-scroll">'+renderTaskChatListHtml(t)+'</div>'+form+'</div>';
 }
 function renderTaskChatUnificadoHtml(expId,taskId,t){
@@ -19032,7 +19075,7 @@ function renderTaskChatUnificadoHtml(expId,taskId,t){
   if(canWriteDept||canWriteResp){
     form=renderTaskChatComposerHtml(expId,taskId,t);
   }
-  const chatPane='<div class="task-chat-uni-pane on" data-pane="act" id="task-chat-act-pane">'+
+  const chatPane='<div class="task-chat-uni-pane on" data-pane="act" id="task-chat-act-pane" ondragover="taskChatAlArrastrarComposer(event)" ondrop="taskChatAlSoltarComposer(event,\''+jsStr(expId)+'\',\''+jsStr(taskId)+'\')">'+
     '<h4>'+chatWaIconHtml(14)+' Chat de actividad</h4>'+
     '<div class="task-chat-uni-scroll" id="task-chat-sep">'+lista+'</div>'+form+'</div>';
   return '<div class="task-chat-unificado">'+
