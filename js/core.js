@@ -30297,6 +30297,11 @@ function exportarConsultaExcel(){
   const pack=buildExpedientesExportRows(list);
   const sheets=[];
   if(pack&&pack.rows&&pack.rows.length)sheets.push({title:'Expedientes',hdr:pack.hdr,rows:pack.rows});
+  const qf=String(window._conExportQf||'');
+  if(qf==='cseg'&&typeof buildConsultaConceptosSeguimientoExportRows==='function'){
+    const seg=buildConsultaConceptosSeguimientoExportRows(list,qi,qact);
+    if(seg.rows&&seg.rows.length)sheets.unshift({title:'Conceptos de seguimiento',hdr:seg.hdr,rows:seg.rows});
+  }
   if(typeof buildConsultaActividadesExportRows==='function'){
     const acts=buildConsultaActividadesExportRows(list,qi,qact);
     if(acts.rows&&acts.rows.length)sheets.push({title:'Actividades',hdr:acts.hdr,rows:acts.rows});
@@ -34156,6 +34161,115 @@ function consultaExportEstadoActividad(t,e){
   }
   return estadoTask(t)||'';
 }
+function esActividadConceptoSeguimiento(nombre){
+  return /conceptos?\s+de\s+seguimiento/i.test(String(nombre||''));
+}
+function expTieneActividadConceptoSeguimiento(e){
+  if(!e)return false;
+  const tasks=(e.tasks||[]).concat(e._act_libre_task&&!e._act_libre_task.eliminada?[e._act_libre_task]:[]);
+  return tasks.some(function(t){
+    return t&&!t.eliminada&&esActividadConceptoSeguimiento(t.actividad||t.desc||'');
+  });
+}
+function numeroConceptoSeguimientoTask(e,t){
+  const strip=typeof numeroDocSinPrefijoNo==='function'?numeroDocSinPrefijoNo:function(s){return String(s||'').replace(/^\s*no\.?\s*/i,'').trim();};
+  const direct=String(t&&t.concepto||'').trim();
+  if(direct)return strip(direct);
+  if(e&&t&&t.conceptoReqId&&typeof findConceptoByReqId==='function'){
+    const hit=findConceptoByReqId(e,t.conceptoReqId);
+    if(hit&&hit.item&&String(hit.item.concepto||'').trim())return strip(hit.item.concepto);
+  }
+  if(e&&typeof conceptosSegData==='function'){
+    const arr=conceptosSegData(e._conceptos_seg)||[];
+    const tid=String(t&&t.id||'');
+    for(let i=arr.length-1;i>=0;i--){
+      const c=arr[i];
+      if(!c||!String(c.concepto||'').trim())continue;
+      if(tid&&String(c.taskId||'')&&String(c.taskId)!==tid)continue;
+      return strip(c.concepto);
+    }
+  }
+  if(typeof taskReviewNumeroDocumentoAct==='function'){
+    const n=String(taskReviewNumeroDocumentoAct(e,t)||'').trim();
+    if(n)return strip(n);
+  }
+  return '';
+}
+function visitaConceptoSeguimientoNombre(t){
+  const h=(t&&t.historial)||[];
+  let i;
+  for(i=0;i<h.length;i++){
+    const x=h[i];
+    if(!x||x.tipo!=='traslado')continue;
+    if(x.revisionPar!=='solicitud'&&x.revisionPar!=='correccion')continue;
+    const de=String(x.de||'').trim();
+    if(de)return de;
+  }
+  for(i=0;i<h.length;i++){
+    const x=h[i];
+    if(!x||x.tipo!=='reenvio_verificacion')continue;
+    const p=String(x.reportadoPor||x.por||'').trim();
+    if(p)return p;
+  }
+  for(i=0;i<h.length;i++){
+    const x=h[i];
+    if(!x||x.tipo!=='soporte')continue;
+    const p=String(x.reportadoPor||x.por||'').trim();
+    if(p)return p;
+  }
+  return String(t&&t.responsable||'').trim();
+}
+function buildConsultaConceptosSeguimientoExportRows(list,qi,qact){
+  qi=String(qi||'').trim();
+  qact=String(qact||'').trim();
+  if(['ejec','venc','porcorr'].includes(qact))qact='poreje';
+  const hdr=['Número del concepto','Expediente','Usuario','Quien hizo la visita','Departamento','Trámite','Responsable(s)','Actividad','Vence','Bandeja (por ejecutar)','Plazo','Estado actividad'];
+  const rows=[];
+  const seen=new Set();
+  (list||[]).forEach(function(e){
+    if(!e)return;
+    const expId=String(e._exp||'').trim();
+    const usuario=e._act_libre_task
+      ?(typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(e._act_libre_task):(e._act_libre_task.interesadoNombre||''))
+      :(typeof getNom==='function'?getNom(e):(e._pn_nombre||e._pj_empresa||''));
+    const depto=typeof labelDepto==='function'?labelDepto(e._depto||''):(e._depto||'');
+    const tram=typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:(e._tramite||'');
+    const tasks=[];
+    if(e._act_libre_task)tasks.push(e._act_libre_task);
+    else (e.tasks||[]).forEach(function(t){tasks.push(t);});
+    tasks.forEach(function(t){
+      if(!t||t.eliminada)return;
+      if(!esActividadConceptoSeguimiento(t.actividad||t.desc||''))return;
+      if(qi&&typeof consultaTaskMatchResponsable==='function'&&!consultaTaskMatchResponsable(t,qi))return;
+      if(qact&&typeof matchActividadTask==='function'&&!matchActividadTask(t,qact))return;
+      const kid=expId+'|'+String(t.id||'');
+      if(seen.has(kid))return;
+      seen.add(kid);
+      const expRef=e._act_libre_task?e:(typeof getExpById==='function'?getExpById(expId):e);
+      const resp=typeof taskResponsablesLabel==='function'?taskResponsablesLabel(t,false):String(t.responsable||'');
+      const actNom=String(t.actividad||t.desc||'').trim();
+      const vence=typeof fmtF==='function'?fmtF(typeof taskVenceEfectivo==='function'?taskVenceEfectivo(t):t.vence):(t.vence||'');
+      rows.push([
+        numeroConceptoSeguimientoTask(expRef||e,t),
+        expId,
+        usuario,
+        visitaConceptoSeguimientoNombre(t),
+        depto,
+        tram,
+        resp,
+        actNom,
+        vence,
+        typeof consultaBandejaActividadLabel==='function'?consultaBandejaActividadLabel(t):'',
+        typeof consultaPlazoActividadLabel==='function'?consultaPlazoActividadLabel(t):'',
+        typeof consultaExportEstadoActividad==='function'?consultaExportEstadoActividad(t,expRef||e):''
+      ]);
+    });
+  });
+  return{hdr:hdr,rows:rows};
+}
+window.esActividadConceptoSeguimiento=esActividadConceptoSeguimiento;
+window.expTieneActividadConceptoSeguimiento=expTieneActividadConceptoSeguimiento;
+window.buildConsultaConceptosSeguimientoExportRows=buildConsultaConceptosSeguimientoExportRows;
 function buildConsultaActividadesExportRows(list,qi,qact){
   qi=String(qi||'').trim();
   qact=String(qact||'').trim();

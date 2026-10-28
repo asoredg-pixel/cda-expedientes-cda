@@ -1997,7 +1997,7 @@ function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
   const ofiDocs=collectConsultaOficinaDocComunicados(q,qi,qact);
   if(!shouldIncludeActLibresEnConsulta())return ofiDocs;
   // Filtros propios de expediente/PQRSD: no mezclar stubs libres (salvo docs/comunicados ya filtrados por texto)
-  if(qt||qe||qf)return ofiDocs;
+  if(qt||qe||(qf&&qf!=='cseg'))return ofiDocs;
   const seen={};
   ofiDocs.forEach(function(s){seen[String(s._act_id||s._exp||'')]=true;});
   const otras=actLibresAmbitoConsulta().filter(function(t){
@@ -2009,6 +2009,7 @@ function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
       if(!ok)return false;
     }
     if(qact&&typeof matchActividadTask==='function'&&!matchActividadTask(t,qact))return false;
+    if(qf==='cseg'&&!(typeof esActividadConceptoSeguimiento==='function'&&esActividadConceptoSeguimiento(t.actividad||t.desc)))return false;
     return true;
   }).map(actLibreAsConsultaStub);
   return ofiDocs.concat(otras);
@@ -2210,7 +2211,7 @@ function renderConsulta(){
   const listExps=filterExpsPeriodo(baseList.filter(e=>{
     if(basPqrs&&!esPqrsSecretaria(e))return false;
     const ac=acctStatus(e);
-    const mf=basPqrs?true:(!qf||(qf==='mp'&&e._medida_prev)||(qf==='sus'&&e._suspendido)||(qf==='san'&&e._sancionatorio)||(qf==='mora'&&ac.mora)||(qf==='pers'&&ac.persuasivo)||(qf==='coa'&&ac.coactivo)||(qf==='acu'&&ac.acuerdo)||(qf==='seg'&&e._estado==='Seguimiento'));
+    const mf=basPqrs?true:(!qf||(qf==='mp'&&e._medida_prev)||(qf==='sus'&&e._suspendido)||(qf==='san'&&e._sancionatorio)||(qf==='mora'&&ac.mora)||(qf==='pers'&&ac.persuasivo)||(qf==='coa'&&ac.coactivo)||(qf==='acu'&&ac.acuerdo)||(qf==='seg'&&e._estado==='Seguimiento')||(qf==='cseg'&&typeof expTieneActividadConceptoSeguimiento==='function'&&expTieneActividadConceptoSeguimiento(e)));
     const mEst=basPqrs?matchPqrsEstadoConsulta(e,qe):(!qe||e._estado===qe);
     const mAct=basPqrs?true:(typeof matchActividadFiltroExp==='function'?matchActividadFiltroExp(e,qact,qi):matchActividadFiltro(e,qact));
     return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&mAct&&mf;
@@ -2228,6 +2229,7 @@ function renderConsulta(){
   window._conExportList=list;
   window._conExportQi=qi;
   window._conExportQact=qact;
+  window._conExportQf=qf;
   const c=document.getElementById('con-list');
   if(!list.length){
     const nAmb=baseList.length;
