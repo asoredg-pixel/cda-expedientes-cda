@@ -2801,9 +2801,9 @@ function entregaNotifRefreshCuerpoDesdeRegistro(){
     const numDoc=stubT.actoNumero||stubT.concepto||stubT.oficio||stubT.facturaRefs||'';
     const cur=String(subjEl.value||'');
     if(!cur||/^Notificación\s*—/i.test(cur)){
-      subjEl.value='Notificación — '+tipoLbl
-        +(numDoc?' No. '+numDoc:'')
-        +(expLbl?' — '+expLbl:'');
+      subjEl.value=typeof asuntoNotificacionActividad==='function'
+        ?asuntoNotificacionActividad(tipoLbl,numDoc,expLbl)
+        :('Notificación — '+tipoLbl+(numDoc?' No. '+numDoc:'')+(expLbl?' — '+expLbl:''));
     }
   }
   const pqrsCuerpo=document.getElementById('pqrs-entrega-resp-cuerpo');

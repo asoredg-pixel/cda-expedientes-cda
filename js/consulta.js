@@ -504,6 +504,34 @@ function collectArchivosPqrsLinks(e){
   }
   return items;
 }
+function archivoUrlDesdeSoporte(s){
+  if(!s)return '';
+  let url=String(s.url||s.preview||s.driveLink||s.previewLink||'').trim();
+  if(!url){
+    const fid=String(s.driveFileId||s.fileId||'').trim();
+    if(fid)url='https://drive.google.com/file/d/'+encodeURIComponent(fid)+'/view';
+  }
+  return url;
+}
+/** Al abrir Archivos, mostrar el concepto/oficio y no el soporte de envío. */
+function conArchivosIndicePreferido(items,taskId){
+  const list=items||[];
+  const esSop=function(it){
+    return /^soporte env[ií]o/i.test(String((it&&(it.tipoDoc||it.docKind||it.label||it.descDoc))||''));
+  };
+  if(taskId){
+    let doc=-1,any=-1;
+    list.forEach(function(it,i){
+      if(!it||it.taskId!==taskId)return;
+      if(any<0)any=i;
+      if(doc<0&&!esSop(it))doc=i;
+    });
+    if(doc>=0)return doc;
+    if(any>=0)return any;
+  }
+  const doc=list.findIndex(function(it){return it&&!esSop(it);});
+  return doc>=0?doc:0;
+}
 function collectArchivosExp(e,taskIdFilter){
   const items=[];
   if(!e)return items;
@@ -513,7 +541,8 @@ function collectArchivosExp(e,taskIdFilter){
     if(taskIdFilter&&t.id!==taskIdFilter)return;
     const esPqrsAct=typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
     (t.soportes||[]).forEach(s=>{
-      const url=s.url||s.preview||'';
+      const url=typeof archivoUrlDesdeSoporte==='function'?archivoUrlDesdeSoporte(s):(s.url||s.preview||'');
+      if(!url&&!s.local)return;
       if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url))return;
       // Ciudadano: no mostrar entregas de actividad PQRSD (borradores / correcciones / firma)
       if(soloPublico&&esPqrsAct)return;
@@ -615,7 +644,7 @@ function pushArchivosExpedienteRaw(raws,e,taskIdFilter){
     const esPqrsAct=typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e);
     if(soloPub&&esPqrsAct)return;
     (t.soportes||[]).forEach(function(s){
-      const url=s.url||s.preview||'';
+      const url=typeof archivoUrlDesdeSoporte==='function'?archivoUrlDesdeSoporte(s):(s.url||s.preview||'');
       if(!url&&!s.local)return;
       if(typeof esUrlCarpetaDrive==='function'&&esUrlCarpetaDrive(url))return;
       if(soloPub&&typeof _pqrsDocEsBorradorInterno==='function'&&_pqrsDocEsBorradorInterno(s))return;
@@ -925,11 +954,7 @@ function conPanelColapsarTodasSecciones(){
 function renderConPanelArchivoPreview(idx){renderConsultaArchivoPreview(idx,{previewId:'con-panel-arch-preview',listSel:'#con-panel-archivos-wrap .con-arch-list-col'});}
 function initConPanelArchivosPreview(preferTaskId){
   if(!(window._conArchItems||[]).length)return;
-  let idx=0;
-  if(preferTaskId){
-    const i=(window._conArchItems||[]).findIndex(it=>it.taskId===preferTaskId);
-    if(i>=0)idx=i;
-  }
+  const idx=conArchivosIndicePreferido(window._conArchItems,preferTaskId||null);
   renderConPanelArchivoPreview(idx);
 }
 function refreshConPanelDocumentos(expId,taskId,open){
@@ -1010,12 +1035,7 @@ function renderTaskReviewArchivoPreview(idx){
 }
 function initTaskReviewArchivosSide(taskId){
   if(!(window._conArchItems||[]).length)return;
-  let idx=0;
-  if(taskId){
-    const i=(window._conArchItems||[]).findIndex(function(it){return it.taskId===taskId;});
-    if(i>=0)idx=i;
-  }
-  renderTaskReviewArchivoPreview(idx);
+  renderTaskReviewArchivoPreview(conArchivosIndicePreferido(window._conArchItems,taskId||null));
 }
 function openConsultaArchivosModal(expId){
   expId=String(expId||'').trim();
@@ -1080,8 +1100,7 @@ function openConsultaArchivos(expId,taskId,opts){
     body.innerHTML='<div class="con-arch-modal-hint">Seleccione un documento. Los archivos se agrupan por registro: el principal y los vinculados (PQRSD o expediente asociado).'+(hasAsocMdl?' <span style="color:var(--tx3)">Incluye documentos de registros asociados.</span>':'')+'</div>'+
       '<div class="con-arch-split"><div class="con-arch-list-col">'+list+'</div><div class="con-arch-preview-col" id="con-arch-preview-wrap"></div></div>'+
       '<div class="con-arch-modal-foot"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+taskModalCloseBtnLabel()+'</button></div>';
-    const selIdx=taskId?Math.max(0,(items||[]).findIndex(it=>it.taskId===taskId)):0;
-    renderConsultaArchivoPreview(selIdx>=0?selIdx:0);
+    renderConsultaArchivoPreview(conArchivosIndicePreferido(items,taskId||null));
   }
   ov.classList.add('on');
   window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{mode:'archivos',panelExp:id});

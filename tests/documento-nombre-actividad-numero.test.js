@@ -40,7 +40,7 @@ function ctx() {
     normalizeTask: t => t,
     taskDocAprobadoCiudadano: () => true
   })
-  runInContext(extraer(core, ['taskDocNombrePublico', 'actividadNombreParaSoporteEnvio', 'esSoporteEnvioCorreoItem',
+  runInContext(extraer(core, ['numeroDocSinPrefijoNo', 'taskDocNombrePublico', 'actividadNombreParaSoporteEnvio', 'esSoporteEnvioCorreoItem',
     'etiquetaSoporteEnvioActividad', 'etiquetaDocNotifPublica']) + '\n' + extraer(pqrs, ['getDocsAprobadosCiudadano']), c)
   return c
 }

@@ -9899,7 +9899,7 @@ function taskReviewCuerpoNotifPredeterminado(e,t){
   const tipoDoc=taskReviewTipoDocumentoAct(e,t);
   const tipo=typeof resolveActividadRegistroTipo==='function'?resolveActividadRegistroTipo(act):'';
   const refExp=expLbl?' del expediente '+expLbl:'';
-  const numTxt=num||expLbl||'XXXXX';
+  const numTxt=numeroDocSinPrefijoNo(num)||expLbl||'XXXXX';
   // Sin «Cordialmente»: la firma de Gmail del remitente ya la incluye.
   if(tipo==='concepto'||/concepto/i.test(act))
     return 'Cordial saludo,\n\nPor medio de la presente, se remite el concepto No. '+numTxt+(tipoDoc&&tipoDoc!==act?' («'+tipoDoc+'»)':'')+' para su conocimiento y fines pertinentes.';
@@ -10298,6 +10298,24 @@ function esSoporteEnvioCorreoItem(s){
   if(s.tipo==='soporte_notificacion'||s.tipo==='soporte_respuesta')return true;
   return /^(soporte de env[ií]o|soporte env[ií]o)/i.test(String(s.label||s.nombre||s.descDoc||'').trim());
 }
+/** Quita un «No.» ya digitado para no imprimir «No. No. CT26588». */
+function numeroDocSinPrefijoNo(num){
+  let s=String(num||'').trim();
+  let prev='';
+  while(s&&s!==prev){
+    prev=s;
+    s=s.replace(/^(?:n[oº°]\.?|nro\.?|n[uú]m(?:ero)?\.?|num\.?)\s+/i,'').trim();
+  }
+  return s;
+}
+function asuntoNotificacionActividad(tipo,num,expLbl){
+  const t=String(tipo||'actividad').trim()||'actividad';
+  const n=numeroDocSinPrefijoNo(num);
+  const exp=String(expLbl||'').trim();
+  return 'Notificación — '+t+(n?' No. '+n:'')+(exp?' — '+exp:'');
+}
+window.numeroDocSinPrefijoNo=numeroDocSinPrefijoNo;
+window.asuntoNotificacionActividad=asuntoNotificacionActividad;
 /** Nombre público del documento de la actividad: «Concepto de seguimiento No. CT26597» (sin número: solo la actividad). */
 function taskDocNombrePublico(e,t,s){
   if(!t)return'';
@@ -10305,7 +10323,8 @@ function taskDocNombrePublico(e,t,s){
   const tipo=String(t.actoTipo||t.tipoActo||t.actividad||t.desc||'').trim();
   if(!tipo)return'';
   const num=typeof taskReviewNumeroDocumentoAct==='function'?String(taskReviewNumeroDocumentoAct(e,t)||'').trim():'';
-  return num?(tipo+' No. '+num):tipo;
+  const n=numeroDocSinPrefijoNo(num);
+  return n?(tipo+' No. '+n):tipo;
 }
 window.taskDocNombrePublico=taskDocNombrePublico;
 /** Etiqueta de lista: «Soporte envío — Resolución que aprueba No. 123». */
@@ -19644,7 +19663,7 @@ function htmlEntregaNotifCorreoCheck(opts){
   const emailCc=String(opts.emailCc!=null?opts.emailCc:(wf.email_cc||'')).trim();
   const emailBcc=String(opts.emailBcc!=null?opts.emailBcc:(wf.email_bcc||'')).trim();
   const numAsunto=actoNumUi||conceptoUi||oficioUi||facRefsStr||'';
-  const asuntoDef='Notificación — '+(actoTipoUi||act||'actividad')+(numAsunto?' No. '+numAsunto:'')+(expLbl?' — '+expLbl:'');
+  const asuntoDef=asuntoNotificacionActividad(actoTipoUi||act||'actividad',numAsunto,expLbl);
   const asunto=String(opts.emailSubject!=null?opts.emailSubject:(wf.email_subject||wf.asunto||'')).trim()
     ||asuntoDef;
   const cuerpo=String(opts.cuerpo!=null?opts.cuerpo:(wf.cuerpo||wf.email_body||'')).trim()
@@ -19700,7 +19719,7 @@ function entregaNotifCorreoToggleUi(cbId){
   const subjEl=document.getElementById('entrega-notif-email-subject');
   const numAsunto=actoNum||conceptoNum||oficioNum||(facRefs.length?facRefs.join(', '):'');
   if(subjEl&&(!String(subjEl.value||'').trim()||/^Notificación\s*—/i.test(String(subjEl.value||''))))
-    subjEl.value='Notificación — '+(actoTipo||act||'actividad')+(numAsunto?' No. '+numAsunto:'')+(expLbl?' — '+expLbl:'');
+    subjEl.value=asuntoNotificacionActividad(actoTipo||act||'actividad',numAsunto,expLbl);
   const cuerpoEl=document.getElementById('entrega-notif-email-cuerpo');
   if(cuerpoEl&&(!String(cuerpoEl.value||'').trim()||typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')){
     if(typeof entregaNotifRefreshCuerpoDesdeRegistro==='function')entregaNotifRefreshCuerpoDesdeRegistro();
@@ -24304,6 +24323,8 @@ function limpiarSoportesPorCorregirTask(t){
       ||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
     if(esAn)return;
     if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s))return;
+    // El soporte de envío se agrega al notificar: no puede desplazar al concepto como entrega vigente.
+    if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return;
     vigente=s;
   });
   const loteV=vigente&&vigente.loteEntrega;
@@ -25026,22 +25047,30 @@ function getTareasRevParTecnicoEsperando(){
 }
 /** Actividad que el técnico envió a revisión del profesional y el encargado ya aprobó (Atendida). */
 function taskRevParAprobadaInfo(t,e){
-  if(!t||t.eliminada||taskEsMultiAsignada(t)||estadoTask(t)!=='Atendida')return null;
+  if(!t||t.eliminada||taskEsMultiAsignada(t))return null;
   if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return null;
+  const est=estadoTask(t);
+  if(est==='Por verificar'||est==='Por corregir')return null;
+  const ncaAprobo=est==='Atendida'
+    ||!!(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.tipo==='aprobada'&&t.fechaAtendida);
+  if(!ncaAprobo)return null;
   const h=t.historial||[];
-  let i=h.length-1;
-  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
-  if(i<0)return null;
-  const tr=h[i];
-  if(tr.revisionPar!=='solicitud'&&tr.revisionPar!=='correccion')return null;
+  let tr=null,iTr=-1;
+  for(let i=h.length-1;i>=0;i--){
+    const x=h[i];
+    if(!x||x.tipo!=='traslado')continue;
+    if(x.revisionPar==='devolucion'||x.revisionPar==='devolucion_nca')return null;
+    if(x.revisionPar==='solicitud'||x.revisionPar==='correccion'){tr=x;iTr=i;break;}
+  }
+  if(!tr)return null;
   const tec=String(tr.de||'').trim(),prof=String(tr.a||'').trim();
-  if(!tec||!prof||agendaNorm(tec)===agendaNorm(prof)||agendaNorm(prof)!==agendaNorm(t.responsable||''))return null;
+  if(!tec||!prof||agendaNorm(tec)===agendaNorm(prof))return null;
   let j=h.length-1;
-  while(j>i&&!(h[j]&&h[j].tipo==='verificacion'))j--;
-  const v=j>i?h[j]:null;
+  while(j>iTr&&!(h[j]&&h[j].tipo==='verificacion'))j--;
+  const v=j>iTr?h[j]:null;
   return{tecnico:tec,profesional:prof,hidx:v?j:-1,
-    fecha:String((v&&v.fecha)||t.fechaAtendida||'').slice(0,10),
-    por:String((v&&v.por)||t.verificadoPor||'').trim()};
+    fecha:String((v&&v.fecha)||t.fechaAtendida||(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.fecha)||'').slice(0,10),
+    por:String((v&&v.por)||t.verificadoPor||(t.ultimaRevisionDepto&&t.ultimaRevisionDepto.por)||'').trim()};
 }
 function taskRevParTecnicoAprobada(t,usuario,e){
   if(!usuario||!esModoResponsable()||!taskTieneRevisionPar(t))return false;
@@ -25063,7 +25092,11 @@ function getTareasRevParTecnicoAprobadas(){
       if(!taskTieneRevisionPar(t))return;
       t=normalizeTask(t);
       const info=taskRevParAprobadaInfo(t,e);
-      if(!info||agendaNorm(info.tecnico)!==yo||taskUsuarioEsAsignado(t,responsableActivo))return;
+      if(!info||agendaNorm(info.tecnico)!==yo)return;
+      if(taskUsuarioEsAsignado(t,responsableActivo)){
+        const st=typeof estadoTaskForAsignado==='function'?estadoTaskForAsignado(t,responsableActivo):estadoTask(t);
+        if(st==='Atendida')return;
+      }
       out.push(Object.assign({},t,{
         exp:e._exp,
         nombre:typeof getNom==='function'?getNom(e):'',
@@ -37224,12 +37257,14 @@ function collectDocsParaNotificacionCorreo(e,t){
     const esRad=function(s){return typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s);};
     const mains=sops.filter(function(s){return s&&!s.excluido_notif&&!esRad(s)&&!soporteEsAnexoEntrega(s);});
     const anex=sops.filter(function(s){return s&&!s.excluido_notif&&!esRad(s)&&soporteEsAnexoEntrega(s);});
-    // Preferir PDF firmado / por notificar / aprobado
-    const firm=mains.filter(function(s){
-      const est=String(s.driveEstado||'').toLowerCase();
-      return est==='por_notificar'||est==='firmado'||est==='aprobado'||est==='notificado'||s.notificado===true;
+    // La entrega vigente (p. ej. POR REVISAR V3), no un soporte de envío ni un id viejo ya notificado.
+    const entregaMains=mains.filter(function(s){
+      if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
+      if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return false;
+      return true;
     });
-    const main=firm.length?firm[firm.length-1]:(mains.length?mains[mains.length-1]:null);
+    const pool=entregaMains.length?entregaMains:mains;
+    const main=pool.length?pool[pool.length-1]:null;
     if(main){
       const nomMain=main.driveFilename||main.nombre||main.label||'Documento principal';
       const lblMain=/^proyecci/i.test(String(nomMain))?'Documento principal':nomMain;
