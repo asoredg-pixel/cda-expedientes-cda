@@ -19058,6 +19058,7 @@ window.taskChatResolveDefaultPara=taskChatResolveDefaultPara;
 window.taskChatDestinatarioEfectivo=taskChatDestinatarioEfectivo;
 window.taskChatCampanitaAplica=taskChatCampanitaAplica;
 function chatActividadYoNombre(){
+  if(typeof esSecretaria==='function'&&esSecretaria())return'';
   if(typeof esModoResponsable==='function'&&esModoResponsable())return String(typeof responsableActivo!=='undefined'?responsableActivo||'':'').trim();
   if(typeof esJurisdiccional==='function'&&esJurisdiccional())return'';
   if(typeof getEncargadoDepto==='function'){

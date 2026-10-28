@@ -138,6 +138,29 @@ describe('Chat de actividad dentro del chat interno', () => {
     expect(abrir).toContain('window._chatActSeccionAbierta=false')
   })
 
+  it('la secretaría no ve los chats de actividad del encargado con los responsables', () => {
+    const sec = createContext({
+      esSecretaria: () => true,
+      esModoResponsable: () => false,
+      esJurisdiccional: () => false,
+      getEncargadoDepto: () => 'Encargado NCA',
+      deptoActivo: 'secretaria',
+      responsableActivo: 'Encargado NCA'
+    })
+    runInContext(extraer(core, ['chatActividadYoNombre']), sec)
+    expect(sec.chatActividadYoNombre()).toBe('')
+    const enc = createContext({
+      esSecretaria: () => false,
+      esModoResponsable: () => false,
+      esJurisdiccional: () => false,
+      getEncargadoDepto: () => 'Encargado NCA',
+      deptoActivo: 'guaviare',
+      responsableActivo: ''
+    })
+    runInContext(extraer(core, ['chatActividadYoNombre']), enc)
+    expect(enc.chatActividadYoNombre()).toBe('Encargado NCA')
+  })
+
   it('responder en el hilo va dirigido a la otra persona', () => {
     const c = ctx()
     const t = { comentarios: [
