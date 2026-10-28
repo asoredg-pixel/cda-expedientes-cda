@@ -115,11 +115,27 @@ describe('Chat de actividad dentro del chat interno', () => {
     expect(btn).toContain('taskChatComentariosCount(t)')
     expect(btn).not.toContain('chatActividadNoLeidosTask')
     const lista = extraer(chat, ['renderChatContacts'])
-    expect(lista).toContain("chatSeccionContactos('act','Actividades',actividades)")
+    expect(lista).toContain("titulo:'Actividades'")
+    expect(lista).toContain('chatOrdenSeccionesBuzon')
     const envio = extraer(chat, ['chatEnviarArchivosActividad'])
     expect(envio).toContain('driveUploadChat')
     expect(envio).toContain('addTaskComentario')
     expect(envio).not.toContain('chats/')
+  })
+
+  it('al abrir el chat los grupos quedan contraídos y el que tiene mensajes nuevos va primero', () => {
+    const c = createContext({})
+    runInContext(extraer(chat, ['chatOrdenSeccionesBuzon']), c)
+    const personas = { id: 'personas', unread: 0 }
+    const act = { id: 'act', unread: 0 }
+    const ids = secs => c.chatOrdenSeccionesBuzon(secs).map(s => s.id)
+    expect(ids([{ ...personas }, { ...act, unread: 2 }])).toEqual(['act', 'personas'])
+    expect(ids([{ ...act }, { ...personas, unread: 1 }])).toEqual(['personas', 'act'])
+    expect(ids([{ ...personas, unread: 3 }, { ...act, unread: 1 }])).toEqual(['act', 'personas'])
+    expect(ids([{ ...act }, { ...personas }])).toEqual(['personas', 'act'])
+    const abrir = extraer(chat, ['toggleChatWindow'])
+    expect(abrir).toContain('window._chatPersonasSeccionAbierta=false')
+    expect(abrir).toContain('window._chatActSeccionAbierta=false')
   })
 
   it('responder en el hilo va dirigido a la otra persona', () => {

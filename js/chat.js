@@ -1272,6 +1272,8 @@ function toggleChatWindow(force){
     window._chatActiveContactKey=null;
     window._chatVista='contactos';
     window._chatContactsCollapsed=false;
+    window._chatPersonasSeccionAbierta=false;
+    window._chatActSeccionAbierta=false;
     window._chatSearchOpen=false;
     window._chatContactQ='';
     _chatContactsPaintSig='';
@@ -1370,14 +1372,27 @@ function chatClearContactSearch(){
 window.chatToggleContactSearch=chatToggleContactSearch;
 window.chatOnContactSearchInput=chatOnContactSearchInput;
 window.chatClearContactSearch=chatClearContactSearch;
+function chatSeccionEstaAbierta(id){
+  if(id==='act')return window._chatActSeccionAbierta===true;
+  return window._chatPersonasSeccionAbierta===true;
+}
+function chatOrdenSeccionesBuzon(secciones){
+  return (secciones||[]).slice().sort(function(a,b){
+    const ua=(a&&a.unread>0)?1:0;
+    const ub=(b&&b.unread>0)?1:0;
+    if(ua!==ub)return ub-ua;
+    if(ua&&ub){
+      if(a.id==='act')return -1;
+      if(b.id==='act')return 1;
+    }
+    if(a.id==='personas')return -1;
+    if(b.id==='personas')return 1;
+    return 0;
+  });
+}
 function chatToggleSeccion(id){
-  if(id==='act'){
-    const base=window._chatActSeccionAbierta==null?!!window._chatActHayNoLeidos:!!window._chatActSeccionAbierta;
-    window._chatActSeccionAbierta=!base;
-  }else{
-    const base=window._chatPersonasSeccionAbierta==null?true:!!window._chatPersonasSeccionAbierta;
-    window._chatPersonasSeccionAbierta=!base;
-  }
+  if(id==='act')window._chatActSeccionAbierta=!chatSeccionEstaAbierta('act');
+  else window._chatPersonasSeccionAbierta=!chatSeccionEstaAbierta('personas');
   _chatContactsPaintSig='';
   renderChatContacts();
 }
@@ -1530,20 +1545,21 @@ function renderChatContacts(){
         (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
         '</div>'};
     }
-    function chatSeccionContactos(id,titulo,lista){
-      if(!lista.length)return '';
-      const filas=lista.map(chatFilaContacto);
-      const unread=filas.reduce(function(n,f){return n+f.unread;},0);
-      if(id==='act')window._chatActHayNoLeidos=unread>0;
-      const forzar=!!qNorm;
-      const abierta=forzar||(id==='act'
-        ?(window._chatActSeccionAbierta==null?unread>0:!!window._chatActSeccionAbierta)
-        :(window._chatPersonasSeccionAbierta==null?true:!!window._chatPersonasSeccionAbierta));
-      return '<button type="button" class="chat-sec-toggle" data-chat-sec="'+id+'"><span>'+(abierta?'▾':'▸')+' '+escAttr(titulo)+'</span>'+
-        (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+'</button>'+
-        (abierta?filas.map(function(f){return f.html;}).join(''):'');
+    function chatHtmlSeccion(sec){
+      if(!sec.filas.length)return '';
+      const abierta=!!qNorm||chatSeccionEstaAbierta(sec.id);
+      return '<button type="button" class="chat-sec-toggle" data-chat-sec="'+sec.id+'"><span>'+(abierta?'▾':'▸')+' '+escAttr(sec.titulo)+'</span>'+
+        (sec.unread?'<span class="chat-contact-unread">'+sec.unread+'</span>':'')+'</button>'+
+        (abierta?sec.filas.map(function(f){return f.html;}).join(''):'');
     }
-    const html=chatSeccionContactos('personas','Personas',personas)+chatSeccionContactos('act','Actividades',actividades);
+    const filasPersonas=personas.map(chatFilaContacto);
+    const filasAct=actividades.map(chatFilaContacto);
+    const unreadAct=filasAct.reduce(function(n,f){return n+(f.unread||0);},0);
+    window._chatActHayNoLeidos=unreadAct>0;
+    const html=chatOrdenSeccionesBuzon([
+      {id:'personas',titulo:'Personas',filas:filasPersonas,unread:filasPersonas.reduce(function(n,f){return n+(f.unread||0);},0)},
+      {id:'act',titulo:'Actividades',filas:filasAct,unread:unreadAct}
+    ]).map(chatHtmlSeccion).join('');
     const adminTools=(typeof esAdministrador==='function'&&esAdministrador())
       ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
       :'';
