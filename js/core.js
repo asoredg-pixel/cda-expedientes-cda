@@ -8525,7 +8525,7 @@ function taskReviewSideTitles(){
   return {doc:'Documento',exp:'Expediente',archivos:'Comparar',compare:'Comparar',pqrsCorreo:'Correo de respuesta',edit:'Editar',actividades:'Actividades asignadas',asociar:'Asociar',trasladar:'Traslado y asignación',trasladarNotificador:'Trasladar persona a notificar',elimEntregaNotif:'Eliminar entrega',biblioteca:'Biblioteca',eliminar:'Eliminar',chat:'Chat y observaciones',entrega:'Nueva entrega',notas:'Notas internas',decision:'Decisión',atajoFirmado:'Cargar documento firmado',notificar:'Reportar notificación',devolverTecnico:'Devolver al técnico'};
 }
 function taskReviewChatRailBtnHtml(ref,taskId,t){
-  const nc=typeof chatActividadNoLeidosTask==='function'?chatActividadNoLeidosTask(ref,taskId):0;
+  const nc=taskChatComentariosCount(t);
   const sel=typeof getSoporteSeleccionado==='function'?getSoporteSeleccionado(t):getSoporteActivo(t);
   const no=(t&&t.notasDoc||[]).filter(function(n){return n&&n.rol==='revisor'&&sel&&String(n.soporteId||'')===String(sel.id||'');}).length;
   const badge=Math.max(nc,no);
@@ -18041,7 +18041,7 @@ function actIcoBadgeHtml(n,tipo){
   return '<span class="'+cls+'" aria-hidden="true">'+num+'</span>';
 }
 function taskChatBtnHtml(expId,taskId,t){
-  const nc=typeof chatActividadNoLeidosTask==='function'?chatActividadNoLeidosTask(expId,taskId):0;
+  const nc=taskChatComentariosCount(t);
   const ref=escAttr(expId),tid=escAttr(taskId);
   return '<button type="button" class="btn bsm bic act-ico act-ico-btn" title="Chat de actividad'+(nc?' · '+nc+' mensaje'+(nc>1?'s':''):'')+'" onclick="event.stopPropagation();openTaskCommentsChatOnly(\''+ref+'\',\''+tid+'\')">'+chatWaIconHtml(15)+actIcoBadgeHtml(nc,'blue')+'</button>';
 }
@@ -19043,6 +19043,14 @@ function chatActividadComentarioNoLeido(c,t,yo,leidos,expId,taskId,ci){
   if(typeof bandejaItemIsLeido==='function'&&bandejaItemIsLeido(it,leidos))return false;
   return true;
 }
+function chatActividadDentroDeVentana(ts, ahora, dias){
+  const n=Number(dias);
+  const ventana=(isFinite(n)&&n>0)?n:10;
+  const t=Date.parse(String(ts||''));
+  if(!isFinite(t))return false;
+  const ref=(ahora&&typeof ahora.getTime==='function')?ahora.getTime():Date.now();
+  return (ref-t)<=ventana*86400000;
+}
 function chatActividadResumen(expId,taskId,t,yo,leidos){
   if(typeof normalizeTask==='function')t=normalizeTask(t||{});
   else t=t||{};
@@ -19056,16 +19064,18 @@ function chatActividadResumen(expId,taskId,t,yo,leidos){
     if(chatActividadComentarioNoLeido(x.c,t,yo,leidos,expId,taskId,x.ci))unread++;
   });
   const last=cms[cms.length-1].c;
-  const desc=String(t.desc||t.actividad||t.codigo||'').trim();
+  const dias=(typeof CHAT_NOTIFY_VENTANA_DIAS!=='undefined')?CHAT_NOTIFY_VENTANA_DIAS:10;
+  if(!chatActividadDentroDeVentana(last.fecha, new Date(), dias))return null;
   const cuerpo=String(last.texto||'').trim()||((last.adjuntos&&last.adjuntos.length)?'Archivo':'');
+  const prev=((last.autor?String(last.autor)+': ':'')+cuerpo).slice(0,80);
   return{
     key:chatActividadClave(expId,taskId),
     kind:'actchat',
     expId:String(expId||''),
     taskId:String(taskId||''),
     label:String(expId||taskId||'Actividad'),
-    meta:desc?('Actividad · '+desc):'Chat de actividad',
-    preview:(last.autor?String(last.autor)+': ':'')+cuerpo,
+    meta:'Actividad',
+    preview:prev,
     ts:String(last.fecha||''),
     unread:unread
   };

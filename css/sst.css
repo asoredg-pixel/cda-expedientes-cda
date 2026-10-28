@@ -3024,6 +3024,8 @@ body.modo-ciudadano .sst-nav,
 body.modo-ciudadano #sst-nav{display:none!important}
 .export-reminder-box{background:#fff;border-radius:var(--r);padding:1.25rem;max-width:420px;width:100%;box-shadow:0 8px 24px rgba(0,0,0,.2)}
 .export-reminder-btns{display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap}
+.chat-sec-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:8px 10px;border:0;border-bottom:1px solid var(--bd);background:var(--sf2);color:var(--tx);font-size:11px;font-weight:700;cursor:pointer;text-align:left}
+.chat-sec-toggle .chat-contact-unread{margin-left:auto}
 .chat-contact-info{flex:1;min-width:0}
 .chat-contact-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chat-contact-meta{font-size:9px;color:var(--tx3);line-height:1.25;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

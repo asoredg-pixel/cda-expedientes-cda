@@ -52,6 +52,7 @@ function ctx() {
     'chatActividadParticipa',
     'chatActividadComentarioItem',
     'chatActividadComentarioNoLeido',
+    'chatActividadDentroDeVentana',
     'chatActividadResumen',
     'chatActividadEnviarPara'
   ]), c)
@@ -88,7 +89,8 @@ describe('Chat de actividad dentro del chat interno', () => {
     }
     const row = c.chatActividadResumen('EXP-9', 't1', t, 'Ana', [])
     expect(row.label).toBe('EXP-9')
-    expect(row.meta).toContain('Visita')
+    expect(row.meta).toBe('Actividad')
+    expect(row.preview).toContain('Ya fui')
     expect(row.unread).toBe(1)
     expect(row.key).toBe(c.chatActividadClave('EXP-9', 't1'))
     const leido = c.chatActividadResumen('EXP-9', 't1', t, 'Ana', ['2026-10-28T10:00:00|Luis'])
@@ -96,6 +98,28 @@ describe('Chat de actividad dentro del chat interno', () => {
     expect(c.chatActividadResumen('EXP-9', 't1', {
       comentarios: [{ autor: 'Otro', para: 'Luis', texto: 'Ajeno', fecha: '2026-10-28T09:00:00' }]
     }, 'Ana', [])).toBe(null)
+  })
+
+  it('un chat de actividad viejo no entra en la lista del chat interno', () => {
+    const c = ctx()
+    const viejo = c.chatActividadResumen('EXP-9', 't1', {
+      comentarios: [{ autor: 'Luis', para: 'Ana', texto: 'Hace mucho', fecha: '2020-01-01T00:00:00' }]
+    }, 'Ana', [])
+    expect(viejo).toBe(null)
+    expect(c.chatActividadDentroDeVentana('2026-10-28T10:00:00', new Date('2026-10-28T12:00:00'), 10)).toBe(true)
+    expect(c.chatActividadDentroDeVentana('2020-01-01T00:00:00', new Date('2026-10-28T12:00:00'), 10)).toBe(false)
+  })
+
+  it('el icono de la actividad cuenta todos los mensajes y el chat interno separa actividades', () => {
+    const btn = extraer(core, ['taskChatBtnHtml'])
+    expect(btn).toContain('taskChatComentariosCount(t)')
+    expect(btn).not.toContain('chatActividadNoLeidosTask')
+    const lista = extraer(chat, ['renderChatContacts'])
+    expect(lista).toContain("chatSeccionContactos('act','Actividades',actividades)")
+    const envio = extraer(chat, ['chatEnviarArchivosActividad'])
+    expect(envio).toContain('driveUploadChat')
+    expect(envio).toContain('addTaskComentario')
+    expect(envio).not.toContain('chats/')
   })
 
   it('responder en el hilo va dirigido a la otra persona', () => {

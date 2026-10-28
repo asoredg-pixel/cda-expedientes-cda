@@ -1370,11 +1370,29 @@ function chatClearContactSearch(){
 window.chatToggleContactSearch=chatToggleContactSearch;
 window.chatOnContactSearchInput=chatOnContactSearchInput;
 window.chatClearContactSearch=chatClearContactSearch;
+function chatToggleSeccion(id){
+  if(id==='act'){
+    const base=window._chatActSeccionAbierta==null?!!window._chatActHayNoLeidos:!!window._chatActSeccionAbierta;
+    window._chatActSeccionAbierta=!base;
+  }else{
+    const base=window._chatPersonasSeccionAbierta==null?true:!!window._chatPersonasSeccionAbierta;
+    window._chatPersonasSeccionAbierta=!base;
+  }
+  _chatContactsPaintSig='';
+  renderChatContacts();
+}
+window.chatToggleSeccion=chatToggleSeccion;
 function chatInitContactsClicks(){
   const el=document.getElementById('chat-contacts');
   if(!el||el.dataset.chatClickBound==='1')return;
   el.dataset.chatClickBound='1';
   el.addEventListener('click',function(ev){
+    const sec=ev.target&&ev.target.closest?ev.target.closest('[data-chat-sec]'):null;
+    if(sec&&el.contains(sec)){
+      ev.preventDefault();
+      chatToggleSeccion(sec.getAttribute('data-chat-sec'));
+      return;
+    }
     const row=ev.target&&ev.target.closest?ev.target.closest('.chat-contact[data-chat-key]'):null;
     if(!row||!el.contains(row))return;
     ev.preventDefault();
@@ -1462,20 +1480,27 @@ function renderChatContacts(){
       chatSyncLayout();
       return;
     }
-    contacts=contacts.slice().sort(function(a,b){
-      let ta='',tb='';
-      try{ta=chatContactLastTs(me,a.key);tb=chatContactLastTs(me,b.key);}catch(e){}
-      if(ta!==tb)return tb.localeCompare(ta);
-      let ua=0,ub=0;
-      try{ua=chatContactUnreadCount(me,a.key);ub=chatContactUnreadCount(me,b.key);}catch(e){}
-      if(ua!==ub)return ub-ua;
-      return String(a.label||'').localeCompare(String(b.label||''),'es');
-    });
+    function chatOrdenContactos(arr){
+      return arr.slice().sort(function(a,b){
+        let ta='',tb='';
+        try{ta=chatContactLastTs(me,a.key);tb=chatContactLastTs(me,b.key);}catch(e){}
+        if(ta!==tb)return tb.localeCompare(ta);
+        let ua=0,ub=0;
+        try{ua=chatContactUnreadCount(me,a.key);ub=chatContactUnreadCount(me,b.key);}catch(e){}
+        if(ua!==ub)return ub-ua;
+        return String(a.label||'').localeCompare(String(b.label||''),'es');
+      });
+    }
+    let personas=chatOrdenContactos(contacts.filter(function(c){return c.kind!=='actchat';}));
+    let actividades=chatOrdenContactos(contacts.filter(function(c){return c.kind==='actchat';}));
     const qRaw=String(window._chatContactQ||'').trim();
     const qNorm=chatNormSearch(qRaw);
-    if(qNorm)contacts=contacts.filter(function(c){return chatContactMatchesQuery(c,qNorm);});
+    if(qNorm){
+      personas=personas.filter(function(c){return chatContactMatchesQuery(c,qNorm);});
+      actividades=actividades.filter(function(c){return chatContactMatchesQuery(c,qNorm);});
+    }
     chatSyncSearchBarUi();
-    if(!contacts.length){
+    if(!personas.length&&!actividades.length){
       const adminToolsEmpty=(typeof esAdministrador==='function'&&esAdministrador())
         ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
         :'';
@@ -1487,7 +1512,7 @@ function renderChatContacts(){
       chatSyncLayout();
       return;
     }
-    const html=contacts.map(function(c){
+    function chatFilaContacto(c){
       const convId=chatConvId(me.key,c.key);
       let prev='Sin mensajes',unread=0;
       try{
@@ -1497,14 +1522,28 @@ function renderChatContacts(){
       }catch(e){}
       const active=window._chatActiveContactKey===c.key||window._chatConvActiva===convId||chatActiveContactKey()===c.key;
       const meta=c.meta||c.sub||'';
-      return '<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+(c.kind==='admin'?' chat-contact-admin':'')+(c.kind==='actchat'?' chat-contact-act':'')+'" role="button" tabindex="0" data-chat-key="'+escAttr(c.key)+'">'+
+      return {unread:unread,html:'<div class="chat-contact'+(active?' on':'')+(unread?' has-unread':'')+(c.kind==='admin'?' chat-contact-admin':'')+(c.kind==='actchat'?' chat-contact-act':'')+'" role="button" tabindex="0" data-chat-key="'+escAttr(c.key)+'">'+
         '<div class="chat-contact-av'+chatAvRegionClass(c)+'">'+chatAvLetter(c.label)+'</div>'+
         '<div class="chat-contact-info"><div class="chat-contact-name">'+escAttr(c.label)+'</div>'+
         (meta?'<div class="chat-contact-meta">'+escAttr(meta)+'</div>':'')+
         '<div class="chat-contact-prev">'+escAttr(prev)+'</div></div>'+
         (unread?'<span class="chat-contact-unread" style="min-width:20px;height:20px;padding:0 5px;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--gn,#1a7a4a)">'+unread+'</span>':'')+
-        '</div>';
-    }).join('');
+        '</div>'};
+    }
+    function chatSeccionContactos(id,titulo,lista){
+      if(!lista.length)return '';
+      const filas=lista.map(chatFilaContacto);
+      const unread=filas.reduce(function(n,f){return n+f.unread;},0);
+      if(id==='act')window._chatActHayNoLeidos=unread>0;
+      const forzar=!!qNorm;
+      const abierta=forzar||(id==='act'
+        ?(window._chatActSeccionAbierta==null?unread>0:!!window._chatActSeccionAbierta)
+        :(window._chatPersonasSeccionAbierta==null?true:!!window._chatPersonasSeccionAbierta));
+      return '<button type="button" class="chat-sec-toggle" data-chat-sec="'+id+'"><span>'+(abierta?'▾':'▸')+' '+escAttr(titulo)+'</span>'+
+        (unread?'<span class="chat-contact-unread">'+unread+'</span>':'')+'</button>'+
+        (abierta?filas.map(function(f){return f.html;}).join(''):'');
+    }
+    const html=chatSeccionContactos('personas','Personas',personas)+chatSeccionContactos('act','Actividades',actividades);
     const adminTools=(typeof esAdministrador==='function'&&esAdministrador())
       ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
       :'';
@@ -1836,7 +1875,7 @@ function chatAbrirHiloActividad(contactKey){
   const tit=document.getElementById('chat-hdr-tit');
   const sub=document.getElementById('chat-hdr-sub');
   if(tit)tit.textContent=(h&&h.label)||(ref&&ref.expId)||'Actividad';
-  if(sub)sub.textContent=(h&&h.meta)||'Chat de actividad';
+  if(sub)sub.textContent='Chat de actividad';
   chatSyncLayout();
   _chatMessagesPaintSig='';
   renderChatHiloActividad();
@@ -2404,10 +2443,85 @@ function chatAlArrastrarComposer(ev){
   if(ev.stopPropagation)ev.stopPropagation();
   try{ev.dataTransfer.dropEffect='copy';}catch(e){}
 }
+async function chatEnviarArchivosActividad(files){
+  files=(files||[]).filter(Boolean);
+  const ref=typeof chatActividadParseClave==='function'?chatActividadParseClave(window._chatActiveContactKey||''):null;
+  if(!ref||!files.length)return;
+  if(typeof chatDriveConectado==='function'&&!chatDriveConectado()){
+    if(typeof chatModalCorreoRequerido==='function')chatModalCorreoRequerido();
+    return;
+  }
+  if(typeof driveUploadChat!=='function'||typeof addTaskComentario!=='function'){
+    if(typeof notif==='function')notif('No se pudo adjuntar el archivo','err');
+    return;
+  }
+  const maxBytes=(typeof CHAT_DRIVE_MAX_BYTES!=='undefined')?CHAT_DRIVE_MAX_BYTES:25*1024*1024;
+  const mal=files.find(function(f){return f&&f.size>maxBytes;});
+  if(mal){
+    if(typeof chatModalAlert==='function')chatModalAlert({title:'Archivo demasiado grande',message:'El archivo supera el límite de 25 MB del chat.',detail:mal.name,tone:'warn'});
+    return;
+  }
+  if(_chatFileUploading){
+    if(typeof chatModalAlert==='function')chatModalAlert({title:'Subida en curso',message:'Ya hay un archivo subiéndose. Espere a que termine.',tone:'warn'});
+    return;
+  }
+  _chatFileUploading=true;
+  const adj=[];
+  try{
+    for(let i=0;i<files.length;i++){
+      const file=files[i];
+      if(typeof chatUploadOverlayShow==='function')chatUploadOverlayShow(file.name);
+      const uploaded=await driveUploadChat(file,file.name,file.type||'application/octet-stream');
+      adj.push({
+        nombre:file.name,
+        driveFileId:uploaded.fileId,
+        fileId:uploaded.fileId,
+        driveLink:uploaded.driveLink,
+        previewLink:uploaded.previewLink||uploaded.driveLink,
+        driveFilename:uploaded.nombre||file.name,
+        mime:file.type||'',
+        expiresAt:uploaded.expiresAt||'',
+        driveEstado:'chat_actividad',
+        chatDrive:true
+      });
+      if(typeof chatRegisterDrivePurge==='function'&&uploaded.fileId){
+        try{
+          await chatRegisterDrivePurge(uploaded.fileId,{
+            expiresAt:uploaded.expiresAt||'',
+            msgId:'task_cmt_'+Date.now(),
+            fsConvId:'task:'+ref.expId+':'+ref.taskId,
+            driveLink:uploaded.driveLink||'',
+            nombre:uploaded.nombre||file.name
+          });
+        }catch(errP){console.warn('chatActividad purge:',errP);}
+      }
+    }
+    const t=typeof getTaskAny==='function'?getTaskAny(ref.expId,ref.taskId):null;
+    const yo=typeof chatActividadYoNombre==='function'?chatActividadYoNombre():'';
+    const para=(t&&typeof chatActividadEnviarPara==='function')?chatActividadEnviarPara(t,yo):'';
+    if(!addTaskComentario(ref.expId,ref.taskId,'',{para:para,adjuntos:adj})){
+      if(typeof notif==='function')notif('No se pudo enviar el archivo en la actividad','err');
+      return;
+    }
+    window._chatActHilos=null;
+    _chatMessagesPaintSig='';
+    renderChatHiloActividad();
+    renderChatContacts();
+    renderChatBadge();
+    if(typeof chatUploadOverlaySuccess==='function')chatUploadOverlaySuccess(adj[0]&&(adj[0].driveFilename||adj[0].nombre));
+  }catch(err){
+    console.error('chatEnviarArchivosActividad:',err);
+    if(typeof chatUploadOverlayError==='function')chatUploadOverlayError(err.message||'Revise la conexión Gmail/Drive.',files[0]&&files[0].name);
+    else if(typeof notif==='function')notif('No se pudo adjuntar el archivo','err');
+  }finally{
+    _chatFileUploading=false;
+  }
+}
 function chatEnviarArchivosPegados(files){
   if(!files||!files.length)return;
   if(typeof chatActividadEsClave==='function'&&chatActividadEsClave(window._chatActiveContactKey||'')){
-    if(typeof notif==='function')notif('Para adjuntar un archivo use el chat de la actividad','warn');
+    const listos=files.map(function(f){return chatArchivoParaEnviarDesdePegado(f, new Date());}).filter(Boolean);
+    void chatEnviarArchivosActividad(listos);
     return;
   }
   const contactKey=window._chatActiveContactKey||(typeof chatActiveContactKey==='function'?chatActiveContactKey():'')||'';
@@ -2439,10 +2553,6 @@ function chatAlSoltarComposer(ev){
   chatEnviarArchivosPegados(files);
 }
 function chatAdjuntarArchivoClick(){
-  if(typeof chatActividadEsClave==='function'&&chatActividadEsClave(window._chatActiveContactKey||'')){
-    if(typeof notif==='function')notif('Para adjuntar un archivo use el chat de la actividad','warn');
-    return;
-  }
   const inp=document.getElementById('chat-file-inp');
   if(!inp)return;
   if(!chatPuedeResponderAContacto(window._chatActiveContactKey||chatActiveContactKey()||'')){
@@ -2630,6 +2740,14 @@ function chatUploadOverlayError(errMsg,fileName){
 }
 async function chatEnviarArchivo(fileArg){
   const inp=document.getElementById('chat-file-inp');
+  if(typeof chatActividadEsClave==='function'&&chatActividadEsClave(window._chatActiveContactKey||'')){
+    let files=[];
+    if(fileArg instanceof File)files=[fileArg];
+    else if(inp&&inp.files)files=Array.from(inp.files);
+    if(inp)inp.value='';
+    await chatEnviarArchivosActividad(files);
+    return;
+  }
   let file=(fileArg instanceof File)?fileArg:null;
   if(!file&&inp)file=inp.files&&inp.files[0];
   if(!file)return;
