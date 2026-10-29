@@ -28,7 +28,8 @@ function extraer(src, nombres) {
 const src = 'const _actLibresQuitadosIds=new Set();\n' + extraer(per, [
   'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'actLibreTieneArchivoDrive', 'scoreActividadLibreMerge',
   'pickMejorActLibre', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
-  'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep', 'quitarBandejaCompartidaDelPayload', 'saveGlobalFirestore'
+  'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep', 'quitarBandejaCompartidaDelPayload',
+  'actLibresRemotoPreferido', 'escribirParteSistema', 'moverCamposAPartes', 'saveGlobalFirestore'
 ])
 
 function armar(opts) {

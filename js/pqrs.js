@@ -1752,7 +1752,7 @@ function ncaPqrsPinUsuarioKey(){
   const enc=typeof getEncargadoDepto==='function'?String(getEncargadoDepto('guaviare')||'').trim():'';
   return u||enc||'nca';
 }
-/** Fijadas compartidas entre equipos: sistema/global.ncaPinsByUser[usuario]. Cada equipo suma sus fijadas locales una sola vez. */
+/** Fijadas compartidas entre equipos: sistema/fichas.ncaPinsByUser[usuario]. Si ese documento no se puede escribir, siguen en sistema/global. */
 const NCA_PQRS_PIN_MIGRADO_LS='sst_nca_pqrs_pin_migrado';
 function ncaPqrsPinsNorm(arr){
   return Array.isArray(arr)?arr.map(function(x){return String(x||'').trim();}).filter(Boolean):[];
@@ -1790,9 +1790,16 @@ function ncaPqrsPinsPersistFirestore(k,arr){
     m[u]=val.slice();
     window._ncaPinsRemote[u]=val.slice();
   });
-  return Promise.resolve(window._fsSetDoc(window._fsDoc(db,'sistema','global'),{ncaPinsByUser:m},{merge:true}))
-    .then(function(){return true;})
-    .catch(function(err){console.warn('ncaPqrsPinsPersistFirestore:',err);return false;});
+  const fichas=window._fsSetDoc(window._fsDoc(db,'sistema','fichas'),{ncaPinsByUser:m},{merge:true});
+  return Promise.resolve(fichas).then(function(){
+    if(typeof window._fsDeleteField!=='function')return true;
+    return Promise.resolve(window._fsSetDoc(window._fsDoc(db,'sistema','global'),{ncaPinsByUser:window._fsDeleteField()},{merge:true})).then(function(){return true;});
+  }).catch(function(err){
+    console.warn('ncaPqrsPinsPersistFirestore:',err);
+    return Promise.resolve(window._fsSetDoc(window._fsDoc(db,'sistema','global'),{ncaPinsByUser:m},{merge:true}))
+      .then(function(){return true;})
+      .catch(function(err2){console.warn('ncaPqrsPinsPersistFirestore:',err2);return false;});
+  });
 }
 /** Lee sistema/global.ncaPinsByUser (carga inicial y tiempo real). Devuelve true si cambian las fijadas del usuario actual. */
 function ncaPqrsPinsApplyFromGlobal(g){

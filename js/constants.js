@@ -168,6 +168,9 @@ if(typeof window!=='undefined'&&!window._gmailClientId)window._gmailClientId=GMA
 // Firebase / Firestore
 const ADMIN_GMAIL='ncacdaguaviare@gmail.com';
 const DEPTOS_FIRESTORE=['guaviare','guainia','vaupes'];
+// Expedientes que sí se escuchan y se buscan. Guainía y Vaupés siguen en el menú,
+// pero no tienen datos: no se abre su colección hasta que empiecen a guardar.
+const DEPTOS_EXPEDIENTES_ACTIVOS=['guaviare'];
 
 // Secciones editables del registro (responsables/contratistas)
 const REG_EDIT_SECS={
@@ -223,7 +226,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20261029b';
+const SST_BUILD_ID = '20261029c';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 

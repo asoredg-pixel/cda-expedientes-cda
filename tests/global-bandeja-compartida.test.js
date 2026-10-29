@@ -58,7 +58,8 @@ function ctxGlobal() {
   runInContext('const _actLibresQuitadosIds=new Set();\n' + extraer(per, [
     'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'actLibreTieneArchivoDrive', 'scoreActividadLibreMerge',
     'pickMejorActLibre', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc',
-    'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep', 'quitarBandejaCompartidaDelPayload', 'saveGlobalFirestore'
+    'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep', 'quitarBandejaCompartidaDelPayload',
+    'actLibresRemotoPreferido', 'escribirParteSistema', 'moverCamposAPartes', 'saveGlobalFirestore'
   ]), c)
   return { c, escritos }
 }
@@ -68,11 +69,12 @@ describe('sistema/global sin la lista compartida antigua de la bandeja', () => {
     const { c, escritos } = ctxGlobal()
     c.window._bandejaDocFallo = true
     expect(await c.saveGlobalFirestore()).toBe(true)
-    const p = escritos[0]
-    expect(p.bandejaLeidos).toBe(BORRAR)
+    const p = escritos.find(x => x && x.bandejaLeidos === BORRAR)
     expect(p.bandejaEliminados).toBe(BORRAR)
     expect(p.bandejaLeidosByUser['sec@cda.gov.co']).toEqual(['k1'])
-    expect(p.personas[0].pn_nombre).toBe('Ana')
+    expect(p.personas).toBe(BORRAR)
+    const personas = escritos.find(x => x && Array.isArray(x.personas))
+    expect(personas.personas[0].pn_nombre).toBe('Ana')
   })
 
   it('la orden de borrado no pasa por la limpieza de campos (se dañaría)', () => {

@@ -81,7 +81,7 @@ describe('Fijadas NCA: mismo usuario escrito distinto en cada equipo', () => {
     runInContext("ncaPqrsPinsGuardar(['EXP-1'])", c)
     await tick()
     expect(writes).toHaveLength(1)
-    expect(writes[0].ref).toBe('sistema/global')
+    expect(writes[0].ref).toBe('sistema/fichas')
     expect(writes[0].opt).toEqual({ merge: true })
     expect(writes[0].data.ncaPinsByUser).toEqual({ 'Juan Pérez': ['EXP-1'], 'JUAN PEREZ': ['EXP-1'] })
     expect(c.window._ncaPinsRemote.otro).toEqual(['EXP-9'])

@@ -229,8 +229,32 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // sistema/global — datos transversales e índice de usuarios
+    // Personas, actividades libres, agenda y fichas viven en documentos aparte
+    // (mismo permiso). Requiere: firebase deploy --only firestore:rules
+    // GitHub Pages no despliega reglas. Hasta ese despliegue el cliente sigue
+    // escribiendo esos campos en sistema/global.
     // -------------------------------------------------------------------------
     match /sistema/global {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isAdmin();
+    }
+    match /sistema/actividades_libres {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isAdmin();
+    }
+    match /sistema/personas {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isAdmin();
+    }
+    match /sistema/agenda {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isAdmin();
+    }
+    match /sistema/fichas {
       allow read: if isActiveUser();
       allow create, update: if isActiveUser() && puedeEscribirGlobal();
       allow delete: if isAdmin();
