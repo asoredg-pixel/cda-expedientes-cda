@@ -1422,23 +1422,23 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
         notificacion:{en:new Date().toISOString(),a:(opts.destinos||[]).join(', '),por:taskComentarioAutor(),canal:opts.canal||prev.canal||''}
       });
     }
-    // Si hubo firma + notificación: quitar proyección intermedia (queda Firma. + Not.)
-    if(opts.via==='notificacion'&&Array.isArray(t.soportes)&&t.soportes.length){
-      const hasFirm=t.soportes.some(function(s){return typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s);});
-      const hasNot=t.soportes.some(function(s){return typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s);});
-      if(hasFirm&&hasNot){
-        const drop=[];
-        t.soportes=t.soportes.filter(function(s){
-          if(!s)return false;
-          if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return true;
-          if(typeof soporteEsDocumentoFirmado==='function'&&soporteEsDocumentoFirmado(s))return true;
-          if(typeof soporteEsDocumentoNotificado==='function'&&soporteEsDocumentoNotificado(s))return true;
-          drop.push(s);
-          return false;
-        });
-        // Borrado Drive async fuera de mutate (best-effort)
-        window._tramiteDropProyPend=(window._tramiteDropProyPend||[]).concat(drop.map(function(s){return s.driveFileId||s.fileId;}).filter(Boolean));
-      }
+    // Quitar solo la proyección intermedia. El documento notificado y el PDF de soporte se quedan.
+    if(opts.via==='notificacion'&&Array.isArray(t.soportes)&&t.soportes.length&&typeof filtrarSoportesTrasNotificar==='function'){
+      const pack=filtrarSoportesTrasNotificar(t.soportes);
+      t.soportes=pack.keep;
+      const vivos={};
+      (pack.keep||[]).forEach(function(s){
+        const id=String((s&&(s.driveFileId||s.fileId))||'').trim();
+        if(id)vivos[id]=true;
+      });
+      const drop=(pack.drop||[]).filter(function(s){
+        if(!s||s===pack.vigente)return false;
+        if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
+        const id=String(s.driveFileId||s.fileId||'').trim();
+        if(id&&vivos[id])return false;
+        return true;
+      });
+      window._tramiteDropProyPend=(window._tramiteDropProyPend||[]).concat(drop.map(function(s){return s.driveFileId||s.fileId;}).filter(Boolean));
     }
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
   });
