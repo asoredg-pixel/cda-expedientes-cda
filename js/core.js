@@ -32456,6 +32456,177 @@ function filtrarActividadesPorEstado(list,filtro){
   if(filtro==='all')return list;
   return list;
 }
+/** Coincidencia del número (expediente, PQRSD, trámite o actividad) contra el título. 0 = exacto. */
+function busquedaIdRank(id, ql){
+  const raw=String(id||'').trim();
+  const q=String(ql||'').trim().toLowerCase();
+  if(!raw||!q)return 99;
+  const n=raw.toLowerCase().replace(/[\s\-_.\/]/g,'');
+  const qn=q.replace(/[\s\-_.\/]/g,'');
+  if(n===qn)return 0;
+  const qd=q.replace(/\D/g,'');
+  const idd=raw.replace(/\D/g,'');
+  if(qd.length>=3&&idd&&idd===qd)return 0;
+  if(n.startsWith(qn))return 1;
+  if(qd.length>=3&&idd&&(idd.startsWith(qd)||idd.endsWith(qd)))return 1;
+  if(qn.length>=3&&n.includes(qn))return 2;
+  if(qd.length>=4&&idd&&idd.includes(qd))return 2;
+  return 99;
+}
+/** 0–2 título (número), 5 nombre visible, 8 solo contenido. */
+function actividadTituloRank(t,q){
+  const ql=String(q||'').toLowerCase().trim();
+  if(!ql||!t)return 9;
+  const ids=[t.exp,t.codigo];
+  let best=99;
+  ids.forEach(function(id){
+    const r=busquedaIdRank(id,ql);
+    if(r<best)best=r;
+  });
+  if(best<99)return best;
+  const names=[t.actividad,t.desc,t.nombre,t.interesadoNombre,t.tram].filter(Boolean).join(' ').toLowerCase();
+  if(names.includes(ql))return 5;
+  return 8;
+}
+function actBusqTextoRapido(t,ql){
+  if(!t||!ql)return false;
+  if(actividadTituloRank(t,ql)<8)return true;
+  const blob=[t.nombre,t.interesadoNombre,t._pn_nombre,t._pj_empresa,t._pj_nit,t._pn_identificacion,t._ciudad,t._municipio,t.responsable,t.tram].filter(Boolean).join(' ').toLowerCase();
+  return blob.includes(ql);
+}
+function actSearchCacheSig(filtroAct, listRespFilter){
+  const g=function(id){return document.getElementById(id);};
+  const pv=g('act-preset'), d=g('act-desde'), h=g('act-hasta'), a=g('act-ano'), m=g('act-mes');
+  return [
+    typeof deptoActivo!=='undefined'?deptoActivo:'',
+    typeof responsableActivo!=='undefined'?responsableActivo:'',
+    filtroAct||'',
+    listRespFilter==null?'*':String(listRespFilter),
+    pv?pv.value:'', d?d.value:'', h?h.value:'', a?a.value:'', m?m.value:'',
+    window._actVista||''
+  ].join('|');
+}
+function actBusqRef(t){
+  if(!t)return '';
+  return String(t.sinExpediente?(t.codigo||t.exp||''):(t.exp||t.codigo||'')).trim();
+}
+function actBusqPintar(inp){
+  const portal=document.getElementById('s-act-sug');
+  if(!portal)return;
+  const est=document.getElementById('f-act-est');
+  if(est&&est.value==='req'){portal.style.display='none';portal.innerHTML='';return;}
+  const q=String((inp&&inp.value)||'').trim().toLowerCase();
+  if(q.length<1){portal.style.display='none';portal.innerHTML='';return;}
+  const cache=window._actSearchCache;
+  const base=cache&&Array.isArray(cache.list)?cache.list:[];
+  const hits=base.filter(function(t){return actBusqTextoRapido(t,q);}).map(function(t){
+    return {t:t,r:actividadTituloRank(t,q)};
+  }).sort(function(a,b){return a.r-b.r;}).slice(0,12);
+  if(!hits.length){
+    portal.style.display='block';
+    portal.innerHTML='<div style="padding:8px 10px;font-size:12px;color:var(--tx3)">Sin coincidencias en el título. La tabla incluye también el contenido.</div>';
+    return;
+  }
+  portal.innerHTML=hits.map(function(h){
+    const t=h.t;
+    const ref=actBusqRef(t);
+    const nom=String(t.actividad||t.desc||t.nombre||'').trim();
+    return '<button type="button" class="entrega-resp-sug-btn" data-val="'+escAttr(ref||nom)+'" onmousedown="event.preventDefault();actBusqElegir(this.getAttribute(\'data-val\'))"><strong>'+escAttr(ref||'—')+'</strong> · '+escAttr(nom)+'</button>';
+  }).join('');
+  portal.style.display='block';
+}
+function actBusqAbrir(inp){
+  if(!inp)return;
+  try{inp.select();}catch(e){}
+  actBusqPintar(inp);
+}
+function actBusqInput(inp){
+  actBusqPintar(inp);
+  clearTimeout(window._actBusqT);
+  window._actBusqT=setTimeout(function(){renderActividades({soloTexto:true});},160);
+}
+function actBusqElegir(valor){
+  const inp=document.getElementById('s-act');
+  if(inp)inp.value=valor||'';
+  actBusqCerrar();
+  clearTimeout(window._actBusqT);
+  renderActividades({soloTexto:true});
+}
+function actBusqCerrar(){
+  const portal=document.getElementById('s-act-sug');
+  if(portal)portal.style.display='none';
+}
+function actBusqKey(ev,inp){
+  if(!ev)return;
+  if(ev.key==='Escape'){actBusqCerrar();if(inp)inp.blur();return;}
+  if(ev.key!=='Enter')return;
+  ev.preventDefault();
+  clearTimeout(window._actBusqT);
+  actBusqCerrar();
+  renderActividades({soloTexto:true});
+}
+function ordenarActividadesVisibles(list, filtroAct){
+  list=filtroAct==='revisados'?sortTasksRevisadas(list):
+    (filtroAct==='porver'?(typeof ordenarActividadesNcaPinsPrimero==='function'
+      ?ordenarActividadesNcaPinsPrimero(sortTasksPorRevisar(list),true)
+      :sortTasksPorRevisar(list)):
+    (filtroAct==='pend'||filtroAct==='venc'?(
+      typeof ordenarActividadesNcaPinsPrimero==='function'&&filtroAct==='pend'
+        ?ordenarActividadesNcaPinsPrimero(sortTasksPorEjecutar(list))
+        :sortTasksPorEjecutar(list)
+    ):
+    (filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados'?sortTasksPorFirma(list):
+    (filtroAct==='done'?sortTasksAtendidas(list):sortTasksByUrgency(list)))));
+  if(filtroAct==='porver'||filtroAct==='porcorr')list=ordenarInformesContratoPrimero(list);
+  return list;
+}
+/** Repinta solo la tabla al escribir: no recuenta paletas ni repara PQRSD. */
+function pintarActividadesPorTexto(cache,q,filtroAct){
+  const deptView=!!cache.deptView;
+  const respFilter=cache.respFilter;
+  let list=(cache.list||[]).slice();
+  if(q)list=list.filter(function(t){return matchActividadSearch(t,q);});
+  list=ordenarActividadesVisibles(list, filtroAct);
+  window._actExportList=list;
+  const tb=document.getElementById('tbl-act');
+  const btnExp=document.getElementById('btn-export-act');
+  if(btnExp)btnExp.style.display='';
+  const muestraNotifCol=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();
+  const colSpan=(deptView?9:8)+(muestraNotifCol?1:0);
+  const tableWrap=document.getElementById('act-table-wrap');
+  const ganttWrap=document.getElementById('act-gantt-wrap');
+  const moreRev=document.getElementById('act-revisados-more');
+  const useGantt=deptView&&window._actVista==='gantt';
+  if(tableWrap)tableWrap.style.display=useGantt?'none':'';
+  const pageSize=actPaletaPageSize();
+  const filterKey=actPaletaFilterKey(filtroAct,q,respFilter);
+  if(window._actListFilterKey!==filterKey){
+    window._actListShown=pageSize;
+    window._actListFilterKey=filterKey;
+  }
+  if(window._actListShown==null||window._actListShown<pageSize)window._actListShown=pageSize;
+  const shown=Math.min(window._actListShown,list.length);
+  const listRender=list.slice(0,shown);
+  if(moreRev){
+    const rest=list.length-shown;
+    if(rest>0){
+      moreRev.style.display='block';
+      const nextBatch=Math.min(rest,pageSize);
+      moreRev.textContent='Cargar más ('+nextBatch+' · '+rest+' restantes)';
+    }else moreRev.style.display='none';
+  }
+  if(ganttWrap){
+    ganttWrap.style.display=useGantt?'block':'none';
+    if(useGantt&&typeof renderActGantt==='function')renderActGantt(listRender);
+  }
+  if(tb&&!useGantt){
+    tb.innerHTML=listRender.length?listRender.map(function(t){return renderActividadesRowHtml(t);}).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
+    if(typeof markUltimaFilaFijadaNca==='function'){
+      const tblAct=tb.closest?tb.closest('table'):null;
+      markUltimaFilaFijadaNca(tblAct);
+    }
+  }
+}
 /** Buscador de actividades con las mismas características de filtrado que Consulta (`matchS`). */
 function matchActividadSearch(t,q){
   if(!q)return true;
@@ -32472,11 +32643,18 @@ function matchActividadSearch(t,q){
     if(vd&&vd.includes(qDigits))return true;
   }
   const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-  if(e&&typeof matchS==='function')return matchS(e,ql);
+  if(e&&typeof matchS==='function'){
+    const ck=String(e._exp||'')+'|'+ql;
+    if(!window._actMatchSCache||window._actMatchSCache.q!==ql)window._actMatchSCache={q:ql,map:{}};
+    if(Object.prototype.hasOwnProperty.call(window._actMatchSCache.map,ck))return window._actMatchSCache.map[ck];
+    const ok=!!matchS(e,ql);
+    window._actMatchSCache.map[ck]=ok;
+    return ok;
+  }
   return false;
 }
 window.matchActividadSearch=matchActividadSearch;
-function renderActividades(){
+function renderActividades(opts){
   if(typeof updateActRespActionsUi==='function')updateActRespActionsUi();
   const deptView=esVistaActividadesDepto();
   if(!esModoResponsable()&&!deptView)return;
@@ -32540,6 +32718,14 @@ function renderActividades(){
   }
   let listRespFilter=respFilter;
   if(deptView&&bandejaRevDepto&&(filtroAct==='porver'||filtroAct==='revisados'||filtroAct==='porcorr'))listRespFilter=null;
+  const actSig=actSearchCacheSig(filtroAct, listRespFilter);
+  if(opts&&opts.soloTexto&&filtroAct!=='req'){
+    const cacheTxt=window._actSearchCache;
+    if(cacheTxt&&cacheTxt.sig===actSig&&Array.isArray(cacheTxt.list)){
+      pintarActividadesPorTexto(cacheTxt,q,filtroAct);
+      return;
+    }
+  }
   let list=deptView?getTareasDeptActividades(listRespFilter):getTareasResponsableActivo();
   list=filterTasksPeriodo(list,'act');
   // Heal anticipado: PQRSD ya aprobada (firma/notif/cerrada) no debe quedar en «Por revisar»
@@ -32593,6 +32779,7 @@ function renderActividades(){
   });
   // Re-aplicar filtro porver tras rehidratar firmaWf
   if(filtroAct==='porver')list=filtrarActividadesPorEstado(list,'porver');
+  window._actSearchCache={sig:actSig, list:list.slice(), filtroAct:filtroAct, deptView:deptView, respFilter:respFilter};
   if(q)list=list.filter(t=>matchActividadSearch(t,q));
   list=filtroAct==='revisados'?sortTasksRevisadas(list):
     (filtroAct==='porver'?(typeof ordenarActividadesNcaPinsPrimero==='function'

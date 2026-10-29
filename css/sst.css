@@ -2268,6 +2268,10 @@ body.task-review-doc-mode #task-modal-overlay{
 .soporte-doc-tab.on{background:var(--bll);border-color:var(--bl);color:var(--bl);font-weight:600}
 .act-filtros-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:.8rem}
 .act-filtros-bar .sb{margin-bottom:0;flex:1;min-width:280px}
+.busq-rapida{position:relative;z-index:50;flex:1;min-width:180px}
+.busq-rapida>input{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #c5c5c5;border-radius:6px;background:#fff;color:#1a1a1a;font-size:13px;font-family:'DM Sans',sans-serif}
+#pg-con .busq-rapida{flex:2;min-width:200px}
+.busq-rapida .entrega-resp-sug{z-index:60}
 .juris-filtros-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px;padding:10px 12px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--rl)}
 .juris-filtros-bar .fld{min-width:160px}
 .juris-filtros-bar label{font-size:11px;color:var(--tx2);display:block;margin-bottom:3px;font-weight:600}
@@ -3898,7 +3902,7 @@ body.sesion-activa #pg-login{display:none!important}
   .login-wrap{margin:0;padding:1.75rem 1.25rem}
   .login-roles-grid{grid-template-columns:1fr}
   .sb,.act-filtros-bar,.act-periodo-row,.periodo-filtro{flex-direction:column;align-items:stretch!important}
-  .sb input,.sb select,.sb .btn,.sb label,.act-filtros-bar .btn,.act-filtros-bar select,.act-filtros-bar input,.act-periodo-row input,.act-periodo-row select,.act-periodo-row .btn,.act-periodo-row label,.periodo-filtro input,.periodo-filtro select,.periodo-filtro .btn,.periodo-filtro label{width:100%;max-width:none}
+  .sb input,.sb select,.sb .btn,.sb label,.act-filtros-bar .btn,.act-filtros-bar select,.act-filtros-bar input,.act-periodo-row input,.act-periodo-row select,.act-periodo-row .btn,.act-periodo-row label,.periodo-filtro input,.periodo-filtro select,.periodo-filtro .btn,.periodo-filtro label,.busq-rapida{width:100%;max-width:none}
   .sb label{display:flex;flex-direction:column;gap:4px}
   .card{padding:.85rem 1rem}
   .fg{grid-template-columns:1fr}

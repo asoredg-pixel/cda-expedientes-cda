@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20261028g">
+<link rel="stylesheet" href="css/sst.css?v=20261029b">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,14 +20,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026u"></script>
-<script src="js/constants.js?v=20261029a"></script>
+<script src="js/constants.js?v=20261029b"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261027f"></script>
 <script src="js/roles.js?v=20261026t"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261029a"></script>
+<script src="js/core.js?v=20261029b"></script>
 <script src="js/formulario.js?v=20261015a"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
@@ -41,7 +41,7 @@
 <script src="js/gmail.js?v=20261026q"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261028g"></script>
-<script src="js/consulta.js?v=20261028d"></script>
+<script src="js/consulta.js?v=20261029b"></script>
 <script src="js/entrega-responsable.js?v=20261028a"></script>
 <script src="js/tramite-firma.js?v=20261029a"></script>
 <script src="js/requerimientos.js?v=20261022g"></script>
@@ -399,7 +399,10 @@
           <option value="done">Atendidas</option>
           <option value="all">Todas las asignadas</option>
         </select>
-        <input type="text" id="s-act" placeholder="Nombre, expediente, resolución, NIT, ciudad…" oninput="renderActividades()" style="flex:1;min-width:180px">
+        <div class="busq-rapida">
+          <input type="text" id="s-act" autocomplete="off" placeholder="Nombre, expediente, resolución, NIT, ciudad…" onfocus="actBusqAbrir(this)" oninput="actBusqInput(this)" onkeydown="actBusqKey(event,this)" onblur="setTimeout(actBusqCerrar,200)">
+          <div id="s-act-sug" class="entrega-resp-sug" style="display:none"></div>
+        </div>
         <button type="button" class="btn bsm bp" id="btn-export-act" style="display:none" onclick="exportarActividadesExcel()">⬇ Descargar</button>
       </div>
     </div>
@@ -474,7 +477,10 @@
     </div>
     <div id="q-periodo-resumen" style="font-size:11px;color:var(--tx2);margin:-4px 0 10px"></div>
     <div class="sb con-filtro-avanzado">
-      <input type="text" id="q-txt" placeholder="Nombre, expediente, resolución, NIT, ciudad…" oninput="renderConsulta()" style="flex:2;min-width:200px">
+      <div class="busq-rapida">
+        <input type="text" id="q-txt" autocomplete="off" placeholder="Nombre, expediente, resolución, NIT, ciudad…" onfocus="consultaBusqAbrir(this)" oninput="consultaBusqInput(this)" onkeydown="consultaBusqKey(event,this)" onblur="setTimeout(consultaBusqCerrar,200)">
+        <div id="q-txt-sug" class="entrega-resp-sug" style="display:none"></div>
+      </div>
       <select id="q-tram" onchange="renderConsulta()"><option value="">Todos los trámites</option></select>
       <select id="q-est" onchange="renderConsulta()">
         <option value="">Todos los estados</option>

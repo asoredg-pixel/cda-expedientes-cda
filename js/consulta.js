@@ -2185,6 +2185,134 @@ function conConsultaAppendMore(){
   if(rest<=0){if(btn)btn.remove();}
   else if(btn)btn.textContent='Cargar '+CON_CONSULTA_PAGE+' más (quedan '+rest+')';
 }
+function consultaBusquedaRank(item,q){
+  const ql=String(q||'').toLowerCase().trim();
+  if(!ql||!item)return 9;
+  const ids=[];
+  const names=[];
+  if(item._consulta_act_libre){
+    const t=item._act_libre_task||(item.tasks&&item.tasks[0])||{};
+    ids.push(item._exp, t.codigo);
+    names.push(t.actividad, t.desc, t.interesadoNombre);
+  }else{
+    ids.push(item._exp, item._resolucion);
+    names.push(typeof getNom==='function'?getNom(item):'', item._tipo_solicitud);
+    const tram=typeof getTram==='function'?getTram(item._tramite, item):null;
+    if(tram&&tram.nombre)names.push(tram.nombre);
+    (item.tasks||[]).forEach(function(t){
+      if(!t||t.eliminada)return;
+      if(t.codigo)ids.push(t.codigo);
+      names.push(t.actividad, t.desc);
+    });
+  }
+  let best=99;
+  const rankFn=typeof busquedaIdRank==='function'?busquedaIdRank:function(){return 99;};
+  ids.forEach(function(id){
+    const r=rankFn(id, ql);
+    if(r<best)best=r;
+  });
+  if(best<99)return best;
+  const nb=names.filter(Boolean).join(' ').toLowerCase();
+  if(nb.includes(ql))return 5;
+  return 8;
+}
+function ordenarConsultaPorTitulo(list,q){
+  const ql=String(q||'').trim();
+  const arr=list||[];
+  if(!ql)return arr;
+  return arr.map(function(item,i){return {item:item,i:i,r:consultaBusquedaRank(item,ql)};})
+    .sort(function(a,b){return a.r-b.r||a.i-b.i;})
+    .map(function(x){return x.item;});
+}
+function consultaBusqEtiqueta(item){
+  if(item&&item._consulta_act_libre){
+    const t=item._act_libre_task||(item.tasks&&item.tasks[0])||{};
+    const cod=String(item._exp||t.codigo||'').trim();
+    return {val:cod, titulo:cod||'Actividad', sub:String(t.actividad||t.desc||'Actividad'), tag:'Actividad'};
+  }
+  const esP=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(item))||!!(item&&(item._es_pqrs||item._radicado_secretaria));
+  const tram=typeof getTram==='function'?getTram(item._tramite, item):null;
+  const nom=typeof getNom==='function'?getNom(item):'';
+  const num=String((item&&item._exp)||'').trim();
+  return {val:num, titulo:num||'—', sub:[tram&&tram.nombre, nom].filter(Boolean).join(' · '), tag:esP?'PQRSD':'Trámite'};
+}
+function consultaBusqItems(q){
+  const ql=String(q||'').trim().toLowerCase();
+  if(!ql)return [];
+  const out=[];
+  const base=typeof expsAmbito==='function'?expsAmbito():(typeof exps!=='undefined'?exps:[]);
+  (base||[]).forEach(function(e){
+    if(!e||(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(e)))return;
+    const r=consultaBusquedaRank(e, ql);
+    if(r>=8)return;
+    out.push({item:e,r:r});
+  });
+  let libres=[];
+  if(typeof shouldIncludeActLibresEnConsulta!=='function'||shouldIncludeActLibresEnConsulta()){
+    libres=typeof actLibresAmbitoConsulta==='function'
+      ?actLibresAmbitoConsulta()
+      :(typeof actividadesLibres!=='undefined'?actividadesLibres:[]);
+  }
+  (libres||[]).forEach(function(t){
+    if(!t||t.eliminada)return;
+    const stub={_consulta_act_libre:true,_exp:t.codigo||'',_act_libre_task:t,tasks:[t]};
+    const r=consultaBusquedaRank(stub, ql);
+    if(r>=8)return;
+    out.push({item:stub,r:r});
+  });
+  out.sort(function(a,b){return a.r-b.r;});
+  return out.slice(0,12);
+}
+function consultaBusqPintar(inp){
+  const portal=document.getElementById('q-txt-sug');
+  if(!portal)return;
+  const q=String((inp&&inp.value)||'').trim();
+  if(q.length<1){portal.style.display='none';portal.innerHTML='';return;}
+  const hits=consultaBusqItems(q);
+  if(!hits.length){
+    portal.style.display='block';
+    portal.innerHTML='<div style="padding:8px 10px;font-size:12px;color:var(--tx3)">Sin coincidencias en el título. Abajo quedan también las del contenido.</div>';
+    return;
+  }
+  portal.innerHTML=hits.map(function(h){
+    const et=consultaBusqEtiqueta(h.item);
+    const tagCol=et.tag==='PQRSD'?'#6d3fa8':(et.tag==='Actividad'?'var(--pu)':'var(--bl)');
+    return '<button type="button" class="entrega-resp-sug-btn" data-val="'+escAttr(et.val)+'" onmousedown="event.preventDefault();consultaBusqElegir(this.getAttribute(\'data-val\'))">'+
+      '<span style="color:'+tagCol+';font-weight:600">'+escAttr(et.tag)+'</span> · <strong>'+escAttr(et.titulo)+'</strong>'+
+      (et.sub?(' · '+escAttr(et.sub)):'')+'</button>';
+  }).join('');
+  portal.style.display='block';
+}
+function consultaBusqAbrir(inp){
+  if(!inp)return;
+  try{inp.select();}catch(e){}
+  consultaBusqPintar(inp);
+}
+function consultaBusqInput(inp){
+  consultaBusqPintar(inp);
+  clearTimeout(window._conBusqT);
+  window._conBusqT=setTimeout(function(){renderConsulta();},180);
+}
+function consultaBusqElegir(valor){
+  const inp=document.getElementById('q-txt');
+  if(inp)inp.value=valor||'';
+  consultaBusqCerrar();
+  clearTimeout(window._conBusqT);
+  renderConsulta();
+}
+function consultaBusqCerrar(){
+  const portal=document.getElementById('q-txt-sug');
+  if(portal)portal.style.display='none';
+}
+function consultaBusqKey(ev,inp){
+  if(!ev)return;
+  if(ev.key==='Escape'){consultaBusqCerrar();if(inp)inp.blur();return;}
+  if(ev.key!=='Enter')return;
+  ev.preventDefault();
+  clearTimeout(window._conBusqT);
+  consultaBusqCerrar();
+  renderConsulta();
+}
 function renderConsulta(){
   actualizarConsultaPqrsUI();
   const sl=document.querySelector('#pg-con .card > .slbl');
@@ -2217,7 +2345,7 @@ function renderConsulta(){
     return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&mAct&&mf;
   }),'q');
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
-  const list=listExps.concat(listLibres);
+  const list=ordenarConsultaPorTitulo(listExps.concat(listLibres), q);
   const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?' — todas las PQRSD radicadas':esSecretaria()?' — PQRSD radicadas':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
