@@ -36,6 +36,7 @@ describe('Consolidado del encargado: buscar por corte', () => {
     const body = pers.slice(ini, fin)
     expect(body).toContain('esNcaDeguv()')
     expect(body).toContain('esJurisdiccional()')
+    expect(body).toContain('esAdministrador()')
   })
 
   it('sin corte no consulta Firestore', async () => {

@@ -2465,7 +2465,7 @@ function consultaBusqKey(ev,inp){
 function renderConsulta(){
   actualizarConsultaPqrsUI();
   const sl=document.querySelector('#pg-con .card > .slbl');
-  if(sl)sl.textContent=esModoCiudadano()?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':esModoOficinaDeguv()?'Consulta PQRSD — todas las solicitudes radicadas':esSecretaria()?'Consulta PQRSD — radicaciones y seguimiento':esModoResponsable()?'Consulta — interesado, contacto, información contable y actividades':'Búsqueda avanzada — línea de tiempo completa';
+  if(sl)sl.textContent=esModoCiudadano()?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':esModoOficinaDeguv()?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()?'Consulta PQRSD — por atender y atendidas de los últimos 30 días':'Consulta PQRSD — por atender y atendidas de los últimos 30 días de su oficina'):esSecretaria()?'Consulta PQRSD — radicaciones y seguimiento':esModoResponsable()?'Consulta — interesado, contacto, información contable y actividades':'Búsqueda avanzada — línea de tiempo completa';
   const q=(document.getElementById('q-txt').value||'').trim();
   const qt=document.getElementById('q-tram').value;
   const qe=document.getElementById('q-est').value;
@@ -2495,7 +2495,7 @@ function renderConsulta(){
   }),'q');
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=ordenarConsultaPorTitulo(listExps.concat(listLibres), q);
-  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?' — todas las PQRSD radicadas':esSecretaria()?' — PQRSD radicadas':' — '+labelDepto(deptoActivo);
+  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — PQRSD radicadas':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
   if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';

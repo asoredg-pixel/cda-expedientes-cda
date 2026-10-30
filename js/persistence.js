@@ -309,6 +309,8 @@ async function loadLS(){
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
       if(typeof ncaPqrsPinsApplyFromGlobal==='function')ncaPqrsPinsApplyFromGlobal(g);
       if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
+      if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
+      if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
     }
     await cargarPartesSistema();
     await cargarPersonasColeccion();
@@ -538,14 +540,60 @@ function aplicarMarcasBandeja(exp){
   }
   exp.reqAlerta=req;
   exp.esPqrs=typeof esPqrsSecretaria==='function'?!!esPqrsSecretaria(exp):!!(exp._es_pqrs||exp._radicado_secretaria);
+  const yaPqrs=!!exp.pqrsAbierta||!!String(exp.pqrsCerradaEn||'')||!!String(exp.pqrsPendienteOficina||'')||!!String(exp.pqrsCerradaClave||'');
+  if(exp.esPqrs||yaPqrs){
+    const cerrada=!!exp.esPqrs&&(typeof pqrsEstaCerrada==='function'?!!pqrsEstaCerrada(exp):(exp._pqrs_estado_oficina==='cerrado'||exp._estado==='Atendido'));
+    const ofi=exp.esPqrs?oficinaPqrsMarca(exp):'';
+    exp.pqrsAbierta=!!(exp.esPqrs&&!cerrada);
+    exp.pqrsCerradaEn=(exp.esPqrs&&cerrada)?fechaCierrePqrsMarca(exp):'';
+    exp.pqrsPendienteOficina=(exp.pqrsAbierta&&ofi)?ofi:'';
+    exp.pqrsCerradaClave=(exp.esPqrs&&cerrada)?clavePqrsCerrada(ofi,exp.pqrsCerradaEn):'';
+  }
   return exp;
+}
+function oficinaPqrsMarca(exp){
+  return String((exp&&exp._pqrs_oficina)||'').trim();
+}
+function clavePqrsCerrada(oficina,fecha){
+  const ofi=String(oficina||'').trim();
+  const f=String(fecha||'').slice(0,10);
+  if(!ofi||!/^\d{4}-\d{2}-\d{2}$/.test(f))return '';
+  return ofi+'|'+f;
+}
+function corteFechaMarca(dias){
+  const d=new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-(dias||0));
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fechaCierrePqrsMarca(exp){
+  let f=String((exp&&(exp._pqrs_respuesta_fecha||exp._fecha_res))||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f)&&exp&&exp._fechas_estado){
+    try{
+      const fe=typeof exp._fechas_estado==='string'?JSON.parse(exp._fechas_estado):exp._fechas_estado;
+      f=String((fe&&fe.Atendido)||'').slice(0,10);
+    }catch(e){}
+  }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(f))return f;
+  return '1970-01-01';
 }
 function marcasBandejaDistintas(data,exp){
   const a=data||{};
   return JSON.stringify(a.pendientes||[])!==JSON.stringify(exp.pendientes||[])
     ||!!a.seguimiento!==!!exp.seguimiento
     ||!!a.reqAlerta!==!!exp.reqAlerta
-    ||!!a.esPqrs!==!!exp.esPqrs;
+    ||!!a.esPqrs!==!!exp.esPqrs
+    ||!!a.pqrsAbierta!==!!exp.pqrsAbierta
+    ||String(a.pqrsCerradaEn||'')!==String(exp.pqrsCerradaEn||'')
+    ||String(a.pqrsPendienteOficina||'')!==String(exp.pqrsPendienteOficina||'')
+    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'');
+}
+function marcasPqrsOficinaDistintas(data,exp){
+  const a=data||{};
+  return !!a.pqrsAbierta!==!!exp.pqrsAbierta
+    ||String(a.pqrsCerradaEn||'')!==String(exp.pqrsCerradaEn||'')
+    ||String(a.pqrsPendienteOficina||'')!==String(exp.pqrsPendienteOficina||'')
+    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'');
 }
 async function asegurarMarcasBandeja(){
   if(window._bandejaMarcasListas||window._bandejaMarcasCorriendo)return;
@@ -576,7 +624,11 @@ async function asegurarMarcasBandeja(){
             pendientes:exp.pendientes,
             seguimiento:exp.seguimiento,
             reqAlerta:exp.reqAlerta,
-            esPqrs:exp.esPqrs
+            esPqrs:exp.esPqrs,
+            pqrsAbierta:!!exp.pqrsAbierta,
+            pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
+            pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),
+            pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
           },{merge:true});
           n++;
         }catch(errW){console.warn('marca expediente',d.id,errW);}
@@ -586,10 +638,63 @@ async function asegurarMarcasBandeja(){
     window._bandejaMarcasListas=true;
     console.log('Marcas de bandeja listas',n);
     if(typeof initRealtimeSync==='function')initRealtimeSync();
+    if(typeof asegurarMarcasPqrsOficina==='function')asegurarMarcasPqrsOficina();
   }catch(err){
     console.warn('asegurarMarcasBandeja',err);
   }finally{
     window._bandejaMarcasCorriendo=false;
+  }
+}
+/** Una sola vez: marca las PQRSD abiertas y la fecha de las cerradas, sin tocar updatedAt. */
+async function asegurarMarcasPqrsOficina(){
+  if(window._pqrsOficinaPropiaListo||window._pqrsOficinaCorteCorriendo)return;
+  if(!window._bandejaMarcasListas)return;
+  const db=window._db;
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  const puede=rol==='admin'||rol==='guaviare'||rol==='guainia'||rol==='vaupes';
+  if(!puede||!db||!window._fsGetDocs||!window._fsQuery||!window._fsWhere||!window._fsSetDoc||!window._fsCollection||!window._fsDoc)return;
+  window._pqrsOficinaCorteCorriendo=true;
+  try{
+    const deptos=(typeof DEPTOS_EXPEDIENTES_ACTIVOS!=='undefined'&&DEPTOS_EXPEDIENTES_ACTIVOS.length)
+      ?DEPTOS_EXPEDIENTES_ACTIVOS.slice()
+      :(typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare']);
+    let n=0;
+    let fallos=0;
+    for(let i=0;i<deptos.length;i++){
+      const depto=deptos[i];
+      let snap;
+      try{
+        const ref=window._fsQuery(window._fsCollection(db,'departamentos',depto,'expedientes'),window._fsWhere('esPqrs','==',true));
+        snap=await window._fsGetDocs(ref);
+      }catch(err){console.warn('marcas pqrs oficina',depto,err);fallos++;continue;}
+      const docs=snap&&snap.docs?snap.docs:[];
+      for(let j=0;j<docs.length;j++){
+        const d=docs[j];
+        const data=d.data?d.data()||{}:{};
+        const exp=Object.assign({},data,{_exp:data._exp||d.id,_depto:data._depto||depto});
+        aplicarMarcasBandeja(exp);
+        if(!marcasPqrsOficinaDistintas(data,exp))continue;
+        try{
+          await window._fsSetDoc(d.ref||window._fsDoc(db,'departamentos',depto,'expedientes',d.id),{
+            pqrsAbierta:!!exp.pqrsAbierta,
+            pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
+            pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),
+            pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
+          },{merge:true});
+          n++;
+        }catch(errW){fallos++;console.warn('marca pqrs oficina',d.id,errW);}
+      }
+    }
+    if(fallos)return;
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{pqrsOficinaCorteListo:true,pqrsOficinaPropiaListo:true},{merge:true});
+    window._pqrsOficinaCorteListo=true;
+    window._pqrsOficinaPropiaListo=true;
+    console.log('Corte PQRSD de oficinas listo',n);
+    if(typeof initRealtimeSync==='function')initRealtimeSync();
+  }catch(err){
+    console.warn('asegurarMarcasPqrsOficina',err);
+  }finally{
+    window._pqrsOficinaCorteCorriendo=false;
   }
 }
 async function saveExpedienteDoc(deptoId,exp){
@@ -2205,6 +2310,11 @@ function initRealtimeGlobalSync(){
     const g=snap.data()||{};
     avisarTamanoGlobalSiCrece(g);
     if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
+    const cortePqrsYa=!!window._pqrsOficinaCorteListo;
+    const propiaYa=!!window._pqrsOficinaPropiaListo;
+    if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
+    if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
+    if(((!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo))&&typeof initRealtimeSync==='function')initRealtimeSync();
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
       setMantenimientoEstadoLocal(g.mantenimiento);
@@ -2244,7 +2354,8 @@ function initRealtimeGlobalSync(){
 }
 function consolidadoBuscaPorCorte(){
   return (typeof esNcaDeguv==='function'&&esNcaDeguv())
-    ||(typeof esJurisdiccional==='function'&&esJurisdiccional());
+    ||(typeof esJurisdiccional==='function'&&esJurisdiccional())
+    ||(typeof esAdministrador==='function'&&esAdministrador());
 }
 function consTramiteBusqueda(){
   try{
@@ -2272,7 +2383,7 @@ function asegurarEscuchaConsolidado(){
   initRealtimeSync();
   if(typeof reloadExpedientesTrasLogin==='function')reloadExpedientesTrasLogin();
 }
-/** Encargado NCA y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
+/** Encargado NCA, administrador y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
 async function buscarConsolidadoNca(){
   if(!consolidadoBuscaPorCorte()){
     if(typeof renderConsolidado==='function')renderConsolidado();
@@ -2352,7 +2463,11 @@ async function buscarConsolidadoNca(){
 }
 function initAppRealtimeSync(){
   initRealtimeSync();
-  setTimeout(function(){if(typeof asegurarMarcasBandeja==='function')asegurarMarcasBandeja();},1500);
+  setTimeout(function(){
+    Promise.resolve(typeof asegurarMarcasBandeja==='function'?asegurarMarcasBandeja():null).then(function(){
+      if(typeof asegurarMarcasPqrsOficina==='function')asegurarMarcasPqrsOficina();
+    });
+  },1500);
   initRealtimeCfgSyncAll();
   initRealtimeGlobalSync();
   if(typeof startUsuariosFirestoreListener==='function')startUsuariosFirestoreListener();
@@ -2493,6 +2608,9 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
   let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
   if(filtro&&window._fsQuery&&window._fsWhere){
     if(filtro.tipo==='updated')ref=window._fsQuery(ref,window._fsWhere('updatedAt','>=',filtro.desde));
+    else if(filtro.tipo==='desde')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'>=',filtro.desde));
+    else if(filtro.tipo==='rango')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'>=',filtro.desde),window._fsWhere(filtro.campo,'<=',filtro.hasta));
+    else if(filtro.tipo==='igual')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',filtro.valor));
     else if(filtro.tipo==='bool')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',true));
     else if(filtro.tipo==='nombre')ref=window._fsQuery(ref,window._fsWhere('pendientes','array-contains',filtro.nombre));
   }
@@ -2534,10 +2652,22 @@ function initRealtimeSync(){
     const esOficina=rolLogin==='secretaria'||rolLogin==='oap_deguv'||rolLogin==='rn_deguv'||rolLogin==='admin_deguv'||rolLogin==='ds_deguv';
     const verReq=!esResp||cargo==='coordinador'||cargo==='contable';
     deptos.forEach(function(depto){
-      escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:esResp?corteCalendarioIso(30):corteBandejaIso()});
+      const ofiPqrs=esOficina&&rolLogin!=='secretaria';
+      const ofiCorte=ofiPqrs&&window._pqrsOficinaCorteListo;
+      const ofiPropia=ofiPqrs&&window._pqrsOficinaPropiaListo&&rolLogin!=='ds_deguv';
+      if(!ofiCorte&&!ofiPropia)escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:esResp?corteCalendarioIso(30):corteBandejaIso()});
       if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
       if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});
-      if(esOficina&&rolLogin!=='secretaria')escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
+      if(ofiPropia){
+        const corteOfi=corteFechaMarca(30);
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'igual',campo:'pqrsPendienteOficina',valor:rolLogin});
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'rango',campo:'pqrsCerradaClave',desde:rolLogin+'|'+corteOfi,hasta:rolLogin+'|\uf8ff'});
+      }else if(ofiPqrs&&ofiCorte){
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'pqrsAbierta'});
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'desde',campo:'pqrsCerradaEn',desde:corteFechaMarca(30)});
+      }else if(esOficina&&rolLogin!=='secretaria'){
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
+      }
       if(esResp&&nombre)escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
     });
     _fsUnsub=unsubs;
@@ -2587,13 +2717,15 @@ function initRealtimeSync(){
 }
 function repararMarcaExpediente(exp){
   if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
-  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs]);
+  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||'')]);
   aplicarMarcasBandeja(exp);
-  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs]);
+  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||'')]);
   if(antes===despues)return;
   const depto=String(exp._depto||'guaviare').trim();
   window._fsSetDoc(window._fsDoc(window._db,'departamentos',depto,'expedientes',exp._exp),{
-    pendientes:exp.pendientes,seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs
+    pendientes:exp.pendientes,seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
+    pqrsAbierta:!!exp.pqrsAbierta,pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
+    pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
   },{merge:true}).catch(function(err){console.warn('repararMarcaExpediente',err);});
 }
 async function traerExpedienteSiFalta(q){
