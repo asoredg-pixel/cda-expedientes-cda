@@ -311,6 +311,7 @@ async function loadLS(){
       if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
       if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
       if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
+      if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
     }
     await cargarPartesSistema();
     await cargarPersonasColeccion();
@@ -540,7 +541,7 @@ function aplicarMarcasBandeja(exp){
   }
   exp.reqAlerta=req;
   exp.esPqrs=typeof esPqrsSecretaria==='function'?!!esPqrsSecretaria(exp):!!(exp._es_pqrs||exp._radicado_secretaria);
-  const yaPqrs=!!exp.pqrsAbierta||!!String(exp.pqrsCerradaEn||'')||!!String(exp.pqrsPendienteOficina||'')||!!String(exp.pqrsCerradaClave||'');
+  const yaPqrs=!!exp.pqrsAbierta||!!String(exp.pqrsCerradaEn||'')||!!String(exp.pqrsPendienteOficina||'')||!!String(exp.pqrsCerradaClave||'')||!!String(exp.pqrsRadicadaEn||'');
   if(exp.esPqrs||yaPqrs){
     const cerrada=!!exp.esPqrs&&(typeof pqrsEstaCerrada==='function'?!!pqrsEstaCerrada(exp):(exp._pqrs_estado_oficina==='cerrado'||exp._estado==='Atendido'));
     const ofi=exp.esPqrs?oficinaPqrsMarca(exp):'';
@@ -548,6 +549,7 @@ function aplicarMarcasBandeja(exp){
     exp.pqrsCerradaEn=(exp.esPqrs&&cerrada)?fechaCierrePqrsMarca(exp):'';
     exp.pqrsPendienteOficina=(exp.pqrsAbierta&&ofi)?ofi:'';
     exp.pqrsCerradaClave=(exp.esPqrs&&cerrada)?clavePqrsCerrada(ofi,exp.pqrsCerradaEn):'';
+    exp.pqrsRadicadaEn=exp.esPqrs?fechaRadicacionPqrsMarca(exp):'';
   }
   return exp;
 }
@@ -565,6 +567,14 @@ function corteFechaMarca(dias){
   d.setHours(0,0,0,0);
   d.setDate(d.getDate()-(dias||0));
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fechaRadicacionPqrsMarca(exp){
+  const keys=['_pqrs_radicado_menu_en','_fecha_solicitud','_fecha','createdAt'];
+  for(let i=0;i<keys.length;i++){
+    const f=String((exp&&exp[keys[i]])||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(f))return f;
+  }
+  return '1970-01-01';
 }
 function fechaCierrePqrsMarca(exp){
   let f=String((exp&&(exp._pqrs_respuesta_fecha||exp._fecha_res))||'').slice(0,10);
@@ -586,14 +596,16 @@ function marcasBandejaDistintas(data,exp){
     ||!!a.pqrsAbierta!==!!exp.pqrsAbierta
     ||String(a.pqrsCerradaEn||'')!==String(exp.pqrsCerradaEn||'')
     ||String(a.pqrsPendienteOficina||'')!==String(exp.pqrsPendienteOficina||'')
-    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'');
+    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'')
+    ||String(a.pqrsRadicadaEn||'')!==String(exp.pqrsRadicadaEn||'');
 }
 function marcasPqrsOficinaDistintas(data,exp){
   const a=data||{};
   return !!a.pqrsAbierta!==!!exp.pqrsAbierta
     ||String(a.pqrsCerradaEn||'')!==String(exp.pqrsCerradaEn||'')
     ||String(a.pqrsPendienteOficina||'')!==String(exp.pqrsPendienteOficina||'')
-    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'');
+    ||String(a.pqrsCerradaClave||'')!==String(exp.pqrsCerradaClave||'')
+    ||String(a.pqrsRadicadaEn||'')!==String(exp.pqrsRadicadaEn||'');
 }
 async function asegurarMarcasBandeja(){
   if(window._bandejaMarcasListas||window._bandejaMarcasCorriendo)return;
@@ -628,7 +640,8 @@ async function asegurarMarcasBandeja(){
             pqrsAbierta:!!exp.pqrsAbierta,
             pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
             pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),
-            pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
+            pqrsCerradaClave:String(exp.pqrsCerradaClave||''),
+            pqrsRadicadaEn:String(exp.pqrsRadicadaEn||'')
           },{merge:true});
           n++;
         }catch(errW){console.warn('marca expediente',d.id,errW);}
@@ -647,7 +660,8 @@ async function asegurarMarcasBandeja(){
 }
 /** Una sola vez: marca las PQRSD abiertas y la fecha de las cerradas, sin tocar updatedAt. */
 async function asegurarMarcasPqrsOficina(){
-  if(window._pqrsOficinaPropiaListo||window._pqrsOficinaCorteCorriendo)return;
+  if(window._pqrsOficinaCorteCorriendo)return;
+  if(window._pqrsOficinaPropiaListo&&window._secretariaRadicacionLista)return;
   if(!window._bandejaMarcasListas)return;
   const db=window._db;
   const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
@@ -679,16 +693,18 @@ async function asegurarMarcasPqrsOficina(){
             pqrsAbierta:!!exp.pqrsAbierta,
             pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
             pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),
-            pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
+            pqrsCerradaClave:String(exp.pqrsCerradaClave||''),
+            pqrsRadicadaEn:String(exp.pqrsRadicadaEn||'')
           },{merge:true});
           n++;
         }catch(errW){fallos++;console.warn('marca pqrs oficina',d.id,errW);}
       }
     }
     if(fallos)return;
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{pqrsOficinaCorteListo:true,pqrsOficinaPropiaListo:true},{merge:true});
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{pqrsOficinaCorteListo:true,pqrsOficinaPropiaListo:true,secretariaRadicacionLista:true},{merge:true});
     window._pqrsOficinaCorteListo=true;
     window._pqrsOficinaPropiaListo=true;
+    window._secretariaRadicacionLista=true;
     console.log('Corte PQRSD de oficinas listo',n);
     if(typeof initRealtimeSync==='function')initRealtimeSync();
   }catch(err){
@@ -2312,9 +2328,11 @@ function initRealtimeGlobalSync(){
     if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
     const cortePqrsYa=!!window._pqrsOficinaCorteListo;
     const propiaYa=!!window._pqrsOficinaPropiaListo;
+    const secYa=!!window._secretariaRadicacionLista;
     if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
     if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
-    if(((!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo))&&typeof initRealtimeSync==='function')initRealtimeSync();
+    if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
+    if(((!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo)||(!secYa&&window._secretariaRadicacionLista))&&typeof initRealtimeSync==='function')initRealtimeSync();
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
       setMantenimientoEstadoLocal(g.mantenimiento);
@@ -2655,7 +2673,13 @@ function initRealtimeSync(){
       const ofiPqrs=esOficina&&rolLogin!=='secretaria';
       const ofiCorte=ofiPqrs&&window._pqrsOficinaCorteListo;
       const ofiPropia=ofiPqrs&&window._pqrsOficinaPropiaListo&&rolLogin!=='ds_deguv';
-      if(!ofiCorte&&!ofiPropia)escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:esResp?corteCalendarioIso(30):corteBandejaIso()});
+      const esSec=rolLogin==='secretaria';
+      const esEnc=!esResp&&!esOficina;
+      if(!esResp&&!esEnc&&!esSec&&!ofiCorte&&!ofiPropia)escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
+      if(esSec){
+        if(window._secretariaRadicacionLista)escucharConsultaDepto(db,depto,unsubs,{tipo:'desde',campo:'pqrsRadicadaEn',desde:corteFechaMarca(10)});
+        else escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
+      }
       if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
       if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});
       if(ofiPropia){
@@ -2717,15 +2741,16 @@ function initRealtimeSync(){
 }
 function repararMarcaExpediente(exp){
   if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
-  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||'')]);
+  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   aplicarMarcasBandeja(exp);
-  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||'')]);
+  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   if(antes===despues)return;
   const depto=String(exp._depto||'guaviare').trim();
   window._fsSetDoc(window._fsDoc(window._db,'departamentos',depto,'expedientes',exp._exp),{
     pendientes:exp.pendientes,seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
     pqrsAbierta:!!exp.pqrsAbierta,pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
-    pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),pqrsCerradaClave:String(exp.pqrsCerradaClave||'')
+    pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),pqrsCerradaClave:String(exp.pqrsCerradaClave||''),
+    pqrsRadicadaEn:String(exp.pqrsRadicadaEn||'')
   },{merge:true}).catch(function(err){console.warn('repararMarcaExpediente',err);});
 }
 async function traerExpedienteSiFalta(q){

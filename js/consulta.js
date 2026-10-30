@@ -2462,10 +2462,16 @@ function consultaBusqKey(ev,inp){
   }
   renderConsulta();
 }
+function consultaTopeSecretaria(list,q){
+  if(typeof esSecretaria!=='function'||!esSecretaria())return list||[];
+  if(String(q||'').trim())return list||[];
+  const fecha=function(e){return String((e&&(e.pqrsRadicadaEn||e._fecha_solicitud||e._fecha))||'').slice(0,10);};
+  return (list||[]).slice().sort(function(a,b){return fecha(b).localeCompare(fecha(a));}).slice(0,10);
+}
 function renderConsulta(){
   actualizarConsultaPqrsUI();
   const sl=document.querySelector('#pg-con .card > .slbl');
-  if(sl)sl.textContent=esModoCiudadano()?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':esModoOficinaDeguv()?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()?'Consulta PQRSD — por atender y atendidas de los últimos 30 días':'Consulta PQRSD — por atender y atendidas de los últimos 30 días de su oficina'):esSecretaria()?'Consulta PQRSD — radicaciones y seguimiento':esModoResponsable()?'Consulta — interesado, contacto, información contable y actividades':'Búsqueda avanzada — línea de tiempo completa';
+  if(sl)sl.textContent=esModoCiudadano()?'Consulta de trámites y PQRSD — busque por número de expediente o solicitud':esModoOficinaDeguv()?(typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv()?'Consulta PQRSD — por atender y atendidas de los últimos 30 días':'Consulta PQRSD — por atender y atendidas de los últimos 30 días de su oficina'):esSecretaria()?'Consulta PQRSD — las últimas 10. Escriba el número para ver otra':esModoResponsable()?'Consulta — interesado, contacto, información contable y actividades':'Búsqueda avanzada — línea de tiempo completa';
   const q=(document.getElementById('q-txt').value||'').trim();
   const qt=document.getElementById('q-tram').value;
   const qe=document.getElementById('q-est').value;
@@ -2493,9 +2499,10 @@ function renderConsulta(){
     const mAct=basPqrs?true:(typeof matchActividadFiltroExp==='function'?matchActividadFiltroExp(e,qact,qi):matchActividadFiltro(e,qact));
     return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&mAct&&mf;
   }),'q');
+  const listExpsVis=esSecretaria()?consultaTopeSecretaria(listExps,q):listExps;
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
-  const list=ordenarConsultaPorTitulo(listExps.concat(listLibres), q);
-  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — PQRSD radicadas':' — '+labelDepto(deptoActivo);
+  const list=ordenarConsultaPorTitulo(listExpsVis.concat(listLibres), q);
+  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
   if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';

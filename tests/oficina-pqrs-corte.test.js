@@ -34,7 +34,7 @@ function ctxMarcas() {
   })
   runInContext(extraer(pers, [
     'oficinaPqrsMarca', 'clavePqrsCerrada', 'corteFechaMarca', 'fechaCierrePqrsMarca',
-    'aplicarMarcasBandeja', 'marcasPqrsOficinaDistintas'
+    'fechaRadicacionPqrsMarca', 'aplicarMarcasBandeja', 'marcasPqrsOficinaDistintas'
   ]), c)
   return c
 }
@@ -84,7 +84,7 @@ describe('Corte de PQRSD para oficinas', () => {
     expect(tramite.pqrsAbierta).toBeUndefined()
     expect(c.marcasPqrsOficinaDistintas({}, abierta)).toBe(true)
     expect(c.marcasPqrsOficinaDistintas({
-      pqrsAbierta: true, pqrsCerradaEn: '', pqrsPendienteOficina: 'oap_deguv', pqrsCerradaClave: ''
+      pqrsAbierta: true, pqrsCerradaEn: '', pqrsPendienteOficina: 'oap_deguv', pqrsCerradaClave: '', pqrsRadicadaEn: '1970-01-01'
     }, abierta)).toBe(false)
   })
 
@@ -93,7 +93,7 @@ describe('Corte de PQRSD para oficinas', () => {
     expect(pers).toContain("campo:'pqrsCerradaClave'")
     expect(pers).toContain("rolLogin!=='ds_deguv'")
     expect(pers).toContain('corteFechaMarca(30)')
-    expect(pers).toContain('if(!ofiCorte&&!ofiPropia)')
+    expect(pers).toContain('if(!esResp&&!esEnc&&!esSec&&!ofiCorte&&!ofiPropia)')
     expect(pers).toContain("esOficina&&rolLogin!=='secretaria'")
     expect(pers).toContain('pqrsOficinaPropiaListo')
     const ini = pers.indexOf('if(ofiPropia)')

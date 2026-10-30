@@ -30176,6 +30176,9 @@ function updateActEstFilterForEnc(forEnc){
   }
   if(optNotif)optNotif.hidden=!(!isDir&&(puedeFirmarBan||isResp));
   if(optVenc){optVenc.hidden=false;optVenc.textContent='Vencidas';}
+  const optDone=sel.querySelector('option[value="done"]');
+  const sinAtendidas=deptView&&typeof esNcaDeguv==='function'&&esNcaDeguv();
+  if(optDone)optDone.hidden=!!sinAtendidas;
   const optReq=sel.querySelector('option[value="req"]');
   const reqSoloConsulta=!deptView&&typeof reqPaletaSoloConsulta==='function'&&reqPaletaSoloConsulta();
   if(optReq)optReq.hidden=!((deptView||reqSoloConsulta)&&typeof reqPaletaVisible==='function'&&reqPaletaVisible());
@@ -30199,6 +30202,7 @@ function updateActEstFilterForEnc(forEnc){
   });
   if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
   else if(cv==='revisados')sel.value='porver';
+  else if(cv==='done'&&optDone&&optDone.hidden)sel.value='pend';
   else if(cv==='porfirma'&&optPorFirma&&optPorFirma.hidden)sel.value='pend';
 }
 function exportarActividadesExcel(){
@@ -32762,6 +32766,11 @@ function renderActividades(opts){
     const selMig=document.getElementById('f-act-est');
     if(selMig)selMig.value='porfirma';
   }
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv()&&filtroAct==='done'){
+    filtroAct='pend';
+    const selDone=document.getElementById('f-act-est');
+    if(selDone)selDone.value='pend';
+  }
   const q=(document.getElementById('s-act')?document.getElementById('s-act').value:'').toLowerCase();
   // Encargado / «Todos»: bandeja «Por revisar» = entregas de todos. Otro responsable: solo las suyas.
   const bandejaRevDepto=deptView&&(!respFilter||filterIsEnc);
@@ -32907,7 +32916,7 @@ function renderActividades(opts){
     const nReq=typeof reqPaletaContar==='function'?reqPaletaContar():0;
     cards.req=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Requerimientos</div>','#9a3412');
   }
-  cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)',doneTitulo);
+  if(!(typeof esNcaDeguv==='function'&&esNcaDeguv()))cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)',doneTitulo);
   // Orden de tarjetas según rol (responsable: Por revisar justo antes de Atendidas)
   const ordenMets=isResp&&!isVital&&!esDirAct
     ?['pend','prior','pornotif','porcorr','porver','porfirma','req','done']

@@ -1495,10 +1495,16 @@ function getPqrsPendientesTrasladoList(skipPeriodo){
   if(!skipPeriodo)list=filterExpsPeriodo(list,'pqrs-ofi');
   return list.sort(pqrsSortRecientePrimero);
 }
+function secretariaRadicacionEnCorte(e){
+  const corte=typeof corteFechaMarca==='function'?corteFechaMarca(10):'';
+  if(!corte)return true;
+  const f=String((e&&(e.pqrsRadicadaEn||e._fecha_solicitud||e._fecha))||'').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(f)&&f>=corte;
+}
 function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
-  const menuRad=all.filter(pqrsEsRadicadoMenuSecretaria);
+  const menuRad=all.filter(function(e){return pqrsEsRadicadoMenuSecretaria(e)&&secretariaRadicacionEnCorte(e);});
   const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortRecientePrimero);
   const asignadas=menuRad.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortMenuSecretariaAsignadas);
   const atendidas=menuRad.filter(e=>pqrsEstaCerrada(e));
