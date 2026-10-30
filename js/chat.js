@@ -1516,7 +1516,7 @@ function renderChatContacts(){
     }
     chatSyncSearchBarUi();
     if(!personas.length&&!actividades.length){
-      const adminToolsEmpty=(typeof esAdministrador==='function'&&esAdministrador())
+      const adminToolsEmpty=chatPuedeEnviarAvisoSoporte()
         ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
         :'';
       const emptyMsg=qNorm
@@ -1560,7 +1560,7 @@ function renderChatContacts(){
       {id:'personas',titulo:'Personas',filas:filasPersonas,unread:filasPersonas.reduce(function(n,f){return n+(f.unread||0);},0)},
       {id:'act',titulo:'Actividades',filas:filasAct,unread:unreadAct}
     ]).map(chatHtmlSeccion).join('');
-    const adminTools=(typeof esAdministrador==='function'&&esAdministrador())
+    const adminTools=chatPuedeEnviarAvisoSoporte()
       ?('<div class="chat-admin-tools"><button type="button" class="btn bsm bp chat-admin-bcast-btn" onclick="event.stopPropagation();chatAdminAbrirBroadcast()">📢 Enviar aviso</button></div>')
       :'';
     const sig=(window._chatActiveContactKey||'')+'|'+(window._chatVista||'')+'|q:'+qNorm+'|'+adminTools+html;
@@ -2075,15 +2075,24 @@ function chatAdminTargetsTodos(){
   });
   return out;
 }
+function chatPuedeEnviarAvisoSoporte(){
+  if(typeof esAdministrador==='function'&&esAdministrador())return true;
+  if(typeof esNcaDeguv==='function'&&esNcaDeguv())return true;
+  return false;
+}
 function chatAdminTargetsForScope(scope){
-  if(scope==='oficinas')return chatAdminTargetsOficinas();
-  if(scope==='deptos')return chatAdminTargetsDeptos();
-  if(scope==='responsables')return chatAdminTargetsResponsables();
-  return chatAdminTargetsTodos();
+  let list;
+  if(scope==='oficinas')list=chatAdminTargetsOficinas();
+  else if(scope==='deptos')list=chatAdminTargetsDeptos();
+  else if(scope==='responsables')list=chatAdminTargetsResponsables();
+  else list=chatAdminTargetsTodos();
+  const me=typeof chatEffectiveIdentity==='function'?chatEffectiveIdentity():null;
+  if(!me||chatIsAdminKey(me.key))return list;
+  return list.filter(function(c){return c&&!chatKeysMatch(c.key,me.key);});
 }
 function chatAdminAbrirBroadcast(){
-  if(!(typeof esAdministrador==='function'&&esAdministrador())){
-    if(typeof notif==='function')notif('Solo el Administrador puede enviar avisos','err');
+  if(!chatPuedeEnviarAvisoSoporte()){
+    if(typeof notif==='function')notif('No puede enviar avisos de Soporte','err');
     return;
   }
   window._chatVista='admin_broadcast';
@@ -2145,7 +2154,7 @@ function renderChatAdminBroadcast(){
   if(banner){banner.hidden=true;banner.style.display='none';}
 }
 async function chatAdminEnviarBroadcast(){
-  if(!(typeof esAdministrador==='function'&&esAdministrador())){notif('Solo el Administrador puede enviar avisos','err');return;}
+  if(!chatPuedeEnviarAvisoSoporte()){notif('No puede enviar avisos de Soporte','err');return;}
   const ta=document.getElementById('chat-admin-broadcast-text');
   const text=(ta&&ta.value||'').trim();
   if(!text){notif('Escriba el mensaje del aviso','err');return;}
