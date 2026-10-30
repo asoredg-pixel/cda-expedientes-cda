@@ -54,7 +54,7 @@ function montar(allowTramite) {
   }
   createContext(c)
   runInContext(extraerFunciones(read('js/consulta.js'), [
-    'reviewAsocEsPqrs', 'collectReviewAsocCandidatos', 'reviewAsocPuedeCrearExp',
+    'reviewAsocEsPqrs', 'reviewAsocRank', 'collectReviewAsocCandidatos', 'reviewAsocPuedeCrearExp',
     'renderReviewAsocPickPanel', 'confirmReviewAsocPick'
   ]), c)
   return c

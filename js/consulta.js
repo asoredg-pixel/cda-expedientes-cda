@@ -1140,6 +1140,37 @@ function reviewAsocEsPqrs(e){
   if(typeof expAsocEsRegistroPqrs==='function')return !!expAsocEsRegistroPqrs(e);
   return typeof esPqrsSecretaria==='function'&&!!esPqrsSecretaria(e);
 }
+/** 0 código exacto, 1 empieza por lo escrito, 2–3 nombre visible, 4+ solo el número parecido o el contenido. */
+function reviewAsocRank(item,q){
+  const ql=String(q||'').toLowerCase().trim();
+  if(!ql||!item)return 9;
+  const norm=function(s){return String(s||'').toLowerCase().replace(/[\s\-_.\/]/g,'');};
+  const qn=norm(ql);
+  if(item.tipo==='act'){
+    const t=item.t||{};
+    const cod=norm(t.codigo);
+    if(cod&&cod===qn)return 0;
+    if(cod&&qn&&cod.startsWith(qn))return 1;
+    const nom=String((typeof actLibreInteresadoLabel==='function'?actLibreInteresadoLabel(t):'')||t.interesadoNombre||t.actividad||t.desc||'').toLowerCase();
+    if(nom&&(nom===ql||nom.startsWith(ql)))return 2;
+    if(nom.includes(ql))return 3;
+    return 8;
+  }
+  const e=item.e||{};
+  const idn=norm(e._exp);
+  if(idn&&idn===qn)return 0;
+  if(idn&&qn&&idn.startsWith(qn))return 1;
+  const nom=String(typeof getNom==='function'?getNom(e):'').toLowerCase();
+  const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
+  const titulo=[nom,tram&&tram.nombre,e._tipo_solicitud].filter(Boolean).join(' ').toLowerCase();
+  if(nom&&(nom===ql||nom.startsWith(ql)))return 2;
+  if(titulo.includes(ql))return 3;
+  if(typeof busquedaIdRank==='function'){
+    const r=busquedaIdRank(e._exp,ql);
+    if(r<99)return 4+r;
+  }
+  return 8;
+}
 function collectReviewAsocCandidatos(q,ctx){
   ctx=ctx||{};
   const source=String(ctx.sourceExp||ctx.sourceCod||'').trim();
@@ -1162,7 +1193,13 @@ function collectReviewAsocCandidatos(q,ctx){
       items.push({tipo:'act',t:t,id:t.codigo||t.id});
     });
   }
-  return items.slice(0,80);
+  let out=items;
+  if(ql){
+    out=items.map(function(it,i){return {it:it,i:i,r:reviewAsocRank(it,ql)};})
+      .sort(function(a,b){return a.r-b.r||a.i-b.i;})
+      .map(function(x){return x.it;});
+  }
+  return out.slice(0,80);
 }
 function reviewAsocPickCardHtml(item){
   const q=(window._reviewAsocCtx||{}).q||'';
