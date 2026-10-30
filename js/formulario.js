@@ -81,7 +81,11 @@ function showTab(t){
     renderActividades();
   }
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
-  if(t==='cons'){initPeriodoFiltros('cons');renderConsolidado();}
+  if(t==='cons'){
+    if(typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado();
+    initPeriodoFiltros('cons');
+    renderConsolidado();
+  }
   if(t==='cfg'){
     updateDeptoUI();
     renderCfg();

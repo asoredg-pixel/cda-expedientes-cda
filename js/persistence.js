@@ -307,6 +307,7 @@ async function loadLS(){
       if(typeof pqrsMatrizApplySheetIdFromGlobal==='function')pqrsMatrizApplySheetIdFromGlobal(g);
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
       if(typeof ncaPqrsPinsApplyFromGlobal==='function')ncaPqrsPinsApplyFromGlobal(g);
+      if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
     }
     await cargarPartesSistema();
     await cargarPersonasColeccion();
@@ -391,8 +392,22 @@ async function reloadExpedientesTrasLogin(){
     ?await ensureFirestoreAuthReady()
     :{ok:!!(window._firebaseAuth&&window._firebaseAuth.currentUser)};
   if(!authReady||!authReady.ok)return false;
+  const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if((rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta){
+    updateSyncIndicator('synced');
+    return true;
+  }
   const deptos=deptosExpedientesAccesibles();
   let lastCount=0;
+  if(window._bandejaMarcasListas&&window._fsQuery&&!window._consEscuchaCompleta){
+    if(await esperarPrimerSnapExpedientes(deptos,EXP_PRIMER_SNAP_TOPE_MS)){
+      mergePendingExpBackup();
+      clearLegacyExpsLocalStorage();
+      if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
+      updateSyncIndicator('synced');
+    }
+    return true;
+  }
   // La escucha en tiempo real ya descarga todos los expedientes: repetirlo con getDocs duplica las lecturas.
   if(await esperarPrimerSnapExpedientes(deptos,EXP_PRIMER_SNAP_TOPE_MS)&&Array.isArray(exps)&&exps.length){
     mergePendingExpBackup();
@@ -465,6 +480,117 @@ function _fsStripUndefinedDeep(v){
   }
   return v;
 }
+function nombresPendientesExp(exp){
+  const set=[];
+  const add=function(n){
+    n=String(n||'').trim();
+    if(!n)return;
+    const k=n.toLowerCase();
+    if(set.some(function(x){return String(x).toLowerCase()===k;}))return;
+    set.push(n);
+  };
+  (exp&&exp.tasks||[]).forEach(function(t){
+    if(!t||t.eliminada)return;
+    let pend=false;
+    const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+    if(est&&est!=='Atendida')pend=true;
+    (t.asignados||[]).forEach(function(a){
+      if(a&&a.estado&&a.estado!=='atendido')pend=true;
+    });
+    const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+    if(f&&f!=='cerrada'&&f!=='cerrada_atendida')pend=true;
+    if(!pend)return;
+    if(t.responsable)add(t.responsable);
+    (t.responsables||[]).forEach(add);
+    (t.asignados||[]).forEach(function(a){
+      if(!a)return;
+      if(typeof a==='string')add(a);
+      else if(a.nombre)add(String(a.nombre));
+    });
+    const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
+    if(nPor)add(nPor);
+  });
+  const wf=exp&&exp._pqrs_workflow;
+  const nPq=String((wf&&wf.notificar_por)||'').trim();
+  if(nPq)add(nPq);
+  return set.slice(0,40);
+}
+function expTieneSeguimiento(exp){
+  const wf=exp&&exp._pqrs_workflow;
+  const fase=String((wf&&wf.fase)||'').trim();
+  if(fase&&!/cerrad/i.test(fase))return true;
+  return (exp&&exp.tasks||[]).some(function(t){
+    if(!t||t.eliminada)return false;
+    const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+    if(est==='Por verificar'||est==='Por corregir'||est==='En ejecución'||est==='Vencida')return true;
+    const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+    return !!(f&&f!=='cerrada'&&f!=='cerrada_atendida');
+  });
+}
+function aplicarMarcasBandeja(exp){
+  if(!exp||typeof exp!=='object')return exp;
+  exp.pendientes=nombresPendientesExp(exp);
+  exp.seguimiento=!!expTieneSeguimiento(exp);
+  let req=false;
+  if(typeof _reqPalEntradasExp==='function'){
+    try{const out=[];_reqPalEntradasExp(exp,out);req=out.length>0;}catch(e){req=!!exp.reqAlerta;}
+  }
+  exp.reqAlerta=req;
+  exp.esPqrs=typeof esPqrsSecretaria==='function'?!!esPqrsSecretaria(exp):!!(exp._es_pqrs||exp._radicado_secretaria);
+  return exp;
+}
+function marcasBandejaDistintas(data,exp){
+  const a=data||{};
+  return JSON.stringify(a.pendientes||[])!==JSON.stringify(exp.pendientes||[])
+    ||!!a.seguimiento!==!!exp.seguimiento
+    ||!!a.reqAlerta!==!!exp.reqAlerta
+    ||!!a.esPqrs!==!!exp.esPqrs;
+}
+async function asegurarMarcasBandeja(){
+  if(window._bandejaMarcasListas||window._bandejaMarcasCorriendo)return;
+  const db=window._db;
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  const puede=rol==='admin'||rol==='guaviare'||rol==='guainia'||rol==='vaupes';
+  if(!puede||!db||!window._fsGetDocs||!window._fsSetDoc||!window._fsCollection||!window._fsDoc)return;
+  window._bandejaMarcasCorriendo=true;
+  try{
+    const deptos=(typeof DEPTOS_EXPEDIENTES_ACTIVOS!=='undefined'&&DEPTOS_EXPEDIENTES_ACTIVOS.length)
+      ?DEPTOS_EXPEDIENTES_ACTIVOS.slice()
+      :(typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare']);
+    let n=0;
+    for(let i=0;i<deptos.length;i++){
+      const depto=deptos[i];
+      let snap;
+      try{snap=await window._fsGetDocs(window._fsCollection(db,'departamentos',depto,'expedientes'));}
+      catch(err){console.warn('marcas bandeja',depto,err);continue;}
+      const docs=snap&&snap.docs?snap.docs:[];
+      for(let j=0;j<docs.length;j++){
+        const d=docs[j];
+        const data=d.data?d.data()||{}:{};
+        const exp=Object.assign({},data,{_exp:data._exp||d.id,_depto:data._depto||depto});
+        aplicarMarcasBandeja(exp);
+        if(!marcasBandejaDistintas(data,exp))continue;
+        try{
+          await window._fsSetDoc(d.ref||window._fsDoc(db,'departamentos',depto,'expedientes',d.id),{
+            pendientes:exp.pendientes,
+            seguimiento:exp.seguimiento,
+            reqAlerta:exp.reqAlerta,
+            esPqrs:exp.esPqrs
+          },{merge:true});
+          n++;
+        }catch(errW){console.warn('marca expediente',d.id,errW);}
+      }
+    }
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{bandejaMarcasListas:true},{merge:true});
+    window._bandejaMarcasListas=true;
+    console.log('Marcas de bandeja listas',n);
+    if(typeof initRealtimeSync==='function')initRealtimeSync();
+  }catch(err){
+    console.warn('asegurarMarcasBandeja',err);
+  }finally{
+    window._bandejaMarcasCorriendo=false;
+  }
+}
 async function saveExpedienteDoc(deptoId,exp){
   const db=window._db;
   if(!db||!window._fsSetDoc||!exp)return false;
@@ -475,6 +601,7 @@ async function saveExpedienteDoc(deptoId,exp){
   }
   const expId=expedienteDocId(exp);
   if(!expId){console.warn('saveExpedienteDoc: expediente sin _exp');return false;}
+  aplicarMarcasBandeja(exp);
   const depto=resolveDeptoFirestoreId(deptoId,exp);
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
@@ -2075,6 +2202,7 @@ function initRealtimeGlobalSync(){
     if(!snap.exists())return;
     const g=snap.data()||{};
     avisarTamanoGlobalSiCrece(g);
+    if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
       setMantenimientoEstadoLocal(g.mantenimiento);
@@ -2112,8 +2240,15 @@ function initRealtimeGlobalSync(){
   escucharPartesSistema();
   escucharPersonasColeccion();
 }
+function asegurarEscuchaConsolidado(){
+  if(window._consEscuchaCompleta)return;
+  window._consEscuchaCompleta=true;
+  initRealtimeSync();
+  if(typeof reloadExpedientesTrasLogin==='function')reloadExpedientesTrasLogin();
+}
 function initAppRealtimeSync(){
   initRealtimeSync();
+  setTimeout(function(){if(typeof asegurarMarcasBandeja==='function')asegurarMarcasBandeja();},1500);
   initRealtimeCfgSyncAll();
   initRealtimeGlobalSync();
   if(typeof startUsuariosFirestoreListener==='function')startUsuariosFirestoreListener();
@@ -2238,11 +2373,65 @@ function hydrateExpsFromSnapshotDocs(snap){
   });
   return changed;
 }
+function corteBandejaIso(){
+  const d=new Date();
+  d.setDate(d.getDate()-10);
+  return d.toISOString();
+}
+function escucharConsultaDepto(db,depto,unsubs,filtro){
+  let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
+  if(filtro&&window._fsQuery&&window._fsWhere){
+    if(filtro.tipo==='updated')ref=window._fsQuery(ref,window._fsWhere('updatedAt','>=',filtro.desde));
+    else if(filtro.tipo==='bool')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',true));
+    else if(filtro.tipo==='nombre')ref=window._fsQuery(ref,window._fsWhere('pendientes','array-contains',filtro.nombre));
+  }
+  let listo=null;
+  if(filtro&&filtro.tipo==='updated'){
+    _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
+  }
+  const primer=_expPrimerSnap[depto];
+  const unsub=window._fsOnSnapshot(ref,function(snap){
+    let changed=applyExpedienteFirestoreChanges(snap.docChanges());
+    if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
+      if(hydrateExpsFromSnapshotDocs(snap))changed=true;
+    }
+    if(primer&&filtro&&filtro.tipo==='updated'&&!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
+    if(!changed)return;
+    scheduleRefreshViewsAfterRemoteDataChange();
+  },function(err){
+    if(primer&&filtro&&filtro.tipo==='updated')primer.listo(false);
+    console.warn('Error escuchando expedientes',depto,filtro&&filtro.tipo,err);
+  });
+  unsubs.push(unsub);
+}
 function initRealtimeSync(){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   stopRealtimeExpSync();
   const unsubs=[];
+  const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if((rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta){
+    _fsUnsub=[];
+    return;
+  }
+  const acotar=!!(window._bandejaMarcasListas&&window._fsQuery&&window._fsWhere&&!window._consEscuchaCompleta);
+  const deptos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
+  if(acotar){
+    const nombre=String((typeof responsableActivo!=='undefined'&&responsableActivo)||(window._usuarioActual&&window._usuarioActual.nombre)||'').trim();
+    const cargo=typeof usuarioCargoSesion==='function'?usuarioCargoSesion():'';
+    const esResp=rolLogin==='responsables'||rolLogin==='contratista';
+    const esOficina=rolLogin==='secretaria'||rolLogin==='oap_deguv'||rolLogin==='rn_deguv'||rolLogin==='admin_deguv'||rolLogin==='ds_deguv';
+    const verReq=!esResp||cargo==='coordinador'||cargo==='contable';
+    deptos.forEach(function(depto){
+      escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
+      if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
+      if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});
+      if(esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
+      if(esResp&&nombre)escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
+    });
+    _fsUnsub=unsubs;
+    return;
+  }
   const TOPE=8000;
   function escuchar(depto, acotada){
     let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
@@ -2258,7 +2447,7 @@ function initRealtimeSync(){
     const primer=_expPrimerSnap[depto];
     const unsub=window._fsOnSnapshot(ref,function(snap){
       const n=(snap&&(typeof snap.size==='number'?snap.size:(snap.docs&&snap.docs.length)))||0;
-      if(!acotada&&n>TOPE&&window._fsQuery&&window._fsWhere){
+      if(!acotada&&!window._consEscuchaCompleta&&n>TOPE&&window._fsQuery&&window._fsWhere){
         try{unsub();}catch(e){}
         window._expEscuchaAcotada=true;
         if(Array.isArray(exps))exps=exps.filter(function(e){return String(e&&e._depto||'')!==depto;});
@@ -2285,15 +2474,27 @@ function initRealtimeSync(){
   deptosExpedientesAccesibles().forEach(function(depto){escuchar(depto,false);});
   _fsUnsub=unsubs;
 }
+function repararMarcaExpediente(exp){
+  if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
+  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs]);
+  aplicarMarcasBandeja(exp);
+  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs]);
+  if(antes===despues)return;
+  const depto=String(exp._depto||'guaviare').trim();
+  window._fsSetDoc(window._fsDoc(window._db,'departamentos',depto,'expedientes',exp._exp),{
+    pendientes:exp.pendientes,seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs
+  },{merge:true}).catch(function(err){console.warn('repararMarcaExpediente',err);});
+}
 async function traerExpedienteSiFalta(q){
   const id=String(q||'').trim();
   if(!id||id.length<4||typeof fetchExpedientePorNumero!=='function')return null;
-  if((exps||[]).some(function(e){return String(e&&e._exp||'').toLowerCase()===id.toLowerCase();}))return null;
+  const ya=(exps||[]).find(function(e){return String(e&&e._exp||'').toLowerCase()===id.toLowerCase();});
+  if(ya){repararMarcaExpediente(ya);return ya;}
   const exp=await fetchExpedientePorNumero(id);
   if(!exp||!exp._exp)return null;
-  if((exps||[]).some(function(e){return String(e&&e._exp||'')===String(exp._exp);}))return exp;
   if(!Array.isArray(exps))exps=[];
-  exps.push(exp);
+  if(!exps.some(function(e){return String(e&&e._exp||'')===String(exp._exp);}))exps.push(exp);
+  repararMarcaExpediente(exp);
   return exp;
 }
 async function migrarLocalStorageAFirestore(){

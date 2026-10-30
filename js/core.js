@@ -30133,7 +30133,7 @@ function updateActEstFilterForEnc(forEnc){
   const optVenc=sel.querySelector('option[value="venc"]');
   if(optCorr)optCorr.hidden=false;
   if(optVer){optVer.hidden=false;optVer.textContent='Por revisar';}
-  if(optRev){optRev.hidden=!deptView;optRev.textContent='Revisados';}
+    if(optRev){optRev.hidden=true;optRev.textContent='Revisados';}
   if(optPorFirma){
     optPorFirma.hidden=!puedePorFirma;
     optPorFirma.textContent='Por firma';
@@ -30162,6 +30162,7 @@ function updateActEstFilterForEnc(forEnc){
     if(o)sel.appendChild(o);
   });
   if(sel.querySelector('option[value="'+cv+'"]')&&!sel.querySelector('option[value="'+cv+'"]').hidden)sel.value=cv;
+  else if(cv==='revisados')sel.value='porver';
   else if(cv==='porfirma'&&optPorFirma&&optPorFirma.hidden)sel.value='pend';
 }
 function exportarActividadesExcel(){
@@ -32240,6 +32241,14 @@ function actividadCuentaComoPorCorregir(t){
   return est==='Por corregir';
 }
 window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
+function actividadEsDeUltimosDias(t,dias){
+  const e=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
+  const f=String((t&&(t.fechaAtendida||t.fechaReportada))||(e&&e.updatedAt)||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return true;
+  const corte=new Date();
+  corte.setDate(corte.getDate()-(dias||10));
+  return f>=corte.toISOString().slice(0,10);
+}
 function filtrarActividadesPorEstado(list,filtro){
   // «Requerimientos» no filtra actividades: filas propias (requerimientos.js)
   if(filtro==='req')return [];
@@ -32438,14 +32447,9 @@ function filtrarActividadesPorEstado(list,filtro){
   }),typeof getTareasRevParTecnicoAprobadas==='function'?getTareasRevParTecnicoAprobadas():[]);
     if(typeof getTareasRevParProfesionalDevueltaNca==='function')
       doneList=mergeActividadLists(doneList,getTareasRevParProfesionalDevueltaNca());
-    return doneList;
+    return doneList.filter(function(t){return actividadEsDeUltimosDias(t,10);});
   }
-  if(filtro==='revisados'){
-    return (list||[]).filter(function(t){
-      const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
-      return typeof taskCuentaComoRevisadaEncargado==='function'&&taskCuentaComoRevisadaEncargado(t,e);
-    });
-  }
+  if(filtro==='revisados')return [];
   if(filtro==='prior'){
     let out=(list||[]).filter(t=>esActividadPrioritariaPendiente(t));
     // Notificaciones vencidas (5 días hábiles) → prioritarias aunque no estén en el listado base
@@ -32855,7 +32859,6 @@ function renderActividades(opts){
   cards.pend=actMetCard('pend','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porEjec+'</div><div class="l">Por ejecutar</div>','var(--or)');
   cards.prior=actMetCard('prior','border-left:3px solid var(--rd)','<div class="v" style="color:var(--rd)">'+prior+'</div><div class="l">Prioritarias</div>','var(--rd)');
   cards.porver=actMetCard('porver','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porrevisar+'</div><div class="l">Por revisar</div>','var(--bl)');
-  if(deptView)cards.revisados=actMetCard('revisados','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+nRevisados+'</div><div class="l">Revisados</div>','var(--gn)');
   if(isResp||isVital||deptView)cards.porcorr=actMetCard('porcorr','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+porcorr+'</div><div class="l">Por corregir</div>','var(--or)');
   if(puedePorFirmaMets){
     cards.porfirma=actMetCard('porfirma','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+nPorFirma+'</div><div class="l">Por firma</div>','#0d5c2e');

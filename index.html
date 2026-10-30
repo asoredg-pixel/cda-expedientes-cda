@@ -20,15 +20,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026u"></script>
-<script src="js/constants.js?v=20261030a"></script>
+<script src="js/constants.js?v=20261030c"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
-<script src="js/persistence.js?v=20261029d"></script>
+<script src="js/persistence.js?v=20261030b"></script>
 <script src="js/roles.js?v=20261026t"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261029d"></script>
-<script src="js/formulario.js?v=20261015a"></script>
+<script src="js/core.js?v=20261030b"></script>
+<script src="js/formulario.js?v=20261030b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
 <script src="js/consolidado.js?v=20261001a"></script>
@@ -41,7 +41,7 @@
 <script src="js/gmail.js?v=20261026q"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261029c"></script>
-<script src="js/consulta.js?v=20261029d"></script>
+<script src="js/consulta.js?v=20261030c"></script>
 <script src="js/entrega-responsable.js?v=20261028a"></script>
 <script src="js/tramite-firma.js?v=20261029a"></script>
 <script src="js/requerimientos.js?v=20261022g"></script>
@@ -478,7 +478,7 @@
     <div id="q-periodo-resumen" style="font-size:11px;color:var(--tx2);margin:-4px 0 10px"></div>
     <div class="sb con-filtro-avanzado">
       <div class="busq-rapida">
-        <input type="text" id="q-txt" autocomplete="off" placeholder="Nombre, expediente, resolución, NIT, ciudad…" onfocus="consultaBusqAbrir(this)" oninput="consultaBusqInput(this)" onkeydown="consultaBusqKey(event,this)" onblur="setTimeout(consultaBusqCerrar,200)">
+        <input type="text" id="q-txt" autocomplete="off" placeholder="Número de expediente, trámite o PQRSD. Cédula y NIT, en Drive." onfocus="consultaBusqAbrir(this)" oninput="consultaBusqInput(this)" onkeydown="consultaBusqKey(event,this)" onblur="setTimeout(consultaBusqCerrar,200)">
         <div id="q-txt-sug" class="entrega-resp-sug" style="display:none"></div>
       </div>
       <select id="q-tram" onchange="renderConsulta()"><option value="">Todos los trámites</option></select>

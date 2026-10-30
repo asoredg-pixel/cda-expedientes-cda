@@ -2068,6 +2068,24 @@ function conConsultaActLibreCard(stub){
     '</div>'+
   '</details>';
 }
+/** Actividad con la que el encargado abre el rail desde Consulta: la pendiente de revisión, o la última vigente. */
+function consultaTareaRailNca(e){
+  const tasks=(e&&e.tasks||[]).filter(function(t){return t&&!t.eliminada&&t.id;});
+  if(!tasks.length)return null;
+  const pend=tasks.filter(function(t){
+    if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return true;
+    return typeof estadoTask==='function'&&estadoTask(t)==='Por verificar';
+  });
+  const pool=pend.length?pend:tasks;
+  return pool[pool.length-1];
+}
+/** Encargado NCA: 🧐 abre el rail vertical de Revisadas (incluye editar). Sin actividad, se conserva Editar. */
+function consultaBtnGestionNcaHtml(e){
+  if(typeof esNcaDeguv!=='function'||!esNcaDeguv()||!e)return '';
+  const t=consultaTareaRailNca(e);
+  if(!t)return '';
+  return '<button type="button" class="btn bsm bic act-ico" title="Revisar y gestionar" onclick="event.stopPropagation();openTaskCommentsModal(\''+escAttr(e._exp)+'\',\''+escAttr(t.id)+'\',{verRevisado:true})">🧐</button>';
+}
 /** Papelera no se lista en Consulta. Sí se deja el rastro «Trasladada» de una PQRSD. */
 function taskVisibleEnConsulta(e,t){
   if(!t)return false;
@@ -2144,7 +2162,7 @@ function conConsultaOneCard(e){
       '<div class="ech-right">'+
         '<div class="fx" style="flex-wrap:wrap;gap:4px">'+badgeTram(e._tramite,e)+' '+badgeEst(e._estado)+
         expBtnArchHtml(e._exp,{title:'Ver todos los adjuntos'})+
-          (esSoloLectura()?'':expBtnEditHtml(e._exp,{bic:false,label:'✏️',suffix:' Editar',title:'Editar en '+uiEditorContenedorLbl()}))+'</div>'+
+          (esSoloLectura()?'':((typeof consultaBtnGestionNcaHtml==='function'&&consultaBtnGestionNcaHtml(e))||expBtnEditHtml(e._exp,{bic:false,label:'✏️',suffix:' Editar',title:'Editar en '+uiEditorContenedorLbl()})))+'</div>'+
         renderConsultaHdrMeta(e,ter,porVerT,doneT,porEjecT,vencT,porCorrT,d)+
       '</div>'+
     '</div>'+
