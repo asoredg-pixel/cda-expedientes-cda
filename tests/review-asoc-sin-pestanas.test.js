@@ -102,7 +102,7 @@ describe('Aviso de asociado visible y permanente', () => {
     expect(core).toContain("const okMsg='Quedó asociado a '+target._exp+'.'")
   })
 
-  it('el buscador marca Ya asociado y deja el aviso en el panel', () => {
+  it('el buscador ofrece Desasociar si el vínculo ya existe', () => {
     const consulta = read('js/consulta.js')
     const c = createContext({
       window: { _reviewAsocCtx: { sourceExp: 'PQ-1', mode: 'pqrs-pick' }, _reviewAsocAviso: null },
@@ -119,8 +119,45 @@ describe('Aviso de asociado visible y permanente', () => {
     runInContext(extraerFunciones(consulta, ['reviewAsocYaVinculado', 'reviewAsocPickCardHtml']), c)
     expect(c.reviewAsocYaVinculado('EXP-7')).toBe(true)
     const html = c.reviewAsocPickCardHtml({ tipo: 'exp', e: { _exp: 'EXP-7' } })
-    expect(html).toContain('Ya asociado')
-    expect(html).not.toContain('confirmReviewAsocPick')
+    expect(html).toContain('Desasociar')
+    expect(html).toContain('desasociarExpedienteDesdeRevision')
+    expect(html).not.toContain('Ya asociado')
     expect(consulta).toContain('id="review-asoc-aviso"')
+  })
+})
+
+describe('Desasociar desde el buscador', () => {
+  it('quita el número en los dos registros', () => {
+    const consulta = read('js/consulta.js')
+    const pq = { _exp: 'PQ-1', _usar_exp_asociados: true, _expedientes_asociados: '["CAS-1"]', _pqrs_historial: [] }
+    const cas = { _exp: 'CAS-1', _usar_exp_asociados: true, _expedientes_asociados: '["PQ-1"]' }
+    const guardados = []
+    const win = { _reviewAsocCtx: { sourceExp: 'PQ-1' }, _reviewAsocBusy: false, _reviewAsocAviso: null }
+    const c = createContext({
+      window: win,
+      getExpById: id => (id === 'PQ-1' ? pq : id === 'CAS-1' ? cas : null),
+      getExpAsociadosDirectos: e => (!e || !e._usar_exp_asociados ? [] : JSON.parse(e._expedientes_asociados || '[]')),
+      getExpAsociadosInversos: () => [],
+      expAsocMatchNum: (a, b) => String(a) === String(b),
+      esPqrsSecretaria: e => e && e._exp === 'PQ-1',
+      hoy: () => '2026-10-30',
+      pqrsComentarioAutor: () => 'Ana',
+      persistExpedienteGranular: e => { guardados.push(e._exp) },
+      avisoVinculoAsociado: () => {},
+      notif: () => {},
+      reviewAsocRefrescarEnRevision: () => false,
+      renderActividades: () => {},
+      renderConsulta: () => {},
+      document: { getElementById: () => null }
+    })
+    runInContext(extraerFunciones(consulta, ['quitarNumeroAsociado', 'ajustarFlagAsociados', 'desasociarExpedienteDesdeRevision']), c)
+    c.desasociarExpedienteDesdeRevision('CAS-1')
+    expect(JSON.parse(pq._expedientes_asociados)).toEqual([])
+    expect(JSON.parse(cas._expedientes_asociados)).toEqual([])
+    expect(pq._usar_exp_asociados).toBe(false)
+    expect(cas._usar_exp_asociados).toBe(false)
+    expect(pq._pqrs_historial[0].tipo).toBe('desasociacion')
+    expect(guardados).toEqual(['PQ-1', 'CAS-1'])
+    expect(win._reviewAsocAviso.msg).toContain('CAS-1')
   })
 })

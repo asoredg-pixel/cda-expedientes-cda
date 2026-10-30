@@ -290,6 +290,7 @@ async function loadLS(){
         actividadesLibres=mergeActividadesLibresFromRemote(remG);
       }
       if(Array.isArray(g.agendaEventos))agendaEventos=g.agendaEventos;
+      if(typeof depurarAgendaAlmacenada==='function')depurarAgendaAlmacenada();
       // chatMensajes ya no se carga desde sistema/global — usa chats/{convId}/mensajes
       if(g.encargadosGlobal)encargadosGlobal=normalizeEncargadosGlobal(g.encargadosGlobal);
       if(Array.isArray(g.usuariosIndex)&&g.usuariosIndex.length)aplicarUsuariosIndex(g.usuariosIndex);
@@ -1186,6 +1187,7 @@ function aplicarParteSistema(campo,valor,silencioso){
   }else if(campo==='agendaEventos'&&Array.isArray(valor)){
     agendaEventos=valor;
     changed=true;
+    if(typeof depurarAgendaAlmacenada==='function')depurarAgendaAlmacenada();
   }else if(campo==='ncaPinsByUser'&&valor&&typeof valor==='object'&&typeof ncaPqrsPinsApplyFromGlobal==='function'){
     changed=!!ncaPqrsPinsApplyFromGlobal({ncaPinsByUser:valor});
   }
@@ -2230,7 +2232,7 @@ function initRealtimeGlobalSync(){
       actividadesLibres=mergeActividadesLibresFromRemote(actLibresRemotoCombinado('global',g.actividadesLibres));
       changed=true;
     }
-    if(Array.isArray(g.agendaEventos)&&!parteGlobalViva('agendaEventos')){agendaEventos=g.agendaEventos;changed=true;}
+    if(Array.isArray(g.agendaEventos)&&!parteGlobalViva('agendaEventos')){agendaEventos=g.agendaEventos;changed=true;if(typeof depurarAgendaAlmacenada==='function')depurarAgendaAlmacenada();}
     if(typeof ncaPqrsPinsApplyFromGlobal==='function'&&!parteGlobalViva('ncaPinsByUser')&&ncaPqrsPinsApplyFromGlobal(g))changed=true;
     if(changed){
       try{_saveLSLocal();}catch(e){}
@@ -2240,11 +2242,80 @@ function initRealtimeGlobalSync(){
   escucharPartesSistema();
   escucharPersonasColeccion();
 }
+function consolidadoBuscaPorCorte(){
+  return (typeof esNcaDeguv==='function'&&esNcaDeguv())
+    ||(typeof esJurisdiccional==='function'&&esJurisdiccional());
+}
 function asegurarEscuchaConsolidado(){
+  if(consolidadoBuscaPorCorte())return;
   if(window._consEscuchaCompleta)return;
   window._consEscuchaCompleta=true;
   initRealtimeSync();
   if(typeof reloadExpedientesTrasLogin==='function')reloadExpedientesTrasLogin();
+}
+/** Encargado NCA y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
+async function buscarConsolidadoNca(){
+  if(!consolidadoBuscaPorCorte()){
+    if(typeof renderConsolidado==='function')renderConsolidado();
+    return;
+  }
+  const rango=typeof getPeriodoRango==='function'?getPeriodoRango('cons'):null;
+  if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31'){
+    window._consNcaList=null;
+    window._consNcaRango='';
+    if(typeof renderConsolidadoNcaEspera==='function')renderConsolidadoNcaEspera();
+    else if(typeof renderConsolidado==='function')renderConsolidado();
+    if(typeof notif==='function')notif('Elija un año, trimestre, mes o un rango de fechas','warn');
+    return;
+  }
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsQuery||!window._fsWhere||!window._fsCollection){
+    if(typeof notif==='function')notif('No hay conexión para buscar el consolidado','err');
+    return;
+  }
+  const activos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
+  let deptos;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional()){
+    const fd=String(window._jurisFiltroDepto||'').trim();
+    deptos=fd?[fd]:activos;
+  }else{
+    deptos=[String((typeof deptoActivo!=='undefined'&&deptoActivo)||'guaviare').trim()||'guaviare'];
+  }
+  if(!deptos.length)deptos=['guaviare'];
+  const hasta=String(rango.hasta);
+  const tope=hasta.length===10?hasta+'\uf8ff':hasta;
+  const list=[];
+  try{
+    for(let i=0;i<deptos.length;i++){
+      const depto=deptos[i];
+      let snap;
+      try{
+        snap=await window._fsGetDocs(window._fsQuery(
+          window._fsCollection(db,'departamentos',depto,'expedientes'),
+          window._fsWhere('_fecha','>=',rango.desde),
+          window._fsWhere('_fecha','<=',tope)
+        ));
+      }catch(errDepto){
+        console.warn('buscarConsolidadoNca',depto,errDepto);
+        continue;
+      }
+      if(!snap||typeof snap.forEach!=='function')continue;
+      snap.forEach(function(d){
+        const data=d.data?d.data()||{}:{};
+        const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
+        if(!exp)return;
+        if(!exp._depto)exp._depto=depto;
+        if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
+        list.push(exp);
+      });
+    }
+    window._consNcaList=list;
+    window._consNcaRango=rango.desde+'|'+rango.hasta;
+    if(typeof renderConsolidado==='function')renderConsolidado();
+  }catch(err){
+    console.warn('buscarConsolidadoNca',err);
+    if(typeof notif==='function')notif('No se pudo buscar el consolidado','err');
+  }
 }
 function initAppRealtimeSync(){
   initRealtimeSync();

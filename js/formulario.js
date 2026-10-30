@@ -26,7 +26,7 @@ function showTab(t){
   if(esModoOficinaDeguv()&&(t==='reg'||t==='cfg'||t==='cons'))t=(t==='con'?'con':'pqrs-ofi');
   if(esJurisdiccional()&&t!=='con'&&t!=='cons')t='con';
   if((esModoResponsable()||esModoContratista())&&t==='reg'&&!responsablePuedeVerRegistro())t='act';
-  if(esModoResponsable()&&t==='cons'&&!(typeof esCargoCoordinador==='function'&&esCargoCoordinador()))t='act';
+  if(esModoResponsable()&&t==='cons')t='act';
   if(esModoResponsable()&&t==='cfg')t='act';
   if(t==='rec'&&!puedeVerRecursos())t=esModoResponsable()?'act':'con';
   // secretary can switch between sec and gmail-ofi freely
@@ -82,7 +82,8 @@ function showTab(t){
   }
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){
-    if(typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado();
+    const corteCons=typeof consolidadoBuscaPorCorte==='function'&&consolidadoBuscaPorCorte();
+    if(!corteCons&&typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado();
     initPeriodoFiltros('cons');
     renderConsolidado();
   }

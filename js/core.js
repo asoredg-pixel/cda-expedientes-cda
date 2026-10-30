@@ -6772,6 +6772,35 @@ function agendaEventoVisible(ev){
   }
   return true;
 }
+function agendaCorteIso(meses){
+  const d=new Date();
+  d.setMonth(d.getMonth()-(meses||3));
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+/** Quita de la agenda lo agendado hace más de tres meses. Sin fecha válida se conserva. */
+function agendaListaSinVencidas(lista,corte){
+  const c=String(corte||agendaCorteIso(3));
+  const queda=[];
+  let quito=false;
+  (lista||[]).forEach(function(ev){
+    const f=String(ev&&ev.fecha||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(f)&&f<c){quito=true;return;}
+    queda.push(ev);
+  });
+  return {lista:queda,quito:quito};
+}
+function depurarAgendaAlmacenada(){
+  if(typeof agendaEventos==='undefined'||!Array.isArray(agendaEventos))return false;
+  const out=agendaListaSinVencidas(agendaEventos);
+  if(!out.quito)return false;
+  agendaEventos=out.lista;
+  if(typeof marcarParteGlobalViva==='function')marcarParteGlobalViva('agendaEventos');
+  try{if(typeof _saveLSLocal==='function')_saveLSLocal();}catch(e){}
+  if(window._agendaDepurando||typeof escribirParteSistema!=='function')return true;
+  window._agendaDepurando=true;
+  escribirParteSistema('agenda','agendaEventos',agendaEventos).then(function(){window._agendaDepurando=false;},function(){window._agendaDepurando=false;});
+  return true;
+}
 function getAgendaEventosResponsable(nombre,deptoId){
   const n=String(nombre||'').trim();
   if(!n)return [];
@@ -29134,8 +29163,7 @@ function updateDeptoUI(){
   document.body.classList.toggle('modo-ciudadano',ciudadano);
   if(typeof renderSstGmailSesionBloqueo==='function')renderSstGmailSesionBloqueo();
   if(typeof sstRescheduleGmailExpiryTimers==='function')sstRescheduleGmailExpiryTimers();
-  if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on')
-    &&!(typeof esCargoCoordinador==='function'&&esCargoCoordinador()))showTab('act');
+  if(resp&&document.getElementById('pg-cons')&&document.getElementById('pg-cons').classList.contains('on'))showTab('act');
   // No forzar Consulta si el responsable está en Actividades
   if(resp&&window._sstTabActual==='act'){
     const pgAct=document.getElementById('pg-act');
@@ -37585,13 +37613,31 @@ function pqrsDocsSolicitudRadicada(e){
       previewLink:String(d.previewLink||link||'').trim(),
       fileId:fid,
       driveFileId:fid,
-      mimeType:d.mime||d.mimeType||''
+      mimeType:d.mime||d.mimeType||'',
+      tipo:d.tipo||'',
+      es_solicitud:!!d.es_solicitud,
+      es_radicacion:!!d.es_radicacion
     });
   };
+  if(typeof _pqrsCollectDocsRadicacion==='function'){
+    _pqrsCollectDocsRadicacion(e).forEach(function(a){
+      if(!a)return;
+      push({
+        nombre:a.nombre||a.label||'Solicitud',
+        driveLink:a.driveLink||a.url||'',
+        previewLink:a.previewLink||'',
+        fileId:a.fileId||a.driveFileId||'',
+        mime:a.mime||a.mimeType||'',
+        tipo:a.tipo||'',
+        es_solicitud:!!a.es_solicitud,
+        es_radicacion:true
+      });
+    });
+  }
   const sol=String(e._pqrs_solicitud_link||'').trim();
   if(sol){
     const nomSol=String(e._pqrs_solicitud_archivo||'').split(';')[0].trim()||'Solicitud';
-    push({nombre:nomSol,driveLink:sol});
+    push({nombre:nomSol,driveLink:sol,es_radicacion:true,es_solicitud:true});
   }
   (Array.isArray(e._pqrs_gmail_attachments)?e._pqrs_gmail_attachments:[]).forEach(function(a){
     if(!a)return;
@@ -37600,7 +37646,10 @@ function pqrsDocsSolicitudRadicada(e){
       driveLink:a.driveLink||a.url||'',
       previewLink:a.previewLink||'',
       fileId:a.fileId||a.driveFileId||'',
-      mime:a.mime||a.mimeType||''
+      mime:a.mime||a.mimeType||'',
+      tipo:a.tipo||'',
+      es_solicitud:!!a.es_solicitud,
+      es_radicacion:true
     });
   });
   return out;
@@ -37610,11 +37659,21 @@ window.pqrsDocsSolicitudRadicada=pqrsDocsSolicitudRadicada;
 async function pqrsArchivosSolicitudRadicada(e){
   const docs=pqrsDocsSolicitudRadicada(e);
   const files=[];
+  const fallos=[];
   for(let i=0;i<docs.length;i++){
     try{
       const f=typeof pqrsDriveDocToFile==='function'?await pqrsDriveDocToFile(docs[i],e&&e._exp):null;
       if(f)files.push(f);
-    }catch(err){console.warn('pqrsArchivosSolicitudRadicada:',docs[i]&&docs[i].nombre,err);}
+      else fallos.push((docs[i]&&docs[i].nombre)||'documento');
+    }catch(err){
+      fallos.push((docs[i]&&docs[i].nombre)||'documento');
+      console.warn('pqrsArchivosSolicitudRadicada:',docs[i]&&docs[i].nombre,err);
+    }
+  }
+  if(fallos.length&&typeof notif==='function'){
+    notif(files.length
+      ?('⚠️ No se pudieron adjuntar algunos documentos de la solicitud: '+fallos.slice(0,3).join(', '))
+      :'⚠️ La solicitud tiene documento principal o anexos, pero no se pudieron adjuntar al correo de traslado.','warn');
   }
   return files;
 }
@@ -37744,10 +37803,19 @@ async function pqrsDriveDocToFile(doc,expIdOpt){
     return String(d.localNombre||d.nombre||d.label||d.driveFilename||'adjunto.pdf')
       .replace(/^(por_notificar|atendido|por_firma|por_firmar|revision)-/i,'');
   };
+  const nombreAdjunto=function(d){
+    const t=String(d&&d.tipo||'');
+    const rad=!!(d&&(d.es_radicacion===true||d.es_solicitud===true||t==='soporte_radicacion'||t==='anexo_radicacion'||t==='anexo_solicitud'));
+    if(rad){
+      const n=String(d.nombre||d.driveFilename||'').trim();
+      if(n&&n!=='.')return n;
+    }
+    return nombrePublico(d);
+  };
   // Preferir blob local (acabado de seleccionar/subir) — evita fallos al re-descargar de Drive.
   const localBlob=doc.localBlob||doc._localBlob||doc.blob||null;
   if(localBlob){
-    let nombre=nombrePublico(doc);
+    let nombre=nombreAdjunto(doc);
     if(!nombre||nombre==='.')nombre='adjunto.pdf';
     const mime=doc.localMime||doc.mimeType||doc.mime||(localBlob.type)||'application/pdf';
     return localBlob instanceof File?localBlob:new File([localBlob],nombre,{type:mime});
@@ -37769,16 +37837,17 @@ async function pqrsDriveDocToFile(doc,expIdOpt){
   if(secTok&&secTok!==best&&secTok!==ofiTok)tokens.push(secTok);
   if(!tokens.length)throw new Error('Conecte Gmail/Drive para adjuntar los documentos');
   const driveApi=typeof DRIVE_API_BASE!=='undefined'?DRIVE_API_BASE:'https://www.googleapis.com/drive/v3/files';
+  const driveQs=typeof _DRIVE_API_QS==='string'&&_DRIVE_API_QS?_DRIVE_API_QS:'&supportsAllDrives=true';
   let lastErr=null;
   for(let ti=0;ti<tokens.length;ti++){
     try{
-      const r=await fetch(driveApi+'/'+encodeURIComponent(fid)+'?alt=media',{headers:{Authorization:'Bearer '+tokens[ti]}});
+      const r=await fetch(driveApi+'/'+encodeURIComponent(fid)+'?alt=media'+driveQs,{headers:{Authorization:'Bearer '+tokens[ti]}});
       if(!r.ok){
         lastErr=new Error('No se pudo descargar '+(doc.nombre||doc.label||fid)+' ('+r.status+')');
         continue;
       }
       const blob=await r.blob();
-      let nombre=nombrePublico(doc);
+      let nombre=nombreAdjunto(doc);
       if(!nombre||nombre==='.')nombre='adjunto.pdf';
       const mime=blob.type||doc.mimeType||doc.mime||'application/pdf';
       return new File([blob],nombre,{type:mime});

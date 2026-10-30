@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20261029b">
+<link rel="stylesheet" href="css/sst.css?v=20261030a">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,18 +20,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026u"></script>
-<script src="js/constants.js?v=20261030d"></script>
+<script src="js/constants.js?v=20261030i"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
-<script src="js/persistence.js?v=20261030b"></script>
-<script src="js/roles.js?v=20261026t"></script>
+<script src="js/persistence.js?v=20261030f"></script>
+<script src="js/roles.js?v=20261030e"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261030b"></script>
-<script src="js/formulario.js?v=20261030b"></script>
+<script src="js/core.js?v=20261030i"></script>
+<script src="js/formulario.js?v=20261030f"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
-<script src="js/consolidado.js?v=20261001a"></script>
+<script src="js/consolidado.js?v=20261030f"></script>
 <script src="js/configuracion.js?v=20261009a"></script>
 <script src="js/export.js?v=20260911h"></script>
 <script src="js/chat.js?v=20261030a"></script>
@@ -41,7 +41,7 @@
 <script src="js/gmail.js?v=20261026q"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261029c"></script>
-<script src="js/consulta.js?v=20261030d"></script>
+<script src="js/consulta.js?v=20261030g"></script>
 <script src="js/entrega-responsable.js?v=20261028a"></script>
 <script src="js/tramite-firma.js?v=20261029a"></script>
 <script src="js/requerimientos.js?v=20261022g"></script>
@@ -711,6 +711,7 @@
       <label>Desde<input type="date" id="cons-desde" onchange="onRangoManualPeriodo('cons')"></label>
       <label>Hasta<input type="date" id="cons-hasta" onchange="onRangoManualPeriodo('cons')"></label>
       <button type="button" class="btn bsm" onclick="limpiarPeriodo('cons')">Limpiar fechas</button>
+      <button type="button" class="btn bsm bp" onclick="buscarConsolidado()">Buscar</button>
       <button type="button" class="btn bsm" onclick="exportarConsolidadoExcel()">⬇ Descargar</button>
     </div>
     <div id="cons-periodo-resumen" style="font-size:12px;color:var(--tx2);margin-top:6px"></div>

@@ -1134,7 +1134,8 @@ function reviewAsocYaVinculado(targetExp){
   if(!source||typeof getExpById!=='function'||typeof getExpAsociadosDirectos!=='function')return false;
   const src=getExpById(source);
   if(!src)return false;
-  return getExpAsociadosDirectos(src).some(function(n){return expAsocMatchNum(n,targetExp);});
+  const lista=typeof getExpAsociadosAll==='function'?getExpAsociadosAll(src):getExpAsociadosDirectos(src);
+  return (lista||[]).some(function(n){return expAsocMatchNum(n,targetExp);});
 }
 function reviewAsocEsPqrs(e){
   if(typeof expAsocEsRegistroPqrs==='function')return !!expAsocEsRegistroPqrs(e);
@@ -1233,7 +1234,7 @@ function reviewAsocPickCardHtml(item){
     '<button type="button" class="btn bsm" onclick="reviewAsocVerConsulta(\''+jsStr(e._exp)+'\',\'\',\'exp\')">🔍 Consultar</button>'+
     '<button type="button" class="btn bsm" onclick="reviewAsocVerArchivos(\''+jsStr(e._exp)+'\')">📁 Archivos</button>'+
     (puedeAsoc?(reviewAsocYaVinculado(e._exp)
-      ?'<button type="button" class="btn bsm" disabled style="opacity:.9">✓ Ya asociado</button>'
+      ?'<button type="button" class="btn bsm" title="Quitar esta asociación" onclick="desasociarExpedienteDesdeRevision(\''+jsStr(e._exp)+'\')">Desasociar</button>'
       :'<button type="button" class="btn bsm bp" onclick="confirmReviewAsocPick(\''+jsStr(e._exp)+'\')">🖇️ Asociar</button>')
       :'')+
     '</div></div>';
@@ -1257,7 +1258,7 @@ function renderReviewAsocPickPanel(panelId){
       ?'Busque la PQRSD por número, interesado, asunto, correo de radicación u otros datos.'
       :'Busque por número, interesado, asunto, correo de radicación, actividad sin expediente u otros datos.');
   body.innerHTML=
-    (aviso?'<div id="review-asoc-aviso" style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:#e7f6ee;border:1px solid #1a7a4a;color:#145c38;font-size:13px;font-weight:600">✓ '+escAttr(aviso.msg)+'</div>':'')+
+    (aviso?'<div id="review-asoc-aviso" style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:#e7f6ee;border:1px solid #1a7a4a;color:#145c38;font-size:13px;font-weight:600">'+(aviso.quito?'':'✓ ')+escAttr(aviso.msg)+'</div>':'')+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
     (reviewAsocPuedeCrearExp(ctx)
       ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
@@ -1447,6 +1448,54 @@ function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
   else notif(okMsg,'ok');
   return true;
+}
+function quitarNumeroAsociado(e,num){
+  if(!e||typeof getExpAsociadosDirectos!=='function')return false;
+  const arr=getExpAsociadosDirectos(e);
+  if(!arr.some(function(n){return expAsocMatchNum(n,num);}))return false;
+  e._expedientes_asociados=JSON.stringify(arr.filter(function(n){return !expAsocMatchNum(n,num);}));
+  return true;
+}
+function ajustarFlagAsociados(e){
+  if(!e)return;
+  const dir=typeof getExpAsociadosDirectos==='function'?getExpAsociadosDirectos(e):[];
+  const inv=typeof getExpAsociadosInversos==='function'?getExpAsociadosInversos(e._exp):[];
+  if(!dir.length&&!inv.length)e._usar_exp_asociados=false;
+}
+/** Quita el vínculo en los dos registros para corregir una asociación hecha por error. */
+function desasociarExpedienteDesdeRevision(targetExpId){
+  if(window._reviewAsocBusy)return;
+  window._reviewAsocBusy=true;
+  try{
+  targetExpId=String(targetExpId||'').trim();
+  const ctx=window._reviewAsocCtx||{};
+  const sourceExp=String(ctx.sourceExp||'').trim();
+  const e=typeof getExpById==='function'?getExpById(sourceExp):null;
+  const target=(typeof getExpById==='function'?getExpById(targetExpId):null)
+    ||(typeof findExpByNumPlain==='function'?findExpByNumPlain(targetExpId):null);
+  if(!e||!target){notif('No se pudo quitar la asociación','err');return;}
+  const q1=quitarNumeroAsociado(e,target._exp);
+  const q2=quitarNumeroAsociado(target,e._exp);
+  if(!q1&&!q2){notif('Ese registro no está asociado','err');return;}
+  ajustarFlagAsociados(e);
+  ajustarFlagAsociados(target);
+  if(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)){
+    if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
+    const quien=typeof pqrsComentarioAutor==='function'?pqrsComentarioAutor():'';
+    e._pqrs_historial.push({ts:Date.now(),tipo:'desasociacion',fecha:typeof hoy==='function'?hoy():'',nota:'Se quitó el vínculo con '+target._exp+(quien?' — '+quien:''),por:quien});
+  }
+  if(typeof persistExpedienteGranular==='function'){
+    persistExpedienteGranular(e,false);
+    if(target._exp!==e._exp)persistExpedienteGranular(target,false);
+  }
+  const okMsg='Se quitó la asociación con '+target._exp+'.';
+  window._reviewAsocAviso={msg:okMsg,exp:target._exp,quito:true};
+  if(typeof avisoVinculoAsociado==='function')avisoVinculoAsociado(okMsg);
+  else notif(okMsg,'ok');
+  if(typeof reviewAsocRefrescarEnRevision==='function'&&reviewAsocRefrescarEnRevision())return;
+  if(typeof renderActividades==='function')renderActividades();
+  if(typeof renderConsulta==='function'&&document.getElementById('pg-con')&&document.getElementById('pg-con').classList.contains('on'))renderConsulta();
+  }finally{window._reviewAsocBusy=false;}
 }
 /** Asociación hecha desde el panel lateral de la revisión: no reabrir ni cerrar la ventana, solo repintar. */
 function reviewAsocRefrescarEnRevision(){

@@ -48,13 +48,52 @@ function renderConsolidadoResponsable(){
   }
   renderJurisConsolidadoStats([]);
 }
+function consolidadoNcaModo(){
+  if(typeof consolidadoBuscaPorCorte==='function')return consolidadoBuscaPorCorte();
+  return (typeof esNcaDeguv==='function'&&esNcaDeguv())
+    ||(typeof esJurisdiccional==='function'&&esJurisdiccional());
+}
+/** El encargado no baja el archivo al abrir: solo el corte que ya buscó. */
+function consolidadoNcaEspera(){
+  if(!consolidadoNcaModo())return false;
+  const rango=typeof getPeriodoRango==='function'?getPeriodoRango('cons'):null;
+  if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31')return true;
+  const clave=(rango.desde||'')+'|'+(rango.hasta||'');
+  return clave!==window._consNcaRango||!Array.isArray(window._consNcaList);
+}
+function renderConsolidadoNcaEspera(){
+  const res=document.getElementById('cons-periodo-resumen');
+  if(res)res.textContent='Elija un año, trimestre, mes o un rango de fechas y pulse Buscar. Hasta entonces no se descarga el archivo.';
+  const panel=document.getElementById('cons-cortes-panel');
+  if(panel)panel.innerHTML='';
+  const mets=document.getElementById('mets');
+  if(mets)mets.innerHTML='<div class="emp">Sin búsqueda todavía.</div>';
+  ['terms-grid','c-mp','c-sus','c-san','c-mora','c-pers','c-coa','c-acu','c-req','ch-tram','ch-est','ch-inst','tbl-terms','tbl-inst','tbl-dias','tbl-acts'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el)el.innerHTML='';
+  });
+}
+function buscarConsolidado(){
+  if(consolidadoNcaModo()&&typeof buscarConsolidadoNca==='function')return buscarConsolidadoNca();
+  renderConsolidado();
+}
 function renderConsolidado(){
+  if(consolidadoNcaEspera()){
+    renderConsolidadoNcaEspera();
+    return;
+  }
   document.querySelectorAll('#pg-cons .cgr, #pg-cons > .card, #pg-cons #cons-juris-panel').forEach(el=>{el.style.display='';});
   const rango=getPeriodoRango('cons');
-  const baseAmb=filterExpsPeriodo(typeof reqListaAmbito==='function'?reqListaAmbito():expsAmbito(),'cons');
+  const baseAmb=consolidadoNcaModo()&&Array.isArray(window._consNcaList)
+    ?window._consNcaList.slice()
+    :filterExpsPeriodo(typeof reqListaAmbito==='function'?reqListaAmbito():expsAmbito(),'cons');
   window._jurisConsListCache=baseAmb;
   const amb=esJurisdiccional()?filtrarJurisConsList(baseAmb):(esDeptoConsFiltroActivo()?filtrarDeptoConsList(baseAmb):baseAmb);
   renderConsolidadoCortesPanel(amb,rango);
+  if(consolidadoNcaModo()&&rango){
+    const resNca=document.getElementById('cons-periodo-resumen');
+    if(resNca&&typeof labelPeriodo==='function')resNca.textContent='Expedientes radicados entre '+labelPeriodo('cons')+' · '+amb.length+' expediente(s). No es el archivo completo.';
+  }
   window._consExportList=amb;
   window._consCatLists={};
   const total=amb.length;

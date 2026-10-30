@@ -31,6 +31,7 @@ describe('ventana del anexo del correo', () => {
   it('el visor queda por encima de la PQRSD y se cierra con la X', () => {
     expect(css).toContain('#ciudadano-doc-overlay.pqrs-att-ventana-on')
     expect(css).toContain('z-index:100200')
+    expect(css).toContain('height:min(84vh,calc(100vh - 140px))!important')
     expect(pqrs).toContain("ov.classList.remove('on','pqrs-att-ventana-on')")
   })
 
