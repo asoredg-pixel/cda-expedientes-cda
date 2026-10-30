@@ -2482,6 +2482,13 @@ function corteBandejaIso(){
   d.setDate(d.getDate()-10);
   return d.toISOString();
 }
+/** Inicio del día local de hace N días calendario, en ISO, para updatedAt. */
+function corteCalendarioIso(dias){
+  const d=new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-(dias||0));
+  return d.toISOString();
+}
 function escucharConsultaDepto(db,depto,unsubs,filtro){
   let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
   if(filtro&&window._fsQuery&&window._fsWhere){
@@ -2527,7 +2534,7 @@ function initRealtimeSync(){
     const esOficina=rolLogin==='secretaria'||rolLogin==='oap_deguv'||rolLogin==='rn_deguv'||rolLogin==='admin_deguv'||rolLogin==='ds_deguv';
     const verReq=!esResp||cargo==='coordinador'||cargo==='contable';
     deptos.forEach(function(depto){
-      escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
+      escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:esResp?corteCalendarioIso(30):corteBandejaIso()});
       if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
       if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});
       if(esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});

@@ -1989,16 +1989,16 @@ function _driveNombreArchivoPlano(s) {
 }
 window._driveNombreArchivoPlano = _driveNombreArchivoPlano;
 
-/** Estado legible para el nombre en Drive (por revisar, por corregir, aprobado…); '' si no aplica. */
+/** Estado legible para el nombre en Drive (PR, por corregir, AP…); '' si no aplica. */
 function _driveEstadoLegible(estado) {
   const est = String(estado || '').toLowerCase();
   if (est === 'guia_correccion' || est === 'guia') return 'guia';
-  if (est === 'aprobado' || est === 'ok' || est === 'atendido' || est === 'cerrado' || est === 'notificado') return 'aprobado';
+  if (est === 'aprobado' || est === 'ok' || est === 'atendido' || est === 'cerrado' || est === 'notificado') return 'AP';
   if (est === 'corregir' || est === 'acorregir') return 'por corregir';
   if (est === 'por_firmar') return 'por firmar';
   if (est === 'por_firma') return 'por firma';
   if (est === 'por_notificar') return 'por notificar';
-  if (est === 'revision') return 'por revisar';
+  if (est === 'revision') return 'PR';
   return '';
 }
 window._driveEstadoLegible = _driveEstadoLegible;
@@ -2087,7 +2087,7 @@ function _driveTipoDocumentoNombre(e, task) {
  * Sin fecha ni responsable (ya están en el sistema / se filtran ahí).
  * Formato: [ANEXON] {ESTADO} {EXP} {TIPO DOCUMENTO}.{ext}
  * No usar «proyeccion» en el nombre público (confunde: parece no aprobada).
- * Estado «aprobado» = aprobado / atendido / cerrado (con o sin notificación).
+ * Estado «AP» = aprobado / atendido / cerrado (con o sin notificación). «PR» = por revisar.
  * opts: { esAnexo, anexoN, soporte }
  */
 function buildExpedienteDriveFilename(estado, e, task, responsable, origName, opts) {
@@ -2095,7 +2095,7 @@ function buildExpedienteDriveFilename(estado, e, task, responsable, origName, op
   const exp = String(e && e._exp || '').trim().replace(/\s/g, '') || 'EXP';
   const act = _driveTipoDocumentoNombre(e, task);
   const ext = _driveFileExt(origName, 'pdf');
-  const pref = _driveEstadoLegible(estado) || 'por revisar';
+  const pref = _driveEstadoLegible(estado) || 'PR';
   const sop = opts.soporte || null;
   let anexoN = parseInt(opts.anexoN != null ? opts.anexoN : (sop && (sop.anexo_n || sop.anexoN)), 10) || 0;
   const esAnexo = !!(opts.esAnexo || opts.es_anexo || (sop && (sop.es_anexo || sop.esAnexo))
@@ -2789,8 +2789,8 @@ async function driveRenameExpedienteSoporte(soporte, newEstado, e, task, respons
   const ok = await driveRenameInstitutional(fid, newName);
   if (ok) {
     const prevLabel = String(soporte.label || '');
-    const isDriveName = /^((docprincipal|anexo\d*)[-_ ])?(revision|por revisar|aprobado|ok|acorregir|por corregir|corregir|por[_ ]firmar|por[_ ]firma|por[_ ]notificar|guia|atendido|notificado)[-_ ]/i.test(prevLabel)
-      || /^(revision|por revisar|aprobado|ok|acorregir|por corregir|por[_ ]firmar|por[_ ]firma|por[_ ]notificar|guia)[-_ ]/i.test(prevLabel)
+    const isDriveName = /^((docprincipal|anexo\d*)[-_ ])?(revision|por revisar|pr|aprobado|ap|ok|acorregir|por corregir|corregir|por[_ ]firmar|por[_ ]firma|por[_ ]notificar|guia|atendido|notificado)[-_ ]/i.test(prevLabel)
+      || /^(revision|por revisar|pr|aprobado|ap|ok|acorregir|por corregir|por[_ ]firmar|por[_ ]firma|por[_ ]notificar|guia)[-_ ]/i.test(prevLabel)
       || /^proyecci/i.test(prevLabel)
       || prevLabel === String(soporte.driveFilename || '')
       || prevLabel === String(origName || '');

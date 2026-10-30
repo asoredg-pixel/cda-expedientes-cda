@@ -114,9 +114,9 @@ describe('Aprobar y cerrar / notificar: renombre Drive PQRSD', () => {
     expect(c._calls.cerrar).toBe(1)
     expect(c._calls.mensaje).toBe(0)
     expect(c.renombres.length).toBe(1)
-    expect(c.renombres[0].name).toMatch(/^APROBADO /i)
+    expect(c.renombres[0].name).toMatch(/^AP /i)
     expect(docs[0].driveEstado).toBe('aprobado')
-    expect(docs[0].driveFilename).toMatch(/^APROBADO /i)
+    expect(docs[0].driveFilename).toMatch(/^AP /i)
   })
 
   it('mensaje sigue yendo a ncaAprobarMensajeSimple (sin cerrar directo)', async () => {
@@ -137,7 +137,7 @@ describe('Aprobar y cerrar / notificar: renombre Drive PQRSD', () => {
     const e = { _exp: 'WE26453', _pqrs_workflow: { documentos: docs } }
     const c = ctxCerrar(e, { id: 't1' })
     await c._pqrsRenombrarDocsAlCerrarDesdeRevision(e, 'atendido')
-    expect(c.renombres[0].name).toMatch(/^APROBADO V2 /i)
+    expect(c.renombres[0].name).toMatch(/^AP V2 /i)
     expect(docs[0].driveEstado).toBe('atendido')
   })
 

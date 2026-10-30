@@ -2329,7 +2329,7 @@ function _pqrsDocEsBorradorInterno(d){
   if(['revision','acorregir','por_firma','por_firmar','vital_gestion'].includes(est))return true;
   const lbl=String(d.label||d.nombre||d.driveFilename||d.name||'');
   if(/por corregir|entrega\s*v\d+|por firmar|para firma/i.test(lbl))return true;
-  if(/^(revision|por revisar|acorregir|por corregir|por[_ ]firma|por[_ ]firmar)[-_ ]/i.test(lbl))return true;
+  if(/^(revision|por revisar|pr|acorregir|por corregir|por[_ ]firma|por[_ ]firmar)[-_ ]/i.test(lbl))return true;
   if(d.version_historial)return true;
   if(d.activo===false&&(/por corregir|entrega\s*v\d+/i.test(lbl)||est==='acorregir'||est==='revision'))return true;
   return false;
@@ -8144,6 +8144,13 @@ function taskActividadIconBarHtml(ref,taskId,t){
   if(!t)return'';
   return '<div class="fx sst-act-toolbar" style="gap:4px;flex-wrap:wrap;margin-bottom:10px">'+taskActividadToolbarInnerHtml(ref,taskId,t,{showEdit:true})+'</div>';
 }
+function taskReviewAsocRailBtnHtml(ref,taskId,t,on){
+  const r=escAttr(ref),tid=escAttr(taskId);
+  const n=typeof reviewAsocConteo==='function'?reviewAsocConteo(ref,t):0;
+  const badge=n&&typeof actIcoBadgeHtml==='function'?actIcoBadgeHtml(n,'blue'):'';
+  const titulo=(t&&t.sinExpediente?'Asociar a expediente o PQRSD':'Asociar expediente o PQRSD')+(n?' · '+n:'');
+  return '<button type="button" class="btn bsm bic act-ico task-review-rail-btn act-ico-btn'+(on?' on':'')+'" data-side="asociar" title="'+escAttr(titulo)+'" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️'+badge+'</button>';
+}
 function taskActividadToolbarReviewRailHtml(ref,taskId,t,opts){
   if(!t)return'';
   opts=opts||{};
@@ -8158,11 +8165,11 @@ function taskActividadToolbarReviewRailHtml(ref,taskId,t,opts){
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
   h+=taskReviewChatRailBtnHtml(ref,taskId,t);
   if(libre)
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar a expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
+    h+=taskReviewAsocRailBtnHtml(ref,taskId,t,false);
   else{
     const ex=getExpById(ref);
     if(ex&&(typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(ex)||typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()))
-      h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="asociar" title="Asociar expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
+      h+=taskReviewAsocRailBtnHtml(ref,taskId,t,false);
   }
   if(!hideTrasladar)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="trasladar" title="Trasladar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
@@ -9079,7 +9086,7 @@ function taskReviewPqrsOrigenRailHtml(ref,taskId,t,e){
     ||(typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()&&e&&esPqrsSecretaria(e))))
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='edit'?' on':'')+'" data-side="edit" title="Editar expediente · traslado y asignación" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
   if(e&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e))
-    h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='asociar'?' on':'')+'" data-side="asociar" title="Asociar expediente o PQRSD" onclick="taskReviewToggleSidePanel(\'asociar\',\''+r+'\',\''+tid+'\')">🖇️</button>';
+    h+=taskReviewAsocRailBtnHtml(refExp,taskId,t,side==='asociar');
   if(esEnc)
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar oficina o asignar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
   if(typeof openBibGuardarModal==='function')
@@ -16432,7 +16439,7 @@ function soporteEsProyeccionIntermedia(s){
   const est=String(s.driveEstado||'').toLowerCase();
   const nom=String(s.driveFilename||s.label||s.nombre||'');
   if(est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir')return true;
-  if(/^(por revisar|revision|proyecci)/i.test(nom))return true;
+  if(/^(por revisar|pr[-_ ]|revision|proyecci)/i.test(nom))return true;
   return false;
 }
 /**
@@ -20599,7 +20606,7 @@ async function driveRenombrarSoporteActivoExp(expId,taskId,newEstado,opts){
     if(aOk){
       // No renombrar versiones «por corregir» (se eliminan al cerrar)
       if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s))return false;
-      if(/^(revision|por revisar)[-_ ]/i.test(nom)||/(?:^|[-_ ])(revision|por revisar)[-_ ]/i.test(nom))return true;
+      if(/^(revision|por revisar|pr)[-_ ]/i.test(nom)||/(?:^|[-_ ])(revision|por revisar|pr)[-_ ]/i.test(nom))return true;
       return !est||est==='revision'||est==='por_firma'||est==='por_firmar'||est==='vital_gestion'||est==='acorregir'||est==='corregir';
     }
     // Devolver: solo el documento principal (el que estaba «por revisar») pasa a «por corregir»
@@ -20677,7 +20684,7 @@ function driveReintentarNombrePorCorregir(expId,taskId){
     if(!s)return false;
     if(s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta')return false;
     if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s))return false;
-    return /^(por revisar|revision)[-_ ]/i.test(String(s.driveFilename||''));
+    return /^(por revisar|pr|revision)[-_ ]/i.test(String(s.driveFilename||''));
   });
   if(!pendiente)return;
   driveRenombrarSoporteActivoExp(expId,taskId,'corregir').catch(function(err){
@@ -24513,7 +24520,7 @@ function driveOpsCompletarAtendida(t,e){
       const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
       if(esAn)return;
       const nom=String(s.driveFilename||'');
-      if(!/^(por revisar|revision)[-_ ]/i.test(nom))return;
+      if(!/^(por revisar|pr|revision)[-_ ]/i.test(nom))return;
       const id=typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):String(s.driveFileId||s.fileId||'');
       if(!id)return;
       let nuevo='';
@@ -24640,7 +24647,7 @@ function limpiarSoportesPorCorregirTask(t){
     if(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)){trash.push(s);return false;}
     const nom=String(s.driveFilename||s.label||'');
     const est=String(s.driveEstado||'').toLowerCase();
-    if(/^(por revisar|revision)[-_ ]/i.test(nom)||est==='revision'){trash.push(s);return false;}
+    if(/^(por revisar|pr|revision)[-_ ]/i.test(nom)||est==='revision'){trash.push(s);return false;}
     return true;
   });
   return trash;
@@ -24693,7 +24700,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
         const esAn=s.es_anexo===true||s.esAnexo===true||s.tipo==='anexo_respuesta'||(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(s));
         if(esAn)return;
         const nom=String(s.driveFilename||'');
-        if(!/^(por revisar|revision)[-_ ]/i.test(nom))return;
+        if(!/^(por revisar|pr|revision)[-_ ]/i.test(nom))return;
         const fid=String((typeof _soporteResolveDriveFileId==='function'?_soporteResolveDriveFileId(s):'')||s.driveFileId||s.fileId||'').trim();
         if(!fid)return;
         let nuevo='';
@@ -24810,7 +24817,7 @@ function verificarTaskExp(expId,taskId,fecha,opts){
           if(!s||(typeof soporteEsPorCorregir==='function'&&soporteEsPorCorregir(s)))return false;
           if(typeof esSoporteEnvioCorreoItem==='function'&&esSoporteEnvioCorreoItem(s))return false;
           const nom=String(s.driveFilename||s.label||'');
-          return /^(revision|por revisar)[-_ ]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
+          return /^(revision|por revisar|pr)[-_ ]/i.test(nom)||String(s.driveEstado||'').toLowerCase()==='revision';
         });
         if(still){
           console.warn('verificarTaskExp: el documento vigente sigue con prefijo POR REVISAR. Las copias anteriores se eliminan al cerrar.');
@@ -32270,13 +32277,17 @@ function actividadCuentaComoPorCorregir(t){
   return est==='Por corregir';
 }
 window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
+function corteCalendarioLocal(dias){
+  const corte=new Date();
+  corte.setHours(0,0,0,0);
+  corte.setDate(corte.getDate()-(dias||0));
+  return corte.getFullYear()+'-'+String(corte.getMonth()+1).padStart(2,'0')+'-'+String(corte.getDate()).padStart(2,'0');
+}
 function actividadEsDeUltimosDias(t,dias){
   const e=typeof getExpById==='function'?getExpById(t&&(t.exp||t.codigo)):null;
   const f=String((t&&(t.fechaAtendida||t.fechaReportada))||(e&&e.updatedAt)||'').slice(0,10);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return true;
-  const corte=new Date();
-  corte.setDate(corte.getDate()-(dias||10));
-  return f>=corte.toISOString().slice(0,10);
+  return f>=corteCalendarioLocal(dias||10);
 }
 function filtrarActividadesPorEstado(list,filtro){
   // «Requerimientos» no filtra actividades: filas propias (requerimientos.js)
@@ -32476,7 +32487,8 @@ function filtrarActividadesPorEstado(list,filtro){
   }),typeof getTareasRevParTecnicoAprobadas==='function'?getTareasRevParTecnicoAprobadas():[]);
     if(typeof getTareasRevParProfesionalDevueltaNca==='function')
       doneList=mergeActividadLists(doneList,getTareasRevParProfesionalDevueltaNca());
-    return doneList.filter(function(t){return actividadEsDeUltimosDias(t,10);});
+    const diasAtend=typeof esModoResponsable==='function'&&esModoResponsable()?30:10;
+    return doneList.filter(function(t){return actividadEsDeUltimosDias(t,diasAtend);});
   }
   if(filtro==='revisados')return [];
   if(filtro==='prior'){
@@ -35266,7 +35278,7 @@ async function _pqrsRenombrarDocsDriveWf(wf,nuevoEstado,opts){
   if(!wf||!Array.isArray(wf.documentos))return;
   opts=opts||{};
   const only=Array.isArray(opts.onlyEstados)?opts.onlyEstados.map(function(s){return String(s||'').toLowerCase();}):null;
-  const prefRgx=/^(revision[_ ]final|revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
+  const prefRgx=/^(revision[_ ]final|revision|por revisar|pr|acorregir|por corregir|aprobado|ap|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido)[- ]/i;
   const entregaWf=Number(wf.entrega_n)||0;
   for(const doc of wf.documentos){
     const estEff=String(doc.driveEstado||'revision').toLowerCase()||'revision';
@@ -37851,9 +37863,9 @@ function pqrsStripPrefijoInternoDrive(n){
   if(!s)return '';
   for(let i=0;i<8;i++){
     const prev=s;
-    s=s.replace(/^(docprincipal|anexo\d*)[-_ ]?(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|vital[_ ]gestion|ok|guia|corregir)[-_ ]/i,'');
+    s=s.replace(/^(docprincipal|anexo\d*)[-_ ]?(revision|por revisar|pr|acorregir|por corregir|aprobado|ap|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|vital[_ ]gestion|ok|guia|corregir)[-_ ]/i,'');
     s=s.replace(/^v\d+[- ]/i,'');
-    s=s.replace(/^(revision|por revisar|acorregir|por corregir|aprobado|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|guia|corregir)[-_ ]/i,'');
+    s=s.replace(/^(revision|por revisar|pr|acorregir|por corregir|aprobado|ap|por[_ ]firma|por[_ ]firmar|por[_ ]notificar|atendido|notificado|guia|corregir)[-_ ]/i,'');
     if(s===prev)break;
   }
   return s.trim();

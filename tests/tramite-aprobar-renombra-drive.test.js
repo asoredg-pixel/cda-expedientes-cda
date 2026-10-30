@@ -100,10 +100,10 @@ describe('driveRenombrarSoporteActivoExp (concepto)', () => {
     expect(ok).toBe(true)
     expect(c.renombres.length).toBe(1)
     expect(c.renombres[0].fid).toBe('fidRlo')
-    expect(c.renombres[0].name).toMatch(/^APROBADO /i)
+    expect(c.renombres[0].name).toMatch(/^AP /i)
     expect(c.renombres[0].name).toMatch(/SEGUIMIENTO/i)
     expect(sop.driveEstado).toBe('aprobado')
-    expect(sop.driveFilename).toMatch(/^APROBADO /i)
+    expect(sop.driveFilename).toMatch(/^AP /i)
   })
 
   it('al devolver, el principal POR REVISAR pasa a POR CORREGIR y el anexo no', async () => {
@@ -152,7 +152,7 @@ describe('driveRenombrarSoporteActivoExp (concepto)', () => {
     const ok = await c.driveRenombrarSoporteActivoExp('VDA-00011-15', 't1', 'aprobado')
     expect(ok).toBe(true)
     expect(c.renombres.map(r => r.fid)).toEqual(['NEW'])
-    expect(c.renombres[0].name).toMatch(/^APROBADO /i)
+    expect(c.renombres[0].name).toMatch(/^AP /i)
     expect(viejo.driveFilename).toMatch(/^POR REVISAR /i)
   })
 

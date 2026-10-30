@@ -55,6 +55,8 @@ function montar(allowTramite) {
   createContext(c)
   runInContext(extraerFunciones(read('js/consulta.js'), [
     'reviewAsocEsPqrs', 'reviewAsocRank', 'collectReviewAsocCandidatos', 'reviewAsocPuedeCrearExp',
+    'reviewAsocConteo', 'reviewAsocVinculadosItems', 'reviewAsocIdsVinculados', 'reviewAsocFijosHtml',
+    'reviewAsocListaVisible', 'reviewAsocPintarBadgeRail',
     'renderReviewAsocPickPanel', 'confirmReviewAsocPick'
   ]), c)
   return c
@@ -123,6 +125,63 @@ describe('Aviso de asociado visible y permanente', () => {
     expect(html).toContain('desasociarExpedienteDesdeRevision')
     expect(html).not.toContain('Ya asociado')
     expect(consulta).toContain('id="review-asoc-aviso"')
+  })
+})
+
+describe('Asociados fijos y contador del rail', () => {
+  it('al abrir Asociar el vínculo queda arriba, fuera de la búsqueda', () => {
+    const consulta = read('js/consulta.js')
+    const body = { innerHTML: '' }
+    const lista = [
+      { _exp: 'PQ-1', _es_pqrs: true },
+      { _exp: 'PQ-2', _es_pqrs: true },
+      { _exp: 'EXP-7' }
+    ]
+    const c = createContext({
+      window: { _reviewAsocPanelId: 'task-review-asoc-body', _reviewAsocCtx: { mode: 'pqrs-pick', allowTramite: true, sourceExp: 'PQ-1', q: '' } },
+      document: { getElementById: id => (id === 'task-review-asoc-body' ? body : null) },
+      exps: lista,
+      actividadesLibres: [],
+      expAsocEsRegistroPqrs: e => !!e._es_pqrs,
+      expAsocMatchNum: (a, b) => a === b,
+      matchS: () => true,
+      matchActLibre: () => true,
+      getExpById: id => lista.find(e => e._exp === id) || null,
+      getExpAsociadosAll: e => (e && e._exp === 'PQ-1' ? ['EXP-7'] : []),
+      escAttr: s => String(s == null ? '' : s),
+      notif: () => {},
+      puedeCrearExpedienteRegistro: () => true,
+      reviewAsocPickCardHtml: it => '[' + it.id + ']'
+    })
+    runInContext(extraerFunciones(consulta, [
+      'reviewAsocEsPqrs', 'reviewAsocRank', 'collectReviewAsocCandidatos', 'reviewAsocPuedeCrearExp',
+      'reviewAsocConteo', 'reviewAsocVinculadosItems', 'reviewAsocIdsVinculados', 'reviewAsocFijosHtml',
+      'reviewAsocListaVisible', 'reviewAsocPintarBadgeRail', 'renderReviewAsocPickPanel'
+    ]), c)
+    c.renderReviewAsocPickPanel('task-review-asoc-body')
+    const h = body.innerHTML
+    const fijos = h.slice(0, h.indexOf('id="review-asoc-list"'))
+    const busqueda = h.slice(h.indexOf('id="review-asoc-list"'))
+    expect(fijos).toContain('id="review-asoc-fijos"')
+    expect(fijos).toContain('[EXP-7]')
+    expect(busqueda).not.toContain('[EXP-7]')
+    expect(busqueda).toContain('[PQ-2]')
+    expect(c.reviewAsocConteo('PQ-1', null)).toBe(1)
+  })
+
+  it('el rail pinta el número como el chat', () => {
+    const core = read('js/core.js')
+    const c = createContext({
+      escAttr: s => String(s == null ? '' : s),
+      reviewAsocConteo: () => 2,
+      actIcoBadgeHtml: n => '<span class="act-ico-badge">' + n + '</span>'
+    })
+    runInContext(extraerFunciones(core, ['taskReviewAsocRailBtnHtml']), c)
+    const html = c.taskReviewAsocRailBtnHtml('QR260506', 't1', { exp: 'QR260506' }, false)
+    expect(html).toContain('data-side="asociar"')
+    expect(html).toContain('act-ico-btn')
+    expect(html).toContain('act-ico-badge')
+    expect(html).toContain('>2<')
   })
 })
 

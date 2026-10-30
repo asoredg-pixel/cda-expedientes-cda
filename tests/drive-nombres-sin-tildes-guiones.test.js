@@ -82,8 +82,8 @@ describe('Normalizador de nombres Drive', () => {
   it('Expediente/actividad: [ANEXON] {ESTADO} {EXP} {ACTIVIDAD} si no hay tipo de documento', () => {
     const e = { _exp: 'PAF-00012-26' }
     const t = { desc: 'Revisión técnica' }
-    expect(g._exp('revision', e, t, '', 'informe.pdf', {})).toBe('POR REVISAR PAF-00012-26 REVISION TECNICA.pdf')
-    expect(g._exp('aprobado', e, t, '', 'x.pdf', { esAnexo: true, anexoN: 2 })).toBe('ANEXO2 APROBADO PAF-00012-26 REVISION TECNICA.pdf')
+    expect(g._exp('revision', e, t, '', 'informe.pdf', {})).toBe('PR PAF-00012-26 REVISION TECNICA.pdf')
+    expect(g._exp('aprobado', e, t, '', 'x.pdf', { esAnexo: true, anexoN: 2 })).toBe('ANEXO2 AP PAF-00012-26 REVISION TECNICA.pdf')
     expect(g._exp('acorregir', e, t, '', 'x.pdf', {})).toMatch(/^POR CORREGIR PAF-00012-26 /)
     expect(g._exp('por_firmar', e, t, '', 'x.pdf', {})).toMatch(/^POR FIRMAR /)
     expect(g._exp('por_notificar', e, t, '', 'x.pdf', {})).toMatch(/^POR NOTIFICAR /)
@@ -97,16 +97,16 @@ describe('Normalizador de nombres Drive', () => {
       conceptosSegData: x => x || []
     })
     expect(gx._exp('revision', e, { desc: 'Elaborar concepto', conceptoTipo: 'Concepto de seguimiento' }, '', 'c.pdf', {}))
-      .toBe('POR REVISAR PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
+      .toBe('PR PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     expect(gx._exp('aprobado', e, { desc: 'Proyectar acto', actoTipo: 'Resolución que aprueba' }, '', 'r.docx', {}))
-      .toBe('APROBADO PAF-0009-21 RESOLUCION APRUEBA.docx')
+      .toBe('AP PAF-0009-21 RESOLUCION APRUEBA.docx')
     expect(gx._exp('revision', e, { desc: 'Proyectar acto', actoTipo: 'Auto desiste' }, '', 'a.pdf', {}))
-      .toBe('POR REVISAR PAF-0009-21 AUTO DESISTE.pdf')
+      .toBe('PR PAF-0009-21 AUTO DESISTE.pdf')
     expect(gx._exp('revision', e, { id: 't3', desc: 'Liquidar factura' }, '', 'f.pdf', {}))
-      .toBe('POR REVISAR PAF-0009-21 FACTURA TUA.pdf')
+      .toBe('PR PAF-0009-21 FACTURA TUA.pdf')
     const eSeg = { _exp: 'PAF-0009-21', _conceptos_seg: [{ taskId: 't9', tipoConcepto: 'Concepto evaluación' }] }
     expect(gx._exp('revision', eSeg, { id: 't9', desc: 'Concepto técnico' }, '', 'c.pdf', {}))
-      .toBe('POR REVISAR PAF-0009-21 CONCEPTO EVALUACION.pdf')
+      .toBe('PR PAF-0009-21 CONCEPTO EVALUACION.pdf')
   })
 
   it('Expediente: versiones de corrección V1, V2… según la entrega', () => {
@@ -115,19 +115,19 @@ describe('Normalizador de nombres Drive', () => {
     const a1 = { loteEntrega: 'lot_1', es_anexo: true, anexo_n: 1 }
     const t = { desc: 'Concepto', conceptoTipo: 'Concepto de seguimiento', soportes: [s1, a1] }
     // Una sola entrega aprobada: sin V
-    expect(g._exp('aprobado', e, t, '', 'c.pdf', { soporte: s1 })).toBe('APROBADO PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
+    expect(g._exp('aprobado', e, t, '', 'c.pdf', { soporte: s1 })).toBe('AP PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     // Devolución: V1 en principal y anexo
     expect(g._exp('corregir', e, t, '', 'c.pdf', { soporte: s1 })).toBe('POR CORREGIR V1 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     expect(g._exp('corregir', e, t, '', 'a.pdf', { soporte: a1, esAnexo: true, anexoN: 1 })).toBe('ANEXO1 POR CORREGIR V1 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     // Nueva entrega corregida (subida): V2
-    expect(g._exp('revision', e, t, '', 'c2.pdf', {})).toBe('POR REVISAR V2 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
+    expect(g._exp('revision', e, t, '', 'c2.pdf', {})).toBe('PR V2 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     const s2 = { loteEntrega: 'lot_2' }
     t.soportes.push(s2)
-    expect(g._exp('aprobado', e, t, '', 'c2.pdf', { soporte: s2 })).toBe('APROBADO V2 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
+    expect(g._exp('aprobado', e, t, '', 'c2.pdf', { soporte: s2 })).toBe('AP V2 PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     // Firmado / notificado no son entregas del responsable
     expect(g._exp('por_notificar', e, t, '', 'f.pdf', { soporte: { loteEntrega: 'wf_firma_1' } })).toBe('POR NOTIFICAR PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
     // Actividad sin entregas previas: sin V
-    expect(g._exp('revision', e, { desc: 'Concepto', conceptoTipo: 'Concepto de seguimiento' }, '', 'c.pdf', {})).toBe('POR REVISAR PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
+    expect(g._exp('revision', e, { desc: 'Concepto', conceptoTipo: 'Concepto de seguimiento' }, '', 'c.pdf', {})).toBe('PR PAF-0009-21 CONCEPTO SEGUIMIENTO.pdf')
   })
 })
 
@@ -140,10 +140,10 @@ describe('PQRSD: renombre por estado y reconocimiento de nombres', () => {
     await c._renWf(wf, 'por_firmar')
     expect(wf.documentos[0].nombre).toBe('POR FIRMAR V2 PAF-0009-21.pdf')
     await c._renWf(wf, 'aprobado')
-    expect(wf.documentos[0].nombre).toBe('APROBADO V2 PAF-0009-21.pdf')
+    expect(wf.documentos[0].nombre).toBe('AP V2 PAF-0009-21.pdf')
     const wf2 = { documentos: [{ fileId: 'f2', nombre: 'por_firmar-v1-wq261892.pdf', entrega_n: 1 }] }
     await c._renWf(wf2, 'revision')
-    expect(wf2.documentos[0].nombre).toBe('POR REVISAR V1 WQ261892.pdf')
+    expect(wf2.documentos[0].nombre).toBe('PR V1 WQ261892.pdf')
   })
 
   it('etiqueta «Documento de respuesta»: renombra el archivo real y conserva la etiqueta', async () => {
@@ -164,7 +164,7 @@ describe('PQRSD: renombre por estado y reconocimiento de nombres', () => {
     c.renombres.length = 0
     const wf = { documentos: [{ fileId: 'x1', nombre: 'Proyección oficio', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }] }
     await c._renWf(wf, 'atendido')
-    expect(c.renombres[0]).toBe('APROBADO PROYECCION OFICIO.docx')
+    expect(c.renombres[0]).toBe('AP PROYECCION OFICIO.docx')
     expect(wf.documentos[0].nombre).toBe('Proyección oficio')
   })
 
@@ -172,7 +172,7 @@ describe('PQRSD: renombre por estado y reconocimiento de nombres', () => {
     c.renombres.length = 0
     const wf = { documentos: [{ fileId: 'n1', nombre: 'Documento notificado presencial — WE26453 NOT.jpg', driveFilename: 'WE26453 NOT.jpg' }] }
     await c._renWf(wf, 'atendido')
-    expect(c.renombres[0]).toBe('APROBADO WE26453 NOT.jpg')
+    expect(c.renombres[0]).toBe('AP WE26453 NOT.jpg')
     expect(wf.documentos[0].nombre).toBe('Documento notificado presencial — WE26453 NOT.jpg')
   })
 

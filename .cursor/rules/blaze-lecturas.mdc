@@ -1,0 +1,28 @@
+---
+description: Toda modificación debe minimizar lecturas y escrituras de Firestore (Blaze)
+alwaysApply: true
+---
+
+# Blaze: no volver a leer el archivo
+
+El cobro es por documento leído o escrito, multiplicado por cada usuario conectado. Una pantalla no puede escuchar `departamentos/{depto}/expedientes` completa.
+
+## Al entrar
+
+- Admin y jurisdiccional: cero expedientes al login. Un número es un `getDoc`.
+- Con `bandejaMarcasListas`: solo `updatedAt` de 10 días (responsables: 30 días calendario, para su paleta Atendidas), y según el rol `seguimiento`, `reqAlerta`, `esPqrs` o `pendientes` array-contains. Consultas separadas, sin índice compuesto.
+- No poner `_consEscuchaCompleta` para pintar un módulo. Si una consulta corta falla, no pasar a la colección completa.
+
+## Pantalla o módulo nuevo
+
+- Al abrir: no `getDocs` ni `onSnapshot` del archivo. Mostrar vacío hasta que la persona pulse Buscar.
+- Buscar: una consulta con igualdad (`_tramite`, una marca) o un rango cerrado (`_fecha`, `updatedAt`). «Todo el historial» no consulta.
+- Un registro: un `getDoc` (`traerExpedienteSiFalta`). Cédula, NIT y nombre no recorren Firestore.
+- Filtro que deba ahorrar lecturas: va en la consulta. Filtrar en memoria una lista ya bajada no ahorra.
+- Igualdad más rango exige índice compuesto. No desplegar `firestore.indexes.json` nuevo si borra los índices que ya están en la consola.
+- Lista que crezca con los años: una marca booleana o un array en el expediente, escrita en `saveExpedienteDoc` con `merge:true`. No escuchar los demás expedientes para calcularla. Reparar marcas no escribe `updatedAt`.
+- Chat, agenda y actividades libres siguen acotados (últimos días o un solo documento). No pasarlos a colección completa.
+
+## Al guardar
+
+`setDoc` con `merge:true`. Omitir un campo no lo borra. Un cliente viejo puede trabajar el día sin apagar las bandejas de los demás.

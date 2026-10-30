@@ -1113,6 +1113,60 @@ function matchActLibre(t,q){
   if(parts.some(function(v){return String(v||'').toLowerCase().includes(ql);}))return true;
   return false;
 }
+function reviewAsocConteo(ref,t){
+  if(t&&t.sinExpediente)return 0;
+  const expId=String((t&&(t.exp||ref))||ref||'').trim();
+  if(!expId||typeof getExpById!=='function'||typeof getExpAsociadosAll!=='function')return 0;
+  const e=getExpById(expId);
+  if(!e)return 0;
+  return (getExpAsociadosAll(e)||[]).length;
+}
+function reviewAsocVinculadosItems(ctx){
+  ctx=ctx||window._reviewAsocCtx||{};
+  const source=String(ctx.sourceExp||'').trim();
+  if(!source||typeof getExpById!=='function'||typeof getExpAsociadosAll!=='function')return [];
+  const src=getExpById(source);
+  if(!src)return [];
+  return (getExpAsociadosAll(src)||[]).map(function(num){
+    const hit=(typeof findExpByNumPlain==='function'?findExpByNumPlain(num):null)||getExpById(num);
+    const e=hit||{_exp:String(num||'').trim()};
+    return {tipo:'exp',e:e,id:e._exp||num};
+  });
+}
+function reviewAsocIdsVinculados(ctx){
+  const set={};
+  reviewAsocVinculadosItems(ctx).forEach(function(it){
+    const id=String((it.e&&it.e._exp)||it.id||'').trim().toLowerCase();
+    if(id)set[id]=true;
+  });
+  return set;
+}
+function reviewAsocFijosHtml(ctx){
+  const items=reviewAsocVinculadosItems(ctx);
+  if(!items.length)return '';
+  return '<div id="review-asoc-fijos" style="margin-bottom:12px;padding:8px;border-radius:8px;background:var(--sf2);border:1px solid var(--bd)">'+
+    '<div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px">Asociados</div>'+
+    items.map(reviewAsocPickCardHtml).join('')+'</div>';
+}
+function reviewAsocListaVisible(ctx){
+  const q=String((ctx&&ctx.q)||'').trim();
+  const vinculados=reviewAsocIdsVinculados(ctx);
+  return collectReviewAsocCandidatos(q,ctx).filter(function(it){
+    const id=String((it.e&&it.e._exp)||(it.t&&it.t.codigo)||it.id||'').trim().toLowerCase();
+    return !vinculados[id];
+  });
+}
+function reviewAsocPintarBadgeRail(){
+  if(typeof document==='undefined'||!document.querySelectorAll)return;
+  const ctx=window._reviewAsocCtx||{};
+  const n=reviewAsocConteo(ctx.sourceExp||ctx.ref,null);
+  document.querySelectorAll('.task-review-rail-btn[data-side="asociar"]').forEach(function(btn){
+    btn.classList.add('act-ico-btn');
+    const old=btn.querySelector('.act-ico-badge');
+    if(old)old.remove();
+    if(n>0&&typeof actIcoBadgeHtml==='function')btn.insertAdjacentHTML('beforeend',actIcoBadgeHtml(n,'blue'));
+  });
+}
 function reviewAsocYaVinculado(targetExp){
   const ctx=window._reviewAsocCtx||{};
   const source=String(ctx.sourceExp||'').trim();
@@ -1236,7 +1290,7 @@ function renderReviewAsocPickPanel(panelId){
   }
   const q=String(ctx.q||'').trim();
   const aviso=window._reviewAsocAviso&&window._reviewAsocAviso.msg?window._reviewAsocAviso:null;
-  const list=collectReviewAsocCandidatos(q,ctx);
+  const list=reviewAsocListaVisible(ctx);
   const hint=ctx.mode==='act-libre'
     ?'Busque por número, nombre, correo del radicado, asunto o actividad sin expediente.'
     :(ctx.mode==='pqrs-pick'&&!ctx.allowTramite
@@ -1248,10 +1302,12 @@ function renderReviewAsocPickPanel(panelId){
     (reviewAsocPuedeCrearExp(ctx)
       ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
       :'')+
+    reviewAsocFijosHtml(ctx)+
     '<div class="fld" style="margin-bottom:10px"><input type="text" id="review-asoc-q" value="'+escAttr(q)+'" placeholder="Nombre, N° expediente, correo, asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="onReviewAsocSearchInput(this)"></div>'+
     '<div id="review-asoc-list" class="review-asoc-list">'+
     (list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>')+
     '</div>';
+  reviewAsocPintarBadgeRail();
 }
 function onReviewAsocSearchInput(inp){
   const ctx=window._reviewAsocCtx||{};
@@ -1259,7 +1315,7 @@ function onReviewAsocSearchInput(inp){
   window._reviewAsocCtx=ctx;
   const listEl=document.getElementById('review-asoc-list');
   if(!listEl)return;
-  const list=collectReviewAsocCandidatos(ctx.q,ctx);
+  const list=reviewAsocListaVisible(ctx);
   listEl.innerHTML=list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>';
 }
 function setReviewAsocPqrsModo(modo){
