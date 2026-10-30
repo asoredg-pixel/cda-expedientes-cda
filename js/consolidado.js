@@ -58,12 +58,31 @@ function consolidadoNcaEspera(){
   if(!consolidadoNcaModo())return false;
   const rango=typeof getPeriodoRango==='function'?getPeriodoRango('cons'):null;
   if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31')return true;
-  const clave=(rango.desde||'')+'|'+(rango.hasta||'');
+  const clave=typeof consClaveBusqueda==='function'?consClaveBusqueda(rango):((rango.desde||'')+'|'+(rango.hasta||'')+'|');
   return clave!==window._consNcaRango||!Array.isArray(window._consNcaList);
 }
+function poblarConsTramSelect(){
+  const el=document.getElementById('cons-tram');
+  if(!el||typeof tramitesFiltroConsulta!=='function')return;
+  const cv=String(el.value||window._consBuscaTram||'');
+  const trams=(tramitesFiltroConsulta()||[]).filter(function(t){return t&&t.id;});
+  el.innerHTML='<option value="">Todos los trámites</option>'+trams.map(function(t){
+    return '<option value="'+escAttr(t.id)+'">'+escAttr(t.nombre||t.id)+'</option>';
+  }).join('');
+  if(cv&&trams.some(function(t){return t.id===cv;}))el.value=cv;
+  else el.value='';
+  window._consBuscaTram=String(el.value||'');
+}
+function onConsTramiteBusqueda(){
+  const el=document.getElementById('cons-tram');
+  window._consBuscaTram=el?String(el.value||'').trim():'';
+  const pg=document.getElementById('pg-cons');
+  if(pg&&pg.classList.contains('on'))renderConsolidado();
+}
 function renderConsolidadoNcaEspera(){
+  if(typeof poblarConsTramSelect==='function')poblarConsTramSelect();
   const res=document.getElementById('cons-periodo-resumen');
-  if(res)res.textContent='Elija un año, trimestre, mes o un rango de fechas y pulse Buscar. Hasta entonces no se descarga el archivo.';
+  if(res)res.textContent='Elija un año, trimestre, mes o un rango de fechas y pulse Buscar. Si elige un tipo de trámite, solo se leen esos expedientes.';
   const panel=document.getElementById('cons-cortes-panel');
   if(panel)panel.innerHTML='';
   const mets=document.getElementById('mets');
@@ -78,6 +97,7 @@ function buscarConsolidado(){
   renderConsolidado();
 }
 function renderConsolidado(){
+  if(typeof poblarConsTramSelect==='function')poblarConsTramSelect();
   if(consolidadoNcaEspera()){
     renderConsolidadoNcaEspera();
     return;
@@ -92,7 +112,13 @@ function renderConsolidado(){
   renderConsolidadoCortesPanel(amb,rango);
   if(consolidadoNcaModo()&&rango){
     const resNca=document.getElementById('cons-periodo-resumen');
-    if(resNca&&typeof labelPeriodo==='function')resNca.textContent='Expedientes radicados entre '+labelPeriodo('cons')+' · '+amb.length+' expediente(s). No es el archivo completo.';
+    let tramLbl='';
+    const tramId=typeof consTramiteBusqueda==='function'?consTramiteBusqueda():'';
+    if(tramId&&typeof tramitesFiltroConsulta==='function'){
+      const t=(tramitesFiltroConsulta()||[]).find(function(x){return x&&x.id===tramId;});
+      tramLbl=t&&t.nombre?t.nombre:tramId;
+    }
+    if(resNca&&typeof labelPeriodo==='function')resNca.textContent='Expedientes radicados entre '+labelPeriodo('cons')+(tramLbl?' · '+tramLbl:'')+' · '+amb.length+' expediente(s). No es el archivo completo.';
   }
   window._consExportList=amb;
   window._consCatLists={};

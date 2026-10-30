@@ -2246,6 +2246,25 @@ function consolidadoBuscaPorCorte(){
   return (typeof esNcaDeguv==='function'&&esNcaDeguv())
     ||(typeof esJurisdiccional==='function'&&esJurisdiccional());
 }
+function consTramiteBusqueda(){
+  try{
+    if(typeof document!=='undefined'&&document.getElementById){
+      const el=document.getElementById('cons-tram');
+      if(el)return String(el.value||'').trim();
+    }
+  }catch(e){}
+  return String(window._consBuscaTram||'').trim();
+}
+function consClaveBusqueda(rango){
+  const d=rango&&rango.desde||'';
+  const h=rango&&rango.hasta||'';
+  return d+'|'+h+'|'+(typeof consTramiteBusqueda==='function'?consTramiteBusqueda():'');
+}
+function consErrorEsIndice(err){
+  const code=String(err&&err.code||'');
+  const msg=String(err&&err.message||'');
+  return code==='failed-precondition'||/requires an index/i.test(msg);
+}
 function asegurarEscuchaConsolidado(){
   if(consolidadoBuscaPorCorte())return;
   if(window._consEscuchaCompleta)return;
@@ -2284,18 +2303,24 @@ async function buscarConsolidadoNca(){
   if(!deptos.length)deptos=['guaviare'];
   const hasta=String(rango.hasta);
   const tope=hasta.length===10?hasta+'\uf8ff':hasta;
+  const tram=consTramiteBusqueda();
   const list=[];
+  let faltaIndice=false;
   try{
     for(let i=0;i<deptos.length;i++){
       const depto=deptos[i];
       let snap;
       try{
+        const filtros=[];
+        if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
+        filtros.push(window._fsWhere('_fecha','>=',rango.desde));
+        filtros.push(window._fsWhere('_fecha','<=',tope));
         snap=await window._fsGetDocs(window._fsQuery(
           window._fsCollection(db,'departamentos',depto,'expedientes'),
-          window._fsWhere('_fecha','>=',rango.desde),
-          window._fsWhere('_fecha','<=',tope)
+          ...filtros
         ));
       }catch(errDepto){
+        if(tram&&consErrorEsIndice(errDepto))faltaIndice=true;
         console.warn('buscarConsolidadoNca',depto,errDepto);
         continue;
       }
@@ -2309,8 +2334,16 @@ async function buscarConsolidadoNca(){
         list.push(exp);
       });
     }
+    if(faltaIndice){
+      window._consNcaList=null;
+      window._consNcaRango='';
+      if(typeof renderConsolidadoNcaEspera==='function')renderConsolidadoNcaEspera();
+      else if(typeof renderConsolidado==='function')renderConsolidado();
+      if(typeof notif==='function')notif('Para leer solo ese tipo de trámite hay que activar el índice una sola vez: F12, enlace de Firestore, abrirlo. En unos minutos, pulse Buscar de nuevo.','err');
+      return;
+    }
     window._consNcaList=list;
-    window._consNcaRango=rango.desde+'|'+rango.hasta;
+    window._consNcaRango=consClaveBusqueda(rango);
     if(typeof renderConsolidado==='function')renderConsolidado();
   }catch(err){
     console.warn('buscarConsolidadoNca',err);

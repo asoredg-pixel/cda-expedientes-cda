@@ -793,8 +793,8 @@ function reqPaletaRowsHtml(q,colSpan){
   window._reqPaletaEntries=rows;
   if(!rows.length){
     const vacio=reqPaletaSoloCartera()
-      ?'Sin facturas, persuasivos ni acuerdos de pago en mora. Entran al '+REQ_PAL_MORA_HABILES+'.º día hábil del vencimiento. Si ya tienen fecha de pago, no aparecen.'
-      :'Sin pendientes por gestionar. Requerimientos: '+REQ_PALETA_GRACIA_HABILES+' días hábiles después del vencimiento · Resoluciones: '+REQ_PAL_ACTO_AVISO_HABILES+' días hábiles antes de vencer · Facturas y acuerdos de pago: '+REQ_PAL_MORA_HABILES+' días hábiles después del vencimiento.';
+      ?'Sin facturas, persuasivos ni acuerdos de pago en mora.'
+      :'Sin pendientes por gestionar.';
     return '<tr><td colspan="'+colSpan+'" class="emp">'+vacio+'</td></tr>';
   }
   const colNotif=typeof actMuestraColNotificadorPor==='function'&&actMuestraColNotificadorPor();

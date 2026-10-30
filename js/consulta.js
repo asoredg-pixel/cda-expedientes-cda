@@ -153,7 +153,7 @@ function jurisTramiteOpciones(fullList){
 }
 function filtrarJurisConsList(list){
   const fd=window._jurisFiltroDepto||'';
-  const ft=window._jurisFiltroTram||'';
+  const ft=typeof consTramiteBusqueda==='function'?consTramiteBusqueda():(window._jurisFiltroTram||'');
   return(list||[]).filter(e=>{
     if(fd&&String(e._depto||'guaviare')!==fd)return false;
     if(ft&&String(e._tramite||'')!==ft)return false;
@@ -165,7 +165,7 @@ function esDeptoConsFiltroActivo(){
   return !esJurisdiccional()&&!esModoResponsable()&&DEPTOS.some(d=>d.id===deptoActivo);
 }
 function filtrarDeptoConsList(list){
-  const ft=window._deptoConsFiltroTram||'';
+  const ft=typeof consTramiteBusqueda==='function'?consTramiteBusqueda():(window._deptoConsFiltroTram||'');
   if(!ft)return list||[];
   return(list||[]).filter(e=>String(e._tramite||'')===ft);
 }
@@ -191,23 +191,12 @@ function renderJurisConsolidadoStats(list,fullList){
   fullList=fullList||window._jurisConsListCache||list||[];
   list=list||fullList;
   if(deptoF&&!juris){
-    const ft=window._deptoConsFiltroTram||'';
-    const tramOpts=jurisTramiteOpciones(fullList);
-    const total=list.length;
-    el.innerHTML='<div class="slbl">Filtros consolidado — '+escAttr(labelDepto(typeof reqDeptoAmbito==='function'?reqDeptoAmbito():deptoActivo))+' ('+total+' expediente'+(total!==1?'s':'')+(ft?' · filtrado':'')+')</div>'+
-      '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Filtre por tipo de trámite dentro del departamento.</div>'+
-      '<div class="juris-filtros-bar">'+
-      '<div class="fld"><label>Tipo de trámite</label><select id="depto-f-tram" onchange="onDeptoConsFiltroChange()">'+
-      '<option value=""'+(ft===''?' selected':'')+'>Todos los trámites</option>'+
-      tramOpts.map(([tid,nom])=>'<option value="'+escAttr(tid)+'"'+(ft===tid?' selected':'')+'>'+escAttr(nom)+'</option>').join('')+
-      '</select></div>'+
-      (ft?'<button type="button" class="btn bsm" onclick="window._deptoConsFiltroTram=\'\';renderConsolidado()">Limpiar filtro</button>':'')+
-      '</div>';
+    el.style.display='none';
+    el.innerHTML='';
     return;
   }
   const fd=window._jurisFiltroDepto||'';
-  const ft=window._jurisFiltroTram||'';
-  const tramOpts=jurisTramiteOpciones(fullList);
+  const ft=typeof consTramiteBusqueda==='function'?consTramiteBusqueda():'';
   const deptoRows=fd?DEPTOS.filter(d=>d.id===fd):DEPTOS;
   const total=list.length;
   const countsTotal=contarPorDepto(list);
@@ -233,11 +222,7 @@ function renderJurisConsolidadoStats(list,fullList){
     '<option value=""'+(fd===''?' selected':'')+'>Todos los departamentos</option>'+
     DEPTOS.map(d=>'<option value="'+d.id+'"'+(fd===d.id?' selected':'')+'>'+labelDepartamento(d.id)+'</option>').join('')+
     '</select></div>'+
-    '<div class="fld"><label>Tipo de trámite</label><select id="juris-f-tram" onchange="onJurisFiltroChange()">'+
-    '<option value=""'+(ft===''?' selected':'')+'>Todos los trámites</option>'+
-    tramOpts.map(([tid,nom])=>'<option value="'+escAttr(tid)+'"'+(ft===tid?' selected':'')+'>'+escAttr(nom)+'</option>').join('')+
-    '</select></div>'+
-    (fd||ft?'<button type="button" class="btn bsm" onclick="window._jurisFiltroDepto=\'\';window._jurisFiltroTram=\'\';renderConsolidado()">Limpiar filtros</button>':'')+
+    (fd?'<button type="button" class="btn bsm" onclick="window._jurisFiltroDepto=\'\';renderConsolidado()">Limpiar filtros</button>':'')+
     '</div>';
   const filtrosLbl=(fd||ft)?' · filtrado':'';
   const tabla='<div style="margin-top:10px;overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th>Departamento</th><th>Total</th><th>Activos</th><th>Solicitud</th><th>En trámite</th><th>Atendido</th><th>Seguimiento</th><th>Archivados</th></tr></thead><tbody>'+
@@ -252,7 +237,7 @@ function renderJurisConsolidadoStats(list,fullList){
     '<td style="text-align:center">'+sumCol(id=>porEstado['Archivado o anulado'][id]||0)+'</td></tr>':'')+
     '</tbody></table></div>';
   el.innerHTML='<div class="slbl">Resumen jurisdiccional por departamento ('+total+' expediente'+(total!==1?'s':'')+filtrosLbl+')</div>'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Filtros aplicados a todo el consolidado. Desglose por Guaviare, Guainía y Vaupés.</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Desglose por Guaviare, Guainía y Vaupés. El tipo de trámite se elige arriba, junto al corte.</div>'+
     filtros+pie+tabla;
 }
 function renderConceptosSegView(e){

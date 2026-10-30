@@ -27273,6 +27273,7 @@ function poblarSelectAno(prefix){
 function initPeriodoFiltros(prefix){
   poblarSelectAno(prefix);
   updatePeriodoUIMes(prefix);
+  if(prefix==='cons'&&typeof poblarConsTramSelect==='function')poblarConsTramSelect();
 }
 function rangoDesdePreset(preset,ano,mes){
   ano=parseInt(ano,10)||new Date().getFullYear();
@@ -32864,22 +32865,7 @@ function renderActividades(opts){
   const colSpan=(deptView?9:8)+(muestraNotifCol?1:0);
   const actPr=document.getElementById('act-periodo-resumen');
   if(actPr)actPr.textContent=labelActPeriodo()?('Filtro de fechas (vencimiento/reporte): '+labelActPeriodo()):'';
-  if(sub){
-    if(filtroAct==='pend')sub.textContent='';
-    else if(filtroAct==='venc')sub.textContent='Vencidas: recorte de «Por ejecutar» (fuera de término, aún no atendidas).';
-    else if(filtroAct==='pornotif')sub.textContent=deptView
-      ?'Por notificar: con el encargado en el selector se ven todas; con otro responsable, solo las suyas. Plazo 5 días hábiles; si vence sin reportar, también en Prioritarias. No aparece en Por ejecutar.'
-      :'Por notificar: plazo de 5 días hábiles. Si vence sin reportar, pasa a Prioritarias como vencida.';
-    else if(filtroAct==='porfirma'||filtroAct==='parafirma'||filtroAct==='porfirmar'||filtroAct==='firmados')
-      sub.textContent='Por firma: imprimir → firmar → firmados. El badge indica la fase; 🖨 marca impreso (✓), 🖊 firma y 📬 notifica.';
-    else if(filtroAct==='porver')sub.textContent='Por revisar: entregas reportadas pendientes de evaluación del departamento.';
-    else if(filtroAct==='revisados')sub.textContent='Revisados: actividades ya evaluadas por el departamento. El estado indica si están por corregir, en firma, notificación, etc. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='porcorr')sub.textContent='Por corregir: devoluciones pendientes de nueva entrega. Al reentregar pasan a «Por revisar».';
-    else if(filtroAct==='req'&&typeof esCargoContable==='function'&&esCargoContable())sub.textContent='Cartera en mora de su departamento: facturas, persuasivos vencidos y acuerdos de pago, desde el 3.er día hábil. 🔍 ver el expediente, trámite o PQRSD · ✏️ editar Información contable. Si registra el pago, sale de la paleta.';
-    else if(filtroAct==='req'&&reqSoloConsulta)sub.textContent='Requerimientos (solo consulta): término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer · Facturas y acuerdos de pago al 3.er día hábil del vencimiento. 🔍 ver el expediente. El encargado registra el cumplimiento o asigna la actividad.';
-    else if(filtroAct==='req')sub.textContent='Requerimientos: término vencido sin verificar, 5 días hábiles después del vencimiento · Resoluciones a 30 días hábiles o menos de vencer (o vencidas) · Facturas y acuerdos de pago al 3.er día hábil del vencimiento. 🔍 revisar · ✔ cumplió / gestión · 📌 asignar actividad (al guardarla sale de la paleta). Seguimiento completo en Consolidado › Requerimientos.';
-    else sub.textContent=deptView?'Filtre por estado. El departamento también gestiona firmar / notificar PQRSD.':'Reporte con 📤 → el departamento revisa. Use los filtros por estado según su deuda.';
-  }
+  if(sub)sub.textContent='';
   const puedeImprimirMets=typeof pqrsPuedeFlujoPorImprimir==='function'&&pqrsPuedeFlujoPorImprimir();
   const puedeFirmarMets=typeof pqrsPuedeFlujoPorFirmarBandeja==='function'&&pqrsPuedeFlujoPorFirmarBandeja();
   const puedePorFirmaMets=puedeImprimirMets||puedeFirmarMets||puedeFirmadosMets;
