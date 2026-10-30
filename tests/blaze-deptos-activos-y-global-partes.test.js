@@ -30,7 +30,8 @@ const BORRAR = { _borrar: true }
 const srcSave = 'const _actLibresQuitadosIds=new Set();\n' + extraer(per, [
   'actLibreEventTs', 'actLibreEsPorCorregirMerge', 'actLibreTieneArchivoDrive', 'scoreActividadLibreMerge',
   'pickMejorActLibre', 'mergeActLibresConRemotoParaGuardar', 'actLibresRemotoDoc', 'actLibresRemotoPreferido',
-  'escribirParteSistema', 'moverCamposAPartes', 'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep',
+  'escribirParteSistema', 'personaFirestoreId', 'personaFirmaEstable', 'personasMarcarFirmas',
+  'guardarPersonasComoDocs', 'moverCamposAPartes', 'sanitizeActLibreForFirestore', '_fsStripUndefinedDeep',
   'quitarBandejaCompartidaDelPayload', 'saveGlobalFirestore'
 ])
 
@@ -98,6 +99,7 @@ describe('sistema/global partido', () => {
     ['actividades_libres', 'personas', 'agenda', 'fichas'].forEach(function(id) {
       expect(rules).toContain('match /sistema/' + id + ' {')
     })
+    expect(rules).toContain('match /personas/{personaId} {')
     expect(rules).toContain('match /sistema/{docId} {')
     expect(rules).toContain('allow read, write: if false;')
   })
@@ -111,7 +113,7 @@ describe('sistema/global partido', () => {
     expect(global.personas).toBe(BORRAR)
     expect(global.actividadesLibres).toBe(BORRAR)
     expect(global.agendaEventos).toBe(BORRAR)
-    expect(escritos.find(x => x.ref === 'sistema/personas').payload.personas[0].pn_nombre).toBe('Ana')
+    expect(escritos.find(x => x.ref === 'personas/p1').payload.pn_nombre).toBe('Ana')
     expect(escritos.find(x => x.ref === 'sistema/actividades_libres').payload.actividadesLibres[0].id).toBe('L1')
     expect(escritos.find(x => x.ref === 'sistema/agenda').payload.agendaEventos[0].id).toBe('a1')
   })
@@ -119,7 +121,7 @@ describe('sistema/global partido', () => {
   it('si la parte no se puede escribir, el arreglo sigue en global', async () => {
     const { c, escritos } = ctxSave({
       getDoc: async () => ({ exists: () => true, data: () => ({ actividadesLibres: [{ id: 'L1' }] }) }),
-      falla: ref => String(ref).indexOf('sistema/personas') >= 0
+      falla: ref => ref === 'personas/p1' || ref === 'sistema/personas'
     })
     expect(await c.saveGlobalFirestore()).toBe(true)
     const global = escritos.find(x => x.ref === 'sistema/global').payload

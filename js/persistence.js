@@ -129,7 +129,11 @@ function _saveLSLocal(){
   lsStoreJson('sst_c_by_depto',cfgByDepto);
   localStorage.setItem('sst_depto',deptoActivo);
   localStorage.setItem('sst_depto_cfg',deptoCfg);
-  lsStoreJson('sst_p',personas);
+  try{
+    const pj=JSON.stringify(personas||[]);
+    if(pj.length>800000)localStorage.removeItem('sst_p');
+    else lsStoreJson('sst_p',personas);
+  }catch(e){try{localStorage.removeItem('sst_p');}catch(e2){}}
   localStorage.setItem('sst_responsable',responsableActivo||'');
   lsStoreJson('sst_act_libres',actividadesLibres||[]);
   lsStoreJson('sst_agenda',agendaEventos||[]);
@@ -305,6 +309,7 @@ async function loadLS(){
       if(typeof ncaPqrsPinsApplyFromGlobal==='function')ncaPqrsPinsApplyFromGlobal(g);
     }
     await cargarPartesSistema();
+    await cargarPersonasColeccion();
     const deptosCfg=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare'];
     const deptosExp=deptosExpedientesAccesibles();
     const [deptoResults,expSnaps]=await Promise.all([
@@ -913,6 +918,98 @@ async function escribirParteSistema(docId,campo,valor){
     return false;
   }
 }
+function personaFirestoreId(p){
+  const raw=String((p&&p.id)||'').trim()||(typeof personaIdentityKey==='function'?personaIdentityKey(p):'');
+  return raw.replace(/[\/#?[\]\s]/g,'_').slice(0,700);
+}
+function personaFirmaEstable(p){
+  const c=Object.assign({},p||{});
+  delete c.updatedAt;
+  try{return JSON.stringify(c);}catch(e){return String((p&&p.id)||'');}
+}
+function personasMarcarFirmas(lista){
+  const map={};
+  (lista||[]).forEach(function(p){
+    const id=personaFirestoreId(p);
+    if(id)map[id]=personaFirmaEstable(p);
+  });
+  window._personasFirmas=map;
+}
+/** Una persona por documento. Si la colección no se puede escribir, el arreglo sigue en sistema/personas. */
+async function guardarPersonasComoDocs(lista){
+  const db=window._db;
+  if(!Array.isArray(lista)||!lista.length||!db||!window._fsSetDoc||!window._fsDoc)return false;
+  const prev=window._personasFirmas||{};
+  const vistos={};
+  try{
+    for(let i=0;i<lista.length;i++){
+      const p=lista[i];
+      if(!p||typeof p!=='object')continue;
+      const id=personaFirestoreId(p);
+      if(!id)continue;
+      vistos[id]=1;
+      const firma=personaFirmaEstable(p);
+      if(prev[id]===firma)continue;
+      await window._fsSetDoc(window._fsDoc(db,'personas',id),Object.assign({},p,{id:id}),{merge:true});
+      prev[id]=firma;
+    }
+    const quitar=Object.keys(prev).filter(function(id){return !vistos[id];});
+    if(quitar.length&&window._fsDeleteDoc){
+      for(let j=0;j<quitar.length;j++){
+        await window._fsDeleteDoc(window._fsDoc(db,'personas',quitar[j]));
+        delete prev[quitar[j]];
+      }
+    }
+    if(!Object.keys(vistos).length)return false;
+    window._personasFirmas=prev;
+    return true;
+  }catch(err){
+    console.warn('guardarPersonasComoDocs',err);
+    return false;
+  }
+}
+function aplicarPersonasLista(list){
+  if(!Array.isArray(list)||!list.length)return;
+  personas=list.map(function(p){return typeof normalizePersonaRecord==='function'?normalizePersonaRecord(p):p;});
+  personasMarcarFirmas(personas);
+  window._personasColeccionLista=true;
+  marcarParteGlobalViva('personas');
+}
+async function cargarPersonasColeccion(){
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsCollection)return;
+  try{
+    const snap=await window._fsGetDocs(window._fsCollection(db,'personas'));
+    const list=[];
+    if(snap&&typeof snap.forEach==='function'){
+      snap.forEach(function(d){
+        const data=d.data?d.data()||{}:{};
+        list.push(Object.assign({},data,{id:data.id||d.id}));
+      });
+    }
+    aplicarPersonasLista(list);
+  }catch(err){
+    console.warn('cargarPersonasColeccion',err);
+  }
+}
+function escucharPersonasColeccion(){
+  const db=window._db;
+  if(!db||!window._fsOnSnapshot||!window._fsCollection||window._personasUnsub)return;
+  window._personasUnsub=window._fsOnSnapshot(window._fsCollection(db,'personas'),function(snap){
+    if(typeof _localSaving!=='undefined'&&_localSaving)return;
+    const list=[];
+    if(snap&&typeof snap.forEach==='function'){
+      snap.forEach(function(d){
+        const data=d.data?d.data()||{}:{};
+        list.push(Object.assign({},data,{id:data.id||d.id}));
+      });
+    }
+    if(!list.length)return;
+    aplicarPersonasLista(list);
+    try{_saveLSLocal();}catch(e){}
+    if(typeof scheduleRefreshViewsAfterRemoteDataChange==='function')scheduleRefreshViewsAfterRemoteDataChange();
+  },function(err){console.warn('personas coleccion',err);});
+}
 /** Pasa personas, libres y agenda a su documento. Solo los quita de global si ese documento se escribió. */
 async function moverCamposAPartes(payload){
   if(!payload||typeof window._fsDeleteField!=='function')return payload;
@@ -924,8 +1021,19 @@ async function moverCamposAPartes(payload){
   for(let i=0;i<partes.length;i++){
     const campo=partes[i][1];
     if(!Object.prototype.hasOwnProperty.call(payload,campo))continue;
-    const ok=await escribirParteSistema(partes[i][0],campo,payload[campo]);
+    let ok=false;
+    let porColeccion=false;
+    if(campo==='personas'){
+      ok=await guardarPersonasComoDocs(payload.personas);
+      porColeccion=ok;
+    }
+    if(!ok)ok=await escribirParteSistema(partes[i][0],campo,payload[campo]);
     if(ok)payload[campo]=window._fsDeleteField();
+    if(porColeccion){
+      try{
+        await window._fsSetDoc(window._fsDoc(window._db,'sistema','personas'),{personas:window._fsDeleteField()},{merge:true});
+      }catch(e){}
+    }
   }
   return payload;
 }
@@ -940,6 +1048,7 @@ function aplicarParteSistema(campo,valor,silencioso){
   marcarParteGlobalViva(campo);
   let changed=false;
   if(campo==='personas'&&Array.isArray(valor)){
+    if(window._personasColeccionLista)return;
     personas=valor.map(function(p){return typeof normalizePersonaRecord==='function'?normalizePersonaRecord(p):p;});
     changed=true;
   }else if(campo==='actividadesLibres'&&Array.isArray(valor)){
@@ -1802,6 +1911,7 @@ function stopRealtimeGlobalSync(){
     window._sstParteUnsubs=[];
   }
   window._sstPartesVivas={};
+  if(window._personasUnsub){try{window._personasUnsub();}catch(e){}window._personasUnsub=null;}
 }
 function stopAllRealtimeSync(){
   stopRealtimeExpSync();
@@ -2000,6 +2110,7 @@ function initRealtimeGlobalSync(){
     }
   },function(err){console.warn('Error escuchando sistema/global:',err);});
   escucharPartesSistema();
+  escucharPersonasColeccion();
 }
 function initAppRealtimeSync(){
   initRealtimeSync();
@@ -2132,12 +2243,28 @@ function initRealtimeSync(){
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
   stopRealtimeExpSync();
   const unsubs=[];
-  const deptos=deptosExpedientesAccesibles();
-  deptos.forEach(function(depto){
-    let listo;
-    _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
+  const TOPE=8000;
+  function escuchar(depto, acotada){
+    let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
+    if(acotada&&window._fsQuery&&window._fsWhere){
+      const corte=new Date();
+      corte.setMonth(corte.getMonth()-36);
+      ref=window._fsQuery(ref, window._fsWhere('updatedAt','>=', corte.toISOString()));
+    }
+    if(!acotada){
+      let listo;
+      _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
+    }
     const primer=_expPrimerSnap[depto];
-    const unsub=window._fsOnSnapshot(window._fsCollection(db,'departamentos',depto,'expedientes'),function(snap){
+    const unsub=window._fsOnSnapshot(ref,function(snap){
+      const n=(snap&&(typeof snap.size==='number'?snap.size:(snap.docs&&snap.docs.length)))||0;
+      if(!acotada&&n>TOPE&&window._fsQuery&&window._fsWhere){
+        try{unsub();}catch(e){}
+        window._expEscuchaAcotada=true;
+        if(Array.isArray(exps))exps=exps.filter(function(e){return String(e&&e._depto||'')!==depto;});
+        escuchar(depto,true);
+        return;
+      }
       // No bloquear por _localSaving: ese flag es de cfg/global y retrasaba
       // la aparición de PQRSD recién radicadas en Actividades/Consulta (~1–3 min).
       let changed=applyExpedienteFirestoreChanges(snap.docChanges());
@@ -2146,16 +2273,28 @@ function initRealtimeSync(){
       if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
         if(hydrateExpsFromSnapshotDocs(snap))changed=true;
       }
-      if(!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
+      if(primer&&!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
       if(!changed)return;
       scheduleRefreshViewsAfterRemoteDataChange();
     },function(err){
-      primer.listo(false);
+      if(primer)primer.listo(false);
       console.warn('Error escuchando expedientes',depto,err);
     });
     unsubs.push(unsub);
-  });
+  }
+  deptosExpedientesAccesibles().forEach(function(depto){escuchar(depto,false);});
   _fsUnsub=unsubs;
+}
+async function traerExpedienteSiFalta(q){
+  const id=String(q||'').trim();
+  if(!id||id.length<4||typeof fetchExpedientePorNumero!=='function')return null;
+  if((exps||[]).some(function(e){return String(e&&e._exp||'').toLowerCase()===id.toLowerCase();}))return null;
+  const exp=await fetchExpedientePorNumero(id);
+  if(!exp||!exp._exp)return null;
+  if((exps||[]).some(function(e){return String(e&&e._exp||'')===String(exp._exp);}))return exp;
+  if(!Array.isArray(exps))exps=[];
+  exps.push(exp);
+  return exp;
 }
 async function migrarLocalStorageAFirestore(){
   const db=window._db;

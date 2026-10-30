@@ -2311,6 +2311,10 @@ function consultaBusqKey(ev,inp){
   ev.preventDefault();
   clearTimeout(window._conBusqT);
   consultaBusqCerrar();
+  if(typeof traerExpedienteSiFalta==='function'){
+    Promise.resolve(traerExpedienteSiFalta(inp&&inp.value)).then(function(){renderConsulta();});
+    return;
+  }
   renderConsulta();
 }
 function renderConsulta(){

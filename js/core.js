@@ -32563,6 +32563,10 @@ function actBusqKey(ev,inp){
   ev.preventDefault();
   clearTimeout(window._actBusqT);
   actBusqCerrar();
+  if(typeof traerExpedienteSiFalta==='function'){
+    Promise.resolve(traerExpedienteSiFalta(inp&&inp.value)).then(function(){renderActividades({soloTexto:true});});
+    return;
+  }
   renderActividades({soloTexto:true});
 }
 function ordenarActividadesVisibles(list, filtroAct){

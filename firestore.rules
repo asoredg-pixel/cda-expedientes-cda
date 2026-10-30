@@ -260,6 +260,14 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Una persona por documento. Crece sin el tope de 1 MB del arreglo.
+    // firebase deploy --only firestore:rules
+    match /personas/{personaId} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() && puedeEscribirGlobal();
+      allow delete: if isActiveUser() && puedeEscribirGlobal();
+    }
+
     // -------------------------------------------------------------------------
     // notas_internas/{email} — notas privadas del usuario (sincronizadas entre equipos)
     // Solo el dueño de la cuenta lee y escribe su documento.
