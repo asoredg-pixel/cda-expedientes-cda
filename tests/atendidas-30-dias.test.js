@@ -41,12 +41,16 @@ describe('Atendidas del responsable a 30 días calendario', () => {
     expect(c.actividadEsDeUltimosDias({ fechaAtendida: '2026-09-30' }, 30)).toBe(false)
   })
 
-  it('la paleta del responsable usa 30 y su escucha baja ese corte', () => {
+  it('la paleta del responsable y de la oficina usa 30; secretaría no baja todas las PQRSD', () => {
     const core = read('js/core.js')
     const done = extraer(core, ['filtrarActividadesPorEstado'])
-    expect(done).toContain('esModoResponsable()?30:10')
+    expect(done).toContain('actividadVentanaAtendidasDias()')
+    expect(done).toContain('opts&&opts.sinCorte')
+    expect(core).toContain("filterTasksPeriodo(all,'act')")
+    expect(core).toContain("filtrarActividadesPorEstado(allCorte,'done',{sinCorte:true})")
     const pers = read('js/persistence.js')
     expect(pers).toContain('esResp?corteCalendarioIso(30):corteBandejaIso()')
+    expect(pers).toContain("esOficina&&rolLogin!=='secretaria'")
     const c = createContext({ Date })
     runInContext(extraer(pers, ['corteCalendarioIso']), c)
     const iso = c.corteCalendarioIso(30)
@@ -54,5 +58,15 @@ describe('Atendidas del responsable a 30 días calendario', () => {
     local.setHours(0, 0, 0, 0)
     local.setDate(local.getDate() - 30)
     expect(iso).toBe(local.toISOString())
+    const v = createContext({
+      esModoResponsable: () => false,
+      esModoOficinaDeguv: () => true,
+      esSecretaria: () => false
+    })
+    runInContext(extraer(core, ['actividadVentanaAtendidasDias']), v)
+    expect(v.actividadVentanaAtendidasDias()).toBe(30)
+    v.esModoOficinaDeguv = () => false
+    v.esModoResponsable = () => false
+    expect(v.actividadVentanaAtendidasDias()).toBe(10)
   })
 })

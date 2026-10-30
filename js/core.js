@@ -32178,14 +32178,15 @@ function renderActGantt(list){
     '<div class="act-gantt-hdr-label">Trámite / expediente / actividad</div>'+
     '<div class="act-gantt-hdr-timeline act-gantt-hdr-note">Cada trámite usa su propia escala según su plazo de atención</div></div>'+rows+'</div>';
 }
-function actMetCard(filterVal,style,inner,accent){
+function actMetCard(filterVal,style,inner,accent,title){
   const cur=document.getElementById('f-act-est')?document.getElementById('f-act-est').value:'pend';
   // «Vencidas» del selector es un recorte de «Por ejecutar»: resalta esa paleta
   const on=String(cur||'pend')===String(filterVal||'')
     ||(filterVal==='pend'&&cur==='venc');
   const acc=accent||'var(--bl)';
   const st=metOnCssVars(acc)+(style||'');
-  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="'+(on?'Paleta activa':'Clic para filtrar')+'">'+inner+'</div>';
+  const tip=title?(title+' '+(on?'Paleta activa.':'Clic para filtrar.')):(on?'Paleta activa':'Clic para filtrar');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setActFiltro(\''+filterVal+'\')" title="'+escAttr(tip)+'">'+inner+'</div>';
 }
 function getTareasPqrsPorFaseWorkflow(matchFn){
   const out=[];
@@ -32277,6 +32278,12 @@ function actividadCuentaComoPorCorregir(t){
   return est==='Por corregir';
 }
 window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
+function actividadVentanaAtendidasDias(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return 30;
+  if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return 30;
+  if(typeof esSecretaria==='function'&&esSecretaria())return 30;
+  return 10;
+}
 function corteCalendarioLocal(dias){
   const corte=new Date();
   corte.setHours(0,0,0,0);
@@ -32289,7 +32296,7 @@ function actividadEsDeUltimosDias(t,dias){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return true;
   return f>=corteCalendarioLocal(dias||10);
 }
-function filtrarActividadesPorEstado(list,filtro){
+function filtrarActividadesPorEstado(list,filtro,opts){
   // «Requerimientos» no filtra actividades: filas propias (requerimientos.js)
   if(filtro==='req')return [];
   if(filtro==='porfirma'){
@@ -32487,8 +32494,8 @@ function filtrarActividadesPorEstado(list,filtro){
   }),typeof getTareasRevParTecnicoAprobadas==='function'?getTareasRevParTecnicoAprobadas():[]);
     if(typeof getTareasRevParProfesionalDevueltaNca==='function')
       doneList=mergeActividadLists(doneList,getTareasRevParProfesionalDevueltaNca());
-    const diasAtend=typeof esModoResponsable==='function'&&esModoResponsable()?30:10;
-    return doneList.filter(function(t){return actividadEsDeUltimosDias(t,diasAtend);});
+    if(opts&&opts.sinCorte)return doneList;
+    return doneList.filter(function(t){return actividadEsDeUltimosDias(t,actividadVentanaAtendidasDias());});
   }
   if(filtro==='revisados')return [];
   if(filtro==='prior'){
@@ -32865,7 +32872,11 @@ function renderActividades(opts){
   const porcorr=(deptView?porverBase:all).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   }).length;
-  const done=filtrarActividadesPorEstado(all,'done').length;
+  const allCorte=filterTasksPeriodo(all,'act');
+  const doneVis=filtrarActividadesPorEstado(allCorte,'done');
+  const done=filtrarActividadesPorEstado(allCorte,'done',{sinCorte:true}).length;
+  const corteLbl=typeof labelActPeriodo==='function'?labelActPeriodo():'';
+  const doneTitulo=done>doneVis.length?('Atendidas en '+(corteLbl||'lo ya cargado')+': '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días.'):'';
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   let nPorFirmaList=filtrarActividadesPorEstado(bandejaRevDepto?[]:all,'porfirma');
@@ -32896,7 +32907,7 @@ function renderActividades(opts){
     const nReq=typeof reqPaletaContar==='function'?reqPaletaContar():0;
     cards.req=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Requerimientos</div>','#9a3412');
   }
-  cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)');
+  cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)',doneTitulo);
   // Orden de tarjetas según rol (responsable: Por revisar justo antes de Atendidas)
   const ordenMets=isResp&&!isVital&&!esDirAct
     ?['pend','prior','pornotif','porcorr','porver','porfirma','req','done']

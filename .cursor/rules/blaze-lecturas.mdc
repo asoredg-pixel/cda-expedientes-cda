@@ -10,7 +10,7 @@ El cobro es por documento leído o escrito, multiplicado por cada usuario conect
 ## Al entrar
 
 - Admin y jurisdiccional: cero expedientes al login. Un número es un `getDoc`.
-- Con `bandejaMarcasListas`: solo `updatedAt` de 10 días (responsables: 30 días calendario, para su paleta Atendidas), y según el rol `seguimiento`, `reqAlerta`, `esPqrs` o `pendientes` array-contains. Consultas separadas, sin índice compuesto.
+- Con `bandejaMarcasListas`: solo `updatedAt` de 10 días (responsables: 30 días calendario). Encargado: `seguimiento` y `reqAlerta`. Oficinas: `esPqrs` (la cola abierta). Secretaría no escucha `esPqrs`: solo los 10 días. Responsable: `pendientes` array-contains. Consultas separadas, sin índice compuesto. La paleta Atendidas lista 30 días (oficinas y responsables) o 10 (encargado); el número de la tarjeta cuenta las atendidas ya cargadas que caen en el corte de fechas. Cambiar el corte no descarga el archivo.
 - No poner `_consEscuchaCompleta` para pintar un módulo. Si una consulta corta falla, no pasar a la colección completa.
 
 ## Pantalla o módulo nuevo

@@ -2537,7 +2537,7 @@ function initRealtimeSync(){
       escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:esResp?corteCalendarioIso(30):corteBandejaIso()});
       if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
       if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});
-      if(esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
+      if(esOficina&&rolLogin!=='secretaria')escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
       if(esResp&&nombre)escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
     });
     _fsUnsub=unsubs;
