@@ -230,9 +230,13 @@ function apoyoRegistrarLecturas(n){
   u.lecturasMes+=n;
   u.cobrablesDia+=cob;
   u.cobrablesMes+=cob;
-  var m=apoyoCalcMontos(u.cobrablesMes,cfg);
-  u.montoUsd=m.usd;
-  u.montoCop=m.cop;
+  // Solo el excedente NUEVO se valora con la tarifa vigente. Lo ya cobrado
+  // (montoUsd/montoCop) no se recalcula si el admin cambia cupo, precio o TRM.
+  if(cob>0){
+    var m=apoyoCalcMontos(cob,cfg);
+    u.montoUsd=Math.round(((Number(u.montoUsd)||0)+m.usd)*10000)/10000;
+    u.montoCop=Math.round((Number(u.montoCop)||0)+m.cop);
+  }
   window._apoyoUso=u;
   apoyoProgramarGuardarUso();
   apoyoPintarUI();
@@ -485,7 +489,7 @@ function apoyoCfgCardBody(){
   var cfg=apoyoNormCfg(window._apoyoCfg);
   var inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   return '<div class="cfcard" id="apoyo-cfg-card">'+
-    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cada persona tiene un cupo diario de lecturas. Si lo supera, el excedente suma al <strong>apoyo solidario</strong> del ciclo (corte día 28 + 3 días hábiles). Tras el plazo, sin el apoyo registrado, no podrá conectar Drive. El tono hacia los usuarios es solidario, no comercial.</p>'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cada persona tiene un cupo diario de lecturas. Si lo supera, el excedente suma al <strong>apoyo solidario</strong> del ciclo (corte día 28 + 3 días hábiles). Si cambia cupo, precio o TRM, lo ya cobrado en el ciclo <strong>no se ajusta</strong>: solo el consumo nuevo se valora con los criterios nuevos y se suma al monto acumulado. Tras el plazo, sin el apoyo registrado, no podrá conectar Drive.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
     '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis por día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+

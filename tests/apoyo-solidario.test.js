@@ -94,6 +94,35 @@ describe('Apoyo solidario', () => {
     expect(src).toContain("bar.style.height=pct+'%'")
   })
 
+  it('cambiar precio o TRM no recalcula lo ya cobrado; solo suma el excedente nuevo', () => {
+    const w = montar()
+    w._usuarioActual = { email: 'a@x.co', rol: 'responsables' }
+    w._apoyoCfg = { cupoDiario: 10, precioPorMilUsd: 1, trmCop: 4000, diaCorte: 28, diasGraciaHabiles: 3, activo: true }
+    const hoy = new Date()
+    const iso = hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0') + '-' + String(hoy.getDate()).padStart(2, '0')
+    const perY = hoy.getDate() > 28
+      ? (hoy.getMonth() === 11 ? (hoy.getFullYear() + 1) + '-01' : hoy.getFullYear() + '-' + String(hoy.getMonth() + 2).padStart(2, '0'))
+      : hoy.getFullYear() + '-' + String(hoy.getMonth() + 1).padStart(2, '0')
+    w._apoyoUso = {
+      email: 'a@x.co', periodo: perY, diaIso: iso,
+      lecturasDia: 10, cobrablesDia: 0, lecturasMes: 10, cobrablesMes: 0,
+      montoUsd: 0, montoCop: 0, apoyado: false, historial: []
+    }
+    // 1000 cobrables × $1/mil × TRM 4000 = $4000 COP
+    w.apoyoRegistrarLecturas(1000)
+    expect(w._apoyoUso.cobrablesMes).toBe(1000)
+    expect(w._apoyoUso.montoCop).toBe(4000)
+    // Admin sube precio y TRM: lo acumulado no se toca
+    w._apoyoCfg = { cupoDiario: 10, precioPorMilUsd: 2, trmCop: 5000, diaCorte: 28, diasGraciaHabiles: 3, activo: true }
+    // 1000 cobrables nuevos × $2/mil × TRM 5000 = $10000 COP → total 14000
+    w.apoyoRegistrarLecturas(1000)
+    expect(w._apoyoUso.cobrablesMes).toBe(2000)
+    expect(w._apoyoUso.montoCop).toBe(14000)
+    // Si se recalculara todo a tarifa nueva serían 2000×2×5 = 20000; no debe pasar
+    expect(w._apoyoUso.montoCop).not.toBe(20000)
+    expect(src).toContain('Solo el excedente NUEVO se valora')
+  })
+
   it('Drive se restringe solo tras gracia y con cobrables, no al administrador', () => {
     const w = montar()
     w._usuarioActual = { email: 'a@x.co', rol: 'responsables' }
