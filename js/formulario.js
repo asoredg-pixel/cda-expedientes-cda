@@ -82,8 +82,8 @@ function showTab(t){
   }
   if(t==='con'){poblarFiltrosCon();initPeriodoFiltros('q');actualizarConsultaPqrsUI();renderConsulta();}
   if(t==='cons'){
-    const corteCons=typeof consolidadoBuscaPorCorte==='function'&&consolidadoBuscaPorCorte();
-    if(!corteCons&&typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado();
+    // #3 Blaze: vacío hasta Buscar; no abrir escucha completa del archivo.
+    if(typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado();
     initPeriodoFiltros('cons');
     renderConsolidado();
   }

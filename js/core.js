@@ -23046,9 +23046,108 @@ function purgeBandejaLeidasAntiguas(){
   }
   return ch;
 }
+/** Fecha de atención/cierre para retención del chat de actividad. */
+function taskFechaAtendidaRetencion(t){
+  if(!t)return'';
+  let fa=String(t.fechaAtendida||'').trim();
+  if(fa)return fa;
+  const asigs=Array.isArray(t.asignados)?t.asignados:[];
+  for(let i=0;i<asigs.length;i++){
+    const a=asigs[i];
+    if(a&&a.fechaAtendida){fa=String(a.fechaAtendida).trim();if(fa)return fa;}
+  }
+  const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+  if(f==='cerrada'||f==='cerrada_atendida'){
+    const hist=Array.isArray(t.historial)?t.historial:[];
+    for(let j=hist.length-1;j>=0;j--){
+      const h=hist[j];
+      if(!h)continue;
+      if(/cierre|atendid|notif|cerrad|firma_cerrada/i.test(String(h.tipo||''))&&h.fecha)return String(h.fecha).trim();
+      if(h.fecha&&(h.ts||h.fecha))return String(h.fecha).trim();
+    }
+  }
+  return'';
+}
+function taskChatActividadCaducado(t){
+  if(!t||t.eliminada||t._chatActPurgadoAt)return false;
+  const chat=(t.comentarios||[]).filter(function(c){return c&&!c.incluidoEnReporte;});
+  if(!chat.length)return false;
+  const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+  const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+  const cerrada=est==='Atendida'||f==='cerrada'||f==='cerrada_atendida';
+  if(!cerrada)return false;
+  const fa=taskFechaAtendidaRetencion(t);
+  if(!fa)return false;
+  const dias=typeof CHAT_ACT_RETENCION_DIAS==='number'?CHAT_ACT_RETENCION_DIAS:(typeof RETENCION_LEIDOS_DIAS==='number'?RETENCION_LEIDOS_DIAS:30);
+  return diasDesdeIso(fa)>=dias;
+}
+function taskPurgarChatActividadLocal(t){
+  if(!taskChatActividadCaducado(t))return false;
+  const antes=(t.comentarios||[]).length;
+  t.comentarios=(t.comentarios||[]).filter(function(c){return c&&c.incluidoEnReporte;});
+  if(t.comentarios.length===antes)return false;
+  t._chatActPurgadoAt=new Date().toISOString();
+  return true;
+}
+/** Borra chats de actividad atendida/cerrada hace ≥30 días (no toca entregas ni el flujo de gestión). */
+async function purgeChatActividadAtendidas(){
+  if(!document.body.classList.contains('sesion-activa'))return false;
+  if(typeof esModoCiudadano==='function'&&esModoCiudadano())return false;
+  const TOPE=12;
+  let n=0;
+  const expsTouched=[];
+  let libresCh=false;
+  const listaExp=typeof exps!=='undefined'&&Array.isArray(exps)?exps:[];
+  for(let i=0;i<listaExp.length&&n<TOPE;i++){
+    const e=listaExp[i];
+    if(!e||!Array.isArray(e.tasks))continue;
+    let chExp=false;
+    for(let j=0;j<e.tasks.length&&n<TOPE;j++){
+      let t=e.tasks[j];
+      if(typeof normalizeTask==='function')t=normalizeTask(t);
+      if(!taskPurgarChatActividadLocal(t))continue;
+      e.tasks[j]=t;
+      chExp=true;
+      n++;
+    }
+    if(chExp)expsTouched.push(e);
+  }
+  const libres=typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)?actividadesLibres:[];
+  for(let k=0;k<libres.length&&n<TOPE;k++){
+    let t=libres[k];
+    if(typeof normalizeActLibre==='function')t=normalizeActLibre(t);
+    else if(typeof normalizeTask==='function')t=normalizeTask(t);
+    if(!taskPurgarChatActividadLocal(t))continue;
+    libres[k]=t;
+    libresCh=true;
+    n++;
+  }
+  if(!n)return false;
+  window._chatActHilos=null;
+  for(let p=0;p<expsTouched.length;p++){
+    const exp=expsTouched[p];
+    try{
+      if(typeof persistExpedienteGranularAsync==='function'){
+        await persistExpedienteGranularAsync(exp,false,{silent:true,sinRespaldoLocal:true});
+      }else if(typeof saveExpedienteDoc==='function'){
+        await saveExpedienteDoc(exp._depto||'guaviare',exp);
+      }
+    }catch(err){console.warn('purgeChatActividadAtendidas exp',exp&&exp._exp,err);}
+  }
+  if(libresCh&&typeof persistActividadesLibresFirestore==='function'){
+    try{await persistActividadesLibresFirestore();}
+    catch(errL){console.warn('purgeChatActividadAtendidas libres',errL);}
+  }
+  if(typeof scheduleRenderChatBadge==='function')scheduleRenderChatBadge();
+  if(n)console.log('purgeChatActividadAtendidas:',n,'chat(s) de actividad purgado(s)');
+  return n>0;
+}
 function purgeRetencionDatosLeidos(){
   let ch=purgeChatConversacionesLeidas();
   if(purgeBandejaLeidasAntiguas())ch=true;
+  void purgeChatActividadAtendidas().then(function(ok){
+    if(ok&&typeof renderChatMessages==='function'){try{renderChatMessages();renderChatContacts();}catch(e){}}
+  });
   if(typeof chatPurgeExpiredDriveFiles==='function'){
     void chatPurgeExpiredDriveFiles().then(function(ok){
       if(ok&&typeof renderChatMessages==='function'){renderChatMessages();renderChatContacts();}

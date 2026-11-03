@@ -193,6 +193,8 @@ const PQRS_TRAM_VIRTUAL={id:'t_pqrs',nombre:'PQRSD',color:'#6366f1',plazo:15,uni
 
 // Retención de mensajes de chat leídos
 const RETENCION_LEIDOS_DIAS=30;
+/** Días tras Atendida/cerrada para borrar el chat de la actividad (comentarios, no entregas). */
+const CHAT_ACT_RETENCION_DIAS=30;
 // Retención de adjuntos del chat en Drive institucional (días)
 const CHAT_DRIVE_RETENTION_DIAS=30;
 const CHAT_DRIVE_MAX_BYTES=25*1024*1024;
@@ -226,7 +228,7 @@ const TIPOS_ACTO_DEF=[
 // URL pública de la app (consulta ciudadana en correos al solicitante)
 const PUBLIC_APP_URL = 'https://asoredg-pixel.github.io/cda-expedientes-cda/';
 // Identificador de build (visible en Radicación para confirmar despliegue)
-const SST_BUILD_ID = '20261103d';
+const SST_BUILD_ID = '20261103k';
 /** sandbox de iframes Drive: la flecha «ventana externa» debe poder descargar. */
 const DRIVE_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-forms';
 

@@ -319,19 +319,32 @@ async function loadLS(){
     const deptosCfg=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare'];
     const deptosExp=deptosExpedientesAccesibles();
     const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
-    const sinArchivoAdmin=(rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta;
+    const sinArchivoAdmin=(rolLogin==='admin'||rolLogin==='jurisdiccional');
+    // Con marcas de bandeja, lo a cargo llega por consultas filtradas (pendientes/seguimiento/...).
+    // No bajar el archivo completo: Actividades/firma/notificar/corregir siguen por esas escuchas.
+    const sinArchivoBandeja=!!(window._bandejaMarcasListas&&window._fsQuery&&window._fsWhere);
+    const omitirArchivoCompleto=sinArchivoAdmin||sinArchivoBandeja;
     const [deptoResults,expSnaps]=await Promise.all([
       Promise.allSettled(deptosCfg.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
-      sinArchivoAdmin?Promise.resolve([]):Promise.all(deptosExp.map(depto=>loadExpedientesDepto(depto)))
+      omitirArchivoCompleto?Promise.resolve([]):Promise.all(deptosExp.map(depto=>loadExpedientesDepto(depto)))
     ]);
-    if(gen!==_loadLSGen)return;
+    if(gen!==_loadFSGen)return;
     const remote=[];
-    if(!sinArchivoAdmin)expSnaps.forEach(function(deptoExps){if(Array.isArray(deptoExps))deptoExps.forEach(function(e){remote.push(e);});});
+    if(!omitirArchivoCompleto)expSnaps.forEach(function(deptoExps){if(Array.isArray(deptoExps))deptoExps.forEach(function(e){remote.push(e);});});
     const authOk=!!(window._firebaseAuth&&window._firebaseAuth.currentUser);
     const sesionOn=document.body.classList.contains('sesion-activa');
     // Admin / jurisdiccional: no conservar ni bajar el archivo completo.
     if(sinArchivoAdmin){
       exps=[];
+    }else if(sinArchivoBandeja){
+      // Conservar lo ya hidratado por la escucha de bandeja; no vaciar con remote=[].
+      if(Array.isArray(exps)&&exps.length){
+        /* ya llego por onSnapshot de pendientes/seguimiento/PQRS */
+      }else if(prevExps.length&&(sesionOn||authOk)){
+        exps=prevExps;
+      }else{
+        exps=[];
+      }
     }else if(!remote.length&&prevExps.length&&(sesionOn||authOk)){
       // Carrera crítica: un loadLS anónimo/tardío NO debe vaciar exps ya hidratados
       // tras login (el listener realtime no reenvía 'added' → Secretaría queda en cero).
@@ -403,57 +416,27 @@ async function reloadExpedientesTrasLogin(){
     :{ok:!!(window._firebaseAuth&&window._firebaseAuth.currentUser)};
   if(!authReady||!authReady.ok)return false;
   const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
-  if((rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta){
+  if(rolLogin==='admin'||rolLogin==='jurisdiccional'){
     if(Array.isArray(exps))exps=[];
     updateSyncIndicator('synced');
     return true;
   }
   const deptos=deptosExpedientesAccesibles();
   let lastCount=0;
-  if(window._bandejaMarcasListas&&window._fsQuery&&!window._consEscuchaCompleta){
-    if(await esperarPrimerSnapExpedientes(deptos,EXP_PRIMER_SNAP_TOPE_MS)){
-      mergePendingExpBackup();
-      clearLegacyExpsLocalStorage();
-      if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-      updateSyncIndicator('synced');
-    }
-    return true;
-  }
-  // La escucha en tiempo real ya descarga todos los expedientes: repetirlo con getDocs duplica las lecturas.
-  if(await esperarPrimerSnapExpedientes(deptos,EXP_PRIMER_SNAP_TOPE_MS)&&Array.isArray(exps)&&exps.length){
+  if(window._bandejaMarcasListas&&window._fsQuery){
+    // Espera la bandeja filtrada (pendientes / seguimiento / PQRS), no el archivo completo.
+    await esperarHidratacionBandeja(deptos,EXP_PRIMER_SNAP_TOPE_MS);
     mergePendingExpBackup();
     clearLegacyExpsLocalStorage();
     if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
     updateSyncIndicator('synced');
-    if(typeof papeleraSchedulePurge==='function')papeleraSchedulePurge();
-    if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
-    console.log('reloadExpedientesTrasLogin: '+exps.length+' expediente(s) desde la escucha en tiempo real (deptos='+deptos.join(',')+')');
+    console.log('reloadExpedientesTrasLogin: bandeja filtrada · '+(Array.isArray(exps)?exps.length:0)+' expediente(s) (deptos='+deptos.join(',')+')');
     return true;
   }
-  for(let attempt=0;attempt<3;attempt++){
-    try{
-      if(attempt>0)await new Promise(function(r){setTimeout(r,400*attempt);});
-      const snaps=await Promise.all(deptos.map(function(depto){return loadExpedientesDepto(depto);}));
-      const remote=[];
-      snaps.forEach(function(arr){if(Array.isArray(arr))arr.forEach(function(e){remote.push(e);});});
-      lastCount=mergeRemoteExpsIntoCache(remote);
-      mergePendingExpBackup();
-      if(lastCount){
-        clearLegacyExpsLocalStorage();
-        if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-        updateSyncIndicator('synced');
-        if(typeof papeleraSchedulePurge==='function')papeleraSchedulePurge();
-        if(typeof driveOpsProcesarSilencioso==='function')driveOpsProcesarSilencioso();
-        console.log('reloadExpedientesTrasLogin: '+lastCount+' expediente(s) (intento '+(attempt+1)+', deptos='+deptos.join(',')+')');
-        return true;
-      }
-      console.warn('reloadExpedientesTrasLogin: 0 docs (intento '+(attempt+1)+')',deptos);
-    }catch(err){
-      console.warn('reloadExpedientesTrasLogin intento '+(attempt+1)+':',err);
-    }
-  }
-  if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-  return lastCount>0;
+  // #2/#3: sin marcas no hacer getDocs del archivo completo (ingreso reintenta tras asegurarMarcasBandeja).
+  console.warn('reloadExpedientesTrasLogin: esperando marcas de bandeja (sin archivo completo)');
+  updateSyncIndicator('syncing');
+  return false;
 }
 window.reloadExpedientesTrasLogin=reloadExpedientesTrasLogin;
 
@@ -618,8 +601,14 @@ async function asegurarMarcasBandeja(){
   if(window._bandejaMarcasListas||window._bandejaMarcasCorriendo)return;
   const db=window._db;
   const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
-  const puede=rol==='admin'||rol==='guaviare'||rol==='guainia'||rol==='vaupes';
-  if(!puede||!db||!window._fsGetDocs||!window._fsSetDoc||!window._fsCollection||!window._fsDoc)return;
+  // #7 Blaze: el barrido del archivo es one-shot solo del administrador.
+  // Los demás esperan bandejaMarcasListas (global) y no re-suscriben de más.
+  const puede=rol==='admin';
+  if(!puede){
+    if(!window._bandejaMarcasListas)console.warn('asegurarMarcasBandeja: solo admin repara marcas; esperando bandejaMarcasListas');
+    return;
+  }
+  if(!db||!window._fsGetDocs||!window._fsSetDoc||!window._fsCollection||!window._fsDoc)return;
   window._bandejaMarcasCorriendo=true;
   try{
     const deptos=(typeof DEPTOS_EXPEDIENTES_ACTIVOS!=='undefined'&&DEPTOS_EXPEDIENTES_ACTIVOS.length)
@@ -657,7 +646,11 @@ async function asegurarMarcasBandeja(){
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{bandejaMarcasListas:true},{merge:true});
     window._bandejaMarcasListas=true;
     console.log('Marcas de bandeja listas',n);
-    if(typeof initRealtimeSync==='function')initRealtimeSync();
+    // Una sola rehidratación filtrada (initRealtimeSync salta si la firma no cambió).
+    if(typeof initRealtimeSync==='function')initRealtimeSync(true);
+    if(typeof reloadExpedientesTrasLogin==='function'){
+      Promise.resolve(reloadExpedientesTrasLogin()).catch(function(e){console.warn('reload tras marcas',e);});
+    }
     if(typeof asegurarMarcasPqrsOficina==='function')asegurarMarcasPqrsOficina();
   }catch(err){
     console.warn('asegurarMarcasBandeja',err);
@@ -713,6 +706,7 @@ async function asegurarMarcasPqrsOficina(){
     window._pqrsOficinaPropiaListo=true;
     window._secretariaRadicacionLista=true;
     console.log('Corte PQRSD de oficinas listo',n);
+    // Solo reengancha si cambió la forma de la bandeja (firma distinta).
     if(typeof initRealtimeSync==='function')initRealtimeSync();
   }catch(err){
     console.warn('asegurarMarcasPqrsOficina',err);
@@ -2145,13 +2139,49 @@ function esperarPrimerSnapExpedientes(deptos,ms){
     new Promise(function(res){setTimeout(function(){res(false);},ms);})
   ]);
 }
+/** Espera a que la escucha de bandeja (cualquier consulta del depto) hidrate o venza el tope. */
+function esperarHidratacionBandeja(deptos,ms){
+  ms=ms||EXP_PRIMER_SNAP_TOPE_MS;
+  return new Promise(function(resolve){
+    const t0=Date.now();
+    function listoDepto(d){
+      const s=_expPrimerSnap[d];
+      return !!(s&&s._done);
+    }
+    function tick(){
+      const todos=(deptos||[]).length&&(deptos||[]).every(listoDepto);
+      const hay=Array.isArray(exps)&&exps.length>0;
+      const vencido=Date.now()-t0>=ms;
+      if(hay||todos||vencido){
+        resolve(hay||todos);
+        return;
+      }
+      setTimeout(tick,80);
+    }
+    tick();
+  });
+}
 function stopRealtimeExpSync(){
   Object.keys(_expPrimerSnap).forEach(function(d){_expPrimerSnap[d].listo(false);});
   _expPrimerSnap={};
+  window._fsBandejaSig='';
   if(!_fsUnsub)return;
   if(Array.isArray(_fsUnsub))_fsUnsub.forEach(function(u){try{u();}catch(e){}});
   else try{_fsUnsub();}catch(e){}
   _fsUnsub=null;
+}
+/** Firma de la bandeja filtrada: si no cambia, no re-suscribir (#7). */
+function bandejaEscuchaSig(){
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  const nombre=String((typeof responsableActivo!=='undefined'&&responsableActivo)||(window._usuarioActual&&window._usuarioActual.nombre)||'').trim();
+  const cargo=typeof usuarioCargoSesion==='function'?String(usuarioCargoSesion()||''):'';
+  return [
+    rol,nombre,cargo,
+    window._bandejaMarcasListas?'1':'0',
+    window._pqrsOficinaCorteListo?'1':'0',
+    window._pqrsOficinaPropiaListo?'1':'0',
+    window._secretariaRadicacionLista?'1':'0'
+  ].join('|');
 }
 function stopRealtimeCfgSync(){
   if(_cfgUnsub){try{_cfgUnsub();}catch(e){}_cfgUnsub=null;}
@@ -2332,6 +2362,7 @@ function initRealtimeGlobalSync(){
     if(!snap.exists())return;
     const g=snap.data()||{};
     avisarTamanoGlobalSiCrece(g);
+    const marcasYa=!!window._bandejaMarcasListas;
     if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
     const cortePqrsYa=!!window._pqrsOficinaCorteListo;
     const propiaYa=!!window._pqrsOficinaPropiaListo;
@@ -2340,7 +2371,14 @@ function initRealtimeGlobalSync(){
     if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
     if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
     if(g.apoyoSolidarioCfg&&typeof apoyoAplicarCfgRemota==='function')apoyoAplicarCfgRemota(g.apoyoSolidarioCfg);
-    if(((!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo)||(!secYa&&window._secretariaRadicacionLista))&&typeof initRealtimeSync==='function')initRealtimeSync();
+    const marcasNuevas=!marcasYa&&window._bandejaMarcasListas;
+    const corteNuevo=(!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo)||(!secYa&&window._secretariaRadicacionLista);
+    if((marcasNuevas||corteNuevo)&&typeof initRealtimeSync==='function'){
+      initRealtimeSync();
+      if(marcasNuevas&&typeof reloadExpedientesTrasLogin==='function'){
+        Promise.resolve(reloadExpedientesTrasLogin()).catch(function(e){console.warn('reload tras marcas global',e);});
+      }
+    }
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
       setMantenimientoEstadoLocal(g.mantenimiento);
@@ -2379,9 +2417,8 @@ function initRealtimeGlobalSync(){
   escucharPersonasColeccion();
 }
 function consolidadoBuscaPorCorte(){
-  return (typeof esNcaDeguv==='function'&&esNcaDeguv())
-    ||(typeof esJurisdiccional==='function'&&esJurisdiccional())
-    ||(typeof esAdministrador==='function'&&esAdministrador());
+  // #3 Blaze: Consolidado siempre busca por fechas; nadie abre escucha completa al pintar el módulo.
+  return true;
 }
 function consTramiteBusqueda(){
   try{
@@ -2403,11 +2440,12 @@ function consErrorEsIndice(err){
   return code==='failed-precondition'||/requires an index/i.test(msg);
 }
 function asegurarEscuchaConsolidado(){
-  if(consolidadoBuscaPorCorte())return;
-  if(window._consEscuchaCompleta)return;
-  window._consEscuchaCompleta=true;
-  initRealtimeSync();
-  if(typeof reloadExpedientesTrasLogin==='function')reloadExpedientesTrasLogin();
+  // #3 Blaze: no poner _consEscuchaCompleta para pintar Consolidado.
+  // Use Buscar (buscarConsolidadoNca) con rango de fechas / trámite.
+  if(window._consEscuchaCompleta){
+    window._consEscuchaCompleta=false;
+    if(typeof initRealtimeSync==='function')initRealtimeSync();
+  }
 }
 /** Encargado NCA, administrador y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
 async function buscarConsolidadoNca(){
@@ -2646,9 +2684,10 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
     else if(filtro.tipo==='bool')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',true));
     else if(filtro.tipo==='nombre')ref=window._fsQuery(ref,window._fsWhere('pendientes','array-contains',filtro.nombre));
   }
-  let listo=null;
-  if(filtro&&filtro.tipo==='updated'){
-    _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
+  // Una señal por depto (pendientes, seguimiento, PQRS, etc.): no solo updatedAt.
+  if(!_expPrimerSnap[depto]){
+    let listo=null;
+    _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);},_done:false};
   }
   const primer=_expPrimerSnap[depto];
   const unsub=window._fsOnSnapshot(ref,function(snap){
@@ -2656,26 +2695,34 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
     if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
       if(hydrateExpsFromSnapshotDocs(snap))changed=true;
     }
-    if(primer&&filtro&&filtro.tipo==='updated'&&!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
+    if(primer&&!primer._done&&!(snap.metadata&&snap.metadata.fromCache)){
+      primer._done=true;
+      primer.listo(true);
+    }
     if(!changed)return;
     scheduleRefreshViewsAfterRemoteDataChange();
   },function(err){
-    if(primer&&filtro&&filtro.tipo==='updated')primer.listo(false);
+    if(primer&&!primer._done){primer._done=true;primer.listo(false);}
     console.warn('Error escuchando expedientes',depto,filtro&&filtro.tipo,err);
   });
   unsubs.push(unsub);
 }
-function initRealtimeSync(){
+function initRealtimeSync(force){
   const db=window._db;
   if(!db||!window._fsOnSnapshot||!window._fsCollection)return;
+  const sig=bandejaEscuchaSig();
+  // #7: no tumbar/recrear listeners si la bandeja ya tiene la misma forma.
+  if(!force&&_fsUnsub!=null&&window._fsBandejaSig===sig)return;
   stopRealtimeExpSync();
   const unsubs=[];
   const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
-  if((rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta){
+  if(window._consEscuchaCompleta)window._consEscuchaCompleta=false;
+  if(rolLogin==='admin'||rolLogin==='jurisdiccional'){
     _fsUnsub=[];
+    window._fsBandejaSig=sig;
     return;
   }
-  const acotar=!!(window._bandejaMarcasListas&&window._fsQuery&&window._fsWhere&&!window._consEscuchaCompleta);
+  const acotar=!!(window._bandejaMarcasListas&&window._fsQuery&&window._fsWhere);
   const deptos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
   if(acotar){
     const nombre=String((typeof responsableActivo!=='undefined'&&responsableActivo)||(window._usuarioActual&&window._usuarioActual.nombre)||'').trim();
@@ -2709,49 +2756,14 @@ function initRealtimeSync(){
       if(esResp&&nombre)escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
     });
     _fsUnsub=unsubs;
+    window._fsBandejaSig=sig;
     return;
   }
-  const TOPE=8000;
-  function escuchar(depto, acotada){
-    let ref=window._fsCollection(db,'departamentos',depto,'expedientes');
-    if(acotada&&window._fsQuery&&window._fsWhere){
-      const corte=new Date();
-      corte.setMonth(corte.getMonth()-36);
-      ref=window._fsQuery(ref, window._fsWhere('updatedAt','>=', corte.toISOString()));
-    }
-    if(!acotada){
-      let listo;
-      _expPrimerSnap[depto]={p:new Promise(function(res){listo=res;}),listo:function(ok){listo(ok);}};
-    }
-    const primer=_expPrimerSnap[depto];
-    const unsub=window._fsOnSnapshot(ref,function(snap){
-      const n=(snap&&(typeof snap.size==='number'?snap.size:(snap.docs&&snap.docs.length)))||0;
-      if(!acotada&&!window._consEscuchaCompleta&&n>TOPE&&window._fsQuery&&window._fsWhere){
-        try{unsub();}catch(e){}
-        window._expEscuchaAcotada=true;
-        if(Array.isArray(exps))exps=exps.filter(function(e){return String(e&&e._depto||'')!==depto;});
-        escuchar(depto,true);
-        return;
-      }
-      // No bloquear por _localSaving: ese flag es de cfg/global y retrasaba
-      // la aparición de PQRSD recién radicadas en Actividades/Consulta (~1–3 min).
-      let changed=applyExpedienteFirestoreChanges(snap.docChanges());
-      // Si la caché quedó vacía (p. ej. loadLS tardío la borró), rehidratar
-      // desde snap.docs — docChanges() no vuelve a emitir 'added' ya aplicados.
-      if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
-        if(hydrateExpsFromSnapshotDocs(snap))changed=true;
-      }
-      if(primer&&!(snap.metadata&&snap.metadata.fromCache))primer.listo(true);
-      if(!changed)return;
-      scheduleRefreshViewsAfterRemoteDataChange();
-    },function(err){
-      if(primer)primer.listo(false);
-      console.warn('Error escuchando expedientes',depto,err);
-    });
-    unsubs.push(unsub);
-  }
-  deptosExpedientesAccesibles().forEach(function(depto){escuchar(depto,false);});
-  _fsUnsub=unsubs;
+  // #2/#3 Blaze: sin marcas o sin query — no escuchar archivo (ni completo ni 36 meses).
+  // Lo a cargo llega cuando bandejaMarcasListas=true vía consultas filtradas.
+  console.warn('initRealtimeSync: sin escucha de archivo completo (#3); esperando marcas/bandeja');
+  _fsUnsub=[];
+  window._fsBandejaSig=sig;
 }
 function repararMarcaExpediente(exp){
   if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
