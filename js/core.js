@@ -33014,11 +33014,12 @@ function renderActividades(opts){
   const porcorr=(deptView?porverBase:all).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   }).length;
-  const allCorte=filterTasksPeriodo(all,'act');
-  const doneVis=filtrarActividadesPorEstado(allCorte,'done');
-  const done=filtrarActividadesPorEstado(allCorte,'done',{sinCorte:true}).length;
-  const corteLbl=typeof labelActPeriodo==='function'?labelActPeriodo():'';
-  const doneTitulo=done>doneVis.length?('Atendidas en '+(corteLbl||'lo ya cargado')+': '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días.'):'';
+  // Contador = todas las Atendidas ya cargadas; lista/búsqueda = últimos 30 días.
+  const done=filtrarActividadesPorEstado(all,'done',{sinCorte:true}).length;
+  const doneVis=filtrarActividadesPorEstado(filterTasksPeriodo(all,'act'),'done');
+  const doneTitulo=done>doneVis.length
+    ?('Atendidas cargadas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días.')
+    :'';
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   let nPorFirmaList=filtrarActividadesPorEstado(bandejaRevDepto?[]:all,'porfirma');

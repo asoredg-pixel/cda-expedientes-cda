@@ -2207,9 +2207,14 @@ function esperarHidratacionBandeja(deptos,ms){
   });
 }
 function stopRealtimeExpSync(){
-  Object.keys(_expPrimerSnap).forEach(function(d){_expPrimerSnap[d].listo(false);});
+  Object.keys(_expPrimerSnap).forEach(function(d){
+    const p=_expPrimerSnap[d];
+    if(p&&p._cacheUiTimer){try{clearTimeout(p._cacheUiTimer);}catch(e){}}
+    if(p)p.listo(false);
+  });
   _expPrimerSnap={};
   window._fsBandejaSig='';
+  window._apoyoExpLectura=Object.create(null);
   if(!_fsUnsub)return;
   if(Array.isArray(_fsUnsub))_fsUnsub.forEach(function(u){try{u();}catch(e){}});
   else try{_fsUnsub();}catch(e){}
@@ -2637,11 +2642,31 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
   });
   return Array.from(byId.values());
 }
-function applyExpedienteFirestoreChanges(changes){
+/**
+ * Medidor Apoyo: 1 cobro por expediente+versión (updatedAt).
+ * Varias escuchas del mismo doc no cobran de más; una modificación real sí
+ * (y la fusión de datos siempre ocurre — sync en vivo intacto).
+ */
+function apoyoDebeCobrarExp(expId,updatedAt,fromCache){
+  if(fromCache)return false;
+  expId=String(expId||'').trim();
+  if(!expId)return false;
+  if(!window._apoyoExpLectura)window._apoyoExpLectura=Object.create(null);
+  const at=String(updatedAt||'').trim();
+  const prev=window._apoyoExpLectura[expId];
+  if(prev!=null){
+    if(!at||at===prev)return false;
+    window._apoyoExpLectura[expId]=at;
+    return true;
+  }
+  window._apoyoExpLectura[expId]=at||'*';
+  return true;
+}
+function applyExpedienteFirestoreChanges(changes,opts){
   if(!changes||!changes.length)return false;
+  opts=opts||{};
+  const fromCache=!!opts.fromCache;
   let lecturas=0;
-  changes.forEach(function(c){if(c&&(c.type==='added'||c.type==='modified'))lecturas++;});
-  if(lecturas&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(lecturas);
   let changed=false;
   changes.forEach(function(change){
     if(change.type==='removed'){
@@ -2680,7 +2705,9 @@ function applyExpedienteFirestoreChanges(changes){
       exps.push(exp);
     }
     changed=true;
+    if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,fromCache))lecturas++;
   });
+  if(lecturas&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(lecturas);
   return changed;
 }
 function hydrateExpsFromSnapshotDocs(snap){
@@ -2738,15 +2765,28 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
   }
   const primer=_expPrimerSnap[depto];
   const unsub=window._fsOnSnapshot(ref,function(snap){
-    let changed=applyExpedienteFirestoreChanges(snap.docChanges());
+    const fromCache=!!(snap.metadata&&snap.metadata.fromCache);
+    let changed=applyExpedienteFirestoreChanges(snap.docChanges(),{fromCache:fromCache});
     if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
       if(hydrateExpsFromSnapshotDocs(snap))changed=true;
     }
-    if(primer&&!primer._done&&!(snap.metadata&&snap.metadata.fromCache)){
+    if(primer&&!primer._done&&!fromCache){
       primer._done=true;
+      if(primer._cacheUiTimer){try{clearTimeout(primer._cacheUiTimer);}catch(eT){}primer._cacheUiTimer=null;}
       primer.listo(true);
     }
     if(!changed)return;
+    // Caché local puede traer Por notificar / Atendidas viejas: fusionar datos, no pintar aún.
+    // Tras el primer snap de servidor (o tope offline) sí se pinta y queda en vivo.
+    if(fromCache&&primer&&!primer._done){
+      if(!primer._cacheUiTimer){
+        primer._cacheUiTimer=setTimeout(function(){
+          primer._cacheUiTimer=null;
+          if(primer&&!primer._done)scheduleRefreshViewsAfterRemoteDataChange();
+        },Math.min(2500,EXP_PRIMER_SNAP_TOPE_MS));
+      }
+      return;
+    }
     scheduleRefreshViewsAfterRemoteDataChange();
   },function(err){
     if(primer&&!primer._done){primer._done=true;primer.listo(false);}
@@ -2840,7 +2880,7 @@ async function traerExpedienteSiFalta(q){
   if(ya){repararMarcaExpediente(ya);return ya;}
   const exp=await fetchExpedientePorNumero(id);
   if(!exp||!exp._exp)return null;
-  if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+  if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
   if(!Array.isArray(exps))exps=[];
   if(!exps.some(function(e){return String(e&&e._exp||'')===String(exp._exp);}))exps.push(exp);
   repararMarcaExpediente(exp);
