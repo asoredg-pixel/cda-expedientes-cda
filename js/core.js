@@ -5946,8 +5946,9 @@ function matchPqrsEstadoConsulta(e,qe){
   // Unión: respondidas a tiempo + fuera de término (+ informativas cerradas)
   if(qe==='Atendidas'||qe==='Respondida')return pqrsEstaCerrada(e);
   if(qe==='Atrasada'||qe==='Vencida')return pqrsEstaAtrasada(e);
-  if(qe==='Atendido extemporánea')return pqrsEstaCerrada(e)&&!pqrsRespuestaEnTermino(e);
-  if(qe==='Atendida')return pqrsEstaCerrada(e)&&(pqrsRespuestaEnTermino(e)||!!e._pqrs_informativa);
+  if(qe==='Atendido extemporánea')return pqrsEstaCerrada(e)&&!e._pqrs_informativa&&!pqrsRespuestaEnTermino(e);
+  // Solo en término: no mezclar informativas (van en «Atendidas» / estado propio)
+  if(qe==='Atendida')return pqrsEstaCerrada(e)&&!e._pqrs_informativa&&!!pqrsRespuestaEnTermino(e);
   return st===qe;
 }
 function pqrsEstadoDisplayBadge(e){
