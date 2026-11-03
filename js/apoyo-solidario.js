@@ -322,20 +322,39 @@ function apoyoPintarMedidor(){
   var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
   var u=apoyoAsegurarDia(window._apoyoUso||apoyoUsoVacio());
   var cupo=cfg.cupoDiario|0;
-  var usados=Math.min(cupo,u.lecturasDia|0);
-  var pct=cupo?Math.min(100,Math.round(usados/cupo*100)):100;
+  var lectDia=u.lecturasDia|0;
+  var sobre=cupo>0&&lectDia>cupo;
+  var pct=cupo?Math.min(100,Math.round((lectDia/cupo)*100)): (lectDia>0?100:0);
   var bar=el.querySelector('.sst-apoyo-bar-fill');
   var lbl=el.querySelector('.sst-apoyo-meter-lbl');
+  var cobroEl=el.querySelector('.sst-apoyo-meter-cobro');
   if(bar){
-    bar.style.width=pct+'%';
-    bar.classList.toggle('over',(u.lecturasDia|0)>cupo);
+    bar.style.width='';
+    bar.style.height=pct+'%';
+    bar.classList.toggle('over',sobre||pct>=100&&lectDia>0);
   }
   if(lbl){
-    var cob=u.cobrablesMes|0;
-    lbl.textContent=cupo?(usados+'/'+cupo+' hoy'+(cob?' · +'+cob+' mes':'')):(cob+' lect. mes');
+    lbl.textContent=sobre?('100% · apoyo'):(pct+'% hoy');
   }
-  el.title='Apoyo solidario: cupo diario gratis y consumo del ciclo ('+apoyoFmtCop(u.montoCop)+')';
+  var monto=Number(u.montoCop)||0;
+  var hayCobro=monto>0||(u.cobrablesMes|0)>0;
+  if(cobroEl){
+    cobroEl.hidden=!hayCobro;
+    cobroEl.classList.toggle('has-cobro',hayCobro);
+    cobroEl.textContent=hayCobro?apoyoFmtCopCorto(monto):'';
+  }
+  el.title=hayCobro
+    ?('Apoyo solidario del ciclo: '+apoyoFmtCop(monto)+' · cupo del día al '+pct+'%')
+    :('Apoyo solidario · cupo del día al '+pct+'%');
   el.classList.toggle('sst-apoyo-blocked',apoyoDriveRestringido());
+}
+function apoyoFmtCopCorto(n){
+  n=Math.round(Number(n)||0);
+  if(n>=1000000)return'$'+(n/1000000).toFixed(n%1000000===0?0:1).replace(/\.0$/,'')+'M';
+  if(n>=10000)return'$'+Math.round(n/1000)+'mil';
+  if(n>=1000)return'$'+(n/1000).toFixed(1).replace(/\.0$/,'')+'mil';
+  try{return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n);}
+  catch(e){return '$'+n;}
 }
 function apoyoPintarUI(){
   apoyoPintarBanner();

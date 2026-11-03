@@ -89,6 +89,9 @@ describe('Apoyo solidario', () => {
     expect(w._apoyoUso.cobrablesMes).toBe(5)
     expect(w._apoyoUso.montoUsd).toBeCloseTo(0.005, 5)
     expect(w._apoyoUso.montoCop).toBe(20)
+    expect(src).toContain("pct+'% hoy'")
+    expect(src).toContain('apoyoFmtCopCorto')
+    expect(src).toContain("bar.style.height=pct+'%'")
   })
 
   it('Drive se restringe solo tras gracia y con cobrables, no al administrador', () => {
