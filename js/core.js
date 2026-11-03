@@ -18046,11 +18046,11 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       })();
     }
     if(revParRet){
-      notif('Corrección enviada a '+revParRet.profesional+' — queda en su Por ejecutar','ok');
+      notif('Corrección enviada a '+revParRet.profesional+' — queda en su Por revisar','ok');
       return ok;
     }
     if(revProfEnvio){
-      notif('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por ejecutar','ok');
+      notif('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por revisar','ok');
       return ok;
     }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
@@ -25451,6 +25451,36 @@ function getTareasRevParTecnicoEsperando(){
   });
   return out;
 }
+/** El profesional tiene pendiente revisar un concepto enviado por el técnico. */
+function taskRevParProfesionalPendiente(t,usuario,e){
+  if(!t||t.eliminada||!usuario)return false;
+  const p=taskRevParParticipante(t,usuario,e);
+  if(!(p&&p.rol==='profesional'&&p.fase==='profesional'))return false;
+  const est=estadoTask(t);
+  return est!=='Atendida'&&est!=='Por verificar'&&est!=='Por corregir';
+}
+/** Filas «Por revisar» del profesional: conceptos enviados a su revisión. */
+function getTareasRevParProfesionalPendientes(){
+  if(!responsableActivo||!esModoResponsable())return[];
+  const out=[];
+  (exps||[]).forEach(function(e){
+    if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    (e.tasks||[]).forEach(function(t){
+      if(!t||t.eliminada||!(t.historial||[]).some(function(h){return h&&h.tipo==='traslado'&&h.revisionPar;}))return;
+      t=normalizeTask(t);
+      if(!taskRevParProfesionalPendiente(t,responsableActivo,e))return;
+      out.push(Object.assign({},t,{
+        exp:e._exp,
+        nombre:typeof getNom==='function'?getNom(e):'',
+        tram:(typeof getTram==='function'?(getTram(e._tramite,e)||{}).nombre:'')||'',
+        depto:e._depto,
+        sinExpediente:false,
+        _revParProfesional:true
+      }));
+    });
+  });
+  return out;
+}
 /** Actividad que el técnico envió a revisión del profesional y el encargado ya aprobó (Atendida). */
 function taskRevParAprobadaInfo(t,e){
   if(!t||t.eliminada||taskEsMultiAsignada(t))return null;
@@ -25528,7 +25558,7 @@ function renderTaskReviewDevolverTecnicoSideHtml(expId,taskId,t){
   if(!ctx||!puedeDevolverAlTecnico(t,responsableActivo,e))
     return '<div style="padding:12px;font-size:12px;color:var(--tx3)">Esta actividad no se puede devolver al técnico.</div>';
   return '<div class="task-review-side-scroll" style="padding:10px">'+
-    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">La actividad pasa a <strong>Por corregir</strong> de <strong>'+escAttr(ctx.tecnico)+'</strong>. Cuando entregue la corrección, vuelve a su <strong>Por ejecutar</strong> (no pasa por el encargado).</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">La actividad pasa a <strong>Por corregir</strong> de <strong>'+escAttr(ctx.tecnico)+'</strong>. Cuando entregue la corrección, vuelve a su <strong>Por revisar</strong> (no pasa por el encargado).</div>'+
     '<div class="fld" style="margin-bottom:10px"><label>Observación para el técnico (opcional)</label><textarea id="devolver-tecnico-nota" placeholder="Indique qué debe corregir…" style="width:100%;min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-family:\'DM Sans\',sans-serif;font-size:12px"></textarea></div>'+
     '<button type="button" class="btn bsm bp" onclick="submitDevolverAlTecnico(\''+escAttr(expId)+'\',\''+escAttr(taskId)+'\')">↩ Devolver para corregir</button>'+
     '</div>';
@@ -31548,6 +31578,9 @@ function esActividadPorEjecutar(t){
     return false;
   // Revisión NCA (incl. devolución Director): va a «Por revisar»; Por corregir tiene paleta propia
   if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION)return false;
+  // Concepto en revisión del profesional → paleta «Por revisar», no «Por ejecutar»
+  if(esModoResponsable()&&responsableActivo&&typeof taskRevParProfesionalPendiente==='function'
+    &&taskRevParProfesionalPendiente(t,responsableActivo,eExp))return false;
   if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
     const est=estadoTaskForAsignado(t,responsableActivo);
     if(est==='Atendida'||est==='Eliminada'||est==='Por verificar'||est==='Por corregir')return false;
@@ -32506,10 +32539,11 @@ function filtrarActividadesPorEstado(list,filtro,opts){
     }):[];
     out=mergeActividadLists(out,mergeActividadLists(revFinal,tramRev));
     if(typeof getTareasRevParTecnicoEsperando==='function')out=mergeActividadLists(out,getTareasRevParTecnicoEsperando());
+    if(typeof getTareasRevParProfesionalPendientes==='function')out=mergeActividadLists(out,getTareasRevParProfesionalPendientes());
     if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
       out=(out||[]).filter(function(t){
         if(!t)return false;
-        if(t._revParTecnico)return true;
+        if(t._revParTecnico||t._revParProfesional)return true;
         const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
         const esRevFinal=(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
           ||(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t));

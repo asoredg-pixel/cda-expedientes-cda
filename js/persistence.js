@@ -474,15 +474,15 @@ function _fsStripUndefinedDeep(v){
   }
   return v;
 }
+function _marcasAddNombre(set,n){
+  n=String(n||'').trim();
+  if(!n)return;
+  const k=n.toLowerCase();
+  if(set.some(function(x){return String(x).toLowerCase()===k;}))return;
+  set.push(n);
+}
 function nombresPendientesExp(exp){
   const set=[];
-  const add=function(n){
-    n=String(n||'').trim();
-    if(!n)return;
-    const k=n.toLowerCase();
-    if(set.some(function(x){return String(x).toLowerCase()===k;}))return;
-    set.push(n);
-  };
   (exp&&exp.tasks||[]).forEach(function(t){
     if(!t||t.eliminada)return;
     let pend=false;
@@ -493,20 +493,62 @@ function nombresPendientesExp(exp){
     });
     const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
     if(f&&f!=='cerrada'&&f!=='cerrada_atendida')pend=true;
+    // Revisión par en curso: técnico y profesional deben seguir escuchando el expediente
+    // (tras el envío el responsable pasa al profesional; sin esto el técnico pierde «Por revisar»
+    // y el profesional puede no ver lo pendiente si la marca quedó corta).
+    if(typeof taskRevisionParCtx==='function'){
+      try{
+        const ctx=taskRevisionParCtx(t,exp);
+        if(ctx&&(ctx.fase==='profesional'||ctx.fase==='tecnico')){
+          if(ctx.tecnico)_marcasAddNombre(set,ctx.tecnico);
+          if(ctx.profesional)_marcasAddNombre(set,ctx.profesional);
+          pend=true;
+        }
+      }catch(e){}
+    }
     if(!pend)return;
-    if(t.responsable)add(t.responsable);
-    (t.responsables||[]).forEach(add);
+    if(t.responsable)_marcasAddNombre(set,t.responsable);
+    (t.responsables||[]).forEach(function(n){_marcasAddNombre(set,n);});
     (t.asignados||[]).forEach(function(a){
       if(!a)return;
-      if(typeof a==='string')add(a);
-      else if(a.nombre)add(String(a.nombre));
+      if(typeof a==='string')_marcasAddNombre(set,a);
+      else if(a.nombre)_marcasAddNombre(set,String(a.nombre));
     });
     const nPor=String((t.firmaWf&&t.firmaWf.notificar_por)||'').trim();
-    if(nPor)add(nPor);
+    if(nPor)_marcasAddNombre(set,nPor);
   });
   const wf=exp&&exp._pqrs_workflow;
   const nPq=String((wf&&wf.notificar_por)||'').trim();
-  if(nPq)add(nPq);
+  if(nPq)_marcasAddNombre(set,nPq);
+  return set.slice(0,40);
+}
+/** Responsables que deben ver la paleta Atendidas (últimos 30 días calendario). */
+function nombresAtendidasPaletaExp(exp){
+  const set=[];
+  const corte=corteFechaMarca(30);
+  (exp&&exp.tasks||[]).forEach(function(t){
+    if(!t||t.eliminada)return;
+    const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
+    let fa=String(t.fechaAtendida||'').slice(0,10);
+    let atendida=est==='Atendida';
+    (t.asignados||[]).forEach(function(a){
+      if(!a)return;
+      if(a.estado==='atendido'||String(a.fechaAtendida||'').trim()){
+        atendida=true;
+        const af=String(a.fechaAtendida||'').slice(0,10);
+        if(/^\d{4}-\d{2}-\d{2}$/.test(af)&&( !fa||af>fa))fa=af;
+      }
+    });
+    if(!atendida)return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fa)||fa<corte)return;
+    if(t.responsable)_marcasAddNombre(set,t.responsable);
+    (t.responsables||[]).forEach(function(n){_marcasAddNombre(set,n);});
+    (t.asignados||[]).forEach(function(a){
+      if(!a)return;
+      if(typeof a==='string')_marcasAddNombre(set,a);
+      else if(a.nombre&&(a.estado==='atendido'||String(a.fechaAtendida||'').trim()||est==='Atendida'))_marcasAddNombre(set,String(a.nombre));
+    });
+  });
   return set.slice(0,40);
 }
 function expTieneSeguimiento(exp){
@@ -524,6 +566,7 @@ function expTieneSeguimiento(exp){
 function aplicarMarcasBandeja(exp){
   if(!exp||typeof exp!=='object')return exp;
   exp.pendientes=nombresPendientesExp(exp);
+  exp.atendidasPaleta=nombresAtendidasPaletaExp(exp);
   exp.seguimiento=!!expTieneSeguimiento(exp);
   let req=false;
   if(typeof _reqPalEntradasExp==='function'){
@@ -580,6 +623,7 @@ function fechaCierrePqrsMarca(exp){
 function marcasBandejaDistintas(data,exp){
   const a=data||{};
   return JSON.stringify(a.pendientes||[])!==JSON.stringify(exp.pendientes||[])
+    ||JSON.stringify(a.atendidasPaleta||[])!==JSON.stringify(exp.atendidasPaleta||[])
     ||!!a.seguimiento!==!!exp.seguimiento
     ||!!a.reqAlerta!==!!exp.reqAlerta
     ||!!a.esPqrs!==!!exp.esPqrs
@@ -630,6 +674,7 @@ async function asegurarMarcasBandeja(){
         try{
           await window._fsSetDoc(d.ref||window._fsDoc(db,'departamentos',depto,'expedientes',d.id),{
             pendientes:exp.pendientes,
+            atendidasPaleta:exp.atendidasPaleta||[],
             seguimiento:exp.seguimiento,
             reqAlerta:exp.reqAlerta,
             esPqrs:exp.esPqrs,
@@ -2180,7 +2225,8 @@ function bandejaEscuchaSig(){
     window._bandejaMarcasListas?'1':'0',
     window._pqrsOficinaCorteListo?'1':'0',
     window._pqrsOficinaPropiaListo?'1':'0',
-    window._secretariaRadicacionLista?'1':'0'
+    window._secretariaRadicacionLista?'1':'0',
+    'at30' // puente Atendidas 30d + atendidasPaleta para responsables
   ].join('|');
 }
 function stopRealtimeCfgSync(){
@@ -2683,6 +2729,7 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
     else if(filtro.tipo==='igual')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',filtro.valor));
     else if(filtro.tipo==='bool')ref=window._fsQuery(ref,window._fsWhere(filtro.campo,'==',true));
     else if(filtro.tipo==='nombre')ref=window._fsQuery(ref,window._fsWhere('pendientes','array-contains',filtro.nombre));
+    else if(filtro.tipo==='atendidas')ref=window._fsQuery(ref,window._fsWhere('atendidasPaleta','array-contains',filtro.nombre));
   }
   // Una señal por depto (pendientes, seguimiento, PQRS, etc.): no solo updatedAt.
   if(!_expPrimerSnap[depto]){
@@ -2753,7 +2800,13 @@ function initRealtimeSync(force){
       }else if(esOficina&&rolLogin!=='secretaria'){
         escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'esPqrs'});
       }
-      if(esResp&&nombre)escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
+      if(esResp&&nombre){
+        // Pendientes (Por ejecutar / Por revisar / Por corregir)
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'nombre',nombre:nombre});
+        // Atendidas 30 días: marca dedicada + puente updatedAt (no depender solo del backfill)
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'atendidas',nombre:nombre});
+        escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteCalendarioIso(30)});
+      }
     });
     _fsUnsub=unsubs;
     window._fsBandejaSig=sig;
@@ -2767,13 +2820,14 @@ function initRealtimeSync(force){
 }
 function repararMarcaExpediente(exp){
   if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
-  const antes=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
+  const antes=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   aplicarMarcasBandeja(exp);
-  const despues=JSON.stringify([exp.pendientes||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
+  const despues=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   if(antes===despues)return;
   const depto=String(exp._depto||'guaviare').trim();
   window._fsSetDoc(window._fsDoc(window._db,'departamentos',depto,'expedientes',exp._exp),{
-    pendientes:exp.pendientes,seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
+    pendientes:exp.pendientes,atendidasPaleta:exp.atendidasPaleta||[],
+    seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
     pqrsAbierta:!!exp.pqrsAbierta,pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
     pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),pqrsCerradaClave:String(exp.pqrsCerradaClave||''),
     pqrsRadicadaEn:String(exp.pqrsRadicadaEn||'')

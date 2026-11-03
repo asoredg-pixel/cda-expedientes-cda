@@ -2428,6 +2428,20 @@ function consultaBusqPintar(inp){
   }).join('');
   portal.style.display='block';
 }
+/** Número de PQR/expediente tipado: basta para un getDoc (oficinas RN/admin/OAP/PQR y el resto). */
+function consultaPareceNumeroDoc(q){
+  const s=String(q||'').trim();
+  if(s.length<4)return false;
+  if(/\s{2,}/.test(s))return false;
+  // Evitar búsquedas por nombre largo: priorizar códigos (letras/números/-._)
+  if(!/^[A-Za-z0-9][A-Za-z0-9._\-\/]*$/.test(s))return false;
+  return true;
+}
+function consultaTrasTraerNumero(q,done){
+  const go=typeof done==='function'?done:function(){};
+  if(!consultaPareceNumeroDoc(q)||typeof traerExpedienteSiFalta!=='function'){go();return;}
+  Promise.resolve(traerExpedienteSiFalta(q)).then(go).catch(go);
+}
 function consultaBusqAbrir(inp){
   if(!inp)return;
   try{inp.select();}catch(e){}
@@ -2436,14 +2450,21 @@ function consultaBusqAbrir(inp){
 function consultaBusqInput(inp){
   consultaBusqPintar(inp);
   clearTimeout(window._conBusqT);
-  window._conBusqT=setTimeout(function(){renderConsulta();},180);
+  window._conBusqT=setTimeout(function(){
+    const q=String((inp&&inp.value)||'').trim();
+    consultaTrasTraerNumero(q,function(){
+      renderConsulta();
+      consultaBusqPintar(inp);
+    });
+  },280);
 }
 function consultaBusqElegir(valor){
   const inp=document.getElementById('q-txt');
   if(inp)inp.value=valor||'';
   consultaBusqCerrar();
   clearTimeout(window._conBusqT);
-  renderConsulta();
+  const q=String(valor||'').trim();
+  consultaTrasTraerNumero(q,function(){renderConsulta();});
 }
 function consultaBusqCerrar(){
   const portal=document.getElementById('q-txt-sug');
@@ -2456,11 +2477,8 @@ function consultaBusqKey(ev,inp){
   ev.preventDefault();
   clearTimeout(window._conBusqT);
   consultaBusqCerrar();
-  if(typeof traerExpedienteSiFalta==='function'){
-    Promise.resolve(traerExpedienteSiFalta(inp&&inp.value)).then(function(){renderConsulta();});
-    return;
-  }
-  renderConsulta();
+  const q=String((inp&&inp.value)||'').trim();
+  consultaTrasTraerNumero(q,function(){renderConsulta();});
 }
 function consultaTopeSecretaria(list,q){
   if(typeof esSecretaria!=='function'||!esSecretaria())return list||[];
