@@ -20,15 +20,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261103i"></script>
-<script src="js/constants.js?v=20261103n"></script>
+<script src="js/constants.js?v=20261103o"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
-<script src="js/persistence.js?v=20261103m"></script>
+<script src="js/persistence.js?v=20261103o"></script>
 <script src="js/roles.js?v=20261103a"></script>
 <script src="js/apoyo-solidario.js?v=20261103d"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261103n"></script>
+<script src="js/core.js?v=20261103o"></script>
 <script src="js/formulario.js?v=20261103h"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
@@ -42,7 +42,7 @@
 <script src="js/gmail.js?v=20261103a"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261030s"></script>
-<script src="js/consulta.js?v=20261103l"></script>
+<script src="js/consulta.js?v=20261103o"></script>
 <script src="js/entrega-responsable.js?v=20261028a"></script>
 <script src="js/tramite-firma.js?v=20261029a"></script>
 <script src="js/requerimientos.js?v=20261030j"></script>
@@ -481,6 +481,7 @@
       <div class="fld" style="min-width:110px" id="q-mes-wrap"><label style="font-size:11px;color:var(--tx2)">Mes</label><select id="q-mes" onchange="onPresetPeriodo('q')"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></div>
       <label>Desde<input type="date" id="q-desde" onchange="onRangoManualPeriodo('q')"></label>
       <label>Hasta<input type="date" id="q-hasta" onchange="onRangoManualPeriodo('q')"></label>
+      <button type="button" class="btn bsm bp" id="btn-buscar-consulta-pqrs" style="display:none" onclick="buscarConsultaPqrsPorCorte()" title="Lee de Firestore solo las PQRSD del corte (suma lecturas Blaze). La lista, Descargar y Matriz usan ese resultado.">Buscar</button>
       <button type="button" class="btn bsm" onclick="limpiarPeriodo('q')">Limpiar fechas</button>
     </div>
     <div id="q-periodo-resumen" style="font-size:11px;color:var(--tx2);margin:-4px 0 10px"></div>

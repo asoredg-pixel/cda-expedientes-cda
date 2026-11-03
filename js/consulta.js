@@ -2502,10 +2502,31 @@ function renderConsulta(){
     if(qActEl)qActEl.value='poreje';
   }
   const basPqrs=esModoOficinaDeguv()||esSecretaria();
-  // Oficinas: en Consulta ven todas las PQRSD radicadas (no solo las asignadas a su oficina)
-  let baseList=esModoOficinaDeguv()
-    ?exps.filter(function(e){return esPqrsSecretaria(e)&&!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);})
-    :expsAmbito();
+  const conBusca=basPqrs&&!!String(window._conPqrsBuscaRango||'').trim()&&Array.isArray(window._conPqrsBuscaList);
+  // Oficinas / secretaría: tras Buscar por corte, la base es esa lectura (no el archivo completo).
+  let baseList;
+  if(conBusca){
+    baseList=(window._conPqrsBuscaList||[]).filter(function(e){
+      return e&&!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);
+    });
+    // Número traído con getDoc tras Buscar: incluirlo aunque no esté en el corte
+    if(q){
+      const ids={};
+      baseList.forEach(function(e){ids[String(e&&e._exp||'').toLowerCase()]=true;});
+      (exps||[]).forEach(function(e){
+        if(!e||ids[String(e._exp||'').toLowerCase()])return;
+        if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
+        if(!esPqrsSecretaria(e))return;
+        if(!matchS(e,q))return;
+        baseList.push(e);
+        ids[String(e._exp||'').toLowerCase()]=true;
+      });
+    }
+  }else if(esModoOficinaDeguv()){
+    baseList=exps.filter(function(e){return esPqrsSecretaria(e)&&!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);});
+  }else{
+    baseList=expsAmbito();
+  }
   if(esModoOficinaDeguv()&&typeof esUsuarioContratista==='function'&&esUsuarioContratista()&&typeof expVisibleParaContratista==='function'){
     baseList=baseList.filter(expVisibleParaContratista);
   }
@@ -2517,10 +2538,11 @@ function renderConsulta(){
     const mAct=basPqrs?true:(typeof matchActividadFiltroExp==='function'?matchActividadFiltroExp(e,qact,qi):matchActividadFiltro(e,qact));
     return matchS(e,q)&&(basPqrs||!qt||e._tramite===qt)&&mEst&&mAct&&mf;
   }),'q');
-  const listExpsVis=esSecretaria()?consultaTopeSecretaria(listExps,q):listExps;
+  // Tope 10 solo al entrar sin Buscar; con corte cargado se listan todas las del resultado (matriz/descarga).
+  const listExpsVis=(esSecretaria()&&!conBusca)?consultaTopeSecretaria(listExps,q):listExps;
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=ordenarConsultaPorTitulo(listExpsVis.concat(listLibres), q);
-  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
+  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':conBusca?' — corte Buscar (matriz/descarga)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
   if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';

@@ -2498,6 +2498,89 @@ function asegurarEscuchaConsolidado(){
     if(typeof initRealtimeSync==='function')initRealtimeSync();
   }
 }
+/**
+ * Consulta PQRSD (secretaría / oficinas): getDocs acotado por pqrsRadicadaEn.
+ * No abre el archivo completo. «Todo el historial» no consulta.
+ * El resultado alimenta pantalla, Descargar y Matriz (_conExportList vía renderConsulta).
+ */
+async function buscarConsultaPqrsPorCorte(){
+  const bas=(typeof esSecretaria==='function'&&esSecretaria())
+    ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv());
+  if(!bas){
+    if(typeof notif==='function')notif('Buscar por corte aplica a Secretaría y oficinas PQRSD','warn');
+    return;
+  }
+  if(window._conPqrsBuscando)return;
+  const rango=typeof getPeriodoRango==='function'?getPeriodoRango('q'):null;
+  if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31'){
+    if(typeof notif==='function')notif('Elija año, trimestre, mes o un rango de fechas. «Todo el historial» no consulta.','warn');
+    return;
+  }
+  const db=window._db;
+  if(!db||!window._fsGetDocs||!window._fsQuery||!window._fsWhere||!window._fsCollection){
+    if(typeof notif==='function')notif('No hay conexión para buscar','err');
+    return;
+  }
+  window._conPqrsBuscando=true;
+  if(typeof notif==='function')notif('Buscando PQRSD del corte…','info');
+  const deptos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
+  const hasta=String(rango.hasta);
+  const tope=hasta.length===10?hasta+'\uf8ff':hasta;
+  const list=[];
+  try{
+    for(let i=0;i<(deptos||[]).length;i++){
+      const depto=deptos[i];
+      let snap;
+      try{
+        snap=await window._fsGetDocs(window._fsQuery(
+          window._fsCollection(db,'departamentos',depto,'expedientes'),
+          window._fsWhere('pqrsRadicadaEn','>=',rango.desde),
+          window._fsWhere('pqrsRadicadaEn','<=',tope)
+        ));
+      }catch(errDepto){
+        console.warn('buscarConsultaPqrsPorCorte',depto,errDepto);
+        if(typeof notif==='function')notif('No se pudo buscar en '+depto+': '+(errDepto&&errDepto.message||errDepto),'err');
+        continue;
+      }
+      if(!snap||typeof snap.forEach!=='function')continue;
+      snap.forEach(function(d){
+        const data=d.data?d.data()||{}:{};
+        const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
+        if(!exp||!exp._exp)return;
+        if(!exp._depto)exp._depto=depto;
+        if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
+        if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
+        list.push(exp);
+        if(!Array.isArray(exps))exps=[];
+        const idx=exps.findIndex(function(e){return String(e&&e._exp||'')===String(exp._exp);});
+        if(idx>=0){
+          const local=exps[idx];
+          exp.tasks=typeof mergeExpedienteTasksLocalRemote==='function'
+            ?mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks)
+            :(exp.tasks||local.tasks);
+          exps[idx]=Object.assign({},local,exp);
+        }else exps.push(exp);
+        if(typeof apoyoDebeCobrarExp==='function'){
+          if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+        }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+      });
+    }
+    window._conPqrsBuscaList=list;
+    window._conPqrsBuscaRango=String(rango.desde)+'|'+String(rango.hasta);
+    if(typeof renderConsulta==='function')renderConsulta();
+    if(typeof notif==='function'){
+      notif(list.length
+        ?('Consulta: '+list.length+' PQRSD del corte. Descargar y Matriz usan esta lista.')
+        :'Sin PQRSD en ese corte de fechas','ok');
+    }
+  }catch(err){
+    console.warn('buscarConsultaPqrsPorCorte',err);
+    if(typeof notif==='function')notif('No se pudo buscar la consulta PQRSD','err');
+  }finally{
+    window._conPqrsBuscando=false;
+  }
+}
+window.buscarConsultaPqrsPorCorte=buscarConsultaPqrsPorCorte;
 /** Encargado NCA, administrador y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
 async function buscarConsolidadoNca(){
   if(!consolidadoBuscaPorCorte()){
