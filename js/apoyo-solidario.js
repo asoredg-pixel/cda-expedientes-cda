@@ -23,9 +23,31 @@ window._apoyoUsoListo=false;
 window._apoyoLecturasCola=0;
 window._apoyoFlushBound=false;
 
+/** Día de cupo gratis: se renueva a las 02:00 (misma franja en que Blaze renueva lo gratuito). Antes de las 2:00 sigue contando el día anterior. */
+var APOYO_HORA_RENOVACION=2;
 function apoyoHoyLocal(){
   var d=new Date();
+  if(d.getHours()<APOYO_HORA_RENOVACION)d.setDate(d.getDate()-1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function apoyoMsHastaRenovacion(){
+  var ahora=new Date();
+  var next=new Date(ahora.getFullYear(),ahora.getMonth(),ahora.getDate(),APOYO_HORA_RENOVACION,0,0,0);
+  if(ahora.getTime()>=next.getTime())next.setDate(next.getDate()+1);
+  return Math.max(1000,next.getTime()-ahora.getTime());
+}
+function apoyoProgramarRenovacionDia(){
+  if(window._apoyoRenovTimer){try{clearTimeout(window._apoyoRenovTimer);}catch(e){}}
+  window._apoyoRenovTimer=setTimeout(function(){
+    window._apoyoRenovTimer=null;
+    if(!document.body.classList.contains('sesion-activa'))return;
+    if(window._apoyoUso){
+      apoyoAsegurarDia(window._apoyoUso);
+      if(window._apoyoUsoListo)apoyoProgramarGuardarUso();
+      apoyoPintarUI();
+    }
+    apoyoProgramarRenovacionDia();
+  },apoyoMsHastaRenovacion()+800);
 }
 function apoyoEmailKey(){
   var e=(window._usuarioActual&&window._usuarioActual.email)||(window._firebaseAuth&&window._firebaseAuth.currentUser&&window._firebaseAuth.currentUser.email)||'';
@@ -467,10 +489,12 @@ async function apoyoInitSesion(){
   await apoyoCargarCfg();
   await apoyoCargarUso();
   apoyoBindFlush();
+  apoyoProgramarRenovacionDia();
   apoyoPintarUI();
 }
 function apoyoResetSesion(){
   if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
+  if(window._apoyoRenovTimer){try{clearTimeout(window._apoyoRenovTimer);}catch(e){}window._apoyoRenovTimer=null;}
   if(window._apoyoUsoDirty){
     try{apoyoGuardarUso();}catch(e){}
   }
@@ -599,7 +623,7 @@ function apoyoCfgCardBody(){
   var cfg=apoyoNormCfg(window._apoyoCfg);
   var inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   return '<div class="cfcard" id="apoyo-cfg-card">'+
-    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cada persona tiene un cupo diario de lecturas. Si lo supera, el excedente suma al <strong>apoyo solidario</strong> del ciclo (corte día 28 + 3 días hábiles). Si cambia cupo, precio o TRM, lo ya cobrado en el ciclo <strong>no se ajusta</strong>: solo el consumo nuevo se valora con los criterios nuevos y se suma al monto acumulado. Tras el plazo, sin el apoyo registrado, no podrá conectar Drive.</p>'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cada persona tiene un cupo diario de lecturas (se renueva a las <strong>2:00 a. m.</strong>, como el cupo gratis de Blaze). Si lo supera, el excedente suma al <strong>apoyo solidario</strong> del ciclo (corte día 28 + 3 días hábiles). Si cambia cupo, precio o TRM, lo ya cobrado en el ciclo <strong>no se ajusta</strong>: solo el consumo nuevo se valora con los criterios nuevos y se suma al monto acumulado. Tras el plazo, sin el apoyo registrado, no podrá conectar Drive.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
     '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis por día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
