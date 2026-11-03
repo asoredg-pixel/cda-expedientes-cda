@@ -5910,14 +5910,15 @@ function actualizarConsultaPqrsUI(){
   const btnMatriz=document.getElementById('btn-export-matriz-pqrs');
   if(btnMatriz)btnMatriz.style.display=esSecretaria()?'':'none';
   const btnBusca=document.getElementById('btn-buscar-consulta-pqrs');
-  if(btnBusca)btnBusca.style.display=bas?'':'none';
+  if(btnBusca)btnBusca.style.display='';
   const qTxt=document.getElementById('q-txt');
   const sl=document.querySelector('#pg-con .card > .slbl');
   if(qTxt&&bas)qTxt.placeholder='N° PQRSD, nombre del interesado, asunto, NIT…';
   else if(qTxt)qTxt.placeholder='Nombre, expediente, resolución, NIT, ciudad…';
   if(sl&&bas)sl.textContent=esSecretaria()
-    ?'Consulta PQRSD — últimas 10 al entrar. Use Buscar con fechas para listar un corte (matriz/descarga); el número sigue con getDoc'
-    :'Consulta PQRSD — por atender y 30 días. Use Buscar con fechas para otro corte (suma lecturas)';
+    ?'Consulta PQRSD — últimas 10 al entrar. Buscar con fechas lista el corte (matriz/descarga); cortes ya leídos no se vuelven a descargar'
+    :'Consulta PQRSD — por atender y 30 días. Buscar con fechas para otro corte; lo ya cargado se reutiliza';
+  else if(sl&&!bas)sl.textContent='Consulta — use Buscar con fechas para un corte (trámites/PQRSD). Estado y texto filtran en memoria; sin doble descarga del mismo corte';
   ['q-inst','q-act','q-fl','q-tram'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){el.style.display=bas?'none':'';if(bas)el.value='';}
@@ -27513,6 +27514,9 @@ function limpiarPeriodo(prefix){
   const d=document.getElementById(ids.desde),h=document.getElementById(ids.hasta);
   if(d)d.value='';if(h)h.value='';
   if(prefix==='q'){
+    // Solo limpia el resultado activo; la caché de sesión (_conBuscaCache) se conserva para no re-cobrar.
+    window._conBuscaList=null;
+    window._conBuscaRango='';
     window._conPqrsBuscaList=null;
     window._conPqrsBuscaRango='';
   }

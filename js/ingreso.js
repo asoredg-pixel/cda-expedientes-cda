@@ -663,38 +663,41 @@ function ingresarComoRol(rolId,respNombre){
   initPeriodoFiltros('pqrs-ofi');
   renderChatBadge();
   installSessionPageLifecycle();
-  initAppRealtimeSync();
+  // Apoyo primero: el medidor diario vive en Firestore por usuario. Sin esto,
+  // la bandeja contaba desde 0 y podía pisar el % de otro PC / F5.
+  const trasApoyoListo=function(){
+    initAppRealtimeSync();
+    if(typeof reloadExpedientesTrasLogin==='function'){
+      reloadExpedientesTrasLogin().then(function(ok){
+        if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
+          try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
+        }
+        if(!ok||!(typeof exps!=='undefined'&&exps&&exps.length)){
+          setTimeout(function(){
+            reloadExpedientesTrasLogin().then(function(){
+              if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
+                try{aplicarSugerenciaNumeroPqrsSec();}catch(e2){}
+              }
+            }).catch(function(){});
+          },1200);
+        }
+      }).catch(function(e){console.warn('reloadExpedientesTrasLogin:',e);});
+    }
+    if(typeof syncPendingExpedientesToFirestore==='function'){
+      syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
+    }
+    if(typeof syncPendingActividadesLibresToFirestore==='function'){
+      setTimeout(function(){
+        syncPendingActividadesLibresToFirestore().catch(function(e){console.warn('syncActLibres al ingresar:',e);});
+      },1200);
+    }
+  };
   if(typeof apoyoInitSesion==='function'){
-    Promise.resolve(apoyoInitSesion()).catch(function(e){console.warn('apoyoInitSesion',e);});
-  }
-  // Releer expedientes YA autenticado. Admin→Secretaría ya trae exps en memoria;
-  // la cuenta Secretaría real depende de esta recarga (+ reintentos).
-  if(typeof reloadExpedientesTrasLogin==='function'){
-    reloadExpedientesTrasLogin().then(function(ok){
-      if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
-        try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
-      }
-      // Segundo pase por si el primer getDocs corrió con token aún frío
-      if(!ok||!(typeof exps!=='undefined'&&exps&&exps.length)){
-        setTimeout(function(){
-          reloadExpedientesTrasLogin().then(function(){
-            if(typeof aplicarSugerenciaNumeroPqrsSec==='function'&&esSecretaria()){
-              try{aplicarSugerenciaNumeroPqrsSec();}catch(e){}
-            }
-          }).catch(function(){});
-        },1200);
-      }
-    }).catch(function(e){console.warn('reloadExpedientesTrasLogin:',e);});
-  }
-  if(typeof syncPendingExpedientesToFirestore==='function'){
-    syncPendingExpedientesToFirestore().catch(function(e){console.warn('syncPending al ingresar:',e);});
-  }
-  // Reintentar actividades sin expediente que quedaron solo en local (p. ej. rules antiguas)
-  if(typeof syncPendingActividadesLibresToFirestore==='function'){
-    setTimeout(function(){
-      syncPendingActividadesLibresToFirestore().catch(function(e){console.warn('syncActLibres al ingresar:',e);});
-    },1200);
-  }
+    Promise.resolve(apoyoInitSesion()).then(trasApoyoListo).catch(function(e){
+      console.warn('apoyoInitSesion',e);
+      trasApoyoListo();
+    });
+  }else trasApoyoListo();
   if(window._usuarioActual&&window._usuarioActual.email&&_sessionId){
     if(!String(_sessionId).startsWith('local_')){
       startSessionGuard(window._usuarioActual.email);
@@ -756,6 +759,7 @@ window.stopIdleSessionWatch=stopIdleSessionWatch;
 function salirDeSesionApp(){
   stopIdleSessionWatch();
   const email=window._usuarioActual&&window._usuarioActual.email;
+  if(typeof apoyoResetSesion==='function')apoyoResetSesion();
   rolSesion=null;
   deptoActivo='guaviare';
   responsableActivo='';

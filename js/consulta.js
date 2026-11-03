@@ -2502,11 +2502,14 @@ function renderConsulta(){
     if(qActEl)qActEl.value='poreje';
   }
   const basPqrs=esModoOficinaDeguv()||esSecretaria();
-  const conBusca=basPqrs&&!!String(window._conPqrsBuscaRango||'').trim()&&Array.isArray(window._conPqrsBuscaList);
-  // Oficinas / secretaría: tras Buscar por corte, la base es esa lectura (no el archivo completo).
+  const buscaList=Array.isArray(window._conBuscaList)?window._conBuscaList
+    :(Array.isArray(window._conPqrsBuscaList)?window._conPqrsBuscaList:null);
+  const buscaRango=String(window._conBuscaRango||window._conPqrsBuscaRango||'').trim();
+  const conBusca=!!buscaRango&&Array.isArray(buscaList);
+  // Tras Buscar por corte (cualquier rol): base = esa lectura. Sin Buscar: bandeja/escucha habitual.
   let baseList;
   if(conBusca){
-    baseList=(window._conPqrsBuscaList||[]).filter(function(e){
+    baseList=(buscaList||[]).filter(function(e){
       return e&&!(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado);
     });
     // Número traído con getDoc tras Buscar: incluirlo aunque no esté en el corte
@@ -2516,7 +2519,7 @@ function renderConsulta(){
       (exps||[]).forEach(function(e){
         if(!e||ids[String(e._exp||'').toLowerCase()])return;
         if(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado)return;
-        if(!esPqrsSecretaria(e))return;
+        if(basPqrs&&!esPqrsSecretaria(e))return;
         if(!matchS(e,q))return;
         baseList.push(e);
         ids[String(e._exp||'').toLowerCase()]=true;
@@ -2542,7 +2545,7 @@ function renderConsulta(){
   const listExpsVis=(esSecretaria()&&!conBusca)?consultaTopeSecretaria(listExps,q):listExps;
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=ordenarConsultaPorTitulo(listExpsVis.concat(listLibres), q);
-  const ambitoLbl=esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':conBusca?' — corte Buscar (matriz/descarga)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
+  const ambitoLbl=conBusca?' — corte Buscar (descarga/matriz)':esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
   if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';

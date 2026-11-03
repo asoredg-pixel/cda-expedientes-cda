@@ -2215,6 +2215,11 @@ function stopRealtimeExpSync(){
   _expPrimerSnap={};
   window._fsBandejaSig='';
   window._apoyoExpLectura=Object.create(null);
+  window._conBuscaCache=null;
+  window._conBuscaList=null;
+  window._conBuscaRango='';
+  window._conPqrsBuscaList=null;
+  window._conPqrsBuscaRango='';
   if(!_fsUnsub)return;
   if(Array.isArray(_fsUnsub))_fsUnsub.forEach(function(u){try{u();}catch(e){}});
   else try{_fsUnsub();}catch(e){}
@@ -2498,22 +2503,120 @@ function asegurarEscuchaConsolidado(){
     if(typeof initRealtimeSync==='function')initRealtimeSync();
   }
 }
-/**
- * Consulta PQRSD (secretaría / oficinas): getDocs acotado por pqrsRadicadaEn.
- * No abre el archivo completo. «Todo el historial» no consulta.
- * El resultado alimenta pantalla, Descargar y Matriz (_conExportList vía renderConsulta).
- */
-async function buscarConsultaPqrsPorCorte(){
-  const bas=(typeof esSecretaria==='function'&&esSecretaria())
-    ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv());
-  if(!bas){
-    if(typeof notif==='function')notif('Buscar por corte aplica a Secretaría y oficinas PQRSD','warn');
-    return;
+/** Fecha de corte para Consulta Buscar (PQRS → radicación; resto → fecha de referencia). */
+function conBuscaFechaDoc(exp,modoPqrs){
+  if(modoPqrs){
+    const p=String((exp&&exp.pqrsRadicadaEn)||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(p))return p;
   }
-  if(window._conPqrsBuscando)return;
+  if(typeof fechaRefExpediente==='function'){
+    const f=fechaRefExpediente(exp);
+    if(f)return String(f).slice(0,10);
+  }
+  return String((exp&&(exp._fecha_solicitud||exp._fecha))||'').slice(0,10);
+}
+function conBuscaTramiteActual(){
+  try{
+    const el=document.getElementById('q-tram');
+    return el?String(el.value||'').trim():'';
+  }catch(e){return'';}
+}
+function conBuscaModoPqrs(){
+  return (typeof esSecretaria==='function'&&esSecretaria())
+    ||(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv());
+}
+function conBuscaAsegurarCache(){
+  if(!window._conBuscaCache)window._conBuscaCache={docs:Object.create(null),cubiertos:[]};
+  return window._conBuscaCache;
+}
+/** ¿Este corte (y trámite) ya se leyó en la sesión? Evita getDocs / doble cobro Blaze. */
+function conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs){
+  const cov=(conBuscaAsegurarCache().cubiertos)||[];
+  return cov.some(function(c){
+    if(!!c.modoPqrs!==!!modoPqrs)return false;
+    if(tram){
+      // Sirve un corte previo sin trámite (más amplio) o el mismo trámite
+      if(c.tram&&c.tram!==tram)return false;
+    }else if(c.tram){
+      return false; // pedimos todos los trámites; lo previo era uno solo
+    }
+    return String(c.desde)<=String(desde)&&String(c.hasta)>=String(hasta);
+  });
+}
+function conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs){
+  const cache=conBuscaAsegurarCache();
+  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs))return;
+  cache.cubiertos.push({desde:String(desde),hasta:String(hasta),tram:String(tram||''),modoPqrs:!!modoPqrs});
+}
+function conBuscaFusionarExp(exp){
+  if(!exp||!exp._exp)return;
+  const cache=conBuscaAsegurarCache();
+  const id=String(exp._exp);
+  const prev=cache.docs[id];
+  if(prev){
+    const remoteAt=String(exp.updatedAt||'');
+    const localAt=String(prev.updatedAt||'');
+    if(localAt&&remoteAt&&localAt>remoteAt)exp=Object.assign({},exp,prev);
+    else{
+      exp.tasks=typeof mergeExpedienteTasksLocalRemote==='function'
+        ?mergeExpedienteTasksLocalRemote(prev.tasks,exp.tasks)
+        :(exp.tasks||prev.tasks);
+      exp=Object.assign({},prev,exp);
+    }
+  }
+  cache.docs[id]=exp;
+  if(!Array.isArray(exps))exps=[];
+  const idx=exps.findIndex(function(e){return String(e&&e._exp||'')===id;});
+  if(idx>=0){
+    const local=exps[idx];
+    exp.tasks=typeof mergeExpedienteTasksLocalRemote==='function'
+      ?mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks)
+      :(exp.tasks||local.tasks);
+    exps[idx]=Object.assign({},local,exp);
+  }else exps.push(exp);
+}
+function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs){
+  const cache=conBuscaAsegurarCache();
+  const out=[];
+  Object.keys(cache.docs).forEach(function(id){
+    const exp=cache.docs[id];
+    if(!exp)return;
+    if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
+    if(modoPqrs){
+      if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
+    }
+    if(tram&&String(exp._tramite||'')!==tram)return;
+    const f=conBuscaFechaDoc(exp,modoPqrs);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f<desde||f>hasta)return;
+    out.push(exp);
+  });
+  return out;
+}
+/**
+ * Consulta (todos los roles): getDocs acotado por fechas.
+ * PQRSD (secretaría/oficinas): pqrsRadicadaEn. Trámites / resto: _fecha (+ _tramite si el filtro lo pide).
+ * «Todo el historial» no consulta. Cortes ya leídos en la sesión se reutilizan (sin nueva descarga ni doble cobro).
+ */
+async function buscarConsultaPorCorte(){
+  if(window._conBuscaCorriendo)return;
   const rango=typeof getPeriodoRango==='function'?getPeriodoRango('q'):null;
   if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31'){
     if(typeof notif==='function')notif('Elija año, trimestre, mes o un rango de fechas. «Todo el historial» no consulta.','warn');
+    return;
+  }
+  const modoPqrs=conBuscaModoPqrs();
+  const tram=modoPqrs?'':conBuscaTramiteActual();
+  const desde=String(rango.desde);
+  const hasta=String(rango.hasta).slice(0,10);
+  // Reutilizar lo ya descargado en esta sesión (mismo o mayor corte)
+  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs)){
+    const list=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs);
+    window._conBuscaList=list;
+    window._conPqrsBuscaList=list;
+    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'');
+    window._conPqrsBuscaRango=window._conBuscaRango;
+    if(typeof renderConsulta==='function')renderConsulta();
+    if(typeof notif==='function')notif('Consulta: '+list.length+' registro(s) del corte (ya en memoria, sin nueva descarga).','ok');
     return;
   }
   const db=window._db;
@@ -2521,24 +2624,43 @@ async function buscarConsultaPqrsPorCorte(){
     if(typeof notif==='function')notif('No hay conexión para buscar','err');
     return;
   }
-  window._conPqrsBuscando=true;
-  if(typeof notif==='function')notif('Buscando PQRSD del corte…','info');
-  const deptos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
-  const hasta=String(rango.hasta);
+  window._conBuscaCorriendo=true;
+  if(typeof notif==='function')notif(modoPqrs?'Buscando PQRSD del corte…':'Buscando expedientes del corte…','info');
+  let deptos;
+  if(typeof esJurisdiccional==='function'&&esJurisdiccional()){
+    const fd=String(window._jurisFiltroDepto||'').trim();
+    const activos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
+    deptos=fd?[fd]:activos;
+  }else if(typeof deptosExpedientesAccesibles==='function'){
+    deptos=deptosExpedientesAccesibles();
+  }else{
+    deptos=[String((typeof deptoActivo!=='undefined'&&deptoActivo)||'guaviare').trim()||'guaviare'];
+  }
   const tope=hasta.length===10?hasta+'\uf8ff':hasta;
   const list=[];
+  let faltaIndice=false;
+  let leidosNuevos=0;
   try{
     for(let i=0;i<(deptos||[]).length;i++){
       const depto=deptos[i];
       let snap;
       try{
+        const filtros=[];
+        if(modoPqrs){
+          filtros.push(window._fsWhere('pqrsRadicadaEn','>=',desde));
+          filtros.push(window._fsWhere('pqrsRadicadaEn','<=',tope));
+        }else{
+          if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
+          filtros.push(window._fsWhere('_fecha','>=',desde));
+          filtros.push(window._fsWhere('_fecha','<=',tope));
+        }
         snap=await window._fsGetDocs(window._fsQuery(
           window._fsCollection(db,'departamentos',depto,'expedientes'),
-          window._fsWhere('pqrsRadicadaEn','>=',rango.desde),
-          window._fsWhere('pqrsRadicadaEn','<=',tope)
+          ...filtros
         ));
       }catch(errDepto){
-        console.warn('buscarConsultaPqrsPorCorte',depto,errDepto);
+        if(tram&&!modoPqrs&&typeof consErrorEsIndice==='function'&&consErrorEsIndice(errDepto))faltaIndice=true;
+        console.warn('buscarConsultaPorCorte',depto,errDepto);
         if(typeof notif==='function')notif('No se pudo buscar en '+depto+': '+(errDepto&&errDepto.message||errDepto),'err');
         continue;
       }
@@ -2549,38 +2671,46 @@ async function buscarConsultaPqrsPorCorte(){
         if(!exp||!exp._exp)return;
         if(!exp._depto)exp._depto=depto;
         if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
-        if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
-        list.push(exp);
-        if(!Array.isArray(exps))exps=[];
-        const idx=exps.findIndex(function(e){return String(e&&e._exp||'')===String(exp._exp);});
-        if(idx>=0){
-          const local=exps[idx];
-          exp.tasks=typeof mergeExpedienteTasksLocalRemote==='function'
-            ?mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks)
-            :(exp.tasks||local.tasks);
-          exps[idx]=Object.assign({},local,exp);
-        }else exps.push(exp);
-        if(typeof apoyoDebeCobrarExp==='function'){
-          if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
-        }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+        if(modoPqrs&&typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
+        const yaCache=!!(window._conBuscaCache&&window._conBuscaCache.docs&&window._conBuscaCache.docs[String(exp._exp)]);
+        conBuscaFusionarExp(exp);
+        list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
+        if(!yaCache){
+          leidosNuevos++;
+          if(typeof apoyoDebeCobrarExp==='function'){
+            if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+          }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+        }
       });
     }
-    window._conPqrsBuscaList=list;
-    window._conPqrsBuscaRango=String(rango.desde)+'|'+String(rango.hasta);
+    if(faltaIndice){
+      if(typeof notif==='function')notif('Para filtrar por ese trámite hace falta el índice (F12 → enlace Firestore). Puede Buscar sin trámite o esperar unos minutos.','err');
+      return;
+    }
+    conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs);
+    // Lista activa = lo del corte (cache puede tener más de cortes anteriores)
+    const listCorte=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs);
+    window._conBuscaList=listCorte.length?listCorte:list;
+    window._conPqrsBuscaList=window._conBuscaList;
+    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'');
+    window._conPqrsBuscaRango=window._conBuscaRango;
     if(typeof renderConsulta==='function')renderConsulta();
     if(typeof notif==='function'){
-      notif(list.length
-        ?('Consulta: '+list.length+' PQRSD del corte. Descargar y Matriz usan esta lista.')
-        :'Sin PQRSD en ese corte de fechas','ok');
+      const n=(window._conBuscaList||[]).length;
+      const extra=leidosNuevos<(list||[]).length?(' · '+leidosNuevos+' lectura(s) nueva(s)'):'';
+      notif(n
+        ?('Consulta: '+n+' registro(s). Descargar/Matriz usan esta lista'+extra+'.')
+        :'Sin registros en ese corte de fechas','ok');
     }
   }catch(err){
-    console.warn('buscarConsultaPqrsPorCorte',err);
-    if(typeof notif==='function')notif('No se pudo buscar la consulta PQRSD','err');
+    console.warn('buscarConsultaPorCorte',err);
+    if(typeof notif==='function')notif('No se pudo buscar en Consulta','err');
   }finally{
-    window._conPqrsBuscando=false;
+    window._conBuscaCorriendo=false;
   }
 }
-window.buscarConsultaPqrsPorCorte=buscarConsultaPqrsPorCorte;
+window.buscarConsultaPorCorte=buscarConsultaPorCorte;
+window.buscarConsultaPqrsPorCorte=buscarConsultaPorCorte;
 /** Encargado NCA, administrador y jurisdiccional: una lectura solo de los expedientes radicados en el corte. */
 async function buscarConsolidadoNca(){
   if(!consolidadoBuscaPorCorte()){

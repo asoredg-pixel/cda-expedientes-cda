@@ -18,6 +18,10 @@ window._apoyoUso=null;
 window._apoyoUsoDirty=false;
 window._apoyoSaveTimer=null;
 window._apoyoTrmConsultada=null;
+/** false hasta cargar apoyo_uso/{email}: las lecturas de login no parten de 0 ni pisan el día en otro PC. */
+window._apoyoUsoListo=false;
+window._apoyoLecturasCola=0;
+window._apoyoFlushBound=false;
 
 function apoyoHoyLocal(){
   var d=new Date();
@@ -141,6 +145,47 @@ function apoyoMergeUsoRemoto(data){
     return;
   }
   window._apoyoUso=Object.assign(apoyoUsoVacio(per),data,{periodo:per,email:apoyoEmailKey()});
+  apoyoAsegurarDia(window._apoyoUso);
+}
+/** Une dos copias del mismo periodo/día tomando el mayor consumo (varios PC / pestañas). */
+function apoyoFusionarMaxUso(local,remote){
+  var per=apoyoPeriodoId();
+  var hoy=apoyoHoyLocal();
+  if(!local)local=apoyoUsoVacio(per);
+  if(!remote||typeof remote!=='object')return local;
+  if(String(remote.periodo||'')!==per)return local;
+  var out=Object.assign(apoyoUsoVacio(per),local,{periodo:per,email:apoyoEmailKey()||local.email||remote.email});
+  var rDia=String(remote.diaIso||'');
+  var lDia=String(local.diaIso||'');
+  if(rDia===hoy&&(lDia===hoy||!lDia)){
+    out.diaIso=hoy;
+    out.lecturasDia=Math.max(local.lecturasDia|0,remote.lecturasDia|0);
+    out.cobrablesDia=Math.max(local.cobrablesDia|0,remote.cobrablesDia|0);
+  }else if(rDia===hoy&&lDia&&lDia!==hoy){
+    out.diaIso=hoy;
+    out.lecturasDia=remote.lecturasDia|0;
+    out.cobrablesDia=remote.cobrablesDia|0;
+  }else if(lDia===hoy){
+    out.diaIso=hoy;
+    out.lecturasDia=local.lecturasDia|0;
+    out.cobrablesDia=local.cobrablesDia|0;
+  }
+  out.lecturasMes=Math.max(local.lecturasMes|0,remote.lecturasMes|0);
+  out.cobrablesMes=Math.max(local.cobrablesMes|0,remote.cobrablesMes|0);
+  out.montoUsd=Math.max(Number(local.montoUsd)||0,Number(remote.montoUsd)||0);
+  out.montoCop=Math.max(Number(local.montoCop)||0,Number(remote.montoCop)||0);
+  if(remote.apoyado){
+    out.apoyado=true;
+    out.apoyadoEn=remote.apoyadoEn||out.apoyadoEn||'';
+    out.apoyadoPor=remote.apoyadoPor||out.apoyadoPor||'';
+  }
+  var hist=[];
+  (Array.isArray(remote.historial)?remote.historial:[]).concat(Array.isArray(local.historial)?local.historial:[]).forEach(function(h){
+    if(!h)return;
+    hist.push(h);
+  });
+  out.historial=hist.slice(-40);
+  return out;
 }
 async function apoyoCargarCfg(){
   var db=window._db;
@@ -154,9 +199,17 @@ async function apoyoCargarCfg(){
   }catch(e){console.warn('apoyoCargarCfg',e);}
 }
 async function apoyoCargarUso(){
-  if(apoyoEsAdmin()){window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());return;}
+  if(apoyoEsAdmin()){
+    window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    window._apoyoUsoListo=true;
+    return;
+  }
   var email=apoyoEmailKey();
-  if(!email||!window._db||!window._fsGetDoc||!window._fsDoc)return;
+  if(!email||!window._db||!window._fsGetDoc||!window._fsDoc){
+    if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    window._apoyoUsoListo=true;
+    return;
+  }
   try{
     var snap=await window._fsGetDoc(window._fsDoc(window._db,'apoyo_uso',email));
     if(snap&&snap.exists&&snap.exists())apoyoMergeUsoRemoto(snap.data());
@@ -165,21 +218,22 @@ async function apoyoCargarUso(){
     console.warn('apoyoCargarUso',e);
     if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
   }
+  window._apoyoUsoListo=true;
+  if(window._apoyoLecturasCola>0){
+    var cola=window._apoyoLecturasCola;
+    window._apoyoLecturasCola=0;
+    apoyoRegistrarLecturas(cola);
+  }
   apoyoPintarUI();
 }
 function apoyoProgramarGuardarUso(){
   if(apoyoEsAdmin())return;
   window._apoyoUsoDirty=true;
   if(window._apoyoSaveTimer)clearTimeout(window._apoyoSaveTimer);
-  window._apoyoSaveTimer=setTimeout(function(){apoyoGuardarUso();},2500);
+  window._apoyoSaveTimer=setTimeout(function(){apoyoGuardarUso();},1200);
 }
-async function apoyoGuardarUso(){
-  if(apoyoEsAdmin())return;
-  var email=apoyoEmailKey();
-  var u=window._apoyoUso;
-  if(!email||!u||!window._db||!window._fsSetDoc||!window._fsDoc)return;
-  window._apoyoUsoDirty=false;
-  var payload={
+function apoyoPayloadDesdeUso(u,email){
+  return{
     email:email,
     periodo:u.periodo,
     diaIso:u.diaIso||'',
@@ -195,8 +249,33 @@ async function apoyoGuardarUso(){
     historial:Array.isArray(u.historial)?u.historial.slice(-40):[],
     updatedAt:new Date().toISOString()
   };
+}
+async function apoyoGuardarUso(){
+  if(apoyoEsAdmin())return;
+  var email=apoyoEmailKey();
+  var u=window._apoyoUso;
+  if(!email||!u||!window._db||!window._fsDoc)return;
+  if(!window._fsSetDoc&&!window._fsRunTransaction)return;
+  window._apoyoUsoDirty=false;
+  var ref=window._fsDoc(window._db,'apoyo_uso',email);
   try{
-    await window._fsSetDoc(window._fsDoc(window._db,'apoyo_uso',email),payload,{merge:true});
+    // Leer remoto y guardar el máximo del día/periodo: otro PC no debe borrar el consumo.
+    if(typeof window._fsRunTransaction==='function'){
+      await window._fsRunTransaction(window._db,async function(tx){
+        var snap=await tx.get(ref);
+        var remote=snap&&snap.exists()?snap.data():null;
+        var merged=apoyoFusionarMaxUso(u,remote);
+        window._apoyoUso=merged;
+        tx.set(ref,apoyoPayloadDesdeUso(merged,email),{merge:true});
+      });
+    }else{
+      var snap2=window._fsGetDoc?await window._fsGetDoc(ref):null;
+      var remote2=snap2&&snap2.exists&&snap2.exists()?snap2.data():null;
+      var merged2=apoyoFusionarMaxUso(u,remote2);
+      window._apoyoUso=merged2;
+      await window._fsSetDoc(ref,apoyoPayloadDesdeUso(merged2,email),{merge:true});
+    }
+    apoyoPintarUI();
   }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;}
 }
 function apoyoAsegurarDia(u){
@@ -213,6 +292,18 @@ function apoyoAsegurarDia(u){
   }
   return u;
 }
+function apoyoBindFlush(){
+  if(window._apoyoFlushBound)return;
+  window._apoyoFlushBound=true;
+  var flush=function(){
+    if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
+    if(window._apoyoUsoDirty)apoyoGuardarUso();
+  };
+  window.addEventListener('pagehide',flush);
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden')flush();
+  });
+}
 /** Registra lecturas de documentos Firestore hechas por la sesión. */
 function apoyoRegistrarLecturas(n){
   n=parseInt(n,10)||0;
@@ -221,6 +312,11 @@ function apoyoRegistrarLecturas(n){
   if(!(window._apoyoCfg&&window._apoyoCfg.activo!==false))return;
   if(!document.body.classList.contains('sesion-activa'))return;
   if(typeof esModoCiudadano==='function'&&esModoCiudadano())return;
+  // Esperar consumo diario remoto (mismo usuario en otro PC / F5).
+  if(!window._apoyoUsoListo){
+    window._apoyoLecturasCola=(window._apoyoLecturasCola|0)+n;
+    return;
+  }
   var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
   var u=apoyoAsegurarDia(window._apoyoUso||apoyoUsoVacio());
   var cupo=cfg.cupoDiario|0;
@@ -366,10 +462,24 @@ function apoyoPintarUI(){
   if(typeof sstRenderGmailDriveStatusBtn==='function')sstRenderGmailDriveStatusBtn();
 }
 async function apoyoInitSesion(){
+  window._apoyoUsoListo=false;
+  window._apoyoLecturasCola=0;
   await apoyoCargarCfg();
   await apoyoCargarUso();
+  apoyoBindFlush();
   apoyoPintarUI();
 }
+function apoyoResetSesion(){
+  if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
+  if(window._apoyoUsoDirty){
+    try{apoyoGuardarUso();}catch(e){}
+  }
+  window._apoyoUsoListo=false;
+  window._apoyoLecturasCola=0;
+  window._apoyoUso=null;
+  window._apoyoUsoDirty=false;
+}
+window.apoyoResetSesion=apoyoResetSesion;
 async function apoyoGuardarCfgDesdeForm(){
   if(!apoyoEsAdmin()){if(typeof notif==='function')notif('Solo el administrador puede configurar el apoyo solidario','err');return;}
   var cupo=parseInt((document.getElementById('apoyo-cfg-cupo')||{}).value,10);
