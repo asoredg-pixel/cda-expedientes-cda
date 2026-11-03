@@ -601,6 +601,10 @@ function sstStartGmailDriveStatusTick() {
 }
 function sstToggleDriveConnectPanel(ev) {
   if (ev) ev.stopPropagation();
+  if (typeof apoyoDriveRestringido === 'function' && apoyoDriveRestringido()) {
+    if (typeof notif === 'function') notif(typeof apoyoMensajeDriveBloqueado === 'function' ? apoyoMensajeDriveBloqueado() : 'Apoyo solidario pendiente: no se puede conectar Drive.', 'warn');
+    return;
+  }
   if (sstGmailSesionActiva()) {
     const rem = sstGmailDriveExpiryMs() - Date.now();
     if (typeof notif === 'function') {
@@ -618,6 +622,10 @@ function sstSecretariaDriveActiva() {
 }
 function sstAbrirGmailDriveModal(opts) {
   opts = opts || {};
+  if (typeof apoyoDriveRestringido === 'function' && apoyoDriveRestringido()) {
+    if (typeof notif === 'function') notif(typeof apoyoMensajeDriveBloqueado === 'function' ? apoyoMensajeDriveBloqueado() : 'Apoyo solidario pendiente: no se puede conectar Drive.', 'warn');
+    return;
+  }
   const ov = document.getElementById('gmail-sesion-overlay');
   if (!ov) return;
   const tit = document.getElementById('gmail-sesion-tit');
@@ -778,6 +786,11 @@ function gmailIsTokenValid() {
 // OAuth — GIS initTokenClient
 // ----------------------------------------------------------------
 function gmailConnect(callback) {
+  if (typeof apoyoDriveRestringido === 'function' && apoyoDriveRestringido()) {
+    if (typeof notif === 'function') notif(typeof apoyoMensajeDriveBloqueado === 'function' ? apoyoMensajeDriveBloqueado() : 'Apoyo solidario pendiente: no se puede conectar Drive.', 'warn');
+    if (typeof callback === 'function') callback();
+    return false;
+  }
   const started = _gmailStartOAuth(GMAIL_SCOPES, function(tok, exp) {
     gmailSetToken(tok, exp, GMAIL_SCOPES);
     _gmailSecSignatureLoaded = false;

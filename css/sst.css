@@ -231,6 +231,17 @@ a.btn,a.btn:hover,a.btn:focus,a.btn:visited{text-decoration:none!important}
 .mant-banner{display:none;position:sticky;top:0;z-index:240;background:#7c2d12;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.2)}
 body.mant-aviso-visible .mant-banner{display:block}
 body.modo-mantenimiento .mant-banner strong{font-weight:700}
+.apoyo-banner{display:none;position:sticky;top:0;z-index:239;background:#134e4a;color:#ecfdf5;padding:10px 16px;font-size:13px;font-weight:600;line-height:1.4;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+body.mant-aviso-visible .apoyo-banner{top:auto}
+body.apoyo-aviso-visible .apoyo-banner{display:block}
+.apoyo-banner strong{font-weight:700;color:#fff}
+.sst-apoyo-meter{display:flex;align-items:center;gap:6px;width:100%;margin:0 0 8px;padding:6px 8px;border:1px solid var(--bd,#d4d4d4);border-radius:8px;background:var(--bg2,#f8fafc);color:var(--tx,#1a1a1a);font-size:11px;cursor:default;text-align:left}
+.sst-apoyo-meter.sst-apoyo-blocked{border-color:#0f766e;background:#ecfdf5}
+.sst-apoyo-meter-ico{flex:0 0 auto}
+.sst-apoyo-bar{flex:1;height:6px;border-radius:99px;background:#e2e8f0;overflow:hidden;min-width:36px}
+.sst-apoyo-bar-fill{display:block;height:100%;width:0;background:#0f766e;border-radius:99px;transition:width .25s ease}
+.sst-apoyo-bar-fill.over{background:#b45309}
+.sst-apoyo-meter-lbl{flex:0 0 auto;font-variant-numeric:tabular-nums;color:var(--tx2,#64748b);max-width:7.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 body.modo-mantenimiento .tabsi .tab[data-mant-block]{opacity:.45;pointer-events:none}
 /* En mantenimiento: bloquea edición en pantallas operativas (consulta y cfg admin siguen usables) */
 body.modo-mantenimiento #pg-reg input,

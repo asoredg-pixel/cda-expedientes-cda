@@ -664,6 +664,9 @@ function ingresarComoRol(rolId,respNombre){
   renderChatBadge();
   installSessionPageLifecycle();
   initAppRealtimeSync();
+  if(typeof apoyoInitSesion==='function'){
+    Promise.resolve(apoyoInitSesion()).catch(function(e){console.warn('apoyoInitSesion',e);});
+  }
   // Releer expedientes YA autenticado. Admin→Secretaría ya trae exps en memoria;
   // la cuenta Secretaría real depende de esta recarga (+ reintentos).
   if(typeof reloadExpedientesTrasLogin==='function'){

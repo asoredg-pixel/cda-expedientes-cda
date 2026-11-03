@@ -367,6 +367,7 @@ function renderListasCfg(){
     let html='';
     if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','Asignación automática según el rol en Usuarios autorizados (Secretaría, NCA, departamentos y oficinas DEGUV).',encargadosGlobalCardBody(),false)+
       cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
+    if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Apoyo solidario','Cupo diario, TRM, histórico de consumo y registro del apoyo por usuario. Mantiene el sistema entre todos.',typeof apoyoCfgCardBody==='function'?apoyoCfgCardBody():'',false);
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Modo mantenimiento','Congela la aplicación para ajustes: los funcionarios pueden entrar y consultar, pero no diligenciar ni adjuntar. Indique fecha y hora de restablecimiento.',mantenimientoCfgCardBody(),false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Criterios informes contratistas','Máximo de actividades prioritarias y de urgentes/vencidas pendientes para poder entregar el informe de contrato.',informesCriteriosCfgCardBody(),false);
@@ -379,6 +380,7 @@ function renderListasCfg(){
     el.innerHTML=html;
     restoreCfgFoldState(open);
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
+    if((esAdministrador()||esAdminFirestore())&&typeof apoyoPintarListaAdmin==='function')apoyoPintarListaAdmin();
   });
 }
 function informesCriteriosCfgCardBody(){

@@ -282,6 +282,12 @@ service cloud.firestore {
       allow read, write: if isActiveUser() && (email.lower() == authEmail() || isAdmin());
     }
 
+    // apoyo_uso/{email} — medidor de lecturas / apoyo solidario por usuario.
+    // Cada usuario actualiza el suyo; el administrador lee y ajusta todos.
+    match /apoyo_uso/{email} {
+      allow read, write: if isActiveUser() && (email.lower() == authEmail() || isAdmin());
+    }
+
     // -------------------------------------------------------------------------
     // revision_en_curso/{exp__tarea} — quién tiene abierta una actividad en revisión (tiempo real)
     // Todos los usuarios activos leen; escriben/borran con el correo del token (authEmail).

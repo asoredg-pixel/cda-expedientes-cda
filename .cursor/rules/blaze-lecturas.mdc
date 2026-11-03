@@ -22,6 +22,7 @@ El cobro es por documento leído o escrito, multiplicado por cada usuario conect
 - Igualdad más rango exige índice compuesto. No desplegar `firestore.indexes.json` nuevo si borra los índices que ya están en la consola.
 - Lista que crezca con los años: una marca booleana o un array en el expediente, escrita en `saveExpedienteDoc` con `merge:true`. No escuchar los demás expedientes para calcularla. Reparar marcas no escribe `updatedAt`.
 - Chat, agenda y actividades libres siguen acotados (últimos días o un solo documento). No pasarlos a colección completa.
+- Apoyo solidario: el medidor cuenta lecturas de expedientes por usuario (`apoyoRegistrarLecturas`); no sustituye la factura de Google. El administrador no baja el archivo al login.
 
 ## Al guardar
 

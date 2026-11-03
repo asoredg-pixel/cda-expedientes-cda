@@ -312,6 +312,7 @@ async function loadLS(){
       if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
       if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
       if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
+      if(g.apoyoSolidarioCfg&&typeof apoyoAplicarCfgRemota==='function')apoyoAplicarCfgRemota(g.apoyoSolidarioCfg);
     }
     await cargarPartesSistema();
     await cargarPersonasColeccion();
@@ -2332,6 +2333,7 @@ function initRealtimeGlobalSync(){
     if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
     if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
     if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
+    if(g.apoyoSolidarioCfg&&typeof apoyoAplicarCfgRemota==='function')apoyoAplicarCfgRemota(g.apoyoSolidarioCfg);
     if(((!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo)||(!secYa&&window._secretariaRadicacionLista))&&typeof initRealtimeSync==='function')initRealtimeSync();
     let changed=false;
     if(g.mantenimiento&&typeof setMantenimientoEstadoLocal==='function'){
@@ -2454,7 +2456,9 @@ async function buscarConsolidadoNca(){
         continue;
       }
       if(!snap||typeof snap.forEach!=='function')continue;
+      let nSnap=0;
       snap.forEach(function(d){
+        nSnap++;
         const data=d.data?d.data()||{}:{};
         const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
         if(!exp)return;
@@ -2462,6 +2466,7 @@ async function buscarConsolidadoNca(){
         if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
         list.push(exp);
       });
+      if(nSnap&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(nSnap);
     }
     if(faltaIndice){
       window._consNcaList=null;
@@ -2544,6 +2549,9 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
 }
 function applyExpedienteFirestoreChanges(changes){
   if(!changes||!changes.length)return false;
+  let lecturas=0;
+  changes.forEach(function(c){if(c&&(c.type==='added'||c.type==='modified'))lecturas++;});
+  if(lecturas&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(lecturas);
   let changed=false;
   changes.forEach(function(change){
     if(change.type==='removed'){
@@ -2760,6 +2768,7 @@ async function traerExpedienteSiFalta(q){
   if(ya){repararMarcaExpediente(ya);return ya;}
   const exp=await fetchExpedientePorNumero(id);
   if(!exp||!exp._exp)return null;
+  if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
   if(!Array.isArray(exps))exps=[];
   if(!exps.some(function(e){return String(e&&e._exp||'')===String(exp._exp);}))exps.push(exp);
   repararMarcaExpediente(exp);
