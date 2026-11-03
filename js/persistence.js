@@ -318,18 +318,23 @@ async function loadLS(){
     await cargarPersonasColeccion();
     const deptosCfg=typeof DEPTOS_FIRESTORE!=='undefined'?DEPTOS_FIRESTORE:['guaviare'];
     const deptosExp=deptosExpedientesAccesibles();
+    const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+    const sinArchivoAdmin=(rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta;
     const [deptoResults,expSnaps]=await Promise.all([
       Promise.allSettled(deptosCfg.map(depto=>window._fsGetDoc(window._fsDoc(db,'departamentos',depto)))),
-      Promise.all(deptosExp.map(depto=>loadExpedientesDepto(depto)))
+      sinArchivoAdmin?Promise.resolve([]):Promise.all(deptosExp.map(depto=>loadExpedientesDepto(depto)))
     ]);
     if(gen!==_loadLSGen)return;
     const remote=[];
-    expSnaps.forEach(function(deptoExps){if(Array.isArray(deptoExps))deptoExps.forEach(function(e){remote.push(e);});});
+    if(!sinArchivoAdmin)expSnaps.forEach(function(deptoExps){if(Array.isArray(deptoExps))deptoExps.forEach(function(e){remote.push(e);});});
     const authOk=!!(window._firebaseAuth&&window._firebaseAuth.currentUser);
     const sesionOn=document.body.classList.contains('sesion-activa');
-    // Carrera crítica: un loadLS anónimo/tardío NO debe vaciar exps ya hidratados
-    // tras login (el listener realtime no reenvía 'added' → Secretaría queda en cero).
-    if(!remote.length&&prevExps.length&&(sesionOn||authOk)){
+    // Admin / jurisdiccional: no conservar ni bajar el archivo completo.
+    if(sinArchivoAdmin){
+      exps=[];
+    }else if(!remote.length&&prevExps.length&&(sesionOn||authOk)){
+      // Carrera crítica: un loadLS anónimo/tardío NO debe vaciar exps ya hidratados
+      // tras login (el listener realtime no reenvía 'added' → Secretaría queda en cero).
       console.warn('loadLS: remoto vacío con sesión/datos previos — no se borran',prevExps.length,'expediente(s)');
       exps=prevExps;
     }else{
@@ -399,6 +404,7 @@ async function reloadExpedientesTrasLogin(){
   if(!authReady||!authReady.ok)return false;
   const rolLogin=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
   if((rolLogin==='admin'||rolLogin==='jurisdiccional')&&!window._consEscuchaCompleta){
+    if(Array.isArray(exps))exps=[];
     updateSyncIndicator('synced');
     return true;
   }

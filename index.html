@@ -20,20 +20,20 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261026u"></script>
-<script src="js/constants.js?v=20261103a"></script>
+<script src="js/constants.js?v=20261103b"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
-<script src="js/persistence.js?v=20261103a"></script>
+<script src="js/persistence.js?v=20261103b"></script>
 <script src="js/roles.js?v=20261103a"></script>
-<script src="js/apoyo-solidario.js?v=20261103a"></script>
+<script src="js/apoyo-solidario.js?v=20261103b"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/core.js?v=20261030s"></script>
-<script src="js/formulario.js?v=20261030f"></script>
+<script src="js/formulario.js?v=20261103b"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
 <script src="js/consolidado.js?v=20261030j"></script>
-<script src="js/configuracion.js?v=20261103a"></script>
+<script src="js/configuracion.js?v=20261103b"></script>
 <script src="js/export.js?v=20260911h"></script>
 <script src="js/chat.js?v=20261030a"></script>
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
@@ -1106,11 +1106,13 @@
     <button class="cfg-tab on" onclick="showCfgTab('listas')" id="ctab-listas">Configuración base</button>
     <button class="cfg-tab" onclick="showCfgTab('tramites')" id="ctab-tramites">Tipos de trámite</button>
     <button class="cfg-tab" onclick="showCfgTab('personas')" id="ctab-personas">Personas / usuarios</button>
+    <button class="cfg-tab" onclick="showCfgTab('apoyo')" id="ctab-apoyo" style="display:none">🤝 Apoyo solidario</button>
     <button class="cfg-tab" onclick="showCfgTab('auditoria')" id="ctab-auditoria" style="display:none">Log de Auditoría</button>
     <button class="cfg-tab" onclick="showCfgTab('usuarios')" id="ctab-usuarios" style="display:none">👥 Usuarios autorizados</button>
     <button class="cfg-tab" onclick="showCfgTab('papelera')" id="ctab-papelera" style="display:none">🗑 Papelera</button>
   </div>
   <div class="cfg-pg on" id="cpg-listas"><div class="cfgr" id="cfg-panels"></div></div>
+  <div class="cfg-pg" id="cpg-apoyo"><div id="cfg-apoyo-panel"></div></div>
   <div class="cfg-pg" id="cpg-personas"><div id="cfg-personas-panel"></div></div>
   <div class="cfg-pg" id="cpg-tramites">
     <div id="tram-nuevo-wrap" class="card" style="margin-bottom:1rem">

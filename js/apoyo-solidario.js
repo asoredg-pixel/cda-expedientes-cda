@@ -370,7 +370,8 @@ async function apoyoGuardarCfgDesdeForm(){
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{apoyoSolidarioCfg:cfg},{merge:true});
     window._apoyoCfg=cfg;
     notif('Apoyo solidario actualizado','ok');
-    if(typeof renderListasCfg==='function')renderListasCfg();
+    if(typeof renderApoyoSolidarioCfg==='function')renderApoyoSolidarioCfg();
+    else if(typeof renderListasCfg==='function')renderListasCfg();
     apoyoPintarUI();
   }catch(e){console.warn(e);notif('No se pudo guardar','err');}
 }
@@ -432,7 +433,8 @@ async function apoyoMarcarApoyoUsuario(email,reiniciar){
   }
   await window._fsSetDoc(ref,patch,{merge:true});
   if(typeof notif==='function')notif('Apoyo registrado'+(reiniciar?' y consumo reiniciado':''),'ok');
-  if(typeof renderListasCfg==='function')renderListasCfg();
+  if(typeof renderApoyoSolidarioCfg==='function')renderApoyoSolidarioCfg();
+  else if(typeof renderListasCfg==='function')renderListasCfg();
 }
 async function apoyoReiniciarUsuario(email){
   if(!apoyoEsAdmin())return;
@@ -457,7 +459,8 @@ async function apoyoReiniciarUsuario(email){
     updatedAt:new Date().toISOString()
   },{merge:true});
   if(typeof notif==='function')notif('Consumo reiniciado','ok');
-  if(typeof renderListasCfg==='function')renderListasCfg();
+  if(typeof renderApoyoSolidarioCfg==='function')renderApoyoSolidarioCfg();
+  else if(typeof renderListasCfg==='function')renderListasCfg();
 }
 function apoyoCfgCardBody(){
   var cfg=apoyoNormCfg(window._apoyoCfg);

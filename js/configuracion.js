@@ -261,6 +261,8 @@ function renderCfg(){
   if(rb)rb.innerHTML='';
   updateCfgTabsDepto();
   renderListasCfg();
+  const tabApoyo=document.getElementById('ctab-apoyo');
+  if(tabApoyo)tabApoyo.style.display=(esAdministrador()||esAdminFirestore())?'':'none';
   const tabAud=document.getElementById('ctab-auditoria');
   if(tabAud)tabAud.style.display=esAdministrador()?'':'none';
   const tabUsu=document.getElementById('ctab-usuarios');
@@ -367,7 +369,6 @@ function renderListasCfg(){
     let html='';
     if(esVistaEncargadosModuloCfg())html+=cfgSectionFold('Encargados por módulo','Asignación automática según el rol en Usuarios autorizados (Secretaría, NCA, departamentos y oficinas DEGUV).',encargadosGlobalCardBody(),false)+
       cfgSectionFold('Migración a Firestore','Subir datos locales actuales a la nube (multi-usuario).', '<div class="cfcard"><p style="font-size:12px;color:var(--tx2);margin:0 0 10px">Use este botón una sola vez para migrar el contenido de localStorage a Firestore.</p><button type="button" class="btn bsm bp" onclick="migrarLocalStorageAFirestore()">☁ Migrar localStorage → Firestore</button></div>',false);
-    if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Apoyo solidario','Cupo diario, TRM, histórico de consumo y registro del apoyo por usuario. Mantiene el sistema entre todos.',typeof apoyoCfgCardBody==='function'?apoyoCfgCardBody():'',false);
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Modo mantenimiento','Congela la aplicación para ajustes: los funcionarios pueden entrar y consultar, pero no diligenciar ni adjuntar. Indique fecha y hora de restablecimiento.',mantenimientoCfgCardBody(),false);
     html+=CFG_PANELS.map(p=>cfgSectionFold(p.title,p.key==='instructores'?instructoresPanelSub():'',p.key==='instructores'?instructoresCardBody():cfgSimpleListBody(p.key),false)).join('');
     if(esAdministrador()||esAdminFirestore())html+=cfgSectionFold('Criterios informes contratistas','Máximo de actividades prioritarias y de urgentes/vencidas pendientes para poder entregar el informe de contrato.',informesCriteriosCfgCardBody(),false);
@@ -380,9 +381,26 @@ function renderListasCfg(){
     el.innerHTML=html;
     restoreCfgFoldState(open);
     if(typeof chatRefreshContactsIfOpen==='function')chatRefreshContactsIfOpen();
-    if((esAdministrador()||esAdminFirestore())&&typeof apoyoPintarListaAdmin==='function')apoyoPintarListaAdmin();
   });
 }
+function renderApoyoSolidarioCfg(){
+  const el=document.getElementById('cfg-apoyo-panel');
+  if(!el)return;
+  if(!(esAdministrador()||esAdminFirestore())){
+    el.innerHTML='<div class="emp">Solo el administrador gestiona el apoyo solidario.</div>';
+    return;
+  }
+  let body='';
+  try{
+    body=typeof apoyoCfgCardBody==='function'?apoyoCfgCardBody():'<div class="emp">Módulo de apoyo no cargado. Recargue con Ctrl+F5.</div>';
+  }catch(err){
+    console.warn('renderApoyoSolidarioCfg',err);
+    body='<div class="emp">No se pudo mostrar el apoyo solidario.</div>';
+  }
+  el.innerHTML='<div class="cfgr">'+cfgSectionFold('Apoyo solidario','Cupo diario, TRM, histórico de consumo y registro del apoyo por usuario. Mantiene el sistema entre todos.',body,true)+'</div>';
+  if(typeof apoyoPintarListaAdmin==='function')apoyoPintarListaAdmin();
+}
+window.renderApoyoSolidarioCfg=renderApoyoSolidarioCfg;
 function informesCriteriosCfgCardBody(){
   const rc=(typeof recursosConfig!=='undefined'&&recursosConfig)||{};
   const c=rc.criteriosInformes||{};

@@ -125,6 +125,10 @@ function showCfgTab(t){
     return;
   }
   if(t==='listas')renderListasCfg();
+  if(t==='apoyo'){
+    if(!(esAdministrador()||esAdminFirestore())){notif('Solo administrador','err');t='listas';showCfgTab('listas');return;}
+    if(typeof renderApoyoSolidarioCfg==='function')renderApoyoSolidarioCfg();
+  }
   if(t==='info-tecnica'){
     // Unificado en Configuración base
     t='listas';
