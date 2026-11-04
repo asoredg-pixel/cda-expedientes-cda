@@ -1756,26 +1756,12 @@ function expedienteFlujoNoDebeRetroceder(base,cand){
 }
 window.faseFlujoFirmaRank=faseFlujoFirmaRank;
 window.expedienteFlujoNoDebeRetroceder=expedienteFlujoNoDebeRetroceder;
-function persistExpLocalBackup(exp){
-  if(!exp)return;
-  const id=expedienteDocId(exp);
-  if(!id)return;
-  try{
-    const list=_pendingExpBackupList();
-    // Conservar updatedAt del contenido: _pending_fs_at solo indica el intento de sync
-    const row=Object.assign({},exp,{_pending_fs_sync:true,_pending_fs_at:new Date().toISOString()});
-    if(!row.updatedAt)row.updatedAt=row._pending_fs_at;
-    const idx=list.findIndex(function(e){return expedienteDocId(e)===id;});
-    if(idx>=0){
-      const prev=list[idx];
-      // No reemplazar un pending más avanzado (p. ej. cerrado) por uno viejo reintentado
-      if(expedienteFlujoNoDebeRetroceder(prev,row)){
-        prev._pending_fs_at=row._pending_fs_at;
-        list[idx]=prev;
-      }else list[idx]=row;
-    }else list.push(row);
-    lsStoreJson(SST_PENDING_EXP_KEY,list);
-  }catch(e){console.warn('persistExpLocalBackup:',e);}
+/**
+ * Ya no se respaldan expedientes completos en localStorage (fuente de verdad = Firestore).
+ * Un pending viejo en un PC pisaba cierres hechos en otro. Si falla el save, reintento en memoria/sesión.
+ */
+function persistExpLocalBackup(/*exp*/){
+  try{localStorage.removeItem(SST_PENDING_EXP_KEY);}catch(e){}
 }
 function removeExpLocalBackup(expId){
   const id=String(expId||'').trim();
@@ -1811,31 +1797,9 @@ function mergeExpIntoExpsCache(exp){
   }else exps.push(clean);
 }
 function mergePendingExpBackup(){
-  const pending=_pendingExpBackupList();
-  if(!pending.length)return;
-  const keep=[];
-  pending.forEach(function(exp){
-    const id=expedienteDocId(exp);
-    if(!id)return;
-    const idx=(exps||[]).findIndex(function(e){return expedienteDocId(e)===id;});
-    if(idx<0){
-      mergeExpIntoExpsCache(exp);
-      keep.push(exp);
-      return;
-    }
-    const remote=exps[idx];
-    // Remoto ya cerrado / más avanzado: descartar pending viejo (no resucitar por firmar/notificar)
-    if(expedienteFlujoNoDebeRetroceder(remote,exp))return;
-    const remoteAt=String(remote.updatedAt||remote._fecha||'');
-    const contentAt=String(exp.updatedAt||exp._fecha||'');
-    // Comparar updatedAt del contenido, NO _pending_fs_at (ese se estampa al fallar el save)
-    if(!remoteAt||contentAt>remoteAt)exps[idx]=exp;
-    keep.push(exp);
-  });
-  try{
-    if(keep.length)lsStoreJson(SST_PENDING_EXP_KEY,keep);
-    else localStorage.removeItem(SST_PENDING_EXP_KEY);
-  }catch(e){}
+  // Descarta cualquier sst_e_pending legado: no fusionar expedientes desde localStorage
+  try{localStorage.removeItem(SST_PENDING_EXP_KEY);}catch(e){}
+  clearLegacyExpsLocalStorage();
 }
 /** Expira el JWT de Firebase (ms epoch) o 0 si no se puede leer. */
 function _firebaseIdTokenExpMs(jwt){
@@ -1904,49 +1868,14 @@ async function ensureFirestoreAuthReady(){
 }
 window.ensureFirestoreAuthReady=ensureFirestoreAuthReady;
 async function syncPendingExpedientesToFirestore(){
+  // Expedientes solo en Firebase: no reinyectar sst_e_pending (aunque quede basura de versiones viejas)
   const pending=_pendingExpBackupList();
-  if(!pending.length)return 0;
-  const authOk=await ensureFirestoreAuthReady();
-  if(!authOk.ok)return 0;
-  let synced=0;
-  const remaining=[];
-  for(let i=0;i<pending.length;i++){
-    const exp=pending[i];
-    const id=expedienteDocId(exp);
-    const depto=resolveDeptoFirestoreId(exp._depto||deptoActivo||'guaviare',exp);
-    let remoto=null;
-    if(window._db&&window._fsGetDoc&&id){
-      try{
-        const ref=expedienteDocRef(window._db,depto,id);
-        if(ref){
-          const snap=await window._fsGetDoc(ref);
-          if(snap&&snap.exists&&snap.exists())
-            remoto=typeof mergeExpFromFirestoreSnapshot==='function'
-              ?mergeExpFromFirestoreSnapshot(snap.data(),snap.id)
-              :Object.assign({_exp:id},snap.data());
-        }
-      }catch(errR){console.warn('syncPending getDoc',id,errR);}
-    }
-    if(remoto&&expedienteFlujoNoDebeRetroceder(remoto,exp)){
-      // Firestore ya tiene cierre/fase más avanzada: no subir el local viejo
-      removeExpLocalBackup(id);
-      mergeExpIntoExpsCache(remoto);
-      synced++;
-      continue;
-    }
-    const ok=await saveExpedienteDoc(depto,exp);
-    if(ok){
-      removeExpLocalBackup(id);
-      mergeExpIntoExpsCache(exp);
-      synced++;
-    }else remaining.push(exp);
+  if(pending.length){
+    console.warn('syncPendingExpedientesToFirestore: se descartan',pending.length,'respaldo(s) local(es) de expediente (Firestore es la fuente)');
   }
-  try{
-    if(remaining.length)lsStoreJson(SST_PENDING_EXP_KEY,remaining);
-    else localStorage.removeItem(SST_PENDING_EXP_KEY);
-  }catch(e){}
-  if(synced>0&&typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
-  return synced;
+  try{localStorage.removeItem(SST_PENDING_EXP_KEY);}catch(e){}
+  clearLegacyExpsLocalStorage();
+  return 0;
 }
 window.syncPendingExpedientesToFirestore=syncPendingExpedientesToFirestore;
 function _firestoreSaveErrorMessage(errCode){

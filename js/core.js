@@ -18160,11 +18160,11 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       })();
     }
     if(revParRet){
-      notif('Corrección enviada a '+revParRet.profesional+' — queda en su Por revisar','ok');
+      notif('Corrección enviada a '+revParRet.profesional+' — queda en su Por ejecutar','ok');
       return ok;
     }
     if(revProfEnvio){
-      notif('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por revisar','ok');
+      notif('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por ejecutar','ok');
       return ok;
     }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
@@ -25573,7 +25573,7 @@ function taskRevParProfesionalPendiente(t,usuario,e){
   const est=estadoTask(t);
   return est!=='Atendida'&&est!=='Por verificar'&&est!=='Por corregir';
 }
-/** Filas «Por revisar» del profesional: conceptos enviados a su revisión. */
+/** Conceptos pendientes de revisión del profesional (van a «Por ejecutar», no a «Por revisar»). */
 function getTareasRevParProfesionalPendientes(){
   if(!responsableActivo||!esModoResponsable())return[];
   const out=[];
@@ -31699,9 +31699,7 @@ function esActividadPorEjecutar(t){
     return false;
   // Revisión NCA (incl. devolución Director): va a «Por revisar»; Por corregir tiene paleta propia
   if(esPqrs&&fase===PQRS_WF.PENDIENTE_REVISION)return false;
-  // Concepto en revisión del profesional → paleta «Por revisar», no «Por ejecutar»
-  if(esModoResponsable()&&responsableActivo&&typeof taskRevParProfesionalPendiente==='function'
-    &&taskRevParProfesionalPendiente(t,responsableActivo,eExp))return false;
+  // Concepto enviado a revisión del profesional → «Por ejecutar» del profesional (no «Por revisar»)
   if(esModoResponsable()&&responsableActivo&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo)){
     const est=estadoTaskForAsignado(t,responsableActivo);
     if(est==='Atendida'||est==='Eliminada'||est==='Por verificar'||est==='Por corregir')return false;
@@ -32630,7 +32628,7 @@ function filtrarActividadesPorEstado(list,filtro,opts){
   }
   if(filtro==='pend'){
     // Solo por ejecutar: notificaciones van a la paleta «Por notificar»
-    return (list||[]).filter(function(t){
+    let pendOut=(list||[]).filter(function(t){
       if(!esActividadPorEjecutar(t))return false;
       // Exclusión mutua: si cuenta como Por revisar, no en Por ejecutar
       if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return false;
@@ -32643,6 +32641,10 @@ function filtrarActividadesPorEstado(list,filtro,opts){
         &&pqrsEsContextoReasignacionNotificacion(eP,t))return false;
       return true;
     });
+    // Conceptos a nombre del profesional (revisión par): refuerzo por si no estaban en el listado base
+    if(typeof getTareasRevParProfesionalPendientes==='function')
+      pendOut=mergeActividadLists(pendOut,getTareasRevParProfesionalPendientes());
+    return pendOut;
   }
   if(filtro==='porver'){
     let out=(list||[]).filter(actividadCuentaComoPorRevisar);
@@ -32659,12 +32661,14 @@ function filtrarActividadesPorEstado(list,filtro,opts){
       return true;
     }):[];
     out=mergeActividadLists(out,mergeActividadLists(revFinal,tramRev));
+    // Técnico que envió a profesional: sigue viendo seguimiento en «Por revisar»
     if(typeof getTareasRevParTecnicoEsperando==='function')out=mergeActividadLists(out,getTareasRevParTecnicoEsperando());
-    if(typeof getTareasRevParProfesionalPendientes==='function')out=mergeActividadLists(out,getTareasRevParProfesionalPendientes());
+    // Profesional: el concepto llega a «Por ejecutar» (no se mezcla aquí)
     if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
       out=(out||[]).filter(function(t){
         if(!t)return false;
-        if(t._revParTecnico||t._revParProfesional)return true;
+        if(t._revParTecnico)return true;
+        if(t._revParProfesional)return false;
         const e=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
         const esRevFinal=(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,e))
           ||(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t));
