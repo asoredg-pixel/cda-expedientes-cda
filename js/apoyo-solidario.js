@@ -22,6 +22,8 @@ window._apoyoSaveTimer=null;
 window._apoyoTrmConsultada=null;
 /** false hasta cargar apoyo_uso/{email}: las lecturas de login no parten de 0 ni pisan el día en otro PC. */
 window._apoyoUsoListo=false;
+/** true solo si getDoc de apoyo_uso respondió (evita guardar U bajo y borrar el pico en Firestore). */
+window._apoyoUsoCargadoFs=false;
 window._apoyoLecturasCola=0;
 window._apoyoFlushBound=false;
 window._apoyoGlobal={diaIso:'',lecturas:0,baseB:0};
@@ -351,33 +353,55 @@ async function apoyoCargarUso(){
   if(apoyoEsAdmin()){
     window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
     window._apoyoUsoListo=true;
+    window._apoyoUsoCargadoFs=true;
     return;
   }
   apoyoLimpiarEspejoUsoLocal();
   var email=apoyoEmailKey();
+  window._apoyoUsoCargadoFs=false;
   if(!email||!window._db||!window._fsGetDoc||!window._fsDoc){
     window._apoyoUso=window._apoyoUso||apoyoUsoVacio(apoyoPeriodoId());
     apoyoAsegurarDia(window._apoyoUso);
     window._apoyoUsoListo=true;
     return;
   }
+  if(typeof window.ensureFirestoreAuthReady==='function'){
+    try{
+      var authOk=await window.ensureFirestoreAuthReady();
+      if(authOk&&authOk.ok===false)throw new Error('auth apoyo_uso');
+    }catch(eAuth){console.warn('apoyoCargarUso auth',eAuth);}
+  }
+  var prevSesion=window._apoyoUso;
   try{
     var snap=await window._fsGetDoc(window._fsDoc(window._db,'apoyo_uso',email));
     var remote=snap&&snap.exists&&snap.exists()?snap.data():null;
     // Solo Firestore: otro PC ve el mismo U; al entrar suma lo que descargue esta sesión
     if(remote)apoyoMergeUsoRemoto(remote);
     else window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    // Reintento tras fallo: conservar lecturas ya contadas en esta sesión
+    if(prevSesion&&(prevSesion.lecturasDia|0)>0)
+      window._apoyoUso=apoyoFusionarMaxUso(prevSesion,window._apoyoUso);
+    window._apoyoUsoCargadoFs=true;
   }catch(e){
     console.warn('apoyoCargarUso',e);
     if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    window._apoyoUsoCargadoFs=false;
+    // Reintento: no dejar la sesión escribiendo U=0/bajo sobre el pico remoto
+    if(!window._apoyoUsoRetryTimer){
+      window._apoyoUsoRetryTimer=setTimeout(function(){
+        window._apoyoUsoRetryTimer=null;
+        apoyoCargarUso();
+      },2500);
+    }
   }
   apoyoAsegurarDia(window._apoyoUso);
   window._apoyoUsoListo=true;
-  if(window._apoyoLecturasCola>0){
+  if(window._apoyoUsoCargadoFs&&window._apoyoLecturasCola>0){
     var cola=window._apoyoLecturasCola;
     window._apoyoLecturasCola=0;
     apoyoRegistrarLecturas(cola);
   }
+  if(window._apoyoUsoCargadoFs&&window._apoyoUsoDirty)apoyoProgramarGuardarUso();
   apoyoPintarUI();
 }
 function apoyoProgramarGuardarUso(){
@@ -413,6 +437,11 @@ function apoyoPayloadDesdeUso(u,email){
 async function apoyoGuardarUso(){
   if(apoyoEsAdmin())return;
   if(!window._apoyoUsoListo)return;
+  // Sin lectura previa de Firestore no escribir: un U de sesión corta pisaba el pico del día
+  if(!window._apoyoUsoCargadoFs){
+    window._apoyoUsoDirty=true;
+    return;
+  }
   var email=apoyoEmailKey();
   var u=window._apoyoUso;
   if(!email||!u||!window._db||!window._fsDoc)return;
@@ -420,21 +449,30 @@ async function apoyoGuardarUso(){
   window._apoyoUsoDirty=false;
   var ref=window._fsDoc(window._db,'apoyo_uso',email);
   try{
-    // Máximo con remoto al guardar: dos PCs no se pisan; la lectura al entrar siempre es Firestore.
+    // Siempre leer remoto y guardar max: si no se puede leer, NO escribir (evita borrar 2543 con 270)
     if(typeof window._fsRunTransaction==='function'){
       await window._fsRunTransaction(window._db,async function(tx){
         var snap=await tx.get(ref);
-        var remote=snap&&snap.exists()?snap.data():null;
-        var merged=apoyoFusionarMaxUso(u,remote);
-        window._apoyoUso=merged;
-        tx.set(ref,apoyoPayloadDesdeUso(merged,email),{merge:true});
+        if(snap&&snap.exists()){
+          var merged=apoyoFusionarMaxUso(u,snap.data());
+          window._apoyoUso=merged;
+          tx.set(ref,apoyoPayloadDesdeUso(merged,email),{merge:true});
+        }else{
+          tx.set(ref,apoyoPayloadDesdeUso(apoyoAsegurarDia(u),email),{merge:true});
+        }
       });
+    }else if(window._fsGetDoc){
+      var snap2=await window._fsGetDoc(ref);
+      if(snap2&&snap2.exists&&snap2.exists()){
+        var merged2=apoyoFusionarMaxUso(u,snap2.data());
+        window._apoyoUso=merged2;
+        await window._fsSetDoc(ref,apoyoPayloadDesdeUso(merged2,email),{merge:true});
+      }else{
+        await window._fsSetDoc(ref,apoyoPayloadDesdeUso(apoyoAsegurarDia(u),email),{merge:true});
+      }
     }else{
-      var snap2=window._fsGetDoc?await window._fsGetDoc(ref):null;
-      var remote2=snap2&&snap2.exists&&snap2.exists()?snap2.data():null;
-      var merged2=apoyoFusionarMaxUso(u,remote2);
-      window._apoyoUso=merged2;
-      await window._fsSetDoc(ref,apoyoPayloadDesdeUso(merged2,email),{merge:true});
+      window._apoyoUsoDirty=true;
+      return;
     }
     apoyoPintarUI();
   }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;}
@@ -800,7 +838,10 @@ function apoyoPintarMedidor(){
   var sobre=cupo>0&&lectDia>cupo;
   var sobreG=cupoG>0&&lectG>cupoG;
   var pct=cupo?Math.min(100,Math.round((lectDia/cupo)*100)):(lectDia>0?100:0);
-  var pctG=cupoG?Math.min(100,Math.round((lectG/cupoG)*100)):(lectG>0?100:0);
+  var pctGRaw=cupoG?(lectG/cupoG)*100:0;
+  var pctG=cupoG?Math.min(100,Math.round(pctGRaw)):(lectG>0?100:0);
+  // Evitar “0%” engañoso cuando hay lecturas pero el redondeo cae bajo 0.5
+  if(cupoG&&lectG>0&&pctG===0)pctG=1;
   var fillP=el.querySelector('.sst-apoyo-fill-per')||el.querySelector('.sst-apoyo-bar-fill');
   var fillG=el.querySelector('.sst-apoyo-fill-glob');
   var pctPEl=el.querySelector('.sst-apoyo-pct-per');
@@ -851,13 +892,14 @@ function apoyoPintarUI(){
 }
 async function apoyoInitSesion(){
   window._apoyoUsoListo=false;
+  window._apoyoUsoCargadoFs=false;
   window._apoyoLecturasCola=0;
   window._apoyoGlobalPend=0;
   window._apoyoGlobalBasePend=0;
   await apoyoCargarCfg();
   await apoyoCargarUso();
   await apoyoCargarGlobalDia();
-  await apoyoAsegurarGlobalNoMenorQuePersonal();
+  if(window._apoyoUsoCargadoFs)await apoyoAsegurarGlobalNoMenorQuePersonal();
   apoyoEscucharGlobalDia();
   apoyoBindFlush();
   apoyoProgramarRenovacionDia();
