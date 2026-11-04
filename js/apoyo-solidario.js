@@ -457,12 +457,8 @@ async function apoyoFlushGlobalPendiente(){
 function apoyoSumarGlobalLocal(n,deltaBaseB){
   n=n|0;deltaBaseB=deltaBaseB|0;
   if(n<=0&&deltaBaseB<=0)return;
-  var hoy=apoyoHoyLocal();
-  var g=window._apoyoGlobal||{diaIso:'',lecturas:0,baseB:0};
-  if(g.diaIso!==hoy){g={diaIso:hoy,lecturas:0,baseB:0};}
-  g.lecturas=(g.lecturas|0)+n;
-  g.baseB=(g.baseB|0)+deltaBaseB;
-  window._apoyoGlobal=g;
+  // Solo encola el aporte: la barra G es la misma para todos (apoyo_consumo en Firestore).
+  // No inflar _apoyoGlobal en local — si no, un responsable ve 2% y otro aún 1%.
   window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
   window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+deltaBaseB;
   apoyoProgramarGlobalFlush();
