@@ -347,11 +347,16 @@ function apoyoAsegurarDia(u){
     window._apoyoUso=u;
   }
   if(u.diaIso!==hoy){
-    u.diaIso=hoy;
-    u.lecturasDia=0;
-    u.cobrablesDia=0;
-    u.baseBDia=0;
-    u.cobrablesBlazeDia=0;
+    // Cliente viejo sin diaIso pero con lecturas del día: no borrar al cargar.
+    if(!u.diaIso&&((u.lecturasDia|0)>0||(u.cobrablesDia|0)>0||(u.baseBDia|0)>0)){
+      u.diaIso=hoy;
+    }else{
+      u.diaIso=hoy;
+      u.lecturasDia=0;
+      u.cobrablesDia=0;
+      u.baseBDia=0;
+      u.cobrablesBlazeDia=0;
+    }
   }
   if(u.baseBDia==null)u.baseBDia=0;
   if(u.cobrablesBlazeDia==null)u.cobrablesBlazeDia=0;
