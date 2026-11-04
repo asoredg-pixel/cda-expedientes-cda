@@ -548,7 +548,26 @@ function nombresAtendidasPaletaExp(exp){
       if(typeof a==='string')_marcasAddNombre(set,a);
       else if(a.nombre&&(a.estado==='atendido'||String(a.fechaAtendida||'').trim()||est==='Atendida'))_marcasAddNombre(set,String(a.nombre));
     });
+    // Trámite cerrado por notificador (VITAL/encargado) aunque no figure en asignados
+    const fw=t.firmaWf&&typeof t.firmaWf==='object'?t.firmaWf:null;
+    if(fw&&(String(fw.fase||'')==='cerrada_atendida'||String(fw.fase||'')==='cerrada')){
+      _marcasAddNombre(set,fw.cerrado_por);
+      _marcasAddNombre(set,fw.notificar_por);
+    }
   });
+  // PQRSD cerrada: quien notificó/cerró (p. ej. VITAL) entra a la consulta Atendidas
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(exp)){
+    let wf=null;
+    try{wf=exp._pqrs_workflow&&typeof exp._pqrs_workflow==='string'?JSON.parse(exp._pqrs_workflow):exp._pqrs_workflow;}catch(x){wf=null;}
+    const fa=String((wf&&(wf.cerrado_en||wf.fecha_respuesta))||exp._fecha_res||'').slice(0,10);
+    if(/^\d{4}-\d{2}-\d{2}$/.test(fa)&&fa>=corte){
+      if(wf){
+        _marcasAddNombre(set,wf.cerrado_por);
+        _marcasAddNombre(set,wf.notificar_por);
+        _marcasAddNombre(set,wf.notificar_por_propuesto);
+      }
+    }
+  }
   return set.slice(0,40);
 }
 function expTieneSeguimiento(exp){
@@ -1818,49 +1837,67 @@ function _persistLocalBackupHint(exp){
 async function persistExpedienteGranular(exp,withGlobal,opts){
   return persistExpedienteGranularAsync(exp,withGlobal,opts);
 }
+/** Una escritura a la vez por expediente: evita que un save viejo (p. ej. «por notificar») pise cierre/impreso. */
+window._expSaveChains=window._expSaveChains||Object.create(null);
+function enqueueExpedienteSave(expId,fn){
+  const id=String(expId||'').trim()||'_';
+  const chains=window._expSaveChains;
+  const prev=chains[id]||Promise.resolve();
+  const next=prev.catch(function(){}).then(fn);
+  chains[id]=next.then(function(){},function(){});
+  return next;
+}
+window.enqueueExpedienteSave=enqueueExpedienteSave;
 /** Guarda el expediente en Firestore y retorna true/false (para await en radicación). */
 async function persistExpedienteGranularAsync(exp,withGlobal,opts){
   if(!exp)return false;
   opts=opts||{};
   const silencioso=!!opts.silent;
-  const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
-  if(!silencioso)console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
-  if(!silencioso)updateSyncIndicator('syncing');
-  const authOk=await ensureFirestoreAuthReady();
-  if(!authOk.ok){
+  const expId=expedienteDocId(exp);
+  return enqueueExpedienteSave(expId,async function(){
+    // Marca pendiente ANTES de armar el payload: el snapshot no debe pisar impreso/cierre en vuelo.
+    const ahora=new Date().toISOString();
+    exp._pending_fs_sync=true;
+    exp._pending_fs_at=ahora;
+    if(!exp.updatedAt||String(exp.updatedAt)<ahora)exp.updatedAt=ahora;
+    const deptoResolved=resolveDeptoFirestoreId(deptoActivo,exp);
+    if(!silencioso)console.log('persistExpedienteGranular:',{deptoActivo,exp_depto:exp._depto,exp__exp:exp._exp,deptoResolved,withGlobal:!!withGlobal});
+    if(!silencioso)updateSyncIndicator('syncing');
+    const authOk=await ensureFirestoreAuthReady();
+    if(!authOk.ok){
+      if(!opts.sinRespaldoLocal)persistExpLocalBackup(exp);
+      if(!silencioso){
+        updateSyncIndicator('error');
+        if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+_persistLocalBackupHint(exp),'err');
+      }
+      return false;
+    }
+    // Payload desde el objeto vivo (tras la cola): incluye cierre/impreso hechos mientras esperaba.
+    const expOk=await saveExpedienteDoc(deptoResolved,exp);
+    let globalOk=true;
+    if(withGlobal)globalOk=await saveGlobalFirestore();
+    if(expOk){
+      removeExpLocalBackup(expedienteDocId(exp));
+      mergeExpIntoExpsCache(exp);
+      if(!silencioso)updateSyncIndicator('synced');
+      if(!silencioso&&!globalOk&&typeof notif==='function'){
+        const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp);
+        const cod=window._lastFsSaveError&&window._lastFsSaveError.code;
+        const base=esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.';
+        notif(base+(cod&&cod!=='unknown'?' ('+cod+')':''),'warn');
+      }
+      return true;
+    }
     if(!opts.sinRespaldoLocal)persistExpLocalBackup(exp);
     if(!silencioso){
       updateSyncIndicator('error');
-      if(typeof notif==='function')notif(_firestoreSaveErrorMessage('unauthenticated')+_persistLocalBackupHint(exp),'err');
+      const lastErr=window._lastFsSaveError||null;
+      const errCode=lastErr&&lastErr.code||'unknown';
+      console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
+      if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+_persistLocalBackupHint(exp),'err');
     }
     return false;
-  }
-  // Evita que el listener ignore el snapshot del propio guardado (y el de otras pestañas
-  // en el mismo navegador) mientras corre un saveFirestore/cfg concurrente.
-  const expOk=await saveExpedienteDoc(deptoResolved,exp);
-  let globalOk=true;
-  if(withGlobal)globalOk=await saveGlobalFirestore();
-  if(expOk){
-    removeExpLocalBackup(expedienteDocId(exp));
-    mergeExpIntoExpsCache(exp);
-    if(!silencioso)updateSyncIndicator('synced');
-    if(!silencioso&&!globalOk&&typeof notif==='function'){
-      const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(exp);
-      const cod=window._lastFsSaveError&&window._lastFsSaveError.code;
-      const base=esPqrs?'⚠️ PQRSD guardada, pero no se actualizó el índice global.':'⚠️ Expediente guardado, pero no se actualizó el índice global.';
-      notif(base+(cod&&cod!=='unknown'?' ('+cod+')':''),'warn');
-    }
-    return true;
-  }
-  if(!opts.sinRespaldoLocal)persistExpLocalBackup(exp);
-  if(!silencioso){
-    updateSyncIndicator('error');
-    const lastErr=window._lastFsSaveError||null;
-    const errCode=lastErr&&lastErr.code||'unknown';
-    console.error('persistExpedienteGranular: guardado falló',{exp__exp:exp._exp,deptoResolved,errCode,lastErr});
-    if(typeof notif==='function')notif(_firestoreSaveErrorMessage(errCode)+_persistLocalBackupHint(exp),'err');
-  }
-  return false;
+  });
 }
 window.persistExpedienteGranularAsync=persistExpedienteGranularAsync;
 /** Reparos al pintar listas (dedupe / heal). Una escritura a la vez, sin aviso.
@@ -2907,12 +2944,15 @@ function applyExpedienteFirestoreChanges(changes,opts){
       const remoteTasks=(exp.tasks&&exp.tasks.length)||0;
       if(localAt&&remoteAt&&localAt>remoteAt&&localTasks>remoteTasks)return;
       if(local._pending_fs_sync&&localTasks>remoteTasks)return;
+      // Guardado en vuelo (impreso / cierre / firma): no aceptar eco viejo que borre el avance
+      if(local._pending_fs_sync&&localAt&&(!remoteAt||remoteAt<=localAt))return;
       // Fusionar tasks: no revivir eliminadas locales ni perder firmaWf
       const merged=Object.assign({},exp);
       merged.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
       if(local._pending_fs_sync){
         merged._pending_fs_sync=true;
         merged._pending_fs_at=local._pending_fs_at||merged.updatedAt;
+        if(local._pqrs_workflow!=null)merged._pqrs_workflow=local._pqrs_workflow;
       }
       exps[idx]=merged;
     }else{

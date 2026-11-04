@@ -2810,7 +2810,8 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
     setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
     if(typeof _pqrsAplicarCierrePqrsYLimpiarDocs==='function')
       await _pqrsAplicarCierrePqrsYLimpiarDocs(e,wf.fecha_respuesta||hoy(),'PQRSD cerrada — oficio notificado por correo');
-    persistExpedienteGranular(e);
+    if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
+    else if(typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e);
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     closeTaskModal();
     if(typeof renderPqrsOficinaInbox==='function')renderPqrsOficinaInbox();

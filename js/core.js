@@ -32601,6 +32601,21 @@ function filtrarActividadesPorEstado(list,filtro,opts){
     const yoResp=typeof getActProyeccionResponsableNombre==='function'?getActProyeccionResponsableNombre():null;
     if(yoResp){
       const eD=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+      const normYo=typeof agendaNorm==='function'?agendaNorm(yoResp):String(yoResp||'').toLowerCase();
+      // VITAL (u otro) que cerró/notificó: va a Atendidas aunque no sea asignado de la tarea
+      if(eD&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eD)
+        &&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(eD)){
+        const wfC=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(eD):{};
+        const cer=typeof agendaNorm==='function'?agendaNorm(wfC.cerrado_por||''):String(wfC.cerrado_por||'').toLowerCase();
+        const nPorC=typeof agendaNorm==='function'?agendaNorm(wfC.notificar_por||''):String(wfC.notificar_por||'').toLowerCase();
+        if((cer&&cer===normYo)||(nPorC&&nPorC===normYo)||(typeof esCargoVital==='function'&&esCargoVital()))return true;
+      }
+      if(t.firmaWf&&(String(t.firmaWf.fase||'')==='cerrada_atendida'||String(t.firmaWf.fase||'')==='cerrada')){
+        const fw=t.firmaWf||{};
+        const cerT=typeof agendaNorm==='function'?agendaNorm(fw.cerrado_por||''):String(fw.cerrado_por||'').toLowerCase();
+        const nPorT=typeof agendaNorm==='function'?agendaNorm(fw.notificar_por||''):String(fw.notificar_por||'').toLowerCase();
+        if((cerT&&cerT===normYo)||(nPorT&&nPorT===normYo)||(typeof esCargoVital==='function'&&esCargoVital()&&(cerT||nPorT)))return true;
+      }
       // Designado a notificar: solo «Por notificar» (y prioritarias si vence) — no Atendidas
       if(typeof actividadEsRevisionFinalNotif==='function'&&actividadEsRevisionFinalNotif(t,eD)){
         if(typeof actividadUsuarioEsNotificadorRevision==='function'&&actividadUsuarioEsNotificadorRevision(t,yoResp))return false;
@@ -36661,7 +36676,8 @@ async function pqrsDirectorConfirmarFirmado(expId,skipClose){
     if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({ts:Date.now(),tipo:'firma_director',fecha:hoy(),nota:'Director cargó oficio firmado → Por notificar'+(notifPor?' · Notificará: '+notifPor:''),oficina:'ds_deguv',por:porDir});
-    persistExpedienteGranular(e);
+    if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
+    else if(typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e);
     window._directorSignedFile=null;
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     if(skipClose){
@@ -37103,7 +37119,8 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
         setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
         await _pqrsAplicarCierrePqrsYLimpiarDocs(e,wfActual.fecha_respuesta||hoy(),'PQRSD cerrada — oficio notificado por correo');
         termPqrs(hoy(),'correo');
-        persistExpedienteGranular(e);
+        if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
+        else if(typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e);
         if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:400});
         closeTaskModal();
         renderPqrsOficinaInbox();
@@ -37126,7 +37143,8 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
     if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
     e._pqrs_historial.push({ts:Date.now(),tipo:'notif_pendiente_encargado',fecha:hoy(),nota:'Borrador de notificación por correo listo — pendiente envío desde correo autorizado de la oficina',por:por});
     termPqrsProponer();
-    persistExpedienteGranular(e);
+    if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
+    else if(typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e);
     closeTaskModal();
     renderPqrsOficinaInbox();
     notif(esEncargado?'Conecte el correo autorizado de la oficina y use «Notificar» para enviar.':'📬 Preparado. El encargado enviará desde el correo autorizado de la oficina.','ok');
