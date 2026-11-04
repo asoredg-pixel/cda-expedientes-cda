@@ -617,22 +617,21 @@ function apoyoPintarMedidor(){
   var pctG=cupoG?Math.min(100,Math.round((lectG/cupoG)*100)):(lectG>0?100:0);
   var fillP=el.querySelector('.sst-apoyo-fill-per')||el.querySelector('.sst-apoyo-bar-fill');
   var fillG=el.querySelector('.sst-apoyo-fill-glob');
-  var lbl=el.querySelector('.sst-apoyo-meter-lbl');
+  var pctPEl=el.querySelector('.sst-apoyo-pct-per');
+  var pctGEl=el.querySelector('.sst-apoyo-pct-glob');
   var cobroEl=el.querySelector('.sst-apoyo-meter-cobro');
+  var txtP=(sobre?pct+'+':String(pct))+'%';
+  var txtG=(sobreG?pctG+'+':String(pctG))+'%';
   if(fillP){
-    fillP.style.height=pct+'%';
+    fillP.style.setProperty('--apoyo-fill',pct+'%');
     fillP.classList.toggle('over',sobre||pct>=100&&lectDia>0);
   }
   if(fillG){
-    fillG.style.height=pctG+'%';
+    fillG.style.setProperty('--apoyo-fill',pctG+'%');
     fillG.classList.toggle('over',sobreG||pctG>=100&&lectG>0);
   }
-  if(lbl){
-    var partes=[];
-    partes.push(sobre?('U '+pct+'%+'):('U '+pct+'%'));
-    partes.push(sobreG?('G '+pctG+'%+'):('G '+pctG+'%'));
-    lbl.textContent=partes.join(' · ');
-  }
+  if(pctPEl)pctPEl.textContent=txtP;
+  if(pctGEl)pctGEl.textContent=txtG;
   var monto=Number(u.montoCop)||0;
   var montoB=Number(u.montoBlazeCop)||0;
   var montoA=Math.max(0,monto-montoB);

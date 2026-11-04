@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20261104a">
+<link rel="stylesheet" href="css/sst.css?v=20261104b">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,12 +20,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261103i"></script>
-<script src="js/constants.js?v=20261104a"></script>
+<script src="js/constants.js?v=20261104b"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261103s"></script>
 <script src="js/roles.js?v=20261103a"></script>
-<script src="js/apoyo-solidario.js?v=20261104a"></script>
+<script src="js/apoyo-solidario.js?v=20261104b"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="js/core.js?v=20261103s"></script>
@@ -113,11 +113,18 @@
   <div class="sst-nav-tools" id="sst-nav-tools">
     <button type="button" class="sst-apoyo-meter" id="sst-apoyo-meter" style="display:none" title="Apoyo solidario" aria-live="polite">
       <span class="sst-apoyo-meter-ico" aria-hidden="true">🤝</span>
-      <span class="sst-apoyo-bars" aria-hidden="true">
-        <span class="sst-apoyo-bar sst-apoyo-bar-per" title="Cupo personal"><span class="sst-apoyo-bar-fill sst-apoyo-fill-per"></span></span>
-        <span class="sst-apoyo-bar sst-apoyo-bar-glob" title="Cupo global (Blaze)"><span class="sst-apoyo-bar-fill sst-apoyo-fill-glob"></span></span>
+      <span class="sst-apoyo-bars">
+        <span class="sst-apoyo-track sst-apoyo-track-per" title="Cupo personal">
+          <span class="sst-apoyo-bar-tag">U</span>
+          <span class="sst-apoyo-bar sst-apoyo-bar-per"><span class="sst-apoyo-bar-fill sst-apoyo-fill-per"></span></span>
+          <span class="sst-apoyo-bar-pct sst-apoyo-pct-per">0%</span>
+        </span>
+        <span class="sst-apoyo-track sst-apoyo-track-glob" title="Cupo global (Blaze)">
+          <span class="sst-apoyo-bar-tag">G</span>
+          <span class="sst-apoyo-bar sst-apoyo-bar-glob"><span class="sst-apoyo-bar-fill sst-apoyo-fill-glob"></span></span>
+          <span class="sst-apoyo-bar-pct sst-apoyo-pct-glob">0%</span>
+        </span>
       </span>
-      <span class="sst-apoyo-meter-lbl">—</span>
       <span class="sst-apoyo-meter-cobro" hidden></span>
     </button>
     <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">

@@ -102,7 +102,7 @@ describe('Apoyo solidario', () => {
     expect(w._apoyoUso.baseBDia).toBe(10)
     expect(w._apoyoUso.montoUsd).toBeCloseTo(0.005, 5)
     expect(w._apoyoUso.montoCop).toBe(20)
-    expect(src).toContain("pct+'%'")
+    expect(src).toContain('--apoyo-fill')
     expect(src).toContain('apoyoFmtCopCorto')
     expect(src).toContain('sst-apoyo-fill-per')
     expect(src).toContain('apoyoAplicarCobroBlaze')
