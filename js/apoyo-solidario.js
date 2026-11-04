@@ -49,26 +49,20 @@ function apoyoLsKey(email){
   email=String(email||apoyoEmailKey()||'').trim().toLowerCase();
   return email?(APOYO_LS_PREFIX+email):'';
 }
-/** Copia síncrona del consumo del día: sobrevive Ctrl+F5 si Firestore no alcanzó a escribir. */
-function apoyoMirrorLocal(u){
+/** U personal solo en Firestore: limpia espejos locales viejos (alteraban % entre PCs). */
+function apoyoLimpiarEspejoUsoLocal(){
   try{
-    var email=apoyoEmailKey();
-    var key=apoyoLsKey(email);
-    if(!key||!u)return;
-    var payload=apoyoPayloadDesdeUso(apoyoAsegurarDia(u),email);
-    localStorage.setItem(key,JSON.stringify(payload));
-  }catch(e){/* quota / privado */}
+    var key=apoyoLsKey();
+    if(key)localStorage.removeItem(key);
+    // Basura de sesiones anteriores (otros correos en el mismo navegador)
+    for(var i=localStorage.length-1;i>=0;i--){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf(APOYO_LS_PREFIX)===0)localStorage.removeItem(k);
+    }
+  }catch(e){}
 }
-function apoyoLeerMirrorLocal(email){
-  try{
-    var key=apoyoLsKey(email||apoyoEmailKey());
-    if(!key)return null;
-    var raw=localStorage.getItem(key);
-    if(!raw)return null;
-    var data=JSON.parse(raw);
-    return data&&typeof data==='object'?data:null;
-  }catch(e){return null;}
-}
+function apoyoMirrorLocal(/*u*/){/* no-op: U = Firestore */}
+function apoyoLeerMirrorLocal(){return null;}
 function apoyoMirrorGlobalWrite(){
   try{
     var hoy=apoyoHoyLocal();
@@ -90,36 +84,30 @@ function apoyoLeerMirrorGlobal(){
     return d&&typeof d==='object'?d:null;
   }catch(e){return null;}
 }
-/** Aplica servidor + espejo del día (máximo) y reencola pendientes no flushados. */
+/**
+ * Estado G = solo lecturas confirmadas en Firestore (misma barra para todos).
+ * El espejo local solo reencola `pend` para no perder aportes si F5 corta el flush;
+ * no infla lecturas/baseB (eso hacía ver 2% en un PC y 0% en otro).
+ */
 function apoyoAplicarEstadoGlobal(lecturas,baseB,opts){
   opts=opts||{};
   var hoy=apoyoHoyLocal();
   var lect=lecturas|0;
   var base=baseB|0;
   var mir=opts.skipMirror?null:apoyoLeerMirrorGlobal();
-  if(mir&&apoyoNormDiaIso(mir.diaIso)===hoy){
-    lect=Math.max(lect,mir.lecturas|0);
-    base=Math.max(base,mir.baseB|0);
-    if(!opts.skipPendRequeue){
-      var p=mir.pend|0,pb=mir.pendBase|0;
-      window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+p;
-      window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+pb;
-      // Consumir pend del espejo al reencolar (evita doble conteo si se vuelve a cargar)
-      try{
-        localStorage.setItem(APOYO_LS_GLOBAL_PREFIX+hoy,JSON.stringify({
-          diaIso:hoy,lecturas:lect,baseB:base,pend:0,pendBase:0
-        }));
-      }catch(e){}
-    }
+  if(mir&&apoyoNormDiaIso(mir.diaIso)===hoy&&!opts.skipPendRequeue){
+    var p=mir.pend|0,pb=mir.pendBase|0;
+    window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+p;
+    window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+pb;
   }
   window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
   apoyoMirrorGlobalWrite();
   return window._apoyoGlobal;
 }
-/** Lecturas globales a mostrar: servidor + pendiente local aún no confirmado. */
+/** Barra G: únicamente lo confirmado en apoyo_consumo (sin pendiente local). */
 function apoyoLecturasGlobalVista(){
   var g=window._apoyoGlobal||{};
-  return (g.lecturas|0)+(window._apoyoGlobalPend|0);
+  return g.lecturas|0;
 }
 function apoyoMsHastaRenovacion(){
   var ahora=new Date();
@@ -284,12 +272,9 @@ function apoyoMergeUsoRemoto(data){
   if(!data||typeof data!=='object')return;
   var per=apoyoPeriodoId();
   if(String(data.periodo||'')!==per){
-    // Periodo distinto: el % diario arranca en 0, pero el cobro NO pagado se hereda
-    var mirror0=apoyoLeerMirrorLocal();
+    // Periodo distinto: el % diario arranca en 0, pero el cobro NO pagado se hereda desde Firestore
     var base=apoyoUsoVacio(per);
     apoyoHeredarCobroCiclo(base,data);
-    if(mirror0&&String(mirror0.periodo||'')===per)base=apoyoFusionarMaxUso(base,mirror0);
-    else if(mirror0)apoyoHeredarCobroCiclo(base,mirror0);
     window._apoyoUso=base;
     apoyoAsegurarDia(window._apoyoUso);
     return;
@@ -368,44 +353,26 @@ async function apoyoCargarUso(){
     window._apoyoUsoListo=true;
     return;
   }
+  apoyoLimpiarEspejoUsoLocal();
   var email=apoyoEmailKey();
-  var mirror=apoyoLeerMirrorLocal(email);
-  var remote=null;
-  var remoteLect=0;
   if(!email||!window._db||!window._fsGetDoc||!window._fsDoc){
-    window._apoyoUso=mirror&&String(mirror.periodo||'')===apoyoPeriodoId()
-      ?apoyoFusionarMaxUso(apoyoUsoVacio(apoyoPeriodoId()),mirror)
-      :(window._apoyoUso||apoyoUsoVacio(apoyoPeriodoId()));
+    window._apoyoUso=window._apoyoUso||apoyoUsoVacio(apoyoPeriodoId());
     apoyoAsegurarDia(window._apoyoUso);
-    apoyoMirrorLocal(window._apoyoUso);
     window._apoyoUsoListo=true;
     return;
   }
   try{
     var snap=await window._fsGetDoc(window._fsDoc(window._db,'apoyo_uso',email));
-    remote=snap&&snap.exists&&snap.exists()?snap.data():null;
-    remoteLect=remote?(remote.lecturasDia|0):0;
+    var remote=snap&&snap.exists&&snap.exists()?snap.data():null;
+    // Solo Firestore: otro PC ve el mismo U; al entrar suma lo que descargue esta sesión
     if(remote)apoyoMergeUsoRemoto(remote);
     else window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
-    // F5 / versión nueva: el espejo local puede tener el pico del día que Firestore no alcanzó a escribir
-    if(mirror&&String(mirror.periodo||'')===apoyoPeriodoId()){
-      window._apoyoUso=apoyoFusionarMaxUso(window._apoyoUso,mirror);
-      apoyoAsegurarDia(window._apoyoUso);
-    }
   }catch(e){
     console.warn('apoyoCargarUso',e);
-    if(mirror&&String(mirror.periodo||'')===apoyoPeriodoId()){
-      window._apoyoUso=apoyoFusionarMaxUso(apoyoUsoVacio(apoyoPeriodoId()),mirror);
-    }else if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
   }
   apoyoAsegurarDia(window._apoyoUso);
-  apoyoMirrorLocal(window._apoyoUso);
   window._apoyoUsoListo=true;
-  // Si el espejo traía más que Firestore, subir el máximo sin demora
-  if((window._apoyoUso.lecturasDia|0)>remoteLect){
-    window._apoyoUsoDirty=true;
-    apoyoGuardarUso();
-  }
   if(window._apoyoLecturasCola>0){
     var cola=window._apoyoLecturasCola;
     window._apoyoLecturasCola=0;
@@ -416,9 +383,8 @@ async function apoyoCargarUso(){
 function apoyoProgramarGuardarUso(){
   if(apoyoEsAdmin())return;
   window._apoyoUsoDirty=true;
-  apoyoMirrorLocal(window._apoyoUso);
   if(window._apoyoSaveTimer)clearTimeout(window._apoyoSaveTimer);
-  // Debounce corto: Ctrl+F5 no debe llevarse el consumo del día
+  // Debounce corto → Firestore (fuente de U entre PCs)
   window._apoyoSaveTimer=setTimeout(function(){apoyoGuardarUso();},400);
 }
 function apoyoPayloadDesdeUso(u,email){
@@ -451,18 +417,16 @@ async function apoyoGuardarUso(){
   var u=window._apoyoUso;
   if(!email||!u||!window._db||!window._fsDoc)return;
   if(!window._fsSetDoc&&!window._fsRunTransaction)return;
-  apoyoMirrorLocal(u);
   window._apoyoUsoDirty=false;
   var ref=window._fsDoc(window._db,'apoyo_uso',email);
   try{
-    // Leer remoto y guardar el máximo del día/periodo: otro PC / F5 no debe borrar el consumo.
+    // Máximo con remoto al guardar: dos PCs no se pisan; la lectura al entrar siempre es Firestore.
     if(typeof window._fsRunTransaction==='function'){
       await window._fsRunTransaction(window._db,async function(tx){
         var snap=await tx.get(ref);
         var remote=snap&&snap.exists()?snap.data():null;
         var merged=apoyoFusionarMaxUso(u,remote);
         window._apoyoUso=merged;
-        apoyoMirrorLocal(merged);
         tx.set(ref,apoyoPayloadDesdeUso(merged,email),{merge:true});
       });
     }else{
@@ -470,11 +434,10 @@ async function apoyoGuardarUso(){
       var remote2=snap2&&snap2.exists&&snap2.exists()?snap2.data():null;
       var merged2=apoyoFusionarMaxUso(u,remote2);
       window._apoyoUso=merged2;
-      apoyoMirrorLocal(merged2);
       await window._fsSetDoc(ref,apoyoPayloadDesdeUso(merged2,email),{merge:true});
     }
     apoyoPintarUI();
-  }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;apoyoMirrorLocal(window._apoyoUso);}
+  }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;}
 }
 function apoyoAsegurarDia(u){
   var hoy=apoyoHoyLocal();
@@ -518,8 +481,6 @@ function apoyoBindFlush(){
   var flush=function(){
     if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
     if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
-    // Siempre espejo sync primero (Ctrl+F5 aborta el await a Firestore)
-    if(window._apoyoUso)apoyoMirrorLocal(window._apoyoUso);
     apoyoMirrorGlobalWrite();
     if(window._apoyoUsoDirty)apoyoGuardarUso();
     if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoFlushGlobalPendiente();
@@ -562,7 +523,7 @@ function apoyoAplicarCobroBlaze(u,cfg){
 }
 function apoyoProgramarGlobalFlush(){
   if(window._apoyoGlobalSaveTimer)clearTimeout(window._apoyoGlobalSaveTimer);
-  window._apoyoGlobalSaveTimer=setTimeout(function(){apoyoFlushGlobalPendiente();},900);
+  window._apoyoGlobalSaveTimer=setTimeout(function(){apoyoFlushGlobalPendiente();},400);
 }
 async function apoyoFlushGlobalPendiente(){
   var n=window._apoyoGlobalPend|0;
@@ -622,13 +583,9 @@ async function apoyoFlushGlobalPendiente(){
 function apoyoSumarGlobalLocal(n,deltaBaseB){
   n=n|0;deltaBaseB=deltaBaseB|0;
   if(n<=0&&deltaBaseB<=0)return;
-  // Encola aporte al proyecto. La barra G se pinta desde servidor+espejo (mismo día para todos tras sync).
+  // Solo encola: la barra G no sube aquí; sube cuando Firestore confirma (mismo % para todos).
   window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
   window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+deltaBaseB;
-  // Conservar pend en espejo por si F5 corta el flush
-  var g=window._apoyoGlobal||{diaIso:apoyoHoyLocal(),lecturas:0,baseB:0};
-  if(g.diaIso!==apoyoHoyLocal())g={diaIso:apoyoHoyLocal(),lecturas:0,baseB:0};
-  window._apoyoGlobal=g;
   apoyoMirrorGlobalWrite();
   apoyoProgramarGlobalFlush();
 }
@@ -657,12 +614,12 @@ function apoyoEscucharGlobalDia(){
     var hoy2=apoyoHoyLocal();
     if(hoy2!==hoy){apoyoEscucharGlobalDia();return;}
     var d=snap&&snap.exists&&snap.exists()?snap.data():{};
-    // Servidor es fuente; el pend local se suma solo en la vista hasta el flush
-    var cur=window._apoyoGlobal||{lecturas:0,baseB:0};
-    var lect=Math.max(d.lecturas|0,cur.lecturas|0);
-    var base=Math.max(d.baseB|0,cur.baseB|0);
-    if((d.lecturas|0)>=(cur.lecturas|0)){lect=d.lecturas|0;base=d.baseB|0;}
-    window._apoyoGlobal={diaIso:hoy2,lecturas:lect,baseB:base};
+    // Solo servidor: todos ven el mismo G (no max con local/espejo)
+    window._apoyoGlobal={
+      diaIso:hoy2,
+      lecturas:d.lecturas|0,
+      baseB:d.baseB|0
+    };
     apoyoMirrorGlobalWrite();
     if(window._apoyoUsoListo&&window._apoyoUso){
       if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
@@ -704,7 +661,6 @@ function apoyoRegistrarLecturas(n){
     u.montoCop=Math.round((Number(u.montoCop)||0)+m.cop);
   }
   window._apoyoUso=u;
-  apoyoMirrorLocal(u);
   apoyoSumarGlobalLocal(n,deltaBaseB);
   apoyoAplicarCobroBlaze(u,cfg);
   apoyoProgramarGuardarUso();
