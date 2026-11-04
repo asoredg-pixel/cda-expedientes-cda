@@ -2236,7 +2236,8 @@ function bandejaEscuchaSig(){
     window._pqrsOficinaCorteListo?'1':'0',
     window._pqrsOficinaPropiaListo?'1':'0',
     window._secretariaRadicacionLista?'1':'0',
-    'at30' // puente Atendidas 30d + atendidasPaleta para responsables
+    'at30', // puente Atendidas 30d + atendidasPaleta para responsables
+    'sec30c' // secretaría: cerradas 30d para contador Atendidas
   ].join('|');
 }
 function stopRealtimeCfgSync(){
@@ -3038,8 +3039,11 @@ function initRealtimeSync(force){
       const esEnc=!esResp&&!esOficina;
       if(!esResp&&!esEnc&&!esSec&&!ofiCorte&&!ofiPropia)escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
       if(esSec){
-        if(window._secretariaRadicacionLista)escucharConsultaDepto(db,depto,unsubs,{tipo:'desde',campo:'pqrsRadicadaEn',desde:corteFechaMarca(10)});
-        else escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
+        if(window._secretariaRadicacionLista){
+          // Radicadas recientes (lista) + cerradas 30d (contador Atendidas, como paleta responsables)
+          escucharConsultaDepto(db,depto,unsubs,{tipo:'desde',campo:'pqrsRadicadaEn',desde:corteFechaMarca(10)});
+          escucharConsultaDepto(db,depto,unsubs,{tipo:'desde',campo:'pqrsCerradaEn',desde:corteFechaMarca(30)});
+        }else escucharConsultaDepto(db,depto,unsubs,{tipo:'updated',desde:corteBandejaIso()});
       }
       if(!esResp&&!esOficina)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'seguimiento'});
       if(!esOficina&&verReq)escucharConsultaDepto(db,depto,unsubs,{tipo:'bool',campo:'reqAlerta'});

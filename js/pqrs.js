@@ -1501,22 +1501,70 @@ function secretariaRadicacionEnCorte(e){
   const f=String((e&&(e.pqrsRadicadaEn||e._fecha_solicitud||e._fecha))||'').slice(0,10);
   return /^\d{4}-\d{2}-\d{2}$/.test(f)&&f>=corte;
 }
+function pqrsFechaCierreIso(e){
+  return String((e&&(e.pqrsCerradaEn||e._pqrs_respuesta_fecha||e._fecha_res||e._fecha))||'').slice(0,10);
+}
+/** Ventana de lista Atendidas/Respondidas (contador puede ser mayor: todo lo cargado). */
+function pqrsEnVentanaAtendidasLista(e,dias){
+  dias=dias==null?30:dias;
+  const f=pqrsFechaCierreIso(e);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f))return true;
+  const corte=typeof corteFechaMarca==='function'?corteFechaMarca(dias):'';
+  return !corte||f>=corte;
+}
+function setSecPqrsFiltro(v){
+  window._secPqrsFiltro=v||'rad';
+  window._secAsignadasShown=10;
+  renderSecretariaPqrs();
+}
+window.setSecPqrsFiltro=setSecPqrsFiltro;
+function secPqrsMetCard(filterVal,style,inner,accent,title){
+  const cur=String(window._secPqrsFiltro||'rad');
+  const on=cur===String(filterVal||'');
+  const acc=accent||'var(--bl)';
+  const st=(typeof metOnCssVars==='function'?metOnCssVars(acc):'')+(style||'');
+  const tip=title
+    ?(String(title)+(on?' · Paleta activa.':' · Clic para filtrar.'))
+    :(on?'Paleta activa':'Clic para filtrar');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setSecPqrsFiltro(\''+(typeof jsStr==='function'?jsStr(filterVal):String(filterVal||'').replace(/'/g,"\\'"))+'\')" title="'+(typeof escAttr==='function'?escAttr(tip):tip)+'">'+inner+'</div>';
+}
 function renderSecretariaPqrs(){
   renderSecGmailBloqueoRadicacion();
   const all=getSecretariaPqrsAll();
-  const menuRad=all.filter(function(e){return pqrsEsRadicadoMenuSecretaria(e)&&secretariaRadicacionEnCorte(e);});
+  const menuAll=all.filter(function(e){return pqrsEsRadicadoMenuSecretaria(e);});
+  // Lista «radicadas» recientes (10 d); contadores Atendidas = todo lo cargado (cierre 30 d en escucha).
+  const menuRad=menuAll.filter(secretariaRadicacionEnCorte);
   const pendientes=getPqrsPendientesTrasladoList(true).sort(pqrsSortRecientePrimero);
-  const asignadas=menuRad.filter(e=>!pqrsPendienteTraslado(e)).sort(pqrsSortMenuSecretariaAsignadas);
-  const atendidas=menuRad.filter(e=>pqrsEstaCerrada(e));
+  const enGestionAll=menuAll.filter(function(e){return !pqrsPendienteTraslado(e)&&!pqrsEstaCerrada(e);});
+  const atendidasAll=menuAll.filter(function(e){return !pqrsPendienteTraslado(e)&&pqrsEstaCerrada(e);});
+  const atendidasLista=atendidasAll.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
+  const filtro=String(window._secPqrsFiltro||'rad');
+  let asignadas;
+  if(filtro==='gestion')asignadas=enGestionAll.sort(pqrsSortMenuSecretariaAsignadas);
+  else if(filtro==='atendidas')asignadas=atendidasLista.slice().sort(pqrsSortMenuSecretariaAsignadas);
+  else asignadas=menuRad.filter(function(e){return !pqrsPendienteTraslado(e);}).sort(pqrsSortMenuSecretariaAsignadas);
   const SEC_PQRS_PAGE=10;
   const SEC_PQRS_MAX=50;
   if(window._secPendTraslShown==null)window._secPendTraslShown=SEC_PQRS_PAGE;
   if(window._secAsignadasShown==null)window._secAsignadasShown=SEC_PQRS_PAGE;
+  const nRad=menuRad.length;
+  const nGest=enGestionAll.length;
+  const nAte=atendidasAll.length;
+  const ateTitulo=nAte>atendidasLista.length
+    ?('Atendidas cargadas: '+nAte+'. La lista muestra los últimos 30 días.')
+    :('Atendidas en lo cargado. La tabla pagina; no descarga el archivo completo.');
   const mets=document.getElementById('sec-pqrs-mets');
   if(mets)mets.innerHTML=
-    '<div class="met" style="border-left:3px solid var(--bl)"><div class="v" style="color:var(--bl)">'+menuRad.length+'</div><div class="l">Radicadas</div></div>'+
-    '<div class="met" style="border-left:3px solid var(--or)"><div class="v" style="color:var(--or)">'+asignadas.filter(e=>!pqrsEstaCerrada(e)).length+'</div><div class="l">En gestión</div></div>'+
-    '<div class="met" style="border-left:3px solid var(--gn)"><div class="v" style="color:var(--gn)">'+atendidas.length+'</div><div class="l">Atendidas</div></div>';
+    secPqrsMetCard('rad','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+nRad+'</div><div class="l">Radicadas</div>','var(--bl)','Radicadas (últimos 10 días). Contador de lo cargado; la tabla pagina.')+
+    secPqrsMetCard('gestion','border-left:3px solid var(--or)','<div class="v" style="color:var(--or)">'+nGest+'</div><div class="l">En gestión</div>','var(--or)','En gestión (abiertas). Contador completo de lo cargado.')+
+    secPqrsMetCard('atendidas','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+nAte+'</div><div class="l">Atendidas</div>','var(--gn)',ateTitulo);
+  const tblCardSlbl=document.getElementById('tbl-sec-pqrs')&&document.getElementById('tbl-sec-pqrs').closest('.card')
+    ?document.getElementById('tbl-sec-pqrs').closest('.card').querySelector('.slbl'):null;
+  if(tblCardSlbl){
+    tblCardSlbl.textContent=filtro==='gestion'?'PQRSD en gestión'
+      :(filtro==='atendidas'?'PQRSD atendidas (lista 30 días; contador = todas las cargadas)'
+        :'PQRSD asignadas a oficinas');
+  }
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
   const pendTb=document.getElementById('tbl-sec-pend-trasl');
   const pendMore=document.getElementById('sec-pend-trasl-more');
@@ -1533,7 +1581,10 @@ function renderSecretariaPqrs(){
   const highlightExp=String(window._secHighlightExp||'').trim().toUpperCase();
   if(tb){
     if(!asignadas.length){
-      tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">Sin PQRSD en seguimiento.</td></tr>';
+      tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--tx3);padding:16px">'+(
+        filtro==='atendidas'?'Sin PQRSD atendidas en la ventana de lista.':
+        filtro==='gestion'?'Sin PQRSD en gestión.':'Sin PQRSD en seguimiento.'
+      )+'</td></tr>';
       if(asigMore)asigMore.style.display='none';
     }else{
       const lim=Math.min(window._secAsignadasShown,SEC_PQRS_MAX,asignadas.length);
@@ -2431,6 +2482,13 @@ function renderPqrsOficinaInbox(){
   if(!tb)return;
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   let list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
+  // Respondidas: contador = todas las cargadas; lista = últimos 30 días (como Atendidas responsables)
+  if(filtro==='cerr'){
+    const soloPqrsCerr=(list||[]).filter(function(e){return e&&!e._oficina_doc_respondida&&!e._tramite_firma_task;});
+    const docsCerr=(list||[]).filter(function(e){return e&&(e._oficina_doc_respondida||(e._tramite_firma_task&&e._oficina_firma));});
+    const soloVis=soloPqrsCerr.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
+    list=soloVis.concat(docsCerr);
+  }
   const qOfi=(document.getElementById('s-pqrs-ofi')?document.getElementById('s-pqrs-ofi').value:'').trim();
   if(qOfi)list=(list||[]).filter(function(e){return matchPqrsOfiSearch(e,qOfi);});
   window._pqrsOfiExportList=list||[];
@@ -2464,10 +2522,14 @@ function renderPqrsOficinaInbox(){
       return typeof pqrsEsFirmadoPendienteGestion==='function'?pqrsEsFirmadoPendienteGestion(e):(typeof pqrsEsFirmadoDirectorPendiente==='function'&&pqrsEsFirmadoDirectorPendiente(e));
     };
     const ofiActMets=getPqrsOficinaActiva();
-    const cerrPqrs=listAll.filter(e=>pqrsEstaCerrada(e)).length;
+    const cerrPqrsAll=listAll.filter(e=>pqrsEstaCerrada(e));
+    const cerrPqrsVis=cerrPqrsAll.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
     const docsRespondidas=(typeof getOficinaDocRespondidasRows==='function'
       ?getOficinaDocRespondidasRows(ofiActMets,esDirMets):[])||[];
-    const cerr=cerrPqrs+docsRespondidas.length;
+    const cerr=cerrPqrsAll.length+docsRespondidas.length;
+    const cerrTitulo=cerrPqrsAll.length>cerrPqrsVis.length
+      ?('Respondidas cargadas: '+cerr+'. La lista muestra los últimos 30 días.')
+      :('Respondidas en lo cargado. La tabla pagina; el contador no baja aunque no se listen todas.');
     const tramPorFirmarRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
       ?(typeof filterTramiteFirmaRowsPorOficina==='function'
         ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[],ofiActMets,esDirMets,{paletaPorFirmar:true})
@@ -2508,7 +2570,7 @@ function renderPqrsOficinaInbox(){
       (showPorFirmarCard?pqrsMetCard('por_firmar','border-left:3px solid #0d5c2e','<div class="v" style="color:#0d5c2e">'+porFirmar+'</div><div class="l">Por firmar</div>','#0d5c2e'):'')+
       (showFirmadosCard?pqrsMetCard('firmados','border-left:3px solid #15803d','<div class="v" style="color:#15803d">'+firmados+'</div><div class="l">Firmados</div>','#15803d'):'')+
       (showPorNotificarCard&&(porNotif||showPorFirmarCard)?pqrsMetCard('por_notificar','border-left:3px solid var(--bl)','<div class="v" style="color:var(--bl)">'+porNotif+'</div><div class="l">Por notificar</div>','var(--bl)'):'')+
-      pqrsMetCard('cerr','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>','var(--gn)');
+      pqrsMetCard('cerr','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+cerr+'</div><div class="l">Respondidas</div>','var(--gn)',cerrTitulo);
     const accOfi={
       pend:'var(--or)',atras:'var(--rd)',revision:'#6d3fa8',para_firma:'#1a7a4a',por_firmar:'#0d5c2e',
       firmados:'#15803d',por_notificar:'var(--bl)',cerr:'var(--gn)',por_trasladar:'#7c5cbf'

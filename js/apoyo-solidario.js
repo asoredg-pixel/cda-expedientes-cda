@@ -6,6 +6,8 @@
 
 var APOYO_CFG_DEFAULT={
   cupoDiario:800,
+  /** Cupo gratis global del proyecto/día (colchón bajo el de Blaze, p. ej. 40k vs 50k). */
+  cupoGlobalDia:40000,
   precioPorMilUsd:0.35,
   trmCop:4200,
   diaCorte:28,
@@ -22,6 +24,11 @@ window._apoyoTrmConsultada=null;
 window._apoyoUsoListo=false;
 window._apoyoLecturasCola=0;
 window._apoyoFlushBound=false;
+window._apoyoGlobal={diaIso:'',lecturas:0,baseB:0};
+window._apoyoGlobalUnsub=null;
+window._apoyoGlobalPend=0;
+window._apoyoGlobalBasePend=0;
+window._apoyoGlobalSaveTimer=null;
 
 /** Día de cupo gratis: se renueva a las 02:00 (misma franja en que Blaze renueva lo gratuito). Antes de las 2:00 sigue contando el día anterior. */
 var APOYO_HORA_RENOVACION=2;
@@ -44,8 +51,9 @@ function apoyoProgramarRenovacionDia(){
     if(window._apoyoUso){
       apoyoAsegurarDia(window._apoyoUso);
       if(window._apoyoUsoListo)apoyoProgramarGuardarUso();
-      apoyoPintarUI();
     }
+    apoyoEscucharGlobalDia();
+    apoyoPintarUI();
     apoyoProgramarRenovacionDia();
   },apoyoMsHastaRenovacion()+800);
 }
@@ -60,6 +68,8 @@ function apoyoNormCfg(raw){
   raw=raw&&typeof raw==='object'?raw:{};
   var c=Object.assign({},APOYO_CFG_DEFAULT,raw);
   c.cupoDiario=Math.max(0,parseInt(c.cupoDiario,10)||0);
+  c.cupoGlobalDia=Math.max(0,parseInt(c.cupoGlobalDia,10)||0);
+  if(!c.cupoGlobalDia&&raw.cupoGlobalDia==null)c.cupoGlobalDia=APOYO_CFG_DEFAULT.cupoGlobalDia;
   c.precioPorMilUsd=Math.max(0,Number(c.precioPorMilUsd)||0);
   c.trmCop=Math.max(1,Number(c.trmCop)||APOYO_CFG_DEFAULT.trmCop);
   c.diaCorte=Math.min(28,Math.max(1,parseInt(c.diaCorte,10)||28));
@@ -140,6 +150,12 @@ function apoyoUsoVacio(periodoId){
     cobrablesDia:0,
     lecturasMes:0,
     cobrablesMes:0,
+    /** Peso del día para reparto B: min(lecturasDia, cupo personal) — no incluye lo ya cobrado como A. */
+    baseBDia:0,
+    cobrablesBlazeDia:0,
+    cobrablesBlazeMes:0,
+    montoBlazeUsd:0,
+    montoBlazeCop:0,
     montoUsd:0,
     montoCop:0,
     apoyado:false,
@@ -147,6 +163,11 @@ function apoyoUsoVacio(periodoId){
     apoyadoPor:'',
     historial:[]
   };
+}
+function apoyoBaseBUsuario(lecturasDia,cupoPersonal){
+  cupoPersonal=Math.max(0,cupoPersonal|0);
+  lecturasDia=Math.max(0,lecturasDia|0);
+  return Math.min(lecturasDia,cupoPersonal);
 }
 function apoyoCalcMontos(cobrables,cfg){
   cfg=cfg||window._apoyoCfg||APOYO_CFG_DEFAULT;
@@ -183,17 +204,26 @@ function apoyoFusionarMaxUso(local,remote){
     out.diaIso=hoy;
     out.lecturasDia=Math.max(local.lecturasDia|0,remote.lecturasDia|0);
     out.cobrablesDia=Math.max(local.cobrablesDia|0,remote.cobrablesDia|0);
+    out.baseBDia=Math.max(local.baseBDia|0,remote.baseBDia|0);
+    out.cobrablesBlazeDia=Math.max(local.cobrablesBlazeDia|0,remote.cobrablesBlazeDia|0);
   }else if(rDia===hoy&&lDia&&lDia!==hoy){
     out.diaIso=hoy;
     out.lecturasDia=remote.lecturasDia|0;
     out.cobrablesDia=remote.cobrablesDia|0;
+    out.baseBDia=remote.baseBDia|0;
+    out.cobrablesBlazeDia=remote.cobrablesBlazeDia|0;
   }else if(lDia===hoy){
     out.diaIso=hoy;
     out.lecturasDia=local.lecturasDia|0;
     out.cobrablesDia=local.cobrablesDia|0;
+    out.baseBDia=local.baseBDia|0;
+    out.cobrablesBlazeDia=local.cobrablesBlazeDia|0;
   }
   out.lecturasMes=Math.max(local.lecturasMes|0,remote.lecturasMes|0);
   out.cobrablesMes=Math.max(local.cobrablesMes|0,remote.cobrablesMes|0);
+  out.cobrablesBlazeMes=Math.max(local.cobrablesBlazeMes|0,remote.cobrablesBlazeMes|0);
+  out.montoBlazeUsd=Math.max(Number(local.montoBlazeUsd)||0,Number(remote.montoBlazeUsd)||0);
+  out.montoBlazeCop=Math.max(Number(local.montoBlazeCop)||0,Number(remote.montoBlazeCop)||0);
   out.montoUsd=Math.max(Number(local.montoUsd)||0,Number(remote.montoUsd)||0);
   out.montoCop=Math.max(Number(local.montoCop)||0,Number(remote.montoCop)||0);
   if(remote.apoyado){
@@ -263,6 +293,11 @@ function apoyoPayloadDesdeUso(u,email){
     cobrablesDia:u.cobrablesDia|0,
     lecturasMes:u.lecturasMes|0,
     cobrablesMes:u.cobrablesMes|0,
+    baseBDia:u.baseBDia|0,
+    cobrablesBlazeDia:u.cobrablesBlazeDia|0,
+    cobrablesBlazeMes:u.cobrablesBlazeMes|0,
+    montoBlazeUsd:Number(u.montoBlazeUsd)||0,
+    montoBlazeCop:Number(u.montoBlazeCop)||0,
     montoUsd:Number(u.montoUsd)||0,
     montoCop:Number(u.montoCop)||0,
     apoyado:!!u.apoyado,
@@ -311,7 +346,14 @@ function apoyoAsegurarDia(u){
     u.diaIso=hoy;
     u.lecturasDia=0;
     u.cobrablesDia=0;
+    u.baseBDia=0;
+    u.cobrablesBlazeDia=0;
   }
+  if(u.baseBDia==null)u.baseBDia=0;
+  if(u.cobrablesBlazeDia==null)u.cobrablesBlazeDia=0;
+  if(u.cobrablesBlazeMes==null)u.cobrablesBlazeMes=0;
+  if(u.montoBlazeUsd==null)u.montoBlazeUsd=0;
+  if(u.montoBlazeCop==null)u.montoBlazeCop=0;
   return u;
 }
 function apoyoBindFlush(){
@@ -319,12 +361,127 @@ function apoyoBindFlush(){
   window._apoyoFlushBound=true;
   var flush=function(){
     if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
+    if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
     if(window._apoyoUsoDirty)apoyoGuardarUso();
+    if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoFlushGlobalPendiente();
   };
   window.addEventListener('pagehide',flush);
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState==='hidden')flush();
   });
+}
+/** Aplica cobro B (excedente global) sin doblar lo ya cobrado como A personal. */
+function apoyoAplicarCobroBlaze(u,cfg){
+  cfg=cfg||window._apoyoCfg||APOYO_CFG_DEFAULT;
+  u=apoyoAsegurarDia(u||window._apoyoUso||apoyoUsoVacio());
+  var g=window._apoyoGlobal||{lecturas:0,baseB:0};
+  var cupoG=cfg.cupoGlobalDia|0;
+  var lectG=g.lecturas|0;
+  var baseG=g.baseB|0;
+  var baseU=u.baseBDia|0;
+  var target=0;
+  if(cupoG>0&&lectG>cupoG&&baseG>0&&baseU>0){
+    var exc=lectG-cupoG;
+    target=Math.floor(exc*(baseU/baseG));
+  }
+  var prev=u.cobrablesBlazeDia|0;
+  var delta=Math.max(0,target-prev);
+  if(delta>0){
+    u.cobrablesBlazeDia=target;
+    u.cobrablesBlazeMes=(u.cobrablesBlazeMes|0)+delta;
+    var m=apoyoCalcMontos(delta,cfg);
+    u.montoBlazeUsd=Math.round(((Number(u.montoBlazeUsd)||0)+m.usd)*10000)/10000;
+    u.montoBlazeCop=Math.round((Number(u.montoBlazeCop)||0)+m.cop);
+    u.montoUsd=Math.round(((Number(u.montoUsd)||0)+m.usd)*10000)/10000;
+    u.montoCop=Math.round((Number(u.montoCop)||0)+m.cop);
+  }else{
+    u.cobrablesBlazeDia=Math.max(prev,target);
+  }
+  window._apoyoUso=u;
+  return delta;
+}
+function apoyoProgramarGlobalFlush(){
+  if(window._apoyoGlobalSaveTimer)clearTimeout(window._apoyoGlobalSaveTimer);
+  window._apoyoGlobalSaveTimer=setTimeout(function(){apoyoFlushGlobalPendiente();},900);
+}
+async function apoyoFlushGlobalPendiente(){
+  var n=window._apoyoGlobalPend|0;
+  var dbInc=window._apoyoGlobalBasePend|0;
+  if(n<=0&&dbInc<=0)return;
+  window._apoyoGlobalPend=0;
+  window._apoyoGlobalBasePend=0;
+  var hoy=apoyoHoyLocal();
+  if(!window._db||!window._fsDoc){
+    window._apoyoGlobalPend=n;
+    window._apoyoGlobalBasePend=dbInc;
+    return;
+  }
+  var ref=window._fsDoc(window._db,'apoyo_consumo',hoy);
+  try{
+    if(typeof window._fsRunTransaction==='function'){
+      await window._fsRunTransaction(window._db,async function(tx){
+        var snap=await tx.get(ref);
+        var cur=snap&&snap.exists()?snap.data():{};
+        var lect=(cur.lecturas|0)+n;
+        var base=(cur.baseB|0)+dbInc;
+        tx.set(ref,{
+          diaIso:hoy,
+          lecturas:lect,
+          baseB:base,
+          updatedAt:new Date().toISOString()
+        },{merge:true});
+        window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
+      });
+    }else if(window._fsSetDoc&&window._fsGetDoc){
+      var snap2=await window._fsGetDoc(ref);
+      var cur2=snap2&&snap2.exists&&snap2.exists()?snap2.data():{};
+      var lect2=(cur2.lecturas|0)+n;
+      var base2=(cur2.baseB|0)+dbInc;
+      await window._fsSetDoc(ref,{diaIso:hoy,lecturas:lect2,baseB:base2,updatedAt:new Date().toISOString()},{merge:true});
+      window._apoyoGlobal={diaIso:hoy,lecturas:lect2,baseB:base2};
+    }
+    if(window._apoyoUsoListo&&window._apoyoUso){
+      if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
+      apoyoPintarUI();
+    }
+  }catch(e){
+    console.warn('apoyoFlushGlobalPendiente',e);
+    window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
+    window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+dbInc;
+  }
+}
+function apoyoSumarGlobalLocal(n,deltaBaseB){
+  n=n|0;deltaBaseB=deltaBaseB|0;
+  if(n<=0&&deltaBaseB<=0)return;
+  var hoy=apoyoHoyLocal();
+  var g=window._apoyoGlobal||{diaIso:'',lecturas:0,baseB:0};
+  if(g.diaIso!==hoy){g={diaIso:hoy,lecturas:0,baseB:0};}
+  g.lecturas=(g.lecturas|0)+n;
+  g.baseB=(g.baseB|0)+deltaBaseB;
+  window._apoyoGlobal=g;
+  window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
+  window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+deltaBaseB;
+  apoyoProgramarGlobalFlush();
+}
+function apoyoEscucharGlobalDia(){
+  if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
+  if(apoyoEsAdmin()||!window._db||!window._fsDoc||!window._fsOnSnapshot)return;
+  var hoy=apoyoHoyLocal();
+  var ref=window._fsDoc(window._db,'apoyo_consumo',hoy);
+  window._apoyoGlobalUnsub=window._fsOnSnapshot(ref,function(snap){
+    var hoy2=apoyoHoyLocal();
+    if(hoy2!==hoy){apoyoEscucharGlobalDia();return;}
+    var d=snap&&snap.exists&&snap.exists()?snap.data():{};
+    window._apoyoGlobal={
+      diaIso:hoy2,
+      lecturas:d.lecturas|0,
+      baseB:d.baseB|0
+    };
+    if(window._apoyoUsoListo&&window._apoyoUso){
+      if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
+      apoyoPintarUI();
+    }
+  },function(err){console.warn('apoyoEscucharGlobalDia',err);});
 }
 /** Registra lecturas de documentos Firestore hechas por la sesión. */
 function apoyoRegistrarLecturas(n){
@@ -342,20 +499,26 @@ function apoyoRegistrarLecturas(n){
   var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
   var u=apoyoAsegurarDia(window._apoyoUso||apoyoUsoVacio());
   var cupo=cfg.cupoDiario|0;
-  var libres=Math.max(0,cupo-u.lecturasDia);
+  var antes=u.lecturasDia|0;
+  var baseAntes=apoyoBaseBUsuario(antes,cupo);
+  var libres=Math.max(0,cupo-antes);
   var cob=Math.max(0,n-libres);
-  u.lecturasDia+=n;
-  u.lecturasMes+=n;
-  u.cobrablesDia+=cob;
-  u.cobrablesMes+=cob;
-  // Solo el excedente NUEVO se valora con la tarifa vigente. Lo ya cobrado
-  // (montoUsd/montoCop) no se recalcula si el admin cambia cupo, precio o TRM.
+  u.lecturasDia=antes+n;
+  u.lecturasMes=(u.lecturasMes|0)+n;
+  u.cobrablesDia=(u.cobrablesDia|0)+cob;
+  u.cobrablesMes=(u.cobrablesMes|0)+cob;
+  var baseDesp=apoyoBaseBUsuario(u.lecturasDia,cupo);
+  u.baseBDia=baseDesp;
+  var deltaBaseB=Math.max(0,baseDesp-baseAntes);
+  // Cobro A (personal): solo excedente sobre cupo propio.
   if(cob>0){
     var m=apoyoCalcMontos(cob,cfg);
     u.montoUsd=Math.round(((Number(u.montoUsd)||0)+m.usd)*10000)/10000;
     u.montoCop=Math.round((Number(u.montoCop)||0)+m.cop);
   }
   window._apoyoUso=u;
+  apoyoSumarGlobalLocal(n,deltaBaseB);
+  apoyoAplicarCobroBlaze(u,cfg);
   apoyoProgramarGuardarUso();
   apoyoPintarUI();
 }
@@ -392,7 +555,7 @@ function apoyoDriveRestringido(){
   if(hoy<=corte)return false;
   if(apoyoDiasGraciaRestantes(per,hoy)>0)return false;
   // Solo restringe si hubo consumo cobrable
-  if(!(Number(u.cobrablesMes)>0||Number(u.montoCop)>0))return false;
+  if(!(Number(u.cobrablesMes)>0||Number(u.cobrablesBlazeMes)>0||Number(u.montoCop)>0))return false;
   return hoy>apoyoUltimoDiaGracia(per);
 }
 function apoyoFmtCop(n){
@@ -415,7 +578,7 @@ function apoyoMensajeBanner(){
   var resto=apoyoDiasGraciaRestantes(per,hoy);
   var monto=apoyoFmtCop(u.montoCop);
   if(u.apoyado)return'';
-  if(!(Number(u.cobrablesMes)>0||Number(u.montoCop)>0))return'';
+  if(!(Number(u.cobrablesMes)>0||Number(u.cobrablesBlazeMes)>0||Number(u.montoCop)>0))return'';
   if(hoy===corte){
     return '🤝 <strong>Apoyo solidario</strong> — consumo del ciclo: <strong>'+monto+'</strong>. Entre todos mantenemos el sistema. Plazo solidario: '+(window._apoyoCfg.diasGraciaHabiles||3)+' días hábiles.';
   }
@@ -444,30 +607,48 @@ function apoyoPintarMedidor(){
   var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
   var u=apoyoAsegurarDia(window._apoyoUso||apoyoUsoVacio());
   var cupo=cfg.cupoDiario|0;
+  var cupoG=cfg.cupoGlobalDia|0;
   var lectDia=u.lecturasDia|0;
+  var g=window._apoyoGlobal||{lecturas:0};
+  var lectG=g.lecturas|0;
   var sobre=cupo>0&&lectDia>cupo;
-  var pct=cupo?Math.min(100,Math.round((lectDia/cupo)*100)): (lectDia>0?100:0);
-  var bar=el.querySelector('.sst-apoyo-bar-fill');
+  var sobreG=cupoG>0&&lectG>cupoG;
+  var pct=cupo?Math.min(100,Math.round((lectDia/cupo)*100)):(lectDia>0?100:0);
+  var pctG=cupoG?Math.min(100,Math.round((lectG/cupoG)*100)):(lectG>0?100:0);
+  var fillP=el.querySelector('.sst-apoyo-fill-per')||el.querySelector('.sst-apoyo-bar-fill');
+  var fillG=el.querySelector('.sst-apoyo-fill-glob');
   var lbl=el.querySelector('.sst-apoyo-meter-lbl');
   var cobroEl=el.querySelector('.sst-apoyo-meter-cobro');
-  if(bar){
-    bar.style.width='';
-    bar.style.height=pct+'%';
-    bar.classList.toggle('over',sobre||pct>=100&&lectDia>0);
+  if(fillP){
+    fillP.style.height=pct+'%';
+    fillP.classList.toggle('over',sobre||pct>=100&&lectDia>0);
+  }
+  if(fillG){
+    fillG.style.height=pctG+'%';
+    fillG.classList.toggle('over',sobreG||pctG>=100&&lectG>0);
   }
   if(lbl){
-    lbl.textContent=sobre?('100% · apoyo'):(pct+'% hoy');
+    var partes=[];
+    partes.push(sobre?('U '+pct+'%+'):('U '+pct+'%'));
+    partes.push(sobreG?('G '+pctG+'%+'):('G '+pctG+'%'));
+    lbl.textContent=partes.join(' · ');
   }
   var monto=Number(u.montoCop)||0;
-  var hayCobro=monto>0||(u.cobrablesMes|0)>0;
+  var montoB=Number(u.montoBlazeCop)||0;
+  var montoA=Math.max(0,monto-montoB);
+  var hayCobro=monto>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;
   if(cobroEl){
     cobroEl.hidden=!hayCobro;
     cobroEl.classList.toggle('has-cobro',hayCobro);
     cobroEl.textContent=hayCobro?apoyoFmtCopCorto(monto):'';
   }
-  el.title=hayCobro
-    ?('Apoyo solidario del ciclo: '+apoyoFmtCop(monto)+' · cupo del día al '+pct+'%')
-    :('Apoyo solidario · cupo del día al '+pct+'%');
+  var tip='Personal '+pct+'% ('+lectDia+'/'+cupo+') · Global '+pctG+'% ('+lectG+'/'+cupoG+')';
+  if(hayCobro){
+    tip+=' · Apoyo ciclo '+apoyoFmtCop(monto);
+    if(montoA>0)tip+=' · personal '+apoyoFmtCop(montoA);
+    if(montoB>0)tip+=' · Blaze '+apoyoFmtCop(montoB);
+  }
+  el.title=tip;
   el.classList.toggle('sst-apoyo-blocked',apoyoDriveRestringido());
 }
 function apoyoFmtCopCorto(n){
@@ -486,35 +667,47 @@ function apoyoPintarUI(){
 async function apoyoInitSesion(){
   window._apoyoUsoListo=false;
   window._apoyoLecturasCola=0;
+  window._apoyoGlobalPend=0;
+  window._apoyoGlobalBasePend=0;
   await apoyoCargarCfg();
   await apoyoCargarUso();
+  apoyoEscucharGlobalDia();
   apoyoBindFlush();
   apoyoProgramarRenovacionDia();
   apoyoPintarUI();
 }
 function apoyoResetSesion(){
   if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
+  if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
   if(window._apoyoRenovTimer){try{clearTimeout(window._apoyoRenovTimer);}catch(e){}window._apoyoRenovTimer=null;}
+  if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
   if(window._apoyoUsoDirty){
     try{apoyoGuardarUso();}catch(e){}
+  }
+  if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0){
+    try{apoyoFlushGlobalPendiente();}catch(e){}
   }
   window._apoyoUsoListo=false;
   window._apoyoLecturasCola=0;
   window._apoyoUso=null;
   window._apoyoUsoDirty=false;
+  window._apoyoGlobal={diaIso:'',lecturas:0,baseB:0};
 }
 window.apoyoResetSesion=apoyoResetSesion;
 async function apoyoGuardarCfgDesdeForm(){
   if(!apoyoEsAdmin()){if(typeof notif==='function')notif('Solo el administrador puede configurar el apoyo solidario','err');return;}
   var cupo=parseInt((document.getElementById('apoyo-cfg-cupo')||{}).value,10);
+  var cupoG=parseInt((document.getElementById('apoyo-cfg-cupo-global')||{}).value,10);
   var precio=Number((document.getElementById('apoyo-cfg-precio')||{}).value);
   var trm=Number((document.getElementById('apoyo-cfg-trm')||{}).value);
   var activo=!!(document.getElementById('apoyo-cfg-activo')&&document.getElementById('apoyo-cfg-activo').checked);
-  if(isNaN(cupo)||cupo<0){notif('Cupo diario inválido','err');return;}
+  if(isNaN(cupo)||cupo<0){notif('Cupo diario personal inválido','err');return;}
+  if(isNaN(cupoG)||cupoG<0){notif('Cupo global diario inválido','err');return;}
   if(isNaN(precio)||precio<0){notif('Precio inválido','err');return;}
   if(isNaN(trm)||trm<=0){notif('TRM inválida','err');return;}
   var cfg=apoyoNormCfg({
     cupoDiario:cupo,
+    cupoGlobalDia:cupoG,
     precioPorMilUsd:precio,
     trmCop:trm,
     diaCorte:28,
@@ -585,6 +778,11 @@ async function apoyoMarcarApoyoUsuario(email,reiniciar){
     patch.cobrablesDia=0;
     patch.lecturasMes=0;
     patch.cobrablesMes=0;
+    patch.baseBDia=0;
+    patch.cobrablesBlazeDia=0;
+    patch.cobrablesBlazeMes=0;
+    patch.montoBlazeUsd=0;
+    patch.montoBlazeCop=0;
     patch.montoUsd=0;
     patch.montoCop=0;
   }
@@ -607,6 +805,11 @@ async function apoyoReiniciarUsuario(email){
     cobrablesDia:0,
     lecturasMes:0,
     cobrablesMes:0,
+    baseBDia:0,
+    cobrablesBlazeDia:0,
+    cobrablesBlazeMes:0,
+    montoBlazeUsd:0,
+    montoBlazeCop:0,
     montoUsd:0,
     montoCop:0,
     apoyado:false,
@@ -623,17 +826,20 @@ function apoyoCfgCardBody(){
   var cfg=apoyoNormCfg(window._apoyoCfg);
   var inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   return '<div class="cfcard" id="apoyo-cfg-card">'+
-    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Cada persona tiene un cupo diario de lecturas (se renueva a las <strong>2:00 a. m.</strong>, como el cupo gratis de Blaze). Si lo supera, el excedente suma al <strong>apoyo solidario</strong> del ciclo (corte día 28 + 3 días hábiles). Si cambia cupo, precio o TRM, lo ya cobrado en el ciclo <strong>no se ajusta</strong>: solo el consumo nuevo se valora con los criterios nuevos y se suma al monto acumulado. Tras el plazo, sin el apoyo registrado, no podrá conectar Drive.</p>'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Dos cupos (renuevan a las <strong>2:00 a. m.</strong>): <strong>personal</strong> por usuario y <strong>global</strong> del proyecto (colchón bajo Blaze). Cobro A = superar el personal. Cobro B = si el global se pasa, se reparte según el consumo del día <em>dentro</em> del cupo personal (sin doble cobro de lo ya cobrado como A). Ambos montos suman al ciclo. Tras el plazo solidario sin registrar apoyo, no podrá conectar Drive.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
-    '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis por día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis personales / día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label for="apoyo-cfg-cupo-global">Lecturas gratis globales / día (Blaze)</label><input type="number" min="0" step="1000" id="apoyo-cfg-cupo-global" value="'+escAttr(String(cfg.cupoGlobalDia))+'" style="'+inp+'" title="Ej. 40000 aunque Blaze ofrezca 50000"></div>'+
+    '</div>'+
+    '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label for="apoyo-cfg-precio">USD por cada 1.000 lecturas cobrables</label><input type="number" min="0" step="0.01" id="apoyo-cfg-precio" value="'+escAttr(String(cfg.precioPorMilUsd))+'" style="'+inp+'"></div>'+
+    '<div class="fld"><label for="apoyo-cfg-trm">TRM (COP por USD)</label><input type="number" min="1" step="0.01" id="apoyo-cfg-trm" value="'+escAttr(String(cfg.trmCop))+'" style="'+inp+'"></div>'+
     '</div>'+
     '<div class="fg" style="margin-bottom:8px">'+
-    '<div class="fld"><label for="apoyo-cfg-trm">TRM (COP por USD)</label><input type="number" min="1" step="0.01" id="apoyo-cfg-trm" value="'+escAttr(String(cfg.trmCop))+'" style="'+inp+'"></div>'+
     '<div class="fld" style="display:flex;align-items:flex-end"><button type="button" class="btn bsm" onclick="apoyoConsultarTrm()">Consultar tasa</button></div>'+
     '</div>'+
-    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte fijo: día 28. Plazo solidario: 3 días hábiles. Puede ajustar la TRM a la del Banco de la República.</div>'+
+    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte fijo: día 28. Plazo solidario: 3 días hábiles. Solo el excedente NUEVO se valora con precio/TRM actuales (lo ya cobrado no se recalcula). El cupo global debe ser ≤ al gratis real de Blaze para dejar margen.</div>'+
     '<button type="button" class="btn bsm bp" onclick="apoyoGuardarCfgDesdeForm()">Guardar apoyo solidario</button>'+
     '<div id="apoyo-admin-lista" style="margin-top:16px"></div>'+
   '</div>';
@@ -644,13 +850,13 @@ async function apoyoPintarListaAdmin(){
   box.innerHTML='<div style="font-size:12px;color:var(--tx3)">Cargando consumos…</div>';
   var list=await apoyoListarUsosAdmin();
   if(!list.length){box.innerHTML='<div style="font-size:12px;color:var(--tx3);margin-top:8px">Sin registros de consumo todavía.</div>';return;}
-  var h='<div class="slbl" style="margin:12px 0 8px">Histórico por usuario</div><div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lecturas</th><th>Cobrables</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>';
+  var h='<div class="slbl" style="margin:12px 0 8px">Histórico por usuario</div><div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lecturas</th><th>A pers.</th><th>B Blaze</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>';
   list.forEach(function(u){
     var email=String(u.email||u.id||'').trim().toLowerCase();
     var emailJs=JSON.stringify(email);
     h+='<tr><td style="font-size:12px">'+escAttr(email)+'</td><td>'+escAttr(u.periodo||'')+'</td>'+
-      '<td>'+(u.lecturasMes|0)+'</td><td>'+(u.cobrablesMes|0)+'</td>'+
-      '<td>'+escAttr(apoyoFmtCop(u.montoCop))+'</td>'+
+      '<td>'+(u.lecturasMes|0)+'</td><td>'+(u.cobrablesMes|0)+'</td><td>'+(u.cobrablesBlazeMes|0)+'</td>'+
+      '<td title="Personal '+escAttr(apoyoFmtCop(Math.max(0,(Number(u.montoCop)||0)-(Number(u.montoBlazeCop)||0))))+' · Blaze '+escAttr(apoyoFmtCop(u.montoBlazeCop))+'" >'+escAttr(apoyoFmtCop(u.montoCop))+'</td>'+
       '<td>'+(u.apoyado?'✓ Apoyó':'Pendiente')+'</td>'+
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm bp" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',true)\'>Apoyó + reiniciar</button> '+
@@ -663,6 +869,7 @@ async function apoyoPintarListaAdmin(){
 }
 
 window.apoyoRegistrarLecturas=apoyoRegistrarLecturas;
+window.apoyoAplicarCobroBlaze=apoyoAplicarCobroBlaze;
 window.apoyoDriveRestringido=apoyoDriveRestringido;
 window.apoyoInitSesion=apoyoInitSesion;
 window.apoyoAplicarCfgRemota=apoyoAplicarCfgRemota;

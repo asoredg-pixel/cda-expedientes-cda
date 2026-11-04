@@ -288,6 +288,14 @@ service cloud.firestore {
       allow read, write: if isActiveUser() && (email.lower() == authEmail() || isAdmin());
     }
 
+    // apoyo_consumo/{diaIso} — lecturas globales del día (barra Blaze + reparto B).
+    // Usuarios activos leen y suman; el admin puede ajustar.
+    match /apoyo_consumo/{diaIso} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser();
+      allow delete: if isAdmin();
+    }
+
     // -------------------------------------------------------------------------
     // revision_en_curso/{exp__tarea} — quién tiene abierta una actividad en revisión (tiempo real)
     // Todos los usuarios activos leen; escriben/borran con el correo del token (authEmail).

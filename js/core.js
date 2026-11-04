@@ -6002,12 +6002,15 @@ function markUltimaFilaFijadaNca(tableEl){
   const w=tableEl.offsetWidth||0;
   if(w>0)last.style.setProperty('--pqrs-pin-sep-w',w+'px');
 }
-function pqrsMetCard(filterVal,style,inner,accent){
+function pqrsMetCard(filterVal,style,inner,accent,title){
   const cur=String(window._pqrsOfiFiltro||'pend');
   const on=cur===String(filterVal||'');
   const acc=accent||'var(--bl)';
   const st=metOnCssVars(acc)+(style||'');
-  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="'+(on?'Paleta activa: ':'Filtrar: ')+String(filterVal||'')+'">'+inner+'</div>';
+  const tip=title
+    ?(String(title)+(on?' · Paleta activa.':' · Clic para filtrar.'))
+    :(on?'Paleta activa':'Clic para filtrar');
+  return '<div class="met met-click'+(on?' is-on':'')+'" style="'+st+'" onclick="setPqrsOfiFiltro(\''+jsStr(filterVal)+'\')" title="'+escAttr(tip)+'">'+inner+'</div>';
 }
 function setPqrsOfiFiltro(v){
   window._pqrsOfiFiltro=v||'pend';
