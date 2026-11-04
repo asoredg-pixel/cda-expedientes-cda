@@ -1717,15 +1717,63 @@ const SST_PENDING_EXP_KEY='sst_e_pending';
 function _pendingExpBackupList(){
   try{return lsLoadJson(SST_PENDING_EXP_KEY)||[];}catch(e){return[];}
 }
+/** Orden de fase firma/PQRSD: mayor = más avanzado. Evita que un respaldo local baje un cierre. */
+function faseFlujoFirmaRank(fase){
+  const f=String(fase||'').trim();
+  if(!f)return 0;
+  if(f==='rechazada')return 1;
+  if(f==='sin_respuesta'||f==='pendiente_revision_nca')return 2;
+  if(f==='para_firma'||f==='pendiente_gestion_vital')return 3;
+  if(f==='por_firmar')return 4;
+  if(f==='pendiente_notificacion'||f==='lista_para_envio')return 5;
+  if(f==='revision_final_nca')return 6;
+  if(f==='cerrada_atendida')return 10;
+  return 0;
+}
+function expedienteFaseFlujo(exp){
+  if(!exp)return '';
+  const wf=exp._pqrs_workflow;
+  if(wf&&typeof wf==='object'&&wf.fase)return String(wf.fase).trim();
+  const tasks=exp.tasks||[];
+  let best='',bestR=-1;
+  for(let i=0;i<tasks.length;i++){
+    const t=tasks[i];
+    if(!t||t.eliminada)continue;
+    const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+    const r=faseFlujoFirmaRank(f);
+    if(r>bestR){bestR=r;best=f;}
+  }
+  return best;
+}
+/** true si `cand` no debe pisar `base` (base ya está más adelante en el flujo). */
+function expedienteFlujoNoDebeRetroceder(base,cand){
+  if(!base||!cand)return false;
+  const rb=faseFlujoFirmaRank(expedienteFaseFlujo(base));
+  const rc=faseFlujoFirmaRank(expedienteFaseFlujo(cand));
+  if(rb>=10&&rc<10)return true;
+  if(rb>rc&&rb>=4)return true;
+  return false;
+}
+window.faseFlujoFirmaRank=faseFlujoFirmaRank;
+window.expedienteFlujoNoDebeRetroceder=expedienteFlujoNoDebeRetroceder;
 function persistExpLocalBackup(exp){
   if(!exp)return;
   const id=expedienteDocId(exp);
   if(!id)return;
   try{
     const list=_pendingExpBackupList();
+    // Conservar updatedAt del contenido: _pending_fs_at solo indica el intento de sync
     const row=Object.assign({},exp,{_pending_fs_sync:true,_pending_fs_at:new Date().toISOString()});
+    if(!row.updatedAt)row.updatedAt=row._pending_fs_at;
     const idx=list.findIndex(function(e){return expedienteDocId(e)===id;});
-    if(idx>=0)list[idx]=row;else list.push(row);
+    if(idx>=0){
+      const prev=list[idx];
+      // No reemplazar un pending más avanzado (p. ej. cerrado) por uno viejo reintentado
+      if(expedienteFlujoNoDebeRetroceder(prev,row)){
+        prev._pending_fs_at=row._pending_fs_at;
+        list[idx]=prev;
+      }else list[idx]=row;
+    }else list.push(row);
     lsStoreJson(SST_PENDING_EXP_KEY,list);
   }catch(e){console.warn('persistExpLocalBackup:',e);}
 }
@@ -1765,19 +1813,29 @@ function mergeExpIntoExpsCache(exp){
 function mergePendingExpBackup(){
   const pending=_pendingExpBackupList();
   if(!pending.length)return;
+  const keep=[];
   pending.forEach(function(exp){
     const id=expedienteDocId(exp);
     if(!id)return;
     const idx=(exps||[]).findIndex(function(e){return expedienteDocId(e)===id;});
     if(idx<0){
       mergeExpIntoExpsCache(exp);
+      keep.push(exp);
       return;
     }
     const remote=exps[idx];
+    // Remoto ya cerrado / más avanzado: descartar pending viejo (no resucitar por firmar/notificar)
+    if(expedienteFlujoNoDebeRetroceder(remote,exp))return;
     const remoteAt=String(remote.updatedAt||remote._fecha||'');
-    const pendingAt=String(exp._pending_fs_at||'');
-    if(!remoteAt||pendingAt>remoteAt)exps[idx]=exp;
+    const contentAt=String(exp.updatedAt||exp._fecha||'');
+    // Comparar updatedAt del contenido, NO _pending_fs_at (ese se estampa al fallar el save)
+    if(!remoteAt||contentAt>remoteAt)exps[idx]=exp;
+    keep.push(exp);
   });
+  try{
+    if(keep.length)lsStoreJson(SST_PENDING_EXP_KEY,keep);
+    else localStorage.removeItem(SST_PENDING_EXP_KEY);
+  }catch(e){}
 }
 /** Expira el JWT de Firebase (ms epoch) o 0 si no se puede leer. */
 function _firebaseIdTokenExpMs(jwt){
@@ -1854,10 +1912,31 @@ async function syncPendingExpedientesToFirestore(){
   const remaining=[];
   for(let i=0;i<pending.length;i++){
     const exp=pending[i];
+    const id=expedienteDocId(exp);
     const depto=resolveDeptoFirestoreId(exp._depto||deptoActivo||'guaviare',exp);
+    let remoto=null;
+    if(window._db&&window._fsGetDoc&&id){
+      try{
+        const ref=expedienteDocRef(window._db,depto,id);
+        if(ref){
+          const snap=await window._fsGetDoc(ref);
+          if(snap&&snap.exists&&snap.exists())
+            remoto=typeof mergeExpFromFirestoreSnapshot==='function'
+              ?mergeExpFromFirestoreSnapshot(snap.data(),snap.id)
+              :Object.assign({_exp:id},snap.data());
+        }
+      }catch(errR){console.warn('syncPending getDoc',id,errR);}
+    }
+    if(remoto&&expedienteFlujoNoDebeRetroceder(remoto,exp)){
+      // Firestore ya tiene cierre/fase más avanzada: no subir el local viejo
+      removeExpLocalBackup(id);
+      mergeExpIntoExpsCache(remoto);
+      synced++;
+      continue;
+    }
     const ok=await saveExpedienteDoc(depto,exp);
     if(ok){
-      removeExpLocalBackup(expedienteDocId(exp));
+      removeExpLocalBackup(id);
       mergeExpIntoExpsCache(exp);
       synced++;
     }else remaining.push(exp);
@@ -3015,10 +3094,14 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
     if(!rem){put(t);return;}
     if(t.eliminada&&!rem.eliminada){put(t);return;}
     if(rem.eliminada&&!t.eliminada)return;
-    // Sync local pendiente (marcadores / entrega en curso): conservar local
-    if(t._pending_fs_sync){put(t);return;}
     const lf=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
     const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();
+    const lr=faseFlujoFirmaRank(lf);
+    const rr=faseFlujoFirmaRank(rf);
+    // Remoto más avanzado (p. ej. cerrada): no revivir por firmar/notificar local
+    if(rr>lr&&(rr>=5||lr>0)){put(rem);return;}
+    // Sync local pendiente (marcadores / entrega en curso): conservar local si no retrocede
+    if(t._pending_fs_sync&&!(rr>lr)){put(t);return;}
     // Encargado devolvió desde Por firmar: remoto deja fase vacía + Por corregir.
     // Antes se resuscitaba firmaWf local y VITAL seguía viéndola hasta F5.
     if(lf&&!rf){
@@ -3084,15 +3167,21 @@ function applyExpedienteFirestoreChanges(changes,opts){
       const remoteTasks=(exp.tasks&&exp.tasks.length)||0;
       if(localAt&&remoteAt&&localAt>remoteAt&&localTasks>remoteTasks)return;
       if(local._pending_fs_sync&&localTasks>remoteTasks)return;
+      // Remoto más avanzado en flujo: aceptar aunque haya pending local (evita resucitar por notificar)
+      const remotoGanaFlujo=expedienteFlujoNoDebeRetroceder(exp,local);
       // Guardado en vuelo (impreso / cierre / firma): no aceptar eco viejo que borre el avance
-      if(local._pending_fs_sync&&localAt&&(!remoteAt||remoteAt<=localAt))return;
+      if(!remotoGanaFlujo&&local._pending_fs_sync&&localAt&&(!remoteAt||remoteAt<=localAt))return;
       // Fusionar tasks: no revivir eliminadas locales ni perder firmaWf
       const merged=Object.assign({},exp);
       merged.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
-      if(local._pending_fs_sync){
+      if(local._pending_fs_sync&&!remotoGanaFlujo){
         merged._pending_fs_sync=true;
         merged._pending_fs_at=local._pending_fs_at||merged.updatedAt;
         if(local._pqrs_workflow!=null)merged._pqrs_workflow=local._pqrs_workflow;
+      }else if(remotoGanaFlujo){
+        delete merged._pending_fs_sync;
+        delete merged._pending_fs_at;
+        removeExpLocalBackup(exp._exp);
       }
       exps[idx]=merged;
     }else{

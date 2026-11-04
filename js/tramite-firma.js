@@ -1442,6 +1442,14 @@ async function finalizarTramiteTrasPublicar(expId,taskId,opts){
     }
     if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
   });
+  // mutateTask dispara persist sin await: forzar commit del cierre antes de dar por notificado
+  try{
+    const eCierre=typeof getExpById==='function'?getExpById(expId):null;
+    if(eCierre&&eCierre._exp&&typeof persistExpedienteGranularAsync==='function'){
+      const okCierre=await persistExpedienteGranularAsync(eCierre);
+      if(!okCierre)console.warn('finalizarTramiteTrasPublicar: cierre no confirmado en Firestore');
+    }
+  }catch(errC){console.warn('finalizarTramiteTrasPublicar persist:',errC);}
   const dropIds=window._tramiteDropProyPend||[];
   window._tramiteDropProyPend=[];
   if(dropIds.length&&typeof driveDeleteInstitutional==='function'){
