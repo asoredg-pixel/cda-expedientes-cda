@@ -6002,6 +6002,78 @@ function markUltimaFilaFijadaNca(tableEl){
   const w=tableEl.offsetWidth||0;
   if(w>0)last.style.setProperty('--pqrs-pin-sep-w',w+'px');
 }
+/** Acordeón de fijadas en Actividades › Por ejecutar / Por revisar: contraído por defecto si hay ≥ 3. */
+const NCA_PINS_ACC_MIN=3;
+const NCA_PINS_ACC_LS='sst_nca_pins_acc_';
+function ncaPinsAcordeonFiltroOk(fil){
+  const f=String(fil||'');
+  return f==='pend'||f==='porver';
+}
+function ncaPinsAcordeonEstaColapsado(fil,n){
+  try{
+    const raw=sessionStorage.getItem(NCA_PINS_ACC_LS+String(fil||''));
+    if(raw==='1')return true;
+    if(raw==='0')return false;
+  }catch(e){}
+  return (n||0)>=NCA_PINS_ACC_MIN;
+}
+function ncaPinsAcordeonGuardar(fil,collapsed){
+  try{sessionStorage.setItem(NCA_PINS_ACC_LS+String(fil||''),collapsed?'1':'0');}catch(e){}
+}
+function toggleAcordeonFijadasAct(ev){
+  if(ev&&ev.preventDefault)ev.preventDefault();
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  const filEl=document.getElementById('f-act-est');
+  const fil=filEl?String(filEl.value||''):'';
+  if(!ncaPinsAcordeonFiltroOk(fil))return;
+  const tbody=document.getElementById('tbl-act');
+  if(!tbody)return;
+  const n=tbody.querySelectorAll('tr.pqrs-nca-pinned').length;
+  ncaPinsAcordeonGuardar(fil,!ncaPinsAcordeonEstaColapsado(fil,n));
+  const wrap=document.getElementById('act-table-wrap');
+  const table=wrap&&wrap.querySelector?wrap.querySelector('table'):(tbody.closest?tbody.closest('table'):null);
+  aplicarAcordeonFijadasAct(table||tbody,fil);
+}
+function aplicarAcordeonFijadasAct(tableEl,filtroAct){
+  if(!tableEl)return;
+  const fil=String(filtroAct||'');
+  if(!ncaPinsAcordeonFiltroOk(fil))return;
+  if(typeof ncaEncargadoSesionPqrsPin==='function'&&!ncaEncargadoSesionPqrsPin())return;
+  const tbody=tableEl.tBodies&&tableEl.tBodies[0]?tableEl.tBodies[0]
+    :(tableEl.tagName==='TBODY'?tableEl:tableEl.querySelector('tbody'));
+  if(!tbody)return;
+  tbody.querySelectorAll('tr.nca-pins-acc-hd').forEach(function(tr){tr.remove();});
+  const pins=Array.prototype.slice.call(tbody.querySelectorAll('tr.pqrs-nca-pinned'));
+  if(!pins.length)return;
+  const n=pins.length;
+  const collapsed=ncaPinsAcordeonEstaColapsado(fil,n);
+  const cols=pins[0].children?pins[0].children.length:8;
+  const tr=document.createElement('tr');
+  tr.className='nca-pins-acc-hd'+(collapsed?' is-collapsed':'');
+  const td=document.createElement('td');
+  td.colSpan=cols;
+  td.setAttribute('role','button');
+  td.tabIndex=0;
+  td.title=collapsed?'Mostrar fijadas':'Ocultar fijadas';
+  td.onclick=function(e){toggleAcordeonFijadasAct(e);};
+  td.onkeydown=function(e){
+    if(e&&(e.key==='Enter'||e.key===' ')){if(e.preventDefault)e.preventDefault();toggleAcordeonFijadasAct(e);}
+  };
+  const chev=collapsed?'▸':'▾';
+  const hint=collapsed?'clic para ver':'clic para ocultar';
+  td.innerHTML='<span class="nca-pins-acc-lbl">'+chev+' 📌 Fijadas ('+n+') · '+hint+'</span>';
+  tr.appendChild(td);
+  tbody.insertBefore(tr,pins[0]);
+  pins.forEach(function(r){
+    r.style.display=collapsed?'none':'';
+    if(collapsed)r.classList.remove('pqrs-nca-pinned-last');
+  });
+  if(!collapsed&&typeof markUltimaFilaFijadaNca==='function')markUltimaFilaFijadaNca(tableEl.tagName==='TABLE'?tableEl:(tableEl.closest?tableEl.closest('table'):tableEl));
+}
+window.ncaPinsAcordeonEstaColapsado=ncaPinsAcordeonEstaColapsado;
+window.ncaPinsAcordeonGuardar=ncaPinsAcordeonGuardar;
+window.toggleAcordeonFijadasAct=toggleAcordeonFijadasAct;
+window.aplicarAcordeonFijadasAct=aplicarAcordeonFijadasAct;
 function pqrsMetCard(filterVal,style,inner,accent,title){
   const cur=String(window._pqrsOfiFiltro||'pend');
   const on=cur===String(filterVal||'');
@@ -32848,6 +32920,7 @@ function pintarActividadesPorTexto(cache,q,filtroAct){
     if(typeof markUltimaFilaFijadaNca==='function'){
       const tblAct=tb.closest?tb.closest('table'):null;
       markUltimaFilaFijadaNca(tblAct);
+      if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);
     }
   }
 }
@@ -33151,6 +33224,7 @@ function renderActividades(opts){
     if(typeof markUltimaFilaFijadaNca==='function'){
       const tblAct=tb.closest('table')||document.querySelector('#act-table-wrap table');
       markUltimaFilaFijadaNca(tblAct);
+      if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);
     }
   }
 }
