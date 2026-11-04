@@ -33,6 +33,7 @@ window._apoyoGlobalSaveTimer=null;
 /** Día de cupo gratis: se renueva a las 02:00 (misma franja en que Blaze renueva lo gratuito). Antes de las 2:00 sigue contando el día anterior. */
 var APOYO_HORA_RENOVACION=2;
 var APOYO_LS_PREFIX='sst_apoyo_uso_v1:';
+var APOYO_LS_GLOBAL_PREFIX='sst_apoyo_consumo_v1:';
 function apoyoHoyLocal(){
   var d=new Date();
   if(d.getHours()<APOYO_HORA_RENOVACION)d.setDate(d.getDate()-1);
@@ -67,6 +68,58 @@ function apoyoLeerMirrorLocal(email){
     var data=JSON.parse(raw);
     return data&&typeof data==='object'?data:null;
   }catch(e){return null;}
+}
+function apoyoMirrorGlobalWrite(){
+  try{
+    var hoy=apoyoHoyLocal();
+    var g=window._apoyoGlobal||{};
+    localStorage.setItem(APOYO_LS_GLOBAL_PREFIX+hoy,JSON.stringify({
+      diaIso:hoy,
+      lecturas:g.lecturas|0,
+      baseB:g.baseB|0,
+      pend:window._apoyoGlobalPend|0,
+      pendBase:window._apoyoGlobalBasePend|0
+    }));
+  }catch(e){}
+}
+function apoyoLeerMirrorGlobal(){
+  try{
+    var raw=localStorage.getItem(APOYO_LS_GLOBAL_PREFIX+apoyoHoyLocal());
+    if(!raw)return null;
+    var d=JSON.parse(raw);
+    return d&&typeof d==='object'?d:null;
+  }catch(e){return null;}
+}
+/** Aplica servidor + espejo del día (máximo) y reencola pendientes no flushados. */
+function apoyoAplicarEstadoGlobal(lecturas,baseB,opts){
+  opts=opts||{};
+  var hoy=apoyoHoyLocal();
+  var lect=lecturas|0;
+  var base=baseB|0;
+  var mir=opts.skipMirror?null:apoyoLeerMirrorGlobal();
+  if(mir&&apoyoNormDiaIso(mir.diaIso)===hoy){
+    lect=Math.max(lect,mir.lecturas|0);
+    base=Math.max(base,mir.baseB|0);
+    if(!opts.skipPendRequeue){
+      var p=mir.pend|0,pb=mir.pendBase|0;
+      window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+p;
+      window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+pb;
+      // Consumir pend del espejo al reencolar (evita doble conteo si se vuelve a cargar)
+      try{
+        localStorage.setItem(APOYO_LS_GLOBAL_PREFIX+hoy,JSON.stringify({
+          diaIso:hoy,lecturas:lect,baseB:base,pend:0,pendBase:0
+        }));
+      }catch(e){}
+    }
+  }
+  window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
+  apoyoMirrorGlobalWrite();
+  return window._apoyoGlobal;
+}
+/** Lecturas globales a mostrar: servidor + pendiente local aún no confirmado. */
+function apoyoLecturasGlobalVista(){
+  var g=window._apoyoGlobal||{};
+  return (g.lecturas|0)+(window._apoyoGlobalPend|0);
 }
 function apoyoMsHastaRenovacion(){
   var ahora=new Date();
@@ -467,6 +520,7 @@ function apoyoBindFlush(){
     if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
     // Siempre espejo sync primero (Ctrl+F5 aborta el await a Firestore)
     if(window._apoyoUso)apoyoMirrorLocal(window._apoyoUso);
+    apoyoMirrorGlobalWrite();
     if(window._apoyoUsoDirty)apoyoGuardarUso();
     if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoFlushGlobalPendiente();
   };
@@ -537,6 +591,8 @@ async function apoyoFlushGlobalPendiente(){
           updatedAt:new Date().toISOString()
         },{merge:true});
         window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
+        // No poner pend=0 aquí: durante el await pudieron encolarse aportes nuevos
+        apoyoMirrorGlobalWrite();
       });
     }else if(window._fsSetDoc&&window._fsGetDoc){
       var snap2=await window._fsGetDoc(ref);
@@ -545,6 +601,12 @@ async function apoyoFlushGlobalPendiente(){
       var base2=(cur2.baseB|0)+dbInc;
       await window._fsSetDoc(ref,{diaIso:hoy,lecturas:lect2,baseB:base2,updatedAt:new Date().toISOString()},{merge:true});
       window._apoyoGlobal={diaIso:hoy,lecturas:lect2,baseB:base2};
+      apoyoMirrorGlobalWrite();
+    }else{
+      window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
+      window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+dbInc;
+      apoyoMirrorGlobalWrite();
+      return;
     }
     if(window._apoyoUsoListo&&window._apoyoUso){
       if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
@@ -554,16 +616,37 @@ async function apoyoFlushGlobalPendiente(){
     console.warn('apoyoFlushGlobalPendiente',e);
     window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
     window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+dbInc;
+    apoyoMirrorGlobalWrite();
   }
 }
 function apoyoSumarGlobalLocal(n,deltaBaseB){
   n=n|0;deltaBaseB=deltaBaseB|0;
   if(n<=0&&deltaBaseB<=0)return;
-  // Solo encola el aporte: la barra G es la misma para todos (apoyo_consumo en Firestore).
-  // No inflar _apoyoGlobal en local — si no, un responsable ve 2% y otro aún 1%.
+  // Encola aporte al proyecto. La barra G se pinta desde servidor+espejo (mismo día para todos tras sync).
   window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
   window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+deltaBaseB;
+  // Conservar pend en espejo por si F5 corta el flush
+  var g=window._apoyoGlobal||{diaIso:apoyoHoyLocal(),lecturas:0,baseB:0};
+  if(g.diaIso!==apoyoHoyLocal())g={diaIso:apoyoHoyLocal(),lecturas:0,baseB:0};
+  window._apoyoGlobal=g;
+  apoyoMirrorGlobalWrite();
   apoyoProgramarGlobalFlush();
+}
+async function apoyoCargarGlobalDia(){
+  if(apoyoEsAdmin())return;
+  var hoy=apoyoHoyLocal();
+  var lect=0,base=0;
+  if(window._db&&window._fsDoc&&window._fsGetDoc){
+    try{
+      var snap=await window._fsGetDoc(window._fsDoc(window._db,'apoyo_consumo',hoy));
+      var d=snap&&snap.exists&&snap.exists()?snap.data():{};
+      lect=d.lecturas|0;
+      base=d.baseB|0;
+    }catch(e){console.warn('apoyoCargarGlobalDia',e);}
+  }
+  apoyoAplicarEstadoGlobal(lect,base,{});
+  if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoProgramarGlobalFlush();
+  apoyoPintarUI();
 }
 function apoyoEscucharGlobalDia(){
   if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
@@ -574,11 +657,13 @@ function apoyoEscucharGlobalDia(){
     var hoy2=apoyoHoyLocal();
     if(hoy2!==hoy){apoyoEscucharGlobalDia();return;}
     var d=snap&&snap.exists&&snap.exists()?snap.data():{};
-    window._apoyoGlobal={
-      diaIso:hoy2,
-      lecturas:d.lecturas|0,
-      baseB:d.baseB|0
-    };
+    // Servidor es fuente; el pend local se suma solo en la vista hasta el flush
+    var cur=window._apoyoGlobal||{lecturas:0,baseB:0};
+    var lect=Math.max(d.lecturas|0,cur.lecturas|0);
+    var base=Math.max(d.baseB|0,cur.baseB|0);
+    if((d.lecturas|0)>=(cur.lecturas|0)){lect=d.lecturas|0;base=d.baseB|0;}
+    window._apoyoGlobal={diaIso:hoy2,lecturas:lect,baseB:base};
+    apoyoMirrorGlobalWrite();
     if(window._apoyoUsoListo&&window._apoyoUso){
       if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
       apoyoPintarUI();
@@ -712,8 +797,7 @@ function apoyoPintarMedidor(){
   var cupo=cfg.cupoDiario|0;
   var cupoG=cfg.cupoGlobalDia|0;
   var lectDia=u.lecturasDia|0;
-  var g=window._apoyoGlobal||{lecturas:0};
-  var lectG=g.lecturas|0;
+  var lectG=apoyoLecturasGlobalVista();
   var sobre=cupo>0&&lectDia>cupo;
   var sobreG=cupoG>0&&lectG>cupoG;
   var pct=cupo?Math.min(100,Math.round((lectDia/cupo)*100)):(lectDia>0?100:0);
@@ -773,6 +857,7 @@ async function apoyoInitSesion(){
   window._apoyoGlobalBasePend=0;
   await apoyoCargarCfg();
   await apoyoCargarUso();
+  await apoyoCargarGlobalDia();
   apoyoEscucharGlobalDia();
   apoyoBindFlush();
   apoyoProgramarRenovacionDia();
