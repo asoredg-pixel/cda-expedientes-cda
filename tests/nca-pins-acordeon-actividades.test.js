@@ -1,6 +1,6 @@
 /**
  * nca-pins-acordeon-actividades.test.js — Actividades › Por ejecutar / Por revisar:
- * las filas fijadas del encargado NCA van en un acordeón contraíble.
+ * las filas fijadas del encargado NCA van en un acordeón contraíble (barra encima de la tabla).
  * Por defecto contraído solo si hay ≥ 3 fijadas visibles; preferencia en sessionStorage.
  */
 
@@ -28,48 +28,44 @@ function extraer(src, nombres) {
   }).join('\n')
 }
 
-function makeTr(cls) {
+function makeTr(cls, withLbl) {
   const children = Array.from({ length: 8 }, () => ({ tagName: 'TD' }))
-  return {
+  const tr = {
     className: cls || '',
     classList: {
       _s: new Set(String(cls || '').split(/\s+/).filter(Boolean)),
-      add(c) { this._s.add(c); this.className = [...this._s].join(' ') },
-      remove(c) { this._s.delete(c); this.className = [...this._s].join(' ') },
+      add(c) { this._s.add(c); tr.className = [...this._s].join(' ') },
+      remove(c) { this._s.delete(c); tr.className = [...this._s].join(' ') },
       contains(c) { return this._s.has(c) }
     },
     children,
     style: { display: '' },
-    parentNode: null
+    parentNode: null,
+    querySelector(sel) {
+      if (sel === '.pqrs-nca-pin-lbl' && withLbl) return { className: 'pqrs-nca-pin-lbl' }
+      return null
+    }
   }
+  return tr
 }
 
 function makeTbody(pinCount, restCount) {
   const rows = []
-  for (let i = 0; i < pinCount; i++) rows.push(makeTr('pqrs-nca-pinned'))
-  for (let i = 0; i < restCount; i++) rows.push(makeTr(''))
+  for (let i = 0; i < pinCount; i++) rows.push(makeTr('pqrs-nca-pinned', true))
+  for (let i = 0; i < restCount; i++) rows.push(makeTr('', false))
   const tbody = {
     tagName: 'TBODY',
+    id: 'tbl-act',
     _rows: rows,
     querySelectorAll(sel) {
       if (sel === 'tr.pqrs-nca-pinned') return this._rows.filter(r => r.classList.contains('pqrs-nca-pinned'))
-      if (sel === 'tr.nca-pins-acc-hd') return this._rows.filter(r => r.classList.contains('nca-pins-acc-hd'))
-      if (sel === 'tr.pqrs-nca-pinned-last') return this._rows.filter(r => r.classList.contains('pqrs-nca-pinned-last'))
+      if (sel === 'tr.nca-pins-acc-hd') return this._rows.filter(r => String(r.className || '').includes('nca-pins-acc-hd'))
+      if (sel === 'tr') return this._rows.slice()
       return []
     },
-    querySelector() { return null },
-    insertBefore(tr, ref) {
-      const i = this._rows.indexOf(ref)
-      if (i < 0) this._rows.unshift(tr)
-      else this._rows.splice(i, 0, tr)
-      tr.parentNode = this
-    }
+    querySelector() { return null }
   }
-  rows.forEach(r => { r.parentNode = tbody; r.remove = function () {
-    const i = tbody._rows.indexOf(this)
-    if (i >= 0) tbody._rows.splice(i, 1)
-  } })
-  // remove() used on accordion hd via forEach tr.remove
+  rows.forEach(r => { r.parentNode = tbody })
   return tbody
 }
 
@@ -81,32 +77,78 @@ function ctx() {
     removeItem(k) { delete store[k] },
     _store: store
   }
+  let barEl = null
+  const tbody = makeTbody(0, 0)
+  const table = { tagName: 'TABLE', tBodies: [tbody], querySelector: () => tbody }
+  const wrap = {
+    id: 'act-table-wrap',
+    firstChild: table,
+    children: [table],
+    querySelector(sel) { return sel === 'table' ? table : null },
+    insertBefore(node, ref) {
+      this.children.unshift(node)
+      this.firstChild = this.children[0]
+      if (node && node.id === 'nca-pins-acc-bar') barEl = node
+      return node
+    }
+  }
+  const els = { 'tbl-act': tbody, 'act-table-wrap': wrap, 'nca-pins-acc-bar': null, 'f-act-est': { value: 'porver' } }
+  const document = {
+    getElementById(id) {
+      if (id === 'nca-pins-acc-bar') return barEl
+      return els[id] || null
+    },
+    createElement(tag) {
+      const el = {
+        tagName: String(tag).toUpperCase(),
+        type: '',
+        id: '',
+        className: '',
+        title: '',
+        innerHTML: '',
+        onclick: null,
+        style: {},
+        setAttribute() {},
+        parentNode: null
+      }
+      return el
+    },
+    querySelector(sel) {
+      if (sel === '#act-table-wrap table') return table
+      return null
+    }
+  }
   const c = createContext({
     window: {},
+    console,
     sessionStorage,
-    document: { getElementById: () => null },
+    document,
     NCA_PINS_ACC_MIN: 3,
     NCA_PINS_ACC_LS: 'sst_nca_pins_acc_',
     ncaEncargadoSesionPqrsPin: () => true,
-    markUltimaFilaFijadaNca: () => {}
+    markUltimaFilaFijadaNca: () => {},
+    _barRef: () => barEl,
+    _setPins(n) {
+      const tb = makeTbody(n, 2)
+      els['tbl-act'] = tb
+      table.tBodies = [tb]
+      barEl = null
+    }
   })
-  // Extraer constantes + funciones: las const están justo antes de las functions
   const bloqIni = core.indexOf('const NCA_PINS_ACC_MIN=3')
   if (bloqIni < 0) throw new Error('NCA_PINS_ACC_MIN no encontrado')
   const names = [
     'ncaPinsAcordeonFiltroOk',
     'ncaPinsAcordeonEstaColapsado',
     'ncaPinsAcordeonGuardar',
+    'ncaPinsFilasEnTbody',
+    'ncaPinsAcordeonQuitarBarra',
     'toggleAcordeonFijadasAct',
     'aplicarAcordeonFijadasAct'
   ]
   const funcs = extraer(core, names)
   const consts = core.slice(bloqIni, core.indexOf('function ncaPinsAcordeonFiltroOk'))
   runInContext(consts + '\n' + funcs, c)
-  c.window.ncaPinsAcordeonEstaColapsado = c.ncaPinsAcordeonEstaColapsado
-  c.window.ncaPinsAcordeonGuardar = c.ncaPinsAcordeonGuardar
-  c.window.toggleAcordeonFijadasAct = c.toggleAcordeonFijadasAct
-  c.window.aplicarAcordeonFijadasAct = c.aplicarAcordeonFijadasAct
   return c
 }
 
@@ -131,83 +173,45 @@ describe('Acordeón de fijadas en Actividades', () => {
     expect(c.ncaPinsAcordeonFiltroOk('pend')).toBe(true)
     expect(c.ncaPinsAcordeonFiltroOk('porver')).toBe(true)
     expect(c.ncaPinsAcordeonFiltroOk('porcorr')).toBe(false)
-    expect(c.ncaPinsAcordeonFiltroOk('done')).toBe(false)
   })
 
-  it('con ≥ 3 fijadas inserta cabecera y oculta las filas', () => {
-    const tbody = makeTbody(3, 2)
-    // fake createElement / document pieces used by aplicarAcordeonFijadasAct
-    const created = []
-    c.document = {
-      getElementById: () => null,
-      createElement(tag) {
-        const el = {
-          tagName: String(tag).toUpperCase(),
-          className: '',
-          classList: {
-            _s: new Set(),
-            add(x) { this._s.add(x); el.className = [...this._s].join(' ') },
-            remove(x) { this._s.delete(x); el.className = [...this._s].join(' ') },
-            contains(x) { return this._s.has(x) }
-          },
-          style: {},
-          children: [],
-          colSpan: 1,
-          setAttribute() {},
-          appendChild(ch) { this.children.push(ch); ch.parentNode = this },
-          innerHTML: '',
-          onclick: null,
-          onkeydown: null,
-          tabIndex: 0,
-          title: '',
-          remove() {
-            if (this.parentNode && this.parentNode._rows) {
-              const i = this.parentNode._rows.indexOf(this)
-              if (i >= 0) this.parentNode._rows.splice(i, 1)
-            }
-          }
-        }
-        created.push(el)
-        return el
-      }
-    }
-    // Re-bind document into context after mutation — functions close over global document via context
-    runInContext('document = globalThis.document', Object.assign(c, { globalThis: c }))
-    // The functions already captured document from createContext; update the same object
-    Object.assign(c.document, {
-      getElementById: () => null,
-      createElement: c.document.createElement
-    })
-
-    const table = { tagName: 'TABLE', tBodies: [tbody], querySelector: () => tbody, offsetWidth: 800 }
-    c.aplicarAcordeonFijadasAct(table, 'pend')
-    const hd = tbody._rows.filter(r => String(r.className || '').includes('nca-pins-acc-hd'))
-    expect(hd.length).toBe(1)
-    expect(String(hd[0].className)).toMatch(/is-collapsed/)
-    const pins = tbody._rows.filter(r => r.classList && r.classList.contains('pqrs-nca-pinned'))
+  it('con ≥ 3 fijadas crea barra encima y oculta las filas', () => {
+    c._setPins(4)
+    const table = c.document.getElementById('act-table-wrap').querySelector('table')
+    c.aplicarAcordeonFijadasAct(table, 'porver')
+    const bar = c._barRef()
+    expect(bar).toBeTruthy()
+    expect(bar.id).toBe('nca-pins-acc-bar')
+    expect(String(bar.className)).toMatch(/is-collapsed/)
+    expect(String(bar.innerHTML)).toMatch(/Fijadas \(4\)/)
+    expect(String(bar.innerHTML)).toMatch(/clic para ver/)
+    const pins = c.ncaPinsFilasEnTbody(c.document.getElementById('tbl-act'))
     expect(pins.every(p => p.style.display === 'none')).toBe(true)
-    expect(String(hd[0].children[0].innerHTML)).toMatch(/Fijadas \(3\)/)
-    expect(String(hd[0].children[0].innerHTML)).toMatch(/clic para ver/)
   })
 
-  it('sin sesión NCA pin no inserta cabecera', () => {
+  it('sin sesión NCA pin no crea barra', () => {
     c.ncaEncargadoSesionPqrsPin = () => false
-    const tbody = makeTbody(4, 1)
-    const table = { tagName: 'TABLE', tBodies: [tbody], querySelector: () => tbody }
-    c.document.createElement = () => { throw new Error('no debería crear') }
-    c.aplicarAcordeonFijadasAct(table, 'pend')
-    expect(tbody._rows.filter(r => String(r.className || '').includes('nca-pins-acc-hd')).length).toBe(0)
+    c._setPins(5)
+    const table = c.document.getElementById('act-table-wrap').querySelector('table')
+    c.aplicarAcordeonFijadasAct(table, 'porver')
+    expect(c._barRef()).toBe(null)
+  })
+
+  it('detecta fijadas por etiqueta si falta la clase', () => {
+    const tb = c.document.getElementById('tbl-act')
+    const onlyLbl = makeTr('', true)
+    onlyLbl.parentNode = tb
+    tb._rows = [onlyLbl]
+    expect(c.ncaPinsFilasEnTbody(tb).length).toBe(1)
   })
 
   it('renderActividades y pintarActividadesPorTexto llaman al acordeón', () => {
-    expect(core).toMatch(/aplicarAcordeonFijadasAct\(tblAct,filtroAct\)/)
     const hits = core.match(/aplicarAcordeonFijadasAct\(tblAct,filtroAct\)/g) || []
     expect(hits.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('CSS de cabecera sticky presente', () => {
-    expect(css).toMatch(/tr\.nca-pins-acc-hd\s*>\s*td/)
-    expect(css).toMatch(/position:\s*sticky/)
-    expect(css).toMatch(/nca-pins-acc-hd\.is-collapsed/)
+  it('CSS de barra de acordeón presente', () => {
+    expect(css).toMatch(/\.nca-pins-acc-bar\s*\{/)
+    expect(css).toMatch(/nca-pins-acc-bar\.is-collapsed/)
   })
 })

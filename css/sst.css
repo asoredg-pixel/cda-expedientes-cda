@@ -3680,23 +3680,21 @@ details[open]>summary.form-section-hdr:before{transform:rotate(90deg)}
 /* Fijadas: sin caja; solo separador degradado bajo la última fijada (color de la paleta activa) */
 tr.pqrs-nca-pinned > td{background:transparent!important}
 #pg-act #act-table-wrap tbody tr.pqrs-nca-pinned:hover > td{background:transparent!important}
-/* Acordeón de fijadas (Actividades › Por ejecutar / Por revisar) */
-#pg-act #act-table-wrap tbody tr.nca-pins-acc-hd > td{
-  position:sticky;top:0;z-index:3;
-  padding:8px 10px;cursor:pointer;user-select:none;
-  font-size:12px;font-weight:600;color:var(--tx);
-  border-bottom:1px solid color-mix(in srgb, var(--met-accent-hex, var(--or)) 35%, var(--bd));
-  background:color-mix(in srgb, var(--met-accent-hex, var(--or)) 9%, var(--sf,#fff))!important;
+/* Acordeón de fijadas: barra encima de la tabla (Por ejecutar / Por revisar) */
+#pg-act #act-table-wrap .nca-pins-acc-bar{
+  display:flex;align-items:center;width:100%;box-sizing:border-box;
+  margin:0 0 6px;padding:8px 12px;cursor:pointer;user-select:none;
+  font:inherit;font-size:12px;font-weight:600;color:var(--tx);text-align:left;
+  border:1px solid var(--bd);border-left:3px solid var(--met-accent-hex, var(--bl));
+  border-radius:var(--r);background:var(--sf,#fff);
 }
-#pg-act #act-table-wrap tbody tr.nca-pins-acc-hd:hover > td,
-#pg-act #act-table-wrap tbody tr.nca-pins-acc-hd:nth-child(even):hover > td{
-  background:color-mix(in srgb, var(--met-accent-hex, var(--or)) 16%, var(--sf,#fff))!important;
+#pg-act #act-table-wrap .nca-pins-acc-bar:hover{
+  background:rgba(26,73,46,.04);
 }
-#pg-act #act-table-wrap tbody tr.nca-pins-acc-hd.is-collapsed > td{
-  border-bottom:2px solid transparent;
-  box-shadow:0 2px 0 0 color-mix(in srgb, var(--met-accent-hex, var(--or)) 45%, transparent);
+#pg-act #act-table-wrap .nca-pins-acc-bar.is-collapsed{
+  box-shadow:0 2px 0 0 rgba(37,99,235,.28);
 }
-#pg-act #act-table-wrap tbody tr.nca-pins-acc-hd .nca-pins-acc-lbl{letter-spacing:.01em}
+#pg-act #act-table-wrap .nca-pins-acc-bar .nca-pins-acc-lbl{letter-spacing:.01em}
 #pg-act #act-table-wrap,
 #tbl-pqrs-ofi-wrap{position:relative}
 #pg-act #act-table-wrap tbody tr.pqrs-nca-pinned-last > td:first-child,

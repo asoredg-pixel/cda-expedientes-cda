@@ -6020,6 +6020,24 @@ function ncaPinsAcordeonEstaColapsado(fil,n){
 function ncaPinsAcordeonGuardar(fil,collapsed){
   try{sessionStorage.setItem(NCA_PINS_ACC_LS+String(fil||''),collapsed?'1':'0');}catch(e){}
 }
+/** Filas fijadas: clase .pqrs-nca-pinned o, si falta, etiqueta 📌 en Ref. */
+function ncaPinsFilasEnTbody(tbody){
+  if(!tbody)return[];
+  const byCls=Array.prototype.slice.call(tbody.querySelectorAll('tr.pqrs-nca-pinned'));
+  if(byCls.length)return byCls;
+  return Array.prototype.slice.call(tbody.querySelectorAll('tr')).filter(function(tr){
+    return !!(tr.querySelector&&tr.querySelector('.pqrs-nca-pin-lbl'));
+  });
+}
+function ncaPinsAcordeonQuitarBarra(){
+  const bar=document.getElementById('nca-pins-acc-bar');
+  if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
+  const tbody=document.getElementById('tbl-act');
+  if(!tbody)return;
+  Array.prototype.forEach.call(tbody.querySelectorAll('tr.nca-pins-acc-hd'),function(tr){
+    if(tr.parentNode)tr.parentNode.removeChild(tr);
+  });
+}
 function toggleAcordeonFijadasAct(ev){
   if(ev&&ev.preventDefault)ev.preventDefault();
   if(ev&&ev.stopPropagation)ev.stopPropagation();
@@ -6028,50 +6046,65 @@ function toggleAcordeonFijadasAct(ev){
   if(!ncaPinsAcordeonFiltroOk(fil))return;
   const tbody=document.getElementById('tbl-act');
   if(!tbody)return;
-  const n=tbody.querySelectorAll('tr.pqrs-nca-pinned').length;
+  const n=ncaPinsFilasEnTbody(tbody).length;
   ncaPinsAcordeonGuardar(fil,!ncaPinsAcordeonEstaColapsado(fil,n));
   const wrap=document.getElementById('act-table-wrap');
   const table=wrap&&wrap.querySelector?wrap.querySelector('table'):(tbody.closest?tbody.closest('table'):null);
   aplicarAcordeonFijadasAct(table||tbody,fil);
 }
 function aplicarAcordeonFijadasAct(tableEl,filtroAct){
-  if(!tableEl)return;
-  const fil=String(filtroAct||'');
-  if(!ncaPinsAcordeonFiltroOk(fil))return;
-  if(typeof ncaEncargadoSesionPqrsPin==='function'&&!ncaEncargadoSesionPqrsPin())return;
-  const tbody=tableEl.tBodies&&tableEl.tBodies[0]?tableEl.tBodies[0]
-    :(tableEl.tagName==='TBODY'?tableEl:tableEl.querySelector('tbody'));
-  if(!tbody)return;
-  tbody.querySelectorAll('tr.nca-pins-acc-hd').forEach(function(tr){tr.remove();});
-  const pins=Array.prototype.slice.call(tbody.querySelectorAll('tr.pqrs-nca-pinned'));
-  if(!pins.length)return;
-  const n=pins.length;
-  const collapsed=ncaPinsAcordeonEstaColapsado(fil,n);
-  const cols=pins[0].children?pins[0].children.length:8;
-  const tr=document.createElement('tr');
-  tr.className='nca-pins-acc-hd'+(collapsed?' is-collapsed':'');
-  const td=document.createElement('td');
-  td.colSpan=cols;
-  td.setAttribute('role','button');
-  td.tabIndex=0;
-  td.title=collapsed?'Mostrar fijadas':'Ocultar fijadas';
-  td.onclick=function(e){toggleAcordeonFijadasAct(e);};
-  td.onkeydown=function(e){
-    if(e&&(e.key==='Enter'||e.key===' ')){if(e.preventDefault)e.preventDefault();toggleAcordeonFijadasAct(e);}
-  };
-  const chev=collapsed?'▸':'▾';
-  const hint=collapsed?'clic para ver':'clic para ocultar';
-  td.innerHTML='<span class="nca-pins-acc-lbl">'+chev+' 📌 Fijadas ('+n+') · '+hint+'</span>';
-  tr.appendChild(td);
-  tbody.insertBefore(tr,pins[0]);
-  pins.forEach(function(r){
-    r.style.display=collapsed?'none':'';
-    if(collapsed)r.classList.remove('pqrs-nca-pinned-last');
-  });
-  if(!collapsed&&typeof markUltimaFilaFijadaNca==='function')markUltimaFilaFijadaNca(tableEl.tagName==='TABLE'?tableEl:(tableEl.closest?tableEl.closest('table'):tableEl));
+  try{
+    const fil=String(filtroAct||'');
+    if(!ncaPinsAcordeonFiltroOk(fil)){ncaPinsAcordeonQuitarBarra();return;}
+    if(typeof ncaEncargadoSesionPqrsPin==='function'&&!ncaEncargadoSesionPqrsPin()){ncaPinsAcordeonQuitarBarra();return;}
+    const tbody=document.getElementById('tbl-act')
+      ||(tableEl&&tableEl.tBodies&&tableEl.tBodies[0])
+      ||(tableEl&&tableEl.tagName==='TBODY'?tableEl:(tableEl&&tableEl.querySelector?tableEl.querySelector('tbody'):null));
+    if(!tbody){ncaPinsAcordeonQuitarBarra();return;}
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr.nca-pins-acc-hd'),function(tr){
+      if(tr.parentNode)tr.parentNode.removeChild(tr);
+    });
+    const pins=ncaPinsFilasEnTbody(tbody);
+    const wrap=document.getElementById('act-table-wrap');
+    if(!pins.length){ncaPinsAcordeonQuitarBarra();return;}
+    pins.forEach(function(r){
+      if(r.classList&&!r.classList.contains('pqrs-nca-pinned'))r.classList.add('pqrs-nca-pinned');
+    });
+    const n=pins.length;
+    const collapsed=ncaPinsAcordeonEstaColapsado(fil,n);
+    const chev=collapsed?'▸':'▾';
+    const hint=collapsed?'clic para ver':'clic para ocultar';
+    let bar=document.getElementById('nca-pins-acc-bar');
+    if(!bar){
+      bar=document.createElement('button');
+      bar.type='button';
+      bar.id='nca-pins-acc-bar';
+      bar.className='nca-pins-acc-bar';
+      if(wrap){
+        const tabla=wrap.querySelector('table');
+        if(tabla)wrap.insertBefore(bar,tabla);
+        else wrap.insertBefore(bar,wrap.firstChild);
+      }else if(tbody.parentNode){
+        tbody.parentNode.insertBefore(bar,tbody);
+      }
+    }
+    bar.className='nca-pins-acc-bar'+(collapsed?' is-collapsed':'');
+    bar.title=collapsed?'Mostrar fijadas':'Ocultar fijadas';
+    bar.setAttribute('aria-expanded',collapsed?'false':'true');
+    bar.onclick=function(e){toggleAcordeonFijadasAct(e);};
+    bar.innerHTML='<span class="nca-pins-acc-lbl">'+chev+' 📌 Fijadas ('+n+') · '+hint+'</span>';
+    pins.forEach(function(r){
+      r.style.display=collapsed?'none':'';
+      if(collapsed&&r.classList)r.classList.remove('pqrs-nca-pinned-last');
+    });
+    const tbl=tableEl&&tableEl.tagName==='TABLE'?tableEl
+      :(wrap&&wrap.querySelector?wrap.querySelector('table'):(tbody.closest?tbody.closest('table'):null));
+    if(!collapsed&&typeof markUltimaFilaFijadaNca==='function'&&tbl)markUltimaFilaFijadaNca(tbl);
+  }catch(errAcc){try{console.warn('aplicarAcordeonFijadasAct',errAcc);}catch(e2){}}
 }
 window.ncaPinsAcordeonEstaColapsado=ncaPinsAcordeonEstaColapsado;
 window.ncaPinsAcordeonGuardar=ncaPinsAcordeonGuardar;
+window.ncaPinsFilasEnTbody=ncaPinsFilasEnTbody;
 window.toggleAcordeonFijadasAct=toggleAcordeonFijadasAct;
 window.aplicarAcordeonFijadasAct=aplicarAcordeonFijadasAct;
 function pqrsMetCard(filterVal,style,inner,accent,title){
@@ -32917,11 +32950,9 @@ function pintarActividadesPorTexto(cache,q,filtroAct){
   }
   if(tb&&!useGantt){
     tb.innerHTML=listRender.length?listRender.map(function(t){return renderActividadesRowHtml(t);}).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
-    if(typeof markUltimaFilaFijadaNca==='function'){
-      const tblAct=tb.closest?tb.closest('table'):null;
-      markUltimaFilaFijadaNca(tblAct);
-      if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);
-    }
+    const tblAct=tb.closest?tb.closest('table'):document.querySelector('#act-table-wrap table');
+    try{if(typeof markUltimaFilaFijadaNca==='function')markUltimaFilaFijadaNca(tblAct);}catch(eM){}
+    try{if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);}catch(eA){}
   }
 }
 /** Buscador de actividades con las mismas características de filtrado que Consulta (`matchS`). */
@@ -33221,11 +33252,9 @@ function renderActividades(opts){
   }
   if(tb&&!useGantt){
     tb.innerHTML=listRender.length?listRender.map(t=>renderActividadesRowHtml(t)).join(''):'<tr><td colspan="'+colSpan+'" class="emp">Sin actividades en este filtro.</td></tr>';
-    if(typeof markUltimaFilaFijadaNca==='function'){
-      const tblAct=tb.closest('table')||document.querySelector('#act-table-wrap table');
-      markUltimaFilaFijadaNca(tblAct);
-      if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);
-    }
+    const tblAct=tb.closest('table')||document.querySelector('#act-table-wrap table');
+    try{if(typeof markUltimaFilaFijadaNca==='function')markUltimaFilaFijadaNca(tblAct);}catch(eM){}
+    try{if(typeof aplicarAcordeonFijadasAct==='function')aplicarAcordeonFijadasAct(tblAct,filtroAct);}catch(eA){}
   }
 }
 // PERSONA_ROLES → js/constants.js
