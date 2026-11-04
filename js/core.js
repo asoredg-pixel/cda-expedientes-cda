@@ -36152,7 +36152,7 @@ function openPqrsParaFirmaModal(expId){
   if(!docsHtml)docsHtml='<div style="font-size:12px;color:var(--tx3)">Sin documento en Drive — revise la entrega del responsable.</div>';
   body.innerHTML=
     '<div style="font-size:13px;font-weight:600;margin-bottom:.5rem">🖨 Por imprimir — pasar a firma del Director — '+escAttr(expId)+'</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Revise la <strong>proyección</strong> y los <strong>anexos</strong>, imprima lo necesario y use <strong>Pasar a firma</strong>. Quedará en «Por firmar» para el Director.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Revise la <strong>proyección</strong> y los <strong>anexos</strong> y use <strong>Pasar a firma</strong>. Quedará en «Por firmar»; allí VITAL o el encargado NCA deben marcar <strong>🖨️</strong> cuando esté impreso.</div>'+
     '<div style="padding:10px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r);margin-bottom:12px">'+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Resumen aprobado</div>'+
     '<div style="font-size:12px;white-space:pre-wrap;margin-bottom:6px">'+escAttr(wf.cuerpo||'—')+'</div>'+
@@ -36165,7 +36165,7 @@ function openPqrsParaFirmaModal(expId){
   ov.classList.add('on');
   window._taskModalCtx={mode:'pqrsParaFirma',expId};
 }
-/** Impreso + envío a firma del Director en un solo paso. */
+/** Envío a «Por firmar» del Director. No marca impreso: VITAL / encargado NCA lo hacen con 🖨️. */
 async function pqrsPasarAFirmaDirector(expId){
   if(typeof guardMantenimientoSoloConsulta==='function'&&guardMantenimientoSoloConsulta())return;
   const e=exps.find(x=>String(x._exp||'').trim()===String(expId||'').trim());
@@ -36181,7 +36181,7 @@ async function pqrsPasarAFirmaDirector(expId){
   }
   const patch={
     fase:PQRS_WF.POR_FIRMAR,
-    impreso:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()},
+    impreso:null,
     listo_firma:{por:responsableActivo||rolSesion||'',en:new Date().toISOString()}
   };
   if(notifPor){
@@ -36191,7 +36191,7 @@ async function pqrsPasarAFirmaDirector(expId){
   setPqrsWorkflow(e,patch);
   pqrsSincronizarParticipacionPostAprobacion(e);
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
-  e._pqrs_historial.push({ts:Date.now(),tipo:'pasar_a_firma_director',fecha:hoy(),nota:'Impreso y pasado a firma del Director'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
+  e._pqrs_historial.push({ts:Date.now(),tipo:'pasar_a_firma_director',fecha:hoy(),nota:'Pasado a «Por firmar» (pendiente marcar 🖨️ impreso)'+(notifPor?' · Notificará: '+notifPor:''),oficina:e._pqrs_oficina||'guaviare',por:responsableActivo||''});
   let ok=false;
   try{
     ok=typeof persistExpedienteGranularAsync==='function'
@@ -36210,7 +36210,7 @@ async function pqrsPasarAFirmaDirector(expId){
   renderPqrsOficinaInbox();
   try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(err){}
   if(typeof renderActividades==='function')renderActividades();
-  notif('🖊 Pasó a «Por firmar» (Director)'+(notifPor?' · Notificará: '+notifPor:''),'ok');
+  notif('🖊 Pasó a «Por firmar» — marque 🖨️ cuando esté impreso'+(notifPor?' · Notificará: '+notifPor:''),'ok');
 }
 
 function _pqrsDocDriveUrls(doc){

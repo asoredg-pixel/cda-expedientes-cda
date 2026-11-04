@@ -682,14 +682,14 @@ async function tramitePasarAPorFirmar(expId,taskId){
   let notifPor=String(wf.notificar_por||'').trim();
   const sel=document.getElementById('tramite-notif-por-sel');
   if(sel&&sel.value)notifPor=String(sel.value).trim();
-  const yaImp=!!(wf.impreso&&wf.impreso.en);
   setTaskFirmaWf(expId,taskId,{
     fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.POR_FIRMAR:'por_firmar'),
-    impreso:yaImp?wf.impreso:{por:taskComentarioAutor(),en:new Date().toISOString()},
+    // No auto-marcar impreso: VITAL / encargado NCA lo confirman con 🖨️ en «Por firmar»
+    impreso:null,
     listo_firma:{por:taskComentarioAutor(),en:new Date().toISOString()},
     notificar_por:notifPor
   });
-  notif('🖊 Pasó a «Por firmar» (Director)','ok');
+  notif('🖊 Pasó a «Por firmar» — marque 🖨️ cuando esté impreso','ok');
   closeTaskModal();
   try{if(typeof setActFiltro==='function')setActFiltro('porfirma');}catch(e){}
   if(typeof renderActividades==='function')renderActividades();
