@@ -32,10 +32,41 @@ window._apoyoGlobalSaveTimer=null;
 
 /** Día de cupo gratis: se renueva a las 02:00 (misma franja en que Blaze renueva lo gratuito). Antes de las 2:00 sigue contando el día anterior. */
 var APOYO_HORA_RENOVACION=2;
+var APOYO_LS_PREFIX='sst_apoyo_uso_v1:';
 function apoyoHoyLocal(){
   var d=new Date();
   if(d.getHours()<APOYO_HORA_RENOVACION)d.setDate(d.getDate()-1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+/** Normaliza diaIso a YYYY-MM-DD (evita reiniciar el día si llegó con hora ISO). */
+function apoyoNormDiaIso(s){
+  var t=String(s||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(t))return t.slice(0,10);
+  return '';
+}
+function apoyoLsKey(email){
+  email=String(email||apoyoEmailKey()||'').trim().toLowerCase();
+  return email?(APOYO_LS_PREFIX+email):'';
+}
+/** Copia síncrona del consumo del día: sobrevive Ctrl+F5 si Firestore no alcanzó a escribir. */
+function apoyoMirrorLocal(u){
+  try{
+    var email=apoyoEmailKey();
+    var key=apoyoLsKey(email);
+    if(!key||!u)return;
+    var payload=apoyoPayloadDesdeUso(apoyoAsegurarDia(u),email);
+    localStorage.setItem(key,JSON.stringify(payload));
+  }catch(e){/* quota / privado */}
+}
+function apoyoLeerMirrorLocal(email){
+  try{
+    var key=apoyoLsKey(email||apoyoEmailKey());
+    if(!key)return null;
+    var raw=localStorage.getItem(key);
+    if(!raw)return null;
+    var data=JSON.parse(raw);
+    return data&&typeof data==='object'?data:null;
+  }catch(e){return null;}
 }
 function apoyoMsHastaRenovacion(){
   var ahora=new Date();
@@ -184,17 +215,37 @@ function apoyoAplicarCfgRemota(raw){
   }
   if(typeof apoyoPintarUI==='function')apoyoPintarUI();
 }
+/** Traslada deuda del ciclo (cobro A+B) si cambia el periodo sin haber marcado apoyo. */
+function apoyoHeredarCobroCiclo(destino,origen){
+  if(!destino||!origen||origen.apoyado)return destino;
+  destino.lecturasMes=Math.max(destino.lecturasMes|0,origen.lecturasMes|0);
+  destino.cobrablesMes=Math.max(destino.cobrablesMes|0,origen.cobrablesMes|0);
+  destino.cobrablesBlazeMes=Math.max(destino.cobrablesBlazeMes|0,origen.cobrablesBlazeMes|0);
+  destino.montoUsd=Math.max(Number(destino.montoUsd)||0,Number(origen.montoUsd)||0);
+  destino.montoCop=Math.max(Number(destino.montoCop)||0,Number(origen.montoCop)||0);
+  destino.montoBlazeUsd=Math.max(Number(destino.montoBlazeUsd)||0,Number(origen.montoBlazeUsd)||0);
+  destino.montoBlazeCop=Math.max(Number(destino.montoBlazeCop)||0,Number(origen.montoBlazeCop)||0);
+  return destino;
+}
 function apoyoMergeUsoRemoto(data){
   if(!data||typeof data!=='object')return;
   var per=apoyoPeriodoId();
   if(String(data.periodo||'')!==per){
-    window._apoyoUso=apoyoUsoVacio(per);
+    // Periodo distinto: el % diario arranca en 0, pero el cobro NO pagado se hereda
+    var mirror0=apoyoLeerMirrorLocal();
+    var base=apoyoUsoVacio(per);
+    apoyoHeredarCobroCiclo(base,data);
+    if(mirror0&&String(mirror0.periodo||'')===per)base=apoyoFusionarMaxUso(base,mirror0);
+    else if(mirror0)apoyoHeredarCobroCiclo(base,mirror0);
+    window._apoyoUso=base;
+    apoyoAsegurarDia(window._apoyoUso);
     return;
   }
+  if(data.diaIso)data.diaIso=apoyoNormDiaIso(data.diaIso)||data.diaIso;
   window._apoyoUso=Object.assign(apoyoUsoVacio(per),data,{periodo:per,email:apoyoEmailKey()});
   apoyoAsegurarDia(window._apoyoUso);
 }
-/** Une dos copias del mismo periodo/día tomando el mayor consumo (varios PC / pestañas). */
+/** Une dos copias del mismo periodo/día tomando el mayor consumo (varios PC / pestañas / F5). */
 function apoyoFusionarMaxUso(local,remote){
   var per=apoyoPeriodoId();
   var hoy=apoyoHoyLocal();
@@ -202,8 +253,8 @@ function apoyoFusionarMaxUso(local,remote){
   if(!remote||typeof remote!=='object')return local;
   if(String(remote.periodo||'')!==per)return local;
   var out=Object.assign(apoyoUsoVacio(per),local,{periodo:per,email:apoyoEmailKey()||local.email||remote.email});
-  var rDia=String(remote.diaIso||'');
-  var lDia=String(local.diaIso||'');
+  var rDia=apoyoNormDiaIso(remote.diaIso);
+  var lDia=apoyoNormDiaIso(local.diaIso);
   if(rDia===hoy&&(lDia===hoy||!lDia)){
     out.diaIso=hoy;
     out.lecturasDia=Math.max(local.lecturasDia|0,remote.lecturasDia|0);
@@ -234,6 +285,10 @@ function apoyoFusionarMaxUso(local,remote){
     out.apoyado=true;
     out.apoyadoEn=remote.apoyadoEn||out.apoyadoEn||'';
     out.apoyadoPor=remote.apoyadoPor||out.apoyadoPor||'';
+  }else if(local.apoyado){
+    out.apoyado=true;
+    out.apoyadoEn=local.apoyadoEn||'';
+    out.apoyadoPor=local.apoyadoPor||'';
   }
   var hist=[];
   (Array.isArray(remote.historial)?remote.historial:[]).concat(Array.isArray(local.historial)?local.historial:[]).forEach(function(h){
@@ -261,20 +316,43 @@ async function apoyoCargarUso(){
     return;
   }
   var email=apoyoEmailKey();
+  var mirror=apoyoLeerMirrorLocal(email);
+  var remote=null;
+  var remoteLect=0;
   if(!email||!window._db||!window._fsGetDoc||!window._fsDoc){
-    if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    window._apoyoUso=mirror&&String(mirror.periodo||'')===apoyoPeriodoId()
+      ?apoyoFusionarMaxUso(apoyoUsoVacio(apoyoPeriodoId()),mirror)
+      :(window._apoyoUso||apoyoUsoVacio(apoyoPeriodoId()));
+    apoyoAsegurarDia(window._apoyoUso);
+    apoyoMirrorLocal(window._apoyoUso);
     window._apoyoUsoListo=true;
     return;
   }
   try{
     var snap=await window._fsGetDoc(window._fsDoc(window._db,'apoyo_uso',email));
-    if(snap&&snap.exists&&snap.exists())apoyoMergeUsoRemoto(snap.data());
+    remote=snap&&snap.exists&&snap.exists()?snap.data():null;
+    remoteLect=remote?(remote.lecturasDia|0):0;
+    if(remote)apoyoMergeUsoRemoto(remote);
     else window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    // F5 / versión nueva: el espejo local puede tener el pico del día que Firestore no alcanzó a escribir
+    if(mirror&&String(mirror.periodo||'')===apoyoPeriodoId()){
+      window._apoyoUso=apoyoFusionarMaxUso(window._apoyoUso,mirror);
+      apoyoAsegurarDia(window._apoyoUso);
+    }
   }catch(e){
     console.warn('apoyoCargarUso',e);
-    if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
+    if(mirror&&String(mirror.periodo||'')===apoyoPeriodoId()){
+      window._apoyoUso=apoyoFusionarMaxUso(apoyoUsoVacio(apoyoPeriodoId()),mirror);
+    }else if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
   }
+  apoyoAsegurarDia(window._apoyoUso);
+  apoyoMirrorLocal(window._apoyoUso);
   window._apoyoUsoListo=true;
+  // Si el espejo traía más que Firestore, subir el máximo sin demora
+  if((window._apoyoUso.lecturasDia|0)>remoteLect){
+    window._apoyoUsoDirty=true;
+    apoyoGuardarUso();
+  }
   if(window._apoyoLecturasCola>0){
     var cola=window._apoyoLecturasCola;
     window._apoyoLecturasCola=0;
@@ -285,8 +363,10 @@ async function apoyoCargarUso(){
 function apoyoProgramarGuardarUso(){
   if(apoyoEsAdmin())return;
   window._apoyoUsoDirty=true;
+  apoyoMirrorLocal(window._apoyoUso);
   if(window._apoyoSaveTimer)clearTimeout(window._apoyoSaveTimer);
-  window._apoyoSaveTimer=setTimeout(function(){apoyoGuardarUso();},1200);
+  // Debounce corto: Ctrl+F5 no debe llevarse el consumo del día
+  window._apoyoSaveTimer=setTimeout(function(){apoyoGuardarUso();},400);
 }
 function apoyoPayloadDesdeUso(u,email){
   return{
@@ -313,20 +393,23 @@ function apoyoPayloadDesdeUso(u,email){
 }
 async function apoyoGuardarUso(){
   if(apoyoEsAdmin())return;
+  if(!window._apoyoUsoListo)return;
   var email=apoyoEmailKey();
   var u=window._apoyoUso;
   if(!email||!u||!window._db||!window._fsDoc)return;
   if(!window._fsSetDoc&&!window._fsRunTransaction)return;
+  apoyoMirrorLocal(u);
   window._apoyoUsoDirty=false;
   var ref=window._fsDoc(window._db,'apoyo_uso',email);
   try{
-    // Leer remoto y guardar el máximo del día/periodo: otro PC no debe borrar el consumo.
+    // Leer remoto y guardar el máximo del día/periodo: otro PC / F5 no debe borrar el consumo.
     if(typeof window._fsRunTransaction==='function'){
       await window._fsRunTransaction(window._db,async function(tx){
         var snap=await tx.get(ref);
         var remote=snap&&snap.exists()?snap.data():null;
         var merged=apoyoFusionarMaxUso(u,remote);
         window._apoyoUso=merged;
+        apoyoMirrorLocal(merged);
         tx.set(ref,apoyoPayloadDesdeUso(merged,email),{merge:true});
       });
     }else{
@@ -334,23 +417,34 @@ async function apoyoGuardarUso(){
       var remote2=snap2&&snap2.exists&&snap2.exists()?snap2.data():null;
       var merged2=apoyoFusionarMaxUso(u,remote2);
       window._apoyoUso=merged2;
+      apoyoMirrorLocal(merged2);
       await window._fsSetDoc(ref,apoyoPayloadDesdeUso(merged2,email),{merge:true});
     }
     apoyoPintarUI();
-  }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;}
+  }catch(e){console.warn('apoyoGuardarUso',e);window._apoyoUsoDirty=true;apoyoMirrorLocal(window._apoyoUso);}
 }
 function apoyoAsegurarDia(u){
   var hoy=apoyoHoyLocal();
   var per=apoyoPeriodoId(hoy);
-  if(!u||u.periodo!==per){
+  if(!u){
     u=apoyoUsoVacio(per);
     window._apoyoUso=u;
+  }else if(u.periodo!==per){
+    // Nuevo periodo de facturación: reinicia contadores del día/mes de lecturas libres,
+    // pero conserva cobro acumulado hasta que el admin marque apoyo (+ reinicio).
+    var prev=u;
+    u=apoyoUsoVacio(per);
+    apoyoHeredarCobroCiclo(u,prev);
+    window._apoyoUso=u;
   }
+  var dia=apoyoNormDiaIso(u.diaIso);
+  if(dia)u.diaIso=dia;
   if(u.diaIso!==hoy){
     // Cliente viejo sin diaIso pero con lecturas del día: no borrar al cargar.
-    if(!u.diaIso&&((u.lecturasDia|0)>0||(u.cobrablesDia|0)>0||(u.baseBDia|0)>0)){
+    if(!dia&&((u.lecturasDia|0)>0||(u.cobrablesDia|0)>0||(u.baseBDia|0)>0)){
       u.diaIso=hoy;
     }else{
+      // Solo reinicia el medidor diario (U). Nunca montoCop / cobrablesMes del ciclo.
       u.diaIso=hoy;
       u.lecturasDia=0;
       u.cobrablesDia=0;
@@ -371,10 +465,13 @@ function apoyoBindFlush(){
   var flush=function(){
     if(window._apoyoSaveTimer){clearTimeout(window._apoyoSaveTimer);window._apoyoSaveTimer=null;}
     if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
+    // Siempre espejo sync primero (Ctrl+F5 aborta el await a Firestore)
+    if(window._apoyoUso)apoyoMirrorLocal(window._apoyoUso);
     if(window._apoyoUsoDirty)apoyoGuardarUso();
     if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoFlushGlobalPendiente();
   };
   window.addEventListener('pagehide',flush);
+  window.addEventListener('beforeunload',flush);
   document.addEventListener('visibilitychange',function(){
     if(document.visibilityState==='hidden')flush();
   });
@@ -522,6 +619,7 @@ function apoyoRegistrarLecturas(n){
     u.montoCop=Math.round((Number(u.montoCop)||0)+m.cop);
   }
   window._apoyoUso=u;
+  apoyoMirrorLocal(u);
   apoyoSumarGlobalLocal(n,deltaBaseB);
   apoyoAplicarCobroBlaze(u,cfg);
   apoyoProgramarGuardarUso();

@@ -108,6 +108,8 @@ describe('Apoyo solidario', () => {
     expect(src).toContain('apoyoFmtCopCorto')
     expect(src).toContain('sst-apoyo-fill-per')
     expect(src).toContain('apoyoAplicarCobroBlaze')
+    expect(src).toContain('apoyoHeredarCobroCiclo')
+    expect(src).toContain('apoyoFusionarMaxUso')
   })
 
   it('cambiar precio o TRM no recalcula lo ya cobrado; solo suma el excedente nuevo', () => {
