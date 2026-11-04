@@ -605,6 +605,49 @@ async function apoyoCargarGlobalDia(){
   if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoProgramarGlobalFlush();
   apoyoPintarUI();
 }
+/**
+ * Invariante: G (proyecto) ≥ U (este usuario) el mismo día.
+ * Si el personal se guardó y el flush global se perdió, G quedaba por debajo (p. ej. 820 < 2543).
+ * Repara con max en Firestore (no suma: evita doble conteo al repetir).
+ */
+async function apoyoAsegurarGlobalNoMenorQuePersonal(){
+  if(apoyoEsAdmin())return;
+  var u=apoyoAsegurarDia(window._apoyoUso||apoyoUsoVacio());
+  var lectU=u.lecturasDia|0;
+  var baseU=u.baseBDia|0;
+  if(lectU<=0&&baseU<=0)return;
+  var g=window._apoyoGlobal||{};
+  if(apoyoNormDiaIso(g.diaIso)===apoyoHoyLocal()&&(g.lecturas|0)>=lectU&&(g.baseB|0)>=baseU)return;
+  if(!window._db||!window._fsDoc)return;
+  var hoy=apoyoHoyLocal();
+  var ref=window._fsDoc(window._db,'apoyo_consumo',hoy);
+  try{
+    if(typeof window._fsRunTransaction==='function'){
+      await window._fsRunTransaction(window._db,async function(tx){
+        var snap=await tx.get(ref);
+        var cur=snap&&snap.exists()?snap.data():{};
+        var lect=Math.max(cur.lecturas|0,lectU);
+        var base=Math.max(cur.baseB|0,baseU);
+        if(lect===(cur.lecturas|0)&&base===(cur.baseB|0)){
+          window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
+          return;
+        }
+        tx.set(ref,{diaIso:hoy,lecturas:lect,baseB:base,updatedAt:new Date().toISOString()},{merge:true});
+        window._apoyoGlobal={diaIso:hoy,lecturas:lect,baseB:base};
+      });
+    }else if(window._fsSetDoc&&window._fsGetDoc){
+      var snap2=await window._fsGetDoc(ref);
+      var cur2=snap2&&snap2.exists&&snap2.exists()?snap2.data():{};
+      var lect2=Math.max(cur2.lecturas|0,lectU);
+      var base2=Math.max(cur2.baseB|0,baseU);
+      if(lect2!==(cur2.lecturas|0)||base2!==(cur2.baseB|0))
+        await window._fsSetDoc(ref,{diaIso:hoy,lecturas:lect2,baseB:base2,updatedAt:new Date().toISOString()},{merge:true});
+      window._apoyoGlobal={diaIso:hoy,lecturas:lect2,baseB:base2};
+    }
+    apoyoMirrorGlobalWrite();
+    apoyoPintarUI();
+  }catch(e){console.warn('apoyoAsegurarGlobalNoMenorQuePersonal',e);}
+}
 function apoyoEscucharGlobalDia(){
   if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
   if(apoyoEsAdmin()||!window._db||!window._fsDoc||!window._fsOnSnapshot)return;
@@ -814,6 +857,7 @@ async function apoyoInitSesion(){
   await apoyoCargarCfg();
   await apoyoCargarUso();
   await apoyoCargarGlobalDia();
+  await apoyoAsegurarGlobalNoMenorQuePersonal();
   apoyoEscucharGlobalDia();
   apoyoBindFlush();
   apoyoProgramarRenovacionDia();
