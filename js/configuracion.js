@@ -397,7 +397,7 @@ function renderApoyoSolidarioCfg(){
     console.warn('renderApoyoSolidarioCfg',err);
     body='<div class="emp">No se pudo mostrar el apoyo solidario.</div>';
   }
-  el.innerHTML='<div class="cfgr">'+cfgSectionFold('Apoyo solidario','Cupo diario, TRM, histórico de consumo y registro del apoyo por usuario. Mantiene el sistema entre todos.',body,true)+'</div>';
+  el.innerHTML='<div class="cfgr">'+cfgSectionFold('Apoyo solidario','Cupo personal, cupo global Blaze, TRM, histórico y registro del apoyo. Lo ya cobrado no se recalcula al cambiar cupos.',body,true)+'</div>';
   if(typeof apoyoPintarListaAdmin==='function')apoyoPintarListaAdmin();
 }
 window.renderApoyoSolidarioCfg=renderApoyoSolidarioCfg;

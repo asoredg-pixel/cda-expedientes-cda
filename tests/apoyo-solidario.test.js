@@ -82,6 +82,8 @@ describe('Apoyo solidario', () => {
     expect(readFileSync(resolve(root, 'index.html'), 'utf8')).toContain('apoyo-solidario.js')
     expect(readFileSync(resolve(root, 'index.html'), 'utf8')).toContain('id="apoyo-banner"')
     expect(readFileSync(resolve(root, 'index.html'), 'utf8')).toContain('sst-apoyo-fill-glob')
+    expect(src).toContain('apoyo-cfg-cupo-global')
+    expect(src).toContain('Lecturas gratis globales')
   })
 
   it('el excedente del cupo diario suma cobrables y el monto en COP', () => {

@@ -178,6 +178,10 @@ function apoyoCalcMontos(cobrables,cfg){
 }
 function apoyoAplicarCfgRemota(raw){
   window._apoyoCfg=apoyoNormCfg(raw);
+  // Cupo/precio nuevos: solo el excedente NUEVO (A o B). Lo ya cobrado en el ciclo no se toca.
+  if(window._apoyoUsoListo&&window._apoyoUso&&!apoyoEsAdmin()){
+    if(apoyoAplicarCobroBlaze(window._apoyoUso,window._apoyoCfg)>0)apoyoProgramarGuardarUso();
+  }
   if(typeof apoyoPintarUI==='function')apoyoPintarUI();
 }
 function apoyoMergeUsoRemoto(data){
@@ -717,11 +721,10 @@ async function apoyoGuardarCfgDesdeForm(){
   if(!db||!window._fsSetDoc||!window._fsDoc){notif('Firestore no disponible','err');return;}
   try{
     await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{apoyoSolidarioCfg:cfg},{merge:true});
-    window._apoyoCfg=cfg;
+    apoyoAplicarCfgRemota(cfg);
     notif('Apoyo solidario actualizado','ok');
     if(typeof renderApoyoSolidarioCfg==='function')renderApoyoSolidarioCfg();
     else if(typeof renderListasCfg==='function')renderListasCfg();
-    apoyoPintarUI();
   }catch(e){console.warn(e);notif('No se pudo guardar','err');}
 }
 async function apoyoConsultarTrm(){
@@ -824,12 +827,19 @@ async function apoyoReiniciarUsuario(email){
 function apoyoCfgCardBody(){
   var cfg=apoyoNormCfg(window._apoyoCfg);
   var inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  var cupoG=cfg.cupoGlobalDia|0;
   return '<div class="cfcard" id="apoyo-cfg-card">'+
     '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Dos cupos (renuevan a las <strong>2:00 a. m.</strong>): <strong>personal</strong> por usuario y <strong>global</strong> del proyecto (colchón bajo Blaze). Cobro A = superar el personal. Cobro B = si el global se pasa, se reparte según el consumo del día <em>dentro</em> del cupo personal (sin doble cobro de lo ya cobrado como A). Ambos montos suman al ciclo. Tras el plazo solidario sin registrar apoyo, no podrá conectar Drive.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
     '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis personales / día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
-    '<div class="fld"><label for="apoyo-cfg-cupo-global">Lecturas gratis globales / día (Blaze)</label><input type="number" min="0" step="1000" id="apoyo-cfg-cupo-global" value="'+escAttr(String(cfg.cupoGlobalDia))+'" style="'+inp+'" title="Ej. 40000 aunque Blaze ofrezca 50000"></div>'+
+    '</div>'+
+    '<div class="fg" style="margin-bottom:10px">'+
+    '<div class="fld" style="grid-column:1/-1">'+
+    '<label for="apoyo-cfg-cupo-global">Lecturas gratis globales / día (Blaze del proyecto)</label>'+
+    '<input type="number" min="0" step="1000" id="apoyo-cfg-cupo-global" value="'+escAttr(String(cupoG))+'" style="'+inp+'" title="Ej. 40000 aunque Blaze ofrezca 50000">'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35">Colchón del proyecto (por defecto '+escAttr(String(APOYO_CFG_DEFAULT.cupoGlobalDia))+'). Al bajarlo o subirlo, lo <strong>ya cobrado</strong> en el ciclo se mantiene; desde Guardar (o al volver a entrar) el cobro B usa el cupo nuevo según el aporte personal del día.</div>'+
+    '</div>'+
     '</div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label for="apoyo-cfg-precio">USD por cada 1.000 lecturas cobrables</label><input type="number" min="0" step="0.01" id="apoyo-cfg-precio" value="'+escAttr(String(cfg.precioPorMilUsd))+'" style="'+inp+'"></div>'+
@@ -838,7 +848,7 @@ function apoyoCfgCardBody(){
     '<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" style="display:flex;align-items:flex-end"><button type="button" class="btn bsm" onclick="apoyoConsultarTrm()">Consultar tasa</button></div>'+
     '</div>'+
-    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte fijo: día 28. Plazo solidario: 3 días hábiles. Solo el excedente NUEVO se valora con precio/TRM actuales (lo ya cobrado no se recalcula). El cupo global debe ser ≤ al gratis real de Blaze para dejar margen.</div>'+
+    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte fijo: día 28. Plazo solidario: 3 días hábiles. Solo el excedente NUEVO se valora con precio/TRM/cupo actuales (lo ya cobrado no se recalcula). El cupo global debe ser ≤ al gratis real de Blaze para dejar margen.</div>'+
     '<button type="button" class="btn bsm bp" onclick="apoyoGuardarCfgDesdeForm()">Guardar apoyo solidario</button>'+
     '<div id="apoyo-admin-lista" style="margin-top:16px"></div>'+
   '</div>';
