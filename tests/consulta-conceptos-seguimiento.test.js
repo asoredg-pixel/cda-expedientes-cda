@@ -59,7 +59,12 @@ describe('filtro conceptos de seguimiento', () => {
     expect(html).toContain('<option value="cseg">Conceptos de seguimiento</option>')
     expect(consulta).toContain("qf==='cseg'")
     expect(consulta).toContain('window._conExportQf=qf')
+    expect(consulta).toContain('pulse <strong>Buscar</strong>')
+    expect(consulta).toContain('cupo personal y al global')
     expect(core).toContain("title:'Conceptos de seguimiento'")
+    const pers = readFileSync(resolve(root, 'js/persistence.js'), 'utf8')
+    expect(pers).toContain("conceptoSeguimiento")
+    expect(pers).toContain("conceptoSeguimiento','==',true")
   })
 
   it('solo cuenta la actividad predeterminada', () => {

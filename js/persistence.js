@@ -309,6 +309,7 @@ async function loadLS(){
       if(typeof pqrsMatrizApplyXlsxFileIdFromGlobal==='function')pqrsMatrizApplyXlsxFileIdFromGlobal(g);
       if(typeof ncaPqrsPinsApplyFromGlobal==='function')ncaPqrsPinsApplyFromGlobal(g);
       if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
+      if(g.conceptoSeguimientoMarcasListas)window._conceptoSeguimientoMarcasListas=true;
       if(g.pqrsOficinaCorteListo)window._pqrsOficinaCorteListo=true;
       if(g.pqrsOficinaPropiaListo)window._pqrsOficinaPropiaListo=true;
       if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
@@ -582,11 +583,20 @@ function expTieneSeguimiento(exp){
     return !!(f&&f!=='cerrada'&&f!=='cerrada_atendida');
   });
 }
+/** Marca Blaze: expediente con actividad «Concepto(s) de seguimiento» (Consulta filtro cseg). */
+function expMarcaConceptoSeguimiento(exp){
+  if(typeof expTieneActividadConceptoSeguimiento==='function')
+    return!!expTieneActividadConceptoSeguimiento(exp);
+  return(exp&&exp.tasks||[]).some(function(t){
+    return t&&!t.eliminada&&/conceptos?\s+de\s+seguimiento/i.test(String(t.actividad||t.desc||''));
+  });
+}
 function aplicarMarcasBandeja(exp){
   if(!exp||typeof exp!=='object')return exp;
   exp.pendientes=nombresPendientesExp(exp);
   exp.atendidasPaleta=nombresAtendidasPaletaExp(exp);
   exp.seguimiento=!!expTieneSeguimiento(exp);
+  exp.conceptoSeguimiento=!!expMarcaConceptoSeguimiento(exp);
   let req=false;
   if(typeof _reqPalEntradasExp==='function'){
     try{const out=[];_reqPalEntradasExp(exp,out);req=out.length>0;}catch(e){req=!!exp.reqAlerta;}
@@ -644,6 +654,7 @@ function marcasBandejaDistintas(data,exp){
   return JSON.stringify(a.pendientes||[])!==JSON.stringify(exp.pendientes||[])
     ||JSON.stringify(a.atendidasPaleta||[])!==JSON.stringify(exp.atendidasPaleta||[])
     ||!!a.seguimiento!==!!exp.seguimiento
+    ||!!a.conceptoSeguimiento!==!!exp.conceptoSeguimiento
     ||!!a.reqAlerta!==!!exp.reqAlerta
     ||!!a.esPqrs!==!!exp.esPqrs
     ||!!a.pqrsAbierta!==!!exp.pqrsAbierta
@@ -695,6 +706,7 @@ async function asegurarMarcasBandeja(){
             pendientes:exp.pendientes,
             atendidasPaleta:exp.atendidasPaleta||[],
             seguimiento:exp.seguimiento,
+            conceptoSeguimiento:!!exp.conceptoSeguimiento,
             reqAlerta:exp.reqAlerta,
             esPqrs:exp.esPqrs,
             pqrsAbierta:!!exp.pqrsAbierta,
@@ -707,8 +719,9 @@ async function asegurarMarcasBandeja(){
         }catch(errW){console.warn('marca expediente',d.id,errW);}
       }
     }
-    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{bandejaMarcasListas:true},{merge:true});
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{bandejaMarcasListas:true,conceptoSeguimientoMarcasListas:true},{merge:true});
     window._bandejaMarcasListas=true;
+    window._conceptoSeguimientoMarcasListas=true;
     console.log('Marcas de bandeja listas',n);
     // Una sola rehidratación filtrada (initRealtimeSync salta si la firma no cambió).
     if(typeof initRealtimeSync==='function')initRealtimeSync(true);
@@ -716,12 +729,59 @@ async function asegurarMarcasBandeja(){
       Promise.resolve(reloadExpedientesTrasLogin()).catch(function(e){console.warn('reload tras marcas',e);});
     }
     if(typeof asegurarMarcasPqrsOficina==='function')asegurarMarcasPqrsOficina();
+    if(typeof asegurarMarcasConceptoSeguimiento==='function')asegurarMarcasConceptoSeguimiento();
   }catch(err){
     console.warn('asegurarMarcasBandeja',err);
   }finally{
     window._bandejaMarcasCorriendo=false;
   }
 }
+/**
+ * Una sola vez (admin): escribe conceptoSeguimiento en expedientes que ya tenían la actividad
+ * pero se marcaron antes de existir el campo. Sin updatedAt. No escucha el archivo completo después.
+ */
+async function asegurarMarcasConceptoSeguimiento(){
+  if(window._conceptoSeguimientoMarcasListas||window._conceptoSeguimientoMarcasCorriendo)return;
+  const db=window._db;
+  const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if(rol!=='admin')return;
+  if(!db||!window._fsGetDocs||!window._fsSetDoc||!window._fsCollection||!window._fsDoc)return;
+  window._conceptoSeguimientoMarcasCorriendo=true;
+  try{
+    const deptos=(typeof DEPTOS_EXPEDIENTES_ACTIVOS!=='undefined'&&DEPTOS_EXPEDIENTES_ACTIVOS.length)
+      ?DEPTOS_EXPEDIENTES_ACTIVOS.slice()
+      :(typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare']);
+    let n=0;
+    for(let i=0;i<deptos.length;i++){
+      const depto=deptos[i];
+      let snap;
+      try{snap=await window._fsGetDocs(window._fsCollection(db,'departamentos',depto,'expedientes'));}
+      catch(err){console.warn('marcas conceptoSeguimiento',depto,err);continue;}
+      const docs=snap&&snap.docs?snap.docs:[];
+      for(let j=0;j<docs.length;j++){
+        const d=docs[j];
+        const data=d.data?d.data()||{}:{};
+        const exp=Object.assign({},data,{_exp:data._exp||d.id,_depto:data._depto||depto});
+        const marca=!!expMarcaConceptoSeguimiento(exp);
+        if(!!data.conceptoSeguimiento===marca)continue;
+        try{
+          await window._fsSetDoc(d.ref||window._fsDoc(db,'departamentos',depto,'expedientes',d.id),{
+            conceptoSeguimiento:marca
+          },{merge:true});
+          n++;
+        }catch(errW){console.warn('marca conceptoSeguimiento',d.id,errW);}
+      }
+    }
+    await window._fsSetDoc(window._fsDoc(db,'sistema','global'),{conceptoSeguimientoMarcasListas:true},{merge:true});
+    window._conceptoSeguimientoMarcasListas=true;
+    console.log('Marcas conceptoSeguimiento listas',n);
+  }catch(err){
+    console.warn('asegurarMarcasConceptoSeguimiento',err);
+  }finally{
+    window._conceptoSeguimientoMarcasCorriendo=false;
+  }
+}
+window.asegurarMarcasConceptoSeguimiento=asegurarMarcasConceptoSeguimiento;
 /** Una sola vez: marca las PQRSD abiertas y la fecha de las cerradas, sin tocar updatedAt. */
 async function asegurarMarcasPqrsOficina(){
   if(window._pqrsOficinaCorteCorriendo)return;
@@ -2458,6 +2518,7 @@ function initRealtimeGlobalSync(){
     avisarTamanoGlobalSiCrece(g);
     const marcasYa=!!window._bandejaMarcasListas;
     if(g.bandejaMarcasListas)window._bandejaMarcasListas=true;
+    if(g.conceptoSeguimientoMarcasListas)window._conceptoSeguimientoMarcasListas=true;
     const cortePqrsYa=!!window._pqrsOficinaCorteListo;
     const propiaYa=!!window._pqrsOficinaPropiaListo;
     const secYa=!!window._secretariaRadicacionLista;
@@ -2466,6 +2527,10 @@ function initRealtimeGlobalSync(){
     if(g.secretariaRadicacionLista)window._secretariaRadicacionLista=true;
     if(g.apoyoSolidarioCfg&&typeof apoyoAplicarCfgRemota==='function')apoyoAplicarCfgRemota(g.apoyoSolidarioCfg);
     const marcasNuevas=!marcasYa&&window._bandejaMarcasListas;
+    if(window._bandejaMarcasListas&&!window._conceptoSeguimientoMarcasListas
+      &&typeof asegurarMarcasConceptoSeguimiento==='function'){
+      Promise.resolve(asegurarMarcasConceptoSeguimiento()).catch(function(e){console.warn('conceptoSeguimiento marcas',e);});
+    }
     const corteNuevo=(!cortePqrsYa&&window._pqrsOficinaCorteListo)||(!propiaYa&&window._pqrsOficinaPropiaListo)||(!secYa&&window._secretariaRadicacionLista);
     if((marcasNuevas||corteNuevo)&&typeof initRealtimeSync==='function'){
       initRealtimeSync();
@@ -2568,10 +2633,15 @@ function conBuscaAsegurarCache(){
   return window._conBuscaCache;
 }
 /** ¿Este corte (y trámite) ya se leyó en la sesión? Evita getDocs / doble cobro Blaze. */
-function conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs){
+function conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs,modoCseg){
   const cov=(conBuscaAsegurarCache().cubiertos)||[];
   return cov.some(function(c){
     if(!!c.modoPqrs!==!!modoPqrs)return false;
+    if(!!c.modoCseg!==!!modoCseg)return false;
+    if(modoCseg){
+      // Consulta por marca: una lectura de conceptoSeguimiento==true cubre cualquier corte de fechas
+      return true;
+    }
     if(tram){
       // Sirve un corte previo sin trámite (más amplio) o el mismo trámite
       if(c.tram&&c.tram!==tram)return false;
@@ -2581,10 +2651,10 @@ function conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs){
     return String(c.desde)<=String(desde)&&String(c.hasta)>=String(hasta);
   });
 }
-function conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs){
+function conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs,modoCseg){
   const cache=conBuscaAsegurarCache();
-  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs))return;
-  cache.cubiertos.push({desde:String(desde),hasta:String(hasta),tram:String(tram||''),modoPqrs:!!modoPqrs});
+  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs,modoCseg))return;
+  cache.cubiertos.push({desde:String(desde),hasta:String(hasta),tram:String(tram||''),modoPqrs:!!modoPqrs,modoCseg:!!modoCseg});
 }
 function conBuscaFusionarExp(exp){
   if(!exp||!exp._exp)return;
@@ -2613,7 +2683,7 @@ function conBuscaFusionarExp(exp){
     exps[idx]=Object.assign({},local,exp);
   }else exps.push(exp);
 }
-function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs){
+function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs,modoCseg){
   const cache=conBuscaAsegurarCache();
   const out=[];
   Object.keys(cache.docs).forEach(function(id){
@@ -2623,9 +2693,13 @@ function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs){
     if(modoPqrs){
       if(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
     }
-    if(tram&&String(exp._tramite||'')!==tram)return;
-    const f=conBuscaFechaDoc(exp,modoPqrs);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f<desde||f>hasta)return;
+    if(modoCseg){
+      if(!(exp.conceptoSeguimiento||(typeof expMarcaConceptoSeguimiento==='function'&&expMarcaConceptoSeguimiento(exp))))return;
+    }else{
+      if(tram&&String(exp._tramite||'')!==tram)return;
+      const f=conBuscaFechaDoc(exp,modoPqrs);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f<desde||f>hasta)return;
+    }
     out.push(exp);
   });
   return out;
@@ -2633,6 +2707,7 @@ function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs){
 /**
  * Consulta (todos los roles): getDocs acotado por fechas.
  * PQRSD (secretaría/oficinas): pqrsRadicadaEn. Trámites / resto: _fecha (+ _tramite si el filtro lo pide).
+ * Conceptos de seguimiento (cseg): igualdad conceptoSeguimiento==true (+ refuerzo por _fecha del corte).
  * «Todo el historial» no consulta. Cortes ya leídos en la sesión se reutilizan (sin nueva descarga ni doble cobro).
  */
 async function buscarConsultaPorCorte(){
@@ -2643,15 +2718,17 @@ async function buscarConsultaPorCorte(){
     return;
   }
   const modoPqrs=conBuscaModoPqrs();
-  const tram=modoPqrs?'':conBuscaTramiteActual();
+  const qf=String((document.getElementById('q-fl')||{}).value||'').trim();
+  const modoCseg=!modoPqrs&&qf==='cseg';
+  const tram=modoPqrs||modoCseg?'':conBuscaTramiteActual();
   const desde=String(rango.desde);
   const hasta=String(rango.hasta).slice(0,10);
   // Reutilizar lo ya descargado en esta sesión (mismo o mayor corte)
-  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs)){
-    const list=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs);
+  if(conBuscaCorteYaCubierto(desde,hasta,tram,modoPqrs,modoCseg)){
+    const list=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs,modoCseg);
     window._conBuscaList=list;
     window._conPqrsBuscaList=list;
-    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'');
+    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'')+(modoCseg?'|cseg':'');
     window._conPqrsBuscaRango=window._conBuscaRango;
     if(typeof renderConsulta==='function')renderConsulta();
     if(typeof notif==='function')notif('Consulta: '+list.length+' registro(s) del corte (ya en memoria, sin nueva descarga).','ok');
@@ -2663,7 +2740,11 @@ async function buscarConsultaPorCorte(){
     return;
   }
   window._conBuscaCorriendo=true;
-  if(typeof notif==='function')notif(modoPqrs?'Buscando PQRSD del corte…':'Buscando expedientes del corte…','info');
+  if(typeof notif==='function'){
+    notif(modoCseg?'Buscando conceptos de seguimiento (cuenta lecturas Blaze)…'
+      :(modoPqrs?'Buscando PQRSD del corte (cuenta lecturas Blaze)…'
+        :('Buscando expedientes del corte'+(qf?(' · filtro '+qf):'')+' (cuenta lecturas Blaze)…')),'info');
+  }
   let deptos;
   if(typeof esJurisdiccional==='function'&&esJurisdiccional()){
     const fd=String(window._jurisFiltroDepto||'').trim();
@@ -2678,67 +2759,125 @@ async function buscarConsultaPorCorte(){
   const list=[];
   let faltaIndice=false;
   let leidosNuevos=0;
+  const ingerirSnap=function(snap,depto){
+    if(!snap||typeof snap.forEach!=='function')return;
+    snap.forEach(function(d){
+      const data=d.data?d.data()||{}:{};
+      const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
+      if(!exp||!exp._exp)return;
+      if(!exp._depto)exp._depto=depto;
+      if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
+      if(modoPqrs&&typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
+      if(modoCseg){
+        aplicarMarcasBandeja(exp);
+        if(!exp.conceptoSeguimiento&&typeof expMarcaConceptoSeguimiento==='function'&&expMarcaConceptoSeguimiento(exp)){
+          exp.conceptoSeguimiento=true;
+          if(typeof repararMarcaExpediente==='function')repararMarcaExpediente(exp);
+        }
+        if(!exp.conceptoSeguimiento)return;
+      }
+      const yaCache=!!(window._conBuscaCache&&window._conBuscaCache.docs&&window._conBuscaCache.docs[String(exp._exp)]);
+      conBuscaFusionarExp(exp);
+      list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
+      if(!yaCache){
+        leidosNuevos++;
+        if(typeof apoyoDebeCobrarExp==='function'){
+          if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+        }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+      }
+    });
+  };
   try{
     for(let i=0;i<(deptos||[]).length;i++){
       const depto=deptos[i];
-      let snap;
       try{
-        const filtros=[];
-        if(modoPqrs){
-          filtros.push(window._fsWhere('pqrsRadicadaEn','>=',desde));
-          filtros.push(window._fsWhere('pqrsRadicadaEn','<=',tope));
+        if(modoCseg){
+          // Igualdad sola (sin índice compuesto). Cubrir conceptos aunque _fecha esté fuera del corte.
+          let snapMarca=null;
+          try{
+            snapMarca=await window._fsGetDocs(window._fsQuery(
+              window._fsCollection(db,'departamentos',depto,'expedientes'),
+              window._fsWhere('conceptoSeguimiento','==',true)
+            ));
+          }catch(errM){
+            console.warn('buscarConsultaPorCorte cseg marca',depto,errM);
+          }
+          ingerirSnap(snapMarca,depto);
+          // Refuerzo: corte por _fecha + filtro en memoria (docs aún sin marca)
+          let snapFecha=null;
+          try{
+            const filtrosF=[];
+            if(tram)filtrosF.push(window._fsWhere('_tramite','==',tram));
+            filtrosF.push(window._fsWhere('_fecha','>=',desde));
+            filtrosF.push(window._fsWhere('_fecha','<=',tope));
+            snapFecha=await window._fsGetDocs(window._fsQuery(
+              window._fsCollection(db,'departamentos',depto,'expedientes'),
+              ...filtrosF
+            ));
+          }catch(errF){
+            if(tram&&typeof consErrorEsIndice==='function'&&consErrorEsIndice(errF))faltaIndice=true;
+            console.warn('buscarConsultaPorCorte cseg fecha',depto,errF);
+          }
+          if(snapFecha&&typeof snapFecha.forEach==='function'){
+            snapFecha.forEach(function(d){
+              const data=d.data?d.data()||{}:{};
+              if(data.conceptoSeguimiento)return; // ya vino por marca
+              const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
+              if(!exp||!exp._exp)return;
+              if(!expMarcaConceptoSeguimiento(exp))return;
+              exp.conceptoSeguimiento=true;
+              if(!exp._depto)exp._depto=depto;
+              if(typeof repararMarcaExpediente==='function')repararMarcaExpediente(exp);
+              const yaCache=!!(window._conBuscaCache&&window._conBuscaCache.docs&&window._conBuscaCache.docs[String(exp._exp)]);
+              conBuscaFusionarExp(exp);
+              list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
+              if(!yaCache){
+                leidosNuevos++;
+                if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
+              }
+            });
+          }
         }else{
-          if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
-          filtros.push(window._fsWhere('_fecha','>=',desde));
-          filtros.push(window._fsWhere('_fecha','<=',tope));
+          const filtros=[];
+          if(modoPqrs){
+            filtros.push(window._fsWhere('pqrsRadicadaEn','>=',desde));
+            filtros.push(window._fsWhere('pqrsRadicadaEn','<=',tope));
+          }else{
+            if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
+            filtros.push(window._fsWhere('_fecha','>=',desde));
+            filtros.push(window._fsWhere('_fecha','<=',tope));
+          }
+          const snap=await window._fsGetDocs(window._fsQuery(
+            window._fsCollection(db,'departamentos',depto,'expedientes'),
+            ...filtros
+          ));
+          ingerirSnap(snap,depto);
         }
-        snap=await window._fsGetDocs(window._fsQuery(
-          window._fsCollection(db,'departamentos',depto,'expedientes'),
-          ...filtros
-        ));
       }catch(errDepto){
         if(tram&&!modoPqrs&&typeof consErrorEsIndice==='function'&&consErrorEsIndice(errDepto))faltaIndice=true;
         console.warn('buscarConsultaPorCorte',depto,errDepto);
         if(typeof notif==='function')notif('No se pudo buscar en '+depto+': '+(errDepto&&errDepto.message||errDepto),'err');
-        continue;
       }
-      if(!snap||typeof snap.forEach!=='function')continue;
-      snap.forEach(function(d){
-        const data=d.data?d.data()||{}:{};
-        const exp=typeof mergeExpFromFirestoreSnapshot==='function'?mergeExpFromFirestoreSnapshot(data,d.id):Object.assign({},data,{_exp:d.id});
-        if(!exp||!exp._exp)return;
-        if(!exp._depto)exp._depto=depto;
-        if(typeof expEstaEnPapelera==='function'&&expEstaEnPapelera(exp))return;
-        if(modoPqrs&&typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(exp)&&!exp.esPqrs)return;
-        const yaCache=!!(window._conBuscaCache&&window._conBuscaCache.docs&&window._conBuscaCache.docs[String(exp._exp)]);
-        conBuscaFusionarExp(exp);
-        list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
-        if(!yaCache){
-          leidosNuevos++;
-          if(typeof apoyoDebeCobrarExp==='function'){
-            if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
-          }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
-        }
-      });
     }
     if(faltaIndice){
       if(typeof notif==='function')notif('Para filtrar por ese trámite hace falta el índice (F12 → enlace Firestore). Puede Buscar sin trámite o esperar unos minutos.','err');
       return;
     }
-    conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs);
-    // Lista activa = lo del corte (cache puede tener más de cortes anteriores)
-    const listCorte=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs);
+    conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs,modoCseg);
+    const listCorte=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs,modoCseg);
     window._conBuscaList=listCorte.length?listCorte:list;
     window._conPqrsBuscaList=window._conBuscaList;
-    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'');
+    window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'')+(modoCseg?'|cseg':'');
     window._conPqrsBuscaRango=window._conBuscaRango;
     if(typeof renderConsulta==='function')renderConsulta();
     if(typeof notif==='function'){
       const n=(window._conBuscaList||[]).length;
-      const extra=leidosNuevos<(list||[]).length?(' · '+leidosNuevos+' lectura(s) nueva(s)'):'';
+      const extra=leidosNuevos&&leidosNuevos<(window._conBuscaList||[]).length?(' · '+leidosNuevos+' lectura(s) nueva(s)'):'';
       notif(n
-        ?('Consulta: '+n+' registro(s). Descargar/Matriz usan esta lista'+extra+'.')
-        :'Sin registros en ese corte de fechas','ok');
+        ?(modoCseg
+          ?('Conceptos de seguimiento: '+n+' expediente(s). Descargar incluye número del concepto y expediente'+extra+'.')
+          :('Consulta: '+n+' registro(s). Descargar/Matriz usan esta lista'+extra+'.'))
+        :(modoCseg?'Sin conceptos de seguimiento con marca en ese ámbito. Si faltan, el administrador debe entrar una vez para reparar marcas.':'Sin registros en ese corte de fechas'),'ok');
     }
   }catch(err){
     console.warn('buscarConsultaPorCorte',err);
@@ -2835,6 +2974,7 @@ function initAppRealtimeSync(){
   setTimeout(function(){
     Promise.resolve(typeof asegurarMarcasBandeja==='function'?asegurarMarcasBandeja():null).then(function(){
       if(typeof asegurarMarcasPqrsOficina==='function')asegurarMarcasPqrsOficina();
+      if(typeof asegurarMarcasConceptoSeguimiento==='function')asegurarMarcasConceptoSeguimiento();
     });
   },1500);
   initRealtimeCfgSyncAll();
@@ -3117,14 +3257,15 @@ function initRealtimeSync(force){
 }
 function repararMarcaExpediente(exp){
   if(!exp||!exp._exp||!window._db||!window._fsSetDoc||!window._fsDoc)return;
-  const antes=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
+  const antes=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.conceptoSeguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   aplicarMarcasBandeja(exp);
-  const despues=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
+  const despues=JSON.stringify([exp.pendientes||[],exp.atendidasPaleta||[],!!exp.seguimiento,!!exp.conceptoSeguimiento,!!exp.reqAlerta,!!exp.esPqrs,!!exp.pqrsAbierta,String(exp.pqrsCerradaEn||''),String(exp.pqrsPendienteOficina||''),String(exp.pqrsCerradaClave||''),String(exp.pqrsRadicadaEn||'')]);
   if(antes===despues)return;
   const depto=String(exp._depto||'guaviare').trim();
   window._fsSetDoc(window._fsDoc(window._db,'departamentos',depto,'expedientes',exp._exp),{
     pendientes:exp.pendientes,atendidasPaleta:exp.atendidasPaleta||[],
-    seguimiento:!!exp.seguimiento,reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
+    seguimiento:!!exp.seguimiento,conceptoSeguimiento:!!exp.conceptoSeguimiento,
+    reqAlerta:!!exp.reqAlerta,esPqrs:!!exp.esPqrs,
     pqrsAbierta:!!exp.pqrsAbierta,pqrsCerradaEn:String(exp.pqrsCerradaEn||''),
     pqrsPendienteOficina:String(exp.pqrsPendienteOficina||''),pqrsCerradaClave:String(exp.pqrsCerradaClave||''),
     pqrsRadicadaEn:String(exp.pqrsRadicadaEn||'')

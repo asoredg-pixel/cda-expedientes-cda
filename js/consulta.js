@@ -2125,6 +2125,9 @@ function collectConsultaActLibres(q,qt,qe,qi,qact,qf){
   if(!shouldIncludeActLibresEnConsulta())return ofiDocs;
   // Filtros propios de expediente/PQRSD: no mezclar stubs libres (salvo docs/comunicados ya filtrados por texto)
   if(qt||qe||(qf&&qf!=='cseg'))return ofiDocs;
+  // Conceptos de seguimiento: sin Buscar no mezclar solo libres (parecían el resultado completo).
+  const buscaCseg=qf==='cseg'&&!!String(window._conBuscaRango||'').trim()&&Array.isArray(window._conBuscaList);
+  if(qf==='cseg'&&!buscaCseg)return[];
   const seen={};
   ofiDocs.forEach(function(s){seen[String(s._act_id||s._exp||'')]=true;});
   const otras=actLibresAmbitoConsulta().filter(function(t){
@@ -2505,8 +2508,12 @@ function renderConsulta(){
   const buscaList=Array.isArray(window._conBuscaList)?window._conBuscaList
     :(Array.isArray(window._conPqrsBuscaList)?window._conPqrsBuscaList:null);
   const buscaRango=String(window._conBuscaRango||window._conPqrsBuscaRango||'').trim();
-  const conBusca=!!buscaRango&&Array.isArray(buscaList);
-  // Tras Buscar por corte (cualquier rol): base = esa lectura. Sin Buscar: bandeja/escucha habitual.
+  const buscaFueCseg=/\|cseg(?:\||$)/.test(buscaRango);
+  // Buscar de conceptos no sirve de base para otros filtros (y viceversa: el corte por fechas sí filtra cseg en memoria).
+  let conBusca=!!buscaRango&&Array.isArray(buscaList);
+  if(conBusca&&buscaFueCseg&&qf!=='cseg')conBusca=false;
+  const filtroEspecial=!!qf&&!basPqrs;
+  // Tras Buscar por corte (cualquier rol): base = esa lectura. Sin Buscar: solo bandeja (incompleta para filtros).
   let baseList;
   if(conBusca){
     baseList=(buscaList||[]).filter(function(e){
@@ -2545,10 +2552,21 @@ function renderConsulta(){
   const listExpsVis=(esSecretaria()&&!conBusca)?consultaTopeSecretaria(listExps,q):listExps;
   const listLibres=filterExpsPeriodo(collectConsultaActLibres(q,qt,qe,qi,qact,qf),'q');
   const list=ordenarConsultaPorTitulo(listExpsVis.concat(listLibres), q);
-  const ambitoLbl=conBusca?' — corte Buscar (descarga/matriz)':esJurisdiccional()?' (jurisdiccional)':esModoResponsable()?' (consulta general — todos los expedientes)':esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días'):esSecretaria()?' — últimas 10 PQRSD':' — '+labelDepto(deptoActivo);
+  const ambitoLbl=conBusca
+    ?(' — corte Buscar'+(qf==='cseg'?' · conceptos':''))
+    :(esJurisdiccional()?' (jurisdiccional — use Buscar para el corte)'
+      :esModoResponsable()?' (bandeja en memoria — use Buscar para el corte completo)'
+      :esModoOficinaDeguv()?((typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv())?' — por atender y atendidas de 30 días':' — su oficina, por atender y atendidas de 30 días')
+      :esSecretaria()?' — últimas 10 PQRSD'
+      :(' — '+labelDepto(deptoActivo)+' · bandeja — use Buscar para el corte'));
   const prLbl=labelPeriodo('q');
   const qPr=document.getElementById('q-periodo-resumen');
-  if(qPr)qPr.textContent=prLbl?('Filtro de fechas (solicitud / estados): '+prLbl):'';
+  if(qPr){
+    let t=prLbl?('Corte de fechas: '+prLbl):'';
+    if(conBusca)t+=(t?' · ':'')+'Resultado de Buscar (suma lecturas personales y cupo global Blaze)';
+    else if(filtroEspecial||qt||qe||qact)t+=(t?' · ':'')+'Pulse Buscar para aplicar el filtro sobre el corte (no solo la bandeja)';
+    qPr.textContent=t;
+  }
   const nLib=listLibres.length;
   const cntBase=listExps.length?(esOficinaPqrsBasica()?listExps.length+' solicitud(es) PQRSD'+ambitoLbl:listExps.length+' expediente(s)'+ambitoLbl):'';
   const cntLib=nLib?(nLib+' documento(s)/actividad(es) sin expediente'):'';
@@ -2563,7 +2581,13 @@ function renderConsulta(){
     const nLibAmb=(shouldIncludeActLibresEnConsulta()?actLibresAmbitoConsulta().length:0)
       +(String(q||'').trim().length>=2?collectConsultaOficinaDocComunicados(q,'','').length:0);
     let msg='Sin resultados con los filtros actuales.';
-    if(!nAmb&&!nLibAmb)msg=esJurisdiccional()?'No hay expedientes registrados en ningún departamento.':esOficinaPqrsBasica()?'No hay PQRSD radicadas.':'No hay expedientes en '+labelDepto(deptoActivo)+'. Verifique el departamento seleccionado arriba.';
+    if(filtroEspecial&&!conBusca){
+      const nomFl={
+        mp:'medida preventiva',sus:'suspendidos',san:'sancionatorio',mora:'mora',pers:'persuasivo',
+        coa:'coactivo',acu:'acuerdo de pago',seg:'en seguimiento',cseg:'conceptos de seguimiento'
+      }[qf]||'filtro especial';
+      msg='Para ver <strong>'+nomFl+'</strong> elija año/trimestre/mes y pulse <strong>Buscar</strong>. Sin Buscar solo está la bandeja del día (recortes Blaze). Buscar lee el corte, aplica el filtro y suma al cupo personal y al global.';
+    }else if(!nAmb&&!nLibAmb)msg=esJurisdiccional()?'No hay expedientes registrados en ningún departamento.':esOficinaPqrsBasica()?'No hay PQRSD radicadas.':'No hay expedientes en '+labelDepto(deptoActivo)+'. Verifique el departamento seleccionado arriba.';
     else if(q.trim()&&exps.some(x=>String(x._exp||'').trim()===q.trim()&&x._depto&&x._depto!==deptoActivo&&!esJurisdiccional()&&!esModoOficinaDeguv()&&!esSecretaria()))msg='El expediente existe en otro departamento. Cambie el selector superior o use vista Jurisdiccional.';
     c.innerHTML='<div class="emp">'+msg+'</div>';
     return;
