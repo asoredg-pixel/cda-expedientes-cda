@@ -45,6 +45,7 @@ function ctx() {
 
 describe('Modo del correo al notificar', () => {
   it('tres casillas y el solicitante conserva el botón', () => {
+    expect(core).toContain('Al solicitante')
     expect(core).toContain('Traslado por competencia')
     expect(core).toContain('Respuesta a oficina interna')
     expect(core).toContain('Respuesta a entidad o tercero')
@@ -86,6 +87,21 @@ describe('Modo del correo al notificar', () => {
     expect(html).not.toContain('CONSULTA')
     expect(html).not.toContain('Consulta ciudadana')
     expect(html).not.toContain('ciudadano')
+  })
+
+  it('sin opción marcada no deja enviar y abre el aviso', () => {
+    let aviso = null
+    const els = { 'task-rev-notif-solicitante': { checked: false } }
+    const c = createContext({
+      document: { getElementById: id => els[id] || null },
+      confirmPrecaucion: opts => { aviso = opts }
+    })
+    runInContext(extraer(core, ['pqrsModoNotifLeer', 'pqrsExigirModoNotifCorreo']), c)
+    expect(c.pqrsExigirModoNotifCorreo('task-rev')).toBe(false)
+    expect(aviso && aviso.message).toMatch(/Escoja la opción/)
+    expect(aviso.hideCancel).toBe(true)
+    els['task-rev-notif-solicitante'].checked = true
+    expect(c.pqrsExigirModoNotifCorreo('task-rev')).toBe(true)
   })
 
   it('al guardar, cada modo deja marcas distintas', () => {

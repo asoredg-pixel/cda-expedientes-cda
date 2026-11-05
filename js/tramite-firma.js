@@ -2269,7 +2269,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
       '</div></div>';
   }
 
-  const modoAtajo=typeof pqrsModoNotifDeWf==='function'?pqrsModoNotifDeWf(wf,e):(e&&e._pqrs_interna?'resp_interna':'');
+  const modoAtajo=typeof pqrsModoNotifDeWf==='function'?pqrsModoNotifDeWf(wf):'';
   const modosChk=typeof htmlChkModosNotifCorreo==='function'?htmlChkModosNotifCorreo('tramite-atajo',modoAtajo):'';
   const emailBlock=
     sugAtajo+
@@ -2861,6 +2861,7 @@ async function cargarFirmadoDesdeRail(expId,taskId,esPqrs,abrirNotif){
   }else if(modoSinNotif){
     // Sin campos adicionales: solo PDF firmado → atendida
   }else if(abrirNotif){
+    if(typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('tramite-atajo'))return;
     const maloA=typeof sstEmailChipsConfirmarPendientes==='function'
       ?sstEmailChipsConfirmarPendientes(['tramite-atajo-email-to','tramite-atajo-email-cc','tramite-atajo-email-bcc']):'';
     if(maloA){notif('Correo no válido en '+maloA+'. Corríjalo o quítelo antes de enviar.','err');return;}

@@ -9109,6 +9109,12 @@ function taskReviewActividadVerRailHtml(ref,taskId,t,e){
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='edit'?' on':'')+'" data-side="edit" title="Editar expediente" onclick="taskReviewToggleSidePanel(\'edit\',\''+r+'\',\''+tid+'\')">✏️</button>';
     if(!t.sinExpediente&&!esOfiBasicaRail)
       h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn'+(side==='trasladar'?' on':'')+'" data-side="trasladar" title="Trasladar oficina o asignar responsable" onclick="taskReviewToggleSidePanel(\'trasladar\',\''+r+'\',\''+tid+'\')">🔄</button>';
+    // Encargado NCA: 🖇️ asociar, igual que el rail de Por ejecutar
+    if(esNcaRail&&(t.sinExpediente||(e&&(
+      (typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e))
+      ||(typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel())
+    ))))
+      h+=taskReviewAsocRailBtnHtml(refExp,taskId,t,side==='asociar');
   }
   if(typeof openBibGuardarModal==='function')
     h+='<button type="button" class="btn bsm bic act-ico task-review-rail-btn" data-side="biblioteca" title="Biblioteca" onclick="taskReviewToggleSidePanel(\'biblioteca\',\''+r+'\',\''+tid+'\')">📚</button>';
@@ -10731,6 +10737,7 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     return;
   }
   if(window._taskReviewNotifBusy)return;
+  if(typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('task-rev'))return;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
   const e=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(expId):null);
@@ -19863,6 +19870,7 @@ function submitEnviarSoporteVerificacion(expId,taskId){
         }else closeTaskModal();
       };
       const needMailEd=pq.tipo===PQRS_WF_TIPO.MENSAJE||(pq.tipo===PQRS_WF_TIPO.OFICIO&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
+      if(needMailEd&&typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('pqrs-entrega'))return;
       if(needMailEd&&typeof pqrsEntregaDirectaEnviarCorreoSiAplica==='function'){
         const tMail=getTaskFromExp(e,taskId)||t;
         const localUpload=typeof collectEnviarAdjuntos==='function'?collectEnviarAdjuntos():{files:[],anexos:[]};
@@ -31354,6 +31362,7 @@ async function submitCrearPqrsDesdeActLibre(){
     const TIPO_OFI_SEND=typeof PQRS_WF_TIPO!=='undefined'?PQRS_WF_TIPO.OFICIO:'oficio_firmado';
     const necesitaCorreo=(pq.tipo===TIPO_MSG)||(pq.tipo===TIPO_OFI_SEND&&typeof pqrsEsCanalCorreo==='function'&&pqrsEsCanalCorreo(pq.canal));
     if(necesitaCorreo){
+      if(typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('pqrs-entrega'))return;
       try{
         const ovCarga=document.getElementById('confirm-prec-overlay');
         if(typeof sstCargaProgress==='function'&&ovCarga&&ovCarga.classList.contains('on')){
@@ -35236,6 +35245,7 @@ async function ncaAprobarMensajeSimple(expId){
   const esTraslado=modoCorreo==='traslado';
   const esInterna=modoCorreo==='resp_interna';
   const esEntidad=modoCorreo==='resp_entidad';
+  if(d.notifCorreo!==false&&typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('nca-rev'))return;
   if(d.notifCorreo!==false&&!cuerpoFinal&&(wf.tipo||PQRS_WF_TIPO.MENSAJE)===PQRS_WF_TIPO.MENSAJE){notif('Escriba el cuerpo del correo','err');return;}
   if(d.notifCorreo&&d.notifCorreo!==false){
     const toList=_ncaRevisionCorreosDestino(d,wf,e);
@@ -37842,37 +37852,58 @@ function pqrsCorreoHtmlBloqueConsulta(expId){
     '<a href="'+escAttr(url)+'" style="display:inline-block;padding:11px 22px;background:#1a5f9e;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600">Consultar aquí</a>'+
     '</div>';
 }
-function htmlChkModoNotifItem(id,checked,titulo,detalle){
+function htmlChkModoNotifItem(id,checked,titulo){
   return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;padding:8px;background:var(--sf2);border:1px solid var(--bd);border-radius:var(--r)">'+
     '<input type="checkbox" id="'+id+'"'+(checked?' checked':'')+' onchange="pqrsToggleChkModoNotif(this)" style="margin-top:2px;width:15px;height:15px;accent-color:var(--bl);flex-shrink:0">'+
-    '<span>'+titulo+' <span style="font-weight:400;color:var(--tx3)">('+detalle+')</span></span></label>';
+    '<span>'+titulo+'</span></label>';
 }
-/** Tres casillas excluyentes. Vacío = notificar al solicitante (botón de consulta ciudadana). */
+/** Cuatro casillas excluyentes. Hay que marcar una para enviar. */
 function htmlChkModosNotifCorreo(prefix,modo){
   modo=String(modo||'');
-  return htmlChkModoNotifItem(prefix+'-notif-traslado',modo==='traslado',
-      'Traslado por competencia',
-      'oficina interna o entidad; reenvía la solicitud con historial y anexos, sin botón')+
-    htmlChkModoNotifItem(prefix+'-notif-interna',modo==='resp_interna',
-      'Respuesta a oficina interna',
-      'sin botón de consulta')+
-    htmlChkModoNotifItem(prefix+'-notif-entidad',modo==='resp_entidad',
-      'Respuesta a entidad o tercero',
-      'enlace «Consultar el trámite», sin decir ciudadano');
+  return htmlChkModoNotifItem(prefix+'-notif-solicitante',modo==='solicitante','Al solicitante')+
+    htmlChkModoNotifItem(prefix+'-notif-traslado',modo==='traslado','Traslado por competencia')+
+    htmlChkModoNotifItem(prefix+'-notif-interna',modo==='resp_interna','Respuesta a oficina interna')+
+    htmlChkModoNotifItem(prefix+'-notif-entidad',modo==='resp_entidad','Respuesta a entidad o tercero');
 }
 function pqrsModoNotifLeer(prefix){
   try{
+    if((document.getElementById(prefix+'-notif-solicitante')||{}).checked)return'solicitante';
     if((document.getElementById(prefix+'-notif-traslado')||{}).checked)return'traslado';
     if((document.getElementById(prefix+'-notif-interna')||{}).checked)return'resp_interna';
     if((document.getElementById(prefix+'-notif-entidad')||{}).checked)return'resp_entidad';
   }catch(_e){}
   return'';
 }
+/** Si hay casillas y ninguna está marcada, avisa y no deja enviar. */
+function pqrsExigirModoNotifCorreo(prefix){
+  let hay=false;
+  try{
+    hay=!!(document.getElementById(prefix+'-notif-solicitante')
+      ||document.getElementById(prefix+'-notif-traslado')
+      ||document.getElementById(prefix+'-notif-interna')
+      ||document.getElementById(prefix+'-notif-entidad'));
+  }catch(_e){return true;}
+  if(!hay)return true;
+  if(pqrsModoNotifLeer(prefix))return true;
+  if(typeof confirmPrecaucion==='function'){
+    confirmPrecaucion({
+      title:'Falta la opción',
+      message:'Escoja la opción para poder enviar por correo.',
+      hideCancel:true,
+      confirmLabel:'Entendido',
+      tone:'warn',
+      requireAck:true
+    });
+  }else if(typeof notif==='function'){
+    notif('Escoja la opción para poder enviar por correo','warn');
+  }
+  return false;
+}
 /** traslado | resp_interna | resp_entidad | '' (solicitante). */
 function pqrsModoCorreoNotif(wf,opts){
   opts=opts||{};
   const directo=String(opts.modo!=null?opts.modo:'').trim();
-  if(directo==='traslado'||directo==='resp_interna'||directo==='resp_entidad')return directo;
+  if(directo==='solicitante'||directo==='traslado'||directo==='resp_interna'||directo==='resp_entidad')return directo;
   if(opts.modo==='')return'';
   if(opts.traslado===true||opts.trasladoCompetencia===true)return'traslado';
   if(opts.respInterna===true)return'resp_interna';
@@ -37880,7 +37911,7 @@ function pqrsModoCorreoNotif(wf,opts){
   if(opts.interna===false&&opts.entidad===false)return'';
   if(opts.interna===true||opts.entidad===true||opts.comunicacionInterna===true||opts.comunicacionEntidad===true)return'traslado';
   const m=String(wf&&wf.modo_correo_notif||'').trim();
-  if(m==='traslado'||m==='resp_interna'||m==='resp_entidad')return m;
+  if(m==='solicitante'||m==='traslado'||m==='resp_interna'||m==='resp_entidad')return m;
   if(!wf)return'';
   if(wf.comunicacion_interna&&wf.traslado_interno)return'traslado';
   if(wf.traslado_competencia||(wf.comunicacion_entidad&&wf.traslado_competencia!==false&&!wf.modo_correo_notif))return'traslado';
@@ -37888,11 +37919,8 @@ function pqrsModoCorreoNotif(wf,opts){
   if(wf.comunicacion_entidad&&wf.traslado_competencia===false)return'resp_entidad';
   return'';
 }
-function pqrsModoNotifDeWf(wf,e){
-  const m=pqrsModoCorreoNotif(wf,{});
-  if(m)return m;
-  if(e&&e._pqrs_interna)return'resp_interna';
-  return'';
+function pqrsModoNotifDeWf(wf){
+  return pqrsModoCorreoNotif(wf,{});
 }
 function pqrsPatchModoCorreo(patch,modo){
   modo=String(modo||'');
@@ -37921,14 +37949,14 @@ function pqrsCorreoHtmlBloqueTramite(expId){
     '</div>';
 }
 function htmlChkComunicacionEntidad(id,checked){
-  return htmlChkModoNotifItem(id,checked,'Respuesta a entidad o tercero','enlace «Consultar el trámite», sin decir ciudadano');
+  return htmlChkModoNotifItem(id,checked,'Respuesta a entidad o tercero');
 }
 function pqrsToggleChkModoNotif(el){
   if(!el)return;
   const id=String(el.id||'');
-  const prefix=id.replace(/-notif-(traslado|interna|entidad)$/,'');
+  const prefix=id.replace(/-notif-(solicitante|traslado|interna|entidad)$/,'');
   if(el.checked&&prefix&&prefix!==id){
-    ['traslado','interna','entidad'].forEach(function(k){
+    ['solicitante','traslado','interna','entidad'].forEach(function(k){
       const other=document.getElementById(prefix+'-notif-'+k);
       if(other&&other!==el)other.checked=false;
     });
@@ -37942,6 +37970,7 @@ function pqrsToggleChkEntidadInterna(el){
 window.htmlChkModosNotifCorreo=htmlChkModosNotifCorreo;
 window.htmlChkComunicacionEntidad=htmlChkComunicacionEntidad;
 window.pqrsModoNotifLeer=pqrsModoNotifLeer;
+window.pqrsExigirModoNotifCorreo=pqrsExigirModoNotifCorreo;
 window.pqrsModoCorreoNotif=pqrsModoCorreoNotif;
 window.pqrsModoNotifDeWf=pqrsModoNotifDeWf;
 window.pqrsPatchModoCorreo=pqrsPatchModoCorreo;

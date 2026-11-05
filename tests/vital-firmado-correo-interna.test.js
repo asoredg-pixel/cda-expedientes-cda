@@ -65,7 +65,7 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
 
   it('PQRSD interna (radicada interna o ya marcada): viene marcada', () => {
     expect(ctxRender(true, {}, { _exp: 'P1', _pqrs_interna: true })('P1', 't1', { id: 't1' }))
-      .toContain('id="tramite-atajo-notif-interna" checked')
+      .not.toContain('id="tramite-atajo-notif-interna" checked')
     expect(ctxRender(true, { comunicacion_interna: true }, { _exp: 'P1' })('P1', 't1', { id: 't1' }))
       .toContain('id="tramite-atajo-notif-interna" checked')
   })
