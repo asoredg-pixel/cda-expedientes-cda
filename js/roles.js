@@ -486,9 +486,8 @@ function aplicarModoMantenimientoUI(){
     if(verAviso&&!mantAdmin){
       const rolU=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
       const gestiona=(typeof esAdministrador==='function'&&esAdministrador())||rolU==='guaviare';
-      const hora=typeof horaReinicioCuotaFirebase==='function'?horaReinicioCuotaFirebase():'2:00 a. m.';
-      ban.innerHTML='⚠️ <strong>Firebase no está guardando: Límite diario de Firebase alcanzado o sin conexión</strong> — solo consulta: lo que asigne o edite se perdería. El cupo se restablece a las <strong>'+escAttr(hora)+'</strong>; la edición se libera sola cuando Firebase vuelva a guardar.'+
-        (gestiona?' <a class="mant-ok" href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="margin-left:8px;color:#fde68a;text-decoration:underline">Ver uso y facturación de Firebase</a>':'');
+      ban.innerHTML='⚠️ <strong>Sin buena conexión a internet</strong> — Firebase no está guardando; la app pasa a <strong>solo consulta</strong>. Lo que asigne o edite se perdería. Revise su red (Wi‑Fi o datos); la edición se libera sola cuando vuelva la conexión.'+
+        (gestiona?' <a class="mant-ok" href="https://console.firebase.google.com/project/cda-tramites/usage" target="_blank" rel="noopener" style="margin-left:8px;color:#fde68a;text-decoration:underline">Ver uso de Firebase (si el problema persiste)</a>':'');
     }else if(verAviso){
       const when=fmtMantenimientoRestablece(mantenimientoEstado.restableceAt);
       const extra=mantenimientoEstado.mensaje?(' · '+mantenimientoEstado.mensaje):'';

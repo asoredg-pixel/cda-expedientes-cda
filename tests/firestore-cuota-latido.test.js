@@ -143,7 +143,10 @@ describe('Cupo agotado: solo consulta, como el modo mantenimiento', () => {
     expect(c.esMantenimientoActivo()).toBe(true)
     expect(clases.has('modo-mantenimiento')).toBe(true)
     expect(clases.has('mant-aviso-visible')).toBe(true)
-    expect(ban.innerHTML).toContain('Límite diario de Firebase')
+    expect(ban.innerHTML).toContain('Sin buena conexión a internet')
+    expect(ban.innerHTML).toContain('solo consulta')
+    expect(ban.innerHTML).not.toContain('Límite diario de Firebase')
+    expect(ban.innerHTML).not.toContain('cupo se restablece')
     expect(ban.innerHTML).not.toContain('console.firebase')
   })
 

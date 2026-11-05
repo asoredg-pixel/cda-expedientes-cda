@@ -110,6 +110,7 @@ describe('Vigilante de guardados en Firestore', () => {
 
   it('al restablecerse se quita la franja y se avisa', () => {
     expect(ingreso).toContain("window.addEventListener('firestore-cuota-restablecida'")
-    expect(roles).toContain('Firebase no está guardando')
+    expect(roles).toContain('Sin buena conexión a internet')
+    expect(roles).toContain('solo consulta')
   })
 })
