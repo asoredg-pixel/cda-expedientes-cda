@@ -1381,10 +1381,27 @@ async function apoyoPintarListaAdmin(){
   var conCobro=list.filter(function(u){return(Number(u.montoCop)||0)>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;});
   var cfg=apoyoNormCfg(window._apoyoCfg);
   var extraCop=Math.round((Number(cfg.costoDiscoRedUsd)||0)*(Number(cfg.trmCop)||0));
-  var sumLect=0;
-  list.forEach(function(u){sumLect+=(u.lecturasMes|0);});
-  var h='<div class="slbl" style="margin:12px 0 8px">Consumo del ciclo por usuario ('+list.length+' · con cobro: '+conCobro.length+')</div>'+
-    (extraCop>0?'<div style="font-size:12px;margin:0 0 8px">Disco y red del ciclo: <strong>'+escAttr(apoyoFmtCop(extraCop))+'</strong>'+(sumLect>0?' · se reparte según lecturas del ciclo ('+sumLect+').':' · sin lecturas de ciclo todavía, no hay a quién repartir.')+'</div>':'');
+  var sumLect=0,sumMonto=0,sumA=0,sumB=0,sumPend=0;
+  list.forEach(function(u){
+    sumLect+=(u.lecturasMes|0);
+    var m=Math.round(Number(u.montoCop)||0);
+    var b=Math.round(Number(u.montoBlazeCop)||0);
+    var a=Math.max(0,m-b);
+    sumMonto+=m;
+    sumA+=a;
+    sumB+=b;
+    if(!u.apoyado)sumPend+=m;
+  });
+  var totalConDisco=sumMonto+extraCop;
+  var h='<div style="margin:14px 0 10px;padding:12px 14px;border:1px solid var(--bd);border-radius:var(--r);background:#f4faf6">'+
+    '<div style="font-size:12px;color:var(--tx3);letter-spacing:.02em">Total acumulado del ciclo · todos los usuarios</div>'+
+    '<div style="font-size:22px;font-weight:700;line-height:1.2;margin-top:2px">'+escAttr(apoyoFmtCop(sumMonto))+'</div>'+
+    '<div style="font-size:12px;color:var(--tx2);margin-top:4px;line-height:1.4">Personal '+escAttr(apoyoFmtCop(sumA))+' · Blaze (lecturas) '+escAttr(apoyoFmtCop(sumB))+' · pendiente de marcar apoyo '+escAttr(apoyoFmtCop(sumPend))+'</div>'+
+    (extraCop>0?'<div style="font-size:12px;color:var(--tx2);margin-top:2px">Con disco y red pegados de la consola: <strong>'+escAttr(apoyoFmtCop(totalConDisco))+'</strong></div>':'')+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.35">Esta cifra es la suma de la columna Monto ciclo, ahora mismo. Compárela cada día con la factura Blaze. No es el cobro de Google: allá también entran almacenamiento y ancho de banda.</div>'+
+    '</div>'+
+    '<div class="slbl" style="margin:12px 0 8px">Consumo del ciclo por usuario ('+list.length+' · con cobro: '+conCobro.length+')</div>'+
+    (extraCop>0?'<div style="font-size:12px;margin:0 0 8px">Disco y red del ciclo: <strong>'+escAttr(apoyoFmtCop(extraCop))+'</strong>'+(sumLect>0?' · se reparte según lecturas del ciclo ('+sumLect+').':' · sin lecturas de ciclo todavía, no hay a quién repartir.')+'</div>':'')+
     '<div style="font-size:11px;color:var(--tx3);margin:0 0 8px;line-height:1.35">Monto = acumulado del ciclo (no se borra a las 2:00; solo lecturas del día). Si ayer vio ~$35 y hoy $0, el pico pudo pisarse antes del arreglo de guardado; no se puede inventar el monto si ya no está en Firestore.</div>'+
     '<div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lect. ciclo</th><th>Lect. hoy</th><th>A pers.</th><th>B Blaze</th><th>Monto ciclo</th><th>Parte disco/red</th><th>Estado</th><th></th></tr></thead><tbody>';
   list.forEach(function(u){
@@ -1403,6 +1420,7 @@ async function apoyoPintarListaAdmin(){
       '<button type="button" class="btn bsm" onclick=\'apoyoReiniciarUsuario('+emailJs+')\'>Reiniciar</button>'+
       '</td></tr>';
   });
+  h+='<tr style="font-weight:700;background:#f4faf6"><td>Total</td><td></td><td>'+sumLect+'</td><td></td><td></td><td></td><td>'+escAttr(apoyoFmtCop(sumMonto))+'</td><td>'+(extraCop>0?escAttr(apoyoFmtCop(extraCop)):'—')+'</td><td></td><td></td></tr>';
   h+='</tbody></table></div>';
   box.innerHTML=h;
 }
