@@ -5,9 +5,15 @@
 'use strict';
 
 var APOYO_CFG_DEFAULT={
+  /** Cupo personal bajo: el cobro A debe activarse antes de que Google facture de más. */
   cupoDiario:800,
-  /** Cupo gratis global del proyecto/día (colchón bajo el de Blaze, p. ej. 40k vs 50k). */
-  cupoGlobalDia:40000,
+  /**
+   * Colchón bajo el gratis de lecturas Blaze (~50k/día).
+   * 40k era demasiado holgado: el proyecto podía costar cientos en consola sin cobro B interno.
+   * El medidor solo cuenta lecturas de expedientes; Blaze también cobra almacenamiento y ancho de banda.
+   */
+  cupoGlobalDia:20000,
+  /** USD / 1.000 lecturas cobrables — debe dejar margen sobre el costo real de Google. */
   precioPorMilUsd:0.35,
   trmCop:4200,
   diaCorte:28,
@@ -972,14 +978,32 @@ async function apoyoConsultarTrm(){
   }
 }
 async function apoyoListarUsosAdmin(){
-  if(!apoyoEsAdmin()||!window._db||!window._fsGetDocs||!window._fsCollection)return[];
+  if(!apoyoEsAdmin()||!window._db||!window._fsGetDocs||!window._fsCollection){
+    return{ok:false,list:[],err:'Sin permisos o Firestore no listo'};
+  }
+  if(typeof window.ensureFirestoreAuthReady==='function'){
+    try{
+      var authOk=await window.ensureFirestoreAuthReady();
+      if(authOk&&authOk.ok===false)return{ok:false,list:[],err:'Sesión Firebase no lista'};
+    }catch(eA){return{ok:false,list:[],err:String(eA&&eA.message||eA).slice(0,120)};}
+  }
   try{
     var snap=await window._fsGetDocs(window._fsCollection(window._db,'apoyo_uso'));
     var list=[];
     snap.forEach(function(d){list.push(Object.assign({id:d.id},d.data()||{}));});
-    list.sort(function(a,b){return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));});
-    return list;
-  }catch(e){console.warn('apoyoListarUsosAdmin',e);return[];}
+    // Primero quien tiene cobro del ciclo; luego por actualización
+    list.sort(function(a,b){
+      var ma=Number(a.montoCop)||0,mb=Number(b.montoCop)||0;
+      if(mb!==ma)return mb-ma;
+      var ca=(a.cobrablesMes|0)+(a.cobrablesBlazeMes|0),cb=(b.cobrablesMes|0)+(b.cobrablesBlazeMes|0);
+      if(cb!==ca)return cb-ca;
+      return String(b.updatedAt||'').localeCompare(String(a.updatedAt||''));
+    });
+    return{ok:true,list:list,err:''};
+  }catch(e){
+    console.warn('apoyoListarUsosAdmin',e);
+    return{ok:false,list:[],err:String(e&&e.code||e&&e.message||e).slice(0,160)};
+  }
 }
 async function apoyoMarcarApoyoUsuario(email,reiniciar){
   if(!apoyoEsAdmin())return;
@@ -1055,16 +1079,17 @@ function apoyoCfgCardBody(){
   var inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   var cupoG=cfg.cupoGlobalDia|0;
   return '<div class="cfcard" id="apoyo-cfg-card">'+
-    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Dos cupos (renuevan a las <strong>2:00 a. m.</strong>): <strong>personal</strong> por usuario y <strong>global</strong> del proyecto (colchón bajo Blaze). Cobro A = superar el personal. Cobro B = si el global se pasa, se reparte según el consumo del día <em>dentro</em> del cupo personal (sin doble cobro de lo ya cobrado como A). Ambos montos suman al ciclo. Tras el plazo solidario sin registrar apoyo, no podrá conectar Drive.</p>'+
+    '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Dos cupos (renuevan a las <strong>2:00 a. m.</strong>): <strong>personal</strong> y <strong>global</strong>. Cobro A = superar el personal. Cobro B = superar el global (reparto por aporte del día dentro del cupo personal). El medidor <strong>solo cuenta lecturas de expedientes</strong>; la factura Google Blaze también cobra <strong>almacenamiento y ancho de banda</strong> — por eso puede haber cobro en consola sin cobro A/B aquí si los cupos están muy altos o el USD/1.000 muy bajo. Objetivo: el apoyo solidario del ciclo debe cubrir (con margen) lo que Google factura.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
     '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis personales / día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
     '</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;line-height:1.35">Recomendado ≤ <strong>800–1200</strong> (con 3000 casi nadie genera cobro A). Valor por defecto del sistema: '+escAttr(String(APOYO_CFG_DEFAULT.cupoDiario))+'. Debe <strong>Guardar</strong> para aplicar.</div>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld" style="grid-column:1/-1">'+
-    '<label for="apoyo-cfg-cupo-global">Lecturas gratis globales / día (Blaze del proyecto)</label>'+
-    '<input type="number" min="0" step="1000" id="apoyo-cfg-cupo-global" value="'+escAttr(String(cupoG))+'" style="'+inp+'" title="Ej. 40000 aunque Blaze ofrezca 50000">'+
-    '<div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35">Colchón del proyecto (por defecto '+escAttr(String(APOYO_CFG_DEFAULT.cupoGlobalDia))+'). Al bajarlo o subirlo, lo <strong>ya cobrado</strong> en el ciclo se mantiene; desde Guardar (o al volver a entrar) el cobro B usa el cupo nuevo según el aporte personal del día.</div>'+
+    '<label for="apoyo-cfg-cupo-global">Lecturas gratis globales / día (colchón bajo Blaze ~50k)</label>'+
+    '<input type="number" min="0" step="1000" id="apoyo-cfg-cupo-global" value="'+escAttr(String(cupoG))+'" style="'+inp+'" title="Recomendado 15000–25000">'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35">Recomendado <strong>15 000–25 000</strong> (por defecto '+escAttr(String(APOYO_CFG_DEFAULT.cupoGlobalDia))+'). Con 40 000 el cobro B casi no dispara aunque Google ya facture por otras partidas. Lo ya cobrado en el ciclo no se recalcula al cambiar cupo.</div>'+
     '</div>'+
     '</div>'+
     '<div class="fg" style="margin-bottom:10px">'+
@@ -1074,7 +1099,7 @@ function apoyoCfgCardBody(){
     '<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" style="display:flex;align-items:flex-end"><button type="button" class="btn bsm" onclick="apoyoConsultarTrm()">Consultar tasa</button></div>'+
     '</div>'+
-    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte fijo: día 28. Plazo solidario: 3 días hábiles. Solo el excedente NUEVO se valora con precio/TRM/cupo actuales (lo ya cobrado no se recalcula). El cupo global debe ser ≤ al gratis real de Blaze para dejar margen.</div>'+
+    '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte día 28 · gracia 3 días hábiles. <strong>0,01 USD/1.000</strong> es demasiado bajo frente a una factura Blaze de cientos: suba el precio y/o baje cupos y pulse Guardar. Consola Google ≠ esta tabla (allá entran disco y red).</div>'+
     '<button type="button" class="btn bsm bp" onclick="apoyoGuardarCfgDesdeForm()">Guardar apoyo solidario</button>'+
     '<div id="apoyo-admin-lista" style="margin-top:16px"></div>'+
   '</div>';
@@ -1083,15 +1108,28 @@ async function apoyoPintarListaAdmin(){
   var box=document.getElementById('apoyo-admin-lista');
   if(!box||!apoyoEsAdmin())return;
   box.innerHTML='<div style="font-size:12px;color:var(--tx3)">Cargando consumos…</div>';
-  var list=await apoyoListarUsosAdmin();
-  if(!list.length){box.innerHTML='<div style="font-size:12px;color:var(--tx3);margin-top:8px">Sin registros de consumo todavía.</div>';return;}
-  var h='<div class="slbl" style="margin:12px 0 8px">Histórico por usuario</div><div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lecturas</th><th>A pers.</th><th>B Blaze</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>';
+  var res=await apoyoListarUsosAdmin();
+  var list=(res&&res.list)||[];
+  if(res&&res.ok===false){
+    box.innerHTML='<div style="font-size:12px;color:var(--or);margin-top:8px">No se pudo leer <code>apoyo_uso</code>'+(res.err?': '+escAttr(res.err):'')+'. Revise sesión admin y reglas.</div>';
+    return;
+  }
+  if(!list.length){
+    box.innerHTML='<div style="font-size:12px;color:var(--tx3);margin-top:8px">Sin documentos en <code>apoyo_uso</code>. El medidor solo crea el del usuario al usar el sistema (no admin). La factura Google Blaze no aparece aquí.</div>';
+    return;
+  }
+  var conCobro=list.filter(function(u){return(Number(u.montoCop)||0)>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;});
+  var h='<div class="slbl" style="margin:12px 0 8px">Consumo del ciclo por usuario ('+list.length+' · con cobro: '+conCobro.length+')</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin:0 0 8px;line-height:1.35">Monto = acumulado del ciclo (no se borra a las 2:00; solo lecturas del día). Si ayer vio ~$35 y hoy $0, el pico pudo pisarse antes del arreglo de guardado; no se puede inventar el monto si ya no está en Firestore.</div>'+
+    '<div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lect. ciclo</th><th>Lect. hoy</th><th>A pers.</th><th>B Blaze</th><th>Monto ciclo</th><th>Estado</th><th></th></tr></thead><tbody>';
   list.forEach(function(u){
     var email=String(u.email||u.id||'').trim().toLowerCase();
     var emailJs=JSON.stringify(email);
-    h+='<tr><td style="font-size:12px">'+escAttr(email)+'</td><td>'+escAttr(u.periodo||'')+'</td>'+
-      '<td>'+(u.lecturasMes|0)+'</td><td>'+(u.cobrablesMes|0)+'</td><td>'+(u.cobrablesBlazeMes|0)+'</td>'+
-      '<td title="Personal '+escAttr(apoyoFmtCop(Math.max(0,(Number(u.montoCop)||0)-(Number(u.montoBlazeCop)||0))))+' · Blaze '+escAttr(apoyoFmtCop(u.montoBlazeCop))+'" >'+escAttr(apoyoFmtCop(u.montoCop))+'</td>'+
+    var monto=Number(u.montoCop)||0;
+    var resalta=monto>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;
+    h+='<tr'+(resalta?' style="background:#fff8e6"':'')+'><td style="font-size:12px">'+escAttr(email)+'</td><td>'+escAttr(u.periodo||'')+'</td>'+
+      '<td>'+(u.lecturasMes|0)+'</td><td>'+(u.lecturasDia|0)+'</td><td>'+(u.cobrablesMes|0)+'</td><td>'+(u.cobrablesBlazeMes|0)+'</td>'+
+      '<td title="Personal '+escAttr(apoyoFmtCop(Math.max(0,monto-(Number(u.montoBlazeCop)||0))))+' · Blaze '+escAttr(apoyoFmtCop(u.montoBlazeCop))+'" >'+escAttr(apoyoFmtCop(monto))+'</td>'+
       '<td>'+(u.apoyado?'✓ Apoyó':'Pendiente')+'</td>'+
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm bp" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',true)\'>Apoyó + reiniciar</button> '+
