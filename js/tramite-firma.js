@@ -2468,11 +2468,15 @@ async function atajoFirmadoCerrarComoAtendidaOtroMedio(expId,taskId,esPqrs,datos
     const e=typeof getExpById==='function'?getExpById(expId):null;
     if(!e){notif('PQRSD no encontrada','err');return false;}
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
-    const docs=(wf.documentos||[]).map(function(d){
-      if(!d)return d;
-      if(d.es_anexo||d.tipo==='anexo_respuesta')return d;
-      return Object.assign({},d,{driveEstado:'cerrado'});
-    });
+    const anexosOk=typeof _pqrsAnexosVigentesKeep==='function'
+      ?_pqrsAnexosVigentesKeep(wf.documentos)
+      :((wf.documentos||[]).filter(function(d){return d&&(d.es_anexo||d.tipo==='anexo_respuesta')&&!d.corr_descartado&&!(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d));}));
+    const otros=(wf.documentos||[]).filter(function(d){
+      if(!d)return false;
+      if(d.es_anexo||d.tipo==='anexo_respuesta')return false;
+      return true;
+    }).map(function(d){return Object.assign({},d,{driveEstado:'cerrado'});});
+    const docs=otros.concat(anexosOk);
     if(typeof setPqrsWorkflow==='function'){
       setPqrsWorkflow(e,{
         fase:typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida',
@@ -2550,11 +2554,15 @@ async function atajoFirmadoCerrarComoAtendidaSinNotif(expId,taskId,esPqrs){
       ||null;
     const para=atajoFirmadoDestinatarioAviso(tAct,e);
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
-    const docs=(wf.documentos||[]).map(function(d){
-      if(!d)return d;
-      if(d.es_anexo||d.tipo==='anexo_respuesta')return d;
-      return Object.assign({},d,{driveEstado:'cerrado'});
-    });
+    const anexosOk=typeof _pqrsAnexosVigentesKeep==='function'
+      ?_pqrsAnexosVigentesKeep(wf.documentos)
+      :((wf.documentos||[]).filter(function(d){return d&&(d.es_anexo||d.tipo==='anexo_respuesta')&&!d.corr_descartado&&!(typeof _pqrsDocEsPorCorregir==='function'&&_pqrsDocEsPorCorregir(d));}));
+    const otros=(wf.documentos||[]).filter(function(d){
+      if(!d)return false;
+      if(d.es_anexo||d.tipo==='anexo_respuesta')return false;
+      return true;
+    }).map(function(d){return Object.assign({},d,{driveEstado:'cerrado'});});
+    const docs=otros.concat(anexosOk);
     if(typeof setPqrsWorkflow==='function'){
       setPqrsWorkflow(e,{
         fase:typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida',

@@ -1065,6 +1065,7 @@ function entregaCorreccionSoportesDesdePqrsWf(t){
   const wf=getPqrsWorkflow(e)||{};
   return (wf.documentos||[]).filter(function(d){
     if(!d||!(d.fileId||d.driveFileId||d.driveLink||d.url))return false;
+    if(d.corr_descartado||d.anexo_quitado_correccion||d.excluido_notif)return false;
     if(d.tipo==='soporte_notificacion'||d.tipo==='soporte_respuesta'||d.tipo==='notificacion_soporte')return false;
     if(d.tipo==='oficio_firmado'||d.notificado===true)return false;
     if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(d))return false;
@@ -1218,10 +1219,11 @@ function informeCorreccionPrecargar(expId,taskId,opts){
   if(typeof sstFileRefreshCtxLists==='function')sstFileRefreshCtxLists(ck,opts.anexosListId||'enviar-anexos-list');
 }
 /** Al quitar un documento de la entrega devuelta, queda «por corregir» para el encargado.
- *  No se borra de Drive hasta que el encargado apruebe la última entrega. */
+ *  No se borra de Drive hasta que el encargado apruebe la última entrega.
+ *  También marca el mismo archivo en wf.documentos (PQRSD) para que no vuelva al firmar/notificar. */
 function informeCorreccionOnQuitar(it){
   const c=it&&it.corrPrev;
-  const fid=String((it&&it.driveFileId)||'');
+  const fid=String((it&&(it.driveFileId||it.fileId))||'').trim();
   if(!c||!fid||typeof mutateTask!=='function')return;
   mutateTask(c.expId,c.taskId,function(t){
     (t.soportes||[]).forEach(function(s){
@@ -1233,6 +1235,22 @@ function informeCorreccionOnQuitar(it){
       if(s.label&&!/por corregir/i.test(String(s.label||'')))
         s.label=String(s.label)+' · por corregir';
     });
+    const e=typeof getExpById==='function'?getExpById(c.expId):null;
+    if(e&&typeof getPqrsWorkflow==='function'){
+      const wf=getPqrsWorkflow(e)||{};
+      let changed=false;
+      (wf.documentos||[]).forEach(function(d){
+        if(!d||String(d.fileId||d.driveFileId||'')!==fid)return;
+        d.corr_descartado=true;
+        d.driveEstado='acorregir';
+        d.version_historial=true;
+        d.conservar_version=true;
+        if(d.nombre&&!/por corregir/i.test(String(d.nombre||'')))
+          d.nombre=String(d.nombre)+' · por corregir';
+        changed=true;
+      });
+      if(changed&&typeof setPqrsWorkflow==='function')setPqrsWorkflow(e,{documentos:wf.documentos||[]});
+    }
   });
 }
 /** Tras traslado en revisión: precarga la entrega del responsable anterior (como anexos/principal ya en Drive). */
