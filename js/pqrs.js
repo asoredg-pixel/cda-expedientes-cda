@@ -3378,12 +3378,29 @@ async function submitTrasladoPqrsInterOficina(expId,taskId){
 function anonimizarParaCiudadano(txt){
   if(!txt)return txt;
   let s=String(txt);
-  getAllResponsables().forEach(n=>{if(n)s=s.split(n).join('');});
-  DEPTOS.forEach(d=>getInstructoresCfg(d.id).forEach(i=>{if(i.nombre)s=s.split(i.nombre).join('');}));
+  try{
+    if(typeof getAllResponsables==='function')getAllResponsables().forEach(n=>{if(n)s=s.split(n).join('');});
+    if(typeof DEPTOS!=='undefined'&&Array.isArray(DEPTOS)&&typeof getInstructoresCfg==='function'){
+      DEPTOS.forEach(d=>getInstructoresCfg(d.id).forEach(i=>{if(i.nombre)s=s.split(i.nombre).join('');}));
+    }
+  }catch(eAnon){}
+  // Correos institucionales / personales
+  s=s.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'');
   s=s.replace(/\b(?:Traslado|Asignado|Aprobado|Por)\s*[:\-]?\s*[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,2}/gi,'');
-  s=s.replace(/\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+ [A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?/g,'');
-  s=s.replace(/\s{2,}/g,' ').replace(/\s+([,.])/g,'$1').trim();
+  // Nombres Title Case y en MAYÚSCULAS (2–4 palabras; no toca códigos tipo PAF-00132-23)
+  s=s.replace(/\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){1,3}\b/g,'');
+  s=s.replace(/\b[A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){1,3}\b/g,'');
+  s=s.replace(/\s*[—–]\s*(?=[—–]|$)/g,'').replace(/\s+[—–\-]\s*$/g,'');
+  s=s.replace(/\s{2,}/g,' ').replace(/\s+([,.])/g,'$1').replace(/^[—–\-\s]+|[—–\-\s]+$/g,'').trim();
   return s;
+}
+/** Número de expediente/PQRSD en notas de asociación (sin autor). */
+function ciudadanoNumDesdeNotaAsoc(nota){
+  const s=String(nota||'').trim();
+  const m=s.match(/Vinculada\s+a\s+(?:PQRSD|expediente)\s+(\S+)/i)
+    ||s.match(/v[ií]nculo con\s+(\S+)/i)
+    ||s.match(/\b((?:QR|PQ|PAF|CAS|EXP)[\w.-]*\d[\w.-]*)/i);
+  return m?String(m[1]).replace(/[—–\-.,;:]+$/,'').trim():'';
 }
 function ciudadanoEventoLabel(h){
   if(!h)return'Actualización del trámite';
@@ -3394,16 +3411,28 @@ function ciudadanoEventoLabel(h){
   }
   if(h.tipo==='asignacion_oficina')return 'Asignación para atención';
   if(h.tipo==='respuesta_oficina')return 'Respuesta registrada';
+  if(h.tipo==='asociacion_exp'){
+    const n=ciudadanoNumDesdeNotaAsoc(h.nota);
+    return n?('Vinculada al expediente '+n):'Vinculada a un expediente';
+  }
+  if(h.tipo==='asociacion_pqrs'){
+    const n=ciudadanoNumDesdeNotaAsoc(h.nota);
+    return n?('Vinculada a PQRSD '+n):'Vinculada a otra PQRSD';
+  }
+  if(h.tipo==='desasociacion'){
+    const n=ciudadanoNumDesdeNotaAsoc(h.nota);
+    return n?('Se quitó el vínculo con '+n):'Se quitó un vínculo';
+  }
   // Workflow interno (impresión, firma, asignación notificador): no visible al ciudadano
   if(h.tipo==='pasar_a_firma_director'||h.tipo==='firma_director'||h.tipo==='impreso_oficio'||
      h.tipo==='listo_firma'||h.tipo==='asignacion_notificador'||h.tipo==='vital_firma_completada'||
      h.tipo==='devuelto_director_firma'||h.tipo==='notif_pendiente_encargado'||
      h.tipo==='notif_reportada_revision'||h.tipo==='notificacion_personal_pendiente')return '';
   if(h.tipo==='entrega_respuesta_nca')return 'Respuesta en proceso de revisión interna';
-  // Tras aprobación: un solo mensaje de proceso de notificación (sin detalle de imprimir/firmar)
+  // Cierre / notificación: la dedupe deja un solo hito público
   if(h.tipo==='revision_nca_aprobado_oficio'||h.tipo==='revision_nca_aprobado')return 'Respuesta aprobada — en proceso de notificación';
   if(h.tipo==='revision_nca_rechazado')return '';
-  if(h.tipo==='notificacion_correo')return 'Respuesta notificada al ciudadano por correo';
+  if(h.tipo==='notificacion_correo')return 'Respuesta notificada — solicitud atendida';
   if(h.tipo==='traslado_interno_correo')return 'Traslado interno para atención';
   if(h.tipo==='notificacion_radicacion')return 'Radicación notificada al ciudadano por correo';
   if(h.tipo==='notificacion_excepcion')return 'Notificación por correo — excepción registrada';
@@ -3415,6 +3444,11 @@ function ciudadanoEventoLabel(h){
 }
 function ciudadanoNotaPublica(h,nota){
   if(h&&h.tipo==='asignacion_oficina')return'';
+  // Asociación / cierre / entrega a NCA: sin notas internas ni autores
+  if(h&&(h.tipo==='asociacion_exp'||h.tipo==='asociacion_pqrs'||h.tipo==='desasociacion'
+    ||h.tipo==='entrega_respuesta_nca'||h.tipo==='notificacion_correo'||h.tipo==='notificacion_radicacion'
+    ||h.tipo==='revision_final_aprobada'||h.tipo==='revision_nca_canal_fisico'
+    ||h.tipo==='revision_nca_aprobado'||h.tipo==='revision_nca_aprobado_oficio'))return'';
   // Radicación / respuesta: sin notas internas (cuerpo, oficio, canal, autor)
   if(h&&(h.tipo==='radicacion'||h.tipo==='respuesta_oficina'||h.tipo==='entrega_directa_oficina'||h.tipo==='notif_otro_medio_entrega'||h.tipo==='traslado_interno_correo'))return'';
   nota=anonimizarParaCiudadano(String(nota||'').trim());
@@ -3426,6 +3460,9 @@ function ciudadanoNotaPublica(h,nota){
   if(/^(traslad|asign|aprob|recib|actividad)/i.test(nota)&&nota.length<90)return'';
   if(/Alta PQRSD|transici[oó]n\s*\(ya radicada/i.test(nota))return'';
   if(/Cordial saludo|Quedamos atentos|Oficio\s+|·\s*Correo/i.test(nota))return'';
+  if(/Vinculada\s+a\s+(?:PQRSD|expediente)/i.test(nota))return'';
+  if(/Entrega de respuesta para revisi[oó]n/i.test(nota))return'';
+  if(/Respuesta\s*\(mensaje\)\s*aprobada|enviada desde el correo/i.test(nota))return'';
   return nota;
 }
 function ciudadanoTaskEventoLabel(h){
@@ -3439,6 +3476,120 @@ function ciudadanoTaskEventoLabel(h){
   if(h.tipo==='reporte'||h.tipo==='entrega')return 'Entrega reportada — en revisión';
   if(h.tipo==='solicitud_traslado')return 'Solicitud de reasignación en trámite';
   return'';
+}
+/** Clase para deduplicar hitos repetidos en la línea de tiempo ciudadana. */
+function ciudadanoTimelineClase(label,origen){
+  const lbl=String(label||'');
+  const o=String(origen||'');
+  if(o==='asignacion_oficina'||lbl==='Asignación para atención')return 'asig_ofi';
+  if(o==='task_asignacion'||lbl==='Actividad asignada para gestión')return 'asig_act';
+  if(o==='revision_nca_aprobado'||o==='revision_nca_aprobado_oficio'||o==='notificacion_correo'
+    ||o==='revision_final_aprobada'||o==='revision_nca_canal_fisico'||o==='task_publicada'||o==='task_verif_notif'
+    ||lbl==='Respuesta aprobada — en proceso de notificación'
+    ||lbl==='Respuesta notificada al ciudadano por correo'
+    ||lbl==='Respuesta notificada — solicitud atendida'
+    ||lbl==='Respuesta aprobada y publicada'
+    ||lbl==='Respuesta verificada — solicitud atendida')return 'cierre';
+  return '';
+}
+/** Un solo hito de cierre; sin «actividad asignada» si ya hay asignación de oficina. */
+function ciudadanoTimelineDedupe(items){
+  const list=(items||[]).slice();
+  const hasAsigOfi=list.some(function(i){return i&&i.clase==='asig_ofi';});
+  let out=list.filter(function(i){
+    if(!i)return false;
+    if(hasAsigOfi&&i.clase==='asig_act')return false;
+    return true;
+  });
+  const esCierreFinal=function(i){
+    if(!i||i.clase!=='cierre')return false;
+    const l=String(i.label||'');
+    return/notificada — solicitud atendida|aprobada y publicada|verificada — solicitud atendida/i.test(l)
+      ||l==='Respuesta notificada al ciudadano por correo';
+  };
+  const esSoloProceso=function(i){
+    return i&&i.clase==='cierre'&&/en proceso de notificaci[oó]n/i.test(String(i.label||''));
+  };
+  const cierres=out.filter(function(i){return i.clase==='cierre';});
+  if(cierres.some(esCierreFinal)){
+    let keepIdx=-1;
+    out.forEach(function(i,idx){if(esCierreFinal(i))keepIdx=idx;});
+    out=out.filter(function(i,idx){return i.clase!=='cierre'||idx===keepIdx;});
+    const keep=out.find(function(i){return i.clase==='cierre';});
+    if(keep){keep.label='Respuesta notificada — solicitud atendida';keep.nota='';}
+  }else if(cierres.length>1){
+    let last=-1;
+    out.forEach(function(i,idx){if(i.clase==='cierre')last=idx;});
+    out=out.filter(function(i,idx){return i.clase!=='cierre'||idx===last;});
+  }else if(cierres.length===1&&esSoloProceso(cierres[0])){
+    // Único hito «en proceso»: se deja tal cual (aún no notificada)
+  }
+  return out;
+}
+/** Ítems de línea de tiempo pública (PQRSD y trámites) sin HTML. */
+function ciudadanoTimelineItems(e){
+  const items=[];
+  if(!e)return items;
+  const esPqrs=(typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e))
+    ||(typeof esTramitePqrs==='function'&&esTramitePqrs(e._tramite));
+  if(esPqrs){
+    const fs=e._fecha_solicitud||'';
+    const fr=e._fecha||'';
+    if(fs)items.push({fecha:fs,label:'Solicitud presentada por el ciudadano',nota:'',clase:''});
+    const hist=(e._pqrs_historial||[]).slice();
+    if(!hist.some(function(h){return h&&h.tipo==='radicacion';})&&fr)hist.push({tipo:'radicacion',fecha:fr,nota:''});
+    hist.sort(function(a,b){return String(a.fecha||'').localeCompare(String(b.fecha||''));});
+    hist.forEach(function(h){
+      const lbl=ciudadanoEventoLabel(h);
+      if(!lbl)return;
+      let notaRaw=h.nota||'';
+      if(h.tipo==='revision_nca_aprobado'||h.tipo==='revision_nca_aprobado_oficio')notaRaw='';
+      const nota=ciudadanoNotaPublica(h,notaRaw);
+      items.push({fecha:h.fecha||fr,label:lbl,nota:nota,clase:ciudadanoTimelineClase(lbl,h.tipo)});
+    });
+  }else{
+    let fechas={};
+    try{fechas=JSON.parse(e._fechas_estado||'{}')||{};}catch(eF){fechas={};}
+    Object.keys(fechas).forEach(function(st){
+      const fc=fechas[st];
+      if(fc)items.push({fecha:fc,label:'Estado: '+st,nota:'',clase:'',estado:true});
+    });
+  }
+  (e.tasks||[]).forEach(function(t){
+    t=typeof normalizeTask==='function'?normalizeTask(t):t;
+    if(!t||t.eliminada)return;
+    (t.historial||[]).forEach(function(h){
+      const lbl=ciudadanoTaskEventoLabel(h);
+      if(!lbl)return;
+      const origen=h.tipo==='asignacion'?'task_asignacion'
+        :(h.tipo==='verificacion'&&/notif/i.test(String(h.nota||''))?'task_verif_notif':'');
+      items.push({fecha:h.fecha||t.fechaReportada||'',label:lbl,nota:'',clase:ciudadanoTimelineClase(lbl,origen)});
+    });
+    const estT=typeof estadoTask==='function'?estadoTask(t):'';
+    if(estT==='Atendida'&&typeof taskDocAprobadoCiudadano==='function'&&taskDocAprobadoCiudadano(t)){
+      items.push({fecha:t.fechaAtendida||t.fechaReportada||'',label:'Respuesta aprobada y publicada',nota:'',clase:ciudadanoTimelineClase('Respuesta aprobada y publicada','task_publicada')});
+    }else if(estT==='Por verificar'){
+      items.push({fecha:t.fechaReportada||'',label:'Respuesta en revisión',nota:'',clase:''});
+    }else if((estT==='En ejecución'||estT==='Vencida'||estT==='Por corregir')
+      &&!(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))){
+      items.push({fecha:t.vence||'',label:'Actividad en gestión',nota:'',clase:''});
+    }
+  });
+  items.sort(function(a,b){return String(a.fecha||'').localeCompare(String(b.fecha||''));});
+  return ciudadanoTimelineDedupe(items);
+}
+function ciudadanoTimelineHtml(items){
+  const list=items||[];
+  if(!list.length)return'<div style="font-size:12px;color:var(--tx3)">Sin movimientos registrados aún.</div>';
+  return list.map(function(ev){
+    const f=fmtF(ev.fecha||'');
+    if(ev.estado){
+      const st=String(ev.label||'').replace(/^Estado:\s*/,'');
+      return '<div class="ciudadano-tl-item"><div class="tl-fecha">'+f+'</div><div class="tl-nota">Estado: <strong>'+escAttr(st)+'</strong></div></div>';
+    }
+    const nota=ev.nota?(': '+escAttr(ev.nota)):'';
+    return '<div class="ciudadano-tl-item"><div class="tl-fecha">'+f+'</div><div class="tl-nota"><strong>'+escAttr(ev.label||'')+'</strong>'+nota+'</div></div>';
+  }).join('');
 }
 function taskDocAprobadoCiudadano(t){
   t=normalizeTask(t);
@@ -3612,42 +3763,7 @@ async function buscarExpCiudadano(){
   if(esPqrs)normalizePqrsOficinaFields(e);
   const tram=getTram(e._tramite,e);
   const est=esPqrs?getPqrsEstadoDisplay(e):(e._estado||'Solicitud');
-  const eventos=[];
-  if(esPqrs){
-    const fs=e._fecha_solicitud||'';
-    const fr=e._fecha||'';
-    if(fs)eventos.push({fecha:fs,html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(fs)+'</div><div class="tl-nota"><strong>Solicitud presentada por el ciudadano</strong></div></div>'});
-    const hist=(e._pqrs_historial||[]).slice();
-    if(!hist.some(h=>h.tipo==='radicacion')&&fr)hist.push({tipo:'radicacion',fecha:fr,nota:''});
-    hist.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
-    hist.forEach(h=>{
-      const lbl=ciudadanoEventoLabel(h);
-      if(!lbl)return;
-      // Tras aprobación no mostrar detalle interno (quién firma / imprime / notifica)
-      let notaRaw=h.nota||'';
-      if(h.tipo==='revision_nca_aprobado'||h.tipo==='revision_nca_aprobado_oficio')notaRaw='';
-      const nota=ciudadanoNotaPublica(h,notaRaw);
-      eventos.push({fecha:h.fecha||fr,html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(h.fecha||fr)+'</div><div class="tl-nota"><strong>'+escAttr(lbl)+'</strong>'+(nota?(': '+escAttr(nota)):'')+'</div></div>'});
-    });
-  }else{
-    const fechas=JSON.parse(e._fechas_estado||'{}');
-    Object.entries(fechas).forEach(([st,fc])=>{if(fc)eventos.push({fecha:fc,html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(fc)+'</div><div class="tl-nota">Estado: <strong>'+escAttr(st)+'</strong></div></div>'});});
-  }
-  (e.tasks||[]).forEach(t=>{
-    t=normalizeTask(t);
-    if(t.eliminada)return;
-    (t.historial||[]).forEach(h=>{
-      const lbl=ciudadanoTaskEventoLabel(h);
-      if(!lbl)return;
-      eventos.push({fecha:h.fecha||t.fechaReportada||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(h.fecha||'')+'</div><div class="tl-nota">'+escAttr(lbl)+'</div></div>'});
-    });
-    const estT=estadoTask(t);
-    if(estT==='Atendida'&&taskDocAprobadoCiudadano(t))eventos.push({fecha:t.fechaAtendida||t.fechaReportada||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.fechaAtendida||t.fechaReportada||'')+'</div><div class="tl-nota"><strong>Respuesta aprobada y publicada</strong></div></div>'});
-    else if(estT==='Por verificar')eventos.push({fecha:t.fechaReportada||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.fechaReportada||'')+'</div><div class="tl-nota"><strong>Respuesta en revisión</strong></div></div>'});
-    else if((estT==='En ejecución'||estT==='Vencida'||estT==='Por corregir')&&!pqrsEstaCerrada(e))eventos.push({fecha:t.vence||'',html:'<div class="ciudadano-tl-item"><div class="tl-fecha">'+fmtF(t.vence||'')+'</div><div class="tl-nota">Actividad en gestión</div></div>'});
-  });
-  eventos.sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
-  const tlHtml=eventos.length?eventos.map(ev=>ev.html).join(''):'<div style="font-size:12px;color:var(--tx3)">Sin movimientos registrados aún.</div>';
+  const tlHtml=ciudadanoTimelineHtml(ciudadanoTimelineItems(e));
   const docsTask=(esPqrs&&typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))?[]:getDocsAprobadosCiudadano(e);
   const docsPqrsSol=getDocsPqrsSolicitudCiudadano(e);
   const docsPqrs=getDocsPqrsRespuestaCiudadano(e);
