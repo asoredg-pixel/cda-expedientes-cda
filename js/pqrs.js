@@ -553,6 +553,11 @@ async function _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,applyEx
   }
   const destLbl=typeof labelOficina==='function'?labelOficina(nuevaOfi):nuevaOfi;
   const necesitaCorreo=_pqrsNecesitaCorreoParaTraslado(e);
+  if(necesitaCorreo&&!_pqrsTokOk()){
+    const okMail=await _pqrsAsegurarCorreoParaAsignarOTraslado(e);
+    if(!okMail&&typeof notif==='function')
+      notif('Traslado sin reenvío de correo: conecte Gmail después si desea reenviar el radicado.','warn');
+  }
   const enviaraCorreo=necesitaCorreo&&_pqrsTokOk();
   window._pqrsTrasladoSubmitBusy=true;
   _pqrsTrasladoUiBusy(true);
@@ -2993,9 +2998,23 @@ function _pqrsNecesitaCorreoParaAsignar(e){
   return true;
 }
 function _pqrsTokOk(){
+  if(typeof sstGmailSesionActiva==='function')return !!sstGmailSesionActiva();
   return (typeof gmailIsTokenValid==='function'&&gmailIsTokenValid())||
          (typeof _gmailOfiTokenValid==='function'&&_gmailOfiTokenValid());
 }
+/** Si hace falta Gmail para reenviar anexos y no hay sesión: abre la ventana de cuenta y resuelve al conectar (o false si cancela). */
+async function _pqrsAsegurarCorreoParaAsignarOTraslado(e){
+  if(!_pqrsNecesitaCorreoParaAsignar(e))return true;
+  if(_pqrsTokOk())return true;
+  if(typeof sstSolicitarGmailParaAdjuntar!=='function')return false;
+  const ok=await sstSolicitarGmailParaAdjuntar({
+    force:true,
+    title:'Conectar correo para asignar',
+    message:'Para <strong>reenviar el correo con anexos</strong> al responsable, elija su cuenta institucional y autorice. Al conectar, la asignación continúa.'
+  });
+  return !!(ok&&_pqrsTokOk());
+}
+window._pqrsAsegurarCorreoParaAsignarOTraslado=_pqrsAsegurarCorreoParaAsignarOTraslado;
 function _pqrsHtmlBannerCorreoDesconectado(expId){
   return '<div id="pqrs-asig-gmail-warn" style="background:var(--warnl,#fff8e1);border:1px solid var(--warn,#f59e0b);border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--tx)">'+
     '⚠️ Esta PQRSD fue radicada por correo. Para reenviar el correo original con sus anexos al responsable debe estar conectado a Gmail.<br>'+
@@ -3004,27 +3023,25 @@ function _pqrsHtmlBannerCorreoDesconectado(expId){
     '<button type="button" class="btn bsm" onclick="_pqrsAsignarSinCorreo(\''+escAttr(expId)+'\')">Asignar sin reenviar correo</button>'+
     '</div></div>';
 }
-function _pqrsConectarCorreoYAsignar(expId){
+async function _pqrsConectarCorreoYAsignar(expId){
   const btn=document.getElementById('pqrs-asig-gmail-conn-btn');
   if(btn){btn.disabled=true;btn.textContent='Conectando…';}
-  const fn=typeof gmailOfiConnect==='function'?gmailOfiConnect:
-            (typeof gmailConnect==='function'?gmailConnect:null);
-  if(!fn){notif('Conexión Gmail no disponible','err');if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}return;}
-  fn(function(){
-    // Ya conectado → SOLO habilitar el botón Confirmar; NO asignar automáticamente.
-    if(!_pqrsTokOk()){
-      if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}
-      notif('No se pudo conectar el correo. Intente de nuevo.','warn');
-      return;
-    }
-    const warn=document.getElementById('pqrs-asig-gmail-warn');
-    if(warn)warn.remove();
-    const footer=document.getElementById('pqrs-asig-footer');
-    if(footer)footer.innerHTML=
-      '<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'+
-      '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>';
-    notif('✅ Correo conectado. Ahora confirme la asignación.','ok');
-  });
+  let ok=false;
+  if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+    ok=!!(await sstSolicitarGmailParaAdjuntar({force:true}));
+  }
+  if(!ok||!_pqrsTokOk()){
+    if(btn){btn.disabled=false;btn.textContent='📧 Conectar correo ahora';}
+    if(typeof notif==='function')notif('No se conectó el correo. Puede reintentar o usar «Asignar sin reenviar correo».','warn');
+    return;
+  }
+  const warn=document.getElementById('pqrs-asig-gmail-warn');
+  if(warn)warn.remove();
+  const footer=document.getElementById('pqrs-asig-footer');
+  if(footer)footer.innerHTML=
+    '<button type="button" class="btn bsm bp" onclick="submitAsignarPqrsOficina(\''+escAttr(expId)+'\')">Confirmar asignación</button>'+
+    '<button type="button" class="btn bsm" onclick="closeTaskModal()">Cancelar</button>';
+  if(typeof notif==='function')notif('✅ Correo conectado. Ahora confirme la asignación.','ok');
 }
 function togglePqrsAsigModo(){
   const n=document.querySelectorAll('.pqrs-asig-resp-cb:checked').length;
@@ -3158,10 +3175,14 @@ async function submitAsignarPqrsOficina(expId,taskId){
     notif('Ya se está procesando la asignación. Espere…','warn');
     return;
   }
-  // Si viene de correo y no hay token: redirigir a conectar (a menos que el usuario eligió asignar sin correo)
+  // Si viene de correo y no hay token: abrir ventana Gmail; al conectar, seguir con la asignación
   if(!window._pqrsAsignarForzarSinCorreo&&_pqrsNecesitaCorreoParaAsignar(e)&&!_pqrsTokOk()){
-    notif('Conecte el correo para reenviar al responsable los anexos de la PQRSD, o use "Asignar sin reenviar correo".','warn');
-    return;
+    const okMail=await _pqrsAsegurarCorreoParaAsignarOTraslado(e);
+    if(!okMail){
+      if(typeof notif==='function')
+        notif('Conecte el correo para reenviar los anexos, o use «Asignar sin reenviar correo».','warn');
+      return;
+    }
   }
   const forzarSinCorreo=!!window._pqrsAsignarForzarSinCorreo;
   window._pqrsAsignarForzarSinCorreo=false;

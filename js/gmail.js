@@ -632,11 +632,12 @@ function sstAbrirGmailDriveModal(opts) {
   const txt = document.getElementById('gmail-sesion-txt');
   const force = !!opts.force; // true solo cuando una acción requiere Drive (subir/adjuntar)
   if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(false);
-  if (tit) tit.textContent = force ? 'Conectar para continuar' : 'Conectar con Google Drive';
+  if (tit) tit.textContent = opts.title || (force ? 'Conectar para continuar' : 'Conectar con Google Drive');
   if (txt) {
-    txt.innerHTML = force
-      ? 'Para <strong>cargar o adjuntar este documento</strong> siga los pasos y autorice su correo institucional en Google.'
-      : 'Use su <strong>correo institucional</strong> para adjuntar archivos, usar la biblioteca Drive y enviar correos desde el sistema.';
+    txt.innerHTML = opts.message
+      || (force
+        ? 'Para <strong>cargar o adjuntar este documento</strong> siga los pasos y autorice su correo institucional en Google.'
+        : 'Use su <strong>correo institucional</strong> para adjuntar archivos, usar la biblioteca Drive y enviar correos desde el sistema.');
   }
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
@@ -683,7 +684,11 @@ function sstSolicitarGmailParaAdjuntar(opts) {
     window._sstGmailAttachCb = resolve;
     window._sstGmailAttachForce = true;
     window._sstGmailAttachRequireSecretaria = false;
-    sstAbrirGmailDriveModal({ force: true });
+    sstAbrirGmailDriveModal({
+      force: true,
+      title: opts.title || '',
+      message: opts.message || ''
+    });
   });
 }
 function sstSolicitarDriveParaPqrs(expRef) {

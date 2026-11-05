@@ -58,7 +58,8 @@ function consolidadoNcaEspera(){
   if(!consolidadoNcaModo())return false;
   const rango=typeof getPeriodoRango==='function'?getPeriodoRango('cons'):null;
   if(!rango||!rango.desde||rango.desde==='0000-01-01'||!rango.hasta||rango.hasta==='9999-12-31')return true;
-  const clave=typeof consClaveBusqueda==='function'?consClaveBusqueda(rango):((rango.desde||'')+'|'+(rango.hasta||'')+'|');
+  // La clave de sesión es solo fechas; el trámite se filtra al pintar (sin índice Firestore).
+  const clave=(rango.desde||'')+'|'+(rango.hasta||'')+'|';
   return clave!==window._consNcaRango||!Array.isArray(window._consNcaList);
 }
 function poblarConsTramSelect(){
@@ -82,7 +83,7 @@ function onConsTramiteBusqueda(){
 function renderConsolidadoNcaEspera(){
   if(typeof poblarConsTramSelect==='function')poblarConsTramSelect();
   const res=document.getElementById('cons-periodo-resumen');
-  if(res)res.textContent='Elija un año, trimestre, mes o un rango de fechas y pulse Buscar. Si elige un tipo de trámite, solo se leen esos expedientes.';
+  if(res)res.textContent='Elija un año, trimestre, mes o un rango de fechas y pulse Buscar. Si elige un tipo de trámite, el resultado se filtra a esos expedientes.';
   const panel=document.getElementById('cons-cortes-panel');
   if(panel)panel.innerHTML='';
   const mets=document.getElementById('mets');
@@ -104,9 +105,17 @@ function renderConsolidado(){
   }
   document.querySelectorAll('#pg-cons .cgr, #pg-cons > .card, #pg-cons #cons-juris-panel').forEach(el=>{el.style.display='';});
   const rango=getPeriodoRango('cons');
-  const baseAmb=consolidadoNcaModo()&&Array.isArray(window._consNcaList)
+  let baseAmb=consolidadoNcaModo()&&Array.isArray(window._consNcaList)
     ?window._consNcaList.slice()
     :filterExpsPeriodo(typeof reqListaAmbito==='function'?reqListaAmbito():expsAmbito(),'cons');
+  if(consolidadoNcaModo()&&Array.isArray(window._consNcaList)){
+    const tramId=typeof consTramiteBusqueda==='function'?consTramiteBusqueda():'';
+    if(tramId){
+      baseAmb=baseAmb.filter(function(e){
+        return typeof consExpCoincideTramite==='function'?consExpCoincideTramite(e,tramId):String((e&&e._tramite)||'')===tramId;
+      });
+    }
+  }
   window._jurisConsListCache=baseAmb;
   const amb=esJurisdiccional()?filtrarJurisConsList(baseAmb):(esDeptoConsFiltroActivo()?filtrarDeptoConsList(baseAmb):baseAmb);
   renderConsolidadoCortesPanel(amb,rango);

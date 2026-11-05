@@ -28,16 +28,15 @@ function extraer(src, nombres) {
 describe('Consolidado del encargado: buscar por corte', () => {
   it('abrir el menú no enciende la escucha completa', () => {
     const form = read('js/formulario.js')
-    expect(form).toContain("const corteCons=typeof consolidadoBuscaPorCorte==='function'&&consolidadoBuscaPorCorte()")
-    expect(form).toContain("if(!corteCons&&typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado()")
+    expect(form).toContain("if(typeof asegurarEscuchaConsolidado==='function')asegurarEscuchaConsolidado()")
     const pers = read('js/persistence.js')
     const ini = pers.indexOf('function consolidadoBuscaPorCorte(')
     const fin = pers.indexOf('\nfunction ', ini + 10)
     const body = pers.slice(ini, fin)
-    expect(body).toContain('esNcaDeguv()')
-    expect(body).toContain('esJurisdiccional()')
-    expect(body).toContain('esAdministrador()')
+    expect(body).toContain('return true')
+    expect(extraer(pers, ['asegurarEscuchaConsolidado'])).toContain('_consEscuchaCompleta=false')
   })
+
 
   it('sin corte no consulta Firestore', async () => {
     let consultas = 0
@@ -113,7 +112,7 @@ describe('Consolidado del encargado: buscar por corte', () => {
     expect(c._consNcaList.map(e => e._exp)).toEqual(['guaviare-1'])
   })
 
-  it('con tipo de trámite la consulta también filtra _tramite', async () => {
+  it('con tipo de trámite no pide índice: lee solo _fecha y guarda el corte completo', async () => {
     const wheres = []
     const c = createContext({
       esNcaDeguv: () => true,
@@ -123,20 +122,28 @@ describe('Consolidado del encargado: buscar por corte', () => {
       renderConsolidado: () => {},
       window: {},
       _db: {},
-      _consBuscaTram: 'aguas',
+      _consBuscaTram: 't_pqrs',
       _fsCollection: () => 'col',
       _fsWhere: (campo, op, val) => { wheres.push([campo, op, val]); return { campo, op, val } },
       _fsQuery: (col, ...rest) => ({ col, rest }),
-      _fsGetDocs: async () => ({ forEach(fn) { fn({ id: 'A', data: () => ({ _fecha: '2026-02-10', _tramite: 'aguas' }) }) } })
+      _fsGetDocs: async () => ({
+        forEach(fn) {
+          fn({ id: 'PQ', data: () => ({ _fecha: '2026-02-10', _tramite: 't_pqrs', _es_pqrs: true }) })
+          fn({ id: 'AG', data: () => ({ _fecha: '2026-02-11', _tramite: 'aguas' }) })
+        }
+      })
     })
     c.window = c
-    runInContext(extraer(read('js/persistence.js'), ['consolidadoBuscaPorCorte', 'consTramiteBusqueda', 'consClaveBusqueda', 'consErrorEsIndice', 'buscarConsolidadoNca']), c)
+    runInContext(extraer(read('js/persistence.js'), [
+      'consolidadoBuscaPorCorte', 'consTramiteBusqueda', 'consClaveBusqueda', 'consErrorEsIndice',
+      'consExpCoincideTramite', 'buscarConsolidadoNca'
+    ]), c)
     await c.buscarConsolidadoNca()
-    expect(wheres.map(w => w[0])).toEqual(['_tramite', '_fecha', '_fecha'])
-    expect(wheres[0][1]).toBe('==')
-    expect(wheres[0][2]).toBe('aguas')
-    expect(c._consNcaRango).toBe('2026-01-01|2026-03-31|aguas')
+    expect(wheres.map(w => w[0])).toEqual(['_fecha', '_fecha'])
+    expect(c._consNcaList.map(e => e._exp)).toEqual(['PQ', 'AG'])
+    expect(c._consNcaRango).toBe('2026-01-01|2026-03-31|')
+    expect(read('js/persistence.js')).not.toContain('Para leer solo ese tipo de trámite hay que activar el índice')
     expect(read('index.html')).toContain('id="cons-tram"')
-    expect(read('js/core.js')).not.toContain('Seguimiento completo en Consolidado')
   })
 })
+

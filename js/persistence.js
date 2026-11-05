@@ -2606,6 +2606,17 @@ function consErrorEsIndice(err){
   const msg=String(err&&err.message||'');
   return code==='failed-precondition'||/requires an index/i.test(msg);
 }
+/** ¿El expediente es del trámite pedido? PQRSD usa esPqrsSecretaria (no solo _tramite==t_pqrs). */
+function consExpCoincideTramite(exp,tram){
+  if(!tram)return true;
+  if(!exp)return false;
+  if(typeof esTramitePqrs==='function'&&esTramitePqrs(tram)){
+    if(typeof esPqrsSecretaria==='function')return !!esPqrsSecretaria(exp);
+    return !!(exp.esPqrs||exp._es_pqrs||exp._radicado_secretaria)||String(exp._tramite||'')===tram;
+  }
+  return String(exp._tramite||'')===tram;
+}
+window.consExpCoincideTramite=consExpCoincideTramite;
 function asegurarEscuchaConsolidado(){
   // #3 Blaze: no poner _consEscuchaCompleta para pintar Consolidado.
   // Use Buscar (buscarConsolidadoNca) con rango de fechas / trámite.
@@ -2704,7 +2715,7 @@ function conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs,modoCseg){
     if(modoCseg){
       if(!(exp.conceptoSeguimiento||(typeof expMarcaConceptoSeguimiento==='function'&&expMarcaConceptoSeguimiento(exp))))return;
     }else{
-      if(tram&&String(exp._tramite||'')!==tram)return;
+      if(tram&&!consExpCoincideTramite(exp,tram))return;
       const f=conBuscaFechaDoc(exp,modoPqrs);
       if(!/^\d{4}-\d{2}-\d{2}$/.test(f)||f<desde||f>hasta)return;
     }
@@ -2765,7 +2776,6 @@ async function buscarConsultaPorCorte(){
   }
   const tope=hasta.length===10?hasta+'\uf8ff':hasta;
   const list=[];
-  let faltaIndice=false;
   let leidosNuevos=0;
   const ingerirSnap=function(snap,depto){
     if(!snap||typeof snap.forEach!=='function')return;
@@ -2784,15 +2794,17 @@ async function buscarConsultaPorCorte(){
         }
         if(!exp.conceptoSeguimiento)return;
       }
+      // Siempre fusionar al caché del corte; el filtro de trámite se aplica al listar.
       const yaCache=!!(window._conBuscaCache&&window._conBuscaCache.docs&&window._conBuscaCache.docs[String(exp._exp)]);
       conBuscaFusionarExp(exp);
-      list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
       if(!yaCache){
         leidosNuevos++;
         if(typeof apoyoDebeCobrarExp==='function'){
           if(apoyoDebeCobrarExp(exp._exp,exp.updatedAt,false)&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
         }else if(typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(1);
       }
+      if(tram&&!modoCseg&&!consExpCoincideTramite(exp,tram))return;
+      list.push(window._conBuscaCache.docs[String(exp._exp)]||exp);
     });
   };
   try{
@@ -2811,19 +2823,15 @@ async function buscarConsultaPorCorte(){
             console.warn('buscarConsultaPorCorte cseg marca',depto,errM);
           }
           ingerirSnap(snapMarca,depto);
-          // Refuerzo: corte por _fecha + filtro en memoria (docs aún sin marca)
+          // Refuerzo: corte por _fecha (sin _tramite: igualdad+rango exige índice); trámite en memoria
           let snapFecha=null;
           try{
-            const filtrosF=[];
-            if(tram)filtrosF.push(window._fsWhere('_tramite','==',tram));
-            filtrosF.push(window._fsWhere('_fecha','>=',desde));
-            filtrosF.push(window._fsWhere('_fecha','<=',tope));
             snapFecha=await window._fsGetDocs(window._fsQuery(
               window._fsCollection(db,'departamentos',depto,'expedientes'),
-              ...filtrosF
+              window._fsWhere('_fecha','>=',desde),
+              window._fsWhere('_fecha','<=',tope)
             ));
           }catch(errF){
-            if(tram&&typeof consErrorEsIndice==='function'&&consErrorEsIndice(errF))faltaIndice=true;
             console.warn('buscarConsultaPorCorte cseg fecha',depto,errF);
           }
           if(snapFecha&&typeof snapFecha.forEach==='function'){
@@ -2846,12 +2854,13 @@ async function buscarConsultaPorCorte(){
             });
           }
         }else{
+          // Solo rango de fechas (sin _tramite en la consulta: igualdad+rango pide índice compuesto).
+          // El tipo de trámite se filtra en memoria al ingerir / listar desde caché.
           const filtros=[];
           if(modoPqrs){
             filtros.push(window._fsWhere('pqrsRadicadaEn','>=',desde));
             filtros.push(window._fsWhere('pqrsRadicadaEn','<=',tope));
           }else{
-            if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
             filtros.push(window._fsWhere('_fecha','>=',desde));
             filtros.push(window._fsWhere('_fecha','<=',tope));
           }
@@ -2862,18 +2871,14 @@ async function buscarConsultaPorCorte(){
           ingerirSnap(snap,depto);
         }
       }catch(errDepto){
-        if(tram&&!modoPqrs&&typeof consErrorEsIndice==='function'&&consErrorEsIndice(errDepto))faltaIndice=true;
         console.warn('buscarConsultaPorCorte',depto,errDepto);
         if(typeof notif==='function')notif('No se pudo buscar en '+depto+': '+(errDepto&&errDepto.message||errDepto),'err');
       }
     }
-    if(faltaIndice){
-      if(typeof notif==='function')notif('Para filtrar por ese trámite hace falta el índice (F12 → enlace Firestore). Puede Buscar sin trámite o esperar unos minutos.','err');
-      return;
-    }
-    conBuscaRegistrarCubierto(desde,hasta,tram,modoPqrs,modoCseg);
+    // La lectura fue por fechas (sin _tramite): el corte cubre todos los trámites de ese rango.
+    conBuscaRegistrarCubierto(desde,hasta,'',modoPqrs,modoCseg);
     const listCorte=conBuscaListarDesdeCache(desde,hasta,tram,modoPqrs,modoCseg);
-    window._conBuscaList=listCorte.length?listCorte:list;
+    window._conBuscaList=listCorte;
     window._conPqrsBuscaList=window._conBuscaList;
     window._conBuscaRango=desde+'|'+hasta+(tram?'|'+tram:'')+(modoCseg?'|cseg':'');
     window._conPqrsBuscaRango=window._conBuscaRango;
@@ -2929,22 +2934,19 @@ async function buscarConsolidadoNca(){
   const tope=hasta.length===10?hasta+'\uf8ff':hasta;
   const tram=consTramiteBusqueda();
   const list=[];
-  let faltaIndice=false;
   try{
     for(let i=0;i<deptos.length;i++){
       const depto=deptos[i];
       let snap;
       try{
-        const filtros=[];
-        if(tram)filtros.push(window._fsWhere('_tramite','==',tram));
-        filtros.push(window._fsWhere('_fecha','>=',rango.desde));
-        filtros.push(window._fsWhere('_fecha','<=',tope));
+        // Solo rango _fecha (sin _tramite: igualdad+rango exige índice compuesto).
+        // El tipo de trámite se filtra en memoria abajo / al pintar.
         snap=await window._fsGetDocs(window._fsQuery(
           window._fsCollection(db,'departamentos',depto,'expedientes'),
-          ...filtros
+          window._fsWhere('_fecha','>=',rango.desde),
+          window._fsWhere('_fecha','<=',tope)
         ));
       }catch(errDepto){
-        if(tram&&consErrorEsIndice(errDepto))faltaIndice=true;
         console.warn('buscarConsolidadoNca',depto,errDepto);
         continue;
       }
@@ -2961,16 +2963,9 @@ async function buscarConsolidadoNca(){
       });
       if(nSnap&&typeof apoyoRegistrarLecturas==='function')apoyoRegistrarLecturas(nSnap);
     }
-    if(faltaIndice){
-      window._consNcaList=null;
-      window._consNcaRango='';
-      if(typeof renderConsolidadoNcaEspera==='function')renderConsolidadoNcaEspera();
-      else if(typeof renderConsolidado==='function')renderConsolidado();
-      if(typeof notif==='function')notif('Para leer solo ese tipo de trámite hay que activar el índice una sola vez: F12, enlace de Firestore, abrirlo. En unos minutos, pulse Buscar de nuevo.','err');
-      return;
-    }
+    // Guardar el corte completo; al pintar se aplica el filtro de trámite (sin volver a leer).
     window._consNcaList=list;
-    window._consNcaRango=consClaveBusqueda(rango);
+    window._consNcaRango=String(rango.desde||'')+'|'+String(rango.hasta||'')+'|';
     if(typeof renderConsolidado==='function')renderConsolidado();
   }catch(err){
     console.warn('buscarConsolidadoNca',err);
