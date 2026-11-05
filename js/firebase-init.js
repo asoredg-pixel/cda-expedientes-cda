@@ -9,7 +9,7 @@ const firebaseConfig={
   appId:"1:215089141263:web:3eda6997d502150f16b57a"
 };
 import{initializeApp,onLog}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,query,where,orderBy,limit,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,query,where,orderBy,limit,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction,increment}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signInWithCredential,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 const app=initializeApp(firebaseConfig);
 // Con la cuota diaria agotada, Firestore solo lo informa en su registro: las escrituras quedan en espera.
@@ -383,6 +383,8 @@ window._fsGetDoc=function(ref){
 window._fsSetDoc=vigilarEscritura(setDoc);
 window._fsUpdateDoc=vigilarEscritura(updateDoc);
 window._fsAddDoc=vigilarEscritura(addDoc);
+/** Contador atómico: suma sin pisar el valor remoto (medidor apoyo / acumulados). */
+window._fsIncrement=increment;
 window._fsOnSnapshot=function(ref,cb){
   fsDiagAvisarConsulta('onSnapshot',ref);
   if(typeof cb!=='function')return onSnapshot.apply(null,arguments);
