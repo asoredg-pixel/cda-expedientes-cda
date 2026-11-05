@@ -32,9 +32,10 @@ describe('Traslado por competencia / comunicación a entidad', () => {
     expect(core).toContain("'nca-rev-notif-entidad'")
     expect(core).toContain("'pqrs-entrega-notif-entidad'")
     expect(core).toContain("'task-rev-notif-entidad'")
-    expect(tf).toContain('id="tramite-atajo-notif-entidad"')
-    expect(core).toContain('Traslado por competencia / comunicación a entidad')
-    expect(core).toContain('sin botón de consulta ciudadana; lleva la solicitud y el oficio si lo adjunta')
+    expect(tf).toContain("htmlChkModosNotifCorreo('tramite-atajo',modoAtajo)")
+    expect(core).toContain('Traslado por competencia')
+    expect(core).toContain('Respuesta a entidad o tercero')
+    expect(core).toContain('Respuesta a oficina interna')
   })
 
   it('el responsable deja la marca en el flujo que ve el encargado', () => {
@@ -51,6 +52,8 @@ describe('Traslado por competencia / comunicación a entidad', () => {
       pqrsCorreoHtmlPieInstitucional: () => '<PIE>'
     })
     runInContext(extraer(core, [
+      'pqrsModoCorreoNotif',
+      'pqrsCuerpoSegunModoCorreo',
       'pqrsEsComunicacionEntidadEnvio',
       'pqrsEsComunicacionInternaEnvio',
       'pqrsCorreoHtmlComunicacionInterna',
@@ -88,9 +91,9 @@ describe('Traslado por competencia / comunicación a entidad', () => {
     const pq = extraer(tf, ['pqrsAtajoEnviarCorreoDirecto'])
     expect(pq).toContain('pqrsArmarEnvioTrasladoInterno')
     expect(pq).toContain('pqrsDriveDocToFile')
-    expect(pq).toContain('optsInt.entidad=true')
+    expect(pq).toContain('const optsInt={modo:modoCorreo}')
     const tr = extraer(tf, ['tramiteAtajoEnviarCorreoDirecto'])
-    expect(tr).toContain('entidad:esEntidad')
+    expect(tr).toContain('modo:modoCorreo')
     expect(tr).toContain('pqrsDriveDocToFile')
     expect(extraer(core, ['ncaAprobarMensajeSimple'])).toContain('pqrsArmarEnvioTrasladoInterno')
   })

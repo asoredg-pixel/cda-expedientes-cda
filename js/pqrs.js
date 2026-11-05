@@ -530,6 +530,29 @@ function _pqrsTrasladoUiBusy(busy){
 function _pqrsNecesitaCorreoParaTraslado(e){
   return typeof _pqrsNecesitaCorreoParaAsignar==='function'&&_pqrsNecesitaCorreoParaAsignar(e);
 }
+/**
+ * Tras cambio de oficina (modal o corrección Secretaría): si la PQRSD vino por correo,
+ * asegura Gmail y reenvía el radicado con anexos a la oficina destino.
+ * @returns {{necesita:boolean,envio:boolean,ok:boolean}}
+ */
+async function _pqrsTrasladoOficinaReenviarCorreo(e,oficina,expId,opts){
+  opts=opts||{};
+  if(!e||!oficina||oficina==='secretaria')return{necesita:false,envio:false,ok:true};
+  const necesita=_pqrsNecesitaCorreoParaTraslado(e);
+  if(!necesita)return{necesita:false,envio:false,ok:true};
+  if(!_pqrsTokOk()){
+    const okMail=await _pqrsAsegurarCorreoParaAsignarOTraslado(e);
+    if(!okMail&&!opts.silent&&typeof notif==='function'){
+      notif(opts.warnSinTok||'Traslado sin reenvío de correo: conecte Gmail después si desea reenviar el radicado.','warn');
+    }
+  }
+  const envio=necesita&&_pqrsTokOk();
+  if(!envio)return{necesita:true,envio:false,ok:false};
+  if(typeof reenviarCorreoRadicacionPqrsAOficina!=='function')return{necesita:true,envio:true,ok:false};
+  const ok=await reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId);
+  return{necesita:true,envio:true,ok:!!ok};
+}
+window._pqrsTrasladoOficinaReenviarCorreo=_pqrsTrasladoOficinaReenviarCorreo;
 function _pqrsRefreshViewsTrasTraslado(){
   if(typeof refreshViewsAfterRemoteDataChange==='function')refreshViewsAfterRemoteDataChange();
   else{
@@ -574,7 +597,8 @@ async function _pqrsEjecutarTrasladoOficina(expId,taskId,nuevaOfi,motivo,applyEx
     }
     if(enviaraCorreo){
       if(typeof sstCargaProgress==='function')sstCargaProgress(62,'Enviando correo a '+destLbl+'…');
-      correoOk=await reenviarCorreoRadicacionPqrsAOficina(e,nuevaOfi,expId);
+      const r=await _pqrsTrasladoOficinaReenviarCorreo(e,nuevaOfi,expId,{silent:true});
+      correoOk=!!(r&&r.ok);
     }else if(necesitaCorreo){
       correoOk=false;
     }
@@ -1058,7 +1082,7 @@ async function reenviarCorreoRadicacionPqrsAOficina(e,oficina,expId,prefetchedMs
   }
   if(!msg||typeof reenviarEmailAOficina!=='function')return false;
   const ofiEmail=_pqrsEmailOficinaDestino(oficina);
-  const introOfi='<p style="font-family:Arial,sans-serif;font-size:13px">La <strong>Secretaría DEGUV</strong> traslada esta PQRSD a su oficina. Debajo encontrará el correo original recibido en Secretaría (remitente, destinatarios y copia).</p>';
+  const introOfi='<p style="font-family:Arial,sans-serif;font-size:13px">Se <strong>traslada</strong> esta PQRSD a su oficina. Debajo encontrará el correo original de la radicación (remitente, destinatarios y copia).</p>';
   try{
     let ok=await reenviarEmailAOficina(msg,oficina,expId,{silent:true,exp:e,introHtml:introOfi});
     if(!ok&&ofiEmail&&typeof reenviarEmailRawARecipientes==='function'){
@@ -2928,7 +2952,8 @@ async function submitEditPqrsSecretaria(expId){
     e._pj_empresa='';e._pj_nit='';e._pj_correo='';e._pj_telefono='';
   }
   const ofiAnt=e._pqrs_oficina||'';
-  if(oficina!==ofiAnt){
+  const ofiCambio=!!(oficina&&oficina!==ofiAnt);
+  if(ofiCambio){
     e._pqrs_oficina=oficina;
     e._pqrs_traslado_fecha=hoy();
     e._pqrs_traslado_por='Secretaría DEGUV';
@@ -2977,12 +3002,29 @@ async function submitEditPqrsSecretaria(expId){
   }
   window._pqrsEditAnexosDel=new Set();window._pqrsEditAnexosNew=[];
   // ────────────────────────────────────────────────────────────────────
+  // Misma regla que el modal de traslado: al cambiar oficina, reenviar correo a destino.
+  let correoTraslado={necesita:false,envio:false,ok:true};
+  if(ofiCambio&&oficina&&oficina!=='secretaria'){
+    correoTraslado=await _pqrsTrasladoOficinaReenviarCorreo(e,oficina,expId,{
+      warnSinTok:'Cambio de oficina sin reenvío de correo: conecte Gmail después si desea reenviar el radicado.'
+    });
+  }
   upsertPersonaCatalog(e);
   logAudit('Editó PQRSD ['+expId+']','pqrsd',expId);
   if(typeof maybeClearPendienteRevisionAltaOnSave==='function')maybeClearPendienteRevisionAltaOnSave(e);
   persistExpedienteGranular(e,true);
   closeTaskModal();
-  notif('PQRSD actualizada','ok');
+  let msgAct='PQRSD actualizada';
+  if(ofiCambio){
+    const destLbl=typeof labelOficina==='function'?labelOficina(oficina):oficina;
+    msgAct+=' · Oficina: '+destLbl;
+    if(correoTraslado.necesita){
+      if(correoTraslado.envio&&correoTraslado.ok)msgAct+=' · Correo de radicación reenviado.';
+      else if(correoTraslado.envio&&!correoTraslado.ok)msgAct+=' · No se pudo reenviar el correo a la oficina.';
+      else msgAct+=' · Sin reenvío de correo (Gmail no conectado).';
+    }
+  }
+  notif(msgAct,correoTraslado.necesita&&(!correoTraslado.envio||!correoTraslado.ok)?'warn':'ok');
   renderBandejaDepto();
   refreshPqrsDetalleViews(expId);
   renderSecretariaPqrs();
@@ -3009,8 +3051,8 @@ async function _pqrsAsegurarCorreoParaAsignarOTraslado(e){
   if(typeof sstSolicitarGmailParaAdjuntar!=='function')return false;
   const ok=await sstSolicitarGmailParaAdjuntar({
     force:true,
-    title:'Conectar correo para asignar',
-    message:'Para <strong>reenviar el correo con anexos</strong> al responsable, elija su cuenta institucional y autorice. Al conectar, la asignación continúa.'
+    title:'Conectar correo para asignar o trasladar',
+    message:'Para <strong>reenviar el correo con anexos</strong> a la oficina o al responsable, elija su cuenta institucional y autorice. Al conectar, la acción continúa.'
   });
   return !!(ok&&_pqrsTokOk());
 }

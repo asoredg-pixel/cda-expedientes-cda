@@ -108,7 +108,8 @@ describe('Entrega de informes de contrato', () => {
       taskReviewNotifWfFuente: () => ({}),
       taskReviewCorreosNotificacion: () => [],
       taskReviewCuerpoNotifPredeterminado: () => 'cuerpo',
-      htmlChkComunicacionEntidad: id => '<input id="'+id+'">',
+      htmlChkModosNotifCorreo: prefix => '<input id="'+prefix+'-notif-interna">',
+      pqrsModoNotifDeWf: () => '',
       escAttr: v => String(v || ''),
       hoy: () => '2026-10-09',
       taskReviewTermDraftOpts: (id, b) => b

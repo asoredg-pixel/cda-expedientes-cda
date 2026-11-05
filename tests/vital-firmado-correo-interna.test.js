@@ -12,6 +12,7 @@ import { Script, createContext, runInContext } from 'vm'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const tf = readFileSync(resolve(root, 'js/tramite-firma.js'), 'utf8')
+const core = readFileSync(resolve(root, 'js/core.js'), 'utf8')
 
 function extraer(src, nombres) {
   return nombres.map(n => {
@@ -45,6 +46,9 @@ function ctxRender(esPqrs, wf, e) {
     atajoFirmadoEsVistaOficinaSinResponsables: () => false,
     getExpById: () => e
   })
+  runInContext(extraer(core, [
+    'htmlChkModoNotifItem', 'htmlChkModosNotifCorreo', 'pqrsModoNotifLeer', 'pqrsModoCorreoNotif', 'pqrsModoNotifDeWf', 'pqrsPatchModoCorreo'
+  ]), c)
   runInContext(extraer(tf, ['tramiteFirmaExpCtx', 'renderTaskReviewAtajoFirmadoHtml']) + '\nthis._f=renderTaskReviewAtajoFirmadoHtml;', c)
   return c._f
 }
@@ -53,7 +57,9 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
   it('PQRSD: aparece en «Notificar por correo ahora»', () => {
     const h = ctxRender(true, {}, { _exp: 'P1' })('P1', 't1', { id: 't1' })
     expect(h).toContain('id="tramite-atajo-notif-interna"')
-    expect(h).toContain('sin botón de consulta ciudadana')
+    expect(h).toContain('Respuesta a oficina interna')
+    expect(h).toContain('Traslado por competencia')
+    expect(h).toContain('id="tramite-atajo-notif-traslado"')
     expect(h).not.toContain('id="tramite-atajo-notif-interna" checked')
   })
 
@@ -97,7 +103,7 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
     const interna = c._f(e, { id: 't' }, 'Hola', { interna: true }).htmlBody
     expect(interna).not.toContain('CONSULTA')
     expect(interna).toContain('<PIE>')
-    expect(extraer(tf, ['tramiteAtajoEnviarCorreoDirecto'])).toContain('tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,{interna:wf.comunicacion_interna===true,entidad:esEntidad})')
+    expect(extraer(tf, ['tramiteAtajoEnviarCorreoDirecto'])).toContain('tramiteHtmlCuerpoNotifConDocs(e,t,cuerpo,{modo:modoCorreo,interna:esInterna,entidad:esEntidad})')
   })
 
   it('libre: la marca se guarda en el flujo de la actividad', () => {
@@ -110,9 +116,9 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
       document: { getElementById: id => els[id] || null },
       setTaskFirmaWf: (r, id, p) => { patch = p }
     })
-    runInContext(extraer(tf, ['atajoFirmadoPersistEmailFields']) + '\nthis._f=atajoFirmadoPersistEmailFields;', c)
+    runInContext(extraer(core, ['pqrsModoNotifLeer', 'pqrsPatchModoCorreo']) + '\n' + extraer(tf, ['atajoFirmadoPersistEmailFields']) + '\nthis._f=atajoFirmadoPersistEmailFields;', c)
     c._f('ACT1', 't1', false)
-    expect(patch).toMatchObject({ comunicacion_interna: true, traslado_interno: true, notif_interna: true })
+    expect(patch).toMatchObject({ modo_correo_notif: 'resp_interna', comunicacion_interna: true, traslado_interno: false, notif_interna: true })
   })
 
   it('al guardar los datos del correo PQRSD persiste la marca (marcada y desmarcada)', () => {
@@ -128,15 +134,18 @@ describe('Casilla comunicación interna al cargar firmado y notificar por correo
         getExpById: () => ({ _exp: 'P1' }),
         setPqrsWorkflow: (e, p) => { patch = p }
       })
-      runInContext(extraer(tf, ['atajoFirmadoPersistEmailFields']) + '\nthis._f=atajoFirmadoPersistEmailFields;', c)
+      runInContext(extraer(core, ['pqrsModoNotifLeer', 'pqrsPatchModoCorreo']) + '\n' + extraer(tf, ['atajoFirmadoPersistEmailFields']) + '\nthis._f=atajoFirmadoPersistEmailFields;', c)
       c._f('P1', 't1', true)
-      expect(patch).toMatchObject({ comunicacion_interna: marcado, traslado_interno: marcado, notif_interna: marcado })
+      expect(patch.comunicacion_interna).toBe(marcado)
+      expect(patch.traslado_interno).toBe(false)
+      expect(patch.modo_correo_notif).toBe(marcado ? 'resp_interna' : '')
     }
   })
 
   it('el envío PQRSD pasa la marca a pqrsCorreoHtmlRespuesta (sin botón si es interna)', () => {
     const f = extraer(tf, ['pqrsAtajoEnviarCorreoDirecto'])
-    expect(f).toContain("const optsInt=wf.comunicacion_interna===true?{interna:true,comunicacionInterna:true}:(wf.comunicacion_interna===false?{interna:false}:{});")
+    expect(f).toContain('const optsInt={modo:modoCorreo}')
     expect(f).toContain('pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,optsInt)')
+    expect(f).toContain('if(esTraslado&&typeof pqrsArmarEnvioTrasladoInterno')
   })
 })
