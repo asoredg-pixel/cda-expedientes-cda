@@ -54,8 +54,6 @@ function mundo(opts) {
     ensureFirestoreAuthReady: async () => (opts.authOk === false ? { ok: false, code: 'unauthenticated' } : { ok: true }),
     persistExpLocalBackup: (exp) => { backups.push(exp && exp._exp) },
     notif: (msg) => { avisos.push(msg) },
-    _firestoreSaveErrorMessage: () => '⚠️ No se pudo guardar en Firestore. Sesión de Firebase no disponible.',
-    _persistLocalBackupHint: () => ' La PQRSD quedó guardada localmente y se sincronizará al reconectar.',
     saveExpedienteDoc: async () => opts.saveOk !== false,
     saveGlobalFirestore: async () => true,
     expedienteDocId: (exp) => String(exp && exp._exp || ''),
@@ -82,7 +80,10 @@ function cargarCola(c, persist) {
 }
 
 function cargarPersist(c) {
-  runInContext(extraer(persistence, ['persistExpedienteGranularAsync']), c)
+  c.window._expSaveChains = Object.create(null)
+  runInContext(extraer(persistence, [
+    '_firestoreSaveErrorMessage', '_persistLocalBackupHint', 'enqueueExpedienteSave', 'persistExpedienteGranularAsync'
+  ]), c)
 }
 
 afterEach(() => {
@@ -143,8 +144,9 @@ describe('Aviso al guardar un expediente pedido por el usuario', () => {
     const ok = await c.persistExpedienteGranularAsync({ _exp: 'PQRSD-1', _es_pqrs: true }, false)
     expect(ok).toBe(false)
     expect(c.backups).toEqual(['PQRSD-1'])
-    expect(c.avisos[0]).toContain('Sesión de Firebase no disponible')
+    expect(c.avisos[0]).toContain('mala conexión a internet')
     expect(c.avisos[0]).toContain('guardada localmente')
+    expect(c.avisos[0]).not.toContain('contador de Drive')
   })
 
   it('el reparo silencioso no avisa ni copia el expediente entero en local', async () => {

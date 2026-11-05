@@ -1886,13 +1886,13 @@ function _firestoreSaveErrorMessage(errCode){
     msg+=' Sin permisos para "'+email+'" (rol: '+rol+').';
     msg+=' Verifique que su cuenta esté activa y vuelva a iniciar sesión si el problema continúa.';
   }else if(errCode==='unauthenticated'){
-    msg+=' Sesión de Firebase no disponible (el contador de Drive es independiente). Cierre sesión y vuelva a ingresar con su cuenta institucional.';
+    msg+=' Suele deberse a una mala conexión a internet (Wi‑Fi o datos). Revise su red; si el problema continúa, cierre sesión y vuelva a ingresar con su cuenta institucional.';
   }else if(errCode==='invalid-argument'){
     msg+=' Datos del expediente demasiado grandes o inválidos. Intente sin adjuntos pesados en el cuerpo del correo.';
   }else if(errCode&&errCode!=='unknown'){
-    msg+=' Código: '+errCode+'.';
+    msg+=' Código: '+errCode+'. Revise su conexión a internet e intente de nuevo.';
   }else{
-    msg+=' Verifique conexión o permisos.';
+    msg+=' Revise su conexión a internet e intente de nuevo.';
   }
   return msg;
 }
