@@ -18,6 +18,8 @@ var APOYO_CFG_DEFAULT={
   trmCop:4200,
   diaCorte:28,
   diasGraciaHabiles:3,
+  /** USD del ciclo por almacenamiento + red, copiado a mano desde la consola Google. 0 = no cargado. */
+  costoDiscoRedUsd:0,
   activo:true
 };
 
@@ -32,6 +34,9 @@ window._apoyoUsoListo=false;
 window._apoyoUsoCargadoFs=false;
 window._apoyoLecturasCola=0;
 window._apoyoFlushBound=false;
+/** Permiso denegado: no reintentar (cada intento evaluaba exists+get del usuario). */
+window._apoyoFsDenegado=false;
+window._apoyoUsoRetryN=0;
 window._apoyoGlobal={diaIso:'',lecturas:0,baseB:0};
 window._apoyoGlobalUnsub=null;
 window._apoyoGlobalPend=0;
@@ -184,6 +189,38 @@ function apoyoProgramarRenovacionDia(){
     apoyoProgramarRenovacionDia();
   },apoyoMsHastaRenovacion()+800);
 }
+function apoyoErrorTxt(e){
+  return String((e&&(e.code||e.message))||e||'');
+}
+function apoyoEsPermisoDenegado(e){
+  var c=apoyoErrorTxt(e).toLowerCase();
+  return c.indexOf('permission-denied')>=0||c.indexOf('insufficient')>=0;
+}
+/** Corta lecturas/escrituras del medidor en esta pestaña. Un F5 vuelve a intentar una sola vez. */
+function apoyoMarcarDenegado(origen){
+  if(window._apoyoFsDenegado)return;
+  window._apoyoFsDenegado=true;
+  window._apoyoIncLect=0;
+  window._apoyoIncCob=0;
+  window._apoyoIncBlazeCob=0;
+  window._apoyoIncCop=0;
+  window._apoyoIncUsd=0;
+  window._apoyoIncBaseB=0;
+  window._apoyoIncGlobal=0;
+  window._apoyoGlobalPend=0;
+  window._apoyoGlobalBasePend=0;
+  window._apoyoUsoDirty=false;
+  if(window._apoyoUsoRetryTimer){clearTimeout(window._apoyoUsoRetryTimer);window._apoyoUsoRetryTimer=null;}
+  if(window._apoyoIncTimer){clearTimeout(window._apoyoIncTimer);window._apoyoIncTimer=null;}
+  if(window._apoyoGlobalSaveTimer){clearTimeout(window._apoyoGlobalSaveTimer);window._apoyoGlobalSaveTimer=null;}
+  if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
+  try{apoyoPersistirColaInc();}catch(e2){}
+  try{
+    var hoy=apoyoHoyLocal();
+    localStorage.removeItem(APOYO_LS_GLOBAL_PREFIX+hoy);
+  }catch(e3){}
+  console.warn('apoyo: Firestore negó el permiso; el medidor no reintenta en esta pestaña.',origen||'');
+}
 function apoyoEmailKey(){
   var e=(window._usuarioActual&&window._usuarioActual.email)||(window._firebaseAuth&&window._firebaseAuth.currentUser&&window._firebaseAuth.currentUser.email)||'';
   return String(e||'').trim().toLowerCase();
@@ -201,6 +238,7 @@ function apoyoNormCfg(raw){
   c.trmCop=Math.max(1,Number(c.trmCop)||APOYO_CFG_DEFAULT.trmCop);
   c.diaCorte=Math.min(28,Math.max(1,parseInt(c.diaCorte,10)||28));
   c.diasGraciaHabiles=Math.max(0,parseInt(c.diasGraciaHabiles,10)||0);
+  c.costoDiscoRedUsd=Math.max(0,Number(c.costoDiscoRedUsd)||0);
   c.activo=c.activo!==false;
   return c;
 }
@@ -305,7 +343,7 @@ function apoyoCalcMontos(cobrables,cfg){
 }
 function apoyoAplicarCfgRemota(raw){
   window._apoyoCfg=apoyoNormCfg(raw);
-  // Cupo/precio nuevos: solo el excedente NUEVO (A o B). Lo ya cobrado en el ciclo no se toca.
+  // Solo el excedente NUEVO se valora (A o B). Lo ya cobrado en el ciclo no se toca.
   if(window._apoyoUsoListo&&window._apoyoUso&&!apoyoEsAdmin()){
     if(apoyoAplicarCobroBlaze(window._apoyoUso,window._apoyoCfg)>0)apoyoProgramarGuardarUso();
   }
@@ -455,12 +493,16 @@ async function apoyoCargarUso(){
     console.warn('apoyoCargarUso',e);
     if(!window._apoyoUso)window._apoyoUso=apoyoUsoVacio(apoyoPeriodoId());
     window._apoyoUsoCargadoFs=false;
-    // Reintento: no dejar la sesión escribiendo U=0/bajo sobre el pico remoto
-    if(!window._apoyoUsoRetryTimer){
+    if(apoyoEsPermisoDenegado(e)){
+      apoyoMarcarDenegado('apoyo_uso');
+    }else if((window._apoyoUsoRetryN|0)<2&&!window._apoyoUsoRetryTimer){
+      // Solo fallos de red, y como máximo 2 veces (8s y 20s). Permiso denegado no entra aquí.
+      window._apoyoUsoRetryN=(window._apoyoUsoRetryN|0)+1;
+      var espera=window._apoyoUsoRetryN===1?8000:20000;
       window._apoyoUsoRetryTimer=setTimeout(function(){
         window._apoyoUsoRetryTimer=null;
-        apoyoCargarUso();
-      },2500);
+        if(!window._apoyoFsDenegado)apoyoCargarUso();
+      },espera);
     }
   }
   apoyoAsegurarDia(window._apoyoUso);
@@ -508,7 +550,7 @@ function apoyoPayloadDesdeUso(u,email){
  * lecturas remotas por un valor local bajo → al F5 / otro PC se recupera la suma.
  */
 async function apoyoFlushIncrementosPendientes(){
-  if(apoyoEsAdmin())return false;
+  if(apoyoEsAdmin()||window._apoyoFsDenegado)return false;
   if(!window._apoyoUsoCargadoFs)return false;
   var email=apoyoEmailKey();
   if(!email||!window._db||!window._fsDoc||!window._fsSetDoc||typeof window._fsIncrement!=='function')return false;
@@ -561,6 +603,7 @@ async function apoyoFlushIncrementosPendientes(){
     window._apoyoUsoDirty=false;
   }catch(e){
     console.warn('apoyoFlushIncrementos uso',e);
+    if(apoyoEsPermisoDenegado(e)){apoyoMarcarDenegado('apoyo_uso');return false;}
     window._apoyoIncLect=(window._apoyoIncLect|0)+n;
     window._apoyoIncCob=(window._apoyoIncCob|0)+cob;
     window._apoyoIncBlazeCob=(window._apoyoIncBlazeCob|0)+cobB;
@@ -580,6 +623,7 @@ async function apoyoFlushIncrementosPendientes(){
       await window._fsSetDoc(window._fsDoc(window._db,'apoyo_consumo',hoy),patchG,{merge:true});
     }catch(eG){
       console.warn('apoyoFlushIncrementos global',eG);
+      if(apoyoEsPermisoDenegado(eG)){apoyoMarcarDenegado('apoyo_consumo');return false;}
       window._apoyoIncGlobal=(window._apoyoIncGlobal|0)+nG;
       window._apoyoIncBaseB=(window._apoyoIncBaseB|0)+dbInc;
       apoyoPersistirColaInc();
@@ -590,6 +634,7 @@ async function apoyoFlushIncrementosPendientes(){
   return true;
 }
 function apoyoProgramarFlushIncrementos(){
+  if(window._apoyoFsDenegado)return;
   apoyoPersistirColaInc();
   if(window._apoyoIncTimer)clearTimeout(window._apoyoIncTimer);
   window._apoyoIncTimer=setTimeout(function(){
@@ -627,6 +672,9 @@ function apoyoAsegurarDia(u){
     u.cobrablesDia=0;
     u.baseBDia=0;
     u.cobrablesBlazeDia=0;
+  }else if(u.lecturasPorDia[hoy]==null){
+    // Documento anterior al mapa: no borrar lecturasDia que ya estaba en el mismo día
+    u.lecturasPorDia[hoy]=Math.max(0,u.lecturasDia|0);
   }
   // Barra U = suma durable del día en el mapa (no se pierde al F5)
   u.lecturasDia=Math.max(0,parseInt(u.lecturasPorDia[hoy],10)||0);
@@ -742,6 +790,7 @@ async function apoyoFlushGlobalPendiente(){
     }
   }catch(e){
     console.warn('apoyoFlushGlobalPendiente',e);
+    if(apoyoEsPermisoDenegado(e)){apoyoMarcarDenegado('apoyo_consumo');return;}
     window._apoyoGlobalPend=(window._apoyoGlobalPend|0)+n;
     window._apoyoGlobalBasePend=(window._apoyoGlobalBasePend|0)+dbInc;
     apoyoMirrorGlobalWrite();
@@ -770,10 +819,13 @@ async function apoyoCargarGlobalDia(){
       var d=snap&&snap.exists&&snap.exists()?snap.data():{};
       lect=d.lecturas|0;
       base=d.baseB|0;
-    }catch(e){console.warn('apoyoCargarGlobalDia',e);}
+    }catch(e){
+      console.warn('apoyoCargarGlobalDia',e);
+      if(apoyoEsPermisoDenegado(e))apoyoMarcarDenegado('apoyo_consumo');
+    }
   }
   apoyoAplicarEstadoGlobal(lect,base,{});
-  if((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0)apoyoProgramarGlobalFlush();
+  if(!window._apoyoFsDenegado&&((window._apoyoGlobalPend|0)>0||(window._apoyoGlobalBasePend|0)>0))apoyoProgramarGlobalFlush();
   apoyoPintarUI();
 }
 /**
@@ -817,11 +869,14 @@ async function apoyoAsegurarGlobalNoMenorQuePersonal(){
     }
     apoyoMirrorGlobalWrite();
     apoyoPintarUI();
-  }catch(e){console.warn('apoyoAsegurarGlobalNoMenorQuePersonal',e);}
+  }catch(e){
+    console.warn('apoyoAsegurarGlobalNoMenorQuePersonal',e);
+    if(apoyoEsPermisoDenegado(e))apoyoMarcarDenegado('apoyo_consumo');
+  }
 }
 function apoyoEscucharGlobalDia(){
   if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
-  if(apoyoEsAdmin()||!window._db||!window._fsDoc||!window._fsOnSnapshot)return;
+  if(window._apoyoFsDenegado||apoyoEsAdmin()||!window._db||!window._fsDoc||!window._fsOnSnapshot)return;
   var hoy=apoyoHoyLocal();
   var ref=window._fsDoc(window._db,'apoyo_consumo',hoy);
   window._apoyoGlobalUnsub=window._fsOnSnapshot(ref,function(snap){
@@ -839,13 +894,17 @@ function apoyoEscucharGlobalDia(){
       if(apoyoAplicarCobroBlaze(window._apoyoUso)>0)apoyoProgramarGuardarUso();
       apoyoPintarUI();
     }
-  },function(err){console.warn('apoyoEscucharGlobalDia',err);});
+  },function(err){
+    console.warn('apoyoEscucharGlobalDia',err);
+    if(window._apoyoGlobalUnsub){try{window._apoyoGlobalUnsub();}catch(e){}window._apoyoGlobalUnsub=null;}
+    if(apoyoEsPermisoDenegado(err))apoyoMarcarDenegado('apoyo_consumo');
+  });
 }
 /** Registra lecturas de documentos Firestore hechas por la sesión. */
 function apoyoRegistrarLecturas(n){
   n=parseInt(n,10)||0;
   if(n<=0)return;
-  if(apoyoEsAdmin())return;
+  if(apoyoEsAdmin()||window._apoyoFsDenegado)return;
   if(!(window._apoyoCfg&&window._apoyoCfg.activo!==false))return;
   if(!document.body.classList.contains('sesion-activa'))return;
   if(typeof esModoCiudadano==='function'&&esModoCiudadano())return;
@@ -1039,6 +1098,8 @@ function apoyoPintarUI(){
 async function apoyoInitSesion(){
   window._apoyoUsoListo=false;
   window._apoyoUsoCargadoFs=false;
+  window._apoyoFsDenegado=false;
+  window._apoyoUsoRetryN=0;
   window._apoyoLecturasCola=0;
   window._apoyoGlobalPend=0;
   window._apoyoGlobalBasePend=0;
@@ -1052,6 +1113,11 @@ async function apoyoInitSesion(){
   apoyoRecuperarColaInc();
   await apoyoCargarCfg();
   await apoyoCargarUso();
+  if(window._apoyoFsDenegado){
+    apoyoBindFlush();
+    apoyoPintarUI();
+    return;
+  }
   await apoyoCargarGlobalDia();
   if(window._apoyoUsoCargadoFs){
     await apoyoAsegurarGlobalNoMenorQuePersonal();
@@ -1118,16 +1184,19 @@ async function apoyoGuardarCfgDesdeForm(){
   var cupoG=parseInt((document.getElementById('apoyo-cfg-cupo-global')||{}).value,10);
   var precio=Number((document.getElementById('apoyo-cfg-precio')||{}).value);
   var trm=Number((document.getElementById('apoyo-cfg-trm')||{}).value);
+  var disco=Number((document.getElementById('apoyo-cfg-disco')||{}).value);
   var activo=!!(document.getElementById('apoyo-cfg-activo')&&document.getElementById('apoyo-cfg-activo').checked);
   if(isNaN(cupo)||cupo<0){notif('Cupo diario personal inválido','err');return;}
   if(isNaN(cupoG)||cupoG<0){notif('Cupo global diario inválido','err');return;}
   if(isNaN(precio)||precio<0){notif('Precio inválido','err');return;}
   if(isNaN(trm)||trm<=0){notif('TRM inválida','err');return;}
+  if(isNaN(disco)||disco<0){notif('Costo de disco y red inválido','err');return;}
   var cfg=apoyoNormCfg({
     cupoDiario:cupo,
     cupoGlobalDia:cupoG,
     precioPorMilUsd:precio,
     trmCop:trm,
+    costoDiscoRedUsd:disco,
     diaCorte:28,
     diasGraciaHabiles:3,
     activo:activo
@@ -1284,6 +1353,12 @@ function apoyoCfgCardBody(){
     '<div class="fg" style="margin-bottom:8px">'+
     '<div class="fld" style="display:flex;align-items:flex-end"><button type="button" class="btn bsm" onclick="apoyoConsultarTrm()">Consultar tasa</button></div>'+
     '</div>'+
+    '<div class="fg" style="margin-bottom:10px">'+
+    '<div class="fld" style="grid-column:1/-1">'+
+    '<label for="apoyo-cfg-disco">USD del ciclo: almacenamiento + ancho de banda (consola Google)</label>'+
+    '<input type="number" min="0" step="0.01" id="apoyo-cfg-disco" value="'+escAttr(String(cfg.costoDiscoRedUsd||0))+'" style="'+inp+'">'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35">El navegador no puede leer la factura de disco ni de red de Google (haría falta otra API y más costo). Copie aquí el USD de esas dos partidas, una vez por ciclo, y pulse Guardar. No consulta Firestore de nuevo: viaja en la configuración que ya se lee al entrar. En la tabla de abajo se reparte entre quienes tienen lecturas del ciclo. No se suma a la barra de cada persona (eso cobraría el total a todos).</div>'+
+    '</div></div>'+
     '<div id="apoyo-cfg-trm-hint" style="font-size:11px;color:var(--tx3);margin-bottom:12px">Corte día 28 · gracia 3 días hábiles. <strong>0,01 USD/1.000</strong> es demasiado bajo frente a una factura Blaze de cientos: suba el precio y/o baje cupos y pulse Guardar. Consola Google ≠ esta tabla (allá entran disco y red).</div>'+
     '<button type="button" class="btn bsm bp" onclick="apoyoGuardarCfgDesdeForm()">Guardar apoyo solidario</button>'+
     '<div id="apoyo-admin-lista" style="margin-top:16px"></div>'+
@@ -1304,9 +1379,14 @@ async function apoyoPintarListaAdmin(){
     return;
   }
   var conCobro=list.filter(function(u){return(Number(u.montoCop)||0)>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;});
+  var cfg=apoyoNormCfg(window._apoyoCfg);
+  var extraCop=Math.round((Number(cfg.costoDiscoRedUsd)||0)*(Number(cfg.trmCop)||0));
+  var sumLect=0;
+  list.forEach(function(u){sumLect+=(u.lecturasMes|0);});
   var h='<div class="slbl" style="margin:12px 0 8px">Consumo del ciclo por usuario ('+list.length+' · con cobro: '+conCobro.length+')</div>'+
+    (extraCop>0?'<div style="font-size:12px;margin:0 0 8px">Disco y red del ciclo: <strong>'+escAttr(apoyoFmtCop(extraCop))+'</strong>'+(sumLect>0?' · se reparte según lecturas del ciclo ('+sumLect+').':' · sin lecturas de ciclo todavía, no hay a quién repartir.')+'</div>':'');
     '<div style="font-size:11px;color:var(--tx3);margin:0 0 8px;line-height:1.35">Monto = acumulado del ciclo (no se borra a las 2:00; solo lecturas del día). Si ayer vio ~$35 y hoy $0, el pico pudo pisarse antes del arreglo de guardado; no se puede inventar el monto si ya no está en Firestore.</div>'+
-    '<div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lect. ciclo</th><th>Lect. hoy</th><th>A pers.</th><th>B Blaze</th><th>Monto ciclo</th><th>Estado</th><th></th></tr></thead><tbody>';
+    '<div class="tw"><table><thead><tr><th>Usuario</th><th>Periodo</th><th>Lect. ciclo</th><th>Lect. hoy</th><th>A pers.</th><th>B Blaze</th><th>Monto ciclo</th><th>Parte disco/red</th><th>Estado</th><th></th></tr></thead><tbody>';
   list.forEach(function(u){
     var email=String(u.email||u.id||'').trim().toLowerCase();
     var emailJs=JSON.stringify(email);
@@ -1315,6 +1395,7 @@ async function apoyoPintarListaAdmin(){
     h+='<tr'+(resalta?' style="background:#fff8e6"':'')+'><td style="font-size:12px">'+escAttr(email)+'</td><td>'+escAttr(u.periodo||'')+'</td>'+
       '<td>'+(u.lecturasMes|0)+'</td><td>'+(u.lecturasDia|0)+'</td><td>'+(u.cobrablesMes|0)+'</td><td>'+(u.cobrablesBlazeMes|0)+'</td>'+
       '<td title="Personal '+escAttr(apoyoFmtCop(Math.max(0,monto-(Number(u.montoBlazeCop)||0))))+' · Blaze '+escAttr(apoyoFmtCop(u.montoBlazeCop))+'" >'+escAttr(apoyoFmtCop(monto))+'</td>'+
+      '<td>'+(extraCop>0&&sumLect>0?escAttr(apoyoFmtCop(Math.round(extraCop*((u.lecturasMes|0)/sumLect)))):'—')+'</td>'+
       '<td>'+(u.apoyado?'✓ Apoyó':'Pendiente')+'</td>'+
       '<td style="white-space:nowrap">'+
       '<button type="button" class="btn bsm bp" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',true)\'>Apoyó + reiniciar</button> '+
