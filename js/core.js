@@ -28126,8 +28126,15 @@ function facturaRowHtml(f,i){
   f=f||{};
   const enMora=f.venc&&f.venc<hoy()&&!f.pago;
   const enCoactivo=enMora&&f.persVenc&&f.persVenc<hoy();
+  const persVinculo=!!(String(f.persOficio||'')||String(f.persTaskId||''));
+  const persFechaFld=persVinculo
+    ?('<div class="fld"><label>Oficio del cobro persuasivo</label><div style="font-size:13px;padding:6px 0">'+escAttr(f.persOficio||'—')+'</div></div>'+
+      '<div class="fld"><label>Fecha límite de pago del persuasivo</label><input type="date" class="fx-pers-venc" value="'+(f.persVenc||'')+'" readonly></div>'+
+      '<div class="fld"><label>Valor pagado del persuasivo</label>'+moneyInputHtml('fx-pers-pago',f.persPagoValor,'syncFacturasExtra();onContableChange()')+'</div>'+
+      '<div style="font-size:11px;color:var(--tx3);grid-column:1/-1">Lo deja la entrega de Cobro persuasivo. Sale de Requerimientos con la fecha de pago de la factura o con un acuerdo de pago. Un abono menor no la saca.</div>')
+    :('<div class="fld"><label>Fecha vence factura persuasivo</label><input type="date" class="fx-pers-venc" value="'+(f.persVenc||'')+'" onchange="updateFacturaCobro(this.closest(\'.factura-extra\'));syncFacturasExtra();onContableChange()"></div>');
   const tit=(f.tipo||'Factura')+(f.ref?' · '+f.ref:'')+(enMora?' · <span class="flag" style="background:var(--rdl);color:var(--rd)">Mora</span>':'');
-  return '<details class="item-fold factura-extra"'+(typeof reqPalGestionAttr==='function'?reqPalGestionAttr(f):'')+'>'+
+  return '<details class="item-fold factura-extra"'+(typeof reqPalGestionAttr==='function'?reqPalGestionAttr(f):'')+(typeof persCarteraAttr==='function'?persCarteraAttr(f):'')+'>'+
     foldSummary(tit)+
     '<div class="item-fold-body"><div class="fg">'+
     '<div class="fld"><label>Tipo factura</label><select class="fx-tipo" onchange="syncFacturasExtra();refreshFacturaFold(this)">'+facturaTipoOpts(f.tipo||'')+'</select></div>'+
@@ -28138,7 +28145,7 @@ function facturaRowHtml(f,i){
     '</div>'+
     '<div class="factura-cobro" style="'+(enMora?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--rd);padding-left:.8rem">'+
     '<div class="slbl" style="margin-bottom:.5rem;color:var(--rd)">Gestión de cobro de esta factura</div><div class="fg">'+
-    '<div class="fld"><label>Fecha vence factura persuasivo</label><input type="date" class="fx-pers-venc" value="'+(f.persVenc||'')+'" onchange="updateFacturaCobro(this.closest(\'.factura-extra\'));syncFacturasExtra();onContableChange()"></div>'+
+    persFechaFld+
     '<div class="fld factura-coactivo" style="'+(enCoactivo||f.coacFecha?'':'display:none')+'"><label>Fecha enviar coactivo</label><input type="date" class="fx-coac-fecha" value="'+(f.coacFecha||'')+'" onchange="syncFacturasExtra();onContableChange()"></div>'+
     '</div></div>'+
     '<div class="factura-acuerdo" style="'+(enMora||f.acuerdoPago?'':'display:none')+';margin-top:.7rem;border-left:3px solid var(--bl);padding-left:.8rem">'+

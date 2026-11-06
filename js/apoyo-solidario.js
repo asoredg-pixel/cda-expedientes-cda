@@ -20,6 +20,8 @@ var APOYO_CFG_DEFAULT={
   diasGraciaHabiles:3,
   /** USD del ciclo por almacenamiento + red, copiado a mano desde la consola Google. 0 = no cargado. */
   costoDiscoRedUsd:0,
+  /** Barras personal/global y valor a cobrar. El conteo sigue aunque esté en false. */
+  mostrarMedidor:false,
   activo:true
 };
 
@@ -239,6 +241,7 @@ function apoyoNormCfg(raw){
   c.diaCorte=Math.min(28,Math.max(1,parseInt(c.diaCorte,10)||28));
   c.diasGraciaHabiles=Math.max(0,parseInt(c.diasGraciaHabiles,10)||0);
   c.costoDiscoRedUsd=Math.max(0,Number(c.costoDiscoRedUsd)||0);
+  c.mostrarMedidor=c.mostrarMedidor===true;
   c.activo=c.activo!==false;
   return c;
 }
@@ -996,7 +999,12 @@ function apoyoFmtUsd(n){
   n=Number(n)||0;
   return 'USD '+n.toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
 }
+function apoyoMedidorVisible(){
+  var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
+  return cfg.mostrarMedidor===true;
+}
 function apoyoMensajeBanner(){
+  if(!apoyoMedidorVisible())return'';
   if(apoyoEsAdmin())return'';
   var u=window._apoyoUso;
   if(!u)return'';
@@ -1030,7 +1038,7 @@ function apoyoPintarBanner(){
 function apoyoPintarMedidor(){
   var el=document.getElementById('sst-apoyo-meter');
   if(!el)return;
-  var show=document.body.classList.contains('sesion-activa')&&!(typeof esModoCiudadano==='function'&&esModoCiudadano())&&!apoyoEsAdmin();
+  var show=apoyoMedidorVisible()&&document.body.classList.contains('sesion-activa')&&!(typeof esModoCiudadano==='function'&&esModoCiudadano())&&!apoyoEsAdmin();
   el.style.display=show?'':'none';
   if(!show)return;
   var cfg=window._apoyoCfg||APOYO_CFG_DEFAULT;
@@ -1186,6 +1194,7 @@ async function apoyoGuardarCfgDesdeForm(){
   var trm=Number((document.getElementById('apoyo-cfg-trm')||{}).value);
   var disco=Number((document.getElementById('apoyo-cfg-disco')||{}).value);
   var activo=!!(document.getElementById('apoyo-cfg-activo')&&document.getElementById('apoyo-cfg-activo').checked);
+  var mostrarMedidor=!!(document.getElementById('apoyo-cfg-ver')&&document.getElementById('apoyo-cfg-ver').checked);
   if(isNaN(cupo)||cupo<0){notif('Cupo diario personal inválido','err');return;}
   if(isNaN(cupoG)||cupoG<0){notif('Cupo global diario inválido','err');return;}
   if(isNaN(precio)||precio<0){notif('Precio inválido','err');return;}
@@ -1199,6 +1208,7 @@ async function apoyoGuardarCfgDesdeForm(){
     costoDiscoRedUsd:disco,
     diaCorte:28,
     diasGraciaHabiles:3,
+    mostrarMedidor:mostrarMedidor,
     activo:activo
   });
   var db=window._db;
@@ -1336,6 +1346,7 @@ function apoyoCfgCardBody(){
     '<p style="font-size:12px;color:var(--tx2);margin:0 0 12px;line-height:1.45">Dos cupos (renuevan a las <strong>2:00 a. m.</strong>): <strong>personal</strong> y <strong>global</strong>. Cobro A = superar el personal. Cobro B = superar el global (reparto por aporte del día dentro del cupo personal). El medidor <strong>solo cuenta lecturas de expedientes</strong>; la factura Google Blaze también cobra <strong>almacenamiento y ancho de banda</strong> — por eso puede haber cobro en consola sin cobro A/B aquí si los cupos están muy altos o el USD/1.000 muy bajo. Objetivo: el apoyo solidario del ciclo debe cubrir (con margen) lo que Google factura.</p>'+
     '<div class="fg" style="margin-bottom:10px">'+
     '<div class="fld"><label>Estado</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-activo"'+(cfg.activo?' checked':'')+'> Activar apoyo solidario</label></div>'+
+    '<div class="fld" style="grid-column:1/-1"><label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" id="apoyo-cfg-ver"'+(cfg.mostrarMedidor?' checked':'')+'> Mostrar a todos el contador personal, el global y el valor acumulado a cobrar</label><div style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35">Si está desmarcado, nadie ve las barras ni el valor. El conteo sigue igual. Pulse Guardar para aplicarlo.</div></div>'+
     '<div class="fld"><label for="apoyo-cfg-cupo">Lecturas gratis personales / día</label><input type="number" min="0" step="1" id="apoyo-cfg-cupo" value="'+escAttr(String(cfg.cupoDiario))+'" style="'+inp+'"></div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;line-height:1.35">Recomendado ≤ <strong>800–1200</strong> (con 3000 casi nadie genera cobro A). Valor por defecto del sistema: '+escAttr(String(APOYO_CFG_DEFAULT.cupoDiario))+'. Debe <strong>Guardar</strong> para aplicar.</div>'+

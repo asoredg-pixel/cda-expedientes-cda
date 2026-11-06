@@ -671,8 +671,10 @@ function updateFacturaCobro(row){
 }
 function syncFacturasExtra(){
   const rows=Array.from(document.querySelectorAll('#facturas-extra .factura-extra'));
-  const arr=rows.map(r=>({
+  const arr=rows.map(r=>{
+    const o={
     ...(typeof reqPalGestionFromRow==='function'?reqPalGestionFromRow(r):{}),
+    ...(typeof persCarteraFromRow==='function'?persCarteraFromRow(r):{}),
     tipo:r.querySelector('.fx-tipo').value,
     valor:moneyRaw(r.querySelector('.fx-valor').value),
     ref:r.querySelector('.fx-ref').value,
@@ -685,7 +687,11 @@ function syncFacturasExtra(){
     acuerdoNumCuotas:r.querySelector('.fx-acu-num')?r.querySelector('.fx-acu-num').value:'',
     acuerdoInicio:r.querySelector('.fx-acu-inicio')?r.querySelector('.fx-acu-inicio').value:'',
     acuerdoCuotas:readAcuerdoCuotasFromRow(r)
-  }));
+    };
+    const pagoPers=r.querySelector('.fx-pers-pago');
+    if(pagoPers)o.persPagoValor=moneyRaw(pagoPers.value);
+    return o;
+  });
   const hid=document.getElementById('fld__facturas_extra');if(hid)hid.value=JSON.stringify(arr);
 }
 function addFacturaExtra(){const c=document.getElementById('facturas-extra');c.insertAdjacentHTML('beforeend',facturaRowHtml({tipo:''},c.children.length));syncFacturasExtra();}

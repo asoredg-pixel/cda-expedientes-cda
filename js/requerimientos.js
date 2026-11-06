@@ -17,6 +17,8 @@ const REQ_PAL_ACTO_AVISO_HABILES=30;
 /** Facturas y acuerdos entran a la paleta al 3.er día hábil después del vencimiento (encargado, coordinador y contable). */
 const REQ_PAL_MORA_HABILES=3;
 const REQ_PAL_GESTION_KEYS=['palGestionRef','palGestionEn','palGestionPor','palGestionDesc','palGestionTaskIds'];
+/** Cobro persuasivo vinculado a la factura. persGrupoId queda para un oficio de varios expedientes. */
+const PERS_CARTERA_KEYS=['persOficio','persTaskId','persGrupoId','persExp','persPagoValor'];
 const REQ_ESTADOS={
   en_termino:{lbl:'En término',bg:'var(--gnl)',fg:'var(--gn)',bd:'#9fe1cb'},
   por_vencer:{lbl:'Por vencer',bg:'var(--aml)',fg:'var(--am)',bd:'#f1d795'},
@@ -66,6 +68,60 @@ function reqPalGestionAttr(o){
 }
 function reqPalGestionFromRow(row){
   try{return JSON.parse((row&&row.getAttribute('data-pal-gestion'))||'{}')||{};}catch(err){return{};}
+}
+function esActividadCobroPersuasivo(nombre){
+  return /^cobro\s+persuasivo$/i.test(String(nombre||'').trim());
+}
+function persCarteraPick(o){
+  const r={};
+  if(!o)return r;
+  PERS_CARTERA_KEYS.forEach(function(k){if(o[k]!==undefined&&o[k]!==''&&o[k]!=null)r[k]=o[k];});
+  return r;
+}
+function persCarteraAttr(o){
+  const g=persCarteraPick(o);
+  return Object.keys(g).length?' data-pers-cartera="'+escAttr(JSON.stringify(g))+'"':'';
+}
+function persCarteraFromRow(row){
+  try{return JSON.parse((row&&row.getAttribute('data-pers-cartera'))||'{}')||{};}catch(err){return{};}
+}
+function persCarteraTask(e,f){
+  if(!f||!f.persTaskId)return null;
+  const id=String(f.persTaskId);
+  const local=(e&&e.tasks||[]).find(function(x){return x&&!x.eliminada&&String(x.id)===id;});
+  if(local)return local;
+  if(typeof getTaskAny==='function')return getTaskAny(String(f.persExp||(e&&e._exp)||''),id)||null;
+  return null;
+}
+/** revisar | firmar | notificar | notificado | '' si no hay actividad. */
+function persCarteraFaseUi(t){
+  if(!t||t.eliminada)return'';
+  if(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))return'notificado';
+  const f=typeof taskFirmaFase==='function'?taskFirmaFase(t):String((t.firmaWf&&t.firmaWf.fase)||'');
+  if(f==='cerrada_atendida')return'notificado';
+  if(f==='para_firma'||f==='pendiente_gestion_vital'||f==='por_firmar')return'firmar';
+  if(f==='pendiente_notificacion'||f==='lista_para_envio'||f==='revision_final_nca')return'notificar';
+  return'revisar';
+}
+/**
+ * null: la factura sigue la regla de siempre.
+ * oculto: ya notificado y el plazo del persuasivo no se ha vencido.
+ * flujo: por revisar / por firmar / por notificar.
+ * mora: notificado y el plazo venció sin pago.
+ */
+function persCarteraEnFlujo(f,e){
+  if(!f||!f.persTaskId||f.acuerdoPago)return null;
+  const fase=persCarteraFaseUi(persCarteraTask(e,f));
+  if(!fase)return null;
+  const oficio=String(f.persOficio||'');
+  if(fase==='notificado'){
+    const v=String(f.persVenc||'');
+    const h=reqHoy();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v>=h)return{modo:'oculto',oficio:oficio};
+    return{modo:'mora',oficio:oficio,vence:/^\d{4}-\d{2}-\d{2}$/.test(v)?v:''};
+  }
+  const etq=fase==='firmar'?'por firmar':(fase==='notificar'?'por notificar':'por revisar');
+  return{modo:'flujo',etiqueta:etq,oficio:oficio};
 }
 function reqEsOficioRequerimiento(t){
   if(!t)return false;
@@ -715,18 +771,25 @@ function _reqPalEntradasExp(e,out){
         }
       }else if(!f.acuerdoDia)fecha=String(f.venc||'');
     }else fecha=String(f.venc||'');
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasHabilesEntre(fecha,h)<REQ_PAL_MORA_HABILES)return;
+    const cobro=esAcu?null:persCarteraEnFlujo(f,e);
+    if(cobro&&cobro.modo==='oculto')return;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasHabilesEntre(fecha,h)<REQ_PAL_MORA_HABILES){
+      if(!(cobro&&(cobro.modo==='flujo'||cobro.modo==='mora')&&/^\d{4}-\d{2}-\d{2}$/.test(fecha)))return;
+    }
     const palRef=(esAcu?'c:':'f:')+fecha;
-    if(f.palGestionEn&&f.palGestionRef===palRef)return;
+    if(f.palGestionEn&&f.palGestionRef===palRef&&!(cobro&&(cobro.modo==='flujo'||cobro.modo==='mora')))return;
     const valor=f.valor&&typeof moneyFmt==='function'?'$'+moneyFmt(f.valor):'';
     const persVenc=String(f.persVenc||'');
-    const persVencido=!esAcu&&/^\d{4}-\d{2}-\d{2}$/.test(persVenc)&&persVenc<h;
+    const persVencido=!esAcu&&((cobro&&cobro.modo==='mora')||(/^\d{4}-\d{2}-\d{2}$/.test(persVenc)&&persVenc<h&&!(cobro&&cobro.modo==='flujo')));
+    const oficio=cobro&&cobro.oficio?cobro.oficio:'';
     out.push({
       key:'f|'+exp+'|'+i+'|'+palRef,fuente:esAcu?'acuerdo':'factura',exp:exp,ref:exp,idx:i,sig:_reqPalFacSig(f),
       nombre:nombre,titulo:(esAcu?'Acuerdo de pago · ':'')+String(f.tipo||'Factura')+(f.ref?' · '+f.ref:''),
-      detalle:[det,valor?'Valor '+valor:''].filter(Boolean).join(' · '),
+      detalle:[det,valor?'Valor '+valor:'',oficio?'Oficio '+oficio:''].filter(Boolean).join(' · '),
       vence:fecha,palRef:palRef,estado:'vencido',taskId:f.taskId?String(f.taskId):'',
-      persVencido:persVencido,persVenc:persVencido?persVenc:''
+      persVencido:persVencido,persVenc:persVencido?persVenc:'',
+      persFlujo:cobro&&cobro.modo==='flujo'?cobro.etiqueta:'',
+      persOficio:oficio
     });
   });
 }
@@ -816,9 +879,13 @@ function _reqPaletaRowHtml(x,i,colNotif){
       ?bdgRd+'⚖️ Resolución vencida · '+dv+' d. háb.</span>'
       :'<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">⚖️ Resolución vence en '+reqDiasHabilesEntre(reqHoy(),x.vence)+' d. háb.</span>';
   }else if(esGest){
-    const lbl=x.fuente==='acuerdo'?'Acuerdo en mora':(x.persVencido?'Persuasivo vencido':'Factura en mora');
-    const dias=x.persVencido?reqDiasCalEntre(x.persVenc,reqHoy()):reqDiasCalEntre(x.vence,reqHoy());
-    badge=bdgRd+'💲 '+lbl+' · '+dias+' días</span>';
+    if(x.persFlujo){
+      badge='<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">💲 Cobro persuasivo · '+escAttr(x.persFlujo)+'</span>';
+    }else{
+      const lbl=x.fuente==='acuerdo'?'Acuerdo en mora':(x.persVencido?'Persuasivo vencido':'Factura en mora');
+      const dias=x.persVencido?reqDiasCalEntre(x.persVenc||x.vence,reqHoy()):reqDiasCalEntre(x.vence,reqHoy());
+      badge=bdgRd+'💲 '+lbl+' · '+dias+' días</span>';
+    }
   }else{
     badge=bdgRd+'⏱️ Req. vencido · '+dv+' d. háb.</span>';
     if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff;white-space:nowrap">Incumplió</span>';
@@ -827,13 +894,14 @@ function _reqPaletaRowHtml(x,i,colNotif){
     ?escAttr(x.detalle||'')
     :[x.reqNum?'Req. '+escAttr(x.reqNum):'',x.oficio?'Oficio '+escAttr(x.oficio):'',x.dias?escAttr(x.dias)+' d. '+(x.unidad===REQ_TERM_UNIDAD?'háb.':'cal.'):''].filter(Boolean).join(' · ');
   const cierre=x.fuente==='acto'?'Vigencia hasta '+fx(x.vence):(esGest?(x.fuente==='acuerdo'?'Corte ':'Venció ')+fx(x.vence):'Notificado '+fx(x.inicio));
-  const barra=x.fuente==='acto'&&x.estado!=='vencido'?'var(--am)':'var(--rd)';
+  const barra=(x.persFlujo||(x.fuente==='acto'&&x.estado!=='vencido'))?'var(--am)':'var(--rd)';
   const resp=t&&typeof taskResponsablesLabel==='function'?taskResponsablesLabel(t,true):'—';
   const refHtml=e
     ?'<span style="color:var(--bl);cursor:pointer" data-con-exp-asoc="'+escAttr(x.exp)+'">'+escAttr(x.exp)+'</span>'
     :escAttr(x.exp);
   let acc='<button type="button" class="btn bsm bic act-ico" title="'+(reqPaletaSoloConsulta()?'Ver (solo consulta)':'Ver: revisión con las opciones del encargado (editar expediente, trasladar…)')+'" onclick="event.stopPropagation();reqPaletaVer('+i+')">🔍</button>';
   if(e&&reqPaletaSoloCartera())acc+='<button type="button" class="btn bsm bic act-ico" title="Editar Información contable (pago, persuasivo, acuerdo). Si registra el pago, sale de la paleta" onclick="event.stopPropagation();reqPaletaEditar('+i+')">✏️</button>';
+  if(x.fuente==='factura'&&!x.persFlujo&&reqPaletaPuedeIniciarCobro())acc+='<button type="button" class="btn bsm bic act-ico" title="Entregar Cobro persuasivo y marcar esta factura" onclick="event.stopPropagation();reqPaletaCobroPersuasivo('+i+')">📄</button>';
   if(!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="'+(esGest?'Registrar gestión (observación obligatoria)':'Cumplió el requerimiento')+'" onclick="event.stopPropagation();reqPaletaCumplio('+i+')">✔</button>';
   if(e&&!reqPaletaSoloConsulta())acc+='<button type="button" class="btn bsm bic act-ico" title="Asignar actividad a un responsable (al guardarla sale de esta paleta)" onclick="event.stopPropagation();reqPaletaAsignar('+i+')">📌</button>';
   return '<tr data-req-key="'+escAttr(x.key)+'" style="box-shadow:inset 3px 0 0 '+barra+'">'+
@@ -848,6 +916,27 @@ function _reqPaletaRowHtml(x,i,colNotif){
     '<td class="act-col-vence" style="color:'+barra+'">'+fx(x.vence)+'</td>'+
     '<td class="act-col-cierre" style="font-size:12px">'+cierre+'</td>'+
     '<td class="act-col-acciones"><div class="act-row-actions"><span class="sst-act-toolbar">'+acc+'</span></div></td></tr>';
+}
+function reqPaletaPuedeIniciarCobro(){
+  if(typeof puedeEntregarComoResponsable==='function'&&puedeEntregarComoResponsable())return true;
+  return reqPuedeVerificar()&&!reqPaletaSoloConsulta();
+}
+function reqPaletaCobroPersuasivo(i){
+  const x=(window._reqPaletaEntries||[])[i];
+  if(!x||x.fuente!=='factura')return;
+  if(typeof puedeEntregarComoResponsable!=='function'||!puedeEntregarComoResponsable()){
+    if(typeof notif==='function')notif('El Cobro persuasivo lo entrega el responsable: Entregar documento → actividad Cobro persuasivo.','err');
+    return;
+  }
+  window._persCarteraPrefill={exp:String(x.exp||''),sig:String(x.sig||'')};
+  if(typeof closeTaskModal==='function')closeTaskModal();
+  if(typeof openEntregaResponsableModal!=='function'){
+    if(typeof notif==='function')notif('No se pudo abrir Entregar documento','err');
+    return;
+  }
+  openEntregaResponsableModal();
+  if(typeof pickExpEntregaResp==='function')pickExpEntregaResp(x.exp);
+  if(typeof pickActEntregaResp==='function')pickActEntregaResp('Cobro persuasivo');
 }
 function reqPaletaEditar(i){
   const x=(window._reqPaletaEntries||[])[i];
@@ -1057,4 +1146,9 @@ window.reqPaletaEditar=reqPaletaEditar;
 window.reqPaletaCumplio=reqPaletaCumplio;
 window.reqPaletaConfirmarCumplio=reqPaletaConfirmarCumplio;
 window.reqPaletaAsignar=reqPaletaAsignar;
+window.reqPaletaCobroPersuasivo=reqPaletaCobroPersuasivo;
+window.esActividadCobroPersuasivo=esActividadCobroPersuasivo;
+window.persCarteraAttr=persCarteraAttr;
+window.persCarteraFromRow=persCarteraFromRow;
+window.persCarteraEnFlujo=persCarteraEnFlujo;
 window.reqGestionRevisar=reqGestionRevisar;
