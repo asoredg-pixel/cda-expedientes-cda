@@ -138,7 +138,7 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].persFlujo).toBeFalsy()
     expect(rows[0].persVencido).toBe(false)
-    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Factura en mora')
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('En mora')
   })
 
   it('por revisar, por corregir y por firmar salen de Requerimientos mientras el plazo no vence', () => {
@@ -166,7 +166,7 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].persVencido).toBe(true)
     expect(rows[0].persFlujo).toBeFalsy()
-    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo vencido')
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo ·')
     expect(sst.reqPaletaRowsHtml('', 9)).toContain('Oficio DSGV-1')
     expect(sst.reqPaletaRowsHtml('', 9)).not.toContain('Cobro persuasivo ·')
   })
@@ -183,7 +183,7 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     const rows = sst.reqPaletaEntradas()
     expect(rows).toHaveLength(1)
     expect(rows[0].persVencido).toBe(true)
-    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo vencido')
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo ·')
   })
 
   it('la fecha de pago la saca; un abono no. El acuerdo vencido sigue como acuerdo', () => {

@@ -28136,7 +28136,7 @@ function facturaRowHtml(f,i){
     ?('<div class="fld"><label>Oficio del cobro persuasivo</label><div style="font-size:13px;padding:6px 0">'+escAttr(f.persOficio||'—')+'</div></div>'+
       '<div class="fld"><label>Fecha límite de pago del persuasivo</label><input type="date" class="fx-pers-venc" value="'+(f.persVenc||'')+'" readonly></div>'+
       '<div class="fld"><label>Valor pagado del persuasivo</label>'+moneyInputHtml('fx-pers-pago',f.persPagoValor,'syncFacturasExtra();onContableChange()')+'</div>'+
-      '<div style="font-size:11px;color:var(--tx3);grid-column:1/-1">Lo deja la entrega de Cobro persuasivo. Sale de Requerimientos con la fecha de pago de la factura o con un acuerdo de pago. Un abono menor no la saca.</div>')
+      '<div style="font-size:11px;color:var(--tx3);grid-column:1/-1">Lo deja la entrega de Cobro persuasivo. Sale de Vencimientos con la fecha de pago de la factura o con un acuerdo de pago. Un abono menor no la saca.</div>')
     :('<div class="fld"><label>Fecha vence factura persuasivo</label><input type="date" class="fx-pers-venc" value="'+(f.persVenc||'')+'" onchange="updateFacturaCobro(this.closest(\'.factura-extra\'));syncFacturasExtra();onContableChange()"></div>');
   const tit=(f.tipo||'Factura')+(f.ref?' · '+f.ref:'')+(enMora?' · <span class="flag" style="background:var(--rdl);color:var(--rd)">Mora</span>':'');
   return '<details class="item-fold factura-extra"'+(typeof reqPalGestionAttr==='function'?reqPalGestionAttr(f):'')+(typeof persCarteraAttr==='function'?persCarteraAttr(f):'')+'>'+
@@ -33338,7 +33338,7 @@ function renderActividades(opts){
   }
   if(reqPaletaOn){
     const nReq=typeof reqPaletaContar==='function'?reqPaletaContar():0;
-    cards.req=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Requerimientos</div>','#9a3412');
+    cards.req=actMetCard('req','border-left:3px solid #9a3412','<div class="v" style="color:#9a3412">'+nReq+'</div><div class="l">Vencimientos</div>','#9a3412');
   }
   if(!(typeof esNcaDeguv==='function'&&esNcaDeguv()))cards.done=actMetCard('done','border-left:3px solid var(--gn)','<div class="v" style="color:var(--gn)">'+done+'</div><div class="l">Atendidas</div>','var(--gn)',doneTitulo);
   // Orden de tarjetas según rol (responsable: Por revisar justo antes de Atendidas)

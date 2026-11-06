@@ -141,12 +141,12 @@ describe('Cargo Contable — paleta de cartera', () => {
     const html = sst.reqPaletaRowsHtml('', 9)
     expect(html).toContain('reqPaletaVer(')
     expect(html).toContain('reqPaletaEditar(')
-    expect(html).toContain('Factura en mora')
-    expect(html).toContain('Persuasivo vencido')
-    expect(html).toContain('Acuerdo en mora')
+    expect(html).toContain('En mora')
+    expect(html).toContain('Persuasivo ·')
+    expect(html).toContain('Acuerdo ·')
     expect(html).not.toContain('reqPaletaCumplio(')
     expect(html).not.toContain('reqPaletaAsignar(')
-    expect(html).not.toContain('Resolución vencida')
+    expect(html).not.toContain('Resolución ·')
   })
 
   it('la factura a 2 días hábiles no entra; la pagada tampoco, aunque el persuasivo esté vencido', () => {

@@ -471,7 +471,7 @@ function openRequerimientosBandeja(filtro){
   const tit=document.getElementById('task-modal-title');
   const modal=ov?ov.querySelector('.task-modal'):null;
   if(!ov)return;
-  if(tit)tit.textContent='📋 Requerimientos — seguimiento de cumplimiento';
+  if(tit)tit.textContent='📋 Vencimientos — seguimiento de cumplimiento';
   if(modal){modal.classList.remove('enviar-modal-only');modal.classList.add('task-modal-wide');}
   renderRequerimientosBandeja();
   ov.classList.add('on');
@@ -677,14 +677,14 @@ function reqVerifSyncActividadAgrupada(force){
     const hoyS=reqHoy();
     mutateTask(t.codigo||id,id,function(tk){
       tk.reqVerifKeys=[];
-      tk.detalle='Reemplazada por la paleta Actividades › Requerimientos';
+      tk.detalle='Reemplazada por la paleta Actividades › Vencimientos';
       tk.desc=tk.actividad+' — '+tk.detalle;
       (tk.asignados||[]).forEach(function(a){a.estado='atendido';a.fechaAtendida=hoyS;if(!a.fechaReportada)a.fechaReportada=hoyS;});
       tk.fechaReportada=tk.fechaReportada||hoyS;
       tk.fechaAtendida=hoyS;
       tk.estado='Atendida';
       if(!Array.isArray(tk.historial))tk.historial=[];
-      tk.historial.push({tipo:'auto_req_verif',fecha:hoyS,ts:Date.now(),por:'Sistema',nota:'Cerrada automáticamente: el seguimiento pasa a la paleta Requerimientos'});
+      tk.historial.push({tipo:'auto_req_verif',fecha:hoyS,ts:Date.now(),por:'Sistema',nota:'Cerrada automáticamente: el seguimiento pasa a la paleta Vencimientos'});
     });
   }catch(err){
     console.warn('reqVerifSyncActividadAgrupada:',err);
@@ -692,7 +692,7 @@ function reqVerifSyncActividadAgrupada(force){
 }
 function reqEsActividadAgrupada(t){return !!(t&&t.origen===REQ_VERIF_ORIGEN);}
 function reqActividadAgrupadaToolbarHtml(){
-  return '<span class="sst-act-toolbar"><button type="button" class="btn bsm bic act-ico" title="Abrir requerimientos vencidos por verificar" onclick="event.stopPropagation();openRequerimientosBandeja(\'vencido\')">📋</button></span>';
+  return '<span class="sst-act-toolbar"><button type="button" class="btn bsm bic act-ico" title="Abrir vencimientos por verificar" onclick="event.stopPropagation();openRequerimientosBandeja(\'vencido\')">📋</button></span>';
 }
 
 // ── Paleta «Requerimientos» (Actividades · encargado) ────────────────────────
@@ -824,7 +824,7 @@ function _reqPalMarcarGestion(e,x,d){
   }
   _reqPersistExp(e);
   if(typeof logAudit==='function')
-    logAudit('Gestión paleta Requerimientos ['+x.exp+'] '+x.titulo+' — '+String(d.desc||'').slice(0,200),'expedientes',x.exp);
+    logAudit('Gestión paleta Vencimientos ['+x.exp+'] '+x.titulo+' — '+String(d.desc||'').slice(0,200),'expedientes',x.exp);
   return true;
 }
 function reqPaletaEntradas(){
@@ -867,24 +867,26 @@ function _reqPaletaRowHtml(x,i,colNotif){
     ?String(((typeof getTram==='function'&&getTram(e._tramite,e))||{}).nombre||e._tramite||'')
     :(t&&t.sinExpediente?'Sin expediente':'');
   const esGest=reqPalEsGestionItem(x);
-  const bdgRd='<span class="bdg" style="background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1;white-space:nowrap">';
+  const bdgRd='<span class="bdg" style="background:var(--rdl);color:var(--rd);border:1px solid #f7c1c1">';
+  const bdgAm='<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795">';
   const dv=reqDiasHabilesEntre(x.vence,reqHoy());
   let badge;
   if(x.fuente==='acto'){
     badge=x.estado==='vencido'
-      ?bdgRd+'⚖️ Resolución vencida · '+dv+' d. háb.</span>'
-      :'<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">⚖️ Resolución vence en '+reqDiasHabilesEntre(reqHoy(),x.vence)+' d. háb.</span>';
+      ?bdgRd+'Resolución · '+dv+' d. háb.</span>'
+      :bdgAm+'Resolución · '+reqDiasHabilesEntre(reqHoy(),x.vence)+' d. háb.</span>';
   }else if(esGest){
     if(x.persFlujo){
-      badge='<span class="bdg" style="background:var(--aml);color:var(--am);border:1px solid #f1d795;white-space:nowrap">💲 Cobro persuasivo · '+escAttr(x.persFlujo)+'</span>';
+      badge=bdgAm+'Persuasivo · '+escAttr(x.persFlujo)+'</span>';
     }else{
-      const lbl=x.fuente==='acuerdo'?'Acuerdo en mora':(x.persVencido?'Persuasivo vencido':'Factura en mora');
-      const dias=x.persVencido?reqDiasCalEntre(x.persVenc||x.vence,reqHoy()):reqDiasCalEntre(x.vence,reqHoy());
-      badge=bdgRd+'💲 '+lbl+' · '+dias+' días</span>';
+      const lbl=x.fuente==='acuerdo'?'Acuerdo':(x.persVencido?'Persuasivo':'En mora');
+      const diasRaw=x.persVencido?reqDiasCalEntre(x.persVenc||x.vence,reqHoy()):reqDiasCalEntre(x.vence,reqHoy());
+      const dias=diasRaw<0?0:diasRaw;
+      badge=bdgRd+lbl+' · '+dias+' días</span>';
     }
   }else{
-    badge=bdgRd+'⏱️ Req. vencido · '+dv+' d. háb.</span>';
-    if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff;white-space:nowrap">Incumplió</span>';
+    badge=bdgRd+'Req. · '+dv+' d. háb.</span>';
+    if(x.estado==='incumplio')badge+=' <span class="bdg" style="background:var(--rd);color:#fff">Incumplió</span>';
   }
   const det=esGest
     ?escAttr(x.detalle||'')
@@ -1055,7 +1057,7 @@ function reqGestionRevisar(){
   window._reqGestionCtx=null;
   _reqGestionWatchStop();
   if(reqRegistrarGestion(ctx,e,nuevas)){
-    notif('Gestionado con la actividad asignada — sale de la paleta Requerimientos','ok');
+    notif('Gestionado con la actividad asignada — sale de la paleta Vencimientos','ok');
     _reqRefrescarVistas();
   }
 }

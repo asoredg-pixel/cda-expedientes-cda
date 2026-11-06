@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20261106k">
+<link rel="stylesheet" href="css/sst.css?v=20261106m">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261103i"></script>
-<script src="js/constants.js?v=20261106l"></script>
+<script src="js/constants.js?v=20261106n"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261106g"></script>
@@ -28,7 +28,7 @@
 <script src="js/apoyo-solidario.js?v=20261106e"></script>
 <script src="js/config-store.js?v=20260903a"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="js/core.js?v=20261106j"></script>
+<script src="js/core.js?v=20261106n"></script>
 <script src="js/formulario.js?v=20261106d"></script>
 <script src="js/tareas.js?v=20260826j"></script>
 <script src="js/guardar-exp.js?v=20261022g"></script>
@@ -43,9 +43,9 @@
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261106i"></script>
 <script src="js/consulta.js?v=20261104h"></script>
-<script src="js/entrega-responsable.js?v=20261106l"></script>
+<script src="js/entrega-responsable.js?v=20261106n"></script>
 <script src="js/tramite-firma.js?v=20261106j"></script>
-<script src="js/requerimientos.js?v=20261106l"></script>
+<script src="js/requerimientos.js?v=20261106n"></script>
 <script src="js/papelera.js?v=20261013a"></script>
 <script src="js/recursos.js?v=20261020a"></script>
 <script src="js/ingreso.js?v=20261103q"></script>
@@ -413,7 +413,7 @@
           <option value="porfirma">Por firma</option>
           <option value="pornotif">Por notificar</option>
           <option value="revisados">Revisadas</option>
-          <option value="req" hidden>Requerimientos</option>
+          <option value="req" hidden>Vencimientos</option>
           <option value="done">Atendidas</option>
           <option value="all">Todas las asignadas</option>
         </select>
@@ -752,7 +752,7 @@
     <div class="card" style="border-left:3px solid var(--am)"><div class="slbl" style="margin:0">📨 Persuasivo</div><div id="c-pers"></div></div>
     <div class="card" style="border-left:3px solid var(--pu)"><div class="slbl" style="margin:0">🏛️ Coactivo</div><div id="c-coa"></div></div>
     <div class="card" style="border-left:3px solid var(--bl)"><div class="slbl" style="margin:0">🤝 Acuerdo de pago</div><div id="c-acu"></div></div>
-    <div class="card" style="border-left:3px solid var(--or)"><div class="slbl" style="margin:0">📋 Requerimientos</div><div id="c-req"></div></div>
+    <div class="card" style="border-left:3px solid var(--or)"><div class="slbl" style="margin:0">📋 Vencimientos</div><div id="c-req"></div></div>
   </div>
   <div class="cgr">
     <div class="card"><div class="slbl" style="margin:0">Por tipo de trámite</div><div class="bc" id="ch-tram"></div></div>

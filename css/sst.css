@@ -533,12 +533,12 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 #pg-act #act-table-wrap .act-col-tram{display:none}
 #pg-act #act-table-wrap td{padding:5px 8px;vertical-align:middle}
 #pg-act #act-table-wrap .act-col-estado{
-  width:118px;max-width:118px;min-width:96px;padding:5px 6px;
-  overflow:hidden;vertical-align:middle;
+  width:128px;max-width:140px;min-width:108px;padding:5px 6px;
+  overflow:visible;vertical-align:middle;
 }
 #pg-act #act-table-wrap .act-col-estado .bdg{
-  font-size:10px;padding:1px 6px;margin:0 2px 2px 0;
-  max-width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;
+  font-size:10px;padding:2px 7px;margin:0 2px 2px 0;
+  max-width:100%;box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;line-height:1.25;
   display:inline-flex;vertical-align:middle;
 }
 #pg-act #act-table-wrap .act-col-estado .act-est-dual .bdg{
