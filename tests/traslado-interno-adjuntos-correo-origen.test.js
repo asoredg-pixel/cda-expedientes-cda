@@ -57,7 +57,25 @@ describe('Envío de oficina con adjuntos', () => {
     expect(llamadas).toEqual({ json: 1, upload: 0 })
   })
 
-  it('si messages/send falla, reintenta por el endpoint de carga sin quitar adjuntos', async () => {
+  it('si messages/send rechaza el MIME, reintenta por el endpoint de carga sin quitar adjuntos', async () => {
+    const llamadas = { json: 0, upload: 0 }
+    const c = createContext({
+      GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES: 4 * 1024 * 1024,
+      GMAIL_API_BASE: 'https://gmail.googleapis.com/gmail/v1/users/me',
+      _gmailOfiLoadSignature: async () => {},
+      _gmailOfiBuildHtmlMimeWithAttachments: async () => 'AAAA',
+      _gmailRawB64urlToBytes: () => new Uint8Array([1, 2, 3]),
+      _gmailOfiSendMimeUpload: async () => { llamadas.upload++; return { id: 'u' } },
+      _gmailOfiApi: async () => { llamadas.json++; throw new Error('API 400: invalid value') },
+      gmailOfiSendMessage: async () => ({ id: 's' })
+    })
+    runInContext(extraer(gm, ['gmailOfiSendHtmlWithAttachments']), c)
+    const r = await c.gmailOfiSendHtmlWithAttachments('a@b.co', 'Traslado', '<p>x</p>', [{ name: 'solicitud.pdf' }])
+    expect(r.id).toBe('u')
+    expect(llamadas).toEqual({ json: 1, upload: 1 })
+  })
+
+  it('un corte de red en messages/send no dispara un segundo envío', async () => {
     const llamadas = { json: 0, upload: 0 }
     const c = createContext({
       GMAIL_PQRS_UPLOAD_SEND_MIN_BYTES: 4 * 1024 * 1024,
@@ -70,9 +88,8 @@ describe('Envío de oficina con adjuntos', () => {
       gmailOfiSendMessage: async () => ({ id: 's' })
     })
     runInContext(extraer(gm, ['gmailOfiSendHtmlWithAttachments']), c)
-    const r = await c.gmailOfiSendHtmlWithAttachments('a@b.co', 'Traslado', '<p>x</p>', [{ name: 'solicitud.pdf' }])
-    expect(r.id).toBe('u')
-    expect(llamadas).toEqual({ json: 1, upload: 1 })
+    await expect(c.gmailOfiSendHtmlWithAttachments('a@b.co', 'Traslado', '<p>x</p>', [{ name: 'solicitud.pdf' }])).rejects.toThrow(/Failed to fetch/)
+    expect(llamadas).toEqual({ json: 1, upload: 0 })
   })
 
   it('la carga usa message/rfc822 en el endpoint upload', () => {
@@ -94,6 +111,7 @@ describe('Entrega directa · traslado interno', () => {
   })
   it('el traslado interno no reintenta vaciando los adjuntos', () => {
     expect(fn).toMatch(/Reintentando envío con la solicitud y el oficio/)
+    expect(fn).toMatch(/if\(red&&esTraslado\)throw errSend/)
     expect(fn).not.toMatch(/esInterna&&adjuntos\.length&&\/invalid value\|message\\\.raw\|400\/i\.test\(msg\)\)\{\s*prog\([^)]*sin adjuntos/)
   })
 })

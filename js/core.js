@@ -3183,7 +3183,7 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     adjOmitidos=true;
   }
   if(typeof pqrsEnviarCorreoCiudadano!=='function')throw new Error('No hay envío de correo disponible');
-  prog(Math.min(97,progBase+3),esEntidad?'Enviando comunicación a la entidad…':esInterna?'Enviando correo interno…':'Enviando correo al ciudadano…');
+  prog(Math.min(97,progBase+3),esTraslado?'Enviando traslado por competencia…':esEntidad?'Enviando comunicación a la entidad…':esInterna?'Enviando correo interno…':'Enviando correo al ciudadano…');
   const ofiEnvio=String(e._pqrs_oficina||(typeof deptoActivo!=='undefined'?deptoActivo:'')||'guaviare').trim()||'guaviare';
   let sent=null;
   try{
@@ -3192,7 +3192,10 @@ async function pqrsEntregaDirectaEnviarCorreoSiAplica(e,pq,adjDocumentos,opts){
     });
   }catch(errSend){
     const msg=String(errSend&&errSend.message||errSend||'');
-    if(esTraslado&&adjuntos.length&&/invalid value|message\.raw|400|failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)){
+    const red=/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg);
+    // Un corte de red no significa que Gmail haya rechazado el mensaje: reenviar el mismo correo lo duplica.
+    if(red&&esTraslado)throw errSend;
+    if(esTraslado&&adjuntos.length&&/invalid value|message\.raw|400/i.test(msg)){
       prog(Math.min(98,progBase+4),'Reintentando envío con la solicitud y el oficio…');
       await new Promise(function(r){setTimeout(r,600);});
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{
@@ -10875,13 +10878,15 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
       :(esEntidad
         ?(typeof asuntoCorreoTraslado==='function'?asuntoCorreoTraslado(e||{_tipo_solicitud:t.actividad||'',_exp:(e&&e._exp)||''},'','entidad'):('Traslado por competencia — '+(t.actividad||'actividad')))
         :('Notificación — '+(t.actividad||'actividad'))));
-    prog(55,esEntidad?'Enviando comunicación a la entidad…':esInterna?'Enviando traslado interno…':'Enviando correo al ciudadano…');
+    prog(55,esTraslado?'Enviando traslado por competencia…':esEntidad?'Enviando comunicación a la entidad…':esInterna?'Enviando traslado interno…':'Enviando correo al ciudadano…');
     let sent=null;
     try{
       sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
     }catch(errSend){
       const msg=String(errSend&&errSend.message||errSend||'');
-      if(esTraslado&&adjuntos.length&&/failed to fetch|network|tiempo agotado|respondió a tiempo|invalid value|message\.raw|400/i.test(msg)){
+      const red=/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg);
+      if(red&&esTraslado)throw errSend;
+      if(esTraslado&&adjuntos.length&&/invalid value|message\.raw|400/i.test(msg)){
         prog(70,'Reintentando envío con la solicitud y el oficio…');
         await new Promise(function(r){setTimeout(r,600);});
         sent=await pqrsEnviarCorreoCiudadano(destinos,asuntoFinal,htmlBody,true,adjuntos,{expediente:e,oficinaId:ofiId,cc:emailCc,bcc:emailBcc});
@@ -38213,10 +38218,8 @@ async function pqrsArchivosSolicitudRadicada(e){
       console.warn('pqrsArchivosSolicitudRadicada:',docs[i]&&docs[i].nombre,err);
     }
   }
-  if(fallos.length&&typeof notif==='function'){
-    notif(files.length
-      ?('⚠️ No se pudieron adjuntar algunos documentos de la solicitud: '+fallos.slice(0,3).join(', '))
-      :'⚠️ La solicitud tiene documento principal o anexos, pero no se pudieron adjuntar al correo de traslado.','warn');
+  if(fallos.length){
+    console.warn('pqrsArchivosSolicitudRadicada: no se adjuntaron',fallos.join(', '));
   }
   return files;
 }
@@ -38272,10 +38275,7 @@ function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,opts){
   const cuerpoHtml=cuerpo
     ?('<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>')
     :'';
-  let introHtml=(opts.modo==='traslado'||opts.traslado===true)
-    ?('<p style="font-family:Arial,sans-serif;font-size:13px">Se <strong>traslada por competencia</strong> esta solicitud. A continuación el correo original de la radicación, con su historial y anexos.</p>')
-    :'';
-  introHtml+=cuerpoHtml;
+  let introHtml=cuerpoHtml;
   if(linksHtml)introHtml+='<hr><p><strong>Documentos</strong> (enlace Drive):</p>'+linksHtml;
   const incluir=opts.incluirHistorial!==false;
   const tieneDatos=!!(e&&(e._gmail_message_id||e._gmail_email_data||opts.fullMsg));
@@ -38659,6 +38659,23 @@ async function pqrsPrepararAdjuntosNotificacionCorreo(documentos,opts){
   }
   return files;
 }
+/** Si Gmail ya aceptó el envío pero el navegador perdió la respuesta, el mensaje está en Enviados. */
+async function pqrsCorreoYaEnEnviados(asunto, para){
+  const subj=String(asunto||'').replace(/"/g,'').trim();
+  if(!subj||typeof _gmailOfiApi!=='function'||typeof GMAIL_API_BASE==='undefined')return null;
+  const paraQ=String(para||'').trim().toLowerCase();
+  const q='in:sent newer_than:1d subject:"'+subj+'"'+(paraQ?' to:'+paraQ:'');
+  try{
+    await new Promise(function(r){setTimeout(r,1600);});
+    const data=await _gmailOfiApi('GET',GMAIL_API_BASE+'/messages?q='+encodeURIComponent(q)+'&maxResults=3');
+    const id=data&&data.messages&&data.messages[0]&&data.messages[0].id;
+    if(!id)return null;
+    return{messageId:id,cuenta:'oficina',yaEnviado:true};
+  }catch(err){
+    console.warn('pqrsCorreoYaEnEnviados:',err);
+    return null;
+  }
+}
 // Envía un correo a uno o varios destinatarios.
 // `to` puede ser string (un correo) o array de strings (varios).
 // Si preferOfi=true, SOLO usa el Gmail de oficina (encargado de esa oficina / NCA); nunca el personal.
@@ -38722,7 +38739,14 @@ async function pqrsEnviarCorreoCiudadano(to,subject,htmlBody,preferOfi,attachmen
   for(const addr of lista){
     try{const r=await send(addr);if(!first)first=r;}catch(err){fallidos.push({addr:addr,err:String(err.message||err)});}
   }
-  if(!first&&fallidos.length)throw new Error(fallidos[0].addr+': '+fallidos[0].err);
+  if(!first&&fallidos.length){
+    const red=fallidos.every(function(f){return /failed to fetch|networkerror|load failed|tiempo agotado|respondió a tiempo/i.test(String(f.err||''));});
+    if(red&&typeof pqrsCorreoYaEnEnviados==='function'){
+      const ya=await pqrsCorreoYaEnEnviados(subject,lista[0]);
+      if(ya)return ya;
+    }
+    throw new Error(fallidos[0].addr+': '+fallidos[0].err);
+  }
   if(fallidos.length){
     await new Promise(function(r){setTimeout(r,1500);});
     const quedan=[];

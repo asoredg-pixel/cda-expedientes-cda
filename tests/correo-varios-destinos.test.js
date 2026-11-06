@@ -122,4 +122,27 @@ describe('pqrsEnviarCorreoCiudadano con varios destinatarios', () => {
     const { ctx } = ctxEnvio({ 'uno@correo.com': 9 })
     await expect(ctx.pqrsEnviarCorreoCiudadano(['uno@correo.com'], 'A', '<p>x</p>', true, [], {})).rejects.toThrow('uno@correo.com')
   })
+
+  it('si Gmail ya lo dejó en Enviados, un Failed to fetch no se reporta como fallo ni reenvía', async () => {
+    const ctx = ctxDom()
+    let envios = 0
+    Object.assign(ctx, {
+      deptoActivo: 'guaviare',
+      notif: () => {},
+      GMAIL_API_BASE: 'https://gmail.googleapis.com/gmail/v1/users/me',
+      gmailOfiAsegurarCuentaOficinaParaEnvio: async () => {},
+      gmailOfiIsTokenValid: () => true,
+      gmailOfiCuentaConectadaParaEnvio: () => 'nca@cda.gov.co',
+      gmailOfiSendMessage: async () => { envios++; throw new Error('Failed to fetch') },
+      _gmailOfiApi: async (_method, url) => {
+        if (String(url).indexOf('messages?q=') >= 0) return { messages: [{ id: 'ya-en-enviados' }] }
+        throw new Error('no')
+      }
+    })
+    runInContext(extraerFunciones(read('js/core.js'), ['pqrsCorreoYaEnEnviados', 'pqrsEnviarCorreoCiudadano', 'pqrsAvisoCorreoNoEnviado']), ctx)
+    const r = await ctx.pqrsEnviarCorreoCiudadano(['guainiacda@gmail.com'], 'Traslado por competencia — TX260001', '<p>x</p>', true, [], {})
+    expect(envios).toBe(1)
+    expect(r.messageId).toBe('ya-en-enviados')
+    expect(r.yaEnviado).toBe(true)
+  }, 8000)
 })

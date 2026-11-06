@@ -6183,7 +6183,8 @@ async function _gmailOfiApi(method, url, body, optsApi) {
     if (err && (err.name === 'AbortError' || /aborted/i.test(String(err.message || '')))) {
       throw new Error('El envío de correo no respondió a tiempo. Verifique la conexión Gmail e intente de nuevo.');
     }
-    if (err && /failed to fetch|networkerror|load failed/i.test(String(err.message || err))) {
+    const esEnvio = String(method || '').toUpperCase() === 'POST' && /\/messages\/send/.test(String(url || ''));
+    if (!esEnvio && err && /failed to fetch|networkerror|load failed/i.test(String(err.message || err))) {
       try {
         await new Promise(function(r) { setTimeout(r, 500); });
         return await doFetch();
@@ -7056,7 +7057,7 @@ async function gmailOfiSendHtmlWithAttachments(to, subject, htmlBody, files, opt
     return await _gmailOfiApi('POST', GMAIL_API_BASE + '/messages/send', { raw: mime }, { timeoutMs: 60000 });
   } catch (errSend) {
     const msg = String(errSend && errSend.message || errSend || '');
-    if (mimeBytes && /failed to fetch|network|invalid value|message\.raw|413|400/i.test(msg))
+    if (mimeBytes && /invalid value|message\.raw|413|400/i.test(msg))
       return _gmailOfiSendMimeUpload(mimeBytes);
     throw errSend;
   }

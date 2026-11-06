@@ -54,11 +54,12 @@ describe('Modo del correo al notificar', () => {
     expect(ciudadano).toContain('<CONSULTA PQ1>')
   })
 
-  it('traslado por competencia lleva el aviso y no el botón', () => {
+  it('traslado por competencia usa el cuerpo revisado y no el botón', () => {
     const c = ctx()
     const html = c.pqrsCorreoHtmlRespuesta({ _exp: 'PQ1' }, 'Se remite', [], { modo: 'traslado' })
-    expect(html).toContain('traslada por competencia')
     expect(html).toContain('Se remite')
+    expect(html).not.toContain('traslada por competencia')
+    expect(html).not.toContain('A continuación el correo original')
     expect(html).not.toContain('CONSULTA')
     expect(html).not.toContain('Consulta ciudadana')
     expect(html).not.toContain('Consultar el trámite')

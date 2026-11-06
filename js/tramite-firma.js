@@ -2689,6 +2689,7 @@ async function tramiteAtajoEnviarCorreoDirecto(refId,taskId){
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,htmlBody,true,adjuntos,{cc:emailCc,bcc:emailBcc,expediente:e&&!e._sin_expediente?e:null,oficinaId:ofiId});
     }catch(errSend){
       const msg=String(errSend&&errSend.message||errSend||'');
+      if(esTraslado&&/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg))throw errSend;
       if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)){
         if(typeof sstCargaProgress==='function')sstCargaProgress(70,'Reintentando envío…');
         await new Promise(function(r){setTimeout(r,600);});
@@ -2807,9 +2808,10 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
       sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,adjuntos,{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
     }catch(errSend){
       const msg=String(errSend&&errSend.message||errSend||'');
+      if((esTraslado||esInterna||esEntidad)&&/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg))throw errSend;
       if(/failed to fetch|network|tiempo agotado|respondió a tiempo/i.test(msg)){
         await new Promise(function(r){setTimeout(r,600);});
-        sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,(esTraslado||esInterna||esEntidad)?adjuntos:[],{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
+        sent=await pqrsEnviarCorreoCiudadano(destinos,asunto,html,true,[],{cc:ccRaw,bcc:bccRaw,expediente:e,oficinaId:e._pqrs_oficina});
       }else throw errSend;
     }
     if(typeof tramiteCorreoQuedoEnEnviados==='function'&&!tramiteCorreoQuedoEnEnviados(sent))
