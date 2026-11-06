@@ -3684,6 +3684,63 @@ function ciudadanoDocsOrdenReciente(docs){
   return docs;
 }
 window.ciudadanoDocsOrdenReciente=ciudadanoDocsOrdenReciente;
+/** Grupo del documento asociado; vacío si es del expediente consultado. */
+function ciudadanoDocsGrupoDe(d){
+  if(d&&d.grupo)return String(d.grupo).trim();
+  const tipo=String((d&&d.tipo)||'');
+  const m=tipo.match(/^((?:PQRSD asociada|Exp\. asociado)\s·\s\S+)/);
+  return m?m[1].trim():'';
+}
+function ciudadanoDocTipoVisible(d){
+  const tipo=String((d&&d.tipo)||'').trim()||'Archivo adjunto';
+  const g=ciudadanoDocsGrupoDe(d);
+  if(!g)return tipo;
+  if(tipo.indexOf(g)!==0)return tipo;
+  return tipo.slice(g.length).replace(/^\s*·\s*/,'').trim()||'Documento';
+}
+function ciudadanoDocCardHtml(d){
+  const ico=(d.mime||'').includes('pdf')||String(d.url||'').includes('pdf')?'📄':'📎';
+  const nom=d.label||'Documento';
+  const tipo=ciudadanoDocTipoVisible(d);
+  return '<button type="button" class="ciudadano-doc-card" onclick="openCiudadanoDocViewer(\''+escAttr(d.preview||d.url)+'\',\''+escAttr(nom)+'\')" title="'+escAttr(nom+' — '+tipo)+'">'+
+    '<span class="ciudadano-doc-card-ico">'+ico+'</span>'+
+    '<span class="ciudadano-doc-card-body">'+
+    '<span class="ciudadano-doc-card-nom">'+escAttr(nom)+'</span>'+
+    '<span class="ciudadano-doc-card-tipo">'+escAttr(tipo)+'</span>'+
+    '</span></button>';
+}
+/** Propios arriba; cada expediente/PQRSD asociada en su bloque. Sin asociados, lista plana. */
+function ciudadanoDocsHtmlAgrupado(docs,opts){
+  opts=opts||{};
+  const propios=[];
+  const orden=[];
+  const map={};
+  (docs||[]).forEach(function(d){
+    if(!d)return;
+    const g=ciudadanoDocsGrupoDe(d);
+    if(!g){propios.push(d);return;}
+    if(!map[g]){map[g]=[];orden.push(g);}
+    map[g].push(d);
+  });
+  const vacio='<div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px">'+escAttr(opts.vacio||'Sin documentos aprobados aún')+'</div>';
+  if(!orden.length){
+    if(!propios.length)return vacio;
+    ciudadanoDocsOrdenReciente(propios);
+    return propios.map(ciudadanoDocCardHtml).join('');
+  }
+  ciudadanoDocsOrdenReciente(propios);
+  const sec=function(titulo,list,emptyTxt){
+    const cards=list.length?list.map(ciudadanoDocCardHtml).join('')
+      :('<div style="font-size:11px;color:var(--tx3);padding:2px 2px 6px">'+escAttr(emptyTxt||'Sin documentos')+'</div>');
+    return '<div class="ciudadano-docs-grupo"><div class="ciudadano-docs-grupo-tit">'+escAttr(titulo)+'</div>'+cards+'</div>';
+  };
+  let html=sec(opts.propioTit||('Esta solicitud · '+(opts.expId||'')),propios,'Sin documentos de esta solicitud');
+  orden.forEach(function(g){
+    ciudadanoDocsOrdenReciente(map[g]);
+    html+=sec(g,map[g],'');
+  });
+  return html;
+}
 function getDocsAprobadosCiudadano(e){
   const docs=[];
   (e.tasks||[]).forEach(t=>{
@@ -3865,22 +3922,16 @@ async function buscarExpCiudadano(){
       asocDocs.forEach(function(d){
         if(!d||!(d.url||d.preview))return;
         if(/^link\s*drive$/i.test(String(d.label||'').trim()))return;
-        pushUnique({url:d.url,preview:d.preview||d.url,label:d.label||'Documento',tipo:tag+' · '+(d.tipo||'Documento'),mime:d.mime||'',fecha:d.fecha||''});
+        pushUnique({url:d.url,preview:d.preview||d.url,label:d.label||'Documento',tipo:tag+' · '+(d.tipo||'Documento'),mime:d.mime||'',fecha:d.fecha||'',grupo:tag});
       });
     });
   }
-  ciudadanoDocsOrdenReciente(docs);
-  const docsHtml=docs.length?docs.map(function(d){
-    const ico=(d.mime||'').includes('pdf')||String(d.url||'').includes('pdf')?'📄':'📎';
-    const nom=d.label||'Documento';
-    const tipo=d.tipo||'Archivo adjunto';
-    return '<button type="button" class="ciudadano-doc-card" onclick="openCiudadanoDocViewer(\''+escAttr(d.preview||d.url)+'\',\''+escAttr(nom)+'\')" title="'+escAttr(nom+' — '+tipo)+'">'+
-      '<span class="ciudadano-doc-card-ico">'+ico+'</span>'+
-      '<span class="ciudadano-doc-card-body">'+
-      '<span class="ciudadano-doc-card-nom">'+escAttr(nom)+'</span>'+
-      '<span class="ciudadano-doc-card-tipo">'+escAttr(tipo)+'</span>'+
-      '</span></button>';
-  }).join(''):'<div style="font-size:11px;color:var(--tx3);text-align:center;padding:8px">'+(pqrsEstaCerrada(e)&&esPqrs?'Sin documentos de respuesta adjuntos':'Sin documentos aprobados aún')+'</div>';
+  const docsVacio=pqrsEstaCerrada(e)&&esPqrs?'Sin documentos de respuesta adjuntos':'Sin documentos aprobados aún';
+  const docsHtml=ciudadanoDocsHtmlAgrupado(docs,{
+    expId:e._exp,
+    propioTit:(esPqrs?'Esta solicitud':'Este expediente')+' · '+(e._exp||''),
+    vacio:docsVacio
+  });
   // Sprint 10: response summary for closed PQRSDs
   let respuestaHtml='';
   if(esPqrs&&pqrsEstaCerrada(e)){

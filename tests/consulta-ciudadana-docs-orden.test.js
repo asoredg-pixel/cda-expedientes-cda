@@ -44,6 +44,7 @@ describe('Consulta ciudadana — orden de documentos', () => {
   })
 
   it('la vista ciudadana ordena antes de pintar', () => {
-    expect(extraer(pqrs, ['buscarExpCiudadano'])).toContain('ciudadanoDocsOrdenReciente')
+    expect(extraer(pqrs, ['buscarExpCiudadano'])).toContain('ciudadanoDocsHtmlAgrupado')
+    expect(extraer(pqrs, ['ciudadanoDocsHtmlAgrupado'])).toContain('ciudadanoDocsOrdenReciente')
   })
 })

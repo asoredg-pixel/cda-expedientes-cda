@@ -3792,6 +3792,9 @@ tr.pqrs-nca-pinned > td{background:transparent!important}
 .ciudadano-doc-card-body{flex:1;min-width:0}
 .ciudadano-doc-card-nom{display:block;font-size:13px;font-weight:600;color:var(--tx);line-height:1.35;word-break:break-word}
 .ciudadano-doc-card-tipo{display:block;font-size:11px;color:var(--tx2);margin-top:3px;line-height:1.35}
+.ciudadano-docs-grupo{display:flex;flex-direction:column;gap:8px}
+.ciudadano-docs-grupo-tit{font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.01em;padding:8px 2px 0;margin-top:4px;border-top:1px solid var(--bd)}
+.ciudadano-docs-grupo:first-child .ciudadano-docs-grupo-tit{border-top:0;margin-top:0;padding-top:0}
 .con-panel-doc-tram-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);margin-bottom:6px;font-size:12px}
 .ciudadano-timeline{border-left:3px solid var(--bl);margin-left:8px;padding-left:14px}
 .ciudadano-tl-item{margin-bottom:12px;font-size:12px}
