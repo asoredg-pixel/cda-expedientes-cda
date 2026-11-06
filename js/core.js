@@ -32595,6 +32595,64 @@ function actividadCuentaComoPorCorregir(t){
   return est==='Por corregir';
 }
 window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
+function actAtendidasAcumEmail(){
+  return String((window._usuarioActual&&window._usuarioActual.email)||'').trim().toLowerCase();
+}
+function actAtendidasClave(t){
+  return String((t&&(t.exp||t.codigo)||'')+'|'+(t&&t.id||'')).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,400);
+}
+function actAtendidasAcumLocal(){
+  const email=actAtendidasAcumEmail();
+  if(!email)return 0;
+  try{return Math.max(0,parseInt(localStorage.getItem('sst_atendidas_acum_v1:'+email),10)||0);}catch(e){return 0;}
+}
+/**
+ * El número de Atendidas no puede depender de la ventana de 30 días:
+ * esa escucha saca el expediente de memoria y el contador bajaba.
+ * Cada actividad atendida vista se anota una vez; el total solo sube.
+ */
+function actSincronizarAtendidasAcum(ids){
+  const email=actAtendidasAcumEmail();
+  if(!email||window._atendidasAcumDenegado)return;
+  if(!window._db||typeof window._fsRunTransaction!=='function'||typeof bandejaEstadoDocRef!=='function')return;
+  ids=(ids||[]).filter(Boolean);
+  const sig=ids.slice().sort().join('\n');
+  if(window._atendidasAcumSig===sig||window._atendidasAcumBusy)return;
+  const ref=bandejaEstadoDocRef(email);
+  if(!ref)return;
+  window._atendidasAcumBusy=true;
+  window._fsRunTransaction(window._db,async function(tx){
+    const snap=await tx.get(ref);
+    const data=snap&&snap.exists&&snap.exists()? (snap.data()||{}):{};
+    const vistos=data.atendidasVistos&&typeof data.atendidasVistos==='object'?data.atendidasVistos:{};
+    const patch={};
+    let add=0;
+    ids.forEach(function(id){
+      if(vistos[id])return;
+      patch['atendidasVistos.'+id]=true;
+      add++;
+    });
+    const total=Math.max(0,(data.atendidasTotal|0)+add);
+    if(add>0){
+      patch.atendidasTotal=total;
+      patch.updatedAt=new Date().toISOString();
+      tx.set(ref,patch,{merge:true});
+    }
+    return total;
+  }).then(function(total){
+    window._atendidasAcumBusy=false;
+    window._atendidasAcumSig=sig;
+    window._atendidasAcum=total;
+    try{localStorage.setItem('sst_atendidas_acum_v1:'+email,String(total));}catch(e){}
+    if(typeof scheduleRefreshViewsAfterRemoteDataChange==='function')scheduleRefreshViewsAfterRemoteDataChange();
+  }).catch(function(err){
+    window._atendidasAcumBusy=false;
+    const c=String((err&&(err.code||err.message))||err||'').toLowerCase();
+    if(c.indexOf('permission-denied')>=0||c.indexOf('insufficient')>=0)window._atendidasAcumDenegado=true;
+    else window._atendidasAcumSig='';
+    console.warn('actSincronizarAtendidasAcum',err);
+  });
+}
 function actividadVentanaAtendidasDias(){
   if(typeof esModoResponsable==='function'&&esModoResponsable())return 30;
   if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return 30;
@@ -33215,12 +33273,20 @@ function renderActividades(opts){
   const porcorr=(deptView?porverBase:all).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   }).length;
-  // Contador = todas las Atendidas ya cargadas; lista/búsqueda = últimos 30 días.
-  const done=filtrarActividadesPorEstado(all,'done',{sinCorte:true}).length;
+  // Lista = últimos 30 días. Contador del responsable = acumulado (no baja cuando sale de la ventana).
+  const doneCargadas=filtrarActividadesPorEstado(all,'done',{sinCorte:true});
   const doneVis=filtrarActividadesPorEstado(filterTasksPeriodo(all,'act'),'done');
-  const doneTitulo=done>doneVis.length
-    ?('Atendidas cargadas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días.')
-    :'';
+  let done=doneCargadas.length;
+  if(isResp){
+    if(window._atendidasAcum==null)window._atendidasAcum=actAtendidasAcumLocal();
+    done=Math.max(done,window._atendidasAcum|0);
+    actSincronizarAtendidasAcum(doneCargadas.map(actAtendidasClave));
+  }
+  const doneTitulo=isResp
+    ?('Total de atendidas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días. Lo que no aparece se busca en Consulta.')
+    :(done>doneVis.length
+      ?('Atendidas cargadas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días.')
+      :'');
   const esDirAct=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
   const puedeFirmadosMets=typeof pqrsPuedeVerPaletaFirmados==='function'?pqrsPuedeVerPaletaFirmados():esDirAct;
   let nPorFirmaList=filtrarActividadesPorEstado(bandejaRevDepto?[]:all,'porfirma');
