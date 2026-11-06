@@ -141,20 +141,34 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     expect(sst.reqPaletaRowsHtml('', 9)).toContain('Factura en mora')
   })
 
-  it('por firmar cambia el rótulo y no dice factura en mora', () => {
+  it('por revisar, por corregir y por firmar salen de Requerimientos mientras el plazo no vence', () => {
+    comoContable()
+    const marca = fac({
+      persOficio: 'DSGV-1', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1', persVenc: '2026-12-01'
+    })
+    const fases = [
+      porFirmar,
+      { id: 'tk1', eliminada: false, actividad: 'Cobro persuasivo', estado: 'Por verificar', firmaWf: { fase: 'pendiente_revision_nca' } },
+      { id: 'tk1', eliminada: false, actividad: 'Cobro persuasivo', estado: 'Por corregir', firmaWf: { fase: 'rechazada' } }
+    ]
+    fases.forEach(t => {
+      exps = [fila([marca], [t])]
+      expect(sst.reqPaletaEntradas()).toHaveLength(0)
+    })
+  })
+
+  it('si la fecha del cobro se vence, vuelve aunque el oficio siga por firmar', () => {
     comoContable()
     exps = [fila([fac({
-      persOficio: 'DSGV-1', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1', persVenc: '2026-12-01'
+      persOficio: 'DSGV-1', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1', persVenc: '2026-11-01'
     })], [porFirmar])]
     const rows = sst.reqPaletaEntradas()
     expect(rows).toHaveLength(1)
-    expect(rows[0].persFlujo).toBe('por firmar')
-    expect(rows[0].persOficio).toBe('DSGV-1')
-    const html = sst.reqPaletaRowsHtml('', 9)
-    expect(html).toContain('Cobro persuasivo · por firmar')
-    expect(html).toContain('Oficio DSGV-1')
-    expect(html).not.toContain('Factura en mora')
-    expect(html).not.toContain('reqPaletaCobroPersuasivo(')
+    expect(rows[0].persVencido).toBe(true)
+    expect(rows[0].persFlujo).toBeFalsy()
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo vencido')
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Oficio DSGV-1')
+    expect(sst.reqPaletaRowsHtml('', 9)).not.toContain('Cobro persuasivo ·')
   })
 
   it('notificado y en plazo sale; si el plazo venció vuelve como persuasivo en mora', () => {

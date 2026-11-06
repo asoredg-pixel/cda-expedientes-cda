@@ -4108,7 +4108,7 @@ function htmlEntregaCobroPersuasivoBlock(e){
     '<div class="fld"><label>N° de oficio <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-pers-oficio" placeholder="Ej. DSGV-E261485" style="'+inp+'"></div>'+
     '<div class="fld"><label>Fecha límite de pago <span style="color:var(--rd)">*</span></label><input type="date" id="entrega-pers-vence" style="'+inp+'"></div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Un solo oficio para las facturas marcadas de este expediente. Mientras esté por revisar, por firmar o por notificar, la paleta lo muestra así. Al notificarlo sale, y vuelve si se vence esta fecha y no hay pago.</div>';
+    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Un solo oficio para las facturas marcadas de este expediente. Sale de Requerimientos y sigue el flujo normal: por revisar, por corregir, por firmar y por notificar. Vuelve a Requerimientos si se vence esta fecha y no hay pago, para otra gestión de cobro.</div>';
 }
 function collectEntregaCobroPersuasivoPayload(){
   if(!document.getElementById('entrega-pers-oficio')){

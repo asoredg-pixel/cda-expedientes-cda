@@ -105,23 +105,19 @@ function persCarteraFaseUi(t){
 }
 /**
  * null: la factura sigue la regla de siempre.
- * oculto: ya notificado y el plazo del persuasivo no se ha vencido.
- * flujo: por revisar / por firmar / por notificar.
- * mora: notificado y el plazo venció sin pago.
+ * oculto: el oficio ya se entregó y sigue el flujo normal (por revisar, por corregir,
+ * por firmar, por notificar) o ya se notificó y el plazo no se ha vencido.
+ * mora: se venció la fecha del cobro persuasivo y no hay pago; vuelve para otra gestión.
  */
 function persCarteraEnFlujo(f,e){
   if(!f||!f.persTaskId||f.acuerdoPago)return null;
   const fase=persCarteraFaseUi(persCarteraTask(e,f));
   if(!fase)return null;
   const oficio=String(f.persOficio||'');
-  if(fase==='notificado'){
-    const v=String(f.persVenc||'');
-    const h=reqHoy();
-    if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v>=h)return{modo:'oculto',oficio:oficio};
-    return{modo:'mora',oficio:oficio,vence:/^\d{4}-\d{2}-\d{2}$/.test(v)?v:''};
-  }
-  const etq=fase==='firmar'?'por firmar':(fase==='notificar'?'por notificar':'por revisar');
-  return{modo:'flujo',etiqueta:etq,oficio:oficio};
+  const v=String(f.persVenc||'');
+  const h=reqHoy();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)&&v<h)return{modo:'mora',oficio:oficio,vence:v};
+  return{modo:'oculto',oficio:oficio};
 }
 function reqEsOficioRequerimiento(t){
   if(!t)return false;
