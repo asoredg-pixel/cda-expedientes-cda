@@ -481,6 +481,12 @@ mark.hl{background:#fff3b0;border-radius:2px;font-weight:600;padding:0 1px}
 .cfg-tab:hover{color:var(--tx)}.cfg-tab.on{color:var(--bl);border-bottom-color:var(--bl)}
 .cfg-pg{display:none}.cfg-pg.on{display:block}
 .cfgr{display:flex;flex-direction:column;gap:.8rem;max-width:720px}
+#cfg-apoyo-panel .apoyo-ancho{max-width:none;width:100%}
+#cfg-apoyo-panel .apoyo-ancho>.form-section{overflow:visible}
+#apoyo-admin-lista .tw{overflow:visible}
+#apoyo-admin-lista table{width:100%}
+#apoyo-admin-lista th,#apoyo-admin-lista td{white-space:nowrap}
+#apoyo-admin-lista td.apoyo-mail{white-space:normal;word-break:break-all;min-width:12rem}
 #cfg-panels .cfg-fold{margin-bottom:0}
 #cfg-panels .cfg-fold .form-section-body .cfcard{border:0;box-shadow:none;padding:0;background:transparent}
 .per-exp-cell{position:relative;display:flex;align-items:center;flex-wrap:wrap;gap:4px}

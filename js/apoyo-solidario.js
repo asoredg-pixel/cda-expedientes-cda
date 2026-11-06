@@ -1402,7 +1402,8 @@ async function apoyoPintarListaAdmin(){
     '</div>'+
     '<div class="slbl" style="margin:12px 0 8px">Consumo del ciclo por usuario ('+list.length+' · con cobro: '+conCobro.length+')</div>'+
     (extraCop>0?'<div style="font-size:12px;margin:0 0 8px">Disco y red del ciclo: <strong>'+escAttr(apoyoFmtCop(extraCop))+'</strong>'+(sumLect>0?' · se reparte según lecturas del ciclo ('+sumLect+').':' · sin lecturas de ciclo todavía, no hay a quién repartir.')+'</div>':'')+
-    '<div style="font-size:11px;color:var(--tx3);margin:0 0 8px;line-height:1.35">Monto = acumulado del ciclo (no se borra a las 2:00; solo lecturas del día). Cada persona va en su propia ficha para que el correo, el monto y los botones no se peguen.</div>';
+    '<div style="font-size:11px;color:var(--tx3);margin:0 0 8px;line-height:1.35">Monto = acumulado del ciclo (no se borra a las 2:00; solo lecturas del día).</div>'+
+    '<div class="tw"><table class="apoyo-uso-table"><thead><tr><th>Usuario</th><th>Periodo</th><th>Lect. hoy</th><th>Lect. ciclo</th><th>A pers.</th><th>B Blaze</th><th>Monto ciclo</th>'+(extraCop>0?'<th>Disco/red</th>':'')+'<th>Estado</th><th></th></tr></thead><tbody>';
   list.forEach(function(u){
     var email=String(u.email||u.id||'').trim().toLowerCase();
     var emailJs=JSON.stringify(email);
@@ -1411,21 +1412,22 @@ async function apoyoPintarListaAdmin(){
     var personal=Math.max(0,monto-blaze);
     var resalta=monto>0||(u.cobrablesMes|0)>0||(u.cobrablesBlazeMes|0)>0;
     var parte=extraCop>0&&sumLect>0?apoyoFmtCop(Math.round(extraCop*((u.lecturasMes|0)/sumLect))):'';
-    h+='<div style="border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:0 0 8px;'+(resalta?'background:#fff8e6;':'background:#fff;')+'">'+
-      '<div style="font-size:13px;font-weight:650;word-break:break-all">'+escAttr(email)+'</div>'+
-      '<div style="font-size:12px;color:var(--tx2);margin-top:4px;line-height:1.45">'+
-      'Periodo '+escAttr(u.periodo||'—')+' · Lect. hoy '+(u.lecturasDia|0)+' · Lect. ciclo '+(u.lecturasMes|0)+'<br>'+
-      'A personal '+escAttr(apoyoFmtCop(personal))+' · B Blaze '+escAttr(apoyoFmtCop(blaze))+
-      ' · <strong>'+escAttr(apoyoFmtCop(monto))+'</strong>'+
-      (parte?' · Disco/red '+escAttr(parte):'')+
-      ' · '+(u.apoyado?'✓ Apoyó':'Pendiente')+
-      '</div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">'+
-      '<button type="button" class="btn bsm bp" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',true)\'>Apoyó + reiniciar</button>'+
-      '<button type="button" class="btn bsm" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',false)\'>Solo apoyó</button>'+
+    h+='<tr'+(resalta?' style="background:#fff8e6"':'')+'>'+
+      '<td class="apoyo-mail" style="font-size:12px">'+escAttr(email)+'</td>'+
+      '<td>'+escAttr(u.periodo||'')+'</td>'+
+      '<td>'+(u.lecturasDia|0)+'</td><td>'+(u.lecturasMes|0)+'</td>'+
+      '<td>'+escAttr(apoyoFmtCop(personal))+'</td><td>'+escAttr(apoyoFmtCop(blaze))+'</td>'+
+      '<td><strong>'+escAttr(apoyoFmtCop(monto))+'</strong></td>'+
+      (extraCop>0?'<td>'+(parte?escAttr(parte):'—')+'</td>':'')+
+      '<td>'+(u.apoyado?'✓ Apoyó':'Pendiente')+'</td>'+
+      '<td>'+
+      '<button type="button" class="btn bsm bp" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',true)\'>Apoyó + reiniciar</button> '+
+      '<button type="button" class="btn bsm" onclick=\'apoyoMarcarApoyoUsuario('+emailJs+',false)\'>Solo apoyó</button> '+
       '<button type="button" class="btn bsm" onclick=\'apoyoReiniciarUsuario('+emailJs+')\'>Reiniciar</button>'+
-      '</div></div>';
+      '</td></tr>';
   });
+  h+='<tr style="font-weight:700;background:#f4faf6"><td>Total</td><td></td><td></td><td>'+sumLect+'</td><td>'+escAttr(apoyoFmtCop(sumA))+'</td><td>'+escAttr(apoyoFmtCop(sumB))+'</td><td>'+escAttr(apoyoFmtCop(sumMonto))+'</td>'+(extraCop>0?'<td>'+escAttr(apoyoFmtCop(extraCop))+'</td>':'')+'<td></td><td></td></tr>';
+  h+='</tbody></table></div>';
   box.innerHTML=h;
 }
 
