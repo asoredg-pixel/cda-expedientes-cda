@@ -1578,7 +1578,7 @@ function renderSecretariaPqrs(){
   if(window._secAsignadasShown==null)window._secAsignadasShown=SEC_PQRS_PAGE;
   const nRad=menuRad.length;
   const nGest=enGestionAll.length;
-  const nAte=atendidasAll.length;
+  const nAte=atendidasLista.length;
   const ateTitulo=nAte>atendidasLista.length
     ?('Atendidas cargadas: '+nAte+'. La lista muestra los últimos 30 días.')
     :('Atendidas en lo cargado. La tabla pagina; no descarga el archivo completo.');
@@ -1591,7 +1591,7 @@ function renderSecretariaPqrs(){
     ?document.getElementById('tbl-sec-pqrs').closest('.card').querySelector('.slbl'):null;
   if(tblCardSlbl){
     tblCardSlbl.textContent=filtro==='gestion'?'PQRSD en gestión'
-      :(filtro==='atendidas'?'PQRSD atendidas (lista 30 días; contador = todas las cargadas)'
+      :(filtro==='atendidas'?'PQRSD atendidas (últimos 30 días)'
         :'PQRSD asignadas a oficinas');
   }
   const pendWrap=document.getElementById('sec-pend-trasl-wrap');
@@ -2511,12 +2511,13 @@ function renderPqrsOficinaInbox(){
   if(!tb)return;
   const listAll=getPqrsOficinaList(getPqrsOficinaActiva(),'all');
   let list=getPqrsOficinaList(getPqrsOficinaActiva(),filtro);
-  // Respondidas: contador = todas las cargadas; lista = últimos 30 días (como Atendidas responsables)
+  // Respondidas: lista y contador = últimos 30 días (no suma cerradas viejas que vengan en otra consulta)
   if(filtro==='cerr'){
     const soloPqrsCerr=(list||[]).filter(function(e){return e&&!e._oficina_doc_respondida&&!e._tramite_firma_task;});
     const docsCerr=(list||[]).filter(function(e){return e&&(e._oficina_doc_respondida||(e._tramite_firma_task&&e._oficina_firma));});
     const soloVis=soloPqrsCerr.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
-    list=soloVis.concat(docsCerr);
+    const docsVis=docsCerr.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
+    list=soloVis.concat(docsVis);
   }
   const qOfi=(document.getElementById('s-pqrs-ofi')?document.getElementById('s-pqrs-ofi').value:'').trim();
   if(qOfi)list=(list||[]).filter(function(e){return matchPqrsOfiSearch(e,qOfi);});
@@ -2555,10 +2556,9 @@ function renderPqrsOficinaInbox(){
     const cerrPqrsVis=cerrPqrsAll.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
     const docsRespondidas=(typeof getOficinaDocRespondidasRows==='function'
       ?getOficinaDocRespondidasRows(ofiActMets,esDirMets):[])||[];
-    const cerr=cerrPqrsAll.length+docsRespondidas.length;
-    const cerrTitulo=cerrPqrsAll.length>cerrPqrsVis.length
-      ?('Respondidas cargadas: '+cerr+'. La lista muestra los últimos 30 días.')
-      :('Respondidas en lo cargado. La tabla pagina; el contador no baja aunque no se listen todas.');
+    const docsVis=docsRespondidas.filter(function(e){return pqrsEnVentanaAtendidasLista(e,30);});
+    const cerr=cerrPqrsVis.length+docsVis.length;
+    const cerrTitulo='Respondidas de los últimos 30 días. La tabla pagina.';
     const tramPorFirmarRows=(typeof getTramiteFirmaRowsParaPaletaDirector==='function'
       ?(typeof filterTramiteFirmaRowsPorOficina==='function'
         ?filterTramiteFirmaRowsPorOficina(getTramiteFirmaRowsParaPaletaDirector('por_firmar')||[],ofiActMets,esDirMets,{paletaPorFirmar:true})

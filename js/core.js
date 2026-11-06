@@ -32608,15 +32608,23 @@ function actAtendidasAcumEmail(){
 function actAtendidasClave(t){
   return String((t&&(t.exp||t.codigo)||'')+'|'+(t&&t.id||'')).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,400);
 }
+function actAtendidaCuentaEnTotal(t){
+  if(!t)return false;
+  if(t.sinExpediente)return true;
+  const id=String(t.exp||t.codigo||'').trim();
+  const set=window._expIdsBandejaPropia;
+  return !!(id&&set&&set[id]);
+}
 function actAtendidasAcumLocal(){
   const email=actAtendidasAcumEmail();
   if(!email)return 0;
-  try{return Math.max(0,parseInt(localStorage.getItem('sst_atendidas_acum_v1:'+email),10)||0);}catch(e){return 0;}
+  try{localStorage.removeItem('sst_atendidas_acum_v1:'+email);}catch(e){}
+  try{return Math.max(0,parseInt(localStorage.getItem('sst_atendidas_propias_v1:'+email),10)||0);}catch(e){return 0;}
 }
 /**
- * El número de Atendidas no puede depender de la ventana de 30 días:
- * esa escucha saca el expediente de memoria y el contador bajaba.
- * Cada actividad atendida vista se anota una vez; el total solo sube.
+ * Total del responsable: solo actividades de su bandeja (pendientes o atendidas de 30 días)
+ * y las que ya salieron de esa ventana después de anotarse.
+ * No cuenta las que aparecen porque el expediente entró por updatedAt o por alerta de cartera.
  */
 function actSincronizarAtendidasAcum(ids){
   const email=actAtendidasAcumEmail();
@@ -32631,17 +32639,19 @@ function actSincronizarAtendidasAcum(ids){
   window._fsRunTransaction(window._db,async function(tx){
     const snap=await tx.get(ref);
     const data=snap&&snap.exists&&snap.exists()? (snap.data()||{}):{};
-    const vistos=data.atendidasVistos&&typeof data.atendidasVistos==='object'?data.atendidasVistos:{};
+    const vistos=data.atendidasPropias&&typeof data.atendidasPropias==='object'?data.atendidasPropias:{};
     const patch={};
     let add=0;
     ids.forEach(function(id){
       if(vistos[id])return;
-      patch['atendidasVistos.'+id]=true;
+      patch['atendidasPropias.'+id]=true;
       add++;
     });
-    const total=Math.max(0,(data.atendidasTotal|0)+add);
-    if(add>0){
-      patch.atendidasTotal=total;
+    const total=Math.max(0,(data.atendidasPropiasTotal|0)+add);
+    if(data.atendidasTotal!=null&&typeof window._fsDeleteField==='function')patch.atendidasTotal=window._fsDeleteField();
+    if(data.atendidasVistos&&typeof window._fsDeleteField==='function')patch.atendidasVistos=window._fsDeleteField();
+    if(add>0)patch.atendidasPropiasTotal=total;
+    if(Object.keys(patch).length){
       patch.updatedAt=new Date().toISOString();
       tx.set(ref,patch,{merge:true});
     }
@@ -32650,7 +32660,7 @@ function actSincronizarAtendidasAcum(ids){
     window._atendidasAcumBusy=false;
     window._atendidasAcumSig=sig;
     window._atendidasAcum=total;
-    try{localStorage.setItem('sst_atendidas_acum_v1:'+email,String(total));}catch(e){}
+    try{localStorage.setItem('sst_atendidas_propias_v1:'+email,String(total));}catch(e){}
     if(typeof scheduleRefreshViewsAfterRemoteDataChange==='function')scheduleRefreshViewsAfterRemoteDataChange();
   }).catch(function(err){
     window._atendidasAcumBusy=false;
@@ -33262,7 +33272,7 @@ function renderActividades(opts){
   const allBase=deptView?getTareasDeptActividades(respFilter):getTareasResponsableActivo();
   const all=allBase;
   const isVital=typeof esCargoVital==='function'&&esCargoVital();
-  const isResp=!deptView&&esModoResponsable();
+  const isResp=!deptView&&(esModoResponsable()||(typeof esModoContratista==='function'&&esModoContratista()));
   const notifAll=getTareasNotifVisiblesAct();
   const porEjec=all.filter(t=>esActividadPorEjecutar(t)).length;
   const priorBase=all.filter(t=>esActividadPrioritariaPendiente(t));
@@ -33280,14 +33290,15 @@ function renderActividades(opts){
   const porcorr=(deptView?porverBase:all).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   }).length;
-  // Lista = últimos 30 días. Contador del responsable = acumulado (no baja cuando sale de la ventana).
+  // Lista = últimos 30 días. Contador del responsable = sus atendidas, no las del volcado del departamento.
   const doneCargadas=filtrarActividadesPorEstado(all,'done',{sinCorte:true});
   const doneVis=filtrarActividadesPorEstado(filterTasksPeriodo(all,'act'),'done');
-  let done=doneCargadas.length;
+  const donePropias=doneCargadas.filter(actAtendidaCuentaEnTotal);
+  let done=isResp?(window._expIdsBandejaPropia?donePropias.length:doneVis.length):doneVis.length;
   if(isResp){
     if(window._atendidasAcum==null)window._atendidasAcum=actAtendidasAcumLocal();
     done=Math.max(done,window._atendidasAcum|0);
-    actSincronizarAtendidasAcum(doneCargadas.map(actAtendidasClave));
+    if(window._expIdsBandejaPropia)actSincronizarAtendidasAcum(donePropias.map(actAtendidasClave));
   }
   const doneTitulo=isResp
     ?('Total de atendidas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días. Lo que no aparece se busca en Consulta.')

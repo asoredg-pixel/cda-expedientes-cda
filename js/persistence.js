@@ -2319,6 +2319,9 @@ function stopRealtimeExpSync(){
   });
   _expPrimerSnap={};
   window._fsBandejaSig='';
+  window._expIdsBandejaPropia=null;
+  window._atendidasAcum=null;
+  window._atendidasAcumSig='';
   window._apoyoExpLectura=Object.create(null);
   window._conBuscaCache=null;
   window._conBuscaList=null;
@@ -3172,6 +3175,13 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
   }
   const primer=_expPrimerSnap[depto];
   const unsub=window._fsOnSnapshot(ref,function(snap){
+    if(filtro&&(filtro.tipo==='nombre'||filtro.tipo==='atendidas')){
+      if(!window._expIdsBandejaPropia)window._expIdsBandejaPropia=Object.create(null);
+      (snap.docs||[]).forEach(function(d){
+        const id=String(d&&d.id||'').trim();
+        if(id)window._expIdsBandejaPropia[id]=1;
+      });
+    }
     const fromCache=!!(snap.metadata&&snap.metadata.fromCache);
     let changed=applyExpedienteFirestoreChanges(snap.docChanges(),{fromCache:fromCache});
     if((!exps||!exps.length)&&snap.docs&&snap.docs.length){
