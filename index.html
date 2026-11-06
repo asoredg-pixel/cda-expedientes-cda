@@ -10,7 +10,7 @@
 <title>TUCÁN — Gestión, Seguimiento y Trazabilidad Ambiental · CDA Guaviare</title>
 <link rel="icon" type="image/png" href="assets/logo-cda.png">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/sst.css?v=20261106i">
+<link rel="stylesheet" href="css/sst.css?v=20261106k">
 <style id="sst-boot-hide-overlays">
 /* Evita FOUC: modales ocultos antes de que termine de aplicar sst.css */
 #confirm-prec-overlay:not(.on),#export-reminder-overlay:not(.on),#gmail-sesion-overlay:not(.on),
@@ -20,7 +20,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module" src="js/firebase-init.js?v=20261103i"></script>
-<script src="js/constants.js?v=20261106j"></script>
+<script src="js/constants.js?v=20261106k"></script>
 <script src="js/utils.js?v=20261021h"></script>
 <script src="js/state.js?v=20260715e"></script>
 <script src="js/persistence.js?v=20261106g"></script>
@@ -39,7 +39,7 @@
 <script src="js/pqrs-matriz-export.js?v=20260707a"></script>
 <script src="js/pqrs-matriz-sheets.js?v=20260908u"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
-<script src="js/gmail.js?v=20261106j"></script>
+<script src="js/gmail.js?v=20261106k"></script>
 <script src="js/sst-file-upload.js?v=20261021m"></script>
 <script src="js/pqrs.js?v=20261106i"></script>
 <script src="js/consulta.js?v=20261104h"></script>
@@ -128,7 +128,7 @@
       <span class="sst-apoyo-meter-cobro" hidden></span>
     </button>
     <button type="button" class="sst-drive-status-btn" id="sst-drive-status-btn" onclick="sstToggleDriveConnectPanel(event)" title="Conexión Drive para archivos" style="display:none" aria-live="polite">
-      <span class="sst-drive-ico" id="sst-drive-ico" aria-hidden="true">⛓️‍💥</span>
+      <span class="sst-drive-ico" id="sst-drive-ico" aria-hidden="true"><svg class="sst-drive-svg sst-drive-svg-off" viewBox="0 0 24 24" focusable="false"><path d="M7.2 18h8.6a3.6 3.6 0 0 0 .35-7.18A5.2 5.2 0 0 0 6.4 12.2 3.2 3.2 0 0 0 7.2 18z"/><path d="M5 19L19 5"/></svg><svg class="sst-drive-svg sst-drive-svg-on" viewBox="0 0 24 24" focusable="false"><path d="M7.2 18h8.6a3.6 3.6 0 0 0 .35-7.18A5.2 5.2 0 0 0 6.4 12.2 3.2 3.2 0 0 0 7.2 18z"/></svg></span>
       <span class="sst-drive-status-dot" aria-hidden="true"></span>
       <span class="sst-drive-status-label" id="sst-drive-status-label">Drive</span>
     </button>

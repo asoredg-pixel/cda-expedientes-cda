@@ -4687,10 +4687,15 @@ body:not(.sesion-activa) .sst-shell{display:block}
   font-size:11px;margin-right:0;filter:none!important;
 }
 .sst-nav-tools .sst-drive-ico{
-  font-size:1.15rem;line-height:1;flex-shrink:0;
+  width:18px;height:18px;line-height:0;flex-shrink:0;
   display:inline-flex;align-items:center;justify-content:center;
   filter:none!important;opacity:1!important;text-shadow:none!important;
 }
+.sst-drive-svg{width:18px;height:18px;display:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sst-drive-status-btn.sst-drive-expired .sst-drive-svg-off,
+.sst-drive-status-btn:not(.sst-drive-ok):not(.sst-drive-warn) .sst-drive-svg-off{display:block}
+.sst-drive-status-btn.sst-drive-ok .sst-drive-svg-on,
+.sst-drive-status-btn.sst-drive-warn .sst-drive-svg-on{display:block}
 .sst-nav:not(.expanded) .sst-drive-status-label,
 .sst-nav:not(.expanded) .sst-drive-status-dot{display:none!important}
 /* Burbuja circular (estilo chat) — conectado verde / desconectado rojo suave */
@@ -4717,10 +4722,11 @@ body.sesion-activa .sst-nav:not(.expanded) .sst-drive-status-btn.sst-drive-expir
   box-shadow:0 3px 10px rgba(248,113,113,.28)!important;
 }
 body.sesion-activa .sst-nav:not(.expanded) .sst-drive-status-btn .sst-drive-ico{
-  filter:none!important;opacity:1!important;font-size:1.2rem;
-  color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.22);
+  filter:none!important;opacity:1!important;width:20px;height:20px;
+  color:#fff;text-shadow:none;
 }
-body.sesion-activa .sst-nav.expanded .sst-drive-ico{font-size:1.1rem;margin-right:4px}
+body.sesion-activa .sst-nav:not(.expanded) .sst-drive-status-btn .sst-drive-svg{width:20px;height:20px}
+body.sesion-activa .sst-nav.expanded .sst-drive-ico{width:18px;height:18px;margin-right:4px}
 body.sesion-activa .sst-nav.expanded .sst-drive-status-btn.sst-drive-ok{
   background:linear-gradient(135deg,rgba(22,163,74,.18),rgba(8,145,178,.14))!important;
   border-color:rgba(22,163,74,.4)!important;color:#047857!important;
