@@ -38297,6 +38297,15 @@ function pqrsCorreoHtmlRadicacion(e){
   h+='</table>'+pqrsCorreoHtmlBloqueConsulta(expId)+pqrsCorreoHtmlPieInstitucional()+'</div>';
   return h;
 }
+/** Nombre del enlace en el correo: el archivo en Drive (AP …), no el de «por firmar». */
+function pqrsNombreLinkCorreo(d){
+  const drive=String(d&&d.driveFilename||'').trim();
+  const nom=String(d&&(d.nombre||d.label)||'').trim();
+  if(/\.[a-zA-Z0-9]{1,8}$/.test(drive))return drive;
+  if(/\.[a-zA-Z0-9]{1,8}$/.test(nom))return nom;
+  return nom||drive||'Documento';
+}
+window.pqrsNombreLinkCorreo=pqrsNombreLinkCorreo;
 function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos,opts){
   opts=opts||{};
   const wfResp=e&&typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):null;
@@ -38314,7 +38323,7 @@ function pqrsCorreoHtmlRespuesta(e,cuerpo,documentos,opts){
       if(!href&&(d.fileId||d.driveFileId))
         href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
       if(!href)return'';
-      const nom=d.nombre||d.label||d.driveFilename||'Documento';
+      const nom=typeof pqrsNombreLinkCorreo==='function'?pqrsNombreLinkCorreo(d):(d.driveFilename||d.nombre||d.label||'Documento');
       return'<p>📎 <a href="'+escAttr(href)+'">'+escAttr(nom)+'</a></p>';
     }).filter(Boolean).join('');
     let hr='<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpoModo||'').replace(/\n/g,'<br>')+'</div>';

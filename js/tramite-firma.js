@@ -2768,7 +2768,12 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
     }
     const optsInt={modo:modoCorreo};
     if(typeof sstCargaShow==='function')sstCargaShow({title:'Enviando correo',message:esTraslado?'Enviando traslado por competencia…':(esInterna?'Enviando comunicación interna…':(esEntidad?'Enviando comunicación…':'Notificando al solicitante…')),pct:40});
-    const docsAdj=wf.documentos||[];
+    // Renombrar a AP en Drive antes del correo: el enlace debe verse igual que el archivo.
+    const wfMail=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):wf;
+    if(typeof _pqrsRenombrarDocsDriveWf==='function'&&wfMail){
+      try{await _pqrsRenombrarDocsDriveWf(wfMail,'atendido');}catch(errNom){console.warn('renombrar antes del correo:',errNom);}
+    }
+    const docsAdj=(wfMail&&wfMail.documentos)||wf.documentos||[];
     const tAct=typeof getPqrsTaskActiva==='function'?getPqrsTaskActiva(e):null;
     let html=typeof pqrsCorreoHtmlRespuesta==='function'?pqrsCorreoHtmlRespuesta(e,cuerpo,docsAdj,optsInt):('<p>'+escAttr(cuerpo)+'</p>');
     let adjuntos=[];
@@ -2820,8 +2825,7 @@ async function pqrsAtajoEnviarCorreoDirecto(expId){
       const ofiLbl=typeof labelOficina==='function'?labelOficina(e._pqrs_oficina||''):(e._pqrs_oficina||'oficina');
       registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:'correo',enviado:true,a:destinos.join(', ')+(ccRaw?' · Cc: '+ccRaw:''),cuenta_emisora:(sent&&sent.cuenta)||'oficina',gmail_message_id:(sent&&sent.messageId)||'',por:por,histTipo:'notificacion_correo',histNota:'Oficio firmado notificado por correo ('+ofiLbl+') a '+destinos.join(', ')});
     }
-    if(typeof _pqrsRenombrarDocsDriveWf==='function')await _pqrsRenombrarDocsDriveWf(getPqrsWorkflow(e),'atendido');
-    setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw});
+    setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:por,cerrado_en:new Date().toISOString(),canal:PQRS_WF_CANAL.CORREO,cuerpo:cuerpo,email_to:toRaw,email_cc:ccRaw,email_bcc:bccRaw,documentos:docsAdj});
     if(typeof _pqrsAplicarCierrePqrsYLimpiarDocs==='function')
       await _pqrsAplicarCierrePqrsYLimpiarDocs(e,wf.fecha_respuesta||hoy(),'PQRSD cerrada — oficio notificado por correo');
     if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
