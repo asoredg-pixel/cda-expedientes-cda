@@ -532,23 +532,24 @@ function nombresAtendidasPaletaExp(exp){
     const est=typeof estadoTask==='function'?estadoTask(t):String(t.estado||'');
     let fa=String(t.fechaAtendida||'').slice(0,10);
     let atendida=est==='Atendida';
+    const quien=[];
     (t.asignados||[]).forEach(function(a){
       if(!a)return;
       if(a.estado==='atendido'||String(a.fechaAtendida||'').trim()){
         atendida=true;
         const af=String(a.fechaAtendida||'').slice(0,10);
         if(/^\d{4}-\d{2}-\d{2}$/.test(af)&&( !fa||af>fa))fa=af;
+        if(a.nombre)quien.push(String(a.nombre));
       }
     });
     if(!atendida)return;
     if(!/^\d{4}-\d{2}-\d{2}$/.test(fa)||fa<corte)return;
-    if(t.responsable)_marcasAddNombre(set,t.responsable);
-    (t.responsables||[]).forEach(function(n){_marcasAddNombre(set,n);});
-    (t.asignados||[]).forEach(function(a){
-      if(!a)return;
-      if(typeof a==='string')_marcasAddNombre(set,a);
-      else if(a.nombre&&(a.estado==='atendido'||String(a.fechaAtendida||'').trim()||est==='Atendida'))_marcasAddNombre(set,String(a.nombre));
-    });
+    // Solo quien atendió (no todo coasignado ni el responsable “en papel”).
+    if(quien.length)quien.forEach(function(n){_marcasAddNombre(set,n);});
+    else{
+      if(t.responsable)_marcasAddNombre(set,t.responsable);
+      (t.responsables||[]).forEach(function(n){_marcasAddNombre(set,n);});
+    }
     // Trámite cerrado por notificador (VITAL/encargado) aunque no figure en asignados
     const fw=t.firmaWf&&typeof t.firmaWf==='object'?t.firmaWf:null;
     if(fw&&(String(fw.fase||'')==='cerrada_atendida'||String(fw.fase||'')==='cerrada')){
@@ -2320,6 +2321,7 @@ function stopRealtimeExpSync(){
   _expPrimerSnap={};
   window._fsBandejaSig='';
   window._expIdsBandejaPropia=null;
+  window._expIdsBandejaPropiaScope='';
   window._atendidasAcum=null;
   window._atendidasAcumSig='';
   window._apoyoExpLectura=Object.create(null);
@@ -2336,10 +2338,14 @@ function stopRealtimeExpSync(){
 /** Firma de la bandeja filtrada: si no cambia, no re-suscribir (#7). */
 function bandejaEscuchaSig(){
   const rol=String((window._usuarioActual&&window._usuarioActual.rol)||'').trim();
+  if((rol==='responsables'||rol==='contratista')&&typeof window.actAsegurarIdentidadResponsable==='function'){
+    window.actAsegurarIdentidadResponsable();
+  }
   const nombre=String((typeof responsableActivo!=='undefined'&&responsableActivo)||(window._usuarioActual&&window._usuarioActual.nombre)||'').trim();
+  const email=String((window._usuarioActual&&window._usuarioActual.email)||'').trim().toLowerCase();
   const cargo=typeof usuarioCargoSesion==='function'?String(usuarioCargoSesion()||''):'';
   return [
-    rol,nombre,cargo,
+    rol,email,nombre,cargo,
     window._bandejaMarcasListas?'1':'0',
     window._pqrsOficinaCorteListo?'1':'0',
     window._pqrsOficinaPropiaListo?'1':'0',
@@ -3176,11 +3182,24 @@ function escucharConsultaDepto(db,depto,unsubs,filtro){
   const primer=_expPrimerSnap[depto];
   const unsub=window._fsOnSnapshot(ref,function(snap){
     if(filtro&&(filtro.tipo==='nombre'||filtro.tipo==='atendidas')){
-      if(!window._expIdsBandejaPropia)window._expIdsBandejaPropia=Object.create(null);
-      (snap.docs||[]).forEach(function(d){
-        const id=String(d&&d.id||'').trim();
-        if(id)window._expIdsBandejaPropia[id]=1;
-      });
+      const nomFiltro=String(filtro.nombre||'').trim();
+      const nomAct=String((typeof responsableActivo!=='undefined'&&responsableActivo)||'').trim();
+      const mismo=nomFiltro&&nomAct&&(
+        typeof window.actPersonaNombreNorm==='function'
+          ?window.actPersonaNombreNorm(nomFiltro)===window.actPersonaNombreNorm(nomAct)
+          :nomFiltro===nomAct
+      );
+      if(mismo){
+        const set=typeof window.actBandejaPropiaAsegurarSet==='function'
+          ?window.actBandejaPropiaAsegurarSet()
+          :(window._expIdsBandejaPropia||(window._expIdsBandejaPropia=Object.create(null)));
+        if(set){
+          (snap.docs||[]).forEach(function(d){
+            const id=String(d&&d.id||'').trim();
+            if(id)set[id]=1;
+          });
+        }
+      }
     }
     const fromCache=!!(snap.metadata&&snap.metadata.fromCache);
     let changed=applyExpedienteFirestoreChanges(snap.docChanges(),{fromCache:fromCache});
@@ -3229,11 +3248,14 @@ function initRealtimeSync(force){
   const acotar=!!(window._bandejaMarcasListas&&window._fsQuery&&window._fsWhere);
   const deptos=typeof deptosExpedientesAccesibles==='function'?deptosExpedientesAccesibles():['guaviare'];
   if(acotar){
+    const esResp=rolLogin==='responsables'||rolLogin==='contratista';
+    // Bandeja y contador Atendidas: por persona, no por cargo (varios contables/profesionales/…).
+    if(esResp&&typeof window.actAsegurarIdentidadResponsable==='function')window.actAsegurarIdentidadResponsable();
     const nombre=String((typeof responsableActivo!=='undefined'&&responsableActivo)||(window._usuarioActual&&window._usuarioActual.nombre)||'').trim();
     const cargo=typeof usuarioCargoSesion==='function'?usuarioCargoSesion():'';
-    const esResp=rolLogin==='responsables'||rolLogin==='contratista';
     const esOficina=rolLogin==='secretaria'||rolLogin==='oap_deguv'||rolLogin==='rn_deguv'||rolLogin==='admin_deguv'||rolLogin==='ds_deguv';
     const verReq=!esResp||cargo==='coordinador'||cargo==='contable';
+    if(esResp&&nombre&&typeof window.actBandejaPropiaAsegurarSet==='function')window.actBandejaPropiaAsegurarSet();
     deptos.forEach(function(depto){
       const ofiPqrs=esOficina&&rolLogin!=='secretaria';
       const ofiCorte=ofiPqrs&&window._pqrsOficinaCorteListo;

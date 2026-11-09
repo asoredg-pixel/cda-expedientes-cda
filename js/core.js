@@ -15520,8 +15520,16 @@ function getResponsableLoginNombre(){
 function fijarResponsableSesion(){
   const nom=getResponsableLoginNombre();
   if(!nom)return false;
+  const antes=String(responsableActivo||'').trim();
   responsableActivo=nom;
   try{localStorage.setItem('sst_responsable',nom);}catch(e){}
+  // Si cambió la persona (otro responsable / mismo cargo en el mismo navegador), no reutilizar su bandeja.
+  if(antes&&actPersonaNombreNorm(antes)!==actPersonaNombreNorm(nom)){
+    window._expIdsBandejaPropia=null;
+    window._expIdsBandejaPropiaScope='';
+    window._atendidasAcum=null;
+    window._atendidasAcumSig='';
+  }
   // La barra «Conectado como» es redundante: el nombre ya está en el header.
   const hint=document.getElementById('resp-global-hint');
   if(hint)hint.textContent='';
@@ -32610,33 +32618,95 @@ window.actividadCuentaComoPorCorregir=actividadCuentaComoPorCorregir;
 function actAtendidasAcumEmail(){
   return String((window._usuarioActual&&window._usuarioActual.email)||'').trim().toLowerCase();
 }
+/** Contador y bandeja van por persona (correo+nombre), nunca por cargo (contable/profesional/…). */
+function actAsegurarIdentidadResponsable(){
+  if(typeof esResponsableIdentidadFija==='function'&&esResponsableIdentidadFija()
+    &&typeof fijarResponsableSesion==='function'){
+    fijarResponsableSesion();
+  }
+  return String((typeof responsableActivo!=='undefined'&&responsableActivo)||'').trim();
+}
+function actPersonaNombreNorm(nom){
+  nom=String(nom||'').trim();
+  return typeof agendaNorm==='function'?agendaNorm(nom):nom.toLowerCase();
+}
+function actPersonaBandejaScope(){
+  const email=actAtendidasAcumEmail();
+  const nom=actAsegurarIdentidadResponsable();
+  if(!email||!nom)return '';
+  return email+'|'+actPersonaNombreNorm(nom);
+}
+function actIdentidadResponsableCoincide(){
+  const nom=String((typeof responsableActivo!=='undefined'&&responsableActivo)||'').trim();
+  if(!nom)return false;
+  if(typeof esResponsableIdentidadFija!=='function'||!esResponsableIdentidadFija())return true;
+  const propio=typeof getResponsableLoginNombre==='function'?getResponsableLoginNombre():'';
+  if(!propio)return false;
+  return actPersonaNombreNorm(nom)===actPersonaNombreNorm(propio);
+}
+function actBandejaPropiaAsegurarSet(){
+  const scope=actPersonaBandejaScope();
+  if(!scope){
+    window._expIdsBandejaPropia=null;
+    window._expIdsBandejaPropiaScope='';
+    return null;
+  }
+  if(!window._expIdsBandejaPropia||window._expIdsBandejaPropiaScope!==scope){
+    window._expIdsBandejaPropia=Object.create(null);
+    window._expIdsBandejaPropiaScope=scope;
+    window._atendidasAcum=null;
+    window._atendidasAcumSig='';
+  }
+  return window._expIdsBandejaPropia;
+}
+function actBandejaPropiaScopeOk(){
+  const scope=actPersonaBandejaScope();
+  return !!(scope&&window._expIdsBandejaPropia&&window._expIdsBandejaPropiaScope===scope);
+}
 function actAtendidasClave(t){
   return String((t&&(t.exp||t.codigo)||'')+'|'+(t&&t.id||'')).replace(/[^A-Za-z0-9_-]/g,'_').slice(0,400);
 }
 function actAtendidaCuentaEnTotal(t){
-  if(!t)return false;
+  if(!t||!actBandejaPropiaScopeOk())return false;
   if(t.sinExpediente)return true;
   const id=String(t.exp||t.codigo||'').trim();
   const set=window._expIdsBandejaPropia;
   return !!(id&&set&&set[id]);
 }
+const ACT_ATENDIDAS_PROPIAS_VER=3;
 function actAtendidasAcumLocal(){
   const email=actAtendidasAcumEmail();
   if(!email)return 0;
   try{localStorage.removeItem('sst_atendidas_acum_v1:'+email);}catch(e){}
-  try{return Math.max(0,parseInt(localStorage.getItem('sst_atendidas_propias_v1:'+email),10)||0);}catch(e){return 0;}
+  try{
+    const ver=parseInt(localStorage.getItem('sst_atendidas_propias_ver:'+email),10)||0;
+    const persona=String(localStorage.getItem('sst_atendidas_propias_persona:'+email)||'');
+    const nom=actPersonaNombreNorm(actAsegurarIdentidadResponsable());
+    if(ver!==ACT_ATENDIDAS_PROPIAS_VER||!nom||persona!==nom){
+      localStorage.removeItem('sst_atendidas_propias_v1:'+email);
+      return 0;
+    }
+    return Math.max(0,parseInt(localStorage.getItem('sst_atendidas_propias_v1:'+email),10)||0);
+  }catch(e){return 0;}
 }
 /**
- * Total del responsable: solo actividades de su bandeja (pendientes o atendidas de 30 días)
- * y las que ya salieron de esa ventana después de anotarse.
- * No cuenta las que aparecen porque el expediente entró por updatedAt o por alerta de cartera.
+ * Total por persona (correo+nombre), independiente del cargo.
+ * Solo actividades de SU bandeja; no usa el volcado del departamento ni datos de otro responsable.
+ * Ver 3: amarra el acumulado a la persona y descarta mezclas entre cuentas del mismo rol.
  */
 function actSincronizarAtendidasAcum(ids){
   const email=actAtendidasAcumEmail();
-  if(!email||window._atendidasAcumDenegado)return;
+  const persona=actAsegurarIdentidadResponsable();
+  const personaN=actPersonaNombreNorm(persona);
+  if(!email||!personaN||window._atendidasAcumDenegado)return;
+  if(!actIdentidadResponsableCoincide())return;
   if(!window._db||typeof window._fsRunTransaction!=='function'||typeof bandejaEstadoDocRef!=='function')return;
+  if(!actBandejaPropiaScopeOk())return;
   ids=(ids||[]).filter(Boolean);
-  const sig=ids.slice().sort().join('\n');
+  const uniq={};
+  ids.forEach(function(id){uniq[id]=true;});
+  ids=Object.keys(uniq);
+  const sig=ACT_ATENDIDAS_PROPIAS_VER+':'+personaN+':'+ids.slice().sort().join('\n');
   if(window._atendidasAcumSig===sig||window._atendidasAcumBusy)return;
   const ref=bandejaEstadoDocRef(email);
   if(!ref)return;
@@ -32644,28 +32714,36 @@ function actSincronizarAtendidasAcum(ids){
   window._fsRunTransaction(window._db,async function(tx){
     const snap=await tx.get(ref);
     const data=snap&&snap.exists&&snap.exists()? (snap.data()||{}):{};
-    const vistos=data.atendidasPropias&&typeof data.atendidasPropias==='object'?data.atendidasPropias:{};
-    const patch={};
-    let add=0;
-    ids.forEach(function(id){
-      if(vistos[id])return;
-      patch['atendidasPropias.'+id]=true;
-      add++;
-    });
-    const total=Math.max(0,(data.atendidasPropiasTotal|0)+add);
-    if(data.atendidasTotal!=null&&typeof window._fsDeleteField==='function')patch.atendidasTotal=window._fsDeleteField();
-    if(data.atendidasVistos&&typeof window._fsDeleteField==='function')patch.atendidasVistos=window._fsDeleteField();
-    if(add>0)patch.atendidasPropiasTotal=total;
-    if(Object.keys(patch).length){
-      patch.updatedAt=new Date().toISOString();
-      tx.set(ref,patch,{merge:true});
+    const ver=data.atendidasPropiasVer|0;
+    const personaDoc=actPersonaNombreNorm(data.atendidasPropiasPersona||'');
+    const reparar=ver!==ACT_ATENDIDAS_PROPIAS_VER||personaDoc!==personaN;
+    const vistosPrev=!reparar&&data.atendidasPropias&&typeof data.atendidasPropias==='object'?data.atendidasPropias:{};
+    const vistos={};
+    Object.keys(vistosPrev).forEach(function(k){if(vistosPrev[k])vistos[k]=true;});
+    ids.forEach(function(id){vistos[id]=true;});
+    const total=Object.keys(vistos).length;
+    const patch={
+      atendidasPropias:vistos,
+      atendidasPropiasTotal:total,
+      atendidasPropiasVer:ACT_ATENDIDAS_PROPIAS_VER,
+      atendidasPropiasPersona:personaN,
+      updatedAt:new Date().toISOString()
+    };
+    if(typeof window._fsDeleteField==='function'){
+      if(data.atendidasTotal!=null)patch.atendidasTotal=window._fsDeleteField();
+      if(data.atendidasVistos)patch.atendidasVistos=window._fsDeleteField();
     }
+    tx.set(ref,patch,{merge:true});
     return total;
   }).then(function(total){
     window._atendidasAcumBusy=false;
     window._atendidasAcumSig=sig;
     window._atendidasAcum=total;
-    try{localStorage.setItem('sst_atendidas_propias_v1:'+email,String(total));}catch(e){}
+    try{
+      localStorage.setItem('sst_atendidas_propias_v1:'+email,String(total));
+      localStorage.setItem('sst_atendidas_propias_ver:'+email,String(ACT_ATENDIDAS_PROPIAS_VER));
+      localStorage.setItem('sst_atendidas_propias_persona:'+email,personaN);
+    }catch(e){}
     if(typeof scheduleRefreshViewsAfterRemoteDataChange==='function')scheduleRefreshViewsAfterRemoteDataChange();
   }).catch(function(err){
     window._atendidasAcumBusy=false;
@@ -32675,6 +32753,9 @@ function actSincronizarAtendidasAcum(ids){
     console.warn('actSincronizarAtendidasAcum',err);
   });
 }
+window.actAsegurarIdentidadResponsable=actAsegurarIdentidadResponsable;
+window.actBandejaPropiaAsegurarSet=actBandejaPropiaAsegurarSet;
+window.actPersonaNombreNorm=actPersonaNombreNorm;
 function actividadVentanaAtendidasDias(){
   if(typeof esModoResponsable==='function'&&esModoResponsable())return 30;
   if(typeof esModoOficinaDeguv==='function'&&esModoOficinaDeguv())return 30;
@@ -33295,15 +33376,17 @@ function renderActividades(opts){
   const porcorr=(deptView?porverBase:all).filter(function(t){
     return typeof actividadCuentaComoPorCorregir==='function'?actividadCuentaComoPorCorregir(t):estadoTask(t)==='Por corregir';
   }).length;
-  // Lista = últimos 30 días. Contador del responsable = sus atendidas, no las del volcado del departamento.
+  // Lista = últimos 30 días. Contador = de ESTA persona (correo+nombre), no del cargo ni de otra cuenta.
+  if(isResp)actAsegurarIdentidadResponsable();
   const doneCargadas=filtrarActividadesPorEstado(all,'done',{sinCorte:true});
   const doneVis=filtrarActividadesPorEstado(filterTasksPeriodo(all,'act'),'done');
   const donePropias=doneCargadas.filter(actAtendidaCuentaEnTotal);
-  let done=isResp?(window._expIdsBandejaPropia?donePropias.length:doneVis.length):doneVis.length;
-  if(isResp){
+  const bandejaPersonaOk=isResp&&actBandejaPropiaScopeOk()&&actIdentidadResponsableCoincide();
+  let done=isResp?(bandejaPersonaOk?donePropias.length:doneVis.length):doneVis.length;
+  if(isResp&&bandejaPersonaOk){
     if(window._atendidasAcum==null)window._atendidasAcum=actAtendidasAcumLocal();
     done=Math.max(done,window._atendidasAcum|0);
-    if(window._expIdsBandejaPropia)actSincronizarAtendidasAcum(donePropias.map(actAtendidasClave));
+    actSincronizarAtendidasAcum(donePropias.map(actAtendidasClave));
   }
   const doneTitulo=isResp
     ?('Total de atendidas: '+done+'. La lista muestra los últimos '+actividadVentanaAtendidasDias()+' días. Lo que no aparece se busca en Consulta.')
