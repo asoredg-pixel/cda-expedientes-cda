@@ -769,6 +769,9 @@ function _reqPalEntradasExp(e,out){
     }else fecha=String(f.venc||'');
     const cobro=esAcu?null:persCarteraEnFlujo(f,e);
     if(cobro&&cobro.modo==='oculto')return;
+    // Factura digitalizada en transición: sin venc propio; usa el límite del persuasivo al volver a mora.
+    if(cobro&&cobro.modo==='mora'&&!/^\d{4}-\d{2}-\d{2}$/.test(fecha))
+      fecha=String(cobro.vence||f.persVenc||'');
     if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)||reqDiasHabilesEntre(fecha,h)<REQ_PAL_MORA_HABILES){
       if(!(cobro&&(cobro.modo==='flujo'||cobro.modo==='mora')&&/^\d{4}-\d{2}-\d{2}$/.test(fecha)))return;
     }

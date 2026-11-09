@@ -206,7 +206,7 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     expect(rows[0].persFlujo).toBeFalsy()
   })
 
-  it('el encargado ve el botón para iniciar el cobro; el contable que no entrega, no', () => {
+  it('el encargado y el contable que puede entregar ven el botón; sin entrega no', () => {
     sst.deptoActivo = 'guaviare'
     sst.rolSesion = 'guaviare'
     sst._usuarioActual = { cargo: '', rol: 'guaviare' }
@@ -217,8 +217,28 @@ describe('Paleta — cobro persuasivo de un expediente', () => {
     exps = [fila([fac()])]
     expect(sst.reqPaletaRowsHtml('', 9)).toContain('reqPaletaCobroPersuasivo(')
     comoContable()
+    sst.puedeEntregarComoResponsable = () => false
     exps = [fila([fac()])]
     expect(sst.reqPaletaRowsHtml('', 9)).not.toContain('reqPaletaCobroPersuasivo(')
+    sst.puedeEntregarComoResponsable = () => true
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('reqPaletaCobroPersuasivo(')
+  })
+
+  it('factura digitalizada sin venc vuelve a Vencimientos solo cuando el persuasivo ya venció y está notificado', () => {
+    comoContable()
+    const dig = fac({
+      ref: 'DIG-1', venc: '', valor: '50000',
+      persOficio: 'DSGV-DIG', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1', persVenc: '2026-12-01'
+    })
+    exps = [fila([dig], [notificado])]
+    expect(sst.reqPaletaEntradas()).toHaveLength(0)
+    dig.persVenc = '2026-11-01'
+    exps = [fila([dig], [notificado])]
+    const rows = sst.reqPaletaEntradas()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].persVencido).toBe(true)
+    expect(rows[0].vence).toBe('2026-11-01')
+    expect(sst.reqPaletaRowsHtml('', 9)).toContain('Persuasivo ·')
   })
 })
 
@@ -280,6 +300,67 @@ describe('Entrega — vincula las facturas elegidas y no las demás', () => {
     expect(ctx.applyEntregaCobroPersuasivo(e, t, { oficio: 'DUP', vence: '2026-12-01', idxs: [0] })).toBe(false)
     expect(JSON.parse(e._facturas_extra)[0].persOficio).toBeUndefined()
     expect(t.oficio).toBeUndefined()
+  })
+
+  it('digitaliza factura nueva sin venc y la vincula al oficio', () => {
+    ctx.validarNumeroOficioDisponible = () => true
+    const e = { _exp: 'EXP-1', _facturas_extra: '[]' }
+    const t = { id: 'tkN', historial: [] }
+    expect(ctx.applyEntregaCobroPersuasivo(e, t, {
+      oficio: 'DSGV-N', vence: '2026-12-20', idxs: [],
+      nuevas: [{ tipo: 'Seguimiento', ref: 'VIS-NEW', valor: '150000' }]
+    })).toBe(true)
+    const facs = JSON.parse(e._facturas_extra)
+    expect(facs).toHaveLength(1)
+    expect(facs[0].venc).toBe('')
+    expect(facs[0].ref).toBe('VIS-NEW')
+    expect(facs[0].valor).toBe('150000')
+    expect(facs[0].persOficio).toBe('DSGV-N')
+    expect(facs[0].persTaskId).toBe('tkN')
+    expect(facs[0].persVenc).toBe('2026-12-20')
+    expect(t.historial[0].nota).toContain('digitalizada')
+  })
+
+  it('permite marcar vencidas y digitalizar nuevas en la misma entrega', () => {
+    ctx.validarNumeroOficioDisponible = () => true
+    const e = {
+      _exp: 'EXP-1',
+      _facturas_extra: JSON.stringify([{ tipo: 'Seguimiento', ref: 'OLD', venc: '2026-09-01', valor: '10' }])
+    }
+    const t = { id: 'tkM', historial: [] }
+    expect(ctx.applyEntregaCobroPersuasivo(e, t, {
+      oficio: 'DSGV-M', vence: '2026-12-01', idxs: [0],
+      nuevas: [{ tipo: 'TCAF', ref: 'NEW', valor: '99' }]
+    })).toBe(true)
+    const facs = JSON.parse(e._facturas_extra)
+    expect(facs).toHaveLength(2)
+    expect(facs[0].persOficio).toBe('DSGV-M')
+    expect(facs[1].ref).toBe('NEW')
+    expect(facs[1].venc).toBe('')
+    expect(facs[1].persTaskId).toBe('tkM')
+  })
+})
+
+describe('Contable — solo Cobro persuasivo', () => {
+  it('lista de actividades del contable queda en Cobro persuasivo', () => {
+    const entrega = read('js/entrega-responsable.js')
+    const c = createContext({
+      console,
+      deptoActivo: 'responsables',
+      getDeptoOperativo: () => 'guaviare',
+      getCfgActividadesPred: () => ({ actividadesPred: ['Visita de campo', 'Cobro persuasivo', 'Elaborar concepto técnico'] }),
+      cfgFor: () => ({ actividadesPred: ['Visita de campo', 'Cobro persuasivo'] }),
+      esCargoContable: () => true,
+      esActividadCobroPersuasivo: n => /^cobro\s+persuasivo$/i.test(String(n || '').trim())
+    })
+    c.window = c
+    runInContext(extraer(entrega, [
+      'entregaRespSoloCobroPersuasivo', 'listActividadesPredEntregaResp', 'actividadPredEntregaExiste'
+    ]), c)
+    expect(c.entregaRespSoloCobroPersuasivo()).toBe(true)
+    expect(c.listActividadesPredEntregaResp()).toEqual(['Cobro persuasivo'])
+    expect(c.actividadPredEntregaExiste('Cobro persuasivo')).toBe(true)
+    expect(c.actividadPredEntregaExiste('Visita de campo')).toBe(false)
   })
 })
 

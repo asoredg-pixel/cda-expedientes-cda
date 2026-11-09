@@ -17,6 +17,10 @@ function puedeEntregarComoResponsable(){
   }
   return !!String(responsableActivo||'').trim();
 }
+/** Contable: Entregar documento solo para Cobro persuasivo (cartera / transición). */
+function entregaRespSoloCobroPersuasivo(){
+  return typeof esCargoContable==='function'&&esCargoContable();
+}
 
 function buscarExpedientesEntregaResp(q,lim){
   const ql=String(q||'').trim().toLowerCase();
@@ -2319,6 +2323,7 @@ function openEntregaResponsableModal(){
   window._entregaLibrePersonaId='';
   window._entregaRespCrearNuevo=false;
   window._entregaRespCrearTipo='';
+  const soloPers=entregaRespSoloCobroPersuasivo();
   if(modal){
     modal.classList.add('task-modal-wide');
     modal.classList.add('enviar-modal-only');
@@ -2327,11 +2332,13 @@ function openEntregaResponsableModal(){
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="onEntregaRespModoRadioChange()"> Expediente / PQRSD</label>'+
+      (soloPers?'':
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-libre" onchange="onEntregaRespModoRadioChange()"> Actividad sin expediente</label>'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-informe" onchange="onEntregaRespModoRadioChange()"> Entrega de informes</label>'+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-informe" onchange="onEntregaRespModoRadioChange()"> Entrega de informes</label>')+
       '<input type="checkbox" id="entrega-resp-modo-nuevo" style="display:none" tabindex="-1" aria-hidden="true">'+
       '<input type="checkbox" id="entrega-resp-modo-pqrs" style="display:none" tabindex="-1" aria-hidden="true">'+
     '</div>'+
+    (soloPers?'<div style="font-size:11px;color:var(--tx3);margin:-4px 0 10px">Contable: solo Cobro persuasivo sobre un expediente existente (puede digitalizar la factura si aún no está en el sistema).</div>':'')+
     '<div id="entrega-resp-exist-box">'+
       '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente / PQRSD</label>'+
         '<div style="position:relative">'+
@@ -2416,6 +2423,7 @@ function openEntregaResponsableModal(){
     sstFileRenderList('entrega-resp-anexos-list',entregaRespFileCtxKey());
   }
   setTimeout(function(){
+    if(soloPers&&typeof pickActEntregaResp==='function')pickActEntregaResp('Cobro persuasivo');
     const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
     const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
     const exp=document.getElementById('entrega-resp-exp');
@@ -2424,6 +2432,8 @@ function openEntregaResponsableModal(){
     else if(libre&&nom)nom.focus();
     const actSug=document.getElementById('entrega-resp-act-sug');
     if(actSug){actSug.style.display='none';actSug.innerHTML='';}
+    const actInp=document.getElementById('entrega-resp-actividad');
+    if(soloPers&&actInp){actInp.readOnly=true;actInp.style.background='var(--sf2)';}
   },80);
 }
 
@@ -2439,12 +2449,18 @@ function syncEntregaRespFileLabel(inp,labelId,multi){
 function listActividadesPredEntregaResp(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(depto):(typeof cfgFor==='function'?cfgFor(depto):null);
-  return (cfgAct&&cfgAct.actividadesPred)||[];
+  const base=(cfgAct&&cfgAct.actividadesPred)||[];
+  if(entregaRespSoloCobroPersuasivo()){
+    const cobro=base.find(function(a){return typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(a);});
+    return cobro?[cobro]:['Cobro persuasivo'];
+  }
+  return base;
 }
 
 function actividadPredEntregaExiste(nombre){
   const nom=String(nombre||'').trim().toLowerCase();
   if(!nom)return false;
+  if(entregaRespSoloCobroPersuasivo()&&typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(nombre))return true;
   return listActividadesPredEntregaResp().some(function(a){return String(a||'').trim().toLowerCase()===nom;});
 }
 
@@ -4084,14 +4100,77 @@ function facturasVencidasCobroPersuasivo(e){
   });
   return out;
 }
+function htmlEntregaPersNuevaRow(uid){
+  uid=String(uid||('n'+Date.now().toString(36)));
+  const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
+  const tipos=_entregaFacTiposOptionsHtml();
+  const idBase='entrega-pers-nueva-'+uid;
+  const moneyHtml=typeof moneyInputHtml==='function'
+    ?moneyInputHtml('entrega-pers-nueva-valor','','',idBase+'-valor')
+    :'<input type="text" id="'+escAttr(idBase+'-valor')+'" class="entrega-pers-nueva-valor" style="'+inp+'">';
+  return '<div class="entrega-pers-nueva-row" data-pers-nueva="'+escAttr(uid)+'" style="margin-bottom:8px;padding:8px;border:1px dashed var(--bd);border-radius:var(--r);background:#fff">'+
+    '<div class="fx" style="justify-content:space-between;align-items:center;margin-bottom:6px">'+
+    '<div style="font-size:11px;font-weight:600;color:var(--tx2)">Factura nueva</div>'+
+    '<button type="button" class="btn bsm bic" title="Quitar" onclick="entregaPersNuevaRemoveRow(this)">✕</button></div>'+
+    '<div class="fg">'+
+    '<div class="fld"><label>Tipo de factura <span style="color:var(--rd)">*</span></label><select class="entrega-pers-nueva-tipo" id="'+escAttr(idBase+'-tipo')+'" style="'+inp+'"><option value="">— Seleccione —</option>'+tipos+'</select></div>'+
+    '<div class="fld"><label>Valor del cobro persuasivo <span style="color:var(--rd)">*</span></label>'+moneyHtml+'</div>'+
+    '<div class="fld"><label>Referencia / N° <span style="color:var(--rd)">*</span></label><input type="text" class="entrega-pers-nueva-ref" id="'+escAttr(idBase+'-ref')+'" placeholder="N° / ref." style="'+inp+'"></div>'+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Sin vencimiento propio: la fecha límite del oficio (abajo) define cuándo vuelve a Vencimientos si no pagan.</div></div>';
+}
+function entregaPersNuevaAddRow(){
+  const wrap=document.getElementById('entrega-pers-nuevas');
+  if(!wrap)return;
+  const uid=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,5);
+  const tmp=document.createElement('div');
+  tmp.innerHTML=htmlEntregaPersNuevaRow(uid);
+  wrap.appendChild(tmp.firstElementChild);
+  entregaPersNuevaSyncRemove();
+}
+function entregaPersNuevaRemoveRow(btn){
+  const wrap=document.getElementById('entrega-pers-nuevas');
+  if(!wrap)return;
+  const row=btn&&btn.closest?btn.closest('.entrega-pers-nueva-row'):null;
+  if(!row)return;
+  if(wrap.querySelectorAll('.entrega-pers-nueva-row').length<=1){
+    row.querySelectorAll('input,select').forEach(function(el){if(el)el.value='';});
+    return;
+  }
+  row.remove();
+  entregaPersNuevaSyncRemove();
+}
+function entregaPersNuevaSyncRemove(){
+  const wrap=document.getElementById('entrega-pers-nuevas');
+  if(!wrap)return;
+  const rows=wrap.querySelectorAll('.entrega-pers-nueva-row');
+  rows.forEach(function(row){
+    const b=row.querySelector('button[onclick*="entregaPersNuevaRemoveRow"]');
+    if(b)b.style.visibility=rows.length>1?'':'hidden';
+  });
+}
+function collectEntregaPersNuevasUi(){
+  const out=[];
+  document.querySelectorAll('#entrega-pers-nuevas .entrega-pers-nueva-row').forEach(function(row){
+    const tipo=String((row.querySelector('.entrega-pers-nueva-tipo')||{}).value||'').trim();
+    const valorEl=row.querySelector('.entrega-pers-nueva-valor')||row.querySelector('input[id$="-valor"]');
+    const valorRaw=typeof moneyRaw==='function'
+      ?moneyRaw(String((valorEl||{}).value||''))
+      :String((valorEl||{}).value||'').trim();
+    const ref=String((row.querySelector('.entrega-pers-nueva-ref')||{}).value||'').trim();
+    if(!tipo&&!ref&&!valorRaw)return;
+    out.push({tipo:tipo,valor:valorRaw,ref:ref});
+  });
+  return out;
+}
 function htmlEntregaCobroPersuasivoBlock(e){
   const inp='width:100%;padding:7px;border:1px solid var(--bd);border-radius:var(--r)';
   const lista=facturasVencidasCobroPersuasivo(e);
   const pre=window._persCarteraPrefill||null;
   const preExp=pre&&String(pre.exp||'')===String((e&&e._exp)||'');
   let facsHtml;
-  if(!e)facsHtml='<div style="font-size:12px;color:var(--tx3)">Seleccione el expediente para ver las facturas vencidas.</div>';
-  else if(!lista.length)facsHtml='<div style="font-size:12px;color:var(--tx3)">Este expediente no tiene facturas vencidas sin pago (los acuerdos de pago se gestionan aparte).</div>';
+  if(!e)facsHtml='<div style="font-size:12px;color:var(--tx3)">Seleccione el expediente para ver las facturas vencidas o digitalizar una nueva.</div>';
+  else if(!lista.length)facsHtml='<div style="font-size:12px;color:var(--tx3)">No hay facturas vencidas registradas. Digitalice abajo la factura del cobro (transición).</div>';
   else{
     facsHtml=lista.map(function(o){
       const f=o.f;
@@ -4103,16 +4182,21 @@ function htmlEntregaCobroPersuasivoBlock(e){
     }).join('');
   }
   return '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--rd)">Cobro persuasivo</div>'+
-    '<div id="entrega-pers-facs" style="margin-bottom:8px">'+facsHtml+'</div>'+
+    '<div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--tx2)">Facturas vencidas en el expediente</div>'+
+    '<div id="entrega-pers-facs" style="margin-bottom:10px">'+facsHtml+'</div>'+
+    '<div style="font-size:11px;font-weight:600;margin-bottom:4px;color:var(--tx2)">Digitalizar factura (sin registro previo)</div>'+
+    '<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">Para oficios adelantados en la transición: tipo, valor, referencia. La fecha límite es la del oficio (abajo).</div>'+
+    '<div id="entrega-pers-nuevas">'+htmlEntregaPersNuevaRow('1')+'</div>'+
+    '<button type="button" class="btn bsm" style="margin:0 0 10px" onclick="entregaPersNuevaAddRow()">+ Añadir otra factura nueva</button>'+
     '<div class="fg">'+
     '<div class="fld"><label>N° de oficio <span style="color:var(--rd)">*</span></label><input type="text" id="entrega-pers-oficio" placeholder="Ej. DSGV-E261485" style="'+inp+'"></div>'+
     '<div class="fld"><label>Fecha límite de pago <span style="color:var(--rd)">*</span></label><input type="date" id="entrega-pers-vence" style="'+inp+'"></div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Un solo oficio para las facturas marcadas de este expediente. Sale de Vencimientos y sigue el flujo normal: por revisar, por corregir, por firmar y por notificar. Vuelve a Vencimientos si se vence esta fecha y no hay pago, para otra gestión de cobro.</div>';
+    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Marque vencidas y/o digitalice nuevas. Sale de Vencimientos y sigue el flujo normal. Vuelve a Vencimientos si se vence esta fecha y no hay pago.</div>';
 }
 function collectEntregaCobroPersuasivoPayload(){
   if(!document.getElementById('entrega-pers-oficio')){
-    notif('Seleccione el expediente y las facturas vencidas del cobro persuasivo','err');
+    notif('Seleccione el expediente y complete el Cobro persuasivo','err');
     return false;
   }
   const oficio=String((document.getElementById('entrega-pers-oficio')||{}).value||'').trim();
@@ -4123,32 +4207,64 @@ function collectEntregaCobroPersuasivoPayload(){
     const n=parseInt(b.value,10);
     if(!isNaN(n))idxs.push(n);
   });
-  if(!idxs.length){notif('Seleccione al menos una factura vencida','err');return false;}
+  const nuevas=collectEntregaPersNuevasUi();
+  const nuevasOk=[];
+  for(let i=0;i<nuevas.length;i++){
+    const n=nuevas[i];
+    if(!n.tipo){notif('Indique el tipo de cada factura digitalizada','err');return false;}
+    if(!n.ref){notif('Indique la referencia de cada factura digitalizada','err');return false;}
+    if(!n.valor){notif('Indique el valor del cobro persuasivo de cada factura digitalizada','err');return false;}
+    nuevasOk.push(n);
+  }
+  if(!idxs.length&&!nuevasOk.length){
+    notif('Marque al menos una factura vencida o digitalice una factura nueva','err');
+    return false;
+  }
   if(!oficio){notif('Indique el N° de oficio','err');return false;}
   if(!/^\d{4}-\d{2}-\d{2}$/.test(vence)){notif('Indique la fecha límite de pago del persuasivo','err');return false;}
-  return{tipo:'cobro_persuasivo',item:{oficio:oficio,vence:vence,idxs:idxs}};
+  return{tipo:'cobro_persuasivo',item:{oficio:oficio,vence:vence,idxs:idxs,nuevas:nuevasOk}};
 }
 function applyEntregaCobroPersuasivo(e,t,item){
   if(!e||!t||!item)return false;
   const oficio=String(item.oficio||'').trim();
   const vence=String(item.vence||'').trim();
   const idxs=Array.isArray(item.idxs)?item.idxs:[];
-  if(!oficio||!/^\d{4}-\d{2}-\d{2}$/.test(vence)||!idxs.length)return false;
+  const nuevas=Array.isArray(item.nuevas)?item.nuevas:[];
+  if(!oficio||!/^\d{4}-\d{2}-\d{2}$/.test(vence)||(!idxs.length&&!nuevas.length))return false;
   if(typeof validarNumeroOficioDisponible==='function'&&!validarNumeroOficioDisponible(oficio,e._exp))return false;
   const facs=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
   const grupo=String(t.id||'');
   let n=0;
-  idxs.forEach(function(i){
-    const f=facs[i];
-    if(!f||f.pago||f.acuerdoPago)return;
+  const patch=function(f){
     f.persOficio=oficio;
     f.persTaskId=grupo;
     f.persGrupoId=grupo;
     f.persExp=String(e._exp||'');
     f.persVenc=vence;
+  };
+  idxs.forEach(function(i){
+    const f=facs[i];
+    if(!f||f.pago||f.acuerdoPago)return;
+    patch(f);
     n++;
   });
-  if(!n){notif('Ninguna de las facturas marcadas se puede vincular','err');return false;}
+  nuevas.forEach(function(nv){
+    if(!nv||!nv.tipo||!nv.ref)return;
+    const f={
+      tipo:String(nv.tipo||'').trim(),
+      valor:String(nv.valor||'').trim(),
+      ref:String(nv.ref||'').trim(),
+      venc:'',
+      pago:'',
+      persVenc:vence,
+      coacFecha:'',
+      acuerdoPago:false
+    };
+    patch(f);
+    facs.push(f);
+    n++;
+  });
+  if(!n){notif('Ninguna factura se pudo vincular al cobro persuasivo','err');return false;}
   e._facturas_extra=JSON.stringify(facs);
   t.oficio=oficio;
   t.nro_oficio=oficio;
@@ -4158,7 +4274,7 @@ function applyEntregaCobroPersuasivo(e,t,item){
   t.persGrupoId=grupo;
   t.persExp=String(e._exp||'');
   if(!Array.isArray(t.historial))t.historial=[];
-  t.historial.push({tipo:'cobro_persuasivo',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:typeof responsableActivo!=='undefined'?responsableActivo:'',nota:'Cobro persuasivo '+oficio+' · límite '+vence+' · '+n+' factura(s)'});
+  t.historial.push({tipo:'cobro_persuasivo',fecha:typeof hoy==='function'?hoy():'',ts:Date.now(),por:typeof responsableActivo!=='undefined'?responsableActivo:'',nota:'Cobro persuasivo '+oficio+' · límite '+vence+' · '+n+' factura(s)'+(nuevas.length?' · '+nuevas.length+' digitalizada(s)':'')});
   window._persCarteraPrefill=null;
   return true;
 }
@@ -4176,11 +4292,15 @@ function ensureExpTaskEntregaResponsable(){
   }
   const actFinalCheck=actividad;
   if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
+  if(entregaRespSoloCobroPersuasivo()&&!(typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(actFinalCheck))){
+    notif('Como Contable solo puede entregar Cobro persuasivo','err');
+    return null;
+  }
 
   // Sin expediente: actividad libre autoasignada al responsable
   if(libre){
     if(typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(actFinalCheck)){
-      notif('Cobro persuasivo se entrega sobre un expediente con facturas vencidas, no como actividad libre','err');
+      notif('Cobro persuasivo se entrega sobre un expediente, no como actividad libre','err');
       return null;
     }
     const interesadoDatos=collectEntregaLibreInteresado();
@@ -4411,8 +4531,12 @@ window.confirmarRegistroPendienteDeEntrega=confirmarRegistroPendienteDeEntrega;
 window.htmlEntregaOficioRequerimientoBlock=htmlEntregaOficioRequerimientoBlock;
 window.syncEntregaOfiReqMedioUi=syncEntregaOfiReqMedioUi;
 window.esActividadOficioRequerimiento=esActividadOficioRequerimiento;
+window.entregaRespSoloCobroPersuasivo=entregaRespSoloCobroPersuasivo;
 window.facturasVencidasCobroPersuasivo=facturasVencidasCobroPersuasivo;
 window.htmlEntregaCobroPersuasivoBlock=htmlEntregaCobroPersuasivoBlock;
+window.htmlEntregaPersNuevaRow=htmlEntregaPersNuevaRow;
+window.entregaPersNuevaAddRow=entregaPersNuevaAddRow;
+window.entregaPersNuevaRemoveRow=entregaPersNuevaRemoveRow;
 window.collectEntregaCobroPersuasivoPayload=collectEntregaCobroPersuasivoPayload;
 window.applyEntregaCobroPersuasivo=applyEntregaCobroPersuasivo;
 window.applyConceptoReqDesdeNotificacion=applyConceptoReqDesdeNotificacion;
