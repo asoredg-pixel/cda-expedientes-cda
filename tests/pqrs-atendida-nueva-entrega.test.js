@@ -29,7 +29,8 @@ function extraer(src, nombres) {
 
 const PQRS_WF = {
   SIN_RESPUESTA: 'sin_respuesta', PENDIENTE_REVISION: 'pendiente_revision_nca', RECHAZADA: 'rechazada',
-  POR_FIRMAR: 'por_firmar', REVISION_FINAL: 'revision_final', CERRADA: 'cerrada'
+  POR_FIRMAR: 'por_firmar', PENDIENTE_NOTIF: 'pendiente_notificacion', LISTA_ENVIO: 'lista_para_envio',
+  REVISION_FINAL: 'revision_final', CERRADA: 'cerrada'
 }
 
 function ctx() {
@@ -58,7 +59,13 @@ describe('PQRSD atendida con entrega posterior', () => {
     const c = ctx()
     expect(c.pqrsEnRevisionNca(exp(PQRS_WF.PENDIENTE_REVISION, false))).toBe(true)
     expect(c.pqrsWorkflowFase(exp(PQRS_WF.RECHAZADA, false))).toBe(PQRS_WF.RECHAZADA)
-    expect(c.pqrsWorkflowFase(exp(PQRS_WF.REVISION_FINAL, true))).toBe(PQRS_WF.REVISION_FINAL)
+    expect(c.pqrsWorkflowFase(exp(PQRS_WF.REVISION_FINAL, false))).toBe(PQRS_WF.REVISION_FINAL)
+  })
+
+  it('PQRSD cerrada con eco viejo de notif/revisión final cuenta como cerrada', () => {
+    const c = ctx()
+    expect(c.pqrsWorkflowFase(exp(PQRS_WF.REVISION_FINAL, true))).toBe(PQRS_WF.CERRADA)
+    expect(c.pqrsWorkflowFase(exp(PQRS_WF.PENDIENTE_NOTIF, true))).toBe(PQRS_WF.CERRADA)
   })
 
   it('no fusiona una nueva «Oficio de respuesta» en una PQRSD atendida', () => {

@@ -472,10 +472,23 @@ function finalizarTareasPqrsAlCerrar(e,nota){
   e.tasks.forEach((t,i)=>{
     t=normalizeTask(t);
     if(t.eliminada||!(String(t.actividad||'').startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(String(t.actividad||''))))return;
-    if(estadoTask(t)==='Atendida')return;
-    t.fechaReportada=hoyStr;
+    // Multi-asignados: estadoTask mira asignados. Si el notificador sigue en
+    // por_verificar/pendiente tras el cierre, la actividad reaparece abierta.
+    const asig=(t.asignados||[]);
+    const asigPend=asig.some(function(a){return a&&a.estado&&a.estado!=='atendido';});
+    if(estadoTask(t)==='Atendida'&&!asigPend)return;
+    (asig).forEach(function(a){
+      if(!a)return;
+      a.estado='atendido';
+      a.fechaAtendida=a.fechaAtendida||hoyStr;
+      if(!a.fechaReportada)a.fechaReportada=hoyStr;
+    });
+    t.fechaReportada=t.fechaReportada||hoyStr;
     t.fechaAtendida=hoyStr;
     t.estado='Atendida';
+    t._pqrs_proyeccion_atendida=true;
+    t._pqrs_notif_en_revision=false;
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
     if(!Array.isArray(t.historial))t.historial=[];
     t.historial.push({tipo:'cierre_pqrs',fecha:hoyStr,por:pqrsComentarioAutor(),nota:nota});
     e.tasks[i]=t;
@@ -737,8 +750,13 @@ function setPqrsWorkflow(e,patch){
 }
 function pqrsWorkflowFase(e){
   const f=getPqrsWorkflow(e).fase||PQRS_WF.SIN_RESPUESTA;
-  // PQRSD ya atendida: una entrega posterior (reiteración, nueva respuesta) no la devuelve a revisión
-  if((f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.RECHAZADA)&&pqrsEstaCerrada(e))return PQRS_WF.CERRADA;
+  // PQRSD ya atendida: no reabrir bandejas si el workflow quedó desfasado (p. ej. eco viejo por notificar)
+  if(pqrsEstaCerrada(e)){
+    if(f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.RECHAZADA
+      ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL
+      ||f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR)
+      return PQRS_WF.CERRADA;
+  }
   return f;
 }
 function pqrsEnRevisionNca(e){return pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION;}
@@ -16490,10 +16508,14 @@ function soportesVisiblesParaVista(t,opts){
       const lotes=[...new Set(list.map(function(x){return x.loteEntrega;}).filter(Boolean))];
       if(lotes.length){
         const lastLote=lotes[lotes.length-1];
-        list=list.filter(function(x){
+        const delLote=list.filter(function(x){
           if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(x))return true;
           return x.loteEntrega===lastLote;
         });
+        // Principal recargado al pasar a Imprimir puede quedar sin loteEntrega: no ocultarlo en Por firmar
+        list=typeof _soportesAcompanarPrincipalSinLote==='function'
+          ?_soportesAcompanarPrincipalSinLote(list,delLote)
+          :delLote;
       }else{
         const mains=list.filter(function(s){return !soporteEsAnexoEntrega(s)&&!(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(s));});
         const lastMain=mains.length?mains[mains.length-1]:null;
@@ -16751,6 +16773,20 @@ function soporteTabLabel(s,idx,soportes){
   const n=list.slice(0,idx+1).filter(function(x){return !x.local===isLink;}).length;
   return(isLink?'Link ':'Documento ')+n;
 }
+/** Si el último lote solo tiene anexos (p. ej. principal recargado sin loteEntrega), reincorpora el principal vigente. */
+function _soportesAcompanarPrincipalSinLote(pool,delLote){
+  const base=Array.isArray(delLote)?delLote.slice():[];
+  const esMain=function(x){
+    if(!x)return false;
+    if(typeof soporteEsDocRadicacion==='function'&&soporteEsDocRadicacion(x))return false;
+    if(typeof soporteEsAnexoEntrega==='function'&&soporteEsAnexoEntrega(x))return false;
+    return true;
+  };
+  if(base.some(esMain))return base;
+  const sinLote=(pool||[]).filter(function(x){return x&&!x.loteEntrega&&esMain(x);});
+  if(!sinLote.length)return base;
+  return base.concat([sinLote[sinLote.length-1]]);
+}
 function getSoportesUltimaEntrega(t){
   const s=t.soportes||[];
   if(!s.length)return[];
@@ -16764,7 +16800,8 @@ function getSoportesUltimaEntrega(t){
   const lotes=[...new Set(s.map(x=>x.loteEntrega).filter(Boolean))];
   if(lotes.length){
     const lastLote=lotes[lotes.length-1];
-    return s.filter(function(x){return x.loteEntrega===lastLote&&vivo(x);});
+    const delLote=s.filter(function(x){return x.loteEntrega===lastLote&&vivo(x);});
+    return _soportesAcompanarPrincipalSinLote(s.filter(vivo),delLote);
   }
   const last=s[s.length-1];
   const f=(last.fecha||'').slice(0,10);
@@ -25368,8 +25405,11 @@ function pqrsReasignarMantenerPorNotificar(e,t,nuevoResp,opts){
 /** Sanea EA-like: sin_respuesta + notificación reportada huérfana → Por notificar. */
 function pqrsRepararNotifHuerfanaTrasReasignacion(e){
   if(!e||typeof getPqrsWorkflow!=='function'||typeof setPqrsWorkflow!=='function')return false;
+  // PQRSD ya cerrada: no reabrir a Por notificar aunque quede notificacion_reportada
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
   const wf=getPqrsWorkflow(e)||{};
   const f=String(wf.fase||'');
+  if(f===PQRS_WF.CERRADA||/cerrad/i.test(f))return false;
   if(f!==PQRS_WF.SIN_RESPUESTA&&f!=='sin_respuesta')return false;
   if(!wf.notificacion_reportada)return false;
   const t=(typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(e):null)
@@ -31917,10 +31957,15 @@ function getTareasNotifVisiblesAct(){
   }
   const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
     if(!pqrsEnFaseNotificacion(e))return false;
+    // Defensa: cerrada no debe listarse aunque un eco haya dejado fase vieja en memoria cruda
+    if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
     // Notificación devuelta a corregir: solo «Por corregir» / «Revisados», no «Por notificar»
     const tAt=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
     if(tAt&&typeof estadoTask==='function'&&estadoTask(tAt)==='Por corregir')return false;
+    // Ya reportada o atendida: no debe quedar huérfana en Por notificar
+    if(tAt&&(estadoTask(tAt)==='Atendida'||String(tAt.fechaAtendida||'').trim()))return false;
     const wf=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    if(wf&&wf.notificacion_reportada)return false;
     if(wf&&(wf.notificacion_devuelta||wf._notif_devuelta_corregir)&&tAt&&estadoTask(tAt)==='Por corregir')return false;
     if(deptView){
       if(respFilter){
@@ -31937,8 +31982,11 @@ function getTareasNotifVisiblesAct(){
   const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
     if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
     if(typeof taskFirmaEnPorNotificar!=='function'||!taskFirmaEnPorNotificar(t))return false;
-    if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return false;
+    if(typeof estadoTask==='function'&&(estadoTask(t)==='Por corregir'||estadoTask(t)==='Atendida'))return false;
+    if(String(t.fechaAtendida||'').trim())return false;
     const fw=t.firmaWf||{};
+    if(fw.notificacion_reportada)return false;
+    if(/cerrad/i.test(String(fw.fase||'')))return false;
     if((fw.notificacion_devuelta||fw._notif_devuelta_corregir)&&estadoTask(t)==='Por corregir')return false;
     if(deptView){
       if(respFilter)return typeof actividadNotifEsDeResp==='function'?actividadNotifEsDeResp(t,respFilter):true;
@@ -37598,7 +37646,11 @@ async function pqrsConfirmarNotificacionOficio(expId,opts){
       sstFileStagingReset(ctxSop);
       sstFileStagingReset(ctxOfi);
     }
-    persistExpedienteGranular(e);
+    // Await: sin confirmar, un eco «por notificar» puede dejar la actividad huérfana al responsable
+    try{
+      if(typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(e);
+      else if(typeof persistExpedienteGranular==='function')await persistExpedienteGranular(e);
+    }catch(errP){console.warn('pqrsConfirmarNotificacionOficio persist revisión final:',errP);}
     closeTaskModal();
     renderPqrsOficinaInbox();
     if(typeof renderActividades==='function')renderActividades();
@@ -37623,12 +37675,22 @@ async function ncaAprobarRevisionFinalNotif(expId){
   const fechaResp=(wf.notificacion_reportada&&wf.notificacion_reportada.fecha)||wf.fecha_respuesta||hoy();
   setPqrsWorkflow(e,{fase:PQRS_WF.CERRADA,cerrado_por:responsableActivo||'NCA',cerrado_en:new Date().toISOString()});
   await _pqrsAplicarCierrePqrsYLimpiarDocs(e,fechaResp,'PQRSD cerrada — notificación '+ (wf.canal||'') +' aprobada');
+  // CERRADA: marca todos los asignados (incl. notificador) como atendidos — evita reabrir Por notificar
+  if(typeof pqrsSincronizarParticipacionPostAprobacion==='function')pqrsSincronizarParticipacionPostAprobacion(e);
   if(typeof registrarNotificacionCiudadanoPqrs==='function'){
     registrarNotificacionCiudadanoPqrs(e,{tipo:'respuesta',medio:wf.canal||'presencial',enviado:true,por:responsableActivo||'',histTipo:'notificacion_'+ (wf.canal||'fisica'),histNota:'Notificación '+(wf.canal||'')+' aprobada en revisión final'});
   }
   if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
   e._pqrs_historial.push({ts:Date.now(),tipo:'revision_final_aprobada',fecha:hoy(),nota:'Encargado aprobó notificación final',por:responsableActivo||'NCA'});
-  persistExpedienteGranular(e);
+  // Await: sin confirmación un eco viejo «por notificar» puede pisar el cierre
+  try{
+    if(typeof persistExpedienteGranularAsync==='function'){
+      const ok=await persistExpedienteGranularAsync(e);
+      if(!ok)console.warn('ncaAprobarRevisionFinalNotif: cierre no confirmado en Firestore');
+    }else if(typeof persistExpedienteGranular==='function'){
+      await persistExpedienteGranular(e);
+    }
+  }catch(errP){console.warn('ncaAprobarRevisionFinalNotif persist:',errP);}
   closeTaskModal();
   renderPqrsOficinaInbox();
   if(typeof renderActividades==='function')renderActividades();

@@ -573,7 +573,10 @@ function nombresAtendidasPaletaExp(exp){
   return set.slice(0,40);
 }
 function expTieneSeguimiento(exp){
-  const wf=exp&&exp._pqrs_workflow;
+  let wf=exp&&exp._pqrs_workflow;
+  if(typeof wf==='string'){
+    try{wf=JSON.parse(wf);}catch(x){wf=null;}
+  }
   const fase=String((wf&&wf.fase)||'').trim();
   if(fase&&!/cerrad/i.test(fase))return true;
   return (exp&&exp.tasks||[]).some(function(t){
@@ -1078,6 +1081,16 @@ function pickMejorActLibre(a,b){
   const bF=!!(b.firmaWf&&String(b.firmaWf.fase||'').trim());
   if(aCorr&&!aF&&bF&&!bCorr)return a;
   if(bCorr&&!bF&&aF&&!aCorr)return b;
+  // Flujo firma/notif más avanzado gana aunque el otro tenga timestamp más nuevo
+  // (evita que un eco «por notificar» reaparezca tras reportar o cerrar).
+  if(typeof faseFlujoFirmaRank==='function'){
+    const aRank=faseFlujoFirmaRank(String((a.firmaWf&&a.firmaWf.fase)||'').trim());
+    const bRank=faseFlujoFirmaRank(String((b.firmaWf&&b.firmaWf.fase)||'').trim());
+    if(aRank!==bRank&&(aRank>=5||bRank>=5)){
+      if(aRank>bRank)return a;
+      if(bRank>aRank)return b;
+    }
+  }
   // Una copia más nueva sin el PDF no debe pisar el informe que sí tiene archivo en Drive.
   const aEnt=actLibreTieneArchivoDrive(a),bEnt=actLibreTieneArchivoDrive(b);
   if(aEnt&&!bEnt&&!bCorr)return a;
@@ -1733,7 +1746,12 @@ function faseFlujoFirmaRank(fase){
 }
 function expedienteFaseFlujo(exp){
   if(!exp)return '';
-  const wf=exp._pqrs_workflow;
+  // _pqrs_workflow suele ir como JSON string (setPqrsWorkflow). Sin parsear, el
+  // merge creía rank 0 y un snapshot viejo en «por notificar» podía pisar el cierre.
+  let wf=exp._pqrs_workflow;
+  if(typeof wf==='string'){
+    try{wf=JSON.parse(wf);}catch(x){wf=null;}
+  }
   if(wf&&typeof wf==='object'&&wf.fase)return String(wf.fase).trim();
   const tasks=exp.tasks||[];
   let best='',bestR=-1;
@@ -3033,6 +3051,13 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
     const rr=faseFlujoFirmaRank(rf);
     // Remoto más avanzado (p. ej. cerrada): no revivir por firmar/notificar local
     if(rr>lr&&(rr>=5||lr>0)){put(rem);return;}
+    // Local más avanzado (reportó notif → revisión final / cierre): no dejar que un eco
+    // viejo «por notificar» gane solo porque el historial remoto es más largo o igual.
+    if(lr>rr&&(lr>=5||rr>0)){put(t);return;}
+    const localAtendida=lr>=10||String(t.estado||'')==='Atendida'||!!String(t.fechaAtendida||'').trim();
+    const remAtendida=rr>=10||String(rem.estado||'')==='Atendida'||!!String(rem.fechaAtendida||'').trim();
+    if(localAtendida&&!remAtendida){put(t);return;}
+    if(remAtendida&&!localAtendida){put(rem);return;}
     // Sync local pendiente (marcadores / entrega en curso): conservar local si no retrocede
     if(t._pending_fs_sync&&!(rr>lr)){put(t);return;}
     // Encargado devolvió desde Por firmar: remoto deja fase vacía + Por corregir.
@@ -3102,8 +3127,11 @@ function applyExpedienteFirestoreChanges(changes,opts){
       if(local._pending_fs_sync&&localTasks>remoteTasks)return;
       // Remoto más avanzado en flujo: aceptar aunque haya pending local (evita resucitar por notificar)
       const remotoGanaFlujo=expedienteFlujoNoDebeRetroceder(exp,local);
+      const localGanaFlujo=expedienteFlujoNoDebeRetroceder(local,exp);
       // Guardado en vuelo (impreso / cierre / firma): no aceptar eco viejo que borre el avance
       if(!remotoGanaFlujo&&local._pending_fs_sync&&localAt&&(!remoteAt||remoteAt<=localAt))return;
+      // Cierre/notif ya avanzado en memoria: un eco atrasado no debe reabrir «Por notificar»
+      if(localGanaFlujo&&!remotoGanaFlujo&&localAt&&(!remoteAt||localAt>=remoteAt))return;
       // Fusionar tasks: no revivir eliminadas locales ni perder firmaWf
       const merged=Object.assign({},exp);
       merged.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
@@ -3111,6 +3139,12 @@ function applyExpedienteFirestoreChanges(changes,opts){
         merged._pending_fs_sync=true;
         merged._pending_fs_at=local._pending_fs_at||merged.updatedAt;
         if(local._pqrs_workflow!=null)merged._pqrs_workflow=local._pqrs_workflow;
+      }else if(localGanaFlujo&&!remotoGanaFlujo&&local._pqrs_workflow!=null){
+        // Sin pending: conservar workflow/cierre local si el remoto va atrás en el flujo
+        merged._pqrs_workflow=local._pqrs_workflow;
+        if(local._estado)merged._estado=local._estado;
+        if(local._pqrs_estado_oficina)merged._pqrs_estado_oficina=local._pqrs_estado_oficina;
+        if(local._fecha_res)merged._fecha_res=local._fecha_res;
       }else if(remotoGanaFlujo){
         delete merged._pending_fs_sync;
         delete merged._pending_fs_at;
@@ -3140,6 +3174,15 @@ function hydrateExpsFromSnapshotDocs(snap){
         exp.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
         exp._pending_fs_sync=true;
         exp._pending_fs_at=local._pending_fs_at;
+        if(local._pqrs_workflow!=null)exp._pqrs_workflow=local._pqrs_workflow;
+      }else if(local&&typeof expedienteFlujoNoDebeRetroceder==='function'
+        &&expedienteFlujoNoDebeRetroceder(local,exp)){
+        // Local ya cerró / avanzó notif: no reabrir con un snapshot de hidratación atrasado
+        exp.tasks=mergeExpedienteTasksLocalRemote(local.tasks||[],exp.tasks);
+        if(local._pqrs_workflow!=null)exp._pqrs_workflow=local._pqrs_workflow;
+        if(local._estado)exp._estado=local._estado;
+        if(local._pqrs_estado_oficina)exp._pqrs_estado_oficina=local._pqrs_estado_oficina;
+        if(local._fecha_res)exp._fecha_res=local._fecha_res;
       }else if(local&&local.tasks&&local.tasks.length){
         exp.tasks=mergeExpedienteTasksLocalRemote(local.tasks,exp.tasks);
       }

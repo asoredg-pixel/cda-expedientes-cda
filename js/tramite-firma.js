@@ -1306,6 +1306,13 @@ async function submitTramiteNotificar(expId,taskId){
       if(termPayload&&termPayload.otorga&&typeof proponerTerminoCumplimiento==='function'){
         try{proponerTerminoCumplimiento(refId,taskId,termPayload);}catch(errP){console.warn('término sugerido:',errP);}
       }
+      // Confirmar revisión final en Firestore antes de repintar (evita huérfanas en Por notificar)
+      try{
+        const ePers=(!t.sinExpediente&&typeof getExpById==='function')?getExpById(refId):null;
+        if(ePers&&typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(ePers);
+        else if(ePers&&typeof persistExpedienteGranular==='function')await persistExpedienteGranular(ePers);
+        else if(typeof saveGlobalFirestore==='function'&&t.sinExpediente)await saveGlobalFirestore();
+      }catch(errP){console.warn('tramiteConfirmarNotificacion persist revisión final:',errP);}
       notif('⏳ Documento cargado — pasa a revisión del departamento para cerrar','ok');
     }
     closeTaskModal();
@@ -3011,6 +3018,15 @@ async function cargarDocPasarImprimir(expId,taskId,esPqrs){
     };
     const sopQuitar=atajoSoportesPrincipalesReemplazo(t);
     sopQuitar.forEach(pushFid);
+    // Conservar el lote de la entrega: sin loteEntrega, «Por firmar» (soloAprobados) solo deja anexos
+    let loteKeep=String((sopQuitar[0]&&sopQuitar[0].loteEntrega)||'').trim();
+    if(!loteKeep){
+      const anexL=((t.soportes||[]).filter(function(s){
+        if(!s||!s.loteEntrega)return false;
+        return typeof soporteEsAnexoEntrega==='function'?soporteEsAnexoEntrega(s):(s.es_anexo===true||s.tipo==='anexo_respuesta');
+      }));
+      if(anexL.length)loteKeep=String(anexL[anexL.length-1].loteEntrega||'').trim();
+    }
     if(esPqrs){
       const wf=getPqrsWorkflow(e);
       const docsQuitar=atajoPqrsDocsPrincipalesReemplazo(wf);
@@ -3037,7 +3053,7 @@ async function cargarDocPasarImprimir(expId,taskId,esPqrs){
         const f=String(s.driveFileId||s.fileId||'').trim();
         return !(f&&borrar.indexOf(f)>=0);
       });
-      tk.soportes.push({
+      const nuevo={
         id:'sop_'+Date.now(),
         nombre:nomArch,
         label:'Documento principal',
@@ -3057,7 +3073,9 @@ async function cargarDocPasarImprimir(expId,taskId,esPqrs){
         por:autor,
         fecha:new Date().toISOString(),
         version:tk.soportes.length+1
-      });
+      };
+      if(loteKeep)nuevo.loteEntrega=loteKeep;
+      tk.soportes.push(nuevo);
       if(res.folderId&&!tk._drive_folder_id){
         tk._drive_folder_id=res.folderId;
         tk._drive_folder_link=res.folderLink||'';

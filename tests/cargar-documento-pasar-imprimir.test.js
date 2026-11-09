@@ -165,8 +165,8 @@ describe('cargarDocPasarImprimir', () => {
     const t = {
       id: 't1',
       soportes: [
-        { id: 'p', driveFileId: 'F1', activo: true, label: 'Documento principal', driveInstitutional: true },
-        { id: 'a', driveFileId: 'F2', activo: true, es_anexo: true, label: 'Anexo 1', driveInstitutional: true }
+        { id: 'p', driveFileId: 'F1', activo: true, label: 'Documento principal', driveInstitutional: true, loteEntrega: 'L1' },
+        { id: 'a', driveFileId: 'F2', activo: true, es_anexo: true, label: 'Anexo 1', driveInstitutional: true, loteEntrega: 'L1' }
       ],
       historial: []
     }
@@ -174,9 +174,28 @@ describe('cargarDocPasarImprimir', () => {
     expect(await run('E1', 't1', false)).toBe(true)
     expect(log.upload[0]).toMatchObject({ n: 'nuevo.docx', m: 'application/msword', est: 'revision' })
     expect(t.soportes.map(s => s.driveFileId)).toEqual(['F2', 'NEW'])
-    expect(t.soportes[1]).toMatchObject({ activo: true, es_anexo: false, driveEstado: 'revision', label: 'Documento principal' })
+    expect(t.soportes[1]).toMatchObject({
+      activo: true, es_anexo: false, driveEstado: 'revision', label: 'Documento principal', loteEntrega: 'L1'
+    })
     expect(log.del).toEqual(['F1'])
     expect(log.imprimir).toEqual([['E1', 't1']])
+  })
+
+  it('hereda loteEntrega de los anexos si el principal no lo tenía (evita tabs solo-Anexo en Por firmar)', async () => {
+    const t = {
+      id: 't1',
+      soportes: [
+        { id: 'p', driveFileId: 'F1', activo: true, label: 'Documento principal', driveInstitutional: true },
+        { id: 'a1', driveFileId: 'A1', activo: true, es_anexo: true, label: 'Anexo 1', loteEntrega: 'lot_9', driveInstitutional: true },
+        { id: 'a2', driveFileId: 'A2', activo: true, es_anexo: true, label: 'Anexo 2', loteEntrega: 'lot_9', driveInstitutional: true }
+      ],
+      historial: []
+    }
+    const { run } = ctxRun(t)
+    expect(await run('CEQ-1', 't1', false)).toBe(true)
+    const neu = t.soportes.find(s => s.driveFileId === 'NEW')
+    expect(neu.loteEntrega).toBe('lot_9')
+    expect(t.soportes.filter(s => s.es_anexo).map(s => s.driveFileId).sort()).toEqual(['A1', 'A2'])
   })
 
   it('PQRSD: reemplaza el oficio en wf.documentos, mantiene anexos y aprueba a Imprimir', async () => {
@@ -217,3 +236,41 @@ describe('cargarDocPasarImprimir', () => {
     expect(t.soportes.length).toBe(1)
   })
 })
+
+describe('Por firmar: principal sin lote no se pierde entre anexos', () => {
+  function ctxVista() {
+    const c = createContext({
+      window: {},
+      soporteEsPorCorregir: () => false,
+      soporteTieneVista: () => true,
+      soporteEsAnexoEntrega: s => !!(s && (s.es_anexo || s.tipo === 'anexo_respuesta')),
+      soporteEsDocumentoFirmado: () => false,
+      soporteEsDocumentoNotificado: () => false,
+      soporteEsDocRadicacion: () => false,
+      getExpById: () => null,
+      pqrsWorkflowFase: () => '',
+      taskFirmaFase: () => 'por_firmar',
+      pqrsEstaCerrada: () => false,
+      estadoTask: () => 'En ejecución',
+      taskFirmaEnPorNotificar: () => false,
+      taskFirmaEnRevisionFinalNotif: () => false,
+      PQRS_WF: {}
+    })
+    runInContext(extraer(core, ['_soportesAcompanarPrincipalSinLote', 'soportesVisiblesParaVista', 'getSoportesUltimaEntrega']), c)
+    return c
+  }
+
+  it('soloAprobados incluye Documento principal aunque carezca de loteEntrega', () => {
+    const c = ctxVista()
+    const t = {
+      soportes: [
+        { id: 'a1', label: 'Anexo 1', es_anexo: true, anexo_n: 1, loteEntrega: 'L1', activo: true },
+        { id: 'a2', label: 'Anexo 2', es_anexo: true, anexo_n: 2, loteEntrega: 'L1', activo: true },
+        { id: 'm', label: 'Documento principal', es_anexo: false, activo: true, driveEstado: 'revision' }
+      ]
+    }
+    expect(c.soportesVisiblesParaVista(t, { soloAprobados: true }).map(s => s.id).sort()).toEqual(['a1', 'a2', 'm'])
+    expect(c.getSoportesUltimaEntrega(t).map(s => s.id).sort()).toEqual(['a1', 'a2', 'm'])
+  })
+})
+
