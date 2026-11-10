@@ -1380,9 +1380,17 @@ function reviewAsocVerArchivos(expId,taskId,libre){
   taskId=String(taskId||'').trim();
   if(!expId)return;
   if(typeof pushTaskModalLayer==='function')pushTaskModalLayer('archivos');
-  if(typeof openConsultaArchivos==='function')openConsultaArchivos(expId,taskId||null,{forceModal:true,libre:!!libre});
-  if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
-  else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
+  const abrir=function(){
+    if(typeof openConsultaArchivos==='function')openConsultaArchivos(expId,taskId||null,{forceModal:true,libre:!!libre});
+    if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
+    else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
+  };
+  // Asociado puede no estar en memoria (Blaze): un getDoc como en Consulta
+  if(!libre&&typeof getExpById==='function'&&!getExpById(expId)&&typeof traerExpedienteSiFalta==='function'){
+    Promise.resolve(traerExpedienteSiFalta(expId)).then(abrir).catch(abrir);
+    return;
+  }
+  abrir();
 }
 function renderReviewAsocActConsultaFull(expId,taskId,opts){
   opts=opts&&typeof opts==='object'?opts:{};
@@ -1427,8 +1435,10 @@ function renderReviewAsocConsultaPreview(expId,taskId,tipo){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
   if(tipo==='act')return renderReviewAsocActConsultaFull(expId,taskId);
-  const e=typeof getExpById==='function'?getExpById(expId):null;
-  if(!e)return '<div style="font-size:12px;color:var(--tx3)">Registro no encontrado</div>';
+  const e=(typeof getExpById==='function'?getExpById(expId):null)
+    ||(typeof findExpByNumPlain==='function'?findExpByNumPlain(expId):null);
+  if(!e)return '<div style="font-size:12px;color:var(--tx3)">Registro no encontrado · '+escAttr(expId)+'</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">No está en memoria ni respondió el getDoc (revise número o permisos del departamento).</div>';
   if(typeof migrarInfoTecExpediente==='function')migrarInfoTecExpediente(e);
   const tram=typeof getTram==='function'?getTram(e._tramite,e):null;
   const hdr='<div class="con-panel-toolbar" style="margin-bottom:10px">'+
@@ -1443,9 +1453,11 @@ function renderReviewAsocConsultaPreview(expId,taskId,tipo){
     (typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof renderConPanelPqrsExtras==='function'?renderConPanelPqrsExtras(e):'');
   return '<div class="review-asoc-consulta-full">'+hdr+renderConPanelExpContent(e,{foldOpen:true})+'</div>';
 }
+/** Misma vista que Consulta: si el asociado no está en memoria, un getDoc (traerExpedienteSiFalta). */
 function reviewAsocVerConsulta(expId,taskId,tipo){
   expId=String(expId||'').trim();
   taskId=String(taskId||'').trim();
+  tipo=tipo||'exp';
   if(!expId)return;
   if(typeof pushTaskModalLayer==='function')pushTaskModalLayer('consulta');
   const ov=document.getElementById('task-modal-overlay');
@@ -1455,12 +1467,34 @@ function reviewAsocVerConsulta(expId,taskId,tipo){
   if(!ov||!body)return;
   if(tit)tit.textContent='🔍 Consulta · '+expId;
   if(modal){modal.classList.add('task-modal-wide');modal.classList.add('enviar-modal-only');modal.classList.add('review-asoc-consulta-modal');}
-  body.innerHTML='<div class="review-asoc-consulta-body">'+renderReviewAsocConsultaPreview(expId,taskId,tipo||'exp')+'</div>'+
-    '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+((typeof taskModalCloseBtnLabel==='function')?taskModalCloseBtnLabel():'Cerrar')+'</button></div>';
+  const closeLbl=(typeof taskModalCloseBtnLabel==='function')?taskModalCloseBtnLabel():'Cerrar';
+  const pintar=function(){
+    body.innerHTML='<div class="review-asoc-consulta-body">'+renderReviewAsocConsultaPreview(expId,taskId,tipo)+'</div>'+
+      '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+closeLbl+'</button></div>';
+  };
+  const yaMem=tipo==='act'
+    ?((typeof getActLibreByCodigo==='function'&&getActLibreByCodigo(expId))
+      ||(typeof getActLibreById==='function'&&getActLibreById(taskId))
+      ||(typeof getExpById==='function'&&getExpById(expId)))
+    :((typeof getExpById==='function'&&getExpById(expId))
+      ||(typeof findExpByNumPlain==='function'&&findExpByNumPlain(expId)));
+  if(yaMem){
+    pintar();
+  }else{
+    body.innerHTML='<div class="review-asoc-consulta-body"><div style="font-size:12px;color:var(--tx3)">Cargando '+escAttr(expId)+'…</div></div>'+
+      '<div style="margin-top:12px"><button type="button" class="btn bsm" onclick="closeTaskModal()">'+closeLbl+'</button></div>';
+    if(tipo!=='act'&&typeof traerExpedienteSiFalta==='function'){
+      Promise.resolve(traerExpedienteSiFalta(expId)).then(pintar).catch(pintar);
+    }else{
+      pintar();
+    }
+  }
   ov.classList.add('on');
   if(typeof reviewStackEnsureTaskModalFront==='function')reviewStackEnsureTaskModalFront();
   else if(typeof reviewElevateTaskModal==='function')reviewElevateTaskModal();
 }
+window.reviewAsocVerConsulta=reviewAsocVerConsulta;
+window.reviewAsocVerArchivos=reviewAsocVerArchivos;
 function asociarExpedienteDesdeRevision(sourceExpId,targetExpNum){
   sourceExpId=String(sourceExpId||'').trim();
   targetExpNum=String(targetExpNum||'').trim();
