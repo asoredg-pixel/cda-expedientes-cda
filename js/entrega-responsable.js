@@ -3310,8 +3310,23 @@ function retirarRegistroPendienteDeEntrega(e,t,opts){
     for(let i=0;i<farr.length;i++){
       const f=farr[i];
       if(!f)continue;
-      if(tid&&String(f.taskId||'')===tid&&(forceAll||f.pendienteAprobacion)){fChanged=true;continue;}
-      nextF.push(f);
+      const byTask=tid&&String(f.taskId||'')===tid;
+      const byPers=tid&&String(f.persTaskId||'')===tid;
+      if(!byTask&&!byPers){nextF.push(f);continue;}
+      const liberar=forceAll||!!f.pendienteAprobacion||byPers;
+      if(!liberar){nextF.push(f);continue;}
+      // Mora preexistente vinculada al persuasivo: conservar la factura y solo desvincular.
+      if(byPers&&String(f.venc||'').trim()){
+        delete f.persOficio;delete f.persTaskId;delete f.persGrupoId;
+        delete f.persExp;delete f.persVenc;delete f.persPagoValor;
+        if(byTask)delete f.taskId;
+        delete f.pendienteAprobacion;
+        fChanged=true;
+        nextF.push(f);
+        continue;
+      }
+      // Factura digitalizada en la entrega (o persuasivo sin venc): se elimina para reusar el N°.
+      fChanged=true;
     }
     if(fChanged){e._facturas_extra=JSON.stringify(nextF);changed=true;}
   }catch(err){}
@@ -3349,6 +3364,16 @@ function confirmarRegistroPendienteDeEntrega(e,t){
       }
     });
     if(cChanged){e._conceptos_seg=JSON.stringify(carr);changed=true;}
+  }catch(err){}
+  try{
+    const farr=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
+    let fChanged=false;
+    farr.forEach(function(f){
+      if(!f)return;
+      const linked=tid&&(String(f.taskId||'')===tid||String(f.persTaskId||'')===tid);
+      if(linked&&f.pendienteAprobacion){delete f.pendienteAprobacion;fChanged=true;}
+    });
+    if(fChanged){e._facturas_extra=JSON.stringify(farr);changed=true;}
   }catch(err){}
   return changed;
 }
@@ -3683,13 +3708,27 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
       notif('Seleccione el tipo de factura (Evaluación, TCAF, etc.)','err');
       return false;
     }
+    // Reentrega / corrección: quita las de esta actividad (taskId) para reutilizar el N°.
+    // No borra por persTaskId: esas son moras del persuasivo y solo se desvinculan al devolver.
+    const tidFac=taskOpt&&taskOpt.id?String(taskOpt.id):'';
+    if(tidFac&&typeof facturasData==='function'){
+      const arrF=facturasData(e._facturas_extra);
+      const nextF=arrF.filter(function(f){
+        if(!f)return false;
+        if(String(f.taskId||'')!==tidFac)return true;
+        // Mora con vencimiento vinculada al persuasivo: no eliminar aquí.
+        if(String(f.persTaskId||'')===tidFac&&String(f.venc||'').trim())return true;
+        return false;
+      });
+      if(nextF.length!==arrF.length)e._facturas_extra=JSON.stringify(nextF);
+    }
     for(let i=0;i<facItems.length;i++){
       if(!facItems[i].tipo){
         notif('Seleccione el tipo de factura en la fila '+(i+1),'err');
         return false;
       }
       if(facItems[i].ref&&typeof validarNumeroFacturaDisponible==='function'){
-        if(!validarNumeroFacturaDisponible(facItems[i].ref,null,null))return false;
+        if(!validarNumeroFacturaDisponible(facItems[i].ref,e._exp,null,tidFac||null))return false;
       }
     }
     const seen={};
@@ -4234,6 +4273,13 @@ function applyEntregaCobroPersuasivo(e,t,item){
   if(typeof validarNumeroOficioDisponible==='function'&&!validarNumeroOficioDisponible(oficio,e._exp))return false;
   const facs=typeof facturasData==='function'?facturasData(e._facturas_extra):[];
   const grupo=String(t.id||'');
+  const normRef=function(r){return typeof normContableRefNum==='function'?normContableRefNum(r):String(r||'').trim().toUpperCase();}
+  for(let ni=0;ni<nuevas.length;ni++){
+    const nv=nuevas[ni];
+    if(!nv||!nv.ref)continue;
+    if(typeof validarNumeroFacturaDisponible==='function'
+      &&!validarNumeroFacturaDisponible(nv.ref,e._exp,null,grupo))return false;
+  }
   let n=0;
   const patch=function(f){
     f.persOficio=oficio;
@@ -4241,6 +4287,8 @@ function applyEntregaCobroPersuasivo(e,t,item){
     f.persGrupoId=grupo;
     f.persExp=String(e._exp||'');
     f.persVenc=vence;
+    f.taskId=grupo;
+    f.pendienteAprobacion=true;
   };
   idxs.forEach(function(i){
     const f=facs[i];
@@ -4250,18 +4298,30 @@ function applyEntregaCobroPersuasivo(e,t,item){
   });
   nuevas.forEach(function(nv){
     if(!nv||!nv.tipo||!nv.ref)return;
-    const f={
-      tipo:String(nv.tipo||'').trim(),
-      valor:String(nv.valor||'').trim(),
-      ref:String(nv.ref||'').trim(),
-      venc:'',
-      pago:'',
-      persVenc:vence,
-      coacFecha:'',
-      acuerdoPago:false
-    };
+    const needle=normRef(nv.ref);
+    let f=facs.find(function(x){
+      return x&&needle&&normRef(x.ref)===needle
+        &&(String(x.persTaskId||'')===grupo||String(x.taskId||'')===grupo);
+    });
+    if(f){
+      f.tipo=String(nv.tipo||'').trim();
+      f.valor=String(nv.valor||'').trim();
+      f.ref=String(nv.ref||'').trim();
+      if(!f.venc)f.venc='';
+    }else{
+      f={
+        tipo:String(nv.tipo||'').trim(),
+        valor:String(nv.valor||'').trim(),
+        ref:String(nv.ref||'').trim(),
+        venc:'',
+        pago:'',
+        persVenc:vence,
+        coacFecha:'',
+        acuerdoPago:false
+      };
+      facs.push(f);
+    }
     patch(f);
-    facs.push(f);
     n++;
   });
   if(!n){notif('Ninguna factura se pudo vincular al cobro persuasivo','err');return false;}

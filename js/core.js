@@ -3885,10 +3885,17 @@ window.registroEntregaPendienteHuerfano=registroEntregaPendienteHuerfano;
  * @param {string} excludeExpId — expediente a ignorar (al editar el mismo)
  * @param {number|null} excludeIndex — índice de factura a ignorar en ese expediente
  */
-function buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex){
+/**
+ * Busca usos previos del N° de factura (referencia).
+ * excludeExpId + excludeIndex: ignora esa fila (editar Información contable).
+ * excludeExpId sin índice: ignora todas las del expediente (reentrega / corrección).
+ * excludeTaskId: ignora las ligadas a esa actividad (taskId o persTaskId).
+ */
+function buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex,excludeTaskId){
   const needle=normContableRefNum(ref);
   if(!needle)return[];
   const excl=String(excludeExpId||'').trim();
+  const exclTask=String(excludeTaskId||'').trim();
   const hits=[];
   const lista=(typeof exps!=='undefined'&&Array.isArray(exps))?exps:[];
   lista.forEach(function(e){
@@ -3899,8 +3906,12 @@ function buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex){
     if(!Array.isArray(facs))return;
     facs.forEach(function(f,i){
       if(!f)return;
-      if(excl&&id===excl&&excludeIndex!=null&&Number(excludeIndex)===i)return;
-      if(f.pendienteAprobacion&&registroEntregaPendienteHuerfano(e,f.taskId))return;
+      if(excl&&id===excl){
+        if(excludeIndex==null||excludeIndex==='')return;
+        if(Number(excludeIndex)===i)return;
+      }
+      if(exclTask&&(String(f.taskId||'')===exclTask||String(f.persTaskId||'')===exclTask))return;
+      if(f.pendienteAprobacion&&registroEntregaPendienteHuerfano(e,f.taskId||f.persTaskId))return;
       const r=normContableRefNum(f.ref);
       if(r&&r===needle){
         hits.push({
@@ -3961,10 +3972,10 @@ function _avisoNumeroContableDuplicado(kind,valor,usos){
   }
   return true;
 }
-/** false si el N° de factura (ref) ya existe. */
-function validarNumeroFacturaDisponible(ref,excludeExpId,excludeIndex){
+/** false si el N° de factura (ref) ya existe. excludeTaskId: reentrega de la misma actividad. */
+function validarNumeroFacturaDisponible(ref,excludeExpId,excludeIndex,excludeTaskId){
   if(!normContableRefNum(ref))return true;
-  const usos=buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex);
+  const usos=buscarUsosNumeroFactura(ref,excludeExpId,excludeIndex,excludeTaskId);
   if(_avisoNumeroContableDuplicado('factura',ref,usos))return false;
   return true;
 }
@@ -20738,7 +20749,8 @@ function resetTaskPorCorregir(t,nota,reportadoPor){
           }
         }
       }
-      retirarRegistroPendienteDeEntrega(e,t);
+      // forceAll: en corrección se reutilizan los mismos N° (factura, acto, concepto, oficio).
+      retirarRegistroPendienteDeEntrega(e,t,{forceAll:true});
     }
   }catch(errRet){}
   // Conservar el plazo/vencimiento original al devolver

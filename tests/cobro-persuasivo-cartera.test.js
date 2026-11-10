@@ -339,6 +339,74 @@ describe('Entrega — vincula las facturas elegidas y no las demás', () => {
     expect(facs[1].venc).toBe('')
     expect(facs[1].persTaskId).toBe('tkM')
   })
+
+  it('reentrega tras devolución reutiliza el mismo N° de factura digitalizada', () => {
+    ctx.validarNumeroOficioDisponible = () => true
+    const calls = []
+    ctx.validarNumeroFacturaDisponible = (ref, exp, idx, task) => {
+      calls.push({ ref, exp, idx, task })
+      return true
+    }
+    const e = {
+      _exp: 'EXP-1',
+      _facturas_extra: JSON.stringify([{
+        tipo: 'Seguimiento', ref: 'VIS-1', valor: '150000', venc: '',
+        persOficio: 'DSGV-OLD', persTaskId: 'tkR', persGrupoId: 'tkR', persExp: 'EXP-1',
+        persVenc: '2026-11-01', taskId: 'tkR', pendienteAprobacion: true
+      }])
+    }
+    const t = { id: 'tkR', historial: [] }
+    expect(ctx.applyEntregaCobroPersuasivo(e, t, {
+      oficio: 'DSGV-NEW', vence: '2026-12-20', idxs: [],
+      nuevas: [{ tipo: 'Seguimiento', ref: 'VIS-1', valor: '160000' }]
+    })).toBe(true)
+    const facs = JSON.parse(e._facturas_extra)
+    expect(facs).toHaveLength(1)
+    expect(facs[0].ref).toBe('VIS-1')
+    expect(facs[0].valor).toBe('160000')
+    expect(facs[0].persOficio).toBe('DSGV-NEW')
+    expect(calls[0]).toMatchObject({ ref: 'VIS-1', exp: 'EXP-1', task: 'tkR' })
+  })
+})
+
+describe('Devolución — libera N° y conserva mora', () => {
+  const entrega = read('js/entrega-responsable.js')
+  const ctx = createContext({
+    console,
+    facturasData: v => { try { return v ? JSON.parse(v) : [] } catch (e) { return [] } },
+    conceptosSegData: () => [],
+    actosAdminData: () => [],
+    esActividadOficioRequerimiento: () => false
+  })
+  ctx.window = ctx
+  runInContext(extraer(entrega, ['retirarRegistroPendienteDeEntrega']), ctx)
+
+  it('al devolver elimina la digitalizada y desvincula la mora sin borrarla', () => {
+    const e = {
+      _exp: 'EXP-1',
+      _facturas_extra: JSON.stringify([
+        {
+          tipo: 'Seguimiento', ref: 'MORA', valor: '10', venc: '2026-09-01',
+          persOficio: 'DSGV-1', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1',
+          persVenc: '2026-12-01', taskId: 'tk1', pendienteAprobacion: true
+        },
+        {
+          tipo: 'TCAF', ref: 'DIG', valor: '99', venc: '',
+          persOficio: 'DSGV-1', persTaskId: 'tk1', persGrupoId: 'tk1', persExp: 'EXP-1',
+          persVenc: '2026-12-01', taskId: 'tk1', pendienteAprobacion: true
+        }
+      ])
+    }
+    const t = { id: 'tk1', oficio: 'DSGV-1', oficioPendienteAprobacion: true }
+    expect(ctx.retirarRegistroPendienteDeEntrega(e, t, { forceAll: true })).toBe(true)
+    const facs = JSON.parse(e._facturas_extra)
+    expect(facs).toHaveLength(1)
+    expect(facs[0].ref).toBe('MORA')
+    expect(facs[0].persTaskId).toBeUndefined()
+    expect(facs[0].persOficio).toBeUndefined()
+    expect(facs[0].pendienteAprobacion).toBeUndefined()
+    expect(t.oficio).toBe('')
+  })
 })
 
 describe('Contable — solo Cobro persuasivo', () => {
