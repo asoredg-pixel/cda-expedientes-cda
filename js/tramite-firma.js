@@ -603,20 +603,36 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       patch.listo_firma={por:taskComentarioAutor(),en:new Date().toISOString(),atajo_digital:true};
     }
     tk.firmaWf=Object.assign({},prev,patch);
-    if(tk.estado==='Por verificar')tk.estado='En ejecución';
+    if(tk.estado==='Por verificar'||tk.estado==='Por corregir')tk.estado='En ejecución';
+    // Marca de proyección aprobada: si un eco pierde firmaWf, no debe volver a «Por revisar»
+    const fechaApr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+    tk._firma_proyeccion_atendida=true;
+    tk.ultimaRevisionDepto={
+      tipo:'aprobada',fecha:fechaApr,ts:Date.now(),
+      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():'',
+      nota:esImprimir?'Aprobada — enviada a Por firmar (imprimir)':'Aprobada — enviada a Por firmar'
+    };
     if(!Array.isArray(tk.historial))tk.historial=[];
     tk.historial.push({
       tipo:'enviar_firma',
-      fecha:hoy(),
+      fecha:fechaApr,
       ts:Date.now(),
       por:taskComentarioAutor(),
       nota:esImprimir?'Enviado a «Por firmar» (pendiente impresión)':'Enviado a «Por firmar» (Director)'
     });
     tramiteSincronizarParticipacionPostAprobacionFirma(tk);
+    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
   });
   if(ok){
     if(typeof clearAltaResponsableAlAprobarDocumento==='function'&&!t.sinExpediente)
       clearAltaResponsableAlAprobarDocumento(refId,{force:true});
+    // Confirmar en Firestore antes de repintar (evita eco «Por verificar» a ~2 min)
+    try{
+      const ePers=(!t.sinExpediente&&typeof getExpById==='function')?getExpById(refId):null;
+      if(ePers&&typeof persistExpedienteGranularAsync==='function')await persistExpedienteGranularAsync(ePers);
+      else if(ePers&&typeof persistExpedienteGranular==='function')await persistExpedienteGranular(ePers);
+      else if(t.sinExpediente&&typeof saveGlobalFirestore==='function')await saveGlobalFirestore();
+    }catch(errP){console.warn('tramiteEnviarAFirma persist:',errP);}
     if(typeof sstCargaDone==='function'){
       sstCargaDone({title:'Listo',message:okMsg,autoCloseMs:2000,holdMs:260});
     }else notif(okMsg,'ok');
@@ -625,6 +641,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
       taskReviewRefreshModal(refId,taskId,opts.closeSide?'doc':'decision');
     }else{
       closeTaskModal();
+      // Mantenerse en Por revisar solo para seguir el lote; la actividad ya no debe listarse ahí
       if(opts.mantenerPaletaPorRevisar){
         try{if(typeof setActFiltro==='function')setActFiltro('porver');}catch(e){}
       }else{

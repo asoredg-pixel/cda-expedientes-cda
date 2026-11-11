@@ -21841,6 +21841,9 @@ function taskPendienteVerificacion(t){
   t=normalizeTask(t);
   if(t.eliminada)return false;
   if(taskFirmaWfActiva(t))return false;
+  // Ya aprobada y enviada a firma/imprimir: no cuenta como pendiente de revisión
+  if(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida)return false;
+  if(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='aprobada')return false;
   if(taskEsMultiAsignada(t))return (t.asignados||[]).some(a=>a.estado==='por_verificar');
   return!!t.fechaReportada&&!t.fechaAtendida;
 }
@@ -32760,6 +32763,8 @@ function actividadCuentaComoPorRevisar(t){
   if(typeof taskPqrsEnFlujoFirmaNotif==='function'&&taskPqrsEnFlujoFirmaNotif(src))return false;
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(src))return false;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(src))return false;
+  // Cobro / trámite: ya enviada a imprimir o firmar no debe reaparecer en «Por revisar»
+  if(src._firma_proyeccion_atendida||src._pqrs_proyeccion_atendida)return false;
   if(typeof getTaskSolicitudPendiente==='function'&&getTaskSolicitudPendiente(src))return true;
   if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(src))return true;
   if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo

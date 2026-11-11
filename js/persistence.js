@@ -1083,15 +1083,19 @@ function pickMejorActLibre(a,b){
   if(aCorr&&!aF&&bF&&!bCorr)return a;
   if(bCorr&&!bF&&aF&&!aCorr)return b;
   // Flujo firma/notif más avanzado gana aunque el otro tenga timestamp más nuevo
-  // (evita que un eco «por notificar» reaparezca tras reportar o cerrar).
+  // (incluye para_firma/por_firmar: umbral >=5 dejaba que un eco «Por verificar» ganara).
   if(typeof faseFlujoFirmaRank==='function'){
     const aRank=faseFlujoFirmaRank(String((a.firmaWf&&a.firmaWf.fase)||'').trim());
     const bRank=faseFlujoFirmaRank(String((b.firmaWf&&b.firmaWf.fase)||'').trim());
-    if(aRank!==bRank&&(aRank>=5||bRank>=5)){
+    if(aRank!==bRank&&(aRank>0||bRank>0)){
       if(aRank>bRank)return a;
       if(bRank>aRank)return b;
     }
   }
+  const aAprob=!!(a._firma_proyeccion_atendida||(a.ultimaRevisionDepto&&String(a.ultimaRevisionDepto.tipo||'')==='aprobada'));
+  const bAprob=!!(b._firma_proyeccion_atendida||(b.ultimaRevisionDepto&&String(b.ultimaRevisionDepto.tipo||'')==='aprobada'));
+  if(aAprob&&!bAprob&&!bCorr)return a;
+  if(bAprob&&!aAprob&&!aCorr)return b;
   // Una copia más nueva sin el PDF no debe pisar el informe que sí tiene archivo en Drive.
   const aEnt=actLibreTieneArchivoDrive(a),bEnt=actLibreTieneArchivoDrive(b);
   if(aEnt&&!bEnt&&!bCorr)return a;
@@ -3050,21 +3054,31 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
     const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();
     const lr=faseFlujoFirmaRank(lf);
     const rr=faseFlujoFirmaRank(rf);
-    // Remoto más avanzado (p. ej. cerrada): no revivir por firmar/notificar local
-    if(rr>lr&&(rr>=5||lr>0)){put(rem);return;}
-    // Local más avanzado (reportó notif → revisión final / cierre): no dejar que un eco
-    // viejo «por notificar» gane solo porque el historial remoto es más largo o igual.
-    if(lr>rr&&(lr>=5||rr>0)){put(t);return;}
+    // Devolución a corregir (sin fase): gana sobre caché aún en Por firmar — antes del rank.
+    if(lf&&!rf&&taskRemotoDevueltoACorregir(rem))return;
+    if(rf&&!lf&&taskRemotoDevueltoACorregir(t)){put(t);return;}
+    // Cualquier avance de flujo (para_firma=3, por_firmar=4, notif=5…): el más alto gana.
+    // Antes el umbral era >=5 y un eco «Por verificar» sin firmaWf pisaba cobros ya
+    // enviados a imprimir/firmar → volvían a «Por revisar» a los pocos minutos.
+    if(rr!==lr&&(rr>0||lr>0)){
+      if(rr>lr){put(rem);return;}
+      if(lr>rr){put(t);return;}
+    }
     const localAtendida=lr>=10||String(t.estado||'')==='Atendida'||!!String(t.fechaAtendida||'').trim();
     const remAtendida=rr>=10||String(rem.estado||'')==='Atendida'||!!String(rem.fechaAtendida||'').trim();
     if(localAtendida&&!remAtendida){put(t);return;}
     if(remAtendida&&!localAtendida){put(rem);return;}
+    // Proyección ya aprobada (enviada a firma) no debe perderse ante eco aún por_verificar
+    const localAprob=!!(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida
+      ||(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='aprobada'));
+    const remAprob=!!(rem._firma_proyeccion_atendida||rem._pqrs_proyeccion_atendida
+      ||(rem.ultimaRevisionDepto&&String(rem.ultimaRevisionDepto.tipo||'')==='aprobada'));
+    if(localAprob&&!remAprob&&!taskRemotoDevueltoACorregir(rem)){put(t);return;}
+    if(remAprob&&!localAprob&&!taskRemotoDevueltoACorregir(t)){put(rem);return;}
     // Sync local pendiente (marcadores / entrega en curso): conservar local si no retrocede
     if(t._pending_fs_sync&&!(rr>lr)){put(t);return;}
-    // Encargado devolvió desde Por firmar: remoto deja fase vacía + Por corregir.
-    // Antes se resuscitaba firmaWf local y VITAL seguía viéndola hasta F5.
+    // Local con firmaWf y remoto sin fase (eco viejo Por verificar): conservar firma
     if(lf&&!rf){
-      if(taskRemotoDevueltoACorregir(rem))return;
       put(Object.assign({},rem,t,{firmaWf:t.firmaWf,requiereFirma:t.requiereFirma||rem.requiereFirma}));
       return;
     }

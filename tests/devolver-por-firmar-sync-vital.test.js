@@ -33,7 +33,7 @@ describe('Devolver desde Por firmar: sync inmediato para VITAL', () => {
       normalizeTask: t => t,
       String, Array, Object, Math, Number, Date, isFinite
     })
-    runInContext(extraer(persistence, ['taskRemotoDevueltoACorregir', 'mergeExpedienteTasksLocalRemote']), c)
+    runInContext(extraer(persistence, ['faseFlujoFirmaRank', 'taskRemotoDevueltoACorregir', 'mergeExpedienteTasksLocalRemote']), c)
     const local = [{
       id: 't1', estado: 'Atendida',
       firmaWf: { fase: 'por_firmar' },
