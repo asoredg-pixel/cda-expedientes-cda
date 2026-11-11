@@ -31762,6 +31762,16 @@ function actividadExcluidaDePaletaPrioritaria(t){
   if(!t||t.eliminada)return false;
   if(typeof actividadCuentaComoPorRevisar==='function'&&actividadCuentaComoPorRevisar(t))return true;
   if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return true;
+  // Entrega ya reportada al encargado (aunque un eco aún no pinte «Por verificar»)
+  if(typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return true;
+  if(typeof esModoResponsable==='function'&&esModoResponsable()&&responsableActivo){
+    if(typeof estadoTaskForAsignado==='function'&&typeof taskUsuarioEsAsignado==='function'
+      &&taskUsuarioEsAsignado(t,responsableActivo)
+      &&estadoTaskForAsignado(t,responsableActivo)==='Por verificar')return true;
+    // Concepto enviado a profesional: el técnico la ve en Por revisar; no debe quedarse en ⚡
+    const eRp=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+    if(typeof taskRevParTecnicoEsperando==='function'&&taskRevParTecnicoEsperando(t,responsableActivo,eRp))return true;
+  }
   return false;
 }
 window.actividadExcluidaDePaletaPrioritaria=actividadExcluidaDePaletaPrioritaria;
