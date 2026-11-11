@@ -18042,12 +18042,20 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   const revParRet=revParCtx&&revParCtx.fase==='tecnico'&&agendaNorm(responsableActivo||'')===agendaNorm(revParCtx.tecnico)?revParCtx:null;
   // «Aplica revisión de profesional» (entrega de concepto): va al Por ejecutar del profesional
   let revProfEnvio=null;
-  if(!revParCtx&&esModoResponsable()&&!taskEsMultiAsignada(t)){
-    const ctxRp=window._taskModalCtx||{};
-    const destRp=String((ctxRp.revProfesional!=null?ctxRp.revProfesional:(typeof entregaRevProfesionalDestino==='function'?entregaRevProfesionalDestino():''))||'').trim();
+  if(esModoResponsable()&&!taskEsMultiAsignada(t)&&!revParRet){
     const eRp=t.sinExpediente?null:getExpById(expId);
     const esPqrsRp=!!(eRp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eRp));
-    if(destRp&&!esPqrsRp&&agendaNorm(destRp)!==agendaNorm(responsableActivo||''))revProfEnvio={tecnico:responsableActivo,profesional:destRp};
+    // Reenvío del técnico mientras el profesional aún no revisa: no mandar a Por verificar del encargado
+    // (eso duplicaba/desaparecía la actividad en bandejas).
+    if(!esPqrsRp&&revParCtx&&revParCtx.fase==='profesional'
+      &&agendaNorm(responsableActivo||'')===agendaNorm(revParCtx.tecnico)){
+      revProfEnvio={tecnico:revParCtx.tecnico,profesional:revParCtx.profesional,reenvio:true};
+    }else if(!revParCtx){
+      const ctxRp=window._taskModalCtx||{};
+      const destRp=String((ctxRp.revProfesional!=null?ctxRp.revProfesional:(typeof entregaRevProfesionalDestino==='function'?entregaRevProfesionalDestino():''))||'').trim();
+      if(destRp&&!esPqrsRp&&agendaNorm(destRp)!==agendaNorm(responsableActivo||''))
+        revProfEnvio={tecnico:responsableActivo,profesional:destRp};
+    }
   }
   const ok=mutateTask(expId,taskId,t=>{
     normalizeTask(t);
@@ -18262,7 +18270,12 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       t.asignados=[{nombre:revProfEnvio.profesional,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
       t.fechaReportada='';
       t.reporteTrasladado=true;
-      t.historial.push({tipo:'traslado',fecha:hoyRep,ts:Date.now(),de:revProfEnvio.tecnico,a:revProfEnvio.profesional,por:rep,revisionPar:'solicitud',nota:cmt||''});
+      t.historial.push({
+        tipo:'traslado',fecha:hoyRep,ts:Date.now(),
+        de:revProfEnvio.tecnico,a:revProfEnvio.profesional,por:rep,
+        revisionPar:revProfEnvio.reenvio?'correccion':'solicitud',
+        nota:cmt||''
+      });
       syncTaskAggregateState(t);
     }
   });
@@ -25531,12 +25544,83 @@ function taskRevisionParCtx(t,e){
   if(i<0)return null;
   const tr=h[i];
   const de=String(tr.de||'').trim(),a=String(tr.a||'').trim();
-  if(!de||!a||agendaNorm(de)===agendaNorm(a)||agendaNorm(a)!==agendaNorm(t.responsable||''))return null;
+  if(!de||!a||agendaNorm(de)===agendaNorm(a))return null;
+  // Traslado marcado de revisión par: no exigir a===responsable.
+  // Un eco/merge que deja al técnico como responsable anulaba el ctx y la actividad
+  // desaparecía de «Por revisar» (técnico) y de «Por ejecutar» (profesional).
   if(tr.revisionPar==='devolucion'||tr.revisionPar==='devolucion_nca')return{tecnico:a,profesional:de,fase:'tecnico'};
   if(tr.revisionPar==='correccion'||tr.revisionPar==='solicitud')return{tecnico:de,profesional:a,fase:'profesional'};
+  // Traslado «plano»: solo si sigue vigente (responsable = destino) y hubo reset de entrega
+  if(agendaNorm(a)!==agendaNorm(t.responsable||''))return null;
   const conEntrega=h.slice(i+1).some(function(x){return x&&x.tipo==='traslado_entrega_reset';});
   return conEntrega?{tecnico:de,profesional:a,fase:'profesional'}:null;
 }
+/** Nombres técnico/profesional del último traslado de revisión par (para marcas Blaze). */
+function taskRevisionParNombresDesdeHistorial(t){
+  if(!t||t.eliminada)return null;
+  const h=t.historial||[];
+  for(let i=h.length-1;i>=0;i--){
+    const tr=h[i];
+    if(!tr||tr.tipo!=='traslado'||!tr.revisionPar)continue;
+    const de=String(tr.de||'').trim(),a=String(tr.a||'').trim();
+    if(!de||!a)continue;
+    if(tr.revisionPar==='solicitud'||tr.revisionPar==='correccion')
+      return{tecnico:de,profesional:a,fase:'profesional'};
+    if(tr.revisionPar==='devolucion'||tr.revisionPar==='devolucion_nca')
+      return{tecnico:a,profesional:de,fase:'tecnico'};
+  }
+  return null;
+}
+/**
+ * Si el historial dice revisión par pero el responsable quedó desfasado (eco viejo),
+ * realinea asignados para que no desaparezca de las bandejas.
+ */
+function repararRevisionParResponsableSiDesfasado(t){
+  if(!t||t.eliminada)return false;
+  if(typeof estadoTask==='function'&&estadoTask(t)==='Atendida')return false;
+  const ctx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,null)
+    :(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(t):null);
+  if(!ctx)return false;
+  const dest=String(ctx.fase==='profesional'?ctx.profesional:ctx.tecnico||'').trim();
+  if(!dest)return false;
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'')===String(b||'');};
+  const respOk=eq(t.responsable||'',dest);
+  const aPrev=typeof getAsignado==='function'?getAsignado(t,dest):null;
+  const enResp=Array.isArray(t.responsables)&&t.responsables.some(function(n){return eq(n,dest);});
+  if(respOk&&enResp&&aPrev)return false;
+  const hoyStr=typeof hoy==='function'?hoy():'';
+  t.responsable=dest;
+  t.responsables=[dest];
+  if(ctx.fase==='profesional'){
+    // Conservar por_verificar si el profesional ya reportó al encargado
+    const estPrev=aPrev&&aPrev.estado?aPrev.estado:'pendiente';
+    const fr=aPrev&&aPrev.fechaReportada?aPrev.fechaReportada:(estPrev==='por_verificar'?(t.fechaReportada||hoyStr):'');
+    t.asignados=[{nombre:dest,fechaReportada:fr,fechaAtendida:(aPrev&&aPrev.fechaAtendida)||'',estado:estPrev}];
+    if(estPrev==='por_verificar'){
+      t.fechaReportada=t.fechaReportada||fr||hoyStr;
+    }else if(!respOk){
+      t.fechaReportada='';
+      t.fechaAtendida='';
+    }
+  }else{
+    const a=aPrev||{nombre:dest};
+    a.nombre=dest;
+    if(a.estado!=='por_corregir'&&a.estado!=='por_verificar')a.estado='pendiente';
+    a.fechaAtendida='';
+    t.asignados=[a];
+  }
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  if(!Array.isArray(t.historial))t.historial=[];
+  if(!t.historial.some(function(h){return h&&h.tipo==='revpar_heal_responsable';})){
+    t.historial.push({tipo:'revpar_heal_responsable',fecha:hoyStr,ts:Date.now(),por:'sistema',
+      nota:'Realineado responsable con revisión par ('+ctx.fase+') → '+dest});
+  }
+  return true;
+}
+window.taskRevisionParNombresDesdeHistorial=taskRevisionParNombresDesdeHistorial;
+window.repararRevisionParResponsableSiDesfasado=repararRevisionParResponsableSiDesfasado;
 /** Rol del usuario (técnico / profesional) en la revisión en curso de la actividad, o null. */
 function taskRevParParticipante(t,usuario,e){
   usuario=usuario||responsableActivo;
@@ -25671,9 +25755,11 @@ function getTareasRevParTecnicoEsperando(){
   const out=[];
   (exps||[]).forEach(function(e){
     if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    let healed=false;
     (e.tasks||[]).forEach(function(t){
       if(!t||t.eliminada||!(t.historial||[]).some(function(h){return h&&h.tipo==='traslado';}))return;
       t=normalizeTask(t);
+      if(typeof repararRevisionParResponsableSiDesfasado==='function'&&repararRevisionParResponsableSiDesfasado(t))healed=true;
       if(!taskRevParTecnicoEsperando(t,responsableActivo,e))return;
       out.push(Object.assign({},t,{
         exp:e._exp,
@@ -25684,6 +25770,14 @@ function getTareasRevParTecnicoEsperando(){
         _revParTecnico:true
       }));
     });
+    if(healed&&e._exp&&typeof persistExpedienteGranular==='function'){
+      if(!window._revParHealPersist)window._revParHealPersist=new Set();
+      const hk='tec|'+e._exp;
+      if(!window._revParHealPersist.has(hk)){
+        window._revParHealPersist.add(hk);
+        try{persistExpedienteGranular(e,false);}catch(errH){}
+      }
+    }
   });
   return out;
 }
@@ -25701,9 +25795,11 @@ function getTareasRevParProfesionalPendientes(){
   const out=[];
   (exps||[]).forEach(function(e){
     if(!e||(typeof expEstaEnPapelera==='function'?expEstaEnPapelera(e):e._eliminado))return;
+    let healed=false;
     (e.tasks||[]).forEach(function(t){
       if(!t||t.eliminada||!(t.historial||[]).some(function(h){return h&&h.tipo==='traslado'&&h.revisionPar;}))return;
       t=normalizeTask(t);
+      if(typeof repararRevisionParResponsableSiDesfasado==='function'&&repararRevisionParResponsableSiDesfasado(t))healed=true;
       if(!taskRevParProfesionalPendiente(t,responsableActivo,e))return;
       out.push(Object.assign({},t,{
         exp:e._exp,
@@ -25714,6 +25810,14 @@ function getTareasRevParProfesionalPendientes(){
         _revParProfesional:true
       }));
     });
+    if(healed&&e._exp&&typeof persistExpedienteGranular==='function'){
+      if(!window._revParHealPersist)window._revParHealPersist=new Set();
+      const hk='prof|'+e._exp;
+      if(!window._revParHealPersist.has(hk)){
+        window._revParHealPersist.add(hk);
+        try{persistExpedienteGranular(e,false);}catch(errH){}
+      }
+    }
   });
   return out;
 }

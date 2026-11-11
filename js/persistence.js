@@ -497,16 +497,17 @@ function nombresPendientesExp(exp){
     // Revisión par en curso: técnico y profesional deben seguir escuchando el expediente
     // (tras el envío el responsable pasa al profesional; sin esto el técnico pierde «Por revisar»
     // y el profesional puede no ver lo pendiente si la marca quedó corta).
-    if(typeof taskRevisionParCtx==='function'){
-      try{
-        const ctx=taskRevisionParCtx(t,exp);
-        if(ctx&&(ctx.fase==='profesional'||ctx.fase==='tecnico')){
-          if(ctx.tecnico)_marcasAddNombre(set,ctx.tecnico);
-          if(ctx.profesional)_marcasAddNombre(set,ctx.profesional);
-          pend=true;
-        }
-      }catch(e){}
-    }
+    // Preferir historial (no depende de responsable alineado) para no soltar la escucha Blaze.
+    try{
+      const ctxH=typeof taskRevisionParNombresDesdeHistorial==='function'
+        ?taskRevisionParNombresDesdeHistorial(t)
+        :(typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,exp):null);
+      if(ctxH&&(ctxH.fase==='profesional'||ctxH.fase==='tecnico')){
+        if(ctxH.tecnico)_marcasAddNombre(set,ctxH.tecnico);
+        if(ctxH.profesional)_marcasAddNombre(set,ctxH.profesional);
+        pend=true;
+      }
+    }catch(e){}
     if(!pend)return;
     if(t.responsable)_marcasAddNombre(set,t.responsable);
     (t.responsables||[]).forEach(function(n){_marcasAddNombre(set,n);});
