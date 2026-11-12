@@ -244,7 +244,14 @@ function guardarExpCore(stayOnForm){
     },function(){});
     return;
   }
-  const t=getTram(tid,deptoSave);
+  // PQRSD suele no estar en tramites del depto (solo Secretaría); el formulario ya usa ensureTramPqrsCfg.
+  let t=getTram(tid,deptoSave);
+  if(!t&&prevEditRec)t=getTram(tid,prevEditRec);
+  if(!t&&(esTramitePqrs(tid)||(prevEditRec&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(prevEditRec)))){
+    t=typeof ensureTramPqrsCfg==='function'
+      ?ensureTramPqrsCfg((prevEditRec&&prevEditRec._depto)||deptoSave||'guaviare')
+      :(typeof PQRS_TRAM_VIRTUAL!=='undefined'?PQRS_TRAM_VIRTUAL:null);
+  }
   if(!t){notif('Tipo de trámite no encontrado en la configuración del departamento','err');return;}
   let expId=gv('fld__exp');
   // Panel: si quedó un fld__exp fantasma en #form-area, priorizar el del panel / editId
@@ -254,10 +261,12 @@ function guardarExpCore(stayOnForm){
     const fromPanel=el?String(el.value||'').trim():'';
     expId=fromPanel||String(editId);
   }
+  // Solo Información contable (paleta / PQRSD): no hay fld__exp en el formulario.
+  if(!expId&&editId)expId=String(editId);
   if(!editId)expId=String(expId||'').trim().toUpperCase();
   if(!expId){notif('Complete N° Expediente','err');return;}
   const fechaCollect=collectFechasEstado();
-  if(!fechaCollect._fecha&&stayOnForm){
+  if(!fechaCollect._fecha&&(stayOnForm||window._conPanelPqrsContableOnly||contablePaletaPuedeGuardar())){
     const prev=exps.find(x=>x._exp===(editId||expId));
     const vis=document.getElementById('fld__fecha_estado');
     fechaCollect._fecha=(prev&&prev._fecha)||(vis&&vis.value)||hoy();

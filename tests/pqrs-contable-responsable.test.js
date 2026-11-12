@@ -69,6 +69,13 @@ describe('PQRSD: información contable del responsable', () => {
     expect(prev._facturas_extra).toContain('2026-10-22')
   })
 
+  it('al guardar PQRSD desde contable usa ensureTramPqrsCfg si el depto no tiene t_pqrs', () => {
+    const fn = extraer(ge, ['guardarExpCore'])
+    expect(fn).toContain('ensureTramPqrsCfg')
+    expect(fn).toContain('esPqrsSecretaria')
+    expect(fn).toContain('_conPanelPqrsContableOnly')
+  })
+
   it('en esa edición el formulario solo pinta Información contable', () => {
     const c = createContext({
       window: { _conPanelPqrsContableOnly: true },
