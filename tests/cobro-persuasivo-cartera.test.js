@@ -409,15 +409,16 @@ describe('Devolución — libera N° y conserva mora', () => {
   })
 })
 
-describe('Contable — solo Cobro persuasivo', () => {
-  it('lista de actividades del contable queda en Cobro persuasivo', () => {
+describe('Contable — mismas actividades que otros responsables', () => {
+  it('lista completa; Cobro persuasivo sigue disponible al elegirlo', () => {
     const entrega = read('js/entrega-responsable.js')
+    const pred = ['Visita de campo', 'Cobro persuasivo', 'Elaborar concepto técnico']
     const c = createContext({
       console,
       deptoActivo: 'responsables',
       getDeptoOperativo: () => 'guaviare',
-      getCfgActividadesPred: () => ({ actividadesPred: ['Visita de campo', 'Cobro persuasivo', 'Elaborar concepto técnico'] }),
-      cfgFor: () => ({ actividadesPred: ['Visita de campo', 'Cobro persuasivo'] }),
+      getCfgActividadesPred: () => ({ actividadesPred: pred }),
+      cfgFor: () => ({ actividadesPred: pred }),
       esCargoContable: () => true,
       esActividadCobroPersuasivo: n => /^cobro\s+persuasivo$/i.test(String(n || '').trim())
     })
@@ -425,10 +426,10 @@ describe('Contable — solo Cobro persuasivo', () => {
     runInContext(extraer(entrega, [
       'entregaRespSoloCobroPersuasivo', 'listActividadesPredEntregaResp', 'actividadPredEntregaExiste'
     ]), c)
-    expect(c.entregaRespSoloCobroPersuasivo()).toBe(true)
-    expect(c.listActividadesPredEntregaResp()).toEqual(['Cobro persuasivo'])
+    expect(c.entregaRespSoloCobroPersuasivo()).toBe(false)
+    expect(c.listActividadesPredEntregaResp()).toEqual(pred)
     expect(c.actividadPredEntregaExiste('Cobro persuasivo')).toBe(true)
-    expect(c.actividadPredEntregaExiste('Visita de campo')).toBe(false)
+    expect(c.actividadPredEntregaExiste('Visita de campo')).toBe(true)
   })
 })
 

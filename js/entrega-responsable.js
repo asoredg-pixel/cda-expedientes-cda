@@ -17,9 +17,10 @@ function puedeEntregarComoResponsable(){
   }
   return !!String(responsableActivo||'').trim();
 }
-/** Contable: Entregar documento solo para Cobro persuasivo (cartera / transición). */
+/** @deprecated Ya no restringe actividades: el contable ve lo mismo que otros responsables.
+ *  La UI especial de Cobro persuasivo solo aparece al elegir esa actividad. */
 function entregaRespSoloCobroPersuasivo(){
-  return typeof esCargoContable==='function'&&esCargoContable();
+  return false;
 }
 
 function buscarExpedientesEntregaResp(q,lim){
@@ -2323,7 +2324,6 @@ function openEntregaResponsableModal(){
   window._entregaLibrePersonaId='';
   window._entregaRespCrearNuevo=false;
   window._entregaRespCrearTipo='';
-  const soloPers=entregaRespSoloCobroPersuasivo();
   if(modal){
     modal.classList.add('task-modal-wide');
     modal.classList.add('enviar-modal-only');
@@ -2332,13 +2332,11 @@ function openEntregaResponsableModal(){
   body.innerHTML=
     '<div class="fx" style="gap:14px;flex-wrap:wrap;margin-bottom:10px">'+
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-existente" checked onchange="onEntregaRespModoRadioChange()"> Expediente / PQRSD</label>'+
-      (soloPers?'':
       '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-libre" onchange="onEntregaRespModoRadioChange()"> Actividad sin expediente</label>'+
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-informe" onchange="onEntregaRespModoRadioChange()"> Entrega de informes</label>')+
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="entrega-resp-modo" id="entrega-resp-modo-informe" onchange="onEntregaRespModoRadioChange()"> Entrega de informes</label>'+
       '<input type="checkbox" id="entrega-resp-modo-nuevo" style="display:none" tabindex="-1" aria-hidden="true">'+
       '<input type="checkbox" id="entrega-resp-modo-pqrs" style="display:none" tabindex="-1" aria-hidden="true">'+
     '</div>'+
-    (soloPers?'<div style="font-size:11px;color:var(--tx3);margin:-4px 0 10px">Contable: solo Cobro persuasivo sobre un expediente existente (puede digitalizar la factura si aún no está en el sistema).</div>':'')+
     '<div id="entrega-resp-exist-box">'+
       '<div class="fld" style="margin-bottom:8px"><label>Buscar expediente / PQRSD</label>'+
         '<div style="position:relative">'+
@@ -2423,7 +2421,6 @@ function openEntregaResponsableModal(){
     sstFileRenderList('entrega-resp-anexos-list',entregaRespFileCtxKey());
   }
   setTimeout(function(){
-    if(soloPers&&typeof pickActEntregaResp==='function')pickActEntregaResp('Cobro persuasivo');
     const libre=!!((document.getElementById('entrega-resp-modo-libre')||{}).checked);
     const nuevo=!!((document.getElementById('entrega-resp-modo-nuevo')||{}).checked);
     const exp=document.getElementById('entrega-resp-exp');
@@ -2432,8 +2429,6 @@ function openEntregaResponsableModal(){
     else if(libre&&nom)nom.focus();
     const actSug=document.getElementById('entrega-resp-act-sug');
     if(actSug){actSug.style.display='none';actSug.innerHTML='';}
-    const actInp=document.getElementById('entrega-resp-actividad');
-    if(soloPers&&actInp){actInp.readOnly=true;actInp.style.background='var(--sf2)';}
   },80);
 }
 
@@ -2449,18 +2444,12 @@ function syncEntregaRespFileLabel(inp,labelId,multi){
 function listActividadesPredEntregaResp(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const cfgAct=typeof getCfgActividadesPred==='function'?getCfgActividadesPred(depto):(typeof cfgFor==='function'?cfgFor(depto):null);
-  const base=(cfgAct&&cfgAct.actividadesPred)||[];
-  if(entregaRespSoloCobroPersuasivo()){
-    const cobro=base.find(function(a){return typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(a);});
-    return cobro?[cobro]:['Cobro persuasivo'];
-  }
-  return base;
+  return (cfgAct&&cfgAct.actividadesPred)||[];
 }
 
 function actividadPredEntregaExiste(nombre){
   const nom=String(nombre||'').trim().toLowerCase();
   if(!nom)return false;
-  if(entregaRespSoloCobroPersuasivo()&&typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(nombre))return true;
   return listActividadesPredEntregaResp().some(function(a){return String(a||'').trim().toLowerCase()===nom;});
 }
 
@@ -4352,10 +4341,6 @@ function ensureExpTaskEntregaResponsable(){
   }
   const actFinalCheck=actividad;
   if(!responsableActivo){notif('Seleccione su nombre como responsable','err');return null;}
-  if(entregaRespSoloCobroPersuasivo()&&!(typeof esActividadCobroPersuasivo==='function'&&esActividadCobroPersuasivo(actFinalCheck))){
-    notif('Como Contable solo puede entregar Cobro persuasivo','err');
-    return null;
-  }
 
   // Sin expediente: actividad libre autoasignada al responsable
   if(libre){
