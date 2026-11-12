@@ -10081,6 +10081,9 @@ function taskReviewCorreosNotificacion(e,t){
   return Array.from(set);
 }
 function taskReviewNumeroDocumentoAct(e,t){
+  // Informe de contrato: «Informe de contrato No. 2» en correo / bandeja de salida
+  if(t&&t.informeContrato&&t.informeContrato.n!=null&&String(t.informeContrato.n).trim()!=='')
+    return String(t.informeContrato.n).trim();
   const actoNum=String((t&&(t.actoNumero||t.numeroActo))||'').trim();
   if(actoNum)return actoNum;
   if(e&&t&&t.actoAdminId&&typeof findActoByAdminId==='function'){
@@ -10616,6 +10619,8 @@ async function taskReviewSubirSoporteNotificacion(e,t,expId,blob){
  */
 async function registrarSoporteEnvioCorreoNotif(e,t,expId,mailOpts,adjuntosArr){
   mailOpts=mailOpts||{};
+  // Informes de contrato: solo correo con enlaces Drive; no PDF de soporte de envío
+  if(t&&t.informeContrato)return{pdfBlob:null,up:null,omitido:true};
   const por=mailOpts.por||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')||'';
   const fechaC=typeof hoy==='function'?hoy():'';
   let pdfBlob=mailOpts.pdfBlob||null,up=null;
@@ -10853,22 +10858,27 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
         (e&&e._exp&&typeof pqrsCorreoHtmlBloqueConsulta==='function'?pqrsCorreoHtmlBloqueConsulta(e._exp):'')+
         (typeof pqrsCorreoHtmlPieInstitucional==='function'?pqrsCorreoHtmlPieInstitucional():'');
     }
-    prog(35,'Generando soporte de envío…');
+    const esInformeContrato=!!(t&&t.informeContrato);
+    if(esInformeContrato)prog(35,'Preparando envío…');
+    else prog(35,'Generando soporte de envío…');
     let pdfBlob=null,up=null;
     const ofiId=(e&&e._depto)||(t&&t.depto)||(typeof deptoActivo!=='undefined'?deptoActivo:'guaviare');
-    try{
-      const enviadoEnIso=new Date().toISOString();
-      const cuenta=(typeof resolverCuentaEmisoraSoporteEnvio==='function'
-        ?await resolverCuentaEmisoraSoporteEnvio(e,t,{})
-        :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio({},e,t):''));
-      if(typeof generarPdfSoporteNotificacionActividad==='function')
-        pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
-          para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,cuenta:cuenta,
-          enviadoEn:enviadoEnIso,fechaEnvio:enviadoEnIso,
-          documentos:docsConLink
-        });
-    }catch(errP){console.warn('pdf soporte notif:',errP);}
+    if(!esInformeContrato){
+      try{
+        const enviadoEnIso=new Date().toISOString();
+        const cuenta=(typeof resolverCuentaEmisoraSoporteEnvio==='function'
+          ?await resolverCuentaEmisoraSoporteEnvio(e,t,{})
+          :(typeof correoEmisorSoporteEnvio==='function'?correoEmisorSoporteEnvio({},e,t):''));
+        if(typeof generarPdfSoporteNotificacionActividad==='function')
+          pdfBlob=await generarPdfSoporteNotificacionActividad(e,t,{
+            para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,cuenta:cuenta,
+            enviadoEn:enviadoEnIso,fechaEnvio:enviadoEnIso,
+            documentos:docsConLink
+          });
+      }catch(errP){console.warn('pdf soporte notif:',errP);}
+    }
     // Solo adjuntar el soporte (liviano). Los docs de entrega van por enlace Drive.
+    // Informes: sin PDF de soporte de envío ni adjunto.
     let adjuntos=[];
     if(pdfBlob){
       const sopFile=new File([pdfBlob],'Soporte_Envio.pdf',{type:'application/pdf'});
@@ -10933,8 +10943,9 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     if(!sent)throw new Error('No se pudo enviar el correo. Conecte Gmail/NCA e intente de nuevo.');
     const fechaC=hoy();
     const refId=t.sinExpediente?(t.codigo||expId):expId;
-    prog(85,'Registrando soporte de envío…');
-    if(pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
+    if(esInformeContrato)prog(85,'Cerrando informe…');
+    else prog(85,'Registrando soporte de envío…');
+    if(!esInformeContrato&&pdfBlob&&typeof registrarSoporteEnvioCorreoNotif==='function'){
       try{
         const reg=await registrarSoporteEnvioCorreoNotif(e,t,e&&e._exp?e._exp:refId,{
           para:destinos.join(', '),cc:emailCc,bcc:emailBcc,asunto:asunto,cuerpo:cuerpo,por:por,

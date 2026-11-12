@@ -61,8 +61,86 @@ describe('Informe aprobado: un solo PDF', () => {
     expect(t.soportes.find(s => s.id === 'now').driveFilename).toBe('Informe 1 - 272 YESICA CUARAN.pdf')
   })
 
+  it('no borra el informe vigente si ya hay soporte de envío (post-correo)', async () => {
+    const deleted = []
+    let renamed = null
+    const t = {
+      informeContrato: { n: 2, numero: '236', contratista: 'MARCELA CHARA' },
+      soportes: [
+        { id: 'inf', driveFileId: 'INF2', label: 'Informe de contrato', driveFilename: 'Informe 2 - 236 MARCELA CHARA.pdf', activo: true },
+        { id: 'a1', driveFileId: 'ACT', informe_act: { n: 1 }, es_anexo: true, label: 'Act 1' },
+        {
+          id: 'envio', driveFileId: 'SOPENV', tipo: 'soporte_notificacion',
+          label: 'Soporte envío — Informe de contrato No. 2', activo: true
+        }
+      ]
+    }
+    const c = createContext({
+      esSoporteEnvioCorreoItem: s => !!(s && (s.tipo === 'soporte_notificacion' || s.tipo === 'soporte_respuesta')),
+      soporteEsAnexoEntrega: s => !!(s && (s.es_anexo || s.informe_act)),
+      soporteEsPorCorregir: () => false,
+      driveEnsureContratoInformeFolder: async () => ({ folderId: 'FOLD' }),
+      driveListFolderChildren: async () => ([
+        { id: 'INF2', name: 'Informe 2 - 236 MARCELA CHARA.pdf', esCarpeta: false },
+        { id: 'SOPENV', name: 'Soporte_Envio.pdf', esCarpeta: false }
+      ]),
+      driveDeleteInstitutional: async (id) => { deleted.push(id); return true },
+      driveRenameInstitutional: async (id, name) => { renamed = { id, name }; return true },
+      driveContratoInformeFilename: () => 'Informe 2 - 236 MARCELA CHARA.pdf'
+    })
+    runInContext(extraer(gmail, ['informePurgarEntregasPreviasAlAprobar']), c)
+    await c.informePurgarEntregasPreviasAlAprobar(t)
+    expect(deleted).not.toContain('INF2')
+    expect(renamed).toEqual({ id: 'INF2', name: 'Informe 2 - 236 MARCELA CHARA.pdf' })
+    expect(t.soportes.map(s => s.id).sort()).toEqual(['a1', 'envio', 'inf'])
+  })
+
   it('la aprobación y Recursos invocan la limpieza', () => {
     expect(extraer(core, ['verificarTaskExp'])).toContain('informePurgarEntregasPreviasAlAprobar')
     expect(extraer(rec, ['recursosContratosCargarDrive'])).toContain('informePurgarEntregasPreviasAlAprobar')
+  })
+})
+
+describe('Informe de contrato: etiqueta correo con número', () => {
+  it('taskDocNombrePublico incluye No. N del informe', () => {
+    const c = createContext({ String, Object, Array })
+    runInContext(extraer(core, [
+      'numeroDocSinPrefijoNo', 'taskReviewNumeroDocumentoAct', 'taskDocNombrePublico'
+    ]), c)
+    const t = { actividad: 'Informe de contrato', informeContrato: { n: 2, numero: '236' } }
+    expect(c.taskReviewNumeroDocumentoAct(null, t)).toBe('2')
+    expect(c.taskDocNombrePublico(null, t)).toBe('Informe de contrato No. 2')
+  })
+})
+
+describe('Informe de contrato: sin soporte de envío PDF', () => {
+  it('registrarSoporteEnvioCorreoNotif no genera ni sube PDF', async () => {
+    let pdfCalls = 0
+    let upCalls = 0
+    const c = createContext({
+      String, Object, Array, Date, Promise,
+      generarPdfSoporteNotificacionActividad: async () => { pdfCalls++; return 'PDF' },
+      taskReviewSubirSoporteNotificacion: async () => { upCalls++; return { driveLink: 'x', fileId: 'f' } },
+      hoy: () => '2026-11-12',
+      taskComentarioAutor: () => 'NCA'
+    })
+    runInContext(extraer(core, ['registrarSoporteEnvioCorreoNotif']), c)
+    const out = await c.registrarSoporteEnvioCorreoNotif(
+      null,
+      { informeContrato: { n: 2, numero: '236' }, soportes: [] },
+      'inf-1',
+      { para: 'a@b.com', cuerpo: 'x' },
+      []
+    )
+    expect(out.omitido).toBe(true)
+    expect(out.pdfBlob).toBe(null)
+    expect(pdfCalls).toBe(0)
+    expect(upCalls).toBe(0)
+  })
+
+  it('taskReviewConfirmarYNotificar omite generar PDF en informes', () => {
+    const fn = extraer(core, ['taskReviewConfirmarYNotificar'])
+    expect(fn).toMatch(/esInformeContrato/)
+    expect(fn).toMatch(/!esInformeContrato[\s\S]*generarPdfSoporteNotificacionActividad/)
   })
 })

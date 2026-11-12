@@ -2273,6 +2273,8 @@ window.driveEnsureContratoInformeFolder = driveEnsureContratoInformeFolder;
 /**
  * Al aprobar un informe: deja un solo PDF del informe en la carpeta (el vigente)
  * y borra en Drive las entregas anteriores (V2, V3, duplicados). Los soportes por actividad se conservan.
+ * Nunca elige como «vigente» el soporte de envío del correo (se agrega al notificar):
+ * si no, borra el PDF real del informe y el enlace del correo queda roto.
  */
 async function informePurgarEntregasPreviasAlAprobar(t) {
   if (!t || !t.informeContrato) return false;
@@ -2282,13 +2284,24 @@ async function informePurgarEntregasPreviasAlAprobar(t) {
     if (typeof soporteEsAnexoEntrega === 'function' && soporteEsAnexoEntrega(s)) return true;
     return /^Act\s+\d+\s*[—\-–]/i.test(String(s.label || s.driveFilename || ''));
   };
+  const esEnvio = function(s) {
+    if (!s) return false;
+    if (typeof esSoporteEnvioCorreoItem === 'function' && esSoporteEnvioCorreoItem(s)) return true;
+    return s.tipo === 'soporte_notificacion' || s.tipo === 'soporte_respuesta'
+      || /^(soporte de env[ií]o|soporte env[ií]o)/i.test(String(s.label || s.nombre || '').trim());
+  };
   const porCorr = function(s) {
     return typeof soporteEsPorCorregir === 'function' && soporteEsPorCorregir(s);
   };
-  const mains = (t.soportes || []).filter(function(s) { return s && !esAn(s); });
+  const esPdfInforme = function(s) {
+    return /^Informe\s+\d+\b/i.test(String((s && (s.driveFilename || s.label || s.nombre)) || ''));
+  };
+  const mains = (t.soportes || []).filter(function(s) { return s && !esAn(s) && !esEnvio(s); });
   const vivos = mains.filter(function(s) { return !porCorr(s) && s.activo !== false; });
   const pool = vivos.length ? vivos : mains.filter(function(s) { return !porCorr(s); });
-  const base = pool.length ? pool : mains;
+  // Preferir el PDF «Informe N …» (no un adjunto ambiguo sin prefijo)
+  const prefer = (pool.length ? pool : mains).filter(esPdfInforme);
+  const base = prefer.length ? prefer : (pool.length ? pool : mains);
   const keep = base.length ? base[base.length - 1] : null;
   const keepId = keep ? String(keep.driveFileId || keep.fileId || '') : '';
   if (!keepId) return false;
@@ -2329,7 +2342,8 @@ async function informePurgarEntregasPreviasAlAprobar(t) {
   }
   if (!okInformeNom && nomInforme && typeof driveOpEncolarEnTask === 'function') driveOpEncolarEnTask(t, keepId, 'renombrar', nomInforme);
   t.soportes = (t.soportes || []).filter(function(s) {
-    if (!s || esAn(s)) return !!s;
+    if (!s) return false;
+    if (esAn(s) || esEnvio(s)) return true;
     const id = String(s.driveFileId || s.fileId || '');
     if (s === keep || (keepId && id === keepId)) return true;
     return false;
