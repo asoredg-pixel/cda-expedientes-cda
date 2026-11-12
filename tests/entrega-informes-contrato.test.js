@@ -65,6 +65,28 @@ describe('Entrega de informes de contrato', () => {
     expect(r[0].informes.map(i => i.n)).toEqual([1, 2])
   })
 
+  it('fechas del contrato: usa las de la entrega con mayor N° (corrección en 2ª entrega)', () => {
+    const c = ctxInforme()
+    const lista = [
+      { id: 'a', responsable: 'Ana', informeContrato: { numero: '236', inicio: '2026-10-01', fin: '2026-10-30', n: 1, desde: '2026-10-01', hasta: '2026-10-30' } },
+      { id: 'b', responsable: 'Ana', informeContrato: { numero: '236', inicio: '2026-10-01', fin: '2026-12-31', n: 2, desde: '2026-11-01', hasta: '2026-11-30' } }
+    ]
+    const r = c.informeContratosDeResponsable(lista, 'Ana')
+    expect(r[0].inicio).toBe('2026-10-01')
+    expect(r[0].fin).toBe('2026-12-31')
+    const s = c.informeContratoSiguiente(r[0].informes, r[0].inicio, r[0].fin)
+    expect(s).toEqual({ n: 3, desde: '2026-12-01', hasta: '2026-12-31' })
+  })
+
+  it('2ª entrega válida si se corrige la fecha final del contrato', () => {
+    const c = ctxInforme()
+    const contratos = [{ numero: '236', informes: [{ n: 1, desde: '2026-10-01', hasta: '2026-10-30' }] }]
+    const mal = { numero: '236', inicio: '2026-10-01', fin: '2026-10-30', n: 2, desde: '2026-11-01', hasta: '2026-11-30' }
+    expect(c.validarInformeContrato(mal, contratos)).toMatch(/dentro de las fechas/)
+    const ok = Object.assign({}, mal, { fin: '2026-12-31' })
+    expect(c.validarInformeContrato(ok, contratos)).toBe('')
+  })
+
   it('validación: periodo dentro del contrato y N° de informe no repetido', () => {
     const c = ctxInforme()
     const contratos = [{ numero: '045-2026', informes: [{ n: 1 }] }]
@@ -74,6 +96,24 @@ describe('Entrega de informes de contrato', () => {
     expect(c.validarInformeContrato(Object.assign({}, ok, { hasta: '2026-06-30' }), contratos)).toMatch(/dentro de las fechas/)
     expect(c.validarInformeContrato(Object.assign({}, ok, { numero: '' }), contratos)).toMatch(/N° de contrato/)
     expect(c.validarInformeContrato(Object.assign({}, ok, { desde: '2026-04-01' }), contratos)).toMatch(/inválido/)
+  })
+
+  it('formulario: fechas del contrato siempre visibles (no solo en contrato nuevo)', () => {
+    const c = createContext({
+      agendaNorm: s => String(s || '').trim().toLowerCase(),
+      escAttr: s => String(s || ''),
+      fmtF: s => String(s || ''),
+      entregaInformeContratosActuales: () => [{ numero: '236', inicio: '2026-10-01', fin: '2026-10-30', informes: [] }],
+      responsableActivo: 'Ana'
+    })
+    runInContext(extraer(er, ['htmlEntregaInformeBox']), c)
+    const html = c.htmlEntregaInformeBox()
+    expect(html).toContain('entrega-inf-inicio')
+    expect(html).toContain('Fecha inicio del contrato')
+    expect(html).toContain('Fecha final del contrato')
+    expect(html).toContain('entrega-inf-numero-box')
+    expect(html).not.toContain('entrega-inf-nuevo-box')
+    expect(html).toMatch(/ver y corregir/)
   })
 
   it('carpeta Drive: Contratos/<año>/<N° CONTRATISTA>/Informe N (periodo)', () => {

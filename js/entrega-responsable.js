@@ -512,10 +512,21 @@ function informeContratosDeResponsable(lista,resp){
     const ic=t.informeContrato;
     const k=String(ic.numero||'').trim();
     if(!k)return;
-    const c=map[k]||(map[k]={numero:k,inicio:ic.inicio||'',fin:ic.fin||'',informes:[]});
+    const c=map[k]||(map[k]={numero:k,inicio:'',fin:'',informes:[],_maxN:-1});
     c.informes.push({n:ic.n,desde:ic.desde||'',hasta:ic.hasta||'',taskId:t.id});
+    // Fechas de contrato: las de la entrega con mayor N° (permite corregir en 2ª/3ª entrega)
+    const nn=parseInt(ic.n,10)||0;
+    if(nn>=c._maxN){
+      c._maxN=nn;
+      if(ic.inicio)c.inicio=String(ic.inicio);
+      if(ic.fin)c.fin=String(ic.fin);
+    }
   });
-  return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return String(b.inicio).localeCompare(String(a.inicio));});
+  return Object.keys(map).map(function(k){
+    const c=map[k];
+    delete c._maxN;
+    return c;
+  }).sort(function(a,b){return String(b.inicio).localeCompare(String(a.inicio));});
 }
 function validarInformeContrato(d,contratos){
   if(!d||!d.numero)return'Indique el N° de contrato';
@@ -524,7 +535,7 @@ function validarInformeContrato(d,contratos){
   if(!(d.n>=1))return'Indique el N° de informe';
   if(!d.desde||!d.hasta)return'Indique el periodo del informe (desde y hasta)';
   if(d.desde>d.hasta)return'El periodo del informe es inválido: «desde» es posterior a «hasta»';
-  if(d.desde<d.inicio||d.hasta>d.fin)return'El periodo del informe debe estar dentro de las fechas del contrato';
+  if(d.desde<d.inicio||d.hasta>d.fin)return'El periodo del informe debe estar dentro de las fechas del contrato. Corrija las fechas del contrato o el periodo del informe.';
   const c=(contratos||[]).find(function(x){return agendaNorm(x.numero)===agendaNorm(d.numero);});
   if(c&&c.informes.some(function(i){return (parseInt(i.n,10)||0)===d.n;}))return'Ya entregó el informe N° '+d.n+' de este contrato';
   return'';
@@ -548,10 +559,11 @@ function htmlEntregaInformeBox(){
     '<div style="font-size:12px;font-weight:700;margin-bottom:8px">📑 Informe de contrato</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Contrato'+req+'</label>'+
       '<select id="entrega-inf-contrato" style="'+inp+'" onchange="entregaInformeOnContratoChange()">'+opts+'</select></div>'+
-    '<div id="entrega-inf-nuevo-box" class="fg" style="margin-bottom:8px">'+
-      '<div class="fld"><label>N° de contrato'+req+'</label><input type="text" id="entrega-inf-numero" placeholder="Ej. 045-2026" style="'+inp+'"></div>'+
-      '<div class="fld"><label>Fecha inicio'+req+'</label><input type="date" id="entrega-inf-inicio" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
-      '<div class="fld"><label>Fecha final'+req+'</label><input type="date" id="entrega-inf-fin" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
+    '<div id="entrega-inf-numero-box" class="fld" style="margin-bottom:8px">'+
+      '<label>N° de contrato'+req+'</label><input type="text" id="entrega-inf-numero" placeholder="Ej. 045-2026" style="'+inp+'"></div>'+
+    '<div class="fg" style="margin-bottom:8px">'+
+      '<div class="fld"><label>Fecha inicio del contrato'+req+'</label><input type="date" id="entrega-inf-inicio" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
+      '<div class="fld"><label>Fecha final del contrato'+req+'</label><input type="date" id="entrega-inf-fin" style="'+inp+'" onchange="entregaInformeAplicarSugerencia()"></div>'+
     '</div>'+
     '<div class="fg" style="margin-bottom:6px">'+
       '<div class="fld"><label>N° de informe'+req+'</label><input type="number" min="1" step="1" id="entrega-inf-n" style="'+inp+'"></div>'+
@@ -559,9 +571,10 @@ function htmlEntregaInformeBox(){
       '<div class="fld"><label>Periodo hasta'+req+'</label><input type="date" id="entrega-inf-hasta" style="'+inp+'"></div>'+
     '</div>'+
     '<div id="entrega-inf-borrador"></div>'+
-    '<div style="font-size:11px;color:var(--tx3)">Cargue los soportes de las actividades con «📎 Soportes +» y guárdelos con «💾 Guardar borrador» a medida que avanza. '+
-      'Cuando tenga todo, adjunte el informe con «📄 Cargar informe» y pulse Entregar. '+
-      'Se guardan en Recursos › Contratos › año › N° de contrato. Queda <strong>Por revisar</strong>; al aprobarse se remite por correo a la oficina interna.</div>'+
+    '<div style="font-size:11px;color:var(--tx3)">En cada entrega puede <strong>ver y corregir</strong> las fechas del contrato (inicio y final). '+
+      'El periodo del informe (desde–hasta) debe quedar <strong>dentro</strong> de esas fechas; si quedó mal en una entrega anterior, ajuste aquí las fechas del contrato y el periodo. '+
+      'Cargue los soportes con «📎 Soportes +» y «💾 Guardar borrador»; al final adjunte el informe con «📄 Cargar informe» y pulse Entregar. '+
+      'Se guardan en Recursos › Contratos. Queda <strong>Por revisar</strong>; al aprobarse se remite por correo a la oficina interna.</div>'+
   '</div>';
 }
 function entregaInformeAplicarSugerencia(){
@@ -570,7 +583,7 @@ function entregaInformeAplicarSugerencia(){
   const inicio=String((document.getElementById('entrega-inf-inicio')||{}).value||'');
   const fin=String((document.getElementById('entrega-inf-fin')||{}).value||'');
   const s=informeContratoSiguiente(c?c.informes:[],inicio,fin);
-  const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
+  const set=function(id,val){const el=document.getElementById(id);if(el&&!el.disabled)el.value=val;};
   set('entrega-inf-n',s.n);
   set('entrega-inf-desde',s.desde);
   set('entrega-inf-hasta',s.hasta);
@@ -578,9 +591,10 @@ function entregaInformeAplicarSugerencia(){
 function entregaInformeOnContratoChange(){
   const v=String((document.getElementById('entrega-inf-contrato')||{}).value||'');
   const c=entregaInformeContratosActuales().find(function(x){return x.numero===v;});
-  const box=document.getElementById('entrega-inf-nuevo-box');
-  if(box)box.style.display=c?'none':'';
-  const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
+  // N° solo al crear contrato nuevo; las fechas del contrato siempre visibles y editables
+  const numBox=document.getElementById('entrega-inf-numero-box');
+  if(numBox)numBox.style.display=c?'none':'';
+  const set=function(id,val){const el=document.getElementById(id);if(el){el.value=val;el.disabled=false;}};
   set('entrega-inf-numero',c?c.numero:'');
   set('entrega-inf-inicio',c?c.inicio:'');
   set('entrega-inf-fin',c?c.fin:'');
@@ -899,15 +913,22 @@ function informeBorradorAplicarUi(){
   const ctx=sstFileStagingCtx(ck);
   ctx.anexos=(ctx.anexos||[]).filter(function(a){return a&&!a.borrador;});
   const b=entregaRespEsInforme()?informeBorradorActual():null;
+  // Con borrador se fija N°/periodo del informe; las fechas del contrato siguen editables
   ['entrega-inf-n','entrega-inf-desde','entrega-inf-hasta'].forEach(function(id){
     const el=document.getElementById(id);
     if(el)el.disabled=!!b;
+  });
+  ['entrega-inf-inicio','entrega-inf-fin'].forEach(function(id){
+    const el=document.getElementById(id);
+    if(el)el.disabled=false;
   });
   if(b){
     const set=function(id,val){const el=document.getElementById(id);if(el)el.value=val;};
     set('entrega-inf-n',b.n);
     set('entrega-inf-desde',b.desde||'');
     set('entrega-inf-hasta',b.hasta||'');
+    if(b.inicio)set('entrega-inf-inicio',b.inicio);
+    if(b.fin)set('entrega-inf-fin',b.fin);
     (b.soportes||[]).forEach(function(s){if(s&&s.driveFileId)ctx.anexos.push(informeBorradorItem(s));});
     ctx.anexos.sort(function(x,y){
       const ax=(x&&x.informeAct&&parseInt(x.informeAct.n,10))||0,ay=(y&&y.informeAct&&parseInt(y.informeAct.n,10))||0;
