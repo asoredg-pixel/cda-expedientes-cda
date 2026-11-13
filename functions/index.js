@@ -13,7 +13,7 @@ initializeApp();
 
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
 const MAX_CHARS = 8000;
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 
 function buildPulirPrompt(texto) {
   return [
@@ -90,7 +90,16 @@ exports.pulirCorreoTexto = onCall(
         detail = await res.text();
       } catch (e) { /* ignore */ }
       console.error('Gemini HTTP', res.status, detail.slice(0, 400));
-      throw new HttpsError('internal', 'El servicio de redacción respondió con error.');
+      let msgUsuario = 'El servicio de redacción respondió con error.';
+      if (res.status === 402 || /prepayment|credits are depleted|RESOURCE_EXHAUSTED/i.test(detail)) {
+        msgUsuario =
+          'Sin crédito de Gemini API. En AI Studio (ai.studio/projects) active facturación o recargue crédito del proyecto cda-tramites.';
+      } else if (res.status === 404 || /not found|not supported/i.test(detail)) {
+        msgUsuario = 'Modelo de redacción no disponible. Contacte al administrador del sistema.';
+      } else if (res.status === 403 || /PERMISSION_DENIED|API_KEY/i.test(detail)) {
+        msgUsuario = 'La API key de Gemini no tiene permiso. Revise la clave y que Gemini API esté habilitada.';
+      }
+      throw new HttpsError('internal', msgUsuario);
     }
 
     let data;

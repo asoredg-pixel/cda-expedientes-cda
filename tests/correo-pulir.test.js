@@ -78,6 +78,8 @@ describe('correo-pulir', () => {
     expect(fnSrc).toContain('pulirCorreoTexto')
     expect(fnSrc).toContain("if (!request.auth)")
     expect(fnSrc).toContain('No inventes hechos')
+    expect(fnSrc).toContain('gemini-2.5-flash')
+    expect(fnSrc).toContain('Sin crédito de Gemini API')
     expect(fnSrc).toMatch(/exports\.pulirCorreoTexto\s*=\s*onCall/)
   })
 
