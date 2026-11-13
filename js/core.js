@@ -3562,7 +3562,7 @@ async function openPqrsRespuestaModal(expId,opts){
     (typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Mensaje','pqrs-compose-body')
       :'<label style="font-size:12px;font-weight:600;display:block;margin:6px 0 4px">Mensaje</label>')+
-    '<textarea spellcheck="true" lang="es" id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Mensaje al ciudadano…" style="min-height:160px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
+    '<textarea spellcheck="true" id="pqrs-compose-body" class="gm-compose-textarea" placeholder="Mensaje al ciudadano…" style="min-height:160px;width:100%;box-sizing:border-box">'+escAttr(wf.cuerpo||(e&&e._pqrs_respuesta_nota)||'')+'</textarea>'+
     '<div id="pqrs-compose-att-list" class="pqrs-compose-att-list"></div>'+
     '<div id="pqrs-compose-att-err" class="fld-err" style="display:none"></div>'+
     '<div class="fx" style="gap:6px;flex-wrap:wrap;margin-top:6px">'+
@@ -3571,7 +3571,7 @@ async function openPqrsRespuestaModal(expId,opts){
     '<div class="fld" id="pqrs-resp-cuerpo-wrap" style="margin-bottom:10px;display:none">'+(typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Descripción','pqrs-resp-cuerpo','pqrs-resp-cuerpo-label')
       :'<label style="font-weight:600;font-size:12px" id="pqrs-resp-cuerpo-label">Descripción</label>')+
-    '<textarea spellcheck="true" lang="es" id="pqrs-resp-cuerpo" placeholder="" style="min-height:120px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
+    '<textarea spellcheck="true" id="pqrs-resp-cuerpo" placeholder="" style="min-height:120px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:5px;box-sizing:border-box;line-height:1.45">'+escAttr(cuerpoVal)+'</textarea></div>'+
     '<div class="fld" id="pqrs-resp-adj-wrap" style="margin-bottom:10px"><label style="font-weight:600;font-size:12px" id="pqrs-resp-adj-label">Documento</label>'+
     '<div id="pqrs-resp-adj-hint" style="display:none"></div>'+
     '<div id="pqrs-resp-adj-rows" style="display:none;margin-top:4px"></div>'+
@@ -9810,7 +9810,7 @@ function renderTaskReviewDecisionSideHtml(expId,taskId,t){
     h+=renderTaskReviewAprobarAccHtml(1,'Aprobar y cerrar',
       '<p style="font-size:11px;color:var(--tx3);margin:0 0 8px">Cierra como informativa. Queda <strong>✓ Revisada</strong> · sin correo ni firma.</p>'+
       '<div class="fld" style="margin-bottom:10px"><label>Motivo / descripción del responsable <span style="font-weight:400;color:var(--tx3)">(visible en consulta ciudadana)</span></label>'+
-      '<textarea spellcheck="true" lang="es" id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(motivo)+'</textarea></div>'+
+      '<textarea spellcheck="true" id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(motivo)+'</textarea></div>'+
       '<div class="fld" style="margin-bottom:10px"><label>Comentario de la revisión <span style="font-weight:400;color:var(--tx3)">(solo en sistema)</span></label>'+
       '<input type="text" id="nca-rev-comentario" placeholder="Ej: Aprobado como informativa." style="margin-top:4px;width:100%;box-sizing:border-box"></div>'+
       '<input type="hidden" id="nca-rev-fecha" value="'+escAttr(hoy())+'">'+
@@ -10209,7 +10209,7 @@ function renderTaskReviewNotifEmailFieldsHtml(e,t,expId,opts){
     (typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Cuerpo del correo <span style="font-weight:400">(editable)</span>','task-rev-notif-cuerpo')
       :'<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Cuerpo del correo <span style="font-weight:400">(editable)</span></div>')+
-    '<textarea spellcheck="true" lang="es" id="task-rev-notif-cuerpo" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea>'+
+    '<textarea spellcheck="true" id="task-rev-notif-cuerpo" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea>'+
     (typeof renderAdjuntosNotificacionPreviewHtml==='function'&&typeof collectDocsParaNotificacionCorreo==='function'
       ?renderAdjuntosNotificacionPreviewHtml(collectDocsParaNotificacionCorreo(e,t),{title:'📎 Documento y anexos que se enviarán'})
       :'')+
@@ -10268,7 +10268,7 @@ function renderTaskEntregaCorreoEditHtml(expId,taskId,c,opts){
     (typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Cuerpo del correo <span style="font-weight:400">(editable)</span>','rev-ent-email-cuerpo')
       :'<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Cuerpo del correo <span style="font-weight:400">(editable)</span></div>')+
-    '<textarea spellcheck="true" lang="es" id="rev-ent-email-cuerpo" data-orig="'+escAttr(c.cuerpo)+'" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(c.cuerpo)+'</textarea>'+
+    '<textarea spellcheck="true" id="rev-ent-email-cuerpo" data-orig="'+escAttr(c.cuerpo)+'" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(c.cuerpo)+'</textarea>'+
     '<button type="button" class="btn bsm" style="width:100%;margin-top:8px" onclick="taskEntregaCorreoGuardar(\''+eid+'\',\''+tid+'\')">💾 Guardar cambios del correo</button>'+
     '</div>';
 }
@@ -12893,7 +12893,7 @@ function renderPqrsEntregaCamposHtml(e,opts){
   h+='<div class="fld" id="pqrs-entrega-cuerpo-wrap">'+(typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Mensaje / plantilla <span class="req-star">*</span>','pqrs-entrega-resp-cuerpo','pqrs-entrega-cuerpo-label')
       :'<label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>')+
-    '<textarea spellcheck="true" lang="es" id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(entregaAjena?'':(wf.cuerpo||e._pqrs_respuesta_nota||''))+'</textarea>'+
+    '<textarea spellcheck="true" id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(entregaAjena?'':(wf.cuerpo||e._pqrs_respuesta_nota||''))+'</textarea>'+
     '</div>';
   // Adjunto estilo oficinas (oculto para informativa)
   h+='<div id="pqrs-entrega-adj-wrap" style="margin-top:10px">'+
@@ -20272,7 +20272,7 @@ function htmlEntregaNotifCorreoCheck(opts){
       '<div class="fld" style="margin-bottom:0">'+(typeof htmlCorreoPulirLabelRow==='function'
         ?htmlCorreoPulirLabelRow('Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span>','entrega-notif-email-cuerpo')
         :'<div style="font-size:11px;font-weight:600;margin-bottom:4px">Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></div>')+
-      '<textarea spellcheck="true" lang="es" id="entrega-notif-email-cuerpo" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
+      '<textarea spellcheck="true" id="entrega-notif-email-cuerpo" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
     '</div></div>';
 }
 function entregaNotifCorreoToggleUi(cbId){
@@ -22086,7 +22086,7 @@ function renderNcaRevisionEmailBlockHtml(expId,e,wf){
     (typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow(cuerpoLblRev,'nca-rev-cuerpo','nca-rev-cuerpo-lbl')
       :'<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px" id="nca-rev-cuerpo-lbl">'+cuerpoLblRev+'</div>')+
-    '<textarea spellcheck="true" lang="es" id="nca-rev-cuerpo" style="min-height:120px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>'+
+    '<textarea spellcheck="true" id="nca-rev-cuerpo" style="min-height:120px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>'+
     '</div>';
 }
 function renderTaskReviewPqrsCorreoSideHtml(expId,taskId,t,e){
@@ -22314,7 +22314,7 @@ function renderNcaDecisionFormHtml(expId,e,wf,opts){
       ?((typeof htmlCorreoPulirLabelRow==='function'
           ?htmlCorreoPulirLabelRow(cuerpoLblRev,'nca-rev-cuerpo','nca-rev-cuerpo-lbl')
           :'<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px" id="nca-rev-cuerpo-lbl">'+cuerpoLblRev+'</div>')+
-        '<textarea spellcheck="true" lang="es" id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>')
+        '<textarea spellcheck="true" id="nca-rev-cuerpo" style="min-height:90px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(wf.cuerpo||'')+'</textarea>')
       :(emailInSide?'':renderNcaRevisionEmailBlockHtml(expId,e,wf)))+
     '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-top:8px;margin-bottom:4px">Documentos adjuntos</div>'+
     docsHtml+
@@ -37353,7 +37353,7 @@ function openPqrsNotificarOficioModal(expId){
     '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="pqrs-notif-cc" class="sst-email-chips" value="'+escAttr(wf.email_cc||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="pqrs-notif-bcc" class="sst-email-chips" value="'+escAttr(wf.email_bcc||'')+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="pqrs-notif-asunto" value="Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+escAttr(expId)+'"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Mensaje'+(esVitalNcaPlantilla?' <span style="font-weight:400;color:var(--tx3)">(plantilla de oficio firmado)</span>':'')+'</label><textarea spellcheck="true" lang="es" id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoNotif)+'</textarea></div>'+
+    '<div class="fld" style="margin-bottom:8px"><label>Mensaje'+(esVitalNcaPlantilla?' <span style="font-weight:400;color:var(--tx3)">(plantilla de oficio firmado)</span>':'')+'</label><textarea spellcheck="true" id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpoNotif)+'</textarea></div>'+
     '<div style="font-size:11px;color:'+(correoOfiOk?'var(--gn)':'var(--or)')+';margin-bottom:8px">'+    (correoOfiOk
       ?('✅ Correo de '+escAttr(ofiLblEnv)+' conectado'+(correoOfiCon?' ('+escAttr(correoOfiCon)+')':'')+' — el envío saldrá de esa cuenta.')
       :(correoOfiEsp
@@ -37450,7 +37450,7 @@ function pqrsNotifCorreoCamposHtml(e,wf){
     '<div class="fld" style="margin-bottom:8px">'+(typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Mensaje','pqrs-notif-cuerpo')
       :'<label>Mensaje</label>')+
-    '<textarea spellcheck="true" lang="es" id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpo)+'</textarea></div>';
+    '<textarea spellcheck="true" id="pqrs-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(cuerpo)+'</textarea></div>';
 }
 window.pqrsNotifCorreoCamposHtml=pqrsNotifCorreoCamposHtml;
 function initTaskReviewPqrsNotificarSide(expId){
@@ -39240,7 +39240,7 @@ function confirmarEnvioRespuestaEmailPqrs(e,ciudEmail,cuerpo,documentos){
     '<div class="fld" style="margin-bottom:8px"><label>Cco (opcional)</label><input type="text" id="pqrs-mail-bcc" class="sst-email-chips" value="'+escAttr(wf.email_bcc||'')+'" placeholder="oculto@ejemplo.com"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Asunto</label><input type="text" id="pqrs-mail-asunto" value="'+escAttr(wf.email_subject||('Respuesta a su solicitud '+(e._tipo_solicitud||'PQRSD')+' — '+e._exp))+'"></div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></label>'+
-    '<textarea id="pqrs-mail-cuerpo" style="min-height:100px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(cuerpo)+'</textarea></div>'+
+    '<textarea spellcheck="true" id="pqrs-mail-cuerpo" style="min-height:100px;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px">'+escAttr(cuerpo)+'</textarea></div>'+
     '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;margin-bottom:4px">Documentos (se adjuntan al correo + links):</div>'+docsHtml+'</div>'+
     '<div id="pqrs-mail-status" style="font-size:11px;margin-bottom:8px"></div>'+
     '<div class="fx" style="gap:8px;flex-wrap:wrap">'+

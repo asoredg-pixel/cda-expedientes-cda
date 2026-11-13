@@ -223,6 +223,43 @@
     aviso('Texto pulido aplicado. Revise y guarde/envíe cuando corresponda.', 'ok');
   }
 
+  /** Activa el corrector nativo (subrayado rojo). No forzar lang=es: sin diccionario español Chrome no marca nada. */
+  var CORREO_SPELLCHECK_IDS = [
+    'entrega-notif-email-cuerpo', 'rev-ent-email-cuerpo', 'pqrs-entrega-resp-cuerpo',
+    'tramite-notif-cuerpo', 'tramite-atajo-email-cuerpo', 'ofi-doc-cuerpo',
+    'pqrs-compose-body', 'pqrs-resp-cuerpo', 'nca-rev-cuerpo', 'pqrs-notif-cuerpo',
+    'task-rev-notif-cuerpo', 'pqrs-mail-cuerpo'
+  ];
+  function correoActivarSpellcheckNativo(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    CORREO_SPELLCHECK_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.setAttribute('spellcheck', 'true');
+      el.spellcheck = true;
+      if (el.getAttribute('lang') === 'es' || el.getAttribute('lang') === 'es-CO') {
+        el.removeAttribute('lang');
+      }
+    });
+    try {
+      scope.querySelectorAll('textarea[spellcheck="true"]').forEach(function (el) {
+        el.spellcheck = true;
+      });
+    } catch (e) { /* ignore */ }
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('focusin', function (ev) {
+      var t = ev && ev.target;
+      if (!t || !t.id || CORREO_SPELLCHECK_IDS.indexOf(t.id) < 0) return;
+      correoActivarSpellcheckNativo();
+    });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { correoActivarSpellcheckNativo(); });
+    } else {
+      correoActivarSpellcheckNativo();
+    }
+  }
+
   window.htmlCorreoPulirBtn = htmlCorreoPulirBtn;
   window.htmlCorreoPulirLabelRow = htmlCorreoPulirLabelRow;
   window.correoPulirValidarTexto = correoPulirValidarTexto;
@@ -230,6 +267,7 @@
   window.correoPulirCerrar = correoPulirCerrar;
   window.correoPulirUsar = correoPulirUsar;
   window.correoPulirReintentar = correoPulirReintentar;
+  window.correoActivarSpellcheckNativo = correoActivarSpellcheckNativo;
   window.CORREO_PULIR_MAX = CORREO_PULIR_MAX;
   window.CORREO_PULIR_UI_ACTIVO = CORREO_PULIR_UI_ACTIVO;
 })();

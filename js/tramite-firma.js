@@ -340,7 +340,7 @@ function tramiteNotifCorreoCamposHtml(e,t,wf){
     '<div class="fld" style="margin-bottom:8px">'+(typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Mensaje','tramite-notif-cuerpo')
       :'<label>Mensaje</label>')+
-    '<textarea spellcheck="true" lang="es" id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(def.cuerpo)+'</textarea></div>';
+    '<textarea spellcheck="true" id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(def.cuerpo)+'</textarea></div>';
 }
 window.tramiteNotifCorreoPropuesta=tramiteNotifCorreoPropuesta;
 window.tramiteNotifCorreoCamposHtml=tramiteNotifCorreoCamposHtml;
@@ -2312,7 +2312,7 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
     '<div class="fld" style="margin-bottom:8px">'+(typeof htmlCorreoPulirLabelRow==='function'
       ?htmlCorreoPulirLabelRow('Cuerpo del correo','tramite-atajo-email-cuerpo')
       :'<label>Cuerpo del correo</label>')+
-    '<textarea spellcheck="true" lang="es" id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
+    '<textarea spellcheck="true" id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
     '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5;width:100%" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>';
 
   const asignarBlock=
@@ -3560,7 +3560,7 @@ function openEntregaOficinaFirmaModal(){
         '<div class="fld" id="ofi-doc-cuerpo-wrap" style="margin-bottom:10px">'+(typeof htmlCorreoPulirLabelRow==='function'
             ?htmlCorreoPulirLabelRow('Mensaje <span class="req-star">*</span>','ofi-doc-cuerpo','ofi-doc-cuerpo-label')
             :'<label id="ofi-doc-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje <span class="req-star">*</span></label>')+
-          '<textarea spellcheck="true" lang="es" id="ofi-doc-cuerpo" placeholder="Texto del mensaje o cuerpo del correo…" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box"></textarea></div>'+
+          '<textarea spellcheck="true" id="ofi-doc-cuerpo" placeholder="Texto del mensaje o cuerpo del correo…" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box"></textarea></div>'+
         '<div id="ofi-doc-adj-wrap" style="margin-bottom:10px">'+
           '<label style="font-size:11px;font-weight:600;color:var(--tx3)" id="ofi-doc-adj-label">Documentos</label>'+
           '<div class="sst-file-pick-row" style="margin-top:6px">'+

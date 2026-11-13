@@ -56,10 +56,11 @@ describe('correo-pulir', () => {
     expect(typeof c.CORREO_PULIR_UI_ACTIVO).toBe('boolean')
   })
 
-  it('cuerpos de correo llevan spellcheck del navegador', () => {
-    expect(core).toMatch(/<textarea spellcheck="true" lang="es"[^>]*id="nca-rev-cuerpo"/)
-    expect(core).toMatch(/<textarea spellcheck="true" lang="es"[^>]*id="task-rev-notif-cuerpo"/)
-    expect(tf).toMatch(/<textarea spellcheck="true" lang="es"[^>]*id="tramite-notif-cuerpo"/)
+  it('cuerpos de correo llevan spellcheck sin forzar lang=es (Chrome sin diccionario ES no marca)', () => {
+    expect(core).toMatch(/<textarea spellcheck="true"[^>]*id="task-rev-notif-cuerpo"/)
+    expect(core).not.toMatch(/<textarea spellcheck="true" lang="es"[^>]*id="task-rev-notif-cuerpo"/)
+    expect(tf).toMatch(/<textarea spellcheck="true"[^>]*id="tramite-notif-cuerpo"/)
+    expect(pulirSrc).toContain('correoActivarSpellcheckNativo')
   })
 
   it('formularios principales incluyen el enganche (con fallback si no hay helper)', () => {
@@ -77,9 +78,9 @@ describe('correo-pulir', () => {
     expect(tf).toContain("'ofi-doc-cuerpo'")
   })
 
-  it('index carga correo-pulir.js y build 20261113c', () => {
-    expect(indexHtml).toContain('js/correo-pulir.js?v=20261113c')
-    expect(indexHtml).toContain('js/core.js?v=20261113c')
+  it('index carga correo-pulir.js y build 20261113d', () => {
+    expect(indexHtml).toContain('js/correo-pulir.js?v=20261113d')
+    expect(indexHtml).toContain('js/core.js?v=20261113d')
   })
 
   it('Cloud Function: secret, auth y prompt sin inventar hechos', () => {
