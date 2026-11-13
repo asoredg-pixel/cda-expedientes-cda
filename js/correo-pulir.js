@@ -1,10 +1,12 @@
 /**
  * 🪄 Pulir cuerpo de correo (Gemini vía Cloud Function pulirCorreoTexto).
  * Solo cambia el textarea si el usuario elige «Usar texto pulido». No escribe Firestore.
+ * CORREO_PULIR_UI_ACTIVO=false: oculta el botón (p. ej. sin crédito Gemini); el corrector del navegador sigue activo en los textareas.
  */
 (function () {
   'use strict';
 
+  var CORREO_PULIR_UI_ACTIVO = false;
   var CORREO_PULIR_MAX = 8000;
   var _correoPulirCtx = null;
 
@@ -23,6 +25,7 @@
 
   /** HTML del botón junto al label del cuerpo. */
   function htmlCorreoPulirBtn(textareaId) {
+    if (!CORREO_PULIR_UI_ACTIVO) return '';
     var id = String(textareaId || '').trim();
     if (!id) return '';
     return (
@@ -37,6 +40,16 @@
   /** Fila label + botón (el label puede actualizarse sin borrar el botón). */
   function htmlCorreoPulirLabelRow(labelHtml, textareaId, labelId) {
     var lid = labelId ? ' id="' + esc(labelId) + '"' : '';
+    var btn = htmlCorreoPulirBtn(textareaId);
+    if (!btn) {
+      return (
+        '<label' +
+        lid +
+        ' style="font-size:11px;font-weight:600;display:block;margin:0 0 4px">' +
+        labelHtml +
+        '</label>'
+      );
+    }
     return (
       '<div class="correo-pulir-label-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">' +
       '<label' +
@@ -44,7 +57,7 @@
       ' style="font-size:11px;font-weight:600;margin:0">' +
       labelHtml +
       '</label>' +
-      htmlCorreoPulirBtn(textareaId) +
+      btn +
       '</div>'
     );
   }
@@ -156,6 +169,10 @@
   }
 
   function correoPulirAbrir(textareaId) {
+    if (!CORREO_PULIR_UI_ACTIVO) {
+      aviso('Pulir está temporalmente desactivado. Use el corrector del navegador (subrayado rojo).', 'err');
+      return;
+    }
     var id = String(textareaId || '').trim();
     var ta = document.getElementById(id);
     if (!ta) {
@@ -214,4 +231,5 @@
   window.correoPulirUsar = correoPulirUsar;
   window.correoPulirReintentar = correoPulirReintentar;
   window.CORREO_PULIR_MAX = CORREO_PULIR_MAX;
+  window.CORREO_PULIR_UI_ACTIVO = CORREO_PULIR_UI_ACTIVO;
 })();
