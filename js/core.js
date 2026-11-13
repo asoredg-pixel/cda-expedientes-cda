@@ -10259,7 +10259,9 @@ function renderTaskEntregaCorreoEditHtml(expId,taskId,c,opts){
     '<div class="fld" style="margin-bottom:8px"><label>Con copia (Cc) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+inp('rev-ent-email-cc',c.cc,true)+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Con copia oculta (Cco) <span style="font-weight:400;color:var(--tx3)">(opcional)</span></label>'+inp('rev-ent-email-bcc',c.bcc,true)+'</div>'+
     '<div class="fld" style="margin-bottom:8px"><label>Asunto</label>'+inp('rev-ent-email-subject',c.asunto,false)+'</div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Cuerpo del correo <span style="font-weight:400">(editable)</span></div>'+
+    (typeof htmlCorreoPulirLabelRow==='function'
+      ?htmlCorreoPulirLabelRow('Cuerpo del correo <span style="font-weight:400">(editable)</span>','rev-ent-email-cuerpo')
+      :'<div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:4px">Cuerpo del correo <span style="font-weight:400">(editable)</span></div>')+
     '<textarea id="rev-ent-email-cuerpo" data-orig="'+escAttr(c.cuerpo)+'" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(c.cuerpo)+'</textarea>'+
     '<button type="button" class="btn bsm" style="width:100%;margin-top:8px" onclick="taskEntregaCorreoGuardar(\''+eid+'\',\''+tid+'\')">💾 Guardar cambios del correo</button>'+
     '</div>';
@@ -12882,7 +12884,9 @@ function renderPqrsEntregaCamposHtml(e,opts){
     '<div class="fld" style="margin-bottom:6px"><label>Asunto (referencia)</label>'+
     '<input type="text" id="pqrs-entrega-email-subject" value="'+escAttr(wfVis.email_subject||asuntoMail)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
     '</div>';
-  h+='<div class="fld" id="pqrs-entrega-cuerpo-wrap"><label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>'+
+  h+='<div class="fld" id="pqrs-entrega-cuerpo-wrap">'+(typeof htmlCorreoPulirLabelRow==='function'
+      ?htmlCorreoPulirLabelRow('Mensaje / plantilla <span class="req-star">*</span>','pqrs-entrega-resp-cuerpo','pqrs-entrega-cuerpo-label')
+      :'<label id="pqrs-entrega-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje / plantilla <span class="req-star">*</span></label>')+
     '<textarea id="pqrs-entrega-resp-cuerpo" placeholder="Plantilla de respuesta…" style="min-height:180px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box">'+escAttr(entregaAjena?'':(wf.cuerpo||e._pqrs_respuesta_nota||''))+'</textarea>'+
     '</div>';
   // Adjunto estilo oficinas (oculto para informativa)
@@ -20259,7 +20263,9 @@ function htmlEntregaNotifCorreoCheck(opts){
       '<input type="text" id="entrega-notif-email-bcc" class="sst-email-chips" placeholder="oculto@ejemplo.com" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
       '<div class="fld" style="margin-bottom:8px"><label>Asunto</label>'+
       '<input type="text" id="entrega-notif-email-subject" value="'+escAttr(asunto)+'" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
-      '<div class="fld" style="margin-bottom:0"><label>Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></label>'+
+      '<div class="fld" style="margin-bottom:0">'+(typeof htmlCorreoPulirLabelRow==='function'
+        ?htmlCorreoPulirLabelRow('Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span>','entrega-notif-email-cuerpo')
+        :'<div style="font-size:11px;font-weight:600;margin-bottom:4px">Cuerpo del correo <span style="font-weight:400;color:var(--tx3)">(editable)</span></div>')+
       '<textarea id="entrega-notif-email-cuerpo" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
     '</div></div>';
 }

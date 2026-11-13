@@ -337,7 +337,10 @@ function tramiteNotifCorreoCamposHtml(e,t,wf){
     '<div class="fld" style="margin-bottom:6px"><label>Cc (opcional)</label><input type="text" id="tramite-notif-cc" class="sst-email-chips" value="'+escAttr(String(wf.email_cc||'').trim())+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Cco (opcional)</label><input type="text" id="tramite-notif-bcc" class="sst-email-chips" value="'+escAttr(String(wf.email_bcc||'').trim())+'"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label><input type="text" id="tramite-notif-asunto" value="'+escAttr(def.asunto)+'"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Mensaje</label><textarea id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(def.cuerpo)+'</textarea></div>';
+    '<div class="fld" style="margin-bottom:8px">'+(typeof htmlCorreoPulirLabelRow==='function'
+      ?htmlCorreoPulirLabelRow('Mensaje','tramite-notif-cuerpo')
+      :'<label>Mensaje</label>')+
+    '<textarea id="tramite-notif-cuerpo" style="min-height:100px;width:100%;padding:6px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px">'+escAttr(def.cuerpo)+'</textarea></div>';
 }
 window.tramiteNotifCorreoPropuesta=tramiteNotifCorreoPropuesta;
 window.tramiteNotifCorreoCamposHtml=tramiteNotifCorreoCamposHtml;
@@ -2306,7 +2309,9 @@ function renderTaskReviewAtajoFirmadoHtml(expId,taskId,t,opts){
     '<input type="text" id="tramite-atajo-email-bcc" class="sst-email-chips" value="'+escAttr(emailBcc)+'" style="width:100%;box-sizing:border-box"></div>'+
     '<div class="fld" style="margin-bottom:6px"><label>Asunto</label>'+
     '<input type="text" id="tramite-atajo-email-subject" value="'+escAttr(asuntoDef)+'" style="width:100%;box-sizing:border-box"></div>'+
-    '<div class="fld" style="margin-bottom:8px"><label>Cuerpo del correo</label>'+
+    '<div class="fld" style="margin-bottom:8px">'+(typeof htmlCorreoPulirLabelRow==='function'
+      ?htmlCorreoPulirLabelRow('Cuerpo del correo','tramite-atajo-email-cuerpo')
+      :'<label>Cuerpo del correo</label>')+
     '<textarea id="tramite-atajo-email-cuerpo" style="min-height:110px;width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:12px;box-sizing:border-box;font-family:\'DM Sans\',sans-serif;white-space:pre-wrap">'+escAttr(cuerpo)+'</textarea></div>'+
     '<button type="button" class="btn bsm bp" id="tramite-atajo-firmado-btn" style="background:#185fa5;border-color:#185fa5;width:100%" onclick="'+confNotif+'">📬 Cargar y notificar ahora</button>';
 
@@ -3552,7 +3557,9 @@ function openEntregaOficinaFirmaModal(){
           '<div class="fld" style="margin-bottom:8px"><label>Asunto del correo <span class="req-star">*</span></label>'+
             '<input type="text" id="ofi-doc-email-subject" placeholder="Asunto que verá el destinatario" style="width:100%;box-sizing:border-box;margin-top:4px"></div>'+
         '</div>'+
-        '<div class="fld" id="ofi-doc-cuerpo-wrap" style="margin-bottom:10px"><label id="ofi-doc-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje <span class="req-star">*</span></label>'+
+        '<div class="fld" id="ofi-doc-cuerpo-wrap" style="margin-bottom:10px">'+(typeof htmlCorreoPulirLabelRow==='function'
+            ?htmlCorreoPulirLabelRow('Mensaje <span class="req-star">*</span>','ofi-doc-cuerpo','ofi-doc-cuerpo-label')
+            :'<label id="ofi-doc-cuerpo-label" style="font-size:11px;font-weight:600">Mensaje <span class="req-star">*</span></label>')+
           '<textarea id="ofi-doc-cuerpo" placeholder="Texto del mensaje o cuerpo del correo…" style="min-height:140px;padding:8px;border:1px solid var(--bd);border-radius:var(--r);font-size:13px;font-family:\'DM Sans\',sans-serif;width:100%;margin-top:4px;line-height:1.45;box-sizing:border-box"></textarea></div>'+
         '<div id="ofi-doc-adj-wrap" style="margin-bottom:10px">'+
           '<label style="font-size:11px;font-weight:600;color:var(--tx3)" id="ofi-doc-adj-label">Documentos</label>'+

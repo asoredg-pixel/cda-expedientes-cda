@@ -1,0 +1,13 @@
+{
+  "name": "cda-expedientes-functions",
+  "description": "Cloud Functions SST CDA (pulir correo)",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.0"
+  }
+}

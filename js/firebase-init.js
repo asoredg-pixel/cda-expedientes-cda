@@ -11,6 +11,7 @@ const firebaseConfig={
 import{initializeApp,onLog}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{getFirestore,doc,getDoc,setDoc,updateDoc,addDoc,onSnapshot,getDocs,collection,collectionGroup,query,where,orderBy,limit,deleteDoc,deleteField,arrayUnion,arrayRemove,runTransaction,increment}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signInWithCredential,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import{getFunctions,httpsCallable}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js';
 const app=initializeApp(firebaseConfig);
 // Con la cuota diaria agotada, Firestore solo lo informa en su registro: las escrituras quedan en espera.
 onLog(function(e){
@@ -368,6 +369,8 @@ const db=getFirestore(app);
 const auth=getAuth(app);
 window._db=db;
 window._firebaseAuth=auth;
+window._firebaseFunctions=getFunctions(app,'us-central1');
+window._httpsCallable=httpsCallable;
 window._fsDoc=doc;
 window._fsGetDoc=function(ref){
   const modulo=fsDiagModulo();
