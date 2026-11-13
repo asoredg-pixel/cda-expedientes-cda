@@ -58,14 +58,19 @@ describe('correo-pulir', () => {
     expect(core).toContain("'entrega-notif-email-cuerpo'")
     expect(core).toContain("'rev-ent-email-cuerpo'")
     expect(core).toContain("'pqrs-entrega-resp-cuerpo'")
+    expect(core).toContain("'pqrs-compose-body'")
+    expect(core).toContain("'pqrs-resp-cuerpo'")
+    expect(core).toContain("'nca-rev-cuerpo'")
+    expect(core).toContain("'pqrs-notif-cuerpo'")
+    expect(core).toContain("'task-rev-notif-cuerpo'")
     expect(tf).toContain("'tramite-notif-cuerpo'")
     expect(tf).toContain("'tramite-atajo-email-cuerpo'")
     expect(tf).toContain("'ofi-doc-cuerpo'")
   })
 
-  it('index carga correo-pulir.js y build 20261113a', () => {
-    expect(indexHtml).toContain('js/correo-pulir.js?v=20261113a')
-    expect(indexHtml).toContain('js/firebase-init.js?v=20261113a')
+  it('index carga correo-pulir.js y build 20261113b', () => {
+    expect(indexHtml).toContain('js/correo-pulir.js?v=20261113b')
+    expect(indexHtml).toContain('js/core.js?v=20261113b')
   })
 
   it('Cloud Function: secret, auth y prompt sin inventar hechos', () => {
