@@ -3050,6 +3050,17 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
     if(!rem){put(t);return;}
     if(t.eliminada&&!rem.eliminada){put(t);return;}
     if(rem.eliminada&&!t.eliminada)return;
+    // Revisión par cerrada (cancelada / entrega retirada): no dejar que un eco
+    // con solicitud/corrección abierta resuscite Por revisar + Por ejecutar.
+    const cerradaFn=typeof taskRevisionParCerradaPorRetiro==='function'
+      ?taskRevisionParCerradaPorRetiro
+      :(typeof window!=='undefined'&&window.taskRevisionParCerradaPorRetiro);
+    if(typeof cerradaFn==='function'){
+      const localCerrada=!!cerradaFn(t);
+      const remCerrada=!!cerradaFn(rem);
+      if(localCerrada&&!remCerrada){put(t);return;}
+      if(remCerrada&&!localCerrada){put(rem);return;}
+    }
     const lf=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
     const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();
     const lr=faseFlujoFirmaRank(lf);

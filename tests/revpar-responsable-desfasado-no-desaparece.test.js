@@ -68,6 +68,8 @@ function ctxBase() {
     normalizeTask: x => x
   })
   runInContext(extraer(core, [
+    'taskRevisionParCerradaPorRetiro',
+    'taskRevisionParMarcarCancelada',
     'taskRevisionParCtx',
     'taskRevisionParNombresDesdeHistorial',
     'repararRevisionParResponsableSiDesfasado',

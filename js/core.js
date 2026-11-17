@@ -21364,11 +21364,13 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     return true;
   }
 
-  // Autoentrega sobre expediente/PQRSD: quitar solo la actividad de entrega;
-  // conservar el registro (interesado, radicación, alta pendiente, etc.).
+  // Autoentrega sobre expediente/PQRSD: soft-delete de la actividad de entrega
+  // (no hard-remove). Si se quita del array, un eco Firestore resuscita la tarea
+  // y la revisión par vuelve a Por revisar (técnico) / Por ejecutar (profesional).
   if(esAuto&&e){
     const tid=String(taskId||t.id||'').trim();
-    // Otras entregas pendientes en el mismo expediente/PQRSD (antes de quitar esta)
+    const cuando=new Date().toISOString();
+    const porAuto=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
     const otrasPendList=(e.tasks||[]).filter(function(x){
       if(!x||x.eliminada||String(x.id||'')===tid)return false;
       const estO=typeof estadoTask==='function'?estadoTask(x):'';
@@ -21376,7 +21378,6 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       return typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(x);
     });
     const otraPend=otrasPendList[0]||null;
-    // Solo resetear workflow PQRSD si no quedan otras entregas pendientes de revisión
     if(!otraPend&&typeof limpiarRespuestaEntregaConservandoAlta==='function')
       limpiarRespuestaEntregaConservandoAlta(e);
     else if(otraPend&&esPqrs&&typeof getPqrsWorkflow==='function'&&typeof setPqrsWorkflow==='function'){
@@ -21389,13 +21390,61 @@ async function eliminarEntregaActividad(expId,taskId,opts){
         setPqrsWorkflow(e,patch);
       }
     }
-    e.tasks=Array.isArray(e.tasks)?e.tasks.filter(function(x){return !x||String(x.id||'')!==tid;}):[];
+    const ctxRevAuto=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,e)
+      :(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(t):null);
+    let marcada=false;
+    e.tasks=(Array.isArray(e.tasks)?e.tasks:[]).map(function(x){
+      if(!x||String(x.id||'')!==tid)return x;
+      marcada=true;
+      const row=Object.assign({},x);
+      row.eliminada=true;
+      row.eliminadaEn=cuando;
+      row.eliminadaPor=porAuto;
+      row.eliminadaMotivo='Autoentrega cancelada — se conserva el '+(esPqrs?'PQRSD':'expediente');
+      row.estado='En ejecución';
+      row.fechaReportada='';
+      row.fechaAtendida='';
+      row.soportes=[];
+      row.notasDoc=[];
+      row.comentarios=[];
+      row.ultimaRevisionDepto=null;
+      row._pending_fs_sync=true;
+      row._pending_fs_at=Date.now();
+      if(!Array.isArray(row.historial))row.historial=[];
+      if(ctxRevAuto&&typeof taskRevisionParMarcarCancelada==='function')
+        taskRevisionParMarcarCancelada(row,ctxRevAuto,'Entrega retirada — revisión par cerrada');
+      else if(ctxRevAuto){
+        row.historial.push({
+          tipo:'traslado',fecha:hoy(),ts:Date.now(),
+          de:ctxRevAuto.tecnico||porAuto,a:ctxRevAuto.tecnico||porAuto,
+          por:porAuto,revisionPar:'cancelada',
+          nota:'Entrega retirada — revisión par cerrada'
+        });
+      }
+      row.historial.push({
+        tipo:'eliminacion',fecha:hoy(),ts:Date.now(),por:porAuto,
+        nota:row.eliminadaMotivo,papelera:true,autoentrega:true
+      });
+      return row;
+    });
+    if(!marcada){
+      const row=Object.assign({},t,{
+        eliminada:true,eliminadaEn:cuando,eliminadaPor:porAuto,
+        eliminadaMotivo:'Autoentrega cancelada',estado:'En ejecución',
+        fechaReportada:'',fechaAtendida:'',soportes:[],_pending_fs_sync:true
+      });
+      if(!Array.isArray(row.historial))row.historial=[];
+      if(ctxRevAuto&&typeof taskRevisionParMarcarCancelada==='function')
+        taskRevisionParMarcarCancelada(row,ctxRevAuto,'Entrega retirada — revisión par cerrada');
+      row.historial.push({tipo:'eliminacion',fecha:hoy(),ts:Date.now(),por:porAuto,nota:row.eliminadaMotivo,papelera:true,autoentrega:true});
+      e.tasks.push(row);
+    }
     if(!Array.isArray(e.historial))e.historial=[];
     e.historial.push({
       estado:e._estado||'En trámite',
       fecha:hoy(),
       nota:'Autoentrega cancelada — se conservó el '+(esPqrs?'PQRSD':'expediente')+' y se liberaron documentos/N° de la entrega',
-      por:typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'')
+      por:porAuto
     });
     if(esPqrs){
       if(!Array.isArray(e._pqrs_historial))e._pqrs_historial=[];
@@ -21406,7 +21455,6 @@ async function eliminarEntregaActividad(expId,taskId,opts){
         oficina:e._pqrs_oficina||'guaviare',
         por:responsableActivo||''
       });
-      // Mantener al creador/asignado como responsable de oficina para que siga viendo la PQRSD en Actividades
       const porAlta=String(
         e._alta_por
         ||(t.responsables&&t.responsables[0])
@@ -21419,7 +21467,6 @@ async function eliminarEntregaActividad(expId,taskId,opts){
         e._pqrs_estado_oficina='asignado';
       }
     }
-    // Asegurar que el alta por responsable siga pendiente de revisión si aplica
     if(e._alta_por_responsable&&e._alta_revisada_en==null){
       if(e._pendiente_revision_alta!==false)e._pendiente_revision_alta=true;
     }
@@ -21499,6 +21546,8 @@ async function eliminarEntregaActividad(expId,taskId,opts){
       });
       return;
     }
+    const ctxRevMut=revParTec||(typeof taskRevisionParCtx==='function'?taskRevisionParCtx(tk,e):null)
+      ||(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(tk):null);
     if(revParTec){
       tk.responsable=revParTec.tecnico;
       tk.responsables=[revParTec.tecnico];
@@ -21510,6 +21559,9 @@ async function eliminarEntregaActividad(expId,taskId,opts){
     if(tk.fechaReportada)tk.fechaReportada='';
     if(tk.fechaAtendida)tk.fechaAtendida='';
     if(tk.estado==='Por verificar'||tk.estado==='Por corregir'||tk.estado==='Atendida')tk.estado='En ejecución';
+    // Cerrar revisión par para que no reaparezca en Por revisar / Por ejecutar tras un eco
+    if(ctxRevMut&&typeof taskRevisionParMarcarCancelada==='function')
+      taskRevisionParMarcarCancelada(tk,ctxRevMut,'Entrega retirada — revisión par cerrada');
     tk.historial.push({
       tipo:'eliminar_entrega',
       fecha:hoy(),
@@ -25583,15 +25635,62 @@ function trasladarTaskExp(expId,taskId,nuevoResp,opts){
  * El profesional puede devolver al técnico (Por corregir) y la corrección vuelve al profesional (Por ejecutar)
  * sin pasar por el encargado. Se deduce del último traslado del historial.
  */
+/** true si la entrega se retiró y la revisión par ya no debe listarse (Por revisar / Por ejecutar). */
+function taskRevisionParCerradaPorRetiro(t){
+  if(!t)return true;
+  if(t.eliminada)return true;
+  const h=t.historial||[];
+  for(let i=h.length-1;i>=0;i--){
+    const x=h[i];
+    if(!x)continue;
+    if(x.tipo==='traslado'&&x.revisionPar==='cancelada')return true;
+    if(x.tipo==='revpar_cancelada')return true;
+    if(x.tipo==='eliminar_entrega'||x.tipo==='eliminacion'){
+      for(let j=i-1;j>=0;j--){
+        const tr=h[j];
+        if(tr&&tr.tipo==='traslado'&&tr.revisionPar
+          &&tr.revisionPar!=='cancelada')return true;
+      }
+      return false;
+    }
+    if(x.tipo==='traslado'&&x.revisionPar&&x.revisionPar!=='cancelada')return false;
+  }
+  return false;
+}
+window.taskRevisionParCerradaPorRetiro=taskRevisionParCerradaPorRetiro;
+/** Cierra el ciclo de revisión par en el historial (tras retirar/eliminar la entrega). */
+function taskRevisionParMarcarCancelada(tk,ctx,nota){
+  if(!tk)return;
+  if(!Array.isArray(tk.historial))tk.historial=[];
+  const tec=String((ctx&&ctx.tecnico)||tk.responsable||'').trim();
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  tk.historial.push({
+    tipo:'traslado',
+    fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
+    ts:Date.now(),
+    de:tec||por,
+    a:tec||por,
+    por:por,
+    revisionPar:'cancelada',
+    nota:nota||'Entrega retirada — revisión par cerrada'
+  });
+}
+window.taskRevisionParMarcarCancelada=taskRevisionParMarcarCancelada;
 function taskRevisionParCtx(t,e){
   if(!t||t.eliminada||taskEsMultiAsignada(t))return null;
+  if(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t))return null;
   if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return null;
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return null;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return null;
   const h=t.historial||[];
   let i=h.length-1;
-  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'))i--;
+  while(i>=0&&!(h[i]&&h[i].tipo==='traslado'&&h[i].revisionPar!=='cancelada'))i--;
   if(i<0)return null;
+  // Tras retirar la entrega (eliminar_entrega) el ciclo queda cerrado aunque quede un traslado viejo
+  if(h.slice(i+1).some(function(x){
+    return x&&(x.tipo==='eliminar_entrega'||x.tipo==='eliminacion'
+      ||x.tipo==='revpar_cancelada'||(x.tipo==='traslado'&&x.revisionPar==='cancelada'));
+  }))return null;
   const tr=h[i];
   const de=String(tr.de||'').trim(),a=String(tr.a||'').trim();
   if(!de||!a||agendaNorm(de)===agendaNorm(a))return null;
@@ -25608,10 +25707,12 @@ function taskRevisionParCtx(t,e){
 /** Nombres técnico/profesional del último traslado de revisión par (para marcas Blaze). */
 function taskRevisionParNombresDesdeHistorial(t){
   if(!t||t.eliminada)return null;
+  if(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t))return null;
   const h=t.historial||[];
   for(let i=h.length-1;i>=0;i--){
     const tr=h[i];
     if(!tr||tr.tipo!=='traslado'||!tr.revisionPar)continue;
+    if(tr.revisionPar==='cancelada')return null;
     const de=String(tr.de||'').trim(),a=String(tr.a||'').trim();
     if(!de||!a)continue;
     if(tr.revisionPar==='solicitud'||tr.revisionPar==='correccion')
@@ -25627,6 +25728,7 @@ function taskRevisionParNombresDesdeHistorial(t){
  */
 function repararRevisionParResponsableSiDesfasado(t){
   if(!t||t.eliminada)return false;
+  if(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t))return false;
   if(typeof estadoTask==='function'&&estadoTask(t)==='Atendida')return false;
   const ctx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,null)
     :(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(t):null);
