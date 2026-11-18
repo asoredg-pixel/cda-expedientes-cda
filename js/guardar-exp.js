@@ -5,6 +5,24 @@
 // =============================================================================
 // GUARDAR EXPEDIENTE
 // ================================================================
+/** Avance de una tarea: el save del formulario no debe retroceder cierre/firma/aprobación. */
+function taskFormSaveAvanceRank(t){
+  if(!t)return 0;
+  if(t.eliminada)return 40;
+  const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
+  if(f&&typeof faseFlujoFirmaRank==='function'){
+    const r=faseFlujoFirmaRank(f);
+    if(r>0)return 20+r;
+  }else if(f)return 22;
+  if(String(t.estado||'')==='Atendida'||!!String(t.fechaAtendida||'').trim())return 18;
+  if(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida)return 17;
+  if(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='aprobada')return 17;
+  if(String(t.estado||'')==='Por corregir'
+    ||(t.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';}))return 8;
+  if(String(t.estado||'')==='Por verificar'||!!String(t.fechaReportada||'').trim())return 5;
+  return 1;
+}
+window.taskFormSaveAvanceRank=taskFormSaveAvanceRank;
 function mergeTasksForSave(formTasks,prevTasks){
   const prevList=(prevTasks||[]).map(normalizeTask).filter(Boolean);
   const prevMap={};
@@ -36,6 +54,33 @@ function mergeTasksForSave(formTasks,prevTasks){
     if(ft&&ft.id)formIds.add(String(ft.id));
     const p=p0||(ft&&ft.id?prevMap[String(ft.id)]:null);
     if(!p)return ft;
+    // Rail ✏️ (editar+asignar) deja el form con «Por verificar»; si el encargado ya aprobó,
+    // un Guardar sección pisaba Atendida y la actividad volvía a Por revisar (concepto vía profesional).
+    if(taskFormSaveAvanceRank(p)>taskFormSaveAvanceRank(ft)){
+      return normalizeTask({
+        ...ft,...p,
+        responsables:(ft.responsables&&ft.responsables.length)?ft.responsables:(p.responsables||[]),
+        asignados:(p.asignados&&p.asignados.length)?p.asignados:(ft.asignados||[]),
+        entregaModo:p.entregaModo||ft.entregaModo||'individual',
+        comentarios:(p.comentarios&&p.comentarios.length)>=(ft.comentarios&&ft.comentarios.length||0)?(p.comentarios||[]):(ft.comentarios||p.comentarios||[]),
+        historial:(p.historial&&p.historial.length)>=(ft.historial&&ft.historial.length||0)?(p.historial||[]):(ft.historial||p.historial||[]),
+        soportes:(p.soportes&&p.soportes.length)?p.soportes:(ft.soportes||[]),
+        notasDoc:(p.notasDoc&&p.notasDoc.length)?p.notasDoc:(ft.notasDoc||[]),
+        fechaReportada:p.fechaReportada||ft.fechaReportada,
+        fechaAtendida:p.fechaAtendida||ft.fechaAtendida,
+        estado:p.estado||ft.estado,
+        verificadoPor:p.verificadoPor||ft.verificadoPor,
+        autoAsignadaPorResponsable:!!(p.autoAsignadaPorResponsable||ft.autoAsignadaPorResponsable),
+        origen:p.origen||ft.origen||'',
+        ultimaRevisionDepto:p.ultimaRevisionDepto||ft.ultimaRevisionDepto||null,
+        requiereFirma:p.requiereFirma!=null?p.requiereFirma:ft.requiereFirma,
+        firmaWf:p.firmaWf||ft.firmaWf||null,
+        _firma_proyeccion_atendida:!!(p._firma_proyeccion_atendida||ft._firma_proyeccion_atendida),
+        _pqrs_proyeccion_atendida:!!(p._pqrs_proyeccion_atendida||ft._pqrs_proyeccion_atendida),
+        publicado:p.publicado!=null?p.publicado:ft.publicado,
+        bibliotecaRepoIds:(p.bibliotecaRepoIds&&p.bibliotecaRepoIds.length)?p.bibliotecaRepoIds:(ft.bibliotecaRepoIds||[])
+      });
+    }
     return normalizeTask({
       ...p,...ft,
       responsables:(ft.responsables&&ft.responsables.length)?ft.responsables:(p.responsables||[]),
@@ -46,12 +91,15 @@ function mergeTasksForSave(formTasks,prevTasks){
       soportes:(ft.soportes&&ft.soportes.length)?ft.soportes:(p.soportes||[]),
       notasDoc:(ft.notasDoc&&ft.notasDoc.length)?ft.notasDoc:(p.notasDoc||[]),
       fechaReportada:p.fechaReportada||ft.fechaReportada,
+      fechaAtendida:p.fechaAtendida||ft.fechaAtendida,
       verificadoPor:p.verificadoPor||ft.verificadoPor,
       autoAsignadaPorResponsable:!!(ft.autoAsignadaPorResponsable||p.autoAsignadaPorResponsable),
       origen:ft.origen||p.origen||'',
       ultimaRevisionDepto:ft.ultimaRevisionDepto||p.ultimaRevisionDepto||null,
       requiereFirma:ft.requiereFirma!=null?ft.requiereFirma:p.requiereFirma,
       firmaWf:ft.firmaWf||p.firmaWf||null,
+      _firma_proyeccion_atendida:!!(ft._firma_proyeccion_atendida||p._firma_proyeccion_atendida),
+      _pqrs_proyeccion_atendida:!!(ft._pqrs_proyeccion_atendida||p._pqrs_proyeccion_atendida),
       publicado:ft.publicado!=null?ft.publicado:p.publicado,
       bibliotecaRepoIds:(ft.bibliotecaRepoIds&&ft.bibliotecaRepoIds.length)?ft.bibliotecaRepoIds:(p.bibliotecaRepoIds||[])
     });
@@ -59,11 +107,12 @@ function mergeTasksForSave(formTasks,prevTasks){
   prevList.forEach(p=>{
     if(!p.id||formIds.has(String(p.id)))return;
     // Conservar eliminadas y entregas autoasignadas por responsable que aún no están en el formulario abierto
-    if(p.eliminada||p.autoAsignadaPorResponsable||p.origen==='responsable'||p.fechaReportada||(p.soportes&&p.soportes.length))
+    if(p.eliminada||p.autoAsignadaPorResponsable||p.origen==='responsable'||p.fechaReportada||(p.soportes&&p.soportes.length)||String(p.estado||'')==='Atendida'||String(p.fechaAtendida||'').trim())
       merged.push(p);
   });
   return merged;
 }
+window.mergeTasksForSave=mergeTasksForSave;
 /** En una PQRSD el responsable solo actualiza facturas y pago; el radicado no se reescribe. */
 function aplicarContableSobreExpediente(prev,data){
   if(!prev||!data)return prev;
@@ -109,15 +158,28 @@ function getTasksSafe(prevTasks){
   if(!form.length&&prev.length&&(!cont||!cont.querySelector('.tkr-wrap')))return prev;
   return form;
 }
-function getFormRootSel(){return window._conPanelEditMode?'#con-side-form-wrap':'#form-area';}
-function getFormRootId(){return window._conPanelEditMode?'con-side-form-wrap':'form-area';}
+function getTaskReviewFormRoot(){
+  const w=document.getElementById('task-review-form-wrap');
+  return (w&&w.querySelector('.tk-cont'))?w:null;
+}
+function getFormRootSel(){
+  if(getTaskReviewFormRoot())return'#task-review-form-wrap';
+  return window._conPanelEditMode?'#con-side-form-wrap':'#form-area';
+}
+function getFormRootId(){
+  if(getTaskReviewFormRoot())return'task-review-form-wrap';
+  return window._conPanelEditMode?'con-side-form-wrap':'form-area';
+}
 function getTkCont(){
   const root=document.querySelector(getFormRootSel());
   if(root){
     const c=root.querySelector('.tk-cont');
     if(c)return c;
   }
-  return document.querySelector('#con-side-form-wrap .tk-cont')||document.querySelector('#form-area .tk-cont')||document.querySelector('.tk-cont');
+  return document.querySelector('#task-review-form-wrap .tk-cont')
+    ||document.querySelector('#con-side-form-wrap .tk-cont')
+    ||document.querySelector('#form-area .tk-cont')
+    ||document.querySelector('.tk-cont');
 }
 function forEachActiveTkRow(fn){
   const cont=getTkCont();
@@ -127,6 +189,8 @@ function forEachActiveTkRow(fn){
 function isFormExpVisible(expId){
   if(!expId)return false;
   if(editId===expId)return true;
+  const ctx=window._taskModalCtx;
+  if(getTaskReviewFormRoot()&&ctx&&String(ctx.expId||'')===String(expId))return true;
   return !!(window._conPanelEditMode&&window._conPanelActive===expId&&document.getElementById('con-side-panel')&&document.getElementById('con-side-panel').classList.contains('on'));
 }
 function syncTkRowsFromExp(expId,taskId){

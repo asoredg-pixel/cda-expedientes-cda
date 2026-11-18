@@ -25172,6 +25172,10 @@ function verificarTaskExp(expId,taskId,fecha,opts){
       });
     }
     const fechaC=fecha||hoy();
+    // Capturar revisión par ANTES de marcar Atendida (ctx se anula al cerrar).
+    const eRevPre=typeof getExpById==='function'?getExpById(expId):null;
+    const ctxRevPre=(typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,eRevPre):null)
+      ||(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(t):null);
     // Cierre real: si quedó en Por firmar / Para firma, sale de esa paleta (sin «X Imprimir»).
     if((typeof taskFirmaEnPorFirmar==='function'&&taskFirmaEnPorFirmar(t))
       ||(typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t))){
@@ -25204,6 +25208,12 @@ function verificarTaskExp(expId,taskId,fecha,opts){
     t.verificadoPor=taskComentarioAutor()+' · '+new Date().toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit'});
     t.ultimaRevisionDepto={tipo:'aprobada',fecha:fechaC,ts:Date.now(),por:taskComentarioAutor(),nota:opts.notificada?(repPend?('Aprobada y notificada — '+repPend):'Aprobada y notificada'):(repPend?('Aprobada — '+repPend):'Actividad aprobada y cerrada'),notificada:!!opts.notificada};
     t.historial.push({tipo:'verificacion',fecha:fechaC,ts:Date.now(),por:taskComentarioAutor(),nota:opts.notificada?(repPend?('Notificada — entrega de '+repPend):'Notificada al interesado'):(repPend?('Aprobada entrega de '+repPend):'Actividad aprobada y cerrada'),reportadoPor:repPend||''});
+    // Concepto vía profesional: cerrar revisión par para que un heal/eco no la reabra en Por revisar.
+    try{
+      if(ctxRevPre&&typeof taskRevisionParMarcarCancelada==='function'
+        &&!(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t)))
+        taskRevisionParMarcarCancelada(t,ctxRevPre,'Aprobada y cerrada — revisión par cerrada');
+    }catch(errRev){}
     if(typeof limpiarAnexosTrasladoEntrega==='function')limpiarAnexosTrasladoEntrega(typeof getExpById==='function'?getExpById(expId):null,t);
   })){
       if(trashIds.length&&typeof driveDeleteInstitutional==='function'){
@@ -25247,6 +25257,8 @@ function verificarTaskExp(expId,taskId,fecha,opts){
           if(e){setCfgPtr(e._depto||getDeptoOperativo());renderFormulario(e._tramite,e,'con-side-form-wrap');}
         }
       }
+      // Si el rail ✏️ sigue abierto, alinear filas con Atendida (evita Guardar → Por verificar).
+      try{if(typeof isFormExpVisible==='function'&&isFormExpVisible(expId)&&typeof syncTkRowsFromExp==='function')syncTkRowsFromExp(expId,taskId);}catch(errSync){}
     }else hideProg();
   };
   (async function(){
@@ -25692,6 +25704,9 @@ window.taskRevisionParMarcarCancelada=taskRevisionParMarcarCancelada;
 function taskRevisionParCtx(t,e){
   if(!t||t.eliminada||taskEsMultiAsignada(t))return null;
   if(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t))return null;
+  // Ya aprobada/cerrada: no mantener ciclo de revisión par vivo
+  if(String(t.estado||'')==='Atendida'||!!String(t.fechaAtendida||'').trim())return null;
+  if(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='aprobada')return null;
   if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e))return null;
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t))return null;
   if(typeof taskEnFlujoFirmaTramite==='function'&&taskEnFlujoFirmaTramite(t))return null;
