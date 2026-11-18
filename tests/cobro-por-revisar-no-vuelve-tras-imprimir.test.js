@@ -28,6 +28,49 @@ function extraer(src, nombres) {
 }
 
 describe('Cobro persuasivo: no vuelve a Por revisar tras imprimir', () => {
+  it('merge SAN-00052: tras corregir→reentregar→imprimir, eco con ajuste_soporte no quita por_firmar', () => {
+    const c = createContext({
+      window: {}, JSON, String, Object, Array,
+      normalizeTask: x => Object.assign({}, x)
+    })
+    runInContext(extraer(persistence, [
+      'faseFlujoFirmaRank', 'taskRemotoDevueltoACorregir', 'mergeExpedienteTasksLocalRemote'
+    ]), c)
+    const local = [{
+      id: 'san52',
+      actividad: 'Sancionatorio',
+      estado: 'En ejecución',
+      _firma_proyeccion_atendida: true,
+      ultimaRevisionDepto: { tipo: 'aprobada', fecha: '2026-11-18' },
+      firmaWf: { fase: 'por_firmar', enviado_firma_en: '2026-11-18T20:00:00.000Z' },
+      historial: [
+        { tipo: 'entrega', ts: 1 },
+        { tipo: 'ajuste_soporte', ts: 2 },
+        { tipo: 'entrega', ts: 3 },
+        { tipo: 'enviar_firma', ts: 4 }
+      ]
+    }]
+    // Eco de otro cliente / snapshot previo: aún Por verificar, con rastro de corrección
+    const remoteEco = [{
+      id: 'san52',
+      actividad: 'Sancionatorio',
+      estado: 'Por verificar',
+      fechaReportada: '2026-11-18',
+      firmaWf: { fase: '' },
+      ultimaRevisionDepto: { tipo: 'corregir', fecha: '2026-11-17' },
+      historial: [
+        { tipo: 'entrega', ts: 1 },
+        { tipo: 'ajuste_soporte', ts: 2 },
+        { tipo: 'devolver_desde_firma', ts: 2.5 },
+        { tipo: 'entrega', ts: 3 }
+      ]
+    }]
+    expect(c.taskRemotoDevueltoACorregir(remoteEco[0])).toBe(false)
+    const merged = c.mergeExpedienteTasksLocalRemote(local, remoteEco)
+    expect(merged[0].firmaWf.fase).toBe('por_firmar')
+    expect(merged[0]._firma_proyeccion_atendida).toBe(true)
+  })
+
   it('merge: por_firmar local gana frente a eco Por verificar sin firmaWf', () => {
     const c = createContext({
       window: {}, JSON, String, Object, Array,

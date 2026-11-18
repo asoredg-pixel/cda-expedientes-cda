@@ -9636,6 +9636,30 @@ function marcarActividadTrasNotifReportada(t,por,fechaN){
 }
 window.marcarActividadTrasNotifReportada=marcarActividadTrasNotifReportada;
 /** Devolución que el encargado decide aprobar igual: queda como entrega en revisión. */
+/** Aplica en memoria el paso Por corregir → Por verificar (sin persistir). */
+function aplicarLiberarPorCorregirEnTask(tk){
+  if(!tk)return false;
+  if(typeof normalizeTask==='function')normalizeTask(tk);
+  const estabaCorregir=(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(tk))
+    ||String(tk.estado||'')==='Por corregir'
+    ||(tk.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';})
+    ||(tk.ultimaRevisionDepto&&tk.ultimaRevisionDepto.tipo==='corregir');
+  if(!estabaCorregir)return false;
+  const fecha=tk.fechaReportada||(typeof hoy==='function'?hoy():'');
+  (tk.asignados||[]).forEach(function(a){
+    if(!a||a.estado!=='por_corregir')return;
+    a.estado='por_verificar';
+    if(!a.fechaReportada)a.fechaReportada=fecha;
+    a.fechaAtendida='';
+  });
+  if(!tk.fechaReportada)tk.fechaReportada=fecha;
+  tk.fechaAtendida='';
+  if(String(tk.estado||'')==='Por corregir')tk.estado='Por verificar';
+  if(tk.ultimaRevisionDepto&&tk.ultimaRevisionDepto.tipo==='corregir')tk.ultimaRevisionDepto=null;
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+  return true;
+}
+window.aplicarLiberarPorCorregirEnTask=aplicarLiberarPorCorregirEnTask;
 function liberarPorCorregirParaAprobacion(expId,taskId){
   if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
   if(typeof esJurisdiccional==='function'&&esJurisdiccional())return false;
@@ -9645,20 +9669,7 @@ function liberarPorCorregirParaAprobacion(expId,taskId){
   const tid=String(t0.id||taskId||'').trim();
   if(typeof mutateTask!=='function'||!tid)return false;
   mutateTask(refId,tid,function(tk){
-    if(!tk)return;
-    if(typeof normalizeTask==='function')normalizeTask(tk);
-    const fecha=tk.fechaReportada||(typeof hoy==='function'?hoy():'');
-    (tk.asignados||[]).forEach(function(a){
-      if(!a||a.estado!=='por_corregir')return;
-      a.estado='por_verificar';
-      if(!a.fechaReportada)a.fechaReportada=fecha;
-      a.fechaAtendida='';
-    });
-    if(!tk.fechaReportada)tk.fechaReportada=fecha;
-    tk.fechaAtendida='';
-    tk.estado='Por verificar';
-    if(tk.ultimaRevisionDepto&&tk.ultimaRevisionDepto.tipo==='corregir')tk.ultimaRevisionDepto=null;
-    if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+    if(typeof aplicarLiberarPorCorregirEnTask==='function')aplicarLiberarPorCorregirEnTask(tk);
   });
   return true;
 }
@@ -10018,15 +10029,17 @@ function _taskReviewDecidirImprimirRun(expId,taskId){
   const esPqrsImp=!!(e&&((typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e))
     ||(t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e))));
   taskReviewProponerTerminoImprimir(expId,esPqrsImp?e:null,t,termPayload);
-  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
   if(e&&typeof pqrsEnRevisionNca==='function'&&pqrsEnRevisionNca(e)&&typeof ncaAprobarOficioFirmado==='function'){
+    if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
     return ncaAprobarOficioFirmado(expId,revOpts);
   }
   if(e&&t&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)
     &&typeof ncaAprobarOficioFirmado==='function'
     &&typeof pqrsEstaCerrada==='function'&&!pqrsEstaCerrada(e)){
+    if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(expId,taskId);
     return ncaAprobarOficioFirmado(expId,revOpts);
   }
+  // tramiteLibreParaImprimir libera Por corregir en el mismo mutate de por_firmar
   if(typeof tramiteLibreParaImprimir==='function')
     return tramiteLibreParaImprimir(expId,taskId,Object.assign({keepOpen:false,modo:'imprimir'},revOpts));
 }

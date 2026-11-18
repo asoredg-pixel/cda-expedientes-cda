@@ -552,7 +552,9 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   const e=tramiteFirmaExpCtx(t,expId);
   if(typeof expPqrsBloqueaFlujoTramite==='function'&&expPqrsBloqueaFlujoTramite(e,t)){notif('Use el flujo PQRSD','err');return;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
-  if(typeof liberarPorCorregirParaAprobacion==='function')liberarPorCorregirParaAprobacion(refId,taskId);
+  // Liberar Por corregir DENTRO del mismo mutate de firma (abajo): un solo persist.
+  // Un liberar+persist previo dejaba eco «Por verificar» sin firmaWf que, con historial
+  // de ajuste_soporte, volvía a Por revisar minutos después (SAN-00052-24).
   // opts.modo: 'imprimir' | 'firma' — ambos van a «Por firmar» (impreso se marca con 🖨️ en paleta)
   const modo=String(opts.modo||opts.fase||'').trim().toLowerCase();
   const esImprimir=modo==='imprimir'||modo==='para_firma'||modo==='por_imprimir';
@@ -583,6 +585,7 @@ async function tramiteEnviarAFirmaDesdeRevision(expId,taskId,opts){
   }
   if(typeof sstCargaProgress==='function')sstCargaProgress(72,'Actualizando actividad…');
   const ok=mutateTask(refId,taskId,function(tk){
+    if(typeof aplicarLiberarPorCorregirEnTask==='function')aplicarLiberarPorCorregirEnTask(tk);
     tk.requiereFirma=true;
     try{
       if(typeof confirmarRegistroPendienteDeEntrega==='function'){

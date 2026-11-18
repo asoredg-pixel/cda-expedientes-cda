@@ -3022,15 +3022,32 @@ function mergeExpFromFirestoreSnapshot(data,docId){
   if(!expId)return null;
   return{...data,_exp:expId,id:expId};
 }
-/** Remoto ya devolvió a corregir / limpió firma: no resucitar «Por firmar» desde caché local. */
+/** Remoto ya devolvió a corregir / limpió firma: no resucitar «Por firmar» desde caché local.
+ *  No basta con que el historial tenga algún «ajuste_soporte» antiguo: tras corregir→reentregar→aprobar,
+ *  ese rastro quedaba para siempre y un eco «Por verificar» sin firmaWf pisaba por_firmar
+ *  (caso exclusivo tipo SAN-00052-24: volvía a Por revisar minutos después). */
 function taskRemotoDevueltoACorregir(rem){
   if(!rem)return false;
   if(String(rem.estado||'')==='Por corregir')return true;
   if((rem.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';}))return true;
-  return (rem.historial||[]).some(function(h){
-    return h&&(h.tipo==='devolver_desde_firma'||h.tipo==='ajuste_soporte'||h.tipo==='notif_devuelta_corregir'
-      ||h.tipo==='devuelto_director_firma'||h.tipo==='revision_nca_rechazado');
-  });
+  // No usar ultimaRevisionDepto.corregir: tras reentregar sigue «corregir» en Por verificar
+  // y no significa devolución actual desde firma.
+  if(String((rem.firmaWf&&rem.firmaWf.fase)||'').trim())return false;
+  const h=rem.historial||[];
+  for(let i=h.length-1;i>=0;i--){
+    const x=h[i];
+    if(!x||!x.tipo)continue;
+    if(x.tipo==='devolver_desde_firma'||x.tipo==='devuelto_director_firma'
+      ||x.tipo==='notif_devuelta_corregir'||x.tipo==='revision_nca_rechazado'
+      ||x.tipo==='ajuste_soporte')
+      return true;
+    // Reentrega / aprobación / envío a firma posteriores al ajuste: ya no es «devuelto ahora».
+    if(x.tipo==='enviar_firma'||x.tipo==='firma_wf'||x.tipo==='impreso'
+      ||x.tipo==='reenvio_verificacion'||x.tipo==='verificacion'||x.tipo==='entrega'
+      ||x.tipo==='soporte'||x.tipo==='enviar_notif'||x.tipo==='liberar_por_corregir')
+      return false;
+  }
+  return false;
 }
 /** Fusiona tasks local/remoto: conserva eliminadas locales y firmaWf más avanzado. */
 function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
