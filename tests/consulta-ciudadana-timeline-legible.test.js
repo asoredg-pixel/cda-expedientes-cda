@@ -48,7 +48,7 @@ function ctx() {
   })
   runInContext(extraer(pqrs, [
     'anonimizarParaCiudadano', 'ciudadanoNumDesdeNotaAsoc', 'ciudadanoEventoLabel',
-    'ciudadanoNotaPublica', 'ciudadanoTaskEventoLabel', 'ciudadanoTimelineClase',
+    'ciudadanoNotaPublica', 'ciudadanoEventoPublico', 'ciudadanoTaskEventoLabel', 'ciudadanoTimelineClase',
     'ciudadanoTimelineDedupe', 'ciudadanoTimelineItems', 'ciudadanoTimelineHtml'
   ]), c)
   return c
@@ -149,5 +149,31 @@ describe('Consulta ciudadana — línea de tiempo legible', () => {
       'Radicación de la solicitud',
       'Respuesta aprobada — en proceso de notificación'
     ])
+  })
+
+  it('comunicación a entidad no aparece como «Actualización del trámite»', () => {
+    const c = ctx()
+    const items = c.ciudadanoTimelineItems({
+      _tramite: 'pqrs',
+      _fecha_solicitud: '2026-11-17',
+      _fecha: '2026-11-17',
+      _pqrs_historial: [
+        { tipo: 'radicacion', fecha: '2026-11-17' },
+        { tipo: 'traslado_oficina', fecha: '2026-11-18', oficina: 'guaviare' },
+        { tipo: 'traslado_competencia_correo', fecha: '2026-11-19', nota: 'Traslado por competencia / comunicación a entidad enviado por correo (NCA DEGUV) a entidad@ejemplo.gov.co' },
+        { tipo: 'respuesta_oficina', fecha: '2026-11-19', nota: 'Respuesta registrada' },
+        { tipo: 'revision_final_aprobada', fecha: '2026-11-19', nota: '' }
+      ],
+      tasks: []
+    })
+    const labels = items.map(i => i.label)
+    expect(labels).toEqual([
+      'Solicitud presentada por el ciudadano',
+      'Radicación de la solicitud',
+      'Traslado a NCA DEGUV',
+      'Respuesta registrada',
+      'Respuesta notificada — solicitud atendida'
+    ])
+    expect(labels.join(' ')).not.toMatch(/Actualización del trámite|comunicaci[oó]n a entidad/i)
   })
 })
