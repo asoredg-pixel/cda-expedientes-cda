@@ -18123,17 +18123,24 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       return false;
     }
   }
-  const revParCtx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,t.sinExpediente?null:getExpById(expId)):null;
-  const revParRet=revParCtx&&revParCtx.fase==='tecnico'&&agendaNorm(responsableActivo||'')===agendaNorm(revParCtx.tecnico)?revParCtx:null;
+  const eRevPar=t.sinExpediente?null:getExpById(expId);
+  const revParCtx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,eRevPar):null;
+  // Corrección tras devolución del profesional: reenviar al profesional aunque el nombre
+  // del técnico en historial no coincida al 100% (sigue asignado / es el originador).
+  const yoRev=agendaNorm(responsableActivo||'');
+  const soyTecnicoRev=!!(revParCtx&&(
+    yoRev===agendaNorm(revParCtx.tecnico)
+    ||(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))
+  ));
+  const revParRet=revParCtx&&revParCtx.fase==='tecnico'&&soyTecnicoRev?revParCtx:null;
   // «Aplica revisión de profesional» (entrega de concepto): va al Por ejecutar del profesional
   let revProfEnvio=null;
   if(esModoResponsable()&&!taskEsMultiAsignada(t)&&!revParRet){
-    const eRp=t.sinExpediente?null:getExpById(expId);
+    const eRp=eRevPar;
     const esPqrsRp=!!(eRp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eRp));
     // Reenvío del técnico mientras el profesional aún no revisa: no mandar a Por verificar del encargado
     // (eso duplicaba/desaparecía la actividad en bandejas).
-    if(!esPqrsRp&&revParCtx&&revParCtx.fase==='profesional'
-      &&agendaNorm(responsableActivo||'')===agendaNorm(revParCtx.tecnico)){
+    if(!esPqrsRp&&revParCtx&&revParCtx.fase==='profesional'&&soyTecnicoRev){
       revProfEnvio={tecnico:revParCtx.tecnico,profesional:revParCtx.profesional,reenvio:true};
     }else if(!revParCtx){
       const ctxRp=window._taskModalCtx||{};
@@ -31207,12 +31214,11 @@ function openCrearActLibreModal(){
   if(!ov||!body)return;
   if(tit)tit.textContent='Crear actividad';
   if(modal){modal.classList.remove('task-modal-wide');modal.classList.add('enviar-modal-only','task-modal-wide','entrega-resp-modal','act-libre-crear-modal');}
-  const respSel=document.getElementById('act-dept-resp-sel');
-  const defResp=respSel&&respSel.value?respSel.value:responsableActivo;
+  // No premarcar responsables: el filtro de la bandeja (o el de la actividad anterior)
+  // dejaba checked al mismo y, al marcar otro, la nueva actividad salía con dos.
   const names=typeof getAsignablesActividad==='function'?getAsignablesActividad(deptoActivo):getContratistasAsignables(deptoActivo);
   const encNom=typeof getEncargadoDepto==='function'?String(getEncargadoDepto(deptoActivo)||'').trim():'';
-  const defCheck=defResp||encNom;
-  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'"'+(agendaNorm(n)===agendaNorm(defCheck)||(!defCheck&&names.length===1)?' checked':'')+' onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
+  const respChecks=names.length?names.map(n=>'<label class="act-libre-resp-row"><input type="checkbox" class="act-libre-resp-cb" value="'+escAttr(n)+'" onchange="toggleActLibreModo()"><span class="act-libre-resp-nom">'+escAttr(n)+(encNom&&agendaNorm(n)===agendaNorm(encNom)?' <span style="color:var(--bl);font-size:10px">(encargado)</span>':'')+'</span></label>').join(''):'<div style="padding:10px;font-size:12px;color:var(--tx3)">No hay responsables configurados en el departamento.</div>';
   const altaPqrsHtml=typeof htmlEntregaRespPqrsAltaBox==='function'?htmlEntregaRespPqrsAltaBox():'';
   const puedePqrs=typeof esNcaDeguv==='function'&&esNcaDeguv()||typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca()||(typeof deptoActivo!=='undefined'&&deptoActivo==='guaviare');
   body.innerHTML=

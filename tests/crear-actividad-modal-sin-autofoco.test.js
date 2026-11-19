@@ -38,4 +38,11 @@ describe('Crear actividad · encargado', () => {
     expect(css).toMatch(/\.task-modal\.enviar-modal-only\.act-libre-crear-modal \.task-modal-body\{min-height:min\(560px,70vh\)\}/)
     expect(extraer(core, ['closeTaskModal'])).toMatch(/classList\.remove\('act-libre-crear-modal'\)/)
   })
+
+  it('no premarca responsables (evita arrastrar el de la actividad anterior / filtro bandeja)', () => {
+    const src = extraer(core, ['openCrearActLibreModal'])
+    expect(src).not.toContain('act-dept-resp-sel')
+    expect(src).not.toContain('defCheck')
+    expect(src).not.toMatch(/act-libre-resp-cb[^>]*checked/)
+  })
 })

@@ -3049,6 +3049,31 @@ function taskRemotoDevueltoACorregir(rem){
   }
   return false;
 }
+/**
+ * Avance de revisión par (concepto→profesional): un eco con historial más largo pero
+ * aún en «devolución» no debe pisar una reentrega ya enviada al profesional
+ * (PAF-00080-26: volvía a Por ejecutar del técnico tras varias reentregas).
+ * 0=sin ciclo · 1=devuelta al técnico · 3=enviada/reenviada al profesional · 4=alineada al profesional.
+ */
+function taskRevisionParMergeRank(t){
+  if(!t||t.eliminada)return 0;
+  const h=t.historial||[];
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();};
+  for(let i=h.length-1;i>=0;i--){
+    const x=h[i];
+    if(!x||x.tipo!=='traslado'||!x.revisionPar||x.revisionPar==='cancelada')continue;
+    if(x.revisionPar==='solicitud'||x.revisionPar==='correccion'){
+      const prof=String(x.a||'').trim();
+      return (prof&&eq(t.responsable||'',prof))?4:3;
+    }
+    if(x.revisionPar==='devolucion'||x.revisionPar==='devolucion_nca')return 1;
+    break;
+  }
+  return 0;
+}
+window.taskRevisionParMergeRank=taskRevisionParMergeRank;
 /** Fusiona tasks local/remoto: conserva eliminadas locales y firmaWf más avanzado. */
 function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
   const byId=new Map();
@@ -3077,6 +3102,14 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
       const remCerrada=!!cerradaFn(rem);
       if(localCerrada&&!remCerrada){put(t);return;}
       if(remCerrada&&!localCerrada){put(rem);return;}
+    }
+    // Revisión par: reentrega al profesional gana frente a eco aún «devuelto al técnico»
+    // (aunque el eco tenga más mensajes/soportes en el historial).
+    const lrp=taskRevisionParMergeRank(t);
+    const rrp=taskRevisionParMergeRank(rem);
+    if(lrp!==rrp&&(lrp>0||rrp>0)){
+      if(lrp>rrp){put(t);return;}
+      if(rrp>lrp){put(rem);return;}
     }
     const lf=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
     const rf=String((rem.firmaWf&&rem.firmaWf.fase)||'').trim();

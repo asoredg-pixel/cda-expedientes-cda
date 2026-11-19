@@ -3853,6 +3853,9 @@ function findTaskEntregaRespDedupe(e,actividad,responsable){
   if(!e||!actividad||!responsable)return null;
   const actN=String(actividad).trim().toLowerCase();
   const respN=typeof agendaNorm==='function'?agendaNorm(responsable):String(responsable).toLowerCase();
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();};
   return (e.tasks||[]).map(function(t){return typeof normalizeTask==='function'?normalizeTask(t):t;}).find(function(t){
     if(!t||t.eliminada)return false;
     if(typeof taskEntregaRespNoReutilizar==='function'&&taskEntregaRespNoReutilizar(t,e))return false;
@@ -3862,7 +3865,13 @@ function findTaskEntregaRespDedupe(e,actividad,responsable){
     const sameAct=String(t.actividad||t.desc||'').trim().toLowerCase()===actN
       ||String(t.actividad||'').trim().toLowerCase()===actN;
     if(!sameAct)return false;
-    if(typeof taskUsuarioEsAsignado==='function')return taskUsuarioEsAsignado(t,responsable);
+    if(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsable))return true;
+    // Concepto en Por corregir tras devolución del profesional: reutilizar aunque el
+    // responsable del historial/asignado no coincida al 100% con el login (mismo ciclo).
+    if(est==='Por corregir'&&typeof taskRevisionParCtx==='function'){
+      const ctx=taskRevisionParCtx(t,e);
+      if(ctx&&ctx.fase==='tecnico'&&eq(ctx.tecnico,responsable))return true;
+    }
     return (typeof agendaNorm==='function'?agendaNorm(t.responsable):String(t.responsable||'').toLowerCase())===respN;
   })||null;
 }
