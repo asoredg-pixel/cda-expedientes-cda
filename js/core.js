@@ -35848,10 +35848,10 @@ async function ncaAprobarMensajeSimple(expId){
         cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
         documentos:docsAprob,
         comunicacion_interna:esInterna,
-        traslado_interno:esInterna,
+        traslado_interno:esTraslado||esInterna,
         notif_interna:esInterna,
         comunicacion_entidad:esEntidad,
-        traslado_competencia:esEntidad,
+        traslado_competencia:esTraslado,
         revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
         cerrado_por:cerradoPor,cerrado_en:new Date().toISOString(),
         task_id:taskIdFinal||wf.task_id||''
@@ -35861,7 +35861,7 @@ async function ncaAprobarMensajeSimple(expId){
       e._pqrs_respuesta_medio='correo';
       _pqrsAplicarCierrePqrs(e,fechaResp,esInterna
         ?'PQRSD cerrada — traslado/comunicación interna enviada'
-        :(esEntidad?'PQRSD cerrada — traslado por competencia / comunicación a entidad':'PQRSD cerrada — mensaje aprobado y enviado desde NCA'));
+        :(esTraslado||esEntidad?'PQRSD cerrada — traslado por competencia / comunicación a entidad':'PQRSD cerrada — mensaje aprobado y enviado desde NCA'));
       const sopEnvio=docsAprob.filter(function(d){return d&&d.tipo==='soporte_respuesta';});
       if(sopEnvio.length){
         e._pqrs_respuesta_soportes=(Array.isArray(e._pqrs_respuesta_soportes)?e._pqrs_respuesta_soportes:[]).concat(sopEnvio.map(function(d){
@@ -35907,7 +35907,7 @@ async function ncaAprobarMensajeSimple(expId){
     }catch(err){
       console.warn('ncaAprobarMensajeSimple envío:',err);
       // Fallback: dejar lista para envío manual
-      setPqrsWorkflow(e,_ncaRevisionEmailPatch({fase:PQRS_WF.LISTA_ENVIO,cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,documentos:wf.documentos||[],comunicacion_interna:esInterna,traslado_interno:esInterna,notif_interna:esInterna,comunicacion_entidad:esEntidad,traslado_competencia:esEntidad,revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},notif_inicio:hoy(),notif_vence:(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(hoy(),5):hoy()),notif_plazo_dias:5},d,wf));
+      setPqrsWorkflow(e,_ncaRevisionEmailPatch({fase:PQRS_WF.LISTA_ENVIO,cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,documentos:wf.documentos||[],comunicacion_interna:esInterna,traslado_interno:esTraslado||esInterna,notif_interna:esInterna,comunicacion_entidad:esEntidad,traslado_competencia:esTraslado,revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},notif_inicio:hoy(),notif_vence:(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(hoy(),5):hoy()),notif_plazo_dias:5},d,wf));
       e._pqrs_historial.push({ts:Date.now(),tipo:'revision_nca_aprobado',fecha:hoy(),nota:'NCA aprobó respuesta (mensaje) — envío pendiente: '+String(err.message||err).slice(0,80),oficina:'guaviare',por:cerradoPor});
       if(taskIdFinal&&termPayload&&termPayload.otorga&&typeof proponerTerminoCumplimiento==='function')
         proponerTerminoCumplimiento(expId,taskIdFinal,termPayload);
@@ -35924,10 +35924,10 @@ async function ncaAprobarMensajeSimple(expId){
     cuerpo:cuerpoFinal,oficio:d.oficio||wf.oficio,fecha_respuesta:fechaResp,
     documentos:wf.documentos||[],
     comunicacion_interna:esInterna,
-    traslado_interno:esInterna,
+    traslado_interno:esTraslado||esInterna,
     notif_interna:esInterna,
     comunicacion_entidad:esEntidad,
-    traslado_competencia:esEntidad,
+    traslado_competencia:esTraslado,
     revision_nca:{aprobado:true,tipo:'mensaje',comentario:d.comentario,por:cerradoPor,en:new Date().toISOString()},
     notif_inicio:hoy(),
     notif_vence:(typeof addDiasHabilesCO==='function'?addDiasHabilesCO(hoy(),5):hoy()),
@@ -38718,25 +38718,65 @@ window.pqrsArmarEnvioTrasladoInterno=pqrsArmarEnvioTrasladoInterno;
 /**
  * Correo de traslado / comunicación interna: cuerpo + documentos + historial del correo recibido.
  * Sin saludo de ciudadano ni botón de consulta ciudadana.
+ * En traslado incluye enlaces a la solicitud radicada (ventanilla/correo) y anexos.
  */
 function pqrsCorreoHtmlComunicacionInterna(e,cuerpo,documentos,opts){
   opts=opts||{};
-  const docs=Array.isArray(documentos)?documentos:[];
-  const linksHtml=docs.filter(function(d){return d&&(d.driveLink||d.previewLink||d.url||d.fileId||d.driveFileId);}).map(function(d,di){
+  const docs=Array.isArray(documentos)?documentos.slice():[];
+  const esTrasladoHtml=!!(opts.traslado||opts.modo==='traslado'||opts.incluirSolicitud===true);
+  // Mensaje NCA «traslado por competencia»: wf.documentos suele ir vacío; hay que enlazar
+  // el PDF/anexos de ventanilla (_pqrs_solicitud_link / _pqrs_gmail_attachments).
+  if(esTrasladoHtml&&e&&typeof pqrsDocsSolicitudRadicada==='function'){
+    const seen={};
+    docs.forEach(function(d){
+      if(!d)return;
+      const fid=String(d.fileId||d.driveFileId||'').trim();
+      const link=String(d.driveLink||d.url||d.previewLink||'').trim();
+      const k=fid||link;
+      if(k)seen[k]=true;
+    });
+    (pqrsDocsSolicitudRadicada(e)||[]).forEach(function(d){
+      if(!d)return;
+      const fid=String(d.fileId||d.driveFileId||'').trim();
+      const link=String(d.driveLink||d.url||d.previewLink||'').trim();
+      const k=fid||link;
+      if(!k||seen[k])return;
+      seen[k]=true;
+      docs.push(Object.assign({},d,{
+        label:d.es_solicitud||d.tipo==='soporte_radicacion'
+          ?('Solicitud radicada'+(d.nombre?' — '+d.nombre:''))
+          :(d.tipo==='anexo_radicacion'
+            ?('Anexo radicado'+(d.nombre?' — '+d.nombre:''))
+            :(d.nombre||d.label||'Documento de la solicitud')),
+        es_radicacion:true
+      }));
+    });
+  }
+  const linkLine=function(d,di){
+    if(!d)return'';
     let href=String(d.driveLink||d.previewLink||d.url||'').trim();
     if(!href&&(d.fileId||d.driveFileId))
       href='https://drive.google.com/file/d/'+encodeURIComponent(d.fileId||d.driveFileId)+'/view';
     if(!href)return'';
-    const nom=typeof etiquetaDocNotifPublica==='function'
+    const nom=d.label||(typeof etiquetaDocNotifPublica==='function'
       ?etiquetaDocNotifPublica(d,di)
-      :(d.nombre||d.label||d.driveFilename||'Documento');
+      :(d.nombre||d.driveFilename||'Documento'));
     return'<p>📎 <a href="'+escAttr(href)+'">'+escAttr(nom)+'</a></p>';
-  }).filter(Boolean).join('');
+  };
+  const docsRad=docs.filter(function(d){
+    return d&&(d.es_radicacion||d.es_solicitud||d.tipo==='soporte_radicacion'||d.tipo==='anexo_radicacion'||d.tipo==='anexo_solicitud');
+  });
+  const docsOtros=docs.filter(function(d){
+    return d&&docsRad.indexOf(d)<0;
+  });
+  const linksRad=docsRad.map(linkLine).filter(Boolean).join('');
+  const linksOtros=docsOtros.map(linkLine).filter(Boolean).join('');
   const cuerpoHtml=cuerpo
     ?('<div style="font-family:sans-serif;font-size:14px;line-height:1.5;white-space:pre-wrap">'+escAttr(cuerpo).replace(/\n/g,'<br>')+'</div>')
     :'';
   let introHtml=cuerpoHtml;
-  if(linksHtml)introHtml+='<hr><p><strong>Documentos</strong> (enlace Drive):</p>'+linksHtml;
+  if(linksRad)introHtml+='<hr><p><strong>Documento de la solicitud radicada y anexos</strong> (enlace Drive):</p>'+linksRad;
+  if(linksOtros)introHtml+='<hr><p><strong>Documentos</strong> (enlace Drive):</p>'+linksOtros;
   const incluir=opts.incluirHistorial!==false;
   const tieneDatos=!!(e&&(e._gmail_message_id||e._gmail_email_data||opts.fullMsg));
   if(incluir&&tieneDatos&&typeof gmailBuildPqrsReenvioHtml==='function'){

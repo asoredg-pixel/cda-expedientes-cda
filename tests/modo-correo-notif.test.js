@@ -65,6 +65,30 @@ describe('Modo del correo al notificar', () => {
     expect(html).not.toContain('Consultar el trámite')
   })
 
+  it('traslado ventanilla incluye enlaces a solicitud y anexos aunque no haya wf.documentos', () => {
+    const c = ctx()
+    c.pqrsDocsSolicitudRadicada = e => [
+      { nombre: 'LB260705 SOLICITUD.pdf', driveLink: 'https://drive.google.com/file/d/solVent/view', fileId: 'solVent', tipo: 'soporte_radicacion', es_solicitud: true, es_radicacion: true },
+      { nombre: 'LB260705 A01.pdf', driveLink: 'https://drive.google.com/file/d/anxVent/view', fileId: 'anxVent', tipo: 'anexo_radicacion', es_radicacion: true }
+    ]
+    const e = {
+      _exp: 'LB260705',
+      _pqrs_solicitud_link: 'https://drive.google.com/file/d/solVent/view',
+      _pqrs_solicitud_archivo: 'LB260705 SOLICITUD.pdf',
+      _pqrs_gmail_attachments: [
+        { nombre: 'LB260705 SOLICITUD.pdf', driveLink: 'https://drive.google.com/file/d/solVent/view', fileId: 'solVent', es_solicitud: true },
+        { nombre: 'LB260705 A01.pdf', driveLink: 'https://drive.google.com/file/d/anxVent/view', fileId: 'anxVent' }
+      ]
+    }
+    const html = c.pqrsCorreoHtmlComunicacionInterna(e, 'Conforme a su solicitud radicada bajo el número de PQRSD LB260705…', [], { modo: 'traslado', traslado: true })
+    expect(html).toContain('Documento de la solicitud radicada y anexos')
+    expect(html).toContain('https://drive.google.com/file/d/solVent/view')
+    expect(html).toContain('https://drive.google.com/file/d/anxVent/view')
+    expect(html).toContain('Solicitud radicada')
+    expect(html).toContain('Anexo radicado')
+    expect(html).not.toContain('CONSULTA')
+  })
+
   it('respuesta interna no lleva botón ni la frase de consulta ciudadana', () => {
     const c = ctx()
     const html = c.pqrsCorreoHtmlRespuesta(
