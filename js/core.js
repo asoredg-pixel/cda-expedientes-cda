@@ -18127,10 +18127,14 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   const revParCtx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,eRevPar):null;
   // Corrección tras devolución del profesional: reenviar al profesional aunque el nombre
   // del técnico en historial no coincida al 100% (sigue asignado / es el originador).
+  // El respaldo taskUsuarioEsAsignado solo aplica en fase técnico: si se usa también en
+  // fase profesional, el profesional (ya asignado) se trata como técnico y la entrega
+  // final vuelve a su Por ejecutar en vez de Por verificar del encargado.
   const yoRev=agendaNorm(responsableActivo||'');
-  const soyTecnicoRev=!!(revParCtx&&(
+  const soyProfRev=!!(revParCtx&&yoRev===agendaNorm(revParCtx.profesional));
+  const soyTecnicoRev=!!(revParCtx&&!soyProfRev&&(
     yoRev===agendaNorm(revParCtx.tecnico)
-    ||(typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))
+    ||(revParCtx.fase==='tecnico'&&typeof taskUsuarioEsAsignado==='function'&&taskUsuarioEsAsignado(t,responsableActivo))
   ));
   const revParRet=revParCtx&&revParCtx.fase==='tecnico'&&soyTecnicoRev?revParCtx:null;
   // «Aplica revisión de profesional» (entrega de concepto): va al Por ejecutar del profesional

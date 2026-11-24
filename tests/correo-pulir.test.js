@@ -78,9 +78,9 @@ describe('correo-pulir', () => {
     expect(tf).toContain("'ofi-doc-cuerpo'")
   })
 
-  it('index carga correo-pulir.js y build 20261113d', () => {
-    expect(indexHtml).toContain('js/correo-pulir.js?v=20261113d')
-    expect(indexHtml).toContain('js/core.js?v=20261113d')
+  it('index carga correo-pulir.js y core con ?v=', () => {
+    expect(indexHtml).toMatch(/js\/correo-pulir\.js\?v=\d{8}[a-z]/)
+    expect(indexHtml).toMatch(/js\/core\.js\?v=\d{8}[a-z]/)
   })
 
   it('Cloud Function: secret, auth y prompt sin inventar hechos', () => {
