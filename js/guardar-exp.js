@@ -17,11 +17,12 @@ function taskFormSaveAvanceRank(t){
   if(String(t.estado||'')==='Atendida'||!!String(t.fechaAtendida||'').trim())return 18;
   if(t._firma_proyeccion_atendida||t._pqrs_proyeccion_atendida)return 17;
   if(t.ultimaRevisionDepto&&String(t.ultimaRevisionDepto.tipo||'')==='aprobada')return 17;
-  // Reentrega concepto→profesional (PAF-00080-26): por encima de «Por corregir»
-  // para que un Guardar con form viejo no la devuelva al Por ejecutar del técnico.
+  // Ciclo revisión par activo (solicitud/corrección/devolución): mismo piso.
+  // Quién gana lo decide taskRevisionParUltimoTs / rank en mergeTasksForSave
+  // (así un form viejo en solicitud no pisa devolución ni al revés PAF-00080-26).
   if(typeof taskRevisionParMergeRank==='function'){
     const rp=taskRevisionParMergeRank(t);
-    if(rp>=3)return 12;
+    if(rp>=1)return 12;
   }
   if(String(t.estado||'')==='Por corregir'
     ||(t.asignados||[]).some(function(a){return a&&a.estado==='por_corregir';}))return 8;
@@ -60,35 +61,71 @@ function mergeTasksForSave(formTasks,prevTasks){
     if(ft&&ft.id)formIds.add(String(ft.id));
     const p=p0||(ft&&ft.id?prevMap[String(ft.id)]:null);
     if(!p)return ft;
-    // Revisión par: preferir la copia con correccion/solicitud al profesional frente a eco en devolución.
+    // Revisión par: gana el traslado revisionPar más reciente (ts). Sin ts/empate → rank
+    // (reentrega frente a eco en devolución). Evita que un Guardar con form viejo en
+    // solicitud pise una devolución fresca del profesional (y el caso inverso PAF-00080-26).
+    const preferPrevRevPar=function(){
+      return normalizeTask({
+        ...ft,...p,
+        responsables:(p.responsables&&p.responsables.length)?p.responsables:(ft.responsables||[]),
+        asignados:(p.asignados&&p.asignados.length)?p.asignados:(ft.asignados||[]),
+        entregaModo:p.entregaModo||ft.entregaModo||'individual',
+        comentarios:(p.comentarios&&p.comentarios.length)>=(ft.comentarios&&ft.comentarios.length||0)?(p.comentarios||[]):(ft.comentarios||p.comentarios||[]),
+        historial:(p.historial&&p.historial.length)>=(ft.historial&&ft.historial.length||0)?(p.historial||[]):(ft.historial||p.historial||[]),
+        soportes:(p.soportes&&p.soportes.length)?p.soportes:(ft.soportes||[]),
+        notasDoc:(p.notasDoc&&p.notasDoc.length)?p.notasDoc:(ft.notasDoc||[]),
+        fechaReportada:p.fechaReportada||ft.fechaReportada,
+        fechaAtendida:p.fechaAtendida||ft.fechaAtendida,
+        estado:p.estado||ft.estado,
+        verificadoPor:p.verificadoPor||ft.verificadoPor,
+        autoAsignadaPorResponsable:!!(p.autoAsignadaPorResponsable||ft.autoAsignadaPorResponsable),
+        origen:p.origen||ft.origen||'',
+        ultimaRevisionDepto:p.ultimaRevisionDepto||ft.ultimaRevisionDepto||null,
+        requiereFirma:p.requiereFirma!=null?p.requiereFirma:ft.requiereFirma,
+        firmaWf:p.firmaWf||ft.firmaWf||null,
+        _firma_proyeccion_atendida:!!(p._firma_proyeccion_atendida||ft._firma_proyeccion_atendida),
+        _pqrs_proyeccion_atendida:!!(p._pqrs_proyeccion_atendida||ft._pqrs_proyeccion_atendida),
+        publicado:p.publicado!=null?p.publicado:ft.publicado,
+        bibliotecaRepoIds:(p.bibliotecaRepoIds&&p.bibliotecaRepoIds.length)?p.bibliotecaRepoIds:(ft.bibliotecaRepoIds||[])
+      });
+    };
+    const preferFormRevPar=function(){
+      return normalizeTask({
+        ...p,...ft,
+        responsables:(ft.responsables&&ft.responsables.length)?ft.responsables:(p.responsables||[]),
+        asignados:(ft.asignados&&ft.asignados.length)?ft.asignados:(p.asignados||[]),
+        entregaModo:ft.entregaModo||p.entregaModo||'individual',
+        comentarios:(ft.comentarios&&ft.comentarios.length)?ft.comentarios:(p.comentarios||[]),
+        historial:(ft.historial&&ft.historial.length)?ft.historial:(p.historial||[]),
+        soportes:(ft.soportes&&ft.soportes.length)?ft.soportes:(p.soportes||[]),
+        notasDoc:(ft.notasDoc&&ft.notasDoc.length)?ft.notasDoc:(p.notasDoc||[]),
+        fechaReportada:ft.fechaReportada!=null&&ft.fechaReportada!==''?ft.fechaReportada:p.fechaReportada,
+        fechaAtendida:ft.fechaAtendida||p.fechaAtendida,
+        estado:ft.estado||p.estado,
+        verificadoPor:ft.verificadoPor||p.verificadoPor,
+        autoAsignadaPorResponsable:!!(ft.autoAsignadaPorResponsable||p.autoAsignadaPorResponsable),
+        origen:ft.origen||p.origen||'',
+        ultimaRevisionDepto:ft.ultimaRevisionDepto||p.ultimaRevisionDepto||null,
+        requiereFirma:ft.requiereFirma!=null?ft.requiereFirma:p.requiereFirma,
+        firmaWf:ft.firmaWf||p.firmaWf||null,
+        _firma_proyeccion_atendida:!!(ft._firma_proyeccion_atendida||p._firma_proyeccion_atendida),
+        _pqrs_proyeccion_atendida:!!(ft._pqrs_proyeccion_atendida||p._pqrs_proyeccion_atendida),
+        publicado:ft.publicado!=null?ft.publicado:p.publicado,
+        bibliotecaRepoIds:(ft.bibliotecaRepoIds&&ft.bibliotecaRepoIds.length)?ft.bibliotecaRepoIds:(p.bibliotecaRepoIds||[])
+      });
+    };
+    if(typeof taskRevisionParUltimoTs==='function'){
+      const fts=taskRevisionParUltimoTs(ft)||0;
+      const pts=taskRevisionParUltimoTs(p)||0;
+      if(fts!==pts&&(fts>0||pts>0)){
+        if(pts>fts)return preferPrevRevPar();
+        if(fts>pts)return preferFormRevPar();
+      }
+    }
     if(typeof taskRevisionParMergeRank==='function'){
       const frp=taskRevisionParMergeRank(ft);
       const prp=taskRevisionParMergeRank(p);
-      if(prp>frp&&prp>0){
-        return normalizeTask({
-          ...ft,...p,
-          responsables:(p.responsables&&p.responsables.length)?p.responsables:(ft.responsables||[]),
-          asignados:(p.asignados&&p.asignados.length)?p.asignados:(ft.asignados||[]),
-          entregaModo:p.entregaModo||ft.entregaModo||'individual',
-          comentarios:(p.comentarios&&p.comentarios.length)>=(ft.comentarios&&ft.comentarios.length||0)?(p.comentarios||[]):(ft.comentarios||p.comentarios||[]),
-          historial:(p.historial&&p.historial.length)>=(ft.historial&&ft.historial.length||0)?(p.historial||[]):(ft.historial||p.historial||[]),
-          soportes:(p.soportes&&p.soportes.length)?p.soportes:(ft.soportes||[]),
-          notasDoc:(p.notasDoc&&p.notasDoc.length)?p.notasDoc:(ft.notasDoc||[]),
-          fechaReportada:p.fechaReportada||ft.fechaReportada,
-          fechaAtendida:p.fechaAtendida||ft.fechaAtendida,
-          estado:p.estado||ft.estado,
-          verificadoPor:p.verificadoPor||ft.verificadoPor,
-          autoAsignadaPorResponsable:!!(p.autoAsignadaPorResponsable||ft.autoAsignadaPorResponsable),
-          origen:p.origen||ft.origen||'',
-          ultimaRevisionDepto:p.ultimaRevisionDepto||ft.ultimaRevisionDepto||null,
-          requiereFirma:p.requiereFirma!=null?p.requiereFirma:ft.requiereFirma,
-          firmaWf:p.firmaWf||ft.firmaWf||null,
-          _firma_proyeccion_atendida:!!(p._firma_proyeccion_atendida||ft._firma_proyeccion_atendida),
-          _pqrs_proyeccion_atendida:!!(p._pqrs_proyeccion_atendida||ft._pqrs_proyeccion_atendida),
-          publicado:p.publicado!=null?p.publicado:ft.publicado,
-          bibliotecaRepoIds:(p.bibliotecaRepoIds&&p.bibliotecaRepoIds.length)?p.bibliotecaRepoIds:(ft.bibliotecaRepoIds||[])
-        });
-      }
+      if(prp>frp&&prp>0)return preferPrevRevPar();
     }
     // Rail ✏️ (editar+asignar) deja el form con «Por verificar»; si el encargado ya aprobó,
     // un Guardar sección pisaba Atendida y la actividad volvía a Por revisar (concepto vía profesional).

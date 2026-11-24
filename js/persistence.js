@@ -3054,6 +3054,8 @@ function taskRemotoDevueltoACorregir(rem){
  * aún en «devolución» no debe pisar una reentrega ya enviada al profesional
  * (PAF-00080-26: volvía a Por ejecutar del técnico tras varias reentregas).
  * 0=sin ciclo · 1=devuelta al técnico · 3=enviada/reenviada al profesional · 4=alineada al profesional.
+ * Ojo: la devolución es un retroceso intencional (4→1); no usar solo el rank frente a un eco
+ * viejo en solicitud — comparar antes con taskRevisionParUltimoTs.
  */
 function taskRevisionParMergeRank(t){
   if(!t||t.eliminada)return 0;
@@ -3074,6 +3076,19 @@ function taskRevisionParMergeRank(t){
   return 0;
 }
 window.taskRevisionParMergeRank=taskRevisionParMergeRank;
+/** ts del último traslado revisionPar (≠ cancelada); 0 si no hay. Preferir este frente al rank. */
+function taskRevisionParUltimoTs(t){
+  if(!t||t.eliminada)return 0;
+  const h=t.historial||[];
+  for(let i=h.length-1;i>=0;i--){
+    const x=h[i];
+    if(!x||x.tipo!=='traslado'||!x.revisionPar||x.revisionPar==='cancelada')continue;
+    const ts=Number(x.ts);
+    return(ts&&isFinite(ts))?ts:0;
+  }
+  return 0;
+}
+window.taskRevisionParUltimoTs=taskRevisionParUltimoTs;
 /** Fusiona tasks local/remoto: conserva eliminadas locales y firmaWf más avanzado. */
 function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
   const byId=new Map();
@@ -3103,10 +3118,17 @@ function mergeExpedienteTasksLocalRemote(localTasks,remoteTasks){
       if(localCerrada&&!remCerrada){put(t);return;}
       if(remCerrada&&!localCerrada){put(rem);return;}
     }
-    // Revisión par: reentrega al profesional gana frente a eco aún «devuelto al técnico»
-    // (aunque el eco tenga más mensajes/soportes en el historial).
-    const lrp=taskRevisionParMergeRank(t);
-    const rrp=taskRevisionParMergeRank(rem);
+    // Revisión par: primero el traslado revisionPar más reciente (ts). Así una devolución
+    // fresca no la pisa un eco viejo aún en solicitud/corrección (rebote a Por ejecutar).
+    // Si falta ts o empatan, el rank: reentrega gana frente a eco aún en devolución (PAF-00080-26).
+    const lts=typeof taskRevisionParUltimoTs==='function'?taskRevisionParUltimoTs(t):0;
+    const rts=typeof taskRevisionParUltimoTs==='function'?taskRevisionParUltimoTs(rem):0;
+    if(lts!==rts&&(lts>0||rts>0)){
+      if(lts>rts){put(t);return;}
+      if(rts>lts){put(rem);return;}
+    }
+    const lrp=typeof taskRevisionParMergeRank==='function'?taskRevisionParMergeRank(t):0;
+    const rrp=typeof taskRevisionParMergeRank==='function'?taskRevisionParMergeRank(rem):0;
     if(lrp!==rrp&&(lrp>0||rrp>0)){
       if(lrp>rrp){put(t);return;}
       if(rrp>lrp){put(rem);return;}
