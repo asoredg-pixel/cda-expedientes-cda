@@ -255,6 +255,8 @@ async function eliminarDefinitivoActividadPapelera(expId,taskId){
   if(e&&Array.isArray(e.tasks)){
     e.tasks=e.tasks.filter(function(x){return String(x&&x.id||'')!==tid;});
     e._pending_fs_sync=true;
+    // Última actividad purgada: permitir tasks:[] (saveExpedienteDoc omite [] por defecto)
+    if(!e.tasks.length)e._fsForceEmptyTasks=true;
     if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(e,false);
     else if(typeof persistExpLocal==='function')persistExpLocal();
   }else if(typeof actividadesLibres!=='undefined'&&Array.isArray(actividadesLibres)){

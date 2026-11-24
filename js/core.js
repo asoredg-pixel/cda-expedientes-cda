@@ -13909,6 +13909,7 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   else notif(okMsg,'ok');
   return true;
 }
+window.asociarVinculoAPqrs=asociarVinculoAPqrs;
 function filtrarPqrsExpAsocSug(inp){
   if(!inp)return;
   const ctx=window._taskModalCtx||{};

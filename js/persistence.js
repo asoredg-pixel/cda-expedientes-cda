@@ -858,10 +858,18 @@ async function saveExpedienteDoc(deptoId,exp){
   const ref=expedienteDocRef(db,depto,expId);
   if(!ref){console.warn('saveExpedienteDoc: ref nula',depto,expId);return false;}
   // Strip undefined values (incluye anidados) — Firestore v10 throws invalid-argument on undefined fields
+  const forceEmptyTasks=!!exp._fsForceEmptyTasks;
   const rawPayload={...exp,id:expId,_depto:depto,updatedAt:new Date().toISOString()};
   delete rawPayload._pending_fs_sync;
   delete rawPayload._pending_fs_at;
+  delete rawPayload._fsForceEmptyTasks;
   const payload=_fsStripUndefinedDeep(rawPayload);
+  // merge:true pisa arrays enteros. Un tasks:[] borra la trazabilidad (Drive queda huérfano).
+  // Solo se permite vaciar con _fsForceEmptyTasks (p. ej. purga definitiva de la última actividad).
+  if(Array.isArray(payload.tasks)&&payload.tasks.length===0&&!forceEmptyTasks){
+    delete payload.tasks;
+    console.warn('saveExpedienteDoc: omití tasks:[] para no borrar trazabilidad',expId);
+  }
   try{
     console.log('saveExpedienteDoc intento:',{deptoIdArg:deptoId,deptoResuelto:depto,expId,path:ref.path,auth:!!(window._usuarioActual||window.authUsuario)});
     await window._fsSetDoc(ref,payload,{merge:true});
@@ -892,6 +900,137 @@ async function deleteExpedienteDoc(deptoId,exp){
     return false;
   }
 }
+/**
+ * Revincula PDFs huérfanos de la carpeta Drive del expediente como una actividad Atendida.
+ * Solo si tasks está vacío (o solo eliminadas). No inventa firmas/asignados originales.
+ * opts.dryRun=true lista sin guardar. opts.actividad fuerza el nombre.
+ */
+async function repararTrazabilidadDesdeDrive(expId,opts){
+  opts=opts||{};
+  const id=String(expId||'').trim();
+  if(!id)return{ok:false,err:'sin_id'};
+  if(typeof traerExpedienteSiFalta==='function'){
+    try{await traerExpedienteSiFalta(id);}catch(e){}
+  }
+  const e=typeof getExpById==='function'?getExpById(id):null;
+  if(!e)return{ok:false,err:'no_encontrado'};
+  const tasks=Array.isArray(e.tasks)?e.tasks:[];
+  const vivos=tasks.filter(function(t){return t&&!t.eliminada;});
+  if(vivos.length&&!opts.force){
+    return{ok:false,err:'ya_tiene_actividades',vivos:vivos.length};
+  }
+  const folderId=String(e._drive_folder_id||'').trim();
+  if(!folderId)return{ok:false,err:'sin_carpeta_drive'};
+  if(typeof driveListFolderChildren!=='function')return{ok:false,err:'sin_drive'};
+  const kids=await driveListFolderChildren(folderId);
+  const files=(kids||[]).filter(function(k){return k&&k.id&&!k.esCarpeta;});
+  if(!files.length)return{ok:false,err:'carpeta_vacia',folderId:folderId};
+  const actHint=String(opts.actividad||'').trim();
+  let actNombre=actHint;
+  if(!actNombre){
+    for(let i=0;i<files.length;i++){
+      if(/lista\s*de\s*chequeo|listadechequeo|lista\s*chequeo/i.test(String(files[i].name||''))){
+        actNombre='Lista de Chequeo';
+        break;
+      }
+    }
+  }
+  if(!actNombre)actNombre='Actividad (revinculada desde Drive)';
+  const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
+  const fechaC=String(e._alta_fecha||e._fecha||hoyStr).slice(0,10);
+  const por=typeof taskComentarioAutor==='function'?taskComentarioAutor()
+    :(typeof responsableActivo!=='undefined'?responsableActivo:'')
+    ||'reparación';
+  function labelFromName(name){
+    const n=String(name||'').trim();
+    if(/soporte\s*env[ií]o/i.test(n))return'Soporte envío';
+    if(/^APROBADO\b/i.test(n))return n.replace(/\.pdf$/i,'').trim()||'Documento aprobado';
+    if(/^revision[-_]/i.test(n)||/\bPR\b/.test(n))return n.replace(/\.pdf$/i,'').trim()||'Documento en revisión';
+    return n.replace(/\.pdf$/i,'').trim()||'Documento';
+  }
+  function estadoFromName(name){
+    const n=String(name||'');
+    if(/APROBADO/i.test(n))return'aprobado';
+    if(/por corregir|acorregir/i.test(n))return'corregir';
+    if(/revision|\bPR\b/i.test(n))return'revision';
+    return'';
+  }
+  const soportes=files.map(function(f,i){
+    const link='https://drive.google.com/file/d/'+encodeURIComponent(f.id)+'/view';
+    const lbl=labelFromName(f.name);
+    const est=estadoFromName(f.name);
+    return{
+      id:'sop_rep_'+Date.now()+'_'+i,
+      url:link,preview:link,driveLink:link,previewLink:link,
+      label:lbl,nombre:lbl,
+      fecha:fechaC,autor:por,version:i+1,activo:true,local:false,
+      driveFileId:f.id,fileId:f.id,
+      driveFilename:f.name||'',
+      driveEstado:est,driveInstitutional:true,
+      tipo:f.mimeType||'application/pdf',
+      es_anexo:false,esAnexo:false,
+      _revinculado_drive:true
+    };
+  });
+  const taskId=typeof genTaskId==='function'?genTaskId():('tk_rep_'+Date.now());
+  const task={
+    id:taskId,
+    actividad:actNombre,
+    detalle:'Revinculada desde carpeta Drive (trazabilidad perdida en Firestore)',
+    desc:actNombre,
+    responsable:por,
+    responsables:[por],
+    asignados:[{nombre:por,fechaReportada:fechaC,fechaAtendida:fechaC,estado:'atendido'}],
+    entregaModo:'individual',
+    plazoDias:'',
+    plazoUnidad:'dias',
+    vence:'',
+    fechaReportada:fechaC,
+    fechaAtendida:fechaC,
+    estado:'Atendida',
+    publicado:true,
+    prioritaria:false,
+    eliminada:false,
+    comentarios:[],
+    historial:[{
+      tipo:'reparacion_trazabilidad',
+      fecha:hoyStr,
+      por:por,
+      nota:'Actividad reconstruida desde '+files.length+' archivo(s) en Drive · carpeta '+folderId
+    }],
+    soportes:soportes,
+    notasDoc:[],
+    ultimaRevisionDepto:{
+      tipo:'aprobada',fecha:fechaC,por:por,
+      nota:'Revinculación desde Drive (reparación)',notificada:false
+    },
+    origen:'reparacion_drive',
+    _drive_folder_id:folderId,
+    _drive_folder_link:e._drive_folder_link||('https://drive.google.com/drive/folders/'+folderId)
+  };
+  const nt=typeof normalizeTask==='function'?normalizeTask(task):task;
+  const preview={
+    ok:true,dryRun:!!opts.dryRun,exp:id,folderId:folderId,
+    archivos:files.map(function(f){return{id:f.id,name:f.name};}),
+    actividad:actNombre,taskId:taskId,soportes:soportes.length
+  };
+  if(opts.dryRun)return preview;
+  const keepElim=tasks.filter(function(t){return t&&t.eliminada;});
+  e.tasks=keepElim.concat([nt]);
+  e._pending_fs_sync=true;
+  let saved=false;
+  if(typeof persistExpedienteGranularAsync==='function')
+    saved=!!(await persistExpedienteGranularAsync(e,false));
+  else if(typeof persistExpedienteGranular==='function')
+    saved=!!(await persistExpedienteGranular(e,false));
+  if(typeof logAudit==='function')
+    logAudit('Reparó trazabilidad desde Drive ['+id+'] · '+files.length+' archivo(s)','expedientes',id);
+  preview.saved=saved;
+  preview.ok=saved;
+  if(!saved)preview.err='save_fallo';
+  return preview;
+}
+window.repararTrazabilidadDesdeDrive=repararTrazabilidadDesdeDrive;
 function purgeExpFromLocalStorageCache(expId){
   const id=String(expId||'').trim();
   if(!id)return;
