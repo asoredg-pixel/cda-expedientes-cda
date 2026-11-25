@@ -13915,7 +13915,7 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   return true;
 }
 window.asociarVinculoAPqrs=asociarVinculoAPqrs;
-function filtrarPqrsExpAsocSug(inp){
+function filtrarPqrsExpAsocSugPintar(inp){
   if(!inp)return;
   const ctx=window._taskModalCtx||{};
   const list=buscarVinculosAsocPqrs(inp.value.trim(),ctx.expId,ctx.modo||'pqrs',10);
@@ -13927,6 +13927,27 @@ function filtrarPqrsExpAsocSug(inp){
   box.innerHTML=list.map(function(ex,i){
     return '<button type="button" style="display:block;width:100%;text-align:left;padding:8px 10px;border:0;border-bottom:1px solid var(--bd);background:var(--sf);cursor:pointer;font-size:12px;font-family:\'DM Sans\',sans-serif" onmousedown="event.preventDefault();SST.pickPqrsExpAsocSug('+i+')">'+expAsocEtiquetaSug(ex)+'</button>';
   }).join('');
+}
+/** Sugerencias Asociar PQRSD/expediente: si el N° no está en memoria, un getDoc y repinta. */
+function filtrarPqrsExpAsocSug(inp){
+  if(!inp)return;
+  filtrarPqrsExpAsocSugPintar(inp);
+  clearTimeout(window._pqrsAsocBusqT);
+  window._pqrsAsocBusqT=setTimeout(function(){
+    const q=String((inp&&inp.value)||'').trim();
+    const parece=typeof consultaPareceNumeroDoc==='function'?consultaPareceNumeroDoc(q):false;
+    if(!parece||typeof traerExpedienteSiFalta!=='function')return;
+    const ya=(typeof getExpById==='function'&&getExpById(q))
+      ||(typeof findExpByNumPlain==='function'&&findExpByNumPlain(q));
+    if(ya){filtrarPqrsExpAsocSugPintar(inp);return;}
+    Promise.resolve(traerExpedienteSiFalta(q)).then(function(){
+      if(String((inp&&inp.value)||'').trim()!==q)return;
+      filtrarPqrsExpAsocSugPintar(inp);
+    }).catch(function(){
+      if(String((inp&&inp.value)||'').trim()!==q)return;
+      filtrarPqrsExpAsocSugPintar(inp);
+    });
+  },280);
 }
 function pickPqrsExpAsocSug(idx){
   const ex=(window._pqrsAsocSugList||[])[idx];
@@ -13961,9 +13982,12 @@ function openAsociarVinculoPqrsModal(expId,modo){
   window._taskModalCtx={mode:'pqrsAsoc',expId:expId,modo:modo};
   setTimeout(function(){const inp=document.getElementById('pqrs-asoc-exp-inp');if(inp)inp.focus();},80);
 }
-function submitAsociarVinculoPqrs(expId){
+async function submitAsociarVinculoPqrs(expId){
   const ctx=window._taskModalCtx||{};
   const num=String((document.getElementById('pqrs-asoc-exp-inp')||{}).value||'').trim();
+  if(num&&typeof traerExpedienteSiFalta==='function'){
+    try{await traerExpedienteSiFalta(num);}catch(e){}
+  }
   if(asociarVinculoAPqrs(expId,num,ctx.modo||'pqrs')){
     closeTaskModal();
     refreshPqrsPanelViews(expId);
@@ -35088,7 +35112,7 @@ function positionExpAsocSugPortal(inp){
   portal.style.width=Math.max(r.width,360)+'px';
   portal.style.zIndex=portalZIndexFlotante();
 }
-function filtrarExpAsocSug(inp){
+function filtrarExpAsocSugPintar(inp){
   if(!inp)return;
   expAsocSugInput=inp;
   const portal=document.getElementById('exp-asoc-sug-portal');
@@ -35098,6 +35122,27 @@ function filtrarExpAsocSug(inp){
   window._expAsocSugList=list;
   portal.innerHTML=list.map((e,i)=>'<button type="button" onmousedown="pickExpAsocSug('+i+')">'+escAttr(expAsocEtiquetaSug(e))+'</button>').join('');
   if(list.length){positionExpAsocSugPortal(inp);portal.style.display='block';}else portal.style.display='none';
+}
+/** Formulario «expedientes asociados»: getDoc si el N° tipado aún no está en memoria. */
+function filtrarExpAsocSug(inp){
+  if(!inp)return;
+  filtrarExpAsocSugPintar(inp);
+  clearTimeout(window._expAsocBusqT);
+  window._expAsocBusqT=setTimeout(function(){
+    const q=String((inp&&inp.value)||'').trim();
+    const parece=typeof consultaPareceNumeroDoc==='function'?consultaPareceNumeroDoc(q):false;
+    if(!parece||typeof traerExpedienteSiFalta!=='function')return;
+    const ya=(typeof getExpById==='function'&&getExpById(q))
+      ||(typeof findExpByNumPlain==='function'&&findExpByNumPlain(q));
+    if(ya){filtrarExpAsocSugPintar(inp);return;}
+    Promise.resolve(traerExpedienteSiFalta(q)).then(function(){
+      if(String((inp&&inp.value)||'').trim()!==q)return;
+      filtrarExpAsocSugPintar(inp);
+    }).catch(function(){
+      if(String((inp&&inp.value)||'').trim()!==q)return;
+      filtrarExpAsocSugPintar(inp);
+    });
+  },280);
 }
 function hideExpAsocSug(){
   const portal=document.getElementById('exp-asoc-sug-portal');

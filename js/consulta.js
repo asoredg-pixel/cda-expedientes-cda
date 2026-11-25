@@ -1309,15 +1309,48 @@ function renderReviewAsocPickPanel(panelId){
     '</div>';
   reviewAsocPintarBadgeRail();
 }
-function onReviewAsocSearchInput(inp){
+/** Repinta solo la lista de Asociar (sin rearmar el input). */
+function reviewAsocPintarLista(){
   const ctx=window._reviewAsocCtx||{};
-  ctx.q=String((inp&&inp.value)||'').trim();
-  window._reviewAsocCtx=ctx;
   const listEl=document.getElementById('review-asoc-list');
   if(!listEl)return;
   const list=reviewAsocListaVisible(ctx);
-  listEl.innerHTML=list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>';
+  listEl.innerHTML=list.length?list.map(reviewAsocPickCardHtml).join('')
+    :'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>';
 }
+/**
+ * Como la barra de Consulta: filtra en memoria y, si el texto parece N° de
+ * expediente/PQRSD y no está cargado, un getDoc (traerExpedienteSiFalta) y repinta.
+ */
+function onReviewAsocSearchInput(inp){
+  const ctx=window._reviewAsocCtx||{};
+  const q=String((inp&&inp.value)||'').trim();
+  ctx.q=q;
+  window._reviewAsocCtx=ctx;
+  reviewAsocPintarLista();
+  clearTimeout(window._reviewAsocBusqT);
+  window._reviewAsocBusqT=setTimeout(function(){
+    const qNow=String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim();
+    const parece=typeof consultaPareceNumeroDoc==='function'?consultaPareceNumeroDoc(qNow):false;
+    if(!parece||typeof traerExpedienteSiFalta!=='function')return;
+    const ya=(typeof getExpById==='function'&&getExpById(qNow))
+      ||(typeof findExpByNumPlain==='function'&&findExpByNumPlain(qNow));
+    if(ya){reviewAsocPintarLista();return;}
+    const listEl=document.getElementById('review-asoc-list');
+    if(listEl&&!reviewAsocListaVisible(window._reviewAsocCtx||{}).length){
+      listEl.innerHTML='<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Buscando '+escAttr(qNow)+'…</div>';
+    }
+    Promise.resolve(traerExpedienteSiFalta(qNow)).then(function(){
+      if(String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim()!==qNow)return;
+      reviewAsocPintarLista();
+    }).catch(function(){
+      if(String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim()!==qNow)return;
+      reviewAsocPintarLista();
+    });
+  },280);
+}
+window.reviewAsocPintarLista=reviewAsocPintarLista;
+window.onReviewAsocSearchInput=onReviewAsocSearchInput;
 function setReviewAsocPqrsModo(modo){
   const ctx=window._reviewAsocCtx||{};
   ctx.pqrsModo=modo==='tramite'?'tramite':'pqrs';
