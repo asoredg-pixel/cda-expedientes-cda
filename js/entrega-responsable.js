@@ -3107,6 +3107,11 @@ function collectEntregaRespRegistroPayload(actividad){
     }
     const aplicaReq=cumple==='no'&&String((document.getElementById('entrega-reg-concepto-aplica-req')||{}).value||'si')!=='no';
     const conceptoReqId=aplicaReq?('cr_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6)):'';
+    const presentadoPor=String(
+      (typeof responsableActivo!=='undefined'&&responsableActivo)
+      ||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')
+      ||''
+    ).trim();
     return{tipo:'concepto',item:{
       tipoConcepto:tipoConcepto,
       fecha:String((document.getElementById('entrega-reg-concepto-fecha')||{}).value||(typeof hoy==='function'?hoy():'')),
@@ -3115,6 +3120,7 @@ function collectEntregaRespRegistroPayload(actividad){
       cumple:cumple,
       aplicaReq:aplicaReq,
       conceptoReqId:conceptoReqId,
+      presentadoPor:presentadoPor,
       coordenadas:coordenadas,
       coordCambioNota:coordCambioNota,
       coordAnterior:coordAnterior,
@@ -3188,7 +3194,7 @@ function appendRegistroDesdeEntrega(e,payload,taskOpt){
       appendCoordEntregaAInfoTecnica(e,item.coordenadas,coordOpts);
     }
     if(item.aplicaReq&&item.conceptoReqId){
-      ensureOficioRequerimientoTask(e,item);
+      ensureOficioRequerimientoTask(e,item,t);
     }
     return true;
   }
@@ -3401,18 +3407,73 @@ function findConceptoByReqId(e,conceptoReqId){
   }
   return null;
 }
-function ensureOficioRequerimientoTask(e,conceptoItem){
+/**
+ * Destinatario del Oficio de requerimiento:
+ * 1) quien presentó el concepto (presentadoPor),
+ * 2) técnico del ciclo revisión par (responsable→profesional→NCA),
+ * 3) quien entrega ahora (entrega directa al NCA).
+ */
+function destOficioRequerimientoConcepto(e,conceptoItem,taskOpt){
+  const presentado=String((conceptoItem&&conceptoItem.presentadoPor)||'').trim();
+  if(presentado)return presentado;
+  const tid=String((conceptoItem&&conceptoItem.taskId)||(taskOpt&&taskOpt.id)||'').trim();
+  let tConcepto=taskOpt||null;
+  if(!tConcepto&&e&&tid){
+    tConcepto=(e.tasks||[]).map(function(x){return typeof normalizeTask==='function'?normalizeTask(x):x;})
+      .find(function(x){return x&&!x.eliminada&&String(x.id||'')===tid;})||null;
+  }
+  if(tConcepto){
+    const ctx=typeof taskRevisionParCtx==='function'?taskRevisionParCtx(tConcepto,e)
+      :(typeof taskRevisionParNombresDesdeHistorial==='function'?taskRevisionParNombresDesdeHistorial(tConcepto):null);
+    const tec=String((ctx&&ctx.tecnico)||'').trim();
+    if(tec)return tec;
+  }
+  return String(
+    (typeof responsableActivo!=='undefined'&&responsableActivo)
+    ||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')
+    ||''
+  ).trim();
+}
+window.destOficioRequerimientoConcepto=destOficioRequerimientoConcepto;
+function ensureOficioRequerimientoTask(e,conceptoItem,taskOpt){
   if(!e||!conceptoItem||!conceptoItem.conceptoReqId)return null;
   e.tasks=Array.isArray(e.tasks)?e.tasks:[];
   const reqId=String(conceptoItem.conceptoReqId);
+  // Destino primero (presentadoPor → técnico revpar → quien entrega); luego fijar presentadoPor
+  // si faltaba, para no atribuir el concepto al profesional que solo reenvía.
+  const responsable=destOficioRequerimientoConcepto(e,conceptoItem,taskOpt||null);
+  if(!responsable)return null;
+  if(!String(conceptoItem.presentadoPor||'').trim())conceptoItem.presentadoPor=responsable;
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();};
   const existing=e.tasks.map(function(t){return typeof normalizeTask==='function'?normalizeTask(t):t;}).find(function(t){
     return t&&!t.eliminada&&String(t.conceptoReqId||'')===reqId&&esActividadOficioRequerimiento(t.actividad||t.desc||'');
   });
-  if(existing)return existing;
-  const responsable=(typeof responsableActivo!=='undefined'&&responsableActivo)
-    ||(typeof taskComentarioAutor==='function'?taskComentarioAutor():'')
-    ||'';
-  if(!responsable)return null;
+  if(existing){
+    // Realinear si quedó en el profesional (reentrega) y aún no se ha ejecutado.
+    const est=typeof estadoTask==='function'?estadoTask(existing):String(existing.estado||'');
+    const pendiente=!String(existing.fechaReportada||'').trim()
+      &&!String(existing.fechaAtendida||'').trim()
+      &&est!=='Atendida'&&est!=='Por verificar'&&est!=='Por corregir';
+    if(pendiente&&!eq(existing.responsable,responsable)){
+      existing.responsable=responsable;
+      existing.responsables=[responsable];
+      existing.asignados=[{nombre:responsable,fechaReportada:'',fechaAtendida:'',estado:'pendiente'}];
+      if(!Array.isArray(existing.historial))existing.historial=[];
+      existing.historial.push({
+        tipo:'auto_oficio_requerimiento_realineado',
+        fecha:typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10),
+        ts:Date.now(),
+        por:'sistema',
+        a:responsable,
+        nota:'Oficio reasignado a quien presentó el concepto (no al revisor profesional)'
+      });
+      if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(existing);
+      if(typeof logAudit==='function')logAudit('Oficio de requerimiento realineado ['+e._exp+'] → '+responsable,'expedientes',e._exp);
+    }
+    return existing;
+  }
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
   const vence=typeof calcVenceConUnidad==='function'?calcVenceConUnidad(hoyStr,1,'dias'):hoyStr;
   const detalle=conceptoItem.concepto?('Concepto '+conceptoItem.concepto):(conceptoItem.tipoConcepto||'');
@@ -3763,9 +3824,11 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
     const tid=String(taskOpt.id);
     const arr=conceptosSegData(e._conceptos_seg);
     let prevReqId='';
+    let prevPresentado='';
     const next=arr.filter(function(c){
       if(c&&c.pendienteAprobacion&&String(c.taskId||'')===tid){
         if(c.aplicaReq&&c.conceptoReqId)prevReqId=String(c.conceptoReqId);
+        if(c.presentadoPor)prevPresentado=String(c.presentadoPor||'').trim();
         return false;
       }
       return true;
@@ -3774,6 +3837,8 @@ function validateAndAppendEntregaRegistro(e,regPayload,taskOpt){
       conceptosPrev=e._conceptos_seg;
       e._conceptos_seg=JSON.stringify(next);
       if(prevReqId&&regPayload.item.aplicaReq)regPayload.item.conceptoReqId=prevReqId;
+      // Conservar quién presentó el concepto (no el profesional que reenvía al NCA).
+      if(prevPresentado&&regPayload.item)regPayload.item.presentadoPor=prevPresentado;
     }
   }
   if(regPayload.tipo==='concepto'&&regPayload.item.concepto&&typeof validarNumeroConceptoDisponible==='function'){

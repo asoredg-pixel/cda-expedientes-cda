@@ -170,6 +170,116 @@ function taskFirmaEnPorNotificar(t){
   return f===(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion')
     ||f===(typeof PQRS_WF!=='undefined'?PQRS_WF.LISTA_ENVIO:'lista_para_envio');
 }
+/** Proyectista / quien entregó: candidato por defecto a notificar (no VITAL/encargado). */
+function tramiteProyectistaNotificarDefault(t){
+  if(!t)return'';
+  const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+  const ent=String((wf&&wf.entregado_por)||'').trim();
+  if(ent)return ent;
+  const r=String(t.responsable||'').trim();
+  if(r)return r;
+  if(Array.isArray(t.responsables)){
+    for(let i=0;i<t.responsables.length;i++){
+      const n=String(t.responsables[i]||'').trim();
+      if(n)return n;
+    }
+  }
+  return'';
+}
+/**
+ * Quién debe notificar: preferido → notificar_por → propuesto → proyectista.
+ * No cae a VITAL/encargado: eso dejaba al proyectista en Atendidas sin deuda en Por notificar.
+ */
+function tramiteResolverNotificarPor(t,preferido){
+  const pref=String(preferido||'').trim();
+  if(pref)return pref;
+  const wf=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t&&t.firmaWf)||{};
+  const ya=String((wf&&wf.notificar_por)||'').trim();
+  if(ya)return ya;
+  const prop=String((wf&&wf.notificar_por_propuesto)||'').trim();
+  if(prop)return prop;
+  return tramiteProyectistaNotificarDefault(t);
+}
+window.tramiteResolverNotificarPor=tramiteResolverNotificarPor;
+window.tramiteProyectistaNotificarDefault=tramiteProyectistaNotificarDefault;
+/** ¿El nombre es notificador institucional de correo (VITAL / encargado), no el proyectista? */
+function tramiteNotificarPorEsInstitucional(nombre,t){
+  const n=String(nombre||'').trim();
+  if(!n)return false;
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();}
+  if(typeof pqrsNombresVital==='function'){
+    const vit=pqrsNombresVital()||[];
+    if(vit.some(function(v){return eq(v,n);}))return true;
+  }
+  const depto=String((t&&t.depto)||'guaviare').trim()||'guaviare';
+  if(typeof getEncargadoDepto==='function'){
+    const enc=String(getEncargadoDepto(depto)||'').trim();
+    if(enc&&eq(enc,n))return true;
+  }
+  return false;
+}
+/**
+ * Sana fase Por notificar sin designado / con fechaAtendida de proyección:
+ * fija notificar_por al proyectista y reabre su deuda (sale de Atendidas → Por notificar).
+ * También corrige el eco del atajo que dejaba VITAL/encargado por selector vacío.
+ * No escribe Firestore; el caller persiste si cambió.
+ */
+function repararTramiteNotificarPorSiFalta(t){
+  if(!t||t.eliminada)return false;
+  if(typeof taskFirmaEnPorNotificar!=='function'||!taskFirmaEnPorNotificar(t))return false;
+  const wf0=typeof getTaskFirmaWf==='function'?getTaskFirmaWf(t):(t.firmaWf||{});
+  if(wf0&&wf0.notificacion_reportada)return false;
+  if(/cerrad/i.test(String((wf0&&wf0.fase)||'')))return false;
+  let changed=false;
+  let nPor=String((wf0&&wf0.notificar_por)||'').trim();
+  const proy=tramiteProyectistaNotificarDefault(t);
+  const eq=typeof agendaNorm==='function'
+    ?function(a,b){return agendaNorm(a)===agendaNorm(b);}
+    :function(a,b){return String(a||'').trim().toLowerCase()===String(b||'').trim().toLowerCase();}
+  // Atajo firmado → Por notificar: si quedó VITAL/encargado y hay proyectista distinto, devolver deuda al proyectista.
+  const vinoAtajo=!!(wf0&&wf0.firma_director&&wf0.firma_director.atajo_desde_revision)
+    ||(Array.isArray(t.historial)&&t.historial.some(function(h){return h&&h.tipo==='atajo_firmado_revision';}));
+  if(proy&&nPor&&!eq(nPor,proy)&&vinoAtajo&&tramiteNotificarPorEsInstitucional(nPor,t)&&!wf0.notif_sin_plazo){
+    nPor=proy;
+    t.firmaWf=Object.assign({},wf0,{notificar_por:nPor,notificar_por_propuesto:nPor});
+    changed=true;
+  }
+  if(!nPor){
+    nPor=tramiteResolverNotificarPor(t,'');
+    if(nPor){
+      t.firmaWf=Object.assign({},wf0,{
+        notificar_por:nPor,
+        notificar_por_propuesto:String((wf0&&wf0.notificar_por_propuesto)||'').trim()||nPor
+      });
+      changed=true;
+    }
+  }
+  if(!nPor)return changed;
+  const before=JSON.stringify({
+    fa:t.fechaAtendida,est:t.estado,np:(t.firmaWf&&t.firmaWf.notificar_por)||'',
+    asig:(t.asignados||[]).map(function(a){return a&&[a.nombre,a.estado,a.fechaAtendida];})
+  });
+  if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+    tramiteSincronizarParticipacionPostAprobacionFirma(t);
+  if(String(t.fechaAtendida||'').trim()){t.fechaAtendida='';changed=true;}
+  if(String(t.estado||'')==='Atendida'){t.estado='En ejecución';changed=true;}
+  if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(t);
+  // Tras sync con notificador pendiente no debe quedar Atendida agregada
+  if(typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t)){
+    if(String(t.fechaAtendida||'').trim()){t.fechaAtendida='';changed=true;}
+    if(String(t.estado||'')==='Atendida'){t.estado='En ejecución';changed=true;}
+  }
+  const after=JSON.stringify({
+    fa:t.fechaAtendida,est:t.estado,np:(t.firmaWf&&t.firmaWf.notificar_por)||'',
+    asig:(t.asignados||[]).map(function(a){return a&&[a.nombre,a.estado,a.fechaAtendida];})
+  });
+  if(before!==after)changed=true;
+  return changed;
+}
+window.repararTramiteNotificarPorSiFalta=repararTramiteNotificarPorSiFalta;
+window.tramiteNotificarPorEsInstitucional=tramiteNotificarPorEsInstitucional;
 function taskFirmaEnRevisionFinalNotif(t){
   const f=taskFirmaFase(t);
   return f===(typeof PQRS_WF!=='undefined'?PQRS_WF.REVISION_FINAL:'revision_final_nca');
@@ -388,9 +498,20 @@ function tramiteSincronizarParticipacionPostAprobacionFirma(t){
   if(!t||!(typeof taskEnFlujoFirmaTramite==='function'?taskEnFlujoFirmaTramite(t):!!taskFirmaFase(t)))return;
   if(typeof normalizeTask==='function')normalizeTask(t);
   if(typeof migrateLegacyAsignados==='function')migrateLegacyAsignados(t);
-  const wf=getTaskFirmaWf(t);
-  const notifPor=String(wf.notificar_por||'').trim();
+  let wf=getTaskFirmaWf(t);
   const enNotif=typeof taskFirmaEnPorNotificar==='function'&&taskFirmaEnPorNotificar(t);
+  let notifPor=String(wf.notificar_por||'').trim();
+  // Fase Por notificar sin designado: fijar proyectista (no dejar deuda huérfana).
+  if(enNotif&&!notifPor&&typeof tramiteResolverNotificarPor==='function'){
+    notifPor=tramiteResolverNotificarPor(t,'');
+    if(notifPor){
+      t.firmaWf=Object.assign({},wf,{
+        notificar_por:notifPor,
+        notificar_por_propuesto:String(wf.notificar_por_propuesto||'').trim()||notifPor
+      });
+      wf=getTaskFirmaWf(t);
+    }
+  }
   const hoyStr=typeof hoy==='function'?hoy():new Date().toISOString().slice(0,10);
   const nombres=new Set();
   (t.responsables||[]).forEach(function(n){if(n)nombres.add(String(n).trim());});
@@ -407,14 +528,21 @@ function tramiteSincronizarParticipacionPostAprobacionFirma(t){
     if(!a)return;
     const esNotif=enNotif&&notifPor&&typeof agendaNorm==='function'&&agendaNorm(notifPor)===agendaNorm(n);
     if(esNotif){
+      // Designado a notificar: sale de Atendidas → deuda en Por notificar
       a.fechaAtendida='';
       if(a.estado==='atendido')a.estado=a.fechaReportada?'por_verificar':'pendiente';
+      else if(!a.estado||a.estado==='atendido')a.estado=a.fechaReportada?'por_verificar':'pendiente';
     }else{
       if(!a.fechaReportada)a.fechaReportada=hoyStr;
       a.fechaAtendida=a.fechaAtendida||hoyStr;
       a.estado='atendido';
     }
   });
+  // No cerrar el agregado mientras la notificación siga abierta
+  if(enNotif&&notifPor){
+    t.fechaAtendida='';
+    if(String(t.estado||'')==='Atendida')t.estado='En ejecución';
+  }
   t._firma_proyeccion_atendida=true;
   if(!Array.isArray(t.historial))t.historial=[];
   if(!t.historial.some(function(h){return h&&h.tipo==='firma_proyeccion_atendida';})){
@@ -1965,7 +2093,8 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
     let vence='';
     if(!sinPlazo&&typeof addDiasHabiles==='function')vence=addDiasHabiles(inicio,5);
     let notifPor=typeof _pqrsLeerNotifPorSel==='function'?_pqrsLeerNotifPorSel('tramite-notif-por-sel'):'';
-    if(!notifPor)notifPor=String(wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
+    if(!notifPor&&typeof tramiteResolverNotificarPor==='function')notifPor=tramiteResolverNotificarPor(t,'');
+    else if(!notifPor)notifPor=String(wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
     const patchNotif={
       fase:(typeof PQRS_WF!=='undefined'?PQRS_WF.PENDIENTE_NOTIF:'pendiente_notificacion'),
       firma_director:{por:taskComentarioAutor(),en:new Date().toISOString(),pdfLink:pdfLink,modo:'digital'},
@@ -1975,11 +2104,17 @@ async function tramiteDirectorConfirmarFirmado(expId,taskId){
       notif_plazo_dias:sinPlazo?0:5,
       notif_sin_plazo:!!sinPlazo
     };
+    // Siempre fijar notificar_por al entrar a Por notificar (antes solo propuesto en correo sin plazo).
     if(notifPor){
-      if(sinPlazo)patchNotif.notificar_por_propuesto=notifPor;
-      else{patchNotif.notificar_por=notifPor;patchNotif.notificar_por_propuesto=notifPor;}
+      patchNotif.notificar_por=notifPor;
+      patchNotif.notificar_por_propuesto=notifPor;
     }
     setTaskFirmaWf(expId,taskId,patchNotif);
+    mutateTask(expId,taskId,function(tk){
+      if(typeof tramiteSincronizarParticipacionPostAprobacionFirma==='function')
+        tramiteSincronizarParticipacionPostAprobacionFirma(tk);
+      if(typeof syncTaskAggregateState==='function')syncTaskAggregateState(tk);
+    });
     if(typeof sstCargaDone==='function'&&window._confirmRadicacionLoading)sstCargaDone({holdMs:200});
     window._tramiteDirectorSignedFile=null;
     closeTaskModal();
@@ -3241,8 +3376,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
   let notifPor='';
   const sel=document.getElementById('tramite-atajo-notif-por-sel')||document.getElementById('tramite-notif-por-sel')||document.getElementById('pqrs-notif-por-sel');
   if(sel)notifPor=String(sel.value||'').trim();
-  if(!notifPor&&typeof pqrsResolverNotificadorCorreo==='function')
-    notifPor=pqrsResolverNotificadorCorreo((e&&e._depto)||t.depto||'guaviare','');
+  // Por defecto el proyectista (no VITAL/encargado): si le asignan notificar, debe ver Por notificar.
+  if(!notifPor&&typeof tramiteResolverNotificarPor==='function')
+    notifPor=tramiteResolverNotificarPor(t,'');
   const btn=document.getElementById('tramite-atajo-firmado-btn');
   if(btn){btn.disabled=true;btn.textContent='Procesando…';}
   try{
@@ -3307,7 +3443,9 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
         const d=new Date(inicio+'T12:00:00');d.setDate(d.getDate()+5);vence=d.toISOString().slice(0,10);
       }
     }
-    const quienNotif=String(notifPor||wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
+    const quienNotif=typeof tramiteResolverNotificarPor==='function'
+      ?tramiteResolverNotificarPor(t,notifPor)
+      :String(notifPor||wfPrev.notificar_por||wfPrev.notificar_por_propuesto||'').trim();
     const cerrarOtro=!!opts.cerrarOtroMedio;
     const cerrarSinNotif=!!opts.cerrarSinNotif;
     const cerrarAtendida=cerrarOtro||cerrarSinNotif;
@@ -3322,10 +3460,12 @@ async function tramiteAtajoFirmadoConfirmar(expId,taskId,sinPdf,abrirNotif,opts)
     const ok=mutateTask(refId,taskId,function(tk){
       tk.requiereFirma=true;
       const prev=getTaskFirmaWf(tk);
+      const quienN=typeof tramiteResolverNotificarPor==='function'?tramiteResolverNotificarPor(tk,quienNotif):quienNotif;
       tk.firmaWf=Object.assign({},prev,{
         fase:faseDest,
-        notificar_por:cerrarAtendida?'':(abrirNotif?(prev.notificar_por||''):quienNotif),
-        notificar_por_propuesto:cerrarAtendida?'':(quienNotif||prev.notificar_por_propuesto||''),
+        // Al pasar a Por notificar siempre designar (proyectista si no eligieron otro).
+        notificar_por:cerrarAtendida?'':(abrirNotif?(prev.notificar_por||quienN||''):quienN),
+        notificar_por_propuesto:cerrarAtendida?'':(quienN||prev.notificar_por_propuesto||''),
         canal:cerrarSinNotif?'':(cerrarOtro?canalOtro:(abrirNotif||sinPlazo?'correo':(prev.canal&&String(prev.canal).toLowerCase()!=='correo'?prev.canal:''))),
         notif_correo_entrega:cerrarAtendida?false:!!(abrirNotif||sinPlazo),
         firma_fisica:{por:taskComentarioAutor(),en:new Date().toISOString(),atajo_revision:true},

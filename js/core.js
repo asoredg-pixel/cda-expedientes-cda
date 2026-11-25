@@ -32426,8 +32426,29 @@ function getTareasNotifVisiblesAct(){
   const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
     if(typeof taskFirmaEnRevisionFinalNotif==='function'&&taskFirmaEnRevisionFinalNotif(t))return false;
     if(typeof taskFirmaEnPorNotificar!=='function'||!taskFirmaEnPorNotificar(t))return false;
-    if(typeof estadoTask==='function'&&(estadoTask(t)==='Por corregir'||estadoTask(t)==='Atendida'))return false;
-    if(String(t.fechaAtendida||'').trim())return false;
+    // Sana designado vacío / fechaAtendida de proyección (Giovanny: sale de Atendidas → Por notificar)
+    if(typeof repararTramiteNotificarPorSiFalta==='function'){
+      try{
+        if(repararTramiteNotificarPorSiFalta(t)){
+          const eHeal=typeof getExpById==='function'?getExpById(t.exp||t.codigo):null;
+          if(eHeal&&typeof aplicarMarcasBandeja==='function')aplicarMarcasBandeja(eHeal);
+          if(eHeal&&typeof repararMarcaExpediente==='function')repararMarcaExpediente(eHeal);
+          if(!window._tramiteNotifHealPend)window._tramiteNotifHealPend=[];
+          const key=String((eHeal&&eHeal._exp)||t.exp||t.codigo||'')+'|'+(t.id||'');
+          if(key&&window._tramiteNotifHealPend.indexOf(key)<0){
+            window._tramiteNotifHealPend.push(key);
+            if(eHeal&&typeof persistExpedienteGranular==='function'){
+              try{persistExpedienteGranular(eHeal);}catch(errH){console.warn('heal notif persist',errH);}
+            }else if(t.sinExpediente&&typeof saveGlobalFirestore==='function'){
+              try{saveGlobalFirestore();}catch(errG){console.warn('heal notif libre',errG);}
+            }
+          }
+        }
+      }catch(errHeal){console.warn('repararTramiteNotificarPorSiFalta',errHeal);}
+    }
+    if(typeof estadoTask==='function'&&estadoTask(t)==='Por corregir')return false;
+    // No excluir por Atendida/fechaAtendida agregada: la proyección puede quedar «atendida»
+    // mientras la fase sigue Por notificar; la deuda la decide notificar_por.
     const fw=t.firmaWf||{};
     if(fw.notificacion_reportada)return false;
     if(/cerrad/i.test(String(fw.fase||'')))return false;
