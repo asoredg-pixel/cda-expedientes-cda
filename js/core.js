@@ -11245,10 +11245,13 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   const pe=typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(expId,taskId);
   const pa=typeof puedeEliminarActividadRevision==='function'&&puedeEliminarActividadRevision(expId,taskId);
   let detalle='La entrega devuelve la actividad a <strong>Por ejecutar</strong>. Eliminar actividad la mueve a la papelera.';
-  const revParSide=pe&&t&&typeof taskRevParTecnicoPuedeEliminar==='function'&&taskRevParTecnicoPuedeEliminar(t,responsableActivo,eSide)
-    ?taskRevisionParCtx(t,eSide):null;
-  if(revParSide&&!esAuto){
-    detalle='El profesional <strong>'+escAttr(revParSide.profesional)+'</strong> aún no la ha revisado. Al eliminar la entrega sale de su revisión, la actividad vuelve a <strong>su Por ejecutar</strong> y se borran los documentos para que cargue uno nuevo.';
+  const revParActivo=t&&typeof taskEsFlujoRevisionParConceptoActivo==='function'&&taskEsFlujoRevisionParConceptoActivo(t,eSide);
+  const revParSide=revParActivo&&typeof taskRevisionParCtx==='function'?taskRevisionParCtx(t,eSide):null;
+  const puedeReempSide=t&&typeof taskRevParTecnicoPuedeReemplazar==='function'&&taskRevParTecnicoPuedeReemplazar(t,responsableActivo,eSide);
+  if(revParActivo&&esModoResponsable()){
+    detalle=puedeReempSide
+      ?('Concepto en revisión de <strong>'+escAttr((revParSide&&revParSide.profesional)||'profesional')+'</strong>. No se elimina la entrega (se conserva el historial). Use <strong>Reemplazar documento</strong> en la fila o el botón de abajo.')
+      :('Concepto en ciclo con el profesional: el responsable <strong>no elimina</strong> la entrega (Por revisar / Por corregir). Use <strong>Nueva entrega</strong> o reenvío de corrección para conservar la trazabilidad. Solo el encargado NCA puede eliminar la actividad si hace falta.');
   }else if(t&&t.informeContrato&&pe){
     detalle='Se anula el informe <strong>como si no se hubiera entregado</strong>: se borran el PDF, los soportes y la carpeta de Drive, y deja de verse en Recursos. En corrección, solo el encargado NCA o el administrador pueden eliminar la entrega; el responsable solo puede quitar archivos sueltos.';
   }else if(enFirma){
@@ -11259,6 +11262,8 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
       :'Esta es una <strong>autoentrega</strong> (📤 Entregar documento): al eliminar se <strong>anula la actividad</strong> y no quedará en Por ejecutar.';
   }
   let btns='';
+  if(puedeReempSide)
+    btns+='<button type="button" class="btn bsm bp" onclick="abrirReemplazarDocumentoRevPar(\''+eid+'\',\''+tid+'\')">📄 Reemplazar documento</button>';
   // Encargado: cancelar entrega/autoentrega también en Revisados (por corregir / por firmar)
   if(pe)
     btns+='<button type="button" class="btn bsm" onclick="eliminarEntregaActividadConfirm(\''+eid+'\',\''+tid+'\')">'+(esAuto&&!(t&&t.informeContrato)?'🗑 Cancelar autoentrega':'🗑 Eliminar entrega')+'</button>';
@@ -11267,7 +11272,7 @@ function renderTaskReviewEliminarSideHtml(expId,taskId){
   if(!btns)
     btns='<div style="font-size:12px;color:var(--rd)">No hay acciones de eliminación disponibles en este estado.</div>';
   return '<div class="task-review-side-form">'+
-    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">¿Qué desea eliminar?</div>'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:10px">'+(puedeReempSide&&!pe?'Reemplazar documento':'¿Qué desea eliminar?')+'</div>'+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:12px">'+detalle+'</div>'+
     '<div class="fx" style="gap:8px;flex-direction:column;align-items:stretch">'+btns+'</div></div>';
 }
@@ -18081,8 +18086,13 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   if(t&&t.sinExpediente)expId=t.codigo;
   if(!t){notif('Actividad no encontrada','err');return false;}
   if(esTareaDelEncargado(t)){notif('Use autoentrega del encargado (📤): no pasa por Por revisar','err');return false;}
-  if((esModoResponsable()||esVistaActividadesDepto())&&!taskUsuarioEsAsignado(t,responsableActivo)){notif('Actividad no asignada a usted','err');return false;}
-  if(!puedeReportarTask(t,responsableActivo)){notif('No puede reportar esta actividad en su estado actual','err');return false;}
+  const ePreEnv=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(expId):null);
+  const ctxPreEnv=window._taskModalCtx||{};
+  const reempRevPar=!!ctxPreEnv.reemplazoRevPar
+    &&typeof taskRevParTecnicoPuedeReemplazar==='function'
+    &&taskRevParTecnicoPuedeReemplazar(t,responsableActivo,ePreEnv);
+  if((esModoResponsable()||esVistaActividadesDepto())&&!taskUsuarioEsAsignado(t,responsableActivo)&&!reempRevPar){notif('Actividad no asignada a usted','err');return false;}
+  if(!reempRevPar&&!puedeReportarTask(t,responsableActivo)){notif('No puede reportar esta actividad en su estado actual','err');return false;}
   if(estadoTask(t)==='Atendida'){notif('La actividad ya está verificada y cerrada','err');return false;}
   // Defensa: no reenviar sobre una actividad ya en firma (pisaría docs y no entraría a Por revisar)
   if(typeof taskFirmaWfActiva==='function'&&taskFirmaWfActiva(t)){
@@ -18104,7 +18114,7 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   const hasDriveUpload=archivos.some(a=>a&&(a.driveFileId||a.fileId));
   const hasLocalFile=archivos.some(a=>a&&a.data);
   const esReporteTrasladado=!!(document.getElementById('enviar-modo-traslado')&&document.getElementById('enviar-modo-traslado').value==='1')||taskRecibidaPorTraslado(t);
-  const esNuevaEntrega=!!(document.getElementById('enviar-modo-nueva')&&document.getElementById('enviar-modo-nueva').value==='1')||estadoTask(t)==='Por corregir';
+  const esNuevaEntrega=!!(document.getElementById('enviar-modo-nueva')&&document.getElementById('enviar-modo-nueva').value==='1')||estadoTask(t)==='Por corregir'||reempRevPar;
   const omiteCmtAdj=typeof entregaModalOmiteComentarioEnvio==='function'&&entregaModalOmiteComentarioEnvio();
   if(!links.length&&!cmt&&!hasDriveUpload&&!hasLocalFile&&!omiteCmtAdj){
     notif('Escriba un comentario y/o adjunte un archivo para enviar a verificación','err');
@@ -18143,10 +18153,10 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
   if(esModoResponsable()&&!taskEsMultiAsignada(t)&&!revParRet){
     const eRp=eRevPar;
     const esPqrsRp=!!(eRp&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eRp));
-    // Reenvío del técnico mientras el profesional aún no revisa: no mandar a Por verificar del encargado
-    // (eso duplicaba/desaparecía la actividad en bandejas).
-    if(!esPqrsRp&&revParCtx&&revParCtx.fase==='profesional'&&soyTecnicoRev){
-      revProfEnvio={tecnico:revParCtx.tecnico,profesional:revParCtx.profesional,reenvio:true};
+    // Reemplazo de documento / reenvío del técnico mientras el profesional aún no revisa:
+    // no mandar a Por verificar del encargado (eso duplicaba/desaparecía la actividad en bandejas).
+    if(!esPqrsRp&&revParCtx&&revParCtx.fase==='profesional'&&(soyTecnicoRev||reempRevPar)){
+      revProfEnvio={tecnico:revParCtx.tecnico||responsableActivo,profesional:revParCtx.profesional,reenvio:true};
     }else if(!revParCtx){
       const ctxRp=window._taskModalCtx||{};
       const destRp=String((ctxRp.revProfesional!=null?ctxRp.revProfesional:(typeof entregaRevProfesionalDestino==='function'?entregaRevProfesionalDestino():''))||'').trim();
@@ -18392,7 +18402,10 @@ function enviarTaskPorVerificar(expId,taskId,linksOpt,comentarioOpt,requiereLink
       return ok;
     }
     if(revProfEnvio){
-      notif('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por ejecutar','ok');
+      if(reempRevPar&&window._taskModalCtx)window._taskModalCtx.reemplazoRevPar=false;
+      notif(reempRevPar
+        ?('Documento reemplazado — sigue en revisión de '+revProfEnvio.profesional+' (historial conservado)')
+        :('Enviada a revisión de '+revProfEnvio.profesional+' — queda en su Por ejecutar'),'ok');
       return ok;
     }
     notif(esNuevaEntrega?'Nueva entrega enviada al departamento para verificación':esReporteTrasladado?'Actividad reportada tras traslado — pendiente de verificación del departamento':'Actividad reportada — pendiente de verificación del departamento','ok');
@@ -21148,6 +21161,12 @@ function puedeEliminarEntregaActividad(expId,taskId){
   const e=typeof getExpById==='function'?getExpById(expId):null;
   const esEnc=typeof puedeGestionarActividadesDepto==='function'&&puedeGestionarActividadesDepto()
     &&!(typeof esModoResponsable==='function'&&esModoResponsable());
+  // Concepto en ciclo revisión par (responsable↔profesional): el responsable no elimina
+  // (ni en Por revisar del técnico ni en Por corregir). Solo sustituye / nueva entrega.
+  // Entregas directas al encargado NCA (sin ciclo rev par) no se tocan.
+  if(!esEnc&&typeof esModoResponsable==='function'&&esModoResponsable()
+    &&typeof taskEsFlujoRevisionParConceptoActivo==='function'&&taskEsFlujoRevisionParConceptoActivo(t,e))
+    return false;
   // Encargado/NCA: Por revisar + Revisados (por corregir / por firmar).
   // Incluye PQRSD creadas por responsables (autoentrega): cancelar entrega/autoentrega.
   // Si ya está revisada, el responsable NO puede eliminar (rama de abajo); el encargado sí.
@@ -21320,12 +21339,16 @@ async function eliminarEntregaActividad(expId,taskId,opts){
   if(!t){notif('Actividad no encontrada','err');return false;}
   const refId=t.sinExpediente?(t.codigo||expId):expId;
   const e=t.sinExpediente?null:getExpById(refId);
+  // Defensa: ciclo concepto↔profesional activo — no cerrar con cancelada desde responsable
+  if(!desdeNotif&&typeof esModoResponsable==='function'&&esModoResponsable()
+    &&typeof taskEsFlujoRevisionParConceptoActivo==='function'&&taskEsFlujoRevisionParConceptoActivo(t,e)){
+    notif('En revisión de concepto con el profesional no se elimina la entrega: use «Reemplazar documento» o «Nueva entrega» para conservar el historial','err');
+    return false;
+  }
   const esAuto=typeof esAutoentregaResponsable==='function'&&esAutoentregaResponsable(t);
   const esPqrs=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e));
-  // Técnico retira la entrega enviada a revisión del profesional: la actividad vuelve a su nombre
-  const revParTec=!desdeNotif&&typeof esModoResponsable==='function'&&esModoResponsable()
-    &&typeof taskRevParTecnicoPuedeEliminar==='function'&&taskRevParTecnicoPuedeEliminar(t,responsableActivo,e)
-    ?taskRevisionParCtx(t,e):null;
+  // (Rev par concepto: el técnico ya no elimina; solo reemplaza documento.)
+  const revParTec=null;
   // Liberar N° de concepto/acto/factura/oficio de esta entrega
   if(typeof retirarRegistroPendienteDeEntrega==='function'){
     try{
@@ -25965,8 +25988,21 @@ function taskRevParTecnicoEsperando(t,usuario,e){
   const p=taskRevParParticipante(t,usuario,e);
   return !!(p&&p.rol==='tecnico'&&p.fase==='profesional'&&estadoTask(t)!=='Atendida');
 }
-/** El técnico puede eliminar su entrega mientras el profesional no la haya revisado (sin acciones suyas tras el envío). */
-function taskRevParTecnicoPuedeEliminar(t,usuario,e){
+/**
+ * Ciclo activo de revisión de concepto responsable↔profesional
+ * (no aplica a entregas directas al encargado NCA).
+ */
+function taskEsFlujoRevisionParConceptoActivo(t,e){
+  if(!t||t.eliminada)return false;
+  if(typeof taskRevisionParCerradaPorRetiro==='function'&&taskRevisionParCerradaPorRetiro(t))return false;
+  return !!(typeof taskRevisionParCtx==='function'&&taskRevisionParCtx(t,e||null));
+}
+window.taskEsFlujoRevisionParConceptoActivo=taskEsFlujoRevisionParConceptoActivo;
+/**
+ * El técnico puede reemplazar el documento mientras el profesional no lo haya revisado
+ * (sin cerrar el ciclo ni perder la trazabilidad).
+ */
+function taskRevParTecnicoPuedeReemplazar(t,usuario,e){
   if(!taskRevParTecnicoEsperando(t,usuario,e))return false;
   const est=estadoTask(t);
   if(est==='Por verificar'||est==='Por corregir'||est==='Atendida'||t.fechaReportada)return false;
@@ -25977,6 +26013,29 @@ function taskRevParTecnicoPuedeEliminar(t,usuario,e){
   const prof=agendaNorm(h[i].a||'');
   return !h.slice(i+1).some(function(x){return x&&agendaNorm(x.por||x.reportadoPor||'')===prof;});
 }
+window.taskRevParTecnicoPuedeReemplazar=taskRevParTecnicoPuedeReemplazar;
+/** Ya no se elimina la entrega en revisión par de concepto (usar reemplazar). */
+function taskRevParTecnicoPuedeEliminar(t,usuario,e){
+  return false;
+}
+/** Abre la entrega para sustituir el documento sin cancelar la revisión del profesional. */
+function abrirReemplazarDocumentoRevPar(expId,taskId){
+  const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
+  if(!t){notif('Actividad no encontrada','err');return;}
+  const ref=t.sinExpediente?(t.codigo||expId):expId;
+  const e=t.sinExpediente?null:(typeof getExpById==='function'?getExpById(ref):null);
+  if(typeof taskRevParTecnicoPuedeReemplazar!=='function'||!taskRevParTecnicoPuedeReemplazar(t,responsableActivo,e)){
+    notif('No puede reemplazar esta entrega ahora','err');
+    return;
+  }
+  if(typeof openEnviarSoporteModal==='function')openEnviarSoporteModal(ref,taskId,'nuevaEntrega');
+  window._taskModalCtx=Object.assign({},window._taskModalCtx||{},{reemplazoRevPar:true});
+  const tit=document.getElementById('task-modal-title');
+  if(tit)tit.textContent='Reemplazar documento · sigue en revisión del profesional · '+(t.codigo||ref);
+  if(typeof notif==='function')
+    notif('Cargue el documento correcto y envíe: permanece en revisión del profesional y se conserva el historial','ok');
+}
+window.abrirReemplazarDocumentoRevPar=abrirReemplazarDocumentoRevPar;
 /** Filas para «Por revisar» del técnico: actividades que envió a revisión y hoy están a nombre del profesional. */
 function getTareasRevParTecnicoEsperando(){
   if(!responsableActivo||!esModoResponsable())return[];
@@ -27319,6 +27378,7 @@ function taskHistLineaTxt(h){
       if(h.revisionPar==='devolucion_nca')return '↩ Encargado devolvió al técnico (vía profesional): '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—')+nota+por;
       if(h.revisionPar==='correccion')return '📤 Corrección del técnico al profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
       if(h.revisionPar==='solicitud')return '📤 Enviada a revisión de profesional: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
+      if(h.revisionPar==='cancelada')return '🗑 Revisión del profesional cerrada (entrega retirada)'+por+(nota&&!/revisión par cerrada/i.test(String(h.nota||''))?nota:'');
       return '↔ Traslado: '+escAttr(h.de||'—')+' → '+escAttr(h.a||'—');
     case 'asignacion':return '📌 Asignada'+(h.a?' a '+escAttr(h.a):'')+por;
     case 'autoasignacion_responsable':return '📌 Creada por el responsable'+por;
@@ -30484,12 +30544,15 @@ function renderActRowToolbarHtml(t,expAct){
   if(typeof reqEsActividadAgrupada==='function'&&reqEsActividadAgrupada(t))return reqActividadAgrupadaToolbarHtml();
   // Técnico con la actividad en revisión del profesional: solo ver entrega y chat
   if(t._revParTecnico&&esModoResponsable()){
+    const puedeReemp=estadoTask(t)!=='Atendida'
+      &&typeof taskRevParTecnicoPuedeReemplazar==='function'
+      &&taskRevParTecnicoPuedeReemplazar(t,responsableActivo,typeof getExpById==='function'?getExpById(t.exp):null);
     return '<span class="sst-act-toolbar">'+
       (estadoTask(t)==='Atendida'
         ?'<button type="button" class="btn bsm bic act-ico" title="Ver documento y anexos aprobados" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\',{soloAprobados:true})">🔍</button>'
         :'<button type="button" class="btn bsm bic act-ico" title="Ver entrega enviada a revisión" onclick="event.stopPropagation();openTaskVerDocumentoResp(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🔍</button>')+
-      (estadoTask(t)!=='Atendida'&&typeof puedeEliminarEntregaActividad==='function'&&puedeEliminarEntregaActividad(t.exp,t.id)
-        ?'<button type="button" class="btn bsm bic act-ico" title="Eliminar entrega: sale de la revisión del profesional, vuelve a su Por ejecutar y borra documentos de Drive" onclick="event.stopPropagation();eliminarEntregaActividadConfirm(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">🗑️</button>'
+      (puedeReemp
+        ?'<button type="button" class="btn bsm bic act-ico" title="Reemplazar documento: sigue en revisión del profesional y conserva el historial" onclick="event.stopPropagation();abrirReemplazarDocumentoRevPar(\''+escAttr(t.exp)+'\',\''+escAttr(t.id)+'\')">📄</button>'
         :'')+
       taskChatBtnHtml(t.exp,t.id,t)+
       '</span>';

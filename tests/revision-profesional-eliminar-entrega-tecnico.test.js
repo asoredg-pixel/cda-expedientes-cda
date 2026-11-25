@@ -1,7 +1,7 @@
 /**
- * revision-profesional-eliminar-entrega-tecnico.test.js — El técnico que envió un concepto a revisión del profesional
- * puede eliminar la entrega (fila de «Por revisar» y rail de 🔍) mientras el profesional no la haya revisado;
- * la actividad vuelve a su Por ejecutar.
+ * revision-profesional-eliminar-entrega-tecnico.test.js —
+ * En revisión par de concepto el técnico ya no elimina la entrega mientras espera al profesional:
+ * puede reemplazar el documento (conserva historial). Eliminar queda bloqueado.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -35,7 +35,11 @@ function ctx() {
     taskEsMultiAsignada: t => (t.responsables || []).length > 1,
     estadoTask: t => t.estado
   })
-  runInContext(extraer(core, ['taskRevisionParCtx', 'taskRevParParticipante', 'taskRevParTecnicoEsperando', 'taskRevParTecnicoPuedeEliminar']), c)
+  runInContext(extraer(core, [
+    'taskRevisionParCtx', 'taskRevisionParCerradaPorRetiro', 'taskEsFlujoRevisionParConceptoActivo',
+    'taskRevParParticipante', 'taskRevParTecnicoEsperando', 'taskRevParTecnicoPuedeReemplazar',
+    'taskRevParTecnicoPuedeEliminar',
+  ]), c)
   return c
 }
 
@@ -49,41 +53,37 @@ function tarea(extraHist, extra) {
   }, extra || {})
 }
 
-describe('Técnico elimina entrega en revisión del profesional', () => {
-  it('puede mientras el profesional no la haya revisado', () => {
-    expect(ctx().taskRevParTecnicoPuedeEliminar(tarea(), 'Tecnico Uno', null)).toBe(true)
+describe('Técnico en revisión del profesional: reemplazar, no eliminar', () => {
+  it('puede reemplazar mientras el profesional no la haya revisado', () => {
+    expect(ctx().taskRevParTecnicoPuedeReemplazar(tarea(), 'Tecnico Uno', null)).toBe(true)
+    expect(ctx().taskRevParTecnicoPuedeEliminar(tarea(), 'Tecnico Uno', null)).toBe(false)
   })
 
-  it('no puede si el profesional ya actuó (entregó al encargado o devolvió)', () => {
+  it('no puede reemplazar si el profesional ya actuó (entregó al encargado o devolvió)', () => {
     const c = ctx()
-    expect(c.taskRevParTecnicoPuedeEliminar(tarea([{ tipo: 'reenvio_verificacion', por: 'Profesional Dos' }]), 'Tecnico Uno', null)).toBe(false)
-    expect(c.taskRevParTecnicoPuedeEliminar(tarea([], { estado: 'Por verificar', fechaReportada: '2026-10-14' }), 'Tecnico Uno', null)).toBe(false)
+    expect(c.taskRevParTecnicoPuedeReemplazar(tarea([{ tipo: 'reenvio_verificacion', por: 'Profesional Dos' }]), 'Tecnico Uno', null)).toBe(false)
+    expect(c.taskRevParTecnicoPuedeReemplazar(tarea([], { estado: 'Por verificar', fechaReportada: '2026-10-14' }), 'Tecnico Uno', null)).toBe(false)
   })
 
   it('el profesional no lo ve como técnico', () => {
-    expect(ctx().taskRevParTecnicoPuedeEliminar(tarea(), 'Profesional Dos', null)).toBe(false)
+    expect(ctx().taskRevParTecnicoPuedeReemplazar(tarea(), 'Profesional Dos', null)).toBe(false)
   })
 
-  it('al eliminar, la actividad vuelve al técnico', () => {
+  it('puedeEliminarEntregaActividad bloquea al técnico en ciclo rev par', () => {
+    const fn = extraer(core, ['puedeEliminarEntregaActividad'])
+    expect(fn).toMatch(/taskEsFlujoRevisionParConceptoActivo/)
+    expect(fn).toMatch(/return false/)
+  })
+
+  it('eliminarEntregaActividad defiende el ciclo rev par (no cancelada)', () => {
     const fn = extraer(core, ['eliminarEntregaActividad'])
-    expect(fn).toMatch(/tk\.responsable=revParTec\.tecnico;/)
-    expect(fn).toMatch(/tk\.asignados=\[\{nombre:revParTec\.tecnico,fechaReportada:'',fechaAtendida:'',estado:'pendiente'\}\]/)
+    expect(fn).toMatch(/taskEsFlujoRevisionParConceptoActivo/)
+    expect(fn).toMatch(/use «Reemplazar documento»/)
   })
 
-  it('si la creó el técnico (autoentrega) se anula; solo la asignada vuelve a Por ejecutar', () => {
-    const fn = extraer(core, ['eliminarEntregaActividad'])
-    const iAutoExp = fn.indexOf('if(esAuto&&e){')
-    const iAutoLibre = fn.indexOf('tk.eliminada=true;')
-    const iRevPar = fn.indexOf('tk.responsable=revParTec.tecnico;')
-    expect(iAutoExp).toBeGreaterThan(-1)
-    expect(iAutoExp).toBeLessThan(iRevPar)
-    expect(iAutoLibre).toBeLessThan(iRevPar)
-    expect(fn.slice(iAutoExp, iRevPar)).toMatch(/e\.tasks=Array\.isArray\(e\.tasks\)\?e\.tasks\.filter/)
-  })
-
-  it('permiso en puedeEliminarEntregaActividad y 🗑 en la fila del técnico', () => {
-    expect(extraer(core, ['puedeEliminarEntregaActividad'])).toMatch(/taskRevParTecnicoPuedeEliminar\(t,responsableActivo,e\)\)return true/)
+  it('toolbar: Reemplazar documento en la fila del técnico', () => {
     const tb = extraer(core, ['renderActRowToolbarHtml'])
-    expect(tb).toMatch(/Eliminar entrega: sale de la revisión del profesional/)
+    expect(tb).toMatch(/abrirReemplazarDocumentoRevPar/)
+    expect(tb).toMatch(/Reemplazar documento: sigue en revisión del profesional/)
   })
 })
