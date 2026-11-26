@@ -136,4 +136,13 @@ describe('Gmail: conectar antes del progreso de notificación', () => {
     expect(iSolicitar).toBeLessThan(iEnviando)
     expect(iEnviando).toBeLessThan(iCarga)
   })
+
+  it('busy colgado no bloquea un nuevo clic en Enviar', () => {
+    const core = readFileSync(resolve(root, 'js/core.js'), 'utf8')
+    const fnStart = core.indexOf('async function taskReviewConfirmarYNotificar')
+    const slice = core.slice(fnStart, fnStart + 2500)
+    expect(slice).toContain('Si un intento previo dejó busy=true')
+    expect(slice).toContain("window._taskReviewNotifBusy=false")
+    expect(slice.indexOf('pareceEnvioReal')).toBeGreaterThan(0)
+  })
 })

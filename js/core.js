@@ -9738,6 +9738,8 @@ function taskReviewOpenDecisionPanel(mode,expId,taskId){
   window._taskReviewAprobarNotificar=false;
   window._taskReviewTermDraft=null;
   window._taskReviewDecisionMode=mode;
+  // Liberar eco de «Conectando…/Enviando…» de un intento anterior
+  window._taskReviewNotifBusy=false;
   if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('decision',expId,taskId);
 }
 /** Término diligenciado antes de re-renderizar el panel (p. ej. al abrir el correo de «Aprobar y notificar»). */
@@ -10808,10 +10810,21 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     taskReviewTermDraftGuardar(taskId);
     window._taskReviewAprobarNotificar=true;
     window._taskReviewDecisionMode='aprobar';
+    window._taskReviewNotifBusy=false;
     if(typeof taskReviewOpenSidePanel==='function')taskReviewOpenSidePanel('decision',expId,taskId);
     return;
   }
-  if(window._taskReviewNotifBusy)return;
+  // Si un intento previo dejó busy=true (Conectando… colgado), el clic no hacía nada.
+  if(window._taskReviewNotifBusy){
+    const btnBusy=document.getElementById('task-rev-notif-btn');
+    const txt=String((btnBusy&&btnBusy.textContent)||'').trim().toLowerCase();
+    const ovCarga=document.getElementById('confirm-prec-overlay');
+    const cargaOn=!!window._confirmRadicacionLoading||!!(ovCarga&&ovCarga.classList.contains('on'));
+    const pareceEnvioReal=/enviando/.test(txt)&&cargaOn;
+    if(pareceEnvioReal)return;
+    window._taskReviewNotifBusy=false;
+    if(btnBusy){btnBusy.disabled=false;btnBusy.textContent='✓ Enviar notificación y cerrar';}
+  }
   if(typeof pqrsExigirModoNotifCorreo==='function'&&!pqrsExigirModoNotifCorreo('task-rev'))return;
   const t=typeof getTaskAny==='function'?getTaskAny(expId,taskId):null;
   if(!t){notif('Actividad no encontrada','err');return;}
@@ -27201,6 +27214,7 @@ function closeTaskModal(){
   if(popTaskModalLayer())return;
   revEnCursoDetener();
   clearTaskModalHdrOpenBtn();
+  window._taskReviewNotifBusy=false;
   const ctx=window._taskModalCtx||{};
   const formRow=ctx.formRowEl;
   const ov=document.getElementById('task-modal-overlay');
