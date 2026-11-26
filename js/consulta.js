@@ -1179,7 +1179,7 @@ function reviewAsocExisteExacto(q){
  * Se muestra en la lista para que no quede solo un match flojo o un vacío sin acción.
  */
 function reviewAsocCrearCtaHtml(q){
-  if(!reviewAsocPuedeCrearExp())return'';
+  if(!reviewAsocPuedeCrearExp(window._reviewAsocCtx))return'';
   const id=String(q||'').trim();
   if(!id||typeof consultaPareceNumeroDoc!=='function'||!consultaPareceNumeroDoc(id))return'';
   if(reviewAsocExisteExacto(id))return'';
@@ -1755,21 +1755,19 @@ function reviewAsocUsuarioNca(){
   );
 }
 /**
- * «➕ Crear expediente» en el rail Asociar (task-review-asoc-body):
- * NCA sobre PQRSD, o actividad sin expediente. No depender solo de allowTramite/_pqrs_oficina.
+ * «➕ Crear expediente» en Asociar (rail de revisión o panel):
+ * NCA/encargado siempre (aunque el modo quede exp-asoc por getDoc pendiente o PQRSD cerrada).
+ * Oficina: solo con allowTramite (contexto NCA de la PQRSD).
  */
 function reviewAsocPuedeCrearExp(ctx){
   ctx=ctx||window._reviewAsocCtx||{};
-  if(window._reviewAsocPanelId!=='task-review-asoc-body')return false;
+  const panel=String(window._reviewAsocPanelId||'');
+  if(panel!=='task-review-asoc-body'&&panel!=='review-asoc-body')return false;
   if(typeof puedeCrearExpedienteRegistro!=='function'||!puedeCrearExpedienteRegistro())return false;
-  // Caso clásico del rail PQRSD NCA
+  // Encargado / NCA / vista actividades: crear el N° faltante (PSMV-…, etc.)
+  if(typeof reviewAsocUsuarioNca==='function'?reviewAsocUsuarioNca():false)return true;
   if(ctx.mode==='pqrs-pick'&&!!ctx.allowTramite)return true;
-  // NCA: actividad libre, o PQRSD aunque allowTramite/oficina no hayan quedado bien
-  if(!reviewAsocUsuarioNca())return false;
-  if(ctx.mode==='pqrs-pick'||ctx.mode==='act-libre')return true;
-  const srcId=String(ctx.sourceExp||'').trim();
-  const src=srcId&&typeof getExpById==='function'?getExpById(srcId):null;
-  if(src&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(src))return true;
+  if(ctx.mode==='act-libre')return true;
   return false;
 }
 window.reviewAsocUsuarioNca=reviewAsocUsuarioNca;

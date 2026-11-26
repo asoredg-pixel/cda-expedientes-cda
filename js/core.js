@@ -11506,12 +11506,17 @@ function initTaskReviewAsocSide(ref,taskId,t){
     ctx.sourceExp=expId;
     const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
     const nca=reviewAsocEsUsuarioNcaLocal();
+    // Cerrada: puedeGestionarPqrsAsociacion es false; NCA igual asocia/crea
     const puedeAsoc=esPqrs&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
-    // NCA sobre PQRSD: siempre pqrs-pick + crear/asociar trámite (antes fallaba si _pqrs_oficina≠guaviare)
     if(esPqrs&&(puedeAsoc||nca)){
       ctx.mode='pqrs-pick';
       ctx.pqrsModo='pqrs';
-      ctx.allowTramite=nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
+      ctx.allowTramite=!!nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
+    }else if(nca&&!e){
+      // Expediente aún no en memoria (Blaze): NCA puede crear; getDoc afina el modo
+      ctx.mode='pqrs-pick';
+      ctx.pqrsModo='pqrs';
+      ctx.allowTramite=true;
     }else ctx.mode='exp-asoc';
   }
   window._reviewAsocCtx=ctx;
@@ -11520,19 +11525,25 @@ function initTaskReviewAsocSide(ref,taskId,t){
   setTimeout(function(){const inp=document.getElementById('review-asoc-q');if(inp)inp.focus();},80);
   // Si la PQRSD fuente no estaba en memoria, un getDoc y recalcular modo (habilita «Crear expediente»)
   const sourceId=String(ctx.sourceExp||'').trim();
-  if(ctx.mode!=='pqrs-pick'&&!(t&&t.sinExpediente)&&sourceId
+  if(!(t&&t.sinExpediente)&&sourceId
     &&typeof traerExpedienteSiFalta==='function'
-    &&typeof consultaPareceNumeroDoc==='function'&&consultaPareceNumeroDoc(sourceId)){
+    &&typeof consultaPareceNumeroDoc==='function'&&consultaPareceNumeroDoc(sourceId)
+    &&(ctx.mode!=='pqrs-pick'||!getExpById||!getExpById(sourceId))){
     Promise.resolve(traerExpedienteSiFalta(sourceId)).then(function(e){
-      if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return;
+      if(!e)return;
       const nca=reviewAsocEsUsuarioNcaLocal();
-      const puedeAsoc=typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
-      if(!puedeAsoc&&!nca)return;
+      const esPqrs=typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+      const puedeAsoc=esPqrs&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
       const c=window._reviewAsocCtx||{};
       if(String(c.sourceExp||'')!==sourceId||window._reviewAsocPanelId!=='task-review-asoc-body')return;
-      c.mode='pqrs-pick';
-      c.pqrsModo='pqrs';
-      c.allowTramite=nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
+      if(esPqrs&&(puedeAsoc||nca)){
+        c.mode='pqrs-pick';
+        c.pqrsModo='pqrs';
+        c.allowTramite=!!nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
+      }else if(!esPqrs&&c.mode==='pqrs-pick'&&!nca){
+        c.mode='exp-asoc';
+        c.allowTramite=false;
+      }
       window._reviewAsocCtx=c;
       if(typeof renderReviewAsocPickPanel==='function')renderReviewAsocPickPanel('task-review-asoc-body');
     }).catch(function(){});
