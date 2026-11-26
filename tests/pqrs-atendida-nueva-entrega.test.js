@@ -35,7 +35,7 @@ const PQRS_WF = {
 
 function ctx() {
   const c = createContext({ PQRS_WF, JSON })
-  runInContext(extraer(core, ['pqrsEstaCerrada', 'getPqrsWorkflow', 'pqrsWorkflowFase', 'pqrsEnRevisionNca', 'dedupePqrsAtencionTasks']), c)
+  runInContext(extraer(core, ['pqrsTieneHistorialCierre', 'pqrsEstaCerrada', 'getPqrsWorkflow', 'pqrsWorkflowFase', 'pqrsEnRevisionNca', 'dedupePqrsAtencionTasks']), c)
   return c
 }
 
@@ -88,7 +88,7 @@ function ctxFlujo(e) {
     getPqrsAtencionTask: x => (x.tasks || []).find(t => !t.eliminada && /^Oficio de respuesta\b/i.test(t.actividad || '')) || null
   })
   runInContext(extraer(core, [
-    'pqrsEstaCerrada', 'taskEsAtenderPqrs', 'taskPqrsActividadPosCierre', 'taskPqrsFlujoPropio',
+    'pqrsTieneHistorialCierre', 'pqrsEstaCerrada', 'taskEsAtenderPqrs', 'taskPqrsActividadPosCierre', 'taskPqrsFlujoPropio',
     'expPqrsBloqueaFlujoTramite', 'taskUsaEntregaPqrsUi', 'libreEntregaPqrsStubExp', 'libreEntregaRespTipoRevision'
   ]) + '\n' + extraer(firma, ['getTaskFirmaWf', 'taskFirmaFase', 'taskEnFlujoFirmaTramite']), c)
   return c
@@ -116,7 +116,12 @@ describe('Actividad posterior en PQRSD atendida: flujo propio como trámite', ()
   })
 
   it('PQRSD abierta: todo sigue el flujo PQRSD', () => {
-    const eAb = Object.assign({}, e, { _estado: 'En trámite', _pqrs_estado_oficina: 'nca' })
+    const eAb = Object.assign({}, e, {
+      _estado: 'En trámite',
+      _pqrs_estado_oficina: 'nca',
+      // Sin fase/cerrado en workflow: si queda CERRADA, pqrsEstaCerrada sigue en true
+      _pqrs_workflow: JSON.stringify({ fase: PQRS_WF.PENDIENTE_REVISION })
+    })
     const c = ctxFlujo(eAb)
     expect(c.taskPqrsActividadPosCierre(t3, eAb)).toBe(false)
     expect(c.taskUsaEntregaPqrsUi(t2, eAb)).toBe(true)

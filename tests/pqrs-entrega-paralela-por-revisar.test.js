@@ -37,7 +37,7 @@ function ctxBase() {
     setPqrsWorkflow: () => { throw new Error('no debe reescribir el workflow de la entrega en revisión') }
   })
   runInContext(extraer(core, [
-    'pqrsEstaCerrada', 'getPqrsWorkflow', 'pqrsWorkflowFase',
+    'pqrsTieneHistorialCierre', 'pqrsEstaCerrada', 'getPqrsWorkflow', 'pqrsWorkflowFase',
     'pqrsTaskTieneEntregaPropia', 'pqrsEntregaPendienteEsAjena', 'pqrsGuardarEntregaParalelaEnTask',
     'dedupePqrsAtencionTasks', 'taskEntregaCorreoCtx'
   ]), c)

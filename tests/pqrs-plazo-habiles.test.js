@@ -45,7 +45,7 @@ function ctx(hoyStr) {
     '_isoDateLocal', 'pascuaDomingo', '_siguienteLunes', 'festivosColombiaSet',
     'esDiaHabilCO', 'diasHabilesEntreCO', 'addDiasHabilesCO'
   ]) + '\n' + extraer(core, [
-    'getPqrsPlazoDias', 'getPqrsVenceFecha', 'pqrsEstaCerrada',
+    'getPqrsPlazoDias', 'getPqrsVenceFecha', 'pqrsTieneHistorialCierre', 'pqrsEstaCerrada',
     'getPqrsPlazoInfo', 'pqrsRespuestaEnTermino', 'renderPqrsPlazoBarHtml'
   ]), c)
   return c

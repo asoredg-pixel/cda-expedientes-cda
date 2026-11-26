@@ -34,7 +34,7 @@ function ctxMarcas() {
   })
   runInContext(extraer(pers, [
     'oficinaPqrsMarca', 'clavePqrsCerrada', 'corteFechaMarca', 'fechaCierrePqrsMarca',
-    'fechaRadicacionPqrsMarca', 'aplicarMarcasBandeja', 'marcasPqrsOficinaDistintas'
+    'fechaRadicacionPqrsMarca', 'nombresAtendidasPaletaExp', 'aplicarMarcasBandeja', 'marcasPqrsOficinaDistintas'
   ]), c)
   return c
 }

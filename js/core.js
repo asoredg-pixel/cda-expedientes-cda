@@ -707,9 +707,65 @@ function pqrsEsCanalNotifPersonal(canal){
   const c=String(canal||'');
   return c===PQRS_WF_CANAL.PRESENCIAL||c===PQRS_WF_CANAL.FISICA||c===PQRS_WF_CANAL.WHATSAPP||c===PQRS_WF_CANAL.AVISO||c==='aviso';
 }
-function pqrsEstaCerrada(e){
-  return !!(e&&(e._pqrs_estado_oficina==='cerrado'||e._estado==='Atendido'));
+/** Historial de cierre en alguna actividad de atención (sobrevive a ecos que revierten _estado). */
+function pqrsTieneHistorialCierre(e){
+  if(!e||!Array.isArray(e.tasks))return false;
+  for(let i=0;i<e.tasks.length;i++){
+    const t=e.tasks[i];
+    if(!t||t.eliminada)continue;
+    const act=String(t.actividad||'');
+    if(!(act.startsWith('Atender PQRSD')||/^Oficio de respuesta\b/i.test(act)))continue;
+    if((t.historial||[]).some(function(h){return h&&h.tipo==='cierre_pqrs';}))return true;
+  }
+  return false;
 }
+function pqrsEstaCerrada(e){
+  if(!e)return false;
+  if(e._pqrs_estado_oficina==='cerrado'||e._estado==='Atendido')return true;
+  let wf=null;
+  try{wf=e._pqrs_workflow&&typeof e._pqrs_workflow==='string'?JSON.parse(e._pqrs_workflow):e._pqrs_workflow;}catch(x){wf=null;}
+  if(wf&&typeof wf==='object'){
+    const f=String(wf.fase||'').trim();
+    if(f==='cerrada_atendida'||f==='cerrada'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA))return true;
+    if(wf.cerrado_en||wf.cerrado_por)return true;
+  }
+  return pqrsTieneHistorialCierre(e);
+}
+/**
+ * Eco/merge dejó historial de cierre pero _estado/fase en firma: repara en memoria y marca bandeja
+ * sin tocar updatedAt (mismo criterio que reparar marcas).
+ */
+function pqrsSanearCierreDesfasado(e){
+  if(!e||(typeof esPqrsSecretaria==='function'&&!esPqrsSecretaria(e)))return false;
+  if(!pqrsTieneHistorialCierre(e)&&!(function(){
+    let wf=null;
+    try{wf=e._pqrs_workflow&&typeof e._pqrs_workflow==='string'?JSON.parse(e._pqrs_workflow):e._pqrs_workflow;}catch(x){wf=null;}
+    return !!(wf&&typeof wf==='object'&&(wf.cerrado_en||wf.cerrado_por
+      ||String(wf.fase||'')==='cerrada_atendida'||String(wf.fase||'')==='cerrada'
+      ||(typeof PQRS_WF!=='undefined'&&String(wf.fase||'')===PQRS_WF.CERRADA)));
+  })())return false;
+  const yaOk=e._estado==='Atendido'&&e._pqrs_estado_oficina==='cerrado'
+    &&(function(){
+      const f=typeof getPqrsWorkflow==='function'?String((getPqrsWorkflow(e).fase)||''):'';
+      return f==='cerrada_atendida'||f==='cerrada'||(typeof PQRS_WF!=='undefined'&&f===PQRS_WF.CERRADA);
+    })();
+  if(yaOk)return false;
+  const fAt=e._fecha_res||e._pqrs_respuesta_fecha||(typeof hoy==='function'?hoy():'');
+  e._pqrs_estado_oficina='cerrado';
+  e._estado='Atendido';
+  if(fAt)e._fecha_res=fAt;
+  if(typeof setPqrsWorkflow==='function'){
+    const cur=typeof getPqrsWorkflow==='function'?getPqrsWorkflow(e):{};
+    if(String(cur.fase||'')!==(typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida'))
+      setPqrsWorkflow(e,{fase:typeof PQRS_WF!=='undefined'?PQRS_WF.CERRADA:'cerrada_atendida',cerrado_por:cur.cerrado_por||'sistema',cerrado_en:cur.cerrado_en||new Date().toISOString()});
+  }
+  if(typeof aplicarMarcasBandeja==='function')aplicarMarcasBandeja(e);
+  if(typeof encolarReparoExpediente==='function')encolarReparoExpediente(e,'_pqrsCierreHeal',e._exp);
+  else if(typeof repararMarcaExpediente==='function')repararMarcaExpediente(e);
+  return true;
+}
+window.pqrsTieneHistorialCierre=pqrsTieneHistorialCierre;
+window.pqrsSanearCierreDesfasado=pqrsSanearCierreDesfasado;
 
 // ── Workflow de respuesta PQRSD ────────────────────────────────────────────────
 function getPqrsWorkflow(e){
@@ -750,13 +806,8 @@ function setPqrsWorkflow(e,patch){
 }
 function pqrsWorkflowFase(e){
   const f=getPqrsWorkflow(e).fase||PQRS_WF.SIN_RESPUESTA;
-  // PQRSD ya atendida: no reabrir bandejas si el workflow quedó desfasado (p. ej. eco viejo por notificar)
-  if(pqrsEstaCerrada(e)){
-    if(f===PQRS_WF.PENDIENTE_REVISION||f===PQRS_WF.RECHAZADA
-      ||f===PQRS_WF.PENDIENTE_NOTIF||f===PQRS_WF.LISTA_ENVIO||f===PQRS_WF.REVISION_FINAL
-      ||f===PQRS_WF.PARA_FIRMA||f===PQRS_WF.VITAL_GESTION||f===PQRS_WF.POR_FIRMAR)
-      return PQRS_WF.CERRADA;
-  }
+  // PQRSD ya atendida: no reabrir bandejas si el workflow quedó desfasado (eco / entrega borrada)
+  if(pqrsEstaCerrada(e)&&f!==PQRS_WF.CERRADA)return PQRS_WF.CERRADA;
   return f;
 }
 function pqrsEnRevisionNca(e){return pqrsWorkflowFase(e)===PQRS_WF.PENDIENTE_REVISION;}
@@ -12193,6 +12244,8 @@ function taskPqrsActividadPosCierre(t,e){
   // La actividad que atendió la PQRSD sigue en el flujo PQRSD
   const canon=typeof getPqrsAtencionTask==='function'?getPqrsAtencionTask(exp):null;
   if(canon&&String(canon.id||'')===String(t.id||''))return false;
+  // Ya cerró con la PQRSD (finalizarTareas): no es un oficio nuevo de seguimiento
+  if((t.historial||[]).some(function(h){return h&&h.tipo==='cierre_pqrs';}))return false;
   const f=String((t.firmaWf&&t.firmaWf.fase)||'').trim();
   if(f&&f!=='cerrada_atendida'&&f!==PQRS_WF.CERRADA)return true;
   return !(t.fechaAtendida||t.estado==='Atendida'||t.estado==='Completada');
@@ -21388,6 +21441,8 @@ function eliminarEntregaActividadConfirm(expId,taskId){
 /** Limpia solo datos de la respuesta/entrega; conserva alta, interesado y radicación del expediente/PQRSD. */
 function limpiarRespuestaEntregaConservandoAlta(e){
   if(!e)return;
+  // No reabrir una PQRSD ya cerrada/notificada (p. ej. borrar entrega de un duplicado)
+  if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return;
   e._pqrs_respuesta_oficio='';
   e._pqrs_respuesta_fecha='';
   e._pqrs_respuesta_nota='';
@@ -33107,7 +33162,14 @@ function getTareasPqrsPorFaseWorkflow(matchFn){
   const out=[];
   (typeof exps!=='undefined'?exps:[]).forEach(function(e){
     if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return;
+    if(typeof pqrsSanearCierreDesfasado==='function'){
+      try{pqrsSanearCierreDesfasado(e);}catch(errHeal){}
+    }
+    // Cerrada: las «Oficio» del ciclo original no van a Por firma/notif (un oficio nuevo
+    // post-atención entra por flujo de trámite / taskPqrsActividadPosCierre).
+    if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return;
     if(!matchFn(e))return;
+    // Varias «Oficio de respuesta» en la misma PQRSD son válidas (como en trámites)
     (e.tasks||[]).forEach(function(t){
       if(!t||t.eliminada)return;
       if(typeof taskEsAtenderPqrs==='function'&&!taskEsAtenderPqrs(t,e))return;
@@ -33371,11 +33433,14 @@ function filtrarActividadesPorEstado(list,filtro,opts){
       return !(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t));
     };
     const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
+      if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
       if(typeof pqrsEnParaFirma!=='function'||!pqrsEnParaFirma(e))return false;
       const tP=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
       return !tP||exclCorr(tP);
     });
     const tram=typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
+      if(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))return false;
+      if((t.historial||[]).some(function(h){return h&&h.tipo==='cierre_pqrs';}))return false;
       return typeof taskFirmaEnParaFirma==='function'&&taskFirmaEnParaFirma(t)&&exclCorr(t);
     }):[];
     return mergeActividadLists(pqrs,tram);
@@ -33383,6 +33448,7 @@ function filtrarActividadesPorEstado(list,filtro,opts){
   if(filtro==='porfirmar'){
     const esDirPf=typeof esDirectorDsDeguv==='function'&&esDirectorDsDeguv();
     const pqrs=getTareasPqrsPorFaseWorkflow(function(e){
+      if(typeof pqrsEstaCerrada==='function'&&pqrsEstaCerrada(e))return false;
       if(typeof pqrsWorkflowFase!=='function'||pqrsWorkflowFase(e)!==PQRS_WF.POR_FIRMAR)return false;
       const tPq=(e.tasks||[]).find(function(x){return x&&!x.eliminada&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(x,e);});
       if(tPq&&typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(tPq))return false;
@@ -33395,6 +33461,8 @@ function filtrarActividadesPorEstado(list,filtro,opts){
     });
     const tram=(typeof getTareasTramiteFirmaPorFase==='function'?getTareasTramiteFirmaPorFase(function(t){
       if(typeof actividadCuentaComoPorCorregir==='function'&&actividadCuentaComoPorCorregir(t))return false;
+      if(typeof taskFirmaEsNotificada==='function'&&taskFirmaEsNotificada(t))return false;
+      if((t.historial||[]).some(function(h){return h&&h.tipo==='cierre_pqrs';}))return false;
       if(typeof taskFirmaEnPorFirmar!=='function'||!taskFirmaEnPorFirmar(t))return false;
       if(esDirPf&&typeof taskFirmaEsFirmadoPendiente==='function'&&taskFirmaEsFirmadoPendiente(t))return false;
       return true;

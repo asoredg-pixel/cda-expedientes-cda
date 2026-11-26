@@ -1890,13 +1890,28 @@ function faseFlujoFirmaRank(fase){
 }
 function expedienteFaseFlujo(exp){
   if(!exp)return '';
+  // Historial de cierre en actividad: el eco puede haber dejado fase en para_firma
+  // pero el ciclo ya cerró (p. ej. GH260707 notificada y aún «Por firmar»).
+  if(typeof pqrsTieneHistorialCierre==='function'?pqrsTieneHistorialCierre(exp):(function(){
+    const tasks=exp.tasks||[];
+    for(let i=0;i<tasks.length;i++){
+      const t=tasks[i];
+      if(!t||t.eliminada)continue;
+      if((t.historial||[]).some(function(h){return h&&h.tipo==='cierre_pqrs';}))return true;
+    }
+    return false;
+  })())return 'cerrada_atendida';
+  if(exp._estado==='Atendido'||exp._pqrs_estado_oficina==='cerrado')return 'cerrada_atendida';
   // _pqrs_workflow suele ir como JSON string (setPqrsWorkflow). Sin parsear, el
   // merge creía rank 0 y un snapshot viejo en «por notificar» podía pisar el cierre.
   let wf=exp._pqrs_workflow;
   if(typeof wf==='string'){
     try{wf=JSON.parse(wf);}catch(x){wf=null;}
   }
-  if(wf&&typeof wf==='object'&&wf.fase)return String(wf.fase).trim();
+  if(wf&&typeof wf==='object'){
+    if(wf.cerrado_en||wf.cerrado_por)return 'cerrada_atendida';
+    if(wf.fase)return String(wf.fase).trim();
+  }
   const tasks=exp.tasks||[];
   let best='',bestR=-1;
   for(let i=0;i<tasks.length;i++){
