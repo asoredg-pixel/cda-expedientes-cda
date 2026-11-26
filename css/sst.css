@@ -1164,6 +1164,13 @@ body.task-review-doc-mode #task-modal-overlay{
   min-height:0;
   overflow:hidden;
 }
+/* Hint, «Crear expediente» y buscador no deben aplastarse en el panel WA (por revisar / corregir) */
+.task-modal.task-modal-review .task-review-asoc-body > *:not(.review-asoc-list){
+  flex-shrink:0;
+}
+.task-modal.task-modal-review .task-review-asoc-body .review-asoc-crear-bar{
+  flex-shrink:0;
+}
 .task-modal.task-modal-review .task-review-side-body .review-asoc-list{
   flex:1 1 auto;
   min-height:0;

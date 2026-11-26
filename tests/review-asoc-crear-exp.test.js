@@ -106,16 +106,33 @@ describe('Crear expediente desde el rail Asociar de Ver PQRSD', () => {
     expect(otraOficina.body.innerHTML).not.toContain('➕ Crear expediente')
   })
 
-  it('NCA ve «Crear expediente» aunque el modo haya quedado exp-asoc (getDoc pendiente)', () => {
+  it('NCA ve «Crear expediente» en exp-asoc (por revisar / corregir / ejecutar)', () => {
     const c = montar({})
     c.esNcaDeguv = () => true
     c.esOficinaPqrsNca = () => false
     c.esVistaActividadesDepto = () => false
     c.esEncargadoActivo = () => false
+    c.esModoResponsable = () => false
+    c.esAdministrador = () => false
     c.window._reviewAsocCtx = { mode: 'exp-asoc', allowTramite: false, sourceExp: 'HB260391', q: 'PSMV-00002-25' }
     c.renderReviewAsocPickPanel('task-review-asoc-body')
     expect(c.body.innerHTML).toContain('➕ Crear expediente')
+    expect(c.body.innerHTML).toContain('review-asoc-crear-bar')
     expect(c.reviewAsocPuedeCrearExp(c.window._reviewAsocCtx)).toBe(true)
+  })
+
+  it('encargado con puedeEditarExpPanel ve Crear aunque no sea NCA estricto', () => {
+    const c = montar({})
+    c.esNcaDeguv = () => false
+    c.esOficinaPqrsNca = () => false
+    c.esVistaActividadesDepto = () => false
+    c.esEncargadoActivo = () => false
+    c.esModoResponsable = () => false
+    c.esAdministrador = () => false
+    c.puedeEditarExpPanel = () => true
+    c.window._reviewAsocCtx = { mode: 'exp-asoc', allowTramite: false, sourceExp: 'HB260391', q: '' }
+    c.renderReviewAsocPickPanel('task-review-asoc-body')
+    expect(c.body.innerHTML).toContain('➕ Crear expediente')
   })
 
   it('el formulario trae solo Control del trámite, sin PQRSD en los tipos y con el N° buscado', () => {

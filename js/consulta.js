@@ -1335,7 +1335,7 @@ function renderReviewAsocPickPanel(panelId){
     (aviso?'<div id="review-asoc-aviso" style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:#e7f6ee;border:1px solid #1a7a4a;color:#145c38;font-size:13px;font-weight:600">'+(aviso.quito?'':'✓ ')+escAttr(aviso.msg)+'</div>':'')+
     '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">'+hint+'</div>'+
     (reviewAsocPuedeCrearExp(ctx)
-      ?'<div class="fx" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
+      ?'<div class="fx review-asoc-crear-bar" style="gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap"><button type="button" class="btn bsm bp" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente</button><span style="font-size:11px;color:var(--tx3)">¿Aún no está en el sistema? Créelo (Control del trámite) y queda asociado.</span></div>'
       :'')+
     reviewAsocFijosHtml(ctx)+
     '<div class="fld" style="margin-bottom:10px"><input type="text" id="review-asoc-q" value="'+escAttr(q)+'" placeholder="Nombre, N° expediente, correo, asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="onReviewAsocSearchInput(this)"></div>'+
@@ -1747,27 +1747,35 @@ function confirmReviewAsocPick(targetExpId){
 }
 /** Encargado / NCA DEGUV (rail Asociar de actividades). */
 function reviewAsocUsuarioNca(){
+  if(typeof esModoResponsable==='function'&&esModoResponsable())return false;
   return !!(
     (typeof esNcaDeguv==='function'&&esNcaDeguv())
     ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
     ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
     ||(typeof esEncargadoActivo==='function'&&esEncargadoActivo())
+    ||(typeof esAdministrador==='function'&&esAdministrador())
   );
 }
 /**
- * «➕ Crear expediente» en Asociar (rail de revisión o panel):
- * NCA/encargado siempre (aunque el modo quede exp-asoc por getDoc pendiente o PQRSD cerrada).
- * Oficina: solo con allowTramite (contexto NCA de la PQRSD).
+ * «➕ Crear expediente» en Asociar (rail por revisar / ejecutar / corregir / firma):
+ * quien puede crear en Registro y abre Asociar en el rail lo ve siempre
+ * (no depende de allowTramite ni de que el modo haya quedado exp-asoc).
  */
 function reviewAsocPuedeCrearExp(ctx){
   ctx=ctx||window._reviewAsocCtx||{};
   const panel=String(window._reviewAsocPanelId||'');
-  if(panel!=='task-review-asoc-body'&&panel!=='review-asoc-body')return false;
+  const enRail=panel==='task-review-asoc-body'
+    ||(typeof document!=='undefined'&&document.getElementById('task-review-asoc-body'));
+  const enOverlay=panel==='review-asoc-body';
+  if(!enRail&&!enOverlay)return false;
   if(typeof puedeCrearExpedienteRegistro!=='function'||!puedeCrearExpedienteRegistro())return false;
-  // Encargado / NCA / vista actividades: crear el N° faltante (PSMV-…, etc.)
-  if(typeof reviewAsocUsuarioNca==='function'?reviewAsocUsuarioNca():false)return true;
+  // Rail de revisión: NCA/encargado/admin (todas las paletas)
+  if(enRail&&(typeof reviewAsocUsuarioNca==='function'?reviewAsocUsuarioNca():false))return true;
+  if(enRail&&typeof puedeEditarExpPanel==='function'&&puedeEditarExpPanel()
+    &&!(typeof esModoResponsable==='function'&&esModoResponsable()))return true;
   if(ctx.mode==='pqrs-pick'&&!!ctx.allowTramite)return true;
   if(ctx.mode==='act-libre')return true;
+  if(typeof reviewAsocUsuarioNca==='function'?reviewAsocUsuarioNca():false)return true;
   return false;
 }
 window.reviewAsocUsuarioNca=reviewAsocUsuarioNca;

@@ -11517,7 +11517,11 @@ function initTaskReviewAsocSide(ref,taskId,t){
       ctx.mode='pqrs-pick';
       ctx.pqrsModo='pqrs';
       ctx.allowTramite=true;
-    }else ctx.mode='exp-asoc';
+    }else{
+      ctx.mode='exp-asoc';
+      // NCA en trámite / por revisar: igual puede crear N° faltante desde Asociar
+      if(nca)ctx.allowTramite=true;
+    }
   }
   window._reviewAsocCtx=ctx;
   window._reviewAsocPanelId='task-review-asoc-body';
