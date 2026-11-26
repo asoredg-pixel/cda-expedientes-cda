@@ -23,6 +23,18 @@ describe('Asociar busca con getDoc si falta en memoria', () => {
     expect(fn).toMatch(/Buscando/)
   })
 
+  it('si el N° no existe ofrece Crear expediente en la lista', () => {
+    expect(consulta).toMatch(/function reviewAsocCrearCtaHtml/)
+    expect(consulta).toMatch(/Crear expediente «/)
+    expect(consulta).toMatch(/reviewAsocCrearCtaHtml\(q\)/)
+    const lista = consulta.slice(
+      consulta.indexOf('function reviewAsocListaVisible'),
+      consulta.indexOf('function reviewAsocPintarBadgeRail')
+    )
+    expect(lista).toMatch(/consultaPareceNumeroDoc/)
+    expect(lista).toMatch(/reviewAsocRank\(it,q\)<=1/)
+  })
+
   it('filtrarPqrsExpAsocSug también trae el doc si falta', () => {
     const fn = core.slice(
       core.indexOf('function filtrarPqrsExpAsocSug(inp)'),

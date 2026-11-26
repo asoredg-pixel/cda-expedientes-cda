@@ -67,12 +67,22 @@ function montar(campos, opts) {
     renderActividades: () => {},
     renderConsulta: () => {},
     collectReviewAsocCandidatos: () => [],
-    reviewAsocPickCardHtml: () => ''
+    reviewAsocListaVisible: () => [],
+    reviewAsocCrearCtaHtml: () => '',
+    reviewAsocExisteExacto: () => false,
+    reviewAsocFijosHtml: () => '',
+    reviewAsocPintarBadgeRail: () => {},
+    reviewAsocPickCardHtml: () => '',
+    esPqrsSecretaria: () => true,
+    puedeGestionarPqrsAsociacion: () => true,
+    // Alineado con allowTramite del ctx (oficina: false → sin «Crear expediente»)
+    esPqrsAsocContextoNca: () => !!(c.window._reviewAsocCtx && c.window._reviewAsocCtx.allowTramite)
   }
   createContext(c)
   runInContext(extraerFunciones(read('js/consulta.js'), [
     'reviewAsocPuedeCrearExp', 'reviewAsocTramitesCrear', 'reviewAsocCrearExpSubHtml', 'reviewAsocCrearExpFormHtml',
-    'reviewAsocCrearExpAbrir', 'reviewAsocCrearExpGuardar', 'reviewAsocRefrescarEnRevision', 'renderReviewAsocPickPanel'
+    'reviewAsocCrearExpAbrir', 'reviewAsocCrearExpGuardar', 'reviewAsocCrearExpCancelar', 'reviewAsocRefrescarEnRevision',
+    'renderReviewAsocPickPanel'
   ]), c)
   return c
 }

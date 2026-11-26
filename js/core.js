@@ -11454,6 +11454,23 @@ function initTaskReviewAsocSide(ref,taskId,t){
   window._reviewAsocPanelId='task-review-asoc-body';
   if(typeof renderReviewAsocPickPanel==='function')renderReviewAsocPickPanel('task-review-asoc-body');
   setTimeout(function(){const inp=document.getElementById('review-asoc-q');if(inp)inp.focus();},80);
+  // Si la PQRSD fuente no estaba en memoria, un getDoc y recalcular modo (habilita «Crear expediente»)
+  const sourceId=String(ctx.sourceExp||'').trim();
+  if(ctx.mode!=='pqrs-pick'&&!(t&&t.sinExpediente)&&sourceId
+    &&typeof traerExpedienteSiFalta==='function'
+    &&typeof consultaPareceNumeroDoc==='function'&&consultaPareceNumeroDoc(sourceId)){
+    Promise.resolve(traerExpedienteSiFalta(sourceId)).then(function(e){
+      if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return;
+      if(typeof puedeGestionarPqrsAsociacion==='function'&&!puedeGestionarPqrsAsociacion(e))return;
+      const c=window._reviewAsocCtx||{};
+      if(String(c.sourceExp||'')!==sourceId||window._reviewAsocPanelId!=='task-review-asoc-body')return;
+      c.mode='pqrs-pick';
+      c.pqrsModo='pqrs';
+      c.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+      window._reviewAsocCtx=c;
+      if(typeof renderReviewAsocPickPanel==='function')renderReviewAsocPickPanel('task-review-asoc-body');
+    }).catch(function(){});
+  }
 }
 function initTaskReviewBibSide(ref,taskId,t){
   if(!window._bibGuardarCtx||window._bibGuardarCtx.id!==ref||String(window._bibGuardarCtx.taskId||'')!==String(taskId||'')){

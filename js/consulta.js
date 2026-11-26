@@ -1151,10 +1151,44 @@ function reviewAsocFijosHtml(ctx){
 function reviewAsocListaVisible(ctx){
   const q=String((ctx&&ctx.q)||'').trim();
   const vinculados=reviewAsocIdsVinculados(ctx);
-  return collectReviewAsocCandidatos(q,ctx).filter(function(it){
+  let list=collectReviewAsocCandidatos(q,ctx).filter(function(it){
     const id=String((it.e&&it.e._exp)||(it.t&&it.t.codigo)||it.id||'').trim().toLowerCase();
     return !vinculados[id];
   });
+  // N° tipado (PAF-… / YS…): solo coincidencia exacta o prefijo. Evita CSR-00002 por dígitos de PSMV-0002.
+  if(q&&typeof consultaPareceNumeroDoc==='function'&&consultaPareceNumeroDoc(q)){
+    const fuertes=list.filter(function(it){return reviewAsocRank(it,q)<=1;});
+    list=fuertes;
+  }
+  return list;
+}
+/** ¿Ya hay registro con ese N° exacto (memoria)? */
+function reviewAsocExisteExacto(q){
+  const id=String(q||'').trim();
+  if(!id)return false;
+  if(typeof getExpById==='function'&&getExpById(id))return true;
+  if(typeof findExpByNumPlain==='function'&&findExpByNumPlain(id))return true;
+  const idLc=id.toLowerCase();
+  const acts=typeof actividadesLibres!=='undefined'?actividadesLibres:[];
+  return (acts||[]).some(function(t){
+    return t&&!t.eliminada&&String(t.codigo||'').trim().toLowerCase()===idLc;
+  });
+}
+/**
+ * CTA «Crear expediente» cuando el N° buscado no existe (mismo panel Asociar de PQRSD NCA).
+ * Se muestra en la lista para que no quede solo un match flojo o un vacío sin acción.
+ */
+function reviewAsocCrearCtaHtml(q){
+  if(!reviewAsocPuedeCrearExp())return'';
+  const id=String(q||'').trim();
+  if(!id||typeof consultaPareceNumeroDoc!=='function'||!consultaPareceNumeroDoc(id))return'';
+  if(reviewAsocExisteExacto(id))return'';
+  // Aún consultando Firestore: no ofrecer crear hasta saber que no existe
+  if(String(window._reviewAsocFetchPending||'')===id)return'';
+  return '<div class="review-asoc-crear-cta" style="margin:4px 0 12px;padding:10px 12px;border:1px dashed var(--bd);border-radius:8px;background:var(--sf2,var(--sf))">'+
+    '<div style="font-size:12px;color:var(--tx2);margin-bottom:8px">No hay un registro con el N° <strong style="font-family:\'DM Mono\',monospace">'+escAttr(id)+'</strong>.</div>'+
+    '<button type="button" class="btn bsm bp" onclick="reviewAsocCrearExpAbrir()">➕ Crear expediente «'+escAttr(id)+'»</button>'+
+    '</div>';
 }
 function reviewAsocPintarBadgeRail(){
   if(typeof document==='undefined'||!document.querySelectorAll)return;
@@ -1291,6 +1325,7 @@ function renderReviewAsocPickPanel(panelId){
   const q=String(ctx.q||'').trim();
   const aviso=window._reviewAsocAviso&&window._reviewAsocAviso.msg?window._reviewAsocAviso:null;
   const list=reviewAsocListaVisible(ctx);
+  const cta=reviewAsocCrearCtaHtml(q);
   const hint=ctx.mode==='act-libre'
     ?'Busque por número, nombre, correo del radicado, asunto o actividad sin expediente.'
     :(ctx.mode==='pqrs-pick'&&!ctx.allowTramite
@@ -1305,7 +1340,9 @@ function renderReviewAsocPickPanel(panelId){
     reviewAsocFijosHtml(ctx)+
     '<div class="fld" style="margin-bottom:10px"><input type="text" id="review-asoc-q" value="'+escAttr(q)+'" placeholder="Nombre, N° expediente, correo, asunto…" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:var(--r)" oninput="onReviewAsocSearchInput(this)"></div>'+
     '<div id="review-asoc-list" class="review-asoc-list">'+
-    (list.length?list.map(reviewAsocPickCardHtml).join(''):'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>')+
+    cta+
+    (list.length?list.map(reviewAsocPickCardHtml).join('')
+      :(cta?'':'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>'))+
     '</div>';
   reviewAsocPintarBadgeRail();
 }
@@ -1314,9 +1351,12 @@ function reviewAsocPintarLista(){
   const ctx=window._reviewAsocCtx||{};
   const listEl=document.getElementById('review-asoc-list');
   if(!listEl)return;
+  const q=String(ctx.q||'').trim();
   const list=reviewAsocListaVisible(ctx);
-  listEl.innerHTML=list.length?list.map(reviewAsocPickCardHtml).join('')
-    :'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>';
+  const cta=reviewAsocCrearCtaHtml(q);
+  listEl.innerHTML=cta+
+    (list.length?list.map(reviewAsocPickCardHtml).join('')
+      :(cta?'':'<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Sin coincidencias. Pruebe con otro término.</div>'));
 }
 /**
  * Como la barra de Consulta: filtra en memoria y, si el texto parece N° de
@@ -1327,24 +1367,35 @@ function onReviewAsocSearchInput(inp){
   const q=String((inp&&inp.value)||'').trim();
   ctx.q=q;
   window._reviewAsocCtx=ctx;
+  if(String(window._reviewAsocFetchPending||'')&&String(window._reviewAsocFetchPending)!==q)
+    window._reviewAsocFetchPending='';
   reviewAsocPintarLista();
   clearTimeout(window._reviewAsocBusqT);
   window._reviewAsocBusqT=setTimeout(function(){
     const qNow=String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim();
     const parece=typeof consultaPareceNumeroDoc==='function'?consultaPareceNumeroDoc(qNow):false;
-    if(!parece||typeof traerExpedienteSiFalta!=='function')return;
-    const ya=(typeof getExpById==='function'&&getExpById(qNow))
-      ||(typeof findExpByNumPlain==='function'&&findExpByNumPlain(qNow));
-    if(ya){reviewAsocPintarLista();return;}
+    if(!parece||typeof traerExpedienteSiFalta!=='function'){
+      window._reviewAsocFetchPending='';
+      reviewAsocPintarLista();
+      return;
+    }
+    if(reviewAsocExisteExacto(qNow)){
+      window._reviewAsocFetchPending='';
+      reviewAsocPintarLista();
+      return;
+    }
+    window._reviewAsocFetchPending=qNow;
     const listEl=document.getElementById('review-asoc-list');
-    if(listEl&&!reviewAsocListaVisible(window._reviewAsocCtx||{}).length){
+    if(listEl){
       listEl.innerHTML='<div style="font-size:12px;color:var(--tx3);padding:12px 4px">Buscando '+escAttr(qNow)+'…</div>';
     }
     Promise.resolve(traerExpedienteSiFalta(qNow)).then(function(){
       if(String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim()!==qNow)return;
+      window._reviewAsocFetchPending='';
       reviewAsocPintarLista();
     }).catch(function(){
       if(String((window._reviewAsocCtx&&window._reviewAsocCtx.q)||'').trim()!==qNow)return;
+      window._reviewAsocFetchPending='';
       reviewAsocPintarLista();
     });
   },280);
@@ -1694,8 +1745,16 @@ function confirmReviewAsocPick(targetExpId){
 /** «➕ Crear expediente» (solo Control del trámite) en el rail Asociar de Ver PQRSD: expedientes aún no registrados. */
 function reviewAsocPuedeCrearExp(ctx){
   ctx=ctx||window._reviewAsocCtx||{};
-  return window._reviewAsocPanelId==='task-review-asoc-body'&&ctx.mode==='pqrs-pick'&&!!ctx.allowTramite
-    &&typeof puedeCrearExpedienteRegistro==='function'&&puedeCrearExpedienteRegistro();
+  if(window._reviewAsocPanelId!=='task-review-asoc-body')return false;
+  if(typeof puedeCrearExpedienteRegistro!=='function'||!puedeCrearExpedienteRegistro())return false;
+  if(ctx.mode==='pqrs-pick'&&!!ctx.allowTramite)return true;
+  // Respaldo: la fuente es PQRSD NCA aunque el modo haya quedado en exp-asoc (p. ej. sin doc en memoria al abrir)
+  const srcId=String(ctx.sourceExp||'').trim();
+  const src=srcId&&typeof getExpById==='function'?getExpById(srcId):null;
+  if(!src)return false;
+  if(typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(src))return false;
+  if(typeof puedeGestionarPqrsAsociacion==='function'&&!puedeGestionarPqrsAsociacion(src))return false;
+  return typeof esPqrsAsocContextoNca==='function'&&!!esPqrsAsocContextoNca(src);
 }
 function reviewAsocTramitesCrear(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
