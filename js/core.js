@@ -10842,18 +10842,24 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
   };
   try{
-    if(typeof sstCargaShow==='function')
-      sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:8,sub:expSub,unico:true});
+    // Primero conectar Gmail/Drive (sin overlay de progreso encima del botón Conectar).
     if(typeof sstSolicitarGmailParaAdjuntar==='function'){
-      prog(12,'Verificando conexión Gmail…');
-      const okG=await sstSolicitarGmailParaAdjuntar();
-      if(!okG){
-        if(typeof sstCargaHide==='function')sstCargaHide();
-        if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
-        window._taskReviewNotifBusy=false;
-        return;
+      const yaGmail=typeof sstGmailSesionActiva==='function'&&sstGmailSesionActiva();
+      if(!yaGmail){
+        const okG=await sstSolicitarGmailParaAdjuntar({
+          title:'Conectar para notificar',
+          message:'Conecte su correo institucional para enviar la notificación. Después continuará el envío.'
+        });
+        if(!okG){
+          if(typeof sstCargaHide==='function')sstCargaHide();
+          if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
+          window._taskReviewNotifBusy=false;
+          return;
+        }
       }
     }
+    if(typeof sstCargaShow==='function')
+      sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:12,sub:expSub,unico:true});
     const esPqrsNotif=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
       &&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e));
     // Documentos de la entrega: enlaces Drive en el HTML (no embeber PDF grandes → timeout Gmail)

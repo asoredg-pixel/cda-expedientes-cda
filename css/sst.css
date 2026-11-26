@@ -3033,10 +3033,10 @@ html.ui-editor-modal-mode .task-modal-overlay.review-stack-modal-on{z-index:1000
 .export-reminder-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:26000;align-items:center;justify-content:center;padding:1rem}
 .export-reminder-overlay.on{display:flex}
 .gmail-sesion-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:29000;align-items:center;justify-content:center;padding:1rem}
-.gmail-sesion-overlay.on{display:flex}
+.gmail-sesion-overlay.on{display:flex;z-index:100300}
 body.sesion-activa.gmail-sesion-bloqueado #gmail-sesion-overlay,
 body.sesion-activa #gmail-sesion-overlay.on{
-  display:flex!important;visibility:visible!important;pointer-events:auto!important;z-index:50000;
+  display:flex!important;visibility:visible!important;pointer-events:auto!important;z-index:100300;
 }
 body.gmail-sesion-bloqueado .sst-shell,
 body.gmail-sesion-bloqueado .chat-fab,

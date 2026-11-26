@@ -638,6 +638,10 @@ function sstAbrirGmailDriveModal(opts) {
   }
   ov.classList.add('on');
   ov.setAttribute('aria-hidden', 'false');
+  // Por revisar eleva confirm-prec a ~100200: el Conectar debe quedar por encima y ser clicable.
+  if (force && typeof elevateOverlayAboveModals === 'function') {
+    elevateOverlayAboveModals(ov, 100300);
+  }
 }
 function sstCerrarGmailAttachModal(success) {
   if (_gmailConnecting) {
@@ -651,6 +655,7 @@ function sstCerrarGmailAttachModal(success) {
     ov.classList.remove('on');
     ov.setAttribute('aria-hidden', 'true');
     if (typeof sstGmailSesionUiConnecting === 'function') sstGmailSesionUiConnecting(false);
+    if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
   }
   document.body.classList.remove('gmail-sesion-bloqueado');
   window._sstGmailAttachForce = false;
@@ -677,14 +682,42 @@ function sstSolicitarGmailParaAdjuntar(opts) {
   }
   const active = sstGmailSesionActiva();
   if (active) return Promise.resolve(true);
+  // Si ya hay «Notificando…» / progreso, ocultarlo: si no, tapa el botón Conectar.
+  let cargaSnap = null;
+  if (window._confirmRadicacionLoading) {
+    const titEl = document.getElementById('confirm-prec-title');
+    const msgEl = document.getElementById('confirm-prec-msg');
+    const subEl = document.getElementById('confirm-prec-carga-sub');
+    const bar = document.getElementById('confirm-prec-bar-fill');
+    let pct = null;
+    if (bar) {
+      const w = String(bar.style.width || '').replace('%', '');
+      const n = parseFloat(w);
+      if (isFinite(n)) pct = n;
+    }
+    cargaSnap = {
+      title: (titEl && titEl.textContent) || 'Procesando',
+      message: (msgEl && msgEl.textContent) || 'Continuando…',
+      sub: (subEl && subEl.textContent) || '',
+      pct: pct,
+      unico: !!window._sstProgresoUnico,
+      tone: 'radicacion'
+    };
+    if (typeof sstCargaHide === 'function') sstCargaHide();
+  }
   return new Promise(function(resolve) {
-    window._sstGmailAttachCb = resolve;
+    window._sstGmailAttachCb = function(ok) {
+      if (ok && cargaSnap && typeof sstCargaShow === 'function') {
+        try { sstCargaShow(cargaSnap); } catch (e) {}
+      }
+      resolve(!!ok);
+    };
     window._sstGmailAttachForce = true;
     window._sstGmailAttachRequireSecretaria = false;
     sstAbrirGmailDriveModal({
       force: true,
-      title: opts.title || '',
-      message: opts.message || ''
+      title: opts.title || 'Conectar para continuar',
+      message: opts.message || 'Conecte su correo institucional para continuar con el envío o la carga.'
     });
   });
 }
