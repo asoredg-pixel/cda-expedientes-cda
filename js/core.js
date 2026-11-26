@@ -19459,19 +19459,22 @@ function taskChatDestinatariosLista(t){
     seen.add(k);
     out.push(n);
   };
-  const origLista=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t):'';
-  if(origLista)push(origLista);
+  const expIdLista=taskChatExpIdDe(t);
+  const eLista=expIdLista&&typeof getExpById==='function'?getExpById(expIdLista):null;
+  // Concepto vía profesional: el originador (técnico) va primero. Oficio/entrega normal: quien reportó.
+  const viaProf=typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eLista);
+  const origLista=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t,eLista):'';
+  if(viaProf&&origLista)push(origLista);
   push(getUltimoReportadoPor(t));
   (getTaskResponsables(t)||[]).forEach(push);
   push(t.responsable);
+  if(!viaProf&&origLista)push(origLista);
   if(taskChatEncargadoEligeDestino()){
-    const expId=taskChatExpIdDe(t);
-    const e=expId&&typeof getExpById==='function'?getExpById(expId):null;
     let pool=[];
-    if(e&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,e)&&typeof getAsignablesPqrsOficina==='function'){
-      pool=getAsignablesPqrsOficina(e._pqrs_oficina||getPqrsOficinaActiva())||[];
-    }else if(expId&&t.id&&typeof getResponsablesForTrasladoActividad==='function'){
-      pool=getResponsablesForTrasladoActividad(expId,t.id)||[];
+    if(eLista&&typeof taskEsAtenderPqrs==='function'&&taskEsAtenderPqrs(t,eLista)&&typeof getAsignablesPqrsOficina==='function'){
+      pool=getAsignablesPqrsOficina(eLista._pqrs_oficina||getPqrsOficinaActiva())||[];
+    }else if(expIdLista&&t.id&&typeof getResponsablesForTrasladoActividad==='function'){
+      pool=getResponsablesForTrasladoActividad(expIdLista,t.id)||[];
     }
     pool.forEach(push);
     taskChatTrasladoDestinosEnc(t).forEach(function(d){push(d.nombre);});
@@ -19506,10 +19509,14 @@ function taskChatResolveDefaultPara(t){
   if(rp)return rp.def;
   if(taskChatResponsableEscribeEncargado())
     return taskChatEncargadoDeptoNombre(t);
-  // Encargado revisando concepto vía profesional: «Para» = quien envió al profesional (coord./técnico/VITAL), no el profesional
-  if(typeof taskChatEncargadoEligeDestino==='function'&&taskChatEncargadoEligeDestino()){
-    const orig=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t):'';
-    if(orig&&typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return orig;
+  const expIdDef=taskChatExpIdDe(t);
+  const eDef=expIdDef&&typeof getExpById==='function'?getExpById(expIdDef):null;
+  // Solo concepto vía profesional → NCA: «Para» = técnico/originador (no el profesional que reportó).
+  // Oficio de requerimiento / entrega normal: «Para» = quien entregó (último reporte).
+  const viaProf=typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eDef);
+  if(viaProf){
+    const orig=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t,eDef):'';
+    if(orig)return orig;
   }
   if(taskChatEncargadoEligeDestino()){
     const destSel=taskChatTrasladoDestinoSelEnc();
@@ -19523,15 +19530,15 @@ function taskChatResolveDefaultPara(t){
       });
       return pick||checked[0];
     }
+    const repEnc=getUltimoReportadoPor(t);
+    if(repEnc)return repEnc;
     const opts=taskChatParaOpcionesEncargado(t);
     if(opts.length){
-      const orig2=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t):'';
-      if(orig2&&opts.some(function(n){return agendaNorm(n)===agendaNorm(orig2);}))return orig2;
+      const resp=String(t.responsable||'').trim();
+      if(resp&&opts.some(function(n){return agendaNorm(n)===agendaNorm(resp);}))return resp;
       return opts[0];
     }
   }
-  const orig3=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t):'';
-  if(orig3&&typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return orig3;
   const rep=getUltimoReportadoPor(t);
   if(rep)return rep;
   const rs=getTaskResponsables(t)||[];
@@ -19591,8 +19598,12 @@ function taskChatDestinatarioEfectivo(c,t){
   const enc=taskChatEncargadoDeptoNombre(t);
   if(c.rol==='ejecutor')return enc;
   if(c.rol==='asignador'){
-    const origEf=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t):'';
-    if(origEf&&typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return origEf;
+    const expEf=taskChatExpIdDe(t);
+    const eEf=expEf&&typeof getExpById==='function'?getExpById(expEf):null;
+    const viaProfEf=typeof encargadoPuedeDevolverRevParATecnico==='function'&&encargadoPuedeDevolverRevParATecnico(t,eEf);
+    const origEf=typeof taskRevParOriginadorNoProf==='function'?taskRevParOriginadorNoProf(t,eEf):'';
+    // Solo en concepto vía profesional el destino efectivo del encargado es el técnico originador
+    if(viaProfEf&&origEf&&typeof taskPendienteVerificacion==='function'&&taskPendienteVerificacion(t))return origEf;
     if(origEf&&typeof estadoTask==='function'&&estadoTask(t)==='Por corregir'
       &&agendaNorm(String(t.responsable||''))===agendaNorm(origEf))return origEf;
     return getUltimoReportadoPor(t)||String(t.responsable||'').trim();
@@ -25956,10 +25967,16 @@ function taskRevisionParCtx(t,e){
   // desaparecía de «Por revisar» (técnico) y de «Por ejecutar» (profesional).
   if(tr.revisionPar==='devolucion'||tr.revisionPar==='devolucion_nca')return{tecnico:a,profesional:de,fase:'tecnico'};
   if(tr.revisionPar==='correccion'||tr.revisionPar==='solicitud')return{tecnico:de,profesional:a,fase:'profesional'};
-  // Traslado «plano»: solo si sigue vigente (responsable = destino) y hubo reset de entrega
+  // Traslado «plano»: solo conceptos (técnico↔profesional) con reset de entrega.
+  // Oficio de requerimiento u otras actividades: no inventar revisión par (si no, al devolver
+  // el chat y el destino irían al profesional anterior en vez de quien entregó).
   if(agendaNorm(a)!==agendaNorm(t.responsable||''))return null;
   const conEntrega=h.slice(i+1).some(function(x){return x&&x.tipo==='traslado_entrega_reset';});
-  return conEntrega?{tecnico:de,profesional:a,fase:'profesional'}:null;
+  if(!conEntrega)return null;
+  const actNom=String(t.actividad||t.desc||'').trim();
+  if(/^oficio\s+de\s+requerimiento$/i.test(actNom))return null;
+  if(!/concepto|informe\s+t[eé]cnico/i.test(actNom))return null;
+  return{tecnico:de,profesional:a,fase:'profesional'};
 }
 /** Nombres técnico/profesional del último traslado de revisión par (para marcas Blaze). */
 function taskRevisionParNombresDesdeHistorial(t){

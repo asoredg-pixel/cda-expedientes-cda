@@ -136,3 +136,93 @@ describe('Oficio de requerimiento: destinatario = presentador del concepto', () 
     expect(out.historial.some(h => h && h.tipo === 'auto_oficio_requerimiento_realineado')).toBe(true)
   })
 })
+
+/**
+ * Traslado Liliana→Yesica con reset de entrega no debe crear «revisión par»:
+ * al devolver, «Para» = quien entregó (Yesica), no el profesional anterior.
+ */
+describe('Oficio: chat al devolver apunta a quien entregó', () => {
+  function montarOficioEntregado() {
+    const task = {
+      id: 't_ofi',
+      actividad: 'Oficio de requerimiento',
+      responsable: 'Yesica',
+      responsables: ['Yesica'],
+      asignados: [{ nombre: 'Yesica', fechaReportada: '2026-11-26', fechaAtendida: '', estado: 'por_verificar' }],
+      estado: 'Por verificar',
+      fechaReportada: '2026-11-26',
+      comentarios: [],
+      historial: [
+        { tipo: 'auto_oficio_requerimiento', por: 'Liliana', fecha: '2026-11-26',
+          nota: 'Creada automáticamente al registrar concepto que no cumple y aplica requerimiento' },
+        { tipo: 'reenvio_verificacion', por: 'Liliana', fecha: '2026-11-26', ts: 1 },
+        { tipo: 'traslado', de: 'Liliana', a: 'Yesica', por: 'Carlos', fecha: '2026-11-26', ts: 2 },
+        { tipo: 'traslado_entrega_reset', por: 'Carlos', fecha: '2026-11-26', ts: 3,
+          nota: 'la entrega anterior queda como anexo; el nuevo responsable debe entregar de nuevo' },
+        { tipo: 'reenvio_verificacion', por: 'Yesica', fecha: '2026-11-26', ts: 4 },
+      ],
+      soportes: [],
+      notasDoc: [],
+    }
+    const c = createContext({
+      console, JSON, String, Number, Math, Date, Array, Object, Promise,
+      window: { _taskModalCtx: { expId: 'EXP-1' } },
+      responsableActivo: '',
+      exps: [{ _exp: 'EXP-1', tasks: [task], _depto: 'guaviare' }],
+      actividadesLibres: [],
+      document: { getElementById: () => null, querySelectorAll: () => [] },
+      agendaNorm: norm,
+      estadoTask: t => t.estado,
+      taskPendienteVerificacion: t => t.estado === 'Por verificar',
+      esModoResponsable: () => false,
+      esVistaActividadesDepto: () => true,
+      taskUsuarioEsAsignado: () => false,
+      taskEsAtenderPqrs: () => false,
+      taskFirmaWfActiva: () => false,
+      taskEnFlujoFirmaTramite: () => false,
+      taskEsMultiAsignada: () => false,
+      getExpById: () => c.exps[0],
+      normalizeTask: t => t,
+      getUltimoReportadoPor: t => {
+        const h = (t.historial || []).slice().reverse().find(x => x.tipo === 'reenvio_verificacion')
+        return h ? (h.reportadoPor || h.por || '') : ''
+      },
+      getTaskResponsables: t => t.responsables || [t.responsable],
+      getAsignado: () => null,
+    })
+    runInContext(extraer(core, [
+      'taskRevisionParCerradaPorRetiro', 'taskRevisionParCtx', 'taskRevisionParNombresDesdeHistorial',
+      'taskRevParOriginadorNoProf', 'encargadoPuedeDevolverRevParATecnico',
+      'taskChatExpIdDe', 'taskChatResolveDefaultPara', 'getUltimoReportadoPor',
+    ]), c)
+    c.taskChatRevParOpciones = () => null
+    c.taskChatResponsableEscribeEncargado = () => false
+    c.taskChatEncargadoEligeDestino = () => true
+    c.taskChatTrasladoDestinoSelEnc = () => ''
+    c.taskChatTrasladoDestinosEnc = () => []
+    c.taskChatPqrsAsigChecked = () => []
+    c.taskChatParaOpcionesEncargado = () => ['Yesica', 'Liliana']
+    c.taskChatEncargadoDeptoNombre = () => 'Encargado NCA'
+    c.task = task
+    return c
+  }
+
+  it('traslado+reset en Oficio no activa revisión par ni «Para» al profesional anterior', () => {
+    const c = montarOficioEntregado()
+    expect(c.taskRevisionParCtx(c.task, c.exps[0])).toBe(null)
+    expect(c.encargadoPuedeDevolverRevParATecnico(c.task, c.exps[0])).toBe(false)
+    expect(c.getUltimoReportadoPor(c.task)).toBe('Yesica')
+    expect(c.taskChatResolveDefaultPara(c.task)).toBe('Yesica')
+    expect(c.taskChatResolveDefaultPara(c.task)).not.toBe('Liliana')
+  })
+
+  it('el mismo traslado+reset en Concepto sí sigue siendo revisión par', () => {
+    const c = montarOficioEntregado()
+    c.task.actividad = 'Concepto técnico'
+    c.task.desc = 'Concepto técnico'
+    expect(c.taskRevisionParCtx(c.task, c.exps[0])).toMatchObject({
+      tecnico: 'Liliana', profesional: 'Yesica', fase: 'profesional',
+    })
+    expect(c.encargadoPuedeDevolverRevParATecnico(c.task, c.exps[0])).toBe(true)
+  })
+})

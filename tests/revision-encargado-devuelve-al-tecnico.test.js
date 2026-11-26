@@ -97,7 +97,8 @@ function montar(task, opts) {
     'resetTaskPorCorregir', 'taskRevisionParCtx', 'taskRevParParticipante', 'taskTieneRevisionPar',
     'taskRevParOriginadorNoProf', 'taskRevParProfesionalEsperaCorreccionNca', 'getTareasRevParProfesionalDevueltaNca',
     'encargadoPuedeDevolverRevParATecnico', 'encargadoDevolverRevParATecnico',
-    'taskHistLineaTxt', 'bandejaActFiltroParaTask', 'bandejaItemKey', 'taskChatResolveDefaultPara'
+    'taskHistLineaTxt', 'bandejaActFiltroParaTask', 'bandejaItemKey',
+    'taskChatExpIdDe', 'taskChatResolveDefaultPara'
   ]), c)
   // Stubs mínimos del chat (encargado elige destino)
   c.taskChatRevParOpciones = () => null
