@@ -44,6 +44,7 @@ function montar(conectado) {
   }
   const c = createContext({
     console, JSON, String, Number, Math, Date, Array, Object, Promise, isFinite,
+    setInterval, clearInterval, setTimeout, clearTimeout,
     calls,
     document: {
       getElementById: id => els[id] || null,
@@ -55,16 +56,21 @@ function montar(conectado) {
     sstGmailSesionUiConnecting: () => {},
     sstCargaHide: () => { calls.hide++ },
     sstCargaShow: () => { calls.show++ },
+    sstRenderGmailDriveStatusBtn: () => {},
     elevateOverlayAboveModals: (ov, z) => { calls.elevate++; calls.z = z; if (ov) ov.style.zIndex = String(z) },
     resetOverlayElevation: ov => { if (ov) ov.style.zIndex = '' },
     apoyoDriveRestringido: () => false,
+    driveOpsProcesarSilencioso: () => {},
     _gmailConnecting: false,
+    _gmailConnectingWatchdog: null,
+    _sstGmailAutoConnectPending: false,
   })
   c.window = c
   c._confirmRadicacionLoading = !conectado
   c._sstProgresoUnico = true
   runInContext(extraer(gmail, [
-    'sstAbrirGmailDriveModal', 'sstCerrarGmailAttachModal', 'sstSolicitarGmailParaAdjuntar',
+    '_sstResolverGmailAttachCb', 'sstAbrirGmailDriveModal', 'sstCerrarGmailAttachModal',
+    'sstFinalizeGmailConnect', 'sstSolicitarGmailParaAdjuntar', 'renderSstGmailSesionBloqueo',
   ]), c)
   // Hook open count
   const orig = c.sstAbrirGmailDriveModal
@@ -96,6 +102,22 @@ describe('Gmail: conectar antes del progreso de notificación', () => {
     const ok = await p
     expect(ok).toBe(false)
     expect(calls.show).toBe(0)
+  })
+
+  it('tras conectar con OAuth aún “connecting”, libera el await (no queda Conectando…)', async () => {
+    const { c, calls } = montar(false)
+    const p = c.sstSolicitarGmailParaAdjuntar()
+    expect(calls.open).toBe(1)
+    // OAuth en curso + token ya guardado (antes el cerrar abortaba y el await no terminaba)
+    c._gmailConnecting = true
+    c.sstGmailSesionActiva = () => true
+    c.sstFinalizeGmailConnect()
+    const ok = await Promise.race([
+      p,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout await gmail')), 800)),
+    ])
+    expect(ok).toBe(true)
+    expect(c._gmailConnecting).toBe(false)
   })
 
   it('taskReviewConfirmarYNotificar: Gmail antes de Enviando; tras conectar restaura Enviar', () => {

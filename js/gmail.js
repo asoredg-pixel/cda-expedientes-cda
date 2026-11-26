@@ -643,12 +643,26 @@ function sstAbrirGmailDriveModal(opts) {
     elevateOverlayAboveModals(ov, 100300);
   }
 }
+function _sstResolverGmailAttachCb(ok) {
+  if (!window._sstGmailAttachCb) return;
+  const cb = window._sstGmailAttachCb;
+  window._sstGmailAttachCb = null;
+  try { cb(!!ok); } catch (e) { console.warn('sstGmailAttachCb', e); }
+}
 function sstCerrarGmailAttachModal(success) {
-  if (_gmailConnecting) {
+  // Éxito: liberar OAuth aunque el flag siga en true (si no, el await de «Conectando…» nunca termina).
+  if (_gmailConnecting && !success) {
     if (typeof notif === 'function') {
       notif('Conexión en curso. Complete el paso en Google o espere a que termine.', 'warn');
     }
     return;
+  }
+  if (success) {
+    _gmailConnecting = false;
+    if (_gmailConnectingWatchdog) {
+      clearTimeout(_gmailConnectingWatchdog);
+      _gmailConnectingWatchdog = null;
+    }
   }
   const ov = document.getElementById('gmail-sesion-overlay');
   if (ov) {
@@ -660,16 +674,20 @@ function sstCerrarGmailAttachModal(success) {
   document.body.classList.remove('gmail-sesion-bloqueado');
   window._sstGmailAttachForce = false;
   window._sstGmailAttachRequireSecretaria = false;
-  if (window._sstGmailAttachCb) {
-    const cb = window._sstGmailAttachCb;
-    window._sstGmailAttachCb = null;
-    cb(!!success && sstGmailSesionActiva());
-  }
+  const ok = !!success && sstGmailSesionActiva();
+  _sstResolverGmailAttachCb(ok);
 }
 function sstFinalizeGmailConnect() {
+  // Liberar antes de cerrar: el OAuth aún puede tener _gmailConnecting=true.
+  _gmailConnecting = false;
+  if (_gmailConnectingWatchdog) {
+    clearTimeout(_gmailConnectingWatchdog);
+    _gmailConnectingWatchdog = null;
+  }
   renderSstGmailSesionBloqueo();
   if (typeof sstRenderGmailDriveStatusBtn === 'function') sstRenderGmailDriveStatusBtn();
   if (sstGmailSesionActiva()) sstCerrarGmailAttachModal(true);
+  else if (window._sstGmailAttachCb && sstGmailSesionActiva()) _sstResolverGmailAttachCb(true);
   if (typeof driveOpsProcesarSilencioso === 'function') {
     setTimeout(function() { driveOpsProcesarSilencioso(); }, 800);
   }
@@ -706,12 +724,22 @@ function sstSolicitarGmailParaAdjuntar(opts) {
     if (typeof sstCargaHide === 'function') sstCargaHide();
   }
   return new Promise(function(resolve) {
-    window._sstGmailAttachCb = function(ok) {
+    let settled = false;
+    let poll = null;
+    const finish = function(ok) {
+      if (settled) return;
+      settled = true;
+      if (poll) { clearInterval(poll); poll = null; }
+      if (window._sstGmailAttachPoll) {
+        clearInterval(window._sstGmailAttachPoll);
+        window._sstGmailAttachPoll = null;
+      }
       if (ok && cargaSnap && typeof sstCargaShow === 'function') {
         try { sstCargaShow(cargaSnap); } catch (e) {}
       }
       resolve(!!ok);
     };
+    window._sstGmailAttachCb = finish;
     window._sstGmailAttachForce = true;
     window._sstGmailAttachRequireSecretaria = false;
     sstAbrirGmailDriveModal({
@@ -719,6 +747,13 @@ function sstSolicitarGmailParaAdjuntar(opts) {
       title: opts.title || 'Conectar para continuar',
       message: opts.message || 'Conecte su correo institucional para continuar con el envío o la carga.'
     });
+    // Si el OAuth deja la sesión activa sin pasar por cerrar modal, no dejar el await colgado.
+    poll = setInterval(function() {
+      if (sstGmailSesionActiva()) {
+        sstCerrarGmailAttachModal(true);
+      }
+    }, 400);
+    window._sstGmailAttachPoll = poll;
   });
 }
 function sstSolicitarDriveParaPqrs(expRef) {
@@ -735,7 +770,10 @@ function renderSstGmailSesionBloqueo() {
     if (ov) {
       ov.classList.remove('on');
       ov.setAttribute('aria-hidden', 'true');
+      if (typeof resetOverlayElevation === 'function') resetOverlayElevation(ov);
     }
+    // Había un await (p. ej. Aprobar y notificar): liberarlo al detectar sesión activa.
+    if (window._sstGmailAttachCb) _sstResolverGmailAttachCb(true);
   } else if (ov && !window._sstGmailAttachCb) {
     // Sin acción pendiente de adjuntar: no dejar modal abierto
     ov.classList.remove('on');
