@@ -35,6 +35,16 @@ describe('Asociar busca con getDoc si falta en memoria', () => {
     expect(lista).toMatch(/reviewAsocRank\(it,q\)<=1/)
   })
 
+  it('Crear expediente no depende solo de allowTramite/_pqrs_oficina', () => {
+    expect(consulta).toMatch(/function reviewAsocUsuarioNca/)
+    const fn = consulta.slice(
+      consulta.indexOf('function reviewAsocPuedeCrearExp'),
+      consulta.indexOf('window.reviewAsocPuedeCrearExp')
+    )
+    expect(fn).toMatch(/act-libre/)
+    expect(fn).toMatch(/reviewAsocUsuarioNca/)
+  })
+
   it('filtrarPqrsExpAsocSug también trae el doc si falta', () => {
     const fn = core.slice(
       core.indexOf('function filtrarPqrsExpAsocSug(inp)'),

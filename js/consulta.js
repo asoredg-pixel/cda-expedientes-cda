@@ -1422,10 +1422,13 @@ function openReviewAsocPickPanel(opts){
     const expId=t?(t.exp||ref):ref;
     const e=typeof getExpById==='function'?getExpById(expId):null;
     ctx.sourceExp=expId;
-    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+    const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+    const nca=typeof reviewAsocUsuarioNca==='function'&&reviewAsocUsuarioNca();
+    const puedeAsoc=esPqrs&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
+    if(esPqrs&&(puedeAsoc||nca)){
       ctx.mode='pqrs-pick';
       ctx.pqrsModo='pqrs';
-      ctx.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+      ctx.allowTramite=!!nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
     }else{
       ctx.mode='exp-asoc';
     }
@@ -1742,20 +1745,35 @@ function confirmReviewAsocPick(targetExpId){
   }
   }finally{window._reviewAsocBusy=false;}
 }
-/** «➕ Crear expediente» (solo Control del trámite) en el rail Asociar de Ver PQRSD: expedientes aún no registrados. */
+/** Encargado / NCA DEGUV (rail Asociar de actividades). */
+function reviewAsocUsuarioNca(){
+  return !!(
+    (typeof esNcaDeguv==='function'&&esNcaDeguv())
+    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+    ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    ||(typeof esEncargadoActivo==='function'&&esEncargadoActivo())
+  );
+}
+/**
+ * «➕ Crear expediente» en el rail Asociar (task-review-asoc-body):
+ * NCA sobre PQRSD, o actividad sin expediente. No depender solo de allowTramite/_pqrs_oficina.
+ */
 function reviewAsocPuedeCrearExp(ctx){
   ctx=ctx||window._reviewAsocCtx||{};
   if(window._reviewAsocPanelId!=='task-review-asoc-body')return false;
   if(typeof puedeCrearExpedienteRegistro!=='function'||!puedeCrearExpedienteRegistro())return false;
+  // Caso clásico del rail PQRSD NCA
   if(ctx.mode==='pqrs-pick'&&!!ctx.allowTramite)return true;
-  // Respaldo: la fuente es PQRSD NCA aunque el modo haya quedado en exp-asoc (p. ej. sin doc en memoria al abrir)
+  // NCA: actividad libre, o PQRSD aunque allowTramite/oficina no hayan quedado bien
+  if(!reviewAsocUsuarioNca())return false;
+  if(ctx.mode==='pqrs-pick'||ctx.mode==='act-libre')return true;
   const srcId=String(ctx.sourceExp||'').trim();
   const src=srcId&&typeof getExpById==='function'?getExpById(srcId):null;
-  if(!src)return false;
-  if(typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(src))return false;
-  if(typeof puedeGestionarPqrsAsociacion==='function'&&!puedeGestionarPqrsAsociacion(src))return false;
-  return typeof esPqrsAsocContextoNca==='function'&&!!esPqrsAsocContextoNca(src);
+  if(src&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(src))return true;
+  return false;
 }
+window.reviewAsocUsuarioNca=reviewAsocUsuarioNca;
+window.reviewAsocPuedeCrearExp=reviewAsocPuedeCrearExp;
 function reviewAsocTramitesCrear(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const c=typeof cfgFor==='function'?cfgFor(depto):cfg;
@@ -1778,8 +1796,11 @@ function reviewAsocCrearExpFormHtml(){
   const hoyStr=typeof hoy==='function'?hoy():'';
   const trams=reviewAsocTramitesCrear();
   const estados=typeof ESTADOS!=='undefined'&&ESTADOS.length?ESTADOS:['Solicitud'];
+  const vinculoLbl=ctx.mode==='act-libre'
+    ?('Queda vinculado a la actividad <strong>'+escAttr(ctx.sourceCod||ctx.taskId||'')+'</strong>.')
+    :('Queda asociado a la PQRSD <strong>'+escAttr(ctx.sourceExp||'')+'</strong>.');
   return '<div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--bld)">➕ Nuevo expediente · Control del trámite</div>'+
-    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">Queda asociado a la PQRSD <strong>'+escAttr(ctx.sourceExp||'')+'</strong>. Los demás datos (interesado, etc.) se completan después desde Registro o Consulta.</div>'+
+    '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px">'+vinculoLbl+' Los demás datos (interesado, etc.) se completan después desde Registro o Consulta.</div>'+
     '<div class="fg">'+
     '<div class="fld"><label>Tipo de trámite<span class="req-star">*</span></label><select id="review-asoc-new-tram" style="'+inp+'" onchange="reviewAsocCrearExpTramChange(this)"><option value="">— Seleccione —</option>'+
       trams.map(function(t){return '<option value="'+escAttr(t.id)+'">'+escAttr(t.nombre||t.id)+'</option>';}).join('')+'</select></div>'+
@@ -1842,34 +1863,53 @@ function reviewAsocCrearExpGuardar(){
   const depto=typeof getDeptoOperativo==='function'?getDeptoOperativo():deptoActivo;
   const esSanc=typeof esTramiteSancionatorio==='function'&&esTramiteSancionatorio(tid);
   const quien=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
+  const desdeLibre=ctx.mode==='act-libre';
   const fe={Solicitud:fechaSol};
   if(estado!=='Solicitud')fe[estado]=fechaEst;
   const data={
     _depto:depto,_tramite:tid,_exp:expId,_estado:estado,_fecha:fechaSol,_fechas_estado:JSON.stringify(fe),
     _usar_etapa:false,_etapa:'',_instructor:'',
     _subclase:sub,_tipo_sancionatorio:esSanc?sub:'',_es_pqrs:esSanc,_es_queja:esSanc,
-    _alta_desde_pqrs:sourceExp,_alta_por:quien,_alta_fecha:typeof hoy==='function'?hoy():fechaSol,
+    _alta_desde_pqrs:desdeLibre?'':sourceExp,_alta_por:quien,_alta_fecha:typeof hoy==='function'?hoy():fechaSol,
     _tipo_persona:'natural',_pn_nombre:'',_pn_identificacion:'',_pn_correo:'',_pn_telefono:'',_est_com:false,
     _facturas_extra:'[]',_actos_admin:'[]',_conceptos_seg:'[]',_expedientes_asociados:'[]',_info_tecnica_items:'[]',
     tasks:[]
   };
   if(typeof syncFechasEstadoConEstado==='function')syncFechasEstadoConEstado(data);
   const hist=typeof rebuildHistorial==='function'?rebuildHistorial(data,[]):[];
-  if(hist[0])hist[0].desc=String(hist[0].desc||'Apertura del proceso / trámite')+' · creado desde PQRSD '+sourceExp+(quien?' por '+quien:'');
+  const origenLbl=desdeLibre
+    ?('creado desde actividad sin expediente '+(ctx.sourceCod||ctx.taskId||''))
+    :('creado desde PQRSD '+sourceExp);
+  if(hist[0])hist[0].desc=String(hist[0].desc||'Apertura del proceso / trámite')+' · '+origenLbl+(quien?' por '+quien:'');
   data.historial=hist;
   if(!Array.isArray(exps))exps=[];
   exps.push(data);
-  if(typeof logAudit==='function')logAudit('Creó expediente ['+expId+'] desde PQRSD ['+sourceExp+']','expedientes',expId);
+  if(typeof logAudit==='function'){
+    logAudit(desdeLibre
+      ?('Creó expediente ['+expId+'] desde actividad libre')
+      :('Creó expediente ['+expId+'] desde PQRSD ['+sourceExp+']'),'expedientes',expId);
+  }
   ctx.crearExp=false;
   ctx.q=expId;
   ctx.pqrsModo='tramite';
   window._reviewAsocCtx=ctx;
-  // asociarVinculoAPqrs ya persiste la PQRSD y el expediente nuevo
-  const ok=typeof asociarVinculoAPqrs==='function'&&asociarVinculoAPqrs(sourceExp,expId,'tramite');
-  if(!ok){
+  let ok=false;
+  if(desdeLibre){
     if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
     else if(typeof persistExpLocal==='function')persistExpLocal();
-    notif('Expediente '+expId+' creado. No se pudo asociar automáticamente — use 🖇️ Asociar','warn');
+    const pack=typeof vincularActLibreAExpediente==='function'
+      ?vincularActLibreAExpediente(ctx.taskId,data):null;
+    ok=!!pack;
+    if(!ok)notif('Expediente '+expId+' creado. No se pudo vincular la actividad — use 🖇️ Asociar','warn');
+    else if(typeof notif==='function')notif('Expediente '+expId+' creado y actividad vinculada','ok');
+  }else{
+    // asociarVinculoAPqrs ya persiste la PQRSD y el expediente nuevo
+    ok=typeof asociarVinculoAPqrs==='function'&&asociarVinculoAPqrs(sourceExp,expId,'tramite');
+    if(!ok){
+      if(typeof persistExpedienteGranular==='function')persistExpedienteGranular(data,false);
+      else if(typeof persistExpLocal==='function')persistExpLocal();
+      notif('Expediente '+expId+' creado. No se pudo asociar automáticamente — use 🖇️ Asociar','warn');
+    }
   }
   if(!reviewAsocRefrescarEnRevision())renderReviewAsocPickPanel();
 }

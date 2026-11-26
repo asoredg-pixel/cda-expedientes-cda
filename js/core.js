@@ -11433,6 +11433,15 @@ function pqrsTrasladoAsigAcordeon(id){
 }
 window.pqrsTrasladoAsigAcordeon=pqrsTrasladoAsigAcordeon;
 window.renderTaskReviewTrasladarPqrsSideHtml=renderTaskReviewTrasladarPqrsSideHtml;
+function reviewAsocEsUsuarioNcaLocal(){
+  if(typeof reviewAsocUsuarioNca==='function')return !!reviewAsocUsuarioNca();
+  return !!(
+    (typeof esNcaDeguv==='function'&&esNcaDeguv())
+    ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+    ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto())
+    ||(typeof esEncargadoActivo==='function'&&esEncargadoActivo())
+  );
+}
 function initTaskReviewAsocSide(ref,taskId,t){
   const opts={ref:ref,taskId:taskId,task:t};
   let ctx={q:'',ref:ref,taskId:taskId};
@@ -11444,10 +11453,14 @@ function initTaskReviewAsocSide(ref,taskId,t){
     const expId=t?(t.exp||ref):ref;
     const e=typeof getExpById==='function'?getExpById(expId):null;
     ctx.sourceExp=expId;
-    if(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e)){
+    const esPqrs=e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e);
+    const nca=reviewAsocEsUsuarioNcaLocal();
+    const puedeAsoc=esPqrs&&typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
+    // NCA sobre PQRSD: siempre pqrs-pick + crear/asociar trámite (antes fallaba si _pqrs_oficina≠guaviare)
+    if(esPqrs&&(puedeAsoc||nca)){
       ctx.mode='pqrs-pick';
       ctx.pqrsModo='pqrs';
-      ctx.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+      ctx.allowTramite=nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
     }else ctx.mode='exp-asoc';
   }
   window._reviewAsocCtx=ctx;
@@ -11461,12 +11474,14 @@ function initTaskReviewAsocSide(ref,taskId,t){
     &&typeof consultaPareceNumeroDoc==='function'&&consultaPareceNumeroDoc(sourceId)){
     Promise.resolve(traerExpedienteSiFalta(sourceId)).then(function(e){
       if(!e||typeof esPqrsSecretaria!=='function'||!esPqrsSecretaria(e))return;
-      if(typeof puedeGestionarPqrsAsociacion==='function'&&!puedeGestionarPqrsAsociacion(e))return;
+      const nca=reviewAsocEsUsuarioNcaLocal();
+      const puedeAsoc=typeof puedeGestionarPqrsAsociacion==='function'&&puedeGestionarPqrsAsociacion(e);
+      if(!puedeAsoc&&!nca)return;
       const c=window._reviewAsocCtx||{};
       if(String(c.sourceExp||'')!==sourceId||window._reviewAsocPanelId!=='task-review-asoc-body')return;
       c.mode='pqrs-pick';
       c.pqrsModo='pqrs';
-      c.allowTramite=typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e);
+      c.allowTramite=nca||(typeof esPqrsAsocContextoNca==='function'&&esPqrsAsocContextoNca(e));
       window._reviewAsocCtx=c;
       if(typeof renderReviewAsocPickPanel==='function')renderReviewAsocPickPanel('task-review-asoc-body');
     }).catch(function(){});
@@ -13929,8 +13944,12 @@ function asociarVinculoAPqrs(pqrsExpId,targetExpNum,modo){
   const targetEsPqrs=expAsocEsRegistroPqrs(target);
   if(modo==='pqrs'){
     if(!targetEsPqrs){notif('Solo puede asociar con otra PQRSD','err');return false;}
-  }else if(modo==='tramite'){
-    if(!esPqrsAsocContextoNca(e)){notif('Solo NCA puede asociar expedientes de trámite','err');return false;}
+  }else   if(modo==='tramite'){
+    const ncaTram=(typeof reviewAsocUsuarioNca==='function'&&reviewAsocUsuarioNca())
+      ||(typeof esNcaDeguv==='function'&&esNcaDeguv())
+      ||(typeof esOficinaPqrsNca==='function'&&esOficinaPqrsNca())
+      ||(typeof esVistaActividadesDepto==='function'&&esVistaActividadesDepto());
+    if(!esPqrsAsocContextoNca(e)&&!ncaTram){notif('Solo NCA puede asociar expedientes de trámite','err');return false;}
     if(targetEsPqrs){notif('Use «Asociar PQRSD» para vincular con otra PQRSD','err');return false;}
   }
   if(!expAsocVinculoPermitido(target,e)){notif('No puede vincular con ese registro','err');return false;}

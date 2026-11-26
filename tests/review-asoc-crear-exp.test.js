@@ -80,9 +80,9 @@ function montar(campos, opts) {
   }
   createContext(c)
   runInContext(extraerFunciones(read('js/consulta.js'), [
-    'reviewAsocPuedeCrearExp', 'reviewAsocTramitesCrear', 'reviewAsocCrearExpSubHtml', 'reviewAsocCrearExpFormHtml',
-    'reviewAsocCrearExpAbrir', 'reviewAsocCrearExpGuardar', 'reviewAsocCrearExpCancelar', 'reviewAsocRefrescarEnRevision',
-    'renderReviewAsocPickPanel'
+    'reviewAsocUsuarioNca', 'reviewAsocPuedeCrearExp', 'reviewAsocTramitesCrear', 'reviewAsocCrearExpSubHtml',
+    'reviewAsocCrearExpFormHtml', 'reviewAsocCrearExpAbrir', 'reviewAsocCrearExpGuardar', 'reviewAsocCrearExpCancelar',
+    'reviewAsocRefrescarEnRevision', 'renderReviewAsocPickPanel'
   ]), c)
   return c
 }
