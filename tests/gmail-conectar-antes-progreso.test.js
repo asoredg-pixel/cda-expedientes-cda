@@ -98,15 +98,20 @@ describe('Gmail: conectar antes del progreso de notificación', () => {
     expect(calls.show).toBe(0)
   })
 
-  it('taskReviewConfirmarYNotificar pide Gmail antes de sstCargaShow', () => {
+  it('taskReviewConfirmarYNotificar: Gmail antes de Enviando; tras conectar restaura Enviar', () => {
     const core = readFileSync(resolve(root, 'js/core.js'), 'utf8')
     const fnStart = core.indexOf('async function taskReviewConfirmarYNotificar')
     expect(fnStart).toBeGreaterThan(0)
-    const slice = core.slice(fnStart, fnStart + 4500)
+    const slice = core.slice(fnStart, fnStart + 5500)
     const iSolicitar = slice.indexOf('sstSolicitarGmailParaAdjuntar')
+    const iEnviando = slice.indexOf("btn.textContent='Enviando…'")
     const iCarga = slice.indexOf("sstCargaShow({title:'Notificando por correo'")
+    const iRestaurar = slice.indexOf("Pulse «Enviar notificación y cerrar» para enviar")
     expect(iSolicitar).toBeGreaterThan(0)
+    expect(iEnviando).toBeGreaterThan(0)
     expect(iCarga).toBeGreaterThan(0)
-    expect(iSolicitar).toBeLessThan(iCarga)
+    expect(iRestaurar).toBeGreaterThan(0)
+    expect(iSolicitar).toBeLessThan(iEnviando)
+    expect(iEnviando).toBeLessThan(iCarga)
   })
 })

@@ -10834,6 +10834,31 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
   const esInterna=modoCorreo==='resp_interna';
   const esEntidad=modoCorreo==='resp_entidad';
   const btn=document.getElementById('task-rev-notif-btn');
+  const btnLblEnviar='✓ Enviar notificación y cerrar';
+  const restaurarBtnNotif=function(){
+    if(btn){btn.disabled=false;btn.textContent=btnLblEnviar;}
+    window._taskReviewNotifBusy=false;
+  };
+  // Sin Gmail: conectar primero y devolver el botón Enviar (no quedar estancado en «Enviando…»).
+  if(typeof sstSolicitarGmailParaAdjuntar==='function'){
+    const yaGmail=typeof sstGmailSesionActiva==='function'&&sstGmailSesionActiva();
+    if(!yaGmail){
+      if(btn){btn.disabled=true;btn.textContent='Conectando…';}
+      window._taskReviewNotifBusy=true;
+      const okG=await sstSolicitarGmailParaAdjuntar({
+        title:'Conectar para notificar',
+        message:'Conecte su correo institucional. Cuando termine, pulse de nuevo <strong>Enviar notificación</strong>.'
+      });
+      if(!okG){
+        if(typeof sstCargaHide==='function')sstCargaHide();
+        restaurarBtnNotif();
+        return;
+      }
+      restaurarBtnNotif();
+      if(typeof notif==='function')notif('Gmail/Drive conectado. Pulse «Enviar notificación y cerrar» para enviar.','ok');
+      return;
+    }
+  }
   window._taskReviewNotifBusy=true;
   if(btn){btn.disabled=true;btn.textContent='Enviando…';}
   const por=typeof taskComentarioAutor==='function'?taskComentarioAutor():(responsableActivo||'');
@@ -10842,22 +10867,6 @@ async function taskReviewConfirmarYNotificar(expId,taskId){
     if(typeof sstCargaProgress==='function')sstCargaProgress(p,msg||expSub);
   };
   try{
-    // Primero conectar Gmail/Drive (sin overlay de progreso encima del botón Conectar).
-    if(typeof sstSolicitarGmailParaAdjuntar==='function'){
-      const yaGmail=typeof sstGmailSesionActiva==='function'&&sstGmailSesionActiva();
-      if(!yaGmail){
-        const okG=await sstSolicitarGmailParaAdjuntar({
-          title:'Conectar para notificar',
-          message:'Conecte su correo institucional para enviar la notificación. Después continuará el envío.'
-        });
-        if(!okG){
-          if(typeof sstCargaHide==='function')sstCargaHide();
-          if(btn){btn.disabled=false;btn.textContent='✓ Enviar notificación y cerrar';}
-          window._taskReviewNotifBusy=false;
-          return;
-        }
-      }
-    }
     if(typeof sstCargaShow==='function')
       sstCargaShow({title:'Notificando por correo',message:'Preparando envío…',pct:12,sub:expSub,unico:true});
     const esPqrsNotif=!!(e&&typeof esPqrsSecretaria==='function'&&esPqrsSecretaria(e)
